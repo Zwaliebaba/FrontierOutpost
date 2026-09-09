@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClInclude Include="framework.h" />
+    <ClInclude Include="FrontierOutpost.h" />
+    <ClInclude Include="Resource.h" />
+    <ClInclude Include="targetver.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="FrontierOutpost.ico" />
+    <Image Include="small.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FrontierOutpost.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="FrontierOutpost.cpp" />
+  </ItemGroup>
+</Project>
