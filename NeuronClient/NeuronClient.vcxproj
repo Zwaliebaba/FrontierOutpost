@@ -140,8 +140,14 @@
         dxc warns when it is asked for debug information with nowhere to put it. There is nowhere
         to put it on purpose: a .pdb beside the executable is a runtime file dependency (R13), so
         the debug info goes inside the shader container where PIX and RenderDoc still find it.
+
+        Debug only, and the condition is load-bearing rather than tidiness. MSBuild passes /Zi to
+        dxc in Debug and not in Release, and -Qembed_debug without /Zi is an ERROR rather than a
+        no-op. An unconditional version of this line therefore builds Debug perfectly and fails
+        Release, which is exactly the class of defect AGENTS.md 3 says to build Release to catch.
+        It was caught that way.
       -->
-      <AdditionalOptions>-Qembed_debug %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(Configuration)'=='Debug'">-Qembed_debug %(AdditionalOptions)</AdditionalOptions>
     </FXCompile>
   </ItemDefinitionGroup>
   <ItemGroup>

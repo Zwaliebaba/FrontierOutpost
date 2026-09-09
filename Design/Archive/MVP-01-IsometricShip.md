@@ -1,3 +1,94 @@
+# What shipped, and what did not
+
+**Built:** 2026-09-09 to 2026-09-10, one build session. **Nothing in `Archive/` is authoritative**
+(`Design/README.md` §2); the ADRs this plan produced are, and they are ADR-001 through ADR-007.
+
+## What shipped
+
+All seven steps. `FrontierOutpost.exe` opens a 1280×800 window, draws a 640×400 sixteen-colour
+isometric view of a ship, and a tap or click anywhere on the ground plane becomes an order that
+crosses a loopback transport to a server on its own thread, which turns the ship, flies it there
+and stops it on the point. Every layer the arrow in §1 names exists and is exercised.
+
+Measured from a capture of the running client area, rather than asserted: exactly the palette
+indices the scene was authored with and no others, and every 2×2 block of physical pixels
+uniform — which is the whole of what "16 colours, integer scale, no filtering" means. The game's
+own 8×8 status line was read back out of the frame glyph-for-glyph to check what it says.
+
+Seven ADRs, each cited from the code that implements it: ADR-001 the index target and the resolve,
+ADR-002 two-tone flat shading, ADR-003 the camera, ADR-004 the kinematics, ADR-005 replication and
+interpolation, ADR-006 the transport's queues, ADR-007 the engine/game seam. Six were asked for by
+§3; ADR-007 was not, and exists because §4's step 5 and `AGENTS.md` §2 could not both be true as
+written (see below).
+
+## What did not ship, and what is not verified
+
+**A physical tap or click was never observed reaching the window.** This machine has no touch
+digitizer — `Win32_PointingDevice` reports a mouse and nothing else — so it would have been a
+mouse either way, and the workstation locked partway through the session and stayed locked. The
+Windows lock screen is a topmost, full-screen window, so a synthetic click lands on it rather than
+on the game, and `WM_POINTER*` messages cannot be posted to a window to stand in for one.
+
+What *was* verified instead, and what each piece covers:
+
+- The rendering, through `PrintWindow` with `PW_RENDERFULLCONTENT`, which reads the window's own
+  composited surface and does not care what is in front of it.
+- `PointerInput`'s message handling, by six unit tests driving `WM_POINTERDOWN` against a real
+  window at a known position.
+- The un-projection, by the three tests §4 step 6 asks for.
+- The order-to-ship half, by driving a real `Session`, a real `LoopbackTransport` and a real
+  `Frontier::World` end to end: the ship turned to heading 4850, accelerated in exact 60 mm/tick
+  steps to its 1200 mm/tick maximum, braked, and arrived exactly on (60.000 m, 30.000 m) stopped.
+
+The one link with no evidence is the operating system delivering a tap to the window. It needs an
+unlocked desktop and about thirty seconds.
+
+**Whether 20 Hz looks right under interpolation** (section 6) could not be judged, for the same reason:
+judging it requires watching the ship move, and the display was not available. The number stays as
+decided; it has not been argued with.
+
+## Where this plan and the tree disagreed
+
+§4 step 5 says "`NeuronServer`: a `Session` that owns a `World`". `AGENTS.md` §2 says `GameLogic`
+is referenced by the executable and by nothing else. Both cannot hold: a `Session` owning a
+`Frontier::World` is a `NeuronServer` that links `GameLogic`. **ADR-007** resolves it — `Session`
+owns an abstract `Simulation` declared in `NeuronCore`, and the executable is what makes it a
+`World` — so the plan's sentence and the repository map are both satisfied.
+
+§3's camera recommendation is internally inconsistent: "2:1 dimetric (yaw 45°, pitch `atan(0.5)`
+≈ 26.565°)" names two different projections, because for a 45° yaw the ground diamond's ratio is
+1/sin θ, and `atan(0.5)` gives 2.236:1 rather than 2:1. **ADR-003** keeps the 2:1 and derives the
+angle that actually produces it.
+
+§3 also expected the two-tone shading decision to be about the shading rule alone. It is not: the
+light direction and the mesh's own faceting are part of it, because a camera looking along (1,1,1)
+sees only faces that point broadly upwards, and a light from above lights all of them. **ADR-002**
+records both, having got both wrong first.
+
+## One defect only a Release build found
+
+The `FXCompile` rule passed `-Qembed_debug` to dxc unconditionally, to silence a warning about
+debug information with nowhere to go. MSBuild passes `/Zi` to dxc in Debug and not in Release, and
+`-Qembed_debug` without `/Zi` is an error rather than a no-op -- so the rule built Debug perfectly
+and failed Release outright. CI does not build Release (`AGENTS.md` section 6), so nothing would
+have caught it until somebody shipped. It is now conditional on the configuration.
+
+## Two things left alone, deliberately
+
+`NeuronCore.h` has `using namespace Neuron;` at file scope, which R10 forbids in a header. It is
+pre-existing and touching it would have rippled through every translation unit in the tree.
+
+`GameLogic/framework.h` and `FrontierOutpost/framework.h` claim the `.vcxproj` files define the
+Windows macro family; `AGENTS.md` §4 says the projects deliberately define none of them, and they
+do not. `NeuronServer/framework.h` had the same wrong comment and was corrected because this
+session had to change that file anyway; the other two were left, and are wrong.
+
+---
+
+*The plan as it was written, unchanged, follows.*
+
+---
+
 # MVP-01 — An isometric ship you can send somewhere
 
 **Status:** Plan, not started. Owner decisions recorded 2026-09-09, in two rounds: the first settled input, the ship, authority and the palette; the second settled the shader variable naming, the camera, the tick rate and threading. §2 is the complete list.
