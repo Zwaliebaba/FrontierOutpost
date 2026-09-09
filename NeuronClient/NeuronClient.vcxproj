@@ -175,6 +175,7 @@
     <ClCompile Include="IsometricCamera.cpp" />
     <ClCompile Include="MeshRenderer.cpp" />
     <ClCompile Include="PaletteTarget.cpp" />
+    <ClCompile Include="PointerInput.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="D3D12Defaults.h" />
@@ -187,6 +188,7 @@
     <ClInclude Include="NeuronClient.h" />
     <ClInclude Include="Palette.h" />
     <ClInclude Include="PaletteTarget.h" />
+    <ClInclude Include="PointerInput.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>

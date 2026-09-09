@@ -21,6 +21,7 @@
 #include "MeshRenderer.h"
 #include "Palette.h"
 #include "PaletteTarget.h"
+#include "PointerInput.h"
 #include "Session.h"
 
 #include "ShipMesh.h"
@@ -44,8 +45,18 @@ constexpr wchar_t WINDOW_TITLE[] = L"Frontier Outpost";
 HINSTANCE g_instance = nullptr;
 bool g_quitRequested = false;
 
+/// The window procedure runs on the client thread and needs to reach the input state, which lives
+/// in RunGame. A file-scope pointer is the plain Win32 answer and is what the rest of this file
+/// already does with g_instance; it is set once, before the first message is dispatched.
+Neuron::PointerInput* g_pointerInput = nullptr;
+
 LRESULT CALLBACK WndProc(HWND _window, UINT _message, WPARAM _wParam, LPARAM _lParam)
 {
+  if (g_pointerInput != nullptr && g_pointerInput->HandleMessage(_message, _wParam, _lParam))
+  {
+    return 0;
+  }
+
   switch (_message)
   {
   case WM_DESTROY:
@@ -185,6 +196,10 @@ int RunGame(HWND _window)
   // from the transport changes what this says (ADR-005).
   Frontier::ShipView ship;
 
+  Neuron::PointerInput pointer;
+  pointer.Create(_window, PRESENT_SCALE);
+  g_pointerInput = &pointer;
+
   auto previousFrame = std::chrono::steady_clock::now();
 
   while (PumpMessages())
@@ -207,6 +222,25 @@ int RunGame(HWND _window)
     // has not been told where anything is (ADR-005).
     const Neuron::IsometricCamera::WorldPoint shipPosition = {ship.PositionXMetres(), 0.0F, ship.PositionZMetres()};
     camera.Follow(ship.HasState() ? shipPosition : Neuron::IsometricCamera::WorldPoint{0.0F, 0.0F, 0.0F});
+
+    // The click, and the whole of what the client does with it: un-project it onto the ground and
+    // hand the world point to the server. The client does not move the ship, does not predict
+    // where it will go and does not remember where it was told to go -- it sends an order and
+    // waits to be told (MVP-01 section 2).
+    //
+    // The camera is followed BEFORE this, so the un-projection uses the same camera the frame is
+    // about to be drawn with. Doing it after would answer with the previous frame's camera, which
+    // is a whole tick of the ship's travel out at speed.
+    float clickXTexels = 0.0F;
+    float clickYTexels = 0.0F;
+    if (pointer.TakeClick(clickXTexels, clickYTexels))
+    {
+      const Neuron::IsometricCamera::WorldPoint target = camera.UnprojectToGround(clickXTexels, clickYTexels);
+      transport.SendOrder(Neuron::MoveToOrder{
+        .targetXMillimetres = static_cast<std::int64_t>(std::lround(target.x * 1000.0F)),
+        .targetZMillimetres = static_cast<std::int64_t>(std::lround(target.z * 1000.0F)),
+      });
+    }
 
     ID3D12GraphicsCommandList* commandList = device.BeginFrame();
 
@@ -234,6 +268,7 @@ int RunGame(HWND _window)
   // Before the GPU wait, so the server thread is not still pushing states into a transport that
   // is about to go out of scope.
   session.Stop();
+  g_pointerInput = nullptr;
 
   // Drain the GPU here, not in ~Device. Destructors run in reverse declaration order, so the
   // PaletteTarget's index target and depth buffer would otherwise be released while the last
@@ -262,6 +297,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   // Not an error check: a Windows build without the call is one where the manifest default
   // applies, and there is nothing useful to do about it here.
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+  // Before the window too. With this on, a mouse click arrives as WM_POINTERDOWN exactly as a
+  // finger does, so touch and mouse are one code path rather than two (MVP-01 section 2). If it
+  // ever fails, the game gets no pointer messages from a mouse at all -- which is a thing to
+  // report rather than to paper over with a WM_LBUTTONDOWN handler.
+  if (!Neuron::PointerInput::EnableMouseAsPointer())
+  {
+    Neuron::DebugTrace("Input: EnableMouseInPointer failed; a mouse will not produce pointer messages.\n");
+  }
 
   g_instance = _instance;
 

@@ -9,6 +9,7 @@
 #include "FontRenderer.h"
 #include "IsometricCamera.h"
 #include "Palette.h"
+#include "PointerInput.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -318,6 +319,137 @@ public:
     Assert::IsTrue(depth(1.0F, 1.0F, 1.0F) < depth(0.0F, 0.0F, 0.0F), L"towards the camera is nearer");
     Assert::IsTrue(depth(0.0F, 0.0F, 0.0F) < depth(-1.0F, -1.0F, -1.0F), L"away from the camera is further");
   }
+};
+
+// The half of the click that is not the camera: a WM_POINTERDOWN carrying SCREEN coordinates
+// becoming a point on the 640x400 virtual screen. The camera turns that into a world point and is
+// tested above; between them they are the whole of what a tap does.
+//
+// This needs a real window, because the conversion is ScreenToClient and that is a property of a
+// window rather than arithmetic. It is created off-screen and never shown.
+TEST_CLASS(PointerInputTests)
+{
+public:
+  static constexpr int WINDOW_LEFT = 300;
+  static constexpr int WINDOW_TOP = 200;
+  static constexpr std::uint32_t PRESENT_SCALE = 2;
+
+  TEST_METHOD_INITIALIZE(CreateHostWindow)
+  {
+    WNDCLASSEXW windowClass = {};
+    windowClass.cbSize = sizeof(WNDCLASSEXW);
+    windowClass.lpfnWndProc = DefWindowProcW;
+    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.lpszClassName = L"NeuronClientTestsPointerHost";
+    RegisterClassExW(&windowClass);
+
+    // WS_POPUP, so the client area starts exactly at the window's top-left and the expected
+    // numbers below are arithmetic rather than a guess about how thick a caption is.
+    m_window = CreateWindowExW(0, L"NeuronClientTestsPointerHost", L"", WS_POPUP, WINDOW_LEFT, WINDOW_TOP, 1280, 800, nullptr, nullptr,
+                               GetModuleHandleW(nullptr), nullptr);
+    Assert::IsNotNull(m_window, L"the test needs a window to convert screen coordinates against");
+  }
+
+  TEST_METHOD_CLEANUP(DestroyHostWindow)
+  {
+    if (m_window != nullptr)
+    {
+      DestroyWindow(m_window);
+      m_window = nullptr;
+    }
+  }
+
+  /// Packs a screen point the way Windows packs it into WM_POINTERDOWN's lParam.
+  [[nodiscard]] static LPARAM PackScreenPoint(int _screenX, int _screenY)
+  {
+    return static_cast<LPARAM>((static_cast<std::uint32_t>(_screenY & 0xFFFF) << 16) | static_cast<std::uint32_t>(_screenX & 0xFFFF));
+  }
+
+  TEST_METHOD(NothingIsPendingBeforeAPointerDown)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsFalse(input.TakeClick(x, y));
+  }
+
+  TEST_METHOD(APointerDownBecomesAVirtualTexel)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    // The window's client area starts at (300, 200) on screen, so this screen point is client
+    // (400, 300), which at present scale 2 is virtual texel (200, 150).
+    Assert::IsTrue(input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 400, WINDOW_TOP + 300)));
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsTrue(input.TakeClick(x, y));
+    Assert::AreEqual(200.0F, x, 0.0F);
+    Assert::AreEqual(150.0F, y, 0.0F);
+  }
+
+  TEST_METHOD(TheTopLeftOfTheClientAreaIsTheOrigin)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+    Assert::IsTrue(input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT, WINDOW_TOP)));
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsTrue(input.TakeClick(x, y));
+    Assert::AreEqual(0.0F, x, 0.0F);
+    Assert::AreEqual(0.0F, y, 0.0F);
+  }
+
+  TEST_METHOD(TakingAClickClearsIt)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+    input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100));
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsTrue(input.TakeClick(x, y));
+    Assert::IsFalse(input.TakeClick(x, y), L"a click is delivered once");
+  }
+
+  // Only the most recent tap survives: the ship goes where the player last pointed.
+  TEST_METHOD(ASecondTapReplacesAnUnreadFirst)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+    input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100));
+    input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 900, WINDOW_TOP + 500));
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsTrue(input.TakeClick(x, y));
+    Assert::AreEqual(450.0F, x, 0.0F);
+    Assert::AreEqual(250.0F, y, 0.0F);
+  }
+
+  // There is no keyboard control in this game and no mouse-button handler either: with
+  // EnableMouseInPointer on, a mouse click arrives as WM_POINTERDOWN. Anything else is ignored,
+  // and asserting that is what stops a second input path appearing by accident.
+  TEST_METHOD(OtherMessagesAreIgnored)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    Assert::IsFalse(input.HandleMessage(WM_LBUTTONDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100)));
+    Assert::IsFalse(input.HandleMessage(WM_KEYDOWN, VK_SPACE, 0));
+    Assert::IsFalse(input.HandleMessage(WM_POINTERUP, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100)));
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsFalse(input.TakeClick(x, y));
+  }
+
+private:
+  HWND m_window = nullptr;
 };
 
 } // namespace NeuronClientTests
