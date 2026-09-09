@@ -4,8 +4,16 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="Debug.h" />
     <ClInclude Include="NeuronCore.h" />
+    <ClInclude Include="LoopbackTransport.h" />
+    <ClInclude Include="MessageQueue.h" />
+    <ClInclude Include="Protocol.h" />
+    <ClInclude Include="Simulation.h" />
+    <ClInclude Include="Trigonometry.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
+    <ClCompile Include="LoopbackTransport.cpp" />
+    <ClCompile Include="Protocol.cpp" />
+    <ClCompile Include="Trigonometry.cpp" />
   </ItemGroup>
 </Project>

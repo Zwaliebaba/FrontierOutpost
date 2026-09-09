@@ -17,11 +17,17 @@
 #include "Device.h"
 #include "FontRenderer.h"
 #include "IsometricCamera.h"
+#include "LoopbackTransport.h"
 #include "MeshRenderer.h"
 #include "Palette.h"
 #include "PaletteTarget.h"
+#include "Session.h"
 
 #include "ShipMesh.h"
+#include "ShipView.h"
+#include "World.h"
+
+#include <chrono>
 
 namespace
 {
@@ -130,6 +136,21 @@ bool PumpMessages()
   return !g_quitRequested;
 }
 
+/// The status line: the tick the server is on and where it says the ship is.
+///
+/// Metres to one decimal rather than millimetres, because millimetres on a screen where one pixel
+/// is 125 mm is four digits of noise. The tick is what makes it possible to see at a glance that
+/// the server is running at all.
+std::string StatusLine(const Frontier::ShipView& _ship)
+{
+  if (!_ship.HasState())
+  {
+    return "TICK ----  WAITING FOR SERVER";
+  }
+
+  return std::format("TICK {:<6} X {:>8.1F} Z {:>8.1F}", _ship.Tick(), _ship.PositionXMetres(), _ship.PositionZMetres());
+}
+
 int RunGame(HWND _window)
 {
   Neuron::Device device;
@@ -153,14 +174,39 @@ int RunGame(HWND _window)
 
   Neuron::IsometricCamera camera{static_cast<float>(VIRTUAL_WIDTH), static_cast<float>(VIRTUAL_HEIGHT)};
 
-  // Nothing moves it yet: the ship is at the origin, heading zero, until step 5 puts a server
-  // behind it. The client never simulates (MVP-01 section 2).
-  constexpr float SHIP_HEADING_RADIANS = 0.0F;
-  const Neuron::IsometricCamera::WorldPoint shipPosition = {0.0F, 0.0F, 0.0F};
+  // The server. It gets its own thread here and keeps it: same-thread is not a stage this passes
+  // through (MVP-01 section 2). The transport outlives the session, which is why it is declared
+  // first -- destructors run in reverse, so the session stops before the queues it is using go.
+  Neuron::LoopbackTransport transport;
+  Neuron::Session session;
+  session.Start(std::make_unique<Frontier::World>(), transport);
+
+  // The client's entire opinion about where the ship is. It cannot move it; only a state arriving
+  // from the transport changes what this says (ADR-005).
+  Frontier::ShipView ship;
+
+  auto previousFrame = std::chrono::steady_clock::now();
 
   while (PumpMessages())
   {
-    camera.Follow(shipPosition);
+    const auto now = std::chrono::steady_clock::now();
+    const float elapsedSeconds = std::chrono::duration<float>{now - previousFrame}.count();
+    previousFrame = now;
+
+    // Drain every state that arrived since the last frame. At 20 Hz against a display running
+    // faster, this is usually none or one.
+    Neuron::ShipState state = {};
+    while (transport.ReceiveState(state))
+    {
+      ship.Accept(state);
+    }
+    ship.Advance(elapsedSeconds);
+
+    // Before the first state has arrived there is no ship, so the camera sits at the origin and
+    // nothing is drawn. It lasts one tick at most and it is the honest thing to show: the client
+    // has not been told where anything is (ADR-005).
+    const Neuron::IsometricCamera::WorldPoint shipPosition = {ship.PositionXMetres(), 0.0F, ship.PositionZMetres()};
+    camera.Follow(ship.HasState() ? shipPosition : Neuron::IsometricCamera::WorldPoint{0.0F, 0.0F, 0.0F});
 
     ID3D12GraphicsCommandList* commandList = device.BeginFrame();
 
@@ -168,10 +214,15 @@ int RunGame(HWND _window)
     // draws writes a palette index.
     screen.BeginScene(commandList);
 
-    shipRenderer.Draw(commandList, camera, Frontier::ShipWorldMatrix(SHIP_HEADING_RADIANS, shipPosition.x, shipPosition.y, shipPosition.z));
+    if (ship.HasState())
+    {
+      shipRenderer.Draw(commandList, camera,
+                        Frontier::ShipWorldMatrix(ship.HeadingRadians(), shipPosition.x, shipPosition.y, shipPosition.z));
+    }
 
     text.BeginFrame(device.FrameIndex());
     text.DrawText(8, 8, "FRONTIER OUTPOST", Neuron::ToIndex(Neuron::PaletteIndex::White));
+    text.DrawText(8, 20, StatusLine(ship), Neuron::ToIndex(Neuron::PaletteIndex::BrightGreen));
     text.Flush(commandList);
 
     screen.Resolve(commandList, device.BackBufferView(), device.BackBufferWidthPixels(), device.BackBufferHeightPixels(), PRESENT_SCALE);
@@ -179,6 +230,10 @@ int RunGame(HWND _window)
     device.EndFrameAndPresent();
     device.DrainDebugMessages();
   }
+
+  // Before the GPU wait, so the server thread is not still pushing states into a transport that
+  // is about to go out of scope.
+  session.Stop();
 
   // Drain the GPU here, not in ~Device. Destructors run in reverse declaration order, so the
   // PaletteTarget's index target and depth buffer would otherwise be released while the last

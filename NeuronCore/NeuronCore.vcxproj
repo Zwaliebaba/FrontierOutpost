@@ -121,10 +121,18 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="LoopbackTransport.cpp" />
+    <ClCompile Include="Protocol.cpp" />
+    <ClCompile Include="Trigonometry.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Debug.h" />
+    <ClInclude Include="LoopbackTransport.h" />
+    <ClInclude Include="MessageQueue.h" />
     <ClInclude Include="NeuronCore.h" />
+    <ClInclude Include="Protocol.h" />
+    <ClInclude Include="Simulation.h" />
+    <ClInclude Include="Trigonometry.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
