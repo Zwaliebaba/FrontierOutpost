@@ -15,6 +15,8 @@
 #include "FrontierOutpost.h"
 
 #include "Device.h"
+#include "Palette.h"
+#include "PaletteTarget.h"
 
 namespace
 {
@@ -105,17 +107,33 @@ int RunGame(HWND _window)
   Neuron::Device device;
   device.Create(_window, VIRTUAL_WIDTH * PRESENT_SCALE, VIRTUAL_HEIGHT * PRESENT_SCALE);
 
+  // One shader-visible descriptor heap for the whole client: only one can be bound at a time, so
+  // every renderer allocates its slots out of this (DescriptorHeap.h).
+  Neuron::DescriptorHeap shaderVisibleHeap;
+  shaderVisibleHeap.Create(device.Handle(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 16, true);
+
+  Neuron::PaletteTarget screen;
+  screen.Create(device.Handle(), shaderVisibleHeap, Neuron::ToIndex(Neuron::PaletteIndex::Blue));
+
   while (PumpMessages())
   {
     ID3D12GraphicsCommandList* commandList = device.BeginFrame();
 
-    const D3D12_CPU_DESCRIPTOR_HANDLE backBufferView = device.BackBufferView();
-    constexpr float CLEAR_COLOR[4] = {0.0F, 0.0F, 0.0F, 1.0F};
-    commandList->OMSetRenderTargets(1, &backBufferView, FALSE, nullptr);
-    commandList->ClearRenderTargetView(backBufferView, CLEAR_COLOR, 0, nullptr);
+    // Everything the game draws goes between BeginScene and Resolve, and every one of those
+    // draws writes a palette index. There is nothing to draw yet, so the frame is the clear.
+    screen.BeginScene(commandList);
+    screen.Resolve(commandList, device.BackBufferView(), device.BackBufferWidthPixels(), device.BackBufferHeightPixels(), PRESENT_SCALE);
 
     device.EndFrameAndPresent();
+    device.DrainDebugMessages();
   }
+
+  // Drain the GPU here, not in ~Device. Destructors run in reverse declaration order, so the
+  // PaletteTarget's index target and depth buffer would otherwise be released while the last
+  // submitted command list still referenced them -- which the debug layer reports as
+  // OBJECT_DELETED_WHILE_STILL_IN_USE and a release build turns into a use-after-free.
+  device.WaitForGpu();
+  device.DrainDebugMessages();
 
   return EXIT_SUCCESS;
 }

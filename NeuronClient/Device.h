@@ -50,6 +50,13 @@ public:
   /// call before tearing down anything the command lists still reference.
   void WaitForGpu() noexcept;
 
+  /// Empties the debug layer's message queue into DebugTrace, and does nothing in a Release
+  /// build. Errors and corruption already broke at the call that caused them; this is what makes
+  /// the layer's warnings and info visible to somebody running the game without a debugger
+  /// attached, so that "no debug-layer output" is a claim that can be checked rather than
+  /// assumed.
+  void DrainDebugMessages();
+
   [[nodiscard]] ID3D12Device* Handle() const noexcept
   {
     return m_device.get();
@@ -93,6 +100,8 @@ private:
   std::array<std::uint64_t, FRAME_COUNT> m_fenceValues = {};
   winrt::com_ptr<ID3D12GraphicsCommandList> m_commandList;
   winrt::com_ptr<ID3D12Fence> m_fence;
+  /// Null in Release and on a machine without the Graphics Tools feature installed.
+  winrt::com_ptr<ID3D12InfoQueue> m_infoQueue;
   winrt::handle m_fenceEvent;
   std::uint32_t m_renderTargetViewSize = 0;
   std::uint32_t m_frameIndex = 0;

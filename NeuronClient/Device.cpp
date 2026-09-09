@@ -7,6 +7,8 @@
 #include "pch.h"
 #include "Device.h"
 
+#include "D3D12Defaults.h"
+
 namespace Neuron
 {
 
@@ -34,37 +36,23 @@ void EnableDebugLayerIfPresent()
 #endif
 }
 
-/// Makes a debug-layer error stop the program at the call that caused it.
-///
-/// Without this the layer writes a line to the debugger and the frame carries on, which means a
-/// wrong barrier or a mismatched root signature shows up as a picture that is subtly wrong three
-/// steps later. Breaking here is what lets "no debug-layer output" be an exit criterion somebody
-/// can actually check rather than something they have to remember to read.
-void BreakOnDebugLayerErrors([[maybe_unused]] ID3D12Device* _device) noexcept
+const char* SeverityName(D3D12_MESSAGE_SEVERITY _severity) noexcept
 {
-#if defined(_DEBUG)
-  winrt::com_ptr<ID3D12InfoQueue> infoQueue;
-  if (FAILED(_device->QueryInterface(IID_PPV_ARGS(infoQueue.put()))))
+  switch (_severity)
   {
-    return; // A probe: no debug layer means nothing to configure.
+  case D3D12_MESSAGE_SEVERITY_CORRUPTION:
+    return "CORRUPTION";
+  case D3D12_MESSAGE_SEVERITY_ERROR:
+    return "ERROR";
+  case D3D12_MESSAGE_SEVERITY_WARNING:
+    return "WARNING";
+  case D3D12_MESSAGE_SEVERITY_INFO:
+    return "INFO";
+  case D3D12_MESSAGE_SEVERITY_MESSAGE:
+    return "MESSAGE";
+  default:
+    return "UNKNOWN";
   }
-
-  infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
-  infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
-  infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, TRUE);
-#endif
-}
-
-D3D12_RESOURCE_BARRIER TransitionBarrier(ID3D12Resource* _resource, D3D12_RESOURCE_STATES _before, D3D12_RESOURCE_STATES _after) noexcept
-{
-  D3D12_RESOURCE_BARRIER barrier = {};
-  barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-  barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-  barrier.Transition.pResource = _resource;
-  barrier.Transition.StateBefore = _before;
-  barrier.Transition.StateAfter = _after;
-  barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-  return barrier;
 }
 
 } // namespace
@@ -127,7 +115,19 @@ void Device::CreateDeviceAndQueue()
     Fatal("No Direct3D 12 adapter at feature level 11_0. This game is D3D12 only (AGENTS.md R12).");
   }
 
-  BreakOnDebugLayerErrors(m_device.get());
+  // Errors and corruption break at the call that caused them: a wrong barrier or a mismatched
+  // root signature otherwise shows up as a picture that is subtly wrong three steps later.
+  // Warnings deliberately do NOT break -- they are drained to DebugTrace instead, because a
+  // warning is usually a thing to read and decide about rather than a reason to stop, and a
+  // break with no debugger attached hangs the process in Windows Error Reporting where nobody
+  // can see what it was.
+#if defined(_DEBUG)
+  if (SUCCEEDED(m_device->QueryInterface(IID_PPV_ARGS(m_infoQueue.put()))))
+  {
+    winrt::check_hresult(m_infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE));
+    winrt::check_hresult(m_infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE));
+  }
+#endif
 
   D3D12_COMMAND_QUEUE_DESC queueDesc = {};
   queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -272,6 +272,37 @@ void Device::WaitForGpu() noexcept
   }
 
   m_fenceValues[m_frameIndex] = target + 1;
+}
+
+void Device::DrainDebugMessages()
+{
+  if (!m_infoQueue)
+  {
+    return;
+  }
+
+  const UINT64 count = m_infoQueue->GetNumStoredMessages();
+  std::vector<std::byte> storage;
+  for (UINT64 index = 0; index < count; ++index)
+  {
+    SIZE_T length = 0;
+    if (FAILED(m_infoQueue->GetMessage(index, nullptr, &length)))
+    {
+      continue;
+    }
+
+    storage.resize(length);
+    auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+    if (FAILED(m_infoQueue->GetMessage(index, message, &length)))
+    {
+      continue;
+    }
+
+    DebugTrace("D3D12 {}: {}\n", SeverityName(message->Severity),
+               std::string_view{message->pDescription, message->DescriptionByteLength - 1});
+  }
+
+  m_infoQueue->ClearStoredMessages();
 }
 
 void Device::FailIfDeviceRemoved(HRESULT _result, const char* _what)

@@ -14,7 +14,9 @@ still cannot see three kinds of defect, and this script is where those live (AGE
                       .filters, with the exact on-disk spelling, and every listed file exists.
                       MSVC resolves includes case-insensitively and MSBuild silently ignores a
                       file it was never told about, so a half-done move builds locally and fails
-                      only in CI -- or worse, links a stale object nobody notices.
+                      only in CI -- or worse, links a stale object nobody notices. This covers
+                      <Library>/Shaders/*.hlsl as FXCompile items too: the same defect, and the
+                      one directory the flat-directory rule makes an exception for.
   3. NAMING           R2's banned type affixes, R7's file naming and R11's standing spellings.
                       clang-tidy can require an absent prefix but cannot ban a present suffix,
                       and it never looks at a file name at all.
@@ -201,7 +203,7 @@ def check_solution() -> None:
 def registered_files(path: str) -> set[str]:
     tree = ElementTree.parse(path)
     names: set[str] = set()
-    for tag in ("ClCompile", "ClInclude", "ResourceCompile", "None", "Image"):
+    for tag in ("ClCompile", "ClInclude", "ResourceCompile", "None", "Image", "FXCompile"):
         for element in tree.iter(f"{{{MSBUILD_NAMESPACE}}}{tag}"):
             include = element.get("Include")
             if include:
@@ -238,6 +240,55 @@ def check_registration(name: str, directory: str) -> None:
         if entry not in on_disk:
             fail(f"{directory}: {name}.vcxproj lists {entry}, which is not on disk with that exact spelling. "
                  f"MSVC resolves includes case-insensitively, so a wrong case still builds here and fails elsewhere.")
+
+
+def check_shader_registration(name: str, directory: str) -> None:
+    """<Library>/Shaders/*.hlsl is registered as FXCompile in the .vcxproj AND the .filters.
+
+    The same defect as a missing .cpp, with a nastier failure. A .hlsl MSBuild was never told
+    about produces no header in CompiledShaders/, so the build fails at the #include -- which is
+    at least loud. The other direction is the quiet one: a .hlsl listed under the wrong item type,
+    or present in the .vcxproj but not the .filters, builds correctly on the machine that added it
+    and disappears from the IDE for everybody else. CompiledShaders/ is deliberately NOT checked;
+    it is build output (AGENTS.md 2).
+    """
+    shaders_directory = os.path.join(REPO_ROOT, directory, "Shaders")
+    if not os.path.isdir(shaders_directory):
+        return
+
+    project_file = os.path.join(REPO_ROOT, directory, f"{name}.vcxproj")
+    filters_file = project_file + ".filters"
+    in_project = registered_files(project_file)
+    in_filters = registered_files(filters_file) if os.path.exists(filters_file) else set()
+
+    on_disk = {
+        os.path.join("Shaders", entry)
+        for entry in os.listdir(shaders_directory)
+        if os.path.isfile(os.path.join(shaders_directory, entry))
+    }
+
+    for entry in sorted(on_disk):
+        if not entry.endswith(".hlsl"):
+            fail(f"{directory}\\{entry}: Shaders/ holds hand-written .hlsl and nothing else "
+                 f"(AGENTS.md 2). Compiler output belongs in CompiledShaders/.")
+            continue
+        if entry not in in_project:
+            fail(f"{directory}\\{entry}: on disk but not in {name}.vcxproj as an FXCompile item. "
+                 f"A shader MSBuild was never told about writes no header.")
+        elif entry not in in_filters:
+            fail(f"{directory}\\{entry}: in {name}.vcxproj but not in {name}.vcxproj.filters.")
+
+    for entry in sorted(in_project | in_filters):
+        if entry.startswith("Shaders\\") and entry not in on_disk:
+            fail(f"{directory}: {name}.vcxproj lists {entry}, which is not on disk with that exact spelling.")
+
+    # R7's naming rule, applied to the shader half of the tree: <Shader>VS.hlsl / <Shader>PS.hlsl,
+    # because the file stem is what names the generated header AND the byte array inside it.
+    for entry in sorted(on_disk):
+        stem = os.path.splitext(os.path.basename(entry))[0]
+        if entry.endswith(".hlsl") and not re.fullmatch(r"[A-Z][A-Za-z0-9]*(VS|PS)", stem):
+            fail(f"{directory}\\{entry}: R7 -- a shader is named <Shader>VS.hlsl or <Shader>PS.hlsl, "
+                 f"PascalCase; the stem names the generated header and the g_<Shader> array in it.")
 
 
 def check_flat_directories(name: str, directory: str) -> None:
@@ -315,6 +366,7 @@ def main() -> int:
         tree = ElementTree.parse(project_file)
         check_build_shape(name, os.path.join(directory, f"{name}.vcxproj"), tree)
         check_registration(name, directory)
+        check_shader_registration(name, directory)
         check_flat_directories(name, directory)
 
     check_solution()
