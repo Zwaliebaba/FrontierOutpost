@@ -5,11 +5,16 @@
 // non-resizable window, no menu and no About dialog. The window is the presentation target
 // described in Design/README.md -- a 640x400 framebuffer scaled by an integer factor, so the
 // client area is exactly SCALE times the virtual resolution and every virtual pixel lands on a
-// whole number of physical ones. The D3D12 device, the 16-colour palette and the game loop
-// replace the GetMessage loop below; nothing here is meant to survive that.
+// whole number of physical ones.
+//
+// There is no WM_PAINT handler and there must not be one: from the moment the swap chain exists
+// it owns every pixel of the client area, and a BeginPaint/EndPaint pair racing it produces a
+// flash and nothing else (AGENTS.md 4, NOGDI).
 
 #include "pch.h"
 #include "FrontierOutpost.h"
+
+#include "Device.h"
 
 namespace
 {
@@ -24,20 +29,14 @@ constexpr wchar_t WINDOW_CLASS_NAME[] = L"FrontierOutpostWindow";
 constexpr wchar_t WINDOW_TITLE[] = L"Frontier Outpost";
 
 HINSTANCE g_instance = nullptr;
+bool g_quitRequested = false;
 
 LRESULT CALLBACK WndProc(HWND _window, UINT _message, WPARAM _wParam, LPARAM _lParam)
 {
   switch (_message)
   {
-  case WM_PAINT:
-  {
-    PAINTSTRUCT paint;
-    BeginPaint(_window, &paint);
-    EndPaint(_window, &paint);
-    return 0;
-  }
-
   case WM_DESTROY:
+    g_quitRequested = true;
     PostQuitMessage(0);
     return 0;
 
@@ -53,8 +52,6 @@ bool RegisterWindowClass(HINSTANCE _instance)
   windowClass.style = CS_HREDRAW | CS_VREDRAW;
   windowClass.lpfnWndProc = WndProc;
   windowClass.hInstance = _instance;
-  //windowClass.hIcon = LoadIconW(_instance, MAKEINTRESOURCEW(IDI_FRONTIEROUTPOST));
-  //windowClass.hIconSm = LoadIconW(_instance, MAKEINTRESOURCEW(IDI_SMALL));
   windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
   // No background brush. NeuronCore.h defines NOGDI, so GetStockObject is not even declared here
   // -- which is the right answer rather than an obstacle: the swap chain owns every pixel of the
@@ -86,6 +83,43 @@ HWND CreateMainWindow(HINSTANCE _instance, int _showCommand)
   return window;
 }
 
+/// PeekMessage, not GetMessage: the loop now has a frame to render whether or not the window has
+/// anything to say. Returns false when the queue produced WM_QUIT.
+bool PumpMessages()
+{
+  MSG message = {};
+  while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+  {
+    if (message.message == WM_QUIT)
+    {
+      return false;
+    }
+    TranslateMessage(&message);
+    DispatchMessageW(&message);
+  }
+  return !g_quitRequested;
+}
+
+int RunGame(HWND _window)
+{
+  Neuron::Device device;
+  device.Create(_window, VIRTUAL_WIDTH * PRESENT_SCALE, VIRTUAL_HEIGHT * PRESENT_SCALE);
+
+  while (PumpMessages())
+  {
+    ID3D12GraphicsCommandList* commandList = device.BeginFrame();
+
+    const D3D12_CPU_DESCRIPTOR_HANDLE backBufferView = device.BackBufferView();
+    constexpr float CLEAR_COLOR[4] = {0.0F, 0.0F, 0.0F, 1.0F};
+    commandList->OMSetRenderTargets(1, &backBufferView, FALSE, nullptr);
+    commandList->ClearRenderTargetView(backBufferView, CLEAR_COLOR, 0, nullptr);
+
+    device.EndFrameAndPresent();
+  }
+
+  return EXIT_SUCCESS;
+}
+
 } // namespace
 
 int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInstance, _In_ LPWSTR _commandLine, _In_ int _showCommand)
@@ -100,17 +134,27 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
     return EXIT_FAILURE;
   }
 
-  if (CreateMainWindow(_instance, _showCommand) == nullptr)
+  HWND window = CreateMainWindow(_instance, _showCommand);
+  if (window == nullptr)
   {
     return EXIT_FAILURE;
   }
 
-  MSG message = {};
-  while (GetMessageW(&message, nullptr, 0, 0) > 0)
+  // The composition root is the one place that catches. Debug.h routes every HRESULT that had to
+  // succeed, every failed Win32 call and every broken invariant into one exception precisely so
+  // that there is one place to tell a person about it.
+  try
   {
-    TranslateMessage(&message);
-    DispatchMessageW(&message);
+    return RunGame(window);
   }
-
-  return static_cast<int>(message.wParam);
+  catch (const winrt::hresult_error& error)
+  {
+    MessageBoxW(nullptr, error.message().c_str(), WINDOW_TITLE, MB_OK | MB_ICONERROR);
+    return EXIT_FAILURE;
+  }
+  catch (const std::exception& error)
+  {
+    MessageBoxA(nullptr, error.what(), "Frontier Outpost", MB_OK | MB_ICONERROR);
+    return EXIT_FAILURE;
+  }
 }

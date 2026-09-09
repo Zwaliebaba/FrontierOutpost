@@ -4,8 +4,10 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="NeuronClient.h" />
     <ClInclude Include="Font.h" />
+    <ClInclude Include="Device.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
+    <ClCompile Include="Device.cpp" />
   </ItemGroup>
 </Project>
