@@ -102,7 +102,9 @@ BANNED_SPELLINGS = {
 }
 BANNED_SPELLING_PATTERN = re.compile("|".join(BANNED_SPELLINGS), re.IGNORECASE)
 
-SKIP_DIRECTORIES = {".git", ".vs", "x64", "packages", "__pycache__"}
+# CompiledShaders holds build output: the headers the shader compiler writes (AGENTS.md 3). Never
+# hand-written, never committed, never formatted or linted.
+SKIP_DIRECTORIES = {".git", ".vs", "x64", "packages", "__pycache__", "CompiledShaders"}
 
 problems: list[str] = []
 

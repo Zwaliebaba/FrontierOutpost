@@ -162,7 +162,10 @@ GameLogicTests.dll      ← GameLogic, NeuronCore
 
 **`GameLogic` is referenced by the executable and by nothing else.** It is server-side game code; the day a client-side file reaches for it is the day the server stopped being authoritative. Likewise nothing in `NeuronClient` may reach `NeuronServer` or the reverse — they share `NeuronCore` and that is the whole of their common ground.
 
-**Project directories are flat.** Source lives directly in `NeuronCore/`, `GameLogic/` and so on — no subdirectories. This is not taste: `.clang-tidy`'s `HeaderFilterRegex` matches headers exactly one level in, so a header in a subdirectory is silently unchecked. `Build/CheckProjectFiles.py` fails the build on one.
+**Project directories are flat, with exactly two sanctioned subdirectories.** C++ source lives directly in `NeuronCore/`, `GameLogic/` and so on. This is not taste: `.clang-tidy`'s `HeaderFilterRegex` matches headers exactly one level in, so a header in a subdirectory is silently unchecked. `Build/CheckProjectFiles.py` fails the build on one. The two exceptions are the shader pipeline (owner decision, 2026-09-09):
+
+- **`<Library>/Shaders/`** holds the HLSL, hand-written, named `<Shader>VS.hlsl` and `<Shader>PS.hlsl` for the vertex and pixel halves of one shader.
+- **`<Library>/CompiledShaders/`** holds what the compiler wrote: one header per `.hlsl`, `<Shader>VS.h` and `<Shader>PS.h`, each declaring a byte array `g_<Shader>VS` / `g_<Shader>PS`. It is **build output** — produced by an `FXCompile` item in the `.vcxproj` on every build, listed in `.gitignore`, skipped by every checker, and never edited or committed. The `.cpp` that binds the pipeline state includes it and nothing else does.
 
 **There are no vendored SDKs and no package manager.** The build depends on the Windows SDK and the MSVC standard library, and on nothing else. See R14.
 
@@ -238,7 +241,7 @@ x64\Debug\FrontierOutpost.exe
 
 **R12 — Graphics is Direct3D 12 only**, and the screen it presents is fixed. 640×400 with a 16-entry palette, scaled to the window by a **whole number**; a fractional scale is what turns a crisp legacy screen into mush. No D3D11, no D3D11On12, no immediate-mode helper layers. COM lifetimes are RAII from the first line — a raw `AddRef`/`Release` pair in new code is a defect, not a style.
 
-**R13 — The executable ships alone.** There is no assets folder, no data directory, nothing beside `FrontierOutpost.exe` at runtime. Art, palettes, fonts, sound and **compiled shaders** are embedded — through the `.rc` resources, or as generated C++ arrays produced at build time by a step in the `.vcxproj`. Never add a runtime file dependency, a working-directory assumption or a "just for development" loose-file path; the loose path is the one that ships.
+**R13 — The executable ships alone.** There is no assets folder, no data directory, nothing beside `FrontierOutpost.exe` at runtime. Art, palettes, fonts, meshes and sound are embedded as `constexpr` arrays in headers — `NeuronClient/Font.h` is the pattern: 96 glyphs, 8×8, one bit a pixel, 768 bytes, and nothing to load. **Shaders are compiled at build time**, never at runtime: `<Library>/Shaders/<Shader>VS.hlsl` goes through the `.vcxproj`'s `FXCompile` step into `<Library>/CompiledShaders/<Shader>VS.h` as `g_<Shader>VS` (§2). No `D3DCompile`, no `d3dcompiler_47.dll` beside the executable, no `.cso` on disk. Never add a runtime file dependency, a working-directory assumption or a "just for development" loose-file path; the loose path is the one that ships.
 
 **R14 — No third-party dependencies and no package manager.** The Windows SDK and the MSVC standard library, and nothing else. If you believe something is unavoidable, propose it in your report with what it buys and what it costs — do not add it. This is a closed list, not a high bar.
 
