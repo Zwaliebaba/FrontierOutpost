@@ -8,42 +8,36 @@
 # overlap: clang-tidy has no check that reports a wrong brace position or an over-long line, and
 # clang-format cannot see that a parameter is missing its `_`.
 #
-# ── Status: CI gates this over GameLogic and NeuronServer ──────────────────────────────────
+# ── Status: CI gates this over the whole tree ──────────────────────────────────────────────
 #
-# Both linters gate (AGENTS.md §6): clang-format over the whole tree on Linux, clang-tidy on
-# Windows after the build, over GameLogic and NeuronServer -- the second promoted on 2026-08-30
-# after two clean runs under the runner's LLVM 22, which is how a linter arrives here and starts
-# gating. The .vcxproj files still do not enable MSBuild code
-# analysis, so on the other seven projects this file is enforced by review and by whoever remembers
-# to run it. Slice 23 of Design/Archive/MmoScalabilityPlan.md widens the job a project at a time; NeuronCore
-# is next, and slice 22 already swept its one header.
-# Run it by hand ON THE FILES YOU WROTE -- not on the tree, where the engine projects reach D3D12
-# and C++/WinRT headers that have never been swept and will bury your own findings:
+# `.github/workflows/build.yml` runs clang-tidy on the Windows job, after the build, over every
+# hand-written translation unit in the tree (AGENTS.md §6). It runs through clang's MSVC driver
+# (`--driver-mode=cl`) against the same switches the .vcxproj files set, because the alternative —
+# GNU driver mode against the Windows SDK — disagrees with MSVC in both directions and reports
+# defects that are not there.
 #
-#   clang-tidy --quiet NeuronCore/YourNewFile.cpp -- -I . -D _WIN32 -D _DEBUG /std:c++latest
+# This repository is GREENFIELD. Nothing is grandfathered, a whole-tree pass comes back clean
+# today, and a finding is therefore a defect rather than archaeology. That is a claim CI keeps
+# true; it is not a claim about how careful anyone was. When it breaks, fix the code — do not
+# narrow the filter.
 #
-# GameLogic has been swept clean under clang-tidy 18 (Linux) and LLVM 20.1.8 (the CI runner),
-# so a finding there is new work rather than archaeology. What that cost: two identifier
-# findings (local constexpr constants, a lambda parameter), one truncating division split out
-# of the float expression it fed so the intent reads, the `-performance-enum-size` exclusion
-# below, and -- from the Windows run only, which is the argument for having it -- a `noexcept`
-# on `ComputeUniverseHash` that its own per-list allocation could not keep.
+# Run it yourself, on the files you wrote, before you push. From a Developer PowerShell (the
+# INCLUDE variable is what makes the Windows SDK visible to clang):
 #
-# NeuronServer was swept under clang-tidy 18 (Linux) before the job was widened to it and came back
-# with nothing at all -- three headers and one translation unit, which is why it was the project to
-# take next. The runner's LLVM 22 then found it clean on two consecutive main runs (2026-08-30),
-# and it gates.
+#   clang-tidy --quiet NeuronCore/YourNewFile.cpp -- --driver-mode=cl /std:c++latest /EHsc `
+#     /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_DEBUG /I NeuronCore
 #
-# Unlike the sibling tree there is nothing grandfathered here — this is a greenfield repository,
-# so a whole-tree pass should come back clean and a finding is a defect, not archaeology. That
-# claim has now been tested on two projects; the graphics-facing ones are still untested, and the
-# version spread is itself a finding: the newer clang-tidy saw a defect the older one did not, so
-# "clean" is always clean *under something*.
+# UNICODE and _UNICODE are not optional in that command. Every project sets CharacterSet=Unicode,
+# so `IDC_ARROW` is `MAKEINTRESOURCEW`; without the defines clang-tidy reports a type error at
+# every `LoadCursorW` call that MSVC compiles without complaint.
+#
+# THE VERSION MATTERS. clang-tidy 22 finds defects clang-tidy 18 does not, so "clean" is always
+# clean *under something*. The workflow prints the version it used every run.
 
-# Three rules of AGENTS.md §1 this file cannot express — R2's banned type affixes, R7's file naming
-# and .vcxproj/.filters registration, and R11's standing spelling families — are checked by
-# Build/CheckProjectFiles.py, which runs in the same CI job that builds. A check that exists
-# somewhere is worth more than a rule everyone is asked to remember.
+# Four rules of AGENTS.md §1 this file cannot express — R2's banned type affixes, R7's file naming
+# and .vcxproj/.filters registration, R11's standing spelling families, and §3's flat project
+# directories — are checked by Build/CheckProjectFiles.py, which runs in the same CI job that
+# builds. A check that exists somewhere is worth more than a rule everyone is asked to remember.
 #
 # readability-identifier-length is deliberately NOT enabled. Its defaults reject the domain
 # vocabulary this codebase is built on — x, y, _a, _b — and short names here are precise, not lazy.
@@ -62,14 +56,13 @@ Checks: >
 # `-clang-analyzer-optin.performance.Padding` is a judgement call, not a mechanical exclusion. It
 # is an OPT-IN analyzer that arrives with clang-tidy's defaults because this list does not begin
 # with `-*`. Wire records, mesh vertices and GPU instance structs have layouts that are
-# load-bearing — a snapshot record is the size the wire says it is — and
-# reordering fields to save padding is exactly the change this repository must not make casually.
+# load-bearing — a snapshot record is the size the wire says it is — and reordering fields to save
+# padding is exactly the change this repository must not make casually.
 #
 # `-bugprone-narrowing-conversions` is off because quantisation is pervasive and deliberate:
-# metres to eighth-metre lattice steps, radians to turns16, i64 sectors to the wire's i32, float to
-# the integer wire types. It would fire on most of the serialization layer, where the narrowing IS
-# the design. This block described that layer for a year before there was one and said centimetres
-# when the tree does eighth-metres; both are now true rather than aspirational (ADR 0042).
+# world units to lattice steps, radians to turns16, i64 sectors to the wire's i32, float to the
+# integer wire types. It would fire on most of the serialization layer, where the narrowing IS the
+# design.
 #
 # `-performance-enum-size` is off for the same reason as the padding check: it asks a closed
 # taxonomy to shrink to the smallest type its current enumerators happen to fit in. Every such
@@ -80,17 +73,23 @@ Checks: >
 # NOTE ON THE FORMAT: `Checks:` is a FOLDED scalar, so a `#` line indented under it is not a
 # comment — it folds into the value and corrupts the check list. Every comment belongs here.
 #
-# WarningsAsErrors: '*' says every enabled check is fatal, so that a future gate has one answer
-# rather than two settings disagreeing about which findings matter.
+# WarningsAsErrors: '*' says every enabled check is fatal, so that the gate has one answer rather
+# than two settings disagreeing about which findings matter.
 WarningsAsErrors: '*'
 
 # [/\\], not '/'. On a Windows Clang build the paths arrive with backslashes, so a filter anchored
 # on a forward slash matches no header at all and silently suppresses every in-build diagnostic.
-# Headers sitting DIRECTLY in a project folder, which is every hand-written one (AGENTS.md 3's
-# flat-directory rule). The `.*` this replaced also matched build output -- the C++/WinRT
-# projection under <Project>/x64/Debug/Generated Files/winrt/ -- and 46 of the 77 diagnostics in
-# the first sweep were from headers no one in this repository wrote.
-HeaderFilterRegex: '(NeuronCore|GameLogic|NeuronServer|NeuronClient|Outpost)[/\\][A-Za-z0-9]+\.h$'
+# Headers sitting DIRECTLY in a project folder, which is every hand-written one (AGENTS.md §3's
+# flat-directory rule). A bare `.*` would also match build output and the Windows SDK, and most of
+# what it reported would be from headers nobody in this repository wrote.
+HeaderFilterRegex: '(NeuronCore|NeuronClient|NeuronServer|GameLogic|FrontierOutpost|[A-Za-z0-9]+Tests)[/\\][A-Za-z0-9]+\.h$'
+
+# FrontierOutpost/Resource.h is written by the Visual Studio resource editor, not by hand. Its
+# `#define IDC_STATIC -1` trips bugprone-macro-parentheses, and the fix would be undone the next
+# time someone opens the dialog editor. Excluded here rather than by weakening the check for
+# everything else. (`ExcludeHeaderFilterRegex` needs clang-tidy 19 or newer; on an older one pass
+# `--exclude-header-filter='Resource\.h$'` instead.)
+ExcludeHeaderFilterRegex: 'Resource\.h$'
 
 CheckOptions:
   # ── Types: PascalCase, no prefix of any kind (R2, R5) ──────────────────────────────

@@ -1,12 +1,17 @@
 <Solution>
+  <!--
+    x64 is the only platform this game supports (AGENTS.md 3). Win32/x86 was removed
+    on 2026-09-09 together with the Win32 configurations in every .vcxproj: nothing
+    in a 640x400 D3D12 client wants a 32-bit address space, and a second platform
+    nobody builds is a second platform nobody notices breaking.
+  -->
   <Configurations>
     <Platform Name="x64" />
-    <Platform Name="x86" />
   </Configurations>
   <Folder Name="/Tests/">
     <Project Path="Tests/GameLogicTests/GameLogicTests.vcxproj" Id="1c8daad5-06f9-f54f-d508-9714512d9af0" />
     <Project Path="Tests/NeuronClientTests/NeuronClientTests.vcxproj" Id="82ff8212-c7c5-789c-299a-717affb644a4" />
-    <Project Path="Tests/NeuronCoreTests/NeuronCoreTests.vcxproj" />
+    <Project Path="Tests/NeuronCoreTests/NeuronCoreTests.vcxproj" Id="751fa0ba-2b31-0b79-bbad-782e911726df" />
     <Project Path="Tests/NeuronServerTests/NeuronServerTests.vcxproj" Id="96d8b9a7-2d2d-10ef-4802-cba34eb98cc8" />
   </Folder>
   <Project Path="FrontierOutpost/FrontierOutpost.vcxproj" Id="e3c624c0-557c-442f-b033-a83846a21997" />

@@ -1,12 +1,9 @@
-// pch.h: This is a precompiled header file.
-// Files listed below are compiled only once, improving build performance for future builds.
-// This also affects IntelliSense performance, including code completion and many code browsing features.
-// However, files listed here are ALL re-compiled if any one of them is updated between builds.
-// Do not add files here that you will be updating frequently as this negates the performance advantage.
+// pch.h -- the precompiled header for this test project.
+//
+// CppUnitTest.h is included by the test translation units rather than here, so that a failure to
+// find the unit-test headers points at the file that wanted them.
 
 #ifndef PCH_H
 #define PCH_H
 
-// add headers that you want to pre-compile here
-
-#endif //PCH_H
+#endif // PCH_H
