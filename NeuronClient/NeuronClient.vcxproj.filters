@@ -4,6 +4,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="NeuronClient.h" />
     <ClInclude Include="Font.h" />
+    <ClInclude Include="FontRenderer.h" />
     <ClInclude Include="Device.h" />
     <ClInclude Include="DescriptorHeap.h" />
     <ClInclude Include="D3D12Defaults.h" />
@@ -13,6 +14,7 @@
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="Device.cpp" />
+    <ClCompile Include="FontRenderer.cpp" />
     <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="PaletteTarget.cpp" />
   </ItemGroup>
@@ -26,6 +28,12 @@
       <Filter>Shaders</Filter>
     </FXCompile>
     <FXCompile Include="Shaders\PaletteResolvePS.hlsl">
+      <Filter>Shaders</Filter>
+    </FXCompile>
+    <FXCompile Include="Shaders\TextVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FXCompile>
+    <FXCompile Include="Shaders\TextPS.hlsl">
       <Filter>Shaders</Filter>
     </FXCompile>
   </ItemGroup>

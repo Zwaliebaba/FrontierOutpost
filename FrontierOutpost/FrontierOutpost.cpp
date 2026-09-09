@@ -15,6 +15,7 @@
 #include "FrontierOutpost.h"
 
 #include "Device.h"
+#include "FontRenderer.h"
 #include "Palette.h"
 #include "PaletteTarget.h"
 
@@ -66,11 +67,21 @@ bool RegisterWindowClass(HINSTANCE _instance)
 
 // Sizes for the CLIENT area, not the window: AdjustWindowRect adds the border and caption, so
 // the framebuffer is presented 1:1 at PRESENT_SCALE rather than a few rows short of it.
+//
+// AdjustWindowRect assumes 96 DPI, and under per-monitor awareness the caption on a scaled
+// display is not 96 DPI, so its answer is close rather than right. Rather than reach for
+// AdjustWindowRectExForDpi and a DPI to pass it, the window is created and then measured: if the
+// client area came out anything other than exact, the difference is added back. That is correct
+// on every DPI, theme and Windows version without knowing anything about any of them -- and this
+// has to be exact, because a client area one row short means the bottom row of virtual pixels is
+// not PRESENT_SCALE physical pixels tall.
 HWND CreateMainWindow(HINSTANCE _instance, int _showCommand)
 {
   constexpr DWORD STYLE = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+  constexpr int CLIENT_WIDTH = VIRTUAL_WIDTH * PRESENT_SCALE;
+  constexpr int CLIENT_HEIGHT = VIRTUAL_HEIGHT * PRESENT_SCALE;
 
-  RECT bounds = {0, 0, VIRTUAL_WIDTH * PRESENT_SCALE, VIRTUAL_HEIGHT * PRESENT_SCALE};
+  RECT bounds = {0, 0, CLIENT_WIDTH, CLIENT_HEIGHT};
   AdjustWindowRect(&bounds, STYLE, FALSE);
 
   HWND window = CreateWindowExW(0, WINDOW_CLASS_NAME, WINDOW_TITLE, STYLE, CW_USEDEFAULT, CW_USEDEFAULT, bounds.right - bounds.left,
@@ -78,6 +89,19 @@ HWND CreateMainWindow(HINSTANCE _instance, int _showCommand)
   if (window == nullptr)
   {
     return nullptr;
+  }
+
+  RECT clientArea = {};
+  RECT outerArea = {};
+  if (GetClientRect(window, &clientArea) != 0 && GetWindowRect(window, &outerArea) != 0)
+  {
+    const int widthShortfall = CLIENT_WIDTH - (clientArea.right - clientArea.left);
+    const int heightShortfall = CLIENT_HEIGHT - (clientArea.bottom - clientArea.top);
+    if (widthShortfall != 0 || heightShortfall != 0)
+    {
+      SetWindowPos(window, nullptr, 0, 0, (outerArea.right - outerArea.left) + widthShortfall,
+                   (outerArea.bottom - outerArea.top) + heightShortfall, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
   }
 
   ShowWindow(window, _showCommand);
@@ -115,13 +139,21 @@ int RunGame(HWND _window)
   Neuron::PaletteTarget screen;
   screen.Create(device.Handle(), shaderVisibleHeap, Neuron::ToIndex(Neuron::PaletteIndex::Blue));
 
+  Neuron::FontRenderer text;
+  text.Create(device, shaderVisibleHeap);
+
   while (PumpMessages())
   {
     ID3D12GraphicsCommandList* commandList = device.BeginFrame();
 
     // Everything the game draws goes between BeginScene and Resolve, and every one of those
-    // draws writes a palette index. There is nothing to draw yet, so the frame is the clear.
+    // draws writes a palette index.
     screen.BeginScene(commandList);
+
+    text.BeginFrame(device.FrameIndex());
+    text.DrawText(8, 8, "FRONTIER OUTPOST", Neuron::ToIndex(Neuron::PaletteIndex::White));
+    text.Flush(commandList);
+
     screen.Resolve(commandList, device.BackBufferView(), device.BackBufferWidthPixels(), device.BackBufferHeightPixels(), PRESENT_SCALE);
 
     device.EndFrameAndPresent();
@@ -144,6 +176,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
 {
   UNREFERENCED_PARAMETER(_previousInstance);
   UNREFERENCED_PARAMETER(_commandLine);
+
+  // Before the window, before anything. A process that is not DPI-aware gets its window
+  // *bitmap-stretched* by Windows on a scaled display -- on a 125% desktop the 1280x800 client
+  // this game asks for is blown up to 1600x1000 by the compositor, with bilinear filtering, on
+  // top of the integer 2x scale the renderer was so careful about. That is precisely the
+  // fractional scale Design/README.md section 1 rules out, and it is invisible from inside the
+  // process: every D3D12 call still reports 1280x800 and every pixel we write is still exact.
+  //
+  // Not an error check: a Windows build without the call is one where the manifest default
+  // applies, and there is nothing useful to do about it here.
+  SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
   g_instance = _instance;
 

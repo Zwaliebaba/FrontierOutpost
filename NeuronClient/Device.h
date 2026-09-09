@@ -70,6 +70,14 @@ public:
     return m_backBuffers[m_frameIndex].get();
   }
   [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE BackBufferView() const noexcept;
+
+  /// Which of the FRAME_COUNT slots this frame owns. Anything that writes per-frame data the GPU
+  /// reads -- a mapped vertex buffer, a constant buffer -- keeps one copy per slot and indexes it
+  /// with this, which is what stops the CPU overwriting a frame still in flight.
+  [[nodiscard]] std::uint32_t FrameIndex() const noexcept
+  {
+    return m_frameIndex;
+  }
   [[nodiscard]] std::uint32_t BackBufferWidthPixels() const noexcept
   {
     return m_backBufferWidthPixels;

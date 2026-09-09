@@ -151,6 +151,12 @@
     <FXCompile Include="Shaders\PaletteResolvePS.hlsl">
       <ShaderType>Pixel</ShaderType>
     </FXCompile>
+    <FXCompile Include="Shaders\TextVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+    </FXCompile>
+    <FXCompile Include="Shaders\TextPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+    </FXCompile>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -159,6 +165,7 @@
     </ClCompile>
     <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="Device.cpp" />
+    <ClCompile Include="FontRenderer.cpp" />
     <ClCompile Include="PaletteTarget.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -166,6 +173,7 @@
     <ClInclude Include="DescriptorHeap.h" />
     <ClInclude Include="Device.h" />
     <ClInclude Include="Font.h" />
+    <ClInclude Include="FontRenderer.h" />
     <ClInclude Include="NeuronClient.h" />
     <ClInclude Include="Palette.h" />
     <ClInclude Include="PaletteTarget.h" />
