@@ -157,6 +157,12 @@
     <FXCompile Include="Shaders\TextPS.hlsl">
       <ShaderType>Pixel</ShaderType>
     </FXCompile>
+    <FXCompile Include="Shaders\MeshVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+    </FXCompile>
+    <FXCompile Include="Shaders\MeshPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+    </FXCompile>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -166,6 +172,8 @@
     <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="Device.cpp" />
     <ClCompile Include="FontRenderer.cpp" />
+    <ClCompile Include="IsometricCamera.cpp" />
+    <ClCompile Include="MeshRenderer.cpp" />
     <ClCompile Include="PaletteTarget.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -174,6 +182,8 @@
     <ClInclude Include="Device.h" />
     <ClInclude Include="Font.h" />
     <ClInclude Include="FontRenderer.h" />
+    <ClInclude Include="IsometricCamera.h" />
+    <ClInclude Include="MeshRenderer.h" />
     <ClInclude Include="NeuronClient.h" />
     <ClInclude Include="Palette.h" />
     <ClInclude Include="PaletteTarget.h" />

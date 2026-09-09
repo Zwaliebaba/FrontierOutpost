@@ -16,8 +16,12 @@
 
 #include "Device.h"
 #include "FontRenderer.h"
+#include "IsometricCamera.h"
+#include "MeshRenderer.h"
 #include "Palette.h"
 #include "PaletteTarget.h"
+
+#include "ShipMesh.h"
 
 namespace
 {
@@ -136,19 +140,35 @@ int RunGame(HWND _window)
   Neuron::DescriptorHeap shaderVisibleHeap;
   shaderVisibleHeap.Create(device.Handle(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 16, true);
 
+  // Space is black. The blue of step 2 was there to prove the palette; from here the clear index
+  // is the color of empty space.
   Neuron::PaletteTarget screen;
-  screen.Create(device.Handle(), shaderVisibleHeap, Neuron::ToIndex(Neuron::PaletteIndex::Blue));
+  screen.Create(device.Handle(), shaderVisibleHeap, Neuron::ToIndex(Neuron::PaletteIndex::Black));
 
   Neuron::FontRenderer text;
   text.Create(device, shaderVisibleHeap);
 
+  Neuron::MeshRenderer shipRenderer;
+  shipRenderer.Create(device.Handle(), Frontier::SHIP_VERTICES, Frontier::SHIP_INDICES);
+
+  Neuron::IsometricCamera camera{static_cast<float>(VIRTUAL_WIDTH), static_cast<float>(VIRTUAL_HEIGHT)};
+
+  // Nothing moves it yet: the ship is at the origin, heading zero, until step 5 puts a server
+  // behind it. The client never simulates (MVP-01 section 2).
+  constexpr float SHIP_HEADING_RADIANS = 0.0F;
+  const Neuron::IsometricCamera::WorldPoint shipPosition = {0.0F, 0.0F, 0.0F};
+
   while (PumpMessages())
   {
+    camera.Follow(shipPosition);
+
     ID3D12GraphicsCommandList* commandList = device.BeginFrame();
 
     // Everything the game draws goes between BeginScene and Resolve, and every one of those
     // draws writes a palette index.
     screen.BeginScene(commandList);
+
+    shipRenderer.Draw(commandList, camera, Frontier::ShipWorldMatrix(SHIP_HEADING_RADIANS, shipPosition.x, shipPosition.y, shipPosition.z));
 
     text.BeginFrame(device.FrameIndex());
     text.DrawText(8, 8, "FRONTIER OUTPOST", Neuron::ToIndex(Neuron::PaletteIndex::White));

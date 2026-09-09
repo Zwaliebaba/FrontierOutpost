@@ -143,6 +143,7 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="FrontierOutpost.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="ShipMesh.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\NeuronCore\NeuronCore.vcxproj">
