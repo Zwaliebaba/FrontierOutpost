@@ -5,28 +5,22 @@
     <ClInclude Include="NeuronClient.h" />
     <ClInclude Include="Font.h" />
     <ClInclude Include="FontRenderer.h" />
-    <ClInclude Include="IsometricCamera.h" />
-    <ClInclude Include="Mesh.h" />
-    <ClInclude Include="MeshRenderer.h" />
     <ClInclude Include="Device.h" />
     <ClInclude Include="DescriptorHeap.h" />
     <ClInclude Include="D3D12Defaults.h" />
     <ClInclude Include="Color.h" />
     <ClInclude Include="SceneTarget.h" />
+    <ClInclude Include="ShapeRenderer.h" />
     <ClInclude Include="PointerInput.h" />
-    <ClInclude Include="Starfield.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="Device.cpp" />
     <ClCompile Include="FontRenderer.cpp" />
-    <ClCompile Include="IsometricCamera.cpp" />
-    <ClCompile Include="Mesh.cpp" />
-    <ClCompile Include="MeshRenderer.cpp" />
     <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="SceneTarget.cpp" />
+    <ClCompile Include="ShapeRenderer.cpp" />
     <ClCompile Include="PointerInput.cpp" />
-    <ClCompile Include="Starfield.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Shaders">
@@ -40,16 +34,10 @@
     <FXCompile Include="Shaders\TextPS.hlsl">
       <Filter>Shaders</Filter>
     </FXCompile>
-    <FXCompile Include="Shaders\MeshVS.hlsl">
+    <FXCompile Include="Shaders\ShapeVS.hlsl">
       <Filter>Shaders</Filter>
     </FXCompile>
-    <FXCompile Include="Shaders\MeshPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FXCompile>
-    <FXCompile Include="Shaders\StarfieldVS.hlsl">
-      <Filter>Shaders</Filter>
-    </FXCompile>
-    <FXCompile Include="Shaders\StarfieldPS.hlsl">
+    <FXCompile Include="Shaders\ShapePS.hlsl">
       <Filter>Shaders</Filter>
     </FXCompile>
   </ItemGroup>

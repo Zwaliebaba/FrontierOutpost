@@ -1,6 +1,6 @@
 # ADR-007 — The server owns a `Simulation`, not a `World`
 
-**Status:** Accepted
+**Status:** Deprecated by ADR-015 — `Simulation.h` was deleted on 2026-09-11. The seam it describes was shaped around `MoveToOrder`/`ShipState`; the rule it protects, that the engine knows nothing about this game (R9), is in AGENTS.md and is unaffected.
 
 **Date:** 2026-09-09
 **Decided by:** Build session MVP-01, step 5. Not one of the ADRs the plan asked for; written because the decision had to be made mid-implementation and it has real alternatives (`Design/README.md` §5).

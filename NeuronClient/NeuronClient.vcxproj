@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
     NeuronClient. x64 is the only platform (AGENTS.md 3); Debug and Release differ only in
@@ -120,8 +120,8 @@
   </ItemDefinitionGroup>
   <!--
     The shader pipeline (AGENTS.md 2, R13). One rule for every .hlsl in the project: the file
-    stem names the output header and the byte array inside it, so StarfieldPS.hlsl becomes
-    CompiledShaders\StarfieldPS.h holding g_StarfieldPS. No object file: the header
+    stem names the output header and the byte array inside it, so ShapePS.hlsl becomes
+    CompiledShaders\ShapePS.h holding g_ShapePS. No object file: the header
     IS the artifact, because the executable ships alone and there is no .cso to load at runtime.
 
     CompiledShaders\ is build output: .gitignore'd, never edited, never committed, and skipped by
@@ -157,16 +157,10 @@
     <FXCompile Include="Shaders\TextPS.hlsl">
       <ShaderType>Pixel</ShaderType>
     </FXCompile>
-    <FXCompile Include="Shaders\MeshVS.hlsl">
+    <FXCompile Include="Shaders\ShapeVS.hlsl">
       <ShaderType>Vertex</ShaderType>
     </FXCompile>
-    <FXCompile Include="Shaders\MeshPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-    </FXCompile>
-    <FXCompile Include="Shaders\StarfieldVS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-    </FXCompile>
-    <FXCompile Include="Shaders\StarfieldPS.hlsl">
+    <FXCompile Include="Shaders\ShapePS.hlsl">
       <ShaderType>Pixel</ShaderType>
     </FXCompile>
   </ItemGroup>
@@ -178,12 +172,9 @@
     <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="Device.cpp" />
     <ClCompile Include="FontRenderer.cpp" />
-    <ClCompile Include="IsometricCamera.cpp" />
-    <ClCompile Include="Mesh.cpp" />
-    <ClCompile Include="MeshRenderer.cpp" />
     <ClCompile Include="PointerInput.cpp" />
     <ClCompile Include="SceneTarget.cpp" />
-    <ClCompile Include="Starfield.cpp" />
+    <ClCompile Include="ShapeRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="D3D12Defaults.h" />
@@ -192,13 +183,10 @@
     <ClInclude Include="Device.h" />
     <ClInclude Include="Font.h" />
     <ClInclude Include="FontRenderer.h" />
-    <ClInclude Include="IsometricCamera.h" />
-    <ClInclude Include="Mesh.h" />
-    <ClInclude Include="MeshRenderer.h" />
     <ClInclude Include="NeuronClient.h" />
     <ClInclude Include="PointerInput.h" />
     <ClInclude Include="SceneTarget.h" />
-    <ClInclude Include="Starfield.h" />
+    <ClInclude Include="ShapeRenderer.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>

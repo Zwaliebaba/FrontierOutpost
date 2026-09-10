@@ -212,8 +212,73 @@ void FontRenderer::CreatePipeline(ID3D12Device* _device)
   pipelineDesc.InputLayout = {inputLayout.data(), static_cast<UINT>(inputLayout.size())};
   // Text is the last thing drawn and sits on top of the scene, so it neither tests nor writes
   // depth. It writes straight into the back buffer, which is R8G8B8A8_UNORM (ADR-011).
+  //
+  // Blending is on, and it is NOT anti-aliasing: a glyph pixel is lit or discarded, never
+  // partially covered. What it buys is the muted greys the interface is built from -- a caption
+  // at 55% white over a rail is one draw rather than a colour precomputed against whatever
+  // happens to be behind it (ADR-014).
+  pipelineDesc.BlendState = InterfaceBlendState();
   pipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
   winrt::check_hresult(_device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(m_pipeline.put())));
+}
+
+std::vector<std::string> FontRenderer::Wrap(std::string_view _text, std::size_t _maxCharacters)
+{
+  std::vector<std::string> lines;
+  if (_maxCharacters == 0)
+  {
+    return lines;
+  }
+
+  std::string current;
+  std::size_t start = 0;
+  while (start <= _text.size())
+  {
+    const std::size_t space = _text.find(' ', start);
+    const std::size_t end = (space == std::string_view::npos) ? _text.size() : space;
+    std::string_view word = _text.substr(start, end - start);
+
+    // A word longer than the line is hard-broken rather than allowed to overflow. Nothing in the
+    // reference copy is, but a system name from a server is not something this screen gets to
+    // assume anything about.
+    while (word.size() > _maxCharacters)
+    {
+      if (!current.empty())
+      {
+        lines.push_back(current);
+        current.clear();
+      }
+      lines.emplace_back(word.substr(0, _maxCharacters));
+      word = word.substr(_maxCharacters);
+    }
+
+    const std::size_t needed = current.empty() ? word.size() : current.size() + 1 + word.size();
+    if (needed > _maxCharacters && !current.empty())
+    {
+      lines.push_back(current);
+      current.assign(word);
+    }
+    else
+    {
+      if (!current.empty())
+      {
+        current.push_back(' ');
+      }
+      current.append(word);
+    }
+
+    if (space == std::string_view::npos)
+    {
+      break;
+    }
+    start = space + 1;
+  }
+
+  if (!current.empty())
+  {
+    lines.push_back(current);
+  }
+  return lines;
 }
 
 void FontRenderer::BeginFrame(std::uint32_t _frameIndex) noexcept
@@ -222,9 +287,14 @@ void FontRenderer::BeginFrame(std::uint32_t _frameIndex) noexcept
   m_usedThisFrame = 0;
 }
 
-void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color)
+void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color, std::uint32_t _scale)
 {
+  ASSERT_TEXT(_scale > 0, L"A glyph scale of zero would draw nothing and is a caller mistake, not a way to hide text.");
+
   TextVertex* slice = m_mappedVertices + static_cast<std::size_t>(m_frameIndex) * MAX_VERTICES_PER_FRAME;
+
+  const std::uint32_t advance = AdvancePixels(_scale);
+  const std::uint32_t lineHeight = GlyphHeightPixels(_scale);
 
   for (std::size_t character = 0; character < _text.size(); ++character)
   {
@@ -233,14 +303,14 @@ void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::s
 
     const std::uint32_t glyph = GlyphIndex(_text[character]);
 
-    // The quad spans GLYPH_SCALE screen pixels per glyph texel. The atlas coordinates below still
-    // span exactly eight texels, so the interpolator hands the pixel shader a fractional texel and
-    // its truncation is what turns one texel into a GLYPH_SCALE-square block of pixels -- the same
-    // integer divide the resolve pass did for the whole screen before ADR-011 removed it.
-    const auto left = static_cast<float>(_xPixels + static_cast<std::int32_t>(character * CHARACTER_ADVANCE_PIXELS));
+    // The quad spans _scale screen pixels per glyph texel. The atlas coordinates below still span
+    // exactly eight texels, so the interpolator hands the pixel shader a fractional texel and its
+    // truncation is what turns one texel into a _scale-square block of pixels -- the same integer
+    // divide the resolve pass did for the whole screen before ADR-011 removed it.
+    const auto left = static_cast<float>(_xPixels + static_cast<std::int32_t>(character * advance));
     const auto top = static_cast<float>(_yPixels);
-    const float right = left + static_cast<float>(CHARACTER_ADVANCE_PIXELS);
-    const float bottom = top + static_cast<float>(LINE_HEIGHT_PIXELS);
+    const float right = left + static_cast<float>(advance);
+    const float bottom = top + static_cast<float>(lineHeight);
 
     const auto atlasLeft = static_cast<float>(glyph * GLYPH_WIDTH_TEXELS);
     const float atlasRight = atlasLeft + static_cast<float>(GLYPH_WIDTH_TEXELS);

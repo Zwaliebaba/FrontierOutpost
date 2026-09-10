@@ -1,5 +1,11 @@
-// FrontierOutpost.cpp -- process entry point. Hosts the client and the server in one process
-// (the server half is not wired up yet).
+// FrontierOutpost.cpp -- process entry point, and the composition root of the main page.
+//
+// WHAT THIS EXECUTABLE SHOWS, as of 2026-09-11, is the ops console in Design/Screens: digest,
+// map, orders. It used to show the MVP-01 isometric ship scene, and that code -- MeshRenderer,
+// IsometricCamera, Starfield, ShipMesh, StationMesh, ShipView, World, Session -- is still in the
+// tree and still built and tested. It is not reachable from here, because the main page is a
+// different screen of the same game rather than a mode of that one, and a mode switch is not
+// something this task was asked for (ADR-014).
 //
 // This is the wizard's wWinMain reduced to what the game actually needs: one fixed-size,
 // non-resizable window, no menu and no About dialog. The window is the presentation target
@@ -17,18 +23,12 @@
 #include "Color.h"
 #include "Device.h"
 #include "FontRenderer.h"
-#include "IsometricCamera.h"
-#include "LoopbackTransport.h"
-#include "MeshRenderer.h"
 #include "PointerInput.h"
 #include "SceneTarget.h"
-#include "Session.h"
-#include "Starfield.h"
+#include "ShapeRenderer.h"
 
-#include "ShipMesh.h"
-#include "ShipView.h"
-#include "StationMesh.h"
-#include "World.h"
+#include "MainPage.h"
+#include "MatchFixture.h"
 
 #include <chrono>
 
@@ -41,11 +41,6 @@ namespace
 // today (ADR-011).
 constexpr int CLIENT_WIDTH = static_cast<int>(Neuron::SceneTarget::WIDTH_PIXELS);
 constexpr int CLIENT_HEIGHT = static_cast<int>(Neuron::SceneTarget::HEIGHT_PIXELS);
-
-// Where the status text sits, in screen pixels. One glyph is FontRenderer::LINE_HEIGHT_PIXELS
-// tall, so the two lines are one line apart with half a line of air between them.
-constexpr int TEXT_MARGIN_PIXELS = 16;
-constexpr int TEXT_LINE_SPACING_PIXELS = 24;
 
 constexpr wchar_t WINDOW_CLASS_NAME[] = L"FrontierOutpostWindow";
 constexpr wchar_t WINDOW_TITLE[] = L"Frontier Outpost";
@@ -153,21 +148,6 @@ bool PumpMessages()
   return !g_quitRequested;
 }
 
-/// The status line: the tick the server is on and where it says the ship is.
-///
-/// Metres to one decimal rather than millimetres, because millimetres on a screen where one pixel
-/// is 62 mm is four digits of noise. The tick is what makes it possible to see at a glance that
-/// the server is running at all.
-std::string StatusLine(const Frontier::ShipView& _ship)
-{
-  if (!_ship.HasState())
-  {
-    return "TICK ----  WAITING FOR SERVER";
-  }
-
-  return std::format("TICK {:<6} X {:>8.1F} Z {:>8.1F}", _ship.Tick(), _ship.PositionXMetres(), _ship.PositionZMetres());
-}
-
 int RunGame(HWND _window)
 {
   Neuron::Device device;
@@ -178,45 +158,23 @@ int RunGame(HWND _window)
   Neuron::DescriptorHeap shaderVisibleHeap;
   shaderVisibleHeap.Create(device.Handle(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 16, true);
 
-  // Space is black.
+  // Space is black, and on this screen it is also the colour of every rail behind every card.
   Neuron::SceneTarget screen;
   screen.Create(device.Handle(), Neuron::BLACK);
+
+  // The two renderers the interface is made of, and the whole of what it needs: rectangles and
+  // glyphs. There is no widget tree, no retained scene and no texture atlas beyond the font
+  // (ADR-014).
+  Neuron::ShapeRenderer shapes;
+  shapes.Create(device.Handle());
 
   Neuron::FontRenderer text;
   text.Create(device, shaderVisibleHeap);
 
-  // The backdrop. Nothing is stored: it is a hash of the texel's position, three parallax layers
-  // deep (ADR-010).
-  Neuron::Starfield starfield;
-  starfield.Create(device.Handle());
-
-  // One renderer, many meshes: the pipeline is how meshes are drawn and the buffers are which
-  // mesh (Mesh.h).
-  Neuron::MeshRenderer meshRenderer;
-  meshRenderer.Create(device.Handle());
-
-  Neuron::Mesh shipMesh;
-  shipMesh.Create(device.Handle(), Frontier::SHIP_VERTICES, Frontier::SHIP_INDICES);
-
-  Neuron::Mesh stationMesh;
-  stationMesh.Create(device.Handle(), Frontier::STATION_VERTICES, Frontier::STATION_INDICES);
-
-  // The station never moves, so its world matrix is built once rather than every frame.
-  const std::array<float, 16> stationWorld = Neuron::WorldMatrix(0.0F, Frontier::STATION_POSITION_X, 0.0F, Frontier::STATION_POSITION_Z);
-
-  Neuron::IsometricCamera camera{static_cast<float>(Neuron::SceneTarget::WIDTH_PIXELS),
-                                 static_cast<float>(Neuron::SceneTarget::HEIGHT_PIXELS)};
-
-  // The server. It gets its own thread here and keeps it: same-thread is not a stage this passes
-  // through (MVP-01 section 2). The transport outlives the session, which is why it is declared
-  // first -- destructors run in reverse, so the session stops before the queues it is using go.
-  Neuron::LoopbackTransport transport;
-  Neuron::Session session;
-  session.Start(std::make_unique<Frontier::World>(), transport);
-
-  // The client's entire opinion about where the ship is. It cannot move it; only a state arriving
-  // from the transport changes what this says (ADR-005).
-  Frontier::ShipView ship;
+  // The match, from the fixture. When the server sends a digest this is the only line that
+  // changes (MatchFixture.h).
+  Frontier::MainPage page;
+  page.Create(Frontier::MakeReferenceMatch());
 
   Neuron::PointerInput pointer;
   pointer.Create(_window);
@@ -227,84 +185,38 @@ int RunGame(HWND _window)
   while (PumpMessages())
   {
     const auto now = std::chrono::steady_clock::now();
-    const float elapsedSeconds = std::chrono::duration<float>{now - previousFrame}.count();
+    const double elapsedSeconds = std::chrono::duration<double>{now - previousFrame}.count();
     previousFrame = now;
 
-    // Drain every state that arrived since the last frame. At 20 Hz against a display running
-    // faster, this is usually none or one.
-    Neuron::ShipState state = {};
-    while (transport.ReceiveState(state))
-    {
-      ship.Accept(state);
-    }
-    ship.Advance(elapsedSeconds);
+    // The countdown is the only thing on this screen that moves on its own. Everything else
+    // changes because the player did something or because a tick resolved.
+    page.Update(elapsedSeconds);
 
-    // Zoom before the camera is placed, so that the click un-projected below and the frame drawn
-    // after it both use the scale the player just asked for rather than the previous one's.
-    const std::int32_t zoomSteps = pointer.TakeZoomSteps();
-    if (zoomSteps != 0)
+    float tapXPixels = 0.0F;
+    float tapYPixels = 0.0F;
+    if (pointer.TakeClick(tapXPixels, tapYPixels))
     {
-      camera.ZoomBy(zoomSteps);
-    }
-
-    // Before the first state has arrived there is no ship, so the camera sits at the origin and
-    // nothing is drawn. It lasts one tick at most and it is the honest thing to show: the client
-    // has not been told where anything is (ADR-005).
-    const Neuron::IsometricCamera::WorldPoint shipPosition = {ship.PositionXMetres(), 0.0F, ship.PositionZMetres()};
-    camera.Follow(ship.HasState() ? shipPosition : Neuron::IsometricCamera::WorldPoint{0.0F, 0.0F, 0.0F});
-
-    // The click, and the whole of what the client does with it: un-project it onto the ground and
-    // hand the world point to the server. The client does not move the ship, does not predict
-    // where it will go and does not remember where it was told to go -- it sends an order and
-    // waits to be told (MVP-01 section 2).
-    //
-    // The camera is followed BEFORE this, so the un-projection uses the same camera the frame is
-    // about to be drawn with. Doing it after would answer with the previous frame's camera, which
-    // is a whole tick of the ship's travel out at speed.
-    float clickXPixels = 0.0F;
-    float clickYPixels = 0.0F;
-    if (pointer.TakeClick(clickXPixels, clickYPixels))
-    {
-      const Neuron::IsometricCamera::WorldPoint target = camera.UnprojectToGround(clickXPixels, clickYPixels);
-      transport.SendOrder(Neuron::MoveToOrder{
-        .targetXMillimetres = static_cast<std::int64_t>(std::lround(target.x * 1000.0F)),
-        .targetZMillimetres = static_cast<std::int64_t>(std::lround(target.z * 1000.0F)),
-      });
+      page.HandleTap(tapXPixels, tapYPixels);
     }
 
     ID3D12GraphicsCommandList* commandList = device.BeginFrame();
-
-    // Everything the game draws happens after this, straight into the back buffer. There is no
-    // resolve pass any more: the render target and the back buffer are the same 1280x720 pixels
-    // (ADR-011).
     screen.BeginScene(commandList, device.BackBufferView());
 
-    // The backdrop first, before anything that uses depth. It writes the color of empty space
-    // where there is no star, so it costs nothing over the clear it replaces (ADR-010).
-    starfield.Draw(commandList, camera);
-
-    // The station is drawn whether or not the server has spoken: it is not replicated state, it
-    // is scenery, and it is in the same place every frame.
-    meshRenderer.Draw(commandList, stationMesh, camera, stationWorld);
-
-    if (ship.HasState())
-    {
-      meshRenderer.Draw(commandList, shipMesh, camera,
-                        Neuron::WorldMatrix(ship.HeadingRadians(), shipPosition.x, shipPosition.y, shipPosition.z));
-    }
-
+    shapes.BeginFrame(device.FrameIndex());
     text.BeginFrame(device.FrameIndex());
-    text.DrawText(TEXT_MARGIN_PIXELS, TEXT_MARGIN_PIXELS, "FRONTIER OUTPOST", Neuron::WHITE);
-    text.DrawText(TEXT_MARGIN_PIXELS, TEXT_MARGIN_PIXELS + TEXT_LINE_SPACING_PIXELS, StatusLine(ship), Neuron::BRIGHT_GREEN);
+
+    page.Draw(shapes, text);
+
+    // Shapes first, then text, in two draw calls rather than interleaved. Painter's order still
+    // holds within each pass, and the one place it matters across them -- a caption on a card --
+    // is fine because every glyph is drawn after every rectangle.
+    shapes.Flush(commandList);
     text.Flush(commandList);
 
     device.EndFrameAndPresent();
     device.DrainDebugMessages();
   }
 
-  // Before the GPU wait, so the server thread is not still pushing states into a transport that
-  // is about to go out of scope.
-  session.Stop();
   g_pointerInput = nullptr;
 
   // Drain the GPU here, not in ~Device. Destructors run in reverse declaration order, so the
@@ -316,7 +228,6 @@ int RunGame(HWND _window)
 
   return EXIT_SUCCESS;
 }
-
 } // namespace
 
 int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInstance, _In_ LPWSTR _commandLine, _In_ int _showCommand)

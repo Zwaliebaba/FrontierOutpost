@@ -1,6 +1,6 @@
 # ADR-004 — Ship kinematics: turn-rate-limited heading, and a deceleration that arrives stopped
 
-**Status:** Accepted
+**Status:** Deprecated by ADR-015 — `GameLogic/Ship` was deleted on 2026-09-11. The 4X moves fleets along lanes at authored tick costs, so nothing here describes the tree any more.
 
 **Date:** 2026-09-09
 **Decided by:** Build session MVP-01, step 5. Recommendation stated in `Design/Plans/MVP-01-IsometricShip.md` §3; this ADR takes it and fixes the units, the ranges and the arithmetic it left open.

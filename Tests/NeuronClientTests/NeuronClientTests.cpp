@@ -8,10 +8,9 @@
 
 #include "Color.h"
 #include "FontRenderer.h"
-#include "IsometricCamera.h"
 #include "PointerInput.h"
 #include "SceneTarget.h"
-#include "Starfield.h"
+#include "ShapeRenderer.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -205,291 +204,105 @@ public:
   }
 };
 
-// The camera is the one piece of this renderer with an inverse, and the inverse is what turns a
-// click into an order (MVP-01 step 6). Everything here is arithmetic with no device, no window
-// and no D3D12, which is the point: the projection can be wrong in ways that still draw a
-// perfectly plausible ship.
-TEST_CLASS(IsometricCameraTests)
+// The 8x8 font is the whole of this game's typography, so how many characters fit in a rail is
+// not a detail -- it is what decides whether the design's copy can be shown at all (ADR-014).
+// These are the arithmetic every right-aligned and centred thing on the main page is laid out
+// against.
+TEST_CLASS(FontMetricsTests)
 {
 public:
-  static constexpr float SCREEN_WIDTH = static_cast<float>(Neuron::SceneTarget::WIDTH_PIXELS);
-  static constexpr float SCREEN_HEIGHT = static_cast<float>(Neuron::SceneTarget::HEIGHT_PIXELS);
-
-  // Exact powers of two throughout the projection, so equality is the right comparison and a
-  // tolerance would only hide a real error. The one place it is not is the camera's own rounding,
-  // which is tested by value rather than by tolerance too.
-  static constexpr float EXACT = 0.0F;
-
-  static Neuron::IsometricCamera MakeCamera(float _x = 0.0F, float _y = 0.0F, float _z = 0.0F)
+  TEST_METHOD(AGlyphIsEightPixelsAtOneTimes)
   {
-    Neuron::IsometricCamera camera{SCREEN_WIDTH, SCREEN_HEIGHT};
-    camera.Follow({_x, _y, _z});
-    return camera;
+    Assert::AreEqual(8u, Neuron::FontRenderer::AdvancePixels());
+    Assert::AreEqual(8u, Neuron::FontRenderer::GlyphHeightPixels());
+    Assert::AreEqual(16u, Neuron::FontRenderer::AdvancePixels(Neuron::FontRenderer::COUNTDOWN_SCALE));
+    Assert::AreEqual(16u, Neuron::FontRenderer::GlyphHeightPixels(Neuron::FontRenderer::COUNTDOWN_SCALE));
   }
 
-  TEST_METHOD(TheTargetIsAtTheCenterOfTheScreen)
+  TEST_METHOD(MeasuringIsTheAdvanceTimesTheLength)
   {
-    const Neuron::IsometricCamera camera = MakeCamera(17.0F, 0.0F, -4.0F);
-    const Neuron::IsometricCamera::ScreenPoint center = camera.Project({17.0F, 0.0F, -4.0F});
-
-    Assert::AreEqual(SCREEN_WIDTH * 0.5F, center.xPixels, EXACT);
-    Assert::AreEqual(SCREEN_HEIGHT * 0.5F, center.yPixels, EXACT);
+    Assert::AreEqual(64u, Neuron::FontRenderer::MeasurePixels("02:14:09"));
+    Assert::AreEqual(128u, Neuron::FontRenderer::MeasurePixels("02:14:09", Neuron::FontRenderer::COUNTDOWN_SCALE));
+    Assert::AreEqual(0u, Neuron::FontRenderer::MeasurePixels(""));
   }
 
-  // The 2:1 in "2:1 dimetric" (ADR-003). A one-unit square on the ground is a diamond sixteen
-  // pixels wide and eight tall, and these four numbers are that claim.
-  TEST_METHOD(AGroundTileIsExactlyTwiceAsWideAsItIsTall)
+  // The digest rail is 300 wide and spends 14 + 8 + 10 + 14 on margins, the dot and the gap,
+  // which leaves 254 -- and 254 / 8 is 31, not 32. An off-by-one here is copy running under the
+  // map.
+  TEST_METHOD(TheDigestRailHoldsThirtyOneCharacters)
   {
-    const Neuron::IsometricCamera camera = MakeCamera();
-    const Neuron::IsometricCamera::ScreenPoint origin = camera.Project({0.0F, 0.0F, 0.0F});
-    const Neuron::IsometricCamera::ScreenPoint alongX = camera.Project({1.0F, 0.0F, 0.0F});
-    const Neuron::IsometricCamera::ScreenPoint alongZ = camera.Project({0.0F, 0.0F, 1.0F});
+    Assert::AreEqual(static_cast<size_t>(31), Neuron::FontRenderer::FitCharacters(254));
+    Assert::AreEqual(static_cast<size_t>(31), Neuron::FontRenderer::FitCharacters(255), L"a part-character does not fit");
+    Assert::AreEqual(static_cast<size_t>(0), Neuron::FontRenderer::FitCharacters(7));
+  }
+};
 
-    Assert::AreEqual(16.0F, alongX.xPixels - origin.xPixels, EXACT, L"+X moves half a tile width right");
-    Assert::AreEqual(8.0F, alongX.yPixels - origin.yPixels, EXACT, L"+X moves half a tile height down");
-    Assert::AreEqual(-16.0F, alongZ.xPixels - origin.xPixels, EXACT, L"+Z moves half a tile width left");
-    Assert::AreEqual(8.0F, alongZ.yPixels - origin.yPixels, EXACT, L"+Z moves half a tile height down");
+// Wrapping is the piece that had to exist because the reference's copy is longer than an 8px
+// rail can hold, and it is the piece most likely to be quietly wrong (ADR-014).
+TEST_CLASS(TextWrapTests)
+{
+public:
+  TEST_METHOD(ShortTextIsOneLine)
+  {
+    const std::vector<std::string> lines = Neuron::FontRenderer::Wrap("Sealed region opens T60", 31);
+    Assert::AreEqual(static_cast<size_t>(1), lines.size());
+    Assert::AreEqual(std::string("Sealed region opens T60"), lines[0]);
   }
 
-  TEST_METHOD(HeightMovesStraightUpTheScreen)
+  TEST_METHOD(ItBreaksOnSpacesAndNeverExceedsTheWidth)
   {
-    const Neuron::IsometricCamera camera = MakeCamera();
-    const Neuron::IsometricCamera::ScreenPoint ground = camera.Project({0.0F, 0.0F, 0.0F});
-    const Neuron::IsometricCamera::ScreenPoint raised = camera.Project({0.0F, 1.0F, 0.0F});
-
-    Assert::AreEqual(0.0F, raised.xPixels - ground.xPixels, EXACT, L"height must not shift a pixel sideways");
-    Assert::AreEqual(-16.0F, raised.yPixels - ground.yPixels, EXACT);
-  }
-
-  TEST_METHOD(TheCenterOfTheScreenUnprojectsToTheTarget)
-  {
-    const Neuron::IsometricCamera camera = MakeCamera(12.0F, 0.0F, 5.0F);
-    const Neuron::IsometricCamera::WorldPoint ground = camera.UnprojectToGround(SCREEN_WIDTH * 0.5F, SCREEN_HEIGHT * 0.5F);
-
-    Assert::AreEqual(12.0F, ground.x, EXACT);
-    Assert::AreEqual(0.0F, ground.y, EXACT, L"unprojection lands on the ground plane by construction");
-    Assert::AreEqual(5.0F, ground.z, EXACT);
-  }
-
-  // A known pixel to a known offset. Thirty-two pixels right of center is x - z == 2 with
-  // x + z == 0, which is (1, 0, -1) -- worked out by hand rather than by running the code.
-  TEST_METHOD(AKnownPixelUnprojectsToAKnownPoint)
-  {
-    const Neuron::IsometricCamera camera = MakeCamera();
-    const Neuron::IsometricCamera::WorldPoint ground = camera.UnprojectToGround(SCREEN_WIDTH * 0.5F + 32.0F, SCREEN_HEIGHT * 0.5F);
-
-    Assert::AreEqual(1.0F, ground.x, EXACT);
-    Assert::AreEqual(-1.0F, ground.z, EXACT);
-  }
-
-  TEST_METHOD(ProjectAndUnprojectAreInverses)
-  {
-    const Neuron::IsometricCamera camera = MakeCamera(-6.0F, 0.0F, 3.0F);
-
-    for (const Neuron::IsometricCamera::WorldPoint& expected :
-         {Neuron::IsometricCamera::WorldPoint{0.0F, 0.0F, 0.0F}, Neuron::IsometricCamera::WorldPoint{40.0F, 0.0F, -17.0F},
-          Neuron::IsometricCamera::WorldPoint{-125.5F, 0.0F, 64.25F}})
+    // The first digest event, at the width the digest rail actually has.
+    const std::vector<std::string> lines = Neuron::FontRenderer::Wrap("Outpost present. Their fleet ETA T47. Ours ETA T47.", 31);
+    Assert::IsTrue(lines.size() >= 2, L"this line does not fit in 31 characters");
+    for (const std::string& line : lines)
     {
-      const Neuron::IsometricCamera::ScreenPoint pixel = camera.Project(expected);
-      const Neuron::IsometricCamera::WorldPoint roundTrip = camera.UnprojectToGround(pixel.xPixels, pixel.yPixels);
-
-      Assert::AreEqual(expected.x, roundTrip.x, EXACT);
-      Assert::AreEqual(expected.z, roundTrip.z, EXACT);
+      Assert::IsTrue(line.size() <= 31, L"a wrapped line is wider than the rail");
+      Assert::IsTrue(line.front() != ' ' && line.back() != ' ', L"a wrapped line carries no edge space");
     }
   }
 
-  // The property MVP-01 step 6 asks for: the same pixel, after the ship has moved, is a different
-  // world point by exactly the ship's displacement. This is what makes a click an order in world
-  // coordinates rather than an offset that quietly means something else once the camera scrolls.
-  TEST_METHOD(TheSamePixelMovesWithTheCamera)
+  TEST_METHOD(NoWordIsLost)
   {
-    const Neuron::IsometricCamera before = MakeCamera(0.0F, 0.0F, 0.0F);
-    // A displacement that projects to whole pixels, so the camera's snap adds nothing to compare
-    // against: (3, 0, 1) is 16 right and 16 down.
-    const Neuron::IsometricCamera after = MakeCamera(3.0F, 0.0F, 1.0F);
-
-    constexpr float SAMPLE_X = 200.0F;
-    constexpr float SAMPLE_Y = 150.0F;
-    const Neuron::IsometricCamera::WorldPoint groundBefore = before.UnprojectToGround(SAMPLE_X, SAMPLE_Y);
-    const Neuron::IsometricCamera::WorldPoint groundAfter = after.UnprojectToGround(SAMPLE_X, SAMPLE_Y);
-
-    Assert::AreEqual(3.0F, groundAfter.x - groundBefore.x, EXACT);
-    Assert::AreEqual(1.0F, groundAfter.z - groundBefore.z, EXACT);
-  }
-
-  // ADR-003: the camera snaps to whole screen pixels. A target a hundredth of a unit away from
-  // one that snaps identically must produce an identical projection -- if it does not, the whole
-  // scene shimmers by a pixel as the ship drifts.
-  TEST_METHOD(TheCameraSnapsToWholePixels)
-  {
-    const Neuron::IsometricCamera exact = MakeCamera(1.0F, 0.0F, 0.0F);
-    const Neuron::IsometricCamera nudged = MakeCamera(1.01F, 0.0F, 0.0F);
-
-    // 1.0 projects to (8, 4); 1.01 projects to (8.08, 4.04), which rounds to the same whole pixel.
-    const Neuron::IsometricCamera::ScreenPoint fromExact = exact.Project({0.0F, 0.0F, 0.0F});
-    const Neuron::IsometricCamera::ScreenPoint fromNudged = nudged.Project({0.0F, 0.0F, 0.0F});
-
-    Assert::AreEqual(fromExact.xPixels, fromNudged.xPixels, EXACT);
-    Assert::AreEqual(fromExact.yPixels, fromNudged.yPixels, EXACT);
-  }
-
-  TEST_METHOD(TheViewProjectionPutsTheTargetAtTheCenterOfClipSpace)
-  {
-    const Neuron::IsometricCamera camera = MakeCamera(9.0F, 0.0F, 3.0F);
-    const std::array<float, 16> matrix = camera.ViewProjection();
-
-    // Row-vector convention: clip = (x, y, z, 1) * matrix.
-    auto transform = [&matrix](float _x, float _y, float _z, std::size_t _column)
-    { return _x * matrix[_column] + _y * matrix[4 + _column] + _z * matrix[8 + _column] + matrix[12 + _column]; };
-
-    Assert::AreEqual(0.0F, transform(9.0F, 0.0F, 3.0F, 0), EXACT, L"the target is at clip x = 0");
-    Assert::AreEqual(0.0F, transform(9.0F, 0.0F, 3.0F, 1), EXACT, L"the target is at clip y = 0");
-    Assert::AreEqual(0.5F, transform(9.0F, 0.0F, 3.0F, 2), 1.0e-6F, L"and halfway through the depth range");
-  }
-
-  // Nearer must mean a smaller depth: the camera looks along (1, 1, 1), so a point further along
-  // that direction is closer to it. Getting this backwards draws the ship inside out and is not
-  // obvious on a mesh that is nearly convex.
-  // ADR-013, superseding ADR-008. The zoom is a list of even levels, and every one of them has to
-  // keep the properties ADR-003 rests on: the 2:1 tile, and an un-projection that is an exact
-  // inverse.
-  TEST_METHOD(EveryZoomLevelIsEven)
-  {
-    for (const float level : Neuron::IsometricCamera::ZOOM_LEVELS_PIXELS)
+    constexpr const char* SOURCE = "Lane income foregone: 12/tick. Shipyard Idris idle.";
+    std::string rejoined;
+    for (const std::string& line : Neuron::FontRenderer::Wrap(SOURCE, 31))
     {
-      // The half-height is half the level and must also be a whole number of pixels, so an odd
-      // level would put the tile edge on half-pixel steps.
-      Assert::AreEqual(0.0F, std::fmod(level, 2.0F), 0.0F, L"a zoom level must be even");
-      Assert::IsTrue(level > 0.0F);
-    }
-
-    Assert::AreEqual(16.0F, Neuron::IsometricCamera::DEFAULT_HALF_TILE_WIDTH_PIXELS, 0.0F,
-                     L"the default is the 16 pixels a unit everything is drawn against");
-  }
-
-  // The ladder is ADR-008's doubled, and that is a claim worth pinning rather than a coincidence:
-  // it is what makes the picture at 1280x720 the same size as the picture at 640x400 blown up 2x
-  // (ADR-013). A level that drifted off the doubling would silently rescale the whole game.
-  TEST_METHOD(TheLadderIsTheOldOneDoubled)
-  {
-    constexpr std::array<float, 5> BEFORE_ADR_013 = {4.0F, 6.0F, 8.0F, 12.0F, 16.0F};
-
-    Assert::AreEqual(BEFORE_ADR_013.size(), Neuron::IsometricCamera::ZOOM_LEVELS_PIXELS.size());
-    for (std::size_t level = 0; level < BEFORE_ADR_013.size(); ++level)
-    {
-      Assert::AreEqual(BEFORE_ADR_013[level] * 2.0F, Neuron::IsometricCamera::ZOOM_LEVELS_PIXELS[level], 0.0F,
-                       (std::wstring(L"zoom level ") + std::to_wstring(level)).c_str());
-    }
-  }
-
-  TEST_METHOD(ACameraStartsAtTheDefaultZoom)
-  {
-    const Neuron::IsometricCamera camera = MakeCamera();
-    Assert::AreEqual(Neuron::IsometricCamera::DEFAULT_ZOOM_INDEX, camera.ZoomIndex());
-    Assert::AreEqual(16.0F, camera.HalfTileWidthPixels(), 0.0F);
-  }
-
-  TEST_METHOD(ZoomingMovesThroughTheLevels)
-  {
-    Neuron::IsometricCamera camera = MakeCamera();
-
-    camera.ZoomBy(1);
-    Assert::AreEqual(24.0F, camera.HalfTileWidthPixels(), 0.0F, L"in");
-    camera.ZoomBy(-2);
-    Assert::AreEqual(12.0F, camera.HalfTileWidthPixels(), 0.0F, L"and back out past the default");
-  }
-
-  TEST_METHOD(ZoomingClampsAtBothEnds)
-  {
-    Neuron::IsometricCamera camera = MakeCamera();
-
-    camera.ZoomBy(100);
-    Assert::AreEqual(32.0F, camera.HalfTileWidthPixels(), 0.0F, L"clamped at the closest level");
-    camera.ZoomBy(-100);
-    Assert::AreEqual(8.0F, camera.HalfTileWidthPixels(), 0.0F, L"and at the widest");
-  }
-
-  TEST_METHOD(ZoomingScalesTheProjectionAndNothingElse)
-  {
-    Neuron::IsometricCamera camera = MakeCamera();
-    const Neuron::IsometricCamera::ScreenPoint before = camera.Project({4.0F, 0.0F, 0.0F});
-
-    camera.ZoomBy(-1); // 16 -> 12 pixels a unit
-    const Neuron::IsometricCamera::ScreenPoint after = camera.Project({4.0F, 0.0F, 0.0F});
-
-    const float centerX = SCREEN_WIDTH * 0.5F;
-    const float centerY = SCREEN_HEIGHT * 0.5F;
-    Assert::AreEqual(64.0F, before.xPixels - centerX, EXACT);
-    Assert::AreEqual(48.0F, after.xPixels - centerX, EXACT, L"three quarters of the offset at three quarters the zoom");
-    Assert::AreEqual(32.0F, before.yPixels - centerY, EXACT);
-    Assert::AreEqual(24.0F, after.yPixels - centerY, EXACT);
-  }
-
-  // The 2:1 is the projection, not the zoom, so it has to survive every level.
-  TEST_METHOD(TheTileStaysTwoToOneAtEveryZoom)
-  {
-    for (std::int32_t step = -4; step <= 4; ++step)
-    {
-      Neuron::IsometricCamera camera = MakeCamera();
-      camera.ZoomBy(step);
-
-      const Neuron::IsometricCamera::ScreenPoint origin = camera.Project({0.0F, 0.0F, 0.0F});
-      const Neuron::IsometricCamera::ScreenPoint alongX = camera.Project({1.0F, 0.0F, 0.0F});
-
-      const float width = alongX.xPixels - origin.xPixels;
-      const float height = alongX.yPixels - origin.yPixels;
-      Assert::AreEqual(camera.HalfTileWidthPixels(), width, EXACT);
-      Assert::AreEqual(width, height * 2.0F, EXACT, L"twice as wide as tall, at every level");
-    }
-  }
-
-  // The property the click depends on, checked at every zoom rather than only at the default:
-  // if this stops holding at one level, tapping while zoomed sends the ship somewhere else.
-  TEST_METHOD(ProjectAndUnprojectAreInversesAtEveryZoom)
-  {
-    for (std::int32_t step = -4; step <= 4; ++step)
-    {
-      Neuron::IsometricCamera camera{SCREEN_WIDTH, SCREEN_HEIGHT};
-      camera.ZoomBy(step);
-      camera.Follow({-6.0F, 0.0F, 3.0F});
-
-      for (const Neuron::IsometricCamera::WorldPoint& expected :
-           {Neuron::IsometricCamera::WorldPoint{0.0F, 0.0F, 0.0F}, Neuron::IsometricCamera::WorldPoint{40.0F, 0.0F, -17.0F},
-            Neuron::IsometricCamera::WorldPoint{-125.5F, 0.0F, 64.25F}})
+      if (!rejoined.empty())
       {
-        const Neuron::IsometricCamera::ScreenPoint pixel = camera.Project(expected);
-        const Neuron::IsometricCamera::WorldPoint roundTrip = camera.UnprojectToGround(pixel.xPixels, pixel.yPixels);
-
-        Assert::AreEqual(expected.x, roundTrip.x, EXACT);
-        Assert::AreEqual(expected.z, roundTrip.z, EXACT);
+        rejoined.push_back(' ');
       }
+      rejoined.append(line);
     }
+    Assert::AreEqual(std::string(SOURCE), rejoined, L"wrapping must not drop or duplicate a word");
   }
 
-  // Zooming re-snaps the camera. The snap is in pixels and the pixels just changed size, so a
-  // zoom that did not re-snap would leave the scene half a pixel out until the ship next moved.
-  TEST_METHOD(ZoomingKeepsTheTargetCentered)
+  // A system name from a server is not something the screen gets to assume anything about.
+  TEST_METHOD(AWordLongerThanTheLineIsHardBroken)
   {
-    Neuron::IsometricCamera camera = MakeCamera(7.0F, 0.0F, -3.0F);
-
-    for (std::int32_t step = -4; step <= 4; ++step)
-    {
-      camera.ZoomBy(step);
-      const Neuron::IsometricCamera::ScreenPoint center = camera.Project({7.0F, 0.0F, -3.0F});
-      Assert::AreEqual(SCREEN_WIDTH * 0.5F, center.xPixels, EXACT);
-      Assert::AreEqual(SCREEN_HEIGHT * 0.5F, center.yPixels, EXACT);
-    }
+    const std::vector<std::string> lines = Neuron::FontRenderer::Wrap("ABCDEFGHIJ", 4);
+    Assert::AreEqual(static_cast<size_t>(3), lines.size());
+    Assert::AreEqual(std::string("ABCD"), lines[0]);
+    Assert::AreEqual(std::string("EFGH"), lines[1]);
+    Assert::AreEqual(std::string("IJ"), lines[2]);
   }
 
-  TEST_METHOD(PointsTowardsTheCameraAreNearer)
+  TEST_METHOD(AZeroWidthWrapsToNothingRatherThanLoopingForever)
   {
-    const Neuron::IsometricCamera camera = MakeCamera();
-    const std::array<float, 16> matrix = camera.ViewProjection();
+    Assert::AreEqual(static_cast<size_t>(0), Neuron::FontRenderer::Wrap("anything", 0).size());
+  }
+};
 
-    auto depth = [&matrix](float _x, float _y, float _z) { return _x * matrix[2] + _y * matrix[6] + _z * matrix[10] + matrix[14]; };
-
-    Assert::IsTrue(depth(1.0F, 1.0F, 1.0F) < depth(0.0F, 0.0F, 0.0F), L"towards the camera is nearer");
-    Assert::IsTrue(depth(0.0F, 0.0F, 0.0F) < depth(-1.0F, -1.0F, -1.0F), L"away from the camera is further");
+// The interface renderer tessellates on the CPU, so how many segments a circle gets is a real
+// decision: too few facets a node, too many spends the frame's vertex budget on the star field.
+TEST_CLASS(ShapeRendererTests)
+{
+public:
+  TEST_METHOD(SegmentCountsAreClampedAndRiseWithRadius)
+  {
+    Assert::AreEqual(12u, Neuron::ShapeRenderer::SegmentsForRadius(0.7F), L"a star does not need more than the floor");
+    Assert::AreEqual(12u, Neuron::ShapeRenderer::SegmentsForRadius(5.0F));
+    Assert::AreEqual(40u, Neuron::ShapeRenderer::SegmentsForRadius(20.0F));
+    Assert::AreEqual(64u, Neuron::ShapeRenderer::SegmentsForRadius(1000.0F), L"and never more than the ceiling");
   }
 };
 
@@ -627,7 +440,8 @@ private:
 };
 
 // Zoom has two producers -- the wheel and a pinch -- and one intent (ADR-008). These test the
-// producers; IsometricCameraTests tests what the intent does to the picture.
+// producers; nothing consumes the intent yet -- the camera that did was removed with the MVP-01
+// scene (ADR-015), and the map on the main page has no zoom wired to it.
 TEST_CLASS(ZoomInputTests)
 {
 public:
@@ -874,107 +688,6 @@ public:
 
 private:
   HWND m_window = nullptr;
-};
-
-// The backdrop's scroll arithmetic (ADR-010). The stars themselves are a hash in a shader and
-// there is nothing to unit-test about them; this is the part on the CPU, and it is a floor
-// division, which is exactly the kind of thing that is wrong only on one side of zero.
-TEST_CLASS(StarfieldTests)
-{
-public:
-  // The densities are the ones ADR-010 chose, multiplied by four (ADR-013). The screen went from
-  // 256,000 pixels to 921,600, so leaving the masks alone would have put 3.6 times as many stars
-  // on it -- and star density is a thing that was chosen by eye, not a thing that should move
-  // because a resolution did.
-  TEST_METHOD(TheDensitiesAreTheOldOnesQuadrupled)
-  {
-    constexpr std::array<std::uint32_t, 3> BEFORE_ADR_013 = {2047, 4095, 8191};
-
-    Assert::AreEqual(BEFORE_ADR_013.size(), Neuron::Starfield::LAYER_DENSITY_MASKS.size());
-    for (std::size_t layer = 0; layer < BEFORE_ADR_013.size(); ++layer)
-    {
-      // Still one less than a power of two, so the shader's test stays an AND rather than a
-      // modulo: (n + 1) * 4 - 1 is what quadrupling a mask of that shape means.
-      Assert::AreEqual((BEFORE_ADR_013[layer] + 1U) * 4U - 1U, Neuron::Starfield::LAYER_DENSITY_MASKS[layer],
-                       (std::wstring(L"layer ") + std::to_wstring(layer)).c_str());
-    }
-  }
-
-  // Dim far, bright near, and all three gray. A colored star competes with the ship.
-  TEST_METHOD(TheLayersGetBrighterTowardsTheViewer)
-  {
-    std::uint32_t previous = 0;
-    for (const Neuron::Color& color : Neuron::Starfield::LAYER_COLORS)
-    {
-      Assert::IsTrue(Neuron::Luminance(color) > previous, L"each layer must be brighter than the one behind it");
-      Assert::IsTrue(color.red == color.green && color.green == color.blue, L"stars are gray");
-      previous = Neuron::Luminance(color);
-    }
-  }
-
-  TEST_METHOD(LayersScrollAtTheAdvertisedRates)
-  {
-    // Divisor 8, 4, 2: the far layer moves an eighth as fast as the camera, the near one half.
-    Assert::AreEqual(8, Neuron::Starfield::LayerOffset(64.0F, 0));
-    Assert::AreEqual(16, Neuron::Starfield::LayerOffset(64.0F, 1));
-    Assert::AreEqual(32, Neuron::Starfield::LayerOffset(64.0F, 2));
-  }
-
-  TEST_METHOD(TheFarLayerMovesLeastAndNothingMovesWithTheCamera)
-  {
-    // Layer 0 is the far one and moves least, so the offsets INCREASE towards the near layer.
-    std::int32_t previous = std::numeric_limits<std::int32_t>::min();
-    for (std::size_t layer = 0; layer < Neuron::Starfield::LAYER_COUNT; ++layer)
-    {
-      const std::int32_t offset = Neuron::Starfield::LayerOffset(1000.0F, layer);
-      Assert::IsTrue(offset > previous, L"each layer must scroll faster than the one behind it");
-      Assert::IsTrue(offset < 1000, L"no layer scrolls at the camera's own rate; that is the ship's plane");
-      previous = offset;
-    }
-  }
-
-  TEST_METHOD(TheOriginIsNotSpecial)
-  {
-    Assert::AreEqual(0, Neuron::Starfield::LayerOffset(0.0F, 0));
-  }
-
-  // The bug this exists to keep out. C++ division truncates towards zero, so with a divisor of 8
-  // a truncating implementation gives 0 for every camera position from -7 to +7 -- a 15-pixel
-  // band where the layer holds still, and then jumps two steps at once as the ship crosses. A
-  // floor division changes the offset exactly once every `divisor` pixels, everywhere, including
-  // across zero.
-  TEST_METHOD(TheLayersDoNotStutterAcrossTheOrigin)
-  {
-    for (std::size_t layer = 0; layer < Neuron::Starfield::LAYER_COUNT; ++layer)
-    {
-      const std::int32_t divisor = Neuron::Starfield::LAYER_PARALLAX_DIVISORS[layer];
-
-      for (std::int32_t pixels = -64; pixels < 64; ++pixels)
-      {
-        const std::int32_t here = Neuron::Starfield::LayerOffset(static_cast<float>(pixels), layer);
-        const std::int32_t next = Neuron::Starfield::LayerOffset(static_cast<float>(pixels + 1), layer);
-        const std::int32_t step = next - here;
-
-        Assert::IsTrue(step == 0 || step == 1, (std::wstring(L"layer ") + std::to_wstring(layer) + L" jumped by " + std::to_wstring(step) +
-                                                L" at " + std::to_wstring(pixels))
-                                                 .c_str());
-      }
-
-      // And it really does move: exactly one step per `divisor` pixels, over a span that crosses
-      // zero, is the difference between the two ends.
-      const std::int32_t across = Neuron::Starfield::LayerOffset(64.0F, layer) - Neuron::Starfield::LayerOffset(-64.0F, layer);
-      Assert::AreEqual(128 / divisor, across);
-    }
-  }
-
-  TEST_METHOD(NegativePositionsFloorRatherThanTruncate)
-  {
-    // -1 / 8 is 0 when truncated and -1 when floored. The whole of the previous test rests on
-    // this one value being the second.
-    Assert::AreEqual(-1, Neuron::Starfield::LayerOffset(-1.0F, 0));
-    Assert::AreEqual(-1, Neuron::Starfield::LayerOffset(-8.0F, 0));
-    Assert::AreEqual(-2, Neuron::Starfield::LayerOffset(-9.0F, 0));
-  }
 };
 
 } // namespace NeuronClientTests

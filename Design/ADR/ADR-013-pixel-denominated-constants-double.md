@@ -1,6 +1,6 @@
 # ADR-013 — Every constant measured in pixels doubles, so the picture stays the size it was
 
-**Status:** Accepted
+**Status:** Deprecated by ADR-015 — everything it decided is gone. The zoom ladder went with `IsometricCamera` and the starfield densities with `Starfield` (2026-09-11); `GLYPH_SCALE` had already been revised into a per-call argument by ADR-014. The principle -- that a change of resolution must not silently rescale the picture -- is the part worth keeping.
 
 **Date:** 2026-09-10
 **Decided by:** Build session for ADR-011. The owner asked for 1280×720; this ADR decides what

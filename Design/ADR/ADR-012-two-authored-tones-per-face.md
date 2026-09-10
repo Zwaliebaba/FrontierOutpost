@@ -1,6 +1,6 @@
 # ADR-012 — A lit face is one of two authored colours, chosen per face
 
-**Status:** Accepted
+**Status:** Deprecated by ADR-015 — `MeshRenderer`, `Mesh` and the mesh shaders were deleted on 2026-09-11. There are no authored meshes in the tree and nothing is lit.
 
 **Date:** 2026-09-10
 **Decided by:** Build session for ADR-011. The owner decided that the named colours survive the

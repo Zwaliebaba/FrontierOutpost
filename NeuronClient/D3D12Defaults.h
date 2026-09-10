@@ -51,6 +51,45 @@ namespace Neuron
   };
 }
 
+[[nodiscard]] inline D3D12_RENDER_TARGET_BLEND_DESC StraightAlphaBlend() noexcept
+{
+  return D3D12_RENDER_TARGET_BLEND_DESC{
+    .BlendEnable = TRUE,
+    .LogicOpEnable = FALSE,
+    .SrcBlend = D3D12_BLEND_SRC_ALPHA,
+    .DestBlend = D3D12_BLEND_INV_SRC_ALPHA,
+    .BlendOp = D3D12_BLEND_OP_ADD,
+    // The target is opaque and stays opaque: the destination alpha is whatever the swap chain
+    // started with and nothing reads it, so the alpha channel is written as ONE rather than
+    // composited. A back buffer that accumulated fractional alpha would present correctly today
+    // and wrongly the first time anything sampled it.
+    .SrcBlendAlpha = D3D12_BLEND_ONE,
+    .DestBlendAlpha = D3D12_BLEND_ZERO,
+    .BlendOpAlpha = D3D12_BLEND_OP_ADD,
+    .LogicOp = D3D12_LOGIC_OP_NOOP,
+    .RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL,
+  };
+}
+
+/// Straight (non-premultiplied) source-over blending, for the interface passes and nothing else.
+///
+/// THIS IS THE EXCEPTION R12 ASKS TO BE RECORDED, and ADR-014 is the record. The scene passes --
+/// meshes, the starfield -- stay opaque: every surface in the world is one of two authored tones
+/// and there is nothing there to blend (ADR-012). The interface is different in kind. Its tokens
+/// are half a dozen translucent greys over known backgrounds (a card fill at 4% white, a muted
+/// caption at 55%, a lane at 28%), and the alternative -- compositing each one against its
+/// backdrop on the CPU -- stops working the moment a lane crosses the map's gradient, which is
+/// the first thing the map does.
+[[nodiscard]] inline D3D12_BLEND_DESC InterfaceBlendState() noexcept
+{
+  return D3D12_BLEND_DESC{
+    .AlphaToCoverageEnable = FALSE,
+    .IndependentBlendEnable = FALSE,
+    .RenderTarget = {StraightAlphaBlend(), DisabledBlend(), DisabledBlend(), DisabledBlend(), DisabledBlend(), DisabledBlend(),
+                     DisabledBlend(), DisabledBlend()},
+  };
+}
+
 [[nodiscard]] inline D3D12_RASTERIZER_DESC SolidRasterizer(D3D12_CULL_MODE _cullMode) noexcept
 {
   return D3D12_RASTERIZER_DESC{

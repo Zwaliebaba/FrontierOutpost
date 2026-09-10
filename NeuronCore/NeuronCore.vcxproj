@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
     NeuronCore. x64 is the only platform (AGENTS.md 3); Debug and Release differ only in
@@ -121,18 +121,10 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="LoopbackTransport.cpp" />
-    <ClCompile Include="Protocol.cpp" />
-    <ClCompile Include="Trigonometry.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Debug.h" />
-    <ClInclude Include="LoopbackTransport.h" />
-    <ClInclude Include="MessageQueue.h" />
     <ClInclude Include="NeuronCore.h" />
-    <ClInclude Include="Protocol.h" />
-    <ClInclude Include="Simulation.h" />
-    <ClInclude Include="Trigonometry.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

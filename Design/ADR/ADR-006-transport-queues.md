@@ -1,6 +1,6 @@
 # ADR-006 — The transport's queues: a mutex and a ring, fixed capacity, and two different overflow policies
 
-**Status:** Accepted
+**Status:** Deprecated by ADR-015 — `LoopbackTransport` and `MessageQueue` were deleted on 2026-09-11. Read this before re-deciding transport for the 4X: the queue discipline and the reasons for it still apply.
 
 **Date:** 2026-09-09
 **Decided by:** Build session MVP-01, step 5.

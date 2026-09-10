@@ -20,28 +20,74 @@ public:
   static constexpr std::uint32_t GLYPH_WIDTH_TEXELS = 8;
   static constexpr std::uint32_t GLYPH_HEIGHT_TEXELS = 8;
 
-  /// How many screen pixels a glyph texel occupies, on both axes. A whole number, and there is no
-  /// sampler on the path, so the enlargement is an exact block of pixels rather than a filtered
-  /// one -- the same arithmetic the resolve pass used to do for the whole screen (ADR-013).
+  /// How many screen pixels a glyph texel occupies, on both axes, when a caller does not say.
   ///
-  /// It is 2 because that is what an 8x8 glyph was on screen before 2026-09-10: the screen was
-  /// 640x400 blown up 2x, so a glyph occupied 16x16 physical pixels. At 1280x720 with no blow-up,
-  /// a scale of 1 would put 8-pixel-tall text on a 720-line screen. This is the one number that
-  /// decides how big text is, and the UI design is where it should ultimately be settled.
-  static constexpr std::uint32_t GLYPH_SCALE = 2;
+  /// The scale is a PER-CALL argument rather than the compile-time constant it was between
+  /// 2026-09-10 and 2026-09-11, because the UI design has now settled the question ADR-013 left
+  /// open: 1x (8px) everywhere on the main page, 2x (16px) for the lock countdown and nothing
+  /// else (ADR-014). One number could not say that.
+  ///
+  /// It is always a WHOLE number, and there is no sampler on the path, so the enlargement is an
+  /// exact block of pixels rather than a filtered one.
+  static constexpr std::uint32_t DEFAULT_SCALE = 1;
+  static constexpr std::uint32_t COUNTDOWN_SCALE = 2;
 
-  /// What one character advances the cursor by, and how tall a line is, in screen pixels.
-  static constexpr std::uint32_t CHARACTER_ADVANCE_PIXELS = GLYPH_WIDTH_TEXELS * GLYPH_SCALE;
-  static constexpr std::uint32_t LINE_HEIGHT_PIXELS = GLYPH_HEIGHT_TEXELS * GLYPH_SCALE;
+  /// What one character advances the cursor by, and how tall a line is, at a given scale.
+  [[nodiscard]] static constexpr std::uint32_t AdvancePixels(std::uint32_t _scale = DEFAULT_SCALE) noexcept
+  {
+    return GLYPH_WIDTH_TEXELS * _scale;
+  }
+  [[nodiscard]] static constexpr std::uint32_t GlyphHeightPixels(std::uint32_t _scale = DEFAULT_SCALE) noexcept
+  {
+    return GLYPH_HEIGHT_TEXELS * _scale;
+  }
+
+  /// How wide a string is, in screen pixels. The font is fixed-pitch, so this is a multiply --
+  /// but it is a named multiply, because every right-aligned and centred thing on the main page
+  /// is laid out against it and a stray `* 8` somewhere else is how those drift apart.
+  [[nodiscard]] static constexpr std::uint32_t MeasurePixels(std::string_view _text, std::uint32_t _scale = DEFAULT_SCALE) noexcept
+  {
+    return static_cast<std::uint32_t>(_text.size()) * AdvancePixels(_scale);
+  }
+
+  /// The most characters that fit in a width. Used by the digest and the orders rail, whose copy
+  /// is wrapped to the rail rather than truncated (ADR-014).
+  [[nodiscard]] static constexpr std::size_t FitCharacters(std::uint32_t _widthPixels, std::uint32_t _scale = DEFAULT_SCALE) noexcept
+  {
+    return _widthPixels / AdvancePixels(_scale);
+  }
+
+  /// Word-wraps to a character count, breaking on spaces and hard-breaking a word longer than the
+  /// line.
+  ///
+  /// It lives with the font rather than with the screen that needed it, because wrapping to a
+  /// FIXED-PITCH font is arithmetic on the font's own advance -- there is no measurement pass and
+  /// no kerning, so "how many characters fit" is the whole problem and this class is what knows
+  /// it. It is also the piece most likely to be wrong, and here it is reachable from a test
+  /// suite; in the executable it would not be.
+  [[nodiscard]] static std::vector<std::string> Wrap(std::string_view _text, std::size_t _maxCharacters);
+
+  /// The same, given a width in pixels rather than a character count.
+  [[nodiscard]] static std::vector<std::string> WrapToWidth(std::string_view _text, std::uint32_t _widthPixels,
+                                                            std::uint32_t _scale = DEFAULT_SCALE)
+  {
+    return Wrap(_text, FitCharacters(_widthPixels, _scale));
+  }
 
   /// Space through to the last printable ASCII character. Anything outside that range draws as a
   /// space rather than as whatever byte happened to follow the table.
   static constexpr std::uint32_t FIRST_CHARACTER = 32;
   static constexpr std::uint32_t GLYPH_COUNT = 96;
 
-  /// One frame's worth of text. The game draws a status line, not a novel; overrunning this is a
-  /// broken invariant rather than a case to grow into.
-  static constexpr std::uint32_t MAX_CHARACTERS_PER_FRAME = 512;
+  /// One frame's worth of text.
+  ///
+  /// It was 512 when the client drew a two-line status display over a 3D scene. The main page is
+  /// a text interface -- a seven-event digest, three columns of orders, and every label on the
+  /// map -- and a full frame of it measures a little over 1,600 characters, so 512 was not a
+  /// budget it exceeded but one it was never sized for. 4,096 leaves room for a digest twice as
+  /// long as any tick has produced; overrunning it is still a broken invariant rather than a case
+  /// to grow into.
+  static constexpr std::uint32_t MAX_CHARACTERS_PER_FRAME = 4096;
 
   /// Where a character sits in Font.h's table. Anything outside it -- control codes, high bytes,
   /// a stray UTF-8 continuation byte -- maps to the space at index 0, so a bad string draws
@@ -69,7 +115,12 @@ public:
   void BeginFrame(std::uint32_t _frameIndex) noexcept;
 
   /// Appends one string at a position in screen pixels, top-left of the first glyph.
-  void DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color);
+  ///
+  /// The origin is whole pixels by type, not by convention: a glyph on a half pixel is the one
+  /// way this renderer could produce a soft edge, and an integer parameter makes that
+  /// unreachable rather than merely discouraged.
+  void DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color,
+                std::uint32_t _scale = DEFAULT_SCALE);
 
   /// Issues everything DrawText appended since BeginFrame as a single draw call.
   void Flush(ID3D12GraphicsCommandList* _commandList);

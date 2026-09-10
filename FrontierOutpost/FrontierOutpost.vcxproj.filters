@@ -2,14 +2,17 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClInclude Include="FrontierOutpost.h" />
+    <ClInclude Include="MainPage.h" />
+    <ClInclude Include="MapProjection.h" />
+    <ClInclude Include="MatchFixture.h" />
+    <ClInclude Include="MatchState.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="ShipMesh.h" />
-    <ClInclude Include="ShipView.h" />
-    <ClInclude Include="StationMesh.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FrontierOutpost.cpp" />
-    <ClCompile Include="ShipView.cpp" />
+    <ClCompile Include="MainPage.cpp" />
+    <ClCompile Include="MatchFixture.cpp" />
+    <ClCompile Include="MatchState.cpp" />
     <ClCompile Include="pch.cpp" />
   </ItemGroup>
 </Project>

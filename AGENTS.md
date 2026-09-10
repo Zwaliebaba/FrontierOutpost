@@ -133,11 +133,11 @@ private:
 
 | Path | What it is | May you edit it? |
 |---|---|---|
-| `NeuronCore/` | Engine static library used by **both** halves: platform, timing, maths, containers, serialization, the wire protocol | Yes |
+| `NeuronCore/` | Engine static library used by **both** halves: platform, timing, maths, containers, serialization, the wire protocol. **Currently holds only `Debug.h` and the umbrella header** — the MVP-01 protocol and transport were removed by ADR-015 and the 4X's have not been written | Yes |
 | `NeuronClient/` | Engine static library used by the **client only**: the window, the D3D12 device and swap chain, the 1280×720 colour target, input, audio, UI | Yes |
-| `NeuronServer/` | Engine static library used by the **server only**: session ownership, replication, the authoritative loop | Yes |
-| `GameLogic/` | The game itself — entities, orders, economy, simulation rules. Server-side; the client never links it directly | Yes |
-| `FrontierOutpost/` | The executable. Starts the client and the server in one process, and is where every embedded asset and compiled shader ends up | Yes |
+| `NeuronServer/` | Engine static library used by the **server only**: session ownership, replication, the authoritative loop. **Currently empty** — ADR-015 removed the MVP-01 session; the project and its suite are where the 4X's authoritative loop goes | Yes |
+| `GameLogic/` | The game itself — entities, orders, economy, simulation rules. Server-side; the client never links it directly. **Currently empty** — ADR-015 removed the MVP-01 ship simulation and the 4X's has not been written | Yes |
+| `FrontierOutpost/` | The executable, and the main page it draws (`MainPage`, `MatchState`, the fixture). Where every embedded asset and compiled shader ends up. The server half is not wired up | Yes |
 | `Tests/NeuronCoreTests/`, `Tests/NeuronClientTests/`, `Tests/NeuronServerTests/`, `Tests/GameLogicTests/` | MSVC CppUnitTest DLLs, one per library, each referencing the library it tests and the libraries that library is built on. **CI builds and runs all four** | Yes |
 | `Design/` | The design record: `README.md` (the standards), `ADR/` (decisions), and plans | Yes — see §6 |
 | `Build/*.py` | Repository checkers (§6). They gate CI | Yes, carefully |

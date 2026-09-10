@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
     FrontierOutpost. x64 is the only platform (AGENTS.md 3); Debug and Release differ only in
@@ -134,7 +134,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="FrontierOutpost.cpp" />
-    <ClCompile Include="ShipView.cpp" />
+    <ClCompile Include="MainPage.cpp" />
+    <ClCompile Include="MatchFixture.cpp" />
+    <ClCompile Include="MatchState.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
@@ -142,10 +144,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="FrontierOutpost.h" />
+    <ClInclude Include="MainPage.h" />
+    <ClInclude Include="MapProjection.h" />
+    <ClInclude Include="MatchFixture.h" />
+    <ClInclude Include="MatchState.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="ShipMesh.h" />
-    <ClInclude Include="ShipView.h" />
-    <ClInclude Include="StationMesh.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\NeuronCore\NeuronCore.vcxproj">
