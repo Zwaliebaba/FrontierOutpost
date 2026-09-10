@@ -125,6 +125,7 @@
     </ClCompile>
     <ClCompile Include="Galaxy.cpp" />
     <ClCompile Include="MatchState.cpp" />
+    <ClCompile Include="Visibility.cpp" />
     <ClCompile Include="World.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -134,6 +135,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="Random.h" />
     <ClInclude Include="Rules.h" />
+    <ClInclude Include="Visibility.h" />
     <ClInclude Include="World.h" />
   </ItemGroup>
   <ItemGroup>

@@ -5,9 +5,11 @@
 #include "MatchState.h"
 #include "Random.h"
 #include "Rules.h"
+#include "Visibility.h"
 #include "World.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <map>
@@ -614,6 +616,238 @@ public:
     Assert::AreEqual(static_cast<int>(Frontier::GenerationResult::Accepted), static_cast<int>(world.Generation()));
     Assert::AreEqual(7ULL, world.State().seed);
     Assert::AreEqual(static_cast<std::size_t>(6), world.State().seats.size());
+  }
+};
+
+// The fog rule (ADR-017) and the per-seat snapshot (ADR-005). These are the tests that matter most
+// for trust rather than for correctness: the filter is the only thing deciding what a seat may see,
+// so most of what follows asserts an ABSENCE.
+TEST_CLASS(VisibilityTests)
+{
+public:
+  TEST_METHOD(ASeatObservesItsOwnCapitalFromTickOne)
+  {
+    const Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    for (const Frontier::Seat& seat : state.seats)
+    {
+      const std::vector<bool> observed = Frontier::ObservedSystems(state, Frontier::DEFAULT_RULES, seat.id);
+      Assert::IsTrue(observed[seat.capital], L"a seat must see the system its garrison is standing in");
+    }
+  }
+
+  TEST_METHOD(ObservationReachesOneLaneByDefault)
+  {
+    const Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    const Frontier::Seat& seat = state.seats[0];
+    const std::vector<bool> observed = Frontier::ObservedSystems(state, Frontier::DEFAULT_RULES, seat.id);
+
+    for (const Frontier::Lane& lane : state.lanes)
+    {
+      if (lane.endA == seat.capital)
+      {
+        Assert::IsTrue(observed[lane.endB], L"a neighbor of the capital is within the default reach");
+      }
+      if (lane.endB == seat.capital)
+      {
+        Assert::IsTrue(observed[lane.endA]);
+      }
+    }
+  }
+
+  TEST_METHOD(AReachOfZeroSeesOnlyWhereTheFleetStands)
+  {
+    Frontier::Rules rules = Frontier::DEFAULT_RULES;
+    rules.scoutingRevealLanes = 0;
+
+    const Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    const Frontier::Seat& seat = state.seats[0];
+    const std::vector<bool> observed = Frontier::ObservedSystems(state, rules, seat.id);
+
+    std::size_t count = 0;
+    for (const bool seen : observed)
+    {
+      count += seen ? 1 : 0;
+    }
+    Assert::AreEqual(static_cast<std::size_t>(1), count);
+    Assert::IsTrue(observed[seat.capital]);
+  }
+
+  TEST_METHOD(AFleetInTransitObservesNothing)
+  {
+    Frontier::MatchState state = AcceptedGalaxy(1, 8);
+
+    // Put every one of seat 0's fleets on a lane. A fleet between systems is not at one, and a
+    // scout reporting from halfway down a lane would weaken the one-pager's tick resolution.
+    for (Frontier::Fleet& fleet : state.fleets)
+    {
+      if (fleet.owner == 0)
+      {
+        fleet.atSystem = Frontier::NO_SYSTEM;
+        fleet.onLane = 0;
+        fleet.towardSystem = state.lanes[0].endB;
+      }
+    }
+
+    const std::vector<bool> observed = Frontier::ObservedSystems(state, Frontier::DEFAULT_RULES, 0);
+    for (const bool seen : observed)
+    {
+      Assert::IsFalse(seen, L"a fleet in transit observes nothing");
+    }
+  }
+
+  TEST_METHOD(TheTopologyIsPublicInFull)
+  {
+    // Every system and every lane, at their authored coordinates and costs, whatever the seat has
+    // observed. This is what makes the map worth drawing from tick one.
+    const Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    const Neuron::VisibleSnapshot snapshot = Frontier::VisibleSnapshotFor(state, Frontier::DEFAULT_RULES, 0);
+
+    Assert::AreEqual(state.systems.size(), snapshot.systems.size());
+    Assert::AreEqual(state.lanes.size(), snapshot.lanes.size());
+    for (std::size_t index = 0; index < state.systems.size(); ++index)
+    {
+      Assert::AreEqual(state.systems[index].position.xUnits, snapshot.systems[index].xUnits);
+      Assert::AreEqual(state.systems[index].position.yUnits, snapshot.systems[index].yUnits);
+    }
+    for (std::size_t index = 0; index < state.lanes.size(); ++index)
+    {
+      Assert::AreEqual(state.lanes[index].costTicks, snapshot.lanes[index].costTicks);
+    }
+  }
+
+  TEST_METHOD(AnUnobservedSystemCarriesNoContentsAtAll)
+  {
+    // The leak test. Whatever a seat has not seen, it is told nothing about -- not a default, not
+    // a stale guess, nothing.
+    const Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    const Neuron::VisibleSnapshot snapshot = Frontier::VisibleSnapshotFor(state, Frontier::DEFAULT_RULES, 0);
+
+    std::size_t unknown = 0;
+    for (const Neuron::SystemView& view : snapshot.systems)
+    {
+      if (view.visibility != Neuron::Visibility::Unknown)
+      {
+        continue;
+      }
+      ++unknown;
+      Assert::AreEqual(static_cast<int>(Frontier::NO_SEAT), static_cast<int>(view.owner));
+      Assert::AreEqual(0, view.yieldPerTick);
+      Assert::AreEqual(0, view.garrisonStrength);
+      Assert::AreEqual(0ULL, view.observedTick);
+    }
+    Assert::IsTrue(unknown > 0, L"an eight-seat galaxy must have somewhere seat 0 has not been");
+  }
+
+  TEST_METHOD(LeavingASystemTurnsObservedIntoRememberedWithTheOldTick)
+  {
+    Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    const Frontier::SystemId capital = state.seats[0].capital;
+    const std::int32_t knownYield = state.systems[capital].yieldPerTick;
+
+    // The fleets go, the clock moves on, and observation runs again. The capital's contents must
+    // now read as what was seen at tick 0, not as what is true at tick 5.
+    state.fleets.clear();
+    state.tick = 5;
+    Frontier::ObserveAndRemember(state, Frontier::DEFAULT_RULES);
+
+    const Neuron::VisibleSnapshot snapshot = Frontier::VisibleSnapshotFor(state, Frontier::DEFAULT_RULES, 0);
+    const Neuron::SystemView& view = snapshot.systems[capital];
+
+    Assert::AreEqual(static_cast<int>(Neuron::Visibility::Remembered), static_cast<int>(view.visibility));
+    Assert::AreEqual(knownYield, view.yieldPerTick);
+    Assert::AreEqual(0ULL, view.observedTick, L"the stamp is the tick it was seen, not the tick it is now");
+  }
+
+  TEST_METHOD(FogDoesNotCloseAgain)
+  {
+    Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    const Frontier::SystemId capital = state.seats[0].capital;
+
+    state.fleets.clear();
+    for (int tick = 0; tick < 10; ++tick)
+    {
+      state.tick = static_cast<std::uint64_t>(tick);
+      Frontier::ObserveAndRemember(state, Frontier::DEFAULT_RULES);
+    }
+
+    Assert::IsTrue(state.seats[0].memory[capital].known, L"a seat that has seen a system knows it is there");
+  }
+
+  TEST_METHOD(AFleetInTransitIsPublicToEverySeat)
+  {
+    Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    Frontier::Fleet& fleet = state.fleets[0];
+    const Frontier::SeatId owner = fleet.owner;
+    fleet.atSystem = Frontier::NO_SYSTEM;
+    fleet.onLane = 3;
+    fleet.towardSystem = state.lanes[3].endB;
+    fleet.departedTick = 2;
+    fleet.arrivesTick = 5;
+
+    for (const Frontier::Seat& seat : state.seats)
+    {
+      const Neuron::VisibleSnapshot snapshot = Frontier::VisibleSnapshotFor(state, Frontier::DEFAULT_RULES, seat.id);
+      Assert::AreEqual(static_cast<std::size_t>(1), snapshot.transits.size(),
+                       L"a departed fleet is visible in transit to everyone, with its tick-ETA");
+      Assert::AreEqual(static_cast<int>(owner), static_cast<int>(snapshot.transits[0].owner));
+      Assert::AreEqual(5ULL, snapshot.transits[0].arrivesTick);
+    }
+  }
+
+  TEST_METHOD(AFleetAtASystemIsNotATransit)
+  {
+    const Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    const Neuron::VisibleSnapshot snapshot = Frontier::VisibleSnapshotFor(state, Frontier::DEFAULT_RULES, 0);
+    Assert::IsTrue(snapshot.transits.empty(), L"nothing has departed yet");
+  }
+
+  TEST_METHOD(TwoSeatsAreToldDifferentThings)
+  {
+    // If this ever fails, the filter has stopped filtering.
+    const Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    const Neuron::VisibleSnapshot first = Frontier::VisibleSnapshotFor(state, Frontier::DEFAULT_RULES, 0);
+    const Neuron::VisibleSnapshot second = Frontier::VisibleSnapshotFor(state, Frontier::DEFAULT_RULES, 4);
+
+    bool sawDifference = false;
+    for (std::size_t index = 0; index < first.systems.size() && !sawDifference; ++index)
+    {
+      sawDifference = first.systems[index].visibility != second.systems[index].visibility;
+    }
+    Assert::IsTrue(sawDifference, L"two seats on opposite sides of the galaxy must not see the same thing");
+  }
+
+  TEST_METHOD(TheSnapshotCarriesTheCountdownsTheDesignMakesPublic)
+  {
+    const Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    const Neuron::VisibleSnapshot snapshot = Frontier::VisibleSnapshotFor(state, Frontier::DEFAULT_RULES, 0);
+
+    Assert::AreEqual(state.endTick, snapshot.endTick);
+    Assert::AreEqual(state.sealedOpensTick, snapshot.sealedOpensTick);
+    Assert::AreEqual(state.seats.size(), snapshot.seats.size());
+    for (const Neuron::SeatView& seat : snapshot.seats)
+    {
+      Assert::AreEqual(Frontier::DEFAULT_RULES.capitalGuardTicks, seat.capitalGuardEndsTick);
+    }
+  }
+
+  TEST_METHOD(ASnapshotSurvivesTheWire)
+  {
+    // The filter's output has to be the thing that actually crosses a transport, so the two are
+    // tested together at least once rather than only in their own suites.
+    const Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    const Neuron::VisibleSnapshot original = Frontier::VisibleSnapshotFor(state, Frontier::DEFAULT_RULES, 0);
+
+    std::vector<std::byte> bytes;
+    Neuron::Serialize(original, bytes);
+
+    Neuron::VisibleSnapshot restored;
+    Assert::IsTrue(Neuron::DeserializeVisibleSnapshot(bytes, restored));
+    Assert::AreEqual(original.systems.size(), restored.systems.size());
+    for (std::size_t index = 0; index < original.systems.size(); ++index)
+    {
+      Assert::AreEqual(static_cast<int>(original.systems[index].visibility), static_cast<int>(restored.systems[index].visibility));
+      Assert::AreEqual(original.systems[index].yieldPerTick, restored.systems[index].yieldPerTick);
+    }
   }
 };
 

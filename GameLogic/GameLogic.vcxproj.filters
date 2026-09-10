@@ -7,12 +7,14 @@
     <ClInclude Include="Rules.h" />
     <ClInclude Include="Random.h" />
     <ClInclude Include="Galaxy.h" />
+    <ClInclude Include="Visibility.h" />
     <ClInclude Include="World.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="MatchState.cpp" />
     <ClCompile Include="Galaxy.cpp" />
+    <ClCompile Include="Visibility.cpp" />
     <ClCompile Include="World.cpp" />
   </ItemGroup>
 </Project>

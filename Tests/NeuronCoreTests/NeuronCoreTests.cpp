@@ -6,7 +6,9 @@
 #include "Trigonometry.h"
 
 #include <cmath>
+#include <cstddef>
 #include <numbers>
+#include <span>
 #include <thread>
 #include <vector>
 
@@ -332,6 +334,222 @@ public:
         Assert::Fail((std::wstring(L"out of order at ") + std::to_wstring(index)).c_str());
       }
     }
+  }
+};
+
+namespace
+{
+
+/// A snapshot with something in every list, so a round trip exercises each one rather than the
+/// happy path of the first.
+Neuron::VisibleSnapshot SampleSnapshot()
+{
+  Neuron::VisibleSnapshot snapshot;
+  snapshot.tick = 31;
+  snapshot.endTick = 84;
+  snapshot.sealedOpensTick = 42;
+  snapshot.seat = 3;
+
+  snapshot.systems.push_back(Neuron::SystemView{.systemId = 0,
+                                                .xUnits = -120,
+                                                .yUnits = 77,
+                                                .kind = 1,
+                                                .visibility = Neuron::Visibility::Observed,
+                                                .owner = 3,
+                                                .reserved = 0,
+                                                .yieldPerTick = 6,
+                                                .garrisonStrength = 10,
+                                                .observedTick = 31});
+  snapshot.systems.push_back(Neuron::SystemView{.systemId = 1,
+                                                .xUnits = 5,
+                                                .yUnits = -9,
+                                                .kind = 3,
+                                                .visibility = Neuron::Visibility::Unknown,
+                                                .owner = 0xFF,
+                                                .reserved = 0,
+                                                .yieldPerTick = 0,
+                                                .garrisonStrength = 0,
+                                                .observedTick = 0});
+  snapshot.lanes.push_back(Neuron::LaneView{.laneId = 0, .endA = 0, .endB = 1, .costTicks = 3});
+  snapshot.transits.push_back(Neuron::TransitView{
+    .fleetId = 7, .laneId = 0, .towardSystemId = 1, .owner = 2, .reserved = 0, .strength = 40, .departedTick = 29, .arrivesTick = 32});
+  snapshot.seats.push_back(Neuron::SeatView{.seatId = 3, .reserved0 = 0, .capitalSystemId = 0, .score = 0, .capitalGuardEndsTick = 12});
+  return snapshot;
+}
+
+} // namespace
+
+// The frame: a length, a type and a version in front of every payload (ADR-006). Its job is to
+// turn a malformed or unexpected message into a refusal rather than into a record read out of
+// whatever followed it in memory, so most of these tests are about the refusals.
+TEST_CLASS(FrameTests)
+{
+public:
+  TEST_METHOD(AFrameSurvivesTheRoundTrip)
+  {
+    const Neuron::Frame original{
+      .type = Neuron::MessageType::VisibleSnapshot, .version = Neuron::PROTOCOL_VERSION, .payload = {std::byte{1}, std::byte{2}}};
+
+    std::vector<std::byte> bytes;
+    Neuron::EncodeFrame(original, bytes);
+    Assert::AreEqual(Neuron::FRAME_HEADER_BYTES + 2, bytes.size());
+
+    Neuron::Frame restored = {};
+    Assert::IsTrue(Neuron::DecodeFrame(bytes, restored));
+    Assert::AreEqual(static_cast<int>(original.type), static_cast<int>(restored.type));
+    Assert::AreEqual(original.version, restored.version);
+    Assert::AreEqual(original.payload.size(), restored.payload.size());
+    Assert::IsTrue(original.payload == restored.payload);
+  }
+
+  TEST_METHOD(AnEmptyPayloadIsStillAFrame)
+  {
+    const Neuron::Frame original{.type = Neuron::MessageType::None, .version = Neuron::PROTOCOL_VERSION, .payload = {}};
+    std::vector<std::byte> bytes;
+    Neuron::EncodeFrame(original, bytes);
+    Assert::AreEqual(Neuron::FRAME_HEADER_BYTES, bytes.size());
+
+    Neuron::Frame restored = {};
+    Assert::IsTrue(Neuron::DecodeFrame(bytes, restored));
+    Assert::IsTrue(restored.payload.empty());
+  }
+
+  TEST_METHOD(ABufferShorterThanTheHeaderIsRefused)
+  {
+    const std::vector<std::byte> tooShort(Neuron::FRAME_HEADER_BYTES - 1, std::byte{0});
+    Neuron::Frame restored = {};
+    Assert::IsFalse(Neuron::DecodeFrame(tooShort, restored));
+  }
+
+  TEST_METHOD(ALengthThatDisagreesWithTheBufferIsRefused)
+  {
+    const Neuron::Frame original{
+      .type = Neuron::MessageType::VisibleSnapshot, .version = Neuron::PROTOCOL_VERSION, .payload = {std::byte{9}}};
+    std::vector<std::byte> bytes;
+    Neuron::EncodeFrame(original, bytes);
+
+    // Claim two payload bytes and supply one. This is the truncation a socket produces, and it
+    // must not be read as a one-byte payload.
+    bytes[0] = std::byte{2};
+    Neuron::Frame restored = {};
+    Assert::IsFalse(Neuron::DecodeFrame(bytes, restored));
+  }
+
+  TEST_METHOD(AVersionThisBuildDoesNotKnowIsRefused)
+  {
+    const Neuron::Frame original{
+      .type = Neuron::MessageType::VisibleSnapshot, .version = Neuron::PROTOCOL_VERSION, .payload = {std::byte{9}}};
+    std::vector<std::byte> bytes;
+    Neuron::EncodeFrame(original, bytes);
+
+    bytes[6] = std::byte{0xFE};
+    bytes[7] = std::byte{0xFF};
+    Neuron::Frame restored = {};
+    Assert::IsFalse(Neuron::DecodeFrame(bytes, restored));
+  }
+};
+
+// The snapshot: variable length, so unlike the two MVP-01 records it has no compile-time size and
+// every read has to be bounds-checked (ADR-005).
+TEST_CLASS(VisibleSnapshotTests)
+{
+public:
+  TEST_METHOD(ASnapshotSurvivesTheRoundTrip)
+  {
+    const Neuron::VisibleSnapshot original = SampleSnapshot();
+
+    std::vector<std::byte> bytes;
+    Neuron::Serialize(original, bytes);
+
+    Neuron::VisibleSnapshot restored;
+    Assert::IsTrue(Neuron::DeserializeVisibleSnapshot(bytes, restored));
+
+    Assert::AreEqual(original.tick, restored.tick);
+    Assert::AreEqual(original.endTick, restored.endTick);
+    Assert::AreEqual(original.sealedOpensTick, restored.sealedOpensTick);
+    Assert::AreEqual(original.seat, restored.seat);
+    Assert::AreEqual(original.systems.size(), restored.systems.size());
+    Assert::AreEqual(original.lanes.size(), restored.lanes.size());
+    Assert::AreEqual(original.transits.size(), restored.transits.size());
+    Assert::AreEqual(original.seats.size(), restored.seats.size());
+
+    // A negative coordinate is the field most likely to be wrong, because it is the only signed
+    // one that goes through the unsigned shift path.
+    Assert::AreEqual(-120, restored.systems[0].xUnits);
+    Assert::AreEqual(77, restored.systems[0].yUnits);
+    Assert::AreEqual(static_cast<int>(Neuron::Visibility::Observed), static_cast<int>(restored.systems[0].visibility));
+    Assert::AreEqual(static_cast<int>(Neuron::Visibility::Unknown), static_cast<int>(restored.systems[1].visibility));
+    Assert::AreEqual(3, restored.lanes[0].costTicks);
+    Assert::AreEqual(40, restored.transits[0].strength);
+    Assert::AreEqual(29ULL, restored.transits[0].departedTick);
+    Assert::AreEqual(12ULL, restored.seats[0].capitalGuardEndsTick);
+  }
+
+  TEST_METHOD(AnEmptySnapshotSurvivesTheRoundTrip)
+  {
+    Neuron::VisibleSnapshot original;
+    original.tick = 1;
+    original.seat = 0;
+
+    std::vector<std::byte> bytes;
+    Neuron::Serialize(original, bytes);
+
+    Neuron::VisibleSnapshot restored = SampleSnapshot();
+    Assert::IsTrue(Neuron::DeserializeVisibleSnapshot(bytes, restored));
+    Assert::IsTrue(restored.systems.empty());
+    Assert::IsTrue(restored.lanes.empty());
+  }
+
+  TEST_METHOD(ATruncatedSnapshotIsRefused)
+  {
+    std::vector<std::byte> bytes;
+    Neuron::Serialize(SampleSnapshot(), bytes);
+
+    // Every prefix of a valid record must be refused, not just the obvious ones.
+    for (std::size_t length = 0; length < bytes.size(); ++length)
+    {
+      Neuron::VisibleSnapshot restored;
+      const std::span<const std::byte> prefix{bytes.data(), length};
+      Assert::IsFalse(Neuron::DeserializeVisibleSnapshot(prefix, restored), L"a prefix of a snapshot deserialized as if it were whole");
+    }
+  }
+
+  TEST_METHOD(TrailingBytesAreRefused)
+  {
+    std::vector<std::byte> bytes;
+    Neuron::Serialize(SampleSnapshot(), bytes);
+    bytes.push_back(std::byte{0});
+
+    Neuron::VisibleSnapshot restored;
+    Assert::IsFalse(Neuron::DeserializeVisibleSnapshot(bytes, restored),
+                    L"a record that leaves a tail is one whose writer and reader disagree");
+  }
+
+  TEST_METHOD(AnAbsurdCountIsRefusedRatherThanAllocated)
+  {
+    std::vector<std::byte> bytes;
+    Neuron::Serialize(SampleSnapshot(), bytes);
+
+    // The system count sits after tick, endTick, sealedOpensTick and seat: 8 + 8 + 8 + 1.
+    constexpr std::size_t SYSTEM_COUNT_OFFSET = 25;
+    bytes[SYSTEM_COUNT_OFFSET] = std::byte{0xFF};
+    bytes[SYSTEM_COUNT_OFFSET + 1] = std::byte{0xFF};
+
+    Neuron::VisibleSnapshot restored;
+    Assert::IsFalse(Neuron::DeserializeVisibleSnapshot(bytes, restored),
+                    L"a count larger than the buffer could hold must fail before it reserves");
+  }
+
+  TEST_METHOD(AFailedDeserializeLeavesTheTargetAlone)
+  {
+    // There is no partial success: the target is only assigned once the whole record has read.
+    const Neuron::VisibleSnapshot before = SampleSnapshot();
+    Neuron::VisibleSnapshot target = before;
+
+    const std::vector<std::byte> rubbish(10, std::byte{0xAB});
+    Assert::IsFalse(Neuron::DeserializeVisibleSnapshot(rubbish, target));
+    Assert::AreEqual(before.tick, target.tick);
+    Assert::AreEqual(before.systems.size(), target.systems.size());
   }
 };
 

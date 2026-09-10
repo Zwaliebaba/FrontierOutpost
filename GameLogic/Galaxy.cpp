@@ -11,6 +11,7 @@
 
 #include "Random.h"
 #include "Trigonometry.h"
+#include "Visibility.h"
 
 #include <algorithm>
 #include <array>
@@ -439,7 +440,8 @@ GenerationResult GenerateGalaxy(std::uint64_t _seed, SeatId _seatCount, const Ru
     const auto seatId = static_cast<SeatId>(seat);
     const SystemId capital = capitals[static_cast<std::size_t>(seat)];
     _outState.systems[capital].owner = seatId;
-    _outState.seats.push_back(Seat{.id = seatId, .capital = capital, .income = _rules.startingIncome});
+    _outState.seats.push_back(Seat{
+      .id = seatId, .capital = capital, .income = _rules.startingIncome, .memory = std::vector<SystemMemory>(_outState.systems.size())});
 
     _outState.fleets.push_back(Fleet{
       .id = static_cast<FleetId>(_outState.fleets.size()),
@@ -453,6 +455,10 @@ GenerationResult GenerateGalaxy(std::uint64_t _seed, SeatId _seatCount, const Ru
       .pinned = true,
     });
   }
+
+  // A seat starts knowing its own cluster, because its garrison is standing in it. Without this a
+  // new match opens with every seat drawing its own capital as unknown, which reads as a bug.
+  ObserveAndRemember(_outState, _rules);
 
   return Validate(_outState, _rules);
 }

@@ -96,11 +96,30 @@ struct Fleet
   bool pinned;
 };
 
+/// What one seat remembers about one system (ADR-017).
+///
+/// The topology is public, so nothing here is about where a system is. This is its CONTENTS as of
+/// the last tick this seat had a fleet in range, which is what makes a remembered system drawable
+/// as "what I saw at tick N" rather than as a guess about now.
+struct SystemMemory
+{
+  /// The tick the contents below were observed. Zero while `known` is false.
+  std::uint64_t observedTick;
+  std::int32_t yieldPerTick;
+  std::int32_t garrisonStrength;
+  SeatId owner;
+  bool known;
+};
+
 struct Seat
 {
   SeatId id;
   SystemId capital;
   std::int32_t income;
+  /// Indexed by `SystemId`, one entry per system, sized by the generator. A vector rather than a
+  /// set of the systems seen, because indexing is what makes the visibility filter a walk with no
+  /// lookup in it -- and R16 has no unordered container available to it anyway.
+  std::vector<SystemMemory> memory;
 };
 
 struct MatchState

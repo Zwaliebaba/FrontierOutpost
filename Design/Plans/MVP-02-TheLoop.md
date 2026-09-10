@@ -188,10 +188,32 @@ should expect to move the default zoom, add a sixth level (ADR-008's open questi
 map down in `Rules`. All three are data rather than code, which is the point of ADR-004 putting
 them there.
 
-### Slice 2 — The galaxy on screen
+### Slice 2 — The galaxy on screen, in three parts
 
-**The judgement slice.** Its purpose is to make the map lookable-at before any rule depends on how
-big a galaxy can be.
+**The judgement slice**, and it is split because as first written it mixed work CI can prove with
+work only a person at a screen can prove, so one green run would have attested to about half of it.
+Each part lands green on its own.
+
+- **2a — the snapshot exists.** `NeuronCore` gains the `VisibleSnapshot` record, the frame with its
+  type and version, and their serialization (ADR-005, ADR-006). `GameLogic` gains per-seat memory
+  and the fog filter of ADR-017, with the leak tests. **Nothing else moves:** the seam, the session
+  and the client are untouched and the MVP-01 ship path still builds and still runs, so this part
+  cannot break anything that works today. Fully verifiable by CI.
+- **2b — the seam turns over.** `Simulation` narrows to a per-seat snapshot, `Session` loses its
+  twenty-hertz timer for `ResolveNow()`, the loopback carries frames, and `ShipView`,
+  `Neuron::ShipState` and `Neuron::MoveToOrder` are deleted. The client is stripped to the
+  starfield, the station and a status line: briefly less capable, and honest about it. The strip has
+  to land in this same part, because deleting the record is what breaks the client. Verifiable by
+  CI apart from one run-list line: it still opens a window and draws.
+- **2c — the map.** The panning camera with bounds and `LookAt`, zoom about an anchor, picking,
+  drag, the lane quads, the system meshes, `Frontier::Scene`, and a seat in the harness. **None of
+  this can be verified from a container with no screen**, and it carries the legibility measurement
+  below. It ends with a run list and nothing else.
+
+The parts below describe 2a, 2b and 2c together; the "not in this slice" and "run list" lines apply
+to the slice as a whole.
+
+Its purpose is to make the map lookable-at before any rule depends on how big a galaxy can be.
 
 `NeuronCore`: the frame, the version, and the `VisibleSnapshot` record only (ADR-006). The
 `Simulation` seam narrowed to `Snapshot(seat)` and a `ResolveTick()` that does nothing yet;
