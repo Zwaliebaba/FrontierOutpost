@@ -7,12 +7,15 @@ namespace Neuron
 /// a point on the ground (ADR-003).
 ///
 /// The projection is written as whole numbers of virtual pixels rather than derived from a yaw
-/// and a pitch, because the numbers of pixels are what has to come out exact:
+/// and a pitch, because the numbers of pixels are what has to come out exact. Writing w for
+/// HalfTileWidthPixels():
 ///
-///     pixelX = (x - z) * HALF_TILE_WIDTH_PIXELS
-///     pixelY = (x + z) * HALF_TILE_HEIGHT_PIXELS - y * HEIGHT_PIXELS_PER_UNIT
+///     pixelX = (x - z) * w
+///     pixelY = (x + z) * (w / 2) - y * w
 ///
-/// A one-unit square on the ground is therefore a diamond exactly 16 pixels wide and 8 tall. The
+/// At the default zoom w is 8, so a one-unit square on the ground is a diamond exactly 16 pixels
+/// wide and 8 tall. Zoom moves w through a list of even values and changes nothing else: the 2:1
+/// stays 2:1 at every level, which is the point of the list being what it is (ADR-008). The
 /// null direction of that map -- the direction a viewing ray runs -- works out to (1, 1, 1), so
 /// this is true isometric with the vertical axis squashed by sqrt(3)/2, which is what pixel-art
 /// "isometric" has always actually been. ADR-003 has the derivation and why 2:1 rather than the
@@ -23,14 +26,19 @@ namespace Neuron
 class IsometricCamera
 {
 public:
-  /// Half the width and half the height, in virtual pixels, of the diamond a one-unit ground
-  /// square projects to. The 2:1 ratio between them is the decision; the 8 is the zoom.
-  static constexpr float HALF_TILE_WIDTH_PIXELS = 8.0F;
-  static constexpr float HALF_TILE_HEIGHT_PIXELS = 4.0F;
+  /// The zoom levels this camera has, as the half-width in virtual pixels of the diamond a
+  /// one-unit ground square projects to (ADR-008).
+  ///
+  /// A LIST rather than a range, and every entry EVEN, because the half-height is half of this
+  /// and both have to be whole numbers -- that is what keeps a lattice of world points on a
+  /// lattice of pixels and the un-projection exact (ADR-003). An odd level would put the tile
+  /// edge on half-pixel steps and the crisp staircase would go.
+  static constexpr std::array<float, 5> ZOOM_LEVELS_PIXELS = {4.0F, 6.0F, 8.0F, 12.0F, 16.0F};
 
-  /// One unit of world height, in virtual pixels. Equal to the half-tile width, which is what
-  /// makes the squash exactly sqrt(3)/2 of true isometric (ADR-003).
-  static constexpr float HEIGHT_PIXELS_PER_UNIT = 8.0F;
+  /// 8 pixels a ground unit: the scale everything in the game was drawn against, and the one
+  /// ADR-003 records.
+  static constexpr std::size_t DEFAULT_ZOOM_INDEX = 2;
+  static constexpr float DEFAULT_HALF_TILE_WIDTH_PIXELS = ZOOM_LEVELS_PIXELS[DEFAULT_ZOOM_INDEX];
 
   /// Half the depth the orthographic projection spans, in world units, centered on the target.
   /// Space is unbounded but the depth buffer is not; 4096 units either way is four thousand times
@@ -57,6 +65,28 @@ public:
   /// Centers the view on a world point, rounded to whole virtual pixels.
   void Follow(const WorldPoint& _target) noexcept;
 
+  /// Moves the zoom by whole steps through ZOOM_LEVELS_PIXELS, clamped at both ends. Positive
+  /// zooms in.
+  ///
+  /// There is no anchor argument and there should not be one. Zooming usually keeps the point
+  /// under the cursor fixed, but this camera always centers on whatever it follows (MVP-01
+  /// section 2: the ship stays centered and space scrolls under it), so the anchor is the center
+  /// of the screen by construction and there is nothing to pass.
+  void ZoomBy(std::int32_t _steps) noexcept;
+
+  /// Half the width, in virtual pixels, of the diamond a one-unit ground square currently
+  /// projects to. The half-height is half of this and one unit of world height is equal to it,
+  /// which is what makes the squash exactly sqrt(3)/2 of true isometric (ADR-003).
+  [[nodiscard]] float HalfTileWidthPixels() const noexcept
+  {
+    return ZOOM_LEVELS_PIXELS[m_zoomIndex];
+  }
+
+  [[nodiscard]] std::size_t ZoomIndex() const noexcept
+  {
+    return m_zoomIndex;
+  }
+
   /// World to virtual screen pixels, including the snap. The inverse of UnprojectToGround for any
   /// point with y == 0.
   [[nodiscard]] ScreenPoint Project(const WorldPoint& _world) const noexcept;
@@ -77,9 +107,15 @@ public:
   }
 
 private:
+  /// Recomputes the snapped target. Both Follow and ZoomBy need it: the snap is in pixels, so it
+  /// depends on the scale as well as on where the camera is, and a zoom that did not re-snap
+  /// would leave the whole scene half a pixel out until the next frame moved the ship.
+  void UpdateSnap() noexcept;
+
   float m_virtualWidthPixels;
   float m_virtualHeightPixels;
   WorldPoint m_target = {0.0F, 0.0F, 0.0F};
+  std::size_t m_zoomIndex = DEFAULT_ZOOM_INDEX;
 
   /// The target's projected position, rounded to whole pixels. Everything is drawn relative to
   /// this, so rounding it once here is what keeps the whole scene on the pixel grid.

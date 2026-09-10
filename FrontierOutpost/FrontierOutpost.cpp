@@ -229,6 +229,14 @@ int RunGame(HWND _window)
     }
     ship.Advance(elapsedSeconds);
 
+    // Zoom before the camera is placed, so that the click un-projected below and the frame drawn
+    // after it both use the scale the player just asked for rather than the previous one's.
+    const std::int32_t zoomSteps = pointer.TakeZoomSteps();
+    if (zoomSteps != 0)
+    {
+      camera.ZoomBy(zoomSteps);
+    }
+
     // Before the first state has arrived there is no ship, so the camera sits at the origin and
     // nothing is drawn. It lasts one tick at most and it is the honest thing to show: the client
     // has not been told where anything is (ADR-005).

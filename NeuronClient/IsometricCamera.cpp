@@ -24,17 +24,34 @@ IsometricCamera::IsometricCamera(float _virtualWidthPixels, float _virtualHeight
 void IsometricCamera::Follow(const WorldPoint& _target) noexcept
 {
   m_target = _target;
+  UpdateSnap();
+}
+
+void IsometricCamera::ZoomBy(std::int32_t _steps) noexcept
+{
+  const auto lastIndex = static_cast<std::int32_t>(ZOOM_LEVELS_PIXELS.size()) - 1;
+  const std::int32_t wanted = static_cast<std::int32_t>(m_zoomIndex) + _steps;
+  m_zoomIndex = static_cast<std::size_t>(std::clamp(wanted, 0, lastIndex));
+
+  // The snap is in pixels and the pixels just changed size.
+  UpdateSnap();
+}
+
+void IsometricCamera::UpdateSnap() noexcept
+{
+  const float halfWidth = HalfTileWidthPixels();
 
   // std::round, not a cast: a cast truncates toward zero, which puts a seam at the origin where
   // the camera would jump two pixels instead of one as it crosses.
-  m_snappedTargetXPixels = std::round((_target.x - _target.z) * HALF_TILE_WIDTH_PIXELS);
-  m_snappedTargetYPixels = std::round((_target.x + _target.z) * HALF_TILE_HEIGHT_PIXELS - _target.y * HEIGHT_PIXELS_PER_UNIT);
+  m_snappedTargetXPixels = std::round((m_target.x - m_target.z) * halfWidth);
+  m_snappedTargetYPixels = std::round((m_target.x + m_target.z) * (halfWidth * 0.5F) - m_target.y * halfWidth);
 }
 
 IsometricCamera::ScreenPoint IsometricCamera::Project(const WorldPoint& _world) const noexcept
 {
-  const float xPixels = (_world.x - _world.z) * HALF_TILE_WIDTH_PIXELS;
-  const float yPixels = (_world.x + _world.z) * HALF_TILE_HEIGHT_PIXELS - _world.y * HEIGHT_PIXELS_PER_UNIT;
+  const float halfWidth = HalfTileWidthPixels();
+  const float xPixels = (_world.x - _world.z) * halfWidth;
+  const float yPixels = (_world.x + _world.z) * (halfWidth * 0.5F) - _world.y * halfWidth;
 
   return ScreenPoint{
     (xPixels - m_snappedTargetXPixels) + m_virtualWidthPixels * 0.5F,
@@ -49,10 +66,11 @@ IsometricCamera::WorldPoint IsometricCamera::UnprojectToGround(float _xPixels, f
   const float yFromOrigin = (_yPixels - m_virtualHeightPixels * 0.5F) + m_snappedTargetYPixels;
 
   // With y fixed at 0 the projection is two equations in x and z, and it inverts in one step:
-  //   xFromOrigin = (x - z) * HALF_TILE_WIDTH_PIXELS
-  //   yFromOrigin = (x + z) * HALF_TILE_HEIGHT_PIXELS
-  const float difference = xFromOrigin / HALF_TILE_WIDTH_PIXELS; // x - z
-  const float sum = yFromOrigin / HALF_TILE_HEIGHT_PIXELS;       // x + z
+  //   xFromOrigin = (x - z) * w
+  //   yFromOrigin = (x + z) * (w / 2)
+  const float halfWidth = HalfTileWidthPixels();
+  const float difference = xFromOrigin / halfWidth;   // x - z
+  const float sum = yFromOrigin / (halfWidth * 0.5F); // x + z
 
   return WorldPoint{(sum + difference) * 0.5F, 0.0F, (sum - difference) * 0.5F};
 }
@@ -64,9 +82,10 @@ std::array<float, 16> IsometricCamera::ViewProjection() const noexcept
   const float clipPerPixelY = 2.0F / m_virtualHeightPixels;
   const float clipPerUnitDepth = INVERSE_SQRT_3 / (2.0F * DEPTH_HALF_RANGE_UNITS);
 
-  const float a = HALF_TILE_WIDTH_PIXELS * clipPerPixelX;
-  const float b = HALF_TILE_HEIGHT_PIXELS * clipPerPixelY;
-  const float c = HEIGHT_PIXELS_PER_UNIT * clipPerPixelY;
+  const float halfWidth = HalfTileWidthPixels();
+  const float a = halfWidth * clipPerPixelX;
+  const float b = (halfWidth * 0.5F) * clipPerPixelY;
+  const float c = halfWidth * clipPerPixelY;
 
   // Depth is measured from the target, so the full DEPTH_HALF_RANGE_UNITS either side is centered
   // on whatever the camera is following rather than on the world origin -- which matters because

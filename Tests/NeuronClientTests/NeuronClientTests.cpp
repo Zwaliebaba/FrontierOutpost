@@ -309,6 +309,121 @@ public:
   // Nearer must mean a smaller depth: the camera looks along (1, 1, 1), so a point further along
   // that direction is closer to it. Getting this backwards draws the ship inside out and is not
   // obvious on a mesh that is nearly convex.
+  // ADR-008. The zoom is a list of even levels, and every one of them has to keep the properties
+  // ADR-003 rests on: the 2:1 tile, and an un-projection that is an exact inverse.
+  TEST_METHOD(EveryZoomLevelIsEven)
+  {
+    for (const float level : Neuron::IsometricCamera::ZOOM_LEVELS_PIXELS)
+    {
+      // The half-height is half the level and must also be a whole number of pixels, so an odd
+      // level would put the tile edge on half-pixel steps.
+      Assert::AreEqual(0.0F, std::fmod(level, 2.0F), 0.0F, L"a zoom level must be even");
+      Assert::IsTrue(level > 0.0F);
+    }
+
+    Assert::AreEqual(8.0F, Neuron::IsometricCamera::DEFAULT_HALF_TILE_WIDTH_PIXELS, 0.0F,
+                     L"the default is the 8 pixels a unit everything was drawn against");
+  }
+
+  TEST_METHOD(ACameraStartsAtTheDefaultZoom)
+  {
+    const Neuron::IsometricCamera camera = MakeCamera();
+    Assert::AreEqual(Neuron::IsometricCamera::DEFAULT_ZOOM_INDEX, camera.ZoomIndex());
+    Assert::AreEqual(8.0F, camera.HalfTileWidthPixels(), 0.0F);
+  }
+
+  TEST_METHOD(ZoomingMovesThroughTheLevels)
+  {
+    Neuron::IsometricCamera camera = MakeCamera();
+
+    camera.ZoomBy(1);
+    Assert::AreEqual(12.0F, camera.HalfTileWidthPixels(), 0.0F, L"in");
+    camera.ZoomBy(-2);
+    Assert::AreEqual(6.0F, camera.HalfTileWidthPixels(), 0.0F, L"and back out past the default");
+  }
+
+  TEST_METHOD(ZoomingClampsAtBothEnds)
+  {
+    Neuron::IsometricCamera camera = MakeCamera();
+
+    camera.ZoomBy(100);
+    Assert::AreEqual(16.0F, camera.HalfTileWidthPixels(), 0.0F, L"clamped at the closest level");
+    camera.ZoomBy(-100);
+    Assert::AreEqual(4.0F, camera.HalfTileWidthPixels(), 0.0F, L"and at the widest");
+  }
+
+  TEST_METHOD(ZoomingScalesTheProjectionAndNothingElse)
+  {
+    Neuron::IsometricCamera camera = MakeCamera();
+    const Neuron::IsometricCamera::ScreenPoint before = camera.Project({4.0F, 0.0F, 0.0F});
+
+    camera.ZoomBy(-1); // 8 -> 6 pixels a unit
+    const Neuron::IsometricCamera::ScreenPoint after = camera.Project({4.0F, 0.0F, 0.0F});
+
+    const float centerX = VIRTUAL_WIDTH * 0.5F;
+    const float centerY = VIRTUAL_HEIGHT * 0.5F;
+    Assert::AreEqual(32.0F, before.xPixels - centerX, EXACT);
+    Assert::AreEqual(24.0F, after.xPixels - centerX, EXACT, L"three quarters of the offset at three quarters the zoom");
+    Assert::AreEqual(16.0F, before.yPixels - centerY, EXACT);
+    Assert::AreEqual(12.0F, after.yPixels - centerY, EXACT);
+  }
+
+  // The 2:1 is the projection, not the zoom, so it has to survive every level.
+  TEST_METHOD(TheTileStaysTwoToOneAtEveryZoom)
+  {
+    for (std::int32_t step = -4; step <= 4; ++step)
+    {
+      Neuron::IsometricCamera camera = MakeCamera();
+      camera.ZoomBy(step);
+
+      const Neuron::IsometricCamera::ScreenPoint origin = camera.Project({0.0F, 0.0F, 0.0F});
+      const Neuron::IsometricCamera::ScreenPoint alongX = camera.Project({1.0F, 0.0F, 0.0F});
+
+      const float width = alongX.xPixels - origin.xPixels;
+      const float height = alongX.yPixels - origin.yPixels;
+      Assert::AreEqual(camera.HalfTileWidthPixels(), width, EXACT);
+      Assert::AreEqual(width, height * 2.0F, EXACT, L"twice as wide as tall, at every level");
+    }
+  }
+
+  // The property the click depends on, checked at every zoom rather than only at the default:
+  // if this stops holding at one level, tapping while zoomed sends the ship somewhere else.
+  TEST_METHOD(ProjectAndUnprojectAreInversesAtEveryZoom)
+  {
+    for (std::int32_t step = -4; step <= 4; ++step)
+    {
+      Neuron::IsometricCamera camera{VIRTUAL_WIDTH, VIRTUAL_HEIGHT};
+      camera.ZoomBy(step);
+      camera.Follow({-6.0F, 0.0F, 3.0F});
+
+      for (const Neuron::IsometricCamera::WorldPoint& expected :
+           {Neuron::IsometricCamera::WorldPoint{0.0F, 0.0F, 0.0F}, Neuron::IsometricCamera::WorldPoint{40.0F, 0.0F, -17.0F},
+            Neuron::IsometricCamera::WorldPoint{-125.5F, 0.0F, 64.25F}})
+      {
+        const Neuron::IsometricCamera::ScreenPoint pixel = camera.Project(expected);
+        const Neuron::IsometricCamera::WorldPoint roundTrip = camera.UnprojectToGround(pixel.xPixels, pixel.yPixels);
+
+        Assert::AreEqual(expected.x, roundTrip.x, EXACT);
+        Assert::AreEqual(expected.z, roundTrip.z, EXACT);
+      }
+    }
+  }
+
+  // Zooming re-snaps the camera. The snap is in pixels and the pixels just changed size, so a
+  // zoom that did not re-snap would leave the scene half a pixel out until the ship next moved.
+  TEST_METHOD(ZoomingKeepsTheTargetCentered)
+  {
+    Neuron::IsometricCamera camera = MakeCamera(7.0F, 0.0F, -3.0F);
+
+    for (std::int32_t step = -4; step <= 4; ++step)
+    {
+      camera.ZoomBy(step);
+      const Neuron::IsometricCamera::ScreenPoint center = camera.Project({7.0F, 0.0F, -3.0F});
+      Assert::AreEqual(VIRTUAL_WIDTH * 0.5F, center.xPixels, EXACT);
+      Assert::AreEqual(VIRTUAL_HEIGHT * 0.5F, center.yPixels, EXACT);
+    }
+  }
+
   TEST_METHOD(PointsTowardsTheCameraAreNearer)
   {
     const Neuron::IsometricCamera camera = MakeCamera();
@@ -432,20 +547,261 @@ public:
   }
 
   // There is no keyboard control in this game and no mouse-button handler either: with
-  // EnableMouseInPointer on, a mouse click arrives as WM_POINTERDOWN. Anything else is ignored,
-  // and asserting that is what stops a second input path appearing by accident.
-  TEST_METHOD(OtherMessagesAreIgnored)
+  // EnableMouseInPointer on, a mouse click arrives as WM_POINTERDOWN and a wheel notch as
+  // WM_POINTERWHEEL. Anything outside the pointer family is ignored, and asserting that is what
+  // stops a second input path appearing by accident.
+  TEST_METHOD(MessagesOutsideThePointerFamilyAreIgnored)
   {
     Neuron::PointerInput input;
     input.Create(m_window, PRESENT_SCALE);
 
     Assert::IsFalse(input.HandleMessage(WM_LBUTTONDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100)));
     Assert::IsFalse(input.HandleMessage(WM_KEYDOWN, VK_SPACE, 0));
-    Assert::IsFalse(input.HandleMessage(WM_POINTERUP, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100)));
+    Assert::IsFalse(input.HandleMessage(WM_RBUTTONDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100)));
 
     float x = 0.0F;
     float y = 0.0F;
     Assert::IsFalse(input.TakeClick(x, y));
+    Assert::AreEqual(0, input.TakeZoomSteps());
+  }
+
+private:
+  HWND m_window = nullptr;
+};
+
+// Zoom has two producers -- the wheel and a pinch -- and one intent (ADR-008). These test the
+// producers; IsometricCameraTests tests what the intent does to the picture.
+TEST_CLASS(ZoomInputTests)
+{
+public:
+  static constexpr int WINDOW_LEFT = 300;
+  static constexpr int WINDOW_TOP = 200;
+  static constexpr std::uint32_t PRESENT_SCALE = 2;
+
+  TEST_METHOD_INITIALIZE(CreateHostWindow)
+  {
+    WNDCLASSEXW windowClass = {};
+    windowClass.cbSize = sizeof(WNDCLASSEXW);
+    windowClass.lpfnWndProc = DefWindowProcW;
+    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.lpszClassName = L"NeuronClientTestsZoomHost";
+    RegisterClassExW(&windowClass);
+
+    m_window = CreateWindowExW(0, L"NeuronClientTestsZoomHost", L"", WS_POPUP, WINDOW_LEFT, WINDOW_TOP, 1280, 800, nullptr, nullptr,
+                               GetModuleHandleW(nullptr), nullptr);
+    Assert::IsNotNull(m_window);
+  }
+
+  TEST_METHOD_CLEANUP(DestroyHostWindow)
+  {
+    if (m_window != nullptr)
+    {
+      DestroyWindow(m_window);
+      m_window = nullptr;
+    }
+  }
+
+  [[nodiscard]] static LPARAM PackScreenPoint(int _screenX, int _screenY)
+  {
+    return static_cast<LPARAM>((static_cast<std::uint32_t>(_screenY & 0xFFFF) << 16) | static_cast<std::uint32_t>(_screenX & 0xFFFF));
+  }
+
+  /// WM_POINTERWHEEL packs the pointer id in the low word and the wheel delta in the high word.
+  [[nodiscard]] static WPARAM PackWheel(std::uint32_t _pointerId, int _delta)
+  {
+    return static_cast<WPARAM>((static_cast<std::uint32_t>(_delta & 0xFFFF) << 16) | (_pointerId & 0xFFFF));
+  }
+
+  [[nodiscard]] static WPARAM PackPointer(std::uint32_t _pointerId)
+  {
+    return static_cast<WPARAM>(_pointerId);
+  }
+
+  TEST_METHOD(NoInputMeansNoZoom)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+    Assert::AreEqual(0, input.TakeZoomSteps());
+  }
+
+  TEST_METHOD(AWheelNotchIsOneStep)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    Assert::IsTrue(input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA), 0));
+    Assert::AreEqual(1, input.TakeZoomSteps());
+
+    Assert::IsTrue(input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, -WHEEL_DELTA), 0));
+    Assert::AreEqual(-1, input.TakeZoomSteps(), L"scrolling back zooms back out");
+  }
+
+  // Whether a real wheel arrives as WM_POINTERWHEEL or as the classic WM_MOUSEWHEEL is the one
+  // thing about the pointer path this project has not confirmed on hardware, so both are handled
+  // and both are tested. They carry the delta in the same place.
+  TEST_METHOD(TheClassicMouseWheelMessageWorksToo)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    Assert::IsTrue(input.HandleMessage(WM_MOUSEWHEEL, PackWheel(0, WHEEL_DELTA), 0));
+    Assert::AreEqual(1, input.TakeZoomSteps());
+
+    Assert::IsTrue(input.HandleMessage(WM_MOUSEWHEEL, PackWheel(0, -WHEEL_DELTA * 2), 0));
+    Assert::AreEqual(-2, input.TakeZoomSteps());
+  }
+
+  TEST_METHOD(TakingTheZoomClearsIt)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+    input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA), 0);
+
+    Assert::AreEqual(1, input.TakeZoomSteps());
+    Assert::AreEqual(0, input.TakeZoomSteps(), L"a zoom is delivered once");
+  }
+
+  TEST_METHOD(NotchesInOneFrameAddUp)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA), 0);
+    input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA), 0);
+    input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA * 2), 0);
+
+    Assert::AreEqual(4, input.TakeZoomSteps());
+  }
+
+  // A high-resolution wheel sends deltas smaller than a notch. Throwing the remainder away would
+  // make such a wheel do nothing at all, however far it is turned -- which is the bug this keeps
+  // out.
+  TEST_METHOD(SubNotchWheelDeltasAccumulate)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    constexpr int THIRD_OF_A_NOTCH = WHEEL_DELTA / 3;
+    input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, THIRD_OF_A_NOTCH), 0);
+    Assert::AreEqual(0, input.TakeZoomSteps(), L"a third of a notch is not a step yet");
+
+    input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, THIRD_OF_A_NOTCH), 0);
+    input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, THIRD_OF_A_NOTCH), 0);
+    Assert::AreEqual(1, input.TakeZoomSteps(), L"three thirds are");
+  }
+
+  /// Puts two contacts down a given distance apart, horizontally, centered on the client area.
+  static void StartPinch(Neuron::PointerInput& _input, float _separationTexels)
+  {
+    const auto half = static_cast<int>(_separationTexels * PRESENT_SCALE) / 2;
+    _input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 640 - half, WINDOW_TOP + 400));
+    _input.HandleMessage(WM_POINTERDOWN, PackPointer(2), PackScreenPoint(WINDOW_LEFT + 640 + half, WINDOW_TOP + 400));
+  }
+
+  static void MovePinch(Neuron::PointerInput& _input, float _separationTexels)
+  {
+    const auto half = static_cast<int>(_separationTexels * PRESENT_SCALE) / 2;
+    _input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 640 - half, WINDOW_TOP + 400));
+    _input.HandleMessage(WM_POINTERUPDATE, PackPointer(2), PackScreenPoint(WINDOW_LEFT + 640 + half, WINDOW_TOP + 400));
+  }
+
+  TEST_METHOD(SpreadingTwoContactsZoomsIn)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    StartPinch(input, 100.0F);
+    Assert::AreEqual(0, input.TakeZoomSteps(), L"putting two fingers down is not yet a zoom");
+
+    MovePinch(input, 100.0F * Neuron::PointerInput::PINCH_STEP_RATIO);
+    Assert::AreEqual(1, input.TakeZoomSteps());
+  }
+
+  TEST_METHOD(PinchingTwoContactsTogetherZoomsOut)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    StartPinch(input, 200.0F);
+    MovePinch(input, 200.0F / Neuron::PointerInput::PINCH_STEP_RATIO);
+
+    Assert::AreEqual(-1, input.TakeZoomSteps());
+  }
+
+  // One update can carry a large jump, from a fast pinch or a frame that was missed. Banking a
+  // single step for it would make the zoom lag the fingers.
+  TEST_METHOD(ALargeSpreadInOneUpdateBanksSeveralSteps)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    // 64 to 125 is exactly 1.25 cubed, and every value on the way -- 64, 80, 100, 125 -- lands on
+    // a whole screen pixel and is exact in a float. Picked that way on purpose: a separation the
+    // helpers below have to round would land just under the third threshold and bank two steps,
+    // which says nothing about the code.
+    StartPinch(input, 64.0F);
+    MovePinch(input, 125.0F);
+
+    Assert::AreEqual(3, input.TakeZoomSteps());
+  }
+
+  // The first finger of a pinch is indistinguishable from a tap until the second lands. Without
+  // this, every pinch would also order the ship to wherever that first finger touched down.
+  TEST_METHOD(ASecondContactCancelsThePendingTap)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 200, WINDOW_TOP + 300));
+    float x = 0.0F;
+    float y = 0.0F;
+
+    input.HandleMessage(WM_POINTERDOWN, PackPointer(2), PackScreenPoint(WINDOW_LEFT + 600, WINDOW_TOP + 300));
+    Assert::IsFalse(input.TakeClick(x, y), L"a pinch must not also fly the ship somewhere");
+  }
+
+  TEST_METHOD(OneContactStillTapsNormally)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 400, WINDOW_TOP + 300));
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsTrue(input.TakeClick(x, y));
+    Assert::AreEqual(200.0F, x, 0.0F);
+    Assert::AreEqual(150.0F, y, 0.0F);
+    Assert::AreEqual(0, input.TakeZoomSteps(), L"and does not zoom");
+  }
+
+  // Lifting a finger ends the pinch. Putting it back down starts a new one from where the fingers
+  // now are, rather than resuming against a baseline from before the gap.
+  TEST_METHOD(LiftingAContactEndsThePinch)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    StartPinch(input, 100.0F);
+    input.HandleMessage(WM_POINTERUP, PackPointer(2), PackScreenPoint(WINDOW_LEFT + 690, WINDOW_TOP + 400));
+
+    // A lone contact moving a long way is a drag, not a pinch.
+    input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 400));
+    Assert::AreEqual(0, input.TakeZoomSteps());
+  }
+
+  // A third finger is not a bigger pinch. Resting a hand on the glass must not make the zoom jump.
+  TEST_METHOD(AThirdContactIsIgnored)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, PRESENT_SCALE);
+
+    StartPinch(input, 100.0F);
+    input.HandleMessage(WM_POINTERDOWN, PackPointer(3), PackScreenPoint(WINDOW_LEFT + 1200, WINDOW_TOP + 700));
+    Assert::AreEqual(0, input.TakeZoomSteps());
+
+    MovePinch(input, 100.0F * Neuron::PointerInput::PINCH_STEP_RATIO);
+    Assert::AreEqual(1, input.TakeZoomSteps(), L"the original two still drive the pinch");
   }
 
 private:
