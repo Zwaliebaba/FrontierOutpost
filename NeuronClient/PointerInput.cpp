@@ -44,17 +44,12 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
 
   switch (_message)
   {
-  // Both, and this is not belt-and-braces. EnableMouseInPointer is documented to route mouse
-  // input into the pointer family, which should make a wheel notch arrive as WM_POINTERWHEEL --
-  // but a wheel is the one part of that claim this project has not been able to confirm against
-  // real hardware, and if it turns out to arrive as the classic WM_MOUSEWHEEL then a handler for
-  // only the first would leave zoom quietly not working at all. Both carry the delta in the high
-  // word of wParam, so the two cases are one line each and the ambiguity costs nothing.
-  //
-  // This is NOT the same as adding a WM_LBUTTONDOWN fallback, which MVP-01 section 2 rules out:
-  // there the pointer path is proven to work, so a second one would be dead code.
+  // WM_POINTERWHEEL and not WM_MOUSEWHEEL. Measured rather than assumed: with
+  // EnableMouseInPointer on, a real wheel notch on real hardware arrives here as 0x024E
+  // (ADR-009). A WM_MOUSEWHEEL case was carried for a while against the possibility that it did
+  // not, and came out once the measurement existed -- it is the same second input path MVP-01
+  // section 2 rules out.
   case WM_POINTERWHEEL:
-  case WM_MOUSEWHEEL:
   {
     // The wheel reports in multiples of WHEEL_DELTA, but not necessarily whole ones. Bank the
     // remainder so that a high-resolution wheel adds up to notches instead of never reaching one.

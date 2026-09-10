@@ -636,19 +636,17 @@ public:
     Assert::AreEqual(-1, input.TakeZoomSteps(), L"scrolling back zooms back out");
   }
 
-  // Whether a real wheel arrives as WM_POINTERWHEEL or as the classic WM_MOUSEWHEEL is the one
-  // thing about the pointer path this project has not confirmed on hardware, so both are handled
-  // and both are tested. They carry the delta in the same place.
-  TEST_METHOD(TheClassicMouseWheelMessageWorksToo)
+  // The classic mouse-wheel message is NOT handled, and that is the decision rather than an
+  // oversight: with EnableMouseInPointer on, a real wheel was measured arriving as
+  // WM_POINTERWHEEL (ADR-009), so a WM_MOUSEWHEEL case would be a second input path that never
+  // runs -- exactly what MVP-01 section 2 rules out.
+  TEST_METHOD(TheClassicMouseWheelMessageIsNotHandled)
   {
     Neuron::PointerInput input;
     input.Create(m_window, PRESENT_SCALE);
 
-    Assert::IsTrue(input.HandleMessage(WM_MOUSEWHEEL, PackWheel(0, WHEEL_DELTA), 0));
-    Assert::AreEqual(1, input.TakeZoomSteps());
-
-    Assert::IsTrue(input.HandleMessage(WM_MOUSEWHEEL, PackWheel(0, -WHEEL_DELTA * 2), 0));
-    Assert::AreEqual(-2, input.TakeZoomSteps());
+    Assert::IsFalse(input.HandleMessage(WM_MOUSEWHEEL, PackWheel(0, WHEEL_DELTA), 0));
+    Assert::AreEqual(0, input.TakeZoomSteps());
   }
 
   TEST_METHOD(TakingTheZoomClearsIt)

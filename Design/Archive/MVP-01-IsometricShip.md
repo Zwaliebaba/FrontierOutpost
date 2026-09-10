@@ -47,6 +47,28 @@ unlocked desktop and about thirty seconds.
 judging it requires watching the ship move, and the display was not available. The number stays as
 decided; it has not been argued with.
 
+### Both of those were closed later the same day
+
+**2026-09-10, workstation unlocked.** The two gaps above are no longer gaps, and this section is
+left standing above rather than rewritten because what a session could and could not verify at the
+time is part of the record.
+
+**A physical click was delivered and the whole arrow ran.** A real mouse click at client pixel
+(1150, 700) un-projected to X 34.7, Z 2.8 — against 34.6875, 2.8125 worked out by hand from the
+projection — and the server flew the ship there. Clicking the *same* pixel three more times moved
+it by 34.7, 34.6 and 34.7 again, which is the camera-follows-ship property that
+`TheSamePixelMovesWithTheCamera` asserts, observed live rather than in a test.
+
+**20 Hz reads well under interpolation.** Measured by tracing the client's own interpolated
+position every frame during a run: 7–8 distinct positions per server tick, advancing in steps of
+15–30 mm, which at the default zoom is under a quarter of a virtual pixel. There is no stutter to
+see because consecutive frames are sub-pixel apart. The one artifact worth knowing about is
+visible in the trace: when a state arrives late the client holds the last position for a frame or
+two rather than extrapolating past it — ADR-005's clamp doing exactly what it says. At 165 frames a
+second that is a 6–12 ms hold, and it happened once in the forty frames sampled.
+
+The number stands, and it has now been argued with.
+
 ## Where this plan and the tree disagreed
 
 §4 step 5 says "`NeuronServer`: a `Session` that owns a `World`". `AGENTS.md` §2 says `GameLogic`
