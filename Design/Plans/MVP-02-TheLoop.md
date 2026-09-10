@@ -63,12 +63,15 @@ here, compile on CI). So the loop is:
 1. Write the code, and locally run what a Linux box can: `python Build/CheckFormat.py`, and
    `clang-tidy` and a scratch `clang++ -fsyntax-only` pass over the files that do not touch the
    Windows SDK.
-2. Commit and push the branch.
-3. Dispatch [`.github/workflows/build.yml`](../../.github/workflows/build.yml) against the branch —
-   it has `workflow_dispatch`, so this needs no pull request. That run **is** the build: it does
-   `CheckProjectFiles.py`, Debug|x64, the four test suites, and whole-tree `RunClangTidy.py` on
-   Windows.
-4. Read the run. Fix and re-dispatch until it is green. A slice is not finished on a red run.
+2. Commit and push the branch. [`.github/workflows/build.yml`](../../.github/workflows/build.yml)
+   runs on every push to an open pull request, and there is one for this branch, so the push
+   alone starts the build. With no pull request open, dispatch the workflow against the branch
+   instead — it carries `workflow_dispatch` for exactly that. Do not do both: two runs of a
+   thirty-minute Windows build for one commit is waste, and the second was cancelled on
+   2026-09-10 after this was found out the hard way.
+3. Read the run. That run **is** the build: `CheckProjectFiles.py`, Debug|x64, the four test
+   suites, and whole-tree `RunClangTidy.py`, on Windows. Fix and push again until it is green.
+   A slice is not finished on a red run.
 
 **What this loop cannot verify, ever:** that the game draws, that a tap lands, that the map is
 legible, that the motion reads well. `AGENTS.md` §3 requires the executable to be **run** for
