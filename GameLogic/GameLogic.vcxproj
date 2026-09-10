@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
     GameLogic. x64 is the only platform (AGENTS.md 3); Debug and Release differ only in
@@ -123,13 +123,17 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Ship.cpp" />
+    <ClCompile Include="Galaxy.cpp" />
+    <ClCompile Include="MatchState.cpp" />
     <ClCompile Include="World.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="GameLogic.h" />
+    <ClInclude Include="Galaxy.h" />
+    <ClInclude Include="MatchState.h" />
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Ship.h" />
+    <ClInclude Include="Random.h" />
+    <ClInclude Include="Rules.h" />
     <ClInclude Include="World.h" />
   </ItemGroup>
   <ItemGroup>

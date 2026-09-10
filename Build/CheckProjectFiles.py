@@ -17,7 +17,8 @@ still cannot see three kinds of defect, and this script is where those live (AGE
                       only in CI -- or worse, links a stale object nobody notices. This covers
                       <Library>/Shaders/*.hlsl as FXCompile items too: the same defect, and the
                       one directory the flat-directory rule makes an exception for.
-  3. NAMING           R2's banned type affixes, R7's file naming and R11's standing spellings.
+  3. NAMING           R2's banned type affixes, R7's file naming and R11's standing spellings,
+                      and R16's determinism bans inside GameLogic.
                       clang-tidy can require an absent prefix but cannot ban a present suffix,
                       and it never looks at a file name at all.
 
@@ -103,6 +104,22 @@ BANNED_SPELLINGS = {
     "cancelled": "canceled",
 }
 BANNED_SPELLING_PATTERN = re.compile("|".join(BANNED_SPELLINGS), re.IGNORECASE)
+
+# R16, the GameLogic half: no unordered container, and no float or double, anywhere in the
+# simulation. Both are determinism rules rather than style, and both fail in a way no test reliably
+# catches -- a hash order that differs between builds, or a sum that differs between compilers,
+# shows up as two servers disagreeing about the same tick with no line to blame. ADR-004 makes the
+# resolver a pure function so that a tick is reproducible; these two keep it that way.
+DETERMINISM_DIRECTORY = "GameLogic"
+BANNED_IN_GAME_LOGIC = {
+    r"\bstd::unordered_(?:map|set|multimap|multiset)\b":
+        "an unordered container: iteration order is the implementation's business, and a resolver "
+        "that walks one gives a different answer on a different standard library",
+    r"\b(?:float|double)\b":
+        "a floating-point type: the simulation is integer end to end, and two compilers may not "
+        "agree about the same sum",
+}
+BANNED_IN_GAME_LOGIC_PATTERNS = [(re.compile(pattern), reason) for pattern, reason in BANNED_IN_GAME_LOGIC.items()]
 
 # CompiledShaders holds build output: the headers the shader compiler writes (AGENTS.md 3). Never
 # hand-written, never committed, never formatted or linted.
@@ -338,6 +355,11 @@ def check_source_text(relative: str, text: str) -> None:
         preferred = BANNED_SPELLINGS[found.lower()]
         fail(f"{relative}: R11 -- {found!r} in code; this tree spells that family {preferred!r}, "
              f"the spelling the Windows SDK and DirectX already use.")
+
+    if relative.split(os.sep)[0] == DETERMINISM_DIRECTORY:
+        for pattern, reason in BANNED_IN_GAME_LOGIC_PATTERNS:
+            for match in pattern.finditer(code):
+                fail(f"{relative}: R16 -- {match.group(0)!r} is {reason}.")
 
 
 def check_sources() -> None:

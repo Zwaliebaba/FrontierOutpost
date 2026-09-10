@@ -1,11 +1,18 @@
 #include "pch.h"
 #include "CppUnitTest.h"
 
-#include "Trigonometry.h"
+#include "Galaxy.h"
+#include "MatchState.h"
+#include "Random.h"
+#include "Rules.h"
 #include "World.h"
 
-#include <cmath>
-#include <numbers>
+#include <algorithm>
+#include <cstdint>
+#include <format>
+#include <map>
+#include <string>
+#include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -15,324 +22,598 @@ namespace GameLogicTests
 namespace
 {
 
-/// Ticks a ship until it has no order left, or until the limit. Returns the ticks it took.
-///
-/// The limit is a guard rather than a parameter: a ship that has not arrived after this many
-/// ticks is not slow, it is orbiting, and a test that hangs is worse than one that fails.
-std::uint32_t TickUntilStopped(Frontier::Ship& _ship, std::uint32_t _limitTicks = 4000)
+constexpr Frontier::SeatId SEAT_COUNTS[] = {6, 8, 12};
+
+/// CppUnitTest takes its failure messages wide, and every message here is built with std::format.
+/// The galaxy is ASCII by construction -- system kinds, ids and numbers -- so widening character by
+/// character is exact rather than a transcoding that could be wrong.
+std::wstring ToWide(const std::string& _text)
 {
-  std::uint32_t ticks = 0;
-  while (_ship.HasOrder() && ticks < _limitTicks)
-  {
-    _ship.Tick();
-    ++ticks;
-  }
-  return ticks;
+  return std::wstring{_text.begin(), _text.end()};
 }
 
-/// The stopping distance, by simulating the deceleration rather than by the closed form. This is
-/// the definition; Ship::StoppingDistanceMillimetres is the optimization, and the test below is
-/// what says they agree.
-std::int64_t StoppingDistanceByLoop(std::int32_t _speed)
+/// Generates and asserts the seed was accepted, returning the galaxy. Most tests below want a
+/// galaxy rather than a result, and a rejected seed in one of them is a failure of the test's
+/// premise rather than the thing under test.
+Frontier::MatchState AcceptedGalaxy(std::uint64_t _seed, Frontier::SeatId _seats)
 {
-  std::int64_t distance = 0;
-  std::int32_t speed = _speed;
-  while (speed > 0)
+  Frontier::MatchState state;
+  const Frontier::GenerationResult result = Frontier::GenerateGalaxy(_seed, _seats, Frontier::DEFAULT_RULES, state);
+  Assert::AreEqual(static_cast<int>(Frontier::GenerationResult::Accepted), static_cast<int>(result),
+                   ToWide(std::format("seed {} at {} seats: {}", _seed, static_cast<int>(_seats), Frontier::Describe(result))).c_str());
+  return state;
+}
+
+/// Serializes the parts of a state that a resolver could observe, so two states can be compared for
+/// being the same rather than merely for agreeing on a field somebody thought to check.
+std::string Fingerprint(const Frontier::MatchState& _state)
+{
+  std::string text = std::format("{}|{}|{}|{}|", _state.seed, _state.tick, _state.endTick, _state.sealedOpensTick);
+  for (const Frontier::System& system : _state.systems)
   {
-    speed = std::max(0, speed - Frontier::Ship::ACCELERATION_MILLIMETRES_PER_TICK_SQUARED);
-    distance += speed;
+    text += std::format("S{},{},{},{},{},{},{};", system.id, system.position.xUnits, system.position.yUnits, static_cast<int>(system.kind),
+                        static_cast<int>(system.homeSeat), static_cast<int>(system.owner), system.yieldPerTick);
   }
-  return distance;
+  for (const Frontier::Lane& lane : _state.lanes)
+  {
+    text += std::format("L{},{},{},{};", lane.id, lane.endA, lane.endB, lane.costTicks);
+  }
+  for (const Frontier::Fleet& fleet : _state.fleets)
+  {
+    text += std::format("F{},{},{},{},{};", fleet.id, static_cast<int>(fleet.owner), fleet.atSystem, fleet.strength, fleet.pinned ? 1 : 0);
+  }
+  for (const Frontier::Seat& seat : _state.seats)
+  {
+    text += std::format("T{},{},{};", static_cast<int>(seat.id), seat.capital, seat.income);
+  }
+  return text;
 }
 
 } // namespace
 
-// The kinematics. This is the suite MVP-01 step 5 says will matter most for the rest of the
-// game's life, and it runs with no D3D12, no window and no threads -- a Ship is arithmetic.
-TEST_CLASS(ShipKinematicsTests)
+// The random source. Everything the generator produces rests on this being the same sequence
+// everywhere, which is the argument ADR-019 makes for it being ours rather than the standard
+// library's.
+TEST_CLASS(RandomTests)
 {
 public:
-  TEST_METHOD(StartsStillAtTheOriginWithNoOrder)
+  TEST_METHOD(TheSameSeedGivesTheSameSequence)
   {
-    const Frontier::Ship ship;
-    Assert::AreEqual(0LL, ship.PositionXMillimetres());
-    Assert::AreEqual(0LL, ship.PositionZMillimetres());
-    Assert::AreEqual(0, ship.SpeedMillimetresPerTick());
-    Assert::IsFalse(ship.HasOrder());
-  }
-
-  TEST_METHOD(DoesNothingWithoutAnOrder)
-  {
-    Frontier::Ship ship;
-    for (int tick = 0; tick < 100; ++tick)
+    Frontier::Random first{12345};
+    Frontier::Random second{12345};
+    for (int draw = 0; draw < 64; ++draw)
     {
-      ship.Tick();
-    }
-
-    Assert::AreEqual(0LL, ship.PositionXMillimetres());
-    Assert::AreEqual(0LL, ship.PositionZMillimetres());
-  }
-
-  // The closed form against the loop that defines it, at every speed the ship can be at. If these
-  // ever disagree the ship stops in the wrong place, and the closed form is the sort of algebra
-  // that is wrong by one term without looking wrong.
-  TEST_METHOD(TheStoppingDistanceFormulaMatchesTheSimulatedDeceleration)
-  {
-    for (std::int32_t speed = 0; speed <= Frontier::Ship::MAX_SPEED_MILLIMETRES_PER_TICK; ++speed)
-    {
-      Assert::AreEqual(StoppingDistanceByLoop(speed), Frontier::Ship::StoppingDistanceMillimetres(speed),
-                       (std::wstring(L"stopping distance from speed ") + std::to_wstring(speed)).c_str());
+      Assert::AreEqual(first.Next(), second.Next());
     }
   }
 
-  TEST_METHOD(TurnsTowardsTheTargetNoFasterThanTheTurnRate)
+  TEST_METHOD(DifferentSeedsDiverge)
   {
-    Frontier::Ship ship;
-    // Directly astern: the largest turn there is.
-    ship.OrderMoveTo(-100000, 0);
-
-    Neuron::Turns16 previous = ship.HeadingTurns16();
-    for (int tick = 0; tick < 40; ++tick)
+    Frontier::Random first{1};
+    Frontier::Random second{2};
+    bool sawDifference = false;
+    for (int draw = 0; draw < 8 && !sawDifference; ++draw)
     {
-      ship.Tick();
-      const std::int32_t turned = Neuron::ShortestTurnTurns16(previous, ship.HeadingTurns16());
-      Assert::IsTrue(std::abs(turned) <= Frontier::Ship::TURN_RATE_TURNS16_PER_TICK,
-                     L"the ship turned further in one tick than the turn rate allows");
-      previous = ship.HeadingTurns16();
+      sawDifference = first.Next() != second.Next();
     }
+    Assert::IsTrue(sawDifference, L"Two seeds one apart produced the same first eight words.");
   }
 
-  TEST_METHOD(TurnsTheShortWayRound)
+  TEST_METHOD(TheFirstWordsAreTheKnownSplitMix64Values)
   {
-    // A target just clockwise of dead ahead. The ship starts at heading 0 and must turn a little
-    // positive, not most of the way round the other way.
-    Frontier::Ship ship;
-    ship.OrderMoveTo(100000, 20000);
-    ship.Tick();
-
-    const std::int32_t turned = Neuron::ShortestTurnTurns16(0, ship.HeadingTurns16());
-    Assert::IsTrue(turned > 0, L"a target to starboard is a turn towards +Z");
-    Assert::IsTrue(turned <= Frontier::Ship::TURN_RATE_TURNS16_PER_TICK);
+    // Pinned, not derived: these are what SplitMix64 emits from seed 0, and a change to the mixing
+    // constants would silently regenerate every galaxy in every stored match (ADR-012).
+    Frontier::Random random{0};
+    Assert::AreEqual(0xE220A8397B1DCDAFULL, random.Next());
+    Assert::AreEqual(0x6E789E6AA1B965F4ULL, random.Next());
+    Assert::AreEqual(0x06C45D188009454FULL, random.Next());
   }
 
-  TEST_METHOD(ArrivesExactlyOnTheTargetAndStopped)
+  TEST_METHOD(BetweenStaysInRangeAndIsInclusive)
   {
-    constexpr std::int64_t TARGET_X = 60000; // 60 m dead ahead
-    Frontier::Ship ship;
-    ship.OrderMoveTo(TARGET_X, 0);
-
-    const std::uint32_t ticks = TickUntilStopped(ship);
-
-    Assert::IsFalse(ship.HasOrder(), L"the ship should have finished its order");
-    Assert::AreEqual(TARGET_X, ship.PositionXMillimetres(), L"arrival is exact, not nearby");
-    Assert::AreEqual(0LL, ship.PositionZMillimetres());
-    Assert::AreEqual(0, ship.SpeedMillimetresPerTick(), L"and stopped");
-    Assert::IsTrue(ticks > 0 && ticks < 4000);
-  }
-
-  TEST_METHOD(ArrivesAtATargetInEveryDirection)
-  {
-    // Sixteen directions, including the one directly astern that needs a half turn first.
-    for (std::int32_t sixteenth = 0; sixteenth < 16; ++sixteenth)
+    Frontier::Random random{7};
+    bool sawLow = false;
+    bool sawHigh = false;
+    for (int draw = 0; draw < 2000; ++draw)
     {
-      const auto heading = static_cast<Neuron::Turns16>(sixteenth * 4096);
-      const Neuron::SineCosine direction = Neuron::SineCosineTurns16(heading);
-      const std::int64_t targetX = 80000LL * direction.cosine / Neuron::TRIG_ONE;
-      const std::int64_t targetZ = 80000LL * direction.sine / Neuron::TRIG_ONE;
-
-      Frontier::Ship ship;
-      ship.OrderMoveTo(targetX, targetZ);
-      const std::uint32_t ticks = TickUntilStopped(ship);
-
-      Assert::IsFalse(ship.HasOrder(), (std::wstring(L"never arrived, heading ") + std::to_wstring(heading)).c_str());
-      Assert::AreEqual(targetX, ship.PositionXMillimetres(), (std::wstring(L"x, heading ") + std::to_wstring(heading)).c_str());
-      Assert::AreEqual(targetZ, ship.PositionZMillimetres(), (std::wstring(L"z, heading ") + std::to_wstring(heading)).c_str());
-      Assert::AreEqual(0, ship.SpeedMillimetresPerTick());
-      Assert::IsTrue(ticks < 4000);
+      const std::int32_t value = random.Between(-2, 2);
+      Assert::IsTrue(value >= -2 && value <= 2);
+      sawLow = sawLow || value == -2;
+      sawHigh = sawHigh || value == 2;
     }
+    Assert::IsTrue(sawLow && sawHigh, L"Between never produced one of its endpoints.");
   }
 
-  // The failure the arrival test cannot see: a ship that reaches the target, overshoots, turns
-  // round, comes back and only then satisfies "stopped on the target". Distance to the target
-  // must never increase once the ship is pointed at it and moving.
-  TEST_METHOD(DoesNotOvershootTheTarget)
+  TEST_METHOD(BetweenWithOneValueReturnsIt)
   {
-    constexpr std::int64_t TARGET_X = 100000;
-    Frontier::Ship ship;
-    ship.OrderMoveTo(TARGET_X, 0);
-
-    std::int64_t furthestX = 0;
-    while (ship.HasOrder())
-    {
-      ship.Tick();
-      furthestX = std::max(furthestX, ship.PositionXMillimetres());
-    }
-
-    Assert::AreEqual(TARGET_X, furthestX, L"the ship went past the target and came back");
-  }
-
-  TEST_METHOD(NeverExceedsTheMaximumSpeed)
-  {
-    Frontier::Ship ship;
-    ship.OrderMoveTo(10000000, 0); // 10 km: long enough to reach and hold top speed
-
-    for (int tick = 0; tick < 500; ++tick)
-    {
-      ship.Tick();
-      Assert::IsTrue(ship.SpeedMillimetresPerTick() <= Frontier::Ship::MAX_SPEED_MILLIMETRES_PER_TICK);
-      Assert::IsTrue(ship.SpeedMillimetresPerTick() >= 0);
-    }
-  }
-
-  TEST_METHOD(ReachesTopSpeedInTheAdvertisedTime)
-  {
-    Frontier::Ship ship;
-    ship.OrderMoveTo(10000000, 0);
-
-    std::int32_t ticks = 0;
-    while (ship.SpeedMillimetresPerTick() < Frontier::Ship::MAX_SPEED_MILLIMETRES_PER_TICK && ticks < 100)
-    {
-      ship.Tick();
-      ++ticks;
-    }
-
-    // 1200 / 60 = 20 ticks, which is one second at 20 Hz. Ship.h says so; this is what checks it.
-    Assert::AreEqual(20, ticks);
-  }
-
-  // A ship ordered somewhere behind it must slow down and turn rather than carve a wide arc away
-  // from the target. FACING_TOLERANCE_TURNS16 is what produces that, and this is the behavior it
-  // exists for.
-  TEST_METHOD(SlowsDownBeforeTurningBack)
-  {
-    Frontier::Ship ship;
-    ship.OrderMoveTo(10000000, 0);
-    for (int tick = 0; tick < 40; ++tick)
-    {
-      ship.Tick(); // up to top speed, heading +X
-    }
-    Assert::AreEqual(Frontier::Ship::MAX_SPEED_MILLIMETRES_PER_TICK, ship.SpeedMillimetresPerTick());
-
-    // Now send it back the other way.
-    ship.OrderMoveTo(-10000000, 0);
-    ship.Tick();
-    Assert::IsTrue(ship.SpeedMillimetresPerTick() < Frontier::Ship::MAX_SPEED_MILLIMETRES_PER_TICK,
-                   L"a ship pointed the wrong way should be slowing, not accelerating");
-  }
-
-  TEST_METHOD(ANewOrderReplacesTheOldOne)
-  {
-    Frontier::Ship ship;
-    ship.OrderMoveTo(50000, 0);
-    for (int tick = 0; tick < 5; ++tick)
-    {
-      ship.Tick();
-    }
-
-    ship.OrderMoveTo(0, 50000);
-    TickUntilStopped(ship);
-
-    Assert::AreEqual(0LL, ship.PositionXMillimetres());
-    Assert::AreEqual(50000LL, ship.PositionZMillimetres());
-  }
-
-  // A target the ship is already on: it must finish immediately rather than jittering around it.
-  TEST_METHOD(AnOrderToWhereItAlreadyIsCompletesAtOnce)
-  {
-    Frontier::Ship ship;
-    ship.OrderMoveTo(0, 0);
-    ship.Tick();
-
-    Assert::IsFalse(ship.HasOrder());
-    Assert::AreEqual(0LL, ship.PositionXMillimetres());
-    Assert::AreEqual(0LL, ship.PositionZMillimetres());
-    Assert::AreEqual(0, ship.SpeedMillimetresPerTick());
-  }
-
-  // R16: the same ticks from the same start give the same answer, to the millimetre. This is the
-  // property the whole integer simulation exists for, so it is worth asserting rather than
-  // assuming it follows from there being no float.
-  TEST_METHOD(IsDeterministic)
-  {
-    auto run = []
-    {
-      Frontier::Ship ship;
-      ship.OrderMoveTo(123456, -78901);
-      for (int tick = 0; tick < 200; ++tick)
-      {
-        ship.Tick();
-      }
-      return std::tuple{ship.PositionXMillimetres(), ship.PositionZMillimetres(), ship.HeadingTurns16()};
-    };
-
-    Assert::IsTrue(run() == run());
-  }
-
-  TEST_METHOD(DistanceIsExactForKnownTriangles)
-  {
-    Assert::AreEqual(5LL, Frontier::Ship::DistanceMillimetres(3, 4));
-    Assert::AreEqual(13LL, Frontier::Ship::DistanceMillimetres(-5, 12));
-    Assert::AreEqual(0LL, Frontier::Ship::DistanceMillimetres(0, 0));
-  }
-
-  // ADR-004: the far end of the range saturates rather than overflowing. Unreachable in play, and
-  // still not allowed to be undefined.
-  TEST_METHOD(DistanceSaturatesRatherThanOverflowing)
-  {
-    constexpr std::int64_t HUGE_VALUE = 1LL << 40;
-    Assert::AreEqual(std::numeric_limits<std::int64_t>::max(), Frontier::Ship::DistanceMillimetres(HUGE_VALUE, HUGE_VALUE));
+    Frontier::Random random{7};
+    Assert::AreEqual(5, random.Between(5, 5));
+    Assert::AreEqual(5, random.Between(5, 4));
   }
 };
 
-// The world is a thin thing -- it holds a ship and counts ticks -- but it is also the seam the
-// server ticks through, so the shape of what it reports is worth pinning.
+// The graph queries the generator and the resolver both rest on.
+TEST_CLASS(GraphTests)
+{
+public:
+  TEST_METHOD(IdsAreIndices)
+  {
+    // The whole state assumes it, so it is asserted rather than commented.
+    for (const Frontier::SeatId seats : SEAT_COUNTS)
+    {
+      const Frontier::MatchState state = AcceptedGalaxy(1, seats);
+      for (std::size_t index = 0; index < state.systems.size(); ++index)
+      {
+        Assert::AreEqual(index, static_cast<std::size_t>(state.systems[index].id));
+      }
+      for (std::size_t index = 0; index < state.lanes.size(); ++index)
+      {
+        Assert::AreEqual(index, static_cast<std::size_t>(state.lanes[index].id));
+      }
+      for (std::size_t index = 0; index < state.fleets.size(); ++index)
+      {
+        Assert::AreEqual(index, static_cast<std::size_t>(state.fleets[index].id));
+      }
+      for (std::size_t index = 0; index < state.seats.size(); ++index)
+      {
+        Assert::AreEqual(index, static_cast<std::size_t>(state.seats[index].id));
+      }
+    }
+  }
+
+  TEST_METHOD(DistanceSquaredIsExactForKnownTriangles)
+  {
+    Assert::AreEqual(25LL, Frontier::DistanceSquaredUnits({0, 0}, {3, 4}));
+    Assert::AreEqual(25LL, Frontier::DistanceSquaredUnits({-3, -4}, {0, 0}));
+    Assert::AreEqual(0LL, Frontier::DistanceSquaredUnits({7, -7}, {7, -7}));
+  }
+
+  TEST_METHOD(ShortestPathCountsLaneCostsAndNotLanes)
+  {
+    // A chain of three one-tick lanes must beat a single four-tick lane, which is the whole point of
+    // authored distance: hops are not the measure, ticks are.
+    Frontier::MatchState state;
+    for (int index = 0; index < 4; ++index)
+    {
+      state.systems.push_back(Frontier::System{.id = static_cast<Frontier::SystemId>(index),
+                                               .position = {index, 0},
+                                               .kind = Frontier::SystemKind::Frontier,
+                                               .homeSeat = Frontier::NO_SEAT,
+                                               .owner = Frontier::NO_SEAT,
+                                               .yieldPerTick = 1});
+    }
+    state.lanes.push_back(Frontier::Lane{.id = 0, .endA = 0, .endB = 1, .costTicks = 1});
+    state.lanes.push_back(Frontier::Lane{.id = 1, .endA = 1, .endB = 2, .costTicks = 1});
+    state.lanes.push_back(Frontier::Lane{.id = 2, .endA = 2, .endB = 3, .costTicks = 1});
+    state.lanes.push_back(Frontier::Lane{.id = 3, .endA = 0, .endB = 3, .costTicks = 4});
+
+    const std::vector<std::int32_t> cost = Frontier::ShortestPathTicksFrom(state, 0);
+    Assert::AreEqual(0, cost[0]);
+    Assert::AreEqual(1, cost[1]);
+    Assert::AreEqual(2, cost[2]);
+    Assert::AreEqual(3, cost[3]);
+  }
+
+  TEST_METHOD(AnUnreachableSystemComesBackAsMinusOne)
+  {
+    Frontier::MatchState state;
+    for (int index = 0; index < 3; ++index)
+    {
+      state.systems.push_back(Frontier::System{.id = static_cast<Frontier::SystemId>(index),
+                                               .position = {index, 0},
+                                               .kind = Frontier::SystemKind::Frontier,
+                                               .homeSeat = Frontier::NO_SEAT,
+                                               .owner = Frontier::NO_SEAT,
+                                               .yieldPerTick = 1});
+    }
+    state.lanes.push_back(Frontier::Lane{.id = 0, .endA = 0, .endB = 1, .costTicks = 2});
+
+    const std::vector<std::int32_t> cost = Frontier::ShortestPathTicksFrom(state, 0);
+    Assert::AreEqual(0, cost[0]);
+    Assert::AreEqual(2, cost[1]);
+    Assert::AreEqual(-1, cost[2]);
+  }
+
+  TEST_METHOD(AdjacencyIsSymmetric)
+  {
+    const Frontier::MatchState state = AcceptedGalaxy(3, 8);
+    for (const Frontier::Lane& lane : state.lanes)
+    {
+      Assert::IsTrue(Frontier::AreAdjacent(state, lane.endA, lane.endB));
+      Assert::IsTrue(Frontier::AreAdjacent(state, lane.endB, lane.endA));
+    }
+  }
+};
+
+// The generator, against every guarantee the one-pager and ADR-014 state.
+TEST_CLASS(GalaxyGeneratorTests)
+{
+public:
+  TEST_METHOD(ProducesACapitalAndAPinnedGarrisonPerSeat)
+  {
+    for (const Frontier::SeatId seats : SEAT_COUNTS)
+    {
+      const Frontier::MatchState state = AcceptedGalaxy(1, seats);
+      Assert::AreEqual(static_cast<std::size_t>(seats), state.seats.size());
+
+      std::size_t capitals = 0;
+      for (const Frontier::System& system : state.systems)
+      {
+        capitals += system.kind == Frontier::SystemKind::Capital ? 1 : 0;
+      }
+      Assert::AreEqual(static_cast<std::size_t>(seats), capitals);
+
+      for (const Frontier::Seat& seat : state.seats)
+      {
+        const Frontier::System& capital = state.systems[seat.capital];
+        Assert::AreEqual(static_cast<int>(Frontier::SystemKind::Capital), static_cast<int>(capital.kind));
+        Assert::AreEqual(static_cast<int>(seat.id), static_cast<int>(capital.owner));
+
+        // ADR-018: the garrison is a pinned fleet, not a defence value on the system.
+        std::size_t pinnedHere = 0;
+        for (const Frontier::Fleet& fleet : state.fleets)
+        {
+          if (fleet.owner == seat.id && fleet.atSystem == seat.capital && fleet.pinned)
+          {
+            ++pinnedHere;
+            Assert::AreEqual(Frontier::DEFAULT_RULES.startingGarrisonStrength, fleet.strength);
+            Assert::AreEqual(static_cast<int>(Frontier::NO_LANE), static_cast<int>(fleet.onLane));
+          }
+        }
+        Assert::AreEqual(static_cast<std::size_t>(1), pinnedHere);
+      }
+    }
+  }
+
+  TEST_METHOD(EveryCapitalHasARivalCapitalWithinThreeTicks)
+  {
+    for (const Frontier::SeatId seats : SEAT_COUNTS)
+    {
+      for (std::uint64_t seed = 1; seed <= 40; ++seed)
+      {
+        const Frontier::MatchState state = AcceptedGalaxy(seed, seats);
+        for (const Frontier::Seat& seat : state.seats)
+        {
+          const std::vector<std::int32_t> reach = Frontier::ShortestPathTicksFrom(state, seat.capital);
+          std::int32_t nearest = -1;
+          for (const Frontier::Seat& other : state.seats)
+          {
+            if (other.id != seat.id && reach[other.capital] >= 0 && (nearest < 0 || reach[other.capital] < nearest))
+            {
+              nearest = reach[other.capital];
+            }
+          }
+          Assert::IsTrue(nearest >= 0 && nearest <= Frontier::DEFAULT_RULES.capitalRivalMaxTicks,
+                         ToWide(std::format("seed {} seats {} seat {}: nearest rival {} ticks", seed, static_cast<int>(seats),
+                                            static_cast<int>(seat.id), nearest))
+                           .c_str());
+        }
+      }
+    }
+  }
+
+  TEST_METHOD(ClusterLanesAreOneTickAndEverythingElseIsTwoToFour)
+  {
+    for (const Frontier::SeatId seats : SEAT_COUNTS)
+    {
+      for (std::uint64_t seed = 1; seed <= 40; ++seed)
+      {
+        const Frontier::MatchState state = AcceptedGalaxy(seed, seats);
+        for (const Frontier::Lane& lane : state.lanes)
+        {
+          const Frontier::System& endA = state.systems[lane.endA];
+          const Frontier::System& endB = state.systems[lane.endB];
+          const bool intra = endA.homeSeat != Frontier::NO_SEAT && endA.homeSeat == endB.homeSeat;
+
+          if (intra)
+          {
+            Assert::AreEqual(1, lane.costTicks, L"A lane inside a starting cluster must be one tick.");
+          }
+          else
+          {
+            Assert::IsTrue(lane.costTicks >= 2 && lane.costTicks <= 4,
+                           ToWide(std::format("lane {} costs {} ticks outside a cluster", lane.id, lane.costTicks)).c_str());
+          }
+        }
+      }
+    }
+  }
+
+  TEST_METHOD(DrawnLengthIsMonotoneInTickCost)
+  {
+    // ADR-014's constraint, walked over every pair of lanes rather than sampled. This is the
+    // property that stops the map lying about travel time, so it is checked exhaustively.
+    for (const Frontier::SeatId seats : SEAT_COUNTS)
+    {
+      for (std::uint64_t seed = 1; seed <= 20; ++seed)
+      {
+        const Frontier::MatchState state = AcceptedGalaxy(seed, seats);
+        for (const Frontier::Lane& first : state.lanes)
+        {
+          for (const Frontier::Lane& second : state.lanes)
+          {
+            if (first.costTicks < second.costTicks)
+            {
+              Assert::IsTrue(Frontier::LaneLengthSquaredUnits(state, first) <= Frontier::LaneLengthSquaredUnits(state, second),
+                             ToWide(std::format("lane {} costs {} but is drawn longer than lane {} at {}", first.id, first.costTicks,
+                                                second.id, second.costTicks))
+                               .c_str());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  TEST_METHOD(NoTwoSystemsAreCloserThanTheMinimumSeparation)
+  {
+    const std::int64_t minimumSquared =
+      static_cast<std::int64_t>(Frontier::DEFAULT_RULES.minSeparationUnits) * Frontier::DEFAULT_RULES.minSeparationUnits;
+    for (const Frontier::SeatId seats : SEAT_COUNTS)
+    {
+      for (std::uint64_t seed = 1; seed <= 20; ++seed)
+      {
+        const Frontier::MatchState state = AcceptedGalaxy(seed, seats);
+        for (std::size_t a = 0; a < state.systems.size(); ++a)
+        {
+          for (std::size_t b = a + 1; b < state.systems.size(); ++b)
+          {
+            Assert::IsTrue(Frontier::DistanceSquaredUnits(state.systems[a].position, state.systems[b].position) >= minimumSquared,
+                           ToWide(std::format("systems {} and {} are too close", a, b)).c_str());
+          }
+        }
+      }
+    }
+  }
+
+  TEST_METHOD(TheGalaxyIsConnected)
+  {
+    for (const Frontier::SeatId seats : SEAT_COUNTS)
+    {
+      for (std::uint64_t seed = 1; seed <= 20; ++seed)
+      {
+        const Frontier::MatchState state = AcceptedGalaxy(seed, seats);
+        const std::vector<std::int32_t> reach = Frontier::ShortestPathTicksFrom(state, state.seats[0].capital);
+        Assert::IsTrue(std::ranges::find(reach, -1) == reach.end(), L"A system cannot be reached from a capital.");
+      }
+    }
+  }
+
+  TEST_METHOD(TheSealedRegionIsGeneratedVisibleAndReachable)
+  {
+    // The one-pager makes the region visible from tick one and openable mid-match. Nothing in
+    // MVP-02 can enter it; what this asserts is that it exists, is on the map, and is not stranded.
+    for (const Frontier::SeatId seats : SEAT_COUNTS)
+    {
+      const Frontier::MatchState state = AcceptedGalaxy(1, seats);
+      std::size_t sites = 0;
+      for (const Frontier::System& system : state.systems)
+      {
+        if (system.kind == Frontier::SystemKind::Sealed)
+        {
+          ++sites;
+          Assert::AreEqual(static_cast<int>(Frontier::NO_SEAT), static_cast<int>(system.owner));
+        }
+      }
+      Assert::AreEqual(static_cast<std::size_t>(Frontier::DEFAULT_RULES.sealedSystemCount), sites);
+
+      Assert::IsTrue(state.sealedOpensTick > 0 && state.sealedOpensTick < state.endTick,
+                     L"The region must open during the match, on a tick known from the start.");
+    }
+  }
+
+  TEST_METHOD(TheFrontierIsRicherThanHome)
+  {
+    // "Near and safe, far and rich" is the first of the three interesting decisions, and it is only
+    // a decision if the frontier actually pays more.
+    const Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    std::int32_t clusterBest = 0;
+    std::int32_t frontierWorst = 1000;
+    for (const Frontier::System& system : state.systems)
+    {
+      if (system.kind == Frontier::SystemKind::Cluster)
+      {
+        clusterBest = std::max(clusterBest, system.yieldPerTick);
+      }
+      if (system.kind == Frontier::SystemKind::Frontier)
+      {
+        frontierWorst = std::min(frontierWorst, system.yieldPerTick);
+      }
+    }
+    Assert::IsTrue(frontierWorst > clusterBest, L"The poorest frontier system must out-yield the richest home system.");
+  }
+
+  TEST_METHOD(TheSameSeedGivesTheSameGalaxy)
+  {
+    for (const Frontier::SeatId seats : SEAT_COUNTS)
+    {
+      const Frontier::MatchState first = AcceptedGalaxy(99, seats);
+      const Frontier::MatchState second = AcceptedGalaxy(99, seats);
+      Assert::AreEqual(Fingerprint(first), Fingerprint(second));
+    }
+  }
+
+  TEST_METHOD(DifferentSeedsGiveDifferentGalaxies)
+  {
+    // A generator whose output does not depend on its seed is a generator with one galaxy in it.
+    const Frontier::MatchState first = AcceptedGalaxy(1, 8);
+    const Frontier::MatchState second = AcceptedGalaxy(2, 8);
+    Assert::AreNotEqual(Fingerprint(first), Fingerprint(second));
+  }
+
+  TEST_METHOD(TooFewSeatsIsRefusedRatherThanCrashing)
+  {
+    Frontier::MatchState state;
+    Assert::AreNotEqual(static_cast<int>(Frontier::GenerationResult::Accepted),
+                        static_cast<int>(Frontier::GenerateGalaxy(1, 1, Frontier::DEFAULT_RULES, state)));
+  }
+
+  TEST_METHOD(ImpossibleRulesAreRejectedAndNamed)
+  {
+    // The rejection path has to work, or the measurement below is measuring nothing. A minimum
+    // separation wider than the whole galaxy cannot be satisfied by any seed.
+    Frontier::Rules rules = Frontier::DEFAULT_RULES;
+    rules.minSeparationUnits = 500;
+
+    Frontier::MatchState state;
+    const Frontier::GenerationResult result = Frontier::GenerateGalaxy(1, 8, rules, state);
+    Assert::AreEqual(static_cast<int>(Frontier::GenerationResult::SeparationTooSmall), static_cast<int>(result));
+    Assert::AreEqual(static_cast<std::size_t>(0), std::string{Frontier::Describe(result)}.find("two systems closer"));
+  }
+
+  TEST_METHOD(RetryingReportsHowManySeedsItTook)
+  {
+    Frontier::MatchState state;
+    Assert::AreEqual(1U, Frontier::GenerateGalaxyWithRetries(1, 8, Frontier::DEFAULT_RULES, 8, state));
+
+    Frontier::Rules impossible = Frontier::DEFAULT_RULES;
+    impossible.minSeparationUnits = 500;
+    Assert::AreEqual(0U, Frontier::GenerateGalaxyWithRetries(1, 8, impossible, 4, state));
+  }
+
+  // The figure ADR-014 asks for, measured rather than asserted: how often a seed is refused.
+  //
+  // It is a test so that it cannot rot, and its assertion is deliberately loose -- a rate under a
+  // fifth means match creation is a single attempt in practice. The number itself goes in the
+  // slice report, and the log line below is where it comes from.
+  TEST_METHOD(TheRejectionRateIsLowAtEverySeatCount)
+  {
+    constexpr std::uint64_t SEEDS = 1000;
+
+    for (const Frontier::SeatId seats : SEAT_COUNTS)
+    {
+      std::map<int, std::uint64_t> refusals;
+      std::uint64_t rejected = 0;
+      Frontier::MatchState state;
+
+      for (std::uint64_t seed = 0; seed < SEEDS; ++seed)
+      {
+        const Frontier::GenerationResult result = Frontier::GenerateGalaxy(seed, seats, Frontier::DEFAULT_RULES, state);
+        if (result != Frontier::GenerationResult::Accepted)
+        {
+          ++rejected;
+          ++refusals[static_cast<int>(result)];
+        }
+      }
+
+      std::string detail;
+      for (const auto& [reason, count] : refusals)
+      {
+        detail += std::format(" {}x{}", count, Frontier::Describe(static_cast<Frontier::GenerationResult>(reason)));
+      }
+      Logger::WriteMessage(ToWide(std::format("seats {:>2}: {} of {} seeds rejected;{}\n", static_cast<int>(seats), rejected, SEEDS,
+                                              detail.empty() ? " none" : detail))
+                             .c_str());
+
+      Assert::IsTrue(rejected * 5 < SEEDS, ToWide(std::format("seats {}: {} of {} seeds rejected, which is too many to call a safety net",
+                                                              static_cast<int>(seats), rejected, SEEDS))
+                                             .c_str());
+    }
+  }
+
+  /// Not an assertion: a galaxy printed for a person to read. Slice 2 gives it a picture; until
+  /// then this is the only way to look at what the generator built.
+  TEST_METHOD(LogsAGalaxyForHumanEyes)
+  {
+    const Frontier::MatchState state = AcceptedGalaxy(1, 8);
+    Logger::WriteMessage(ToWide(Frontier::DescribeGalaxy(state)).c_str());
+
+    std::map<int, std::size_t> costs;
+    for (const Frontier::Lane& lane : state.lanes)
+    {
+      ++costs[lane.costTicks];
+    }
+    std::string histogram;
+    for (const auto& [cost, count] : costs)
+    {
+      histogram += std::format(" {} lanes at {} ticks;", count, cost);
+    }
+
+    std::int32_t lowX = 0;
+    std::int32_t highX = 0;
+    std::int32_t lowY = 0;
+    std::int32_t highY = 0;
+    for (const Frontier::System& system : state.systems)
+    {
+      lowX = std::min(lowX, system.position.xUnits);
+      highX = std::max(highX, system.position.xUnits);
+      lowY = std::min(lowY, system.position.yUnits);
+      highY = std::max(highY, system.position.yUnits);
+    }
+
+    // The extent is what slice 2's legibility measurement starts from: ADR-003 projects a map unit
+    // onto eight pixels at the default zoom, so this says how many 640x400 screens the galaxy is.
+    Logger::WriteMessage(ToWide(std::format("extent x[{},{}] y[{},{}];{}\n", lowX, highX, lowY, highY, histogram)).c_str());
+    Assert::IsTrue(highX > lowX && highY > lowY);
+  }
+};
+
+// The thin owner, and the seam it still satisfies.
 TEST_CLASS(WorldTests)
 {
 public:
+  TEST_METHOD(ADefaultWorldIsARealAcceptedMatch)
+  {
+    const Frontier::World world;
+    Assert::AreEqual(static_cast<int>(Frontier::GenerationResult::Accepted), static_cast<int>(world.Generation()));
+    Assert::AreEqual(static_cast<std::size_t>(Frontier::World::DEFAULT_SEAT_COUNT), world.State().seats.size());
+    Assert::AreEqual(Frontier::World::DEFAULT_SEED, world.State().seed);
+  }
+
   TEST_METHOD(CountsItsTicks)
   {
     Frontier::World world;
     Assert::AreEqual(0ULL, world.TickCount());
-
-    for (int tick = 0; tick < 7; ++tick)
+    for (int tick = 0; tick < 5; ++tick)
     {
       world.Tick();
     }
-
-    Assert::AreEqual(7ULL, world.TickCount());
-    Assert::AreEqual(7ULL, world.Snapshot().tick);
+    Assert::AreEqual(5ULL, world.TickCount());
+    Assert::AreEqual(5ULL, world.State().tick);
   }
 
-  TEST_METHOD(AnOrderMovesTheShipItReportsOn)
+  TEST_METHOD(TheSnapshotCarriesTheTick)
   {
+    // All this asserts is the transitional behavior World.h describes: there is no ship, so the
+    // MVP-01 record carries the clock and nothing else. Slice 2 deletes both.
     Frontier::World world;
-    world.ApplyOrder(Neuron::MoveToOrder{.targetXMillimetres = 40000, .targetZMillimetres = 0});
-
-    for (int tick = 0; tick < 200 && world.PlayerShip().HasOrder(); ++tick)
-    {
-      world.Tick();
-    }
+    world.Tick();
+    world.Tick();
 
     const Neuron::ShipState state = world.Snapshot();
-    Assert::AreEqual(40000LL, state.positionXMillimetres);
+    Assert::AreEqual(2ULL, state.tick);
+    Assert::AreEqual(0LL, state.positionXMillimetres);
     Assert::AreEqual(0LL, state.positionZMillimetres);
-    Assert::AreEqual(0, state.speedMillimetresPerTick);
   }
 
-  TEST_METHOD(SnapshotAgreesWithTheShip)
+  TEST_METHOD(AnOrderChangesNothing)
   {
     Frontier::World world;
-    world.ApplyOrder(Neuron::MoveToOrder{.targetXMillimetres = 90000, .targetZMillimetres = 45000});
-    for (int tick = 0; tick < 25; ++tick)
+    const std::string before = Fingerprint(world.State());
+    world.ApplyOrder(Neuron::MoveToOrder{.targetXMillimetres = 60000, .targetZMillimetres = 30000});
+    Assert::AreEqual(before, Fingerprint(world.State()));
+  }
+
+  TEST_METHOD(TickingDoesNotDisturbTheGalaxy)
+  {
+    // The tick is the clock and nothing else until the resolver lands. If this starts failing, a
+    // phase was added without the plan.
+    Frontier::World world;
+    Frontier::MatchState before = world.State();
+    for (int tick = 0; tick < 20; ++tick)
     {
       world.Tick();
     }
+    before.tick = world.State().tick;
+    Assert::AreEqual(Fingerprint(before), Fingerprint(world.State()));
+  }
 
-    const Neuron::ShipState state = world.Snapshot();
-    Assert::AreEqual(world.PlayerShip().PositionXMillimetres(), state.positionXMillimetres);
-    Assert::AreEqual(world.PlayerShip().PositionZMillimetres(), state.positionZMillimetres);
-    Assert::AreEqual(world.PlayerShip().HeadingTurns16(), state.headingTurns16);
-    Assert::AreEqual(world.PlayerShip().SpeedMillimetresPerTick(), state.speedMillimetresPerTick);
+  TEST_METHOD(ARequestedSeedAndSeatCountAreHonored)
+  {
+    const Frontier::World world{7, 6, Frontier::DEFAULT_RULES};
+    Assert::AreEqual(static_cast<int>(Frontier::GenerationResult::Accepted), static_cast<int>(world.Generation()));
+    Assert::AreEqual(7ULL, world.State().seed);
+    Assert::AreEqual(static_cast<std::size_t>(6), world.State().seats.size());
   }
 };
 
