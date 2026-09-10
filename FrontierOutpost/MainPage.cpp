@@ -7,7 +7,7 @@
 #include "pch.h"
 #include "MainPage.h"
 
-#include "MapProjection.h"
+#include "MapView.h"
 
 #include <queue>
 
@@ -52,24 +52,38 @@ constexpr Color LANE_PLAIN = {214, 220, 228, 71};
 constexpr float SCREEN_WIDTH = 1280.0F;
 constexpr float SCREEN_HEIGHT = 720.0F;
 
-/// The map's own coordinates, before the letterbox. Everything on the plane is authored here.
-constexpr float GRID_MIN_X = -200.0F;
-constexpr float GRID_MAX_X = 1000.0F;
-constexpr float GRID_STEP_X = 100.0F;
-constexpr float GRID_STEP_Y = 70.0F;
+constexpr float TWO_PI = 6.28318530717958647692F;
 
-/// Node geometry, as multiples of the depth scale (README "Systems").
+/// The ground grid, in design units. It runs well past the graph so the plane still has a floor
+/// under it when the camera swings round to a corner, and it is square so that turning it reveals
+/// no edge the front view did not have.
+constexpr float GRID_MIN_DESIGN = -240.0F;
+constexpr float GRID_MAX_DESIGN = 1040.0F;
+constexpr float GRID_STEP = 80.0F;
+constexpr std::uint32_t GRID_LINES_ACROSS = static_cast<std::uint32_t>((GRID_MAX_DESIGN - GRID_MIN_DESIGN) / GRID_STEP);
+
+/// How far the sky slides for a radian of camera movement. The star field is at infinity, so it
+/// has no parallax -- but a sky that did not move at all would read as painted on the screen
+/// (ADR-017).
+constexpr float SKY_PIXELS_PER_RADIAN = 90.0F;
+
+/// Node geometry, in WORLD units now rather than as multiples of a depth scale: the camera turns
+/// a world size into a screen size, which is what makes a system genuinely larger when it is
+/// nearer (ADR-017). The numbers are the reference's, read as world units.
 constexpr float NODE_RADIUS = 4.5F * 1.15F;
 constexpr float CAPITAL_RADIUS = 6.0F * 1.15F;
 constexpr float STEM_HEIGHT = 20.0F;
 constexpr float CAPITAL_STEM_HEIGHT = 30.0F;
+constexpr float SITE_PIN_HEIGHT = 14.0F;
 constexpr float SHADOW_WIDE = 2.2F;
 constexpr float SHADOW_TALL = 0.9F;
 constexpr float HALO_SCALE = 2.4F;
 constexpr float RING_SCALE = 2.2F;
 constexpr float FLEET_HOVER = 14.0F;
 constexpr float REGION_RADIUS = 62.0F;
-constexpr float REGION_FLATTEN = 0.42F;
+/// How high the sealed region's second ring floats. The reference lifted it by the ellipse's own
+/// half-height; in world units that is about a quarter of the radius.
+constexpr float REGION_VOLUME_HEIGHT = 26.0F;
 
 /// The background star field: thirty dots in the map's projected space, unprojected (README).
 /// They are a texture, not geometry, which is why they are literals rather than graph data.
@@ -166,6 +180,60 @@ void MainPage::Create(MatchState _state)
   m_panel = Panel::None;
   m_panelSubject = EventRefs::NONE;
   m_focusedSystem = EventRefs::NONE;
+
+  MeasureContent();
+}
+
+void MainPage::MeasureContent()
+{
+  // What the camera has to fit: every system, and the sealed region out to its rim. Measured
+  // once, from the graph, because the galaxy the server sends will not be the one in the fixture
+  // and a distance tuned to this sample would frame nothing else (ADR-017).
+  float minX = 0.0F;
+  float maxX = 0.0F;
+  float minY = 0.0F;
+  float maxY = 0.0F;
+  bool first = true;
+
+  for (std::size_t index = 0; index < m_state.graph.systems.size(); ++index)
+  {
+    const SystemNode& node = m_state.graph.systems[index];
+    // The region anchor draws no node but the region around it is 62 units wide, so it counts for
+    // its rim rather than for its centre.
+    const float reach = HasFlag(node.flags, SystemFlags::RegionAnchor) ? REGION_RADIUS : 0.0F;
+
+    if (first)
+    {
+      minX = node.positionX - reach;
+      maxX = node.positionX + reach;
+      minY = node.positionY - reach;
+      maxY = node.positionY + reach;
+      first = false;
+      continue;
+    }
+    minX = std::min(minX, node.positionX - reach);
+    maxX = std::max(maxX, node.positionX + reach);
+    minY = std::min(minY, node.positionY - reach);
+    maxY = std::max(maxY, node.positionY + reach);
+  }
+
+  if (first)
+  {
+    m_contentCenter = {0.0F, 0.0F, 0.0F};
+    m_contentRadius = 1.0F;
+    return;
+  }
+
+  const float centerDesignX = (minX + maxX) * 0.5F;
+  const float centerDesignY = (minY + maxY) * 0.5F;
+  m_contentCenter = MapView::Ground(centerDesignX, centerDesignY);
+
+  const float halfWidth = (maxX - minX) * 0.5F;
+  const float halfDepth = (maxY - minY) * 0.5F;
+  // The radius IN THE GROUND PLANE, which is what makes the framing independent of yaw: spin the
+  // camera and the content is exactly this wide from every direction. Height is passed separately,
+  // because a galaxy is flat and pretending otherwise wastes a quarter of the pane (MapView.h).
+  m_contentRadius = std::sqrt(halfWidth * halfWidth + halfDepth * halfDepth);
 }
 
 std::string MainPage::FormatCountdown(double _seconds)
@@ -253,6 +321,25 @@ void MainPage::Update(double _elapsedSeconds)
     m_state.orders.locked = true;
     m_panel = Panel::None;
   }
+}
+
+bool MainPage::HandleDrag(const Neuron::PointerInput::Drag& _drag)
+{
+  // The gesture belongs to whatever was under the PRESS. A drag that began on the map keeps
+  // rotating it as the finger crosses onto a rail, and a drag that began on a rail never starts.
+  const float mapLeft = DIGEST_WIDTH;
+  const float mapRight = SCREEN_WIDTH - ORDERS_WIDTH;
+  const bool startedOnMap = _drag.originXPixels >= mapLeft && _drag.originXPixels < mapRight && _drag.originYPixels >= TOP_BAR_HEIGHT;
+  if (!startedOnMap)
+  {
+    return false;
+  }
+
+  // Both axes now. Horizontal orbits the camera around the galaxy, vertical raises and lowers it
+  // -- which is the difference the turntable could not express and the reason it did not feel
+  // like a camera (ADR-017).
+  m_mapView.Drag(_drag.deltaXPixels, _drag.deltaYPixels);
+  return true;
 }
 
 void MainPage::AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index)
@@ -380,9 +467,13 @@ void MainPage::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
 
   _shapes.FillRect(0.0F, 0.0F, SCREEN_WIDTH, SCREEN_HEIGHT, APP_BACKGROUND);
 
+  // THE MAP GOES FIRST, and the rails are painted over it. With the authored curve the map could
+  // not leave its pane; a camera can put a projected label or a lane anywhere on the screen, so
+  // the rails' own opaque backgrounds are what confine it (ADR-017). Text is a separate pass and
+  // cannot be covered that way, so the map's text clips itself instead.
+  DrawMap(_shapes, _text);
   DrawTopBar(_shapes, _text);
   DrawDigestRail(_shapes, _text);
-  DrawMap(_shapes, _text);
   DrawOrdersRail(_shapes, _text);
   DrawPanel(_shapes, _text);
 }
@@ -390,6 +481,7 @@ void MainPage::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
 void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
 {
   const std::int32_t centered = CenterTextY(0.0F, TOP_BAR_HEIGHT);
+  _shapes.FillRect(0.0F, 0.0F, SCREEN_WIDTH, TOP_BAR_HEIGHT, APP_BACKGROUND);
   _shapes.FillRect(0.0F, TOP_BAR_HEIGHT - 1.0F, SCREEN_WIDTH, 1.0F, CARD_BORDER);
 
   _text.DrawText(16, centered, "FRONTIER OUTPOST", TEXT_PRIMARY);
@@ -450,6 +542,7 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
 
 void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 {
+  _shapes.FillRect(0.0F, TOP_BAR_HEIGHT, DIGEST_WIDTH, SCREEN_HEIGHT - TOP_BAR_HEIGHT, APP_BACKGROUND);
   _shapes.FillRect(DIGEST_WIDTH - 1.0F, TOP_BAR_HEIGHT, 1.0F, SCREEN_HEIGHT - TOP_BAR_HEIGHT, CARD_BORDER);
 
   const std::int32_t headerY = static_cast<std::int32_t>(TOP_BAR_HEIGHT) + 12;
@@ -512,177 +605,159 @@ void MainPage::DrawMap(ShapeRenderer& _shapes, FontRenderer& _text)
   const float paneX = DIGEST_WIDTH;
   const float paneWidth = SCREEN_WIDTH - DIGEST_WIDTH - ORDERS_WIDTH;
   const float paneHeight = SCREEN_HEIGHT - TOP_BAR_HEIGHT;
-  const MapProjection projection{paneX, TOP_BAR_HEIGHT, paneWidth, paneHeight};
+  m_mapView.SetViewport(paneX, TOP_BAR_HEIGHT, paneWidth, paneHeight);
+  m_mapView.FrameContent(m_contentCenter, m_contentRadius, CAPITAL_STEM_HEIGHT + CAPITAL_RADIUS);
+  const Neuron::OrbitCamera& camera = m_mapView.Camera();
 
   _shapes.FillVerticalGradient(paneX, TOP_BAR_HEIGHT, paneWidth, paneHeight, MAP_TOP, MAP_MIDDLE, 0.45F, MAP_BOTTOM);
+  _text.SetClipRect(paneX, TOP_BAR_HEIGHT, paneWidth, paneHeight);
 
-  // The star field is unprojected: it is behind the plane, not on it.
+  // The star field is a backdrop at infinity, so it does not project -- it SLIDES with the
+  // camera's yaw and rises and falls with its pitch. That is what a sky does: no parallax, but
+  // not painted on the screen either (ADR-017).
+  const float skyX = -camera.YawRadians() * SKY_PIXELS_PER_RADIAN;
+  const float skyY = camera.PitchRadians() * SKY_PIXELS_PER_RADIAN;
   for (const Star& star : STARS)
   {
-    const float x = paneX + star.x * projection.LetterboxScale();
-    const float y = TOP_BAR_HEIGHT + (paneHeight - MapProjection::DESIGN_HEIGHT * projection.LetterboxScale()) * 0.5F +
-                    star.y * projection.LetterboxScale();
-    _shapes.FillEllipse(x, y, star.radius, star.radius, STAR);
+    const float wrappedX = std::fmod(std::fmod(star.x + skyX, MapView::DESIGN_WIDTH) + MapView::DESIGN_WIDTH, MapView::DESIGN_WIDTH);
+    const float x = paneX + wrappedX * (paneWidth / MapView::DESIGN_WIDTH);
+    const float y = TOP_BAR_HEIGHT + star.y + skyY;
+    if (y >= TOP_BAR_HEIGHT && y < TOP_BAR_HEIGHT + paneHeight)
+    {
+      _shapes.FillEllipse(x, y, star.radius, star.radius, STAR);
+    }
   }
 
-  // The ground grid, drawn as lines of constant y and constant x through the projection. It is
-  // what makes the plane read as a plane rather than as a scatter of dots.
-  // Counted in whole steps rather than by adding a float to itself: nine lines of constant depth
-  // and thirteen of constant x, at exactly the spacing the reference uses.
-  constexpr std::uint32_t DEPTH_LINES = static_cast<std::uint32_t>(MapProjection::DESIGN_HEIGHT / GRID_STEP_Y) + 1;
-  constexpr std::uint32_t ACROSS_LINES = static_cast<std::uint32_t>((GRID_MAX_X - GRID_MIN_X) / GRID_STEP_X) + 1;
-
-  for (std::uint32_t step = 0; step < DEPTH_LINES; ++step)
+  const auto project = [&camera](const Neuron::OrbitCamera::WorldPoint& _world) { return camera.Project(_world); };
+  const auto groundOf = [&](std::int32_t _system)
   {
-    const float designY = static_cast<float>(step) * GRID_STEP_Y;
-    const MapProjection::Point left = projection.Project(GRID_MIN_X, designY);
-    const MapProjection::Point right = projection.Project(GRID_MAX_X, designY);
-    _shapes.Line(left.x, left.y, right.x, right.y, GRID_LINE);
-  }
-  for (std::uint32_t step = 0; step < ACROSS_LINES; ++step)
-  {
-    const float designX = GRID_MIN_X + static_cast<float>(step) * GRID_STEP_X;
-    // `atHorizon` and `atNearEdge`, not `far` and `near`: both of those are macros that
-    // <windows.h> still defines to nothing, and a local called either one vanishes.
-    const MapProjection::Point atHorizon = projection.Project(designX, 0.0F);
-    const MapProjection::Point atNearEdge = projection.Project(designX, MapProjection::DESIGN_HEIGHT);
-    _shapes.Line(atHorizon.x, atHorizon.y, atNearEdge.x, atNearEdge.y, GRID_LINE);
-  }
-
-  const MapProjection::Point horizon = projection.Project(MapProjection::CENTER_X, 0.0F);
-  _shapes.FillRadialGradient(horizon.x, horizon.y, paneWidth * 0.6F, paneHeight * 0.35F, HORIZON_GLOW, HORIZON_GLOW_RIM);
-
-  const Graph& graph = m_state.graph;
-  const auto groundOf = [&projection, &graph](std::int32_t _system)
-  {
-    const SystemNode& node = graph.systems[static_cast<std::size_t>(_system)];
-    return projection.Project(node.positionX, node.positionY);
+    const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(_system)];
+    return project(MapView::Ground(node.positionX, node.positionY));
   };
 
-  // Lanes lie ON the plane, under everything that stands on it.
-  for (const Lane& lane : graph.lanes)
+  // A segment between two projected points, drawn only when both ends are in front of the eye.
+  // Clipping the one-end case properly would be the right answer for a camera that can be put
+  // inside the galaxy; this one orbits outside it, so a lane with one end behind the eye is a
+  // lane at the very edge of a steep view, and dropping it is not visible.
+  const auto segment = [&_shapes](const Neuron::OrbitCamera::ScreenPoint& _a, const Neuron::OrbitCamera::ScreenPoint& _b,
+                                  const Color& _color, float _thickness)
   {
-    const MapProjection::Point a = groundOf(lane.a);
-    const MapProjection::Point b = groundOf(lane.b);
-
-    switch (lane.kind)
+    if (_a.visible && _b.visible)
     {
-    case LaneKind::Trade:
-      // A trade lane is public and is meant to be read at a glance: it is the one consensual
-      // mechanic in the game, and cancelling one is a tell (one-pager, decision 3).
-      _shapes.Line(a.x, a.y, b.x, b.y, BLUE, 2.5F);
-      break;
-    case LaneKind::Proposed:
-      _shapes.DashedLine(a.x, a.y, b.x, b.y, BLUE, 2.0F, 4.0F, 5.0F);
-      break;
-    case LaneKind::None:
-    default:
-      _shapes.Line(a.x, a.y, b.x, b.y, LANE_PLAIN, 1.2F);
-      break;
+      _shapes.Line(_a.xPixels, _a.yPixels, _b.xPixels, _b.yPixels, _color, _thickness);
     }
+  };
 
-    DrawCentered(_text, (a.x + b.x) * 0.5F, static_cast<std::int32_t>(std::lround((a.y + b.y) * 0.5F)) - 4, std::to_string(lane.cost),
-                 TEXT_DETAIL);
+  // The ground grid, now genuinely on the ground: lines of constant x and constant z, projected.
+  // It turns with the camera because it is part of the world, and that single change is most of
+  // what makes the rotation read as a viewpoint moving rather than a picture being spun (ADR-017).
+  for (std::uint32_t step = 0; step <= GRID_LINES_ACROSS; ++step)
+  {
+    const float at = GRID_MIN_DESIGN + static_cast<float>(step) * GRID_STEP;
+    segment(project(MapView::Ground(at, GRID_MIN_DESIGN)), project(MapView::Ground(at, GRID_MAX_DESIGN)), GRID_LINE, 1.0F);
+    segment(project(MapView::Ground(GRID_MIN_DESIGN, at)), project(MapView::Ground(GRID_MAX_DESIGN, at)), GRID_LINE, 1.0F);
   }
 
-  // The sealed region: everyone can see it and count down to it, which is what makes it a race
-  // rather than a reward (one-pager, "Pacing devices").
-  if (m_state.region.anchor != EventRefs::NONE)
+  // Lanes lie on the plane, under everything that stands on it.
+  for (const Lane& lane : m_state.graph.lanes)
   {
-    const SystemNode& anchor = graph.systems[static_cast<std::size_t>(m_state.region.anchor)];
-    const MapProjection::Point center = groundOf(m_state.region.anchor);
-    const float scale = MapProjection::ScaleAt(anchor.positionY);
-    const float radiusX = projection.ToScreen(REGION_RADIUS * scale);
-    const float radiusY = radiusX * REGION_FLATTEN;
-
-    _shapes.FillEllipse(center.x, center.y, radiusX, radiusY, WithAlpha(PURPLE, 20));
-    _shapes.DashedEllipse(center.x, center.y, radiusX, radiusY, PURPLE, 1.0F, 5.0F, 5.0F);
-    // A second ellipse lifted by its own height, so the region reads as a volume rather than a
-    // puddle.
-    _shapes.DashedEllipse(center.x, center.y - radiusY, radiusX, radiusY, WithAlpha(PURPLE, 89), 1.0F, 5.0F, 5.0F);
-
-    for (const auto& [offsetX, offsetY] : m_state.region.siteOffsets)
-    {
-      const float siteX = center.x + projection.ToScreen(offsetX * scale);
-      const float siteY = center.y + projection.ToScreen(offsetY * scale);
-      const float lift = projection.ToScreen(FLEET_HOVER * scale);
-      _shapes.Line(siteX, siteY, siteX, siteY - lift, WithAlpha(PURPLE, 153));
-      _shapes.FillEllipse(siteX, siteY - lift, 2.5F, 2.5F, PURPLE);
-    }
-
-    DrawCentered(_text, center.x, static_cast<std::int32_t>(std::lround(center.y + radiusY + 8.0F)),
-                 std::format("SEALED - OPENS T{}", m_state.region.opensAt), PURPLE);
-  }
-
-  // Systems stand on the plane: a shadow where they touch it, a stem, then the node.
-  for (std::size_t index = 0; index < graph.systems.size(); ++index)
-  {
-    const SystemNode& node = graph.systems[index];
-    if (HasFlag(node.flags, SystemFlags::RegionAnchor))
+    const Neuron::OrbitCamera::ScreenPoint a = groundOf(lane.a);
+    const Neuron::OrbitCamera::ScreenPoint b = groundOf(lane.b);
+    if (!a.visible || !b.visible)
     {
       continue;
     }
 
-    const MapProjection::Point ground = groundOf(static_cast<std::int32_t>(index));
-    const float scale = MapProjection::ScaleAt(node.positionY);
-    const bool capital = HasFlag(node.flags, SystemFlags::Capital);
-    const float radius = projection.ToScreen((capital ? CAPITAL_RADIUS : NODE_RADIUS) * scale);
-    const float stem = projection.ToScreen((capital ? CAPITAL_STEM_HEIGHT : STEM_HEIGHT) * scale);
-    const Color owner = OwnerColor(node.owner);
-    const float topY = ground.y - stem;
-
-    _shapes.FillEllipse(ground.x, ground.y, radius * SHADOW_WIDE, radius * SHADOW_TALL, WithAlpha(owner, 56));
-    _shapes.Line(ground.x, ground.y, ground.x, topY, WithAlpha(owner, 140));
-
-    if (capital)
+    switch (lane.kind)
     {
-      _shapes.FillEllipse(ground.x, topY, radius * HALO_SCALE, radius * HALO_SCALE, WithAlpha(owner, 46));
-    }
-    if (HasFlag(node.flags, SystemFlags::Contested))
-    {
-      _shapes.StrokeEllipse(ground.x, topY, radius * RING_SCALE, radius * RING_SCALE, owner);
-    }
-    if (node.custodianSince != 0)
-    {
-      _shapes.DashedEllipse(ground.x, topY, radius * 2.0F, radius * 2.0F, owner, 1.0F, 2.0F, 3.0F);
-    }
-    if (static_cast<std::int32_t>(index) == m_focusedSystem)
-    {
-      _shapes.StrokeEllipse(ground.x, topY, radius * 3.0F, radius * 3.0F, TEXT_PRIMARY);
+    case LaneKind::Trade:
+      // A trade lane is public and meant to be read at a glance: it is the one consensual
+      // mechanic in the game, and cancelling one is a tell (one-pager, decision 3).
+      _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, BLUE, 2.5F);
+      break;
+    case LaneKind::Proposed:
+      _shapes.DashedLine(a.xPixels, a.yPixels, b.xPixels, b.yPixels, BLUE, 2.0F, 4.0F, 5.0F);
+      break;
+    case LaneKind::None:
+    default:
+      _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, LANE_PLAIN, 1.2F);
+      break;
     }
 
-    _shapes.FillEllipse(ground.x, topY, radius, radius, owner);
-
-    // Labels are 8px wherever they are on the plane. The reference draws every one of them at one
-    // size too; only the geometry takes the depth scale (ADR-014).
-    //
-    // A capital is uppercased rather than given a weight, because the font has one weight and
-    // emphasis on this screen is colour and case (README "Frame"). It is also the one piece of
-    // hierarchy the map needs: a capital is what a war is ultimately about.
-    std::string label = node.name;
-    if (capital)
-    {
-      std::transform(label.begin(), label.end(), label.begin(), [](unsigned char _c) { return static_cast<char>(std::toupper(_c)); });
-    }
-    DrawCentered(_text, ground.x, static_cast<std::int32_t>(std::lround(topY - radius - 13.0F)), label, TEXT_PRIMARY);
-
-    if (node.custodianSince != 0)
-    {
-      DrawCentered(_text, ground.x, static_cast<std::int32_t>(std::lround(ground.y + 8.0F)),
-                   std::format("CUSTODIAN T{}", node.custodianSince), TEXT_MUTED);
-    }
-    if (node.capturedAt != 0)
-    {
-      DrawCentered(_text, ground.x, static_cast<std::int32_t>(std::lround(ground.y + 8.0F)), std::format("CAPTURED T{}", node.capturedAt),
-                   RED);
-    }
-
-    AddHit(ground.x - radius * 3.0F, topY - radius * 3.0F, radius * 6.0F, stem + radius * 6.0F, Action::OpenSystem,
-           static_cast<std::int32_t>(index));
+    DrawCentered(_text, (a.xPixels + b.xPixels) * 0.5F, static_cast<std::int32_t>(std::lround((a.yPixels + b.yPixels) * 0.5F)) - 4,
+                 std::to_string(lane.cost), TEXT_DETAIL);
   }
 
-  // Fleets hover above their lane at the progress fraction, with the tick they arrive. Once a
-  // fleet has departed it is public, so a rival's is drawn exactly like yours in their colour.
+  // The sealed region: everyone can see it and count down to it, which is what makes it a race
+  // rather than a reward (one-pager, "Pacing devices").
+  //
+  // It is a CIRCLE on the ground, emitted as a projected polygon rather than as a screen-space
+  // ellipse. An ellipse was right when the viewing angle could not change; now the shape a ground
+  // circle makes depends on where the camera is, and projecting it is how it comes out right at
+  // every angle for free.
+  if (m_state.region.anchor != EventRefs::NONE)
+  {
+    const SystemNode& anchor = m_state.graph.systems[static_cast<std::size_t>(m_state.region.anchor)];
+    DrawGroundCircle(_shapes, anchor.positionX, anchor.positionY, REGION_RADIUS, WithAlpha(PURPLE, 20), PURPLE, true);
+    // A second ring, lifted. The reference drew one to suggest a volume rather than a puddle, and
+    // with a real camera it does the job properly: it is a circle at altitude, so the gap between
+    // the two rings opens and closes as the camera tilts.
+    DrawGroundCircle(_shapes, anchor.positionX, anchor.positionY, REGION_RADIUS, {0, 0, 0, 0}, WithAlpha(PURPLE, 89), true,
+                     REGION_VOLUME_HEIGHT);
+
+    for (const auto& [offsetX, offsetY] : m_state.region.siteOffsets)
+    {
+      const Neuron::OrbitCamera::ScreenPoint foot = project(MapView::Ground(anchor.positionX + offsetX, anchor.positionY + offsetY));
+      const Neuron::OrbitCamera::ScreenPoint head =
+        project(MapView::Above(anchor.positionX + offsetX, anchor.positionY + offsetY, SITE_PIN_HEIGHT));
+      segment(foot, head, WithAlpha(PURPLE, 153), 1.0F);
+      if (head.visible)
+      {
+        _shapes.FillEllipse(head.xPixels, head.yPixels, 2.5F, 2.5F, PURPLE);
+      }
+    }
+
+    // Below the nearest point of the rim, not beside the centre: at a low camera angle the two
+    // are almost the same place and the label lands inside the region.
+    const Neuron::OrbitCamera::ScreenPoint label = project(MapView::Ground(anchor.positionX, anchor.positionY + REGION_RADIUS));
+    if (label.visible)
+    {
+      DrawCentered(_text, label.xPixels, static_cast<std::int32_t>(std::lround(label.yPixels)) + 14,
+                   std::format("SEALED - OPENS T{}", m_state.region.opensAt), PURPLE);
+    }
+  }
+
+  // ---- SYSTEMS AND FLEETS, BACK TO FRONT ------------------------------------------------------
+  //
+  // THE SORT IS THE CAMERA'S DOING. With a fixed viewpoint the authored order was correct for
+  // every frame and nothing had to decide it. An orbiting camera changes what is in front of what
+  // as it moves, so the order has to be computed -- far first, because this renderer has no depth
+  // buffer for interface geometry and painter's order is the whole of its occlusion model
+  // (ADR-014, ADR-017).
+  struct Drawable
+  {
+    float depth;
+    std::int32_t index;
+    bool isFleet;
+  };
+
+  std::vector<Drawable> drawables;
+  drawables.reserve(m_state.graph.systems.size() + m_state.fleets.size());
+
+  for (std::size_t index = 0; index < m_state.graph.systems.size(); ++index)
+  {
+    const SystemNode& node = m_state.graph.systems[index];
+    if (HasFlag(node.flags, SystemFlags::RegionAnchor))
+    {
+      continue;
+    }
+    const Neuron::OrbitCamera::ScreenPoint ground = groundOf(static_cast<std::int32_t>(index));
+    if (ground.visible)
+    {
+      drawables.push_back(Drawable{ground.depth, static_cast<std::int32_t>(index), false});
+    }
+  }
+
   for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
   {
     const Fleet& fleet = m_state.fleets[index];
@@ -690,55 +765,28 @@ void MainPage::DrawMap(ShapeRenderer& _shapes, FontRenderer& _text)
     {
       continue;
     }
-
-    const MapProjection::Point from = groundOf(fleet.from);
-    const MapProjection::Point to = groundOf(fleet.to);
-    const float x = from.x + (to.x - from.x) * fleet.progress;
-    const float y = from.y + (to.y - from.y) * fleet.progress;
-
-    const float scale = projection.ToScreen(FLEET_HOVER);
-    const float tipY = y - scale;
-    const Color owner = OwnerColor(fleet.owner);
-
-    _shapes.Line(x, y, x, tipY, WithAlpha(owner, 153));
-
-    // The arrowhead points along the lane, so which way a fleet is going is readable without the
-    // label -- which matters because the label is the first thing that collides when two fleets
-    // converge on one system, exactly as they are doing here.
-    const float runX = to.x - from.x;
-    const float runY = to.y - from.y;
-    const float run = std::sqrt(runX * runX + runY * runY);
-    const float dirX = run > 0.0F ? runX / run : 1.0F;
-    const float dirY = run > 0.0F ? runY / run : 0.0F;
-    constexpr float ARROW = 6.0F;
-    _shapes.FillTriangle(x + dirX * ARROW, tipY + dirY * ARROW, x - dirX * ARROW - dirY * ARROW * 0.8F,
-                         tipY - dirY * ARROW + dirX * ARROW * 0.8F, x - dirX * ARROW + dirY * ARROW * 0.8F,
-                         tipY - dirY * ARROW - dirX * ARROW * 0.8F, owner);
-
-    // Two fleets converging on one system put their labels in the same place -- which is exactly
-    // what is happening at Kepler-Reach in the reference, and is the normal case rather than an
-    // edge one, because converging is what fleets do. YOURS goes above the arrowhead, where you
-    // are already looking; a rival's goes beside it. The two can then never overlap, and which
-    // one is yours is readable before you have read either.
-    const std::string label = std::format("{} - ETA T{}", fleet.name, fleet.eta);
-    const auto labelWidth = static_cast<float>(FontRenderer::MeasurePixels(label));
-    const auto labelY = static_cast<std::int32_t>(std::lround(tipY - 18.0F));
-    if (fleet.owner == Owner::You)
+    const SystemNode& from = m_state.graph.systems[static_cast<std::size_t>(fleet.from)];
+    const SystemNode& to = m_state.graph.systems[static_cast<std::size_t>(fleet.to)];
+    const float designX = from.positionX + (to.positionX - from.positionX) * fleet.progress;
+    const float designY = from.positionY + (to.positionY - from.positionY) * fleet.progress;
+    const Neuron::OrbitCamera::ScreenPoint at = project(MapView::Ground(designX, designY));
+    if (at.visible)
     {
-      const float clamped = std::clamp(x, paneX + labelWidth * 0.5F + 4.0F, paneX + paneWidth - labelWidth * 0.5F - 4.0F);
-      DrawCentered(_text, clamped, labelY, label, owner);
+      drawables.push_back(Drawable{at.depth, static_cast<std::int32_t>(index), true});
+    }
+  }
+
+  std::sort(drawables.begin(), drawables.end(), [](const Drawable& _a, const Drawable& _b) { return _a.depth > _b.depth; });
+
+  for (const Drawable& drawable : drawables)
+  {
+    if (drawable.isFleet)
+    {
+      DrawFleet(_shapes, _text, drawable.index);
     }
     else
     {
-      // Beside AND one line below. Sideways alone is not enough when the two arrowheads are a
-      // dozen pixels apart, which is what "one tick out from yours" looks like on the map.
-      const float placed = std::min(x + 10.0F, paneX + paneWidth - labelWidth - 4.0F);
-      _text.DrawText(static_cast<std::int32_t>(std::lround(placed)), labelY + LINE_HEIGHT, label, owner);
-    }
-
-    if (fleet.owner == Owner::You)
-    {
-      AddHit(x - 14.0F, tipY - 22.0F, 28.0F, 36.0F, Action::OpenFleet, static_cast<std::int32_t>(index));
+      DrawSystem(_shapes, _text, drawable.index);
     }
   }
 
@@ -789,6 +837,196 @@ void MainPage::DrawMap(ShapeRenderer& _shapes, FontRenderer& _text)
     _text.DrawText(static_cast<std::int32_t>(legendX), static_cast<std::int32_t>(legendY), entry.label, TEXT_DETAIL);
     legendX += static_cast<float>(FontRenderer::MeasurePixels(entry.label)) + 14.0F;
   }
+
+  _text.ClearClipRect();
+}
+
+void MainPage::DrawGroundCircle(ShapeRenderer& _shapes, float _designX, float _designY, float _radius, const Color& _fill,
+                                const Color& _outline, bool _dashed, float _height)
+{
+  // A circle drawn ON the plane and projected, so the camera decides what shape it makes: a thin
+  // sliver from a low angle, round from overhead, and nothing here has to know which.
+  constexpr std::uint32_t SEGMENTS = 40;
+  std::array<Neuron::OrbitCamera::ScreenPoint, SEGMENTS> rim = {};
+
+  for (std::uint32_t segment = 0; segment < SEGMENTS; ++segment)
+  {
+    const float angle = TWO_PI * static_cast<float>(segment) / static_cast<float>(SEGMENTS);
+    rim[segment] =
+      m_mapView.Camera().Project(MapView::Above(_designX + _radius * std::cos(angle), _designY + _radius * std::sin(angle), _height));
+    if (!rim[segment].visible)
+    {
+      return;
+    }
+  }
+
+  if (_fill.alpha > 0)
+  {
+    // A fan from the centre. A circle projected from outside its own plane stays convex, so a fan
+    // is enough and there is nothing to triangulate.
+    const Neuron::OrbitCamera::ScreenPoint center = m_mapView.Camera().Project(MapView::Above(_designX, _designY, _height));
+    if (center.visible)
+    {
+      for (std::uint32_t segment = 0; segment < SEGMENTS; ++segment)
+      {
+        const Neuron::OrbitCamera::ScreenPoint& a = rim[segment];
+        const Neuron::OrbitCamera::ScreenPoint& b = rim[(segment + 1) % SEGMENTS];
+        _shapes.FillTriangle(center.xPixels, center.yPixels, a.xPixels, a.yPixels, b.xPixels, b.yPixels, _fill);
+      }
+    }
+  }
+
+  if (_outline.alpha > 0)
+  {
+    for (std::uint32_t segment = 0; segment < SEGMENTS; ++segment)
+    {
+      if (_dashed && (segment % 2) == 1)
+      {
+        continue;
+      }
+      const Neuron::OrbitCamera::ScreenPoint& a = rim[segment];
+      const Neuron::OrbitCamera::ScreenPoint& b = rim[(segment + 1) % SEGMENTS];
+      _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, _outline, 1.0F);
+    }
+  }
+}
+
+void MainPage::DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, std::int32_t _index)
+{
+  const Neuron::OrbitCamera& camera = m_mapView.Camera();
+  const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(_index)];
+
+  const bool capital = HasFlag(node.flags, SystemFlags::Capital);
+  const float worldRadius = capital ? CAPITAL_RADIUS : NODE_RADIUS;
+  const float stemHeight = capital ? CAPITAL_STEM_HEIGHT : STEM_HEIGHT;
+
+  const Neuron::OrbitCamera::ScreenPoint ground = camera.Project(MapView::Ground(node.positionX, node.positionY));
+  const Neuron::OrbitCamera::ScreenPoint top = camera.Project(MapView::Above(node.positionX, node.positionY, stemHeight));
+  if (!ground.visible || !top.visible)
+  {
+    return;
+  }
+
+  const Color owner = OwnerColor(node.owner);
+  // Sized at the depth the NODE is at, not the ground point below it: a stem leans away from the
+  // camera, so the two stop being the same distance once the view is steep.
+  const float radius = worldRadius * camera.PixelsPerWorldUnitAt(top.depth);
+
+  // The shadow is a ground circle, so it deforms with the camera like everything else on the
+  // plane -- round from overhead, a sliver from low down.
+  DrawGroundCircle(_shapes, node.positionX, node.positionY, worldRadius * SHADOW_WIDE, WithAlpha(owner, 56), {0, 0, 0, 0}, false);
+
+  _shapes.Line(ground.xPixels, ground.yPixels, top.xPixels, top.yPixels, WithAlpha(owner, 140));
+
+  if (capital)
+  {
+    _shapes.FillEllipse(top.xPixels, top.yPixels, radius * HALO_SCALE, radius * HALO_SCALE, WithAlpha(owner, 46));
+  }
+  if (HasFlag(node.flags, SystemFlags::Contested))
+  {
+    _shapes.StrokeEllipse(top.xPixels, top.yPixels, radius * RING_SCALE, radius * RING_SCALE, owner);
+  }
+  if (node.custodianSince != 0)
+  {
+    _shapes.DashedEllipse(top.xPixels, top.yPixels, radius * 2.0F, radius * 2.0F, owner, 1.0F, 2.0F, 3.0F);
+  }
+  if (_index == m_focusedSystem)
+  {
+    _shapes.StrokeEllipse(top.xPixels, top.yPixels, radius * 3.0F, radius * 3.0F, TEXT_PRIMARY);
+  }
+
+  _shapes.FillEllipse(top.xPixels, top.yPixels, radius, radius, owner);
+
+  // Labels are 8px at every distance. The reference draws every map label at one size and the
+  // game has one font at one size (ADR-014), so a far system's name is exactly as legible as a
+  // near one's -- which on a map you read rather than admire is the right trade.
+  std::string label = node.name;
+  if (capital)
+  {
+    std::transform(label.begin(), label.end(), label.begin(), [](unsigned char _c) { return static_cast<char>(std::toupper(_c)); });
+  }
+  DrawCentered(_text, top.xPixels, static_cast<std::int32_t>(std::lround(top.yPixels - radius)) - 13, label, TEXT_PRIMARY);
+
+  if (node.custodianSince != 0)
+  {
+    DrawCentered(_text, ground.xPixels, static_cast<std::int32_t>(std::lround(ground.yPixels)) + 8,
+                 std::format("CUSTODIAN T{}", node.custodianSince), TEXT_MUTED);
+  }
+  if (node.capturedAt != 0)
+  {
+    DrawCentered(_text, ground.xPixels, static_cast<std::int32_t>(std::lround(ground.yPixels)) + 8,
+                 std::format("CAPTURED T{}", node.capturedAt), RED);
+  }
+
+  AddHit(top.xPixels - radius * 3.0F, top.yPixels - radius * 3.0F, radius * 6.0F, (ground.yPixels - top.yPixels) + radius * 6.0F,
+         Action::OpenSystem, _index);
+}
+
+void MainPage::DrawFleet(ShapeRenderer& _shapes, FontRenderer& _text, std::int32_t _index)
+{
+  const Neuron::OrbitCamera& camera = m_mapView.Camera();
+  const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(_index)];
+
+  const SystemNode& from = m_state.graph.systems[static_cast<std::size_t>(fleet.from)];
+  const SystemNode& to = m_state.graph.systems[static_cast<std::size_t>(fleet.to)];
+  const float designX = from.positionX + (to.positionX - from.positionX) * fleet.progress;
+  const float designY = from.positionY + (to.positionY - from.positionY) * fleet.progress;
+
+  const Neuron::OrbitCamera::ScreenPoint foot = camera.Project(MapView::Ground(designX, designY));
+  const Neuron::OrbitCamera::ScreenPoint head = camera.Project(MapView::Above(designX, designY, FLEET_HOVER));
+  if (!foot.visible || !head.visible)
+  {
+    return;
+  }
+
+  const Color owner = OwnerColor(fleet.owner);
+  _shapes.Line(foot.xPixels, foot.yPixels, head.xPixels, head.yPixels, WithAlpha(owner, 153));
+
+  // The arrowhead points along the lane IN WORLD SPACE and is then projected, so it turns with the
+  // camera and keeps meaning "that way" rather than "that way on the screen when the map happened
+  // to be seen from the front".
+  const Neuron::OrbitCamera::ScreenPoint ahead = camera.Project(
+    MapView::Above(designX + (to.positionX - from.positionX) * 0.02F, designY + (to.positionY - from.positionY) * 0.02F, FLEET_HOVER));
+  float dirX = 1.0F;
+  float dirY = 0.0F;
+  if (ahead.visible)
+  {
+    const float runX = ahead.xPixels - head.xPixels;
+    const float runY = ahead.yPixels - head.yPixels;
+    const float run = std::sqrt(runX * runX + runY * runY);
+    if (run > 0.001F)
+    {
+      dirX = runX / run;
+      dirY = runY / run;
+    }
+  }
+
+  constexpr float ARROW = 6.0F;
+  _shapes.FillTriangle(head.xPixels + dirX * ARROW, head.yPixels + dirY * ARROW, head.xPixels - dirX * ARROW - dirY * ARROW * 0.8F,
+                       head.yPixels - dirY * ARROW + dirX * ARROW * 0.8F, head.xPixels - dirX * ARROW + dirY * ARROW * 0.8F,
+                       head.yPixels - dirY * ARROW - dirX * ARROW * 0.8F, owner);
+
+  // Two fleets converging on one system put their labels in the same place -- which is what is
+  // happening at Kepler-Reach in the reference, and is the normal case rather than an edge one.
+  // Yours goes above the arrowhead, where you are already looking; a rival's goes beside and below
+  // it, so the two can never overlap.
+  const std::string label = std::format("{} - ETA T{}", fleet.name, fleet.eta);
+  const auto labelWidth = static_cast<float>(FontRenderer::MeasurePixels(label));
+  const auto labelY = static_cast<std::int32_t>(std::lround(head.yPixels - 18.0F));
+  const float paneX = DIGEST_WIDTH;
+  const float paneWidth = SCREEN_WIDTH - DIGEST_WIDTH - ORDERS_WIDTH;
+
+  if (fleet.owner == Owner::You)
+  {
+    const float clamped = std::clamp(head.xPixels, paneX + labelWidth * 0.5F + 4.0F, paneX + paneWidth - labelWidth * 0.5F - 4.0F);
+    DrawCentered(_text, clamped, labelY, label, owner);
+    AddHit(head.xPixels - 14.0F, head.yPixels - 22.0F, 28.0F, 36.0F, Action::OpenFleet, _index);
+  }
+  else
+  {
+    const float placed = std::min(head.xPixels + 10.0F, paneX + paneWidth - labelWidth - 4.0F);
+    _text.DrawText(static_cast<std::int32_t>(std::lround(placed)), labelY + LINE_HEIGHT, label, owner);
+  }
 }
 
 void MainPage::DrawOrdersRail(ShapeRenderer& _shapes, FontRenderer& _text)
@@ -799,6 +1037,7 @@ void MainPage::DrawOrdersRail(ShapeRenderer& _shapes, FontRenderer& _text)
   const float cardWidth = contentRight - contentX;
   const std::size_t columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(cardWidth - 2.0F * CARD_PADDING));
 
+  _shapes.FillRect(railX, TOP_BAR_HEIGHT, ORDERS_WIDTH, SCREEN_HEIGHT - TOP_BAR_HEIGHT, APP_BACKGROUND);
   _shapes.FillRect(railX, TOP_BAR_HEIGHT, 1.0F, SCREEN_HEIGHT - TOP_BAR_HEIGHT, CARD_BORDER);
 
   const std::int32_t headerY = static_cast<std::int32_t>(TOP_BAR_HEIGHT) + 12;

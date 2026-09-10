@@ -285,6 +285,21 @@ void FontRenderer::BeginFrame(std::uint32_t _frameIndex) noexcept
 {
   m_frameIndex = _frameIndex;
   m_usedThisFrame = 0;
+  ClearClipRect();
+}
+
+void FontRenderer::SetClipRect(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels) noexcept
+{
+  m_clipLeftPixels = _xPixels;
+  m_clipTopPixels = _yPixels;
+  m_clipRightPixels = _xPixels + _widthPixels;
+  m_clipBottomPixels = _yPixels + _heightPixels;
+  m_clipping = true;
+}
+
+void FontRenderer::ClearClipRect() noexcept
+{
+  m_clipping = false;
 }
 
 void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color, std::uint32_t _scale)
@@ -316,6 +331,13 @@ void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::s
     const float atlasRight = atlasLeft + static_cast<float>(GLYPH_WIDTH_TEXELS);
     constexpr float ATLAS_TOP = 0.0F;
     constexpr float ATLAS_BOTTOM = static_cast<float>(GLYPH_HEIGHT_TEXELS);
+
+    if (m_clipping && (left < m_clipLeftPixels || right > m_clipRightPixels || top < m_clipTopPixels || bottom > m_clipBottomPixels))
+    {
+      // Outside, or straddling the edge. The cursor still advances, so the rest of the string
+      // stays where it would have been -- a clipped label loses letters, it does not shuffle up.
+      continue;
+    }
 
     const std::uint32_t color = Pack(_color);
     TextVertex* quad = slice + m_usedThisFrame;

@@ -172,6 +172,7 @@
     <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="Device.cpp" />
     <ClCompile Include="FontRenderer.cpp" />
+    <ClCompile Include="OrbitCamera.cpp" />
     <ClCompile Include="PointerInput.cpp" />
     <ClCompile Include="SceneTarget.cpp" />
     <ClCompile Include="ShapeRenderer.cpp" />
@@ -184,6 +185,7 @@
     <ClInclude Include="Font.h" />
     <ClInclude Include="FontRenderer.h" />
     <ClInclude Include="NeuronClient.h" />
+    <ClInclude Include="OrbitCamera.h" />
     <ClInclude Include="PointerInput.h" />
     <ClInclude Include="SceneTarget.h" />
     <ClInclude Include="ShapeRenderer.h" />

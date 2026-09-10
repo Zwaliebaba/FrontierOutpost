@@ -192,6 +192,15 @@ int RunGame(HWND _window)
     // changes because the player did something or because a tick resolved.
     page.Update(elapsedSeconds);
 
+    // Drag before tap. They are mutually exclusive by construction -- PointerInput decides which
+    // a press was, and reports only that one -- so the order is about reading rather than about
+    // correctness: the rotation is applied before the frame that a tap would be tested against.
+    Neuron::PointerInput::Drag drag = {};
+    if (pointer.TakeDrag(drag))
+    {
+      page.HandleDrag(drag);
+    }
+
     float tapXPixels = 0.0F;
     float tapYPixels = 0.0F;
     if (pointer.TakeClick(tapXPixels, tapYPixels))

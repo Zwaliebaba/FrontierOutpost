@@ -8,6 +8,7 @@
 
 #include "Color.h"
 #include "FontRenderer.h"
+#include "OrbitCamera.h"
 #include "PointerInput.h"
 #include "SceneTarget.h"
 #include "ShapeRenderer.h"
@@ -368,6 +369,7 @@ public:
     // (400, 300) -- and, with the client area now exactly the framebuffer, screen pixel (400, 300)
     // too. Before ADR-011 this arrived as virtual texel (200, 150).
     Assert::IsTrue(input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 400, WINDOW_TOP + 300)));
+    Assert::IsTrue(input.HandleMessage(WM_POINTERUP, 0, PackScreenPoint(WINDOW_LEFT + 400, WINDOW_TOP + 300)));
 
     float x = 0.0F;
     float y = 0.0F;
@@ -381,6 +383,7 @@ public:
     Neuron::PointerInput input;
     input.Create(m_window);
     Assert::IsTrue(input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT, WINDOW_TOP)));
+    Assert::IsTrue(input.HandleMessage(WM_POINTERUP, 0, PackScreenPoint(WINDOW_LEFT, WINDOW_TOP)));
 
     float x = 0.0F;
     float y = 0.0F;
@@ -394,6 +397,7 @@ public:
     Neuron::PointerInput input;
     input.Create(m_window);
     input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100));
+    input.HandleMessage(WM_POINTERUP, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100));
 
     float x = 0.0F;
     float y = 0.0F;
@@ -407,7 +411,9 @@ public:
     Neuron::PointerInput input;
     input.Create(m_window);
     input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100));
+    input.HandleMessage(WM_POINTERUP, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100));
     input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 900, WINDOW_TOP + 500));
+    input.HandleMessage(WM_POINTERUP, 0, PackScreenPoint(WINDOW_LEFT + 900, WINDOW_TOP + 500));
 
     float x = 0.0F;
     float y = 0.0F;
@@ -433,6 +439,313 @@ public:
     float y = 0.0F;
     Assert::IsFalse(input.TakeClick(x, y));
     Assert::AreEqual(0, input.TakeZoomSteps());
+  }
+
+private:
+  HWND m_window = nullptr;
+};
+
+// The camera the map is seen through (ADR-017). It is the piece of this screen whose bugs are
+// hardest to see and easiest to talk yourself out of -- a mirrored axis or an inverted pitch
+// still draws a plausible picture -- so the properties below are asserted rather than eyeballed.
+TEST_CLASS(OrbitCameraTests)
+{
+public:
+  static constexpr float PANE_X = 300.0F;
+  static constexpr float PANE_Y = 48.0F;
+  static constexpr float PANE_WIDTH = 650.0F;
+  static constexpr float PANE_HEIGHT = 672.0F;
+
+  static Neuron::OrbitCamera MakeCamera(float _yaw = 0.0F, float _pitch = 0.6F, float _distance = 1000.0F)
+  {
+    Neuron::OrbitCamera camera;
+    camera.SetViewport(PANE_X, PANE_Y, PANE_WIDTH, PANE_HEIGHT);
+    camera.SetTarget({0.0F, 0.0F, 0.0F});
+    camera.SetDistance(_distance);
+    camera.SetOrientation(_yaw, _pitch);
+    return camera;
+  }
+
+  TEST_METHOD(TheTargetProjectsToTheCenterOfThePane)
+  {
+    for (const float yaw : {0.0F, 1.0F, -2.5F, 4.0F})
+    {
+      const Neuron::OrbitCamera camera = MakeCamera(yaw);
+      const Neuron::OrbitCamera::ScreenPoint center = camera.Project({0.0F, 0.0F, 0.0F});
+
+      Assert::IsTrue(center.visible);
+      Assert::AreEqual(PANE_X + PANE_WIDTH * 0.5F, center.xPixels, 0.01F);
+      Assert::AreEqual(PANE_Y + PANE_HEIGHT * 0.5F, center.yPixels, 0.01F);
+    }
+  }
+
+  TEST_METHOD(TheEyeIsAtTheRequestedDistanceAndHeight)
+  {
+    const Neuron::OrbitCamera camera = MakeCamera(0.0F, 0.6F, 1000.0F);
+    const Neuron::OrbitCamera::WorldPoint eye = camera.Position();
+
+    Assert::AreEqual(1000.0F, std::sqrt(eye.x * eye.x + eye.y * eye.y + eye.z * eye.z), 0.01F);
+    Assert::IsTrue(eye.y > 0.0F, L"the camera is above the plane it is looking at");
+    // Yaw zero looks along -z, so the eye sits on +z.
+    Assert::IsTrue(eye.z > 0.0F);
+    Assert::AreEqual(0.0F, eye.x, 0.01F);
+  }
+
+  // The axis check that a wrong cross product would fail while still drawing a plausible map: at
+  // yaw zero, world +x has to be screen RIGHT and world -z has to be further away.
+  TEST_METHOD(AtYawZeroTheAxesAreNotMirrored)
+  {
+    const Neuron::OrbitCamera camera = MakeCamera();
+    const Neuron::OrbitCamera::ScreenPoint center = camera.Project({0.0F, 0.0F, 0.0F});
+    const Neuron::OrbitCamera::ScreenPoint right = camera.Project({100.0F, 0.0F, 0.0F});
+    const Neuron::OrbitCamera::ScreenPoint away = camera.Project({0.0F, 0.0F, -100.0F});
+    const Neuron::OrbitCamera::ScreenPoint up = camera.Project({0.0F, 100.0F, 0.0F});
+
+    Assert::IsTrue(right.xPixels > center.xPixels, L"world +x is screen right");
+    Assert::IsTrue(away.depth > center.depth, L"world -z is further from the eye");
+    Assert::IsTrue(away.yPixels < center.yPixels, L"and further away is higher up the screen");
+    Assert::IsTrue(up.yPixels < center.yPixels, L"world +y is screen up");
+  }
+
+  // Perspective, not orthographic: the same object is bigger when it is nearer. This is the whole
+  // reason the projection was replaced.
+  TEST_METHOD(NearerIsLarger)
+  {
+    const Neuron::OrbitCamera camera = MakeCamera();
+    // `close`/`distant`, not `near`/`far`: <windows.h> still defines both of those to nothing.
+    const float close = camera.PixelsPerWorldUnitAt(500.0F);
+    const float distant = camera.PixelsPerWorldUnitAt(1500.0F);
+
+    Assert::IsTrue(close > distant);
+    Assert::AreEqual(3.0F, close / distant, 0.001F, L"three times nearer is three times bigger");
+  }
+
+  TEST_METHOD(PitchIsClampedAndYawIsNot)
+  {
+    Neuron::OrbitCamera camera = MakeCamera();
+
+    camera.SetOrientation(0.0F, 100.0F);
+    Assert::AreEqual(Neuron::OrbitCamera::MAX_PITCH_RADIANS, camera.PitchRadians(), 0.0001F);
+    camera.SetOrientation(0.0F, -100.0F);
+    Assert::AreEqual(Neuron::OrbitCamera::MIN_PITCH_RADIANS, camera.PitchRadians(), 0.0001F);
+
+    camera.SetOrientation(50.0F, 0.6F);
+    Assert::AreEqual(50.0F, camera.YawRadians(), 0.0001F, L"yaw runs as far as the player drags");
+  }
+
+  // Orbiting must not move the thing being looked at, at any angle. If it does, the map drifts
+  // under the player as they turn it.
+  TEST_METHOD(OrbitingKeepsTheTargetPutAndTheDistanceFixed)
+  {
+    Neuron::OrbitCamera camera = MakeCamera();
+
+    for (std::int32_t step = 0; step < 24; ++step)
+    {
+      camera.Orbit(0.31F, 0.07F);
+
+      const Neuron::OrbitCamera::WorldPoint eye = camera.Position();
+      Assert::AreEqual(1000.0F, std::sqrt(eye.x * eye.x + eye.y * eye.y + eye.z * eye.z), 0.05F);
+
+      const Neuron::OrbitCamera::ScreenPoint center = camera.Project({0.0F, 0.0F, 0.0F});
+      Assert::AreEqual(PANE_X + PANE_WIDTH * 0.5F, center.xPixels, 0.05F);
+      Assert::AreEqual(PANE_Y + PANE_HEIGHT * 0.5F, center.yPixels, 0.05F);
+    }
+  }
+
+  // A point level with or behind the eye has no projection. Drawing one anyway mirrors it through
+  // the camera, which puts a lane straight across the pane.
+  TEST_METHOD(PointsBehindTheEyeAreNotVisible)
+  {
+    const Neuron::OrbitCamera camera = MakeCamera(0.0F, 0.6F, 1000.0F);
+    const Neuron::OrbitCamera::WorldPoint eye = camera.Position();
+
+    const Neuron::OrbitCamera::ScreenPoint behind = camera.Project({eye.x, eye.y + 10.0F, eye.z + 500.0F});
+    Assert::IsFalse(behind.visible);
+
+    const Neuron::OrbitCamera::ScreenPoint front = camera.Project({0.0F, 0.0F, 0.0F});
+    Assert::IsTrue(front.visible);
+  }
+
+  // Yawing by a full turn is the same camera. Worth pinning because the yaw is deliberately left
+  // unwrapped, and an implementation that accumulated error would drift over a long session.
+  TEST_METHOD(AFullTurnComesBackToWhereItStarted)
+  {
+    const Neuron::OrbitCamera before = MakeCamera(0.4F);
+    const Neuron::OrbitCamera after = MakeCamera(0.4F + 2.0F * 3.14159265358979323846F);
+
+    const Neuron::OrbitCamera::ScreenPoint a = before.Project({120.0F, 30.0F, -80.0F});
+    const Neuron::OrbitCamera::ScreenPoint b = after.Project({120.0F, 30.0F, -80.0F});
+
+    Assert::AreEqual(a.xPixels, b.xPixels, 0.05F);
+    Assert::AreEqual(a.yPixels, b.yPixels, 0.05F);
+  }
+};
+
+// Tap and drag are the same gesture until they are not, and telling them apart is the whole of
+// what this suite is about. Getting it wrong is not subtle: a tap that fires on press opens a
+// panel every time the player tries to rotate the map, and a drag that swallows short movements
+// makes the screen feel stuck (ADR-016).
+TEST_CLASS(DragInputTests)
+{
+public:
+  static constexpr int WINDOW_LEFT = 300;
+  static constexpr int WINDOW_TOP = 200;
+
+  TEST_METHOD_INITIALIZE(CreateHostWindow)
+  {
+    WNDCLASSEXW windowClass = {};
+    windowClass.cbSize = sizeof(WNDCLASSEXW);
+    windowClass.lpfnWndProc = DefWindowProcW;
+    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.lpszClassName = L"NeuronClientTestsDragHost";
+    RegisterClassExW(&windowClass);
+
+    m_window = CreateWindowExW(0, L"NeuronClientTestsDragHost", L"", WS_POPUP, WINDOW_LEFT, WINDOW_TOP, 1280, 720, nullptr, nullptr,
+                               GetModuleHandleW(nullptr), nullptr);
+    Assert::IsNotNull(m_window);
+  }
+
+  TEST_METHOD_CLEANUP(DestroyHostWindow)
+  {
+    if (m_window != nullptr)
+    {
+      DestroyWindow(m_window);
+      m_window = nullptr;
+    }
+  }
+
+  [[nodiscard]] static LPARAM PackScreenPoint(int _screenX, int _screenY)
+  {
+    return static_cast<LPARAM>((static_cast<std::uint32_t>(_screenY & 0xFFFF) << 16) | static_cast<std::uint32_t>(_screenX & 0xFFFF));
+  }
+
+  [[nodiscard]] static WPARAM PackPointer(std::uint32_t _pointerId)
+  {
+    return static_cast<WPARAM>(_pointerId);
+  }
+
+  // A press and a lift in the same place is a tap, and it arrives on the LIFT. Before the map
+  // could be rotated this fired on the press; it cannot any more, because at press time there is
+  // no way to know the finger is not about to drag.
+  TEST_METHOD(APressAndLiftIsATapAndArrivesOnTheLift)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window);
+
+    input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsFalse(input.TakeClick(x, y), L"a press alone is not yet a tap");
+
+    input.HandleMessage(WM_POINTERUP, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
+    Assert::IsTrue(input.TakeClick(x, y));
+    Assert::AreEqual(500.0F, x, 0.0F);
+    Assert::AreEqual(300.0F, y, 0.0F);
+  }
+
+  // Movement inside the slop is a finger that did not hold still, not a gesture.
+  TEST_METHOD(AWobbleWithinTheSlopIsStillATap)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window);
+
+    input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
+    input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 502, WINDOW_TOP + 301));
+    input.HandleMessage(WM_POINTERUP, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 502, WINDOW_TOP + 301));
+
+    Neuron::PointerInput::Drag drag = {};
+    Assert::IsFalse(input.TakeDrag(drag), L"a wobble is not a drag");
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsTrue(input.TakeClick(x, y));
+    Assert::AreEqual(500.0F, x, 0.0F, L"and the tap is where the finger went down, not where it wandered to");
+  }
+
+  TEST_METHOD(MovingPastTheSlopIsADragAndCancelsTheTap)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window);
+
+    input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
+    input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 560, WINDOW_TOP + 300));
+    input.HandleMessage(WM_POINTERUP, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 560, WINDOW_TOP + 300));
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsFalse(input.TakeClick(x, y), L"a drag must not also tap whatever it started on");
+  }
+
+  // The movement made BEFORE the slop was crossed counts, or a quick flick loses its first few
+  // pixels and the map lags the finger.
+  TEST_METHOD(ADragReportsEveryPixelIncludingTheSlop)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window);
+
+    input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
+    input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 560, WINDOW_TOP + 320));
+
+    Neuron::PointerInput::Drag drag = {};
+    Assert::IsTrue(input.TakeDrag(drag));
+    Assert::AreEqual(60.0F, drag.deltaXPixels, 0.0F);
+    Assert::AreEqual(20.0F, drag.deltaYPixels, 0.0F);
+    Assert::AreEqual(500.0F, drag.originXPixels, 0.0F, L"the drag belongs to where it began");
+    Assert::AreEqual(300.0F, drag.originYPixels, 0.0F);
+  }
+
+  // Movement accumulates between frames and is consumed once. A frame that took longer than usual
+  // must rotate by everything the finger did during it.
+  TEST_METHOD(MovementAccumulatesAndIsConsumedOnce)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window);
+
+    input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
+    input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 540, WINDOW_TOP + 300));
+    input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 570, WINDOW_TOP + 300));
+    input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 600, WINDOW_TOP + 300));
+
+    Neuron::PointerInput::Drag drag = {};
+    Assert::IsTrue(input.TakeDrag(drag));
+    Assert::AreEqual(100.0F, drag.deltaXPixels, 0.0F, L"40 + 30 + 30");
+
+    Assert::IsFalse(input.TakeDrag(drag), L"and it is gone once taken");
+  }
+
+  // A second finger is a pinch. It must cancel both of the one-finger gestures, or a zoom would
+  // also spin the map and tap whatever the first finger landed on.
+  TEST_METHOD(ASecondContactCancelsTheDragAndTheTap)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window);
+
+    input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
+    input.HandleMessage(WM_POINTERDOWN, PackPointer(2), PackScreenPoint(WINDOW_LEFT + 700, WINDOW_TOP + 300));
+    input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 400, WINDOW_TOP + 300));
+
+    Neuron::PointerInput::Drag drag = {};
+    Assert::IsFalse(input.TakeDrag(drag), L"a pinch is not a drag");
+
+    input.HandleMessage(WM_POINTERUP, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 400, WINDOW_TOP + 300));
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsFalse(input.TakeClick(x, y), L"nor a tap");
+  }
+
+  // Losing capture abandons the gesture. A press the window never saw the end of is not a tap.
+  TEST_METHOD(LosingCaptureAbandonsThePress)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window);
+
+    input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
+    input.HandleMessage(WM_POINTERCAPTURECHANGED, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsFalse(input.TakeClick(x, y));
   }
 
 private:
@@ -629,6 +942,9 @@ public:
 
   // The first finger of a pinch is indistinguishable from a tap until the second lands. Without
   // this, every pinch would also order the ship to wherever that first finger touched down.
+  //
+  // Since ADR-016 the tap is decided on the LIFT, so what the second contact cancels is the
+  // pending PRESS -- the lift that follows must not produce a tap either.
   TEST_METHOD(ASecondContactCancelsThePendingTap)
   {
     Neuron::PointerInput input;
@@ -648,6 +964,7 @@ public:
     input.Create(m_window);
 
     input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 400, WINDOW_TOP + 300));
+    input.HandleMessage(WM_POINTERUP, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 400, WINDOW_TOP + 300));
 
     float x = 0.0F;
     float y = 0.0F;

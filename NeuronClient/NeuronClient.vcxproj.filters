@@ -11,6 +11,7 @@
     <ClInclude Include="Color.h" />
     <ClInclude Include="SceneTarget.h" />
     <ClInclude Include="ShapeRenderer.h" />
+    <ClInclude Include="OrbitCamera.h" />
     <ClInclude Include="PointerInput.h" />
   </ItemGroup>
   <ItemGroup>
@@ -20,6 +21,7 @@
     <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="SceneTarget.cpp" />
     <ClCompile Include="ShapeRenderer.cpp" />
+    <ClCompile Include="OrbitCamera.cpp" />
     <ClCompile Include="PointerInput.cpp" />
   </ItemGroup>
   <ItemGroup>

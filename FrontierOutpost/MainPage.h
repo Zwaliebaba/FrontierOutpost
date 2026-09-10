@@ -1,7 +1,9 @@
 #pragma once
 
 #include "FontRenderer.h"
+#include "MapView.h"
 #include "MatchState.h"
+#include "PointerInput.h"
 #include "ShapeRenderer.h"
 
 namespace Frontier
@@ -77,6 +79,24 @@ public:
   /// handled tap from one that fell on the background.
   bool HandleTap(float _xPixels, float _yPixels);
 
+  /// A drag. Only a drag that STARTED on the map rotates it; one that started on a rail is
+  /// ignored, so a slipped finger on the orders list never spins the galaxy. Returns true when
+  /// the drag was consumed.
+  bool HandleDrag(const Neuron::PointerInput::Drag& _drag);
+
+  /// Puts the camera back where the screen opened. There is no other way back to the authored
+  /// framing once the map has been orbited, and hunting for it by eye is not a thing to ask
+  /// (ADR-017).
+  void ResetView() noexcept
+  {
+    m_mapView.ResetView();
+  }
+
+  [[nodiscard]] const MapView& Map() const noexcept
+  {
+    return m_mapView;
+  }
+
   void Draw(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
   [[nodiscard]] const MatchState& State() const noexcept
@@ -111,12 +131,23 @@ private:
     std::int32_t index;
   };
 
+  /// Measures the galaxy's bounding sphere, so the camera can frame it. Called once, from
+  /// Create: the graph does not move between ticks.
+  void MeasureContent();
+
   void AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index);
 
   void DrawTopBar(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawDigestRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawMap(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawOrdersRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
+  void DrawSystem(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, std::int32_t _index);
+  void DrawFleet(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, std::int32_t _index);
+
+  /// A circle lying ON the ground plane, projected. Shadows and the sealed region are both this:
+  /// what shape they make on screen is the camera's business, not theirs (ADR-017).
+  void DrawGroundCircle(Neuron::ShapeRenderer& _shapes, float _designX, float _designY, float _radius, const Neuron::Color& _fill,
+                        const Neuron::Color& _outline, bool _dashed, float _height = 0.0F);
   void DrawPanel(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
   /// Text centred on a point, snapped to a whole pixel. Every centred label on the map goes
@@ -133,6 +164,13 @@ private:
   std::int32_t m_panelSubject = EventRefs::NONE;
   /// The node the digest last pointed at. Drawn with a focus ring; -1 when nothing is focused.
   std::int32_t m_focusedSystem = EventRefs::NONE;
+
+  /// The camera looking at the galaxy, and the ground plane it orbits (ADR-017).
+  MapView m_mapView;
+
+  /// The bounding sphere of everything the map draws, in world space. What the camera frames.
+  Neuron::OrbitCamera::WorldPoint m_contentCenter = {0.0F, 0.0F, 0.0F};
+  float m_contentRadius = 1.0F;
 
   /// Rebuilt every Draw. A tap is tested against the PREVIOUS frame's rectangles, which is
   /// invisible at any frame rate a person can tap through and is what lets layout and hit

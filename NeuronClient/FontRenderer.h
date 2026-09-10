@@ -111,8 +111,21 @@ public:
   void Create(Device& _device, DescriptorHeap& _shaderVisibleHeap);
 
   /// Resets this frame's vertex slice. Every frame writes its own slice of the buffer, so the CPU
-  /// never overwrites vertices the GPU is still reading.
+  /// never overwrites vertices the GPU is still reading. Also clears the clip rectangle.
   void BeginFrame(std::uint32_t _frameIndex) noexcept;
+
+  /// Confines subsequent text to a rectangle, by GLYPH: a glyph that does not fit entirely inside
+  /// is not drawn at all.
+  ///
+  /// It exists because the map got a camera. Every other pane's text is laid out inside its own
+  /// pane by construction and could never leave it, but a projected label can land anywhere on
+  /// the screen -- a system swung behind the viewer puts its name across the digest (ADR-017).
+  ///
+  /// Whole glyphs rather than partial ones because the alternative is a glyph cut down the middle,
+  /// which on an 8x8 font is two or three lit columns of something unreadable. A label that runs
+  /// off the pane loses its last letter cleanly instead.
+  void SetClipRect(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels) noexcept;
+  void ClearClipRect() noexcept;
 
   /// Appends one string at a position in screen pixels, top-left of the first glyph.
   ///
@@ -159,6 +172,14 @@ private:
   TextVertex* m_mappedVertices = nullptr;
   std::uint32_t m_frameIndex = 0;
   std::uint32_t m_usedThisFrame = 0;
+
+  /// The clip rectangle, in screen pixels. Defaults to everything, so a caller that never sets
+  /// one is unaffected.
+  float m_clipLeftPixels = 0.0F;
+  float m_clipTopPixels = 0.0F;
+  float m_clipRightPixels = 0.0F;
+  float m_clipBottomPixels = 0.0F;
+  bool m_clipping = false;
 };
 
 } // namespace Neuron

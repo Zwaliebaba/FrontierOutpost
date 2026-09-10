@@ -42,7 +42,38 @@ public:
   /// Feeds a window message. True when it was consumed.
   bool HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) noexcept;
 
+  /// How far a contact may move and still count as a tap rather than a drag.
+  ///
+  /// A finger never lands and lifts on exactly one pixel, so without a slop every tap on a
+  /// touchscreen would be a one-pixel drag and nothing would ever be tapped. Four pixels is
+  /// comfortably inside the smallest thing on the screen that can be tapped (an 18px button) and
+  /// comfortably outside the jitter of a finger.
+  static constexpr float TAP_SLOP_PIXELS = 4.0F;
+
+  /// A drag in progress: how far since the last frame, and where the finger first went down.
+  ///
+  /// The ORIGIN is what makes this useful to a screen with more than one pane. A drag belongs to
+  /// whatever was under the press, not to whatever the finger happens to be over now -- so a
+  /// rotation that starts on the map keeps rotating the map even when the finger crosses onto a
+  /// rail.
+  struct Drag
+  {
+    float deltaXPixels;
+    float deltaYPixels;
+    float originXPixels;
+    float originYPixels;
+  };
+
+  /// Takes the movement accumulated since the last call, and clears it. False when the player is
+  /// not dragging.
+  [[nodiscard]] bool TakeDrag(Drag& _outDrag) noexcept;
+
   /// Takes the pending tap, in pixels from the top-left of the 1280x720 screen, and clears it.
+  ///
+  /// A TAP IS DOWN AND UP, not down. It has to be: a press that turns into a drag must not also
+  /// have opened whatever was under it, and until the finger lifts (or moves past TAP_SLOP_PIXELS)
+  /// there is no way to know which it was. Before the map could be rotated this fired on
+  /// WM_POINTERDOWN, because nothing on the screen could be dragged (ADR-016).
   ///
   /// Only the most recent tap is kept. A second tap before the frame that reads the first
   /// replaces it, which is what a player means: the ship goes where they last pointed.
@@ -79,6 +110,21 @@ private:
   void EvaluatePinch() noexcept;
 
   HWND m_window = nullptr;
+
+  /// The press that is currently down, and whether it has moved far enough to stop being a tap.
+  /// One finger only: a second contact turns the gesture into a pinch and cancels both.
+  bool m_pressActive = false;
+  bool m_pressBecameDrag = false;
+  float m_pressOriginXPixels = 0.0F;
+  float m_pressOriginYPixels = 0.0F;
+  float m_pressLastXPixels = 0.0F;
+  float m_pressLastYPixels = 0.0F;
+
+  /// Drag movement banked since the last frame. Accumulated rather than sampled, so a frame that
+  /// took longer than usual rotates by everything the finger did during it rather than by the
+  /// last message only.
+  float m_dragDeltaXPixels = 0.0F;
+  float m_dragDeltaYPixels = 0.0F;
 
   bool m_hasClick = false;
   float m_clickXPixels = 0.0F;

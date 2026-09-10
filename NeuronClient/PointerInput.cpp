@@ -70,16 +70,23 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
 
     if (m_contactCount >= MAX_CONTACTS)
     {
-      // The second finger turns what looked like a tap into a pinch. Forget the tap: the player
-      // is zooming, not ordering the ship to wherever their first finger landed.
+      // The second finger turns what looked like a tap into a pinch. Forget the press entirely:
+      // the player is zooming, not tapping and not dragging.
+      m_pressActive = false;
+      m_pressBecameDrag = false;
       m_hasClick = false;
       m_pinchBaseline = ContactSeparation();
     }
     else
     {
-      m_clickXPixels = xPixels;
-      m_clickYPixels = yPixels;
-      m_hasClick = true;
+      // The press is remembered but nothing is decided yet. Which gesture this turns out to be is
+      // known at WM_POINTERUP, or the moment it moves past the slop.
+      m_pressActive = true;
+      m_pressBecameDrag = false;
+      m_pressOriginXPixels = xPixels;
+      m_pressOriginYPixels = yPixels;
+      m_pressLastXPixels = xPixels;
+      m_pressLastYPixels = yPixels;
     }
 
     return true;
@@ -95,13 +102,57 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
     }
 
     MoveContact(pointerId, xPixels, yPixels);
+
+    if (m_pressActive && m_contactCount < MAX_CONTACTS)
+    {
+      const float fromOriginX = xPixels - m_pressOriginXPixels;
+      const float fromOriginY = yPixels - m_pressOriginYPixels;
+      if (!m_pressBecameDrag && (fromOriginX * fromOriginX + fromOriginY * fromOriginY) > (TAP_SLOP_PIXELS * TAP_SLOP_PIXELS))
+      {
+        // It has moved far enough to be a drag. The movement ALREADY MADE counts, so a quick flick
+        // rotates by the whole flick rather than losing its first few pixels to the slop.
+        m_pressBecameDrag = true;
+        m_dragDeltaXPixels += fromOriginX;
+        m_dragDeltaYPixels += fromOriginY;
+      }
+      else if (m_pressBecameDrag)
+      {
+        m_dragDeltaXPixels += xPixels - m_pressLastXPixels;
+        m_dragDeltaYPixels += yPixels - m_pressLastYPixels;
+      }
+
+      m_pressLastXPixels = xPixels;
+      m_pressLastYPixels = yPixels;
+    }
+
     EvaluatePinch();
     return true;
   }
 
   case WM_POINTERUP:
+  {
+    // The tap is decided here, on the lift: a press that never became a drag was a tap, and it
+    // reports the position it went DOWN at rather than the one it came up at, so a tap that
+    // wobbled a pixel still means the thing the player aimed at.
+    if (m_pressActive && !m_pressBecameDrag)
+    {
+      m_clickXPixels = m_pressOriginXPixels;
+      m_clickYPixels = m_pressOriginYPixels;
+      m_hasClick = true;
+    }
+    m_pressActive = false;
+    m_pressBecameDrag = false;
+
+    RemoveContact(pointerId);
+    return true;
+  }
+
   case WM_POINTERCAPTURECHANGED:
   {
+    // Capture lost -- the window went away under the finger, or another window took it. Whatever
+    // was in progress is abandoned rather than completed: a gesture nobody finished is not a tap.
+    m_pressActive = false;
+    m_pressBecameDrag = false;
     RemoveContact(pointerId);
     return true;
   }
@@ -202,6 +253,19 @@ void PointerInput::EvaluatePinch() noexcept
     --m_zoomSteps;
     m_pinchBaseline /= PINCH_STEP_RATIO;
   }
+}
+
+bool PointerInput::TakeDrag(Drag& _outDrag) noexcept
+{
+  if (m_dragDeltaXPixels == 0.0F && m_dragDeltaYPixels == 0.0F)
+  {
+    return false;
+  }
+
+  _outDrag = Drag{m_dragDeltaXPixels, m_dragDeltaYPixels, m_pressOriginXPixels, m_pressOriginYPixels};
+  m_dragDeltaXPixels = 0.0F;
+  m_dragDeltaYPixels = 0.0F;
+  return true;
 }
 
 bool PointerInput::TakeClick(float& _outXPixels, float& _outYPixels) noexcept
