@@ -258,7 +258,12 @@ GenerationResult GenerateGalaxy(std::uint64_t _seed, SeatId _seatCount, const Ru
   const auto halfSector = static_cast<Neuron::Turns16>(32768 / seats);
   const Neuron::SineCosine halfAngle = Neuron::SineCosineTurns16(halfSector);
   const std::int32_t chordUnits = random.Between(_rules.capitalChordMinUnits, _rules.capitalChordMaxUnits);
-  const auto outerRadiusUnits = static_cast<std::int32_t>(static_cast<std::int64_t>(chordUnits) * Neuron::TRIG_ONE / (2 * halfAngle.sine));
+  // Both halves of the division are widened before the arithmetic rather than after it: the
+  // divisor cannot overflow an int at these magnitudes, but a multiplication performed in int
+  // and then widened is the shape of the defect bugprone-implicit-widening-of-multiplication-result
+  // exists to catch, and the check is fatal here.
+  const std::int64_t chordScaled = static_cast<std::int64_t>(chordUnits) * Neuron::TRIG_ONE;
+  const auto outerRadiusUnits = static_cast<std::int32_t>(chordScaled / (2LL * halfAngle.sine));
   const std::int32_t frontierRadiusUnits = outerRadiusUnits - _rules.frontierRadialGapUnits;
   const std::int32_t innerGapUnits = random.Between(_rules.sealedInnerGapMinUnits, _rules.sealedInnerGapMaxUnits);
   const std::int32_t sealedRadiusUnits =
