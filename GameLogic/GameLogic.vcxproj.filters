@@ -2,9 +2,14 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Galaxy.h" />
+    <ClInclude Include="GalaxyGenerator.h" />
     <ClInclude Include="GameLogic.h" />
+    <ClInclude Include="MatchRules.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Galaxy.cpp" />
+    <ClCompile Include="GalaxyGenerator.cpp" />
     <ClCompile Include="pch.cpp" />
   </ItemGroup>
 </Project>

@@ -200,6 +200,9 @@ MatchState MakeReferenceMatch()
     BuildRow{
       .title = "Trade lane - HALVORSEN", .detail = "Orune-Kepler-Reach - +6/tick - both owners", .isTradeLane = true, .available = false},
   };
+  // The count in the reference's BUILDS header. Thirty-eight across the empire, of which the three
+  // rows above are the ones worth offering here.
+  state.orders.availableBuilds = 38;
   state.orders.locked = false;
 
   state.proposals = {

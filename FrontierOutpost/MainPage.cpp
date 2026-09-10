@@ -488,8 +488,15 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
 
   // "DAY 12/21" rather than "DAY 12 / 21", and the countdown and replay labels use T-notation:
   // at 8px the reference's spelled-out bar is 63px wider than the frame (ADR-014).
-  const std::string matchLine =
-    std::format("MATCH {} - DAY {}/{} - ENDS {}", m_state.match.id, m_state.match.day, m_state.match.totalDays, m_state.match.endsAt);
+  //
+  // The end time is dropped rather than left dangling when the state has none. A match generated
+  // without a server has no schedule to report (GeneratedMatch.h), and "- ENDS" followed by
+  // nothing reads as a truncation bug rather than as an absence.
+  std::string matchLine = std::format("MATCH {} - DAY {}/{}", m_state.match.id, m_state.match.day, m_state.match.totalDays);
+  if (!m_state.match.endsAt.empty())
+  {
+    matchLine += std::format(" - ENDS {}", m_state.match.endsAt);
+  }
   _text.DrawText(16 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("FRONTIER OUTPOST")) + 10, centered, matchLine, TEXT_MUTED);
 
   // The right group is laid out right to left, because it is anchored to the frame edge and its
@@ -1116,7 +1123,11 @@ void MainPage::DrawOrdersRail(ShapeRenderer& _shapes, FontRenderer& _text)
   }
 
   // ---- BUILDS -------------------------------------------------------------------------------
-  sectionHeader("BUILDS", "38 AVAILABLE");
+  //
+  // From the state, not a literal. It read "38 AVAILABLE" until 2026-09-10, which was right for
+  // the design reference and a plain untruth over any other state -- a generated match has no
+  // build list and said 38 anyway.
+  sectionHeader("BUILDS", std::format("{} AVAILABLE", m_state.orders.availableBuilds));
 
   for (std::size_t index = 0; index < m_state.orders.builds.size(); ++index)
   {

@@ -134,6 +134,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="FrontierOutpost.cpp" />
+    <ClCompile Include="GeneratedMatch.cpp" />
     <ClCompile Include="MainPage.cpp" />
     <ClCompile Include="MatchFixture.cpp" />
     <ClCompile Include="MatchState.cpp" />
@@ -144,6 +145,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="FrontierOutpost.h" />
+    <ClInclude Include="GeneratedMatch.h" />
     <ClInclude Include="MainPage.h" />
     <ClInclude Include="MapView.h" />
     <ClInclude Include="MatchFixture.h" />

@@ -27,6 +27,7 @@
 #include "SceneTarget.h"
 #include "ShapeRenderer.h"
 
+#include "GeneratedMatch.h"
 #include "MainPage.h"
 #include "MatchFixture.h"
 
@@ -171,10 +172,21 @@ int RunGame(HWND _window)
   Neuron::FontRenderer text;
   text.Create(device, shaderVisibleHeap);
 
-  // The match, from the fixture. When the server sends a digest this is the only line that
-  // changes (MatchFixture.h).
+  // The match. When the server sends a digest this is the only line that changes.
+  //
+  // It shows a GENERATED galaxy rather than the design reference's twelve hand-placed systems --
+  // `MakeReferenceMatch` is still there and still matches the drawing, and swapping this line back
+  // is how the two are compared. The generated one is what the executable shows because it is the
+  // only thing that can catch a layout the generator's constraints allow and the eye rejects: a
+  // ring that crowds the pane, labels that collide, a frontier nobody would fly through.
+  //
+  // The seed is FIXED, so two runs are the same galaxy and a screenshot means something. There is
+  // no server to be handed one by yet (Design/Plans/4X-02-ServerAndClient.md), and a clock-derived
+  // seed here would make every run unreproducible to save nothing.
+  constexpr std::uint64_t GALAXY_SEED = 0x4652'4F4E'5449'4552ULL;
+
   Frontier::MainPage page;
-  page.Create(Frontier::MakeReferenceMatch());
+  page.Create(Frontier::MakeGeneratedMatch(Frontier::MatchRules{}, GALAXY_SEED));
 
   Neuron::PointerInput pointer;
   pointer.Create(_window);

@@ -213,6 +213,10 @@ struct Proposal
 struct Orders
 {
   std::vector<BuildRow> builds;
+  /// How many builds the player could start, across the whole empire. The rail shows the few that
+  /// are worth offering here; this is the total the server reports. The same distinction as
+  /// `totalSystems` below and for the same reason -- what is listed is a selection, not a census.
+  std::uint32_t availableBuilds = 0;
   /// Which proposal index the player has answered, and how. NONE means unanswered.
   std::int32_t answeredProposal = EventRefs::NONE;
   bool acceptedProposal = false;
