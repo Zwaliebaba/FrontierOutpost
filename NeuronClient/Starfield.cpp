@@ -4,7 +4,6 @@
 #include "Starfield.h"
 
 #include "D3D12Defaults.h"
-#include "PaletteTarget.h"
 
 #include "CompiledShaders/StarfieldVS.h"
 #include "CompiledShaders/StarfieldPS.h"
@@ -78,19 +77,23 @@ void Starfield::Create(ID3D12Device* _device)
   // nor writes depth, so the depth buffer the mesh pass is about to use is left exactly as
   // BeginScene cleared it.
   pipelineDesc.DepthStencilState = DepthState(false);
-  pipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8_UINT;
+  pipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
   winrt::check_hresult(_device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(m_pipeline.put())));
 }
 
 void Starfield::Draw(ID3D12GraphicsCommandList* _commandList, const IsometricCamera& _camera)
 {
-  // Four values a layer: the offset in xy, and two of padding the shader ignores.
+  // Four values a layer -- the offset in xy, the density mask, and the packed color -- then one
+  // more int4 whose x is the color of empty space and whose other three are padding.
   std::array<std::int32_t, CONSTANT_COUNT> constants = {};
   for (std::size_t layer = 0; layer < LAYER_COUNT; ++layer)
   {
-    constants[layer * 4 + 0] = LayerOffset(_camera.SnappedTargetXPixels(), layer);
-    constants[layer * 4 + 1] = LayerOffset(_camera.SnappedTargetYPixels(), layer);
+    constants[layer * VALUES_PER_LAYER + 0] = LayerOffset(_camera.SnappedTargetXPixels(), layer);
+    constants[layer * VALUES_PER_LAYER + 1] = LayerOffset(_camera.SnappedTargetYPixels(), layer);
+    constants[layer * VALUES_PER_LAYER + 2] = static_cast<std::int32_t>(LAYER_DENSITY_MASKS[layer]);
+    constants[layer * VALUES_PER_LAYER + 3] = static_cast<std::int32_t>(Pack(LAYER_COLORS[layer]));
   }
+  constants[LAYER_COUNT * VALUES_PER_LAYER] = static_cast<std::int32_t>(Pack(SPACE_COLOR));
 
   _commandList->SetGraphicsRootSignature(m_rootSignature.get());
   _commandList->SetPipelineState(m_pipeline.get());

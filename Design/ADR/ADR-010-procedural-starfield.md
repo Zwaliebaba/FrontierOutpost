@@ -1,6 +1,6 @@
 # ADR-010 — The starfield is a hash, in three parallax layers
 
-**Status:** Accepted
+**Status:** Accepted — the layer densities are revised by ADR-013 (`{2047, 4095, 8191}` became `{8191, 16383, 32767}` when the screen grew from 640×400 to 1280×720), and the layer colors are colors rather than palette indices and now live in `Starfield.h` (ADR-011). The decision itself — a hash rather than a stored field, three parallax layers, why it does not shimmer — stands unchanged.
 
 **Date:** 2026-09-10
 **Decided by:** Build session, at the owner's request for a starfield.

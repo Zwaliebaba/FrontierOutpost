@@ -33,8 +33,14 @@ namespace Neuron
   };
 }
 
-/// No blending anywhere. A 16-color screen has nothing to blend: a half-transparent palette index
-/// is not a color, it is a different index (ADR-001).
+/// No blending in any pass this game has. Every surface it draws is opaque and the text pass
+/// discards the pixels it does not want rather than blending them away, so blending would be a
+/// state nothing sets and everything pays for.
+///
+/// It is a DEFAULT and no longer a prohibition. Until ADR-011 the render target held palette
+/// indices, and blending two of them produced an unrelated third color -- so the restriction was
+/// structural. With an R8G8B8A8 target a pass that genuinely wants to blend can set its own
+/// D3D12_BLEND_DESC; it is a decision to record, not an impossibility.
 [[nodiscard]] inline D3D12_BLEND_DESC OpaqueBlendState() noexcept
 {
   return D3D12_BLEND_DESC{
@@ -55,8 +61,10 @@ namespace Neuron
     .DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP,
     .SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS,
     .DepthClipEnable = TRUE,
-    // No multisampling and no line antialiasing, ever. Both would put a color between two palette
-    // indices, which is the one thing this renderer cannot represent.
+    // No multisampling and no line antialiasing. The picture is built out of flat faces meeting at
+    // hard edges (ADR-012) and the whole path from vertex to pixel is free of resampling
+    // (ADR-011); turning either of these on is a look to choose deliberately, in an ADR, rather
+    // than a default to inherit.
     .MultisampleEnable = FALSE,
     .AntialiasedLineEnable = FALSE,
     .ForcedSampleCount = 0,

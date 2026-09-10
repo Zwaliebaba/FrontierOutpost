@@ -1,4 +1,4 @@
-// PointerInput.cpp -- WM_POINTER* to a point on the virtual screen and a number of zoom steps.
+// PointerInput.cpp -- WM_POINTER* to a point on the screen and a number of zoom steps.
 
 #include "pch.h"
 #include "PointerInput.h"
@@ -11,14 +11,12 @@ bool PointerInput::EnableMouseAsPointer() noexcept
   return EnableMouseInPointer(TRUE) != FALSE;
 }
 
-void PointerInput::Create(HWND _window, std::uint32_t _presentScale)
+void PointerInput::Create(HWND _window) noexcept
 {
-  ASSERT_TEXT(_presentScale > 0, L"A present scale of zero would divide by zero.");
   m_window = _window;
-  m_presentScale = _presentScale;
 }
 
-bool PointerInput::ScreenToVirtual(LPARAM _lParam, float& _outXTexels, float& _outYTexels) const noexcept
+bool PointerInput::ScreenToClientPixels(LPARAM _lParam, float& _outXPixels, float& _outYPixels) const noexcept
 {
   // WM_POINTER* carries SCREEN coordinates, unlike the mouse messages, and they are signed --
   // a second monitor to the left of the primary one has negative x. Extracting them as unsigned
@@ -30,11 +28,11 @@ bool PointerInput::ScreenToVirtual(LPARAM _lParam, float& _outXTexels, float& _o
     return false;
   }
 
-  // Physical client pixels to virtual texels. An exact division, because the scale is a whole
-  // number; the fractional part that survives is the position within the virtual pixel, which the
-  // camera's un-projection is happy to use.
-  _outXTexels = static_cast<float>(point.x) / static_cast<float>(m_presentScale);
-  _outYTexels = static_cast<float>(point.y) / static_cast<float>(m_presentScale);
+  // And that is the whole conversion. Until 2026-09-10 a division by the present scale followed,
+  // because the client area was twice the virtual screen; the client area is now exactly the
+  // screen the game renders, so there is nothing left to divide by (ADR-011).
+  _outXPixels = static_cast<float>(point.x);
+  _outYPixels = static_cast<float>(point.y);
   return true;
 }
 
@@ -61,14 +59,14 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
 
   case WM_POINTERDOWN:
   {
-    float xTexels = 0.0F;
-    float yTexels = 0.0F;
-    if (!ScreenToVirtual(_lParam, xTexels, yTexels))
+    float xPixels = 0.0F;
+    float yPixels = 0.0F;
+    if (!ScreenToClientPixels(_lParam, xPixels, yPixels))
     {
       return false;
     }
 
-    AddContact(pointerId, xTexels, yTexels);
+    AddContact(pointerId, xPixels, yPixels);
 
     if (m_contactCount >= MAX_CONTACTS)
     {
@@ -79,8 +77,8 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
     }
     else
     {
-      m_clickXTexels = xTexels;
-      m_clickYTexels = yTexels;
+      m_clickXPixels = xPixels;
+      m_clickYPixels = yPixels;
       m_hasClick = true;
     }
 
@@ -89,14 +87,14 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
 
   case WM_POINTERUPDATE:
   {
-    float xTexels = 0.0F;
-    float yTexels = 0.0F;
-    if (!ScreenToVirtual(_lParam, xTexels, yTexels))
+    float xPixels = 0.0F;
+    float yPixels = 0.0F;
+    if (!ScreenToClientPixels(_lParam, xPixels, yPixels))
     {
       return false;
     }
 
-    MoveContact(pointerId, xTexels, yTexels);
+    MoveContact(pointerId, xPixels, yPixels);
     EvaluatePinch();
     return true;
   }
@@ -113,14 +111,14 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
   }
 }
 
-void PointerInput::AddContact(std::uint32_t _pointerId, float _xTexels, float _yTexels) noexcept
+void PointerInput::AddContact(std::uint32_t _pointerId, float _xPixels, float _yPixels) noexcept
 {
   // A pointer that is already tracked is a repeat rather than a new contact; move it instead.
   for (std::size_t index = 0; index < m_contactCount; ++index)
   {
     if (m_contacts[index].pointerId == _pointerId)
     {
-      m_contacts[index] = {_pointerId, _xTexels, _yTexels};
+      m_contacts[index] = {_pointerId, _xPixels, _yPixels};
       return;
     }
   }
@@ -129,19 +127,19 @@ void PointerInput::AddContact(std::uint32_t _pointerId, float _xTexels, float _y
   // resting a hand on the glass does not make the zoom jump.
   if (m_contactCount < MAX_CONTACTS)
   {
-    m_contacts[m_contactCount] = {_pointerId, _xTexels, _yTexels};
+    m_contacts[m_contactCount] = {_pointerId, _xPixels, _yPixels};
     ++m_contactCount;
   }
 }
 
-void PointerInput::MoveContact(std::uint32_t _pointerId, float _xTexels, float _yTexels) noexcept
+void PointerInput::MoveContact(std::uint32_t _pointerId, float _xPixels, float _yPixels) noexcept
 {
   for (std::size_t index = 0; index < m_contactCount; ++index)
   {
     if (m_contacts[index].pointerId == _pointerId)
     {
-      m_contacts[index].xTexels = _xTexels;
-      m_contacts[index].yTexels = _yTexels;
+      m_contacts[index].xPixels = _xPixels;
+      m_contacts[index].yPixels = _yPixels;
       return;
     }
   }
@@ -173,8 +171,8 @@ float PointerInput::ContactSeparation() const noexcept
     return 0.0F;
   }
 
-  const float deltaX = m_contacts[1].xTexels - m_contacts[0].xTexels;
-  const float deltaY = m_contacts[1].yTexels - m_contacts[0].yTexels;
+  const float deltaX = m_contacts[1].xPixels - m_contacts[0].xPixels;
+  const float deltaY = m_contacts[1].yPixels - m_contacts[0].yPixels;
   return std::sqrt(deltaX * deltaX + deltaY * deltaY);
 }
 
@@ -206,15 +204,15 @@ void PointerInput::EvaluatePinch() noexcept
   }
 }
 
-bool PointerInput::TakeClick(float& _outXTexels, float& _outYTexels) noexcept
+bool PointerInput::TakeClick(float& _outXPixels, float& _outYPixels) noexcept
 {
   if (!m_hasClick)
   {
     return false;
   }
 
-  _outXTexels = m_clickXTexels;
-  _outYTexels = m_clickYTexels;
+  _outXPixels = m_clickXPixels;
+  _outYPixels = m_clickYPixels;
   m_hasClick = false;
   return true;
 }

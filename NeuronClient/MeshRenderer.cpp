@@ -1,10 +1,9 @@
-// MeshRenderer.cpp -- the mesh pass. ADR-002 (two-tone flat shading) and ADR-003 (the camera).
+// MeshRenderer.cpp -- the mesh pass. ADR-012 (two-tone flat shading) and ADR-003 (the camera).
 
 #include "pch.h"
 #include "MeshRenderer.h"
 
 #include "D3D12Defaults.h"
-#include "PaletteTarget.h"
 
 #include "CompiledShaders/MeshVS.h"
 #include "CompiledShaders/MeshPS.h"
@@ -41,12 +40,17 @@ void MeshRenderer::Create(ID3D12Device* _device)
   winrt::check_hresult(
     _device->CreateRootSignature(0, serialized->GetBufferPointer(), serialized->GetBufferSize(), IID_PPV_ARGS(m_rootSignature.put())));
 
-  const std::array<D3D12_INPUT_ELEMENT_DESC, 3> inputLayout = {
+  // R8G8B8A8_UNORM on the two colors, not R32_UINT: the four bytes Pack() wrote arrive in the
+  // shader as a float4 already divided by 255, so neither side does any unpacking arithmetic and
+  // the channel order is stated once, in Color.h, rather than in both places.
+  const std::array<D3D12_INPUT_ELEMENT_DESC, 4> inputLayout = {
     D3D12_INPUT_ELEMENT_DESC{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(MeshVertex, positionX),
                              D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
     D3D12_INPUT_ELEMENT_DESC{"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(MeshVertex, normalX),
                              D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
-    D3D12_INPUT_ELEMENT_DESC{"TEXCOORD", 0, DXGI_FORMAT_R32_UINT, 0, offsetof(MeshVertex, paletteIndex),
+    D3D12_INPUT_ELEMENT_DESC{"COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(MeshVertex, shadedColor),
+                             D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+    D3D12_INPUT_ELEMENT_DESC{"COLOR", 1, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(MeshVertex, litColor),
                              D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
   };
 
@@ -62,7 +66,7 @@ void MeshRenderer::Create(ID3D12Device* _device)
   pipelineDesc.DepthStencilState = DepthState(true);
   pipelineDesc.RasterizerState = SolidRasterizer(D3D12_CULL_MODE_NONE);
   pipelineDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
-  pipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8_UINT;
+  pipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
   winrt::check_hresult(_device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(m_pipeline.put())));
 }
 

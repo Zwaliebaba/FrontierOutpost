@@ -120,8 +120,8 @@
   </ItemDefinitionGroup>
   <!--
     The shader pipeline (AGENTS.md 2, R13). One rule for every .hlsl in the project: the file
-    stem names the output header and the byte array inside it, so PaletteResolveVS.hlsl becomes
-    CompiledShaders\PaletteResolveVS.h holding g_PaletteResolveVS. No object file: the header
+    stem names the output header and the byte array inside it, so StarfieldPS.hlsl becomes
+    CompiledShaders\StarfieldPS.h holding g_StarfieldPS. No object file: the header
     IS the artifact, because the executable ships alone and there is no .cso to load at runtime.
 
     CompiledShaders\ is build output: .gitignore'd, never edited, never committed, and skipped by
@@ -151,12 +151,6 @@
     </FXCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <FXCompile Include="Shaders\PaletteResolveVS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-    </FXCompile>
-    <FXCompile Include="Shaders\PaletteResolvePS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-    </FXCompile>
     <FXCompile Include="Shaders\TextVS.hlsl">
       <ShaderType>Vertex</ShaderType>
     </FXCompile>
@@ -187,12 +181,13 @@
     <ClCompile Include="IsometricCamera.cpp" />
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="MeshRenderer.cpp" />
-    <ClCompile Include="PaletteTarget.cpp" />
     <ClCompile Include="PointerInput.cpp" />
+    <ClCompile Include="SceneTarget.cpp" />
     <ClCompile Include="Starfield.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="D3D12Defaults.h" />
+    <ClInclude Include="Color.h" />
     <ClInclude Include="DescriptorHeap.h" />
     <ClInclude Include="Device.h" />
     <ClInclude Include="Font.h" />
@@ -201,9 +196,8 @@
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="MeshRenderer.h" />
     <ClInclude Include="NeuronClient.h" />
-    <ClInclude Include="Palette.h" />
-    <ClInclude Include="PaletteTarget.h" />
     <ClInclude Include="PointerInput.h" />
+    <ClInclude Include="SceneTarget.h" />
     <ClInclude Include="Starfield.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>

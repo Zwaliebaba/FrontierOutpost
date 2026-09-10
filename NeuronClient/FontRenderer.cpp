@@ -4,7 +4,7 @@
 #include "FontRenderer.h"
 
 #include "D3D12Defaults.h"
-#include "PaletteTarget.h"
+#include "SceneTarget.h"
 
 #include "CompiledShaders/TextVS.h"
 #include "CompiledShaders/TextPS.h"
@@ -22,7 +22,7 @@ constexpr std::uint32_t ATLAS_WIDTH_TEXELS = FontRenderer::GLYPH_COUNT * FontRen
 constexpr std::uint32_t ATLAS_HEIGHT_TEXELS = FontRenderer::GLYPH_HEIGHT_TEXELS;
 constexpr DXGI_FORMAT ATLAS_FORMAT = DXGI_FORMAT_R8_UINT;
 
-// Two floats for the virtual screen size.
+// Two floats for the screen size in pixels.
 constexpr std::uint32_t TEXT_CONSTANT_COUNT = 2;
 
 } // namespace
@@ -41,7 +41,8 @@ void FontRenderer::CreateAtlas(Device& _device, DescriptorHeap& _shaderVisibleHe
   ID3D12Device* device = _device.Handle();
 
   // Unpack Font.h: byte b of glyph g is row b, most significant bit leftmost. One texel per
-  // pixel, 0 or 1; the pixel shader turns the 1 into a palette index and discards the 0.
+  // pixel, 0 or 1; the pixel shader writes the string's color where the bit is 1 and discards the
+  // pixel where it is 0.
   std::vector<std::uint8_t> texels(static_cast<std::size_t>(ATLAS_WIDTH_TEXELS) * ATLAS_HEIGHT_TEXELS, 0);
   for (std::uint32_t glyph = 0; glyph < GLYPH_COUNT; ++glyph)
   {
@@ -196,9 +197,12 @@ void FontRenderer::CreatePipeline(ID3D12Device* _device)
     _device->CreateRootSignature(0, serialized->GetBufferPointer(), serialized->GetBufferSize(), IID_PPV_ARGS(m_rootSignature.put())));
 
   const std::array<D3D12_INPUT_ELEMENT_DESC, 3> inputLayout = {
-    D3D12_INPUT_ELEMENT_DESC{"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
-    D3D12_INPUT_ELEMENT_DESC{"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 8, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
-    D3D12_INPUT_ELEMENT_DESC{"TEXCOORD", 1, DXGI_FORMAT_R32_UINT, 0, 16, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+    D3D12_INPUT_ELEMENT_DESC{"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(TextVertex, positionXPixels),
+                             D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+    D3D12_INPUT_ELEMENT_DESC{"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(TextVertex, glyphXTexels),
+                             D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+    D3D12_INPUT_ELEMENT_DESC{"COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(TextVertex, color),
+                             D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
   };
 
   D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = DefaultGraphicsPipeline();
@@ -207,8 +211,8 @@ void FontRenderer::CreatePipeline(ID3D12Device* _device)
   pipelineDesc.PS = {g_TextPS, sizeof(g_TextPS)};
   pipelineDesc.InputLayout = {inputLayout.data(), static_cast<UINT>(inputLayout.size())};
   // Text is the last thing drawn and sits on top of the scene, so it neither tests nor writes
-  // depth. The index target it writes into is R8_UINT (ADR-001).
-  pipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8_UINT;
+  // depth. It writes straight into the back buffer, which is R8G8B8A8_UNORM (ADR-011).
+  pipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
   winrt::check_hresult(_device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(m_pipeline.put())));
 }
 
@@ -218,7 +222,7 @@ void FontRenderer::BeginFrame(std::uint32_t _frameIndex) noexcept
   m_usedThisFrame = 0;
 }
 
-void FontRenderer::DrawText(std::int32_t _xTexels, std::int32_t _yTexels, std::string_view _text, std::uint8_t _paletteIndex)
+void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color)
 {
   TextVertex* slice = m_mappedVertices + static_cast<std::size_t>(m_frameIndex) * MAX_VERTICES_PER_FRAME;
 
@@ -229,24 +233,28 @@ void FontRenderer::DrawText(std::int32_t _xTexels, std::int32_t _yTexels, std::s
 
     const std::uint32_t glyph = GlyphIndex(_text[character]);
 
-    const auto left = static_cast<float>(_xTexels + static_cast<std::int32_t>(character * GLYPH_WIDTH_TEXELS));
-    const auto top = static_cast<float>(_yTexels);
-    const float right = left + static_cast<float>(GLYPH_WIDTH_TEXELS);
-    const float bottom = top + static_cast<float>(GLYPH_HEIGHT_TEXELS);
+    // The quad spans GLYPH_SCALE screen pixels per glyph texel. The atlas coordinates below still
+    // span exactly eight texels, so the interpolator hands the pixel shader a fractional texel and
+    // its truncation is what turns one texel into a GLYPH_SCALE-square block of pixels -- the same
+    // integer divide the resolve pass did for the whole screen before ADR-011 removed it.
+    const auto left = static_cast<float>(_xPixels + static_cast<std::int32_t>(character * CHARACTER_ADVANCE_PIXELS));
+    const auto top = static_cast<float>(_yPixels);
+    const float right = left + static_cast<float>(CHARACTER_ADVANCE_PIXELS);
+    const float bottom = top + static_cast<float>(LINE_HEIGHT_PIXELS);
 
     const auto atlasLeft = static_cast<float>(glyph * GLYPH_WIDTH_TEXELS);
     const float atlasRight = atlasLeft + static_cast<float>(GLYPH_WIDTH_TEXELS);
     constexpr float ATLAS_TOP = 0.0F;
     constexpr float ATLAS_BOTTOM = static_cast<float>(GLYPH_HEIGHT_TEXELS);
 
-    const std::uint32_t index = _paletteIndex;
+    const std::uint32_t color = Pack(_color);
     TextVertex* quad = slice + m_usedThisFrame;
-    quad[0] = {left, top, atlasLeft, ATLAS_TOP, index};
-    quad[1] = {right, top, atlasRight, ATLAS_TOP, index};
-    quad[2] = {left, bottom, atlasLeft, ATLAS_BOTTOM, index};
-    quad[3] = {right, top, atlasRight, ATLAS_TOP, index};
-    quad[4] = {right, bottom, atlasRight, ATLAS_BOTTOM, index};
-    quad[5] = {left, bottom, atlasLeft, ATLAS_BOTTOM, index};
+    quad[0] = {left, top, atlasLeft, ATLAS_TOP, color};
+    quad[1] = {right, top, atlasRight, ATLAS_TOP, color};
+    quad[2] = {left, bottom, atlasLeft, ATLAS_BOTTOM, color};
+    quad[3] = {right, top, atlasRight, ATLAS_TOP, color};
+    quad[4] = {right, bottom, atlasRight, ATLAS_BOTTOM, color};
+    quad[5] = {left, bottom, atlasLeft, ATLAS_BOTTOM, color};
 
     m_usedThisFrame += VERTICES_PER_GLYPH;
   }
@@ -272,9 +280,9 @@ void FontRenderer::Flush(ID3D12GraphicsCommandList* _commandList)
   _commandList->SetPipelineState(m_pipeline.get());
   _commandList->SetGraphicsRootDescriptorTable(0, m_shaderVisibleHeap->GpuHandle(m_atlasSlot));
 
-  const std::array<float, TEXT_CONSTANT_COUNT> virtualScreen = {static_cast<float>(PaletteTarget::WIDTH_TEXELS),
-                                                                static_cast<float>(PaletteTarget::HEIGHT_TEXELS)};
-  _commandList->SetGraphicsRoot32BitConstants(1, TEXT_CONSTANT_COUNT, virtualScreen.data(), 0);
+  const std::array<float, TEXT_CONSTANT_COUNT> screenPixels = {static_cast<float>(SceneTarget::WIDTH_PIXELS),
+                                                               static_cast<float>(SceneTarget::HEIGHT_PIXELS)};
+  _commandList->SetGraphicsRoot32BitConstants(1, TEXT_CONSTANT_COUNT, screenPixels.data(), 0);
 
   _commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   _commandList->IASetVertexBuffers(0, 1, &vertexView);

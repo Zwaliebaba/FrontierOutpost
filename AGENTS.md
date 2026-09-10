@@ -2,7 +2,7 @@
 
 Operating instructions for every agent (and human) writing code in this repository. **Read this before generating a single line.**
 
-*Frontier Outpost* is a greenfield C++23 space MMO: a Direct3D 12 client and an authoritative server, hosted in **one executable**, presenting a deliberately legacy screen — **640×400, 16 colours**, blown up by a whole-number factor so it is visible on a modern display. There is no legacy tree here and nothing is grandfathered. A rule below is not a target to migrate towards; it describes the code as it must be written today, and a whole-tree run of any checker comes back clean.
+*Frontier Outpost* is a greenfield C++23 space MMO: a Direct3D 12 client and an authoritative server, hosted in **one executable**, presenting a fixed **1280×720 R8G8B8A8** screen, drawn straight into the swap chain's back buffer and presented 1:1. There is no legacy tree here and nothing is grandfathered. A rule below is not a target to migrate towards; it describes the code as it must be written today, and a whole-tree run of any checker comes back clean.
 
 **What is authoritative, in order:**
 
@@ -24,8 +24,8 @@ If a rule here conflicts with a habit from another codebase, this file wins. If 
 | Static member (mutable) | `sm_camelCase` | `sm_activeDevice` |
 | Global | `g_camelCase` | `g_instance`, `g_frameCount` |
 | Parameter | `_camelCase` | `_fileName`, `_shipId` |
-| Local | `camelCase` | `paletteIndex` |
-| Compile-time constant | `UPPER_CASE` | `VIRTUAL_WIDTH`, `PALETTE_SIZE` |
+| Local | `camelCase` | `shadedColor` |
+| Compile-time constant | `UPPER_CASE` | `WIDTH_PIXELS`, `GLYPH_SCALE` |
 | Enumerator | `PascalCase` | `DeviceLost`, `OutOfVideoMemory` |
 | Macro | `UPPER_CASE` | `FRONTIER_ASSERT` |
 | Namespace | `PascalCase` | `Neuron`, `Frontier` |
@@ -49,7 +49,7 @@ That tree is an illustration of the rule, not a description of anything. A base 
 
 clang-tidy can require an *absent* prefix but cannot see a *present* suffix, so `Build/CheckProjectFiles.py` carries the other half.
 
-**R3 — Compile-time constants are `UPPER_CASE`.** `constexpr`, `inline constexpr` and `static constexpr` members: `VIRTUAL_WIDTH`, `TICKS_PER_SECOND`, `PALETTE_SIZE`. `sm_` is reserved for *mutable* statics, which are rare and must document their thread-safety.
+**R3 — Compile-time constants are `UPPER_CASE`.** `constexpr`, `inline constexpr` and `static constexpr` members: `WIDTH_PIXELS`, `TICKS_PER_SECOND`, `GLYPH_SCALE`. `sm_` is reserved for *mutable* statics, which are rare and must document their thread-safety.
 
 **R4 — Acronyms capitalize as words**: `HlslSource`, `DxgiFactory`, `UdpTransport` — never `HLSLSource`. Identifiers from an external SDK keep that SDK's spelling (`ID3D12Device`, `DXGI_FORMAT`, `HRESULT`, `IDXGISwapChain4`) and are never renamed to fit.
 
@@ -72,7 +72,7 @@ Adding, removing or moving a file means editing the owning `.vcxproj` **and** it
 ### Worked example — this is the target style
 
 ```cpp
-// NeuronClient/PaletteTarget.h
+// NeuronClient/SceneTarget.h
 #pragma once
 
 #include <cstdint>
@@ -81,8 +81,8 @@ namespace Neuron
 {
 
 // R3: constant → UPPER_CASE. R6: the unit is in the name.
-inline constexpr std::uint32_t PALETTE_SIZE = 16;
-inline constexpr std::uint32_t VIRTUAL_WIDTH_TEXELS = 640;
+inline constexpr std::uint32_t SCREEN_WIDTH_PIXELS = 1280;
+inline constexpr std::uint32_t SCREEN_HEIGHT_PIXELS = 720;
 
 // R1 (enumerator) → PascalCase, unlike the constants above.
 enum class TargetFault : std::uint8_t
@@ -92,27 +92,27 @@ enum class TargetFault : std::uint8_t
   OutOfVideoMemory
 };
 
-/// The 640x400 paletted framebuffer the game draws into, and the texture it is presented from.
+/// The 1280x720 color framebuffer the game draws into, and the depth buffer that goes with it.
 /// R2: no prefix on the type. R8: private state carries m_.
-class PaletteTarget
+class SceneTarget
 {
 public:
   struct Desc                                            // R8: aggregate → plain fields
   {
-    std::uint32_t widthTexels;                           // R6: unit in the name
-    std::uint32_t heightTexels;
-    DXGI_FORMAT presentFormat;                           // R4: SDK spelling kept as-is
+    std::uint32_t widthPixels;                           // R6: unit in the name
+    std::uint32_t heightPixels;
+    DXGI_FORMAT colorFormat;                             // R4: SDK spelling kept as-is
   };
 
   [[nodiscard]] static bool Create(ID3D12Device* _device,        // R1: _ on parameters
                                    const Desc& _desc,
-                                   PaletteTarget& _outTarget) noexcept;
+                                   SceneTarget& _outTarget) noexcept;
 
-  [[nodiscard]] std::uint32_t WidthTexels() const noexcept { return m_widthTexels; }
+  [[nodiscard]] std::uint32_t WidthPixels() const noexcept { return m_widthPixels; }
 
 private:
-  ID3D12Resource* m_texture = nullptr;
-  std::uint32_t m_widthTexels = 0;
+  ID3D12Resource* m_depthTarget = nullptr;
+  std::uint32_t m_widthPixels = 0;
   bool m_deviceRemoved = false;
 };
 
@@ -134,7 +134,7 @@ private:
 | Path | What it is | May you edit it? |
 |---|---|---|
 | `NeuronCore/` | Engine static library used by **both** halves: platform, timing, maths, containers, serialization, the wire protocol | Yes |
-| `NeuronClient/` | Engine static library used by the **client only**: the window, the D3D12 device and swap chain, the 640×400 paletted target, input, audio, UI | Yes |
+| `NeuronClient/` | Engine static library used by the **client only**: the window, the D3D12 device and swap chain, the 1280×720 colour target, input, audio, UI | Yes |
 | `NeuronServer/` | Engine static library used by the **server only**: session ownership, replication, the authoritative loop | Yes |
 | `GameLogic/` | The game itself — entities, orders, economy, simulation rules. Server-side; the client never links it directly | Yes |
 | `FrontierOutpost/` | The executable. Starts the client and the server in one process, and is where every embedded asset and compiled shader ends up | Yes |
@@ -239,9 +239,11 @@ x64\Debug\FrontierOutpost.exe
 
 ## 5. C++ rules for this codebase
 
-**R12 — Graphics is Direct3D 12 only**, and the screen it presents is fixed. 640×400 with a 16-entry palette, scaled to the window by a **whole number**; a fractional scale is what turns a crisp legacy screen into mush. No D3D11, no D3D11On12, no immediate-mode helper layers. COM lifetimes are RAII from the first line — a raw `AddRef`/`Release` pair in new code is a defect, not a style.
+**R12 — Graphics is Direct3D 12 only**, and the screen it presents is fixed. **1280×720 `R8G8B8A8_UNORM`** — not `_SRGB`, so a channel authored as `0xAA` is presented as `0xAA` — drawn straight into the swap chain's back buffer, whose client area is those same 1280×720 pixels. There is no intermediate render target, no resolve pass and no present scale (ADR-011). No D3D11, no D3D11On12, no immediate-mode helper layers. COM lifetimes are RAII from the first line — a raw `AddRef`/`Release` pair in new code is a defect, not a style.
 
-**R13 — The executable ships alone.** There is no assets folder, no data directory, nothing beside `FrontierOutpost.exe` at runtime. Art, palettes, fonts, meshes and sound are embedded as `constexpr` arrays in headers — `NeuronClient/Font.h` is the pattern: 96 glyphs, 8×8, one bit a pixel, 768 bytes, and nothing to load. **Shaders are compiled at build time**, never at runtime: `<Library>/Shaders/<Shader>VS.hlsl` goes through the `.vcxproj`'s `FXCompile` step into `<Library>/CompiledShaders/<Shader>VS.h` as `g_<Shader>VS` (§2). No `D3DCompile`, no `d3dcompiler_47.dll` beside the executable, no `.cso` on disk. Never add a runtime file dependency, a working-directory assumption or a "just for development" loose-file path; the loose path is the one that ships.
+**There is no sampler object anywhere in this renderer, and adding one is a decision.** The font atlas is read with `Texture2D<uint>::Load()`, which takes integer texel coordinates and has no filtering to switch on; the starfield is a hash of an integer pixel; the meshes carry no textures. Likewise `D3D12Defaults.h` turns blending, multisampling and anti-aliased lines off for every pipeline built from the shared defaults. Until ADR-011 those were *impossible* — the render target held palette indices and a blend of two of them was an unrelated colour. They are now conventions, which means a pass that wants one has to say so: **blending, multisampling or a sampler in a new pass is an ADR, not a pipeline field.**
+
+**R13 — The executable ships alone.** There is no assets folder, no data directory, nothing beside `FrontierOutpost.exe` at runtime. Art, colours, fonts, meshes and sound are embedded as `constexpr` arrays in headers — `NeuronClient/Font.h` is the pattern: 96 glyphs, 8×8, one bit a pixel, 768 bytes, and nothing to load. **Shaders are compiled at build time**, never at runtime: `<Library>/Shaders/<Shader>VS.hlsl` goes through the `.vcxproj`'s `FXCompile` step into `<Library>/CompiledShaders/<Shader>VS.h` as `g_<Shader>VS` (§2). No `D3DCompile`, no `d3dcompiler_47.dll` beside the executable, no `.cso` on disk. Never add a runtime file dependency, a working-directory assumption or a "just for development" loose-file path; the loose path is the one that ships.
 
 **R14 — No third-party dependencies and no package manager.** The Windows SDK and the MSVC standard library, and nothing else. If you believe something is unavoidable, propose it in your report with what it buys and what it costs — do not add it. This is a closed list, not a high bar.
 

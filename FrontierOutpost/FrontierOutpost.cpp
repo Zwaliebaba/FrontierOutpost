@@ -3,9 +3,9 @@
 //
 // This is the wizard's wWinMain reduced to what the game actually needs: one fixed-size,
 // non-resizable window, no menu and no About dialog. The window is the presentation target
-// described in Design/README.md -- a 640x400 framebuffer scaled by an integer factor, so the
-// client area is exactly SCALE times the virtual resolution and every virtual pixel lands on a
-// whole number of physical ones.
+// described in Design/README.md -- a 1280x720 R8G8B8A8 framebuffer presented 1:1, so the client
+// area is exactly the resolution the game renders and a rendered pixel is a physical one
+// (ADR-011).
 //
 // There is no WM_PAINT handler and there must not be one: from the moment the swap chain exists
 // it owns every pixel of the client area, and a BeginPaint/EndPaint pair racing it produces a
@@ -14,14 +14,14 @@
 #include "pch.h"
 #include "FrontierOutpost.h"
 
+#include "Color.h"
 #include "Device.h"
 #include "FontRenderer.h"
 #include "IsometricCamera.h"
 #include "LoopbackTransport.h"
 #include "MeshRenderer.h"
-#include "Palette.h"
-#include "PaletteTarget.h"
 #include "PointerInput.h"
+#include "SceneTarget.h"
 #include "Session.h"
 #include "Starfield.h"
 
@@ -35,11 +35,17 @@
 namespace
 {
 
-// The legacy screen the game presents, and the integer factor it is blown up by. Both are
-// deliberately compile-time: a non-integer scale is what turns crisp 640x400 into mush.
-constexpr int VIRTUAL_WIDTH = 640;
-constexpr int VIRTUAL_HEIGHT = 400;
-constexpr int PRESENT_SCALE = 2;
+// The screen the game presents. Not restated here: Neuron::SceneTarget owns the numbers, the
+// window is created at exactly that size, and the swap chain is told the same thing -- which is
+// what makes "the client area is the framebuffer" a fact rather than three constants that agree
+// today (ADR-011).
+constexpr int CLIENT_WIDTH = static_cast<int>(Neuron::SceneTarget::WIDTH_PIXELS);
+constexpr int CLIENT_HEIGHT = static_cast<int>(Neuron::SceneTarget::HEIGHT_PIXELS);
+
+// Where the status text sits, in screen pixels. One glyph is FontRenderer::LINE_HEIGHT_PIXELS
+// tall, so the two lines are one line apart with half a line of air between them.
+constexpr int TEXT_MARGIN_PIXELS = 16;
+constexpr int TEXT_LINE_SPACING_PIXELS = 24;
 
 constexpr wchar_t WINDOW_CLASS_NAME[] = L"FrontierOutpostWindow";
 constexpr wchar_t WINDOW_TITLE[] = L"Frontier Outpost";
@@ -88,21 +94,19 @@ bool RegisterWindowClass(HINSTANCE _instance)
   return RegisterClassExW(&windowClass) != 0;
 }
 
-// Sizes for the CLIENT area, not the window: AdjustWindowRect adds the border and caption, so
-// the framebuffer is presented 1:1 at PRESENT_SCALE rather than a few rows short of it.
+// Sizes for the CLIENT area, not the window: AdjustWindowRect adds the border and caption, so the
+// framebuffer is presented 1:1 rather than a few rows short of it.
 //
 // AdjustWindowRect assumes 96 DPI, and under per-monitor awareness the caption on a scaled
 // display is not 96 DPI, so its answer is close rather than right. Rather than reach for
 // AdjustWindowRectExForDpi and a DPI to pass it, the window is created and then measured: if the
 // client area came out anything other than exact, the difference is added back. That is correct
 // on every DPI, theme and Windows version without knowing anything about any of them -- and this
-// has to be exact, because a client area one row short means the bottom row of virtual pixels is
-// not PRESENT_SCALE physical pixels tall.
+// has to be exact, because the client area IS the framebuffer: a row short is a row of the
+// picture the player never sees.
 HWND CreateMainWindow(HINSTANCE _instance, int _showCommand)
 {
   constexpr DWORD STYLE = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
-  constexpr int CLIENT_WIDTH = VIRTUAL_WIDTH * PRESENT_SCALE;
-  constexpr int CLIENT_HEIGHT = VIRTUAL_HEIGHT * PRESENT_SCALE;
 
   RECT bounds = {0, 0, CLIENT_WIDTH, CLIENT_HEIGHT};
   AdjustWindowRect(&bounds, STYLE, FALSE);
@@ -152,7 +156,7 @@ bool PumpMessages()
 /// The status line: the tick the server is on and where it says the ship is.
 ///
 /// Metres to one decimal rather than millimetres, because millimetres on a screen where one pixel
-/// is 125 mm is four digits of noise. The tick is what makes it possible to see at a glance that
+/// is 62 mm is four digits of noise. The tick is what makes it possible to see at a glance that
 /// the server is running at all.
 std::string StatusLine(const Frontier::ShipView& _ship)
 {
@@ -167,17 +171,16 @@ std::string StatusLine(const Frontier::ShipView& _ship)
 int RunGame(HWND _window)
 {
   Neuron::Device device;
-  device.Create(_window, VIRTUAL_WIDTH * PRESENT_SCALE, VIRTUAL_HEIGHT * PRESENT_SCALE);
+  device.Create(_window, Neuron::SceneTarget::WIDTH_PIXELS, Neuron::SceneTarget::HEIGHT_PIXELS);
 
   // One shader-visible descriptor heap for the whole client: only one can be bound at a time, so
   // every renderer allocates its slots out of this (DescriptorHeap.h).
   Neuron::DescriptorHeap shaderVisibleHeap;
   shaderVisibleHeap.Create(device.Handle(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 16, true);
 
-  // Space is black. The blue of step 2 was there to prove the palette; from here the clear index
-  // is the color of empty space.
-  Neuron::PaletteTarget screen;
-  screen.Create(device.Handle(), shaderVisibleHeap, Neuron::ToIndex(Neuron::PaletteIndex::Black));
+  // Space is black.
+  Neuron::SceneTarget screen;
+  screen.Create(device.Handle(), Neuron::BLACK);
 
   Neuron::FontRenderer text;
   text.Create(device, shaderVisibleHeap);
@@ -201,7 +204,8 @@ int RunGame(HWND _window)
   // The station never moves, so its world matrix is built once rather than every frame.
   const std::array<float, 16> stationWorld = Neuron::WorldMatrix(0.0F, Frontier::STATION_POSITION_X, 0.0F, Frontier::STATION_POSITION_Z);
 
-  Neuron::IsometricCamera camera{static_cast<float>(VIRTUAL_WIDTH), static_cast<float>(VIRTUAL_HEIGHT)};
+  Neuron::IsometricCamera camera{static_cast<float>(Neuron::SceneTarget::WIDTH_PIXELS),
+                                 static_cast<float>(Neuron::SceneTarget::HEIGHT_PIXELS)};
 
   // The server. It gets its own thread here and keeps it: same-thread is not a stage this passes
   // through (MVP-01 section 2). The transport outlives the session, which is why it is declared
@@ -215,7 +219,7 @@ int RunGame(HWND _window)
   Frontier::ShipView ship;
 
   Neuron::PointerInput pointer;
-  pointer.Create(_window, PRESENT_SCALE);
+  pointer.Create(_window);
   g_pointerInput = &pointer;
 
   auto previousFrame = std::chrono::steady_clock::now();
@@ -257,11 +261,11 @@ int RunGame(HWND _window)
     // The camera is followed BEFORE this, so the un-projection uses the same camera the frame is
     // about to be drawn with. Doing it after would answer with the previous frame's camera, which
     // is a whole tick of the ship's travel out at speed.
-    float clickXTexels = 0.0F;
-    float clickYTexels = 0.0F;
-    if (pointer.TakeClick(clickXTexels, clickYTexels))
+    float clickXPixels = 0.0F;
+    float clickYPixels = 0.0F;
+    if (pointer.TakeClick(clickXPixels, clickYPixels))
     {
-      const Neuron::IsometricCamera::WorldPoint target = camera.UnprojectToGround(clickXTexels, clickYTexels);
+      const Neuron::IsometricCamera::WorldPoint target = camera.UnprojectToGround(clickXPixels, clickYPixels);
       transport.SendOrder(Neuron::MoveToOrder{
         .targetXMillimetres = static_cast<std::int64_t>(std::lround(target.x * 1000.0F)),
         .targetZMillimetres = static_cast<std::int64_t>(std::lround(target.z * 1000.0F)),
@@ -270,12 +274,13 @@ int RunGame(HWND _window)
 
     ID3D12GraphicsCommandList* commandList = device.BeginFrame();
 
-    // Everything the game draws goes between BeginScene and Resolve, and every one of those
-    // draws writes a palette index.
-    screen.BeginScene(commandList);
+    // Everything the game draws happens after this, straight into the back buffer. There is no
+    // resolve pass any more: the render target and the back buffer are the same 1280x720 pixels
+    // (ADR-011).
+    screen.BeginScene(commandList, device.BackBufferView());
 
-    // The backdrop first, before anything that uses depth. It writes index 0 where there is no
-    // star, so it costs nothing over the clear it replaces (ADR-010).
+    // The backdrop first, before anything that uses depth. It writes the color of empty space
+    // where there is no star, so it costs nothing over the clear it replaces (ADR-010).
     starfield.Draw(commandList, camera);
 
     // The station is drawn whether or not the server has spoken: it is not replicated state, it
@@ -289,11 +294,9 @@ int RunGame(HWND _window)
     }
 
     text.BeginFrame(device.FrameIndex());
-    text.DrawText(8, 8, "FRONTIER OUTPOST", Neuron::ToIndex(Neuron::PaletteIndex::White));
-    text.DrawText(8, 20, StatusLine(ship), Neuron::ToIndex(Neuron::PaletteIndex::BrightGreen));
+    text.DrawText(TEXT_MARGIN_PIXELS, TEXT_MARGIN_PIXELS, "FRONTIER OUTPOST", Neuron::WHITE);
+    text.DrawText(TEXT_MARGIN_PIXELS, TEXT_MARGIN_PIXELS + TEXT_LINE_SPACING_PIXELS, StatusLine(ship), Neuron::BRIGHT_GREEN);
     text.Flush(commandList);
-
-    screen.Resolve(commandList, device.BackBufferView(), device.BackBufferWidthPixels(), device.BackBufferHeightPixels(), PRESENT_SCALE);
 
     device.EndFrameAndPresent();
     device.DrainDebugMessages();
@@ -305,9 +308,9 @@ int RunGame(HWND _window)
   g_pointerInput = nullptr;
 
   // Drain the GPU here, not in ~Device. Destructors run in reverse declaration order, so the
-  // PaletteTarget's index target and depth buffer would otherwise be released while the last
-  // submitted command list still referenced them -- which the debug layer reports as
-  // OBJECT_DELETED_WHILE_STILL_IN_USE and a release build turns into a use-after-free.
+  // SceneTarget's depth buffer would otherwise be released while the last submitted command list
+  // still referenced it -- which the debug layer reports as OBJECT_DELETED_WHILE_STILL_IN_USE and
+  // a release build turns into a use-after-free.
   device.WaitForGpu();
   device.DrainDebugMessages();
 
@@ -322,11 +325,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   UNREFERENCED_PARAMETER(_commandLine);
 
   // Before the window, before anything. A process that is not DPI-aware gets its window
-  // *bitmap-stretched* by Windows on a scaled display -- on a 125% desktop the 1280x800 client
-  // this game asks for is blown up to 1600x1000 by the compositor, with bilinear filtering, on
-  // top of the integer 2x scale the renderer was so careful about. That is precisely the
-  // fractional scale Design/README.md section 1 rules out, and it is invisible from inside the
-  // process: every D3D12 call still reports 1280x800 and every pixel we write is still exact.
+  // *bitmap-stretched* by Windows on a scaled display -- on a 125% desktop the 1280x720 client
+  // this game asks for is blown up to 1600x900 by the compositor, with bilinear filtering. That
+  // is precisely the resample Design/README.md section 1 rules out, and it is invisible from
+  // inside the process: every D3D12 call still reports 1280x720 and every pixel we write is still
+  // exact.
   //
   // Not an error check: a Windows build without the call is one where the manifest default
   // applies, and there is nothing useful to do about it here.

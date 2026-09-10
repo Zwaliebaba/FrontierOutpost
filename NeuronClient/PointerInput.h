@@ -4,7 +4,7 @@ namespace Neuron
 {
 
 /// Turns taps, drags and wheel notches into the two things this game's input means: a point on the
-/// 640x400 virtual screen to go to, and a number of zoom steps.
+/// 1280x720 screen to go to, and a number of zoom steps.
 ///
 /// One code path for touch and mouse, through the Windows Pointer API. Touch is the primary input
 /// and the mouse is the fallback (MVP-01 section 2), and EnableMouseInPointer is what makes that
@@ -34,15 +34,15 @@ public:
   /// to report rather than to work around.
   [[nodiscard]] static bool EnableMouseAsPointer() noexcept;
 
-  /// Not noexcept: a present scale of zero is a broken invariant, and a broken invariant throws
-  /// in this tree (Debug.h).
-  void Create(HWND _window, std::uint32_t _presentScale);
+  /// The window whose client area the screen is. There is no scale factor to pass: the client
+  /// area is exactly the 1280x720 the game renders, so a client pixel IS a screen pixel and the
+  /// conversion is ScreenToClient and nothing else (ADR-011).
+  void Create(HWND _window) noexcept;
 
   /// Feeds a window message. True when it was consumed.
   bool HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) noexcept;
 
-  /// Takes the pending tap, in virtual texels from the top-left of the 640x400 screen, and clears
-  /// it.
+  /// Takes the pending tap, in pixels from the top-left of the 1280x720 screen, and clears it.
   ///
   /// Only the most recent tap is kept. A second tap before the frame that reads the first
   /// replaces it, which is what a player means: the ship goes where they last pointed.
@@ -51,7 +51,7 @@ public:
   /// pinch looks exactly like a tap until the second one lands, so the tap is cancelled when it
   /// does -- otherwise every pinch would also fling the ship at wherever the first finger
   /// happened to touch down.
-  [[nodiscard]] bool TakeClick(float& _outXTexels, float& _outYTexels) noexcept;
+  [[nodiscard]] bool TakeClick(float& _outXPixels, float& _outYPixels) noexcept;
 
   /// Takes the zoom the player has asked for since the last frame, in whole steps, and clears it.
   /// Positive zooms in. Zero when they have not asked for any, which is almost every frame.
@@ -61,15 +61,15 @@ private:
   struct Contact
   {
     std::uint32_t pointerId;
-    float xTexels;
-    float yTexels;
+    float xPixels;
+    float yPixels;
   };
 
-  /// Screen coordinates out of a WM_POINTER* lParam, converted to virtual texels.
-  [[nodiscard]] bool ScreenToVirtual(LPARAM _lParam, float& _outXTexels, float& _outYTexels) const noexcept;
+  /// Desktop coordinates out of a WM_POINTER* lParam, converted to client-area pixels.
+  [[nodiscard]] bool ScreenToClientPixels(LPARAM _lParam, float& _outXPixels, float& _outYPixels) const noexcept;
 
-  void AddContact(std::uint32_t _pointerId, float _xTexels, float _yTexels) noexcept;
-  void MoveContact(std::uint32_t _pointerId, float _xTexels, float _yTexels) noexcept;
+  void AddContact(std::uint32_t _pointerId, float _xPixels, float _yPixels) noexcept;
+  void MoveContact(std::uint32_t _pointerId, float _xPixels, float _yPixels) noexcept;
   void RemoveContact(std::uint32_t _pointerId) noexcept;
 
   /// The distance between the two contacts, or 0 when there are not two.
@@ -79,14 +79,10 @@ private:
   void EvaluatePinch() noexcept;
 
   HWND m_window = nullptr;
-  /// The whole-number factor the virtual screen is blown up by. Dividing by it is the entire
-  /// conversion from a physical client pixel to a virtual one, and it is exact because the factor
-  /// is a whole number (Design/README.md section 1).
-  std::uint32_t m_presentScale = 1;
 
   bool m_hasClick = false;
-  float m_clickXTexels = 0.0F;
-  float m_clickYTexels = 0.0F;
+  float m_clickXPixels = 0.0F;
+  float m_clickYPixels = 0.0F;
 
   std::array<Contact, MAX_CONTACTS> m_contacts = {};
   std::size_t m_contactCount = 0;

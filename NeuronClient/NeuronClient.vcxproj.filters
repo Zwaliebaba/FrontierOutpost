@@ -11,8 +11,8 @@
     <ClInclude Include="Device.h" />
     <ClInclude Include="DescriptorHeap.h" />
     <ClInclude Include="D3D12Defaults.h" />
-    <ClInclude Include="Palette.h" />
-    <ClInclude Include="PaletteTarget.h" />
+    <ClInclude Include="Color.h" />
+    <ClInclude Include="SceneTarget.h" />
     <ClInclude Include="PointerInput.h" />
     <ClInclude Include="Starfield.h" />
   </ItemGroup>
@@ -24,7 +24,7 @@
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="MeshRenderer.cpp" />
     <ClCompile Include="DescriptorHeap.cpp" />
-    <ClCompile Include="PaletteTarget.cpp" />
+    <ClCompile Include="SceneTarget.cpp" />
     <ClCompile Include="PointerInput.cpp" />
     <ClCompile Include="Starfield.cpp" />
   </ItemGroup>
@@ -34,12 +34,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <FXCompile Include="Shaders\PaletteResolveVS.hlsl">
-      <Filter>Shaders</Filter>
-    </FXCompile>
-    <FXCompile Include="Shaders\PaletteResolvePS.hlsl">
-      <Filter>Shaders</Filter>
-    </FXCompile>
     <FXCompile Include="Shaders\TextVS.hlsl">
       <Filter>Shaders</Filter>
     </FXCompile>

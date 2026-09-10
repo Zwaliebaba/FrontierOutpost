@@ -15,7 +15,7 @@ class MeshRenderer
 {
 public:
   /// The light, in world space, as a unit direction from the surface towards it. Fixed for the
-  /// MVP: a single hard key light is what gives flat-shaded faces two clean tones (ADR-002).
+  /// MVP: a single hard key light is what gives flat-shaded faces two clean tones (ADR-012).
   ///
   /// It is raked in from above and from the port quarter rather than pointed straight down, and
   /// that is the whole difference between a ship and a silhouette. The camera looks along
@@ -45,8 +45,8 @@ public:
 
 private:
   /// Two matrices and the light: 16 + 16 + 4 DWORDs of the root signature's 64. Root constants
-  /// rather than a constant buffer, for the same reason as the resolve pass -- no upload heap, no
-  /// per-frame versioning, nothing to keep alive (ADR-001).
+  /// rather than a constant buffer -- no upload heap, no per-frame versioning, nothing to keep
+  /// alive across frames.
   static constexpr std::uint32_t CONSTANT_COUNT = 36;
 
   winrt::com_ptr<ID3D12RootSignature> m_rootSignature;

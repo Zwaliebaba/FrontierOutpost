@@ -13,8 +13,8 @@ namespace Frontier
 //
 // The hull points along +X at heading zero and sits on y = 0. One unit is one metre. The table
 // below is drawn at twice the final size and SHIP_SCALE halves it, so the ship is 10.75 m from
-// nose (x = 12) to exhaust (x = -9.5) and 9.5 m across the wings (z = -/+9.5). At the camera's 8
-// pixels a ground unit that is 86 virtual pixels of a 640-pixel screen (ADR-003).
+// nose (x = 12) to exhaust (x = -9.5) and 9.5 m across the wings (z = -/+9.5). At the camera's 16
+// pixels a ground unit that is 172 pixels of a 1280-pixel screen (ADR-003, ADR-013).
 //
 // It is authored as FACES rather than as vertices, and the vertex array below is computed from
 // them at compile time. That is not tidiness: flat shading needs a normal per face and no shared
@@ -23,7 +23,7 @@ namespace Frontier
 // the cause of.
 
 /// A triangle as authored: three corners, wound so that the cross product of the first two edges
-/// points OUT of the hull, and the dark half of its palette pair.
+/// points OUT of the hull, and the two tones it is shaded between.
 struct ShipFace
 {
   float ax;
@@ -35,16 +35,20 @@ struct ShipFace
   float cx;
   float cy;
   float cz;
-  /// 0-7. The light adds 8 to pick the bright variant of the same hue (ADR-002), so a base index
-  /// of 8 or more would run off the end of the palette.
-  std::uint32_t paletteIndex;
+  /// The shaded tone and the lit tone. The light picks one of them and there is nothing in
+  /// between (ADR-012).
+  Neuron::ColorPair color;
 };
 
-// The palette pairs the ship is built from. Hull is gray/white, wings blue, engines red -- three
+// The color pairs the ship is built from. Hull is gray/white, wings blue, engines red -- three
 // hues is as many as a silhouette this size can carry before it stops reading as one object.
-inline constexpr std::uint32_t HULL_COLOR = 7;   // AAAAAA, lighting to FFFFFF
-inline constexpr std::uint32_t WING_COLOR = 1;   // 0000AA, lighting to 5555FF
-inline constexpr std::uint32_t ENGINE_COLOR = 4; // AA0000, lighting to FF5555
+//
+// They were three palette indices until 2026-09-10, and the light picked index n or index n + 8
+// (ADR-002). ADR-012 writes both halves out instead, because with no palette there is no
+// arithmetic that could imply the second one. The values are unchanged: this is the same ship.
+inline constexpr Neuron::ColorPair HULL_COLOR = {Neuron::LIGHT_GRAY, Neuron::WHITE};
+inline constexpr Neuron::ColorPair WING_COLOR = {Neuron::BLUE, Neuron::BRIGHT_BLUE};
+inline constexpr Neuron::ColorPair ENGINE_COLOR = {Neuron::RED, Neuron::BRIGHT_RED};
 
 // The hull is a raised DECK with flanks falling away to the beam, rather than a simple faceted
 // spindle. That shape is the reason the ship reads as a solid: the deck and the nose and tail
@@ -146,9 +150,12 @@ inline constexpr float SHIP_SCALE = 0.5F;
     const float normalY = edge1Z * edge2X - edge1X * edge2Z;
     const float normalZ = edge1X * edge2Y - edge1Y * edge2X;
 
-    vertices[face * 3 + 0] = {ax, ay, az, normalX, normalY, normalZ, source.paletteIndex};
-    vertices[face * 3 + 1] = {bx, by, bz, normalX, normalY, normalZ, source.paletteIndex};
-    vertices[face * 3 + 2] = {cx, cy, cz, normalX, normalY, normalZ, source.paletteIndex};
+    const std::uint32_t shaded = Neuron::Pack(source.color.shaded);
+    const std::uint32_t lit = Neuron::Pack(source.color.lit);
+
+    vertices[face * 3 + 0] = {ax, ay, az, normalX, normalY, normalZ, shaded, lit};
+    vertices[face * 3 + 1] = {bx, by, bz, normalX, normalY, normalZ, shaded, lit};
+    vertices[face * 3 + 2] = {cx, cy, cz, normalX, normalY, normalZ, shaded, lit};
   }
 
   return vertices;
@@ -171,10 +178,13 @@ inline constexpr float SHIP_SCALE = 0.5F;
 inline constexpr std::array<Neuron::MeshVertex, SHIP_VERTEX_COUNT> SHIP_VERTICES = BuildShipVertices();
 inline constexpr std::array<std::uint16_t, SHIP_VERTEX_COUNT> SHIP_INDICES = BuildShipIndices();
 
-// ADR-002 shades a face between palette index n and n+8, so an authored index of 8 or more runs
-// off the end of the palette. Checking it here makes a bad index a build error rather than a
-// wrong color that only shows up when that face happens to catch the light.
-static_assert(std::ranges::all_of(SHIP_FACES, [](const ShipFace& _face) { return _face.paletteIndex < 8; }),
-              "A face's authored index is the DARK half of a palette pair and must be 0-7.");
+// ADR-012 shades a face between two authored tones, and which of them is which is now a claim
+// about two arbitrary colors rather than something the palette's structure guaranteed. Checking it
+// here makes a pair written the wrong way round a build error rather than a ship that is somehow
+// darker where the light hits it -- which is exactly the kind of wrongness that reads as a
+// deliberate art choice.
+static_assert(std::ranges::all_of(SHIP_FACES, [](const ShipFace& _face)
+                                  { return Neuron::Luminance(_face.color.lit) > Neuron::Luminance(_face.color.shaded); }),
+              "A face's lit tone must be brighter than its shaded tone.");
 
 } // namespace Frontier

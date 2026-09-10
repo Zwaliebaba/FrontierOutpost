@@ -1,8 +1,8 @@
 // Device.cpp -- D3D12 device, direct queue and flip-model swap chain.
 //
-// Nothing here knows about the 640x400 paletted screen; that is PaletteTarget's job. This file
-// owns exactly the part of the stack that would look the same in any D3D12 program: an adapter,
-// a queue, back buffers, and the fence that stops the CPU from running away from the GPU.
+// Nothing here knows about the screen's size or what is drawn on it; that is SceneTarget's job.
+// This file owns exactly the part of the stack that would look the same in any D3D12 program: an
+// adapter, a queue, back buffers, and the fence that stops the CPU from running away from the GPU.
 
 #include "pch.h"
 #include "Device.h"
@@ -15,8 +15,9 @@ namespace Neuron
 namespace
 {
 
-// The swap chain is the only place a color arrives as RGBA. Everything the game draws is a
-// palette index; the resolve pass is what turns one into the other (see PaletteTarget).
+// The format every pass in this renderer writes, because the back buffer is the only render
+// target there is (ADR-011). Deliberately not _SRGB: a channel authored as 0xAA is presented as
+// 0xAA, so a screenshot can be compared against Color.h byte for byte.
 constexpr DXGI_FORMAT BACK_BUFFER_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
 
 /// The debug layer is a capability *probe*, not an error check (Debug.h): a machine without the
@@ -144,9 +145,9 @@ void Device::CreateSwapChain(HWND _window)
   swapChainDesc.SampleDesc.Count = 1;
   swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
   swapChainDesc.BufferCount = FRAME_COUNT;
-  // DXGI_SCALING_NONE, not STRETCH. The back buffer is exactly the client area, so there is
-  // nothing to scale -- and a stretch here is the one place a fractional factor could get back
-  // into a presentation that Design/README.md section 1 fixes at a whole number.
+  // DXGI_SCALING_NONE, not STRETCH. The back buffer is exactly the client area and exactly what
+  // the game renders, so there is nothing to scale -- and a stretch here is the one place a
+  // resample could get into a path that has none (Design/README.md section 1).
   swapChainDesc.Scaling = DXGI_SCALING_NONE;
   swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
   swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
@@ -155,7 +156,7 @@ void Device::CreateSwapChain(HWND _window)
   winrt::check_hresult(m_factory->CreateSwapChainForHwnd(m_queue.get(), _window, &swapChainDesc, nullptr, nullptr, swapChain.put()));
 
   // The window is a fixed size and this game has no fullscreen mode. Alt+Enter would resize a
-  // swap chain whose whole contract is that it is an integer multiple of 640x400.
+  // swap chain whose whole contract is that it is exactly 1280x720.
   winrt::check_hresult(m_factory->MakeWindowAssociation(_window, DXGI_MWA_NO_ALT_ENTER));
 
   m_swapChain = swapChain.as<IDXGISwapChain3>();

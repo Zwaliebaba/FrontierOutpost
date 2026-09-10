@@ -1,11 +1,11 @@
-// MeshVS.hlsl -- an authored mesh through the isometric camera, flat-shaded to two palette
-// indices (ADR-002, ADR-003).
+// MeshVS.hlsl -- an authored mesh through the isometric camera, flat-shaded to one of the two
+// colors it was authored with (ADR-012, ADR-003).
 //
 // The lighting decision is made here rather than in the pixel shader, and that is not an
 // optimization. A face's normal is the same at all three of its vertices, so the choice between
-// the dark and the bright variant of its color is a property of the triangle, not of the pixel.
-// Deciding it once per vertex and marking it nointerpolation makes that structural: there is no
-// arithmetic anywhere that could produce a third tone.
+// its shaded and its lit color is a property of the triangle, not of the pixel. Deciding it once
+// per vertex and marking it nointerpolation makes that structural: the only two colors this pass
+// can emit are the two that arrived on the vertex.
 
 cbuffer MeshConstants : register(b0)
 {
@@ -23,14 +23,16 @@ struct VertexIn
   // the edges, computed at compile time. Normalizing needs a square root, which is not something
   // to ask of a constexpr in C++23, and the shader has to normalize anyway.
   float3 normal : NORMAL;
-  // The DARK half of the palette pair, 0-7. The light adds 8 (ADR-002).
-  uint paletteIndex : TEXCOORD0;
+  // R8G8B8A8_UNORM on both, so they arrive as 0-1 floats and go out unchanged. The framebuffer is
+  // the same format and is not _SRGB, so a channel authored as 0xAA is written back as 0xAA.
+  float4 shadedColor : COLOR0;
+  float4 litColor : COLOR1;
 };
 
 struct VertexOut
 {
   float4 position : SV_Position;
-  nointerpolation uint paletteIndex : TEXCOORD0;
+  nointerpolation float4 color : COLOR0;
 };
 
 VertexOut main(VertexIn _input)
@@ -45,7 +47,7 @@ VertexOut main(VertexIn _input)
   float3 worldNormal = normalize(mul(float4(_input.normal, 0.0), g_world).xyz);
 
   bool lit = dot(worldNormal, g_lightDirection) > g_litThreshold;
-  output.paletteIndex = _input.paletteIndex + (lit ? 8u : 0u);
+  output.color = lit ? _input.litColor : _input.shadedColor;
 
   return output;
 }

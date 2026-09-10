@@ -1,6 +1,6 @@
 # ADR-002 — A lit face is one of two palette entries, chosen per face
 
-**Status:** Accepted
+**Status:** Superseded by ADR-012
 
 **Date:** 2026-09-09
 **Decided by:** Build session MVP-01, step 4. Recommendation stated in `Design/Plans/MVP-01-IsometricShip.md` §3; this ADR takes it and records why, and records one thing the recommendation did not anticipate.

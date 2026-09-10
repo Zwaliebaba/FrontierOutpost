@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Color.h"
+
 namespace Neuron
 {
 
@@ -17,8 +19,15 @@ struct MeshVertex
   float normalX;
   float normalY;
   float normalZ;
-  /// The dark half of the palette pair, 0-7; the light adds 8 (ADR-002).
-  std::uint32_t paletteIndex;
+  /// The face's two tones, packed by Pack() and read back by an R8G8B8A8_UNORM input element. The
+  /// light picks one of them per face and there is nothing in between (ADR-012).
+  ///
+  /// BOTH are carried on the vertex rather than one plus a brightening factor, and that is the
+  /// whole of what keeps ADR-012's guarantee structural: there is no arithmetic anywhere in the
+  /// pass that could produce a third tone, because the only two values in play are the two the
+  /// mesh was authored with.
+  std::uint32_t shadedColor;
+  std::uint32_t litColor;
 };
 
 /// The GPU buffers for one authored mesh.

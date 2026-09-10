@@ -21,16 +21,18 @@ These are settled. They are not preferences to be re-litigated in a session; cha
 
 | | Decision |
 |---|---|
-| **Presentation** | 640×400, **16 colours**. A fixed paletted framebuffer, scaled to the window by a **whole number** (2× today). A fractional scale is what turns a crisp legacy screen into mush, so integer scaling is a design constraint, not a default. |
+| **Presentation** | **1280×720, R8G8B8A8**, presented **1:1**. The render target, the swap chain's back buffer and the window's client area are the same 1280×720 pixels, so nothing on the path from a vertex to the display resamples anything (ADR-011). The window is a fixed size; there is no scaling factor and no fullscreen mode. Until 2026-09-10 this was 640×400 in 16 palette-indexed colours, blown up 2× — see ADR-001 and ADR-011 for what changed and why. |
 | **Graphics API** | Direct3D 12, on Windows 11. The legacy look is a deliberate aesthetic on a modern stack — not a limitation being worked around, and not a reason to reach for an older API. |
 | **Language** | C++23 (`/std:c++latest` under MSVC v145), `/permissive-`, `/W4` with warnings as errors. |
 | **Platform** | x64 only. |
 | **Shape** | One executable. `FrontierOutpost.exe` starts the client and the authoritative server in the same process. |
-| **Distribution** | **The executable ships alone.** No assets folder, no data directory. Art, palettes, fonts, audio and compiled shaders are embedded in the binary (AGENTS.md R13). |
+| **Distribution** | **The executable ships alone.** No assets folder, no data directory. Art, colour tables, fonts, audio and compiled shaders are embedded in the binary (AGENTS.md R13). |
 | **Authority** | The server is authoritative. `GameLogic` is server-side and the client never links it (AGENTS.md §2). |
 | **Dependencies** | The Windows SDK and the MSVC standard library. Nothing else (AGENTS.md R14). |
 
 Every one of these constrains design work in a way that is easy to forget mid-session. A UI mock at 1920×1080, a texture atlas loaded from disk, a `std::print` of a wall-clock timestamp inside the simulation — each is a perfectly good idea that this game has already decided against.
+
+**The presentation row changed on 2026-09-10 and the rest of this record has not all caught up.** ADR-011, ADR-012 and ADR-013 are the change; ADR-001, ADR-002 and ADR-008 are superseded; ADR-003 and ADR-010 are revised in part and say so in their status lines. Anything in `Archive/` describes the 640×400 renderer and is history, not a description of the tree.
 
 ---
 
@@ -49,9 +51,9 @@ Design/
 
 **Which one is it?** The test is what happens when the document turns out to be wrong.
 
-- An **ADR** records a decision with alternatives that were genuinely available. If it turns out wrong, you write a *new* ADR that supersedes it — you do not edit the old one. Transport choice, tick rate, the palette format, how ships are spatially indexed.
+- An **ADR** records a decision with alternatives that were genuinely available. If it turns out wrong, you write a *new* ADR that supersedes it — you do not edit the old one. Transport choice, tick rate, the framebuffer format, how ships are spatially indexed.
 - A **Plan** records intended work. If it turns out wrong, you edit it. It is expected to change every week and to be moved to `Archive/` when it is done.
-- A **Reference** records something that is simply the case. If it turns out wrong, it was a bug in the document. Wire record layouts, the 16-colour palette table, coordinate conventions.
+- A **Reference** records something that is simply the case. If it turns out wrong, it was a bug in the document. Wire record layouts, the named-colour table, coordinate conventions.
 - **`Archive/`** is where a plan goes when it is finished and where a review goes when it is answered. Nothing in `Archive/` is authoritative; it exists so a future session can find out why something was done.
 
 If you cannot tell which a document is, it is probably two documents.

@@ -21,7 +21,7 @@ namespace Frontier
 //
 // The shape, bottom to top: a wide octagonal base drum, a narrower tower rising out of it, a flat
 // cap, and four solar panels on the tower. It is deliberately a stack of tiers rather than a
-// single block -- ADR-002's lighting only reads as three-dimensional when a mesh has faces at
+// single block -- ADR-012's lighting only reads as three-dimensional when a mesh has faces at
 // clearly different orientations, and eight vertical facets around a drum is exactly that: the
 // light rakes across them and splits the ring into a lit half and a shaded half.
 
@@ -53,11 +53,15 @@ inline constexpr std::array<StationPoint, STATION_SIDES> STATION_DIRECTIONS = {{
 // The tiers, in metres. The station is parameterized rather than sculpted, so resizing it is
 // these eight numbers rather than a scale factor like the ship's.
 //
-// The widest part is the base drum, and a drum of radius r spans r * sqrt(2) * 8 virtual pixels
-// across -- the sqrt(2) because the octagon's widest diagonal runs corner to corner, and the 8
-// because that is the camera's pixels per ground unit (ADR-003). At radius 4.5 that is 51 pixels
-// of the 640, and 9 m tall is 72. Getting this arithmetic wrong is what put the first version,
+// The widest part is the base drum, and a drum of radius r spans r * sqrt(2) * 16 pixels across --
+// the sqrt(2) because the octagon's widest diagonal runs corner to corner, and the 16 because that
+// is the camera's pixels per ground unit (ADR-003, ADR-013). At radius 4.5 that is 102 pixels of
+// the 1280, and 9 m tall is 144. Getting this arithmetic wrong is what put the first version,
 // radius 11 by 22 m, off the left edge of the screen.
+//
+// The tiers are unchanged by the move to 1280x720: the camera's scale doubled with the screen, so
+// every one of these figures is the old one doubled and the station occupies the same fraction of
+// the picture it always did (ADR-013).
 inline constexpr float STATION_BASE_RADIUS = 4.5F;
 inline constexpr float STATION_BASE_TOP = 2.0F;
 inline constexpr float STATION_TOWER_RADIUS = 2.0F;
@@ -67,11 +71,11 @@ inline constexpr float STATION_PANEL_INNER = 2.25F;
 inline constexpr float STATION_PANEL_OUTER = 6.0F;
 inline constexpr float STATION_PANEL_HALF_WIDTH = 0.7F;
 
-/// The same three palette pairs the ship uses, so the two read as built by the same people
-/// (ADR-002; the authored index is the dark half, 0-7).
-inline constexpr std::uint32_t STATION_STRUCTURE_COLOR = 7; // AAAAAA, lighting to FFFFFF
-inline constexpr std::uint32_t STATION_BEACON_COLOR = 4;    // AA0000, lighting to FF5555
-inline constexpr std::uint32_t STATION_PANEL_COLOR = 1;     // 0000AA, lighting to 5555FF
+/// The same three color pairs the ship uses, so the two read as built by the same people
+/// (ADR-012).
+inline constexpr Neuron::ColorPair STATION_STRUCTURE_COLOR = {Neuron::LIGHT_GRAY, Neuron::WHITE};
+inline constexpr Neuron::ColorPair STATION_BEACON_COLOR = {Neuron::RED, Neuron::BRIGHT_RED};
+inline constexpr Neuron::ColorPair STATION_PANEL_COLOR = {Neuron::BLUE, Neuron::BRIGHT_BLUE};
 
 // 8 base sides + 8 base-top ring + 8 tower sides, two triangles each, then 8 cap triangles and 4
 // panels of two. Counted here so the array size and the generator cannot disagree.
@@ -94,7 +98,8 @@ inline constexpr std::size_t STATION_VERTEX_COUNT = STATION_TRIANGLE_COUNT * 3;
     return StationPoint{direction.x * _radius, _height, direction.z * _radius};
   };
 
-  const auto triangle = [&vertices, &used](const StationPoint& _a, const StationPoint& _b, const StationPoint& _c, std::uint32_t _color)
+  const auto triangle =
+    [&vertices, &used](const StationPoint& _a, const StationPoint& _b, const StationPoint& _c, const Neuron::ColorPair& _color)
   {
     const float edge1X = _b.x - _a.x;
     const float edge1Y = _b.y - _a.y;
@@ -107,13 +112,16 @@ inline constexpr std::size_t STATION_VERTEX_COUNT = STATION_TRIANGLE_COUNT * 3;
     const float normalY = edge1Z * edge2X - edge1X * edge2Z;
     const float normalZ = edge1X * edge2Y - edge1Y * edge2X;
 
-    vertices[used++] = {_a.x, _a.y, _a.z, normalX, normalY, normalZ, _color};
-    vertices[used++] = {_b.x, _b.y, _b.z, normalX, normalY, normalZ, _color};
-    vertices[used++] = {_c.x, _c.y, _c.z, normalX, normalY, normalZ, _color};
+    const std::uint32_t shaded = Neuron::Pack(_color.shaded);
+    const std::uint32_t lit = Neuron::Pack(_color.lit);
+
+    vertices[used++] = {_a.x, _a.y, _a.z, normalX, normalY, normalZ, shaded, lit};
+    vertices[used++] = {_b.x, _b.y, _b.z, normalX, normalY, normalZ, shaded, lit};
+    vertices[used++] = {_c.x, _c.y, _c.z, normalX, normalY, normalZ, shaded, lit};
   };
 
-  const auto quad =
-    [&triangle](const StationPoint& _a, const StationPoint& _b, const StationPoint& _c, const StationPoint& _d, std::uint32_t _color)
+  const auto quad = [&triangle](const StationPoint& _a, const StationPoint& _b, const StationPoint& _c, const StationPoint& _d,
+                                const Neuron::ColorPair& _color)
   {
     triangle(_a, _b, _c, _color);
     triangle(_a, _c, _d, _color);
@@ -180,15 +188,21 @@ inline constexpr std::array<std::uint16_t, STATION_VERTEX_COUNT> STATION_INDICES
 static_assert(std::ranges::none_of(STATION_VERTICES, [](const Neuron::MeshVertex& _vertex)
                                    { return _vertex.normalX == 0.0F && _vertex.normalY == 0.0F && _vertex.normalZ == 0.0F; }),
               "A station face is degenerate: its three corners are collinear and it has no normal.");
-static_assert(std::ranges::all_of(STATION_VERTICES, [](const Neuron::MeshVertex& _vertex) { return _vertex.paletteIndex < 8; }),
-              "A face's authored index is the DARK half of a palette pair and must be 0-7.");
+static_assert(std::ranges::all_of(std::array{STATION_STRUCTURE_COLOR, STATION_BEACON_COLOR, STATION_PANEL_COLOR},
+                                  [](const Neuron::ColorPair& _pair)
+                                  { return Neuron::Luminance(_pair.lit) > Neuron::Luminance(_pair.shaded); }),
+              "A face's lit tone must be brighter than its shaded tone.");
 
 /// Where the station stands.
 ///
 /// Chosen through the projection rather than by eye. The camera puts a world point at
-/// ((x - z) * 8, (x + z) * 4) virtual pixels from the ship (ADR-003), so x - z = -26 places the
-/// station 208 pixels to the left -- far enough that its 51-pixel half-width clears the ship's 43
-/// -- and x + z = 0 puts it level, where its 72-pixel-tall silhouette has room above.
+/// ((x - z) * 16, (x + z) * 8) pixels from the ship (ADR-003, ADR-013), so x - z = -26 places the
+/// station 416 pixels to the left -- far enough that its 102-pixel half-width clears the ship's 86
+/// -- and x + z = 0 puts it level, where its 144-pixel-tall silhouette has room above.
+///
+/// Every figure in that paragraph doubled on 2026-09-10 and the framing did not move: the screen
+/// went from 640 to 1280 pixels wide at the same time the camera's scale went from 8 to 16, so the
+/// station still sits a third of the way across the picture (ADR-013).
 ///
 /// The distance is deliberately NOT scaled with the objects. Halving both and halving the gap
 /// between them would just be the same picture at a different zoom; leaving the world the size it

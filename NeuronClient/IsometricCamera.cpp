@@ -15,9 +15,9 @@ constexpr float INVERSE_SQRT_3 = 0.57735026918962576F;
 
 } // namespace
 
-IsometricCamera::IsometricCamera(float _virtualWidthPixels, float _virtualHeightPixels) noexcept
-  : m_virtualWidthPixels(_virtualWidthPixels),
-    m_virtualHeightPixels(_virtualHeightPixels)
+IsometricCamera::IsometricCamera(float _screenWidthPixels, float _screenHeightPixels) noexcept
+  : m_screenWidthPixels(_screenWidthPixels),
+    m_screenHeightPixels(_screenHeightPixels)
 {
 }
 
@@ -54,16 +54,16 @@ IsometricCamera::ScreenPoint IsometricCamera::Project(const WorldPoint& _world) 
   const float yPixels = (_world.x + _world.z) * (halfWidth * 0.5F) - _world.y * halfWidth;
 
   return ScreenPoint{
-    (xPixels - m_snappedTargetXPixels) + m_virtualWidthPixels * 0.5F,
-    (yPixels - m_snappedTargetYPixels) + m_virtualHeightPixels * 0.5F,
+    (xPixels - m_snappedTargetXPixels) + m_screenWidthPixels * 0.5F,
+    (yPixels - m_snappedTargetYPixels) + m_screenHeightPixels * 0.5F,
   };
 }
 
 IsometricCamera::WorldPoint IsometricCamera::UnprojectToGround(float _xPixels, float _yPixels) const noexcept
 {
   // Undo the centering and the snap to get back to the pixel offsets the projection produced.
-  const float xFromOrigin = (_xPixels - m_virtualWidthPixels * 0.5F) + m_snappedTargetXPixels;
-  const float yFromOrigin = (_yPixels - m_virtualHeightPixels * 0.5F) + m_snappedTargetYPixels;
+  const float xFromOrigin = (_xPixels - m_screenWidthPixels * 0.5F) + m_snappedTargetXPixels;
+  const float yFromOrigin = (_yPixels - m_screenHeightPixels * 0.5F) + m_snappedTargetYPixels;
 
   // With y fixed at 0 the projection is two equations in x and z, and it inverts in one step:
   //   xFromOrigin = (x - z) * w
@@ -78,8 +78,8 @@ IsometricCamera::WorldPoint IsometricCamera::UnprojectToGround(float _xPixels, f
 std::array<float, 16> IsometricCamera::ViewProjection() const noexcept
 {
   // Clip space is [-1, 1] across the screen with y up, and [0, 1] in depth with 0 nearest.
-  const float clipPerPixelX = 2.0F / m_virtualWidthPixels;
-  const float clipPerPixelY = 2.0F / m_virtualHeightPixels;
+  const float clipPerPixelX = 2.0F / m_screenWidthPixels;
+  const float clipPerPixelY = 2.0F / m_screenHeightPixels;
   const float clipPerUnitDepth = INVERSE_SQRT_3 / (2.0F * DEPTH_HALF_RANGE_UNITS);
 
   const float halfWidth = HalfTileWidthPixels();

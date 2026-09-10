@@ -6,10 +6,11 @@
 // nothing else ever builds it in.
 #include "NeuronClient.h"
 
+#include "Color.h"
 #include "FontRenderer.h"
 #include "IsometricCamera.h"
-#include "Palette.h"
 #include "PointerInput.h"
+#include "SceneTarget.h"
 #include "Starfield.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -17,65 +18,104 @@ using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 namespace NeuronClientTests
 {
 
-// The palette is a wire format in all but name: sixteen numbers that every pixel on the screen
-// goes through, decided once by the owner (Design/Plans MVP-01 section 2) and never negotiated
-// again. A typo in one of them is not something anybody would spot by looking at the screen --
-// dark blue and a slightly different dark blue look alike -- so all sixteen are pinned here by
-// value rather than spot-checked.
-TEST_CLASS(PaletteTests)
+// The named colors are a wire format in all but name: the numbers every pixel on the screen is
+// one of. A typo in one of them is not something anybody would spot by looking at the screen --
+// dark blue and a slightly different dark blue look alike -- so they are pinned here by value
+// rather than spot-checked.
+//
+// Pack() is pinned harder than any of them, because the one bug this whole scheme can have is a
+// byte order that disagrees with DXGI_FORMAT_R8G8B8A8_UNORM: red and blue swapped is a picture
+// that is entirely plausible and entirely wrong (ADR-011).
+TEST_CLASS(ColorTests)
 {
 public:
-  TEST_METHOD(HasSixteenEntries)
+  TEST_METHOD(PackPutsRedInTheLowByte)
   {
-    Assert::AreEqual(static_cast<size_t>(16), Neuron::EGA_PALETTE.size());
-    Assert::AreEqual(static_cast<size_t>(Neuron::PALETTE_SIZE), Neuron::EGA_PALETTE.size());
+    // R8G8B8A8_UNORM reads the four bytes of a vertex attribute in memory order, and x86 is
+    // little-endian, so red has to be the LOW byte of the uint32 -- not the high one a person
+    // writing 0xRRGGBB by hand would produce.
+    constexpr Neuron::Color SAMPLE = {0x12, 0x34, 0x56, 0x78};
+    Assert::AreEqual(0x78563412u, Neuron::Pack(SAMPLE));
+
+    Assert::AreEqual(0xFF0000FFu, Neuron::Pack(Neuron::BRIGHT_RED) & 0xFF0000FFu, L"alpha high, red low");
+    Assert::AreEqual(0xFFFFFFFFu, Neuron::Pack(Neuron::WHITE));
+    Assert::AreEqual(0xFF000000u, Neuron::Pack(Neuron::BLACK));
   }
 
-  TEST_METHOD(IsTheEgaDefaultSixteen)
+  TEST_METHOD(TheNamedColorsAreTheValuesTheyHaveAlwaysBeen)
   {
-    constexpr std::array<std::uint32_t, 16> EXPECTED = {
-      0x000000, 0x0000AA, 0x00AA00, 0x00AAAA, 0xAA0000, 0xAA00AA, 0xAA5500, 0xAAAAAA,
-      0x555555, 0x5555FF, 0x55FF55, 0x55FFFF, 0xFF5555, 0xFF55FF, 0xFFFF55, 0xFFFFFF,
+    // The EGA default 16 the game was drawn against, listed here as the RGB triples they have
+    // been since 2026-09-09. ADR-011 widened the format; it did not repaint anything.
+    struct Expected
+    {
+      Neuron::Color color;
+      std::uint8_t red;
+      std::uint8_t green;
+      std::uint8_t blue;
     };
+
+    constexpr std::array<Expected, 16> EXPECTED = {{
+      {Neuron::BLACK, 0x00, 0x00, 0x00},
+      {Neuron::BLUE, 0x00, 0x00, 0xAA},
+      {Neuron::GREEN, 0x00, 0xAA, 0x00},
+      {Neuron::CYAN, 0x00, 0xAA, 0xAA},
+      {Neuron::RED, 0xAA, 0x00, 0x00},
+      {Neuron::MAGENTA, 0xAA, 0x00, 0xAA},
+      {Neuron::BROWN, 0xAA, 0x55, 0x00},
+      {Neuron::LIGHT_GRAY, 0xAA, 0xAA, 0xAA},
+      {Neuron::DARK_GRAY, 0x55, 0x55, 0x55},
+      {Neuron::BRIGHT_BLUE, 0x55, 0x55, 0xFF},
+      {Neuron::BRIGHT_GREEN, 0x55, 0xFF, 0x55},
+      {Neuron::BRIGHT_CYAN, 0x55, 0xFF, 0xFF},
+      {Neuron::BRIGHT_RED, 0xFF, 0x55, 0x55},
+      {Neuron::BRIGHT_MAGENTA, 0xFF, 0x55, 0xFF},
+      {Neuron::YELLOW, 0xFF, 0xFF, 0x55},
+      {Neuron::WHITE, 0xFF, 0xFF, 0xFF},
+    }};
 
     for (std::size_t index = 0; index < EXPECTED.size(); ++index)
     {
-      Assert::AreEqual(EXPECTED[index], Neuron::EGA_PALETTE[index],
-                       (std::wstring(L"palette entry ") + std::to_wstring(index) + L" is not the EGA default").c_str());
+      const std::wstring which = std::wstring(L"named color ") + std::to_wstring(index);
+      Assert::AreEqual(EXPECTED[index].red, EXPECTED[index].color.red, which.c_str());
+      Assert::AreEqual(EXPECTED[index].green, EXPECTED[index].color.green, which.c_str());
+      Assert::AreEqual(EXPECTED[index].blue, EXPECTED[index].color.blue, which.c_str());
+      Assert::AreEqual(Neuron::OPAQUE_ALPHA, EXPECTED[index].color.alpha, L"every named color is opaque");
     }
   }
 
-  TEST_METHOD(HasNoHighBitsSet)
+  // ADR-012 shades a face between two authored tones. Nothing in the type system says which of a
+  // ColorPair is which, so the pairs the game actually uses are checked here -- the same claim
+  // PaletteTests::BrightHalfIsBrighterThanDarkHalf used to make about indices n and n+8.
+  TEST_METHOD(TheBrightHalfOfEachHueIsBrighter)
   {
-    // 0x00RRGGBB, not 0xAARRGGBB. The resolve shader writes opaque alpha itself; an alpha byte
-    // smuggled into the table would come out as a wrong red channel after the >> 16.
-    for (const std::uint32_t entry : Neuron::EGA_PALETTE)
+    constexpr std::array<Neuron::ColorPair, 8> PAIRS = {{
+      {Neuron::BLACK, Neuron::DARK_GRAY},
+      {Neuron::BLUE, Neuron::BRIGHT_BLUE},
+      {Neuron::GREEN, Neuron::BRIGHT_GREEN},
+      {Neuron::CYAN, Neuron::BRIGHT_CYAN},
+      {Neuron::RED, Neuron::BRIGHT_RED},
+      {Neuron::MAGENTA, Neuron::BRIGHT_MAGENTA},
+      {Neuron::BROWN, Neuron::YELLOW},
+      {Neuron::LIGHT_GRAY, Neuron::WHITE},
+    }};
+
+    for (std::size_t index = 0; index < PAIRS.size(); ++index)
     {
-      Assert::AreEqual(0u, entry >> 24, L"palette entries are 0x00RRGGBB");
+      Assert::IsTrue(Neuron::Luminance(PAIRS[index].lit) > Neuron::Luminance(PAIRS[index].shaded),
+                     (std::wstring(L"pair ") + std::to_wstring(index) + L" is the wrong way round").c_str());
     }
   }
+};
 
-  // ADR-002 shades a face between palette index n and index n+8. That only works because the
-  // bottom eight entries and the top eight are the dark and bright halves of the same eight hues,
-  // which is a property of this specific table -- so it is worth asserting rather than assuming.
-  TEST_METHOD(BrightHalfIsBrighterThanDarkHalf)
+// The screen, which is now one number rather than a virtual resolution and a scale factor
+// (ADR-011). It is asserted here because everything else in this suite is arithmetic against it.
+TEST_CLASS(SceneTargetTests)
+{
+public:
+  TEST_METHOD(TheScreenIsTwelveEightyBySevenTwenty)
   {
-    auto luminance = [](std::uint32_t _packed) { return ((_packed >> 16) & 0xFFu) + ((_packed >> 8) & 0xFFu) + (_packed & 0xFFu); };
-
-    for (std::size_t dark = 0; dark < 8; ++dark)
-    {
-      Assert::IsTrue(
-        luminance(Neuron::EGA_PALETTE[dark + 8]) > luminance(Neuron::EGA_PALETTE[dark]),
-        (std::wstring(L"index ") + std::to_wstring(dark + 8) + L" should be brighter than index " + std::to_wstring(dark)).c_str());
-    }
-  }
-
-  TEST_METHOD(NamedIndicesMatchTheTable)
-  {
-    Assert::AreEqual(0x000000u, Neuron::EGA_PALETTE[Neuron::ToIndex(Neuron::PaletteIndex::Black)]);
-    Assert::AreEqual(0x0000AAu, Neuron::EGA_PALETTE[Neuron::ToIndex(Neuron::PaletteIndex::Blue)]);
-    Assert::AreEqual(0xFFFFFFu, Neuron::EGA_PALETTE[Neuron::ToIndex(Neuron::PaletteIndex::White)]);
-    Assert::AreEqual(0xAA5500u, Neuron::EGA_PALETTE[Neuron::ToIndex(Neuron::PaletteIndex::Brown)]);
+    Assert::AreEqual(1280u, Neuron::SceneTarget::WIDTH_PIXELS);
+    Assert::AreEqual(720u, Neuron::SceneTarget::HEIGHT_PIXELS);
   }
 };
 
@@ -172,8 +212,8 @@ public:
 TEST_CLASS(IsometricCameraTests)
 {
 public:
-  static constexpr float VIRTUAL_WIDTH = 640.0F;
-  static constexpr float VIRTUAL_HEIGHT = 400.0F;
+  static constexpr float SCREEN_WIDTH = static_cast<float>(Neuron::SceneTarget::WIDTH_PIXELS);
+  static constexpr float SCREEN_HEIGHT = static_cast<float>(Neuron::SceneTarget::HEIGHT_PIXELS);
 
   // Exact powers of two throughout the projection, so equality is the right comparison and a
   // tolerance would only hide a real error. The one place it is not is the camera's own rounding,
@@ -182,7 +222,7 @@ public:
 
   static Neuron::IsometricCamera MakeCamera(float _x = 0.0F, float _y = 0.0F, float _z = 0.0F)
   {
-    Neuron::IsometricCamera camera{VIRTUAL_WIDTH, VIRTUAL_HEIGHT};
+    Neuron::IsometricCamera camera{SCREEN_WIDTH, SCREEN_HEIGHT};
     camera.Follow({_x, _y, _z});
     return camera;
   }
@@ -192,8 +232,8 @@ public:
     const Neuron::IsometricCamera camera = MakeCamera(17.0F, 0.0F, -4.0F);
     const Neuron::IsometricCamera::ScreenPoint center = camera.Project({17.0F, 0.0F, -4.0F});
 
-    Assert::AreEqual(VIRTUAL_WIDTH * 0.5F, center.xPixels, EXACT);
-    Assert::AreEqual(VIRTUAL_HEIGHT * 0.5F, center.yPixels, EXACT);
+    Assert::AreEqual(SCREEN_WIDTH * 0.5F, center.xPixels, EXACT);
+    Assert::AreEqual(SCREEN_HEIGHT * 0.5F, center.yPixels, EXACT);
   }
 
   // The 2:1 in "2:1 dimetric" (ADR-003). A one-unit square on the ground is a diamond sixteen
@@ -205,10 +245,10 @@ public:
     const Neuron::IsometricCamera::ScreenPoint alongX = camera.Project({1.0F, 0.0F, 0.0F});
     const Neuron::IsometricCamera::ScreenPoint alongZ = camera.Project({0.0F, 0.0F, 1.0F});
 
-    Assert::AreEqual(8.0F, alongX.xPixels - origin.xPixels, EXACT, L"+X moves half a tile width right");
-    Assert::AreEqual(4.0F, alongX.yPixels - origin.yPixels, EXACT, L"+X moves half a tile height down");
-    Assert::AreEqual(-8.0F, alongZ.xPixels - origin.xPixels, EXACT, L"+Z moves half a tile width left");
-    Assert::AreEqual(4.0F, alongZ.yPixels - origin.yPixels, EXACT, L"+Z moves half a tile height down");
+    Assert::AreEqual(16.0F, alongX.xPixels - origin.xPixels, EXACT, L"+X moves half a tile width right");
+    Assert::AreEqual(8.0F, alongX.yPixels - origin.yPixels, EXACT, L"+X moves half a tile height down");
+    Assert::AreEqual(-16.0F, alongZ.xPixels - origin.xPixels, EXACT, L"+Z moves half a tile width left");
+    Assert::AreEqual(8.0F, alongZ.yPixels - origin.yPixels, EXACT, L"+Z moves half a tile height down");
   }
 
   TEST_METHOD(HeightMovesStraightUpTheScreen)
@@ -218,25 +258,25 @@ public:
     const Neuron::IsometricCamera::ScreenPoint raised = camera.Project({0.0F, 1.0F, 0.0F});
 
     Assert::AreEqual(0.0F, raised.xPixels - ground.xPixels, EXACT, L"height must not shift a pixel sideways");
-    Assert::AreEqual(-8.0F, raised.yPixels - ground.yPixels, EXACT);
+    Assert::AreEqual(-16.0F, raised.yPixels - ground.yPixels, EXACT);
   }
 
   TEST_METHOD(TheCenterOfTheScreenUnprojectsToTheTarget)
   {
     const Neuron::IsometricCamera camera = MakeCamera(12.0F, 0.0F, 5.0F);
-    const Neuron::IsometricCamera::WorldPoint ground = camera.UnprojectToGround(VIRTUAL_WIDTH * 0.5F, VIRTUAL_HEIGHT * 0.5F);
+    const Neuron::IsometricCamera::WorldPoint ground = camera.UnprojectToGround(SCREEN_WIDTH * 0.5F, SCREEN_HEIGHT * 0.5F);
 
     Assert::AreEqual(12.0F, ground.x, EXACT);
     Assert::AreEqual(0.0F, ground.y, EXACT, L"unprojection lands on the ground plane by construction");
     Assert::AreEqual(5.0F, ground.z, EXACT);
   }
 
-  // A known pixel to a known offset. Sixteen pixels right of center is x - z == 2 with x + z == 0,
-  // which is (1, 0, -1) -- worked out by hand rather than by running the code.
+  // A known pixel to a known offset. Thirty-two pixels right of center is x - z == 2 with
+  // x + z == 0, which is (1, 0, -1) -- worked out by hand rather than by running the code.
   TEST_METHOD(AKnownPixelUnprojectsToAKnownPoint)
   {
     const Neuron::IsometricCamera camera = MakeCamera();
-    const Neuron::IsometricCamera::WorldPoint ground = camera.UnprojectToGround(VIRTUAL_WIDTH * 0.5F + 16.0F, VIRTUAL_HEIGHT * 0.5F);
+    const Neuron::IsometricCamera::WorldPoint ground = camera.UnprojectToGround(SCREEN_WIDTH * 0.5F + 32.0F, SCREEN_HEIGHT * 0.5F);
 
     Assert::AreEqual(1.0F, ground.x, EXACT);
     Assert::AreEqual(-1.0F, ground.z, EXACT);
@@ -277,7 +317,7 @@ public:
     Assert::AreEqual(1.0F, groundAfter.z - groundBefore.z, EXACT);
   }
 
-  // ADR-003: the camera snaps to whole virtual pixels. A target a hundredth of a unit away from
+  // ADR-003: the camera snaps to whole screen pixels. A target a hundredth of a unit away from
   // one that snaps identically must produce an identical projection -- if it does not, the whole
   // scene shimmers by a pixel as the ship drifts.
   TEST_METHOD(TheCameraSnapsToWholePixels)
@@ -310,8 +350,9 @@ public:
   // Nearer must mean a smaller depth: the camera looks along (1, 1, 1), so a point further along
   // that direction is closer to it. Getting this backwards draws the ship inside out and is not
   // obvious on a mesh that is nearly convex.
-  // ADR-008. The zoom is a list of even levels, and every one of them has to keep the properties
-  // ADR-003 rests on: the 2:1 tile, and an un-projection that is an exact inverse.
+  // ADR-013, superseding ADR-008. The zoom is a list of even levels, and every one of them has to
+  // keep the properties ADR-003 rests on: the 2:1 tile, and an un-projection that is an exact
+  // inverse.
   TEST_METHOD(EveryZoomLevelIsEven)
   {
     for (const float level : Neuron::IsometricCamera::ZOOM_LEVELS_PIXELS)
@@ -322,15 +363,30 @@ public:
       Assert::IsTrue(level > 0.0F);
     }
 
-    Assert::AreEqual(8.0F, Neuron::IsometricCamera::DEFAULT_HALF_TILE_WIDTH_PIXELS, 0.0F,
-                     L"the default is the 8 pixels a unit everything was drawn against");
+    Assert::AreEqual(16.0F, Neuron::IsometricCamera::DEFAULT_HALF_TILE_WIDTH_PIXELS, 0.0F,
+                     L"the default is the 16 pixels a unit everything is drawn against");
+  }
+
+  // The ladder is ADR-008's doubled, and that is a claim worth pinning rather than a coincidence:
+  // it is what makes the picture at 1280x720 the same size as the picture at 640x400 blown up 2x
+  // (ADR-013). A level that drifted off the doubling would silently rescale the whole game.
+  TEST_METHOD(TheLadderIsTheOldOneDoubled)
+  {
+    constexpr std::array<float, 5> BEFORE_ADR_013 = {4.0F, 6.0F, 8.0F, 12.0F, 16.0F};
+
+    Assert::AreEqual(BEFORE_ADR_013.size(), Neuron::IsometricCamera::ZOOM_LEVELS_PIXELS.size());
+    for (std::size_t level = 0; level < BEFORE_ADR_013.size(); ++level)
+    {
+      Assert::AreEqual(BEFORE_ADR_013[level] * 2.0F, Neuron::IsometricCamera::ZOOM_LEVELS_PIXELS[level], 0.0F,
+                       (std::wstring(L"zoom level ") + std::to_wstring(level)).c_str());
+    }
   }
 
   TEST_METHOD(ACameraStartsAtTheDefaultZoom)
   {
     const Neuron::IsometricCamera camera = MakeCamera();
     Assert::AreEqual(Neuron::IsometricCamera::DEFAULT_ZOOM_INDEX, camera.ZoomIndex());
-    Assert::AreEqual(8.0F, camera.HalfTileWidthPixels(), 0.0F);
+    Assert::AreEqual(16.0F, camera.HalfTileWidthPixels(), 0.0F);
   }
 
   TEST_METHOD(ZoomingMovesThroughTheLevels)
@@ -338,9 +394,9 @@ public:
     Neuron::IsometricCamera camera = MakeCamera();
 
     camera.ZoomBy(1);
-    Assert::AreEqual(12.0F, camera.HalfTileWidthPixels(), 0.0F, L"in");
+    Assert::AreEqual(24.0F, camera.HalfTileWidthPixels(), 0.0F, L"in");
     camera.ZoomBy(-2);
-    Assert::AreEqual(6.0F, camera.HalfTileWidthPixels(), 0.0F, L"and back out past the default");
+    Assert::AreEqual(12.0F, camera.HalfTileWidthPixels(), 0.0F, L"and back out past the default");
   }
 
   TEST_METHOD(ZoomingClampsAtBothEnds)
@@ -348,9 +404,9 @@ public:
     Neuron::IsometricCamera camera = MakeCamera();
 
     camera.ZoomBy(100);
-    Assert::AreEqual(16.0F, camera.HalfTileWidthPixels(), 0.0F, L"clamped at the closest level");
+    Assert::AreEqual(32.0F, camera.HalfTileWidthPixels(), 0.0F, L"clamped at the closest level");
     camera.ZoomBy(-100);
-    Assert::AreEqual(4.0F, camera.HalfTileWidthPixels(), 0.0F, L"and at the widest");
+    Assert::AreEqual(8.0F, camera.HalfTileWidthPixels(), 0.0F, L"and at the widest");
   }
 
   TEST_METHOD(ZoomingScalesTheProjectionAndNothingElse)
@@ -358,15 +414,15 @@ public:
     Neuron::IsometricCamera camera = MakeCamera();
     const Neuron::IsometricCamera::ScreenPoint before = camera.Project({4.0F, 0.0F, 0.0F});
 
-    camera.ZoomBy(-1); // 8 -> 6 pixels a unit
+    camera.ZoomBy(-1); // 16 -> 12 pixels a unit
     const Neuron::IsometricCamera::ScreenPoint after = camera.Project({4.0F, 0.0F, 0.0F});
 
-    const float centerX = VIRTUAL_WIDTH * 0.5F;
-    const float centerY = VIRTUAL_HEIGHT * 0.5F;
-    Assert::AreEqual(32.0F, before.xPixels - centerX, EXACT);
-    Assert::AreEqual(24.0F, after.xPixels - centerX, EXACT, L"three quarters of the offset at three quarters the zoom");
-    Assert::AreEqual(16.0F, before.yPixels - centerY, EXACT);
-    Assert::AreEqual(12.0F, after.yPixels - centerY, EXACT);
+    const float centerX = SCREEN_WIDTH * 0.5F;
+    const float centerY = SCREEN_HEIGHT * 0.5F;
+    Assert::AreEqual(64.0F, before.xPixels - centerX, EXACT);
+    Assert::AreEqual(48.0F, after.xPixels - centerX, EXACT, L"three quarters of the offset at three quarters the zoom");
+    Assert::AreEqual(32.0F, before.yPixels - centerY, EXACT);
+    Assert::AreEqual(24.0F, after.yPixels - centerY, EXACT);
   }
 
   // The 2:1 is the projection, not the zoom, so it has to survive every level.
@@ -393,7 +449,7 @@ public:
   {
     for (std::int32_t step = -4; step <= 4; ++step)
     {
-      Neuron::IsometricCamera camera{VIRTUAL_WIDTH, VIRTUAL_HEIGHT};
+      Neuron::IsometricCamera camera{SCREEN_WIDTH, SCREEN_HEIGHT};
       camera.ZoomBy(step);
       camera.Follow({-6.0F, 0.0F, 3.0F});
 
@@ -420,8 +476,8 @@ public:
     {
       camera.ZoomBy(step);
       const Neuron::IsometricCamera::ScreenPoint center = camera.Project({7.0F, 0.0F, -3.0F});
-      Assert::AreEqual(VIRTUAL_WIDTH * 0.5F, center.xPixels, EXACT);
-      Assert::AreEqual(VIRTUAL_HEIGHT * 0.5F, center.yPixels, EXACT);
+      Assert::AreEqual(SCREEN_WIDTH * 0.5F, center.xPixels, EXACT);
+      Assert::AreEqual(SCREEN_HEIGHT * 0.5F, center.yPixels, EXACT);
     }
   }
 
@@ -438,8 +494,8 @@ public:
 };
 
 // The half of the click that is not the camera: a WM_POINTERDOWN carrying SCREEN coordinates
-// becoming a point on the 640x400 virtual screen. The camera turns that into a world point and is
-// tested above; between them they are the whole of what a tap does.
+// becoming a point on the 1280x720 screen. The camera turns that into a world point and is tested
+// above; between them they are the whole of what a tap does.
 //
 // This needs a real window, because the conversion is ScreenToClient and that is a property of a
 // window rather than arithmetic. It is created off-screen and never shown.
@@ -448,7 +504,6 @@ TEST_CLASS(PointerInputTests)
 public:
   static constexpr int WINDOW_LEFT = 300;
   static constexpr int WINDOW_TOP = 200;
-  static constexpr std::uint32_t PRESENT_SCALE = 2;
 
   TEST_METHOD_INITIALIZE(CreateHostWindow)
   {
@@ -461,7 +516,7 @@ public:
 
     // WS_POPUP, so the client area starts exactly at the window's top-left and the expected
     // numbers below are arithmetic rather than a guess about how thick a caption is.
-    m_window = CreateWindowExW(0, L"NeuronClientTestsPointerHost", L"", WS_POPUP, WINDOW_LEFT, WINDOW_TOP, 1280, 800, nullptr, nullptr,
+    m_window = CreateWindowExW(0, L"NeuronClientTestsPointerHost", L"", WS_POPUP, WINDOW_LEFT, WINDOW_TOP, 1280, 720, nullptr, nullptr,
                                GetModuleHandleW(nullptr), nullptr);
     Assert::IsNotNull(m_window, L"the test needs a window to convert screen coordinates against");
   }
@@ -484,33 +539,34 @@ public:
   TEST_METHOD(NothingIsPendingBeforeAPointerDown)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     float x = 0.0F;
     float y = 0.0F;
     Assert::IsFalse(input.TakeClick(x, y));
   }
 
-  TEST_METHOD(APointerDownBecomesAVirtualTexel)
+  TEST_METHOD(APointerDownBecomesAScreenPixel)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     // The window's client area starts at (300, 200) on screen, so this screen point is client
-    // (400, 300), which at present scale 2 is virtual texel (200, 150).
+    // (400, 300) -- and, with the client area now exactly the framebuffer, screen pixel (400, 300)
+    // too. Before ADR-011 this arrived as virtual texel (200, 150).
     Assert::IsTrue(input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 400, WINDOW_TOP + 300)));
 
     float x = 0.0F;
     float y = 0.0F;
     Assert::IsTrue(input.TakeClick(x, y));
-    Assert::AreEqual(200.0F, x, 0.0F);
-    Assert::AreEqual(150.0F, y, 0.0F);
+    Assert::AreEqual(400.0F, x, 0.0F);
+    Assert::AreEqual(300.0F, y, 0.0F);
   }
 
   TEST_METHOD(TheTopLeftOfTheClientAreaIsTheOrigin)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
     Assert::IsTrue(input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT, WINDOW_TOP)));
 
     float x = 0.0F;
@@ -523,7 +579,7 @@ public:
   TEST_METHOD(TakingAClickClearsIt)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
     input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100));
 
     float x = 0.0F;
@@ -536,15 +592,15 @@ public:
   TEST_METHOD(ASecondTapReplacesAnUnreadFirst)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
     input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100));
     input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 900, WINDOW_TOP + 500));
 
     float x = 0.0F;
     float y = 0.0F;
     Assert::IsTrue(input.TakeClick(x, y));
-    Assert::AreEqual(450.0F, x, 0.0F);
-    Assert::AreEqual(250.0F, y, 0.0F);
+    Assert::AreEqual(900.0F, x, 0.0F);
+    Assert::AreEqual(500.0F, y, 0.0F);
   }
 
   // There is no keyboard control in this game and no mouse-button handler either: with
@@ -554,7 +610,7 @@ public:
   TEST_METHOD(MessagesOutsideThePointerFamilyAreIgnored)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     Assert::IsFalse(input.HandleMessage(WM_LBUTTONDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100)));
     Assert::IsFalse(input.HandleMessage(WM_KEYDOWN, VK_SPACE, 0));
@@ -577,7 +633,8 @@ TEST_CLASS(ZoomInputTests)
 public:
   static constexpr int WINDOW_LEFT = 300;
   static constexpr int WINDOW_TOP = 200;
-  static constexpr std::uint32_t PRESENT_SCALE = 2;
+  static constexpr int CENTER_X = static_cast<int>(Neuron::SceneTarget::WIDTH_PIXELS) / 2;
+  static constexpr int CENTER_Y = static_cast<int>(Neuron::SceneTarget::HEIGHT_PIXELS) / 2;
 
   TEST_METHOD_INITIALIZE(CreateHostWindow)
   {
@@ -588,7 +645,7 @@ public:
     windowClass.lpszClassName = L"NeuronClientTestsZoomHost";
     RegisterClassExW(&windowClass);
 
-    m_window = CreateWindowExW(0, L"NeuronClientTestsZoomHost", L"", WS_POPUP, WINDOW_LEFT, WINDOW_TOP, 1280, 800, nullptr, nullptr,
+    m_window = CreateWindowExW(0, L"NeuronClientTestsZoomHost", L"", WS_POPUP, WINDOW_LEFT, WINDOW_TOP, 1280, 720, nullptr, nullptr,
                                GetModuleHandleW(nullptr), nullptr);
     Assert::IsNotNull(m_window);
   }
@@ -621,14 +678,14 @@ public:
   TEST_METHOD(NoInputMeansNoZoom)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
     Assert::AreEqual(0, input.TakeZoomSteps());
   }
 
   TEST_METHOD(AWheelNotchIsOneStep)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     Assert::IsTrue(input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA), 0));
     Assert::AreEqual(1, input.TakeZoomSteps());
@@ -644,7 +701,7 @@ public:
   TEST_METHOD(TheClassicMouseWheelMessageIsNotHandled)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     Assert::IsFalse(input.HandleMessage(WM_MOUSEWHEEL, PackWheel(0, WHEEL_DELTA), 0));
     Assert::AreEqual(0, input.TakeZoomSteps());
@@ -653,7 +710,7 @@ public:
   TEST_METHOD(TakingTheZoomClearsIt)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
     input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA), 0);
 
     Assert::AreEqual(1, input.TakeZoomSteps());
@@ -663,7 +720,7 @@ public:
   TEST_METHOD(NotchesInOneFrameAddUp)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA), 0);
     input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA), 0);
@@ -678,7 +735,7 @@ public:
   TEST_METHOD(SubNotchWheelDeltasAccumulate)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     constexpr int THIRD_OF_A_NOTCH = WHEEL_DELTA / 3;
     input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, THIRD_OF_A_NOTCH), 0);
@@ -689,25 +746,39 @@ public:
     Assert::AreEqual(1, input.TakeZoomSteps(), L"three thirds are");
   }
 
-  /// Puts two contacts down a given distance apart, horizontally, centered on the client area.
-  static void StartPinch(Neuron::PointerInput& _input, float _separationTexels)
+  /// The two contacts of a pinch a given distance apart, horizontally, centered on the client
+  /// area. The separation is in screen pixels, and so is everything else: there is no present
+  /// scale to convert through any more (ADR-011).
+  ///
+  /// The right-hand contact is placed at left + separation rather than at center + half, so the
+  /// distance between them is EXACTLY the requested one whether or not it is even. Halving it and
+  /// mirroring would lose a pixel on an odd separation, which is enough to leave a test's
+  /// separation a hair under the ratio it was supposed to cross -- and that says nothing about
+  /// the code under test.
+  static void PlaceContacts(Neuron::PointerInput& _input, UINT _message, float _separationPixels)
   {
-    const auto half = static_cast<int>(_separationTexels * PRESENT_SCALE) / 2;
-    _input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 640 - half, WINDOW_TOP + 400));
-    _input.HandleMessage(WM_POINTERDOWN, PackPointer(2), PackScreenPoint(WINDOW_LEFT + 640 + half, WINDOW_TOP + 400));
+    const auto separation = static_cast<int>(std::lround(_separationPixels));
+    const int left = WINDOW_LEFT + CENTER_X - separation / 2;
+    const int y = WINDOW_TOP + CENTER_Y;
+
+    _input.HandleMessage(_message, PackPointer(1), PackScreenPoint(left, y));
+    _input.HandleMessage(_message, PackPointer(2), PackScreenPoint(left + separation, y));
   }
 
-  static void MovePinch(Neuron::PointerInput& _input, float _separationTexels)
+  static void StartPinch(Neuron::PointerInput& _input, float _separationPixels)
   {
-    const auto half = static_cast<int>(_separationTexels * PRESENT_SCALE) / 2;
-    _input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 640 - half, WINDOW_TOP + 400));
-    _input.HandleMessage(WM_POINTERUPDATE, PackPointer(2), PackScreenPoint(WINDOW_LEFT + 640 + half, WINDOW_TOP + 400));
+    PlaceContacts(_input, WM_POINTERDOWN, _separationPixels);
+  }
+
+  static void MovePinch(Neuron::PointerInput& _input, float _separationPixels)
+  {
+    PlaceContacts(_input, WM_POINTERUPDATE, _separationPixels);
   }
 
   TEST_METHOD(SpreadingTwoContactsZoomsIn)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     StartPinch(input, 100.0F);
     Assert::AreEqual(0, input.TakeZoomSteps(), L"putting two fingers down is not yet a zoom");
@@ -719,7 +790,7 @@ public:
   TEST_METHOD(PinchingTwoContactsTogetherZoomsOut)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     StartPinch(input, 200.0F);
     MovePinch(input, 200.0F / Neuron::PointerInput::PINCH_STEP_RATIO);
@@ -732,12 +803,10 @@ public:
   TEST_METHOD(ALargeSpreadInOneUpdateBanksSeveralSteps)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     // 64 to 125 is exactly 1.25 cubed, and every value on the way -- 64, 80, 100, 125 -- lands on
-    // a whole screen pixel and is exact in a float. Picked that way on purpose: a separation the
-    // helpers below have to round would land just under the third threshold and bank two steps,
-    // which says nothing about the code.
+    // a whole screen pixel and is exact in a float.
     StartPinch(input, 64.0F);
     MovePinch(input, 125.0F);
 
@@ -749,7 +818,7 @@ public:
   TEST_METHOD(ASecondContactCancelsThePendingTap)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 200, WINDOW_TOP + 300));
     float x = 0.0F;
@@ -762,15 +831,15 @@ public:
   TEST_METHOD(OneContactStillTapsNormally)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 400, WINDOW_TOP + 300));
 
     float x = 0.0F;
     float y = 0.0F;
     Assert::IsTrue(input.TakeClick(x, y));
-    Assert::AreEqual(200.0F, x, 0.0F);
-    Assert::AreEqual(150.0F, y, 0.0F);
+    Assert::AreEqual(400.0F, x, 0.0F);
+    Assert::AreEqual(300.0F, y, 0.0F);
     Assert::AreEqual(0, input.TakeZoomSteps(), L"and does not zoom");
   }
 
@@ -779,7 +848,7 @@ public:
   TEST_METHOD(LiftingAContactEndsThePinch)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     StartPinch(input, 100.0F);
     input.HandleMessage(WM_POINTERUP, PackPointer(2), PackScreenPoint(WINDOW_LEFT + 690, WINDOW_TOP + 400));
@@ -793,7 +862,7 @@ public:
   TEST_METHOD(AThirdContactIsIgnored)
   {
     Neuron::PointerInput input;
-    input.Create(m_window, PRESENT_SCALE);
+    input.Create(m_window);
 
     StartPinch(input, 100.0F);
     input.HandleMessage(WM_POINTERDOWN, PackPointer(3), PackScreenPoint(WINDOW_LEFT + 1200, WINDOW_TOP + 700));
@@ -813,6 +882,36 @@ private:
 TEST_CLASS(StarfieldTests)
 {
 public:
+  // The densities are the ones ADR-010 chose, multiplied by four (ADR-013). The screen went from
+  // 256,000 pixels to 921,600, so leaving the masks alone would have put 3.6 times as many stars
+  // on it -- and star density is a thing that was chosen by eye, not a thing that should move
+  // because a resolution did.
+  TEST_METHOD(TheDensitiesAreTheOldOnesQuadrupled)
+  {
+    constexpr std::array<std::uint32_t, 3> BEFORE_ADR_013 = {2047, 4095, 8191};
+
+    Assert::AreEqual(BEFORE_ADR_013.size(), Neuron::Starfield::LAYER_DENSITY_MASKS.size());
+    for (std::size_t layer = 0; layer < BEFORE_ADR_013.size(); ++layer)
+    {
+      // Still one less than a power of two, so the shader's test stays an AND rather than a
+      // modulo: (n + 1) * 4 - 1 is what quadrupling a mask of that shape means.
+      Assert::AreEqual((BEFORE_ADR_013[layer] + 1U) * 4U - 1U, Neuron::Starfield::LAYER_DENSITY_MASKS[layer],
+                       (std::wstring(L"layer ") + std::to_wstring(layer)).c_str());
+    }
+  }
+
+  // Dim far, bright near, and all three gray. A colored star competes with the ship.
+  TEST_METHOD(TheLayersGetBrighterTowardsTheViewer)
+  {
+    std::uint32_t previous = 0;
+    for (const Neuron::Color& color : Neuron::Starfield::LAYER_COLORS)
+    {
+      Assert::IsTrue(Neuron::Luminance(color) > previous, L"each layer must be brighter than the one behind it");
+      Assert::IsTrue(color.red == color.green && color.green == color.blue, L"stars are gray");
+      previous = Neuron::Luminance(color);
+    }
+  }
+
   TEST_METHOD(LayersScrollAtTheAdvertisedRates)
   {
     // Divisor 8, 4, 2: the far layer moves an eighth as fast as the camera, the near one half.

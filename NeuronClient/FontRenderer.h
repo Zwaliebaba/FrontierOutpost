@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Color.h"
 #include "DescriptorHeap.h"
 #include "Device.h"
 #include "Font.h"
@@ -7,17 +8,31 @@
 namespace Neuron
 {
 
-/// Draws 8x8 text into the palette index target.
+/// Draws 8x8 text onto the screen.
 ///
 /// Font.h holds 96 glyphs as one bit a pixel, 768 bytes, embedded in the binary (R13). This turns
 /// that into a 768x8 R8_UINT atlas once at startup -- one texel per glyph pixel, 0 or 1 -- and
-/// draws strings as quads that read it with Load(). No sampler, so a glyph texel is an exact 2x2
-/// block of physical pixels at present scale 2 (ADR-001).
+/// draws strings as quads that read it with Load(). No sampler anywhere, so a glyph texel is an
+/// exact GLYPH_SCALE x GLYPH_SCALE block of screen pixels with nothing to filter (ADR-011).
 class FontRenderer
 {
 public:
   static constexpr std::uint32_t GLYPH_WIDTH_TEXELS = 8;
   static constexpr std::uint32_t GLYPH_HEIGHT_TEXELS = 8;
+
+  /// How many screen pixels a glyph texel occupies, on both axes. A whole number, and there is no
+  /// sampler on the path, so the enlargement is an exact block of pixels rather than a filtered
+  /// one -- the same arithmetic the resolve pass used to do for the whole screen (ADR-013).
+  ///
+  /// It is 2 because that is what an 8x8 glyph was on screen before 2026-09-10: the screen was
+  /// 640x400 blown up 2x, so a glyph occupied 16x16 physical pixels. At 1280x720 with no blow-up,
+  /// a scale of 1 would put 8-pixel-tall text on a 720-line screen. This is the one number that
+  /// decides how big text is, and the UI design is where it should ultimately be settled.
+  static constexpr std::uint32_t GLYPH_SCALE = 2;
+
+  /// What one character advances the cursor by, and how tall a line is, in screen pixels.
+  static constexpr std::uint32_t CHARACTER_ADVANCE_PIXELS = GLYPH_WIDTH_TEXELS * GLYPH_SCALE;
+  static constexpr std::uint32_t LINE_HEIGHT_PIXELS = GLYPH_HEIGHT_TEXELS * GLYPH_SCALE;
 
   /// Space through to the last printable ASCII character. Anything outside that range draws as a
   /// space rather than as whatever byte happened to follow the table.
@@ -53,22 +68,23 @@ public:
   /// never overwrites vertices the GPU is still reading.
   void BeginFrame(std::uint32_t _frameIndex) noexcept;
 
-  /// Appends one string at a position in 640x400 virtual texels, top-left of the first glyph.
-  void DrawText(std::int32_t _xTexels, std::int32_t _yTexels, std::string_view _text, std::uint8_t _paletteIndex);
+  /// Appends one string at a position in screen pixels, top-left of the first glyph.
+  void DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color);
 
   /// Issues everything DrawText appended since BeginFrame as a single draw call.
   void Flush(ID3D12GraphicsCommandList* _commandList);
 
 private:
-  /// Position in virtual texels, the atlas texel to read, and the index to write. R8: a vertex is
+  /// Position in screen pixels, the atlas texel to read, and the color to write. R8: a vertex is
   /// a public aggregate handed to the GPU, so plain fields.
   struct TextVertex
   {
-    float positionXTexels;
-    float positionYTexels;
+    float positionXPixels;
+    float positionYPixels;
     float glyphXTexels;
     float glyphYTexels;
-    std::uint32_t paletteIndex;
+    /// Packed by Pack(), read back by an R8G8B8A8_UNORM input element.
+    std::uint32_t color;
   };
 
   static constexpr std::uint32_t VERTICES_PER_GLYPH = 6;

@@ -1,6 +1,6 @@
 # ADR-008 — Zoom is a list of even levels, driven by the wheel and by pinch
 
-**Status:** Accepted
+**Status:** Superseded by ADR-013
 
 **Date:** 2026-09-10
 **Decided by:** Build session, at the owner's request for pinch zoom.

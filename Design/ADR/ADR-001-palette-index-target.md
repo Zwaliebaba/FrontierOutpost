@@ -1,6 +1,6 @@
 # ADR-001 — Sixteen colors reach the screen through an index target, not a quantizer
 
-**Status:** Accepted
+**Status:** Superseded by ADR-011
 
 **Date:** 2026-09-09
 **Decided by:** Build session MVP-01, step 2. Recommendation stated in `Design/Plans/MVP-01-IsometricShip.md` §3; this ADR takes it and records why.
