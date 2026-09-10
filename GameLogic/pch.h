@@ -7,6 +7,6 @@
 #ifndef PCH_H
 #define PCH_H
 
-#include "framework.h"
+#include "GameLogic.h"
 
 #endif // PCH_H
