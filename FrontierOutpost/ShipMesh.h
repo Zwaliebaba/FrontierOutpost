@@ -11,10 +11,10 @@ namespace Frontier
 // and has no idea what a ship is. What crosses the boundary is Neuron::MeshVertex and nothing
 // ship-shaped.
 //
-// The hull points along +X at heading zero and sits on y = 0. One unit is one metre, so the ship
-// is 21.5 m from nose (x = 12) to exhaust (x = -9.5) and 19 m across the wings (z = -/+9.5). At
-// the camera's 8 pixels a ground unit that is 172 virtual pixels of a 640-pixel screen -- a
-// quarter of the width, and unmistakably a ship rather than a speck (ADR-003).
+// The hull points along +X at heading zero and sits on y = 0. One unit is one metre. The table
+// below is drawn at twice the final size and SHIP_SCALE halves it, so the ship is 10.75 m from
+// nose (x = 12) to exhaust (x = -9.5) and 9.5 m across the wings (z = -/+9.5). At the camera's 8
+// pixels a ground unit that is 86 virtual pixels of a 640-pixel screen (ADR-003).
 //
 // It is authored as FACES rather than as vertices, and the vertex array below is computed from
 // them at compile time. That is not tidiness: flat shading needs a normal per face and no shared
@@ -101,9 +101,22 @@ inline constexpr std::array<ShipFace, 24> SHIP_FACES = {{
 
 inline constexpr std::size_t SHIP_VERTEX_COUNT = SHIP_FACES.size() * 3;
 
+/// What the table above is multiplied by on its way into the vertex buffer.
+///
+/// The hull is sculpted rather than parameterized -- 24 faces of literal coordinates -- so
+/// resizing it by editing the table would mean retyping 216 numbers and getting one wrong. This
+/// is the one number instead. The table stays at the proportions it was drawn at and this says
+/// how big the ship actually is.
+inline constexpr float SHIP_SCALE = 0.5F;
+
 /// Faces to vertices, at compile time: three vertices a face, no sharing, each carrying the face
 /// normal. The normal is left unnormalized on purpose -- a cross product is arithmetic a
 /// constexpr can do and a square root is not, and MeshVS normalizes anyway (MeshRenderer.h).
+///
+/// The scale is applied to the corners before the cross product, which costs nothing and keeps
+/// the normal honest about the geometry that is actually in the buffer. A uniform scale would not
+/// change its direction either way, but "the normal belongs to these three points" is a property
+/// worth not having to reason about.
 [[nodiscard]] inline constexpr std::array<Neuron::MeshVertex, SHIP_VERTEX_COUNT> BuildShipVertices() noexcept
 {
   std::array<Neuron::MeshVertex, SHIP_VERTEX_COUNT> vertices = {};
@@ -112,20 +125,30 @@ inline constexpr std::size_t SHIP_VERTEX_COUNT = SHIP_FACES.size() * 3;
   {
     const ShipFace& source = SHIP_FACES[face];
 
-    const float edge1X = source.bx - source.ax;
-    const float edge1Y = source.by - source.ay;
-    const float edge1Z = source.bz - source.az;
-    const float edge2X = source.cx - source.ax;
-    const float edge2Y = source.cy - source.ay;
-    const float edge2Z = source.cz - source.az;
+    const float ax = source.ax * SHIP_SCALE;
+    const float ay = source.ay * SHIP_SCALE;
+    const float az = source.az * SHIP_SCALE;
+    const float bx = source.bx * SHIP_SCALE;
+    const float by = source.by * SHIP_SCALE;
+    const float bz = source.bz * SHIP_SCALE;
+    const float cx = source.cx * SHIP_SCALE;
+    const float cy = source.cy * SHIP_SCALE;
+    const float cz = source.cz * SHIP_SCALE;
+
+    const float edge1X = bx - ax;
+    const float edge1Y = by - ay;
+    const float edge1Z = bz - az;
+    const float edge2X = cx - ax;
+    const float edge2Y = cy - ay;
+    const float edge2Z = cz - az;
 
     const float normalX = edge1Y * edge2Z - edge1Z * edge2Y;
     const float normalY = edge1Z * edge2X - edge1X * edge2Z;
     const float normalZ = edge1X * edge2Y - edge1Y * edge2X;
 
-    vertices[face * 3 + 0] = {source.ax, source.ay, source.az, normalX, normalY, normalZ, source.paletteIndex};
-    vertices[face * 3 + 1] = {source.bx, source.by, source.bz, normalX, normalY, normalZ, source.paletteIndex};
-    vertices[face * 3 + 2] = {source.cx, source.cy, source.cz, normalX, normalY, normalZ, source.paletteIndex};
+    vertices[face * 3 + 0] = {ax, ay, az, normalX, normalY, normalZ, source.paletteIndex};
+    vertices[face * 3 + 1] = {bx, by, bz, normalX, normalY, normalZ, source.paletteIndex};
+    vertices[face * 3 + 2] = {cx, cy, cz, normalX, normalY, normalZ, source.paletteIndex};
   }
 
   return vertices;

@@ -50,20 +50,22 @@ inline constexpr std::array<StationPoint, STATION_SIDES> STATION_DIRECTIONS = {{
   {STATION_DIAGONAL, 0.0F, -STATION_DIAGONAL},
 }};
 
-// The tiers, in metres. Sized against the 640x400 screen rather than against nothing: the widest
-// part is the base drum, and a drum of radius r spans r * sqrt(2) * 8 virtual pixels across --
-// the sqrt(2) because the octagon's widest diagonal runs corner to corner, and the 8 because that
-// is the camera's pixels per ground unit (ADR-003). At radius 9 that is 102 pixels of the 640,
-// and 18 m tall is 144. Bigger than this and the station stops fitting beside the ship; the first
-// version of these numbers was radius 11 by 22 m tall and was clipped by the left edge.
-inline constexpr float STATION_BASE_RADIUS = 9.0F;
-inline constexpr float STATION_BASE_TOP = 4.0F;
-inline constexpr float STATION_TOWER_RADIUS = 4.0F;
-inline constexpr float STATION_TOWER_TOP = 18.0F;
-inline constexpr float STATION_PANEL_HEIGHT = 11.0F;
-inline constexpr float STATION_PANEL_INNER = 4.5F;
-inline constexpr float STATION_PANEL_OUTER = 12.0F;
-inline constexpr float STATION_PANEL_HALF_WIDTH = 1.4F;
+// The tiers, in metres. The station is parameterized rather than sculpted, so resizing it is
+// these eight numbers rather than a scale factor like the ship's.
+//
+// The widest part is the base drum, and a drum of radius r spans r * sqrt(2) * 8 virtual pixels
+// across -- the sqrt(2) because the octagon's widest diagonal runs corner to corner, and the 8
+// because that is the camera's pixels per ground unit (ADR-003). At radius 4.5 that is 51 pixels
+// of the 640, and 9 m tall is 72. Getting this arithmetic wrong is what put the first version,
+// radius 11 by 22 m, off the left edge of the screen.
+inline constexpr float STATION_BASE_RADIUS = 4.5F;
+inline constexpr float STATION_BASE_TOP = 2.0F;
+inline constexpr float STATION_TOWER_RADIUS = 2.0F;
+inline constexpr float STATION_TOWER_TOP = 9.0F;
+inline constexpr float STATION_PANEL_HEIGHT = 5.5F;
+inline constexpr float STATION_PANEL_INNER = 2.25F;
+inline constexpr float STATION_PANEL_OUTER = 6.0F;
+inline constexpr float STATION_PANEL_HALF_WIDTH = 0.7F;
 
 /// The same three palette pairs the ship uses, so the two read as built by the same people
 /// (ADR-002; the authored index is the dark half, 0-7).
@@ -185,8 +187,12 @@ static_assert(std::ranges::all_of(STATION_VERTICES, [](const Neuron::MeshVertex&
 ///
 /// Chosen through the projection rather than by eye. The camera puts a world point at
 /// ((x - z) * 8, (x + z) * 4) virtual pixels from the ship (ADR-003), so x - z = -26 places the
-/// station 208 pixels to the left -- far enough that its 102-pixel half-width clears the ship's
-/// 86 -- and x + z = 0 puts it level, where its 144-metre-tall silhouette has room above.
+/// station 208 pixels to the left -- far enough that its 51-pixel half-width clears the ship's 43
+/// -- and x + z = 0 puts it level, where its 72-pixel-tall silhouette has room above.
+///
+/// The distance is deliberately NOT scaled with the objects. Halving both and halving the gap
+/// between them would just be the same picture at a different zoom; leaving the world the size it
+/// was is what makes them smaller *in it*.
 ///
 /// It is also what makes the ship's movement visible at all. Space is black and the camera
 /// follows the ship, so with nothing else in the scene a ship at full speed looks identical to a
