@@ -10,6 +10,7 @@
 #include "IsometricCamera.h"
 #include "Palette.h"
 #include "PointerInput.h"
+#include "Starfield.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -804,6 +805,77 @@ public:
 
 private:
   HWND m_window = nullptr;
+};
+
+// The backdrop's scroll arithmetic (ADR-010). The stars themselves are a hash in a shader and
+// there is nothing to unit-test about them; this is the part on the CPU, and it is a floor
+// division, which is exactly the kind of thing that is wrong only on one side of zero.
+TEST_CLASS(StarfieldTests)
+{
+public:
+  TEST_METHOD(LayersScrollAtTheAdvertisedRates)
+  {
+    // Divisor 8, 4, 2: the far layer moves an eighth as fast as the camera, the near one half.
+    Assert::AreEqual(8, Neuron::Starfield::LayerOffset(64.0F, 0));
+    Assert::AreEqual(16, Neuron::Starfield::LayerOffset(64.0F, 1));
+    Assert::AreEqual(32, Neuron::Starfield::LayerOffset(64.0F, 2));
+  }
+
+  TEST_METHOD(TheFarLayerMovesLeastAndNothingMovesWithTheCamera)
+  {
+    // Layer 0 is the far one and moves least, so the offsets INCREASE towards the near layer.
+    std::int32_t previous = std::numeric_limits<std::int32_t>::min();
+    for (std::size_t layer = 0; layer < Neuron::Starfield::LAYER_COUNT; ++layer)
+    {
+      const std::int32_t offset = Neuron::Starfield::LayerOffset(1000.0F, layer);
+      Assert::IsTrue(offset > previous, L"each layer must scroll faster than the one behind it");
+      Assert::IsTrue(offset < 1000, L"no layer scrolls at the camera's own rate; that is the ship's plane");
+      previous = offset;
+    }
+  }
+
+  TEST_METHOD(TheOriginIsNotSpecial)
+  {
+    Assert::AreEqual(0, Neuron::Starfield::LayerOffset(0.0F, 0));
+  }
+
+  // The bug this exists to keep out. C++ division truncates towards zero, so with a divisor of 8
+  // a truncating implementation gives 0 for every camera position from -7 to +7 -- a 15-pixel
+  // band where the layer holds still, and then jumps two steps at once as the ship crosses. A
+  // floor division changes the offset exactly once every `divisor` pixels, everywhere, including
+  // across zero.
+  TEST_METHOD(TheLayersDoNotStutterAcrossTheOrigin)
+  {
+    for (std::size_t layer = 0; layer < Neuron::Starfield::LAYER_COUNT; ++layer)
+    {
+      const std::int32_t divisor = Neuron::Starfield::LAYER_PARALLAX_DIVISORS[layer];
+
+      for (std::int32_t pixels = -64; pixels < 64; ++pixels)
+      {
+        const std::int32_t here = Neuron::Starfield::LayerOffset(static_cast<float>(pixels), layer);
+        const std::int32_t next = Neuron::Starfield::LayerOffset(static_cast<float>(pixels + 1), layer);
+        const std::int32_t step = next - here;
+
+        Assert::IsTrue(step == 0 || step == 1, (std::wstring(L"layer ") + std::to_wstring(layer) + L" jumped by " + std::to_wstring(step) +
+                                                L" at " + std::to_wstring(pixels))
+                                                 .c_str());
+      }
+
+      // And it really does move: exactly one step per `divisor` pixels, over a span that crosses
+      // zero, is the difference between the two ends.
+      const std::int32_t across = Neuron::Starfield::LayerOffset(64.0F, layer) - Neuron::Starfield::LayerOffset(-64.0F, layer);
+      Assert::AreEqual(128 / divisor, across);
+    }
+  }
+
+  TEST_METHOD(NegativePositionsFloorRatherThanTruncate)
+  {
+    // -1 / 8 is 0 when truncated and -1 when floored. The whole of the previous test rests on
+    // this one value being the second.
+    Assert::AreEqual(-1, Neuron::Starfield::LayerOffset(-1.0F, 0));
+    Assert::AreEqual(-1, Neuron::Starfield::LayerOffset(-8.0F, 0));
+    Assert::AreEqual(-2, Neuron::Starfield::LayerOffset(-9.0F, 0));
+  }
 };
 
 } // namespace NeuronClientTests

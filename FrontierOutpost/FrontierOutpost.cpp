@@ -23,6 +23,7 @@
 #include "PaletteTarget.h"
 #include "PointerInput.h"
 #include "Session.h"
+#include "Starfield.h"
 
 #include "ShipMesh.h"
 #include "ShipView.h"
@@ -181,6 +182,11 @@ int RunGame(HWND _window)
   Neuron::FontRenderer text;
   text.Create(device, shaderVisibleHeap);
 
+  // The backdrop. Nothing is stored: it is a hash of the texel's position, three parallax layers
+  // deep (ADR-010).
+  Neuron::Starfield starfield;
+  starfield.Create(device.Handle());
+
   // One renderer, many meshes: the pipeline is how meshes are drawn and the buffers are which
   // mesh (Mesh.h).
   Neuron::MeshRenderer meshRenderer;
@@ -267,6 +273,10 @@ int RunGame(HWND _window)
     // Everything the game draws goes between BeginScene and Resolve, and every one of those
     // draws writes a palette index.
     screen.BeginScene(commandList);
+
+    // The backdrop first, before anything that uses depth. It writes index 0 where there is no
+    // star, so it costs nothing over the clear it replaces (ADR-010).
+    starfield.Draw(commandList, camera);
 
     // The station is drawn whether or not the server has spoken: it is not replicated state, it
     // is scenery, and it is in the same place every frame.

@@ -87,6 +87,21 @@ public:
     return m_zoomIndex;
   }
 
+  /// Where the camera is, in whole virtual pixels, already snapped.
+  ///
+  /// Anything drawn as a function of screen position rather than of world position needs this --
+  /// the starfield is the reason it exists. It is a whole number, which is the property that
+  /// makes such a thing possible at all: a backdrop scrolled by a fractional offset resamples
+  /// itself every frame and shimmers (ADR-003, ADR-010).
+  [[nodiscard]] float SnappedTargetXPixels() const noexcept
+  {
+    return m_snappedTargetXPixels;
+  }
+  [[nodiscard]] float SnappedTargetYPixels() const noexcept
+  {
+    return m_snappedTargetYPixels;
+  }
+
   /// World to virtual screen pixels, including the snap. The inverse of UnprojectToGround for any
   /// point with y == 0.
   [[nodiscard]] ScreenPoint Project(const WorldPoint& _world) const noexcept;

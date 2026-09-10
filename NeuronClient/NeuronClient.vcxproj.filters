@@ -14,6 +14,7 @@
     <ClInclude Include="Palette.h" />
     <ClInclude Include="PaletteTarget.h" />
     <ClInclude Include="PointerInput.h" />
+    <ClInclude Include="Starfield.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp" />
@@ -25,6 +26,7 @@
     <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="PaletteTarget.cpp" />
     <ClCompile Include="PointerInput.cpp" />
+    <ClCompile Include="Starfield.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Shaders">
@@ -48,6 +50,12 @@
       <Filter>Shaders</Filter>
     </FXCompile>
     <FXCompile Include="Shaders\MeshPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FXCompile>
+    <FXCompile Include="Shaders\StarfieldVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FXCompile>
+    <FXCompile Include="Shaders\StarfieldPS.hlsl">
       <Filter>Shaders</Filter>
     </FXCompile>
   </ItemGroup>

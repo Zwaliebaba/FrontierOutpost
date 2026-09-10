@@ -169,6 +169,12 @@
     <FXCompile Include="Shaders\MeshPS.hlsl">
       <ShaderType>Pixel</ShaderType>
     </FXCompile>
+    <FXCompile Include="Shaders\StarfieldVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+    </FXCompile>
+    <FXCompile Include="Shaders\StarfieldPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+    </FXCompile>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -183,6 +189,7 @@
     <ClCompile Include="MeshRenderer.cpp" />
     <ClCompile Include="PaletteTarget.cpp" />
     <ClCompile Include="PointerInput.cpp" />
+    <ClCompile Include="Starfield.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="D3D12Defaults.h" />
@@ -197,6 +204,7 @@
     <ClInclude Include="Palette.h" />
     <ClInclude Include="PaletteTarget.h" />
     <ClInclude Include="PointerInput.h" />
+    <ClInclude Include="Starfield.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
