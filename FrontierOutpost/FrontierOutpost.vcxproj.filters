@@ -6,6 +6,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="ShipMesh.h" />
     <ClInclude Include="ShipView.h" />
+    <ClInclude Include="StationMesh.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FrontierOutpost.cpp" />

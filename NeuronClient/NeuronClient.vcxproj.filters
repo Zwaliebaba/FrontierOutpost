@@ -6,6 +6,7 @@
     <ClInclude Include="Font.h" />
     <ClInclude Include="FontRenderer.h" />
     <ClInclude Include="IsometricCamera.h" />
+    <ClInclude Include="Mesh.h" />
     <ClInclude Include="MeshRenderer.h" />
     <ClInclude Include="Device.h" />
     <ClInclude Include="DescriptorHeap.h" />
@@ -19,6 +20,7 @@
     <ClCompile Include="Device.cpp" />
     <ClCompile Include="FontRenderer.cpp" />
     <ClCompile Include="IsometricCamera.cpp" />
+    <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="MeshRenderer.cpp" />
     <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="PaletteTarget.cpp" />

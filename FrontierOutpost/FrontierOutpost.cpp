@@ -26,6 +26,7 @@
 
 #include "ShipMesh.h"
 #include "ShipView.h"
+#include "StationMesh.h"
 #include "World.h"
 
 #include <chrono>
@@ -180,8 +181,19 @@ int RunGame(HWND _window)
   Neuron::FontRenderer text;
   text.Create(device, shaderVisibleHeap);
 
-  Neuron::MeshRenderer shipRenderer;
-  shipRenderer.Create(device.Handle(), Frontier::SHIP_VERTICES, Frontier::SHIP_INDICES);
+  // One renderer, many meshes: the pipeline is how meshes are drawn and the buffers are which
+  // mesh (Mesh.h).
+  Neuron::MeshRenderer meshRenderer;
+  meshRenderer.Create(device.Handle());
+
+  Neuron::Mesh shipMesh;
+  shipMesh.Create(device.Handle(), Frontier::SHIP_VERTICES, Frontier::SHIP_INDICES);
+
+  Neuron::Mesh stationMesh;
+  stationMesh.Create(device.Handle(), Frontier::STATION_VERTICES, Frontier::STATION_INDICES);
+
+  // The station never moves, so its world matrix is built once rather than every frame.
+  const std::array<float, 16> stationWorld = Neuron::WorldMatrix(0.0F, Frontier::STATION_POSITION_X, 0.0F, Frontier::STATION_POSITION_Z);
 
   Neuron::IsometricCamera camera{static_cast<float>(VIRTUAL_WIDTH), static_cast<float>(VIRTUAL_HEIGHT)};
 
@@ -248,10 +260,14 @@ int RunGame(HWND _window)
     // draws writes a palette index.
     screen.BeginScene(commandList);
 
+    // The station is drawn whether or not the server has spoken: it is not replicated state, it
+    // is scenery, and it is in the same place every frame.
+    meshRenderer.Draw(commandList, stationMesh, camera, stationWorld);
+
     if (ship.HasState())
     {
-      shipRenderer.Draw(commandList, camera,
-                        Frontier::ShipWorldMatrix(ship.HeadingRadians(), shipPosition.x, shipPosition.y, shipPosition.z));
+      meshRenderer.Draw(commandList, shipMesh, camera,
+                        Neuron::WorldMatrix(ship.HeadingRadians(), shipPosition.x, shipPosition.y, shipPosition.z));
     }
 
     text.BeginFrame(device.FrameIndex());

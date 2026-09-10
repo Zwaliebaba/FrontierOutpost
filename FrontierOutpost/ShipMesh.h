@@ -148,22 +148,10 @@ inline constexpr std::size_t SHIP_VERTEX_COUNT = SHIP_FACES.size() * 3;
 inline constexpr std::array<Neuron::MeshVertex, SHIP_VERTEX_COUNT> SHIP_VERTICES = BuildShipVertices();
 inline constexpr std::array<std::uint16_t, SHIP_VERTEX_COUNT> SHIP_INDICES = BuildShipIndices();
 
-/// The ship's world matrix: a rotation about Y by its heading, then a translation. Row-major, for
-/// mul(float4(position, 1), matrix) in HLSL.
-///
-/// Heading zero points along +X and increases towards +Z, which is the same sense the server's
-/// turns16 heading uses.
-[[nodiscard]] inline std::array<float, 16> ShipWorldMatrix(float _headingRadians, float _x, float _y, float _z) noexcept
-{
-  const float cosine = std::cos(_headingRadians);
-  const float sine = std::sin(_headingRadians);
-
-  return std::array<float, 16>{
-    cosine, 0.0F, sine,   0.0F, //
-    0.0F,   1.0F, 0.0F,   0.0F, //
-    -sine,  0.0F, cosine, 0.0F, //
-    _x,     _y,   _z,     1.0F,
-  };
-}
+// ADR-002 shades a face between palette index n and n+8, so an authored index of 8 or more runs
+// off the end of the palette. Checking it here makes a bad index a build error rather than a
+// wrong color that only shows up when that face happens to catch the light.
+static_assert(std::ranges::all_of(SHIP_FACES, [](const ShipFace& _face) { return _face.paletteIndex < 8; }),
+              "A face's authored index is the DARK half of a palette pair and must be 0-7.");
 
 } // namespace Frontier
