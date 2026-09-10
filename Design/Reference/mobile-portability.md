@@ -5,9 +5,9 @@ the platform it is written against, and the constraints a second platform would 
 records what is *true* on 2026-09-10, not what has been decided. Nothing here is a decision, and
 the three places a decision would be needed are named in §10 rather than taken.
 
-**Measured** on 2026-09-10 on this branch — `main` at `3468dd6`, plus the removal of
-`FrontierOutpost/framework.h`, which no translation unit included — by classifying every `.cpp` and
-`.h` outside `Tests/` as platform-bound or not: comments stripped, then matched against the Win32, D3D12, DXGI,
+**Measured** on 2026-09-10 on this branch — `main` at `3468dd6`, plus the retirement of all four
+`framework.h` files in favour of the `pch.h` → `<Library>.h` shape the tree now uses everywhere —
+by classifying every `.cpp` and `.h` outside `Tests/` as platform-bound or not: comments stripped, then matched against the Win32, D3D12, DXGI,
 C++/WinRT and MSVC-intrinsic vocabulary the tree actually uses. A file is *portable* here when its
 own text contains none of it. That is a statement about the code, not about the include graph —
 §3 says where the two differ. Line counts are physical lines including comments, which in this
@@ -58,12 +58,12 @@ Both readings share §3 and §9. Everything in §4, §5 and §7 is conditional o
 
 | Library | Portable | Platform-bound | Bound files |
 |---|---:|---:|---|
-| `GameLogic` | 311 | 0 | — |
-| `NeuronServer` | 172 | 0 | — |
+| `GameLogic` | 321 | 0 | — |
+| `NeuronServer` | 176 | 0 | — |
 | `NeuronCore` | 719 | 131 | `NeuronCore.h` (61), `Debug.h` (70) |
 | `FrontierOutpost` | 535 | 374 | `FrontierOutpost.cpp` (374) |
 | `NeuronClient` | 361 | 2157 | everything except `Font.h`, `Palette.h`, `IsometricCamera.{h,cpp}` |
-| **Total** | **2098** | **2662** | 44% of the non-test tree is platform-free |
+| **Total** | **2112** | **2662** | 44% of the non-test tree is platform-free |
 
 Beside that: 255 lines of HLSL in eight files, and 1798 lines of test across four suites, all of
 them written against MSVC's `CppUnitTest`.
@@ -76,12 +76,18 @@ in the shared library it is concentrated in exactly two files, neither of which 
 
 ## 3. What already ports, and why that is a decision rather than luck
 
-`GameLogic` is 311 lines and contains **no `float` and no `double` at all** — verified by matching
+`GameLogic` is 321 lines and contains **no `float` and no `double` at all** — verified by matching
 the stripped source, not by reading it. Positions are `std::int64_t` millimetres, headings are a
 16-bit fixed-point turn, trigonometry is CORDIC in integers, and the square root is digit-by-digit
-in base four (`NeuronCore/Trigonometry.cpp`). It reads no wall clock: the tick is the clock. Its
-`framework.h` includes `<cstddef>` and `<cstdint>` and nothing else, so it does not reach
-`<windows.h>` even transitively.
+in base four (`NeuronCore/Trigonometry.cpp`). It reads no wall clock: the tick is the clock.
+
+Until 2026-09-10 it did not reach `<windows.h>` even transitively, which made it the one library
+with no platform header anywhere in its include graph. That is no longer true: `GameLogic.h`
+includes `NeuronCore.h`, by owner decision on 2026-09-10, so that all four libraries share one
+umbrella-header shape. **The determinism argument below is untouched by that** — it rests on the
+arithmetic in the source, not on what the precompiled header parses — but the *include graph* of
+the library is now Windows-bound exactly as `NeuronServer`'s is, and cutting either loose is the
+same one-line change.
 
 That is R16 doing precisely the job it was written for, and the payoff shows up here rather than
 where it was aimed. R16 exists so that two builds of the same simulation agree; the side effect is
@@ -116,10 +122,11 @@ written portable from the first line, against BSD sockets, which both platforms 
 substitutes. What does not survive is the *shape*: "there is no third error path", one exception
 caught at the composition root, a message box, exit. §7 explains why that is a desktop assumption.
 
-`NeuronServer` is 172 lines with no platform token in any of them, but its `framework.h` includes
-`NeuronCore.h`, so every translation unit in it sees `<windows.h>` and `Session.cpp`'s
-`ASSERT_TEXT` reaches `Debug.h`. Cutting it loose is a one-line change to `framework.h` plus
-whatever `Debug.h` becomes. **The code is portable; the include chain is not.** That distinction
+`NeuronServer` is 176 lines with no platform token in any of them, but its `NeuronServer.h`
+includes `NeuronCore.h`, so every translation unit in it sees `<windows.h>` and `Session.cpp`'s
+`ASSERT_TEXT` reaches `Debug.h`. Unlike `GameLogic`, it has a reason to: `ASSERT_TEXT` is the one
+thing it uses from there. Cutting it loose is a one-line change to `NeuronServer.h` plus whatever
+`Debug.h` becomes. **The code is portable; the include chain is not.** That distinction
 holds for `FrontierOutpost/ShipView.{h,cpp}` and the two mesh headers too — 535 lines that name
 nothing platform-specific but are compiled through `FrontierOutpost/pch.h`, which reaches
 `<windows.h>` and D3D12 by way of `NeuronClient.h`.
