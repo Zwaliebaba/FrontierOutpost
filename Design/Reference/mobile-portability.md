@@ -5,8 +5,9 @@ the platform it is written against, and the constraints a second platform would 
 records what is *true* on 2026-09-10, not what has been decided. Nothing here is a decision, and
 the three places a decision would be needed are named in §10 rather than taken.
 
-**Measured** on 2026-09-10 at commit `3468dd6`, by classifying every `.cpp` and `.h` outside
-`Tests/` as platform-bound or not: comments stripped, then matched against the Win32, D3D12, DXGI,
+**Measured** on 2026-09-10 on this branch — `main` at `3468dd6`, plus the removal of
+`FrontierOutpost/framework.h`, which no translation unit included — by classifying every `.cpp` and
+`.h` outside `Tests/` as platform-bound or not: comments stripped, then matched against the Win32, D3D12, DXGI,
 C++/WinRT and MSVC-intrinsic vocabulary the tree actually uses. A file is *portable* here when its
 own text contains none of it. That is a statement about the code, not about the include graph —
 §3 says where the two differ. Line counts are physical lines including comments, which in this
@@ -60,9 +61,9 @@ Both readings share §3 and §9. Everything in §4, §5 and §7 is conditional o
 | `GameLogic` | 311 | 0 | — |
 | `NeuronServer` | 172 | 0 | — |
 | `NeuronCore` | 719 | 131 | `NeuronCore.h` (61), `Debug.h` (70) |
-| `FrontierOutpost` | 548 | 374 | `FrontierOutpost.cpp` (374) |
+| `FrontierOutpost` | 535 | 374 | `FrontierOutpost.cpp` (374) |
 | `NeuronClient` | 361 | 2157 | everything except `Font.h`, `Palette.h`, `IsometricCamera.{h,cpp}` |
-| **Total** | **2111** | **2662** | 44% of the non-test tree is platform-free |
+| **Total** | **2098** | **2662** | 44% of the non-test tree is platform-free |
 
 Beside that: 255 lines of HLSL in eight files, and 1798 lines of test across four suites, all of
 them written against MSVC's `CppUnitTest`.
@@ -119,8 +120,9 @@ caught at the composition root, a message box, exit. §7 explains why that is a 
 `NeuronCore.h`, so every translation unit in it sees `<windows.h>` and `Session.cpp`'s
 `ASSERT_TEXT` reaches `Debug.h`. Cutting it loose is a one-line change to `framework.h` plus
 whatever `Debug.h` becomes. **The code is portable; the include chain is not.** That distinction
-holds for `FrontierOutpost/ShipView.{h,cpp}` and the two mesh headers too — 548 lines that name
-nothing platform-specific but are compiled through a Windows precompiled header.
+holds for `FrontierOutpost/ShipView.{h,cpp}` and the two mesh headers too — 535 lines that name
+nothing platform-specific but are compiled through `FrontierOutpost/pch.h`, which reaches
+`<windows.h>` and D3D12 by way of `NeuronClient.h`.
 
 `NeuronClient` contributes 361 portable lines, and one of them matters: `IsometricCamera.{h,cpp}`
 is 262 lines of pure arithmetic — the projection, the inverse, the zoom ladder, the pixel snap —
@@ -206,14 +208,6 @@ the checker that enforces the conventions is itself written against one platform
 the Windows SDK. Against an NDK sysroot it needs a different environment and a different
 `HeaderFilterRegex`, but the `.clang-tidy` rules themselves — the naming table, R1, R3, R5, R8 —
 are compiler-agnostic and would carry over.
-
-One concrete symptom of how much the tree leans on its toolchain is already sitting in it:
-`FrontierOutpost/framework.h` includes `"targetver.h"`, a file that was added in `c4685d8` and
-deleted in `ac7cf83`, is not on disk, is not gitignored, and is not registered in the `.vcxproj`.
-The executable has been built and run repeatedly since, so MSVC is resolving that name from
-somewhere on its own include path. No other toolchain will. **Not verified from a build** — there
-is no MSVC in this container — and noted here as an example rather than fixed, since it is outside
-this document's task.
 
 ### 4.4 The test suites — 1798 lines
 
