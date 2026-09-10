@@ -105,15 +105,21 @@ namespace
 
 /// Appends an integer little-endian. Shifts rather than a memcpy, for the same reason as above: a
 /// shift means the same thing on every machine and a struct's layout does not.
+///
+/// The accumulator is 64 bits wide rather than T's own width, and that is not tidiness. Shifting a
+/// one-byte value right by eight is well defined after integer promotion, but casting the result
+/// back to one byte discards it, and MSVC reports that as C4333 -- fatally, under /WX. It is right
+/// to: in a template nobody wrote that shift deliberately for the one-byte case. Widening the
+/// accumulator removes the case rather than silencing the report. These records are the first in
+/// the tree with single-byte fields, which is why the older Write above has never met it.
 template <typename T> void Append(std::vector<std::byte>& _bytes, T _value)
 {
-  using Unsigned = std::make_unsigned_t<T>;
-  auto bits = static_cast<Unsigned>(_value);
+  auto bits = static_cast<std::uint64_t>(static_cast<std::make_unsigned_t<T>>(_value));
 
   for (std::size_t byte = 0; byte < sizeof(T); ++byte)
   {
     _bytes.push_back(static_cast<std::byte>(bits & 0xFFU));
-    bits = static_cast<Unsigned>(bits >> 8);
+    bits >>= 8;
   }
 }
 
@@ -131,23 +137,22 @@ public:
   {
   }
 
+  /// Wide accumulator, for the same reason Append has one: no shift here depends on T's width.
   template <typename T> [[nodiscard]] T Read() noexcept
   {
-    using Unsigned = std::make_unsigned_t<T>;
-
     if (m_failed || m_offset + sizeof(T) > m_bytes.size())
     {
       m_failed = true;
       return T{};
     }
 
-    Unsigned bits = 0;
+    std::uint64_t bits = 0;
     for (std::size_t byte = 0; byte < sizeof(T); ++byte)
     {
-      bits = static_cast<Unsigned>(bits | (static_cast<Unsigned>(m_bytes[m_offset + byte]) << (8 * byte)));
+      bits |= static_cast<std::uint64_t>(m_bytes[m_offset + byte]) << (8 * byte);
     }
     m_offset += sizeof(T);
-    return static_cast<T>(bits);
+    return static_cast<T>(static_cast<std::make_unsigned_t<T>>(bits));
   }
 
   /// A list length, refused when the buffer cannot possibly hold that many elements of

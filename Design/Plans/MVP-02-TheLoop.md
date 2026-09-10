@@ -177,8 +177,10 @@ per attempt. Two of the four constraints were being satisfied by luck at first a
 satisfied by construction: a lane's cost is read off its drawn length, so ADR-014's monotonicity
 cannot fail, and the rings are concentric with lanes joining only angular neighbors or running
 radially, so no two can cross. The prototype measured **0 rejections in 1000 seeds at each of 6, 8
-and 12 seats**; `TheRejectionRateIsLowAtEverySeatCount` measures the real generator on every CI run
-and logs the figure.
+and 12 seats**. The real generator was then measured directly, by linking `GameLogic` against clang
+on this container and running it: **0 rejections in 1000 seeds at each of 6, 8 and 12 seats**, on
+galaxies of 33, 43 and 62 systems. `TheRejectionRateIsLowAtEverySeatCount` runs the same measurement
+on every CI build and logs it.
 
 **One figure slice 2 starts from.** The prototype's eight-seat galaxy spans about 250 map units on
 each axis. ADR-003 projects that onto roughly 4000 by 2000 virtual pixels at the default zoom,
@@ -209,6 +211,27 @@ Each part lands green on its own.
   drag, the lane quads, the system meshes, `Frontier::Scene`, and a seat in the harness. **None of
   this can be verified from a container with no screen**, and it carries the legibility measurement
   below. It ends with a run list and nothing else.
+
+**2a was delivered on 2026-09-10.** The records, the frame, the bounds-checked reader, the per-seat
+memory and the fog filter, with tests in `NeuronCoreTests` and `GameLogicTests`. Two figures were
+measured by linking the real code against clang here and running it, rather than by reading it:
+
+- **An eight-seat snapshot is 2009 bytes on the wire**, frame header included. That answers the
+  open question ADR-005 left, and it answers it two orders of magnitude below the estimate in it:
+  the guess was tens of kilobytes. At four ticks a day for twelve seats this is nothing, and the
+  delta path that ADR-005 said a large snapshot would justify is not needed.
+- **At eight seats a fresh seat observes 6 of 40 systems** and knows nothing of the other 34. That
+  is its capital, its cluster, the two adjacent capitals and its frontier node, which is the
+  one-pager's dense start visible as a number.
+
+One defect got through the local checks and was caught by CI, and it is worth recording because it
+marks the blind spot in them. MSVC rejects a right shift by eight applied to a one-byte accumulator
+inside a template (C4333, fatal under `/WX`); clang with `-Wall -Wextra -Wconversion` says nothing
+about it, so a clean local build was not evidence. These are the first records in the tree with
+single-byte fields, which is why the older serializer never met it. The fix widens the accumulator
+so the case does not arise, rather than silencing the report. **The lesson for later slices: a
+clean clang build here is evidence about syntax and types, and no evidence at all about MSVC's
+warning set.** Running the code, which this slice did for the first time, is worth more.
 
 The parts below describe 2a, 2b and 2c together; the "not in this slice" and "run list" lines apply
 to the slice as a whole.
