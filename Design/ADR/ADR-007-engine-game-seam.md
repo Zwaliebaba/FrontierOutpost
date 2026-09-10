@@ -1,123 +1,107 @@
-# ADR-007 — The server owns a `Simulation`, not a `World`
+# ADR-007 — The server owns a `Simulation` it ticks on a schedule, not a `World` it ticks on a timer
 
 **Status:** Accepted
 
-**Date:** 2026-09-09
-**Decided by:** Build session MVP-01, step 5. Not one of the ADRs the plan asked for; written because the decision had to be made mid-implementation and it has real alternatives (`Design/README.md` §5).
+**Date:** 2026-09-10
+**Decided by:** Owner decision, 2026-09-10. The seam itself was decided in build session MVP-01 and is kept; the interface and the schedule are rewritten here for the 4X (owner decision: the pre-4X record is rewritten in place, `Design/README.md` §4).
 **Supersedes:** —
 
 ---
 
 ## Context
 
-`Design/Plans/MVP-01-IsometricShip.md` step 5 says:
+`AGENTS.md` §2 says `GameLogic` is referenced by the executables and by nothing else, and that
+`NeuronServer` references `NeuronCore` and nothing more. So the engine's server cannot name
+`Frontier::MatchState`. The tree resolves this with an abstract `Neuron::Simulation` declared in
+`NeuronCore` — the one library both halves share — which `Frontier::World` implements and the
+executable hands to `Neuron::Session`. That shape is right and is kept; `NeuronServerTests`
+already proves its worth with a counting simulation that tests the server without a game.
 
-> `NeuronServer`: a `Session` that owns a `World`, receives orders from a transport, ticks on the
-> schedule from the threading ADR, and pushes `ShipState` back.
-
-`AGENTS.md` §2 says:
-
-> **`GameLogic` is referenced by the executable and by nothing else.** It is server-side game
-> code; the day a client-side file reaches for it is the day the server stopped being
-> authoritative.
-
-and gives the dependency graph in which `NeuronServer.lib` references `NeuronCore` and nothing
-more.
-
-Both cannot be true as written. A `Session` that owns a `Frontier::World` is a `NeuronServer` that
-links `GameLogic`, which is the edge the repository map forbids. This is the contradiction that
-step 0 of the plan asks a session to find and report, and it is reported here rather than resolved
-silently.
-
-Two further facts constrain the answer. `NeuronCore` is the only library both halves of the
-process share. And `FrontierOutpost.exe` references all four libraries, so it is the one place
-that is allowed to know about the engine and the game at once.
+What is wrong is everything the interface and the session say about time. `Simulation` has
+`ApplyOrder(MoveToOrder)`, `Tick()` and `Snapshot() -> ShipState`; `Session` runs a thread that
+ticks it twenty times a second against `steady_clock`. The 4X ticks four times a day at fixed UTC
+times, its orders are per-seat and editable until the lock, its snapshot is per seat (ADR-005),
+and the test plan needs the schedule compressed to one hour for Phase 0 and six for Phase 1.
 
 ## Options considered
 
 ### A. Let `NeuronServer` reference `GameLogic`
 
-Implement the plan's sentence literally: add `$(SolutionDir)GameLogic` to `NeuronServer`'s include
-directories and a project reference, and have `Session` hold a `Frontier::World`.
-
-It is the least code. It also deletes the rule: once the engine's server links the game, there is
-no mechanical difference between engine and game any more, and `AGENTS.md` §2's line about the day
-the server stops being authoritative becomes a comment rather than a constraint. It would also
-mean `NeuronServerTests` links `GameLogic`, so a test of the tick schedule would fail when the
-ship's kinematics changed.
+The least code. It deletes the rule that makes the engine an engine, and makes a test of the
+schedule fail when a combat rule changes. Rejected in MVP-01 for the same reasons; nothing has
+changed.
 
 ### B. Make `Session` a template on the simulation type
 
-`Session<Frontier::World>`, instantiated by the executable. No virtual calls, no abstraction, and
-the dependency graph is untouched — the engine genuinely never names the game.
+No virtual calls; the whole session in a header; every holder of a session a template too. The
+tail wagging the dog, as before.
 
-It costs putting the whole of `Session` in a header, including its thread and its schedule, which
-is the part of the server most likely to grow. And it makes the type of a session depend on the
-game, so anything holding one has to be a template too. For a class whose job is to own a thread
-and a clock, that is the tail wagging the dog.
+### C. Keep the abstract `Simulation`, widen it, and give `Session` a schedule
 
-### C. Declare an abstract `Simulation` in `NeuronCore`
-
-`Session` owns a `std::unique_ptr<Neuron::Simulation>`. `Frontier::World` implements it.
-`FrontierOutpost.exe` puts the two together. The engine's server still owns the simulation and
-still ticks it; it just does not know what it is.
-
-Costs one virtual call per tick — twenty a second — and one indirection.
+The seam stays where it is. The interface grows the questions the 4X server has to ask, and the
+session's timer becomes a schedule that is match data.
 
 ## Decision
 
-**C.** `NeuronCore/Simulation.h` declares an abstract `Simulation` with `ApplyOrder`, `Tick` and
-`Snapshot`. `NeuronServer::Session` owns one. `GameLogic`'s `World` implements it.
-`FrontierOutpost.cpp` calls `session.Start(std::make_unique<Frontier::World>(), transport)`.
+**C.** `Neuron::Simulation` is widened to what the server needs and nothing it does not:
 
-Both documents end up true: the plan's `Session` owns and ticks the simulation, and `NeuronServer`
-still references `NeuronCore` and nothing else.
+- `Submit(seat, order) -> Verdict` and `Withdraw(seat, orderId) -> Verdict`, applied to the
+  seat's order book for the next lock. The book is editable until the lock and hidden from every
+  other seat.
+- `OrderBook(seat)`, so a client can read back what it committed.
+- `ResolveTick()`, the lock and the six phases of ADR-004, once per scheduled tick.
+- `Snapshot(seat)` and `Digest(seat)`, the two records of ADR-005.
+- `Preview(seat, request)`, the server-side engagement preview of ADR-013.
+- `Save(bytes)` and `Load(bytes)`, the persistence of ADR-012.
+- `SeatCount()` and `IsOver()`.
 
-**On R2.** `AGENTS.md` R2 warns that a base class with one derived class is ceremony, and this ADR
-is deliberately not that. The abstraction is not there to anticipate a second implementation, it
-is there because the alternative is an edge in the dependency graph the repository map forbids —
-the interface is load-bearing rather than speculative. It is worth adding that the second
-implementation arrived immediately and in the place that shape usually pays off:
-`NeuronServerTests` has a `CountingSimulation`, which is how the tick schedule, the order-before-
-tick ordering and the once-per-tick replication are tested without a ship anywhere in sight.
+Order, snapshot, digest and preview records are `NeuronCore` wire records (ADR-006). They are the
+one place the engine carries game nouns, as the MVP-01 record already admitted for its two; the
+engine still does not know what any of them mean.
 
-**On where the wire records live.** `MoveToOrder` and `ShipState` are in `NeuronCore`, which is
-what the plan asks for and which this seam depends on — `Simulation`'s signature names both. It is
-also the one place in the tree where the engine has a game noun in it, and R9 says the engine
-knows nothing about this game. That tension is real and is left standing rather than resolved,
-because the plan is explicit and because generalizing the two records — an entity state, a move
-order — is a rename rather than a redesign on the day a second kind of thing needs to move. It is
-noted in `Protocol.h` so the next reader meets it there rather than deducing it.
+**`Session` ticks on a `TickSchedule`, and the schedule is match data.** A schedule is a first
+tick time in UTC and a fixed interval; the one-pager's four a day is an interval of six hours,
+Phase 0's compressed clock is one hour. The session reads `system_clock` — wall time, in UTC —
+only to decide when the next lock is, sleeps until it, calls `ResolveTick()`, persists, and sends
+every seat its snapshot and digest. Between ticks it serves requests. The wall clock never enters
+the simulation: R16 is untouched, and the resolver cannot tell which schedule it is on.
+
+**`ResolveNow()` exists on `Session`** for the harness and the tests, and for nothing else. It
+locks and resolves out of schedule. It is not reachable from a client message.
+
+**The tick number in the snapshot is what the client trusts**, not the wall clock. A client whose
+clock is wrong sees the right tick with a wrong countdown, which is recoverable; the reverse is
+not.
 
 ## Consequences
 
-**What this makes easy.** `NeuronServerTests` tests the server without a game. `GameLogicTests`
-tests the game without a server, a window or a thread. Neither suite is coupled to the other's
-subject, which is what makes them cheap to keep passing.
+**What this makes easy.** `NeuronServerTests` still tests the schedule, the order books, the
+per-seat send and persistence with a counting simulation, and `GameLogicTests` still tests every
+rule without a thread. The compressed clock of Phase 0 is a schedule and nothing else. The
+harness of ADR-011 drives the same `Session` with `ResolveNow()`.
 
-**What this makes hard.** The simulation is now behind a pointer, so the server cannot ask it
-anything the interface does not expose. Adding a question means widening an interface in
-`NeuronCore` that both halves compile against — which is friction, and is mostly the good kind:
-it is exactly the moment to ask whether the server should be asking.
+**What this makes hard.** The interface is wider, and every addition is a change to a header both
+halves compile against. That friction is the good kind: it is the moment to ask whether the server
+should be asking.
 
-**What it costs.** A virtual call and an indirection twenty times a second, which is not a cost.
-And an abstract class that a reader has to follow one hop to understand, which is.
+**What it costs.** Virtual calls at four a day, which is nothing; and an interface that has to be
+learned.
 
-**What it forecloses.** Nothing yet. If the server ever needs to tick many simulations, or a
-simulation needs to be sharded across threads, this is the interface that changes.
+**What it forecloses.** Nothing yet. If one server ever hosts many matches, `Session` becomes
+one of many and this interface is unchanged.
 
 ## What this changes elsewhere
 
-- **Code:** `NeuronCore/Simulation.h`, `NeuronServer/Session.{h,cpp}`, `GameLogic/World.h`,
-  `FrontierOutpost.cpp`.
-- **Design/:** `Design/Plans/MVP-01-IsometricShip.md` step 5's "a `Session` that owns a `World`"
-  is implemented as "a `Session` that owns a `Simulation`, which the executable makes a `World`".
-  The plan is archived by this session, so the departure is recorded here rather than by editing
-  it.
-- **AGENTS.md:** no change. §2's dependency graph is what this ADR preserves.
+- **AGENTS.md:** §2's dependency graph is what this preserves. R16 gains the sentence that the
+  schedule lives in `NeuronServer`.
+- **Design/:** ADR-004 is what `ResolveTick()` runs; ADR-005 what `Snapshot` and `Digest` return;
+  ADR-011 which process owns a `Session`; ADR-012 what `Save` and `Load` are for.
+  `Design/Plans/MVP-02-TheLoop.md` steps 3 and 4.
+- **Code:** nothing yet. `NeuronCore/Simulation.h` and `NeuronServer/Session.{h,cpp}` are
+  rewritten by the plan; their current comments describe the MVP-01 interface.
 
 ## Open questions
 
-Whether `MoveToOrder` and `ShipState` should be generalized out of game vocabulary, as above. Not
-now; it is a rename, and doing it before a second kind of entity exists would be guessing at what
-the general case looks like.
+Whether a seat that never connected before the first lock should be treated as absent from tick
+one for the custodian rule. The one-pager counts absence in ticks; the plan treats the first lock
+as tick one and lets the rule run.

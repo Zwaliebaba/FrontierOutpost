@@ -21,14 +21,16 @@ These are settled. They are not preferences to be re-litigated in a session; cha
 
 | | Decision |
 |---|---|
+| **The game** | [`space-4x-one-pager-v10.md`](space-4x-one-pager-v10.md): an asynchronous, tick-quantised 4X for six to twelve humans on a graph of systems and lanes, resolved four times a day, over a three-week match. Owner decision, 2026-09-10. The MVP-01 real-time ship was a proof of the stack, not the game; [`Plans/MVP-02-TheLoop.md`](Plans/MVP-02-TheLoop.md) is what replaces it. |
 | **Presentation** | 640×400, **16 colours**. A fixed paletted framebuffer, scaled to the window by a **whole number** (2× today). A fractional scale is what turns a crisp legacy screen into mush, so integer scaling is a design constraint, not a default. |
 | **Graphics API** | Direct3D 12, on Windows 11. The legacy look is a deliberate aesthetic on a modern stack — not a limitation being worked around, and not a reason to reach for an older API. |
 | **Language** | C++23 (`/std:c++latest` under MSVC v145), `/permissive-`, `/W4` with warnings as errors. |
 | **Platform** | x64 only. |
-| **Shape** | One executable. `FrontierOutpost.exe` starts the client and the authoritative server in the same process. |
-| **Distribution** | **The executable ships alone.** No assets folder, no data directory. Art, palettes, fonts, audio and compiled shaders are embedded in the binary (AGENTS.md R13). |
-| **Authority** | The server is authoritative. `GameLogic` is server-side and the client never links it (AGENTS.md §2). |
+| **Shape** | Two executables (ADR-011). `FrontierServer.exe` hosts a match headless and resolves ticks on a UTC schedule whether or not anyone is connected. `FrontierOutpost.exe` is the client; with no arguments it is also the development harness, hosting every seat in-process over the loopback. **Planned:** today the tree has `FrontierOutpost.exe` alone, hosting one seat. |
+| **Distribution** | **The client ships alone.** No assets folder, no data directory beside `FrontierOutpost.exe`; art, palettes, fonts, audio and compiled shaders are embedded in the binary (AGENTS.md R13). The server keeps a match directory of per-tick snapshots and the event log (ADR-012), and that is the only data on disk anywhere. |
+| **Authority** | The server is authoritative. `GameLogic` is server-side and no client-side file links it (AGENTS.md §2). The client draws what it is sent and derives cosmetic motion from it; it computes no outcome, not even a preview (ADR-013, ADR-015). |
 | **Dependencies** | The Windows SDK and the MSVC standard library. Nothing else (AGENTS.md R14). |
+| **Time** | The tick is the clock inside the simulation (AGENTS.md R16). When a tick happens is match data — four a day at fixed UTC times, compressed to an hour for Phase 0 — read by the server and never by the resolver (ADR-004, ADR-007). |
 
 Every one of these constrains design work in a way that is easy to forget mid-session. A UI mock at 1920×1080, a texture atlas loaded from disk, a `std::print` of a wall-clock timestamp inside the simulation — each is a perfectly good idea that this game has already decided against.
 
@@ -42,7 +44,7 @@ Design/
   ADR/                      ← decisions, numbered, immutable once Accepted
     ADR-000-template.md
     ADR-001-....md
-  Plans/                    ← work in flight: what is being built, in what order
+  Plans/                    ← work in flight: what is being built, in what order (MVP-02-TheLoop.md today)
   Reference/                ← things that are true rather than decided (formats, tables, maths)
   Archive/                  ← superseded plans and finished reviews, kept for the record
 ```
@@ -106,6 +108,8 @@ A **design session** produces documents, not code. It ends with a decision recor
 `Proposed` → `Accepted` → (`Superseded by ADR-0NN` | `Deprecated`).
 
 An **Accepted** ADR is immutable except for its status line. Corrections, refinements and reversals are new ADRs that name the one they supersede. This is the whole point of the format: the record shows what was believed at the time, which is what makes it possible to work out why the code looks the way it does.
+
+**One exception, taken once.** On 2026-09-10 the owner decided that the MVP-01 record — written for a real-time ship that was a proof of the stack, not the game — would be rewritten in place rather than superseded, so that the record reads as one design and not as a game with a correction stapled to it. ADR-003 to ADR-008 were rewritten under their numbers, the kinematics, interpolation and queue-policy decisions were deleted, and ADR-011 to ADR-016 were added. `Design/Archive/MVP-01-IsometricShip.md` still describes what was built and cites the old titles; it is an archive and not authoritative. The rule above holds from here on.
 
 ---
 

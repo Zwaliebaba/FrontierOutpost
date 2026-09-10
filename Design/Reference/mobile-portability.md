@@ -21,6 +21,12 @@ number would be an estimate dressed as a fact (`Design/README.md` §3.2).
 
 ## 1. The question this document cannot answer
 
+**Answered since: owner decision, 2026-09-10.** The one-pager is the game, the Windows D3D12
+640×400 client stays the client, and mobile is a later port. The design record was rewritten to
+say so (ADR-003 to ADR-016, `Design/Plans/MVP-02-TheLoop.md`). The two readings below are kept
+because the measurements in §2 to §9 were taken against the tree as it was, and the tree has not
+yet changed; under the first reading, §3 and §9 are the parts that carry.
+
 The tree and the design record describe two different games, and which one is being moved decides
 almost everything below.
 
@@ -419,8 +425,8 @@ single-platform game and it is the reason §4.1 is 2157 lines rather than a back
 
 Three decisions, none of them taken here, in the order they have to be taken.
 
-**Which game.** §1. Until this is settled, every figure below §3 is being applied to a target that
-may not exist. It is not a technical question and it is not one this document can answer.
+**Which game.** §1. Settled on 2026-09-10: the one-pager. The figures below §3 now describe the
+parts of the tree MVP-02 keeps, and §4.1 the renderer it keeps in full.
 
 **Whether 640×400 is a per-platform constant or a design constant.** `Design/README.md` §1 makes
 it a constraint; §5 shows what that constraint does to a phone in landscape and that it forbids

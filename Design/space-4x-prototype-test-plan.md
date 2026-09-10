@@ -3,7 +3,7 @@
 Three bets are stacked: the tick loop, Exile, the sealed region. Exile depends on the region; both depend on the loop. Test bottom-up. Nothing above a layer is built until that layer holds with strangers.
 
 ## Instrumentation (all phases)
-Timestamped events for: login, session start/end, order edit, order lock, message, proposal sent/accepted/declined, trade lane opened/cancelled, capital fall, custodian takeover, fleet order after capital fall. The login curve is the primary instrument; surveys are secondary.
+Timestamped events for: login, session start/end, order edit, order lock, proposal sent/accepted/declined, trade lane opened/cancelled, capital fall, custodian takeover, fleet order after capital fall. The login curve is the primary instrument; surveys are secondary.
 
 ## Phase 0 — Mechanical shakeout
 **Setup:** 6 players, friends, compressed clock: 1-hour tick, 48-hour match. Loop only.
@@ -16,7 +16,7 @@ Timestamped events for: login, session start/end, order edit, order lock, messag
 
 | # | Hypothesis | Pass | Kill |
 |---|---|---|---|
-| H1 | Strangers engage in diplomacy | ≥ 50% of players send ≥ 1 proposal or message by day 3; trade lanes open between ≥ half of neighbour pairs | < 25% engage in any diplomacy by day 5 → decision three does not exist with strangers; redesign diplomacy before touching Exile |
+| H1 | Strangers engage in diplomacy | ≥ 50% of players send ≥ 1 proposal by day 3; trade lanes open between ≥ half of neighbour pairs | < 25% engage in any diplomacy by day 5 → decision three does not exist with strangers; redesign diplomacy before touching Exile |
 | H2 | The tick and match length hold attention | ≥ 60% of players log in daily through day 10; median 2 logins/day | < 40% daily by day 7 → cadence or length is wrong; Exile is irrelevant until fixed |
 | H3 | Losers keep playing | Of players whose capital falls, ≥ 50% issue fleet orders in ≥ 3 subsequent ticks | < 25% → Exile is a graceful exit, not a mode; scope it to a one-screen epilogue |
 | H4 | The 30-minute session exists | Median session 10–40 min; ≥ 80% of sessions include an order edit | Median > 60 min or < 5 min → the loop is either an obsession trap or a notification-checker; fix digest and order UX |

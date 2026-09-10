@@ -2,7 +2,7 @@
 
 Operating instructions for every agent (and human) writing code in this repository. **Read this before generating a single line.**
 
-*Frontier Outpost* is a greenfield C++23 space MMO: a Direct3D 12 client and an authoritative server, hosted in **one executable**, presenting a deliberately legacy screen — **640×400, 16 colours**, blown up by a whole-number factor so it is visible on a modern display. There is no legacy tree here and nothing is grandfathered. A rule below is not a target to migrate towards; it describes the code as it must be written today, and a whole-tree run of any checker comes back clean.
+*Frontier Outpost* is a greenfield C++23 asynchronous space 4X ([Design/space-4x-one-pager-v10.md](Design/space-4x-one-pager-v10.md)): a Direct3D 12 client, and an authoritative server that resolves a match of six to twelve humans four times a day, presenting a deliberately legacy screen — **640×400, 16 colours**, blown up by a whole-number factor so it is visible on a modern display. The server is a headless executable; the client executable also hosts it in-process as a development harness (ADR-011). There is no legacy tree here and nothing is grandfathered. A rule below is not a target to migrate towards; it describes the code as it must be written today, and a whole-tree run of any checker comes back clean.
 
 **What is authoritative, in order:**
 
@@ -49,7 +49,7 @@ That tree is an illustration of the rule, not a description of anything. A base 
 
 clang-tidy can require an *absent* prefix but cannot see a *present* suffix, so `Build/CheckProjectFiles.py` carries the other half.
 
-**R3 — Compile-time constants are `UPPER_CASE`.** `constexpr`, `inline constexpr` and `static constexpr` members: `VIRTUAL_WIDTH`, `TICKS_PER_SECOND`, `PALETTE_SIZE`. `sm_` is reserved for *mutable* statics, which are rare and must document their thread-safety.
+**R3 — Compile-time constants are `UPPER_CASE`.** `constexpr`, `inline constexpr` and `static constexpr` members: `VIRTUAL_WIDTH`, `TICKS_PER_DAY`, `PALETTE_SIZE`. `sm_` is reserved for *mutable* statics, which are rare and must document their thread-safety.
 
 **R4 — Acronyms capitalize as words**: `HlslSource`, `DxgiFactory`, `UdpTransport` — never `HLSLSource`. Identifiers from an external SDK keep that SDK's spelling (`ID3D12Device`, `DXGI_FORMAT`, `HRESULT`, `IDXGISwapChain4`) and are never renamed to fit.
 
@@ -136,8 +136,9 @@ private:
 | `NeuronCore/` | Engine static library used by **both** halves: platform, timing, maths, containers, serialization, the wire protocol | Yes |
 | `NeuronClient/` | Engine static library used by the **client only**: the window, the D3D12 device and swap chain, the 640×400 paletted target, input, audio, UI | Yes |
 | `NeuronServer/` | Engine static library used by the **server only**: session ownership, replication, the authoritative loop | Yes |
-| `GameLogic/` | The game itself — entities, orders, economy, simulation rules. Server-side; the client never links it directly | Yes |
-| `FrontierOutpost/` | The executable. Starts the client and the server in one process, and is where every embedded asset and compiled shader ends up | Yes |
+| `GameLogic/` | The game itself — the galaxy generator, the match state, the order books, the tick resolver, the visibility filter and the digest (ADR-004). Server-side; no client-side file links it. The composition root of `FrontierOutpost.exe` constructs it for the in-process harness and nothing else does | Yes |
+| `FrontierOutpost/` | The client executable, and with no arguments the development harness that hosts every seat in-process (ADR-011). Where every embedded asset and compiled shader ends up | Yes |
+| `FrontierServer/` | **Planned, not in the tree** (`Design/Plans/MVP-02-TheLoop.md` step 5). The headless server executable: creates a match, resolves ticks on a UTC schedule, keeps the match directory (ADR-012) | — |
 | `Tests/NeuronCoreTests/`, `Tests/NeuronClientTests/`, `Tests/NeuronServerTests/`, `Tests/GameLogicTests/` | MSVC CppUnitTest DLLs, one per library, each referencing the library it tests and the libraries that library is built on. **CI builds and runs all four** | Yes |
 | `Design/` | The design record: `README.md` (the standards), `ADR/` (decisions), and plans | Yes — see §6 |
 | `Build/*.py` | Repository checkers (§6). They gate CI | Yes, carefully |
@@ -145,14 +146,15 @@ private:
 | `.github/workflows/build.yml` | CI. All of it blocks | Yes, carefully |
 | `x64/`, `.vs/`, `*.user` | Build and IDE output | **No — and never commit them** |
 
-**Nine projects, and the edges run one way.** `FrontierOutpost.slnx` is the solution; its only platform is `x64`.
+**Nine projects today, ten when `FrontierServer` lands, and the edges run one way.** `FrontierOutpost.slnx` is the solution; its only platform is `x64`.
 
 ```
 NeuronCore.lib          ← the engine everything else builds on
 ├── NeuronClient.lib    ← references NeuronCore
 ├── NeuronServer.lib    ← references NeuronCore
 ├── GameLogic.lib       ← references NeuronCore
-└── FrontierOutpost.exe ← references all four
+├── FrontierOutpost.exe ← references all four
+└── FrontierServer.exe  ← references NeuronCore, NeuronServer, GameLogic (planned)
 
 NeuronCoreTests.dll     ← NeuronCore
 NeuronClientTests.dll   ← NeuronClient, NeuronCore
@@ -160,7 +162,7 @@ NeuronServerTests.dll   ← NeuronServer, NeuronCore
 GameLogicTests.dll      ← GameLogic, NeuronCore
 ```
 
-**`GameLogic` is referenced by the executable and by nothing else.** It is server-side game code; the day a client-side file reaches for it is the day the server stopped being authoritative. Likewise nothing in `NeuronClient` may reach `NeuronServer` or the reverse — they share `NeuronCore` and that is the whole of their common ground.
+**`GameLogic` is referenced by the executables and by nothing else.** It is server-side game code; the day a client-side file reaches for it is the day the server stopped being authoritative. In `FrontierOutpost.exe` exactly one file may include a `GameLogic` header: the composition root that hands a `Frontier::World` to the harness's `Session`. Nothing that draws, handles input or builds the scene may (ADR-011, ADR-015). Likewise nothing in `NeuronClient` may reach `NeuronServer` or the reverse — they share `NeuronCore` and that is the whole of their common ground.
 
 **Project directories are flat, with exactly two sanctioned subdirectories.** C++ source lives directly in `NeuronCore/`, `GameLogic/` and so on. This is not taste: `.clang-tidy`'s `HeaderFilterRegex` matches headers exactly one level in, so a header in a subdirectory is silently unchecked. `Build/CheckProjectFiles.py` fails the build on one. The two exceptions are the shader pipeline (owner decision, 2026-09-09):
 
@@ -241,13 +243,13 @@ x64\Debug\FrontierOutpost.exe
 
 **R12 — Graphics is Direct3D 12 only**, and the screen it presents is fixed. 640×400 with a 16-entry palette, scaled to the window by a **whole number**; a fractional scale is what turns a crisp legacy screen into mush. No D3D11, no D3D11On12, no immediate-mode helper layers. COM lifetimes are RAII from the first line — a raw `AddRef`/`Release` pair in new code is a defect, not a style.
 
-**R13 — The executable ships alone.** There is no assets folder, no data directory, nothing beside `FrontierOutpost.exe` at runtime. Art, palettes, fonts, meshes and sound are embedded as `constexpr` arrays in headers — `NeuronClient/Font.h` is the pattern: 96 glyphs, 8×8, one bit a pixel, 768 bytes, and nothing to load. **Shaders are compiled at build time**, never at runtime: `<Library>/Shaders/<Shader>VS.hlsl` goes through the `.vcxproj`'s `FXCompile` step into `<Library>/CompiledShaders/<Shader>VS.h` as `g_<Shader>VS` (§2). No `D3DCompile`, no `d3dcompiler_47.dll` beside the executable, no `.cso` on disk. Never add a runtime file dependency, a working-directory assumption or a "just for development" loose-file path; the loose path is the one that ships.
+**R13 — The client executable ships alone.** There is no assets folder, no data directory, nothing beside `FrontierOutpost.exe` at runtime. The one exception in the tree is the server's match directory — per-tick snapshots, the pending order books and the event log beside `FrontierServer.exe` (ADR-012) — and nothing else may write a file. Art, palettes, fonts, meshes and sound are embedded as `constexpr` arrays in headers — `NeuronClient/Font.h` is the pattern: 96 glyphs, 8×8, one bit a pixel, 768 bytes, and nothing to load. **Shaders are compiled at build time**, never at runtime: `<Library>/Shaders/<Shader>VS.hlsl` goes through the `.vcxproj`'s `FXCompile` step into `<Library>/CompiledShaders/<Shader>VS.h` as `g_<Shader>VS` (§2). No `D3DCompile`, no `d3dcompiler_47.dll` beside the executable, no `.cso` on disk. Never add a runtime file dependency, a working-directory assumption or a "just for development" loose-file path; the loose path is the one that ships.
 
 **R14 — No third-party dependencies and no package manager.** The Windows SDK and the MSVC standard library, and nothing else. If you believe something is unavoidable, propose it in your report with what it buys and what it costs — do not add it. This is a closed list, not a high bar.
 
 **R15 — Memory is plain C++.** `new`/`delete` where it must be, RAII everywhere, standard containers by default. No pool, slab or free-list allocator without an owner decision recorded in `Design/ADR/`.
 
-**R16 — Determinism is a property of the server, and it is built, not hoped for.** Every project compiles `/fp:precise` with no `/arch`, stated explicitly in the `.vcxproj` rather than inherited from an MSVC default — a default is not a decision, and the symptom of losing one is two builds of the same simulation disagreeing about the same sum with no line to blame. In `GameLogic`, additionally: no `float` where a fixed-point or integer quantity will do, no iteration over an unordered container whose order reaches the simulation, and no wall-clock time — the tick is the clock.
+**R16 — Determinism is a property of the server, and it is built, not hoped for.** Every project compiles `/fp:precise` with no `/arch`, stated explicitly in the `.vcxproj` rather than inherited from an MSVC default — a default is not a decision, and the symptom of losing one is two builds of the same simulation disagreeing about the same sum with no line to blame. In `GameLogic`, additionally: no `float` where a fixed-point or integer quantity will do, no unordered container at all, and no wall-clock time — the tick is the clock. The resolver is a pure function of the state, the locked orders and the rules (ADR-004): it reads nothing else, and *when* a tick happens is `NeuronServer`'s schedule, which is the only place a wall clock is read on the server (ADR-007). The remainder of an integer proportional split is allocated by largest remainder, ties by ascending entity id — never by the order a container yielded.
 
 **R17 — A string you do not write is `const`.** `/permissive-` turns on `/Zc:strictStrings`: a literal is `const char[N]` and will not bind to `char*`. The fix is `const` on the signature, never a cast at the call site — a `const_cast` here is a lie about a literal that lives in a read-only section, and writing through it is a real crash rather than a theoretical one.
 

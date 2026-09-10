@@ -1,4 +1,4 @@
-# Untitled Space 4X — One-Pager v0.7
+# Untitled Space 4X — One-Pager v10
 
 ## Aesthetic target
 **Challenge** (primary) · **Discovery** (secondary). Narrative arises as a by-product: "the story of my empire this match" — including, if it falls, the story of its exile.

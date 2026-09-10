@@ -10,7 +10,9 @@
 
 ## Context
 
-ADR-008 gave the camera a stepped zoom driven by the wheel and by pinch, and hedged in one place:
+ADR-008 gave the camera a stepped zoom driven by the wheel and by pinch, and hedged in one place
+(quoted from the version of 2026-09-10 that this ADR answered; ADR-008 was rewritten in place later
+that day for the map camera and no longer carries the hedge or the "absent anchor" below):
 
 > `EnableMouseInPointer` is documented to route mouse input into the pointer family, which should
 > make a wheel notch arrive as `WM_POINTERWHEEL` — but that is the one part of the claim this
