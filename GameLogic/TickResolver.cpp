@@ -100,6 +100,59 @@ void Tell(TickLog& _log, PlayerId _player, DigestEntry _entry)
   return LaneId{};
 }
 
+/// Opens a trade lane, charging the proposer, or voids it and says why to both sides.
+///
+/// Shared by an accepted `OpenLane` and by a conditional lane riding on any other accepted offer,
+/// so the two cannot drift apart -- including the part that is easy to forget, which is that the
+/// proposer may have spent the money while the offer sat on the table. "Nobody is ever shown a
+/// dead offer as acceptable" cuts both ways: the answer was honest when it was given, and the
+/// refusal has to reach both digests rather than only the payer's.
+[[nodiscard]] bool OpenTradeLane(Match& _next, TickLog& _log, PhaseRecord& _record, LaneId _lane, PlayerId _from, PlayerId _to,
+                                 std::uint32_t _tick, PlayerId _answeredBy)
+{
+  if (_next.FindTradeLane(_lane) != nullptr)
+  {
+    return false;
+  }
+
+  PlayerState& proposer = _next.MutablePlayers()[_from.AsSize()];
+  if (proposer.credits < _next.Rules().tradeLaneCost)
+  {
+    _record.lines.push_back(std::format("{} could no longer pay for the lane", NameOf(_from)));
+    Tell(_log, _from,
+         DigestEntry{.kind = DigestKind::ProposalVoided,
+                     .severity = Severity::PROPOSAL_RESOLVED,
+                     .title = "Lane voided",
+                     .detail = "You could no longer pay for it",
+                     .lane = _lane,
+                     .other = _answeredBy});
+    Tell(_log, _to,
+         DigestEntry{.kind = DigestKind::ProposalVoided,
+                     .severity = Severity::PROPOSAL_RESOLVED,
+                     .title = "Lane voided",
+                     .detail = std::format("{} could no longer pay for it", NameOf(_from)),
+                     .lane = _lane,
+                     .other = _from});
+    return false;
+  }
+
+  proposer.credits -= _next.Rules().tradeLaneCost;
+  _next.MutableTradeLanes().push_back(ActiveTradeLane{.lane = _lane, .a = _from, .b = _to, .openedAt = _tick});
+
+  _record.lines.push_back(std::format("trade lane opened between {} and {}", NameOf(_from), NameOf(_to)));
+  for (const PlayerId side : {_from, _to})
+  {
+    Tell(_log, side,
+         DigestEntry{.kind = DigestKind::LaneOpened,
+                     .severity = Severity::LANE_CHANGED,
+                     .title = "Trade lane open",
+                     .detail = "It pays from this tick",
+                     .lane = _lane,
+                     .other = side == _from ? _to : _from});
+  }
+  return true;
+}
+
 /// Whether a trade lane still joins the two empires that agreed it.
 [[nodiscard]] bool TradeLaneStillValid(const Match& _match, const ActiveTradeLane& _lane)
 {
@@ -252,6 +305,7 @@ Match TickResolver::Lock(const Match& _in, std::span<const OrderSet> _orders, Ti
       open.to = proposed.to;
       open.kind = proposed.kind;
       open.lane = proposed.lane;
+      open.conditionalLane = proposed.conditionalLane;
       open.ticks = proposed.ticks;
       open.openedAt = _in.Tick();
       next.MutableProposals().push_back(open);
@@ -288,59 +342,57 @@ Match TickResolver::Lock(const Match& _in, std::span<const OrderSet> _orders, Ti
       }
       const OpenProposal decided = *open;
 
-      if (answer.answer == Answer::Accept && decided.kind == ProposalKind::OpenLane)
+      if (answer.answer == Answer::Accept)
       {
-        // Charged now, to the proposer, and only if they can still pay. A player who spent the
-        // money while the offer sat on the table does not get a free lane -- the offer is void,
-        // and both sides are told why, which is the one-pager's rule about dead offers.
-        PlayerState& proposer = next.MutablePlayers()[decided.from.AsSize()];
-        if (proposer.credits < _in.Rules().tradeLaneCost)
+        // "A lane accepted at a lock opens in that same phase 1 and pays from that tick's
+        // production" -- which is why this happens here, in phase 1, and not in a later phase that
+        // would miss phase 2 by one tick.
+        if (decided.kind == ProposalKind::OpenLane)
         {
-          record.lines.push_back(std::format("{} could no longer pay for the lane", NameOf(decided.from)));
-          Tell(_log, decided.from,
-               DigestEntry{.kind = DigestKind::ProposalVoided,
-                           .severity = Severity::PROPOSAL_RESOLVED,
-                           .title = "Lane voided",
-                           .detail = "You could no longer pay for it",
-                           .lane = decided.lane,
-                           .other = player});
-          Tell(_log, player,
-               DigestEntry{.kind = DigestKind::ProposalVoided,
-                           .severity = Severity::PROPOSAL_RESOLVED,
-                           .title = "Lane voided",
-                           .detail = std::format("{} could no longer pay for it", NameOf(decided.from)),
-                           .lane = decided.lane,
-                           .other = decided.from});
+          (void)OpenTradeLane(next, _log, record, decided.lane, decided.from, decided.to, _in.Tick(), player);
         }
         else
         {
-          proposer.credits -= _in.Rules().tradeLaneCost;
-          next.MutableTradeLanes().push_back(
-            ActiveTradeLane{.lane = decided.lane, .a = decided.from, .b = decided.to, .openedAt = _in.Tick()});
+          // The other two kinds are recorded and NOT enforced. That is the design, not an omission:
+          // "no enforced treaties", and the trade lane is called the one consensual mechanic
+          // because it is the only one with teeth.
+          const AgreementKind kind = decided.kind == ProposalKind::ShareScouting ? AgreementKind::ShareScouting : AgreementKind::HoldFire;
 
-          record.lines.push_back(std::format("trade lane opened between {} and {}", NameOf(decided.from), NameOf(decided.to)));
+          next.MutableAgreements().push_back(Agreement{.kind = kind,
+                                                       .a = decided.from,
+                                                       .b = decided.to,
+                                                       .openedAt = _in.Tick(),
+                                                       .expiresAt = kind == AgreementKind::HoldFire ? _in.Tick() + decided.ticks : 0});
+
+          record.lines.push_back(std::format("{} and {} agreed", NameOf(decided.from), NameOf(decided.to)));
           for (const PlayerId side : {decided.from, decided.to})
           {
             Tell(_log, side,
-                 DigestEntry{.kind = DigestKind::LaneOpened,
-                             .severity = Severity::LANE_CHANGED,
-                             .title = "Trade lane open",
-                             .detail = "It pays from this tick",
-                             .lane = decided.lane,
+                 DigestEntry{.kind = DigestKind::AgreementOpened,
+                             .severity = Severity::AGREEMENT_MADE,
+                             .title = kind == AgreementKind::ShareScouting ? "Scouting shared" : "Hold agreed",
+                             .detail = kind == AgreementKind::ShareScouting
+                                         ? "Their map is your map"
+                                         : std::format("For {} ticks, and nothing enforces it", decided.ticks),
                              .other = side == decided.from ? decided.to : decided.from});
           }
         }
+
+        // "It can carry a conditional order -- if accepted, open lane -- so the effect lands
+        // without a second round trip."
+        if (decided.conditionalLane.IsValid() && decided.conditionalLane != decided.lane)
+        {
+          (void)OpenTradeLane(next, _log, record, decided.conditionalLane, decided.from, decided.to, _in.Tick(), player);
+        }
       }
-      else
-      {
-        Tell(_log, decided.from,
-             DigestEntry{.kind = DigestKind::ProposalAnswered,
-                         .severity = Severity::PROPOSAL_RESOLVED,
-                         .title = answer.answer == Answer::Accept ? "Proposal accepted" : "Proposal declined",
-                         .detail = std::format("{} answered", NameOf(player)),
-                         .lane = decided.lane,
-                         .other = player});
-      }
+
+      Tell(_log, decided.from,
+           DigestEntry{.kind = DigestKind::ProposalAnswered,
+                       .severity = Severity::PROPOSAL_RESOLVED,
+                       .title = answer.answer == Answer::Accept ? "Proposal accepted" : "Proposal declined",
+                       .detail = std::format("{} answered", NameOf(player)),
+                       .lane = decided.lane,
+                       .other = player});
 
       std::vector<OpenProposal>& answered = next.MutableProposals();
       answered.erase(std::remove_if(answered.begin(), answered.end(),
@@ -369,6 +421,55 @@ Match TickResolver::Lock(const Match& _in, std::span<const OrderSet> _orders, Ti
       list.erase(std::remove_if(list.begin(), list.end(), [&pulled](const OpenProposal& _candidate) { return _candidate.id == pulled.id; }),
                  list.end());
     }
+
+    // "Either can cancel it at any tick. Lanes are public; cancelling one is a tell." The digest
+    // has to say CANCELED BY PARTNER, distinct from a lane that fell with a system in phase 5 --
+    // the one-pager is explicit that "the tell only works if the reader knows which".
+    for (const CancelLaneOrder& cancel : set->cancellations)
+    {
+      const ActiveTradeLane* found = next.FindTradeLane(cancel.lane);
+      if (found == nullptr || (found->a != player && found->b != player))
+      {
+        continue;
+      }
+      const ActiveTradeLane closed = *found;
+      const PlayerId partner = closed.a == player ? closed.b : closed.a;
+
+      record.lines.push_back(std::format("{} canceled a trade lane with {}", NameOf(player), NameOf(partner)));
+      Tell(_log, partner,
+           DigestEntry{.kind = DigestKind::LaneCanceled,
+                       .severity = Severity::LANE_CHANGED,
+                       .title = "Trade lane canceled",
+                       .detail = std::format("Canceled by partner -- {} closed it", NameOf(player)),
+                       .lane = closed.lane,
+                       .other = player});
+      Tell(_log, player,
+           DigestEntry{.kind = DigestKind::LaneCanceled,
+                       .severity = Severity::LANE_CHANGED,
+                       .title = "Trade lane canceled",
+                       .detail = std::format("You closed it with {}", NameOf(partner)),
+                       .lane = closed.lane,
+                       .other = partner});
+
+      std::vector<ActiveTradeLane>& lanes = next.MutableTradeLanes();
+      lanes.erase(
+        std::remove_if(lanes.begin(), lanes.end(), [&closed](const ActiveTradeLane& _candidate) { return _candidate.lane == closed.lane; }),
+        lanes.end());
+    }
+  }
+
+  // Agreements that have run their term. A hold-fire that lapses is not news -- nothing was
+  // enforcing it -- so it leaves quietly rather than as an event in eleven digests.
+  {
+    std::vector<Agreement> standing;
+    for (const Agreement& agreement : next.Agreements())
+    {
+      if (agreement.expiresAt == 0 || _in.Tick() < agreement.expiresAt)
+      {
+        standing.push_back(agreement);
+      }
+    }
+    next.MutableAgreements() = standing;
   }
 
   // Re-validation. The one-pager: every open proposal is re-checked at every lock, and one that no
@@ -566,6 +667,11 @@ Match TickResolver::Move(const Match& _in, TickLog& _log)
     }
     MatchFleet& fleet = next.MutableFleets()[index];
 
+    // Last tick's movement is not this tick's. Combat reads both of these and would read a stale
+    // answer if they carried over: a fleet that arrived three ticks ago is an incumbent.
+    fleet.arrivedThisTick = false;
+    fleet.departedFrom = SystemId{};
+
     // Departure: an order to somewhere other than where it stands.
     if (!before.InTransit() && before.orderedTo.IsValid() && before.orderedTo != before.at)
     {
@@ -579,6 +685,7 @@ Match TickResolver::Move(const Match& _in, TickLog& _log)
 
       fleet.movingFrom = before.at;
       fleet.movingTo = before.orderedTo;
+      fleet.departedFrom = before.at;
       fleet.at = SystemId{};
       fleet.ticksRemaining = _in.GalaxyGraph().LaneAt(lane).costTicks;
       fleet.orderedTo = SystemId{};
@@ -601,6 +708,7 @@ Match TickResolver::Move(const Match& _in, TickLog& _log)
     if (fleet.ticksRemaining == 0 && fleet.movingTo.IsValid())
     {
       fleet.at = fleet.movingTo;
+      fleet.arrivedThisTick = true;
       record.lines.push_back(std::format("fleet {} arrived at {}", index, NameOf(_in, fleet.movingTo)));
       fleet.movingFrom = SystemId{};
       fleet.movingTo = SystemId{};
@@ -614,13 +722,284 @@ Match TickResolver::Move(const Match& _in, TickLog& _log)
 
 Match TickResolver::Fight(const Match& _in, TickLog& _log)
 {
+  Match next = _in;
   PhaseRecord& record = OpenPhase(_log, Phase::Combat);
 
-  // Step 5 fills this in. It is a phase that runs and does nothing rather than a phase that is not
-  // there, so that the log a replay reads has the same six entries from the first tick ever
-  // resolved -- and so that the ordering around it is already under test.
-  record.lines.push_back("combat is not implemented in this stage (4X-01 step 5)");
-  return _in;
+  // ---- 4a, the rear-guard ----------------------------------------------------------------------
+  //
+  // "Fleets that departed a system this tick while a hostile arrived there take one free round from
+  // the arrivals, computed from the arrivals' end-of-movement strength." Off by default, because
+  // the one-pager keeps it off "until Phase 0 shows dancing dominates".
+  //
+  // It runs first and 4b reads what it leaves, which is why the phases are numbered rather than
+  // merged: a fleet weakened on its way out is weaker wherever it landed.
+  if (_in.Rules().rearGuardEnabled)
+  {
+    for (std::size_t index = 0; index < _in.Systems().size(); ++index)
+    {
+      const SystemId system{static_cast<std::int32_t>(index)};
+
+      // Arrival strength per player, at end of movement.
+      std::vector<std::uint32_t> arriving(_in.Players().size(), 0);
+      for (const MatchFleet& fleet : _in.Fleets())
+      {
+        if (!fleet.destroyed && fleet.arrivedThisTick && fleet.at == system && fleet.owner.IsValid())
+        {
+          arriving[fleet.owner.AsSize()] += fleet.ships;
+        }
+      }
+
+      std::vector<FleetId> departed;
+      for (std::size_t fleetIndex = 0; fleetIndex < _in.Fleets().size(); ++fleetIndex)
+      {
+        const MatchFleet& fleet = _in.Fleets()[fleetIndex];
+        if (!fleet.destroyed && fleet.departedFrom == system)
+        {
+          departed.emplace_back(static_cast<std::int32_t>(fleetIndex));
+        }
+      }
+
+      for (const FleetId leaving : departed)
+      {
+        const PlayerId owner = _in.FleetAt(leaving).owner;
+
+        std::uint64_t hostileStrength = 0;
+        for (std::size_t player = 0; player < arriving.size(); ++player)
+        {
+          if (PlayerId{static_cast<std::int32_t>(player)} != owner)
+          {
+            hostileStrength += arriving[player];
+          }
+        }
+        if (hostileStrength == 0)
+        {
+          continue;
+        }
+
+        // One round, at the ordinary rate, with no defender bonus for anyone: the departing fleet
+        // is not an incumbent any more and the arrivals have not landed on anything to defend.
+        const auto damage = static_cast<std::uint32_t>((hostileStrength * _in.Rules().damagePercentPerRound) / 100);
+        MatchFleet& fleet = next.MutableFleets()[leaving.AsSize()];
+        const std::uint32_t lost = std::min(damage, fleet.ships);
+        fleet.ships -= lost;
+
+        record.lines.push_back(
+          std::format("rear-guard at {}: fleet {} lost {} on its way out", NameOf(_in, system), leaving.Index(), lost));
+
+        if (fleet.ships == 0)
+        {
+          fleet.destroyed = true;
+          fleet.at = SystemId{};
+          fleet.movingFrom = SystemId{};
+          fleet.movingTo = SystemId{};
+          fleet.ticksRemaining = 0;
+        }
+
+        Tell(_log, owner,
+             DigestEntry{.kind = DigestKind::Battle,
+                         .severity = Severity::BATTLE,
+                         .title = std::format("Rear-guard action at {}", NameOf(_in, system)),
+                         .detail = std::format("Lost {} covering the withdrawal", lost),
+                         .system = system,
+                         .fleet = leaving});
+      }
+    }
+  }
+
+  // ---- 4b, system combat -----------------------------------------------------------------------
+  //
+  // Read from the post-4a state -- which here is `next`, since 4a wrote into it -- at every system
+  // holding hostile fleets. ADR-021 has the arithmetic and the reasoning; what matters at this
+  // level is that a round is computed entirely from ROUND-START strengths and applied afterwards,
+  // so neither side gets to shoot first.
+  for (std::size_t index = 0; index < next.Systems().size(); ++index)
+  {
+    const SystemId system{static_cast<std::int32_t>(index)};
+
+    // Sides, in player order. Never a map: two machines have to fight the same battle.
+    const std::size_t playerCount = next.Players().size();
+    std::vector<std::uint32_t> ships(playerCount, 0);
+    std::vector<bool> incumbent(playerCount, false);
+    std::vector<std::vector<FleetId>> fleetsOf(playerCount);
+
+    for (std::size_t fleetIndex = 0; fleetIndex < next.Fleets().size(); ++fleetIndex)
+    {
+      const MatchFleet& fleet = next.Fleets()[fleetIndex];
+      if (fleet.destroyed || fleet.InTransit() || fleet.at != system || !fleet.owner.IsValid() || fleet.ships == 0)
+      {
+        continue;
+      }
+      const std::size_t side = fleet.owner.AsSize();
+      ships[side] += fleet.ships;
+      fleetsOf[side].emplace_back(static_cast<std::int32_t>(fleetIndex));
+
+      // An incumbent is a fleet that was ALREADY HERE. Not the system's owner: at an empty system
+      // nobody owns anything, and the one-pager still says simultaneous arrivals get no bonus.
+      if (!fleet.arrivedThisTick)
+      {
+        incumbent[side] = true;
+      }
+    }
+
+    std::vector<std::size_t> sides;
+    for (std::size_t side = 0; side < playerCount; ++side)
+    {
+      if (ships[side] > 0)
+      {
+        sides.push_back(side);
+      }
+    }
+    if (sides.size() < 2)
+    {
+      continue;
+    }
+
+    std::vector<std::uint32_t> before = ships;
+
+    for (std::uint32_t round = 0; round < next.Rules().combatRounds; ++round)
+    {
+      // Effective strength, with the incumbent's bonus. Computed fresh each round from the
+      // survivors, so a side that is losing also hits less hard.
+      std::vector<std::uint64_t> effective(playerCount, 0);
+      std::uint64_t total = 0;
+      for (const std::size_t side : sides)
+      {
+        const std::uint64_t bonus = incumbent[side] ? next.Rules().defenderBonusPercent : 100U;
+        effective[side] = (static_cast<std::uint64_t>(ships[side]) * bonus) / 100U;
+        total += effective[side];
+      }
+
+      // Damage each side deals, and where it lands: spread across the enemies in proportion to
+      // THEIR strength, which is the one-pager's rule and means a big enemy soaks more of it.
+      std::vector<std::uint64_t> incoming(playerCount, 0);
+      for (const std::size_t attacker : sides)
+      {
+        const std::uint64_t output = (effective[attacker] * next.Rules().damagePercentPerRound) / 100U;
+        const std::uint64_t enemies = total - effective[attacker];
+        if (output == 0 || enemies == 0)
+        {
+          continue;
+        }
+        for (const std::size_t defender : sides)
+        {
+          if (defender != attacker)
+          {
+            incoming[defender] += (output * effective[defender]) / enemies;
+          }
+        }
+      }
+
+      // Applied only now. Every number above came from the state at the start of the round, so a
+      // tie is a tie rather than a race -- "a tie is mutual attrition, not a coin flip".
+      bool anyLoss = false;
+      for (const std::size_t side : sides)
+      {
+        const auto lost = static_cast<std::uint32_t>(std::min<std::uint64_t>(incoming[side], ships[side]));
+        ships[side] -= lost;
+        anyLoss = anyLoss || lost > 0;
+      }
+
+      std::size_t standing = 0;
+      for (const std::size_t side : sides)
+      {
+        standing += ships[side] > 0 ? 1 : 0;
+      }
+      if (standing < 2 || !anyLoss)
+      {
+        // Either it is over, or nobody can hurt anybody and further rounds would change nothing.
+        break;
+      }
+    }
+
+    // Losses back onto the fleets, largest first so the remainder falls on the smallest, and by
+    // fleet id within equal sizes -- a total order, because which fleet absorbs a loss changes what
+    // survives (ADR-018).
+    for (const std::size_t side : sides)
+    {
+      std::uint32_t toLose = before[side] - ships[side];
+      if (toLose == 0)
+      {
+        continue;
+      }
+
+      std::vector<FleetId> order = fleetsOf[side];
+      std::sort(order.begin(), order.end(),
+                [&next](FleetId _left, FleetId _right)
+                {
+                  const std::uint32_t leftShips = next.FleetAt(_left).ships;
+                  const std::uint32_t rightShips = next.FleetAt(_right).ships;
+                  if (leftShips != rightShips)
+                  {
+                    return leftShips > rightShips;
+                  }
+                  return _left < _right;
+                });
+
+      for (const FleetId fleetId : order)
+      {
+        MatchFleet& fleet = next.MutableFleets()[fleetId.AsSize()];
+        const std::uint32_t lost = std::min(toLose, fleet.ships);
+        fleet.ships -= lost;
+        toLose -= lost;
+        if (fleet.ships == 0)
+        {
+          fleet.destroyed = true;
+          fleet.at = SystemId{};
+        }
+        if (toLose == 0)
+        {
+          break;
+        }
+      }
+
+      const PlayerId owner{static_cast<std::int32_t>(side)};
+      Tell(_log, owner,
+           DigestEntry{.kind = DigestKind::Battle,
+                       .severity = Severity::BATTLE,
+                       .title = std::format("Battle at {}", NameOf(next, system)),
+                       .detail =
+                         std::format("{} of {} lost{}", before[side] - ships[side], before[side], incumbent[side] ? " (defending)" : ""),
+                       .system = system});
+    }
+
+    // A hold-fire agreement is not enforced -- nothing in this game is, which is the point of
+    // "no enforced treaties" -- so the only thing that happens when one is broken is that both
+    // sides are told, in as many words. The sanction is entirely social, and it works because the
+    // digest is the screen everybody reads.
+    for (std::size_t attacker : sides)
+    {
+      for (std::size_t victim : sides)
+      {
+        const PlayerId one{static_cast<std::int32_t>(attacker)};
+        const PlayerId other{static_cast<std::int32_t>(victim)};
+        if (attacker >= victim || !next.HasAgreement(AgreementKind::HoldFire, one, other))
+        {
+          continue;
+        }
+
+        record.lines.push_back(std::format("{} and {} fought under a hold agreement", NameOf(one), NameOf(other)));
+        for (const PlayerId side : {one, other})
+        {
+          Tell(_log, side,
+               DigestEntry{.kind = DigestKind::AgreementBreached,
+                           .severity = Severity::AGREEMENT_BREACHED,
+                           .title = "Hold agreement broken",
+                           .detail = std::format("Fighting at {}, and nothing enforced it", NameOf(next, system)),
+                           .system = system,
+                           .other = side == one ? other : one});
+        }
+      }
+    }
+
+    std::string report = std::format("battle at {}:", NameOf(next, system));
+    for (const std::size_t side : sides)
+    {
+      report += std::format(" {} {}->{}", NameOf(PlayerId{static_cast<std::int32_t>(side)}), before[side], ships[side]);
+    }
+    record.lines.push_back(report);
+  }
+
+  return next;
 }
 
 // ---- Phase 5 -- claims and captures ----------------------------------------------------------------
@@ -771,6 +1150,41 @@ Match TickResolver::Claim(const Match& _in, TickLog& _log)
       }
     }
     next.MutableTradeLanes() = surviving;
+  }
+
+  // ---- First contact ---------------------------------------------------------------------------
+  //
+  // "First contact raises the game's own prompt: 'Contact: [player]. Propose trade lane?' -- one
+  // tap, no text." Raised here because it depends on who owns what, which phase 5 has just
+  // settled, and raised ONCE per pair: an offer arriving every six hours forever is a notification
+  // stream, and this game has one digest a tick and no notifications.
+  for (std::size_t index = 0; index < next.GalaxyGraph().Lanes().size(); ++index)
+  {
+    const GalaxyLane& lane = next.GalaxyGraph().Lanes()[index];
+    const PlayerId first = next.SystemAt(lane.a).owner;
+    const PlayerId second = next.SystemAt(lane.b).owner;
+
+    if (!first.IsValid() || !second.IsValid() || first == second || next.HaveMet(first, second))
+    {
+      continue;
+    }
+
+    const PlayerId low = first < second ? first : second;
+    const PlayerId high = first < second ? second : first;
+    next.MutableContacts().push_back(Contact{.a = low, .b = high, .tick = _in.Tick()});
+
+    record.lines.push_back(std::format("{} and {} have met", NameOf(low), NameOf(high)));
+    for (const PlayerId side : {low, high})
+    {
+      const PlayerId other = side == low ? high : low;
+      Tell(_log, side,
+           DigestEntry{.kind = DigestKind::Contact,
+                       .severity = Severity::FIRST_CONTACT,
+                       .title = std::format("Contact: {}", NameOf(other)),
+                       .detail = "Propose trade lane?",
+                       .lane = LaneId{static_cast<std::int32_t>(index)},
+                       .other = other});
+    }
   }
 
   return next;

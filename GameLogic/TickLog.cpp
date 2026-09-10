@@ -51,10 +51,16 @@ const char* Describe(DigestKind _kind) noexcept
     return "system lost";
   case DigestKind::SiegeBegun:
     return "siege begun";
+  case DigestKind::Battle:
+    return "battle";
   case DigestKind::LaneOpened:
     return "lane opened";
   case DigestKind::LaneCanceled:
     return "lane canceled";
+  case DigestKind::AgreementOpened:
+    return "agreement opened";
+  case DigestKind::AgreementBreached:
+    return "agreement breached";
   case DigestKind::Economy:
     return "economy";
   case DigestKind::Region:

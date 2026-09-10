@@ -42,6 +42,16 @@ enum class Answer : std::uint8_t
   Decline
 };
 
+/// What an accepted proposal becomes, when it is not a trade lane.
+///
+/// `OpenLane` has no entry here because it becomes an `ActiveTradeLane` instead -- it is the one
+/// kind that pays, and the one kind the game enforces.
+enum class AgreementKind : std::uint8_t
+{
+  ShareScouting,
+  HoldFire
+};
+
 /// Move a fleet, or hold it.
 ///
 /// The destination is a SYSTEM, not a lane and not a path. A fleet moves along one lane per order
@@ -70,6 +80,25 @@ struct ProposalOrder
   ProposalKind kind = ProposalKind::OpenLane;
   LaneId lane;
   std::uint32_t ticks = 0;
+
+  /// A lane to open if this offer is accepted, whatever else the offer was about.
+  ///
+  /// The one-pager's example, in as many words: a proposal "can carry a conditional order -- *if
+  /// accepted, open lane* -- so the effect lands without a second round trip." Without it, agreeing
+  /// to share scouting and then opening a lane between the same two empires costs two ticks and two
+  /// digests, at four ticks a day. Unset on an `OpenLane` proposal, whose whole subject is already
+  /// a lane.
+  LaneId conditionalLane;
+};
+
+/// Close a trade lane. Either party, any tick, no notice.
+///
+/// The one-pager makes that unilateral and instant on purpose -- "either can cancel it at any
+/// tick... Lanes are public; cancelling one is a tell." The sanction for walking away is that
+/// everybody can see you did.
+struct CancelLaneOrder
+{
+  LaneId lane;
 };
 
 /// Answering an offer. It is ITSELF AN ORDER (one-pager, decision three): it locks with the rest,
@@ -97,6 +126,7 @@ struct OrderSet
   std::vector<ProposalOrder> proposals;
   std::vector<AnswerOrder> answers;
   std::vector<WithdrawOrder> withdrawals;
+  std::vector<CancelLaneOrder> cancellations;
   /// Hand the empire to a custodian, permanently (one-pager, *Player states*).
   bool concede = false;
 
@@ -142,7 +172,11 @@ enum class OrderRejection : std::uint8_t
   /// Withdrawing an offer you did not make.
   NotYoursToWithdraw,
   /// A conceded player has no orders left to give.
-  AlreadyConceded
+  AlreadyConceded,
+  /// Cancelling a trade lane that is not open, or is not yours.
+  NotYourTradeLane,
+  /// A conditional lane that does not join the two parties.
+  ConditionalLaneNotBetweenYou
 };
 
 [[nodiscard]] const char* Describe(OrderRejection _rejection) noexcept;

@@ -50,6 +50,17 @@ struct MatchFleet
   /// Ticks still to run on the current lane. Zero when parked.
   std::uint32_t ticksRemaining = 0;
 
+  /// Whether this fleet reached where it is standing THIS tick.
+  ///
+  /// Combat's incumbency rule reads it, and reads nothing else: an incumbent is a fleet that was
+  /// already here, not the system's owner. That distinction is the one-pager's -- "simultaneous
+  /// arrivals at an empty system get none" -- and it would be lost if incumbency were derived from
+  /// ownership, because at an empty system nobody owns anything.
+  bool arrivedThisTick = false;
+
+  /// The system this fleet left this tick, if it left one. Sub-phase 4a's rear-guard reads it.
+  SystemId departedFrom;
+
   /// Where the lock told this fleet to go, consumed by the movement phase and cleared.
   ///
   /// It is STATE rather than a parameter threaded from phase 1 to phase 3, because that is what it
@@ -77,6 +88,8 @@ struct OpenProposal
   ProposalKind kind = ProposalKind::OpenLane;
   LaneId lane;
   std::uint32_t ticks = 0;
+  /// A lane to open as well, if this is accepted (`ProposalOrder::conditionalLane`).
+  LaneId conditionalLane;
   /// The tick it was made. It closes `proposalWindowTicks` after this.
   std::uint32_t openedAt = 0;
 };
@@ -88,6 +101,42 @@ struct ActiveTradeLane
   PlayerId a;
   PlayerId b;
   std::uint32_t openedAt = 0;
+};
+
+/// An accepted proposal that is not a trade lane.
+///
+/// The one-pager offers three kinds and only one of them is a mechanic: a trade lane is a building
+/// with two owners and pays. The other two are RECORDED AND NOT ENFORCED, which is the design
+/// speaking -- "no enforced treaties" is the whole reason the trade lane is called *the one
+/// consensual mechanic*. Sharing scouting lifts fog (Step 8); holding fire does nothing at all
+/// except make a breach reportable, which is the only sanction the game has.
+struct Agreement
+{
+  AgreementKind kind = AgreementKind::ShareScouting;
+  PlayerId a;
+  PlayerId b;
+  std::uint32_t openedAt = 0;
+  /// The tick it lapses. Zero means it does not -- shared scouting runs until somebody stops it.
+  std::uint32_t expiresAt = 0;
+
+  [[nodiscard]] bool Covers(PlayerId _first, PlayerId _second) const noexcept
+  {
+    return (a == _first && b == _second) || (a == _second && b == _first);
+  }
+};
+
+/// A pair of players who have met.
+///
+/// Kept so that first contact is raised once and not every tick two empires remain adjacent. The
+/// one-pager's prompt -- "Contact: [player]. Propose trade lane?" -- is a one-off, and an offer to
+/// open a lane that arrives every six hours forever is a notification stream, which this game does
+/// not have.
+struct Contact
+{
+  /// Always the lower player id, so a pair has one representation.
+  PlayerId a;
+  PlayerId b;
+  std::uint32_t tick = 0;
 };
 
 struct PlayerState
@@ -158,6 +207,14 @@ public:
   {
     return m_tradeLanes;
   }
+  [[nodiscard]] const std::vector<Agreement>& Agreements() const noexcept
+  {
+    return m_agreements;
+  }
+  [[nodiscard]] const std::vector<Contact>& Contacts() const noexcept
+  {
+    return m_contacts;
+  }
 
   [[nodiscard]] const SystemState& SystemAt(SystemId _system) const
   {
@@ -191,6 +248,15 @@ public:
 
   /// Whether a trade lane is open on this lane.
   [[nodiscard]] bool IsTradeLane(LaneId _lane) const;
+
+  /// The open trade lane on this lane, or null.
+  [[nodiscard]] const ActiveTradeLane* FindTradeLane(LaneId _lane) const;
+
+  /// Whether an agreement of this kind is in force between two players.
+  [[nodiscard]] bool HasAgreement(AgreementKind _kind, PlayerId _first, PlayerId _second) const;
+
+  /// Whether these two have met. First contact is raised once (Contact).
+  [[nodiscard]] bool HaveMet(PlayerId _first, PlayerId _second) const;
 
   /// Every rejection in `_orders`, in the order the orders appear.
   ///
@@ -242,6 +308,14 @@ public:
   {
     return m_tradeLanes;
   }
+  [[nodiscard]] std::vector<Agreement>& MutableAgreements() noexcept
+  {
+    return m_agreements;
+  }
+  [[nodiscard]] std::vector<Contact>& MutableContacts() noexcept
+  {
+    return m_contacts;
+  }
 
   void SetTick(std::uint32_t _tick) noexcept
   {
@@ -265,6 +339,8 @@ private:
   std::vector<PlayerState> m_players;
   std::vector<OpenProposal> m_proposals;
   std::vector<ActiveTradeLane> m_tradeLanes;
+  std::vector<Agreement> m_agreements;
+  std::vector<Contact> m_contacts;
 
   std::int32_t m_nextProposalId = 0;
 };

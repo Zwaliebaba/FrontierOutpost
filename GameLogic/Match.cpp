@@ -124,6 +124,44 @@ bool Match::IsTradeLane(LaneId _lane) const
   return false;
 }
 
+const ActiveTradeLane* Match::FindTradeLane(LaneId _lane) const
+{
+  for (const ActiveTradeLane& lane : m_tradeLanes)
+  {
+    if (lane.lane == _lane)
+    {
+      return &lane;
+    }
+  }
+  return nullptr;
+}
+
+bool Match::HasAgreement(AgreementKind _kind, PlayerId _first, PlayerId _second) const
+{
+  for (const Agreement& agreement : m_agreements)
+  {
+    if (agreement.kind == _kind && agreement.Covers(_first, _second))
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool Match::HaveMet(PlayerId _first, PlayerId _second) const
+{
+  const PlayerId low = _first < _second ? _first : _second;
+  const PlayerId high = _first < _second ? _second : _first;
+  for (const Contact& contact : m_contacts)
+  {
+    if (contact.a == low && contact.b == high)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool Match::IsCapitalGuarded(SystemId _system) const
 {
   if (!HasSystem(_system) || m_galaxy.SystemAt(_system).kind != SystemKind::Capital)
@@ -298,6 +336,26 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
     if (order.kind == ProposalKind::HoldForTicks && (order.ticks == 0 || order.ticks > m_rules.proposalWindowTicks))
     {
       refuse(OrderRejection::BadHoldWindow, index);
+      continue;
+    }
+
+    // A conditional lane is a second offer riding on the first, so it is held to the same rule:
+    // it has to join these two empires, or accepting would open a lane across somebody else's
+    // territory.
+    if (order.conditionalLane.IsValid())
+    {
+      if (order.conditionalLane.AsSize() >= m_galaxy.Lanes().size())
+      {
+        refuse(OrderRejection::ConditionalLaneNotBetweenYou, index);
+        continue;
+      }
+      const GalaxyLane& conditional = m_galaxy.LaneAt(order.conditionalLane);
+      const PlayerId first = SystemAt(conditional.a).owner;
+      const PlayerId second = SystemAt(conditional.b).owner;
+      if (!((first == _orders.player && second == order.to) || (second == _orders.player && first == order.to)))
+      {
+        refuse(OrderRejection::ConditionalLaneNotBetweenYou, index);
+      }
     }
   }
 
@@ -325,6 +383,17 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
     else if (proposal->from != _orders.player)
     {
       refuse(OrderRejection::NotYoursToWithdraw, index);
+    }
+  }
+
+  // Either party may cancel, which is the one-pager's rule and the reason cancelling is a tell.
+  // What nobody may do is cancel a lane they are not on.
+  for (std::size_t index = 0; index < _orders.cancellations.size(); ++index)
+  {
+    const ActiveTradeLane* lane = FindTradeLane(_orders.cancellations[index].lane);
+    if (lane == nullptr || (lane->a != _orders.player && lane->b != _orders.player))
+    {
+      refuse(OrderRejection::NotYourTradeLane, index);
     }
   }
 
@@ -358,6 +427,8 @@ std::uint64_t Match::Hash() const
     hash.AbsorbId(fleet.movingTo.Index());
     hash.Absorb(fleet.ticksRemaining);
     hash.AbsorbId(fleet.orderedTo.Index());
+    hash.Absorb(fleet.arrivedThisTick ? 1U : 0U);
+    hash.AbsorbId(fleet.departedFrom.Index());
     hash.Absorb(fleet.destroyed ? 1U : 0U);
   }
 
@@ -376,6 +447,7 @@ std::uint64_t Match::Hash() const
     hash.AbsorbId(proposal.to.Index());
     hash.Absorb(static_cast<std::uint64_t>(proposal.kind));
     hash.AbsorbId(proposal.lane.Index());
+    hash.AbsorbId(proposal.conditionalLane.Index());
     hash.Absorb(proposal.ticks);
     hash.Absorb(proposal.openedAt);
   }
@@ -386,6 +458,22 @@ std::uint64_t Match::Hash() const
     hash.AbsorbId(lane.a.Index());
     hash.AbsorbId(lane.b.Index());
     hash.Absorb(lane.openedAt);
+  }
+
+  for (const Agreement& agreement : m_agreements)
+  {
+    hash.Absorb(static_cast<std::uint64_t>(agreement.kind));
+    hash.AbsorbId(agreement.a.Index());
+    hash.AbsorbId(agreement.b.Index());
+    hash.Absorb(agreement.openedAt);
+    hash.Absorb(agreement.expiresAt);
+  }
+
+  for (const Contact& contact : m_contacts)
+  {
+    hash.AbsorbId(contact.a.Index());
+    hash.AbsorbId(contact.b.Index());
+    hash.Absorb(contact.tick);
   }
 
   return hash.Value();

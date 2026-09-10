@@ -746,14 +746,19 @@ public:
     raider.owner = Frontier::PlayerId{1};
     raider.ships = 5;
     raider.at = capital;
-    (void)start.MutableFleets().push_back(raider);
+    (void)start.AddFleet(raider);
 
-    const std::uint32_t before = start.FleetAt(FleetOf(start, 0)).ships;
+    // The rival is also a battle, so an absolute ship count would be measuring combat. What this
+    // test is about is the YARD, so it is measured against the same tick with no yard on it.
+    Frontier::Match withoutYard = start;
+    withoutYard.MutableSystems()[capital.AsSize()].hasShipyard = false;
 
     Frontier::TickLog log;
     const Frontier::Match after = Frontier::TickResolver::Resolve(start, {}, log);
+    const Frontier::Match control = AdvanceQuietly(withoutYard);
 
-    Assert::AreEqual(before, after.FleetAt(FleetOf(after, 0)).ships, L"nothing was built");
+    Assert::AreEqual(control.FleetAt(FleetOf(control, 0)).ships, after.FleetAt(FleetOf(after, 0)).ships,
+                     L"the yard added nothing that the same tick without one did not");
     Assert::IsTrue(AnyLineContains(log, "is idle"));
   }
 
@@ -905,7 +910,7 @@ public:
     (void)match.AddFleet(raider);
 
     // The defender's own fleet starts on it, so first move it out of the way.
-    match.MutableFleets()[FleetOf(match, 1).AsSize()].at = CapitalOf(match, 2);
+    match.MutableFleets()[FleetOf(match, 1).AsSize()].at = NeighborOf(match, CapitalOf(match, 1));
 
     Frontier::TickLog first;
     match = Frontier::TickResolver::Resolve(match, {}, first);
@@ -927,12 +932,16 @@ public:
     match.SetTick(match.Rules().capitalGuardTicks);
 
     const Frontier::SystemId target = CapitalOf(match, 1);
+
+    // Evenly matched on purpose. With combat live, a besieger that outnumbers the returning owner
+    // simply kills it and the siege never breaks -- which is correct, and is not what this test is
+    // about. Equal fleets leave both alive, which is what makes the tick contested.
     Frontier::MatchFleet raider;
     raider.owner = Frontier::PlayerId{0};
-    raider.ships = 50;
+    raider.ships = match.Rules().startingShips;
     raider.at = target;
     const Frontier::FleetId raiderId = match.AddFleet(raider);
-    match.MutableFleets()[FleetOf(match, 1).AsSize()].at = CapitalOf(match, 2);
+    match.MutableFleets()[FleetOf(match, 1).AsSize()].at = NeighborOf(match, CapitalOf(match, 1));
 
     match = AdvanceQuietly(match);
     Assert::AreEqual(1U, match.SystemAt(target).siegeTicks);
@@ -945,7 +954,7 @@ public:
     Assert::IsTrue(match.SystemAt(target).owner == Frontier::PlayerId{1});
 
     // And with the owner gone again it is back to one, not two.
-    match.MutableFleets()[FleetOf(match, 1).AsSize()].at = CapitalOf(match, 2);
+    match.MutableFleets()[FleetOf(match, 1).AsSize()].at = NeighborOf(match, CapitalOf(match, 1));
     match = AdvanceQuietly(match);
     Assert::AreEqual(1U, match.SystemAt(target).siegeTicks);
     Assert::IsTrue(match.SystemAt(target).owner == Frontier::PlayerId{1});
@@ -963,7 +972,7 @@ public:
     raider.ships = 50;
     raider.at = target;
     (void)match.AddFleet(raider);
-    match.MutableFleets()[FleetOf(match, 1).AsSize()].at = CapitalOf(match, 2);
+    match.MutableFleets()[FleetOf(match, 1).AsSize()].at = NeighborOf(match, CapitalOf(match, 1));
 
     for (std::uint32_t tick = 0; tick < match.Rules().capitalGuardTicks; ++tick)
     {
@@ -1187,7 +1196,7 @@ public:
     const Frontier::SystemId target = CapitalOf(match, 1);
     match.MutableSystems()[target.AsSize()].siegeBy = Frontier::PlayerId{0};
     match.MutableSystems()[target.AsSize()].siegeTicks = 1;
-    match.MutableFleets()[FleetOf(match, 1).AsSize()].at = CapitalOf(match, 2);
+    match.MutableFleets()[FleetOf(match, 1).AsSize()].at = NeighborOf(match, CapitalOf(match, 1));
 
     Frontier::MatchFleet raider;
     raider.owner = Frontier::PlayerId{0};
@@ -1236,16 +1245,16 @@ public:
     }
   }
 
-  // Combat is a no-op in this stage, and the phase runs anyway. A replay written today has to have
-  // the same six entries as one written after step 5.
-  TEST_METHOD(TheCombatPhaseRunsAndSaysItDidNothing)
+  // The phase is in the log whether or not anything happened in it, which is what lets a replay
+  // written before step 5 and one written after have the same six entries.
+  TEST_METHOD(ThePeacefulTickHasACombatPhaseWithNoBattlesInIt)
   {
     Frontier::TickLog log;
     (void)Frontier::TickResolver::Resolve(SixPlayerMatch(), {}, log);
 
     const Frontier::PhaseRecord* combat = log.Find(Frontier::Phase::Combat);
     Assert::IsNotNull(combat);
-    Assert::AreEqual(static_cast<size_t>(1), combat->lines.size());
+    Assert::IsTrue(combat->lines.empty(), L"nobody was next to anybody yet");
   }
 };
 

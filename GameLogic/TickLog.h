@@ -45,8 +45,11 @@ enum class DigestKind : std::uint8_t
   SystemClaimed,
   SystemLost,
   SiegeBegun,
+  Battle,
   LaneOpened,
   LaneCanceled,
+  AgreementOpened,
+  AgreementBreached,
   Economy,
   Region,
   Custodian
@@ -61,12 +64,17 @@ enum class DigestKind : std::uint8_t
 namespace Severity
 {
 inline constexpr std::uint32_t LOST_A_SYSTEM = 900;
+inline constexpr std::uint32_t BATTLE = 850;
 inline constexpr std::uint32_t FIRST_CONTACT = 800;
 inline constexpr std::uint32_t UNDER_SIEGE = 750;
+/// A hold-fire agreement broken. It ranks with a proposal arriving rather than with a battle: the
+/// battle itself is already reported, and this is the part that changes whom you trust.
+inline constexpr std::uint32_t AGREEMENT_BREACHED = 700;
 inline constexpr std::uint32_t PROPOSAL_ARRIVED = 600;
 inline constexpr std::uint32_t PROPOSAL_RESOLVED = 500;
 inline constexpr std::uint32_t TOOK_A_SYSTEM = 450;
 inline constexpr std::uint32_t LANE_CHANGED = 400;
+inline constexpr std::uint32_t AGREEMENT_MADE = 380;
 inline constexpr std::uint32_t ORDER_REFUSED = 350;
 inline constexpr std::uint32_t REGION = 300;
 inline constexpr std::uint32_t CUSTODIAN = 250;

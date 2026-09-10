@@ -76,6 +76,10 @@ const char* Describe(OrderRejection _rejection) noexcept
     return "you did not make that offer";
   case OrderRejection::AlreadyConceded:
     return "you have conceded this match";
+  case OrderRejection::NotYourTradeLane:
+    return "no trade lane of yours is open there";
+  case OrderRejection::ConditionalLaneNotBetweenYou:
+    return "the conditional lane does not join your two empires";
   default:
     return "unknown";
   }
@@ -106,6 +110,7 @@ void OrderSet::Write(Neuron::ByteWriter& _writer) const
     _writer.WriteU8(static_cast<std::uint8_t>(order.kind));
     WriteId(_writer, order.lane.Index());
     _writer.WriteU32(order.ticks);
+    WriteId(_writer, order.conditionalLane.Index());
   }
 
   _writer.WriteU32(static_cast<std::uint32_t>(answers.size()));
@@ -119,6 +124,12 @@ void OrderSet::Write(Neuron::ByteWriter& _writer) const
   for (const WithdrawOrder& order : withdrawals)
   {
     WriteId(_writer, order.proposal.Index());
+  }
+
+  _writer.WriteU32(static_cast<std::uint32_t>(cancellations.size()));
+  for (const CancelLaneOrder& order : cancellations)
+  {
+    WriteId(_writer, order.lane.Index());
   }
 
   _writer.WriteBool(concede);
@@ -158,6 +169,7 @@ OrderSet OrderSet::Read(Neuron::ByteReader& _reader)
     order.kind = static_cast<ProposalKind>(_reader.ReadU8());
     order.lane = LaneId{_reader.ReadI32()};
     order.ticks = _reader.ReadU32();
+    order.conditionalLane = LaneId{_reader.ReadI32()};
     set.proposals.push_back(order);
   }
 
@@ -178,6 +190,15 @@ OrderSet OrderSet::Read(Neuron::ByteReader& _reader)
     WithdrawOrder order;
     order.proposal = ProposalId{_reader.ReadI32()};
     set.withdrawals.push_back(order);
+  }
+
+  const std::uint32_t cancelCount = ReadCount(_reader);
+  set.cancellations.reserve(cancelCount);
+  for (std::uint32_t index = 0; index < cancelCount; ++index)
+  {
+    CancelLaneOrder order;
+    order.lane = LaneId{_reader.ReadI32()};
+    set.cancellations.push_back(order);
   }
 
   set.concede = _reader.ReadBool();

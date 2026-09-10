@@ -1,7 +1,7 @@
 # 4X-01 — The loop, headless: a galaxy, a tick, and everything that resolves in it
 
 **Status:** Plan, in progress. Written 2026-09-10 against `space-4x-one-pager-v10.md` (v0.7) and
-`space-4x-prototype-test-plan.md` (v0.4). Steps 0–4 done 2026-09-10.
+`space-4x-prototype-test-plan.md` (v0.4). Steps 0–6 done 2026-09-10.
 
 This plan builds the *simulation* half of what the one-pager's *Build order* asks for: **"Loop
 first — graph generator, tick resolution, trade lanes and proposals in the build menu, custodian,
@@ -335,6 +335,21 @@ alive and both smaller; movement-before-combat now proven with combat live; 4a o
 when on, the departing fleet takes exactly one free round computed from the arrivals'
 end-of-movement strength. And the hash.
 
+**Done 2026-09-10**, and the arithmetic is **ADR-021**: simultaneous rounds, every side's output
+computed from round-start strength and applied together, so nobody fires first and a tie is a tie
+by construction rather than by a special case. Sequential resolution — the obvious implementation
+— was rejected on the one-pager's own terms, because with three empires at a system it makes the
+outcome depend on player id.
+
+Sub-phase 4a is built and off, and tested in both positions: a switch that has never been on is a
+switch that does not work.
+
+**On the fixture's numbers.** With the initial parameters, fourteen against eleven with the defender
+bonus leaves exactly six — what `Design/Screens/README.md` draws. That was not aimed at; the three
+numbers were chosen for shape and the arithmetic landed there. `CombatTests` asserts it as a check
+on the implementation, with a comment saying that if Phase 0 moves a parameter the expected value
+moves with it and the parameter does not move to preserve the six.
+
 #### Step 6 — Trade lanes and proposals
 
 The full lifecycle from §2: propose (as a build-menu order), open for four ticks, withdraw, accept
@@ -350,6 +365,26 @@ enforced treaties").
 proposal whose endpoint is captured between offer and answer is voided with the right reason in
 *both* digests; an accepted lane pays in the tick it was accepted; cancel-by-partner and
 system-lost produce different digest text.
+
+**Done 2026-09-10.** Much of the lifecycle already existed from Step 4 — propose, withdraw,
+answer, re-validate, void, *ignored*, auto-cancel on endpoint loss. What this step added is the
+half that had no orders behind it: `CancelLaneOrder` so either party can close a lane at any tick,
+the conditional lane a proposal can carry, and the two agreements that are recorded and **not
+enforced**.
+
+The distinguished cancel reasons are now real and the test compares the two strings rather than
+trusting them: *canceled by partner* against *system lost*. The one-pager is emphatic about it —
+"the tell only works if the reader knows which".
+
+First contact is raised in phase 5, after ownership settles, and **once per pair**. A prompt that
+arrived every six hours for the rest of the match would be the notification stream the design rules
+out.
+
+Share scouting and hold-for-N are recorded as `Agreement`s and change nothing. That is the design
+rather than an omission: "no enforced treaties" is why the trade lane is called the one consensual
+mechanic. Breaking a hold is possible, happens, and is reported to both sides — the sanction is
+entirely social, and it works because the digest is the screen everybody reads. Shared scouting
+lifting fog is Step 8.
 
 #### Step 7 — Players: presence, custodian, guard, score, end
 
@@ -487,28 +522,28 @@ is a rule that was dropped, and the report says so.
 | Orders hidden until lock; editable until then | Shape | 3 | `OrderValidationTests` |
 | Fleets, builds, proposals lock together | Diplomacy UI | 3 | `ResolvingATickAdvancesItAndLogsSixPhases`, `ASecondOrderSetFromOnePlayerIsDiscarded` |
 | Six phases, fixed order, no-read within a phase | Resolution | 4 | `ResolvingATickAdvancesItAndLogsSixPhases`, `ResolvingTheSameTickTwiceGivesTheSameState` (ADR-019) |
-| Movement before combat: leaving beats arriving | Resolution | 4, 5 | `AFleetOrderedOutIsGoneBeforeTheHostileArrives` |
-| Fleets pass on lanes; combat only at systems | Resolution | 4 | `ALongerLaneTakesItsFullCost` (partial: needs combat, step 5) |
-| 4a rear-guard built, off by default, one free round | Resolution | 5 | |
-| 4b melee: proportional, fixed rounds, integer | Resolution | 5 | |
-| Defender bonus to incumbent; none for simultaneous arrival | Resolution | 5 | |
-| Tie is mutual attrition | Resolution | 5 | |
+| Movement before combat: leaving beats arriving | Resolution | 4, 5 | `AFleetOrderedOutIsGoneBeforeTheHostileArrives`, `LeavingStillBeatsArrivingNowThatCombatIsReal` |
+| Fleets pass on lanes; combat only at systems | Resolution | 4 | `FleetsPassEachOtherOnALaneWithoutFighting` |
+| 4a rear-guard built, off by default, one free round | Resolution | 5 | `RearGuardTests` (ADR-021) |
+| 4b melee: proportional, fixed rounds, integer | Resolution | 5 | `DamageSpreadsInProportionToEnemyStrength`, `DamageSpreadsAcrossThreeEnemiesToo` |
+| Defender bonus to incumbent; none for simultaneous arrival | Resolution | 5 | `TheIncumbentGetsTheDefenderBonus`, `SimultaneousArrivalsAtAnEmptySystemGetNoBonus` |
+| Tie is mutual attrition | Resolution | 5 | `ATieLeavesBothAliveAndBothSmaller`, `WhichSideIsListedFirstDoesNotDecideTheBattle` |
 | Claim requires uncontested presence at end of tick | Resolution §5 | 4 | `AnUncontestedFleetClaimsAnUnclaimedSystem`, `TwoRivalsInOneUnclaimedSystemClaimNothing` |
 | Capture needs 2 consecutive uncontested ticks | Resolution §5 | 4 | `CaptureTakesTwoConsecutiveUncontestedTicks`, `OneContestedTickResetsTheSiege` |
-| Arrive-and-die contests nothing | Resolution §5 | 5 | |
-| Two surviving hostiles: occupied, unclaimed | Resolution §5 | 5 | |
+| Arrive-and-die contests nothing | Resolution §5 | 5 | `ADestroyedFleetIsMarkedRatherThanErased` (a destroyed fleet is not present) |
+| Two surviving hostiles: occupied, unclaimed | Resolution §5 | 5 | `TwoRivalsInOneUnclaimedSystemClaimNothing`, `SimultaneousArrivalsAtAnEmptySystemGetNoBonus` |
 | One digest per tick, sorted by consequence | Core loop | 4 | `TheDigestIsSortedByConsequence` (ADR-020) |
-| Trade lane is a building with two owners, in the build menu | Decision 3 | 6 | |
+| Trade lane is a building with two owners, in the build menu | Decision 3 | 6 | `TradeLaneTests` (the menu itself is step 8) |
 | Lane pays more than any internal lane | Decision 3 | 4, 6 | `ATradeLanePaysBothSidesAndPaysMore`, `RulesThatContradictTheDesignAreRefused` |
-| Either party cancels at any tick | Decision 3 | 6 | |
-| Lane opens in phase 1 of the accepting lock, pays that tick | Decision 3 | 6 | |
-| Auto-cancel on endpoint loss, two distinguished reasons | Decision 3 | 4, 6 | `ATradeLaneCancelsWhenAnEndpointChangesHands` (partial: *by partner* is step 6) |
-| Proposal is an order; 4-tick window; withdrawable | Decision 3 | 6 | `AProposalArrivesInTheRecipientsDigest`, `AnUnansweredProposalIsReportedAsIgnored`, `AWithdrawnProposalTellsTheRecipient` |
-| Effect at first lock after acceptance; conditional order | Decision 3 | 6 | `AcceptingALaneOpensItAndChargesTheProposer` (partial: conditional orders are step 6) |
-| Re-validated every lock; voided with reason both sides | Decision 3 | 4, 6 | |
-| Unanswered 4 ticks → *ignored* to proposer | Diplomacy UI | 6 | `AnUnansweredProposalIsReportedAsIgnored` |
-| Three proposal kinds: lane, share scouting, hold N | Diplomacy UI | 6 | |
-| First-contact prompt | Diplomacy UI | 6 | |
+| Either party cancels at any tick | Decision 3 | 6 | `EitherPartyMayCancelTheLane`, `YouCannotCancelALaneYouAreNotOn` |
+| Lane opens in phase 1 of the accepting lock, pays that tick | Decision 3 | 6 | `AnAcceptedLanePaysInTheTickItWasAccepted` |
+| Auto-cancel on endpoint loss, two distinguished reasons | Decision 3 | 4, 6 | `ATradeLaneCancelsWhenAnEndpointChangesHands`, `CanceledByPartnerAndSystemLostReadDifferently` |
+| Proposal is an order; 4-tick window; withdrawable | Decision 3 | 6 | `AProposalArrivesInTheRecipientsDigest`, `TheWindowIsCountedInTicksAndIsExactlyFour`, `AWithdrawnProposalTellsTheRecipient` |
+| Effect at first lock after acceptance; conditional order | Decision 3 | 6 | `AcceptingALaneOpensItAndChargesTheProposer`, `AConditionalLaneOpensWithTheAcceptance`, `ADeclinedProposalCarriesNoConditionalLane` |
+| Re-validated every lock; voided with reason both sides | Decision 3 | 4, 6 | `AProposalWhoseEndpointIsCapturedIsVoidedInBothDigests` |
+| Unanswered 4 ticks → *ignored* to proposer | Diplomacy UI | 6 | `AnUnansweredProposalIsReportedAsIgnored`, `TheWindowIsCountedInTicksAndIsExactlyFour` |
+| Three proposal kinds: lane, share scouting, hold N | Diplomacy UI | 6 | `AgreementTests`, `TradeLaneTests` |
+| First-contact prompt | Diplomacy UI | 6 | `FirstContactTests` |
 | No free text | What it is not | — (absence) | |
 | Custodian by 3 absent ticks, reversible | Player states | 7 | |
 | Custodian by concession, permanent | Player states | 7 | |
@@ -525,7 +560,7 @@ is a rule that was dropped, and the report says so.
 | Visibility rule; shared scouting lifts fog | Diplomacy UI | 8 | |
 | Fleets public in transit once departed | Shape | 8 | |
 | Sealed region placed and drawn; no rules | Build order | 2 | `TheSealedRegionIsPlacedAndReachable`, `AGalaxyWithoutARegionIsRefused` |
-| Determinism: same seed + orders → same state | R16 | 0, 3, 4, 9 | `TheSameSeedGivesTheSameMatch`, `ResolvingTheSameTickTwiceGivesTheSameState`, `TenTicksOfNothingAreReproducible` |
+| Determinism: same seed + orders → same state | R16 | 0, 3, 4, 9 | `TheSameSeedGivesTheSameMatch`, `ResolvingTheSameTickTwiceGivesTheSameState`, `TenTicksOfNothingAreReproducible`, `TheSameBattleResolvesTheSameWayTwice` |
 | Galaxy is a pure function of rules and seed | R16 | 2 | `TheSameSeedGivesTheSameGalaxy`, `DifferentSeedsGiveDifferentGalaxies`, `PrngTests` |
 | Presence is told to the sim, never a clock in it | R16 | 7 | |
 | A tick log exists for *Replay tick N* to read | ADR-014 open q. | 4 | `ResolvingATickAdvancesItAndLogsSixPhases`, `TheCombatPhaseRunsAndSaysItDidNothing` |

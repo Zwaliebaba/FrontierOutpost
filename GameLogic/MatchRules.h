@@ -121,6 +121,32 @@ struct MatchRules
   /// would never make is a mechanic that has quietly ceased to exist.
   std::uint32_t tradeLaneIncome = 6;
 
+  // ---- Combat (resolution phase 4) ---------------------------------------------------------------
+  //
+  // ADR-021 argues these. They are INITIAL VALUES and Phase 0 exists to change them; what is not
+  // negotiable is the shape, which the one-pager fixes: integer, proportional spread, fixed rounds,
+  // deterministic, a tie is mutual attrition.
+
+  /// How many rounds one melee runs. Fixed, so a fight cannot run long because it is close.
+  std::uint32_t combatRounds = 3;
+
+  /// What fraction of its effective strength a side deals each round, as a percentage.
+  std::uint32_t damagePercentPerRound = 50;
+
+  /// The incumbent's multiplier, as a percentage. An incumbent is a fleet that was already at the
+  /// system -- not the system's owner, which is why simultaneous arrivals at an empty system get
+  /// nothing.
+  std::uint32_t defenderBonusPercent = 125;
+
+  /// Sub-phase 4a, the rear-guard: a fleet that leaves a system a hostile arrives at takes one free
+  /// round from the arrivals.
+  ///
+  /// **Off, and built anyway.** The one-pager is explicit: "switched off until Phase 0 shows
+  /// dancing dominates; if enabled, dancing stays possible and stops being free." A switch that has
+  /// never been on is a switch that does not work, so it is implemented and tested now and defaults
+  /// to false.
+  bool rearGuardEnabled = false;
+
   // ---- Build costs (order validation, step 3) --------------------------------------------------
 
   std::uint32_t shipyardCost = 20;
@@ -167,7 +193,13 @@ enum class RulesProblem : std::uint8_t
   /// A match with no ticks to play.
   NoTicksToPlay,
   /// A proposal window of zero, which closes every offer before anyone could answer.
-  NoProposalWindow
+  NoProposalWindow,
+  /// Combat that runs no rounds, or deals no damage. Either makes every fight a draw and every
+  /// fleet immortal, which removes the game rather than tuning it.
+  CombatDecidesNothing,
+  /// A defender bonus below 100%, which would make holding a system worse than arriving at it and
+  /// invert the one-pager's incumbency rule.
+  DefenderBonusPunishesTheDefender
 };
 
 [[nodiscard]] constexpr const char* Describe(RulesProblem _problem) noexcept
@@ -186,6 +218,10 @@ enum class RulesProblem : std::uint8_t
     return "a match needs at least one tick";
   case RulesProblem::NoProposalWindow:
     return "a proposal window of no ticks closes every offer before it can be answered";
+  case RulesProblem::CombatDecidesNothing:
+    return "combat that runs no rounds or deals no damage makes every fleet immortal";
+  case RulesProblem::DefenderBonusPunishesTheDefender:
+    return "a defender bonus below one hundred percent makes holding a system worse than arriving at it";
   default:
     return "unknown";
   }
@@ -218,6 +254,14 @@ enum class RulesProblem : std::uint8_t
   if (_rules.proposalWindowTicks == 0)
   {
     return RulesProblem::NoProposalWindow;
+  }
+  if (_rules.combatRounds == 0 || _rules.damagePercentPerRound == 0)
+  {
+    return RulesProblem::CombatDecidesNothing;
+  }
+  if (_rules.defenderBonusPercent < 100)
+  {
+    return RulesProblem::DefenderBonusPunishesTheDefender;
   }
   return RulesProblem::None;
 }

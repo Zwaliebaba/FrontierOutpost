@@ -4,6 +4,8 @@
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="GameLogicTests.cpp" />
     <ClCompile Include="MatchTests.cpp" />
+    <ClCompile Include="CombatTests.cpp" />
+    <ClCompile Include="DiplomacyTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
