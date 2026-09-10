@@ -82,6 +82,53 @@ struct MatchRules
   /// of attempts is a generator with a bug, not a run of bad luck (GalaxyGenerator.h).
   std::uint32_t maximumSeedAttempts = 64;
 
+  // ---- Starting position -----------------------------------------------------------------------
+
+  /// Ships in the fleet each player starts with, parked at their capital. A player with no fleet
+  /// has no move to make on tick one, and the first thing the loop has to be able to test is a
+  /// fleet moving.
+  std::uint32_t startingShips = 10;
+
+  /// Credits each player starts with. Enough for one building, so the first lock is a real choice
+  /// rather than a wait.
+  std::uint32_t startingCredits = 20;
+
+  // ---- Production (resolution phase 2) ---------------------------------------------------------
+  //
+  // Initial values. Phase 0 of the test plan exists to change them, and nothing below is derived
+  // from anything else, so they can be changed one at a time.
+
+  /// Credits a held system produces each tick.
+  std::uint32_t creditsPerSystem = 2;
+
+  /// What a capital adds on top. A capital is worth holding beyond the guard window.
+  std::uint32_t capitalCreditsBonus = 4;
+
+  /// What a mining station adds to the system it is on.
+  std::uint32_t miningStationCredits = 4;
+
+  /// Ships a shipyard adds to the fleet at its system each tick.
+  std::uint32_t shipsPerShipyard = 2;
+
+  /// What a lane between two systems the same player holds pays that player each tick.
+  std::uint32_t internalLaneIncome = 1;
+
+  /// What an open trade lane pays EACH of its two owners each tick.
+  ///
+  /// THE ONE-PAGER MAKES THIS A STRICT INEQUALITY: a trade lane "pays more than any internal
+  /// lane", and that gap is the entire incentive to talk to a neighbour rather than expand into
+  /// them. `Match::Create` refuses rules where it does not hold, because a build a rational player
+  /// would never make is a mechanic that has quietly ceased to exist.
+  std::uint32_t tradeLaneIncome = 6;
+
+  // ---- Build costs (order validation, step 3) --------------------------------------------------
+
+  std::uint32_t shipyardCost = 20;
+  std::uint32_t miningStationCost = 15;
+
+  /// Paid by the player who proposes the lane, at the lock the partner accepts it.
+  std::uint32_t tradeLaneCost = 10;
+
   // ---- The sealed region -------------------------------------------------------------------
   //
   // Placed and drawn by 4X-01; nothing happens when it opens until Phase 2 (one-pager, "Build
@@ -99,5 +146,80 @@ struct MatchRules
 /// producing a galaxy nobody designed for.
 inline constexpr std::uint32_t MINIMUM_PLAYERS = 6;
 inline constexpr std::uint32_t MAXIMUM_PLAYERS = 12;
+
+/// A way a rules struct contradicts the game it is rules for.
+///
+/// These are not tuning mistakes -- Phase 0 is allowed to make a lane pay badly or a match run
+/// short. They are settings under which a MECHANIC CEASES TO EXIST: a trade lane nobody would ever
+/// build, a siege that captures instantly, a match with no ticks in it. Each would show up in
+/// playtesting as "nobody used X" and take a week to trace back to a number.
+enum class RulesProblem : std::uint8_t
+{
+  None,
+  /// Outside the 6-12 the design is drawn for.
+  PlayerCountOutOfRange,
+  /// A trade lane that pays no more than an internal one. The one-pager makes the gap the entire
+  /// incentive to talk to a neighbour rather than expand into them.
+  TradeLaneNotWorthBuilding,
+  /// A siege of zero ticks, which is a capture with no warning and no chance to answer it. The
+  /// one-pager's siege rule exists so that losing a system is something you saw coming.
+  SiegeIsInstant,
+  /// A match with no ticks to play.
+  NoTicksToPlay,
+  /// A proposal window of zero, which closes every offer before anyone could answer.
+  NoProposalWindow
+};
+
+[[nodiscard]] constexpr const char* Describe(RulesProblem _problem) noexcept
+{
+  switch (_problem)
+  {
+  case RulesProblem::None:
+    return "playable";
+  case RulesProblem::PlayerCountOutOfRange:
+    return "player count is outside the 6-12 the design is drawn for";
+  case RulesProblem::TradeLaneNotWorthBuilding:
+    return "a trade lane must pay more than an internal lane, or nobody would ever build one";
+  case RulesProblem::SiegeIsInstant:
+    return "a siege of no ticks is a capture nobody saw coming";
+  case RulesProblem::NoTicksToPlay:
+    return "a match needs at least one tick";
+  case RulesProblem::NoProposalWindow:
+    return "a proposal window of no ticks closes every offer before it can be answered";
+  default:
+    return "unknown";
+  }
+}
+
+/// Whether these rules describe a game that can be played.
+///
+/// Asked by `Match::Create`, which is fatal on a failure -- a caller that misconfigured the game
+/// is a defect, not a state to recover from. It is a separate function rather than a check buried
+/// in `Create` so that the server can ask BEFORE it has built anything (4X-02), and so that the
+/// answer is testable without provoking a fatal.
+[[nodiscard]] constexpr RulesProblem Check(const MatchRules& _rules) noexcept
+{
+  if (_rules.playerCount < MINIMUM_PLAYERS || _rules.playerCount > MAXIMUM_PLAYERS)
+  {
+    return RulesProblem::PlayerCountOutOfRange;
+  }
+  if (_rules.tradeLaneIncome <= _rules.internalLaneIncome)
+  {
+    return RulesProblem::TradeLaneNotWorthBuilding;
+  }
+  if (_rules.siegeTicks == 0)
+  {
+    return RulesProblem::SiegeIsInstant;
+  }
+  if (_rules.matchLengthTicks == 0)
+  {
+    return RulesProblem::NoTicksToPlay;
+  }
+  if (_rules.proposalWindowTicks == 0)
+  {
+    return RulesProblem::NoProposalWindow;
+  }
+  return RulesProblem::None;
+}
 
 } // namespace Frontier

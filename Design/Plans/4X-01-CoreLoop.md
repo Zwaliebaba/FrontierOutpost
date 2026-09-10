@@ -1,7 +1,7 @@
 # 4X-01 — The loop, headless: a galaxy, a tick, and everything that resolves in it
 
 **Status:** Plan, in progress. Written 2026-09-10 against `space-4x-one-pager-v10.md` (v0.7) and
-`space-4x-prototype-test-plan.md` (v0.4). Steps 0–2 done 2026-09-10.
+`space-4x-prototype-test-plan.md` (v0.4). Steps 0–4 done 2026-09-10.
 
 This plan builds the *simulation* half of what the one-pager's *Build order* asks for: **"Loop
 first — graph generator, tick resolution, trade lanes and proposals in the build menu, custodian,
@@ -260,6 +260,23 @@ whole system.
 **Tests:** validation of every order kind, valid and invalid; an `OrderSet` serialised and read
 back; a `Match` hashed identically from the same construction twice.
 
+**Done 2026-09-10.** `GameLogic/Match` holds the state and owns `Validate`, which is read twice on
+purpose: the resolver applies it at the lock, and the client will be shown the same answer before
+the lock, so there is one function deciding whether an order is real rather than two that agree
+today. Sixteen rejection reasons, each with a sentence that reaches the digest.
+
+The serialization deferred from Step 1 arrived here as `NeuronCore/ByteWriter` and
+`NeuronCore/ByteReader`: little-endian by explicit shifting rather than by `memcpy`, so the format
+is a decision rather than whatever the compiler laid out, and a read past the end sets a flag
+instead of being undefined — these bytes come off a socket in `4X-02`, and a reader whose error
+path is a crash is a denial of service with extra steps.
+
+Two things the step did not name. `MatchRules::Check` was added, so that rules which contradict the
+game they are rules for — a trade lane paying no more than an internal one, a siege of zero ticks
+— are refused with a reason; `Match::Create` is fatal on it, and the server can ask before it has
+built anything. And `MatchRules` grew the production and build numbers, because Step 4's phase 2
+reads them; that is the growth the Step 1 note above predicted.
+
 #### Step 4 — Resolution without combat: phases 1, 2, 3, 5, 6
 
 `GameLogic/TickResolver`. Implement the phases in order, with combat as a no-op, and get the
@@ -288,6 +305,20 @@ empty system); an uncontested claim succeeds; a capture takes exactly two consec
 ticks and is reset by one contested tick; a lane cancels with *system lost* when an endpoint
 changes hands; production and lane income sum to the digest's figure; the digest is sorted as
 decided; and the hash test — resolve the same tick twice, get the same state.
+
+**Done 2026-09-10**, and the no-read discipline is **ADR-019**: every phase is `Match(const
+Match&)`, so within a phase every read is of the parameter and every write is to the local copy.
+The signature is the rule, which is what the step asked for. Combat is a phase that runs and does
+nothing rather than a phase that is missing, so the log a replay reads has had the same six entries
+since the first tick ever resolved.
+
+The digest's sort order is **ADR-020**: a numeric severity carried on each event, sorted descending
+with a total tie-break on kind, system and lane. Ranking by event *kind* was rejected because
+consequence is not a property of the kind — a border world and a capital are both `SystemLost`.
+
+Not implemented here, and not claimed: research, which the phase list names. It is a counter with
+no effect in Stage A, and a field nothing reads is a number that looks tuned and is not. It arrives
+with whatever first reads it.
 
 #### Step 5 — Combat
 
@@ -452,30 +483,30 @@ is a rule that was dropped, and the report says so.
 | Capital within 3 ticks of a rival capital | Shape | 2 | `EveryCapitalHasARivalWithinThreeTicks`, `CapitalsTooFarApartAreRefused` |
 | 1-tick lanes in clusters; 2–4 toward frontier | Shape | 2 | `LaneCostsMatchTheTwoBands`, `AClusterLaneThatDoesNotCostOneIsRefused`, `AFrontierLaneOutsideTheBandIsRefused` |
 | Unsatisfiable seed rejected | Shape | 2 | `GalaxyValidationTests`, one case per rejection |
-| Tick interval a parameter; nothing between ticks | Shape; test plan | 1 | |
-| Orders hidden until lock; editable until then | Shape | 3 | |
-| Fleets, builds, proposals lock together | Diplomacy UI | 3 | |
-| Six phases, fixed order, no-read within a phase | Resolution | 4 | |
-| Movement before combat: leaving beats arriving | Resolution | 4, 5 | |
-| Fleets pass on lanes; combat only at systems | Resolution | 4 | |
+| Tick interval a parameter; nothing between ticks | Shape; test plan | 1 | `MatchRulesTests` via `RulesThatContradictTheDesignAreRefused` |
+| Orders hidden until lock; editable until then | Shape | 3 | `OrderValidationTests` |
+| Fleets, builds, proposals lock together | Diplomacy UI | 3 | `ResolvingATickAdvancesItAndLogsSixPhases`, `ASecondOrderSetFromOnePlayerIsDiscarded` |
+| Six phases, fixed order, no-read within a phase | Resolution | 4 | `ResolvingATickAdvancesItAndLogsSixPhases`, `ResolvingTheSameTickTwiceGivesTheSameState` (ADR-019) |
+| Movement before combat: leaving beats arriving | Resolution | 4, 5 | `AFleetOrderedOutIsGoneBeforeTheHostileArrives` |
+| Fleets pass on lanes; combat only at systems | Resolution | 4 | `ALongerLaneTakesItsFullCost` (partial: needs combat, step 5) |
 | 4a rear-guard built, off by default, one free round | Resolution | 5 | |
 | 4b melee: proportional, fixed rounds, integer | Resolution | 5 | |
 | Defender bonus to incumbent; none for simultaneous arrival | Resolution | 5 | |
 | Tie is mutual attrition | Resolution | 5 | |
-| Claim requires uncontested presence at end of tick | Resolution §5 | 4 | |
-| Capture needs 2 consecutive uncontested ticks | Resolution §5 | 4 | |
+| Claim requires uncontested presence at end of tick | Resolution §5 | 4 | `AnUncontestedFleetClaimsAnUnclaimedSystem`, `TwoRivalsInOneUnclaimedSystemClaimNothing` |
+| Capture needs 2 consecutive uncontested ticks | Resolution §5 | 4 | `CaptureTakesTwoConsecutiveUncontestedTicks`, `OneContestedTickResetsTheSiege` |
 | Arrive-and-die contests nothing | Resolution §5 | 5 | |
 | Two surviving hostiles: occupied, unclaimed | Resolution §5 | 5 | |
-| One digest per tick, sorted by consequence | Core loop | 4 | |
+| One digest per tick, sorted by consequence | Core loop | 4 | `TheDigestIsSortedByConsequence` (ADR-020) |
 | Trade lane is a building with two owners, in the build menu | Decision 3 | 6 | |
-| Lane pays more than any internal lane | Decision 3 | 4, 6 | |
+| Lane pays more than any internal lane | Decision 3 | 4, 6 | `ATradeLanePaysBothSidesAndPaysMore`, `RulesThatContradictTheDesignAreRefused` |
 | Either party cancels at any tick | Decision 3 | 6 | |
 | Lane opens in phase 1 of the accepting lock, pays that tick | Decision 3 | 6 | |
-| Auto-cancel on endpoint loss, two distinguished reasons | Decision 3 | 4, 6 | |
-| Proposal is an order; 4-tick window; withdrawable | Decision 3 | 6 | |
-| Effect at first lock after acceptance; conditional order | Decision 3 | 6 | |
+| Auto-cancel on endpoint loss, two distinguished reasons | Decision 3 | 4, 6 | `ATradeLaneCancelsWhenAnEndpointChangesHands` (partial: *by partner* is step 6) |
+| Proposal is an order; 4-tick window; withdrawable | Decision 3 | 6 | `AProposalArrivesInTheRecipientsDigest`, `AnUnansweredProposalIsReportedAsIgnored`, `AWithdrawnProposalTellsTheRecipient` |
+| Effect at first lock after acceptance; conditional order | Decision 3 | 6 | `AcceptingALaneOpensItAndChargesTheProposer` (partial: conditional orders are step 6) |
 | Re-validated every lock; voided with reason both sides | Decision 3 | 4, 6 | |
-| Unanswered 4 ticks → *ignored* to proposer | Diplomacy UI | 6 | |
+| Unanswered 4 ticks → *ignored* to proposer | Diplomacy UI | 6 | `AnUnansweredProposalIsReportedAsIgnored` |
 | Three proposal kinds: lane, share scouting, hold N | Diplomacy UI | 6 | |
 | First-contact prompt | Diplomacy UI | 6 | |
 | No free text | What it is not | — (absence) | |
@@ -487,14 +518,14 @@ is a rule that was dropped, and the report says so.
 | Conquered-from-custodian yields half, forever | Player states | 7 | |
 | Week-one custodian scores zero | Player states | 7 | |
 | Exile and Gone unreachable in Stage A | Build order | 7 | |
-| Capital guard 12 ticks, visible countdown | Pacing | 7, 8 | |
+| Capital guard 12 ticks, visible countdown | Pacing | 7, 8 | `ACapitalIsGuardedForTheFirstTwelveTicks`, `AGuardedCapitalCannotBeBesieged` (countdown is step 8) |
 | Public score; leader always visible | Pacing | 7, 8 | |
 | Fixed end tick; placement by score | Pacing; Scoring | 7 | |
 | Dominance threshold held N consecutive ticks | Pacing | 7 | |
 | Visibility rule; shared scouting lifts fog | Diplomacy UI | 8 | |
 | Fleets public in transit once departed | Shape | 8 | |
 | Sealed region placed and drawn; no rules | Build order | 2 | `TheSealedRegionIsPlacedAndReachable`, `AGalaxyWithoutARegionIsRefused` |
-| Determinism: same seed + orders → same state | R16 | 0, 3, 4, 9 | |
+| Determinism: same seed + orders → same state | R16 | 0, 3, 4, 9 | `TheSameSeedGivesTheSameMatch`, `ResolvingTheSameTickTwiceGivesTheSameState`, `TenTicksOfNothingAreReproducible` |
 | Galaxy is a pure function of rules and seed | R16 | 2 | `TheSameSeedGivesTheSameGalaxy`, `DifferentSeedsGiveDifferentGalaxies`, `PrngTests` |
 | Presence is told to the sim, never a clock in it | R16 | 7 | |
-| A tick log exists for *Replay tick N* to read | ADR-014 open q. | 4 | |
+| A tick log exists for *Replay tick N* to read | ADR-014 open q. | 4 | `ResolvingATickAdvancesItAndLogsSixPhases`, `TheCombatPhaseRunsAndSaysItDidNothing` |

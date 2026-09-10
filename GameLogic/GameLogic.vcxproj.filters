@@ -5,10 +5,18 @@
     <ClInclude Include="Galaxy.h" />
     <ClInclude Include="GalaxyGenerator.h" />
     <ClInclude Include="GameLogic.h" />
+    <ClInclude Include="Match.h" />
     <ClInclude Include="MatchRules.h" />
+    <ClInclude Include="Orders.h" />
+    <ClInclude Include="TickLog.h" />
+    <ClInclude Include="TickResolver.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Galaxy.cpp" />
+    <ClCompile Include="Match.cpp" />
+    <ClCompile Include="TickLog.cpp" />
+    <ClCompile Include="TickResolver.cpp" />
+    <ClCompile Include="Orders.cpp" />
     <ClCompile Include="GalaxyGenerator.cpp" />
     <ClCompile Include="pch.cpp" />
   </ItemGroup>

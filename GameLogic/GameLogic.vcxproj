@@ -120,6 +120,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Galaxy.cpp" />
+    <ClCompile Include="Match.cpp" />
+    <ClCompile Include="TickLog.cpp" />
+    <ClCompile Include="TickResolver.cpp" />
+    <ClCompile Include="Orders.cpp" />
     <ClCompile Include="GalaxyGenerator.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -130,7 +134,11 @@
     <ClInclude Include="Galaxy.h" />
     <ClInclude Include="GalaxyGenerator.h" />
     <ClInclude Include="GameLogic.h" />
+    <ClInclude Include="Match.h" />
     <ClInclude Include="MatchRules.h" />
+    <ClInclude Include="Orders.h" />
+    <ClInclude Include="TickLog.h" />
+    <ClInclude Include="TickResolver.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
