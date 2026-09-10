@@ -223,6 +223,8 @@ x64\Debug\FrontierOutpost.exe
 
 **Report what you actually did.** "Builds clean, not run" and "builds and runs" are different claims. Never imply the second when you only did the first, and say which configurations you built.
 
+**A session with no Windows toolchain builds on CI, and says so.** `.github/workflows/build.yml` carries `workflow_dispatch`, so a branch can be built and tested without a pull request: push, dispatch the workflow against the branch, and read the run. That run is the build — `CheckProjectFiles.py`, Debug|x64, all four suites, whole-tree clang-tidy — and a slice is not finished on a red one. What it can never verify is that the game draws, that a tap lands, or that anything is legible: CI has no screen. So such a session ends with a **run list**, the specific things a person must launch the executable and look at, and its report says plainly "builds and tests pass on CI, not run" until somebody works that list. Do not run `Build/CheckProjectFiles.py` on a non-Windows box and trust it: it compares Windows path spellings and reports false failures.
+
 ---
 
 ## 4. Layout and formatting

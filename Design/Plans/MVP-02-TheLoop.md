@@ -1,243 +1,345 @@
-# MVP-02 — The loop: a match of eight seats, resolved four times a day, on a map worth looking at
+# MVP-02 — The loop, in eight slices
 
-**Status:** Plan, not started. Owner decisions recorded 2026-09-10; §2 is the complete list and ADR-003 to ADR-016 are the record. Nothing in this plan is built.
-**Read first:** [`AGENTS.md`](../../AGENTS.md) in full, then [`Design/README.md`](../README.md) §1, then [`space-4x-one-pager-v10.md`](../space-4x-one-pager-v10.md) and [`space-4x-prototype-test-plan.md`](../space-4x-prototype-test-plan.md), then every ADR from 003 up. This plan does not repeat any of them; it depends on all of them.
+**Status:** Plan, not started. Owner decisions recorded 2026-09-10 in two rounds; §2 is the complete list and ADR-003 to ADR-018 are the record. Nothing in this plan is built.
+**Read first:** [`AGENTS.md`](../../AGENTS.md) in full, then [`Design/README.md`](../README.md) §1, then [`space-4x-one-pager-v10.md`](../space-4x-one-pager-v10.md) and [`space-4x-prototype-test-plan.md`](../space-4x-prototype-test-plan.md), then the ADRs your slice touches. This plan does not repeat any of them.
 
-This is the prompt for the build sessions that turn the MVP-01 tree into the loop the test plan's Phase 0 runs on. When the work is done, move this file to `Design/Archive/` with a "what shipped, what did not" section at the top, as MVP-01 did.
+The target is the loop the test plan's Phase 0 runs on: a match of eight seats, resolved on a
+schedule, on a map worth looking at. **It is deliberately not one build session.** It is eight
+slices, each of which ends with something you can run and look at, and after each of which the
+direction can change without throwing work away. A slice that turns out wrong costs one slice.
+
+Read §5 before starting any slice. It is the list of ways this plan gets ruined.
 
 ---
 
-## 1. What "done" looks like
+## 1. What "done" looks like, at the end of slice 8
 
-`FrontierServer.exe` creates a match from a seed for eight seats on a compressed one-hour schedule,
-prints eight tokens, and runs unattended. Eight `FrontierOutpost.exe` clients on eight machines
-present a token each, see the same generated galaxy as a 640×400 sixteen-colour isometric diorama,
-place fleet, build and proposal orders that lock together at the hour, and after every lock read a
-digest of what changed and a map on which their fleets have visibly moved. A capital cannot be
-attacked for twelve ticks and says so. A seat that does not log in for three ticks is a custodian
-on everyone's map. A trade lane is proposed from the build menu, accepted from the digest, and pays
-from the tick it was accepted at. The match ends on the tick it said it would, with placements.
-The server was restarted in the middle of it and nobody noticed.
+`FrontierServer.exe` creates a match from a seed for eight seats on a one-hour schedule, prints
+eight tokens, and runs unattended. Eight clients present a token each, see the same generated
+galaxy as a 640×400 sixteen-colour isometric diorama, place fleet, build and proposal orders that
+lock together at the hour, and after every lock read a digest of what changed and a map on which
+their fleets have visibly moved. A capital cannot be attacked for its first twelve ticks and says
+so. A seat that has not logged in for three ticks is a custodian on everyone's map with a decaying
+garrison. A trade lane is proposed from the build menu, accepted from the digest, and pays from the
+tick it was accepted at. The match ends on the tick it said it would, with placements. The server
+was restarted in the middle and nobody noticed.
 
-On one machine with no network, `FrontierOutpost.exe` with no arguments does all of the above for
-all eight seats in one process, with a seat selector and a *Resolve now* button.
-
-That is the one-pager's build order — *loop first: graph generator, tick resolution, trade lanes
-and proposals in the build menu, custodian, capital guard, siege rule, digest, fixed end* — and
-nothing from Phase 2. No Exile, no sealed region, no colony core, no upkeep or salvage. The sealed
-region is *generated and visible* (the one-pager makes it visible from tick one) but nothing can
-enter it; that is Phase 2's.
+**Not in this plan at all:** Exile, the sealed region's contents, colony cores, upkeep, salvage,
+raiding, hiring, accounts, season rank. The sealed region is generated and visible from tick one
+because the one-pager says so, and nothing can enter it. Also not in this plan, and named in
+ADR-015 as the first work after the Phase 0 gate: the system close-up view, the combat replay, and
+the timeline scrubber.
 
 ## 2. Decisions already made (do not reopen these)
 
 | | Decision | Where it binds |
 |---|---|---|
-| **The game** | The one-pager, v10, is the game. The tree's real-time ship was a proof of the stack, not the game. | Owner, 2026-09-10 |
+| **The game** | The one-pager, v10. The MVP-01 real-time ship was a proof of the stack, not the game. | Owner, 2026-09-10 |
 | **Platform** | The Windows D3D12 640×400 client stays the client. Mobile is a later port and a later ADR. | Owner, 2026-09-10; `Design/README.md` §1 |
 | **Process shape** | `FrontierServer.exe` headless; `FrontierOutpost.exe` the client and, with no arguments, the harness hosting every seat in-process. | ADR-011 |
-| **Persistence** | One snapshot file per tick plus the pending order books, in a match directory beside the server. The client still ships alone. | ADR-012 |
-| **Combat preview and replay** | Computed by the server on request from visible information; the digest carries the round log. The client holds no rules. | ADR-013 |
-| **World and tick** | A graph with authored lane costs; a pure resolver in six phases; integer arithmetic with a stated remainder rule; sub-phase 4a a `Rules` flag, off. | ADR-004 |
-| **Schedule** | Four ticks a day at fixed UTC times as match data; one hour for Phase 0, six for Phase 1. The resolver reads no clock. | ADR-007 |
+| **Persistence** | One snapshot file per tick plus the pending books, in a match directory beside the server. The client still ships alone. | ADR-012 |
+| **Preview and replay** | Computed by the server from visible information; the digest carries the round log. The client holds no rules. | ADR-013 |
+| **World and tick** | A graph with authored lane costs; a pure resolver in six phases; integers with a stated remainder rule; sub-phase 4a a `Rules` flag, off. | ADR-004 |
+| **Schedule** | Fixed UTC times as match data. Four a day by design, one hour for Phase 0. The resolver reads no clock. | ADR-007 |
 | **Replication** | A per-seat visible snapshot and a per-seat digest after every tick, complete, never a delta. | ADR-005 |
 | **Transport** | Reliable, ordered, framed, versioned messages over TCP; every request answered; loopback carries the same frames. | ADR-006 |
-| **Map layout** | The generator emits display coordinates; drawn lane length is monotone in tick cost; seeds that cannot be placed are rejected. | ADR-014 |
-| **The scene** | A 3D diorama of authoritative state; cosmetic time between ticks; orders are two ids, never a coordinate. Digest first, map second. | ADR-015 |
+| **Map layout** | The generator emits display coordinates; drawn lane length is monotone in tick cost; unplaceable seeds rejected. | ADR-014 |
+| **The scene** | A 3D diorama of authoritative state; cosmetic time between ticks; orders are ids, never a coordinate. Digest first, map second. | ADR-015 |
 | **Camera** | 2:1 dimetric in whole pixels, snapped, panning over bounded map coordinates; zoom about the point under the pointer. | ADR-003, ADR-008 |
 | **Identity** | A token per seat; presenting it is logging in. No accounts before Phase 1 gates. | ADR-016 |
-| **Documents** | The one-pager's text is current and the test plan's "message" was stale: v1 has no free text. Both documents were corrected on 2026-09-10. | Owner, 2026-09-10 |
-| **Timeline scrubber** | Not in this MVP. Watch item after Phase 1. | Owner, 2026-09-10; ADR-015 |
-| **Presentation, palette, shading, starfield, input** | Unchanged from MVP-01. | ADR-001, ADR-002, ADR-009, ADR-010 |
+| **Fog** | Topology and lane costs public; a system's yield, owner, buildings and resident fleets fogged until observed, then remembered as stale with a tick stamp. Fleets in transit are public. | ADR-017 |
+| **Fleets** | A fleet is an owner, a location and a divisible integer strength. Split is an order; same-owner fleets at one system coalesce at end of tick. A garrison is a pinned fleet. | ADR-018 |
+| **Income** | **One scalar.** Everything the one-pager says about economy is a single number: lanes pay +X/tick, the income screen shows income foregone, custodian conquests yield half. Buildings and fleet strength are bought with it. | Owner, 2026-09-10 |
+| **Supply cost** | A `Rules` field defaulting to **zero**. Lane cost does the anti-snowball work in these slices; Phase 0 can switch upkeep on without a code change. | Owner, 2026-09-10 |
+| **Slice order** | Breadth first. The galaxy is on screen at slice 2, before a single rule is built on an unmeasured galaxy size. | Owner, 2026-09-10 |
+| **Documents** | The one-pager's text is current; the test plan's "message" instrument was stale. Both corrected 2026-09-10. | Owner, 2026-09-10 |
+| **Presentation, palette, shading, starfield, pointer input** | Unchanged from MVP-01. | ADR-001, ADR-002, ADR-009, ADR-010 |
 
-## 3. What the tree loses
+## 3. How a slice is verified
 
-Say it before building, so nobody preserves it by reflex.
+**The sessions writing this code have no Windows toolchain** (owner decision, 2026-09-10: write
+here, compile on CI). So the loop is:
 
-- `GameLogic/Ship.{h,cpp}` and every `ShipKinematicsTests` method. `WorldTests` is rewritten
-  against the new `World`.
-- `Neuron::MoveToOrder`, `Neuron::ShipState`, `MOVE_TO_ORDER_BYTES`, `SHIP_STATE_BYTES` and their
-  four serialize functions and tests. The `Write`/`Read` cursors stay; they are the format.
-- `FrontierOutpost/ShipView.{h,cpp}`. There is nothing to interpolate.
-- `NeuronCore/Trigonometry.{h,cpp}` — CORDIC, `Atan2Turns16`, `SineCosineTurns16`,
-  `IntegerSquareRoot`, `SaturatingAdd` — and `TrigonometryTests`. No consumer remains after step 2.
-  `Turns16` goes with it. If step 6 wants an integer angle for a mesh heading it is a `float` on
-  the client, where R16 does not reach.
-- `Session::TICKS_PER_SECOND`, `TICK_MICROSECONDS`, and `TheTickRateIsTwentyHertz`.
-- `LoopbackTransport`'s two overflow policies as a statement about the game (ADR-006).
-- The status line's `X` and `Z`. The tick stays.
+1. Write the code, and locally run what a Linux box can: `python Build/CheckFormat.py`, and
+   `clang-tidy` and a scratch `clang++ -fsyntax-only` pass over the files that do not touch the
+   Windows SDK.
+2. Commit and push the branch.
+3. Dispatch [`.github/workflows/build.yml`](../../.github/workflows/build.yml) against the branch —
+   it has `workflow_dispatch`, so this needs no pull request. That run **is** the build: it does
+   `CheckProjectFiles.py`, Debug|x64, the four test suites, and whole-tree `RunClangTidy.py` on
+   Windows.
+4. Read the run. Fix and re-dispatch until it is green. A slice is not finished on a red run.
 
-Until each step lands, the code comments that cite ADR-004, ADR-005 and ADR-006 describe decisions
-those files no longer record. That is known and is fixed by deletion, not by editing comments.
+**What this loop cannot verify, ever:** that the game draws, that a tap lands, that the map is
+legible, that the motion reads well. `AGENTS.md` §3 requires the executable to be **run** for
+anything touching rendering, input or presentation, and CI cannot run it. So every slice from 2
+onward ends with a **run list**: the specific things a human must launch the executable and look at,
+written as a checklist in the slice's report. Until somebody works that list, the slice's rendering
+claims are "builds and tests pass, not run", and the report says exactly that.
 
-## 4. The work, in order
+`Build/CheckProjectFiles.py` reports false failures on Linux because it compares Windows path
+spellings. Do not fix it for Linux and do not trust it locally; CI runs it where it is correct.
 
-Each step ends green: builds Debug|x64, every suite passes, the three checkers pass, and where a
-step says **run**, the executable was run. Do not start the next step on a red one. Commit at each
-step boundary; update `Design/` in the same commit as the code it describes.
+## 4. What the tree loses, and in which slice
 
-### Step 0 — Read, then plan out loud
+Say it before building, so nobody preserves it by reflex. Until each deletion lands, the comments
+in those files cite ADR-004, ADR-005 and ADR-006 for decisions those files no longer record. That
+is fixed by deletion, not by editing comments.
 
-Read everything §0 of this file names, then `GameLogic/`, `NeuronCore/Simulation.h`,
-`NeuronCore/Protocol.{h,cpp}`, `NeuronServer/Session.{h,cpp}` and `FrontierOutpost/FrontierOutpost.cpp`.
-Report what is there, which of §3 you will delete at which step, and where the one-pager is
-silent on something the resolver has to decide (there are several — production values, fleet
-strength units, what a building is). If anything in this plan contradicts an ADR or the tree, say
-so and stop.
+| Slice | Deleted |
+|---|---|
+| 1 | `GameLogic/Ship.{h,cpp}`; `ShipKinematicsTests` entire; `WorldTests` rewritten |
+| 2 | `Neuron::MoveToOrder`, `Neuron::ShipState` and their sizes, serializers and tests; `FrontierOutpost/ShipView.{h,cpp}`; `NeuronCore/Trigonometry.{h,cpp}` and `TrigonometryTests` and `Turns16`; `Session::TICKS_PER_SECOND`, `TICK_MICROSECONDS`, `TheTickRateIsTwentyHertz`; the status line's X and Z |
 
-### Step 1 — `GameLogic`: the state and the generator
+The `Write`/`Read` cursor helpers in `Protocol.cpp` stay — they are the format (ADR-012). If a
+client-side heading is wanted for a mesh it is a `float` in the client, where R16 does not reach.
 
-`MatchState`, `Rules`, the id types, and `Generate(seed, seatCount, rules)` per ADR-004 and
-ADR-014. Every entity has a stable integer id; every container is a `std::vector` sorted by id or a
-`std::map`; there is no unordered container in the library and `CheckProjectFiles.py` is extended
-to fail one in `GameLogic/`. Every quantity is an integer with its unit in its name.
+## 5. Things that will ruin this plan, and the answer
 
-Tests in `GameLogicTests`, and this is the suite that matters most: the generator's guarantees
-(each capital a rival within three ticks by shortest path, one-tick lanes inside a cluster, two-
-to four-tick lanes to the frontier), rejection of a seed that fails them, the layout constraint
-(walk every pair of lanes: higher cost never shorter, none cross, minimum separation), the sealed
-region generated and marked, and byte-identical output for the same seed across two runs and — by
-serializing — the same seed on any machine. **Measure and record the rejection rate at 6, 8 and
-12 seats over a thousand seeds**; ADR-014 needs the figure, and if it is near one at twelve, stop
-and report before tuning.
-
-Delete `Ship.{h,cpp}` and its tests here. `World` becomes a thin owner of a `MatchState`.
-
-### Step 2 — `GameLogic`: the resolver
-
-`Resolve(before, lockedOrders, rules) -> TickResult` and its six phases as functions, per ADR-004.
-Orders: `MoveFleet(fleetId, systemId)`, `Build(systemId, buildingKind)`, `Propose(kind, seat, …)`,
-`Accept`, `Decline`, `Withdraw`, `Concede`. Proposals per the one-pager's paragraph in full: lock
-with the others, four ticks open, withdrawable, re-validated at every lock and voided with a
-reason, conditional order, accepted-at-lock pays from that tick, *ignored* reported to the
-proposer. Trade lanes: a building with two owners; cancelled by either at any lock; auto-cancelled
-on losing an endpoint, and the digest says which. Player states: the four states and six
-transitions and nothing else; custodian on three ticks of absence, reversible; on concession,
-permanent; garrisons weaken per tick of absence; conquered-from-custodian yields half for the rest
-of the match; a first-week custodian scores nothing. Capital guard as a countdown in `Rules`.
-Siege: two consecutive ticks of uncontested hostile presence. Score, the fixed end tick, and a
-dominance threshold held for N ticks. The visibility filter that produces a `VisibleSnapshot` and
-the `Digest` sorted by consequence, with an `EngagementLog` per engagement. `Preview` as the same
-combat functions over a visible snapshot (ADR-013).
-
-Tests, one class per phase and one per rule the one-pager states, and three that are the
-architecture: **permute every order book and assert the resolved state is byte-identical**;
-**movement before combat lets a fleet ordered out escape**, and with the 4a flag on, it takes one
-round from the arrivals' end-of-movement strength; **the remainder of a proportional split lands
-by largest remainder, ties by ascending id**. Combat: incumbent bonus, none for simultaneous
-arrivals at an empty system, a tie is mutual attrition. Claims: two surviving hostiles leave a
-system unclaimed; an arriving fleet that dies contests nothing. Every countdown the client will
-draw is a number in the snapshot.
-
-Research is a phase that does nothing, named as such, until the design says what is researched.
-
-### Step 3 — `NeuronCore`: the protocol and the seam
-
-The frame, the message types, the records, the `Verdict` and the reason codes per ADR-006; the
-widened `Simulation` per ADR-007. Round-trip tests for every record, the little-endian test kept,
-a test that a frame with an unknown version is refused, and a test that a `VisibleSnapshot` for
-seat A serialized and deserialized contains no order of seat B. Delete `MoveToOrder` and
-`ShipState`. Name the `Transport` concept; `LoopbackTransport` carries frames.
-
-**Measure a snapshot's size** on an eight-seat generated galaxy and record it in ADR-005's open
-question.
-
-### Step 4 — `NeuronServer`: seats, books, schedule, persistence, socket
-
-`Session` per ADR-007: seats and tokens (ADR-016), an order book per seat with `Submit` and
-`Withdraw` answered, `TickSchedule` in UTC against `system_clock`, `ResolveNow()`, the per-seat
-send after every tick, `Save`/`Load` and the match directory per ADR-012 with `Pending.bin` written
-on every accepted edit, and the event log the test plan names (login, session start and end,
-order edit, order lock, proposal sent, accepted and declined, trade lane opened and cancelled,
-capital fall, custodian takeover, fleet order after capital fall) as one append-only file. A
-`TcpTransport` against Winsock in `NeuronCore`, tested with two ends in one process.
-
-Tests in `NeuronServerTests` with a counting simulation, as now: the schedule fires at the right
-UTC times (drive it with an injected clock — the only place a clock is injected, and it is the
-server's, not the simulation's); orders after the lock go to the next book; a seat receives its
-own snapshot and not another's; restart from a match directory resumes at the right tick with the
-pending books intact; a `Join` with a bad token is refused.
-
-### Step 5 — `FrontierServer.exe`
-
-A new project, `FrontierServer/`, `namespace Frontier`, referencing `NeuronCore`, `NeuronServer`
-and `GameLogic`. Command line: create (seed, seats, schedule, rules file or defaults) and run
-(match directory). Prints the tokens. No window. Register it in `FrontierOutpost.slnx`, extend
-`Build/CheckProjectFiles.py` and `.github/workflows/build.yml`, and update `AGENTS.md` §2's map and
-graph in the same commit. **Run it**: create an eight-seat match on a one-minute schedule, watch
-three ticks resolve and three snapshot files appear, kill it, restart it, and see it resume at
-tick four.
-
-### Step 6 — `FrontierOutpost.exe`: the harness and the client
-
-Two halves, and the harness first because it is what every later session tests with.
-
-**6a — the harness.** With no arguments: a `Session` in-process over the loopback, every seat's
-token held, a seat selector drawn with the 8×8 font, a *Resolve now* target, and the same client
-code as 6b talking to it. With a server address and a token: connect over `TcpTransport`.
-
-**6b — the client.** `Frontier::Scene` per ADR-015, derived from the four inputs and nothing else.
-The **digest** as the opening screen, a list, each entry a tap target that calls `LookAt()`. The
-**map**: systems as meshes in the family of `StationMesh.h`, lanes as thin quads, fleets as
-`ShipMesh.h`, at the generator's coordinates; fleets in transit at their cosmetic-time position
-with an ETA label; own pending orders as unlit ghosts; the sealed region marked with its opening
-countdown; custodians flagged "since tick N"; capitals with their guard countdown. The **orders
-screen**, three columns — fleets, builds, proposals — reading from the acknowledged book. The
-**build menu** on a selected system, with *Trade lane with [neighbour]: +X/tick* greyed and
-*Propose* where *Build* would be. The **income screen** with lane income foregone. First contact's
-prompt: *Contact: [player]. Propose trade lane?* Pending proposals in the digest as countdowns.
-
-Engine additions in `NeuronClient`, none of which knows what a fleet is: the panning camera with
-bounds and `LookAt()` (ADR-003), zoom about an anchor (ADR-008), picking against projected bounds,
-drag and long-press in `PointerInput`, a thin-quad line path, and an animation clock. Tests for
-each in `NeuronClientTests`, the picking ones exact.
-
-**Run it**, with a mouse or a finger, and say which. Take a seat, place a fleet order by selecting
-a fleet and tapping a system, resolve, and watch the fleet on the lane. Propose a lane from one
-seat, accept from another, resolve, and read both digests. **Measure legibility**: at the zoom
-where one empire fits, how many systems are on screen and whether the fleets can be tapped
-(ADR-015's open question). Record the numbers.
-
-The system view and the combat replay are **not** in this step. They are the first work after the
-Phase 0 gate, and they are cheap then because the `EngagementLog` and the meshes exist.
-
-### Step 7 — Phase 0 dry run, and close out
-
-Eight clients against `FrontierServer.exe` on a one-hour schedule — the harness does not count —
-for at least one full day, by whoever can be found. Read the event log and confirm every event the
-test plan names was recorded. Note every place the one-pager was silent and what the resolver
-decided, as candidate ADRs.
-
-Then: this plan to `Design/Archive/` with its "what shipped" section; ADR open questions answered
-where a figure now exists; `AGENTS.md` §2 true to the tree; `SuiteSmoke` deleted from any suite
-that has a real test.
-
-## 5. Things that will tempt you, and the answer
-
-- **"I'll let the client move the ghost as soon as the order is accepted, before the tick."** No.
-  The ghost is drawn from the acknowledged book and stays a ghost until a snapshot says otherwise.
-  ADR-015's derivation rule is the whole architecture.
-- **"The resolver would be simpler if phase 3 could just update the fleet in place."** It would,
-  and then the no-read rule is a hope. Immutable in, fresh out (ADR-004).
-- **"A `float` for the yield fraction."** R16. Integers with a remainder rule.
-- **"An `unordered_map` keyed by id, it's faster."** R16, and there is nothing to be fast about.
-- **"The combat preview is tiny, the client can compute it."** ADR-013. It cannot.
-- **"Keep `Ship` around, we'll want kinematics for the replay."** The replay draws a log
-  (ADR-013). The tree loses `Ship` at step 1.
-- **"A `MoveFleet` that takes a coordinate for convenience."** Two ids, always (ADR-015).
-- **"The wall clock in the resolver, just to stamp the digest."** The tick stamps it. The server
-  knows what time the tick was.
-- **"Skip the harness, we have a server now."** The harness is what every session after this one
-  tests with in thirty seconds. Build it first in step 6.
+- **"I'll do slices 1 and 2 together, they're both small."** No. Slice 2 exists to be *looked at*
+  before rules are built on the galaxy size it measures. Landing it with slice 1 means nobody looks.
+- **"I'll let the client move the ghost when the order is accepted."** No. The ghost is drawn from
+  the acknowledged book and stays a ghost until a snapshot says otherwise (ADR-015).
+- **"The resolver would be simpler if this phase updated the fleet in place."** It would, and then
+  the no-read rule is a hope. Immutable in, fresh out (ADR-004).
+- **"A `float` for the yield fraction."** R16. Integers, and the remainder rule.
+- **"An `unordered_map` keyed by id, it's faster."** R16 forbids it in `GameLogic` outright, and
+  there is nothing to be fast about at four ticks a day.
+- **"The client can compute the preview, it's tiny."** ADR-013. It cannot.
+- **"Keep `Ship`, we'll want kinematics for the replay."** The replay draws a log. `Ship` goes in
+  slice 1.
+- **"A `MoveFleet` that takes a coordinate, just for the harness."** Ids, always (ADR-015).
+- **"The wall clock in the resolver, just to stamp the digest."** The tick stamps it.
+- **"CI is green, so it works."** CI cannot see the screen. Work the run list (§3).
 - **A third-party JSON library for the rules file.** R14. The rules file is the wire format.
 
-## 6. Open questions this plan leaves to the sessions
+---
 
-- Everything the one-pager does not quantify: production per building per tick, fleet strength
-  per ship, what a shipyard builds and how fast, mining station yield, the starting garrison, how
-  fast a custodian's garrison decays. Decide, put it in `Rules`, and list the decisions in the
-  step 2 report as candidate ADRs. Phase 0 tunes them.
-- What research is. A do-nothing phase until the design says.
-- Whether a fleet can be split or merged. The one-pager never says; the resolver treats a fleet as
-  a unit until the design says otherwise, and the step 2 report flags it.
-- The generator's rejection rate at twelve seats (step 1) and the snapshot size (step 3), both to
-  be measured, not guessed.
+## 6. The slices
+
+Every slice ends green on a dispatched CI run, updates `Design/` in the same commit as the code it
+describes, and reports per `AGENTS.md` §7 and `Design/README.md` §6 — including which claims were
+verified by CI and which are waiting on the run list. Commit at slice boundaries and at natural
+points within them.
+
+### Slice 0 — Nothing to build
+
+Read the documents §0 names and the code §4 lists. Report what is there and where this plan
+contradicts an ADR or the tree, and stop if it does. **Delivered on 2026-09-10**: the tree was
+read, the split-fleet contradiction was found and fixed by ADR-018, and the three unstated shape
+rules were answered by ADR-017, ADR-018 and §2's income and supply-cost rows.
+
+### Slice 1 — The galaxy exists
+
+**`GameLogic` only. Nothing else in the tree is touched.**
+
+`MatchState`, `Rules`, the id types, and `Generate(seed, seatCount, rules)` per ADR-004, ADR-014,
+ADR-017 and ADR-018. Every entity has a stable integer id; every container is a `std::vector`
+ordered by id or a `std::map`; there is no unordered container in the library and
+`CheckProjectFiles.py` gains a check that fails one in `GameLogic/`. Every quantity is an integer
+carrying its unit. A text dump of a generated galaxy, for human eyes, in the test output.
+
+`World` becomes a thin owner of a `MatchState` and `Ship` is deleted.
+
+**Tests, and this is the suite that matters most for the rest of the game's life:** the generator's
+guarantees (each capital a rival capital within three ticks by shortest path, one-tick lanes inside
+a starting cluster, two- to four-tick lanes toward the frontier); rejection of a seed that fails
+one; the layout constraint walked over every pair of lanes (higher cost never drawn shorter, no two
+crossing, minimum separation); the sealed region generated, marked and reachable; capitals with a
+pinned garrison; and the same seed producing byte-identical state twice.
+
+**Measure and record:** the rejection rate over a thousand seeds at 6, 8 and 12 seats (ADR-014
+needs the figure). If it is near one at twelve seats, **stop and report** rather than tuning.
+
+**Not in this slice:** the resolver, any order, any protocol change, anything that draws.
+
+**Run list:** none. Nothing draws yet.
+
+### Slice 2 — The galaxy on screen
+
+**The judgement slice.** Its purpose is to make the map lookable-at before any rule depends on how
+big a galaxy can be.
+
+`NeuronCore`: the frame, the version, and the `VisibleSnapshot` record only (ADR-006). The
+`Simulation` seam narrowed to `Snapshot(seat)` and a `ResolveTick()` that does nothing yet;
+`Session` gains `ResolveNow()` and loses its 20 Hz timer. Deletions per §4.
+
+`GameLogic`: the visibility filter of ADR-017 — observed, known-and-stale with a tick stamp, and
+unknown — and the snapshot it produces. Tested hard: a seat that leaves a system keeps its yield
+and loses its fleet count; the stamp is the tick of last observation; **a seat's snapshot never
+contains another seat's anything**.
+
+`NeuronClient`: `Follow()` becomes `LookAt()` with map bounds and a clamp (ADR-003); `ZoomBy`
+takes an anchor (ADR-008); picking against projected bounds; drag in `PointerInput`; a thin-quad
+line path for lanes. Exact tests for the picking and the anchor, as `IsometricCameraTests` does
+today.
+
+`FrontierOutpost`: the harness of ADR-011 hosting one seat in-process, and `Frontier::Scene` per
+ADR-015 built from the snapshot alone. Systems drawn as meshes in the family of `StationMesh.h`,
+lanes as quads with their tick cost legible, the three fog states visually distinct, the sealed
+region marked with its countdown.
+
+**Measure and record:** how many systems are on screen at each zoom level on a generated eight-seat
+galaxy, and whether a system can be reliably tapped at the zoom where one empire fits (ADR-015's
+open question). **The galaxy size in `Rules` is tuned after this figure exists, not before.**
+
+**Not in this slice:** any order, any resolver phase, fleets, the digest, the schedule, TCP.
+
+**Run list:** launch it; pan the whole galaxy at every zoom; tap ten systems and confirm the right
+one selects; confirm the fog states read as different at a glance; confirm no crawl or shimmer while
+panning; read the legibility numbers off the screen.
+
+### Slice 3 — Fleets move
+
+`GameLogic`: the lock phase and the movement phase, and nothing else. `MoveFleet(fleetId, systemId)`
+and `SplitFleet(fleetId, strength)`; end-of-tick coalescing (ADR-018); a per-seat order book that
+is editable until the lock and hidden from every other seat.
+
+`NeuronCore`: the order messages, the `Verdict` and its reason codes.
+
+`NeuronServer`: `Submit`, `Withdraw` and `OrderBook(seat)` answered per seat.
+
+`FrontierOutpost`: fleet meshes; fleets in transit at their cosmetic-time position with a tick-ETA
+label (ADR-015); the seat's own pending orders as unlit ghosts on dotted routes; an orders screen
+with its fleets column; a seat selector and a *Resolve now* target in the harness.
+
+**Tests:** a fleet ordered out the tick a hostile arrives escapes; a fleet arrives on the tick its
+lane cost says; a split refused at zero and at full strength; coalescing takes the lower id; an
+order submitted after the lock lands in the next book; the cosmetic-time position is a pure
+function of the two ticks and the clock, tested at the ends and past both.
+
+**Not in this slice:** combat, claims, production, proposals.
+
+**Run list:** launch the harness; select a fleet, tap a system, see the ghost; *Resolve now*; watch
+the fleet on the lane with its ETA; wait and watch it advance without a resolve; resolve until it
+arrives; split a fleet and send half.
+
+### Slice 4 — Territory changes hands
+
+`GameLogic`: combat sub-phase 4b with the incumbent bonus, no bonus for simultaneous arrivals at an
+empty system, ties as mutual attrition, integer proportional damage with the largest-remainder rule;
+sub-phase 4a written and behind its `Rules` flag, off; claims and captures on the survivor snapshot;
+the two-tick siege. The `EngagementLog` (ADR-013) and the `Digest` sorted by consequence for these
+events.
+
+`FrontierOutpost`: the digest as the **opening screen**, each entry a tap target that calls
+`LookAt()` (ADR-015); ownership on the map.
+
+**Tests, one per sentence the one-pager writes:** two surviving hostiles leave a system occupied and
+unclaimed; a fleet that arrives and dies contests nothing; a capture needs two consecutive
+uncontested ticks; **the resolver's output is byte-identical under every permutation of the order
+books**; with 4a on, the departing fleet takes one round computed from the arrivals'
+end-of-movement strength.
+
+**Not in this slice:** production, proposals, player states, the combat replay animation.
+
+**Run list:** two seats in the harness contest one system; resolve; read both digests and confirm
+each explains what that seat could see; tap a digest entry and confirm the camera goes to the right
+place; take a system after a siege.
+
+### Slice 5 — The economy
+
+`GameLogic`: the production phase; one scalar income; buildings as unlocks with a cost in income, a
+build time in ticks and a yield per tick (shipyard and mining station); fleet strength bought at a
+shipyard; the research phase present and doing nothing, named as such.
+
+`FrontierOutpost`: the build menu on a selected system; the income screen showing income foregone
+the way the one-pager describes.
+
+**Tests:** income accrues per tick from held systems and buildings; a build completes on the tick
+its time says; a build refused when income is short; conquered systems yield what the rules say.
+
+**Not in this slice:** trade lanes, which are diplomacy.
+
+**Run list:** build a shipyard; watch income change on the income screen; buy strength; confirm the
+greyed *Propose* entries appear in the menu even though they do nothing yet.
+
+### Slice 6 — Diplomacy
+
+`GameLogic`: proposals with the one-pager's whole lifecycle — locking with the other orders, four
+ticks open, withdrawable while open, re-validated at every lock and voided with a reason in both
+digests, a conditional order so acceptance needs no second round trip, effect at the first lock
+after acceptance, and *ignored* reported to the proposer after four ticks. Trade lanes as a
+building with two owners, cancellable by either at any lock, auto-cancelled on losing an endpoint,
+with the digest distinguishing *cancelled by partner* from *cancelled: system lost*. Shared
+scouting lifting fog per ADR-017.
+
+`FrontierOutpost`: the proposals column; *Trade lane with [neighbour]: +X/tick* greyed with
+*Propose* where *Build* would be; the first-contact prompt; proposals in the digest as countdowns.
+
+**Tests:** a lane accepted at a lock opens in that lock's phase 1 and pays from that tick; a
+proposal whose endpoint changed hands is voided and both digests say why; withdrawal while open;
+the ignored report at exactly four ticks; shared scouting lifting fog for two seats and nobody else.
+
+**Run list:** propose from one seat, accept from another, resolve, read both digests, confirm the
+lane pays; cancel it and confirm the tell; let one run out unanswered.
+
+### Slice 7 — The match as a whole
+
+`GameLogic`: the four player states and six transitions and nothing else; custodian by three ticks
+of absence, reversible, with pinned-garrison decay and half yield forever on systems conquered from
+one; concession as permanent, forfeiting score, never denying an attacker their prize; the
+first-week custodian scoring nothing; the capital guard countdown; the score; the fixed end tick;
+the dominance threshold held for N ticks.
+
+`FrontierOutpost`: custodian flags reading "custodian since tick N"; guard countdowns on capitals;
+the public score with the leader visible; the end-date countdown.
+
+**Tests:** every one of the six transitions, and that no seventh exists; absence counted in ticks
+from the last `Join` or accepted order; a first-week custodian scores zero; the dominance threshold
+does not end the match unless held; the match ends on its stated tick with a total ordering of
+placements.
+
+**Run list:** resolve a whole short match to its end tick in the harness; read the placements;
+confirm a seat left idle becomes a custodian and can resume.
+
+### Slice 8 — Real time and real players
+
+`NeuronServer`: the `TickSchedule` in UTC against `system_clock`, driven in tests by an injected
+clock; `Save`/`Load` and the match directory with `Pending.bin` on every accepted edit (ADR-012);
+the event log the test plan names, as one append-only file; seat tokens (ADR-016).
+
+`NeuronCore`: `TcpTransport` against Winsock, tested with two ends in one process.
+
+`FrontierServer/`: the new project (ADR-011), registered in the `.slnx`, in
+`Build/CheckProjectFiles.py` and in CI, with `AGENTS.md` §2's map and graph updated in the same
+commit. Create and run subcommands; prints the tokens.
+
+`FrontierOutpost`: connecting to an address with a token.
+
+**Tests:** the schedule fires at the right UTC times under the injected clock; a restart from a
+match directory resumes at the right tick with the pending books intact; a `Join` with a bad token
+is refused; a seat receives its own snapshot and never another's over TCP.
+
+**Run list:** create an eight-seat match on a one-minute schedule; watch three ticks resolve and
+three snapshot files appear; kill the server and restart it and confirm it resumes; connect two
+clients from two machines; confirm the event log holds every event the test plan names.
+
+### Then — Phase 0
+
+The test plan takes over. Eight clients against `FrontierServer.exe` on a one-hour schedule, the
+harness not counting. Then, per ADR-015, the system close-up and the combat replay, which are cheap
+once the `EngagementLog` and the meshes exist.
+
+---
+
+## 7. Open questions these slices must answer
+
+Every one of these is a quantity or a rule the one-pager does not state. Decide it, put it in
+`Rules`, and list the decision in the slice report as a candidate ADR; Phase 0 tunes the numbers.
+
+- **Slice 1:** galaxy size per seat, cluster size, lane cost distribution, minimum system
+  separation, the drawn-length-to-cost relation, starting income, the starting garrison's strength,
+  where the sealed region is placed and how evenly (ADR-014's open question).
+- **Slice 4:** how many combat rounds, what fraction of its strength a fleet deals per round, and
+  the magnitude of the incumbent defender bonus. These three decide whether combat is decisive or
+  grinding, and they are the most consequential unstated numbers in the design.
+- **Slice 5:** what a shipyard and a mining station cost, take and yield; what strength costs; what
+  research is, if anything.
+- **Slice 7:** the scoring formula, which must be a total order; the dominance threshold and its
+  hold duration; the custodian decay rate.
+
+Two things to note rather than decide. The capital guard is twelve ticks, which is three days of a
+twenty-one day match and twelve hours of Phase 0's forty-eight, so Phase 0's tuning of guard length
+does not transfer to Phase 1 proportionally. And ADR-017 leaves the scouting reveal radius as a
+`Rules` value at one lane, which Phase 0 can set to zero.
