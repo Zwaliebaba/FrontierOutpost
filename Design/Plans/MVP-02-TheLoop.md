@@ -92,10 +92,18 @@ is fixed by deletion, not by editing comments.
 | Slice | Deleted |
 |---|---|
 | 1 | `GameLogic/Ship.{h,cpp}`; `ShipKinematicsTests` entire; `WorldTests` rewritten |
-| 2 | `Neuron::MoveToOrder`, `Neuron::ShipState` and their sizes, serializers and tests; `FrontierOutpost/ShipView.{h,cpp}`; `NeuronCore/Trigonometry.{h,cpp}` and `TrigonometryTests` and `Turns16`; `Session::TICKS_PER_SECOND`, `TICK_MICROSECONDS`, `TheTickRateIsTwentyHertz`; the status line's X and Z |
+| 2 | `Neuron::MoveToOrder`, `Neuron::ShipState` and their sizes, serializers and tests; `FrontierOutpost/ShipView.{h,cpp}`; `Session::TICKS_PER_SECOND`, `TICK_MICROSECONDS`, `TheTickRateIsTwentyHertz`; the status line's X and Z |
 
 The `Write`/`Read` cursor helpers in `Protocol.cpp` stay — they are the format (ADR-012). If a
 client-side heading is wanted for a mesh it is a `float` in the client, where R16 does not reach.
+
+**`NeuronCore/Trigonometry.{h,cpp}` stays, and this plan was wrong to list it for deletion.**
+Slice 1 found the consumer while building the generator: placing capitals and rings on a circle
+needs a sine and a cosine, and R16 forbids `std::sin` inside `GameLogic`, so `SineCosineTurns16` —
+integer CORDIC, already written and already tested to 19 parts in 65536 — is exactly the right tool
+and is now called from `Galaxy.cpp`. `Turns16`, `TRIG_ONE` and `TrigonometryTests` stay with it.
+`Atan2Turns16`, `IntegerSquareRoot` and `SaturatingAdd` have no caller today and are kept rather
+than picked off one at a time; a later slice may take them out together.
 
 ## 5. Things that will ruin this plan, and the answer
 
@@ -157,6 +165,28 @@ needs the figure). If it is near one at twelve seats, **stop and report** rather
 **Not in this slice:** the resolver, any order, any protocol change, anything that draws.
 
 **Run list:** none. Nothing draws yet.
+
+**Delivered 2026-09-10.** The state, the rules, `Random` (ADR-019), the generator and the graph
+queries; `Ship` and its nineteen kinematics tests deleted; `World` reduced to a holder;
+`CheckProjectFiles.py` extended so that an unordered container or a floating-point type anywhere in
+`GameLogic` fails the build, which is R16 stated as a check rather than as a hope.
+
+The geometry was tuned against a prototype of the same integer arithmetic before any C++ was
+written, because this container has no Windows toolchain and tuning blind would have cost a CI run
+per attempt. Two of the four constraints were being satisfied by luck at first and are now
+satisfied by construction: a lane's cost is read off its drawn length, so ADR-014's monotonicity
+cannot fail, and the rings are concentric with lanes joining only angular neighbors or running
+radially, so no two can cross. The prototype measured **0 rejections in 1000 seeds at each of 6, 8
+and 12 seats**; `TheRejectionRateIsLowAtEverySeatCount` measures the real generator on every CI run
+and logs the figure.
+
+**One figure slice 2 starts from.** The prototype's eight-seat galaxy spans about 250 map units on
+each axis. ADR-003 projects that onto roughly 4000 by 2000 virtual pixels at the default zoom,
+which is six 640×400 screens across, and about three at the smallest zoom level the camera has. So
+the galaxy does not fit on one screen at any zoom today, and slice 2's legibility measurement
+should expect to move the default zoom, add a sixth level (ADR-008's open question), or scale the
+map down in `Rules`. All three are data rather than code, which is the point of ADR-004 putting
+them there.
 
 ### Slice 2 — The galaxy on screen
 
