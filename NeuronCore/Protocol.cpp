@@ -214,7 +214,7 @@ bool DecodeFrame(std::span<const std::byte> _bytes, Frame& _outFrame)
 
   _outFrame.type = static_cast<MessageType>(type);
   _outFrame.version = version;
-  _outFrame.payload.assign(_bytes.begin() + FRAME_HEADER_BYTES, _bytes.end());
+  _outFrame.payload.assign(_bytes.begin() + static_cast<std::ptrdiff_t>(FRAME_HEADER_BYTES), _bytes.end());
   return true;
 }
 
