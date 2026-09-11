@@ -327,4 +327,21 @@ GeneratedGalaxy GalaxyGenerator::Generate(const MatchRules& _rules, std::uint64_
   return result;
 }
 
+GeneratedGalaxy GalaxyGenerator::Regenerate(const MatchRules& _rules, std::uint64_t _acceptedSeed)
+{
+  GeneratedGalaxy result;
+
+  // One attempt, and no walk. This seed was accepted once already; if it is refused now then the
+  // rules it is being replayed under are not the rules it was generated under, which is a defect
+  // rather than a recoverable state.
+  if (const GalaxyRejection rejection = TryGenerate(_rules, _acceptedSeed, result.galaxy); rejection != GalaxyRejection::None)
+  {
+    Neuron::Fatal("A stored galaxy no longer generates: {}.", Describe(rejection));
+  }
+
+  result.seed = _acceptedSeed;
+  result.rejectedSeeds = 0;
+  return result;
+}
+
 } // namespace Lockstep

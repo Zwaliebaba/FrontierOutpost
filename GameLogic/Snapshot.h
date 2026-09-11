@@ -197,6 +197,13 @@ public:
   /// Whether this snapshot mentions a system at all. The negative test asks this.
   [[nodiscard]] bool Knows(SystemId _system) const;
 
+  /// The system if this snapshot carries it, and `nullptr` if the viewer cannot see it.
+  ///
+  /// A null return is not an error: it is fog, and every caller has to decide what to do about a
+  /// system it has only heard of through a lane. The bots (`BotPolicy`) treat it as "not worth
+  /// walking toward"; the scripted match treats it as "cannot judge this lane".
+  [[nodiscard]] const SnapshotSystem* System(SystemId _system) const;
+
   void Write(Neuron::ByteWriter& _writer) const;
   [[nodiscard]] static Snapshot Read(Neuron::ByteReader& _reader);
 

@@ -145,6 +145,7 @@
     <ClCompile Include="GameLogicTests.cpp" />
     <ClCompile Include="InstrumentationTests.cpp" />
     <ClCompile Include="MatchTests.cpp" />
+    <ClCompile Include="BotTests.cpp" />
     <ClCompile Include="CombatTests.cpp" />
     <ClCompile Include="DiplomacyTests.cpp" />
     <ClCompile Include="PlayerTests.cpp" />

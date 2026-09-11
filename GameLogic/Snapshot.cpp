@@ -316,6 +316,18 @@ bool Snapshot::Knows(SystemId _system) const
   return false;
 }
 
+const SnapshotSystem* Snapshot::System(SystemId _system) const
+{
+  for (const SnapshotSystem& system : m_systems)
+  {
+    if (system.id == _system)
+    {
+      return &system;
+    }
+  }
+  return nullptr;
+}
+
 void Snapshot::Write(Neuron::ByteWriter& _writer) const
 {
   _writer.WriteI32(m_viewer.Index());

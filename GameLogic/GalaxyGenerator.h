@@ -72,6 +72,15 @@ public:
   /// file, not a run of bad luck. Debug.h's Fatal is the right answer to a broken invariant.
   [[nodiscard]] static GeneratedGalaxy Generate(const MatchRules& _rules, std::uint64_t _firstSeed);
 
+  /// The galaxy a previous `Generate` settled on, from the seed it reported.
+  ///
+  /// **`Generate` is not a fixed point and this is why this exists.** It walks its argument through
+  /// the mixer before trying it, so the seed it hands back is the one that was ACCEPTED, not the one
+  /// it was asked for -- and feeding the accepted seed back into `Generate` walks it again and
+  /// produces a different galaxy. Anything reloading a match (ADR-024's store) has to come through
+  /// here instead, or it silently replays a different universe.
+  [[nodiscard]] static GeneratedGalaxy Regenerate(const MatchRules& _rules, std::uint64_t _acceptedSeed);
+
   /// Checks a finished galaxy against every constraint the one-pager states.
   ///
   /// Separate from generation, and reading only the graph, so that it is a test of the RULES rather

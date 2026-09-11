@@ -23,6 +23,10 @@ namespace
 /// silently reverts to its default on reload, which is why the count is checked on read.
 constexpr std::uint32_t CONFIGURATION_FIELDS = 34;
 
+/// The roster byte for a seat a person sits in. Not a `BotPolicy` value and deliberately far from
+/// one, so a roster read out of a truncated store cannot land on a policy by accident.
+constexpr std::uint8_t HUMAN_SEAT = 0xFF;
+
 void WriteRules(Neuron::ByteWriter& _writer, const MatchRules& _rules)
 {
   _writer.WriteU32(CONFIGURATION_FIELDS);
@@ -129,18 +133,50 @@ MatchSimulation::MatchSimulation(const MatchRules& _rules, std::uint64_t _seed)
   m_capitalFellAt.assign(_rules.playerCount, 0);
 }
 
+MatchSimulation::MatchSimulation(const MatchRules& _rules, std::uint64_t _seed, std::vector<std::optional<BotPolicy>> _bots)
+  : MatchSimulation(_rules, _seed)
+{
+  m_bots = std::move(_bots);
+  m_bots.resize(static_cast<std::size_t>(_rules.playerCount));
+}
+
 MatchSimulation MatchSimulation::FromConfiguration(std::span<const std::uint8_t> _configuration)
 {
   Neuron::ByteReader reader{_configuration};
   const MatchRules rules = ReadRules(reader);
   const std::uint64_t seed = reader.ReadU64();
 
+  // The roster is read only if it is there. A store written before bots existed ends after the
+  // seed, and reloading one has to give the match it recorded -- which is one with no bots in it.
+  std::vector<std::optional<BotPolicy>> bots;
+  if (!reader.Failed() && !reader.AtEnd())
+  {
+    for (std::uint32_t player = 0; player < rules.playerCount; ++player)
+    {
+      const std::uint8_t style = reader.ReadU8();
+      bots.push_back(style == HUMAN_SEAT ? std::optional<BotPolicy>{} : std::optional<BotPolicy>{static_cast<BotPolicy>(style)});
+    }
+  }
+
   if (reader.Failed())
   {
     Neuron::Fatal("This match store's configuration is truncated.");
   }
 
-  return MatchSimulation{rules, seed};
+  return MatchSimulation{Reloaded{}, rules, seed, std::move(bots)};
+}
+
+MatchSimulation::MatchSimulation(Reloaded, const MatchRules& _rules, std::uint64_t _acceptedSeed,
+                                 std::vector<std::optional<BotPolicy>> _bots)
+  // **`Reload`, not `Create`.** The stored seed is the one the generator ACCEPTED, and `Create`
+  // would treat it as a starting point and search onward from it -- a different galaxy, silently,
+  // which is the one thing a match store cannot do (ADR-024).
+  : m_match(Match::Reload(_rules, _acceptedSeed)),
+    m_bots(std::move(_bots))
+{
+  m_pending.assign(_rules.playerCount, Neuron::PlayerTurn{});
+  m_capitalFellAt.assign(_rules.playerCount, 0);
+  m_bots.resize(static_cast<std::size_t>(_rules.playerCount));
 }
 
 std::int32_t MatchSimulation::PlayerCount() const
@@ -172,6 +208,14 @@ std::vector<std::uint8_t> MatchSimulation::Configuration() const
   // it was first offered. Storing the first one would regenerate a galaxy the match was not played
   // on, if the rules ever changed enough to alter which seeds are accepted.
   writer.WriteU64(m_match.Seed());
+
+  // **The roster is part of the match's identity, not part of its state.** A store reloaded without
+  // it would have live seats nobody plays -- they would go absent, the custodian rules would fire,
+  // and the reloaded match would diverge from the one that was stored for a reason nothing recorded.
+  for (const std::optional<BotPolicy>& bot : m_bots)
+  {
+    writer.WriteU8(bot.has_value() ? static_cast<std::uint8_t>(*bot) : HUMAN_SEAT);
+  }
   return writer.Bytes();
 }
 
@@ -207,8 +251,34 @@ void MatchSimulation::MarkPresent(std::int32_t _player)
   m_pending[static_cast<std::size_t>(_player)].present = true;
 }
 
+void MatchSimulation::PlayBots()
+{
+  for (std::size_t index = 0; index < m_bots.size(); ++index)
+  {
+    if (!m_bots[index].has_value() || !m_pending[index].orders.empty())
+    {
+      continue;
+    }
+
+    // From the SNAPSHOT, which is the fogged view this seat would have been sent had a person been
+    // in it. A bot that read `m_match` would play a game no human could play, and the whole reason
+    // these policies are worth having as opponents is that they cannot (ADR-037).
+    const Snapshot view = Snapshot::For(m_match, PlayerId{static_cast<std::int32_t>(index)});
+
+    Neuron::ByteWriter writer;
+    BotOrdersFor(*m_bots[index], view, m_match.Rules()).Write(writer);
+    m_pending[index].orders = writer.Bytes();
+
+    // A bot is never absent. That is the point of putting one in a seat: the custodian rules exist
+    // for a person who stopped turning up, and this seat cannot.
+    m_pending[index].present = true;
+  }
+}
+
 void MatchSimulation::Resolve()
 {
+  PlayBots();
+
   std::vector<OrderSet> orders;
   std::vector<PlayerId> present;
 

@@ -67,6 +67,16 @@ const char* Describe(PlayerStatus _status) noexcept
 
 Match Match::Create(const MatchRules& _rules, std::uint64_t _seed)
 {
+  return Build(_rules, GalaxyGenerator::Generate(_rules, _seed));
+}
+
+Match Match::Reload(const MatchRules& _rules, std::uint64_t _acceptedSeed)
+{
+  return Build(_rules, GalaxyGenerator::Regenerate(_rules, _acceptedSeed));
+}
+
+Match Match::Build(const MatchRules& _rules, const GeneratedGalaxy& _generated)
+{
   // Rules that contradict the game they are rules for are a caller defect, not a state to recover
   // from. `Check` is where the reasoning lives (MatchRules.h) and it is separate from here so it
   // can be asked before anything is built -- and so it is testable without provoking this.
@@ -78,7 +88,7 @@ Match Match::Create(const MatchRules& _rules, std::uint64_t _seed)
   Match match;
   match.m_rules = _rules;
 
-  const GeneratedGalaxy generated = GalaxyGenerator::Generate(_rules, _seed);
+  const GeneratedGalaxy& generated = _generated;
   match.m_galaxy = generated.galaxy;
   match.m_seed = generated.seed;
   match.m_tick = 0;

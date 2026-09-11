@@ -8,6 +8,7 @@
 #include "Session.h"
 #include "TickSchedule.h"
 
+#include <algorithm>
 #include <chrono>
 
 namespace Lockstep
@@ -21,10 +22,11 @@ constexpr std::chrono::milliseconds POLL_INTERVAL{16};
 } // namespace
 
 HostedServer::HostedServer(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath,
-                           std::uint64_t _seed, const MatchRules& _rules)
+                           std::uint64_t _seed, const MatchRules& _rules, std::vector<std::optional<BotPolicy>> _bots)
 {
   m_thread = std::thread([this, _port, tokens = std::move(_tokens), store = std::move(_storePath), log = std::move(_logPath), _seed,
-                          rules = _rules]() mutable { Run(_port, std::move(tokens), std::move(store), std::move(log), _seed, rules); });
+                          rules = _rules, bots = std::move(_bots)]() mutable
+                         { Run(_port, std::move(tokens), std::move(store), std::move(log), _seed, rules, std::move(bots)); });
 }
 
 HostedServer::HostedServer(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath)
@@ -33,11 +35,12 @@ HostedServer::HostedServer(std::uint16_t _port, std::vector<std::string> _tokens
                          { RunLobby(_port, std::move(tokens), std::move(store), std::move(log)); });
 }
 
-void HostedServer::Begin(std::uint64_t _seed, const MatchRules& _rules)
+void HostedServer::Begin(std::uint64_t _seed, const MatchRules& _rules, std::vector<std::optional<BotPolicy>> _bots)
 {
   std::lock_guard<std::mutex> held{m_lobbyLock};
   m_beginSeed = _seed;
   m_beginRules = _rules;
+  m_beginBots = std::move(_bots);
   m_beginRequested = true;
 }
 
@@ -70,19 +73,28 @@ std::vector<std::string> HostedServer::TakeLog()
 }
 
 void HostedServer::Run(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath,
-                       std::uint64_t _seed, MatchRules _rules)
+                       std::uint64_t _seed, MatchRules _rules, std::vector<std::optional<BotPolicy>> _bots)
 {
   const MatchRules rules = _rules;
 
   // The instrumentation log (ADR-030). Opened on this thread and written from it, so it needs no
   // lock either -- the same reason nothing else here does.
   Neuron::MatchLog log{std::move(_logPath)};
-  log.Write(std::format("match-start seed={} players={} tick-seconds={} length={}", _seed, rules.playerCount, rules.tickIntervalSeconds,
-                        rules.matchLengthTicks));
+  const auto botCount = static_cast<std::size_t>(
+    std::count_if(_bots.begin(), _bots.end(), [](const std::optional<BotPolicy>& _bot) { return _bot.has_value(); }));
+  log.Write(std::format("match-start seed={} players={} bots={} tick-seconds={} length={}", _seed, rules.playerCount, botCount,
+                        rules.tickIntervalSeconds, rules.matchLengthTicks));
+  for (std::size_t seat = 0; seat < _bots.size(); ++seat)
+  {
+    if (_bots[seat].has_value())
+    {
+      log.Write(std::format("bot-seat player={} style={}", seat + 1, Describe(*_bots[seat])));
+    }
+  }
 
   // Everything below is created on this thread and destroyed on it. The simulation, the session and
   // the server never leave, which is what makes the absence of a lock correct rather than lucky.
-  auto simulation = std::make_unique<MatchSimulation>(rules, _seed);
+  auto simulation = std::make_unique<MatchSimulation>(rules, _seed, std::move(_bots));
   auto session =
     std::make_unique<Neuron::Session>(std::move(simulation), Neuron::TickSchedule{0, rules.tickIntervalSeconds}, std::move(_storePath));
   Neuron::MatchServer server{std::move(session), _port, std::move(_tokens)};
@@ -143,20 +155,34 @@ void HostedServer::RunLobby(std::uint16_t _port, std::vector<std::string> _token
       bool begin = false;
       std::uint64_t seed = 0;
       MatchRules rules;
+      std::vector<std::optional<BotPolicy>> bots;
       {
         std::lock_guard<std::mutex> held{m_lobbyLock};
         begin = m_beginRequested;
         seed = m_beginSeed;
         rules = m_beginRules;
+        bots = std::move(m_beginBots);
         m_beginRequested = false;
       }
 
       if (begin)
       {
-        log.Write(std::format("match-start seed={} players={} tick-seconds={} length={}", seed, rules.playerCount,
+        const auto botCount = static_cast<std::size_t>(
+          std::count_if(bots.begin(), bots.end(), [](const std::optional<BotPolicy>& _bot) { return _bot.has_value(); }));
+        log.Write(std::format("match-start seed={} players={} bots={} tick-seconds={} length={}", seed, rules.playerCount, botCount,
                               rules.tickIntervalSeconds, rules.matchLengthTicks));
 
-        auto simulation = std::make_unique<MatchSimulation>(rules, seed);
+        // Named in the log, because a match's result means something different when three of the
+        // empires were played by the machine and nothing else records which (ADR-030).
+        for (std::size_t seat = 0; seat < bots.size(); ++seat)
+        {
+          if (bots[seat].has_value())
+          {
+            log.Write(std::format("bot-seat player={} style={}", seat + 1, Describe(*bots[seat])));
+          }
+        }
+
+        auto simulation = std::make_unique<MatchSimulation>(rules, seed, std::move(bots));
         server.Begin(
           std::make_unique<Neuron::Session>(std::move(simulation), Neuron::TickSchedule{0, rules.tickIntervalSeconds}, storePath));
         m_started.store(true);

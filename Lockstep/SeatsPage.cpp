@@ -60,6 +60,14 @@ constexpr std::int32_t ACTION_BOT_TAKES_OVER = 8;
 constexpr std::int32_t ACTION_GOES_CUSTODIAN = 9;
 constexpr std::int32_t ACTION_FILL = 10;
 constexpr std::int32_t ACTION_ENTER = 11;
+/// One per offered style rather than one action carrying an index, because a hit is (action, seat)
+/// and the seat is already spoken for.
+constexpr std::int32_t ACTION_STYLE_FIRST = 12;
+
+/// The three styles a host can put in a seat, in the order they are drawn. `BotPolicy` has six;
+/// the other two are the scripted match's (a bot that never moves at all, and one that never
+/// plays) and neither is an opponent anybody would choose.
+constexpr std::array<BotPolicy, 3> OFFERED_STYLES = {BotPolicy::Turtle, BotPolicy::ExpandNear, BotPolicy::Raider};
 
 /// The twelve empires, in the order the generator hands out player indices. The same list the match
 /// uses, so a host can tell somebody which empire they are before anybody has connected.
@@ -137,12 +145,30 @@ bool SeatsPage::EveryoneIsHere() const
 {
   for (std::int32_t index = 0; index < m_seatCount; ++index)
   {
-    if (m_seats[static_cast<std::size_t>(index)].kind == Kind::Human && !m_connected[static_cast<std::size_t>(index)])
+    if (!SeatIsReady(index))
     {
       return false;
     }
   }
   return true;
+}
+
+bool SeatsPage::SeatIsReady(std::int32_t _seat) const
+{
+  const Seat& seat = m_seats[static_cast<std::size_t>(_seat)];
+  return seat.kind == Kind::Bot || m_connected[static_cast<std::size_t>(_seat)] || seat.ifWaiting == IfWaiting::BotTakesOver;
+}
+
+std::vector<std::optional<BotPolicy>> SeatsPage::Roster() const
+{
+  std::vector<std::optional<BotPolicy>> roster;
+  roster.reserve(static_cast<std::size_t>(m_seatCount));
+  for (std::int32_t index = 0; index < m_seatCount; ++index)
+  {
+    const Seat& seat = m_seats[static_cast<std::size_t>(index)];
+    roster.push_back(seat.kind == Kind::Bot ? std::optional<BotPolicy>{seat.policy} : std::optional<BotPolicy>{});
+  }
+  return roster;
 }
 
 std::int32_t SeatsPage::PlayerIndexOf(std::int32_t _seat) const
@@ -223,10 +249,22 @@ bool SeatsPage::HandleTap(float _xPixels, float _yPixels)
       return true;
 
     case ACTION_BOT:
-      // Refused, and said so. ADR-036: the policies are still in the test suite, and a seat that
-      // claimed BOT and then played nothing would be a worse lie than this one.
       m_selected = hit->seat;
-      m_refusal = "Bots are not built yet. A seat can be HUMAN or EMPTY.";
+      if (hit->seat == m_hostSeat)
+      {
+        // The host is sitting in it. Letting them hand their own seat to a bot would leave the
+        // process that owns the match with nothing to draw.
+        m_refusal = "That is your seat. Take another one first.";
+        return true;
+      }
+      if (m_connected[static_cast<std::size_t>(hit->seat)])
+      {
+        // Somebody is already on the token. The seat is theirs until they disconnect.
+        m_refusal = std::format("{} has already connected to that seat.", seat.name);
+        return true;
+      }
+      seat.kind = Kind::Bot;
+      m_refusal.clear();
       return true;
 
     case ACTION_COPY:
@@ -249,7 +287,7 @@ bool SeatsPage::HandleTap(float _xPixels, float _yPixels)
 
     case ACTION_BOT_TAKES_OVER:
       seat.ifWaiting = IfWaiting::BotTakesOver;
-      m_refusal = "Recorded. It needs bots before it can happen.";
+      m_refusal.clear();
       return true;
 
     case ACTION_GOES_CUSTODIAN:
@@ -257,8 +295,25 @@ bool SeatsPage::HandleTap(float _xPixels, float _yPixels)
       return true;
 
     case ACTION_FILL:
-      m_refusal = "Bots are not built yet, so there is nothing to fill them with.";
+    {
+      // Every seat still waiting, except the host's and anybody already on a token. This is the
+      // one-tap version of the thing a host actually wants at the end of an evening.
+      std::int32_t filled = 0;
+      for (std::int32_t index = 0; index < m_seatCount; ++index)
+      {
+        if (index == m_hostSeat || m_connected[static_cast<std::size_t>(index)])
+        {
+          continue;
+        }
+        if (m_seats[static_cast<std::size_t>(index)].kind == Kind::Human)
+        {
+          m_seats[static_cast<std::size_t>(index)].kind = Kind::Bot;
+          ++filled;
+        }
+      }
+      m_refusal = filled == 0 ? std::string{"Every seat already has somebody in it."} : std::string{};
       return true;
+    }
 
     case ACTION_ENTER:
       if (PlayingCount() < static_cast<std::int32_t>(MINIMUM_PLAYERS))
@@ -270,13 +325,31 @@ bool SeatsPage::HandleTap(float _xPixels, float _yPixels)
       {
         // The wait is the point. A match that began without somebody would spend its first ticks
         // putting them into custody for missing a game they were still being invited to.
-        m_refusal = "Every seat needs its player connected first.";
+        m_refusal = "Every seat needs a player connected, a bot, or BOT TAKES OVER.";
         return true;
+      }
+
+      // **Entering is what cashes in BOT TAKES OVER.** Up to this moment the host can still change
+      // their mind and wait; past it the seat is a bot and the roster the match is built from says
+      // so, which is what makes a reloaded store play the same game (ADR-037).
+      for (std::int32_t index = 0; index < m_seatCount; ++index)
+      {
+        Seat& waiting = m_seats[static_cast<std::size_t>(index)];
+        if (waiting.kind == Kind::Human && !m_connected[static_cast<std::size_t>(index)])
+        {
+          waiting.kind = Kind::Bot;
+        }
       }
       m_enterRequested = true;
       return true;
 
     default:
+      if (hit->action >= ACTION_STYLE_FIRST && hit->action < ACTION_STYLE_FIRST + static_cast<std::int32_t>(OFFERED_STYLES.size()))
+      {
+        seat.policy = OFFERED_STYLES[static_cast<std::size_t>(hit->action - ACTION_STYLE_FIRST)];
+        seat.kind = Kind::Bot;
+        m_refusal.clear();
+      }
       return true;
     }
   }
@@ -319,8 +392,32 @@ void SeatsPage::DrawSeatCard(ShapeRenderer& _shapes, FontRenderer& _text, std::i
   _text.DrawText(static_cast<std::int32_t>(_x) + 12, lineY, seat.token, TEXT_PRIMARY);
   lineY += LINE_HEIGHT + 8;
 
-  _text.DrawText(static_cast<std::int32_t>(_x) + 12, lineY, mine ? "CONNECTED - YOU" : (here ? "CONNECTED" : "WAITING FOR PLAYER"),
-                 here ? BLUE : AMBER);
+  std::string status;
+  Color statusColor = AMBER;
+  if (seat.kind == Kind::Bot)
+  {
+    status = std::format("BOT - {}", Describe(seat.policy));
+    statusColor = NEUTRAL_DIM;
+  }
+  else if (mine)
+  {
+    status = "CONNECTED - YOU";
+    statusColor = BLUE;
+  }
+  else if (here)
+  {
+    status = "CONNECTED";
+    statusColor = BLUE;
+  }
+  else if (seat.ifWaiting == IfWaiting::BotTakesOver)
+  {
+    status = "BOT WILL TAKE OVER";
+  }
+  else
+  {
+    status = "WAITING FOR PLAYER";
+  }
+  _text.DrawText(static_cast<std::int32_t>(_x) + 12, lineY, status, statusColor);
 
   // ---- HUMAN | BOT -------------------------------------------------------------------------------
   const float toggleY = _y + _height - 28.0F;
@@ -333,7 +430,9 @@ void SeatsPage::DrawSeatCard(ShapeRenderer& _shapes, FontRenderer& _text, std::i
   {
     const float toggleX = _x + 12.0F + static_cast<float>(slot) * toggleWidth;
     const bool on = seat.kind == kinds[slot];
-    const bool possible = kinds[slot] != Kind::Bot;
+
+    // A seat somebody is already sitting on cannot be handed to a bot, and neither can the host's.
+    const bool possible = kinds[slot] != Kind::Bot || (!here && !mine);
 
     if (on)
     {
@@ -398,9 +497,50 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
   }
   y += 34;
 
-  // ---- If still waiting at the lock --------------------------------------------------------------
   _shapes.FillRect(panelX + 1.0F, static_cast<float>(y), PANEL_WIDTH - 1.0F, 1.0F, DIVIDER);
   y += 10;
+
+  // ---- How a bot plays ---------------------------------------------------------------------------
+  //
+  // Shown instead of the waiting rule rather than beside it, because a bot is never waiting. The
+  // panel says one thing about the selected seat and which thing depends on who is in it.
+  if (seat.kind == Kind::Bot)
+  {
+    _text.DrawText(static_cast<std::int32_t>(contentX), y, "HOW IT PLAYS", TEXT_MUTED);
+    y += LINE_HEIGHT + 6;
+
+    for (std::size_t slot = 0; slot < OFFERED_STYLES.size(); ++slot)
+    {
+      const bool chosen = seat.policy == OFFERED_STYLES[slot];
+      _shapes.StrokeRect(contentX, static_cast<float>(y), contentRight - contentX, 20.0F, chosen ? BLUE : DIVIDER);
+      _text.DrawText(static_cast<std::int32_t>(contentX) + 8, CenterTextY(static_cast<float>(y), 20.0F), Describe(OFFERED_STYLES[slot]),
+                     chosen ? BLUE : TEXT_PRIMARY);
+      AddHit(contentX, static_cast<float>(y), contentRight - contentX, 20.0F, ACTION_STYLE_FIRST + static_cast<std::int32_t>(slot),
+             m_selected);
+      y += 26;
+    }
+
+    y += 4;
+    for (const std::string& line :
+         FontRenderer::Wrap("A bot sees exactly what a player in this seat would see, and nothing more.", columns))
+    {
+      _text.DrawText(static_cast<std::int32_t>(contentX), y, line, NEUTRAL_DIM);
+      y += LINE_HEIGHT;
+    }
+
+    if (!m_refusal.empty())
+    {
+      y += 10;
+      for (const std::string& line : FontRenderer::Wrap(m_refusal, columns))
+      {
+        _text.DrawText(static_cast<std::int32_t>(contentX), y, line, AMBER);
+        y += LINE_HEIGHT;
+      }
+    }
+    return;
+  }
+
+  // ---- If still waiting at the lock --------------------------------------------------------------
   _text.DrawText(static_cast<std::int32_t>(contentX), y, "IF STILL WAITING AT T1 LOCK", TEXT_MUTED);
   y += LINE_HEIGHT + 6;
 
@@ -420,7 +560,9 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
   y += 40;
 
   for (const std::string& line :
-       FontRenderer::Wrap("Seats lock with T1. After that a seat only changes hands by absence, not from this screen.", columns))
+       FontRenderer::Wrap(takesOver ? "This seat is ready to start without its player: entering makes it a bot."
+                                    : "Entering waits for this player. Switch to BOT TAKES OVER to start without them.",
+                          columns))
   {
     _text.DrawText(static_cast<std::int32_t>(contentX), y, line, NEUTRAL_DIM);
     y += LINE_HEIGHT;
@@ -454,9 +596,14 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
   // Named rather than counted. "Waiting for 3" tells the host to wait; "waiting for SORNE, TAMSIN"
   // tells them who to go and ask.
   std::vector<std::string> missing;
+  std::int32_t bots = 0;
   for (std::int32_t index = 0; index < m_seatCount; ++index)
   {
-    if (m_seats[static_cast<std::size_t>(index)].kind == Kind::Human && !m_connected[static_cast<std::size_t>(index)])
+    if (m_seats[static_cast<std::size_t>(index)].kind == Kind::Bot)
+    {
+      ++bots;
+    }
+    else if (!SeatIsReady(index))
     {
       missing.push_back(m_seats[static_cast<std::size_t>(index)].name);
     }
@@ -482,7 +629,8 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
   }
   else
   {
-    summary = std::format("ALL {} SEATS CONNECTED - YOU ARE SEAT {:02}", playing, m_hostSeat + 1);
+    summary = bots == 0 ? std::format("ALL {} SEATS CONNECTED - YOU ARE SEAT {:02}", playing, m_hostSeat + 1)
+                        : std::format("{} SEATS READY ({} BOT) - YOU ARE SEAT {:02}", playing, bots, m_hostSeat + 1);
   }
   _text.DrawText(16, CenterTextY(footerY, FOOTER_HEIGHT), summary, !enough ? RED : (everyone ? BLUE : AMBER));
 
@@ -501,11 +649,10 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
     _text.DrawText(static_cast<std::int32_t>(enterX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "ENTER MATCH >", NEUTRAL_DIM);
   }
 
-  // FILL EMPTY WITH BOTS is drawn and refused, for the same reason the BOT toggle is.
-  const auto fillWidth = static_cast<float>(FontRenderer::MeasurePixels("FILL EMPTY WITH BOTS")) + 24.0F;
+  const auto fillWidth = static_cast<float>(FontRenderer::MeasurePixels("FILL WAITING WITH BOTS")) + 24.0F;
   const float fillX = enterX - 12.0F - fillWidth;
-  _shapes.StrokeRect(fillX, footerY + 10.0F, fillWidth, 24.0F, DIVIDER);
-  _text.DrawText(static_cast<std::int32_t>(fillX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "FILL EMPTY WITH BOTS", NEUTRAL_DIM);
+  _shapes.StrokeRect(fillX, footerY + 10.0F, fillWidth, 24.0F, OUTLINE);
+  _text.DrawText(static_cast<std::int32_t>(fillX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "FILL WAITING WITH BOTS", TEXT_PRIMARY);
   AddHit(fillX, footerY + 10.0F, fillWidth, 24.0F, ACTION_FILL, -1);
 }
 
@@ -520,18 +667,20 @@ void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   _text.DrawText(16 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("LOCKSTEP")) + 12, centered, "SEATS - BEFORE THE MATCH STARTS",
                  TEXT_MUTED);
 
+  // Seats, then the people among them. Counting seats as humans was right up until a seat could be
+  // a bot, at which point a six-seat match with five bots announced itself as "1 SEATS".
   std::int32_t humans = 0;
-  for (const Seat& seat : m_seats)
-  {
-    humans += seat.kind == Kind::Human ? 1 : 0;
-  }
-
   std::int32_t here = 0;
   for (std::int32_t index = 0; index < m_seatCount; ++index)
   {
+    if (m_seats[static_cast<std::size_t>(index)].kind != Kind::Human)
+    {
+      continue;
+    }
+    ++humans;
     here += m_connected[static_cast<std::size_t>(index)] ? 1 : 0;
   }
-  const std::string census = std::format("{} SEATS - {} CONNECTED", humans, here);
+  const std::string census = std::format("{} SEATS - {} OF {} CONNECTED", m_seatCount, here, humans);
   const auto censusWidth = static_cast<float>(FontRenderer::MeasurePixels(census));
   _text.DrawText(static_cast<std::int32_t>(SCREEN_WIDTH - censusWidth) - 16, centered, census, TEXT_MUTED);
 

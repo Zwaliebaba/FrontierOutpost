@@ -2,11 +2,13 @@
 
 #include "MatchServer.h"
 
+#include "BotPolicy.h"
 #include "MatchRules.h"
 
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -28,7 +30,7 @@ class HostedServer
 public:
   /// Starts a match and begins listening. `_port` of zero asks the OS for one; `Port()` says which.
   HostedServer(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath, std::uint64_t _seed,
-               const MatchRules& _rules);
+               const MatchRules& _rules, std::vector<std::optional<BotPolicy>> _bots = {});
 
   /// Opens a LOBBY: listening, seats issued, no match. `Begin` starts the match later.
   ///
@@ -42,7 +44,11 @@ public:
   /// nothing else touches them (ADR-028); that is the whole concurrency story and it is worth more
   /// than the convenience of constructing a simulation on the caller's thread. This leaves the
   /// request under a lock and the server thread picks it up on its next poll.
-  void Begin(std::uint64_t _seed, const MatchRules& _rules);
+  ///
+  /// `_bots` is one entry per seat, in seat order; an empty entry is a person's seat. It is copied
+  /// across the lock with the rules, because it is part of the match's shape and not part of its
+  /// state -- the simulation is built from it on the far side (ADR-037).
+  void Begin(std::uint64_t _seed, const MatchRules& _rules, std::vector<std::optional<BotPolicy>> _bots);
 
   /// True once the match has actually started, which is a poll or two after `Begin`.
   [[nodiscard]] bool Started() const noexcept
@@ -75,7 +81,7 @@ public:
 
 private:
   void Run(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath, std::uint64_t _seed,
-           MatchRules _rules);
+           MatchRules _rules, std::vector<std::optional<BotPolicy>> _bots);
 
   /// The lobby's loop: listen, seat people, and watch for a `Begin`.
   void RunLobby(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath);
@@ -97,6 +103,7 @@ private:
   bool m_beginRequested = false;
   std::uint64_t m_beginSeed = 0;
   MatchRules m_beginRules;
+  std::vector<std::optional<BotPolicy>> m_beginBots;
 
   std::atomic<bool> m_started{false};
 };

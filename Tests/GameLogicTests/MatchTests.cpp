@@ -149,6 +149,24 @@ public:
     Assert::AreNotEqual(SixPlayerMatch().Hash(), Lockstep::Match::Create(other, SEED + 1).Hash(), L"a different seed is a different match");
   }
 
+  TEST_METHOD(ReloadingFromTheReportedSeedGivesTheSameGalaxy)
+  {
+    // **This is a regression test for a silent divergence.** `Create` SEARCHES from its seed --
+    // walking it through the mixer until the generator accepts one -- so `Seed()` reports the seed
+    // it settled on, not the one it was handed. Feeding that back into `Create` walks it again and
+    // builds a different galaxy, which is what a match store did for as long as nothing reloaded
+    // one. `Reload` is the entry point that does not search.
+    const Lockstep::Match original = SixPlayerMatch();
+
+    Assert::AreEqual(original.Hash(), Lockstep::Match::Reload(original.Rules(), original.Seed()).Hash(),
+                     L"a reloaded match is a different galaxy");
+
+    Lockstep::MatchRules rules;
+    rules.playerCount = 6;
+    Assert::AreNotEqual(original.Hash(), Lockstep::Match::Create(rules, original.Seed()).Hash(),
+                        L"Create no longer searches, so Reload has nothing left to be");
+  }
+
   // Every field a rule reads has to be in the hash, or it can drift without a test noticing. These
   // check the ones a resolver phase writes.
   TEST_METHOD(TheHashCoversWhatTheResolverWrites)

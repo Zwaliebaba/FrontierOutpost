@@ -41,6 +41,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -97,6 +98,18 @@ struct Startup
   /// waiting. The test plan is explicit that a compressed clock hides anything about session shape
   /// or retention, so this is for mechanics only, which is exactly what Phase 0 is for.
   std::uint32_t tickSeconds = 0;
+
+  /// `--bots <n>` puts bots in the LAST n seats of a `--serve` match.
+  ///
+  /// **Without it the headless runner runs a match nobody plays.** `--serve` listens and ticks on
+  /// schedule whether or not anybody connects, so a Phase 0 rehearsal with no clients was six
+  /// absent players going into custody -- a match that resolves and proves nothing. `--serve
+  /// --phase0 --tick 3 --bots 6` is a whole match, played, in under three minutes, and the
+  /// instrumentation log (ADR-030) is the output.
+  ///
+  /// The last seats rather than the first, so `--bots 5` leaves seat one for whoever joins with
+  /// `alpha`.
+  std::uint32_t bots = 0;
 };
 
 /// The six Phase 0 tokens.
@@ -141,7 +154,8 @@ struct Startup
   return folder + _name;
 }
 
-/// `--serve [port]`, `--join <host[:port]>`, `--token <token>`. Anything else is host-and-play.
+/// `--serve [port]`, `--join <host[:port]>`, `--token <token>`, `--phase0`, `--tick <seconds>`,
+/// `--bots <n>`. Anything else is host-and-play.
 [[nodiscard]] Startup ParseCommandLine(LPWSTR _commandLine)
 {
   Startup startup;
@@ -220,6 +234,10 @@ struct Startup
     {
       const unsigned long seconds = std::strtoul(words[++index].c_str(), nullptr, 10);
       startup.tickSeconds = seconds > 0 ? static_cast<std::uint32_t>(seconds) : 0;
+    }
+    else if (words[index] == "--bots" && index + 1 < words.size())
+    {
+      startup.bots = static_cast<std::uint32_t>(std::strtoul(words[++index].c_str(), nullptr, 10));
     }
   }
 
@@ -359,22 +377,32 @@ bool PumpMessages()
     rules.playerCount = static_cast<std::uint32_t>(_tokens.size());
   }
 
+  // The LAST n seats (ADR-037). One style, because a command line asking for six bots is asking for
+  // a match to happen at all; the seats screen is where a style is chosen deliberately.
+  std::vector<std::optional<Lockstep::BotPolicy>> bots(rules.playerCount);
+  const std::uint32_t botCount = std::min(_startup.bots, rules.playerCount);
+  for (std::uint32_t seat = rules.playerCount - botCount; seat < rules.playerCount; ++seat)
+  {
+    bots[seat] = Lockstep::BotPolicy::ExpandNear;
+  }
+
   return std::make_unique<Lockstep::HostedServer>(_startup.port, std::move(_tokens), BesideTheExecutable("lockstep-match.store"),
-                                                  BesideTheExecutable("lockstep-match.log"), GALAXY_SEED, rules);
+                                                  BesideTheExecutable("lockstep-match.log"), GALAXY_SEED, rules, std::move(bots));
 }
 
 /// The seats screen, in its own frame loop, until the host enters the match or closes the window.
 ///
-/// **It runs before anything exists** (ADR-036): no server, no galaxy, no tick. The number of seats
-/// is what `Match::Create` needs to generate a galaxy, so it has to be settled here and `ENTER
-/// MATCH` is what starts everything. That is also why nothing on it is live -- the mockup's
-/// CONNECTED badges need a running server, which needs the count this screen is choosing.
+/// **The lobby is already listening; the match is not** (ADR-036 as amended). That split is what
+/// lets this screen be live: the server has the tokens and reports who has presented one, while the
+/// galaxy still does not exist because the number of seats it needs is what the host is settling
+/// here. `ENTER MATCH` is what creates it.
 ///
-/// Fills `_outTokens` and returns the host's seat, or -1 when the window closed first.
+/// Fills `_outTokens` and `_outBots` and returns the host's seat, or -1 when the window closed
+/// first.
 [[nodiscard]] std::int32_t RunSeatsScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::ShapeRenderer& _shapes,
                                           Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer, Neuron::KeyboardInput& _keyboard,
                                           HWND _window, Lockstep::HostedServer& _lobby, const std::vector<std::string>& _tokens,
-                                          std::vector<std::string>& _outTokens)
+                                          std::vector<std::string>& _outTokens, std::vector<std::optional<Lockstep::BotPolicy>>& _outBots)
 {
   Lockstep::SeatsPage page{_tokens};
 
@@ -421,6 +449,9 @@ bool PumpMessages()
     if (page.TakeEnterRequest())
     {
       _outTokens = page.PlayingTokens();
+
+      // After the request, never before: entering is what turns a seat nobody came to into a bot.
+      _outBots = page.Roster();
       return page.HostSeat();
     }
 
@@ -660,7 +691,9 @@ int RunGame(HWND _window, const Startup& _startup)
   if (hosted != nullptr)
   {
     std::vector<std::string> playing;
-    const std::int32_t hostSeat = RunSeatsScreen(device, screen, shapes, text, pointer, keyboard, _window, *hosted, seatTokens, playing);
+    std::vector<std::optional<Lockstep::BotPolicy>> bots;
+    const std::int32_t hostSeat =
+      RunSeatsScreen(device, screen, shapes, text, pointer, keyboard, _window, *hosted, seatTokens, playing, bots);
     if (hostSeat < 0)
     {
       return EXIT_SUCCESS;
@@ -674,7 +707,7 @@ int RunGame(HWND _window, const Startup& _startup)
     }
     rules.playerCount = static_cast<std::uint32_t>(playing.size());
 
-    hosted->Begin(GALAXY_SEED, rules);
+    hosted->Begin(GALAXY_SEED, rules, std::move(bots));
 
     // The server builds the match on its own thread; this waits for it rather than racing it, so
     // that the first state the client asks for is a state that exists.

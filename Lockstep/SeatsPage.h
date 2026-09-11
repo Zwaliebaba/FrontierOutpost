@@ -1,11 +1,13 @@
 #pragma once
 
+#include "BotPolicy.h"
 #include "FontRenderer.h"
 #include "KeyboardInput.h"
 #include "MatchState.h"
 #include "ShapeRenderer.h"
 
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -32,17 +34,19 @@ namespace Lockstep
 class SeatsPage
 {
 public:
-  /// What a seat is for. `Bot` is drawn and refused — the policies still live in the test suite,
-  /// and a seat that said BOT and then played nothing would be worse than one that says it cannot
-  /// yet (ADR-036).
+  /// What a seat is for. `Bot` plays itself, from `BotPolicy` (ADR-037).
   enum class Kind : std::uint8_t
   {
     Human,
     Bot
   };
 
-  /// What happens to a seat nobody has claimed when the first tick locks. Recorded here, enforced
-  /// when bots exist.
+  /// What happens to a seat whose player has not turned up by the time the host wants to start.
+  ///
+  /// **This is what makes `ENTER MATCH` reachable when somebody does not show.** A seat set to
+  /// `BotTakesOver` counts as ready even while empty, and becomes a bot the moment the host
+  /// enters; a seat set to `GoesCustodian` holds the whole lobby until its player connects, which
+  /// is the right default because the host usually does want to wait for a friend.
   enum class IfWaiting : std::uint8_t
   {
     BotTakesOver,
@@ -53,6 +57,9 @@ public:
   {
     Kind kind = Kind::Human;
     IfWaiting ifWaiting = IfWaiting::GoesCustodian;
+    /// How this seat plays when it is a bot. Kept across a flip back to HUMAN, so a host who
+    /// toggles a seat twice does not lose the style they chose.
+    BotPolicy policy = BotPolicy::ExpandNear;
     /// `XXXX-XXXX`, generated. Empty seats carry one too, so that turning a seat on does not have
     /// to invent one while somebody is looking at it.
     std::string token;
@@ -80,9 +87,19 @@ public:
   /// Who is on a seat, from the server. Refreshed every frame.
   void SetConnected(const std::vector<bool>& _connected);
 
-  /// Whether every seat that is meant to have a human on it has one. `ENTER MATCH` waits for this:
-  /// a match that started without somebody would spend its first ticks putting them in custody.
+  /// Whether every seat is ready to play. `ENTER MATCH` waits for this: a match that started
+  /// without somebody would spend its first ticks putting them in custody.
+  ///
+  /// A seat is ready if it is a bot, or its player has connected, or it is marked `BotTakesOver` --
+  /// which is the host saying they have waited long enough.
   [[nodiscard]] bool EveryoneIsHere() const;
+
+  /// Which seats play themselves, in seat order, for `MatchSimulation`. One entry per playing seat;
+  /// an empty entry is a person's.
+  ///
+  /// **Call it after `TakeEnterRequest`**, because entering is what turns a seat nobody came to
+  /// into a bot -- before that the host can still change their mind and wait.
+  [[nodiscard]] std::vector<std::optional<BotPolicy>> Roster() const;
 
   void DrawWorld(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawInterface(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
@@ -134,12 +151,13 @@ private:
   void DrawDetail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawFooter(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
+  /// Whether this seat will not hold the match up: a bot, somebody connected, or a seat the host
+  /// has already said they will not wait for.
+  [[nodiscard]] bool SeatIsReady(std::int32_t _seat) const;
+
   /// The player index this seat will have, or -1 when it is empty. Seats close up: a player index
   /// is a position in the generator's output, not a label the host chose (ADR-036).
   [[nodiscard]] std::int32_t PlayerIndexOf(std::int32_t _seat) const;
-
-  /// Makes the seats match `m_seatCount`: human up to it, empty past it.
-  void ApplyBoundary();
 
   std::array<Seat, SEAT_COUNT> m_seats;
   std::array<bool, SEAT_COUNT> m_connected = {};

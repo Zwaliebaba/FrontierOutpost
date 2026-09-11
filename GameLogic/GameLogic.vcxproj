@@ -124,6 +124,7 @@
     <ClCompile Include="MatchSimulation.cpp" />
     <ClCompile Include="Melee.cpp" />
     <ClCompile Include="Snapshot.cpp" />
+    <ClCompile Include="BotPolicy.cpp" />
     <ClCompile Include="TickLog.cpp" />
     <ClCompile Include="TickResolver.cpp" />
     <ClCompile Include="Orders.cpp" />
@@ -140,6 +141,7 @@
     <ClInclude Include="Match.h" />
     <ClInclude Include="Melee.h" />
     <ClInclude Include="Snapshot.h" />
+    <ClInclude Include="BotPolicy.h" />
     <ClInclude Include="MatchRules.h" />
     <ClInclude Include="MatchSimulation.h" />
     <ClInclude Include="Orders.h" />

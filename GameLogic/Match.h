@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GalaxyGenerator.h"
 #include "Galaxy.h"
 #include "MatchRules.h"
 #include "Orders.h"
@@ -230,6 +231,22 @@ public:
   /// caller that has misconfigured the game.
   [[nodiscard]] static Match Create(const MatchRules& _rules, std::uint64_t _seed);
 
+  /// The same match a previous `Create` made, from the seed it reported through `Seed()`.
+  ///
+  /// **Not the same thing as `Create` with that seed, and the difference is a galaxy.** `Create`
+  /// SEARCHES from its argument -- it walks the seed through the mixer and keeps walking until the
+  /// generator accepts one -- so `Seed()` reports the seed that was accepted, which is not the seed
+  /// it was asked for. Reloading through `Create` would start a fresh search from an already-final
+  /// seed and land somewhere else entirely, which is exactly the kind of divergence a store
+  /// (ADR-024) exists to prevent.
+  [[nodiscard]] static Match Reload(const MatchRules& _rules, std::uint64_t _acceptedSeed);
+
+private:
+  /// Everything both of the above do once they have a galaxy. The two differ in exactly one call
+  /// and this is what keeps that true.
+  [[nodiscard]] static Match Build(const MatchRules& _rules, const GeneratedGalaxy& _generated);
+
+public:
   [[nodiscard]] const Galaxy& GalaxyGraph() const noexcept
   {
     return m_galaxy;

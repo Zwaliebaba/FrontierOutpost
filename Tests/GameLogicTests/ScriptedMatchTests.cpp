@@ -15,6 +15,8 @@
 #include "pch.h"
 #include "CppUnitTest.h"
 
+#include "BotPolicy.h"
+
 #include "Snapshot.h"
 #include "TickResolver.h"
 
@@ -34,287 +36,15 @@ namespace
 
 constexpr std::uint64_t SEED = 0x4652'4F4E'5449'4552ULL;
 
-/// The six policies the plan asks for.
-enum class Policy : std::uint8_t
-{
-  ExpandNear,
-  ExpandFar,
-  Turtle,
-  Raider,
-  Diplomat,
-  Absentee
-};
+/// The six the scripted match plays. `BotPolicy` is the game's now (ADR-037) -- this is the roster,
+/// and the bots themselves are the shipped ones, so a change to how a bot plays is a change this
+/// whole-match run sees.
+using Policy = Lockstep::BotPolicy;
 
 constexpr std::array<Policy, 6> POLICIES = {Policy::ExpandNear, Policy::ExpandFar, Policy::Turtle,
                                             Policy::Raider,     Policy::Diplomat,  Policy::Absentee};
 
 constexpr std::int32_t ABSENTEE = 5;
-
-/// Systems this player holds and can see right now.
-[[nodiscard]] std::vector<Lockstep::SystemId> Held(const Lockstep::Snapshot& _view)
-{
-  std::vector<Lockstep::SystemId> mine;
-  for (const Lockstep::SnapshotSystem& system : _view.Systems())
-  {
-    if (system.live && system.owner == _view.Viewer())
-    {
-      mine.push_back(system.id);
-    }
-  }
-  return mine;
-}
-
-/// Every lane out of `_from` the player knows about, as (destination, cost), lowest id first.
-[[nodiscard]] std::vector<std::pair<Lockstep::SystemId, std::uint32_t>> Exits(const Lockstep::Snapshot& _view, Lockstep::SystemId _from)
-{
-  std::vector<std::pair<Lockstep::SystemId, std::uint32_t>> out;
-  for (const Lockstep::SnapshotLane& lane : _view.Lanes())
-  {
-    if (lane.a == _from)
-    {
-      out.emplace_back(lane.b, lane.costTicks);
-    }
-    else if (lane.b == _from)
-    {
-      out.emplace_back(lane.a, lane.costTicks);
-    }
-  }
-  return out;
-}
-
-[[nodiscard]] const Lockstep::SnapshotSystem* Find(const Lockstep::Snapshot& _view, Lockstep::SystemId _system)
-{
-  for (const Lockstep::SnapshotSystem& system : _view.Systems())
-  {
-    if (system.id == _system)
-    {
-      return &system;
-    }
-  }
-  return nullptr;
-}
-
-/// Where this fleet should go, by policy. An invalid id means hold.
-///
-/// A breadth-first walk over the lanes the player KNOWS ABOUT, to the nearest (or furthest) system
-/// worth having, returning the first hop toward it. An earlier version of these bots looked only one
-/// lane ahead, and every one of them stalled the moment it ran out of adjacent open ground -- six
-/// empires sat on two systems each for eighty ticks and never met. That was a harness failure that
-/// looked exactly like a rules failure, which is worth remembering: a bot too simple to reach a
-/// mechanic will report that the mechanic does not work.
-[[nodiscard]] Lockstep::SystemId ChooseDestination(Policy _policy, const Lockstep::Snapshot& _view, Lockstep::SystemId _at)
-{
-  if (_policy == Policy::Turtle)
-  {
-    return {};
-  }
-
-  // Highest system id the player knows about, so the walk can be indexed rather than searched.
-  std::int32_t highest = _at.Index();
-  for (const Lockstep::SnapshotSystem& system : _view.Systems())
-  {
-    highest = std::max(highest, system.id.Index());
-  }
-  const std::size_t count = static_cast<std::size_t>(highest) + 1;
-
-  std::vector<std::vector<Lockstep::SystemId>> exits(count);
-  for (const Lockstep::SnapshotLane& lane : _view.Lanes())
-  {
-    if (lane.a.AsSize() < count && lane.b.AsSize() < count)
-    {
-      exits[lane.a.AsSize()].push_back(lane.b);
-      exits[lane.b.AsSize()].push_back(lane.a);
-    }
-  }
-  for (std::vector<Lockstep::SystemId>& row : exits)
-  {
-    std::sort(row.begin(), row.end());
-  }
-
-  std::vector<std::int32_t> distance(count, -1);
-  std::vector<Lockstep::SystemId> firstHop(count);
-  distance[_at.AsSize()] = 0;
-
-  std::vector<Lockstep::SystemId> ring = {_at};
-  std::int32_t depth = 0;
-  while (!ring.empty())
-  {
-    std::vector<Lockstep::SystemId> next;
-    for (const Lockstep::SystemId here : ring)
-    {
-      for (const Lockstep::SystemId other : exits[here.AsSize()])
-      {
-        if (distance[other.AsSize()] >= 0)
-        {
-          continue;
-        }
-        distance[other.AsSize()] = depth + 1;
-        firstHop[other.AsSize()] = depth == 0 ? other : firstHop[here.AsSize()];
-        next.push_back(other);
-      }
-    }
-    ring = next;
-    ++depth;
-  }
-
-  Lockstep::SystemId best;
-  std::int32_t bestDistance = 0;
-  bool bestIsRival = false;
-
-  for (const Lockstep::SnapshotSystem& system : _view.Systems())
-  {
-    if (system.kind == Lockstep::SystemKind::RegionAnchor || system.id == _at)
-    {
-      continue;
-    }
-    const std::size_t index = system.id.AsSize();
-    if (index >= count || distance[index] < 0 || !firstHop[index].IsValid())
-    {
-      continue;
-    }
-
-    const bool unowned = !system.owner.IsValid();
-    const bool rival = system.owner.IsValid() && system.owner != _view.Viewer();
-    if (!unowned && !(rival && _policy == Policy::Raider))
-    {
-      continue;
-    }
-
-    // The raider goes for somebody else's ground first and open ground only when there is none.
-    // Everyone else takes what is open, near or far by policy.
-    const bool preferred = _policy == Policy::Raider && rival;
-    bool better = !best.IsValid();
-    if (!better && _policy == Policy::Raider && preferred != bestIsRival)
-    {
-      better = preferred;
-    }
-    else if (!better && distance[index] != bestDistance)
-    {
-      better = _policy == Policy::ExpandFar ? distance[index] > bestDistance : distance[index] < bestDistance;
-    }
-    else if (!better)
-    {
-      better = system.id < best;
-    }
-
-    if (better)
-    {
-      best = system.id;
-      bestDistance = distance[index];
-      bestIsRival = preferred;
-    }
-  }
-
-  return best.IsValid() ? firstHop[best.AsSize()] : Lockstep::SystemId{};
-}
-
-/// One bot's orders for one tick, from what it can see and nothing else.
-[[nodiscard]] Lockstep::OrderSet OrdersFor(Policy _policy, const Lockstep::Snapshot& _view, const Lockstep::MatchRules& _rules)
-{
-  Lockstep::OrderSet orders;
-  orders.player = _view.Viewer();
-
-  if (_policy == Policy::Absentee)
-  {
-    return orders;
-  }
-
-  // Answer everything addressed to you. A trade lane is free income and the other two cost nothing,
-  // so a bot that declined would be modelling suspicion the design has no mechanic for.
-  for (const Lockstep::SnapshotProposal& proposal : _view.Proposals())
-  {
-    if (proposal.to == _view.Viewer())
-    {
-      orders.answers.push_back(Lockstep::AnswerOrder{.proposal = proposal.id, .answer = Lockstep::Answer::Accept});
-    }
-  }
-
-  // Move whatever is parked.
-  for (const Lockstep::SnapshotFleet& fleet : _view.Fleets())
-  {
-    if (fleet.owner != _view.Viewer() || fleet.ticksRemaining > 0 || !fleet.at.IsValid())
-    {
-      continue;
-    }
-
-    const Lockstep::SystemId destination = ChooseDestination(_policy, _view, fleet.at);
-    orders.fleetOrders.push_back(Lockstep::FleetOrder{.fleet = fleet.id, .destination = destination.IsValid() ? destination : fleet.at});
-  }
-
-  // Build, cheapest useful thing first, on the lowest-numbered system that lacks one. The turtle
-  // builds shipyards because it never moves; everybody else builds income.
-  const std::vector<Lockstep::SystemId> mine = Held(_view);
-  const bool yardFirst = _policy == Policy::Turtle;
-
-  for (const Lockstep::SystemId system : mine)
-  {
-    const Lockstep::SnapshotSystem* state = Find(_view, system);
-    if (state == nullptr)
-    {
-      continue;
-    }
-
-    if (yardFirst && !state->hasShipyard)
-    {
-      orders.builds.push_back(Lockstep::BuildOrder{.system = system, .kind = Lockstep::BuildKind::Shipyard});
-      break;
-    }
-    if (!yardFirst && !state->hasMiningStation)
-    {
-      orders.builds.push_back(Lockstep::BuildOrder{.system = system, .kind = Lockstep::BuildKind::MiningStation});
-      break;
-    }
-  }
-
-  // The diplomat offers a lane wherever its territory touches somebody else's and nothing is open
-  // or pending there. One offer a tick, so it does not flood the board.
-  if (_policy == Policy::Diplomat)
-  {
-    for (const Lockstep::SnapshotLane& lane : _view.Lanes())
-    {
-      if (lane.tradeLane)
-      {
-        continue;
-      }
-
-      const Lockstep::SnapshotSystem* first = Find(_view, lane.a);
-      const Lockstep::SnapshotSystem* second = Find(_view, lane.b);
-      if (first == nullptr || second == nullptr || !first->live || !second->live)
-      {
-        continue;
-      }
-
-      const bool mineFirst = first->owner == _view.Viewer();
-      const bool mineSecond = second->owner == _view.Viewer();
-      if (mineFirst == mineSecond)
-      {
-        continue;
-      }
-
-      const Lockstep::SnapshotSystem* theirs = mineFirst ? second : first;
-      if (!theirs->owner.IsValid())
-      {
-        continue;
-      }
-
-      const bool pending = std::any_of(_view.Proposals().begin(), _view.Proposals().end(),
-                                       [&lane](const Lockstep::SnapshotProposal& _open) { return _open.lane == lane.id; });
-      if (pending)
-      {
-        continue;
-      }
-
-      if (_view.Standings()[_view.Viewer().AsSize()].score > 0)
-      {
-        orders.proposals.push_back(Lockstep::ProposalOrder{.to = theirs->owner, .kind = Lockstep::ProposalKind::OpenLane, .lane = lane.id});
-      }
-      break;
-    }
-  }
-
-  (void)_rules;
-  return orders;
-}
 
 /// Everything that must be true of a match at the end of every tick.
 ///
@@ -438,15 +168,15 @@ struct Played
     {
       const Lockstep::PlayerId player{static_cast<std::int32_t>(index)};
       const Lockstep::Snapshot view = Lockstep::Snapshot::For(played.match, player);
-      orders.push_back(OrdersFor(POLICIES[index], view, played.match.Rules()));
+      orders.push_back(Lockstep::BotOrdersFor(POLICIES[index], view, played.match.Rules()));
 
       if (POLICIES[index] == Policy::Diplomat)
       {
         played.proposalsMade += static_cast<std::uint32_t>(orders.back().proposals.size());
         for (const Lockstep::SnapshotLane& lane : view.Lanes())
         {
-          const Lockstep::SnapshotSystem* first = Find(view, lane.a);
-          const Lockstep::SnapshotSystem* second = Find(view, lane.b);
+          const Lockstep::SnapshotSystem* first = view.System(lane.a);
+          const Lockstep::SnapshotSystem* second = view.System(lane.b);
           if (first != nullptr && second != nullptr && first->live && second->live &&
               (first->owner == player) != (second->owner == player) && (first->owner.IsValid() && second->owner.IsValid()))
           {
