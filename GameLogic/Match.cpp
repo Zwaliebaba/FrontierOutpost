@@ -112,7 +112,101 @@ Match Match::Create(const MatchRules& _rules, std::uint64_t _seed)
     (void)match.AddFleet(fleet);
   }
 
+  // What everybody can see from where they start. Without this a snapshot taken before the first
+  // lock is a blank map -- including the player's own capital.
+  match.RecomputeVisibility();
   return match;
+}
+
+void Match::RecomputeVisibility()
+{
+  const std::size_t systemCount = m_systems.size();
+  std::vector<std::vector<bool>> live(m_players.size(), std::vector<bool>(systemCount, false));
+
+  const auto lightUp = [this, &live, systemCount](std::size_t _player, SystemId _from)
+  {
+    if (!_from.IsValid() || _from.AsSize() >= systemCount)
+    {
+      return;
+    }
+    live[_player][_from.AsSize()] = true;
+    if (m_rules.scoutingRangeLanes == 0)
+    {
+      return;
+    }
+    for (const LaneId lane : m_galaxy.LanesAt(_from))
+    {
+      const SystemId other = m_galaxy.OtherEnd(lane, _from);
+      if (other.IsValid() && other.AsSize() < systemCount)
+      {
+        live[_player][other.AsSize()] = true;
+      }
+    }
+  };
+
+  for (std::size_t index = 0; index < systemCount; ++index)
+  {
+    const SystemState& state = m_systems[index];
+    if (state.owner.IsValid() && state.owner.AsSize() < live.size())
+    {
+      lightUp(state.owner.AsSize(), SystemId{static_cast<std::int32_t>(index)});
+    }
+  }
+
+  for (const MatchFleet& fleet : m_fleets)
+  {
+    if (fleet.destroyed || !fleet.owner.IsValid() || fleet.owner.AsSize() >= live.size())
+    {
+      continue;
+    }
+    // A fleet under way sees from both ends of the lane it is on. It is somewhere between them and
+    // there is no third thing for it to be next to.
+    lightUp(fleet.owner.AsSize(), fleet.at);
+    lightUp(fleet.owner.AsSize(), fleet.movingFrom);
+    lightUp(fleet.owner.AsSize(), fleet.movingTo);
+  }
+
+  // Shared scouting, applied last and as a union, so an agreement can only ever add.
+  for (const Agreement& agreement : m_agreements)
+  {
+    if (agreement.kind != AgreementKind::ShareScouting || !agreement.a.IsValid() || !agreement.b.IsValid())
+    {
+      continue;
+    }
+    const std::size_t first = agreement.a.AsSize();
+    const std::size_t second = agreement.b.AsSize();
+    if (first >= live.size() || second >= live.size())
+    {
+      continue;
+    }
+    for (std::size_t index = 0; index < systemCount; ++index)
+    {
+      const bool either = live[first][index] || live[second][index];
+      live[first][index] = either;
+      live[second][index] = either;
+    }
+  }
+
+  for (std::size_t player = 0; player < m_players.size(); ++player)
+  {
+    std::vector<SeenSystem>& seen = m_seen[player];
+    for (std::size_t index = 0; index < systemCount; ++index)
+    {
+      SeenSystem& record = seen[index];
+      record.live = live[player][index];
+      if (!record.live)
+      {
+        continue;
+      }
+
+      const SystemState& state = m_systems[index];
+      record.known = true;
+      record.asOfTick = m_tick;
+      record.owner = state.owner;
+      record.hadShipyard = state.hasShipyard;
+      record.hadMiningStation = state.hasMiningStation;
+    }
+  }
 }
 
 const OpenProposal* Match::FindProposal(ProposalId _proposal) const

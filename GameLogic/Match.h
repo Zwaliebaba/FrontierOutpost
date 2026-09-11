@@ -420,6 +420,14 @@ public:
     m_tick = _tick;
   }
 
+  /// Recomputes what every player can see, and folds it into what they already knew.
+  ///
+  /// Called by the resolver after ownership settles, **and by `Create`**, because a match at tick
+  /// zero is a real state a client can be shown: the server hands out snapshots before the first
+  /// lock and a player whose own capital was hidden would open the game to a blank map. Visibility
+  /// is state (ADR-022), so something has to put it there to begin with.
+  void RecomputeVisibility();
+
   [[nodiscard]] FleetId AddFleet(MatchFleet _fleet);
 
   /// The next proposal id, which only ever goes up. Ids are never reused, so a digest entry from

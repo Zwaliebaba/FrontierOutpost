@@ -255,6 +255,32 @@ public:
 
   // "41 systems" over a map showing eleven is not an inconsistency, it is fog. The totals are the
   // authoritative count and the list is what this player has found.
+  // A match at tick zero is a real state a client can be shown: the server may hand out snapshots
+  // before the first lock, and a screen of zeros would be the player's first impression.
+  TEST_METHOD(ASnapshotAtTickZeroIsUsable)
+  {
+    Frontier::MatchRules rules;
+    rules.playerCount = 6;
+    const Frontier::Match fresh = Frontier::Match::Create(rules, SEED);
+    Assert::AreEqual(0U, fresh.Tick());
+
+    const Frontier::Snapshot view = Frontier::Snapshot::For(fresh, Frontier::PlayerId{0});
+
+    Assert::IsTrue(view.Viewer() == Frontier::PlayerId{0});
+    Assert::AreEqual(static_cast<size_t>(6), view.Standings().size());
+
+    // Placement is an ordinal and starts at one. Zero would print as "0TH".
+    for (const Frontier::SnapshotStanding& standing : view.Standings())
+    {
+      Assert::IsTrue(standing.placement >= 1, L"placement is an ordinal, not an index");
+      Assert::IsTrue(standing.placement <= 6);
+    }
+
+    // THE ONE THAT MATTERS: a player can see their own capital before a tick has resolved.
+    Assert::IsFalse(view.Systems().empty(), L"a fresh match must not be a blank map");
+    Assert::IsTrue(view.Knows(fresh.GalaxyGraph().Capitals()[0]), L"starting with your own capital hidden is not fog, it is a bug");
+  }
+
   TEST_METHOD(TheTotalsAreAuthoritativeAndTheListIsNot)
   {
     const Frontier::Match match = Settled();

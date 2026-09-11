@@ -418,10 +418,10 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       if (editable && m_panelSubject >= 0)
       {
         Fleet& fleet = m_state.fleets[static_cast<std::size_t>(m_panelSubject)];
-        const std::int32_t origin = fleet.order == FleetOrder::Move ? fleet.to : fleet.from;
+        const std::int32_t origin = fleet.order == FleetStance::Move ? fleet.to : fleet.from;
         fleet.from = origin;
         fleet.to = region->index;
-        fleet.order = FleetOrder::Move;
+        fleet.order = FleetStance::Move;
         fleet.progress = 0.0F;
         fleet.eta = m_state.OrdersTick() + TicksTo(origin, region->index) - 1;
         fleet.status = std::format("ordered - ETA T{}", fleet.eta);
@@ -768,7 +768,7 @@ void MainPage::DrawMap(ShapeRenderer& _shapes, FontRenderer& _text)
   for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
   {
     const Fleet& fleet = m_state.fleets[index];
-    if (fleet.order != FleetOrder::Move || fleet.from == fleet.to)
+    if (fleet.order != FleetStance::Move || fleet.from == fleet.to)
     {
       continue;
     }
@@ -806,18 +806,44 @@ void MainPage::DrawMap(ShapeRenderer& _shapes, FontRenderer& _text)
   // learns this row can read every other coloured thing on the screen.
   struct LegendEntry
   {
-    const char* label;
+    std::string label;
     Color color;
     bool isLane;
     bool dashed;
   };
-  const std::array<LegendEntry, 5> legend = {{
-    {"YOU", BLUE, false, false},
-    {"HALVORSEN", AMBER, false, false},
-    {"SORNE", RED, false, false},
-    {"PROPOSED LANE", BLUE, true, true},
-    {"TRADE LANE", BLUE, true, false},
-  }};
+
+  // Three fixed empires until 2026-09-11, and now the ones this player can actually see. A
+  // twelve-swatch legend would fill the bar with colours for empires nobody has met, and the
+  // entries that earn their place are the ones already on the map (ADR-027).
+  const auto labelOf = [this](OwnerId _player)
+  {
+    return _player >= 0 && _player < static_cast<OwnerId>(m_state.players.size()) ? m_state.players[static_cast<std::size_t>(_player)].label
+                                                                                  : std::string("RIVAL");
+  };
+
+  std::vector<LegendEntry> legend;
+  legend.push_back({labelOf(m_state.viewer), OwnerColor(m_state.viewer, m_state.viewer), false, false});
+
+  std::vector<OwnerId> rivals;
+  for (const SystemNode& node : m_state.graph.systems)
+  {
+    if (node.owner != NOBODY && node.owner != m_state.viewer && std::find(rivals.begin(), rivals.end(), node.owner) == rivals.end())
+    {
+      rivals.push_back(node.owner);
+    }
+  }
+  std::sort(rivals.begin(), rivals.end());
+
+  // Four rivals is what fits beside the two lane entries at 8px. Past that the map is its own
+  // legend: every system carries a name, and tapping one says who holds it.
+  constexpr std::size_t MOST_RIVALS_SHOWN = 4;
+  for (std::size_t index = 0; index < rivals.size() && index < MOST_RIVALS_SHOWN; ++index)
+  {
+    legend.push_back({labelOf(rivals[index]), OwnerColor(rivals[index], m_state.viewer), false, false});
+  }
+
+  legend.push_back({"PROPOSED LANE", BLUE, true, true});
+  legend.push_back({"TRADE LANE", BLUE, true, false});
 
   float legendX = paneX + 12.0F;
   const float legendY = SCREEN_HEIGHT - 20.0F;
@@ -914,7 +940,7 @@ void MainPage::DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, std::int3
     return;
   }
 
-  const Color owner = OwnerColor(node.owner);
+  const Color owner = OwnerColor(node.owner, m_state.viewer);
   // Sized at the depth the NODE is at, not the ground point below it: a stem leans away from the
   // camera, so the two stop being the same distance once the view is steep.
   const float radius = worldRadius * camera.PixelsPerWorldUnitAt(top.depth);
@@ -986,7 +1012,7 @@ void MainPage::DrawFleet(ShapeRenderer& _shapes, FontRenderer& _text, std::int32
     return;
   }
 
-  const Color owner = OwnerColor(fleet.owner);
+  const Color owner = OwnerColor(fleet.owner, m_state.viewer);
   _shapes.Line(foot.xPixels, foot.yPixels, head.xPixels, head.yPixels, WithAlpha(owner, 153));
 
   // The arrowhead points along the lane IN WORLD SPACE and is then projected, so it turns with the
@@ -1023,7 +1049,7 @@ void MainPage::DrawFleet(ShapeRenderer& _shapes, FontRenderer& _text, std::int32
   const float paneX = DIGEST_WIDTH;
   const float paneWidth = SCREEN_WIDTH - DIGEST_WIDTH - ORDERS_WIDTH;
 
-  if (fleet.owner == Owner::You)
+  if (fleet.owner == m_state.viewer)
   {
     const float clamped = std::clamp(head.xPixels, paneX + labelWidth * 0.5F + 4.0F, paneX + paneWidth - labelWidth * 0.5F - 4.0F);
     DrawCentered(_text, clamped, labelY, label, owner);
@@ -1066,14 +1092,14 @@ void MainPage::DrawOrdersRail(ShapeRenderer& _shapes, FontRenderer& _text)
   std::uint32_t yours = 0;
   for (const Fleet& fleet : m_state.fleets)
   {
-    yours += fleet.owner == Owner::You ? 1U : 0U;
+    yours += fleet.owner == m_state.viewer ? 1U : 0U;
   }
   sectionHeader("FLEETS", std::to_string(yours));
 
   for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
   {
     const Fleet& fleet = m_state.fleets[index];
-    if (fleet.owner != Owner::You)
+    if (fleet.owner != m_state.viewer)
     {
       continue;
     }
@@ -1090,10 +1116,10 @@ void MainPage::DrawOrdersRail(ShapeRenderer& _shapes, FontRenderer& _text)
     _text.DrawText(static_cast<std::int32_t>(contentX + CARD_PADDING), lineY, std::format("{} - {} ships", fleet.name, fleet.ships),
                    TEXT_PRIMARY);
 
-    const std::string destination = fleet.order == FleetOrder::Move
+    const std::string destination = fleet.order == FleetStance::Move
                                       ? std::format("> {}", m_state.graph.systems[static_cast<std::size_t>(fleet.to)].name)
                                       : std::format("HOLD {}", m_state.graph.systems[static_cast<std::size_t>(fleet.from)].name);
-    DrawRight(_text, contentRight - CARD_PADDING, lineY, destination, fleet.order == FleetOrder::Move ? BLUE : TEXT_DETAIL);
+    DrawRight(_text, contentRight - CARD_PADDING, lineY, destination, fleet.order == FleetStance::Move ? BLUE : TEXT_DETAIL);
     lineY += LINE_HEIGHT;
 
     // "change >" sits on the STATUS line, whose right half is the only part of a fleet card that
@@ -1281,7 +1307,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(m_panelSubject)];
     title = std::format("MOVE {} - PICK LANE", fleet.name);
-    const std::int32_t origin = fleet.order == FleetOrder::Move ? fleet.to : fleet.from;
+    const std::int32_t origin = fleet.order == FleetStance::Move ? fleet.to : fleet.from;
     // Lane-constrained: only the systems this fleet can actually reach along an edge, and the
     // tick it would arrive. A destination picker that offered anything else would be offering a
     // move the graph cannot express (one-pager, "Shape of a game").

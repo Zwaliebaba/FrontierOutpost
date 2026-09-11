@@ -4,7 +4,7 @@
     <ClInclude Include="FrontierOutpost.h" />
     <ClInclude Include="MainPage.h" />
     <ClInclude Include="MapView.h" />
-    <ClInclude Include="GeneratedMatch.h" />
+    <ClInclude Include="SnapshotView.h" />
     <ClInclude Include="MatchFixture.h" />
     <ClInclude Include="MatchState.h" />
     <ClInclude Include="pch.h" />
@@ -12,7 +12,7 @@
   <ItemGroup>
     <ClCompile Include="FrontierOutpost.cpp" />
     <ClCompile Include="MainPage.cpp" />
-    <ClCompile Include="GeneratedMatch.cpp" />
+    <ClCompile Include="SnapshotView.cpp" />
     <ClCompile Include="MatchFixture.cpp" />
     <ClCompile Include="MatchState.cpp" />
     <ClCompile Include="pch.cpp" />

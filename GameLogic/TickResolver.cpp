@@ -1430,93 +1430,10 @@ Match TickResolver::Reckon(const Match& _in, TickLog& _log)
 
   // ---- Visibility ----------------------------------------------------------------------------------
   //
-  // ADR-022. What a player sees this tick: their own systems, anything one lane from them, anything
-  // a fleet of theirs is standing at or adjacent to, and everything a shared-scouting partner sees.
-  // A system once seen stays KNOWN at its last-seen state rather than going dark, with the tick
-  // stamped, so the map can grey it and the digest can say "as of T41".
-  const std::size_t systemCount = next.Systems().size();
-  std::vector<std::vector<bool>> live(next.Players().size(), std::vector<bool>(systemCount, false));
-
-  const auto lightUp = [&next, &live, systemCount](std::size_t _player, SystemId _from)
-  {
-    if (!_from.IsValid())
-    {
-      return;
-    }
-    live[_player][_from.AsSize()] = true;
-    if (next.Rules().scoutingRangeLanes == 0)
-    {
-      return;
-    }
-    for (const LaneId lane : next.GalaxyGraph().LanesAt(_from))
-    {
-      const SystemId other = next.GalaxyGraph().OtherEnd(lane, _from);
-      if (other.IsValid() && other.AsSize() < systemCount)
-      {
-        live[_player][other.AsSize()] = true;
-      }
-    }
-  };
-
-  for (std::size_t index = 0; index < systemCount; ++index)
-  {
-    const SystemState& state = next.Systems()[index];
-    if (state.owner.IsValid())
-    {
-      lightUp(state.owner.AsSize(), SystemId{static_cast<std::int32_t>(index)});
-    }
-  }
-
-  for (const MatchFleet& fleet : next.Fleets())
-  {
-    if (!fleet.destroyed && fleet.owner.IsValid())
-    {
-      // A fleet under way sees from both ends of the lane it is on. It is somewhere between them,
-      // and there is no third thing for it to be next to.
-      lightUp(fleet.owner.AsSize(), fleet.at);
-      lightUp(fleet.owner.AsSize(), fleet.movingFrom);
-      lightUp(fleet.owner.AsSize(), fleet.movingTo);
-    }
-  }
-
-  // Shared scouting, applied after everything else and as a union, so it cannot take anything away.
-  // "Shared scouting pays visibly, as fog lifting on the map."
-  for (const Agreement& agreement : next.Agreements())
-  {
-    if (agreement.kind != AgreementKind::ShareScouting)
-    {
-      continue;
-    }
-    const std::size_t first = agreement.a.AsSize();
-    const std::size_t second = agreement.b.AsSize();
-    for (std::size_t index = 0; index < systemCount; ++index)
-    {
-      const bool either = live[first][index] || live[second][index];
-      live[first][index] = either;
-      live[second][index] = either;
-    }
-  }
-
-  for (std::size_t player = 0; player < next.Players().size(); ++player)
-  {
-    std::vector<SeenSystem>& seen = next.MutableSeen()[player];
-    for (std::size_t index = 0; index < systemCount; ++index)
-    {
-      SeenSystem& record = seen[index];
-      record.live = live[player][index];
-      if (!record.live)
-      {
-        continue;
-      }
-
-      const SystemState& state = next.Systems()[index];
-      record.known = true;
-      record.asOfTick = _in.Tick();
-      record.owner = state.owner;
-      record.hadShipyard = state.hasShipyard;
-      record.hadMiningStation = state.hasMiningStation;
-    }
-  }
+  // ADR-022. The pass itself lives on `Match`, because `Create` needs it too -- a match at tick zero
+  // is a state a client can be shown, and a player whose own capital was hidden would open the game
+  // to a blank map. Running it only here meant exactly that, until 2026-09-11.
+  next.RecomputeVisibility();
 
   return next;
 }

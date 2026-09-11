@@ -27,9 +27,12 @@
 #include "SceneTarget.h"
 #include "ShapeRenderer.h"
 
-#include "GeneratedMatch.h"
 #include "MainPage.h"
 #include "MatchFixture.h"
+#include "SnapshotView.h"
+
+#include "MatchSimulation.h"
+#include "Session.h"
 
 #include <chrono>
 
@@ -172,21 +175,55 @@ int RunGame(HWND _window)
   Neuron::FontRenderer text;
   text.Create(device, shaderVisibleHeap);
 
-  // The match. When the server sends a digest this is the only line that changes.
+  // ---- The match, behind a real session -----------------------------------------------------------
   //
-  // It shows a GENERATED galaxy rather than the design reference's twelve hand-placed systems --
-  // `MakeReferenceMatch` is still there and still matches the drawing, and swapping this line back
-  // is how the two are compared. The generated one is what the executable shows because it is the
-  // only thing that can catch a layout the generator's constraints allow and the eye rejects: a
-  // ring that crowds the pane, labels that collide, a frontier nobody would fly through.
+  // THIS IS THE COMPOSITION ROOT AND THE ONLY PLACE THAT SEES BOTH HALVES. `MatchSimulation` is the
+  // game behind `Neuron::Simulation`; the session drives it on a schedule and cannot see inside it;
+  // the client reads snapshots and knows nothing else (ADR-025). Each of those three ignorances is
+  // enforced by the project graph, and this function is where they are wired together.
   //
-  // The seed is FIXED, so two runs are the same galaxy and a screenshot means something. There is
-  // no server to be handed one by yet (Design/Plans/4X-02-ServerAndClient.md), and a clock-derived
-  // seed here would make every run unreproducible to save nothing.
+  // In-process, as `4X-02` Step 2 asks for: verifiable before a network exists. The seed is FIXED,
+  // so two runs are the same galaxy and a screenshot means something.
   constexpr std::uint64_t GALAXY_SEED = 0x4652'4F4E'5449'4552ULL;
+  constexpr std::int32_t VIEWER = 0;
+
+  const Frontier::MatchRules rules;
+  auto simulation = std::make_unique<Frontier::MatchSimulation>(rules, GALAXY_SEED);
+  Frontier::MatchSimulation* game = simulation.get();
+
+  // The store path is EMPTY, which means this match does not survive the process -- and that is
+  // deliberate rather than unfinished. ADR-024 lets a *server* write one file and R13 still binds
+  // the client; in-process the two are the same executable, so writing one here would be the client
+  // writing it. The separate server in Step 3 is what gets a store.
+  Neuron::Session session{std::move(simulation), Neuron::TickSchedule{0, rules.tickIntervalSeconds}, std::string{}};
+
+  // Wall time, as seconds since the process started. The session is told the instant and never
+  // reads one (ADR-026), so this is the one clock in the whole stack and it is here, at the top.
+  const auto startedAt = std::chrono::steady_clock::now();
+  const auto instantNow = [startedAt]
+  {
+    return static_cast<Neuron::Instant>(
+      std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - startedAt).count());
+  };
+
+  const auto currentView = [&session, game, &instantNow]
+  {
+    // The bytes are held in a NAMED local. `ByteReader` keeps a `std::span` into what it was given
+    // and does not own it, so reading from a temporary works right up until the temporary dies at
+    // the end of its statement -- which it does, one line before the read. That bug shipped in this
+    // function for exactly one build and produced an empty screen rather than a crash, because a
+    // freed buffer still decodes into something.
+    const std::vector<std::uint8_t> bytes = game->SnapshotFor(VIEWER);
+    Neuron::ByteReader reader{bytes};
+
+    return Frontier::ViewOf(Frontier::Snapshot::Read(reader), Frontier::Snapshot::DigestFor(game->LastTick(), Frontier::PlayerId{VIEWER}),
+                            session.SecondsUntilNextLock(instantNow()));
+  };
 
   Frontier::MainPage page;
-  page.Create(Frontier::MakeGeneratedMatch(Frontier::MatchRules{}, GALAXY_SEED));
+  page.Create(currentView());
+
+  std::uint32_t shownTick = game->Tick();
 
   Neuron::PointerInput pointer;
   pointer.Create(_window);
@@ -199,6 +236,24 @@ int RunGame(HWND _window)
     const auto now = std::chrono::steady_clock::now();
     const double elapsedSeconds = std::chrono::duration<double>{now - previousFrame}.count();
     previousFrame = now;
+
+    // ---- The lock ---------------------------------------------------------------------------------
+    //
+    // The session decides whether a tick is due, resolves every one that is, and the client finds
+    // out by noticing the tick changed. The client never asks for a resolution and could not
+    // provoke one -- a client that could would be a client that could see the future half a tick
+    // early.
+    const Neuron::Instant nowSeconds = instantNow();
+
+    // Present because the window is open. Presence is a fact about being seen, and in-process the
+    // thing that sees is the frame loop.
+    session.MarkPresent(VIEWER);
+
+    if (session.Advance(nowSeconds) > 0 || game->Tick() != shownTick)
+    {
+      shownTick = game->Tick();
+      page.Create(currentView());
+    }
 
     // The countdown is the only thing on this screen that moves on its own. Everything else
     // changes because the player did something or because a tick resolved.
@@ -217,7 +272,16 @@ int RunGame(HWND _window)
     float tapYPixels = 0.0F;
     if (pointer.TakeClick(tapXPixels, tapYPixels))
     {
-      page.HandleTap(tapXPixels, tapYPixels);
+      if (page.HandleTap(tapXPixels, tapYPixels))
+      {
+        // Anything the player changed goes to the session immediately, and the session holds the
+        // latest set until the lock. That is what makes "editable until the lock" work without the
+        // client having to know when the lock is: it sends every edit and the last one counts.
+        const Frontier::OrderSet orders = Frontier::OrdersOf(page.State());
+        Neuron::ByteWriter writer;
+        orders.Write(writer);
+        (void)session.Submit(VIEWER, writer.Bytes());
+      }
     }
 
     ID3D12GraphicsCommandList* commandList = device.BeginFrame();
