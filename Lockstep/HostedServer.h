@@ -11,7 +11,7 @@
 #include <thread>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// A match server, on its own thread, inside this process.
@@ -65,4 +65,4 @@ private:
   std::vector<std::string> m_log;
 };
 
-} // namespace Frontier
+} // namespace Lockstep

@@ -18,7 +18,7 @@ happened.
 
 ## 0. What `4X-01` left you, and what it did not
 
-**The simulation is done and is a value.** `Frontier::Match` is copyable, hashable and holds no
+**The simulation is done and is a value.** `Lockstep::Match` is copyable, hashable and holds no
 pointers into itself. `TickResolver::Resolve(match, TickInput, TickLog&) -> Match` is a pure
 function: state and orders in, the next state and a log out. There is no clock in it, no global,
 and no randomness that is not derived from the match seed (ADR-018). You do not need to understand
@@ -147,7 +147,7 @@ resolutions in order; presence marked by a connection *between* locks and not by
 
 #### Step 2 — The fixture retires
 
-`FrontierOutpost` decodes a `Snapshot` into `MatchState`, sends the orders rail's edits as an
+`Lockstep` decodes a `Snapshot` into `MatchState`, sends the orders rail's edits as an
 `OrderSet`, takes the countdown from the server's next lock instant rather than a local number, and
 points *Replay tick N* at the server's `TickLog` instead of the stub view.
 

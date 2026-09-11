@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClInclude Include="FrontierOutpost.h" />
+    <ClInclude Include="Lockstep.h" />
     <ClInclude Include="HostedServer.h" />
     <ClInclude Include="MainPage.h" />
     <ClInclude Include="MatchConnection.h" />
@@ -13,7 +13,7 @@
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="FrontierOutpost.cpp" />
+    <ClCompile Include="Lockstep.cpp" />
     <ClCompile Include="HostedServer.cpp" />
     <ClCompile Include="MainPage.cpp" />
     <ClCompile Include="MatchConnection.cpp" />

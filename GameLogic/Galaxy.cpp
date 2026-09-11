@@ -6,7 +6,7 @@
 
 #include <queue>
 
-namespace Frontier
+namespace Lockstep
 {
 
 SystemId Galaxy::AddSystem(GalaxySystem _system)
@@ -168,4 +168,4 @@ std::vector<SystemId> Galaxy::Capitals() const
   return capitals;
 }
 
-} // namespace Frontier
+} // namespace Lockstep

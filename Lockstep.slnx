@@ -14,7 +14,7 @@
     <Project Path="Tests/NeuronCoreTests/NeuronCoreTests.vcxproj" Id="751fa0ba-2b31-0b79-bbad-782e911726df" />
     <Project Path="Tests/NeuronServerTests/NeuronServerTests.vcxproj" Id="96d8b9a7-2d2d-10ef-4802-cba34eb98cc8" />
   </Folder>
-  <Project Path="FrontierOutpost/FrontierOutpost.vcxproj" Id="e3c624c0-557c-442f-b033-a83846a21997" />
+  <Project Path="Lockstep/Lockstep.vcxproj" Id="e3c624c0-557c-442f-b033-a83846a21997" />
   <Project Path="GameLogic/GameLogic.vcxproj" Id="3823cbca-81bb-434e-b3b8-c9ddaecacdfd" />
   <Project Path="NeuronClient/NeuronClient.vcxproj" Id="4165082c-73dc-4258-8fb7-b39bb55ce704" />
   <Project Path="NeuronCore/NeuronCore.vcxproj" Id="fe68f2f7-3314-472a-84d0-d020a1f56ab2" />

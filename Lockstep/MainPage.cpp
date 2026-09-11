@@ -13,7 +13,7 @@
 
 #include <queue>
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -478,7 +478,7 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.FillRect(0.0F, 0.0F, SCREEN_WIDTH, TOP_BAR_HEIGHT, APP_BACKGROUND);
   _shapes.FillRect(0.0F, TOP_BAR_HEIGHT - 1.0F, SCREEN_WIDTH, 1.0F, CARD_BORDER);
 
-  _text.DrawText(16, centered, "FRONTIER OUTPOST", TEXT_PRIMARY);
+  _text.DrawText(16, centered, "LOCKSTEP", TEXT_PRIMARY);
 
   // "DAY 12/21" rather than "DAY 12 / 21", and the countdown and replay labels use T-notation:
   // at 8px the reference's spelled-out bar is 63px wider than the frame (ADR-014).
@@ -495,14 +495,14 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     matchLine += std::format(" - ENDS {}", m_state.match.endsAt);
   }
-  _text.DrawText(16 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("FRONTIER OUTPOST")) + 10, centered, matchLine, TEXT_MUTED);
+  _text.DrawText(16 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("LOCKSTEP")) + 10, centered, matchLine, TEXT_MUTED);
 
   // A disconnected client says so, in the one place a player is already looking. Everything else on
   // this screen is the last thing the server said, and without this there is no way to tell that
   // from the current thing the server is saying.
   if (!m_state.connected)
   {
-    const std::int32_t offlineX = 16 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("FRONTIER OUTPOST")) + 10 +
+    const std::int32_t offlineX = 16 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("LOCKSTEP")) + 10 +
                                   static_cast<std::int32_t>(FontRenderer::MeasurePixels(matchLine)) + 12;
     _text.DrawText(offlineX, centered, "RECONNECTING", RED);
   }
@@ -1469,4 +1469,4 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   }
 }
 
-} // namespace Frontier
+} // namespace Lockstep

@@ -8,10 +8,10 @@
 #include "PointerInput.h"
 #include "ShapeRenderer.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
-/// The single screen of Frontier Outpost: digest, map, locks.
+/// The single screen of Lockstep: digest, map, locks.
 ///
 /// It is the screen a player opens once or twice a day (Design/Screens/README.md). The three
 /// panes are not three features -- they are one loop: read what changed, look at where it
@@ -191,4 +191,4 @@ private:
   std::vector<HitRegion> m_hits;
 };
 
-} // namespace Frontier
+} // namespace Lockstep

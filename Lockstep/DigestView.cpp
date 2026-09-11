@@ -7,7 +7,7 @@
 #include <format>
 #include <map>
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -211,4 +211,4 @@ DigestDelta DeltaOf(const MatchState& _state)
   return delta;
 }
 
-} // namespace Frontier
+} // namespace Lockstep

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// The digest, ranked and grouped for the screen.
@@ -77,4 +77,4 @@ struct DigestDelta
 
 [[nodiscard]] DigestDelta DeltaOf(const MatchState& _state);
 
-} // namespace Frontier
+} // namespace Lockstep

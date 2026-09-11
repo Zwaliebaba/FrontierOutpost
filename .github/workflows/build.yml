@@ -1,6 +1,6 @@
 name: Build
 
-# CI for Frontier Outpost (AGENTS.md §6). Every step of both jobs blocks.
+# CI for LockStep: Universe (AGENTS.md §6). Every step of both jobs blocks.
 #
 # ── What this builds, and what it deliberately does not ────────────────────────────────────
 #
@@ -126,7 +126,7 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          msbuild FrontierOutpost.slnx `
+          msbuild Lockstep.slnx `
             /p:Configuration=$env:CONFIGURATION /p:Platform=$env:PLATFORM `
             /m /nologo /v:minimal /warnaserror `
             /flp:LogFile=build.log`;Verbosity=normal

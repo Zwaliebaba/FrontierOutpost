@@ -11,7 +11,7 @@
 
 #include "GalaxyGenerator.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -761,4 +761,4 @@ bool Match::IsConsistent() const
   return true;
 }
 
-} // namespace Frontier
+} // namespace Lockstep

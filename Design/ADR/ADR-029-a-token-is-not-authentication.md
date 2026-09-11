@@ -95,7 +95,7 @@ from: the host knows all six.
 ## What this changes elsewhere
 
 `Protocol` gains `Hello`, `Welcome` and `Refused`; `MatchServer` holds the token list and the
-mapping. The six strings live in `FrontierOutpost.cpp`, in the composition root, because who is
+mapping. The six strings live in `Lockstep.cpp`, in the composition root, because who is
 allowed to play is a property of the match being hosted rather than of the server library.
 
 ## Open questions

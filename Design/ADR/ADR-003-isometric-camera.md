@@ -119,7 +119,7 @@ whole-pixel form, so "let the player turn the view" is a new ADR and a different
 ## What this changes elsewhere
 
 - **Code:** `NeuronClient/IsometricCamera.{h,cpp}` is this ADR. `NeuronClient/Shaders/MeshVS.hlsl`
-  consumes the matrix. `FrontierOutpost.cpp` calls `Follow()` with the ship's position each frame.
+  consumes the matrix. `Lockstep.cpp` calls `Follow()` with the ship's position each frame.
 - **AGENTS.md:** no change.
 - **Design/:** this ADR closes the depth-bias question in `Design/Plans/MVP-01-IsometricShip.md`
   §6, and departs from the pitch in that plan's §3 recommendation as argued above.

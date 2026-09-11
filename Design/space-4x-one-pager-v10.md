@@ -1,4 +1,4 @@
-# Frontier Outpost — Space 4X One-Pager v0.7
+# LockStep: Universe — Space 4X One-Pager v0.7
 
 ## Aesthetic target
 **Challenge** (primary) · **Discovery** (secondary). Narrative arises as a by-product: "the story of my empire this match" — including, if it falls, the story of its exile.

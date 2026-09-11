@@ -8,7 +8,7 @@
 #include "pch.h"
 #include "MatchState.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -85,4 +85,4 @@ std::int32_t Graph::FindSystem(std::string_view _name) const noexcept
   return EventRefs::NONE;
 }
 
-} // namespace Frontier
+} // namespace Lockstep

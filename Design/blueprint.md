@@ -1,14 +1,14 @@
-# Frontier Outpost — Blueprint
+# LockStep: Universe — Blueprint
 
 **What this is.** The one document to hand to a game designer you want to recruit, or to any team
-that needs to understand *Frontier Outpost* before it can help: what the game is, why it is worth
+that needs to understand *LockStep: Universe* before it can help: what the game is, why it is worth
 making, what exists today, and where it goes next. It is written from the design record in `Design/`
 and from the code as it stands on **2026-09-11**, and it keeps the record's discipline: what is built
 is described in the present tense, what is designed and not built says so, and what is undecided is
 listed as a question rather than papered over. The engineering detail is kept short here and
 collected in the appendix for the teams that need it.
 
-**In one sentence.** Frontier Outpost is an asynchronous, tick-quantised space strategy game for six
+**In one sentence.** LockStep: Universe is an asynchronous, tick-quantised space strategy game for six
 to twelve humans, played four times a day for three weeks, where every order is a blind bet placed
 against rivals placing theirs — and where losing your capital is the start of the best story the
 game can tell, not the end of yours.
@@ -21,8 +21,11 @@ thing no code can do: six people on six machines playing a match. Exile and the 
 are designed and deliberately not built, gated behind the first playtests. The current client is a
 Windows desktop prototype; **the product is a mobile client** (owner decision, 2026-09-11 — see §7).
 
-**Frontier Outpost is the name**, not a working title (owner decision, 2026-09-11). It is a hobby
-project with no monetisation: free, hosted by whoever runs a match.
+**LockStep: Universe is the name**, shortened to *Lockstep* in running prose (owner decision,
+2026-09-11). It replaces *Frontier Outpost*, which had been settled as final earlier the same day;
+ADR-035 records the change, the alternatives and its one real cost — "lock" is already this game's
+vocabulary, so a sentence about orders locking and a sentence about the product now share a word.
+It is a hobby project with no monetisation: free, hosted by whoever runs a match.
 
 ---
 
@@ -39,7 +42,7 @@ several times a day, for three weeks, between people who have never met.
 
 ### Why it is not another 4X
 
-Most strategy games ask you to spend hours. Frontier Outpost asks for thirty minutes, twice a day,
+Most strategy games ask you to spend hours. Lockstep asks for thirty minutes, twice a day,
 and makes those thirty minutes count. The nearest relatives are *Neptune's Pride* and *Subterfuge*
 — slow, social, betrayal-shaped — and the differences are deliberate:
 
@@ -414,7 +417,7 @@ change a rule or the design record still owe an ADR or a document edit, and the 
 
 | Question | Decision | Follow-up owed |
 |---|---|---|
-| The name | *Frontier Outpost* is final | One-pager title updated in this commit |
+| The name | *LockStep: Universe*, short form *Lockstep* — replacing *Frontier Outpost*, which was settled and then changed on 2026-09-11 | ADR-035; every document, the `Lockstep` namespace and the build identity renamed with it |
 | Shipping platform | Desktop is the prototype; mobile is the product | An ADR revising the presentation baseline in `Design/README.md` §1, when the mobile client starts |
 | Fiction | Wanted, not yet designed | A design session before Phase 1 |
 | Business model | Hobby project, no monetisation | — |
@@ -461,15 +464,15 @@ second client speaks the snapshot and the order set over TCP, and nothing else.
 
 | Built and tested | Where |
 |---|---|
-| One executable, three roles: host-and-play (default), `--join <host>`, `--serve` (headless). The client talks TCP even to a server on the next thread | `FrontierOutpost.cpp`, ADR-028 |
+| One executable, three roles: host-and-play (default), `--join <host>`, `--serve` (headless). The client talks TCP even to a server on the next thread | `Lockstep.cpp`, ADR-028 |
 | The server drives the game through a byte-shaped seam and never names a game type | `NeuronCore/Simulation.h`, `NeuronServer/Session`, ADR-025 |
 | A match is a seed and its orders; loading is re-resolving from tick zero with the hash asserted. About 2 ms per whole match in Release | `NeuronServer/MatchStore`, ADR-024, `Design/Reference/tick-resolution-cost.md` |
 | The schedule is arithmetic over an injected instant; missed locks are resolved in order on wake | `NeuronCore/TickSchedule`, ADR-026 |
 | Length-prefixed frames, six message kinds, every length checked at three layers, fuzzed; socket tests on real loopback sockets | `NeuronCore/{FrameStream,Protocol,Socket}`, `NeuronServer/MatchServer` |
 | Six fixed seat tokens for Phase 0 — a stable identity to log, explicitly not authentication | ADR-029 |
 | Instrumentation to a UTC-stamped plain-text file, including fleet orders after a capital fall and order edits counted as envelopes | `NeuronServer/MatchLog`, ADR-030, ADR-031 |
-| Client reconnection with an on-screen indicator, `--phase0` rules and `--tick <seconds>` for compressed rehearsals | `FrontierOutpost/MatchConnection` |
-| The ops console: immediate-mode UI, perspective orbit camera, spherical star field with a galactic band, twelve owner colours with *you* always blue | `FrontierOutpost/MainPage`, ADR-014, -017, -027, -032, -033 |
+| Client reconnection with an on-screen indicator, `--phase0` rules and `--tick <seconds>` for compressed rehearsals | `Lockstep/MatchConnection` |
+| The ops console: immediate-mode UI, perspective orbit camera, spherical star field with a galactic band, twelve owner colours with *you* always blue | `Lockstep/MainPage`, ADR-014, -017, -027, -032, -033 |
 
 **Hosting** a match today is one machine running `--serve` beside a store file and a log file, and
 five people running `--join`. If the host closes, the match pauses and resumes on restart. There is

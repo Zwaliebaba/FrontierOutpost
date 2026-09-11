@@ -10,7 +10,7 @@
 
 ## Context
 
-ADR-014 made `FrontierOutpost.exe` open the main page — the ops console of the async 4X the
+ADR-014 made `Lockstep.exe` open the main page — the ops console of the async 4X the
 one-pager describes. It left the MVP-01 vertical slice in the tree: an isometric ship you clicked
 to move, a station, a procedural starfield, and everything under them — a graph-free simulation of
 one ship, a wire protocol carrying two ship-shaped records, a loopback transport, an authoritative
@@ -69,7 +69,7 @@ plainly which decisions are live.
 
 **Option C.** Thirty files are deleted:
 
-- **The scene:** `FrontierOutpost/{ShipMesh,StationMesh,ShipView}.*`,
+- **The scene:** `Lockstep/{ShipMesh,StationMesh,ShipView}.*`,
   `NeuronClient/{MeshRenderer,Mesh,IsometricCamera,Starfield}.*` and
   `NeuronClient/Shaders/{Mesh,Starfield}{VS,PS}.hlsl`.
 - **The simulation:** `GameLogic/{Ship,World}.*`.

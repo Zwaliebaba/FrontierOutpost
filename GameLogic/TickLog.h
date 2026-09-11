@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// The six phases, in the order the one-pager fixes them.
@@ -174,4 +174,4 @@ struct TickLog
   [[nodiscard]] std::vector<std::string> AllLines() const;
 };
 
-} // namespace Frontier
+} // namespace Lockstep

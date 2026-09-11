@@ -35,7 +35,7 @@ namespace
 /// too rather than being a second unexplained world.
 constexpr std::uint64_t INSTRUMENTATION_SEED = 0x5350'4143'4520'3458ULL;
 
-[[nodiscard]] std::vector<std::uint8_t> Encoded(const Frontier::OrderSet& _orders)
+[[nodiscard]] std::vector<std::uint8_t> Encoded(const Lockstep::OrderSet& _orders)
 {
   Neuron::ByteWriter writer;
   _orders.Write(writer);
@@ -58,7 +58,7 @@ constexpr std::uint64_t INSTRUMENTATION_SEED = 0x5350'4143'4520'3458ULL;
 }
 
 /// One tick, with everybody present except the named absentee. Returns what was narrated.
-[[nodiscard]] std::vector<std::string> ResolveWith(Frontier::MatchSimulation& _game, std::int32_t _absentee)
+[[nodiscard]] std::vector<std::string> ResolveWith(Lockstep::MatchSimulation& _game, std::int32_t _absentee)
 {
   for (std::int32_t player = 0; player < _game.PlayerCount(); ++player)
   {
@@ -78,9 +78,9 @@ TEST_CLASS(PhaseZeroRulesTests)
 public:
   TEST_METHOD(ThePhaseZeroSetupIsAPlayableGame)
   {
-    const Frontier::MatchRules rules = Frontier::PhaseZeroRules();
+    const Lockstep::MatchRules rules = Lockstep::PhaseZeroRules();
 
-    Assert::IsTrue(Check(rules) == Frontier::RulesProblem::None, L"the rehearsal has to pass the same check as the real thing");
+    Assert::IsTrue(Check(rules) == Lockstep::RulesProblem::None, L"the rehearsal has to pass the same check as the real thing");
     Assert::AreEqual(6U, rules.playerCount);
     Assert::AreEqual(3600U, rules.tickIntervalSeconds, L"an hourly tick, so forty-eight of them is a weekend");
     Assert::AreEqual(48U, rules.matchLengthTicks);
@@ -91,8 +91,8 @@ public:
   // Phase 0 would be measuring a game nobody designed.
   TEST_METHOD(TheCompressedRulesStillMeanWhatTheyMeanAtFullLength)
   {
-    const Frontier::MatchRules full;
-    const Frontier::MatchRules phaseZero = Frontier::PhaseZeroRules();
+    const Lockstep::MatchRules full;
+    const Lockstep::MatchRules phaseZero = Lockstep::PhaseZeroRules();
 
     Assert::IsTrue(phaseZero.firstWeekTicks < phaseZero.matchLengthTicks / 2,
                    L"a first week that is most of the match is not a first week");
@@ -114,8 +114,8 @@ public:
   // answers no hypothesis at all.
   TEST_METHOD(AbsenceIsMeasuredInHoursRatherThanInTicks)
   {
-    const Frontier::MatchRules full;
-    const Frontier::MatchRules phaseZero = Frontier::PhaseZeroRules();
+    const Lockstep::MatchRules full;
+    const Lockstep::MatchRules phaseZero = Lockstep::PhaseZeroRules();
 
     Assert::AreEqual(full.custodianAbsenceTicks * full.tickIntervalSeconds, phaseZero.custodianAbsenceTicks * phaseZero.tickIntervalSeconds,
                      L"the same wall-clock absence at both tick rates");
@@ -137,7 +137,7 @@ TEST_CLASS(InstrumentationTests)
 public:
   TEST_METHOD(ANewMatchHasNarratedNothing)
   {
-    Frontier::MatchSimulation game{Frontier::PhaseZeroRules(), INSTRUMENTATION_SEED};
+    Lockstep::MatchSimulation game{Lockstep::PhaseZeroRules(), INSTRUMENTATION_SEED};
     Assert::IsTrue(game.TakeEvents().empty(), L"nothing has happened yet");
   }
 
@@ -145,7 +145,7 @@ public:
   // tick would report a mechanic as used forty-eight times when it was used once.
   TEST_METHOD(EventsAreTakenAndCleared)
   {
-    Frontier::MatchSimulation game{Frontier::PhaseZeroRules(), INSTRUMENTATION_SEED};
+    Lockstep::MatchSimulation game{Lockstep::PhaseZeroRules(), INSTRUMENTATION_SEED};
 
     const std::vector<std::string> first = ResolveWith(game, -1);
     Assert::IsTrue(game.TakeEvents().empty(), L"a second take must find nothing");
@@ -161,8 +161,8 @@ public:
   // firing a shot, which is why it is the one asserted here.
   TEST_METHOD(AnAbsentPlayerBecomesACustodianInTheLog)
   {
-    const Frontier::MatchRules rules = Frontier::PhaseZeroRules();
-    Frontier::MatchSimulation game{rules, INSTRUMENTATION_SEED};
+    const Lockstep::MatchRules rules = Lockstep::PhaseZeroRules();
+    Lockstep::MatchSimulation game{rules, INSTRUMENTATION_SEED};
 
     constexpr std::int32_t ABSENTEE = 4;
     std::vector<std::string> everything;
@@ -193,8 +193,8 @@ public:
   // which would have made a player who lapsed and returned look like two lapses.
   TEST_METHOD(ComingBackIsNarratedAsTheOppositeEvent)
   {
-    const Frontier::MatchRules rules = Frontier::PhaseZeroRules();
-    Frontier::MatchSimulation game{rules, INSTRUMENTATION_SEED};
+    const Lockstep::MatchRules rules = Lockstep::PhaseZeroRules();
+    Lockstep::MatchSimulation game{rules, INSTRUMENTATION_SEED};
 
     constexpr std::int32_t LAPSED = 2;
     std::vector<std::string> everything;
@@ -222,14 +222,14 @@ public:
   {
     // A short match rather than the full forty-eight, and scaled the same way `PhaseZeroRules` is,
     // so the test measures the narration rather than the length.
-    Frontier::MatchRules rules = Frontier::PhaseZeroRules();
+    Lockstep::MatchRules rules = Lockstep::PhaseZeroRules();
     rules.matchLengthTicks = 8;
     rules.firstWeekTicks = 2;
     rules.regionOpensAtTick = 5;
     rules.capitalGuardTicks = 1;
-    Assert::IsTrue(Check(rules) == Frontier::RulesProblem::None);
+    Assert::IsTrue(Check(rules) == Lockstep::RulesProblem::None);
 
-    Frontier::MatchSimulation game{rules, INSTRUMENTATION_SEED};
+    Lockstep::MatchSimulation game{rules, INSTRUMENTATION_SEED};
     std::vector<std::string> everything;
 
     while (!game.IsFinished())
@@ -249,15 +249,15 @@ public:
   // line for it would put a fact about a socket into a file that is measuring a mechanic.
   TEST_METHOD(ARefusedSubmissionIsCountedRatherThanNarrated)
   {
-    Frontier::MatchSimulation game{Frontier::PhaseZeroRules(), INSTRUMENTATION_SEED};
+    Lockstep::MatchSimulation game{Lockstep::PhaseZeroRules(), INSTRUMENTATION_SEED};
 
     game.Submit(0, std::vector<std::uint8_t>{0xFF, 0xFF, 0xFF});
     Assert::AreEqual(std::uint32_t{1}, game.RejectedSubmissions());
 
     // A well-formed set claiming to be somebody else is refused the same way, and this is the one
     // that matters: accepted, it would replace another player's orders.
-    Frontier::OrderSet impostor;
-    impostor.player = Frontier::PlayerId{3};
+    Lockstep::OrderSet impostor;
+    impostor.player = Lockstep::PlayerId{3};
     game.Submit(0, Encoded(impostor));
     Assert::AreEqual(std::uint32_t{2}, game.RejectedSubmissions());
 

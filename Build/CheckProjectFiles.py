@@ -42,7 +42,7 @@ PROJECTS = {
     "NeuronClient": "NeuronClient",
     "NeuronServer": "NeuronServer",
     "GameLogic": "GameLogic",
-    "FrontierOutpost": "FrontierOutpost",
+    "Lockstep": "Lockstep",
     "NeuronCoreTests": os.path.join("Tests", "NeuronCoreTests"),
     "NeuronClientTests": os.path.join("Tests", "NeuronClientTests"),
     "NeuronServerTests": os.path.join("Tests", "NeuronServerTests"),
@@ -78,7 +78,7 @@ EXPECTED_TO_DIFFER = {"Optimization", "PreprocessorDefinitions", "FunctionLevelL
 # wizards spell them this way and renaming them buys nothing.
 FILENAME_EXEMPTIONS = {"pch.h", "pch.cpp", "framework.h", "targetver.h", "Resource.h"}
 
-GENERATED_FILES = {os.path.join("FrontierOutpost", "Resource.h")}
+GENERATED_FILES = {os.path.join("Lockstep", "Resource.h")}
 
 # R2: a type name carries no prefix and no affix. clang-tidy's AbstractClassPrefix can require an
 # absent prefix; nothing in it can see a present suffix, so `TransportBase` slips through.
@@ -185,16 +185,16 @@ def check_build_shape(name: str, project_path: str, tree: ElementTree.ElementTre
 
 
 def check_solution() -> None:
-    solution = os.path.join(REPO_ROOT, "FrontierOutpost.slnx")
+    solution = os.path.join(REPO_ROOT, "Lockstep.slnx")
     with open(solution, "r", encoding="utf-8-sig") as handle:
         text = handle.read()
     platforms = re.findall(r'<Platform\s+Name="([^"]+)"', text)
     if platforms != ["x64"]:
-        fail(f"FrontierOutpost.slnx: declares platforms {platforms}; x64 is the only one (AGENTS.md 3).")
+        fail(f"Lockstep.slnx: declares platforms {platforms}; x64 is the only one (AGENTS.md 3).")
     for name, directory in PROJECTS.items():
         expected = f'{directory}/{name}.vcxproj'.replace("\\", "/")
         if expected not in text:
-            fail(f"FrontierOutpost.slnx: does not list {expected}.")
+            fail(f"Lockstep.slnx: does not list {expected}.")
 
 
 # ---------------------------------------------------------------------------- 2. registration

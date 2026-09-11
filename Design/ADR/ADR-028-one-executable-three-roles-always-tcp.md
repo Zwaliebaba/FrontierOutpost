@@ -122,7 +122,7 @@ which is what a Phase 0 dry run wants.
 
 `NeuronCore` gains `FrameStream`, `Protocol` and `Socket` — the wire protocol was always listed as
 its business (AGENTS.md §2) and was the one part of the row that did not exist. `NeuronServer` gains
-`MatchServer`. `FrontierOutpost` gains `MatchConnection` and `HostedServer`, and its entry point
+`MatchServer`. `Lockstep` gains `MatchConnection` and `HostedServer`, and its entry point
 picks a role. AGENTS.md R13's amendment changes wording in the same commit. Nine projects, still.
 
 ## Open questions

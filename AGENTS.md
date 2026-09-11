@@ -1,8 +1,8 @@
-# AGENTS.md — Engineering Rules for *Frontier Outpost*
+# AGENTS.md — Engineering Rules for *LockStep: Universe*
 
 Operating instructions for every agent (and human) writing code in this repository. **Read this before generating a single line.**
 
-*Frontier Outpost* is a greenfield C++23 space MMO: a Direct3D 12 client and an authoritative server, hosted in **one executable**, presenting a fixed **1280×720 R8G8B8A8** screen, drawn straight into the swap chain's back buffer and presented 1:1. There is no legacy tree here and nothing is grandfathered. A rule below is not a target to migrate towards; it describes the code as it must be written today, and a whole-tree run of any checker comes back clean.
+*LockStep: Universe* is a greenfield C++23 space MMO: a Direct3D 12 client and an authoritative server, hosted in **one executable**, presenting a fixed **1280×720 R8G8B8A8** screen, drawn straight into the swap chain's back buffer and presented 1:1. There is no legacy tree here and nothing is grandfathered. A rule below is not a target to migrate towards; it describes the code as it must be written today, and a whole-tree run of any checker comes back clean.
 
 **What is authoritative, in order:**
 
@@ -27,8 +27,8 @@ If a rule here conflicts with a habit from another codebase, this file wins. If 
 | Local | `camelCase` | `shadedColor` |
 | Compile-time constant | `UPPER_CASE` | `WIDTH_PIXELS`, `GLYPH_SCALE` |
 | Enumerator | `PascalCase` | `DeviceLost`, `OutOfVideoMemory` |
-| Macro | `UPPER_CASE` | `FRONTIER_ASSERT` |
-| Namespace | `PascalCase` | `Neuron`, `Frontier` |
+| Macro | `UPPER_CASE` | `LOCKSTEP_ASSERT` |
+| Namespace | `PascalCase` | `Neuron`, `Lockstep` |
 | File | `PascalCase.cpp` / `.h` | `SwapChainTarget.cpp` |
 
 **Note the split that catches people out: a `constexpr` is `UPPER_CASE`, an enumerator is `PascalCase`.** They are both compile-time and they are spelled differently on purpose — an enumerator is a *value of a type* and reads as one at the use site (`PageFault::OutOfVideoMemory`), while a constant is a number with a name and is meant to look like one. [`.clang-tidy`](.clang-tidy) enforces both, and it is the single source of truth for the option values; this document does not repeat them, so there is nothing to drift.
@@ -63,7 +63,7 @@ Adding, removing or moving a file means editing the owning `.vcxproj` **and** it
 
 **R8 — `m_` marks encapsulated state, not every field.** A `class` with invariants prefixes private members `m_`. A public aggregate — a `Desc` config struct, a wire record, a POD handed to the renderer — uses plain `camelCase` fields so brace initialization reads naturally.
 
-**R9 — One namespace per layer.** Engine code (`NeuronCore`, `NeuronClient`, `NeuronServer`) is `namespace Neuron`. Game code (`GameLogic`, and the game half of the executable) is `namespace Frontier`. The engine knows nothing about this game; if a type needs to know what a mining laser is, it is in the wrong library. Test suites use `namespace <Project>Tests`.
+**R9 — One namespace per layer.** Engine code (`NeuronCore`, `NeuronClient`, `NeuronServer`) is `namespace Neuron`. Game code (`GameLogic`, and the game half of the executable) is `namespace Lockstep`. The engine knows nothing about this game; if a type needs to know what a mining laser is, it is in the wrong library. Test suites use `namespace <Project>Tests`.
 
 **R10 — No `using namespace` at file scope in a header.** It leaks into every translation unit that includes it, and the failure it causes appears somewhere else. In a `.cpp` it is allowed for the unit-test framework and nothing else; otherwise qualify the name or write a local alias.
 
@@ -137,7 +137,7 @@ private:
 | `NeuronClient/` | Engine static library used by the **client only**: the window, the D3D12 device and swap chain, the 1280×720 colour target, input, audio, UI | Yes |
 | `NeuronServer/` | Engine static library used by the **server only**: `Session` owns a simulation and drives it on a schedule, `MatchStore` persists a match as its orders, `MatchServer` puts it on a socket. It never names a game type — the seam speaks in bytes (ADR-025) | Yes |
 | `GameLogic/` | The game itself — the galaxy and its generator, `MatchRules`, `Match`, `Orders`, `TickResolver` and its six phases, `Melee`, `Snapshot`, and `MatchSimulation` behind the seam. Server-side; the client never links it | Yes |
-| `FrontierOutpost/` | The executable and the composition root — the one thing that sees both halves. The main page (`MainPage`, `MatchState`), the snapshot adapter, the client connection, and the hosted server. **One binary, three roles**: host-and-play, `--join`, `--serve` (ADR-028). Where every embedded asset and compiled shader ends up | Yes |
+| `Lockstep/` | The executable and the composition root — the one thing that sees both halves. The main page (`MainPage`, `MatchState`), the snapshot adapter, the client connection, and the hosted server. **One binary, three roles**: host-and-play, `--join`, `--serve` (ADR-028). Where every embedded asset and compiled shader ends up | Yes |
 | `Tests/NeuronCoreTests/`, `Tests/NeuronClientTests/`, `Tests/NeuronServerTests/`, `Tests/GameLogicTests/` | MSVC CppUnitTest DLLs, one per library, each referencing the library it tests and the libraries that library is built on. **CI builds and runs all four** | Yes |
 | `Design/` | The design record: `README.md` (the standards), `ADR/` (decisions), and plans | Yes — see §6 |
 | `Build/*.py` | Repository checkers (§6). They gate CI | Yes, carefully |
@@ -145,14 +145,14 @@ private:
 | `.github/workflows/build.yml` | CI. All of it blocks | Yes, carefully |
 | `x64/`, `.vs/`, `*.user` | Build and IDE output | **No — and never commit them** |
 
-**Nine projects, and the edges run one way.** `FrontierOutpost.slnx` is the solution; its only platform is `x64`.
+**Nine projects, and the edges run one way.** `Lockstep.slnx` is the solution; its only platform is `x64`.
 
 ```
 NeuronCore.lib          ← the engine everything else builds on
 ├── NeuronClient.lib    ← references NeuronCore
 ├── NeuronServer.lib    ← references NeuronCore
 ├── GameLogic.lib       ← references NeuronCore
-└── FrontierOutpost.exe ← references all four
+└── Lockstep.exe ← references all four
 
 NeuronCoreTests.dll     ← NeuronCore
 NeuronClientTests.dll   ← NeuronClient, NeuronCore
@@ -181,18 +181,18 @@ That check matters more than it looks, because **CI builds Debug only** (§6). R
 
 ```powershell
 # Build everything: the executable, the four libraries it references, and the four test DLLs.
-msbuild FrontierOutpost.slnx /p:Configuration=Debug /p:Platform=x64 /m /v:minimal /nologo
+msbuild Lockstep.slnx /p:Configuration=Debug /p:Platform=x64 /m /v:minimal /nologo
 
 # Just the game and its libraries, still through the solution.
-msbuild FrontierOutpost.slnx /t:FrontierOutpost /p:Configuration=Debug /p:Platform=x64 /m /nologo
+msbuild Lockstep.slnx /t:Lockstep /p:Configuration=Debug /p:Platform=x64 /m /nologo
 
 # Release, before you claim anything about it.
-msbuild FrontierOutpost.slnx /p:Configuration=Release /p:Platform=x64 /m /v:minimal /nologo
+msbuild Lockstep.slnx /p:Configuration=Release /p:Platform=x64 /m /v:minimal /nologo
 ```
 
 All commands run from the repository root, and all of them name the **solution**.
 
-**Build through `FrontierOutpost.slnx`, never a `.vcxproj` directly.** Output paths and cross-project include directories are anchored on `$(SolutionDir)`, and MSBuild defines `SolutionDir` only for a solution build. `msbuild NeuronCore\NeuronCore.vcxproj` therefore resolves every one of those paths against the *project* folder instead of the repository root. **It does not fail — that is the problem.** Output lands in `NeuronCore\x64\Debug\` instead of `x64\Debug\`, so the next solution build links against whichever copy is staler, and `$(SolutionDir)NeuronCore` becomes a path relative to the project that does not exist. The include breakage is latent: it bites the first time a file reaches across projects, which for a fresh test suite may be weeks after someone got into the habit. To build one project, use `/t:<ProjectName>` on the solution, as above. Everything lands in `x64\Debug\` (or `x64\Release\`) at the repository root; intermediates stay in each project's own `x64\` folder, which is `IntDir`'s default base.
+**Build through `Lockstep.slnx`, never a `.vcxproj` directly.** Output paths and cross-project include directories are anchored on `$(SolutionDir)`, and MSBuild defines `SolutionDir` only for a solution build. `msbuild NeuronCore\NeuronCore.vcxproj` therefore resolves every one of those paths against the *project* folder instead of the repository root. **It does not fail — that is the problem.** Output lands in `NeuronCore\x64\Debug\` instead of `x64\Debug\`, so the next solution build links against whichever copy is staler, and `$(SolutionDir)NeuronCore` becomes a path relative to the project that does not exist. The include breakage is latent: it bites the first time a file reaches across projects, which for a fresh test suite may be weeks after someone got into the habit. To build one project, use `/t:<ProjectName>` on the solution, as above. Everything lands in `x64\Debug\` (or `x64\Release\`) at the repository root; intermediates stay in each project's own `x64\` folder, which is `IntDir`'s default base.
 
 **A project does not put its own directory on the include path.** `cl.exe` already searches the directory of the including file first for a quoted include, so `#include "FileSys.h"` from `NeuronCore\FileSys.cpp` resolves without help. Only the directories of *other* projects are listed, as `$(SolutionDir)<Project>`.
 
@@ -216,7 +216,7 @@ python Build\RunClangTidy.py          # needs a Developer PowerShell (INCLUDE mu
 **A green build says nothing about whether the game draws.** For anything touching rendering, input, audio or presentation, launch it:
 
 ```powershell
-x64\Debug\FrontierOutpost.exe
+x64\Debug\Lockstep.exe
 ```
 
 **Report what you actually did.** "Builds clean, not run" and "builds and runs" are different claims. Never imply the second when you only did the first, and say which configurations you built.
@@ -243,7 +243,7 @@ x64\Debug\FrontierOutpost.exe
 
 **There is no sampler object anywhere in this renderer, and adding one is a decision.** The font atlas is read with `Texture2D<uint>::Load()`, which takes integer texel coordinates and has no filtering to switch on; the starfield is a hash of an integer pixel; the meshes carry no textures. Likewise `D3D12Defaults.h` turns blending, multisampling and anti-aliased lines off for every pipeline built from the shared defaults. Until ADR-011 those were *impossible* — the render target held palette indices and a blend of two of them was an unrelated colour. They are now conventions, which means a pass that wants one has to say so: **blending, multisampling or a sampler in a new pass is an ADR, not a pipeline field.**
 
-**R13 — The executable ships alone.** There is no assets folder, no data directory, nothing beside `FrontierOutpost.exe` at runtime. Art, colours, fonts, meshes and sound are embedded as `constexpr` arrays in headers — `NeuronClient/Font.h` is the pattern: 96 glyphs, 8×8, one bit a pixel, 768 bytes, and nothing to load. **Shaders are compiled at build time**, never at runtime: `<Library>/Shaders/<Shader>VS.hlsl` goes through the `.vcxproj`'s `FXCompile` step into `<Library>/CompiledShaders/<Shader>VS.h` as `g_<Shader>VS` (§2). No `D3DCompile`, no `d3dcompiler_47.dll` beside the executable, no `.cso` on disk. Never add a runtime file dependency, a working-directory assumption or a "just for development" loose-file path; the loose path is the one that ships.
+**R13 — The executable ships alone.** There is no assets folder, no data directory, nothing beside `Lockstep.exe` at runtime. Art, colours, fonts, meshes and sound are embedded as `constexpr` arrays in headers — `NeuronClient/Font.h` is the pattern: 96 glyphs, 8×8, one bit a pixel, 768 bytes, and nothing to load. **Shaders are compiled at build time**, never at runtime: `<Library>/Shaders/<Shader>VS.hlsl` goes through the `.vcxproj`'s `FXCompile` step into `<Library>/CompiledShaders/<Shader>VS.h` as `g_<Shader>VS` (§2). No `D3DCompile`, no `d3dcompiler_47.dll` beside the executable, no `.cso` on disk. Never add a runtime file dependency, a working-directory assumption or a "just for development" loose-file path; the loose path is the one that ships.
 
 **R13 binds a process acting as the CLIENT, and has exactly two sanctioned exceptions** (ADR-024, ADR-028 and ADR-030, owner decisions, 2026-09-11). A process **acting as the server** may write **one match store** — the rules, the seed, and every locked order set, from which a match is loaded by re-resolving it — and **one instrumentation log**, the timestamped event stream the test plan's first section requires. Nothing else, and never a client.
 

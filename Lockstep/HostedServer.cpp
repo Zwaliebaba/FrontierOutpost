@@ -10,7 +10,7 @@
 
 #include <chrono>
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -96,4 +96,4 @@ void HostedServer::Run(std::uint16_t _port, std::vector<std::string> _tokens, st
   }
 }
 
-} // namespace Frontier
+} // namespace Lockstep

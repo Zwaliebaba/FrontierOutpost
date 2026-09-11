@@ -32,7 +32,7 @@ constexpr std::array<std::uint64_t, 8> SEEDS = {
 /// FNV-1a over the fields in index order. It covers the positions as well as the graph: the galaxy
 /// is what the player sees as much as what a fleet moves through, so a layout that shifted by one
 /// unit is a layout that changed.
-[[nodiscard]] std::uint64_t HashGalaxy(const Frontier::Galaxy& _galaxy)
+[[nodiscard]] std::uint64_t HashGalaxy(const Lockstep::Galaxy& _galaxy)
 {
   std::uint64_t hash = 0xCBF29CE484222325ULL;
   const auto absorb = [&hash](std::uint64_t _value)
@@ -44,7 +44,7 @@ constexpr std::array<std::uint64_t, 8> SEEDS = {
     }
   };
 
-  for (const Frontier::GalaxySystem& system : _galaxy.Systems())
+  for (const Lockstep::GalaxySystem& system : _galaxy.Systems())
   {
     for (const char letter : system.name)
     {
@@ -57,7 +57,7 @@ constexpr std::array<std::uint64_t, 8> SEEDS = {
     absorb(static_cast<std::uint64_t>(system.positionY));
   }
 
-  for (const Frontier::GalaxyLane& lane : _galaxy.Lanes())
+  for (const Lockstep::GalaxyLane& lane : _galaxy.Lanes())
   {
     absorb(static_cast<std::uint64_t>(lane.a.Index()));
     absorb(static_cast<std::uint64_t>(lane.b.Index()));
@@ -72,22 +72,22 @@ constexpr std::array<std::uint64_t, 8> SEEDS = {
   return L"players " + std::to_wstring(_players) + L", seed " + std::to_wstring(_seed);
 }
 
-[[nodiscard]] Frontier::MatchRules RulesFor(std::uint32_t _players)
+[[nodiscard]] Lockstep::MatchRules RulesFor(std::uint32_t _players)
 {
-  Frontier::MatchRules rules;
+  Lockstep::MatchRules rules;
   rules.playerCount = _players;
   return rules;
 }
 
 /// Generates and asserts the galaxy was accepted, so that a constraint test which fails does so on
 /// the constraint it is named for rather than on an empty graph.
-[[nodiscard]] Frontier::Galaxy GenerateOrFail(std::uint32_t _players, std::uint64_t _seed)
+[[nodiscard]] Lockstep::Galaxy GenerateOrFail(std::uint32_t _players, std::uint64_t _seed)
 {
-  Frontier::Galaxy galaxy;
-  const Frontier::GalaxyRejection rejection = Frontier::GalaxyGenerator::TryGenerate(RulesFor(_players), _seed, galaxy);
+  Lockstep::Galaxy galaxy;
+  const Lockstep::GalaxyRejection rejection = Lockstep::GalaxyGenerator::TryGenerate(RulesFor(_players), _seed, galaxy);
 
-  const std::string reason = Frontier::Describe(rejection);
-  Assert::IsTrue(rejection == Frontier::GalaxyRejection::None,
+  const std::string reason = Lockstep::Describe(rejection);
+  Assert::IsTrue(rejection == Lockstep::GalaxyRejection::None,
                  (Where(_players, _seed) + L": " + std::wstring(reason.begin(), reason.end())).c_str());
   return galaxy;
 }
@@ -106,11 +106,11 @@ TEST_CLASS(GalaxyGenerationTests)
 public:
   TEST_METHOD(EveryPlayerCountAndSeedProducesAnAcceptedGalaxy)
   {
-    for (std::uint32_t players = Frontier::MINIMUM_PLAYERS; players <= Frontier::MAXIMUM_PLAYERS; ++players)
+    for (std::uint32_t players = Lockstep::MINIMUM_PLAYERS; players <= Lockstep::MAXIMUM_PLAYERS; ++players)
     {
       for (const std::uint64_t seed : SEEDS)
       {
-        const Frontier::Galaxy galaxy = GenerateOrFail(players, seed);
+        const Lockstep::Galaxy galaxy = GenerateOrFail(players, seed);
         Assert::IsTrue(galaxy.SystemCount() > players, L"a galaxy is more than its capitals");
       }
     }
@@ -146,7 +146,7 @@ public:
     {
       for (const std::uint64_t seed : SEEDS)
       {
-        const Frontier::Galaxy galaxy = GenerateOrFail(size.players, seed);
+        const Lockstep::Galaxy galaxy = GenerateOrFail(size.players, seed);
         Assert::AreEqual(size.systems, galaxy.SystemCount(), (Where(size.players, seed) + L": systems").c_str());
         Assert::AreEqual(size.lanes, galaxy.LaneCount(), (Where(size.players, seed) + L": lanes").c_str());
       }
@@ -155,11 +155,11 @@ public:
 
   TEST_METHOD(TheGalaxyIsConnected)
   {
-    for (std::uint32_t players = Frontier::MINIMUM_PLAYERS; players <= Frontier::MAXIMUM_PLAYERS; ++players)
+    for (std::uint32_t players = Lockstep::MINIMUM_PLAYERS; players <= Lockstep::MAXIMUM_PLAYERS; ++players)
     {
       for (const std::uint64_t seed : SEEDS)
       {
-        const Frontier::Galaxy galaxy = GenerateOrFail(players, seed);
+        const Lockstep::Galaxy galaxy = GenerateOrFail(players, seed);
         Assert::IsTrue(galaxy.IsConnected(), (Where(players, seed) + L": some system is cut off").c_str());
       }
     }
@@ -170,23 +170,23 @@ public:
   // player is a lonely outpost is the failure this rule exists to prevent.
   TEST_METHOD(EveryCapitalHasARivalWithinThreeTicks)
   {
-    for (std::uint32_t players = Frontier::MINIMUM_PLAYERS; players <= Frontier::MAXIMUM_PLAYERS; ++players)
+    for (std::uint32_t players = Lockstep::MINIMUM_PLAYERS; players <= Lockstep::MAXIMUM_PLAYERS; ++players)
     {
-      const Frontier::MatchRules rules = RulesFor(players);
+      const Lockstep::MatchRules rules = RulesFor(players);
 
       for (const std::uint64_t seed : SEEDS)
       {
-        const Frontier::Galaxy galaxy = GenerateOrFail(players, seed);
+        const Lockstep::Galaxy galaxy = GenerateOrFail(players, seed);
 
-        const std::vector<Frontier::SystemId> capitals = galaxy.Capitals();
+        const std::vector<Lockstep::SystemId> capitals = galaxy.Capitals();
         Assert::AreEqual(static_cast<size_t>(players), capitals.size(), L"one capital per player");
 
-        for (const Frontier::SystemId capital : capitals)
+        for (const Lockstep::SystemId capital : capitals)
         {
           const std::vector<std::uint32_t> reach = galaxy.ShortestPathTicksFrom(capital);
 
-          std::uint32_t nearest = Frontier::Galaxy::UNREACHABLE;
-          for (const Frontier::SystemId rival : capitals)
+          std::uint32_t nearest = Lockstep::Galaxy::UNREACHABLE;
+          for (const Lockstep::SystemId rival : capitals)
           {
             if (rival != capital)
             {
@@ -205,18 +205,18 @@ public:
   // cluster is inside a cluster and costs one; everything else leaves one and is a frontier lane.
   TEST_METHOD(LaneCostsMatchTheTwoBands)
   {
-    for (std::uint32_t players = Frontier::MINIMUM_PLAYERS; players <= Frontier::MAXIMUM_PLAYERS; ++players)
+    for (std::uint32_t players = Lockstep::MINIMUM_PLAYERS; players <= Lockstep::MAXIMUM_PLAYERS; ++players)
     {
-      const Frontier::MatchRules rules = RulesFor(players);
+      const Lockstep::MatchRules rules = RulesFor(players);
 
       for (const std::uint64_t seed : SEEDS)
       {
-        const Frontier::Galaxy galaxy = GenerateOrFail(players, seed);
+        const Lockstep::Galaxy galaxy = GenerateOrFail(players, seed);
 
-        for (const Frontier::GalaxyLane& lane : galaxy.Lanes())
+        for (const Lockstep::GalaxyLane& lane : galaxy.Lanes())
         {
-          const Frontier::GalaxySystem& from = galaxy.SystemAt(lane.a);
-          const Frontier::GalaxySystem& to = galaxy.SystemAt(lane.b);
+          const Lockstep::GalaxySystem& from = galaxy.SystemAt(lane.a);
+          const Lockstep::GalaxySystem& to = galaxy.SystemAt(lane.b);
           const bool insideOneCluster = from.startingCluster.IsValid() && from.startingCluster == to.startingCluster;
 
           const std::wstring context = Where(players, seed) + L": " + std::wstring(from.name.begin(), from.name.end()) + L" to " +
@@ -240,20 +240,20 @@ public:
   // is testable now is that it exists, is unowned, and can be got at from every seat.
   TEST_METHOD(TheSealedRegionIsPlacedAndReachable)
   {
-    for (std::uint32_t players = Frontier::MINIMUM_PLAYERS; players <= Frontier::MAXIMUM_PLAYERS; ++players)
+    for (std::uint32_t players = Lockstep::MINIMUM_PLAYERS; players <= Lockstep::MAXIMUM_PLAYERS; ++players)
     {
       for (const std::uint64_t seed : SEEDS)
       {
-        const Frontier::Galaxy galaxy = GenerateOrFail(players, seed);
+        const Lockstep::Galaxy galaxy = GenerateOrFail(players, seed);
 
-        const Frontier::SystemId region = galaxy.RegionAnchor();
+        const Lockstep::SystemId region = galaxy.RegionAnchor();
         Assert::IsTrue(region.IsValid(), (Where(players, seed) + L": no region").c_str());
         Assert::IsFalse(galaxy.LanesAt(region).empty(), (Where(players, seed) + L": region has no lanes").c_str());
         Assert::IsFalse(galaxy.SystemAt(region).owner.IsValid(), L"the region can be raided, not claimed");
 
-        for (const Frontier::SystemId capital : galaxy.Capitals())
+        for (const Lockstep::SystemId capital : galaxy.Capitals())
         {
-          Assert::IsTrue(galaxy.ShortestPathTicks(capital, region) != Frontier::Galaxy::UNREACHABLE,
+          Assert::IsTrue(galaxy.ShortestPathTicks(capital, region) != Lockstep::Galaxy::UNREACHABLE,
                          (Where(players, seed) + L": a capital cannot reach the region").c_str());
         }
       }
@@ -262,17 +262,17 @@ public:
 
   TEST_METHOD(EachPlayerStartsWithOneCapitalAndItsCluster)
   {
-    for (std::uint32_t players = Frontier::MINIMUM_PLAYERS; players <= Frontier::MAXIMUM_PLAYERS; ++players)
+    for (std::uint32_t players = Lockstep::MINIMUM_PLAYERS; players <= Lockstep::MAXIMUM_PLAYERS; ++players)
     {
-      const Frontier::MatchRules rules = RulesFor(players);
-      const Frontier::Galaxy galaxy = GenerateOrFail(players, 12345ULL);
+      const Lockstep::MatchRules rules = RulesFor(players);
+      const Lockstep::Galaxy galaxy = GenerateOrFail(players, 12345ULL);
 
       std::vector<std::uint32_t> capitalsOwned(players, 0);
       std::vector<std::uint32_t> satellitesInCluster(players, 0);
 
-      for (const Frontier::GalaxySystem& system : galaxy.Systems())
+      for (const Lockstep::GalaxySystem& system : galaxy.Systems())
       {
-        if (system.kind == Frontier::SystemKind::Capital)
+        if (system.kind == Lockstep::SystemKind::Capital)
         {
           Assert::IsTrue(system.owner.IsValid(), L"a capital is somebody's seat");
           capitalsOwned[system.owner.AsSize()]++;
@@ -282,7 +282,7 @@ public:
           Assert::IsFalse(system.owner.IsValid(), L"nothing but a capital is owned at generation");
         }
 
-        if (system.kind == Frontier::SystemKind::Satellite)
+        if (system.kind == Lockstep::SystemKind::Satellite)
         {
           satellitesInCluster[system.startingCluster.AsSize()]++;
         }
@@ -300,14 +300,14 @@ public:
   // map two players cannot talk about over a shared link.
   TEST_METHOD(SystemNamesAreUnique)
   {
-    for (std::uint32_t players = Frontier::MINIMUM_PLAYERS; players <= Frontier::MAXIMUM_PLAYERS; ++players)
+    for (std::uint32_t players = Lockstep::MINIMUM_PLAYERS; players <= Lockstep::MAXIMUM_PLAYERS; ++players)
     {
       for (const std::uint64_t seed : SEEDS)
       {
-        const Frontier::Galaxy galaxy = GenerateOrFail(players, seed);
+        const Lockstep::Galaxy galaxy = GenerateOrFail(players, seed);
 
         std::set<std::string> seen;
-        for (const Frontier::GalaxySystem& system : galaxy.Systems())
+        for (const Lockstep::GalaxySystem& system : galaxy.Systems())
         {
           Assert::IsFalse(system.name.empty(), L"every system is named");
           Assert::IsTrue(seen.insert(system.name).second, (Where(players, seed) + L": a name came up twice").c_str());
@@ -318,14 +318,14 @@ public:
 
   TEST_METHOD(NoLaneIsDuplicatedOrAttachedToItself)
   {
-    for (std::uint32_t players = Frontier::MINIMUM_PLAYERS; players <= Frontier::MAXIMUM_PLAYERS; ++players)
+    for (std::uint32_t players = Lockstep::MINIMUM_PLAYERS; players <= Lockstep::MAXIMUM_PLAYERS; ++players)
     {
       for (const std::uint64_t seed : SEEDS)
       {
-        const Frontier::Galaxy galaxy = GenerateOrFail(players, seed);
+        const Lockstep::Galaxy galaxy = GenerateOrFail(players, seed);
 
         std::set<std::pair<std::int32_t, std::int32_t>> seen;
-        for (const Frontier::GalaxyLane& lane : galaxy.Lanes())
+        for (const Lockstep::GalaxyLane& lane : galaxy.Lanes())
         {
           Assert::IsTrue(lane.a < lane.b, L"endpoints ascend, so a lane has exactly one representation");
           Assert::IsTrue(seen.insert({lane.a.Index(), lane.b.Index()}).second, (Where(players, seed) + L": the same lane twice").c_str());
@@ -342,12 +342,12 @@ public:
   // whoever is tuning to update it without reading it.
   TEST_METHOD(TheSameSeedGivesTheSameGalaxy)
   {
-    for (std::uint32_t players = Frontier::MINIMUM_PLAYERS; players <= Frontier::MAXIMUM_PLAYERS; ++players)
+    for (std::uint32_t players = Lockstep::MINIMUM_PLAYERS; players <= Lockstep::MAXIMUM_PLAYERS; ++players)
     {
       for (const std::uint64_t seed : SEEDS)
       {
-        const Frontier::Galaxy first = GenerateOrFail(players, seed);
-        const Frontier::Galaxy second = GenerateOrFail(players, seed);
+        const Lockstep::Galaxy first = GenerateOrFail(players, seed);
+        const Lockstep::Galaxy second = GenerateOrFail(players, seed);
 
         Assert::AreEqual(HashGalaxy(first), HashGalaxy(second), (Where(players, seed) + L": not reproducible").c_str());
       }
@@ -359,7 +359,7 @@ public:
     std::set<std::uint64_t> hashes;
     for (const std::uint64_t seed : SEEDS)
     {
-      const Frontier::Galaxy galaxy = GenerateOrFail(8, seed);
+      const Lockstep::Galaxy galaxy = GenerateOrFail(8, seed);
       Assert::IsTrue(hashes.insert(HashGalaxy(galaxy)).second, L"two seeds produced the same galaxy");
     }
   }
@@ -368,12 +368,12 @@ public:
   // call would append a whole galaxy to the first and every count above would still pass.
   TEST_METHOD(GeneratingIntoAUsedGalaxyReplacesIt)
   {
-    Frontier::Galaxy galaxy;
-    (void)Frontier::GalaxyGenerator::TryGenerate(RulesFor(6), 1ULL, galaxy);
+    Lockstep::Galaxy galaxy;
+    (void)Lockstep::GalaxyGenerator::TryGenerate(RulesFor(6), 1ULL, galaxy);
     const std::uint32_t systems = galaxy.SystemCount();
     const std::uint32_t lanes = galaxy.LaneCount();
 
-    (void)Frontier::GalaxyGenerator::TryGenerate(RulesFor(6), 2ULL, galaxy);
+    (void)Lockstep::GalaxyGenerator::TryGenerate(RulesFor(6), 2ULL, galaxy);
 
     Assert::AreEqual(systems, galaxy.SystemCount(), L"the second galaxy replaced the first rather than joining it");
     Assert::AreEqual(lanes, galaxy.LaneCount());
@@ -383,13 +383,13 @@ public:
   // generator and the rules have drifted apart. Zero here is the signal that they still agree.
   TEST_METHOD(GenerateAcceptsItsFirstSeed)
   {
-    for (std::uint32_t players = Frontier::MINIMUM_PLAYERS; players <= Frontier::MAXIMUM_PLAYERS; ++players)
+    for (std::uint32_t players = Lockstep::MINIMUM_PLAYERS; players <= Lockstep::MAXIMUM_PLAYERS; ++players)
     {
-      const Frontier::MatchRules rules = RulesFor(players);
-      const Frontier::GeneratedGalaxy generated = Frontier::GalaxyGenerator::Generate(rules, 2026ULL);
+      const Lockstep::MatchRules rules = RulesFor(players);
+      const Lockstep::GeneratedGalaxy generated = Lockstep::GalaxyGenerator::Generate(rules, 2026ULL);
 
       Assert::AreEqual(0U, generated.rejectedSeeds, L"the layout should satisfy its own constraints first time");
-      Assert::IsTrue(Frontier::GalaxyGenerator::Validate(generated.galaxy, rules) == Frontier::GalaxyRejection::None);
+      Assert::IsTrue(Lockstep::GalaxyGenerator::Validate(generated.galaxy, rules) == Lockstep::GalaxyRejection::None);
       Assert::IsTrue(generated.seed != 0ULL, L"the accepted seed is reported, so a bug report can quote it");
     }
   }
@@ -405,28 +405,28 @@ TEST_CLASS(GalaxyValidationTests)
 {
 public:
   /// Two capitals two ticks apart with the region hanging off the first. Small, and it passes.
-  [[nodiscard]] static Frontier::Galaxy Acceptable()
+  [[nodiscard]] static Lockstep::Galaxy Acceptable()
   {
-    Frontier::Galaxy galaxy;
+    Lockstep::Galaxy galaxy;
 
-    Frontier::GalaxySystem region;
+    Lockstep::GalaxySystem region;
     region.name = "Sealed Region";
-    region.kind = Frontier::SystemKind::RegionAnchor;
-    const Frontier::SystemId regionId = galaxy.AddSystem(std::move(region));
+    region.kind = Lockstep::SystemKind::RegionAnchor;
+    const Lockstep::SystemId regionId = galaxy.AddSystem(std::move(region));
 
-    Frontier::GalaxySystem first;
+    Lockstep::GalaxySystem first;
     first.name = "First";
-    first.kind = Frontier::SystemKind::Capital;
-    first.owner = Frontier::PlayerId{0};
-    first.startingCluster = Frontier::PlayerId{0};
-    const Frontier::SystemId firstId = galaxy.AddSystem(std::move(first));
+    first.kind = Lockstep::SystemKind::Capital;
+    first.owner = Lockstep::PlayerId{0};
+    first.startingCluster = Lockstep::PlayerId{0};
+    const Lockstep::SystemId firstId = galaxy.AddSystem(std::move(first));
 
-    Frontier::GalaxySystem second;
+    Lockstep::GalaxySystem second;
     second.name = "Second";
-    second.kind = Frontier::SystemKind::Capital;
-    second.owner = Frontier::PlayerId{1};
-    second.startingCluster = Frontier::PlayerId{1};
-    const Frontier::SystemId secondId = galaxy.AddSystem(std::move(second));
+    second.kind = Lockstep::SystemKind::Capital;
+    second.owner = Lockstep::PlayerId{1};
+    second.startingCluster = Lockstep::PlayerId{1};
+    const Lockstep::SystemId secondId = galaxy.AddSystem(std::move(second));
 
     (void)galaxy.AddLane(firstId, secondId, 2);
     (void)galaxy.AddLane(firstId, regionId, 2);
@@ -435,114 +435,114 @@ public:
 
   TEST_METHOD(TheBaselineIsAccepted)
   {
-    const Frontier::Galaxy galaxy = Acceptable();
-    Assert::IsTrue(Frontier::GalaxyGenerator::Validate(galaxy, Frontier::MatchRules{}) == Frontier::GalaxyRejection::None,
+    const Lockstep::Galaxy galaxy = Acceptable();
+    Assert::IsTrue(Lockstep::GalaxyGenerator::Validate(galaxy, Lockstep::MatchRules{}) == Lockstep::GalaxyRejection::None,
                    L"the galaxy the other cases break must itself be sound, or they prove nothing");
   }
 
   TEST_METHOD(ASystemNothingReachesIsRefused)
   {
-    Frontier::Galaxy galaxy = Acceptable();
+    Lockstep::Galaxy galaxy = Acceptable();
 
-    Frontier::GalaxySystem stranded;
+    Lockstep::GalaxySystem stranded;
     stranded.name = "Stranded";
     (void)galaxy.AddSystem(std::move(stranded));
 
-    Assert::IsTrue(Frontier::GalaxyGenerator::Validate(galaxy, Frontier::MatchRules{}) == Frontier::GalaxyRejection::Disconnected);
+    Assert::IsTrue(Lockstep::GalaxyGenerator::Validate(galaxy, Lockstep::MatchRules{}) == Lockstep::GalaxyRejection::Disconnected);
   }
 
   TEST_METHOD(AClusterLaneThatDoesNotCostOneIsRefused)
   {
-    Frontier::Galaxy galaxy = Acceptable();
+    Lockstep::Galaxy galaxy = Acceptable();
 
-    Frontier::GalaxySystem satellite;
+    Lockstep::GalaxySystem satellite;
     satellite.name = "Suburb";
-    satellite.kind = Frontier::SystemKind::Satellite;
-    satellite.startingCluster = Frontier::PlayerId{0};
-    const Frontier::SystemId satelliteId = galaxy.AddSystem(std::move(satellite));
+    satellite.kind = Lockstep::SystemKind::Satellite;
+    satellite.startingCluster = Lockstep::PlayerId{0};
+    const Lockstep::SystemId satelliteId = galaxy.AddSystem(std::move(satellite));
 
     // Inside the first cluster, so it must cost one. It costs two.
-    (void)galaxy.AddLane(Frontier::SystemId{1}, satelliteId, 2);
+    (void)galaxy.AddLane(Lockstep::SystemId{1}, satelliteId, 2);
 
-    Assert::IsTrue(Frontier::GalaxyGenerator::Validate(galaxy, Frontier::MatchRules{}) == Frontier::GalaxyRejection::ClusterLaneNotOneTick);
+    Assert::IsTrue(Lockstep::GalaxyGenerator::Validate(galaxy, Lockstep::MatchRules{}) == Lockstep::GalaxyRejection::ClusterLaneNotOneTick);
   }
 
   TEST_METHOD(AFrontierLaneOutsideTheBandIsRefused)
   {
-    Frontier::Galaxy galaxy;
+    Lockstep::Galaxy galaxy;
 
-    Frontier::GalaxySystem region;
+    Lockstep::GalaxySystem region;
     region.name = "Sealed Region";
-    region.kind = Frontier::SystemKind::RegionAnchor;
-    const Frontier::SystemId regionId = galaxy.AddSystem(std::move(region));
+    region.kind = Lockstep::SystemKind::RegionAnchor;
+    const Lockstep::SystemId regionId = galaxy.AddSystem(std::move(region));
 
-    Frontier::GalaxySystem first;
+    Lockstep::GalaxySystem first;
     first.name = "First";
-    first.kind = Frontier::SystemKind::Capital;
-    first.owner = Frontier::PlayerId{0};
-    first.startingCluster = Frontier::PlayerId{0};
-    const Frontier::SystemId firstId = galaxy.AddSystem(std::move(first));
+    first.kind = Lockstep::SystemKind::Capital;
+    first.owner = Lockstep::PlayerId{0};
+    first.startingCluster = Lockstep::PlayerId{0};
+    const Lockstep::SystemId firstId = galaxy.AddSystem(std::move(first));
 
     // Five ticks, outside the two-to-four band.
     (void)galaxy.AddLane(firstId, regionId, 5);
 
-    Assert::IsTrue(Frontier::GalaxyGenerator::Validate(galaxy, Frontier::MatchRules{}) == Frontier::GalaxyRejection::FrontierLaneOutOfBand);
+    Assert::IsTrue(Lockstep::GalaxyGenerator::Validate(galaxy, Lockstep::MatchRules{}) == Lockstep::GalaxyRejection::FrontierLaneOutOfBand);
   }
 
   TEST_METHOD(AGalaxyWithoutARegionIsRefused)
   {
-    Frontier::Galaxy galaxy;
+    Lockstep::Galaxy galaxy;
 
-    Frontier::GalaxySystem only;
+    Lockstep::GalaxySystem only;
     only.name = "Alone";
-    only.kind = Frontier::SystemKind::Capital;
-    only.owner = Frontier::PlayerId{0};
+    only.kind = Lockstep::SystemKind::Capital;
+    only.owner = Lockstep::PlayerId{0};
     (void)galaxy.AddSystem(std::move(only));
 
-    Assert::IsTrue(Frontier::GalaxyGenerator::Validate(galaxy, Frontier::MatchRules{}) == Frontier::GalaxyRejection::RegionUnreachable);
+    Assert::IsTrue(Lockstep::GalaxyGenerator::Validate(galaxy, Lockstep::MatchRules{}) == Lockstep::GalaxyRejection::RegionUnreachable);
   }
 
   TEST_METHOD(CapitalsTooFarApartAreRefused)
   {
-    Frontier::Galaxy galaxy;
+    Lockstep::Galaxy galaxy;
 
-    Frontier::GalaxySystem region;
+    Lockstep::GalaxySystem region;
     region.name = "Sealed Region";
-    region.kind = Frontier::SystemKind::RegionAnchor;
-    const Frontier::SystemId regionId = galaxy.AddSystem(std::move(region));
+    region.kind = Lockstep::SystemKind::RegionAnchor;
+    const Lockstep::SystemId regionId = galaxy.AddSystem(std::move(region));
 
-    Frontier::GalaxySystem first;
+    Lockstep::GalaxySystem first;
     first.name = "First";
-    first.kind = Frontier::SystemKind::Capital;
-    first.owner = Frontier::PlayerId{0};
-    first.startingCluster = Frontier::PlayerId{0};
-    const Frontier::SystemId firstId = galaxy.AddSystem(std::move(first));
+    first.kind = Lockstep::SystemKind::Capital;
+    first.owner = Lockstep::PlayerId{0};
+    first.startingCluster = Lockstep::PlayerId{0};
+    const Lockstep::SystemId firstId = galaxy.AddSystem(std::move(first));
 
-    Frontier::GalaxySystem second;
+    Lockstep::GalaxySystem second;
     second.name = "Second";
-    second.kind = Frontier::SystemKind::Capital;
-    second.owner = Frontier::PlayerId{1};
-    second.startingCluster = Frontier::PlayerId{1};
-    const Frontier::SystemId secondId = galaxy.AddSystem(std::move(second));
+    second.kind = Lockstep::SystemKind::Capital;
+    second.owner = Lockstep::PlayerId{1};
+    second.startingCluster = Lockstep::PlayerId{1};
+    const Lockstep::SystemId secondId = galaxy.AddSystem(std::move(second));
 
     // The only route between them runs through the region: two ticks each way, so four apart.
     (void)galaxy.AddLane(firstId, regionId, 2);
     (void)galaxy.AddLane(secondId, regionId, 2);
 
-    Assert::IsTrue(Frontier::GalaxyGenerator::Validate(galaxy, Frontier::MatchRules{}) == Frontier::GalaxyRejection::RivalTooFar);
+    Assert::IsTrue(Lockstep::GalaxyGenerator::Validate(galaxy, Lockstep::MatchRules{}) == Lockstep::GalaxyRejection::RivalTooFar);
   }
 
   TEST_METHOD(APlayerCountOutsideTheDesignIsRefusedBeforeAnythingIsBuilt)
   {
     for (const std::uint32_t players : {0U, 1U, 5U, 13U, 100U})
     {
-      Frontier::MatchRules rules;
+      Lockstep::MatchRules rules;
       rules.playerCount = players;
 
-      Frontier::Galaxy galaxy;
-      const Frontier::GalaxyRejection rejection = Frontier::GalaxyGenerator::TryGenerate(rules, 1ULL, galaxy);
+      Lockstep::Galaxy galaxy;
+      const Lockstep::GalaxyRejection rejection = Lockstep::GalaxyGenerator::TryGenerate(rules, 1ULL, galaxy);
 
-      Assert::IsTrue(rejection == Frontier::GalaxyRejection::PlayerCountOutOfRange, (L"player count " + std::to_wstring(players)).c_str());
+      Assert::IsTrue(rejection == Lockstep::GalaxyRejection::PlayerCountOutOfRange, (L"player count " + std::to_wstring(players)).c_str());
       Assert::AreEqual(0U, galaxy.SystemCount(), L"refused before building, not built and then thrown away");
     }
   }
@@ -550,20 +550,20 @@ public:
   // A rejection nobody can read is a rejection nobody can act on.
   TEST_METHOD(EveryRejectionDescribesItself)
   {
-    constexpr std::array<Frontier::GalaxyRejection, 7> ALL = {
-      Frontier::GalaxyRejection::None,
-      Frontier::GalaxyRejection::PlayerCountOutOfRange,
-      Frontier::GalaxyRejection::Disconnected,
-      Frontier::GalaxyRejection::RivalTooFar,
-      Frontier::GalaxyRejection::ClusterLaneNotOneTick,
-      Frontier::GalaxyRejection::FrontierLaneOutOfBand,
-      Frontier::GalaxyRejection::RegionUnreachable,
+    constexpr std::array<Lockstep::GalaxyRejection, 7> ALL = {
+      Lockstep::GalaxyRejection::None,
+      Lockstep::GalaxyRejection::PlayerCountOutOfRange,
+      Lockstep::GalaxyRejection::Disconnected,
+      Lockstep::GalaxyRejection::RivalTooFar,
+      Lockstep::GalaxyRejection::ClusterLaneNotOneTick,
+      Lockstep::GalaxyRejection::FrontierLaneOutOfBand,
+      Lockstep::GalaxyRejection::RegionUnreachable,
     };
 
     std::set<std::string> descriptions;
-    for (const Frontier::GalaxyRejection rejection : ALL)
+    for (const Lockstep::GalaxyRejection rejection : ALL)
     {
-      const char* text = Frontier::Describe(rejection);
+      const char* text = Lockstep::Describe(rejection);
       Assert::IsNotNull(text);
       Assert::IsTrue(descriptions.insert(text).second, L"two rejections share a description");
     }
@@ -576,10 +576,10 @@ TEST_CLASS(GalaxyGraphTests)
 public:
   TEST_METHOD(ShortestPathCountsTicksRatherThanLanes)
   {
-    Frontier::Galaxy galaxy;
-    const Frontier::SystemId a = galaxy.AddSystem(Frontier::GalaxySystem{.name = "A"});
-    const Frontier::SystemId b = galaxy.AddSystem(Frontier::GalaxySystem{.name = "B"});
-    const Frontier::SystemId c = galaxy.AddSystem(Frontier::GalaxySystem{.name = "C"});
+    Lockstep::Galaxy galaxy;
+    const Lockstep::SystemId a = galaxy.AddSystem(Lockstep::GalaxySystem{.name = "A"});
+    const Lockstep::SystemId b = galaxy.AddSystem(Lockstep::GalaxySystem{.name = "B"});
+    const Lockstep::SystemId c = galaxy.AddSystem(Lockstep::GalaxySystem{.name = "C"});
 
     // One long hop, or two short ones. The pair is further in lanes and nearer in time, and time is
     // what the one-pager measures with.
@@ -593,19 +593,19 @@ public:
 
   TEST_METHOD(AnUnreachableSystemSaysSo)
   {
-    Frontier::Galaxy galaxy;
-    const Frontier::SystemId a = galaxy.AddSystem(Frontier::GalaxySystem{.name = "A"});
-    const Frontier::SystemId b = galaxy.AddSystem(Frontier::GalaxySystem{.name = "B"});
+    Lockstep::Galaxy galaxy;
+    const Lockstep::SystemId a = galaxy.AddSystem(Lockstep::GalaxySystem{.name = "A"});
+    const Lockstep::SystemId b = galaxy.AddSystem(Lockstep::GalaxySystem{.name = "B"});
 
-    Assert::AreEqual(Frontier::Galaxy::UNREACHABLE, galaxy.ShortestPathTicks(a, b));
+    Assert::AreEqual(Lockstep::Galaxy::UNREACHABLE, galaxy.ShortestPathTicks(a, b));
     Assert::IsFalse(galaxy.IsConnected());
   }
 
   TEST_METHOD(SelfLoopsAndDuplicatesAreRefused)
   {
-    Frontier::Galaxy galaxy;
-    const Frontier::SystemId a = galaxy.AddSystem(Frontier::GalaxySystem{.name = "A"});
-    const Frontier::SystemId b = galaxy.AddSystem(Frontier::GalaxySystem{.name = "B"});
+    Lockstep::Galaxy galaxy;
+    const Lockstep::SystemId a = galaxy.AddSystem(Lockstep::GalaxySystem{.name = "A"});
+    const Lockstep::SystemId b = galaxy.AddSystem(Lockstep::GalaxySystem{.name = "B"});
 
     Assert::IsFalse(galaxy.AddLane(a, a, 1).IsValid(), L"a system is not next to itself");
     Assert::IsTrue(galaxy.AddLane(a, b, 1).IsValid());
@@ -616,10 +616,10 @@ public:
 
   TEST_METHOD(BothEndsOfALaneKnowAboutIt)
   {
-    Frontier::Galaxy galaxy;
-    const Frontier::SystemId a = galaxy.AddSystem(Frontier::GalaxySystem{.name = "A"});
-    const Frontier::SystemId b = galaxy.AddSystem(Frontier::GalaxySystem{.name = "B"});
-    const Frontier::LaneId lane = galaxy.AddLane(b, a, 4);
+    Lockstep::Galaxy galaxy;
+    const Lockstep::SystemId a = galaxy.AddSystem(Lockstep::GalaxySystem{.name = "A"});
+    const Lockstep::SystemId b = galaxy.AddSystem(Lockstep::GalaxySystem{.name = "B"});
+    const Lockstep::LaneId lane = galaxy.AddLane(b, a, 4);
 
     Assert::AreEqual(static_cast<size_t>(1), galaxy.LanesAt(a).size());
     Assert::AreEqual(static_cast<size_t>(1), galaxy.LanesAt(b).size());

@@ -93,9 +93,9 @@ WarningsAsErrors: '*'
 # Headers sitting DIRECTLY in a project folder, which is every hand-written one (AGENTS.md §3's
 # flat-directory rule). A bare `.*` would also match build output and the Windows SDK, and most of
 # what it reported would be from headers nobody in this repository wrote.
-HeaderFilterRegex: '(NeuronCore|NeuronClient|NeuronServer|GameLogic|FrontierOutpost|[A-Za-z0-9]+Tests)[/\\][A-Za-z0-9]+\.h$'
+HeaderFilterRegex: '(NeuronCore|NeuronClient|NeuronServer|GameLogic|Lockstep|[A-Za-z0-9]+Tests)[/\\][A-Za-z0-9]+\.h$'
 
-# FrontierOutpost/Resource.h is written by the Visual Studio resource editor, not by hand. Its
+# Lockstep/Resource.h is written by the Visual Studio resource editor, not by hand. Its
 # `#define IDC_STATIC -1` trips bugprone-macro-parentheses, and the fix would be undone the next
 # time someone opens the dialog editor. Excluded here rather than by weakening the check for
 # everything else. (`ExcludeHeaderFilterRegex` needs clang-tidy 19 or newer; on an older one pass

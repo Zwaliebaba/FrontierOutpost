@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 struct FleetTag;
@@ -194,4 +194,4 @@ struct RejectedOrder
   std::int32_t index = -1;
 };
 
-} // namespace Frontier
+} // namespace Lockstep

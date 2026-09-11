@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// The client's end of the wire.
@@ -136,4 +136,4 @@ private:
   std::uint32_t m_reconnects = 0;
 };
 
-} // namespace Frontier
+} // namespace Lockstep

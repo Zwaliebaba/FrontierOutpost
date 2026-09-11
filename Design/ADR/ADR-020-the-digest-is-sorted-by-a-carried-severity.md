@@ -133,7 +133,7 @@ the reference puts a lane cancellation ("system lost") third, and this ranking p
 above a first contact. The reference is a drawing of one plausible tick, not a specification of the
 order, and where they disagree this ADR is the rule.
 
-`FrontierOutpost/MatchState.h` has a seven-value `EventKind` that selects a dot colour. It is not
+`Lockstep/MatchState.h` has a seven-value `EventKind` that selects a dot colour. It is not
 this enum and should not become it: `DigestKind` names what happened and has fifteen values,
 `EventKind` names how it looks. The mapping between them is part of Step 8's client wiring.
 

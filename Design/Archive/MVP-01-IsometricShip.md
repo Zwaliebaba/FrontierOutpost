@@ -5,7 +5,7 @@
 
 ## What shipped
 
-All seven steps. `FrontierOutpost.exe` opens a 1280×800 window, draws a 640×400 sixteen-colour
+All seven steps. `Lockstep.exe` opens a 1280×800 window, draws a 640×400 sixteen-colour
 isometric view of a ship, and a tap or click anywhere on the ground plane becomes an order that
 crosses a loopback transport to a server on its own thread, which turns the ship, flies it there
 and stops it on the point. Every layer the arrow in §1 names exists and is exercised.
@@ -37,7 +37,7 @@ What *was* verified instead, and what each piece covers:
   window at a known position.
 - The un-projection, by the three tests §4 step 6 asks for.
 - The order-to-ship half, by driving a real `Session`, a real `LoopbackTransport` and a real
-  `Frontier::World` end to end: the ship turned to heading 4850, accelerated in exact 60 mm/tick
+  `Lockstep::World` end to end: the ship turned to heading 4850, accelerated in exact 60 mm/tick
   steps to its 1200 mm/tick maximum, braked, and arrived exactly on (60.000 m, 30.000 m) stopped.
 
 The one link with no evidence is the operating system delivering a tap to the window. It needs an
@@ -73,7 +73,7 @@ The number stands, and it has now been argued with.
 
 §4 step 5 says "`NeuronServer`: a `Session` that owns a `World`". `AGENTS.md` §2 says `GameLogic`
 is referenced by the executable and by nothing else. Both cannot hold: a `Session` owning a
-`Frontier::World` is a `NeuronServer` that links `GameLogic`. **ADR-007** resolves it — `Session`
+`Lockstep::World` is a `NeuronServer` that links `GameLogic`. **ADR-007** resolves it — `Session`
 owns an abstract `Simulation` declared in `NeuronCore`, and the executable is what makes it a
 `World` — so the plan's sentence and the repository map are both satisfied.
 
@@ -100,7 +100,7 @@ have caught it until somebody shipped. It is now conditional on the configuratio
 `NeuronCore.h` has `using namespace Neuron;` at file scope, which R10 forbids in a header. It is
 pre-existing and touching it would have rippled through every translation unit in the tree.
 
-`GameLogic/framework.h` and `FrontierOutpost/framework.h` claim the `.vcxproj` files define the
+`GameLogic/framework.h` and `Lockstep/framework.h` claim the `.vcxproj` files define the
 Windows macro family; `AGENTS.md` §4 says the projects deliberately define none of them, and they
 do not. `NeuronServer/framework.h` had the same wrong comment and was corrected because this
 session had to change that file anyway; the other two were left, and are wrong.
@@ -122,7 +122,7 @@ This is the prompt for the first build session, kept in the tree so that the ses
 
 ## 1. What "done" looks like
 
-`FrontierOutpost.exe` starts, opens a fixed 1280×800 window, and shows a **640×400, 16-colour** isometric view of one space ship drifting in space. **Tap or click anywhere on the ground plane and the ship turns toward that point, travels to it, slows, and stops.** A line of 8×8 text in the corner (from `NeuronClient/Font.h`) shows the tick count and the ship's position. That is the whole feature.
+`Lockstep.exe` starts, opens a fixed 1280×800 window, and shows a **640×400, 16-colour** isometric view of one space ship drifting in space. **Tap or click anywhere on the ground plane and the ship turns toward that point, travels to it, slows, and stops.** A line of 8×8 text in the corner (from `NeuronClient/Font.h`) shows the tick count and the ship's position. That is the whole feature.
 
 It is small on purpose. What it buys is not the ship — it is that **every layer the game will ever have exists and is exercised once**:
 
@@ -173,11 +173,11 @@ Each step ends green: builds, four suites pass, three checkers pass, and the exe
 
 ### Step 0 — Read, then plan out loud
 
-Read `AGENTS.md`, `Design/README.md`, the current `NeuronCore.h`, `Debug.h`, `Font.h` and `FrontierOutpost.cpp`. Report what is there, what §2 constrains, and which ADRs you will write — before writing code. If anything in this plan contradicts the tree, say so and stop.
+Read `AGENTS.md`, `Design/README.md`, the current `NeuronCore.h`, `Debug.h`, `Font.h` and `Lockstep.cpp`. Report what is there, what §2 constrains, and which ADRs you will write — before writing code. If anything in this plan contradicts the tree, say so and stop.
 
 ### Step 1 — The device and the window that shows nothing
 
-`NeuronClient`: a `Device` (or whatever R2 lets you call it) owning the `ID3D12Device`, a direct queue, a triple-buffered flip-model swap chain on the existing window, fences, and the per-frame command allocator/list dance. Debug layer on in `_DEBUG`. The window is already 1280×800 client area in `FrontierOutpost.cpp`; keep that and remove the `WM_PAINT` handler — the swap chain owns the pixels. Present a cleared back buffer.
+`NeuronClient`: a `Device` (or whatever R2 lets you call it) owning the `ID3D12Device`, a direct queue, a triple-buffered flip-model swap chain on the existing window, fences, and the per-frame command allocator/list dance. Debug layer on in `_DEBUG`. The window is already 1280×800 client area in `Lockstep.cpp`; keep that and remove the `WM_PAINT` handler — the swap chain owns the pixels. Present a cleared back buffer.
 
 Run it. A black window with no D3D12 debug-layer output is the exit criterion. **Handle device removal** at least to the extent of failing loudly through `Debug.h` rather than presenting garbage.
 
@@ -189,13 +189,13 @@ The palette is a `constexpr std::array<std::uint32_t, 16>` in a `NeuronClient` h
 
 ### Step 3 — Text
 
-A `FontRenderer` (or similar) that turns `FONT_DATA` into an 8-bit texture once at startup and draws a string as textured quads into the index target with a given palette index, `TextVS`/`TextPS`. Draw `"FRONTIER OUTPOST"` at (8, 8) in index 15. Unit-test the glyph lookup (which 8 bytes are `'A'`) in `NeuronClientTests`.
+A `FontRenderer` (or similar) that turns `FONT_DATA` into an 8-bit texture once at startup and draws a string as textured quads into the index target with a given palette index, `TextVS`/`TextPS`. Draw `"LOCKSTEP"` at (8, 8) in index 15. Unit-test the glyph lookup (which 8 bytes are `'A'`) in `NeuronClientTests`.
 
 `Font.h` currently fails `CheckFormat.py`; run `--fix` on it as part of this step, since you are now its first consumer.
 
 ### Step 4 — The mesh, lit, isometric, still
 
-Per the camera and shading ADRs. `MeshVS`/`MeshPS`. The hull is a `constexpr` vertex and index array in **`FrontierOutpost/`** — it is *game* content (R9: the engine does not know what a ship is), in `namespace Frontier`; `NeuronClient` gets a generic "draw this mesh with this world matrix through this camera" and nothing ship-shaped. A root signature with one constant buffer for view-projection and one for the world matrix; depth on. Run it: a ship sitting at the origin, faces two-toned, edges crisp at 2×.
+Per the camera and shading ADRs. `MeshVS`/`MeshPS`. The hull is a `constexpr` vertex and index array in **`Lockstep/`** — it is *game* content (R9: the engine does not know what a ship is), in `namespace Lockstep`; `NeuronClient` gets a generic "draw this mesh with this world matrix through this camera" and nothing ship-shaped. A root signature with one constant buffer for view-projection and one for the world matrix; depth on. Run it: a ship sitting at the origin, faces two-toned, edges crisp at 2×.
 
 ### Step 5 — The server, the tick, the order
 
@@ -205,7 +205,7 @@ Per the camera and shading ADRs. `MeshVS`/`MeshPS`. The hull is a `constexpr` ve
 
 `NeuronServer`: a `Session` that owns a `World`, receives orders from a transport, ticks on the schedule from the threading ADR, and pushes `ShipState` back. `NeuronCore` provides the `LoopbackTransport` (R2: no `I`, no `Base`), tested in `NeuronCoreTests` with two ends in one process.
 
-`FrontierOutpost.cpp` starts the session, wires the loopback ends, and the client renders whatever `ShipState` it last received (interpolated per the ADR). Nothing moves yet, because nothing has sent an order. Run it anyway: the ship is still at the origin, but now it got there through the server.
+`Lockstep.cpp` starts the session, wires the loopback ends, and the client renders whatever `ShipState` it last received (interpolated per the ADR). Nothing moves yet, because nothing has sent an order. Run it anyway: the ship is still at the origin, but now it got there through the server.
 
 ### Step 6 — The click
 

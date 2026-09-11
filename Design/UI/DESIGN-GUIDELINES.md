@@ -1,4 +1,4 @@
-# Design guidelines — Frontier Outpost client
+# Design guidelines — LockStep: Universe client
 
 ## Frame
 - 1280×720 logical pixels, fixed. Letterbox on other aspect ratios; never scale non-integer.

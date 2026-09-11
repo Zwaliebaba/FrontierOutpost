@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// A system as one player sees it.
@@ -114,7 +114,7 @@ struct SnapshotStanding
 
 /// Everything one player is entitled to know, at one tick.
 ///
-/// **The shape is `Frontier::MatchState`'s**, which is the client's view model, but this is not
+/// **The shape is `Lockstep::MatchState`'s**, which is the client's view model, but this is not
 /// that type and must not become it: `GameLogic` is server-side and the client never links it
 /// (AGENTS.md §2), so the two vocabularies meet in the executable's composition root and nowhere
 /// else. What they share is a shape, not a header.
@@ -218,4 +218,4 @@ private:
   bool m_finished = false;
 };
 
-} // namespace Frontier
+} // namespace Lockstep

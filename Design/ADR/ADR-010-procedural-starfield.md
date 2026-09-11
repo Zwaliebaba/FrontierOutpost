@@ -112,7 +112,7 @@ block of physical pixels uniform.
 
 - **Code:** `NeuronClient/Starfield.{h,cpp}`, `NeuronClient/Shaders/Starfield{VS,PS}.hlsl`.
   `IsometricCamera` gains `SnappedTargetXPixels()`/`Y()`, which exist for this and say so.
-  `FrontierOutpost.cpp` draws it first, inside `BeginScene`/`Resolve`.
+  `Lockstep.cpp` draws it first, inside `BeginScene`/`Resolve`.
 - **Design/:** nothing superseded. ADR-003 anticipated this and its snapping decision is what makes
   it work; this is the first thing in the tree that would have failed without it.
 - **AGENTS.md:** no change.

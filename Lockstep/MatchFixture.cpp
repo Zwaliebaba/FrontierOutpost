@@ -9,7 +9,7 @@
 #include "pch.h"
 #include "MatchFixture.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -256,4 +256,4 @@ MatchState MakeReferenceMatch()
   return state;
 }
 
-} // namespace Frontier
+} // namespace Lockstep

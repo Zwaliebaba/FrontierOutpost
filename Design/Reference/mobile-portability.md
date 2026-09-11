@@ -61,7 +61,7 @@ Both readings share §3 and §9. Everything in §4, §5 and §7 is conditional o
 | `GameLogic` | 321 | 0 | — |
 | `NeuronServer` | 176 | 0 | — |
 | `NeuronCore` | 719 | 131 | `NeuronCore.h` (61), `Debug.h` (70) |
-| `FrontierOutpost` | 535 | 374 | `FrontierOutpost.cpp` (374) |
+| `Lockstep` | 535 | 374 | `Lockstep.cpp` (374) |
 | `NeuronClient` | 361 | 2157 | everything except `Font.h`, `Palette.h`, `IsometricCamera.{h,cpp}` |
 | **Total** | **2112** | **2662** | 44% of the non-test tree is platform-free |
 
@@ -127,8 +127,8 @@ includes `NeuronCore.h`, so every translation unit in it sees `<windows.h>` and 
 `ASSERT_TEXT` reaches `Debug.h`. Unlike `GameLogic`, it has a reason to: `ASSERT_TEXT` is the one
 thing it uses from there. Cutting it loose is a one-line change to `NeuronServer.h` plus whatever
 `Debug.h` becomes. **The code is portable; the include chain is not.** That distinction
-holds for `FrontierOutpost/ShipView.{h,cpp}` and the two mesh headers too — 535 lines that name
-nothing platform-specific but are compiled through `FrontierOutpost/pch.h`, which reaches
+holds for `Lockstep/ShipView.{h,cpp}` and the two mesh headers too — 535 lines that name
+nothing platform-specific but are compiled through `Lockstep/pch.h`, which reaches
 `<windows.h>` and D3D12 by way of `NeuronClient.h`.
 
 `NeuronClient` contributes 361 portable lines, and one of them matters: `IsometricCamera.{h,cpp}`
@@ -177,7 +177,7 @@ cost is not measurable, but the pattern is one to know about before the UI grows
 
 ### 4.2 The process shell — 374 lines
 
-`FrontierOutpost.cpp` is a Win32 program: `wWinMain`, a registered window class, a `WndProc`, a
+`Lockstep.cpp` is a Win32 program: `wWinMain`, a registered window class, a `WndProc`, a
 `PeekMessage` pump, `SetProcessDpiAwarenessContext`, and the create-then-measure-then-correct dance
 that guarantees a client area of exactly 1280×800. On Android the equivalent is an `Activity`, a
 `NativeActivity` or `GameActivity` and a `ANativeWindow` reached through JNI, with the message pump
@@ -191,7 +191,7 @@ content in the tree.
 
 ### 4.3 The build system, and the three gates that ride on it
 
-`AGENTS.md` §3 is unambiguous: MSBuild through `FrontierOutpost.slnx`, toolset `v145`,
+`AGENTS.md` §3 is unambiguous: MSBuild through `Lockstep.slnx`, toolset `v145`,
 `/std:c++latest`, `/permissive-`, `/W4` with warnings as errors, `/fp:precise` stated explicitly in
 every `.vcxproj`, precompiled headers, `FXCompile` for shaders, and **"there is no CMake."** None
 of that reaches Android or iOS. Android builds through Gradle driving CMake or `ndk-build`; iOS

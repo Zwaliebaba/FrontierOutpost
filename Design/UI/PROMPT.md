@@ -4,7 +4,7 @@ Read, in order:
 2. `Design/ADR/ADR-014-*.md` (interface layer, 8×8 font), `ADR-027` (owner colours), `ADR-028`, `ADR-029` (roles, tokens).
 3. `Design/UI/README.md`, `DESIGN-GUIDELINES.md`, `SCREENS.md`.
 4. Open the PNGs in `Design/UI/screens/`. They are design references, not code to port.
-5. The current implementation: `FrontierOutpost/MainPage.*`, `GameLogic/TickLog.h`, `NeuronCore/Protocol.h`.
+5. The current implementation: `Lockstep/MainPage.*`, `GameLogic/TickLog.h`, `NeuronCore/Protocol.h`.
 
 **Four of these were put to the owner on 2026-09-11 and answered — see ADR-034.**
 

@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 // The identifiers the game names things with. `Neuron::Id` is the engine's typed index (R9: the
@@ -156,4 +156,4 @@ private:
   SystemId m_regionAnchor;
 };
 
-} // namespace Frontier
+} // namespace Lockstep

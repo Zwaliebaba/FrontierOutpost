@@ -99,7 +99,8 @@ works, which is what R13 is actually protecting.
 
 **Both paths resolve next to the executable, not to the working directory.** This is the bug that
 was in this code before it was in this ADR: `MatchLog` wrote nothing for a full test run because
-`"frontier-match.log"` was relative to wherever the process was launched from. `BesideTheExecutable`
+`"frontier-match.log"` — the file is `lockstep-match.log` since the rename of ADR-035, but it was
+not then — was relative to wherever the process was launched from. `BesideTheExecutable`
 fixes it, and the reason it is worth a paragraph is that R13's warning about "a working-directory
 assumption" turns out to bind the two files the rule allows just as hard as the ones it forbids.
 

@@ -64,7 +64,7 @@ shape of this table and should be measured again when it lands.
 ## Reproducing it
 
 ```
-msbuild FrontierOutpost.slnx /t:Rebuild /p:Configuration=Release /p:Platform=x64
+msbuild Lockstep.slnx /t:Rebuild /p:Configuration=Release /p:Platform=x64
 vstest.console.exe x64\Release\GameLogicTests.dll /Platform:x64 ^
   /Tests:ATickResolvesFastEnoughToReplayAWholeMatch /logger:"console;verbosity=detailed"
 ```

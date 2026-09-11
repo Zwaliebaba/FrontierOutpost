@@ -83,7 +83,7 @@ and from the port quarter — for the deck and the flanks to land on opposite si
 threshold.
 
 **And the mesh has to have faces that differ.** A hull whose facets all tilt upwards has no two
-tones to show under any light. `FrontierOutpost/ShipMesh.h` is built as a raised deck with flanks
+tones to show under any light. `Lockstep/ShipMesh.h` is built as a raised deck with flanks
 falling away to the beam for exactly this reason; the first version was a stretched octahedron and
 rendered as a uniformly white paper aeroplane. Measured on 2026-09-09 from the running executable:
 the hull now covers 12,020 physical pixels of index 7 and 10,508 of index 15.
@@ -113,7 +113,7 @@ a quantity (ADR-001).
 
 - **Code:** `NeuronClient/Shaders/MeshVS.hlsl` implements the choice; `MeshPS.hlsl` deliberately
   contains no arithmetic. `NeuronClient/MeshRenderer.h` holds the light and the threshold.
-  `FrontierOutpost/ShipMesh.h` authors indices in 0–7 and says so.
+  `Lockstep/ShipMesh.h` authors indices in 0–7 and says so.
 - **AGENTS.md:** no change.
 - **Design/:** no document superseded. ADR-001 is the decision this one sits on top of.
 

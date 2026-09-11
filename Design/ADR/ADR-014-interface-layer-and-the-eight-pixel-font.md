@@ -10,7 +10,7 @@
 
 ## Context
 
-`Design/Screens/README.md` specifies the single screen of Frontier Outpost at high fidelity: a
+`Design/Screens/README.md` specifies the single screen of Lockstep at high fidelity: a
 1280×720 ops console of three columns — digest rail, map, orders rail — with final colours,
 spacing and copy, and a projection for the map that is the spec rather than an illustration.
 
@@ -69,7 +69,7 @@ time.
 ## Decision
 
 **The interface is `NeuronClient::ShapeRenderer` plus `NeuronClient::FontRenderer`, and the screen
-is `Frontier::MainPage`, drawn immediate-mode from `Frontier::MatchState`.** Option B.
+is `Lockstep::MainPage`, drawn immediate-mode from `Lockstep::MatchState`.** Option B.
 
 `ShapeRenderer` tessellates on the CPU into one triangle list: a rectangle is two triangles, a
 line is a quad, an ellipse is a fan, a dash pattern is several of the above. There is no
@@ -100,7 +100,7 @@ followed: geometry takes the depth scale, text does not. With one font at whole-
 there was no third option, and the reference shows the intended result.
 
 **The executable shows the main page.** The MVP-01 isometric ship scene is no longer what
-`FrontierOutpost.exe` renders. Its code — `MeshRenderer`, `IsometricCamera`, `Starfield`,
+`Lockstep.exe` renders. Its code — `MeshRenderer`, `IsometricCamera`, `Starfield`,
 `ShipMesh`, `StationMesh`, `ShipView`, `World`, `Session` — is retained, still built and still
 covered by the test suites, but is not reachable from `RunGame`. A mode switch between the two was
 not asked for and is not invented here.
@@ -158,7 +158,7 @@ it, and would sit beside this rather than replacing it.
 
 **A real gap.** `MainPage`'s own logic — the projection, the lane-cost Dijkstra behind the
 destination picker, the countdown format — is **not unit-tested**, because it lives in
-`FrontierOutpost.exe` and the executable has no test suite (AGENTS.md §2 gives one to each of the
+`Lockstep.exe` and the executable has no test suite (AGENTS.md §2 gives one to each of the
 four libraries). Text wrapping was moved to `FontRenderer` partly for this reason and is tested
 there. Closing the rest means either a fifth suite for the executable or moving `MapProjection`
 into `NeuronClient`; neither was done here, and the second is probably right.
@@ -183,8 +183,8 @@ Measured on 2026-09-10 from the running executable at 1280×720:
 - **Code:** `NeuronClient/ShapeRenderer.{h,cpp}`, `NeuronClient/Shaders/Shape{VS,PS}.hlsl` are new.
   `FontRenderer` gains a per-call scale, measurement and wrapping, and its per-frame character
   budget rises from 512 to 4,096. `D3D12Defaults.h` gains `InterfaceBlendState()`.
-  `FrontierOutpost/{MainPage,MatchState,MatchFixture,MapProjection}.*` are new;
-  `FrontierOutpost.cpp` runs the main page.
+  `Lockstep/{MainPage,MatchState,MatchFixture,MapProjection}.*` are new;
+  `Lockstep.cpp` runs the main page.
 - **AGENTS.md:** no change. R12 already required this ADR for the blending exception.
 - **Design/:** ADR-013's `GLYPH_SCALE` is revised — the scale is per-call, and its status line says
   so. Nothing superseded.

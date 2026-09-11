@@ -151,7 +151,7 @@ decision is cheaply reversible.
   `PaletteTarget.{h,cpp}`) are new. `NeuronClient/Shaders/PaletteResolve{VS,PS}.hlsl` are deleted.
   `Mesh{VS,PS}`, `Text{VS,PS}` and `StarfieldPS` write colour; `MeshRenderer`, `FontRenderer`,
   `Starfield` and `Device` name `R8G8B8A8_UNORM`; `PointerInput::Create` lost its present-scale
-  argument; `FrontierOutpost.cpp` no longer resolves.
+  argument; `Lockstep.cpp` no longer resolves.
 - **AGENTS.md:** R12 rewritten, §2's repository map and §1's worked example updated. Done in the
   same commit.
 - **Design/:** `README.md` §1's Presentation row rewritten. ADR-001 superseded. ADR-002 superseded

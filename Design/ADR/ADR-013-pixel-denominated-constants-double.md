@@ -142,7 +142,7 @@ Measured on 2026-09-10 from the running executable at 1280×720:
 - **Code:** `NeuronClient/IsometricCamera.h` (the ladder), `NeuronClient/Starfield.h` (the masks,
   which also moved out of `StarfieldPS.hlsl` into root constants because a colour belongs with the
   other colours), `NeuronClient/FontRenderer.h` (`GLYPH_SCALE` and the two derived spacings),
-  `FrontierOutpost/FrontierOutpost.cpp` (where the status text sits). `ShipMesh.h` and
+  `Lockstep/Lockstep.cpp` (where the status text sits). `ShipMesh.h` and
   `StationMesh.h` have their quoted pixel figures doubled; no geometry changed.
 - **AGENTS.md:** no change.
 - **Design/:** ADR-008 superseded — its ladder is restated above in the units it always physically

@@ -34,7 +34,7 @@ public:
 
   /// Builds the device, the direct queue and a flip-model swap chain sized to the window's client
   /// area. The size is passed rather than measured so that the caller owns the one true statement
-  /// of what the back buffer is (FrontierOutpost.cpp, from SceneTarget's constants).
+  /// of what the back buffer is (Lockstep.cpp, from SceneTarget's constants).
   void Create(HWND _window, std::uint32_t _backBufferWidthPixels, std::uint32_t _backBufferHeightPixels);
 
   /// Waits until the frame that last used this slot has retired, then resets its allocator and

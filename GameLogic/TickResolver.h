@@ -7,7 +7,7 @@
 #include <span>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// Everything the server hands the simulation for one tick.
@@ -70,4 +70,4 @@ private:
   static void WriteDigest(const Match& _in, TickLog& _log);
 };
 
-} // namespace Frontier
+} // namespace Lockstep

@@ -112,7 +112,7 @@ colors a design constraint rather than a preference.
 
 - **Code:** `NeuronClient/PaletteTarget.{h,cpp}`, `NeuronClient/Palette.h`,
   `NeuronClient/Shaders/PaletteResolve{VS,PS}.hlsl` and `NeuronClient/D3D12Defaults.h` implement
-  this and cite it. `FrontierOutpost.cpp` draws everything between `BeginScene()` and `Resolve()`.
+  this and cite it. `Lockstep.cpp` draws everything between `BeginScene()` and `Resolve()`.
 - **AGENTS.md:** no change. R12 already fixes the screen; this ADR says how it is built.
 - **Design/:** no document superseded.
 

@@ -122,7 +122,7 @@ block uniform.
 ## What this changes elsewhere
 
 - **Code:** `NeuronClient/IsometricCamera.{h,cpp}` holds the levels and `ZoomBy`.
-  `NeuronClient/PointerInput.{h,cpp}` holds both producers. `FrontierOutpost.cpp` applies the zoom
+  `NeuronClient/PointerInput.{h,cpp}` holds both producers. `Lockstep.cpp` applies the zoom
   before it places the camera, so the click un-projected in the same frame uses the scale the
   player just asked for.
 - **Design/:** this **refines ADR-003 rather than superseding it**, and the distinction is worth

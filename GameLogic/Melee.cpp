@@ -8,7 +8,7 @@
 #include "pch.h"
 #include "Melee.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 void ResolveMelee(const MatchRules& _rules, std::span<MeleeSide> _sides)
@@ -77,4 +77,4 @@ void ResolveMelee(const MatchRules& _rules, std::span<MeleeSide> _sides)
   }
 }
 
-} // namespace Frontier
+} // namespace Lockstep

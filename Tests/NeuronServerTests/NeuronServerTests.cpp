@@ -53,9 +53,9 @@ constexpr Neuron::Instant ONE_HOUR = ONE_HOUR_INTERVAL;
   std::size_t length = 0;
   if (getenv_s(&length, buffer, sizeof(buffer), "TEMP") != 0 || length == 0)
   {
-    return std::string("frontier-") + _name + ".store";
+    return std::string("lockstep-") + _name + ".store";
   }
-  return std::string(buffer) + "\\frontier-" + _name + ".store";
+  return std::string(buffer) + "\\lockstep-" + _name + ".store";
 }
 
 } // namespace
