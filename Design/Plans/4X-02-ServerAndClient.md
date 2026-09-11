@@ -1,8 +1,10 @@
 # 4X-02 — The server, the client and the network
 
 **Status:** Plan, not started. Written properly 2026-09-11, when `4X-01` closed Stage A and the
-shapes this plan is specified against became facts. Written against `space-4x-one-pager-v10.md`
-(v0.7) and `space-4x-prototype-test-plan.md` (v0.4).
+shapes this plan is specified against became facts. **Both owner decisions are taken** (2026-09-11):
+persistence is ADR-024, and `MatchState::Owner` widens to twelve authored colours, so nothing blocks
+Step 1. Written against `space-4x-one-pager-v10.md` (v0.7) and
+`space-4x-prototype-test-plan.md` (v0.4).
 
 `4X-01` built the loop headless: a galaxy, a resolver, every rule in the one-pager's build order,
 and six scripted policies playing a full 84-tick match deterministically in one process. **This plan
@@ -53,8 +55,9 @@ that is a finding, not a feature.
 
 **One thing `4X-01` left half-done on purpose.** The client still renders `MatchFixture` —
 the design reference's hand-typed tick 46 — and `MatchState::Owner` still has three players and a
-neutral while a `Snapshot` carries standings for six to twelve. Step 2 is where both are fixed, and
-widening `Owner` is a **design question about the token palette**, not a mechanical one.
+neutral while a `Snapshot` carries standings for six to twelve. Step 2 is where both are fixed. The
+owner has chosen **twelve authored colours** (§3, Step 2); authoring them is still a design session
+against the token palette rather than a constant table.
 
 ---
 
@@ -75,33 +78,23 @@ or anything about ranking between matches.
 
 ## 2. What you must decide, and record as ADRs
 
-The first is an **owner decision and blocks Step 1**. The rest are the session's, recorded in the
-step that meets them — the same discipline `4X-01` used, and it worked: five ADRs written against
-code that existed rather than one written against five guesses.
+**Both owner decisions are already taken** and are recorded below with what they rule out. The rest
+are the session's, written in the step that meets them — the same discipline `4X-01` used, and it
+worked: six ADRs written against code that existed rather than one written against six guesses.
 
-**ADR — Persistence, and what R13 means for a server.** *(Owner decision.)* A three-week match must
-survive the server process. R13 says the executable ships alone with no runtime file dependency, and
-it was written for assets. The options:
+**~~ADR — Persistence, and what R13 means for a server.~~ Decided: ADR-024, owner decision,
+2026-09-11.** This no longer blocks Step 1. The server writes **one match store** — the rules, the
+seed, and every locked order set — and a match is loaded by **re-resolving it from tick zero**, with
+the replayed hash asserted against the last one written. AGENTS.md R13 was amended in the same
+commit and now binds the shipped client, naming this store as its one exception.
 
-- **(a)** The server writes one file beside itself; R13 is read as binding the *client*, which still
-  ships alone. The rule gains a sentence saying so.
-- **(b)** Memory only. A restart loses the match. Survivable for Phase 0's forty-eight hours and for
-  nothing after it.
-- **(c)** A database. R14 forbids it — the build depends on the Windows SDK and the MSVC standard
-  library and nothing else.
+Two things ADR-024 decided that this plan has to honour and not quietly soften:
 
-*Recommendation:* **(a)**, with the file being the seed plus every locked order set rather than a
-snapshot — which makes it the same decision as the next one. **Whichever way this goes, AGENTS.md R13
-changes in the same commit**, because a rule that the tree visibly breaks is a rule nobody will
-believe the next time.
-
-**ADR — Persist and replay by re-resolving.** Loading a match is re-running it from tick zero. The
-file is a seed, a `MatchRules`, and the locked order sets in tick order; `4X-01`'s measurement says
-that costs about two milliseconds for a whole match. It buys a tiny file, gives *Replay tick N* for
-free, and turns a determinism bug into a load that visibly diverges instead of a corruption that
-does not. It costs one real thing: **the resolver can never change an in-flight match's history
-without a migration**, so a rule fix mid-Phase-0 either ends the match or accepts that the replay no
-longer reproduces it. This is the payoff ADR-018 exists to make possible.
+- **The hash check at load is not optional and not debug-only.** It is the whole safety argument for
+  storing orders rather than state.
+- **The resolver can never change an in-flight match's history without a migration.** A rule fix
+  during Phase 0 either ends the running match or accepts that its replay no longer reproduces it.
+  There is no third option.
 
 **ADR — The seam.** ADR-007's `Simulation` was `ApplyOrder(MoveToOrder) / Tick() / Snapshot()` and is
 Deprecated. The 4X needs an order *set* per player in, and a per-player snapshot and digest out,
@@ -163,10 +156,19 @@ points *Replay tick N* at the server's `TickLog` instead of the stub view.
 verifiable before any network exists. `MatchFixture` becomes a test fixture and stops being the boot
 path, which is what its header always said would happen. `GeneratedMatch` goes with it.
 
-**`MatchState::Owner` widens here**, and it is the design question named in §0: twelve
-distinguishable colours at 8px, against a token palette that already spends its hues on meaning
-(loss, contact, the region). Expect this to need an owner decision and a change to
-`Design/Screens/README.md`, not just a bigger enum.
+**`MatchState::Owner` widens here, to twelve authored colours** — owner decision, 2026-09-11,
+choosing that over two alternatives that were offered and rejected:
+
+- *Four semantic colours* (you, ally, rival, neutral) reads instantly and never runs out, and was
+  rejected because it cannot tell two rivals apart on the map. The one-pager's late game is "how to
+  read other humans", and a map that renders every rival identically deletes it.
+- *A smaller palette plus a per-node glyph* was rejected as crowding the map at twelve players.
+
+So this step owes **an ADR authoring the twelve colours**, and it is a real design session rather
+than a constant table: the token palette already spends hues on meaning — loss, contact, the region,
+the trade lane — and twelve owner colours have to be distinguishable from those and from each other
+at 8px on black. `Design/Screens/README.md`'s token list changes with it. Do it against the running
+client, not on paper.
 
 **Tests (`NeuronClientTests`):** snapshot to `MatchState` against a hand-built snapshot; an edited
 orders rail serialising to the `OrderSet` the server expects; a fogged snapshot producing a map with
