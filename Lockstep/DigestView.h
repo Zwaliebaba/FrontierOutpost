@@ -58,6 +58,12 @@ struct DigestCard
 ///
 /// A player who produced two or more events in the window collapses into one actor card, ranked by
 /// their worst, because six lines about one rival is one thing happening rather than six.
+///
+/// **When nothing has happened it returns a card anyway, carrying the opening moves.** The digest
+/// is the order surface, and at tick zero the digest is empty -- which made the order surface empty
+/// too, so the first screen of a new match offered no way to give an order at all. That is the
+/// redesign's one real hazard: moving the controls onto the events means a screen with no events
+/// has no controls, and the first screen anybody ever sees is exactly that screen.
 [[nodiscard]] std::vector<DigestCard> CardsOf(const MatchState& _state);
 
 /// The four-cell delta above the digest: `-1 SYSTEM`, `1 CONTACT`, `2 PROPOSALS`, `1 LANE LOST`.

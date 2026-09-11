@@ -145,6 +145,11 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
   state.match.day = 1 + _snapshot.Tick() / 4;
   state.match.totalDays = 21;
   state.match.endsAt = "";
+  state.match.finished = _snapshot.IsFinished();
+
+  // A finished match is locked and stays locked. `locked` is what every control on the screen
+  // already reads, so this is one assignment rather than a second disabled state to maintain.
+  state.orders.locked = state.orders.locked || state.match.finished;
 
   // ---- Standing ----------------------------------------------------------------------------------
   const OwnerId viewer = state.viewer;

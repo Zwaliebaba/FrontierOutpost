@@ -285,6 +285,7 @@ void FontRenderer::BeginFrame(std::uint32_t _frameIndex) noexcept
 {
   m_frameIndex = _frameIndex;
   m_usedThisFrame = 0;
+  m_flushedThisFrame = 0;
   ClearClipRect();
 }
 
@@ -354,7 +355,9 @@ void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::s
 
 void FontRenderer::Flush(ID3D12GraphicsCommandList* _commandList)
 {
-  if (m_usedThisFrame == 0)
+  // Only what has been recorded since the last flush, so that a second layer's glyphs can sit over
+  // a second layer's shapes rather than over the whole frame. See the header.
+  if (m_usedThisFrame == m_flushedThisFrame)
   {
     return;
   }
@@ -378,7 +381,8 @@ void FontRenderer::Flush(ID3D12GraphicsCommandList* _commandList)
 
   _commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   _commandList->IASetVertexBuffers(0, 1, &vertexView);
-  _commandList->DrawInstanced(m_usedThisFrame, 1, 0, 0);
+  _commandList->DrawInstanced(m_usedThisFrame - m_flushedThisFrame, 1, m_flushedThisFrame, 0);
+  m_flushedThisFrame = m_usedThisFrame;
 }
 
 } // namespace Neuron

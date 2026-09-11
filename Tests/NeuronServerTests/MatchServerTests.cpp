@@ -612,6 +612,45 @@ public:
     Assert::IsTrue(Mentions(running.server->TakeLog(), "player 0 disconnected orders=1 edits=0"), L"the second session is its own session");
   }
 
+  // ---- A match that has ended takes no more orders -----------------------------------------------
+  //
+  // Found by a rehearsal rather than by reading: a match ended early on dominance, the client went
+  // on offering its buttons, and every tap was logged as an order edit into a tick that would never
+  // resolve. H4 is a fraction of the edits somebody made while the game was still a game.
+  TEST_METHOD(AFinishedMatchTakesNoMoreOrders)
+  {
+    Running running = Start();
+    running.fake->SetLength(1);
+
+    TestClient client;
+    Assert::IsTrue(client.Connect(running.server->Port()));
+    client.Send(Neuron::Protocol::EncodeHello("alpha"));
+    Settle(*running.server, client);
+
+    // One lock, and the fake is finished.
+    Settle(*running.server, client, SIX_HOURS);
+    Assert::IsTrue(running.server->Match().Match().IsFinished(), L"the fixture has to actually be over");
+    (void)running.server->TakeLog();
+
+    const std::uint32_t resolvedBefore = running.fake->resolves;
+    const std::uint32_t submittedBefore = running.fake->submissions;
+
+    client.Send(Neuron::Protocol::EncodeOrders(SomeOrders(1)));
+    client.Send(Neuron::Protocol::EncodeOrders(SomeOrders(2)));
+    client.Send(Neuron::Protocol::EncodeOrders(SomeOrders(3)));
+    Settle(*running.server, client, SIX_HOURS);
+
+    Assert::AreEqual(submittedBefore, running.fake->submissions, L"a finished match must not take an order");
+    Assert::AreEqual(resolvedBefore, running.fake->resolves, L"and must not resolve another tick");
+
+    const std::vector<std::string> log = running.server->TakeLog();
+    Assert::IsFalse(Mentions(log, "order-edit"), L"an order that was refused is not an edit");
+    Assert::IsTrue(Mentions(log, "ordered after the match ended"), L"but it is worth knowing somebody tried");
+
+    // Once per session, however many times they tap.
+    Assert::AreEqual(std::size_t{1}, CountOf(log, "ordered after the match ended"));
+  }
+
   // The one that survives a reconnect. Whether a submission REPLACED one is a fact about the
   // player's turn, not about the socket it arrived on -- so somebody who submits, drops and comes
   // back inside the same tick has still edited their turn.
