@@ -1,11 +1,12 @@
 # Frontier Outpost — Blueprint
 
-**What this is.** The one document to hand to another team — engineering, art, community, ops, or a
-game designer you want to recruit — that says what *Frontier Outpost* is, why it is worth making,
-what exists today, and where it goes next. It is written from the design record in `Design/` and
-from the code as it stands on **2026-09-11**, and it keeps the record's discipline: what is built is
-described in the present tense, what is designed and not built says so, and what is undecided is
-listed as a question rather than papered over.
+**What this is.** The one document to hand to a game designer you want to recruit, or to any team
+that needs to understand *Frontier Outpost* before it can help: what the game is, why it is worth
+making, what exists today, and where it goes next. It is written from the design record in `Design/`
+and from the code as it stands on **2026-09-11**, and it keeps the record's discipline: what is built
+is described in the present tense, what is designed and not built says so, and what is undecided is
+listed as a question rather than papered over. The engineering detail is kept short here and
+collected in the appendix for the teams that need it.
 
 **In one sentence.** Frontier Outpost is an asynchronous, tick-quantised space strategy game for six
 to twelve humans, played four times a day for three weeks, where every order is a blind bet placed
@@ -17,7 +18,11 @@ four suites) and running end to end over TCP: galaxy generation, the six-phase t
 trade lanes, proposals, custodianship, fog of war, scoring, the fixed ending, a match store that
 survives restarts, and the instrumentation the playtest plan needs. What has not happened is the
 thing no code can do: six people on six machines playing a match. Exile and the sealed region's rules
-are designed and deliberately not built, gated behind the first playtests.
+are designed and deliberately not built, gated behind the first playtests. The current client is a
+Windows desktop prototype; **the product is a mobile client** (owner decision, 2026-09-11 — see §7).
+
+**Frontier Outpost is the name**, not a working title (owner decision, 2026-09-11). It is a hobby
+project with no monetisation: free, hosted by whoever runs a match.
 
 ---
 
@@ -64,6 +69,13 @@ one. The game's own words for its aesthetic target are **Challenge** first and *
 with **Narrative** arising as a by-product: the story of my empire this match, including — if it
 falls — the story of its exile.
 
+### The world
+
+There is no fiction yet. The record has a tone — a terse ops console — and sixty-four system names,
+and nothing about who the players are, why they are out there, or what the sealed region is. The
+owner wants one, and it is not yet designed (2026-09-11). It is a design session before Phase 1
+(§7), and it is the first thing a recruited designer could own outright.
+
 ---
 
 ## 2. What you see
@@ -94,6 +106,9 @@ an order that locks with the rest.
 
 The top bar carries the lock countdown, your score and placement, and the leader — always visible,
 because leader-ganging is the game's only anti-snowball.
+
+The screen is silent, and stays silent in v1: audio is out of scope until after the playtests, and
+so is a colour-blind mode (owner decision, 2026-09-11; both listed under §7).
 
 ---
 
@@ -126,9 +141,10 @@ so that processing order can never change an outcome:
    a hostile arrives escapes, at the price of ceding the system for a tick.
 4. **Combat.** One melee at every system holding two or more empires' fleets. Simultaneous rounds,
    damage spread across enemies in proportion to their strength, integer arithmetic, three rounds.
-   The incumbent gets a defender bonus; simultaneous arrivals at an empty system get none; a tie is
-   mutual attrition. A rear-guard sub-phase that punishes dodging exists and is switched off until
-   playtests show dodging dominates.
+   Strength is ship count — one ship type, and that is deliberate for now (§7). The incumbent gets a
+   defender bonus; simultaneous arrivals at an empty system get none; a tie is mutual attrition. A
+   rear-guard sub-phase that punishes dodging exists and is switched off until playtests show dodging
+   dominates.
 5. **Claims and captures.** An uncontested fleet claims an unclaimed system. Taking an owned system
    needs two consecutive uncontested ticks: siege, then capture. A fleet that arrives and dies
    contests nothing. Trade lanes that lose an endpoint cancel, and the digest says *cancelled by
@@ -171,8 +187,10 @@ expands, never attacks, is flagged on every map as "custodian since tick N", and
 each tick so it is a public race among every neighbour rather than a private farm. Systems taken from
 a custodian yield half for the rest of the match, whoever holds them. A player who goes custodian in
 the first week scores nothing for the match — the only cost that reaches someone who has already
-left. **Exile** and **Gone** are the second act described in §1 and specified in §6; both are
-declared in the code and deliberately unreachable today.
+left. **Conceding forfeits the empire's score outright**, in any week (owner decision, 2026-09-11,
+closing the question ADR-023 left open; the code today forfeits only a first-week concession, so this
+is decided and not yet implemented). **Exile** and **Gone** are the second act described in §1 and
+specified in §6; both are declared in the code and deliberately unreachable today.
 
 ### What it is not
 
@@ -184,7 +202,7 @@ production, not floor plans. Not a sandbox — the map runs out and the match en
 
 ## 4. What exists today
 
-This section is for the teams who will pick the project up. It is an inventory, not a promise.
+An inventory, not a promise.
 
 ### The game, in code
 
@@ -199,32 +217,16 @@ This section is for the teams who will pick the project up. It is an inventory, 
 
 ### The platform around it
 
-| Built and tested | Where |
-|---|---|
-| **One executable, three roles**: host-and-play (default), `--join <host>`, `--serve` (headless). The client talks TCP even to a server on the next thread, so every launch exercises the wire | `FrontierOutpost.cpp`, ADR-028 |
-| The server drives the game through a byte-shaped seam and never names a game type | `NeuronCore/Simulation.h`, `NeuronServer/Session`, ADR-025 |
-| **A match is a seed and its orders.** The store holds rules, seed and every locked order set; loading is re-resolving from tick zero with the replayed hash asserted against the last one written. A whole match replays in about 2 ms in Release | `NeuronServer/MatchStore`, ADR-024 |
-| The schedule is arithmetic over an injected instant; a server that slept through locks resolves every one it missed, in order | `NeuronCore/TickSchedule`, ADR-026 |
-| Length-prefixed frames, six message kinds, every length checked at three layers, fuzzed with truncated and hostile input; socket tests run on real loopback sockets | `NeuronCore/{FrameStream,Protocol,Socket}`, `NeuronServer/MatchServer` |
-| Six fixed seat tokens for Phase 0 — a stable identity to log, explicitly not authentication | ADR-029 |
-| Instrumentation to a UTC-stamped plain-text file: every event the test plan lists, including the awkward ones (fleet orders after a capital fall, order edits counted as envelopes) | `NeuronServer/MatchLog`, ADR-030, ADR-031 |
-| Client reconnection, a `RECONNECTING` indicator, `--phase0` rules and `--tick <seconds>` for compressed rehearsals | `FrontierOutpost/MatchConnection` |
-| The ops console: immediate-mode UI, perspective orbit camera, spherical star field with a galactic band, twelve owner colours with *you* always blue | `FrontierOutpost/MainPage`, ADR-014, -017, -027, -032, -033 |
-
-A rehearsal at two seconds a tick has run a full 48-tick Phase 0 match over sockets with two clients
-and four absentees, and found two instrumentation bugs that reading the code had not. That is the
-closest thing to a played match so far.
-
-### Engineering shape, for the teams that will touch it
-
-C++23, Direct3D 12, Windows 11, x64, MSBuild. **No dependencies** beyond the Windows SDK and the MSVC
-standard library — no engine, no package manager, no vendored library. **The executable ships alone**:
-font, colours, shaders and system names are embedded; the only files a server ever creates are the
-match store and the log. The simulation is integer-only, reads no clock, iterates no unordered
-container, and is a pure function of its inputs — which is what makes replays, persistence and
-"why did my fleet die" all answerable. The client never links the game logic; the server is
-authoritative and the snapshot is the whole contract between them. Anyone building a second client
-(see §7) needs to speak the snapshot and the order set, and nothing else.
+One executable in three roles — host-and-play, join, or a headless dedicated server — with the
+client talking TCP even to a server on the next thread, so every launch exercises the network. A
+match is persisted as its seed and every locked order set and reloaded by replaying them, with the
+replayed hash checked against the last one written; a whole match replays in about two milliseconds.
+A server that slept through locks resolves every one it missed, in order. Six fixed seat tokens
+identify players for Phase 0. Every event the playtest plan asks for is written to a UTC-stamped
+plain-text log. The client reconnects on its own and says so on screen. A rehearsal at two seconds a
+tick has run a full 48-tick Phase 0 match over sockets with two clients and four absentees, and
+found two instrumentation bugs that reading the code had not — the closest thing to a played match
+so far. The appendix has the detail.
 
 ### Designed, not built
 
@@ -232,11 +234,13 @@ authoritative and the snapshot is the whole contract between them. Anyone buildi
 |---|---|
 | Exile: the runway, salvage, raiding, raid fatigue, the colony core, settlement | Gated behind Phase 1's hypothesis H3 — *do losers keep playing?* |
 | The sealed region's rules | It is placed, drawn and reachable; nothing happens when it opens. Phase 2. |
+| Concession forfeiting score in every week | Decided 2026-09-11; the code forfeits first-week concessions only |
+| The fiction | Wanted, not yet designed. A design session before Phase 1 |
 | Hiring exiles (escrowed jobs) | v2 |
-| Research | Named in the phase list, deliberately absent until something reads it |
-| Accounts, matchmaking, a lobby, player names (players are "P2" on screen) | Phase 1 needs at least per-match tokens and names |
-| Season ranking between matches | Nothing carries between matches today |
-| Missed digests on reconnect; a mobile or web client; chat | See §7 and §8 |
+| Research | Named in the phase list, deliberately absent. Becomes an unlock track, decided after Phase 2 |
+| Ship classes | Strength is ship count for now; classes are a v2 candidate |
+| Accounts, rank-gated matchmaking, a lobby, player names (players are "P2" on screen) | Phase 1 needs at least per-match tokens and names; the rest is v2 |
+| Missed digests on reconnect; the mobile client; audio; a colour-blind mode; chat | See §7 and §8 |
 
 ---
 
@@ -296,44 +300,59 @@ salvage where it stands, for whoever is near enough.
 
 ## 7. Where the game goes next
 
-A view, not a plan. Each step depends on the previous one holding.
+A view, not a plan, built on the decisions taken on 2026-09-11. Each step depends on the previous
+one holding.
 
-**Now → Phase 0 (weeks).** Six people, one weekend. The build is ready; what it needs is a host, six
-tokens and a Saturday. Expect to change numbers, not rules.
+**Now → Phase 0 (weeks).** Six people, one weekend, on the desktop prototype. The build is ready;
+what it needs is a host, six tokens and a Saturday. Expect to change numbers, not rules.
+
+**Before Phase 1: the fiction.** A design session that gives the game a world — who the players are,
+why the galaxy is bounded, what the sealed region is and why it opens. It should be written to the
+ops console's tone rather than against it: a setting that survives being told in 8-pixel capitals.
+Nothing in the rules waits on it, and everything in the pitch does.
 
 **Phase 1 (one to two months).** The smallest things that make strangers possible: tokens generated
 per match and printed by the host, player names on the wire, the digests a reconnecting player
-missed, and a way to fill a match. Three matches before any gate decision.
+missed, and a way to fill a match. Three matches before any gate decision. This is also where the
+absence rule is judged: the owner has chosen to keep custodianship at three ticks and the first-week
+forfeit permanent and let H2 decide (§8).
 
 **Phase 2 — the second act (a quarter).** Exile and the region, as designed in §6, if H3 says losers
 keep playing. If it says they don't, Exile becomes an epilogue screen and the region a plain
 mid-match objective — that is a scoped-down game, not a failed one.
 
-**Seasons and identity (v2).** Accounts, placement points across matches, a ladder that makes fourth
-place worth playing for, hiring exiles. This is where "nothing carries between matches but rank"
-starts to mean something, and where matchmaking becomes the product's real cold-start problem.
+**The product client: mobile.** The one-pager's opening image — *you open the app after work* — is a
+phone in a pocket, and the owner has confirmed that is the product: the desktop client is the
+prototype. The architecture was built for this. A client is anything that can read a snapshot and
+write an order set over TCP; the server is authoritative; the game logic has no floating point to
+disagree with another compiler about. `Design/Reference/mobile-portability.md` costs the move
+honestly: the renderer, the window shell and the fixed 1280×720 contract do not travel; the
+simulation, the protocol and the input core do. A portrait, digest-first client with the digest
+delivered as a push notification is a new client, not a port, and it needs a hosted server that
+somebody operates. It should start as soon as Phase 1 says the loop holds, because Phase 2 with
+strangers is the first playtest that wants the real platform.
 
-**A second client.** The one-pager's opening image — *you open the app after work* — is a phone in a
-pocket, and the tree is a Windows desktop window. The architecture was built for this move: a client
-is anything that can read a snapshot and write an order set over TCP, the server is authoritative,
-and the game logic has no floating point to disagree with another compiler about.
-`Design/Reference/mobile-portability.md` costs the move honestly. The renderer, the window shell and
-the fixed 1280×720 contract do not travel; the simulation, the protocol and the input core do. A
-portrait, digest-first mobile client — with the digest delivered as a push notification — is the
-version of this game most people would actually play, and it is a new client, not a port.
+**Seasons, accounts and rank-gated matchmaking (v2).** The owner has chosen rank-gated matchmaking:
+placement points per match, summed over a season, with rank deciding who plays whom. That needs
+accounts, which needs a persistence decision beyond the match store, and it needs a player pool
+large enough to gate — which is the tension §8 names. Hiring exiles lands in the same release.
+
+**Design threads, in the order they become live.** Research becomes an unlock track (cheaper lanes,
+faster ships, or something better) decided after Phase 2 and not before. Ship classes are a v2
+candidate, kept out deliberately so that the combat preview stays exact and the build menu stays
+short. A small vocabulary of one-tap signals that are not chat but let a stranger say *thank you* or
+*last warning*. Audio, at least a tick-resolved cue, once the client is the real one. A colour-blind
+mode, which at twelve hues on an 8-pixel node is a redesign of the node and not of the palette.
+Whether the sealed region should be visible through fog from tick one, as the design says and the
+code does not yet do.
 
 **What the architecture makes cheap, and nobody has asked for yet.** Because a match is a seed and a
 list of orders, a finished match is a few kilobytes that replays in two milliseconds. That is a
 shareable replay, a spectator mode, a "story of my empire" export, a balance-analysis corpus and a
 regression suite for every rule change, all from one file format that already exists. The same
 property makes a compressed **evening match** — two-minute ticks, one sitting — a product mode rather
-than a test tool; it is already how the loop is rehearsed.
-
-**Design threads worth pulling later.** What research unlocks. Whether "strength" stays as ship
-count or grows ship classes. A small vocabulary of one-tap signals that are not chat but let a
-stranger say *thank you* or *last warning*. A colour-blind mode, which at twelve hues on an 8-pixel
-node is a redesign of the node and not of the palette. Whether the sealed region should be visible
-through fog from tick one, as the design says and the code does not yet do.
+than a test tool; it is already how the loop is rehearsed, and for a hobby-scale player pool it may
+be the mode that fills matches.
 
 ---
 
@@ -351,8 +370,15 @@ stress-test before Phase 1:
 hours at the production cadence, and a custodian inside the first week scores zero for the whole
 match with no way back. A weekend away in week one ends a three-week commitment. The compressed
 rehearsal already tripped over exactly this and had to scale the number by the clock rather than the
-match. The mechanic is right; the number and the permanence of the forfeit look wrong for the
-audience the game wants, and H2 will be measured on people this rule has already pushed out.
+match. The owner has chosen to keep the rule as designed and let Phase 1 decide. That is a legitimate
+call and it comes with a cost worth naming: H2 will be measured on people this rule has already
+pushed out, so the Phase 1 log needs to distinguish *left and never came back* from *came back to a
+forfeited match and then left*.
+
+**Rank-gated matchmaking on a hobby-scale pool.** The owner has chosen rank to decide who plays
+whom, and the project is free and self-hosted. Gating needs a pool; at hobby scale the pool is the
+cold-start problem, and a gate makes it worse before it makes anything better. The ladder can exist
+from the first season; the gate should wait until matches fill without it.
 
 **The last tick is a blind, simultaneous, everything-on-the-table lock.** Score is what you hold at
 the end, and the end tick is public. Every player's final orders resolve together with no reply
@@ -369,41 +395,39 @@ before real people find it.
 facing each other, which starts a siege neither can finish. Interdiction, or a stalemate generator —
 only play will say.
 
-**The premise and the platform disagree.** The design is a phone game; the build is a Windows-only
-desktop client with no web or mobile path. For a game whose hardest problem is filling a match with
-strangers, reach is not a nice-to-have. Phase 0 and 1 can run on desktop; the product cannot.
+**The product platform does not exist yet.** Mobile is the product and nothing mobile exists. Phase 0
+and Phase 1 can run on the desktop prototype; Phase 2 with strangers should not, because it would
+validate Exile on a platform nobody will play it on. The mobile client is on the critical path
+earlier than the roadmap order suggests.
 
 **No chat means the community lives elsewhere.** The no-free-text rule is a strong, defensible design
-position, and it also means every conversation about the game happens on Discord or nowhere. That is
-a community-team question the record does not address.
+position, and it also means every conversation about the game happens on Discord or nowhere. For a
+hobby project that is probably right; it is still a community question the record does not address.
 
 ---
 
-## 9. Open questions for the owner
+## 9. Decisions taken, and what is still open
 
-The record leaves these undecided, or does not mention them, and a team reading this blueprint will
-ask. None of them blocks Phase 0.
+The first draft of this blueprint listed ten questions the record could not answer. The owner
+answered them on 2026-09-11, and they are recorded here so that nobody re-asks them. Those that
+change a rule or the design record still owe an ADR or a document edit, and the table says which.
 
-1. **The name.** The one-pager is titled *Untitled Space 4X*; the tree, the window and the screen say
-   *Frontier Outpost*. Is Frontier Outpost the name, or a working title?
-2. **Fiction and setting.** There is no lore anywhere in the record — no factions, no why-are-we-here,
-   no tone beyond "terse ops console" and a table of sixty-four system names. Marketing, art and
-   audio all need a sentence about what world this is. Is the absence a decision?
-3. **The shipping platform.** Desktop Windows for real, or desktop as the prototype and mobile as the
-   product? The answer decides the client roadmap in §7 and the resolution baseline in the design
-   record.
-4. **Business model.** Nothing in the record. Free, paid, season pass, cosmetics? It shapes the season
-   design more than any rule does.
-5. **Season structure.** How many matches make a season, how placement points accumulate, whether
-   rank gates matchmaking. "Placement, not wins" is a principle without a table yet.
-6. **What research does**, and whether ship classes ever exist. Both are named and empty.
-7. **Whether concession forfeits score.** The one-pager says it does under Exile; ADR-023 leaves it
-   open for a custodian who conceded. Same word, two rules.
-8. **Whether the first-week forfeit should be permanent**, and whether absence should be measured in
-   real time rather than ticks (§8).
-9. **Audio.** Nothing exists and nothing is designed. Silence may be right for an ops console; it
-   should be a decision.
-10. **Accessibility.** Colour-blindness is named as unaddressed in ADR-027. Is it in scope for v1?
+| Question | Decision | Follow-up owed |
+|---|---|---|
+| The name | *Frontier Outpost* is final | One-pager title updated in this commit |
+| Shipping platform | Desktop is the prototype; mobile is the product | An ADR revising the presentation baseline in `Design/README.md` §1, when the mobile client starts |
+| Fiction | Wanted, not yet designed | A design session before Phase 1 |
+| Business model | Hobby project, no monetisation | — |
+| Seasons | Rank-gated matchmaking on placement points | v2; needs accounts and a points table |
+| Absence and the first-week forfeit | Keep as designed; Phase 1 decides | Phase 1 log must separate the two kinds of leaving (§8) |
+| Concession | Forfeits score outright, in any week | An ADR superseding the open question in ADR-023, and a code change |
+| Audio and colour-blind mode | Neither in v1 | — |
+| Research | An unlock track, decided after Phase 2 | — |
+| Ship classes | Ship count for now; classes a v2 candidate | — |
+
+**Still open**, and none of it blocks Phase 0: what the fiction is; what research unlocks; the season
+points table; how a player is named and identified in Phase 1; whether the sealed region is visible
+through fog from tick one.
 
 ---
 
@@ -418,3 +442,36 @@ ask. None of them blocks Phase 0.
 | The screen, at reference fidelity | `Design/Screens/README.md` |
 | How code is written here | `AGENTS.md` |
 | What a phone client would cost | `Design/Reference/mobile-portability.md` |
+
+---
+
+## Appendix — for engineering teams
+
+**Shape.** C++23, Direct3D 12, Windows 11, x64, MSBuild. No dependencies beyond the Windows SDK and
+the MSVC standard library — no engine, no package manager, no vendored library. The executable ships
+alone: font, colours, shaders and system names are embedded; the only files a server ever creates are
+the match store and the instrumentation log.
+
+**The simulation** is integer-only, reads no clock, iterates no unordered container, and is a pure
+function of its inputs (ADR-018, ADR-019). That is what makes replays, persistence and "why did my
+fleet die" all answerable, and it is why the game logic ports to another compiler without a
+floating-point argument. The client never links it; the server is authoritative; the per-player
+snapshot is the whole contract between them and the security boundary (ADR-022). Anyone building a
+second client speaks the snapshot and the order set over TCP, and nothing else.
+
+| Built and tested | Where |
+|---|---|
+| One executable, three roles: host-and-play (default), `--join <host>`, `--serve` (headless). The client talks TCP even to a server on the next thread | `FrontierOutpost.cpp`, ADR-028 |
+| The server drives the game through a byte-shaped seam and never names a game type | `NeuronCore/Simulation.h`, `NeuronServer/Session`, ADR-025 |
+| A match is a seed and its orders; loading is re-resolving from tick zero with the hash asserted. About 2 ms per whole match in Release | `NeuronServer/MatchStore`, ADR-024, `Design/Reference/tick-resolution-cost.md` |
+| The schedule is arithmetic over an injected instant; missed locks are resolved in order on wake | `NeuronCore/TickSchedule`, ADR-026 |
+| Length-prefixed frames, six message kinds, every length checked at three layers, fuzzed; socket tests on real loopback sockets | `NeuronCore/{FrameStream,Protocol,Socket}`, `NeuronServer/MatchServer` |
+| Six fixed seat tokens for Phase 0 — a stable identity to log, explicitly not authentication | ADR-029 |
+| Instrumentation to a UTC-stamped plain-text file, including fleet orders after a capital fall and order edits counted as envelopes | `NeuronServer/MatchLog`, ADR-030, ADR-031 |
+| Client reconnection with an on-screen indicator, `--phase0` rules and `--tick <seconds>` for compressed rehearsals | `FrontierOutpost/MatchConnection` |
+| The ops console: immediate-mode UI, perspective orbit camera, spherical star field with a galactic band, twelve owner colours with *you* always blue | `FrontierOutpost/MainPage`, ADR-014, -017, -027, -032, -033 |
+
+**Hosting** a match today is one machine running `--serve` beside a store file and a log file, and
+five people running `--join`. If the host closes, the match pauses and resumes on restart. There is
+no encryption and no accounts; that is right for six friends and wrong for anything else, and ADR-028
+and ADR-029 say so.
