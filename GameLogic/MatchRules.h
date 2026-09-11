@@ -155,6 +155,45 @@ struct MatchRules
   /// Paid by the player who proposes the lane, at the lock the partner accepts it.
   std::uint32_t tradeLaneCost = 10;
 
+  // ---- Players, score and the ending (step 7) ---------------------------------------------------
+
+  /// What a held system is worth each tick, and what a capital adds.
+  ///
+  /// Score is recomputed from scratch every tick from what is held (one-pager: "public score, the
+  /// leader is always visible"), so these are weights rather than a running total -- a player who
+  /// loses half their empire drops, which is what makes the leader attackable.
+  std::uint32_t scorePerSystem = 10;
+  std::uint32_t capitalScoreBonus = 25;
+
+  /// How much a custodian's garrisons weaken per absent tick, as a percentage of what is left.
+  ///
+  /// The one-pager's reason is social rather than mechanical: "their garrisons weaken with each
+  /// tick of absence, so the territory is a public race among every neighbour who can reach it,
+  /// not a private farm."
+  std::uint32_t garrisonDecayPercent = 20;
+
+  /// What a system conquered from a custodian yields, as a percentage, for the rest of the match
+  /// whoever holds it. "The dropout's infrastructure decays under new ownership."
+  std::uint32_t custodianSpoilsYieldPercent = 50;
+
+  /// How long the first week is, in ticks. A player who becomes a custodian inside it scores
+  /// nothing for the match -- "the only cost that reaches someone who has already stopped playing".
+  std::uint32_t firstWeekTicks = 28;
+
+  /// The share of all score on the board one player must hold to be dominant, as a percentage,
+  /// and how many consecutive ticks they must hold it for the match to end early.
+  ///
+  /// "An early dominance threshold ends the match only if held for several consecutive ticks, so
+  /// the leader stays attackable."
+  std::uint32_t dominanceSharePercent = 60;
+  std::uint32_t dominanceHoldTicks = 4;
+
+  // ---- Visibility (step 8) -----------------------------------------------------------------------
+
+  /// How many lanes out from something you hold or occupy you can see. One: your own systems and
+  /// their immediate neighbours (ADR-022).
+  std::uint32_t scoutingRangeLanes = 1;
+
   // ---- The sealed region -------------------------------------------------------------------
   //
   // Placed and drawn by 4X-01; nothing happens when it opens until Phase 2 (one-pager, "Build
@@ -197,6 +236,11 @@ enum class RulesProblem : std::uint8_t
   /// Combat that runs no rounds, or deals no damage. Either makes every fight a draw and every
   /// fleet immortal, which removes the game rather than tuning it.
   CombatDecidesNothing,
+  /// A dominance threshold at or below an even share, which one player would reach by playing
+  /// normally, or above 100, which nobody could ever reach.
+  DominanceUnreachableOrTrivial,
+  /// A dominance hold of no ticks, which ends the match the instant somebody leads.
+  DominanceNeedsNoHolding,
   /// A defender bonus below 100%, which would make holding a system worse than arriving at it and
   /// invert the one-pager's incumbency rule.
   DefenderBonusPunishesTheDefender
@@ -220,6 +264,10 @@ enum class RulesProblem : std::uint8_t
     return "a proposal window of no ticks closes every offer before it can be answered";
   case RulesProblem::CombatDecidesNothing:
     return "combat that runs no rounds or deals no damage makes every fleet immortal";
+  case RulesProblem::DominanceUnreachableOrTrivial:
+    return "a dominance share must be above an even split and no more than the whole board";
+  case RulesProblem::DominanceNeedsNoHolding:
+    return "dominance held for no ticks ends the match the instant somebody leads";
   case RulesProblem::DefenderBonusPunishesTheDefender:
     return "a defender bonus below one hundred percent makes holding a system worse than arriving at it";
   default:
@@ -262,6 +310,14 @@ enum class RulesProblem : std::uint8_t
   if (_rules.defenderBonusPercent < 100)
   {
     return RulesProblem::DefenderBonusPunishesTheDefender;
+  }
+  if (_rules.dominanceSharePercent <= (100U / _rules.playerCount) || _rules.dominanceSharePercent > 100U)
+  {
+    return RulesProblem::DominanceUnreachableOrTrivial;
+  }
+  if (_rules.dominanceHoldTicks == 0)
+  {
+    return RulesProblem::DominanceNeedsNoHolding;
   }
   return RulesProblem::None;
 }

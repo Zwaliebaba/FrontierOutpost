@@ -80,6 +80,8 @@ const char* Describe(OrderRejection _rejection) noexcept
     return "no trade lane of yours is open there";
   case OrderRejection::ConditionalLaneNotBetweenYou:
     return "the conditional lane does not join your two empires";
+  case OrderRejection::YouAreACustodian:
+    return "your territory is in custody and defends only; log in to resume";
   default:
     return "unknown";
   }

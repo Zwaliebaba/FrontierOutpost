@@ -52,7 +52,8 @@ enum class DigestKind : std::uint8_t
   AgreementBreached,
   Economy,
   Region,
-  Custodian
+  Custodian,
+  MatchEnded
 };
 
 [[nodiscard]] const char* Describe(DigestKind _kind) noexcept;
@@ -63,6 +64,8 @@ enum class DigestKind : std::uint8_t
 /// spread out so a later rule can land between two of them without renumbering everything.
 namespace Severity
 {
+/// The match is over. Nothing that happened this tick matters more than that.
+inline constexpr std::uint32_t MATCH_ENDED = 1000;
 inline constexpr std::uint32_t LOST_A_SYSTEM = 900;
 inline constexpr std::uint32_t BATTLE = 850;
 inline constexpr std::uint32_t FIRST_CONTACT = 800;

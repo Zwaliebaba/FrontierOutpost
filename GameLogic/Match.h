@@ -31,6 +31,14 @@ struct SystemState
 
   /// The tick it last changed hands, or 0. The map shows it.
   std::uint32_t capturedAt = 0;
+
+  /// Whether this system was taken from a custodian, and so yields at a fraction for the rest of
+  /// the match whoever holds it afterwards.
+  ///
+  /// "The dropout's infrastructure decays under new ownership." It is permanent and it travels with
+  /// the system, not with the conqueror -- which is what stops a dropout's territory being a prize
+  /// worth more than a live neighbour's.
+  bool halfYield = false;
 };
 
 /// A fleet, at a system or partway along a lane.
@@ -139,15 +147,71 @@ struct Contact
   std::uint32_t tick = 0;
 };
 
+/// The four states the one-pager allows, and nothing else.
+///
+/// *Exile* and *Gone* are declared and **unreachable in Stage A** (4X-01 §1: "Exile and Gone
+/// unreachable"). They are here rather than added later because the transitions between them are
+/// the design, and an enum with a hole in it invites the hole being filled in the wrong place --
+/// the same argument that keeps the combat phase in the phase list while it does nothing.
+enum class PlayerStatus : std::uint8_t
+{
+  Active,
+  Custodian,
+  Exile,
+  Gone
+};
+
+[[nodiscard]] const char* Describe(PlayerStatus _status) noexcept;
+
 struct PlayerState
 {
   std::uint32_t credits = 0;
   std::uint32_t score = 0;
-  /// The last tick this player submitted orders. The custodian rule counts from it -- and it is
-  /// TOLD to the simulation rather than read off a clock, because R16 forbids a clock in here and
-  /// ADR-018 says why.
+  PlayerStatus status = PlayerStatus::Active;
+
+  /// The last tick this player was seen. THE SERVER TELLS THE SIMULATION; the simulation never asks
+  /// a clock (R16, ADR-018), and it does not infer presence from orders either -- a player who logs
+  /// in and changes nothing is present and is not a custodian.
   std::uint32_t lastActiveTick = 0;
+
+  /// Consecutive ticks absent. Reaching `custodianAbsenceTicks` makes a custodian; returning
+  /// resets it, which is what makes absence-custodianship reversible.
+  std::uint32_t absentTicks = 0;
+
+  /// The tick they became a custodian, or 0. Flagged on every player's map as "custodian since
+  /// tick N", because the territory is a public race rather than a private farm.
+  std::uint32_t custodianSince = 0;
+
+  /// Conceded, which is custodianship that cannot be undone. "Conceding never denies an attacker
+  /// their prize."
   bool conceded = false;
+
+  /// Set when a player becomes a custodian inside the first week. It never clears, even if they
+  /// come back: "a player who goes custodian in the first week scores nothing for the match".
+  bool forfeitedScore = false;
+
+  /// Consecutive ticks this player has held the dominance share. The match ends early only when it
+  /// reaches `dominanceHoldTicks`, so a leader stays attackable.
+  std::uint32_t dominanceTicks = 0;
+};
+
+/// What one player can see of one system, and when they last saw it.
+///
+/// ADR-022: a system once seen stays known at its LAST-SEEN state rather than going dark, with a
+/// tick stamp so the map can grey it and the digest can say "as of T41". Fog that erases what you
+/// learned makes a player re-scout ground they have already paid for, four times a day.
+struct SeenSystem
+{
+  /// Whether it is visible right now.
+  bool live = false;
+  /// Whether it has ever been seen. A system never seen is not on the player's map at all.
+  bool known = false;
+  /// The tick the knowledge below is from.
+  std::uint32_t asOfTick = 0;
+  /// Who held it then.
+  PlayerId owner;
+  bool hadShipyard = false;
+  bool hadMiningStation = false;
 };
 
 /// The authoritative state of one match.
@@ -214,6 +278,31 @@ public:
   [[nodiscard]] const std::vector<Contact>& Contacts() const noexcept
   {
     return m_contacts;
+  }
+
+  /// What `_player` can see, indexed by system. Always sized to the galaxy.
+  [[nodiscard]] const std::vector<SeenSystem>& SeenBy(PlayerId _player) const
+  {
+    return m_seen[_player.AsSize()];
+  }
+
+  /// The player leading on score, or an invalid id if nobody holds anything. Ties go to the lower
+  /// player id, which is the same tiebreak `Placements` uses (ADR-023).
+  [[nodiscard]] PlayerId Leader() const;
+
+  /// Player ids in finishing order, best first (ADR-023).
+  [[nodiscard]] std::vector<PlayerId> Placements() const;
+
+  /// Whether the match has ended, by the fixed end tick or by dominance held long enough.
+  [[nodiscard]] bool IsFinished() const noexcept
+  {
+    return m_tick >= m_rules.matchLengthTicks || m_dominanceWinner.IsValid();
+  }
+
+  /// Who ended it early, or invalid if nobody did.
+  [[nodiscard]] PlayerId DominanceWinner() const noexcept
+  {
+    return m_dominanceWinner;
   }
 
   [[nodiscard]] const SystemState& SystemAt(SystemId _system) const
@@ -316,6 +405,15 @@ public:
   {
     return m_contacts;
   }
+  [[nodiscard]] std::vector<std::vector<SeenSystem>>& MutableSeen() noexcept
+  {
+    return m_seen;
+  }
+
+  void SetDominanceWinner(PlayerId _player) noexcept
+  {
+    m_dominanceWinner = _player;
+  }
 
   void SetTick(std::uint32_t _tick) noexcept
   {
@@ -341,6 +439,9 @@ private:
   std::vector<ActiveTradeLane> m_tradeLanes;
   std::vector<Agreement> m_agreements;
   std::vector<Contact> m_contacts;
+  /// Indexed [player][system]. Rectangular and always sized, so a lookup is never a search.
+  std::vector<std::vector<SeenSystem>> m_seen;
+  PlayerId m_dominanceWinner;
 
   std::int32_t m_nextProposalId = 0;
 };

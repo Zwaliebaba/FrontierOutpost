@@ -1,7 +1,7 @@
 # 4X-01 — The loop, headless: a galaxy, a tick, and everything that resolves in it
 
 **Status:** Plan, in progress. Written 2026-09-10 against `space-4x-one-pager-v10.md` (v0.7) and
-`space-4x-prototype-test-plan.md` (v0.4). Steps 0–6 done 2026-09-10.
+`space-4x-prototype-test-plan.md` (v0.4). Steps 0–6 done 2026-09-10, steps 7–8 on 2026-09-11.
 
 This plan builds the *simulation* half of what the one-pager's *Build order* asks for: **"Loop
 first — graph generator, tick resolution, trade lanes and proposals in the build menu, custodian,
@@ -405,6 +405,25 @@ persisting across a second capture; week-one custodian scoring zero; the guard b
 on tick 12 and permitting it on tick 13; dominance held for N−1 ticks not ending the match and for
 N ending it; placement ties broken as decided (record the tiebreak).
 
+**Done 2026-09-11**, and the scoring and ending decisions are **ADR-023**. Score is recomputed every
+tick from what is held rather than accumulated — an accumulated total makes an early lead
+uncatchable by mid-match, which turns off leader-ganging exactly when the design needs it, since
+that is the only anti-snowball there is. The placement tiebreak is score, then systems, then
+capitals, then the lower player id; the last is arbitrary and recorded as arbitrary, because a tie
+that the sort leaves unspecified is two machines reporting a finished match differently.
+
+**Presence is an input, not an inference.** `TickResolver::TickInput` carries orders *and* who the
+server saw, because they are different facts: a player who logs in and changes nothing is present
+and is not on their way to custody. Its `presenceUnknown` default is what a caller with nothing to
+say about presence means, which in Stage A is every caller but the custody tests.
+
+Not implemented, and the test says so out loud: **Exile and Gone**. Both are in `PlayerStatus`
+because the transitions between the four states are the design and an enum with a hole in it invites
+the hole being filled in the wrong place — the same argument that kept the combat phase in the
+phase list while it did nothing. `ExileAndGoneAreUnreachableInThisStage` wipes a fleet and takes a
+capital and asserts neither state is entered, so the day one becomes reachable it is a deliberate
+change rather than a surprise.
+
 #### Step 8 — Visibility, and the per-player snapshot
 
 Implement the visibility ADR. `SnapshotFor(playerId)` produces exactly the fields
@@ -417,6 +436,28 @@ orders rail shows, computed here. `DigestFor(playerId, tick)`.
 a shared-scouting partner's view is added and removed with the agreement; a fleet becomes visible
 to everyone on the tick it departs; a snapshot round-trips through serialization; the snapshot
 contains nothing the player is not entitled to (assert on a system that should be hidden).
+
+**Done 2026-09-11**, and the visibility rule is **ADR-022**: a system once seen stays *known* at its
+last-seen state with the tick stamped, rather than going dark. Live fog was the cheaper option and
+it fails the one-pager's own learning curve — "early: how to read the map" — because a
+player who scouted the frontier on day two would have to re-scout it on day three, four times a day
+for three weeks.
+
+**The snapshot is the security boundary**, and `Snapshot.cpp` says so at the top: every field added
+there gets sent, and there is no second filter downstream. The negative test is the one that matters
+and it checks four things at once — no hidden system, no garrison parked out of sight, no offer
+between two other empires, and no lane with one visible end, since a line running into the dark
+itself says something is there.
+
+The combat preview is computed here and is exact, because `ResolveMelee` was lifted out of
+`TickResolver` into `GameLogic/Melee` and both callers now run the same function. A preview computed
+by a second copy of the arithmetic is a preview that will one day disagree with the battle;
+`AFleetInTransitCarriesAPreviewOfWhatItIsFlyingInto` asserts the design reference's own string.
+
+**Not in this step: drawing any of it.** The client still renders the fixture. `MatchState::Owner`
+still has three players and a neutral while a snapshot now carries standings for six to twelve.
+Retiring the fixture is `4X-02`'s draft step 11, and widening the owner model belongs with it —
+it is a design question about the token palette rather than a mechanical one.
 
 #### Step 9 — Six bots play a whole match
 
@@ -545,22 +586,22 @@ is a rule that was dropped, and the report says so.
 | Three proposal kinds: lane, share scouting, hold N | Diplomacy UI | 6 | `AgreementTests`, `TradeLaneTests` |
 | First-contact prompt | Diplomacy UI | 6 | `FirstContactTests` |
 | No free text | What it is not | — (absence) | |
-| Custodian by 3 absent ticks, reversible | Player states | 7 | |
-| Custodian by concession, permanent | Player states | 7 | |
-| Custodian defends, never expands or attacks | Player states | 7 | |
-| Flagged "custodian since T" on every map | Player states | 7, 8 | |
-| Garrisons weaken per absent tick | Player states | 7 | |
-| Conquered-from-custodian yields half, forever | Player states | 7 | |
-| Week-one custodian scores zero | Player states | 7 | |
-| Exile and Gone unreachable in Stage A | Build order | 7 | |
-| Capital guard 12 ticks, visible countdown | Pacing | 7, 8 | `ACapitalIsGuardedForTheFirstTwelveTicks`, `AGuardedCapitalCannotBeBesieged` (countdown is step 8) |
-| Public score; leader always visible | Pacing | 7, 8 | |
-| Fixed end tick; placement by score | Pacing; Scoring | 7 | |
-| Dominance threshold held N consecutive ticks | Pacing | 7 | |
-| Visibility rule; shared scouting lifts fog | Diplomacy UI | 8 | |
-| Fleets public in transit once departed | Shape | 8 | |
+| Custodian by 3 absent ticks, reversible | Player states | 7 | `ThreeAbsentTicksMakeACustodian`, `ComingBackEndsCustodyImmediately`, `AnInterruptedAbsenceStartsCountingAgain` |
+| Custodian by concession, permanent | Player states | 7 | `ConcedingIsPermanentCustody` |
+| Custodian defends, never expands or attacks | Player states | 7 | `ACustodiansOrdersAreDiscarded`, `ACustodianClaimsNothingEvenStandingOnIt` |
+| Flagged "custodian since T" on every map | Player states | 7, 8 | `EverybodyIsToldWhenSomebodyGoesIntoCustody`; carried in `SnapshotStanding` (drawing it is `4X-02`) |
+| Garrisons weaken per absent tick | Player states | 7 | `ACustodiansGarrisonsWeakenEveryTick` |
+| Conquered-from-custodian yields half, forever | Player states | 7 | `HalfYieldStampsTheSystemAndSurvivesASecondCapture` |
+| Week-one custodian scores zero | Player states | 7 | `AFirstWeekCustodianScoresNothingEverAfter`, `ACustodianAfterTheFirstWeekKeepsTheirScore` |
+| Exile and Gone unreachable in Stage A | Build order | 7 | `ExileAndGoneAreUnreachableInThisStage` |
+| Capital guard 12 ticks, visible countdown | Pacing | 7, 8 | `ACapitalIsGuardedForTheFirstTwelveTicks`, `AGuardedCapitalCannotBeBesieged`, `TheCapitalGuardCountdownIsReported` |
+| Public score; leader always visible | Pacing | 7, 8 | `ScoreIsWhatYouHoldNowAndNotWhatYouEverHeld`, `TheLeaderIsIdentifiedAndVisibleToEverybody` (ADR-023) |
+| Fixed end tick; placement by score | Pacing; Scoring | 7 | `TheMatchEndsAtTheFixedTick`, `PlacementsAreTotallyOrderedEvenWhenScoresTie` |
+| Dominance threshold held N consecutive ticks | Pacing | 7 | `DominanceEndsTheMatchOnlyWhenHeldLongEnough`, `OneTickBelowTheShareResetsTheDominanceCount` |
+| Visibility rule; shared scouting lifts fog | Diplomacy UI | 8 | `VisibilityTests`, `TheSnapshotContainsNothingThePlayerIsNotEntitledTo` (ADR-022) |
+| Fleets public in transit once departed | Shape | 8 | `AFleetBecomesVisibleToEverybodyTheTickItDeparts` |
 | Sealed region placed and drawn; no rules | Build order | 2 | `TheSealedRegionIsPlacedAndReachable`, `AGalaxyWithoutARegionIsRefused` |
 | Determinism: same seed + orders → same state | R16 | 0, 3, 4, 9 | `TheSameSeedGivesTheSameMatch`, `ResolvingTheSameTickTwiceGivesTheSameState`, `TenTicksOfNothingAreReproducible`, `TheSameBattleResolvesTheSameWayTwice` |
 | Galaxy is a pure function of rules and seed | R16 | 2 | `TheSameSeedGivesTheSameGalaxy`, `DifferentSeedsGiveDifferentGalaxies`, `PrngTests` |
-| Presence is told to the sim, never a clock in it | R16 | 7 | |
+| Presence is told to the sim, never a clock in it | R16 | 7 | `BeingPresentWithoutOrdersIsStillBeingPresent` (`TickInput::present`) |
 | A tick log exists for *Replay tick N* to read | ADR-014 open q. | 4 | `ResolvingATickAdvancesItAndLogsSixPhases`, `TheCombatPhaseRunsAndSaysItDidNothing` |

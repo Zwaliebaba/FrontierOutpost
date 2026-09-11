@@ -176,7 +176,10 @@ enum class OrderRejection : std::uint8_t
   /// Cancelling a trade lane that is not open, or is not yours.
   NotYourTradeLane,
   /// A conditional lane that does not join the two parties.
-  ConditionalLaneNotBetweenYou
+  ConditionalLaneNotBetweenYou,
+  /// A custodian's territory defends and never expands or attacks, so its orders are discarded at
+  /// the lock. Distinct from `AlreadyConceded` because absence is reversible and concession is not.
+  YouAreACustodian
 };
 
 [[nodiscard]] const char* Describe(OrderRejection _rejection) noexcept;

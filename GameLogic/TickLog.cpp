@@ -67,6 +67,8 @@ const char* Describe(DigestKind _kind) noexcept
     return "region";
   case DigestKind::Custodian:
     return "custodian";
+  case DigestKind::MatchEnded:
+    return "match ended";
   default:
     return "unknown";
   }

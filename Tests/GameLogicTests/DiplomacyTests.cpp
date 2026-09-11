@@ -63,13 +63,13 @@ struct Neighbors
 
 [[nodiscard]] Frontier::Match Advance(const Frontier::Match& _match, std::span<const Frontier::OrderSet> _orders, Frontier::TickLog& _log)
 {
-  return Frontier::TickResolver::Resolve(_match, _orders, _log);
+  return Frontier::TickResolver::Resolve(_match, {.orders = _orders}, _log);
 }
 
 [[nodiscard]] Frontier::Match Advance(const Frontier::Match& _match, std::span<const Frontier::OrderSet> _orders)
 {
   Frontier::TickLog log;
-  return Frontier::TickResolver::Resolve(_match, _orders, log);
+  return Frontier::TickResolver::Resolve(_match, {.orders = _orders}, log);
 }
 
 [[nodiscard]] Frontier::Match Quiet(const Frontier::Match& _match)

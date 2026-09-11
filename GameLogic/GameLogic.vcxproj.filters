@@ -6,6 +6,8 @@
     <ClInclude Include="GalaxyGenerator.h" />
     <ClInclude Include="GameLogic.h" />
     <ClInclude Include="Match.h" />
+    <ClInclude Include="Melee.h" />
+    <ClInclude Include="Snapshot.h" />
     <ClInclude Include="MatchRules.h" />
     <ClInclude Include="Orders.h" />
     <ClInclude Include="TickLog.h" />
@@ -14,6 +16,8 @@
   <ItemGroup>
     <ClCompile Include="Galaxy.cpp" />
     <ClCompile Include="Match.cpp" />
+    <ClCompile Include="Melee.cpp" />
+    <ClCompile Include="Snapshot.cpp" />
     <ClCompile Include="TickLog.cpp" />
     <ClCompile Include="TickResolver.cpp" />
     <ClCompile Include="Orders.cpp" />

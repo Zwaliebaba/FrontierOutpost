@@ -164,17 +164,18 @@ void Tell(TickLog& _log, PlayerId _player, DigestEntry _entry)
 
 } // namespace
 
-Match TickResolver::Resolve(const Match& _before, std::span<const OrderSet> _orders, TickLog& _outLog)
+Match TickResolver::Resolve(const Match& _before, const TickInput& _input, TickLog& _outLog)
 {
   _outLog = TickLog{};
   _outLog.tick = _before.Tick();
   _outLog.digests.assign(_before.Players().size(), {});
 
-  Match state = Lock(_before, _orders, _outLog);
+  Match state = Lock(_before, _input, _outLog);
   state = Produce(state, _outLog);
   state = Move(state, _outLog);
   state = Fight(state, _outLog);
   state = Claim(state, _outLog);
+  state = Reckon(state, _outLog);
   WriteDigest(state, _outLog);
 
   // The tick advances last, so that everything above read one consistent number and the digest is
@@ -189,16 +190,85 @@ Match TickResolver::Resolve(const Match& _before, std::span<const OrderSet> _ord
 // order, because two players spending their last credits on the same tick must resolve the same
 // way on every machine.
 
-Match TickResolver::Lock(const Match& _in, std::span<const OrderSet> _orders, TickLog& _log)
+Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _log)
 {
   Match next = _in;
   PhaseRecord& record = OpenPhase(_log, Phase::Lock);
+
+  // ---- Presence, before anything reads a player's state ------------------------------------------
+  //
+  // "A player is present for tick N if the server saw them between lock N-1 and lock N (the server
+  // tells the simulation; the simulation never asks a clock)." Absence is counted here, at the top
+  // of the lock, so that the rest of this phase sees the status a player actually has this tick.
+  for (std::size_t index = 0; index < next.Players().size(); ++index)
+  {
+    const PlayerId player{static_cast<std::int32_t>(index)};
+    PlayerState& state = next.MutablePlayers()[index];
+
+    if (state.conceded)
+    {
+      continue;
+    }
+
+    const bool present = _input.presenceUnknown || std::find(_input.present.begin(), _input.present.end(), player) != _input.present.end();
+
+    if (present)
+    {
+      state.lastActiveTick = _in.Tick();
+      state.absentTicks = 0;
+
+      // Reversible: "log in and resume". A first-week forfeit is not reversed, because it is not a
+      // status -- it is a cost already incurred.
+      if (state.status == PlayerStatus::Custodian)
+      {
+        state.status = PlayerStatus::Active;
+        state.custodianSince = 0;
+        record.lines.push_back(std::format("{} returned and resumed", NameOf(player)));
+        Tell(_log, player,
+             DigestEntry{.kind = DigestKind::Custodian,
+                         .severity = Severity::CUSTODIAN,
+                         .title = "You are back",
+                         .detail = "Your territory is yours again"});
+      }
+      continue;
+    }
+
+    ++state.absentTicks;
+    if (state.status == PlayerStatus::Active && state.absentTicks >= _in.Rules().custodianAbsenceTicks)
+    {
+      state.status = PlayerStatus::Custodian;
+      state.custodianSince = _in.Tick();
+
+      // "A player who goes custodian in the first week scores nothing for the match; it is the only
+      // cost that reaches someone who has already stopped playing." It never clears.
+      if (_in.Tick() < _in.Rules().firstWeekTicks)
+      {
+        state.forfeitedScore = true;
+      }
+
+      record.lines.push_back(std::format("{} became a custodian", NameOf(player)));
+
+      // Every player is told, not just the absentee: the one-pager flags custodians "on every
+      // player's map", because the territory is a public race among every neighbour who can reach
+      // it rather than a private farm.
+      for (std::size_t other = 0; other < next.Players().size(); ++other)
+      {
+        Tell(_log, PlayerId{static_cast<std::int32_t>(other)},
+             DigestEntry{.kind = DigestKind::Custodian,
+                         .severity = Severity::CUSTODIAN,
+                         .title = other == index ? std::string("Your territory is in custody")
+                                                 : std::format("{} custodian since T{}", NameOf(player), _in.Tick()),
+                         .detail = other == index ? "Log in to resume" : "Their garrisons weaken each tick",
+                         .other = player});
+      }
+    }
+  }
 
   // One set per player, first submission wins. A retried submission is a network event, not a
   // second turn, and doubling a build because a packet arrived twice would be the worst kind of
   // bug to reproduce.
   std::vector<const OrderSet*> byPlayer(_in.Players().size(), nullptr);
-  for (const OrderSet& set : _orders)
+  for (const OrderSet& set : _input.orders)
   {
     if (!_in.HasPlayer(set.player))
     {
@@ -227,7 +297,7 @@ Match TickResolver::Lock(const Match& _in, std::span<const OrderSet> _orders, Ti
     // Validated against the TICK-START state, which is what the player was looking at when they
     // decided. Validating against a state other players have already changed would refuse an
     // order that was legal when it was given.
-    const std::vector<RejectedOrder> rejected = _in.Validate(*set);
+    const std::vector<RejectedOrder> rejected = next.Validate(*set);
     for (const RejectedOrder& refusal : rejected)
     {
       const std::string reason = Describe(refusal.reason);
@@ -242,17 +312,37 @@ Match TickResolver::Lock(const Match& _in, std::span<const OrderSet> _orders, Ti
                          [_at](const RejectedOrder& _refusal) { return _refusal.index == static_cast<std::int32_t>(_at); });
     };
 
-    if (!rejected.empty() && rejected.front().reason == OrderRejection::AlreadyConceded)
+    // A custodian's whole set is discarded -- its territory defends and never expands or attacks.
+    if (!rejected.empty() &&
+        (rejected.front().reason == OrderRejection::AlreadyConceded || rejected.front().reason == OrderRejection::YouAreACustodian))
     {
       continue;
     }
 
-    next.MutablePlayers()[index].lastActiveTick = _in.Tick();
-
     if (set->concede)
     {
-      next.MutablePlayers()[index].conceded = true;
+      // Concession is custodianship that cannot be undone. "Conceding never denies an attacker
+      // their prize" -- the territory stays on the board and stays takeable.
+      PlayerState& state = next.MutablePlayers()[index];
+      state.conceded = true;
+      state.status = PlayerStatus::Custodian;
+      state.custodianSince = _in.Tick();
+      if (_in.Tick() < _in.Rules().firstWeekTicks)
+      {
+        state.forfeitedScore = true;
+      }
+
       record.lines.push_back(std::format("{} conceded", NameOf(player)));
+      for (std::size_t other = 0; other < next.Players().size(); ++other)
+      {
+        Tell(_log, PlayerId{static_cast<std::int32_t>(other)},
+             DigestEntry{.kind = DigestKind::Custodian,
+                         .severity = Severity::CUSTODIAN,
+                         .title = other == index ? std::string("You conceded") : std::format("{} conceded", NameOf(player)),
+                         .detail = "Permanent; the territory stays on the board",
+                         .other = player});
+      }
+      continue;
     }
 
     // Fleet orders become an intent the movement phase consumes.
@@ -561,6 +651,16 @@ Match TickResolver::Produce(const Match& _in, TickLog& _log)
     {
       produced += _in.Rules().miningStationCredits;
     }
+
+    // "Systems conquered from a custodian yield at half for the rest of the match, whoever holds
+    // them -- the dropout's infrastructure decays under new ownership." It travels with the system,
+    // not with the conqueror, which is what stops a dropout's territory being worth more than a
+    // live neighbour's.
+    if (state.halfYield)
+    {
+      produced = (produced * _in.Rules().custodianSpoilsYieldPercent) / 100U;
+    }
+
     earned[state.owner.AsSize()] += produced;
   }
 
@@ -643,6 +743,35 @@ Match TickResolver::Produce(const Match& _in, TickLog& _log)
       (void)next.AddFleet(built);
     }
     record.lines.push_back(std::format("shipyard at {} produced {}", NameOf(_in, system), _in.Rules().shipsPerShipyard));
+  }
+
+  // A custodian's garrisons weaken every tick of absence. It is the mechanism behind the
+  // one-pager's social point: the territory becomes "a public race among every neighbour who can
+  // reach it, not a private farm". A conceded player decays too -- concession is permanent absence.
+  for (std::size_t index = 0; index < _in.Fleets().size(); ++index)
+  {
+    const MatchFleet& fleet = _in.Fleets()[index];
+    if (fleet.destroyed || !fleet.owner.IsValid() || fleet.ships == 0)
+    {
+      continue;
+    }
+    if (_in.PlayerAt(fleet.owner).status != PlayerStatus::Custodian)
+    {
+      continue;
+    }
+
+    const std::uint32_t lost = std::max(1U, (fleet.ships * _in.Rules().garrisonDecayPercent) / 100U);
+    MatchFleet& decayed = next.MutableFleets()[index];
+    decayed.ships -= std::min(lost, decayed.ships);
+    if (decayed.ships == 0)
+    {
+      decayed.destroyed = true;
+      decayed.at = SystemId{};
+      decayed.movingFrom = SystemId{};
+      decayed.movingTo = SystemId{};
+      decayed.ticksRemaining = 0;
+    }
+    record.lines.push_back(std::format("custodian garrison {} weakened by {}", index, lost));
   }
 
   return next;
@@ -856,59 +985,20 @@ Match TickResolver::Fight(const Match& _in, TickLog& _log)
 
     std::vector<std::uint32_t> before = ships;
 
-    for (std::uint32_t round = 0; round < next.Rules().combatRounds; ++round)
+    // The arithmetic lives in `ResolveMelee` so that the orders rail's preview runs the same code
+    // (Melee.h). What stays here is who is on which side and where the losses land.
+    std::vector<MeleeSide> melee;
+    melee.reserve(sides.size());
+    for (const std::size_t side : sides)
     {
-      // Effective strength, with the incumbent's bonus. Computed fresh each round from the
-      // survivors, so a side that is losing also hits less hard.
-      std::vector<std::uint64_t> effective(playerCount, 0);
-      std::uint64_t total = 0;
-      for (const std::size_t side : sides)
-      {
-        const std::uint64_t bonus = incumbent[side] ? next.Rules().defenderBonusPercent : 100U;
-        effective[side] = (static_cast<std::uint64_t>(ships[side]) * bonus) / 100U;
-        total += effective[side];
-      }
+      melee.push_back(MeleeSide{.player = PlayerId{static_cast<std::int32_t>(side)}, .ships = ships[side], .incumbent = incumbent[side]});
+    }
 
-      // Damage each side deals, and where it lands: spread across the enemies in proportion to
-      // THEIR strength, which is the one-pager's rule and means a big enemy soaks more of it.
-      std::vector<std::uint64_t> incoming(playerCount, 0);
-      for (const std::size_t attacker : sides)
-      {
-        const std::uint64_t output = (effective[attacker] * next.Rules().damagePercentPerRound) / 100U;
-        const std::uint64_t enemies = total - effective[attacker];
-        if (output == 0 || enemies == 0)
-        {
-          continue;
-        }
-        for (const std::size_t defender : sides)
-        {
-          if (defender != attacker)
-          {
-            incoming[defender] += (output * effective[defender]) / enemies;
-          }
-        }
-      }
+    ResolveMelee(next.Rules(), melee);
 
-      // Applied only now. Every number above came from the state at the start of the round, so a
-      // tie is a tie rather than a race -- "a tie is mutual attrition, not a coin flip".
-      bool anyLoss = false;
-      for (const std::size_t side : sides)
-      {
-        const auto lost = static_cast<std::uint32_t>(std::min<std::uint64_t>(incoming[side], ships[side]));
-        ships[side] -= lost;
-        anyLoss = anyLoss || lost > 0;
-      }
-
-      std::size_t standing = 0;
-      for (const std::size_t side : sides)
-      {
-        standing += ships[side] > 0 ? 1 : 0;
-      }
-      if (standing < 2 || !anyLoss)
-      {
-        // Either it is over, or nobody can hurt anybody and further rounds would change nothing.
-        break;
-      }
+    for (std::size_t entry = 0; entry < melee.size(); ++entry)
+    {
+      ships[sides[entry]] = melee[entry].ships;
     }
 
     // Losses back onto the fleets, largest first so the remainder falls on the smallest, and by
@@ -1026,7 +1116,18 @@ Match TickResolver::Claim(const Match& _in, TickLog& _log)
       continue;
     }
 
-    const std::vector<PlayerId> present = OwnersPresent(_in, system);
+    // "Custodian. Territory defends, never expands, never attacks." A custodian's fleets hold what
+    // they stand on and take nothing, so they are dropped from the claiming here rather than
+    // prevented from moving -- a garrison that happens to be standing on open ground does not
+    // annex it, and one standing on its own system still defends it.
+    std::vector<PlayerId> present;
+    for (const PlayerId who : OwnersPresent(_in, system))
+    {
+      if (_in.PlayerAt(who).status != PlayerStatus::Custodian || who == before.owner)
+      {
+        present.push_back(who);
+      }
+    }
 
     std::vector<PlayerId> hostiles;
     for (const PlayerId who : present)
@@ -1092,6 +1193,13 @@ Match TickResolver::Claim(const Match& _in, TickLog& _log)
       after.capturedAt = _in.Tick();
       after.siegeBy = PlayerId{};
       after.siegeTicks = 0;
+
+      // Taken from a custodian: it yields at a fraction from now on, permanently and whoever holds
+      // it. Stamped once and never cleared, so a second capture does not launder it.
+      if (_in.PlayerAt(loser).status == PlayerStatus::Custodian)
+      {
+        after.halfYield = true;
+      }
 
       record.lines.push_back(std::format("{} captured {} from {}", NameOf(besieger), NameOf(_in, system), NameOf(loser)));
       Tell(_log, besieger,
@@ -1190,6 +1298,197 @@ Match TickResolver::Claim(const Match& _in, TickLog& _log)
   return next;
 }
 
+// ---- Between claims and the digest -- score, dominance, and what everyone can see -----------------
+//
+// Not one of the one-pager's six phases, and deliberately not pretending to be. Those six are the
+// rules of the game; this is bookkeeping that has to happen after ownership settles and before the
+// digest is written, because the digest reports the leader and the snapshot is built from what
+// each player can see. Giving it a phase number would have invented a seventh phase the design
+// does not have.
+
+Match TickResolver::Reckon(const Match& _in, TickLog& _log)
+{
+  Match next = _in;
+
+  // ---- Score -------------------------------------------------------------------------------------
+  //
+  // Recomputed from scratch every tick from what is held, never accumulated. "Public score. The
+  // leader is always visible" is the anti-snowball, and it only works if losing half an empire
+  // drops you -- a running total would make an early lead permanent.
+  std::vector<std::uint32_t> scores(next.Players().size(), 0);
+  for (std::size_t index = 0; index < next.Systems().size(); ++index)
+  {
+    const SystemId system{static_cast<std::int32_t>(index)};
+    const SystemState& state = next.SystemAt(system);
+    if (!state.owner.IsValid())
+    {
+      continue;
+    }
+
+    std::uint32_t worth = next.Rules().scorePerSystem;
+    if (next.GalaxyGraph().SystemAt(system).kind == SystemKind::Capital)
+    {
+      worth += next.Rules().capitalScoreBonus;
+    }
+    scores[state.owner.AsSize()] += worth;
+  }
+
+  std::uint32_t total = 0;
+  for (std::size_t index = 0; index < scores.size(); ++index)
+  {
+    // A first-week custodian scores nothing for the match, however much territory they still hold.
+    // It is the one cost that reaches somebody who has already stopped playing -- and it is applied
+    // to the reported score rather than to the territory, because the territory is still a prize
+    // somebody else can take.
+    if (next.Players()[index].forfeitedScore)
+    {
+      scores[index] = 0;
+    }
+    next.MutablePlayers()[index].score = scores[index];
+    total += scores[index];
+  }
+
+  // ---- Dominance ---------------------------------------------------------------------------------
+  //
+  // "An early dominance threshold ends the match only if held for several consecutive ticks, so the
+  // leader stays attackable." Consecutive is the whole rule: one tick below the share and the count
+  // starts again from nothing.
+  for (std::size_t index = 0; index < next.Players().size(); ++index)
+  {
+    const bool dominant = total > 0 && (static_cast<std::uint64_t>(scores[index]) * 100U) >=
+                                         (static_cast<std::uint64_t>(total) * next.Rules().dominanceSharePercent);
+
+    PlayerState& player = next.MutablePlayers()[index];
+    player.dominanceTicks = dominant ? player.dominanceTicks + 1 : 0;
+
+    if (dominant && player.dominanceTicks >= next.Rules().dominanceHoldTicks && !next.DominanceWinner().IsValid())
+    {
+      const PlayerId winner{static_cast<std::int32_t>(index)};
+      next.SetDominanceWinner(winner);
+
+      for (std::size_t other = 0; other < next.Players().size(); ++other)
+      {
+        Tell(_log, PlayerId{static_cast<std::int32_t>(other)},
+             DigestEntry{.kind = DigestKind::MatchEnded,
+                         .severity = Severity::MATCH_ENDED,
+                         .title = other == index ? std::string("You have won") : std::format("{} has won", NameOf(winner)),
+                         .detail = std::format("Dominance held for {} ticks", next.Rules().dominanceHoldTicks),
+                         .other = winner});
+      }
+    }
+  }
+
+  // The fixed end. It is announced once, on the tick that reaches it.
+  if (!next.DominanceWinner().IsValid() && _in.Tick() + 1 >= next.Rules().matchLengthTicks)
+  {
+    const std::vector<PlayerId> placements = next.Placements();
+    for (std::size_t index = 0; index < next.Players().size(); ++index)
+    {
+      const PlayerId player{static_cast<std::int32_t>(index)};
+      const auto place =
+        static_cast<std::uint32_t>(std::distance(placements.begin(), std::find(placements.begin(), placements.end(), player)) + 1);
+
+      Tell(_log, player,
+           DigestEntry{.kind = DigestKind::MatchEnded,
+                       .severity = Severity::MATCH_ENDED,
+                       .title = "The match is over",
+                       .detail = std::format("Placed {} of {} on {} points", place, next.Players().size(), next.Players()[index].score)});
+    }
+  }
+
+  // ---- Visibility ----------------------------------------------------------------------------------
+  //
+  // ADR-022. What a player sees this tick: their own systems, anything one lane from them, anything
+  // a fleet of theirs is standing at or adjacent to, and everything a shared-scouting partner sees.
+  // A system once seen stays KNOWN at its last-seen state rather than going dark, with the tick
+  // stamped, so the map can grey it and the digest can say "as of T41".
+  const std::size_t systemCount = next.Systems().size();
+  std::vector<std::vector<bool>> live(next.Players().size(), std::vector<bool>(systemCount, false));
+
+  const auto lightUp = [&next, &live, systemCount](std::size_t _player, SystemId _from)
+  {
+    if (!_from.IsValid())
+    {
+      return;
+    }
+    live[_player][_from.AsSize()] = true;
+    if (next.Rules().scoutingRangeLanes == 0)
+    {
+      return;
+    }
+    for (const LaneId lane : next.GalaxyGraph().LanesAt(_from))
+    {
+      const SystemId other = next.GalaxyGraph().OtherEnd(lane, _from);
+      if (other.IsValid() && other.AsSize() < systemCount)
+      {
+        live[_player][other.AsSize()] = true;
+      }
+    }
+  };
+
+  for (std::size_t index = 0; index < systemCount; ++index)
+  {
+    const SystemState& state = next.Systems()[index];
+    if (state.owner.IsValid())
+    {
+      lightUp(state.owner.AsSize(), SystemId{static_cast<std::int32_t>(index)});
+    }
+  }
+
+  for (const MatchFleet& fleet : next.Fleets())
+  {
+    if (!fleet.destroyed && fleet.owner.IsValid())
+    {
+      // A fleet under way sees from both ends of the lane it is on. It is somewhere between them,
+      // and there is no third thing for it to be next to.
+      lightUp(fleet.owner.AsSize(), fleet.at);
+      lightUp(fleet.owner.AsSize(), fleet.movingFrom);
+      lightUp(fleet.owner.AsSize(), fleet.movingTo);
+    }
+  }
+
+  // Shared scouting, applied after everything else and as a union, so it cannot take anything away.
+  // "Shared scouting pays visibly, as fog lifting on the map."
+  for (const Agreement& agreement : next.Agreements())
+  {
+    if (agreement.kind != AgreementKind::ShareScouting)
+    {
+      continue;
+    }
+    const std::size_t first = agreement.a.AsSize();
+    const std::size_t second = agreement.b.AsSize();
+    for (std::size_t index = 0; index < systemCount; ++index)
+    {
+      const bool either = live[first][index] || live[second][index];
+      live[first][index] = either;
+      live[second][index] = either;
+    }
+  }
+
+  for (std::size_t player = 0; player < next.Players().size(); ++player)
+  {
+    std::vector<SeenSystem>& seen = next.MutableSeen()[player];
+    for (std::size_t index = 0; index < systemCount; ++index)
+    {
+      SeenSystem& record = seen[index];
+      record.live = live[player][index];
+      if (!record.live)
+      {
+        continue;
+      }
+
+      const SystemState& state = next.Systems()[index];
+      record.known = true;
+      record.asOfTick = _in.Tick();
+      record.owner = state.owner;
+      record.hadShipyard = state.hasShipyard;
+      record.hadMiningStation = state.hasMiningStation;
+    }
+  }
+
+  return next;
+}
+
 // ---- Phase 6 -- digest ------------------------------------------------------------------------------
 
 void TickResolver::WriteDigest(const Match& _in, TickLog& _log)
@@ -1226,6 +1525,55 @@ void TickResolver::WriteDigest(const Match& _in, TickLog& _log)
     total += static_cast<std::uint32_t>(digest.size());
   }
   record.lines.push_back(std::format("{} events across {} players", total, _in.Players().size()));
+}
+
+/// What a fight at `_system` would do, with `_extra` sides added to whoever is already there.
+///
+/// Runs `ResolveMelee`, the same function the resolver runs, on a copy of the numbers. That is the
+/// whole design: the preview cannot drift from the battle because there is nothing to drift.
+std::vector<MeleeSide> TickResolver::Preview(const Match& _match, SystemId _system, std::span<const MeleeSide> _extra)
+{
+  std::vector<MeleeSide> sides;
+
+  const auto sideFor = [&sides](PlayerId _player) -> MeleeSide&
+  {
+    for (MeleeSide& side : sides)
+    {
+      if (side.player == _player)
+      {
+        return side;
+      }
+    }
+    sides.push_back(MeleeSide{.player = _player});
+    return sides.back();
+  };
+
+  if (_match.HasSystem(_system))
+  {
+    for (std::size_t index = 0; index < _match.Fleets().size(); ++index)
+    {
+      const MatchFleet& fleet = _match.Fleets()[index];
+      if (fleet.destroyed || fleet.InTransit() || fleet.at != _system || fleet.ships == 0 || !fleet.owner.IsValid())
+      {
+        continue;
+      }
+      MeleeSide& side = sideFor(fleet.owner);
+      side.ships += fleet.ships;
+      // Anyone standing there now will be an incumbent by the time a fleet ordered this tick
+      // arrives, which is what the player is being shown.
+      side.incumbent = true;
+    }
+  }
+
+  for (const MeleeSide& extra : _extra)
+  {
+    MeleeSide& side = sideFor(extra.player);
+    side.ships += extra.ships;
+    side.incumbent = side.incumbent && extra.incumbent;
+  }
+
+  ResolveMelee(_match.Rules(), sides);
+  return sides;
 }
 
 } // namespace Frontier

@@ -6,6 +6,8 @@
     <ClCompile Include="MatchTests.cpp" />
     <ClCompile Include="CombatTests.cpp" />
     <ClCompile Include="DiplomacyTests.cpp" />
+    <ClCompile Include="PlayerTests.cpp" />
+    <ClCompile Include="SnapshotTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />

@@ -48,6 +48,23 @@ private:
 
 } // namespace
 
+const char* Describe(PlayerStatus _status) noexcept
+{
+  switch (_status)
+  {
+  case PlayerStatus::Active:
+    return "active";
+  case PlayerStatus::Custodian:
+    return "custodian";
+  case PlayerStatus::Exile:
+    return "exile";
+  case PlayerStatus::Gone:
+    return "gone";
+  default:
+    return "unknown";
+  }
+}
+
 Match Match::Create(const MatchRules& _rules, std::uint64_t _seed)
 {
   // Rules that contradict the game they are rules for are a caller defect, not a state to recover
@@ -81,6 +98,8 @@ Match Match::Create(const MatchRules& _rules, std::uint64_t _seed)
     state.owner = system.owner;
     match.m_systems.push_back(state);
   }
+
+  match.m_seen.assign(_rules.playerCount, std::vector<SeenSystem>(match.m_systems.size()));
 
   // One fleet each, on the capital. In capital order, so fleet ids run with player ids and a
   // reader can predict which is whose.
@@ -162,6 +181,70 @@ bool Match::HaveMet(PlayerId _first, PlayerId _second) const
   return false;
 }
 
+PlayerId Match::Leader() const
+{
+  PlayerId best;
+  for (std::size_t index = 0; index < m_players.size(); ++index)
+  {
+    const PlayerId candidate{static_cast<std::int32_t>(index)};
+    if (!best.IsValid() || m_players[index].score > m_players[best.AsSize()].score)
+    {
+      best = candidate;
+    }
+  }
+  return best;
+}
+
+std::vector<PlayerId> Match::Placements() const
+{
+  std::vector<PlayerId> order;
+  order.reserve(m_players.size());
+  for (std::size_t index = 0; index < m_players.size(); ++index)
+  {
+    order.emplace_back(static_cast<std::int32_t>(index));
+  }
+
+  // ADR-023's tiebreak, in order: score, then systems held, then capitals held, then the lower
+  // player id. The last one is arbitrary and is there so the order is TOTAL -- a placement that
+  // depended on sort stability would differ between two machines reporting the same match.
+  const auto held = [this](PlayerId _player)
+  {
+    std::pair<std::uint32_t, std::uint32_t> counts{0, 0};
+    for (std::size_t index = 0; index < m_systems.size(); ++index)
+    {
+      if (m_systems[index].owner == _player)
+      {
+        ++counts.first;
+        if (m_galaxy.SystemAt(SystemId{static_cast<std::int32_t>(index)}).kind == SystemKind::Capital)
+        {
+          ++counts.second;
+        }
+      }
+    }
+    return counts;
+  };
+
+  std::sort(order.begin(), order.end(),
+            [this, &held](PlayerId _left, PlayerId _right)
+            {
+              const std::uint32_t leftScore = m_players[_left.AsSize()].score;
+              const std::uint32_t rightScore = m_players[_right.AsSize()].score;
+              if (leftScore != rightScore)
+              {
+                return leftScore > rightScore;
+              }
+              const auto leftHeld = held(_left);
+              const auto rightHeld = held(_right);
+              if (leftHeld != rightHeld)
+              {
+                return leftHeld > rightHeld;
+              }
+              return _left < _right;
+            });
+
+  return order;
+}
+
 bool Match::IsCapitalGuarded(SystemId _system) const
 {
   if (!HasSystem(_system) || m_galaxy.SystemAt(_system).kind != SystemKind::Capital)
@@ -196,11 +279,12 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
     return rejected;
   }
 
-  if (PlayerAt(_orders.player).conceded)
+  if (PlayerAt(_orders.player).status == PlayerStatus::Custodian)
   {
-    // One refusal for the whole set rather than one per order. A conceded player is not making
-    // mistakes, they are gone, and a digest full of identical refusals says nothing extra.
-    refuse(OrderRejection::AlreadyConceded, 0);
+    // One refusal for the whole set rather than one per order. A custodian is not making mistakes;
+    // its territory defends and never expands or attacks, so there are no orders to refuse
+    // individually and a digest full of identical refusals would say nothing extra.
+    refuse(PlayerAt(_orders.player).conceded ? OrderRejection::AlreadyConceded : OrderRejection::YouAreACustodian, 0);
     return rejected;
   }
 
@@ -416,6 +500,7 @@ std::uint64_t Match::Hash() const
     hash.AbsorbId(system.siegeBy.Index());
     hash.Absorb(system.siegeTicks);
     hash.Absorb(system.capturedAt);
+    hash.Absorb(system.halfYield ? 1U : 0U);
   }
 
   for (const MatchFleet& fleet : m_fleets)
@@ -436,8 +521,13 @@ std::uint64_t Match::Hash() const
   {
     hash.Absorb(player.credits);
     hash.Absorb(player.score);
+    hash.Absorb(static_cast<std::uint64_t>(player.status));
     hash.Absorb(player.lastActiveTick);
+    hash.Absorb(player.absentTicks);
+    hash.Absorb(player.custodianSince);
     hash.Absorb(player.conceded ? 1U : 0U);
+    hash.Absorb(player.forfeitedScore ? 1U : 0U);
+    hash.Absorb(player.dominanceTicks);
   }
 
   for (const OpenProposal& proposal : m_proposals)
@@ -476,6 +566,22 @@ std::uint64_t Match::Hash() const
     hash.Absorb(contact.tick);
   }
 
+  // What each player knows is state like any other. A snapshot is built from it, so two machines
+  // that disagreed about it would show two different maps of the same match.
+  for (const std::vector<SeenSystem>& byPlayer : m_seen)
+  {
+    for (const SeenSystem& seen : byPlayer)
+    {
+      hash.Absorb(seen.live ? 1U : 0U);
+      hash.Absorb(seen.known ? 1U : 0U);
+      hash.Absorb(seen.asOfTick);
+      hash.AbsorbId(seen.owner.Index());
+      hash.Absorb(seen.hadShipyard ? 1U : 0U);
+      hash.Absorb(seen.hadMiningStation ? 1U : 0U);
+    }
+  }
+
+  hash.AbsorbId(m_dominanceWinner.Index());
   return hash.Value();
 }
 
@@ -526,6 +632,33 @@ bool Match::IsConsistent() const
   for (const OpenProposal& proposal : m_proposals)
   {
     if (!HasPlayer(proposal.from) || !HasPlayer(proposal.to) || proposal.from == proposal.to)
+    {
+      return false;
+    }
+  }
+
+  for (const PlayerState& player : m_players)
+  {
+    // Concession is custodianship that cannot be undone, so it is never a status of its own. A
+    // state with one set and not the other would pass every order check that reads `status` and
+    // fail every one that reads `conceded`.
+    if (player.conceded && player.status != PlayerStatus::Custodian)
+    {
+      return false;
+    }
+    if (player.status == PlayerStatus::Custodian && player.custodianSince == 0 && !player.conceded)
+    {
+      return false;
+    }
+  }
+
+  if (m_seen.size() != m_players.size())
+  {
+    return false;
+  }
+  for (const std::vector<SeenSystem>& byPlayer : m_seen)
+  {
+    if (byPlayer.size() != m_systems.size())
     {
       return false;
     }

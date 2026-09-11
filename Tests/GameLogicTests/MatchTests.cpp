@@ -68,7 +68,7 @@ constexpr std::uint64_t SEED = 0x4652'4F4E'5449'4552ULL;
 [[nodiscard]] Frontier::Match Advance(const Frontier::Match& _match, std::span<const Frontier::OrderSet> _orders)
 {
   Frontier::TickLog log;
-  return Frontier::TickResolver::Resolve(_match, _orders, log);
+  return Frontier::TickResolver::Resolve(_match, {.orders = _orders}, log);
 }
 
 [[nodiscard]] Frontier::Match AdvanceQuietly(const Frontier::Match& _match)
@@ -466,7 +466,13 @@ public:
   TEST_METHOD(AConcededPlayerHasNoOrdersLeft)
   {
     Frontier::Match match = SixPlayerMatch();
+
+    // Conceding is custodianship that cannot be undone, so both halves have to be set -- and
+    // `IsConsistent` refuses a state with only one of them.
     match.MutablePlayers()[0].conceded = true;
+    match.MutablePlayers()[0].status = Frontier::PlayerStatus::Custodian;
+    match.MutablePlayers()[0].custodianSince = 1;
+    Assert::IsTrue(match.IsConsistent());
 
     Frontier::OrderSet orders;
     orders.player = Frontier::PlayerId{0};
@@ -871,7 +877,7 @@ public:
     const std::array<Frontier::OrderSet, 1> sets = {orders};
 
     Frontier::TickLog log;
-    const Frontier::Match after = Frontier::TickResolver::Resolve(start, sets, log);
+    const Frontier::Match after = Frontier::TickResolver::Resolve(start, {.orders = sets}, log);
 
     Assert::IsTrue(after.SystemAt(target).owner == Frontier::PlayerId{0});
     Assert::IsTrue(HasDigestKind(log, 0, Frontier::DigestKind::SystemClaimed));
@@ -1018,7 +1024,7 @@ public:
     const std::array<Frontier::OrderSet, 1> sets = {orders};
 
     Frontier::TickLog log;
-    const Frontier::Match after = Frontier::TickResolver::Resolve(start, sets, log);
+    const Frontier::Match after = Frontier::TickResolver::Resolve(start, {.orders = sets}, log);
 
     Assert::AreEqual(static_cast<size_t>(1), after.Proposals().size());
     Assert::IsTrue(HasDigestKind(log, 2, Frontier::DigestKind::ProposalReceived));
@@ -1050,7 +1056,7 @@ public:
     const std::array<Frontier::OrderSet, 1> accepting = {accept};
 
     Frontier::TickLog log;
-    match = Frontier::TickResolver::Resolve(match, accepting, log);
+    match = Frontier::TickResolver::Resolve(match, {.orders = accepting}, log);
 
     Assert::AreEqual(static_cast<size_t>(1), match.TradeLanes().size(), L"the lane is open");
     Assert::IsTrue(match.Proposals().empty(), L"and the offer is off the table");
@@ -1105,7 +1111,7 @@ public:
     const std::array<Frontier::OrderSet, 1> withdrawing = {withdraw};
 
     Frontier::TickLog log;
-    match = Frontier::TickResolver::Resolve(match, withdrawing, log);
+    match = Frontier::TickResolver::Resolve(match, {.orders = withdrawing}, log);
 
     Assert::IsTrue(match.Proposals().empty());
     Assert::IsTrue(HasDigestKind(log, 1, Frontier::DigestKind::ProposalWithdrawn));
@@ -1154,7 +1160,7 @@ public:
     const std::array<Frontier::OrderSet, 1> sets = {orders};
 
     Frontier::TickLog log;
-    const Frontier::Match after = Frontier::TickResolver::Resolve(start, sets, log);
+    const Frontier::Match after = Frontier::TickResolver::Resolve(start, {.orders = sets}, log);
 
     Assert::IsTrue(HasDigestKind(log, 0, Frontier::DigestKind::OrderRejected), L"nothing is dropped silently");
     Assert::IsFalse(after.SystemAt(CapitalOf(after, 4)).hasShipyard, L"and nothing was built");
@@ -1174,7 +1180,7 @@ public:
     const std::array<Frontier::OrderSet, 2> twice = {once, once};
 
     Frontier::TickLog log;
-    const Frontier::Match after = Frontier::TickResolver::Resolve(start, twice, log);
+    const Frontier::Match after = Frontier::TickResolver::Resolve(start, {.orders = twice}, log);
 
     Assert::IsTrue(after.SystemAt(capital).hasMiningStation);
     Assert::AreEqual(start.PlayerAt(Frontier::PlayerId{0}).credits - start.Rules().miningStationCost + after.Rules().creditsPerSystem +
@@ -1210,7 +1216,7 @@ public:
     const std::array<Frontier::OrderSet, 1> sets = {bad};
 
     Frontier::TickLog log;
-    match = Frontier::TickResolver::Resolve(match, sets, log);
+    match = Frontier::TickResolver::Resolve(match, {.orders = sets}, log);
 
     const std::vector<Frontier::DigestEntry>& digest = log.digests[1];
     Assert::IsTrue(digest.size() >= 3, L"a loss, a refusal and the economy line");

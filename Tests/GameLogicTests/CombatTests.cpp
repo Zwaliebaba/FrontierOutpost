@@ -278,7 +278,7 @@ public:
     const std::array<Frontier::OrderSet, 1> sets = {orders};
 
     Frontier::TickLog log;
-    const Frontier::Match after = Frontier::TickResolver::Resolve(match, sets, log);
+    const Frontier::Match after = Frontier::TickResolver::Resolve(match, {.orders = sets}, log);
 
     Assert::AreEqual(5U, after.FleetAt(defender).ships, L"it got out with everything");
     Assert::IsFalse(after.FleetAt(defender).destroyed);
@@ -394,7 +394,7 @@ public:
     orders.player = Frontier::PlayerId{0};
     orders.fleetOrders.push_back(Frontier::FleetOrder{.fleet = _setup.leaving, .destination = _setup.to});
     const std::array<Frontier::OrderSet, 1> sets = {orders};
-    return Frontier::TickResolver::Resolve(_setup.match, sets, _log);
+    return Frontier::TickResolver::Resolve(_setup.match, {.orders = sets}, _log);
   }
 
   TEST_METHOD(TheRearGuardIsOffByDefault)
@@ -439,7 +439,7 @@ public:
     const std::array<Frontier::OrderSet, 1> sets = {orders};
 
     Frontier::TickLog log;
-    const Frontier::Match after = Frontier::TickResolver::Resolve(match, sets, log);
+    const Frontier::Match after = Frontier::TickResolver::Resolve(match, {.orders = sets}, log);
 
     Assert::AreEqual(20U, after.FleetAt(leaving).ships, L"an ordinary move is not a withdrawal under fire");
   }
@@ -462,7 +462,7 @@ public:
     const std::array<Frontier::OrderSet, 1> sets = {orders};
 
     Frontier::TickLog log;
-    const Frontier::Match after = Frontier::TickResolver::Resolve(match, sets, log);
+    const Frontier::Match after = Frontier::TickResolver::Resolve(match, {.orders = sets}, log);
 
     Assert::AreEqual(20U, after.FleetAt(leaving).ships, L"a relief column does not shoot the garrison");
   }
@@ -488,7 +488,7 @@ public:
     const std::array<Frontier::OrderSet, 1> sets = {orders};
 
     Frontier::TickLog log;
-    const Frontier::Match after = Frontier::TickResolver::Resolve(match, sets, log);
+    const Frontier::Match after = Frontier::TickResolver::Resolve(match, {.orders = sets}, log);
 
     // It left with twenty, five were taken on the way out, and it arrived into a fight with an
     // incumbent twelve. What is being asserted is the ordering, not the arithmetic: it must be
