@@ -12,6 +12,14 @@
 namespace Lockstep
 {
 
+/// Tokens for a lobby's seats, one each.
+///
+/// **Generated before any screen exists**, because the server is opened with them: a token has to
+/// be on its list before anybody can present one. `XXXX-XXXX` from an alphabet with no `0`/`O` and
+/// no `1`/`I` -- these are read off one screen, pasted through a chat window and typed into
+/// another, and those are the two pairs people confuse (ADR-036).
+[[nodiscard]] std::vector<std::string> GenerateSeatTokens(std::int32_t _count);
+
 /// The seats screen: who is playing, and what each of them has to type to prove it.
 ///
 /// **It runs before the match exists** (ADR-036). The number of seats decides how the galaxy is
@@ -56,7 +64,16 @@ public:
 
   static constexpr std::int32_t SEAT_COUNT = 12;
 
-  SeatsPage();
+  /// The tokens come from the caller now, because the lobby was opened with them before this
+  /// screen existed: a token has to be on the server's list before anybody can present it.
+  explicit SeatsPage(std::vector<std::string> _tokens);
+
+  /// Who is on a seat, from the server. Refreshed every frame.
+  void SetConnected(const std::vector<bool>& _connected);
+
+  /// Whether every seat that is meant to have a human on it has one. `ENTER MATCH` waits for this:
+  /// a match that started without somebody would spend its first ticks putting them in custody.
+  [[nodiscard]] bool EveryoneIsHere() const;
 
   void DrawWorld(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawInterface(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
@@ -66,6 +83,19 @@ public:
 
   /// True once, when the host has asked to start. Taken, so a held finger starts one match.
   [[nodiscard]] bool TakeEnterRequest() noexcept;
+
+  /// How many seats the match has. Seats fill from the top, so this is also the index one past the
+  /// last playing seat, and a token's position in the list is the player index it becomes.
+  ///
+  /// **Seats are a suffix rather than a set** (ADR-036, revised): the lobby is opened with twelve
+  /// tokens before anybody has chosen anything, and the server maps token *n* to player *n*. A host
+  /// who could empty a seat in the middle would renumber everybody behind it and invalidate tokens
+  /// already sent. So HUMAN on seat *k* fills every seat above it and EMPTY on seat *k* empties
+  /// every seat below.
+  [[nodiscard]] std::int32_t SeatCount() const noexcept
+  {
+    return m_seatCount;
+  }
 
   /// The tokens of the seats that are playing, in seat order. Its size is `playerCount`.
   [[nodiscard]] std::vector<std::string> PlayingTokens() const;
@@ -99,7 +129,12 @@ private:
   /// is a position in the generator's output, not a label the host chose (ADR-036).
   [[nodiscard]] std::int32_t PlayerIndexOf(std::int32_t _seat) const;
 
+  /// Makes the seats match `m_seatCount`: human up to it, empty past it.
+  void ApplyBoundary();
+
   std::array<Seat, SEAT_COUNT> m_seats;
+  std::array<bool, SEAT_COUNT> m_connected = {};
+  std::int32_t m_seatCount = 6;
   std::int32_t m_selected = 0;
   std::int32_t m_hostSeat = 0;
 

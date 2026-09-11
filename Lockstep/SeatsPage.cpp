@@ -94,59 +94,78 @@ constexpr std::string_view TOKEN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 } // namespace
 
-SeatsPage::SeatsPage()
+std::vector<std::string> GenerateSeatTokens(std::int32_t _count)
 {
   // Seeded off the clock, because a token that was the same in every match would be one anybody
-  // could type without being told it. ADR-029 is clear that this is not security -- it is the
-  // difference between a seat you were given and a seat you guessed.
+  // could type without being told it. ADR-029 is clear this is not security -- it is the difference
+  // between a seat you were given and a seat you guessed.
   const auto now = static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
   Neuron::Prng prng{now ^ 0x9E37'79B9'7F4A'7C15ULL};
 
+  std::vector<std::string> tokens;
+  tokens.reserve(static_cast<std::size_t>(_count));
+  for (std::int32_t index = 0; index < _count; ++index)
+  {
+    tokens.push_back(MakeToken(prng));
+  }
+  return tokens;
+}
+
+SeatsPage::SeatsPage(std::vector<std::string> _tokens)
+{
   for (std::int32_t index = 0; index < SEAT_COUNT; ++index)
   {
-    m_seats[static_cast<std::size_t>(index)].token = MakeToken(prng);
-    m_seats[static_cast<std::size_t>(index)].name = EMPIRE_NAMES[static_cast<std::size_t>(index)];
+    Seat& seat = m_seats[static_cast<std::size_t>(index)];
+    seat.token = index < static_cast<std::int32_t>(_tokens.size()) ? _tokens[static_cast<std::size_t>(index)] : std::string{};
+    seat.name = EMPIRE_NAMES[static_cast<std::size_t>(index)];
 
-    // Six human seats to begin with, which is the smallest playable match (`MINIMUM_PLAYERS`) and
-    // therefore the fewest decisions a host has to make before the screen is usable.
-    m_seats[static_cast<std::size_t>(index)].kind = index < static_cast<std::int32_t>(MINIMUM_PLAYERS) ? Kind::Human : Kind::Empty;
+    // Six to begin with, the smallest playable match (`MINIMUM_PLAYERS`), so the screen is usable
+    // before the host has decided anything.
+    seat.kind = index < static_cast<std::int32_t>(MINIMUM_PLAYERS) ? Kind::Human : Kind::Empty;
   }
+  m_seatCount = static_cast<std::int32_t>(MINIMUM_PLAYERS);
+}
+
+void SeatsPage::SetConnected(const std::vector<bool>& _connected)
+{
+  for (std::int32_t index = 0; index < SEAT_COUNT; ++index)
+  {
+    m_connected[static_cast<std::size_t>(index)] =
+      index < static_cast<std::int32_t>(_connected.size()) && _connected[static_cast<std::size_t>(index)];
+  }
+}
+
+bool SeatsPage::EveryoneIsHere() const
+{
+  for (std::int32_t index = 0; index < m_seatCount; ++index)
+  {
+    if (m_seats[static_cast<std::size_t>(index)].kind == Kind::Human && !m_connected[static_cast<std::size_t>(index)])
+    {
+      return false;
+    }
+  }
+  return true;
 }
 
 std::int32_t SeatsPage::PlayerIndexOf(std::int32_t _seat) const
 {
-  if (m_seats[static_cast<std::size_t>(_seat)].kind == Kind::Empty)
-  {
-    return -1;
-  }
-
-  std::int32_t player = 0;
-  for (std::int32_t index = 0; index < _seat; ++index)
-  {
-    player += m_seats[static_cast<std::size_t>(index)].kind == Kind::Empty ? 0 : 1;
-  }
-  return player;
+  // The seat IS the player. The lobby handed out token *n* for player *n* before this screen
+  // existed, so nothing here may renumber anybody.
+  return _seat < m_seatCount ? _seat : -1;
 }
 
 std::int32_t SeatsPage::PlayingCount() const
 {
-  std::int32_t playing = 0;
-  for (const Seat& seat : m_seats)
-  {
-    playing += seat.kind == Kind::Empty ? 0 : 1;
-  }
-  return playing;
+  return m_seatCount;
 }
 
 std::vector<std::string> SeatsPage::PlayingTokens() const
 {
   std::vector<std::string> tokens;
-  for (const Seat& seat : m_seats)
+  tokens.reserve(static_cast<std::size_t>(m_seatCount));
+  for (std::int32_t index = 0; index < m_seatCount; ++index)
   {
-    if (seat.kind != Kind::Empty)
-    {
-      tokens.push_back(seat.token);
-    }
+    tokens.push_back(m_seats[static_cast<std::size_t>(index)].token);
   }
   return tokens;
 }
@@ -170,6 +189,14 @@ std::string SeatsPage::TakeCopyRequest()
   return taken;
 }
 
+void SeatsPage::ApplyBoundary()
+{
+  for (std::int32_t index = 0; index < SEAT_COUNT; ++index)
+  {
+    m_seats[static_cast<std::size_t>(index)].kind = index < m_seatCount ? Kind::Human : Kind::Empty;
+  }
+}
+
 void SeatsPage::AddHit(float _x, float _y, float _width, float _height, std::int32_t _action, std::int32_t _seat)
 {
   m_hits.push_back(Hit{_x, _y, _width, _height, _action, _seat});
@@ -177,7 +204,7 @@ void SeatsPage::AddHit(float _x, float _y, float _width, float _height, std::int
 
 void SeatsPage::HandleKey(Neuron::KeyboardInput::Key _key)
 {
-  if (_key == Neuron::KeyboardInput::Key::Enter && PlayingCount() >= static_cast<std::int32_t>(MINIMUM_PLAYERS))
+  if (_key == Neuron::KeyboardInput::Key::Enter && PlayingCount() >= static_cast<std::int32_t>(MINIMUM_PLAYERS) && EveryoneIsHere())
   {
     m_enterRequested = true;
   }
@@ -202,17 +229,23 @@ bool SeatsPage::HandleTap(float _xPixels, float _yPixels)
 
     case ACTION_EMPTY:
       m_selected = hit->seat;
-      // The host's own seat cannot be emptied from under them: a match where nobody is the host is
-      // a match nobody can enter.
-      if (hit->seat != m_hostSeat)
+      // Seats are a suffix: emptying this one empties everything below it. Anything else would
+      // renumber players whose tokens are already on the server.
+      if (hit->seat > static_cast<std::int32_t>(MINIMUM_PLAYERS) - 1)
       {
-        seat.kind = Kind::Empty;
+        m_seatCount = hit->seat;
       }
+      else
+      {
+        m_refusal = std::format("A match needs at least {} seats.", MINIMUM_PLAYERS);
+      }
+      ApplyBoundary();
       return true;
 
     case ACTION_HUMAN:
       m_selected = hit->seat;
-      seat.kind = Kind::Human;
+      m_seatCount = hit->seat + 1;
+      ApplyBoundary();
       return true;
 
     case ACTION_BOT:
@@ -257,6 +290,13 @@ bool SeatsPage::HandleTap(float _xPixels, float _yPixels)
       if (PlayingCount() < static_cast<std::int32_t>(MINIMUM_PLAYERS))
       {
         m_refusal = std::format("A match needs at least {} seats.", MINIMUM_PLAYERS);
+        return true;
+      }
+      if (!EveryoneIsHere())
+      {
+        // The wait is the point. A match that began without somebody would spend its first ticks
+        // putting them into custody for missing a game they were still being invited to.
+        m_refusal = "Every seat needs its player connected first.";
         return true;
       }
       m_enterRequested = true;
@@ -325,8 +365,9 @@ void SeatsPage::DrawSeatCard(ShapeRenderer& _shapes, FontRenderer& _text, std::i
     _text.DrawText(static_cast<std::int32_t>(_x) + 10 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("TOKEN ")), lineY, seat.token,
                    TEXT_PRIMARY);
     lineY += LINE_HEIGHT;
-    _text.DrawText(static_cast<std::int32_t>(_x) + 10, lineY, m_hostSeat == _index ? "THIS IS YOUR SEAT" : "WAITING FOR PLAYER",
-                   m_hostSeat == _index ? BLUE : AMBER);
+    const bool here = m_connected[static_cast<std::size_t>(_index)];
+    _text.DrawText(static_cast<std::int32_t>(_x) + 10, lineY,
+                   m_hostSeat == _index ? "CONNECTED - YOU" : (here ? "CONNECTED" : "WAITING FOR PLAYER"), here ? BLUE : AMBER);
     lineY += LINE_HEIGHT;
   }
 
@@ -462,14 +503,49 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
   const std::int32_t playing = PlayingCount();
   const bool enough = playing >= static_cast<std::int32_t>(MINIMUM_PLAYERS);
 
-  const std::string summary = enough ? std::format("{} SEATS - SEND EACH PLAYER THEIR TOKEN - YOU ARE SEAT {:02}", playing, m_hostSeat + 1)
-                                     : std::format("{} SEATS - A MATCH NEEDS AT LEAST {}", playing, MINIMUM_PLAYERS);
-  _text.DrawText(16, CenterTextY(footerY, FOOTER_HEIGHT), summary, enough ? TEXT_MUTED : RED);
+  const bool everyone = EveryoneIsHere();
+
+  // ---- Who is still missing ----------------------------------------------------------------------
+  //
+  // Named rather than counted. "Waiting for 3" tells the host to wait; "waiting for SORNE, TAMSIN"
+  // tells them who to go and ask.
+  std::vector<std::string> missing;
+  for (std::int32_t index = 0; index < m_seatCount; ++index)
+  {
+    if (m_seats[static_cast<std::size_t>(index)].kind == Kind::Human && !m_connected[static_cast<std::size_t>(index)])
+    {
+      missing.push_back(m_seats[static_cast<std::size_t>(index)].name);
+    }
+  }
+
+  std::string summary;
+  if (!enough)
+  {
+    summary = std::format("{} SEATS - A MATCH NEEDS AT LEAST {}", playing, MINIMUM_PLAYERS);
+  }
+  else if (!missing.empty())
+  {
+    summary = std::format("WAITING FOR {}", missing.front());
+    for (std::size_t index = 1; index < missing.size() && index < 3; ++index)
+    {
+      summary += ", " + missing[index];
+    }
+    if (missing.size() > 3)
+    {
+      summary += std::format(", +{}", missing.size() - 3);
+    }
+    summary += std::format(" - {} OF {} HERE", playing - static_cast<std::int32_t>(missing.size()), playing);
+  }
+  else
+  {
+    summary = std::format("ALL {} SEATS CONNECTED - YOU ARE SEAT {:02}", playing, m_hostSeat + 1);
+  }
+  _text.DrawText(16, CenterTextY(footerY, FOOTER_HEIGHT), summary, !enough ? RED : (everyone ? BLUE : AMBER));
 
   // ---- ENTER MATCH --------------------------------------------------------------------------------
   const auto enterWidth = static_cast<float>(FontRenderer::MeasurePixels("ENTER MATCH >")) + 24.0F;
   const float enterX = SCREEN_WIDTH - 16.0F - enterWidth;
-  if (enough)
+  if (enough && everyone)
   {
     _shapes.FillRect(enterX, footerY + 10.0F, enterWidth, 24.0F, BLUE);
     _text.DrawText(static_cast<std::int32_t>(enterX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "ENTER MATCH >", APP_BACKGROUND);
@@ -508,7 +584,12 @@ void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
     empties += seat.kind == Kind::Empty ? 1 : 0;
   }
 
-  const std::string census = std::format("{} HUMAN - {} EMPTY", humans, empties);
+  std::int32_t here = 0;
+  for (std::int32_t index = 0; index < m_seatCount; ++index)
+  {
+    here += m_connected[static_cast<std::size_t>(index)] ? 1 : 0;
+  }
+  const std::string census = std::format("{} SEATS - {} CONNECTED - {} EMPTY", humans, here, empties);
   const auto censusWidth = static_cast<float>(FontRenderer::MeasurePixels(census));
   _text.DrawText(static_cast<std::int32_t>(SCREEN_WIDTH - censusWidth) - 16, centered, census, TEXT_MUTED);
 

@@ -31,6 +31,28 @@ public:
   /// test wants and what a host who does not care would use.
   MatchServer(std::unique_ptr<Session> _session, std::uint16_t _port, std::vector<std::string> _tokens);
 
+  /// Listens with NO MATCH YET. This is the lobby: people connect, present a token, are given a
+  /// seat, and wait.
+  ///
+  /// **A server has to be able to exist before a match does**, because the order a player expects
+  /// is log in, then start a game -- and because "how many are playing" cannot be answered until
+  /// they have arrived, while the galaxy cannot be generated until it is answered. Before `Begin`
+  /// this server accepts a `Hello`, refuses everything that would change a match, and pushes no
+  /// state, because there is none.
+  MatchServer(std::uint16_t _port, std::vector<std::string> _tokens);
+
+  /// Installs the match. Everything that was waiting starts playing at the next poll.
+  void Begin(std::unique_ptr<Session> _session);
+
+  [[nodiscard]] bool Started() const noexcept
+  {
+    return m_session != nullptr;
+  }
+
+  /// Which seats have a welcomed connection on them, one entry per token. What a lobby screen
+  /// draws, and what "you cannot start until the humans are here" is decided from.
+  [[nodiscard]] std::vector<bool> SeatsConnected() const;
+
   [[nodiscard]] bool Listening() const noexcept
   {
     return m_listener.Valid();

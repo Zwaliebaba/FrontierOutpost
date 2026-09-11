@@ -29,6 +29,29 @@ public:
   /// Starts a match and begins listening. `_port` of zero asks the OS for one; `Port()` says which.
   HostedServer(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath, std::uint64_t _seed,
                const MatchRules& _rules);
+
+  /// Opens a LOBBY: listening, seats issued, no match. `Begin` starts the match later.
+  ///
+  /// **This is the order a player expects** -- log in, then start a game -- and the only order in
+  /// which "how many are playing" can be answered before the galaxy is generated for that many.
+  HostedServer(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath);
+
+  /// Starts the match, from another thread.
+  ///
+  /// **Queued rather than done here.** The server and its session live on the server thread and
+  /// nothing else touches them (ADR-028); that is the whole concurrency story and it is worth more
+  /// than the convenience of constructing a simulation on the caller's thread. This leaves the
+  /// request under a lock and the server thread picks it up on its next poll.
+  void Begin(std::uint64_t _seed, const MatchRules& _rules);
+
+  /// True once the match has actually started, which is a poll or two after `Begin`.
+  [[nodiscard]] bool Started() const noexcept
+  {
+    return m_started.load();
+  }
+
+  /// Which seats have somebody on them. Published by the server thread every poll.
+  [[nodiscard]] std::vector<bool> SeatsConnected() const;
   ~HostedServer();
 
   HostedServer(const HostedServer&) = delete;
@@ -54,6 +77,9 @@ private:
   void Run(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath, std::uint64_t _seed,
            MatchRules _rules);
 
+  /// The lobby's loop: listen, seat people, and watch for a `Begin`.
+  void RunLobby(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath);
+
   std::thread m_thread;
   std::atomic<bool> m_running{true};
   std::atomic<bool> m_listening{false};
@@ -63,6 +89,16 @@ private:
   /// anything clever -- a few lines a tick is not a performance problem.
   std::mutex m_logLock;
   std::vector<std::string> m_log;
+
+  /// The lobby's shared state, and the only other thing two threads touch. Same discipline as the
+  /// log: a mutex and plain data, because a few seats a poll is not a performance problem.
+  mutable std::mutex m_lobbyLock;
+  std::vector<bool> m_seatsConnected;
+  bool m_beginRequested = false;
+  std::uint64_t m_beginSeed = 0;
+  MatchRules m_beginRules;
+
+  std::atomic<bool> m_started{false};
 };
 
 } // namespace Lockstep

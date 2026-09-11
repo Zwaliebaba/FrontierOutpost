@@ -373,12 +373,17 @@ bool PumpMessages()
 /// Fills `_outTokens` and returns the host's seat, or -1 when the window closed first.
 [[nodiscard]] std::int32_t RunSeatsScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::ShapeRenderer& _shapes,
                                           Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer, Neuron::KeyboardInput& _keyboard,
-                                          HWND _window, std::vector<std::string>& _outTokens)
+                                          HWND _window, Lockstep::HostedServer& _lobby, const std::vector<std::string>& _tokens,
+                                          std::vector<std::string>& _outTokens)
 {
-  Lockstep::SeatsPage page;
+  Lockstep::SeatsPage page{_tokens};
 
   while (PumpMessages())
   {
+    // Who has arrived, straight from the server this process is running. Not a protocol message:
+    // the host owns the object, and this is the same lock `TakeLog` already uses (ADR-028).
+    page.SetConnected(_lobby.SeatsConnected());
+
     for (const Neuron::KeyboardInput::Key key : _keyboard.TakeKeys())
     {
       page.HandleKey(key);
@@ -593,23 +598,23 @@ int RunGame(HWND _window, const Startup& _startup)
 
   Lockstep::MatchConnection connection;
 
-  // ---- The seats screen, when this process is the host -------------------------------------------
+  // ---- The lobby, when this process is the host --------------------------------------------------
   //
-  // Before the server, because the number of seats is what the galaxy is generated for (ADR-036).
-  // A client that was told where to join with `--join` never sees it -- somebody else is hosting.
+  // **Open before anybody logs in, and with no match in it.** The order is log in, then start a
+  // game, and it cannot be anything else: how many are playing is not knowable until they have
+  // arrived, and the galaxy cannot be generated until it is known. So the server listens first and
+  // the match is created later, on the same thread, from a seed and a struct of numbers.
   std::unique_ptr<Lockstep::HostedServer> hosted;
+  std::vector<std::string> seatTokens;
   std::string hostToken = _startup.token;
+
   if (_startup.role == Role::HostAndPlay)
   {
-    std::vector<std::string> tokens;
-    const std::int32_t hostSeat = RunSeatsScreen(device, screen, shapes, text, pointer, keyboard, _window, tokens);
-    if (hostSeat < 0)
-    {
-      return EXIT_SUCCESS;
-    }
+    seatTokens = Lockstep::GenerateSeatTokens(Lockstep::SeatsPage::SEAT_COUNT);
+    hostToken = seatTokens.front();
 
-    hostToken = tokens[static_cast<std::size_t>(hostSeat)];
-    hosted = StartHostedServer(_startup, std::move(tokens));
+    hosted = std::make_unique<Lockstep::HostedServer>(_startup.port, seatTokens, BesideTheExecutable("lockstep-match.store"),
+                                                      BesideTheExecutable("lockstep-match.log"));
   }
 
   // ---- Screen 03, unless the command line already answered it ----------------------------------
@@ -645,6 +650,37 @@ int RunGame(HWND _window, const Startup& _startup)
     {
       MessageBoxA(nullptr, "Could not reach the match server.", "LockStep: Universe", MB_OK | MB_ICONERROR);
       return EXIT_FAILURE;
+    }
+  }
+
+  // ---- The host arranges the match, now that they are logged in ---------------------------------
+  //
+  // Seats after login, which is the order the owner asked for and the only one in which the screen
+  // can say who is here. `ENTER MATCH` waits for every human seat to be connected.
+  if (hosted != nullptr)
+  {
+    std::vector<std::string> playing;
+    const std::int32_t hostSeat = RunSeatsScreen(device, screen, shapes, text, pointer, keyboard, _window, *hosted, seatTokens, playing);
+    if (hostSeat < 0)
+    {
+      return EXIT_SUCCESS;
+    }
+
+    constexpr std::uint64_t GALAXY_SEED = 0x4652'4F4E'5449'4552ULL;
+    Lockstep::MatchRules rules = _startup.phaseZero ? Lockstep::PhaseZeroRules() : Lockstep::MatchRules{};
+    if (_startup.tickSeconds > 0)
+    {
+      rules.tickIntervalSeconds = _startup.tickSeconds;
+    }
+    rules.playerCount = static_cast<std::uint32_t>(playing.size());
+
+    hosted->Begin(GALAXY_SEED, rules);
+
+    // The server builds the match on its own thread; this waits for it rather than racing it, so
+    // that the first state the client asks for is a state that exists.
+    for (std::int32_t attempt = 0; attempt < 400 && !hosted->Started(); ++attempt)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
   }
 

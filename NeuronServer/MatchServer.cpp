@@ -27,7 +27,7 @@ MatchServer::MatchServer(std::unique_ptr<Session> _session, std::uint16_t _port,
     m_listener(Socket::Listen(_port)),
     m_tokens(std::move(_tokens))
 {
-  ASSERT_TEXT(m_session != nullptr, L"A server without a session has no match to serve.");
+  ASSERT_TEXT(m_session != nullptr, L"This constructor is the one that takes a match. Use the other for a lobby.");
 
   m_submissionsThisTick.assign(static_cast<std::size_t>(m_session->Match().PlayerCount()), 0);
 
@@ -37,6 +37,48 @@ MatchServer::MatchServer(std::unique_ptr<Session> _session, std::uint16_t _port,
     return;
   }
   Log(std::format("listening on port {}", m_listener.Port()));
+}
+
+MatchServer::MatchServer(std::uint16_t _port, std::vector<std::string> _tokens)
+  : m_listener(Socket::Listen(_port)),
+    m_tokens(std::move(_tokens))
+{
+  // One counter per seat, sized from the tokens rather than from a match, because there is no match
+  // to ask yet and the tokens are what says how many seats exist.
+  m_submissionsThisTick.assign(m_tokens.size(), 0);
+
+  if (!m_listener.Valid())
+  {
+    Log("listen failed");
+    return;
+  }
+  Log(std::format("lobby open on port {}, {} seats", m_listener.Port(), m_tokens.size()));
+}
+
+void MatchServer::Begin(std::unique_ptr<Session> _session)
+{
+  ASSERT_TEXT(_session != nullptr, L"Beginning a match with no session is beginning nothing.");
+  ASSERT_TEXT(m_session == nullptr, L"A match has already begun on this server.");
+
+  m_session = std::move(_session);
+  m_submissionsThisTick.assign(static_cast<std::size_t>(m_session->Match().PlayerCount()), 0);
+
+  // The seats that were waiting are playing now. Said once, here, because the first thing anybody
+  // reading the log wants to know is when the match actually started.
+  Log(std::format("match begins with {} seats, {} connected", m_session->Match().PlayerCount(), Connected()));
+}
+
+std::vector<bool> MatchServer::SeatsConnected() const
+{
+  std::vector<bool> seats(m_tokens.size(), false);
+  for (const Connection& connection : m_connections)
+  {
+    if (connection.player >= 0 && !connection.closing && connection.player < static_cast<std::int32_t>(seats.size()))
+    {
+      seats[static_cast<std::size_t>(connection.player)] = true;
+    }
+  }
+  return seats;
 }
 
 std::int32_t MatchServer::PlayerFor(const std::string& _token) const
@@ -56,7 +98,8 @@ void MatchServer::Log(std::string _line)
   // Stamped with the tick rather than a wall clock. The server has no clock of its own -- it is
   // handed an instant (ADR-026) -- and the tick is what a Phase 0 reader is correlating against
   // anyway. The caller adds a timestamp if it wants one.
-  m_log.push_back(std::format("T{} {}", m_session->Match().Tick(), _line));
+  // Tick zero before there is a match, which is what a lobby line is about anyway.
+  m_log.push_back(std::format("T{} {}", m_session == nullptr ? 0 : m_session->Match().Tick(), _line));
 }
 
 std::vector<std::string> MatchServer::TakeLog()
@@ -177,10 +220,24 @@ void MatchServer::Handle(Connection& _connection, std::span<const std::uint8_t> 
       }
     }
 
+    // ---- A seat the match does not have --------------------------------------------------------
+    //
+    // The lobby issues a token for every seat it COULD have -- twelve -- and the host then starts a
+    // match with however many they arranged. A token past that names a seat in no galaxy: there is
+    // no capital for it, no snapshot to send it, and nothing it could order. Refused as unknown,
+    // which is what it now is.
+    if (m_session != nullptr && player >= m_session->Match().PlayerCount())
+    {
+      Log(std::format("refused seat {}: this match has {} seats", player + 1, m_session->Match().PlayerCount()));
+      Send(_connection, Protocol::EncodeRefused(RefusalReason::UnknownToken));
+      _connection.closing = true;
+      return;
+    }
+
     _connection.player = player;
     Log(std::format("login player {}", player));
 
-    Send(_connection, Protocol::EncodeWelcome(player, m_session->Match().Tick(), 0));
+    Send(_connection, Protocol::EncodeWelcome(player, m_session == nullptr ? 0 : m_session->Match().Tick(), 0));
     // The state follows immediately, so a client that has just connected has something to draw
     // without waiting up to six hours for the next lock.
     PushState(_connection, 0);
@@ -195,6 +252,20 @@ void MatchServer::Handle(Connection& _connection, std::span<const std::uint8_t> 
       Log(std::format("player {} sent a malformed order message", _connection.player));
       Send(_connection, Protocol::EncodeRefused(RefusalReason::Malformed));
       _connection.closing = true;
+      return;
+    }
+
+    // ---- A match that has not started takes no orders either ------------------------------------
+    //
+    // The lobby accepts a seat and nothing else. An order given before the galaxy exists has no
+    // tick to go into and no board to be legal against.
+    if (m_session == nullptr)
+    {
+      if (!_connection.orderedAfterTheEnd)
+      {
+        Log(std::format("player {} ordered before the match started", _connection.player));
+        _connection.orderedAfterTheEnd = true;
+      }
       return;
     }
 
@@ -253,6 +324,11 @@ void MatchServer::Handle(Connection& _connection, std::span<const std::uint8_t> 
   }
 
   case MessageKind::Ping:
+    if (m_session == nullptr)
+    {
+      // Presence with nothing to be present at. Harmless, and the connection stays.
+      return;
+    }
     // Presence, which is a fact about being seen rather than about submitting. This is the message
     // that keeps a player out of custody while they sit and think.
     m_session->MarkPresent(_connection.player);
@@ -298,6 +374,11 @@ void MatchServer::Flush(Connection& _connection)
 
 void MatchServer::PushState(Connection& _connection, Instant _now)
 {
+  if (m_session == nullptr)
+  {
+    return;
+  }
+
   if (_connection.player < 0)
   {
     return;
@@ -317,6 +398,24 @@ std::uint32_t MatchServer::Poll(Instant _now)
     {
       Read(connection);
     }
+  }
+
+  // ---- Nothing resolves until there is a match --------------------------------------------------
+  if (m_session == nullptr)
+  {
+    for (Connection& connection : m_connections)
+    {
+      Flush(connection);
+    }
+    for (const Connection& connection : m_connections)
+    {
+      if (connection.closing && connection.player >= 0)
+      {
+        Log(std::format("player {} left the lobby", connection.player));
+      }
+    }
+    std::erase_if(m_connections, [](const Connection& _connection) { return _connection.closing; });
+    return 0;
   }
 
   const std::uint32_t resolved = m_session->Advance(_now);

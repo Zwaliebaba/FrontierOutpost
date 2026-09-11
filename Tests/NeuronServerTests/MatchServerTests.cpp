@@ -370,7 +370,7 @@ public:
 
     TestClient client;
     Assert::IsTrue(client.Connect(running.server->Port()));
-    client.Send(Neuron::Protocol::EncodeHello("echo"));
+    client.Send(Neuron::Protocol::EncodeHello("delta"));
     Settle(*running.server, client);
     client.Forget();
 
@@ -442,7 +442,7 @@ public:
 
     TestClient client;
     Assert::IsTrue(client.Connect(running.server->Port()));
-    client.Send(Neuron::Protocol::EncodeHello("foxtrot"));
+    client.Send(Neuron::Protocol::EncodeHello("delta"));
     Settle(*running.server, client);
     Assert::AreEqual(1, running.server->Connected());
 
@@ -500,6 +500,28 @@ public:
     }
     Assert::IsTrue(sawLogin, L"the login curve is the test plan's primary instrument");
     Assert::IsTrue(running.server->TakeLog().empty(), L"and taking it clears it");
+  }
+
+  // A lobby issues a token for every seat it could have; the host then starts a match with fewer.
+  // A token past that names a seat in no galaxy -- no capital, no snapshot, nothing to order -- and
+  // is refused as what it now is. Two tests in this file used to rely on the opposite, logging into
+  // seat five of a four-seat match and being welcomed.
+  TEST_METHOD(ATokenPastTheMatchsSeatsIsRefused)
+  {
+    Running running = Start();
+
+    TestClient client;
+    Assert::IsTrue(client.Connect(running.server->Port()));
+    client.Send(Neuron::Protocol::EncodeHello("echo"));
+    Settle(*running.server, client);
+
+    std::vector<std::uint8_t> refused;
+    Assert::IsTrue(client.Find(Neuron::MessageKind::Refused, refused), L"the fifth token of a four-seat match names nobody");
+
+    Neuron::RefusalReason reason = Neuron::RefusalReason::None;
+    Assert::IsTrue(Neuron::Protocol::DecodeRefused(refused, reason));
+    Assert::IsTrue(reason == Neuron::RefusalReason::UnknownToken);
+    Assert::AreEqual(0, running.server->Connected());
   }
 
   // ---- H4: the order edit ------------------------------------------------------------------------
