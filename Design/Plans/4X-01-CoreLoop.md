@@ -1,7 +1,10 @@
 # 4X-01 — The loop, headless: a galaxy, a tick, and everything that resolves in it
 
-**Status:** Plan, in progress. Written 2026-09-10 against `space-4x-one-pager-v10.md` (v0.7) and
-`space-4x-prototype-test-plan.md` (v0.4). Steps 0–6 done 2026-09-10, steps 7–8 on 2026-09-11.
+**Status:** **Stage A complete, 2026-09-11.** Written 2026-09-10 against
+`space-4x-one-pager-v10.md` (v0.7) and `space-4x-prototype-test-plan.md` (v0.4). Steps 0–6 done
+2026-09-10, steps 7–10 on 2026-09-11. Every row of §7 has a step and a test name; §3's ADRs are
+written. `4X-02-ServerAndClient.md` is now a plan rather than a stub. Archive this when `4X-02`
+closes, not before — it is the rule checklist anything touching the simulation is checked against.
 
 This plan builds the *simulation* half of what the one-pager's *Build order* asks for: **"Loop
 first — graph generator, tick resolution, trade lanes and proposals in the build menu, custodian,
@@ -472,12 +475,61 @@ small.
 This is the pre-Phase-0 gate. If the harness surfaces a rule interaction the one-pager did not
 anticipate, that is a finding for the owner, not something to resolve in a comment.
 
+**Done 2026-09-11.** `Tests/GameLogicTests/ScriptedMatchTests.cpp`. The six policies **play from the
+snapshot, not from the match**, which makes the harness a second test riding on the first: a policy
+that cannot find what it needs to decide is a snapshot missing something a real client would also be
+missing.
+
+A full 84-tick match: **28 of 31 systems claimed, 27 built on, four trade lanes open at the peak**,
+the absentee in custody on tick 3 exactly, invariants checked on every tick, and the same hash from
+two runs.
+
+**The harness found one thing, and it was the harness.** The first version of the bots looked one
+lane ahead, and every one of them stalled the moment it ran out of adjacent open ground — six
+empires sat on two systems each for eighty ticks and never met, so no trade lane ever opened. That
+read exactly like the trade-lane mechanic being broken. It is worth writing down as the shape of a
+false positive: **a bot too simple to reach a mechanic will report that the mechanic does not
+work.** The diplomat test now asserts the lifecycle in order — reached somebody, made an offer,
+opened a lane — so the next failure names the step rather than the end of it.
+
+**No rule interaction surfaced that the one-pager did not anticipate.** Nothing to report to the
+owner from this step.
+
+**Measured:** 1.031 ms a tick in Debug, **0.027 ms in Release — 2.2 ms to replay a whole match**.
+Recorded with its method in `Design/Reference/tick-resolution-cost.md`. That is the number §3's
+persistence recommendation rested on, and it comfortably supports it.
+
 #### Step 10 — Close out Stage A
 
 Update this plan's status and the §7 checklist — every row needs a step and a test name, and a row
 without one is a rule that was dropped, which the report says out loud. Confirm §3's ADRs exist.
 Write `4X-02-ServerAndClient.md` properly now that the snapshot shape, the order-set shape and the
 per-tick resolution cost are facts rather than guesses. Report per `Design/README.md` §6.
+
+**Done 2026-09-11.**
+
+§7 is complete: **52 rows, every one with a step and a test name.** No rule was dropped. The one
+row that had no test was *No free text*, which is an absence — the hardest kind of rule to keep,
+because nothing fails when somebody adds a field. It is now asserted structurally by
+`NoOrderCarriesFreeText`: a fully populated `OrderSet` serialises to a size computable from the
+counts alone, which stops being true the moment a `std::string` appears in an order.
+
+§3's ADRs are written: **ADR-018** (determinism), **ADR-022** (visibility) and **ADR-021** (combat
+arithmetic), plus **ADR-019** (the phase signature) and **ADR-020** (digest ordering) and
+**ADR-023** (score and the ending), which the steps that met them owed. The three deferred to
+`4X-02` are deferred there and named in its §2.
+
+`4X-02-ServerAndClient.md` is written as a plan. The three shapes it sends — `OrderSet`,
+`Snapshot`, `TickLog` — all exist and all serialise, and its persistence recommendation now rests
+on a measurement rather than an expectation.
+
+**Stage A in numbers:** 41 tests at the start of Step 0, **230** at the end of Step 10, passing in
+Debug and Release. `CheckFormat`, `CheckProjectFiles` and `clang-tidy` clean throughout.
+
+**The one thing Stage A did not do that a reader might expect:** the client still draws the fixture.
+That is deliberate and §1 says so — the client is wired only as far as each step's own visible
+check allows, and Step 2 points the map at a generated galaxy because it costs almost nothing.
+Retiring the fixture is `4X-02` Step 2, and `MatchState::Owner` widens with it.
 
 ## 5. Things that will tempt you, and the answer
 
@@ -585,7 +637,7 @@ is a rule that was dropped, and the report says so.
 | Unanswered 4 ticks → *ignored* to proposer | Diplomacy UI | 6 | `AnUnansweredProposalIsReportedAsIgnored`, `TheWindowIsCountedInTicksAndIsExactlyFour` |
 | Three proposal kinds: lane, share scouting, hold N | Diplomacy UI | 6 | `AgreementTests`, `TradeLaneTests` |
 | First-contact prompt | Diplomacy UI | 6 | `FirstContactTests` |
-| No free text | What it is not | — (absence) | |
+| No free text | What it is not | — (absence) | `NoOrderCarriesFreeText` |
 | Custodian by 3 absent ticks, reversible | Player states | 7 | `ThreeAbsentTicksMakeACustodian`, `ComingBackEndsCustodyImmediately`, `AnInterruptedAbsenceStartsCountingAgain` |
 | Custodian by concession, permanent | Player states | 7 | `ConcedingIsPermanentCustody` |
 | Custodian defends, never expands or attacks | Player states | 7 | `ACustodiansOrdersAreDiscarded`, `ACustodianClaimsNothingEvenStandingOnIt` |

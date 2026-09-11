@@ -612,6 +612,37 @@ public:
     }
   }
 
+  // "Not a chat game -- v1 has no free text." The one-pager lists it under *What it is not*, and an
+  // absence is the hardest kind of rule to keep: nothing fails when somebody adds a field.
+  //
+  // So it is asserted structurally. A fully populated `OrderSet` serialises to a size that can be
+  // computed from the counts alone -- ids, enums, counts and flags, all fixed-width. A `std::string`
+  // anywhere in an order would make the size depend on what somebody typed, and this arithmetic
+  // would stop matching.
+  TEST_METHOD(NoOrderCarriesFreeText)
+  {
+    constexpr std::size_t ID = 4;
+    constexpr std::size_t COUNT = 4;
+    constexpr std::size_t ENUM = 1;
+    constexpr std::size_t FLAG = 1;
+
+    const Frontier::OrderSet orders = Populated();
+
+    const std::size_t expected = ID                                                                // the player
+                                 + COUNT + orders.fleetOrders.size() * (ID + ID)                   // fleet, destination
+                                 + COUNT + orders.builds.size() * (ID + ENUM)                      // system, kind
+                                 + COUNT + orders.proposals.size() * (ID + ENUM + ID + COUNT + ID) // to, kind, lane, ticks, conditional
+                                 + COUNT + orders.answers.size() * (ID + ENUM)                     // proposal, answer
+                                 + COUNT + orders.withdrawals.size() * ID                          // proposal
+                                 + COUNT + orders.cancellations.size() * ID                        // lane
+                                 + FLAG;                                                           // concede
+
+    Neuron::ByteWriter writer;
+    orders.Write(writer);
+
+    Assert::AreEqual(expected, writer.Size(), L"an order is ids, enums, counts and flags -- and no prose");
+  }
+
   TEST_METHOD(ALyingLengthDoesNotAllocateTheWorld)
   {
     // A record claiming four billion fleet orders. It must come back empty, not try to hold them.
