@@ -133,11 +133,11 @@ private:
 
 | Path | What it is | May you edit it? |
 |---|---|---|
-| `NeuronCore/` | Engine static library used by **both** halves: platform, timing, maths, containers, serialization, the wire protocol. **Currently holds only `Debug.h` and the umbrella header** — the MVP-01 protocol and transport were removed by ADR-015 and the 4X's have not been written | Yes |
+| `NeuronCore/` | Engine static library used by **both** halves. Holds `Debug.h`, the typed index `Id`, the pinned PRNG, integer trigonometry, the byte reader and writer, the `Simulation` seam, the `TickSchedule`, and the wire protocol — `Socket`, `FrameStream`, `Protocol` | Yes |
 | `NeuronClient/` | Engine static library used by the **client only**: the window, the D3D12 device and swap chain, the 1280×720 colour target, input, audio, UI | Yes |
-| `NeuronServer/` | Engine static library used by the **server only**: session ownership, replication, the authoritative loop. **Currently empty** — ADR-015 removed the MVP-01 session; the project and its suite are where the 4X's authoritative loop goes | Yes |
-| `GameLogic/` | The game itself — entities, orders, economy, simulation rules. Server-side; the client never links it directly. **Currently empty** — ADR-015 removed the MVP-01 ship simulation and the 4X's has not been written | Yes |
-| `FrontierOutpost/` | The executable, and the main page it draws (`MainPage`, `MatchState`, the fixture). Where every embedded asset and compiled shader ends up. The server half is not wired up | Yes |
+| `NeuronServer/` | Engine static library used by the **server only**: `Session` owns a simulation and drives it on a schedule, `MatchStore` persists a match as its orders, `MatchServer` puts it on a socket. It never names a game type — the seam speaks in bytes (ADR-025) | Yes |
+| `GameLogic/` | The game itself — the galaxy and its generator, `MatchRules`, `Match`, `Orders`, `TickResolver` and its six phases, `Melee`, `Snapshot`, and `MatchSimulation` behind the seam. Server-side; the client never links it | Yes |
+| `FrontierOutpost/` | The executable and the composition root — the one thing that sees both halves. The main page (`MainPage`, `MatchState`), the snapshot adapter, the client connection, and the hosted server. **One binary, three roles**: host-and-play, `--join`, `--serve` (ADR-028). Where every embedded asset and compiled shader ends up | Yes |
 | `Tests/NeuronCoreTests/`, `Tests/NeuronClientTests/`, `Tests/NeuronServerTests/`, `Tests/GameLogicTests/` | MSVC CppUnitTest DLLs, one per library, each referencing the library it tests and the libraries that library is built on. **CI builds and runs all four** | Yes |
 | `Design/` | The design record: `README.md` (the standards), `ADR/` (decisions), and plans | Yes — see §6 |
 | `Build/*.py` | Repository checkers (§6). They gate CI | Yes, carefully |
@@ -160,7 +160,7 @@ NeuronServerTests.dll   ← NeuronServer, NeuronCore
 GameLogicTests.dll      ← GameLogic, NeuronCore
 ```
 
-**`GameLogic` is referenced by the executable and by nothing else.** It is server-side game code; the day a client-side file reaches for it is the day the server stopped being authoritative. Likewise nothing in `NeuronClient` may reach `NeuronServer` or the reverse — they share `NeuronCore` and that is the whole of their common ground.
+**`GameLogic` is referenced by the executable and by nothing else.** It is server-side game code; the day a client-side file reaches for it is the day the server stopped being authoritative. `NeuronServer` drives a game it cannot see, through the byte-shaped `Neuron::Simulation` seam (ADR-025), which is what keeps that edge absent rather than merely discouraged. Likewise nothing in `NeuronClient` may reach `NeuronServer` or the reverse — they share `NeuronCore` and that is the whole of their common ground.
 
 **Project directories are flat, with exactly two sanctioned subdirectories.** C++ source lives directly in `NeuronCore/`, `GameLogic/` and so on. This is not taste: `.clang-tidy`'s `HeaderFilterRegex` matches headers exactly one level in, so a header in a subdirectory is silently unchecked. `Build/CheckProjectFiles.py` fails the build on one. The two exceptions are the shader pipeline (owner decision, 2026-09-09):
 

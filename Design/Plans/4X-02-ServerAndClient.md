@@ -1,6 +1,6 @@
 # 4X-02 — The server, the client and the network
 
-**Status:** Steps 1–3 done 2026-09-11; Step 4 outstanding. Written properly 2026-09-11. When it was written, `4X-01` had just
+**Status:** **Done 2026-09-11**, with one thing outstanding that this tree cannot do: six people on six machines. Everything up to that is built and tested. Written properly 2026-09-11. When it was written, `4X-01` had just
 closed Stage A and the shapes this plan is specified against had become facts. **Both owner decisions are taken** (2026-09-11):
 persistence is ADR-024, and `MatchState::Owner` widens to twelve authored colours, so nothing blocks
 Step 1. Written against `space-4x-one-pager-v10.md` (v0.7) and
@@ -247,6 +247,36 @@ Move both plans to `Design/Archive/` with a *What shipped* section above each, a
 AGENTS.md §2's repository map — `GameLogic` and `NeuronServer` are no longer empty and their rows
 should say what they hold. Confirm every §2 ADR exists. Report per `Design/README.md` §6, including
 **what Phase 0 needs that this plan did not build**.
+
+**Done 2026-09-11**, except the archiving — and deliberately so. `Design/README.md` §2 says a plan
+goes to `Archive/` when it is *finished*, and this one has a step nobody has taken: two machines,
+one match, one tick. Archiving it now would file a plan as complete on the strength of the half that
+could be done alone. It moves when six people have played.
+
+AGENTS.md §2's repository map is updated: all four library rows described projects that were empty
+or held something else, and three of them said "currently empty" about libraries that now hold the
+game, the server and the wire.
+
+Every §2 ADR exists: **ADR-024** persistence, **ADR-025** the seam, **ADR-026** the schedule,
+**ADR-028** transport, **ADR-029** identity — plus **ADR-027**, the twelve colours, which the owner
+decided and Step 2 owed.
+
+**What Phase 0 needs that this plan did not build**, in the order it will hurt:
+
+1. **Reconnection.** A dropped connection stops the client. Six people over forty-eight hours will
+   close a lid. The server already sends a snapshot on `Hello`, so this is client-side and small,
+   and it is the first thing to write.
+2. **The instrumentation is a debug trace.** `MatchServer::TakeLog` produces the events and
+   `--serve` prints them where only a debugger sees them. A Phase 0 that cannot draw the login curve
+   answers nothing, so these need to reach a file.
+3. **"Fleet order after capital fall" is still not emitted.** It is H3's entire measurement and it
+   is a join the session is the only thing positioned to make.
+4. **Order edits are not reported.** H4 wants an order edit per session and only the client sees the
+   ones that were replaced.
+5. **Phase parameters.** `MatchRules` is authored for a 21-day match; Phase 0 is 48 ticks at an
+   hourly tick. `firstWeekTicks` at 28 covers most of it. Nothing sets these per phase yet.
+6. **The host leaving ends the match** until somebody restarts. The store means it resumes. Say so
+   out loud to the six people before they start.
 
 ---
 
