@@ -1,6 +1,6 @@
 # ADR-017 — The map has a real camera, and the authored projection is gone
 
-**Status:** Accepted
+**Status:** Accepted — reaffirmed by ADR-034 (2026-09-11) against `Design/UI/DESIGN-GUIDELINES.md`, which restates the authored projection this ADR replaced. That formula describes the mockups; the camera is the map.
 
 **Date:** 2026-09-10
 **Decided by:** Owner decision, 2026-09-10. ADR-016's turntable was tried and rejected — "it just doesn't feel like a camera" — and the owner chose the orbit camera that ADR-016 had recorded as its rejected alternative.

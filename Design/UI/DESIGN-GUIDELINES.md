@@ -49,14 +49,27 @@ Other seats take their ADR-027 colours; names are on every node so colour is nev
 - System count and player count come from the match, never hard-coded (61 systems / 12 players in the reference).
 
 ## Map
-Graph drawn on a tilted plane (design space 800×560 → pane, `preserveAspectRatio: meet`, never crop):
+Graph drawn on a tilted plane, design space 800×560.
+
+**The projection below is how the mockups were rendered, not the spec** (ADR-034). The built map has
+a real orbit camera — an eye position, a field of view, a perspective divide — which the player can
+drag and zoom, and which the star field projects through as directions on a sphere (ADR-017,
+ADR-032). The authored curve was what ADR-016 had; ADR-017 replaced it *because* it could not move
+the viewpoint. Implement against `Neuron::OrbitCamera`, framed by default to sit close to the view
+these PNGs show.
+
 ```
-d  = y / 560
+d  = y / 560                        ← the mockups' curve, kept for provenance
 s  = 0.5 + 0.65·d
 sx = 400 + (x − 400)·s
 sy = 60 + 440·(0.3·d + 0.7·d²)
 ```
-- Grid lines of constant x / y projected; stars unprojected behind.
+
+The consequence to expect: the map pane will not be pixel-identical to its PNG once the camera
+moves. Every other pane is fixed and can be compared exactly.
+
+- Grid lines of constant x / y projected; stars unprojected behind — **the star field is a sphere of
+  directions projected through the same camera** (ADR-032), not a 2D layer that slides.
 - Lanes on the plane: neutral `rgba(214,220,228,0.28)` 1.2px; your trade lane blue 2.5px; proposed lane amber dashed `4 5`; the rival's approach lane amber 2.5px when a contact is pending. Tick cost at midpoint, 8px muted.
 - System: ground shadow ellipse (owner @0.22, rx 2.2r, ry 0.9r) → 1px stem `20·s` (capital `30·s`) → dot r `4.5·s·1.15` (capital `6·s·1.15`, with halo). Contested: 1px ring. Custodian: dashed ring. Name on **every** node, owner tag on non-own (`NARTH · OKO`). Status label under the ground point: `TAKEN T45` red, `T47 · YOU LOSE` amber.
 - Contact spotlight: amber dashed ellipse on the ground at the contested system.

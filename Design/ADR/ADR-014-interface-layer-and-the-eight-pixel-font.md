@@ -1,6 +1,6 @@
 # ADR-014 — The interface is two renderers and an immediate-mode screen, and the 8×8 font sets the copy
 
-**Status:** Accepted
+**Status:** Accepted — amended by ADR-034 (2026-09-11): the interface layer gains one minimal text field, for the join screen's server and token. Everything else here stands.
 
 **Date:** 2026-09-10
 **Decided by:** Build session implementing `Design/Screens` (the main page). The handoff settled colour, layout and copy; this ADR records what it did not settle, and the places where the game's one font could not carry its copy.

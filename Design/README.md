@@ -47,7 +47,14 @@ Design/
   Plans/                    ← work in flight: what is being built, in what order
   Reference/                ← things that are true rather than decided (formats, tables, maths)
   Archive/                  ← superseded plans and finished reviews, kept for the record
+  UI/                       ← the screens: PNGs, guidelines, per-screen spec, work plan
 ```
+
+**`Design/Screens/` is gone.** It held the v1 main page and was superseded by `Design/UI/` on
+2026-09-11. Eight Accepted ADRs still cite `Design/Screens/README.md` — 014, 015, 016, 017, 020,
+021, 022 and 027 — and those citations are left as they are, because an Accepted ADR is immutable
+except for its status line. **Read them against `Design/UI/` instead.** Where the two disagree the
+newer document wins, except on the map projection, where neither does: see ADR-034.
 
 **Which one is it?** The test is what happens when the document turns out to be wrong.
 

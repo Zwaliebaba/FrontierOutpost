@@ -439,7 +439,7 @@ through fog from tick one.
 | How the playtests decide what gets built | `Design/space-4x-prototype-test-plan.md` |
 | Every decision and what it rejected | `Design/ADR/` — ADR-018 through ADR-031 are the game; 014, 017, 027, 032, 033 are the screen |
 | What was built, step by step, with what it found | `Design/Plans/4X-01-CoreLoop.md`, `Design/Plans/4X-02-ServerAndClient.md` |
-| The screen, at reference fidelity | `Design/Screens/README.md` |
+| The screens, at reference fidelity | `Design/UI/` (README, DESIGN-GUIDELINES, SCREENS, `screens/*.png`) |
 | How code is written here | `AGENTS.md` |
 | What a phone client would cost | `Design/Reference/mobile-portability.md` |
 

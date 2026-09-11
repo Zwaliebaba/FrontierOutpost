@@ -6,6 +6,18 @@ Read, in order:
 4. Open the PNGs in `Design/UI/screens/`. They are design references, not code to port.
 5. The current implementation: `FrontierOutpost/MainPage.*`, `GameLogic/TickLog.h`, `NeuronCore/Protocol.h`.
 
+**Four of these were put to the owner on 2026-09-11 and answered — see ADR-034.**
+
+1. **The map keeps its orbit camera.** The projection formula in the guidelines describes how the
+   mockups were rendered; implement against `Neuron::OrbitCamera` (ADR-017), which the sky depends
+   on (ADR-032).
+2. **The share card goes to the clipboard only, never to a file.** A client that writes a file would
+   be R13's first client-side exception and it is not worth one.
+3. **The join screen gets a real text field**, added to the interface layer. The product is a mobile
+   client (blueprint §7) and a phone has no command line.
+4. **No reference fixture.** The "Fixture" paragraph below is superseded: screens render what the
+   server sends. `--tick <seconds>` is how you reach a state that exercises a screen.
+
 Constraints (non-negotiable):
 - 1280×720 logical, letterboxed. The existing 8×8 bitmap font at 1× everywhere and 2× only for the lock countdown and the share-card headline. No anti-aliasing; integer pixel origins.
 - Colours exactly as listed in `DESIGN-GUIDELINES.md` (8-bit RGBA). Owner colours from ADR-027; you are always blue.
@@ -20,6 +32,6 @@ Work plan:
 6. **Join + connection (03, 04, 05).** Join screen with server/token (add a minimal text field to the interface layer, or keep CLI args and use the screen as confirmation — state which). Connecting / Refused ×2 / Finished / Welcome dialogs; connection-lost overlay with retry loop, local order retention and re-send, countdown still live.
 7. **Share tick (02).** Export a 480×640 PNG of the top event: map crop + headline + delta + standings. Local file / clipboard only.
 
-Fixture: seed a match matching the reference (tick 46 → 47, 12 players, 61 systems, the six digest items, Halvorsen leader 1,610, you 4th 1,284, Fallow opens T60) so every screen renders like its PNG on first run.
+~~Fixture: seed a match matching the reference (tick 46 → 47, 12 players, 61 systems, the six digest items, Halvorsen leader 1,610, you 4th 1,284, Fallow opens T60) so every screen renders like its PNG on first run.~~ **Superseded by ADR-034:** no fixture. `MatchFixture` was retired by 4X-02 step 2 and stays retired; a second source of truth about what a match looks like drifts from the resolver the moment a rule changes. Reach a state that exercises a screen by playing or replaying to it.
 
 Deliver: the screens wired to the fixture, a note per screen on anything the 8px font could not fit (with proposed shortened copy), and a list of protocol/server changes you needed (digest retention, seat preview before Welcome, finished-match standings).
