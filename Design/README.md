@@ -1,6 +1,6 @@
 # Design — standards for build and design sessions
 
-This directory is the **design record** for *Frontier Outpost*: what the game is, what has been decided, and why. [`AGENTS.md`](../AGENTS.md) at the repository root is the **conformance record**: how code is written, built and verified.
+This directory is the **design record** for *LockStep: Universe*: what the game is, what has been decided, and why. [`AGENTS.md`](../AGENTS.md) at the repository root is the **conformance record**: how code is written, built and verified.
 
 The split is worth stating plainly, because putting a rule in the wrong one is how both stop being read:
 
@@ -25,7 +25,7 @@ These are settled. They are not preferences to be re-litigated in a session; cha
 | **Graphics API** | Direct3D 12, on Windows 11. The legacy look is a deliberate aesthetic on a modern stack — not a limitation being worked around, and not a reason to reach for an older API. |
 | **Language** | C++23 (`/std:c++latest` under MSVC v145), `/permissive-`, `/W4` with warnings as errors. |
 | **Platform** | x64 only. |
-| **Shape** | One executable. `FrontierOutpost.exe` starts the client and the authoritative server in the same process. |
+| **Shape** | One executable. `Lockstep.exe` starts the client and the authoritative server in the same process. |
 | **Distribution** | **The executable ships alone.** No assets folder, no data directory. Art, colour tables, fonts, audio and compiled shaders are embedded in the binary (AGENTS.md R13). |
 | **Authority** | The server is authoritative. `GameLogic` is server-side and the client never links it (AGENTS.md §2). |
 | **Dependencies** | The Windows SDK and the MSVC standard library. Nothing else (AGENTS.md R14). |
@@ -55,6 +55,19 @@ Design/
 021, 022 and 027 — and those citations are left as they are, because an Accepted ADR is immutable
 except for its status line. **Read them against `Design/UI/` instead.** Where the two disagree the
 newer document wins, except on the map projection, where neither does: see ADR-034.
+
+**The rename to *LockStep: Universe* reached the ADRs, and that is an exception worth naming.** On
+2026-09-11 the game stopped being *Frontier Outpost*; the `Frontier` namespace became `Lockstep` and
+`FrontierOutpost/` became `Lockstep/` (ADR-035). Nineteen Accepted ADRs — 001, 002, 003, 005, 007,
+008, 010, 011, 012, 013, 014, 015, 016, 017, 020, 025, 028, 029 and 030 — were edited in that
+commit, which the lifecycle in §4 otherwise forbids. **What changed in them was pointers into the
+tree** — a namespace, a directory, a solution or executable filename — with two exceptions, both in
+prose: ADR-014's Context calls the screen "the single screen of Lockstep", and ADR-030's account of a
+past bug keeps the old `frontier-match.log` with a clause saying what the file is called now. No
+decision, no rationale, no rejected option and no status line was touched. The reasoning, and the argument for why
+this differs from the `Design/Screens/` citations left standing above, is in ADR-035. If you are
+renaming something again, read it before you assume this is precedent: it turns on a citation to a
+symbol that no longer exists being a defect under §3.1, not on renames being exempt.
 
 **Which one is it?** The test is what happens when the document turns out to be wrong.
 

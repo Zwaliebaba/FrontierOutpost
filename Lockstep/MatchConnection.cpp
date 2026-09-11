@@ -5,7 +5,7 @@
 
 #include <array>
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -183,4 +183,4 @@ void MatchConnection::Pump(double _secondsSinceStart)
   }
 }
 
-} // namespace Frontier
+} // namespace Lockstep

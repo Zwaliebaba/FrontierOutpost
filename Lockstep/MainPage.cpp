@@ -13,7 +13,7 @@
 
 #include <queue>
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -546,11 +546,11 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
             TEXT_MUTED);
 
   // ---- The left half, trimmed to what is left --------------------------------------------------
-  const float titleWidth = static_cast<float>(FontRenderer::MeasurePixels("FRONTIER OUTPOST"));
+  const float titleWidth = static_cast<float>(FontRenderer::MeasurePixels("LOCKSTEP"));
   const float lineX = 16.0F + titleWidth + 10.0F;
   const float room = cursor - 14.0F - lineX;
 
-  _text.DrawText(16, centered, "FRONTIER OUTPOST", TEXT_PRIMARY);
+  _text.DrawText(16, centered, "LOCKSTEP", TEXT_PRIMARY);
 
   // "DAY 12/21" rather than "DAY 12 / 21", and the countdown and replay labels use T-notation: at
   // 8px the reference's spelled-out bar is 63px wider than the frame (ADR-014).
@@ -1519,4 +1519,4 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   }
 }
 
-} // namespace Frontier
+} // namespace Lockstep

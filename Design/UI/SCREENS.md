@@ -1,7 +1,7 @@
 # Screens
 
 ## 01 · Main page (`01-main-page-5a.png`)
-**Top bar (44px):** `FRONTIER OUTPOST` · `M0419 · D12/21 · 12 PLAYERS · 61 SYSTEMS` · spacer · `T47 LOCKS` + 16px amber countdown · `SCORE 1284` + chip `4/12` + `LDR HALVORSEN 1610` · `REPLAY T46` · `SHARE TICK`.
+**Top bar (44px):** `LOCKSTEP` · `M0419 · D12/21 · 12 PLAYERS · 61 SYSTEMS` · spacer · `T47 LOCKS` + 16px amber countdown · `SCORE 1284` + chip `4/12` + `LDR HALVORSEN 1610` · `REPLAY T46` · `SHARE TICK`.
 
 **Digest (400px, left) — the order surface.**
 Header `SINCE YOU LOOKED · T43 > T46` + chip `3 TICKS`; four-cell delta box. Then events in consequence order, each with its actions:
@@ -22,10 +22,10 @@ Rows: 6px vertical padding; must fit 720 with all six visible at reference data.
 **Code:** replaces the three-rail layout in `MainPage.cpp`. Digest from `TickLog` + previous unread ticks; grouping and ranking are client-side presentation over the same events. Verdict from the combat resolver preview.
 
 ## 02 · Share tick (`02-share-tick-5b.png`, 480×640)
-Exported PNG from `SHARE TICK`. 2px border in the top event's colour. Top 340px: map crop centred on the top event's systems (same renderer, `slice`). Below: `FRONTIER OUTPOST · M0419 · T46 > T47` muted; 16px headline in first person (`HALVORSEN MEETS ME AT KEPLER-REACH.`); one amber sentence; the four-cell delta; `4TH OF 12 · 1,284 · LEADER HALVORSEN 1,610`. Written to disk / clipboard; no network.
+Exported PNG from `SHARE TICK`. 2px border in the top event's colour. Top 340px: map crop centred on the top event's systems (same renderer, `slice`). Below: `LOCKSTEP · M0419 · T46 > T47` muted; 16px headline in first person (`HALVORSEN MEETS ME AT KEPLER-REACH.`); one amber sentence; the four-cell delta; `4TH OF 12 · 1,284 · LEADER HALVORSEN 1,610`. Written to disk / clipboard; no network.
 
 ## 03 · Join (`03-join-3a.png`)
-Centre column 480px over the star field. `FRONTIER OUTPOST` 16px + `JOIN A MATCH · ONE SEAT PER TOKEN`. Card: SERVER field (last used) · TOKEN field (masked, SHOW) · one line explaining a token names a seat · seat preview `4 OF 12 · YOU ARE BLUE` (from the server's Welcome once the token validates, dashed box until then) · `JOIN >` filled. Footer: match summary · `ALSO: --join SERVER TOKEN`.
+Centre column 480px over the star field. `LOCKSTEP` 16px + `JOIN A MATCH · ONE SEAT PER TOKEN`. Card: SERVER field (last used) · TOKEN field (masked, SHOW) · one line explaining a token names a seat · seat preview `4 OF 12 · YOU ARE BLUE` (from the server's Welcome once the token validates, dashed box until then) · `JOIN >` filled. Footer: match summary · `ALSO: --join SERVER TOKEN`.
 **Code:** first screen when no `--join` args. Needs text input (ADR-014 has none): implement a minimal field or keep CLI and show this screen as confirmation only. Sends `Hello{token}`; on `Welcome` → 01 (via the Welcome dialog if unread ticks > 0); on `Refused` → 05.
 
 ## 04 · Connection lost (`04-connection-lost-3b.png`)

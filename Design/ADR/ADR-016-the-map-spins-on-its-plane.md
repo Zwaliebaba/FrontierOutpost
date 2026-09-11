@@ -149,9 +149,9 @@ Measured on 2026-09-10 from the running executable:
 ## What this changes elsewhere
 
 - **Code:** `NeuronClient/PointerInput.{h,cpp}` gains `Drag` and `TakeDrag`, and decides taps on
-  the lift. `FrontierOutpost/MapProjection.h` gains the yaw, `DepthAt`'s clamp, `Yaw`,
-  `YawedScaleAt` and `ProjectUnspun`. `FrontierOutpost/MainPage.{h,cpp}` holds the yaw and
-  `HandleDrag`. `FrontierOutpost.cpp` takes the drag each frame.
+  the lift. `Lockstep/MapProjection.h` gains the yaw, `DepthAt`'s clamp, `Yaw`,
+  `YawedScaleAt` and `ProjectUnspun`. `Lockstep/MainPage.{h,cpp}` holds the yaw and
+  `HandleDrag`. `Lockstep.cpp` takes the drag each frame.
 - **Design/Screens/README.md:** the "Interactions" line is amended — the perspective is no longer
   fixed. This ADR is the authority for that.
 - **AGENTS.md:** no change.

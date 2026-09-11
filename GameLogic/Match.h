@@ -8,7 +8,7 @@
 #include <span>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// What has changed about a system since the galaxy was generated.
@@ -454,4 +454,4 @@ private:
   std::int32_t m_nextProposalId = 0;
 };
 
-} // namespace Frontier
+} // namespace Lockstep

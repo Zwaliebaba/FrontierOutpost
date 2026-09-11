@@ -2,7 +2,7 @@
 
 #include "MatchState.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// The match the main page shows before a server exists.
@@ -16,4 +16,4 @@ namespace Frontier
 /// the decode fills in, and this function becomes a test fixture rather than the boot path.
 [[nodiscard]] MatchState MakeReferenceMatch();
 
-} // namespace Frontier
+} // namespace Lockstep

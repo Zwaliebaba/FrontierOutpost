@@ -25,9 +25,9 @@ Read AGENTS.md and Design/README.md first, as always. Then know these five thing
 you are starting from, because the plan's order follows from them.
 
 **The client exists and the game does not.** ADR-014 built the main page — digest, map, orders —
-and it renders a fixture (`FrontierOutpost/MatchFixture.cpp`) that is the design reference's
+and it renders a fixture (`Lockstep/MatchFixture.cpp`) that is the design reference's
 tick 46, hand-typed. ADR-017 gave the map a real camera. Every interaction on that screen works
-against local state and nothing behind it. `Frontier::MatchState` (`FrontierOutpost/MatchState.h`)
+against local state and nothing behind it. `Lockstep::MatchState` (`Lockstep/MatchState.h`)
 is the client's model of a match and is already shaped like the README's *State* section: match,
 player, digest, graph, fleets, orders, proposals, region. **It is the decode target.** When the
 server exists, the fixture is what it replaces.
@@ -107,7 +107,7 @@ From the tree, which is the conformance authority:
 |---|---|---|
 | **Determinism** | `GameLogic` is integer-only, `/fp:precise`, no wall clock, no unordered iteration into the simulation. | AGENTS.md R16 |
 | **Layers** | `NeuronCore` is shared engine; `NeuronServer` is server-only engine; `GameLogic` is the game, server-side, referenced by the executable and nothing else. The client never links it. | AGENTS.md §2, R9 |
-| **The client's model** | `Frontier::MatchState` is the client's view of a match and holds no rules. | ADR-014; `MatchState.h` |
+| **The client's model** | `Lockstep::MatchState` is the client's view of a match and holds no rules. | ADR-014; `MatchState.h` |
 | **The screen** | 1280×720 R8G8B8A8, one 8×8 font, the ops console, a perspective orbit camera. | ADR-011, ADR-014, ADR-017 |
 | **What was removed** | The MVP-01 slice is gone and stays gone; `GameLogic` and `NeuronServer` are the empty projects this work fills. | ADR-015 |
 
@@ -238,7 +238,7 @@ forbids. Serialization, which Step 1 named, was **deferred to Step 3** — nothi
 crosses a wire or a file, and a format written before it has a second reader is a format written
 twice.
 
-`FrontierOutpost/GeneratedMatch` was added and the executable now boots a **generated** galaxy
+`Lockstep/GeneratedMatch` was added and the executable now boots a **generated** galaxy
 rather than the design-reference fixture. That was the point of doing it here: it de-risks the
 design-space mapping before a rule exists, and it caught two numbers the screen was reporting
 without holding — a dangling `- ENDS` and a hardcoded `38 AVAILABLE`, now `Orders::availableBuilds`.
@@ -430,7 +430,7 @@ change rather than a surprise.
 #### Step 8 — Visibility, and the per-player snapshot
 
 Implement the visibility ADR. `SnapshotFor(playerId)` produces exactly the fields
-`Frontier::MatchState` has — systems the player can see with last-seen stamps, lanes, fleets in
+`Lockstep::MatchState` has — systems the player can see with last-seen stamps, lanes, fleets in
 transit, their own orders and the open proposals addressed to them, their standing, the region
 anchor, the totals ("41 systems") from the authoritative count — plus the combat previews the
 orders rail shows, computed here. `DigestFor(playerId, tick)`.

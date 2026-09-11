@@ -7,7 +7,7 @@
 #include <span>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// One side of a fight: who, how many, and whether they were already here.
@@ -36,4 +36,4 @@ struct MeleeSide
 /// which is what makes an exact preview possible at all.
 void ResolveMelee(const MatchRules& _rules, std::span<MeleeSide> _sides);
 
-} // namespace Frontier
+} // namespace Lockstep

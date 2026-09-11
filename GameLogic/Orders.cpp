@@ -6,7 +6,7 @@
 #include "pch.h"
 #include "Orders.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -207,4 +207,4 @@ OrderSet OrderSet::Read(Neuron::ByteReader& _reader)
   return set;
 }
 
-} // namespace Frontier
+} // namespace Lockstep

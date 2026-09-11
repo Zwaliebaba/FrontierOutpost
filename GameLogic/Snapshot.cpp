@@ -16,7 +16,7 @@
 
 #include "TickResolver.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -506,4 +506,4 @@ Snapshot Snapshot::Read(Neuron::ByteReader& _reader)
   return view;
 }
 
-} // namespace Frontier
+} // namespace Lockstep

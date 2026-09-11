@@ -29,8 +29,8 @@ struct PlayerTurn
 /// survives: `NeuronServer` references `NeuronCore` and nothing else (AGENTS.md §2), so the
 /// interface lives here and the server ticks a simulation without knowing the game.
 ///
-/// **IT SPEAKS IN BYTES, AND THAT IS THE POINT.** `NeuronCore` cannot name `Frontier::OrderSet` or
-/// `Frontier::Snapshot` — they are `GameLogic`'s, on the far side of the seam. So orders arrive as
+/// **IT SPEAKS IN BYTES, AND THAT IS THE POINT.** `NeuronCore` cannot name `Lockstep::OrderSet` or
+/// `Lockstep::Snapshot` — they are `GameLogic`'s, on the far side of the seam. So orders arrive as
 /// bytes, snapshots and digests leave as bytes, and the server routes them between a socket and
 /// this interface without ever decoding one. A server that could read an order could be tempted to
 /// act on it, and the day it does the simulation has stopped being authoritative.

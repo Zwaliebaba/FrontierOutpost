@@ -52,7 +52,7 @@ lost or dropped state self-correcting rather than something the client has to re
 The tick number is in the record because the client needs it to notice a gap and because the
 status line shows it — which is what makes "is the server running" answerable by looking.
 
-**The client interpolates (B) and never extrapolates.** `Frontier::ShipView` holds the previous
+**The client interpolates (B) and never extrapolates.** `Lockstep::ShipView` holds the previous
 state and the latest, and a fraction that runs 0 to 1 over one tick of real time from when the
 latest arrived. Heading is interpolated through `ShortestTurnTurns16`, not as a number: 65000 to
 500 is a turn of 1000 units forwards, and lerping the raw values would spin the ship most of the
@@ -90,7 +90,7 @@ a loopback they cannot; over UDP they will. `ShipView::Accept` currently trusts 
 ## What this changes elsewhere
 
 - **Code:** `NeuronCore/Protocol.h` is the record. `NeuronServer/Session.cpp` sends one a tick.
-  `FrontierOutpost/ShipView.{h,cpp}` is the interpolation. `FrontierOutpost.cpp` drains the
+  `Lockstep/ShipView.{h,cpp}` is the interpolation. `Lockstep.cpp` drains the
   transport each frame and draws nothing before the first state.
 - **AGENTS.md:** no change.
 - **Design/:** no document superseded. ADR-006 covers what happens when the state queue is full.

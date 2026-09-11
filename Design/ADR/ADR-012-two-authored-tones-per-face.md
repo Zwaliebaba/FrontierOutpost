@@ -126,7 +126,7 @@ about: under ADR-002 those were impossible because the output was a name. Now th
 - **Code:** `NeuronClient/Color.h` defines `ColorPair`. `NeuronClient/Mesh.h`'s `MeshVertex`
   carries `shadedColor` and `litColor`. `NeuronClient/Shaders/MeshVS.hlsl` selects;
   `MeshPS.hlsl` still contains no arithmetic. `NeuronClient/MeshRenderer.cpp` declares the two
-  `R8G8B8A8_UNORM` input elements. `FrontierOutpost/ShipMesh.h` and `StationMesh.h` author pairs.
+  `R8G8B8A8_UNORM` input elements. `Lockstep/ShipMesh.h` and `StationMesh.h` author pairs.
 - **AGENTS.md:** no change.
 - **Design/:** ADR-002 superseded. ADR-011 is the decision this one sits on top of.
 

@@ -1,4 +1,4 @@
-# Frontier Outpost — UI handoff v2
+# LockStep: Universe — UI handoff v2
 
 Screens for the tablet/desktop client, 1280×720, single 8×8 bitmap font. Built from `Design/space-4x-one-pager-v10.md`, ADR-014 (interface layer), ADR-027 (owner colours), ADR-028/029 (roles, tokens), `NeuronCore/Protocol.h`, `GameLogic/TickLog.h`. Supersedes `Design/Screens/` (v1 main page).
 
@@ -7,7 +7,7 @@ Screens for the tablet/desktop client, 1280×720, single 8×8 bitmap font. Built
 - `DESIGN-GUIDELINES.md` — frame, palette, type, components, copy rules, map projection
 - `SCREENS.md` — per-screen spec: anatomy, state, behaviour, what code it maps to
 - `PROMPT.md` — paste into Claude Code to integrate
-- Live reference: the project file `Frontier Outpost Main Page.dc.html` (all screens on one canvas; design reference, not production code)
+- Live reference: the project file `Frontier Outpost Main Page.dc.html` (all screens on one canvas; design reference, not production code). **The filename predates the rename to LockStep: Universe and is deliberately left alone** — the file lives outside this repository, so renaming it here would break the pointer without renaming anything.
 
 ## Screens
 | # | File | Screen | Replaces / adds |

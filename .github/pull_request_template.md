@@ -17,7 +17,7 @@
 <!-- Be specific and be honest. "Builds clean, not run" and "builds and runs" are different
      claims. Say which configurations you actually built. -->
 
-- [ ] `msbuild FrontierOutpost.slnx /p:Configuration=Debug /p:Platform=x64` — clean
+- [ ] `msbuild Lockstep.slnx /p:Configuration=Debug /p:Platform=x64` — clean
 - [ ] All four test suites run and pass
 - [ ] `python Build\CheckProjectFiles.py`
 - [ ] `python Build\CheckFormat.py`

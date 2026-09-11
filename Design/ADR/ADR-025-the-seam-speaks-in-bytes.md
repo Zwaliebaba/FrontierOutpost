@@ -37,7 +37,7 @@ right.
 ### B. An abstract class over game types
 
 `virtual void Submit(PlayerId, const OrderSet&)`. The obvious shape, and impossible: `NeuronCore`
-cannot name `Frontier::OrderSet`. Moving those types into `NeuronCore` to make it possible would
+cannot name `Lockstep::OrderSet`. Moving those types into `NeuronCore` to make it possible would
 put the game's vocabulary in the engine and break R9 far more seriously than the alternative.
 
 ### C. An abstract class over bytes
@@ -64,8 +64,8 @@ Submit(player, bytes) / MarkPresent(player) / Resolve()
 LockedTurn() / SnapshotFor(player) / DigestFor(player)
 ```
 
-`Frontier::MatchSimulation` implements it and lives in **`GameLogic`**, not `NeuronServer`. The game
-reaches *up* to the interface; the server never reaches down. `FrontierOutpost.exe` is the only
+`Lockstep::MatchSimulation` implements it and lives in **`GameLogic`**, not `NeuronServer`. The game
+reaches *up* to the interface; the server never reaches down. `Lockstep.exe` is the only
 thing that sees both, which is exactly what a composition root is for.
 
 **The opacity is a feature, not a tolerated cost.** A server that could read an order could be

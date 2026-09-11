@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 // The state the main page reads, and nothing else.
@@ -19,7 +19,7 @@ namespace Frontier
 // here, one screen larger.
 //
 // R8: every type below is a public aggregate handed to a renderer, so plain camelCase fields and
-// brace initialization. R9: it is game vocabulary, so it is Frontier and not Neuron -- the engine
+// brace initialization. R9: it is game vocabulary, so it is Lockstep and not Neuron -- the engine
 // draws rectangles and glyphs and has no idea what a trade lane is.
 //
 // Nothing here is a wire record. When the server exists these become the client's decode target
@@ -264,7 +264,7 @@ struct BuildRow
   /// What this row would build, and where. A row the player can queue has to be able to become a
   /// `BuildOrder`, and a title is not an instruction.
   std::int32_t system = EventRefs::NONE;
-  /// 0 shipyard, 1 mining station. Matches `Frontier::BuildKind`, which this header cannot name --
+  /// 0 shipyard, 1 mining station. Matches `Lockstep::BuildKind`, which this header cannot name --
   /// `MatchState` is the client's and `GameLogic` is the server's (AGENTS.md §2).
   std::uint8_t kind = 0;
   /// True for the trade-lane row: dashed amber border, outlined amber PROPOSE button, and it
@@ -411,4 +411,4 @@ struct MatchState
   }
 };
 
-} // namespace Frontier
+} // namespace Lockstep

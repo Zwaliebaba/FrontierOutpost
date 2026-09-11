@@ -61,7 +61,7 @@
     defines SolutionDir only for a solution build, so `msbuild NeuronCore\NeuronCore.vcxproj`
     resolves every path here against the project folder instead of the repository root: output
     in the wrong place, and cross-project includes not found at all. CI builds
-    FrontierOutpost.slnx for exactly that reason (AGENTS.md 3).
+    Lockstep.slnx for exactly that reason (AGENTS.md 3).
   -->
   <PropertyGroup>
     <OutDir>$(SolutionDir)x64\$(Configuration)\</OutDir>

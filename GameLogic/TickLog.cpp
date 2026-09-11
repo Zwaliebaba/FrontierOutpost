@@ -3,7 +3,7 @@
 #include "pch.h"
 #include "TickLog.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 const char* Describe(Phase _phase) noexcept
@@ -109,4 +109,4 @@ std::vector<std::string> TickLog::AllLines() const
   return lines;
 }
 
-} // namespace Frontier
+} // namespace Lockstep

@@ -43,7 +43,7 @@ PROJECTS = {
     "NeuronClient": "NeuronClient",
     "NeuronServer": "NeuronServer",
     "GameLogic": "GameLogic",
-    "FrontierOutpost": "FrontierOutpost",
+    "Lockstep": "Lockstep",
     "NeuronCoreTests": os.path.join("Tests", "NeuronCoreTests"),
     "NeuronClientTests": os.path.join("Tests", "NeuronClientTests"),
     "NeuronServerTests": os.path.join("Tests", "NeuronServerTests"),
@@ -70,7 +70,7 @@ def visual_cpp_directory() -> str:
 
 def expand(value: str, project_directory: str, vc_directory: str) -> str:
     # $(SolutionDir) is the repository root. MSBuild only defines it for a solution build, which is
-    # why the projects must be built through FrontierOutpost.slnx (AGENTS.md §3); here it is simply
+    # why the projects must be built through Lockstep.slnx (AGENTS.md §3); here it is simply
     # known, so this script does not care how the last build was invoked.
     value = value.replace("$(SolutionDir)", REPO_ROOT + os.sep)
     value = value.replace("$(MSBuildThisFileDirectory)", project_directory + os.sep)

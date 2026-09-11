@@ -5,7 +5,7 @@
 
 #include <cstdint>
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// Why a candidate galaxy was refused.
@@ -99,4 +99,4 @@ public:
   static constexpr std::int32_t POSITION_JITTER = 16;
 };
 
-} // namespace Frontier
+} // namespace Lockstep

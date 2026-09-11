@@ -18,7 +18,7 @@
 #include "pch.h"
 #include "TickResolver.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -1525,4 +1525,4 @@ std::vector<MeleeSide> TickResolver::Preview(const Match& _match, SystemId _syst
   return sides;
 }
 
-} // namespace Frontier
+} // namespace Lockstep

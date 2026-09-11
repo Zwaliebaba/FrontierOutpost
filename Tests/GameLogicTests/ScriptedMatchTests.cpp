@@ -51,10 +51,10 @@ constexpr std::array<Policy, 6> POLICIES = {Policy::ExpandNear, Policy::ExpandFa
 constexpr std::int32_t ABSENTEE = 5;
 
 /// Systems this player holds and can see right now.
-[[nodiscard]] std::vector<Frontier::SystemId> Held(const Frontier::Snapshot& _view)
+[[nodiscard]] std::vector<Lockstep::SystemId> Held(const Lockstep::Snapshot& _view)
 {
-  std::vector<Frontier::SystemId> mine;
-  for (const Frontier::SnapshotSystem& system : _view.Systems())
+  std::vector<Lockstep::SystemId> mine;
+  for (const Lockstep::SnapshotSystem& system : _view.Systems())
   {
     if (system.live && system.owner == _view.Viewer())
     {
@@ -65,10 +65,10 @@ constexpr std::int32_t ABSENTEE = 5;
 }
 
 /// Every lane out of `_from` the player knows about, as (destination, cost), lowest id first.
-[[nodiscard]] std::vector<std::pair<Frontier::SystemId, std::uint32_t>> Exits(const Frontier::Snapshot& _view, Frontier::SystemId _from)
+[[nodiscard]] std::vector<std::pair<Lockstep::SystemId, std::uint32_t>> Exits(const Lockstep::Snapshot& _view, Lockstep::SystemId _from)
 {
-  std::vector<std::pair<Frontier::SystemId, std::uint32_t>> out;
-  for (const Frontier::SnapshotLane& lane : _view.Lanes())
+  std::vector<std::pair<Lockstep::SystemId, std::uint32_t>> out;
+  for (const Lockstep::SnapshotLane& lane : _view.Lanes())
   {
     if (lane.a == _from)
     {
@@ -82,9 +82,9 @@ constexpr std::int32_t ABSENTEE = 5;
   return out;
 }
 
-[[nodiscard]] const Frontier::SnapshotSystem* Find(const Frontier::Snapshot& _view, Frontier::SystemId _system)
+[[nodiscard]] const Lockstep::SnapshotSystem* Find(const Lockstep::Snapshot& _view, Lockstep::SystemId _system)
 {
-  for (const Frontier::SnapshotSystem& system : _view.Systems())
+  for (const Lockstep::SnapshotSystem& system : _view.Systems())
   {
     if (system.id == _system)
     {
@@ -102,7 +102,7 @@ constexpr std::int32_t ABSENTEE = 5;
 /// empires sat on two systems each for eighty ticks and never met. That was a harness failure that
 /// looked exactly like a rules failure, which is worth remembering: a bot too simple to reach a
 /// mechanic will report that the mechanic does not work.
-[[nodiscard]] Frontier::SystemId ChooseDestination(Policy _policy, const Frontier::Snapshot& _view, Frontier::SystemId _at)
+[[nodiscard]] Lockstep::SystemId ChooseDestination(Policy _policy, const Lockstep::Snapshot& _view, Lockstep::SystemId _at)
 {
   if (_policy == Policy::Turtle)
   {
@@ -111,14 +111,14 @@ constexpr std::int32_t ABSENTEE = 5;
 
   // Highest system id the player knows about, so the walk can be indexed rather than searched.
   std::int32_t highest = _at.Index();
-  for (const Frontier::SnapshotSystem& system : _view.Systems())
+  for (const Lockstep::SnapshotSystem& system : _view.Systems())
   {
     highest = std::max(highest, system.id.Index());
   }
   const std::size_t count = static_cast<std::size_t>(highest) + 1;
 
-  std::vector<std::vector<Frontier::SystemId>> exits(count);
-  for (const Frontier::SnapshotLane& lane : _view.Lanes())
+  std::vector<std::vector<Lockstep::SystemId>> exits(count);
+  for (const Lockstep::SnapshotLane& lane : _view.Lanes())
   {
     if (lane.a.AsSize() < count && lane.b.AsSize() < count)
     {
@@ -126,23 +126,23 @@ constexpr std::int32_t ABSENTEE = 5;
       exits[lane.b.AsSize()].push_back(lane.a);
     }
   }
-  for (std::vector<Frontier::SystemId>& row : exits)
+  for (std::vector<Lockstep::SystemId>& row : exits)
   {
     std::sort(row.begin(), row.end());
   }
 
   std::vector<std::int32_t> distance(count, -1);
-  std::vector<Frontier::SystemId> firstHop(count);
+  std::vector<Lockstep::SystemId> firstHop(count);
   distance[_at.AsSize()] = 0;
 
-  std::vector<Frontier::SystemId> ring = {_at};
+  std::vector<Lockstep::SystemId> ring = {_at};
   std::int32_t depth = 0;
   while (!ring.empty())
   {
-    std::vector<Frontier::SystemId> next;
-    for (const Frontier::SystemId here : ring)
+    std::vector<Lockstep::SystemId> next;
+    for (const Lockstep::SystemId here : ring)
     {
-      for (const Frontier::SystemId other : exits[here.AsSize()])
+      for (const Lockstep::SystemId other : exits[here.AsSize()])
       {
         if (distance[other.AsSize()] >= 0)
         {
@@ -157,13 +157,13 @@ constexpr std::int32_t ABSENTEE = 5;
     ++depth;
   }
 
-  Frontier::SystemId best;
+  Lockstep::SystemId best;
   std::int32_t bestDistance = 0;
   bool bestIsRival = false;
 
-  for (const Frontier::SnapshotSystem& system : _view.Systems())
+  for (const Lockstep::SnapshotSystem& system : _view.Systems())
   {
-    if (system.kind == Frontier::SystemKind::RegionAnchor || system.id == _at)
+    if (system.kind == Lockstep::SystemKind::RegionAnchor || system.id == _at)
     {
       continue;
     }
@@ -205,13 +205,13 @@ constexpr std::int32_t ABSENTEE = 5;
     }
   }
 
-  return best.IsValid() ? firstHop[best.AsSize()] : Frontier::SystemId{};
+  return best.IsValid() ? firstHop[best.AsSize()] : Lockstep::SystemId{};
 }
 
 /// One bot's orders for one tick, from what it can see and nothing else.
-[[nodiscard]] Frontier::OrderSet OrdersFor(Policy _policy, const Frontier::Snapshot& _view, const Frontier::MatchRules& _rules)
+[[nodiscard]] Lockstep::OrderSet OrdersFor(Policy _policy, const Lockstep::Snapshot& _view, const Lockstep::MatchRules& _rules)
 {
-  Frontier::OrderSet orders;
+  Lockstep::OrderSet orders;
   orders.player = _view.Viewer();
 
   if (_policy == Policy::Absentee)
@@ -221,34 +221,34 @@ constexpr std::int32_t ABSENTEE = 5;
 
   // Answer everything addressed to you. A trade lane is free income and the other two cost nothing,
   // so a bot that declined would be modelling suspicion the design has no mechanic for.
-  for (const Frontier::SnapshotProposal& proposal : _view.Proposals())
+  for (const Lockstep::SnapshotProposal& proposal : _view.Proposals())
   {
     if (proposal.to == _view.Viewer())
     {
-      orders.answers.push_back(Frontier::AnswerOrder{.proposal = proposal.id, .answer = Frontier::Answer::Accept});
+      orders.answers.push_back(Lockstep::AnswerOrder{.proposal = proposal.id, .answer = Lockstep::Answer::Accept});
     }
   }
 
   // Move whatever is parked.
-  for (const Frontier::SnapshotFleet& fleet : _view.Fleets())
+  for (const Lockstep::SnapshotFleet& fleet : _view.Fleets())
   {
     if (fleet.owner != _view.Viewer() || fleet.ticksRemaining > 0 || !fleet.at.IsValid())
     {
       continue;
     }
 
-    const Frontier::SystemId destination = ChooseDestination(_policy, _view, fleet.at);
-    orders.fleetOrders.push_back(Frontier::FleetOrder{.fleet = fleet.id, .destination = destination.IsValid() ? destination : fleet.at});
+    const Lockstep::SystemId destination = ChooseDestination(_policy, _view, fleet.at);
+    orders.fleetOrders.push_back(Lockstep::FleetOrder{.fleet = fleet.id, .destination = destination.IsValid() ? destination : fleet.at});
   }
 
   // Build, cheapest useful thing first, on the lowest-numbered system that lacks one. The turtle
   // builds shipyards because it never moves; everybody else builds income.
-  const std::vector<Frontier::SystemId> mine = Held(_view);
+  const std::vector<Lockstep::SystemId> mine = Held(_view);
   const bool yardFirst = _policy == Policy::Turtle;
 
-  for (const Frontier::SystemId system : mine)
+  for (const Lockstep::SystemId system : mine)
   {
-    const Frontier::SnapshotSystem* state = Find(_view, system);
+    const Lockstep::SnapshotSystem* state = Find(_view, system);
     if (state == nullptr)
     {
       continue;
@@ -256,12 +256,12 @@ constexpr std::int32_t ABSENTEE = 5;
 
     if (yardFirst && !state->hasShipyard)
     {
-      orders.builds.push_back(Frontier::BuildOrder{.system = system, .kind = Frontier::BuildKind::Shipyard});
+      orders.builds.push_back(Lockstep::BuildOrder{.system = system, .kind = Lockstep::BuildKind::Shipyard});
       break;
     }
     if (!yardFirst && !state->hasMiningStation)
     {
-      orders.builds.push_back(Frontier::BuildOrder{.system = system, .kind = Frontier::BuildKind::MiningStation});
+      orders.builds.push_back(Lockstep::BuildOrder{.system = system, .kind = Lockstep::BuildKind::MiningStation});
       break;
     }
   }
@@ -270,15 +270,15 @@ constexpr std::int32_t ABSENTEE = 5;
   // or pending there. One offer a tick, so it does not flood the board.
   if (_policy == Policy::Diplomat)
   {
-    for (const Frontier::SnapshotLane& lane : _view.Lanes())
+    for (const Lockstep::SnapshotLane& lane : _view.Lanes())
     {
       if (lane.tradeLane)
       {
         continue;
       }
 
-      const Frontier::SnapshotSystem* first = Find(_view, lane.a);
-      const Frontier::SnapshotSystem* second = Find(_view, lane.b);
+      const Lockstep::SnapshotSystem* first = Find(_view, lane.a);
+      const Lockstep::SnapshotSystem* second = Find(_view, lane.b);
       if (first == nullptr || second == nullptr || !first->live || !second->live)
       {
         continue;
@@ -291,14 +291,14 @@ constexpr std::int32_t ABSENTEE = 5;
         continue;
       }
 
-      const Frontier::SnapshotSystem* theirs = mineFirst ? second : first;
+      const Lockstep::SnapshotSystem* theirs = mineFirst ? second : first;
       if (!theirs->owner.IsValid())
       {
         continue;
       }
 
       const bool pending = std::any_of(_view.Proposals().begin(), _view.Proposals().end(),
-                                       [&lane](const Frontier::SnapshotProposal& _open) { return _open.lane == lane.id; });
+                                       [&lane](const Lockstep::SnapshotProposal& _open) { return _open.lane == lane.id; });
       if (pending)
       {
         continue;
@@ -306,7 +306,7 @@ constexpr std::int32_t ABSENTEE = 5;
 
       if (_view.Standings()[_view.Viewer().AsSize()].score > 0)
       {
-        orders.proposals.push_back(Frontier::ProposalOrder{.to = theirs->owner, .kind = Frontier::ProposalKind::OpenLane, .lane = lane.id});
+        orders.proposals.push_back(Lockstep::ProposalOrder{.to = theirs->owner, .kind = Lockstep::ProposalKind::OpenLane, .lane = lane.id});
       }
       break;
     }
@@ -320,7 +320,7 @@ constexpr std::int32_t ABSENTEE = 5;
 ///
 /// Returned as a sentence rather than asserted here, so the failure names the tick it happened on
 /// -- "invariant violated" on tick 61 of 84 is a bug report nobody can act on.
-[[nodiscard]] std::string Violation(const Frontier::Match& _match)
+[[nodiscard]] std::string Violation(const Lockstep::Match& _match)
 {
   if (!_match.IsConsistent())
   {
@@ -329,7 +329,7 @@ constexpr std::int32_t ABSENTEE = 5;
 
   for (std::size_t index = 0; index < _match.Fleets().size(); ++index)
   {
-    const Frontier::MatchFleet& fleet = _match.Fleets()[index];
+    const Lockstep::MatchFleet& fleet = _match.Fleets()[index];
     if (fleet.destroyed)
     {
       continue;
@@ -340,7 +340,7 @@ constexpr std::int32_t ABSENTEE = 5;
       // A fleet under way must be on a lane that exists. Anything else is a fleet in open space,
       // which this game does not have -- "not a coordinate map".
       bool onALane = false;
-      for (const Frontier::LaneId lane : _match.GalaxyGraph().LanesAt(fleet.movingFrom))
+      for (const Lockstep::LaneId lane : _match.GalaxyGraph().LanesAt(fleet.movingFrom))
       {
         if (_match.GalaxyGraph().OtherEnd(lane, fleet.movingFrom) == fleet.movingTo)
         {
@@ -359,7 +359,7 @@ constexpr std::int32_t ABSENTEE = 5;
     }
   }
 
-  for (const Frontier::OpenProposal& proposal : _match.Proposals())
+  for (const Lockstep::OpenProposal& proposal : _match.Proposals())
   {
     if (_match.Tick() > proposal.openedAt + _match.Rules().proposalWindowTicks)
     {
@@ -377,11 +377,11 @@ constexpr std::int32_t ABSENTEE = 5;
     }
   }
 
-  for (const Frontier::ActiveTradeLane& lane : _match.TradeLanes())
+  for (const Lockstep::ActiveTradeLane& lane : _match.TradeLanes())
   {
-    const Frontier::GalaxyLane& edge = _match.GalaxyGraph().LaneAt(lane.lane);
-    const Frontier::PlayerId first = _match.SystemAt(edge.a).owner;
-    const Frontier::PlayerId second = _match.SystemAt(edge.b).owner;
+    const Lockstep::GalaxyLane& edge = _match.GalaxyGraph().LaneAt(lane.lane);
+    const Lockstep::PlayerId first = _match.SystemAt(edge.a).owner;
+    const Lockstep::PlayerId second = _match.SystemAt(edge.b).owner;
     if (!((first == lane.a && second == lane.b) || (first == lane.b && second == lane.a)))
     {
       return "a trade lane outlived its endpoints";
@@ -393,7 +393,7 @@ constexpr std::int32_t ABSENTEE = 5;
 
 struct Played
 {
-  Frontier::Match match;
+  Lockstep::Match match;
   std::uint32_t ticks = 0;
   /// Highest count seen at any point, since lanes open and close.
   std::size_t mostTradeLanes = 0;
@@ -414,14 +414,14 @@ struct Played
 /// determinism test measure the simulation rather than the checker.
 [[nodiscard]] Played PlayAMatch(bool _checkInvariants = true)
 {
-  Frontier::MatchRules rules;
+  Lockstep::MatchRules rules;
   rules.playerCount = 6;
 
-  Played played{.match = Frontier::Match::Create(rules, SEED)};
+  Played played{.match = Lockstep::Match::Create(rules, SEED)};
 
   // Everybody but the absentee, every tick. Presence is the server's to report and the harness is
   // standing in for one.
-  std::vector<Frontier::PlayerId> present;
+  std::vector<Lockstep::PlayerId> present;
   for (std::int32_t player = 0; player < 6; ++player)
   {
     if (player != ABSENTEE)
@@ -432,21 +432,21 @@ struct Played
 
   while (!played.match.IsFinished())
   {
-    std::vector<Frontier::OrderSet> orders;
+    std::vector<Lockstep::OrderSet> orders;
     orders.reserve(POLICIES.size());
     for (std::size_t index = 0; index < POLICIES.size(); ++index)
     {
-      const Frontier::PlayerId player{static_cast<std::int32_t>(index)};
-      const Frontier::Snapshot view = Frontier::Snapshot::For(played.match, player);
+      const Lockstep::PlayerId player{static_cast<std::int32_t>(index)};
+      const Lockstep::Snapshot view = Lockstep::Snapshot::For(played.match, player);
       orders.push_back(OrdersFor(POLICIES[index], view, played.match.Rules()));
 
       if (POLICIES[index] == Policy::Diplomat)
       {
         played.proposalsMade += static_cast<std::uint32_t>(orders.back().proposals.size());
-        for (const Frontier::SnapshotLane& lane : view.Lanes())
+        for (const Lockstep::SnapshotLane& lane : view.Lanes())
         {
-          const Frontier::SnapshotSystem* first = Find(view, lane.a);
-          const Frontier::SnapshotSystem* second = Find(view, lane.b);
+          const Lockstep::SnapshotSystem* first = Find(view, lane.a);
+          const Lockstep::SnapshotSystem* second = Find(view, lane.b);
           if (first != nullptr && second != nullptr && first->live && second->live &&
               (first->owner == player) != (second->owner == player) && (first->owner.IsValid() && second->owner.IsValid()))
           {
@@ -457,10 +457,10 @@ struct Played
       }
     }
 
-    Frontier::TickLog log;
+    Lockstep::TickLog log;
     const auto startedAt = std::chrono::steady_clock::now();
-    played.match = Frontier::TickResolver::Resolve(
-      played.match, Frontier::TickInput{.orders = orders, .present = present, .presenceUnknown = false}, log);
+    played.match = Lockstep::TickResolver::Resolve(
+      played.match, Lockstep::TickInput{.orders = orders, .present = present, .presenceUnknown = false}, log);
     played.totalResolveMilliseconds += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startedAt).count();
 
     ++played.ticks;
@@ -468,7 +468,7 @@ struct Played
     played.timesTargeted += static_cast<std::uint32_t>(log.interceptions.size());
     played.timesDodged += log.Dodges();
 
-    if (!played.absenteeWentIntoCustody && played.match.PlayerAt(Frontier::PlayerId{ABSENTEE}).status == Frontier::PlayerStatus::Custodian)
+    if (!played.absenteeWentIntoCustody && played.match.PlayerAt(Lockstep::PlayerId{ABSENTEE}).status == Lockstep::PlayerStatus::Custodian)
     {
       played.absenteeWentIntoCustody = true;
       played.absenteeCustodyTick = played.match.Tick();
@@ -528,12 +528,12 @@ public:
     const double fraction = played.timesTargeted > 0 ? static_cast<double>(played.timesDodged) / played.timesTargeted : 0.0;
 
     Logger::WriteMessage(std::format("defender dancing: {} dodges of {} times targeted ({:.0f}%), rear guard {}\n", played.timesDodged,
-                                     played.timesTargeted, fraction * 100.0, Frontier::MatchRules{}.rearGuardEnabled ? "on" : "off")
+                                     played.timesTargeted, fraction * 100.0, Lockstep::MatchRules{}.rearGuardEnabled ? "on" : "off")
                            .c_str());
 
     Assert::IsTrue(played.timesTargeted > 0, L"a match in which nobody was ever arrived on top of would make the watch item unmeasurable");
     Assert::IsTrue(played.timesDodged <= played.timesTargeted, L"the dodges are a subset of the times targeted");
-    Assert::IsFalse(Frontier::MatchRules{}.rearGuardEnabled, L"and it is measured with the round off, which is the state Phase 0 measures");
+    Assert::IsFalse(Lockstep::MatchRules{}.rearGuardEnabled, L"and it is measured with the round off, which is the state Phase 0 measures");
   }
 
   // ADR-018 at full scale. Everything before this proved one tick reproducible; this proves
@@ -560,8 +560,8 @@ public:
 
     Assert::IsTrue(played.absenteeWentIntoCustody, L"three weeks away and still active would be a broken rule");
     Assert::AreEqual(played.match.Rules().custodianAbsenceTicks, played.absenteeCustodyTick, L"on the tick the rule names, not eventually");
-    Assert::IsTrue(played.match.PlayerAt(Frontier::PlayerId{ABSENTEE}).forfeitedScore, L"and inside the first week, so they score nothing");
-    Assert::AreEqual(0U, played.match.PlayerAt(Frontier::PlayerId{ABSENTEE}).score);
+    Assert::IsTrue(played.match.PlayerAt(Lockstep::PlayerId{ABSENTEE}).forfeitedScore, L"and inside the first week, so they score nothing");
+    Assert::AreEqual(0U, played.match.PlayerAt(Lockstep::PlayerId{ABSENTEE}).score);
   }
 
   // The diplomat's whole policy is to open lanes. If none ever opened, either the policy cannot see
@@ -583,7 +583,7 @@ public:
     Assert::IsTrue(played.mostTradeLanes > 0, L"at least one lane opened during the match");
 
     constexpr std::int32_t DIPLOMAT = 4;
-    Assert::IsTrue(played.match.PlayerAt(Frontier::PlayerId{DIPLOMAT}).credits > 0U, L"and the diplomat has income to show for it");
+    Assert::IsTrue(played.match.PlayerAt(Lockstep::PlayerId{DIPLOMAT}).credits > 0U, L"and the diplomat has income to show for it");
   }
 
   // Something has to be happening. A match where nobody expands is a match where the harness is
@@ -593,7 +593,7 @@ public:
     const Played played = PlayAMatch();
 
     std::uint32_t claimed = 0;
-    for (const Frontier::SystemState& system : played.match.Systems())
+    for (const Lockstep::SystemState& system : played.match.Systems())
     {
       if (system.owner.IsValid())
       {
@@ -604,7 +604,7 @@ public:
     Assert::IsTrue(claimed > 6U, L"somebody expanded past their capital");
 
     std::uint32_t withBuildings = 0;
-    for (const Frontier::SystemState& system : played.match.Systems())
+    for (const Lockstep::SystemState& system : played.match.Systems())
     {
       if (system.hasShipyard || system.hasMiningStation)
       {

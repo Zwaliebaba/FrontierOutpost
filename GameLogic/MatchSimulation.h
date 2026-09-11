@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// The 4X behind `Neuron::Simulation`.
@@ -95,4 +95,4 @@ private:
   std::vector<std::uint32_t> m_capitalFellAt;
 };
 
-} // namespace Frontier
+} // namespace Lockstep

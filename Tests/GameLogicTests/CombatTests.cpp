@@ -30,16 +30,16 @@ namespace
 
 constexpr std::uint64_t SEED = 0x4652'4F4E'5449'4552ULL;
 
-[[nodiscard]] Frontier::Match Arena(Frontier::MatchRules _rules = {})
+[[nodiscard]] Lockstep::Match Arena(Lockstep::MatchRules _rules = {})
 {
   _rules.playerCount = 6;
-  Frontier::Match match = Frontier::Match::Create(_rules, SEED);
+  Lockstep::Match match = Lockstep::Match::Create(_rules, SEED);
 
   // The starting fleets are in the way of every scenario below, so they are moved off the board.
-  for (Frontier::MatchFleet& fleet : match.MutableFleets())
+  for (Lockstep::MatchFleet& fleet : match.MutableFleets())
   {
     fleet.destroyed = true;
-    fleet.at = Frontier::SystemId{};
+    fleet.at = Lockstep::SystemId{};
   }
 
   // Past the capital guard, so a fight at a capital is a fight rather than a rule.
@@ -48,21 +48,21 @@ constexpr std::uint64_t SEED = 0x4652'4F4E'5449'4552ULL;
 }
 
 /// A fleet already standing at a system. An incumbent, in the one-pager's sense.
-Frontier::FleetId Holding(Frontier::Match& _match, std::int32_t _player, std::uint32_t _ships, Frontier::SystemId _at)
+Lockstep::FleetId Holding(Lockstep::Match& _match, std::int32_t _player, std::uint32_t _ships, Lockstep::SystemId _at)
 {
-  Frontier::MatchFleet fleet;
-  fleet.owner = Frontier::PlayerId{_player};
+  Lockstep::MatchFleet fleet;
+  fleet.owner = Lockstep::PlayerId{_player};
   fleet.ships = _ships;
   fleet.at = _at;
   return _match.AddFleet(fleet);
 }
 
 /// A fleet that will land at `_to` during this tick's movement phase.
-Frontier::FleetId Arriving(Frontier::Match& _match, std::int32_t _player, std::uint32_t _ships, Frontier::SystemId _from,
-                           Frontier::SystemId _to)
+Lockstep::FleetId Arriving(Lockstep::Match& _match, std::int32_t _player, std::uint32_t _ships, Lockstep::SystemId _from,
+                           Lockstep::SystemId _to)
 {
-  Frontier::MatchFleet fleet;
-  fleet.owner = Frontier::PlayerId{_player};
+  Lockstep::MatchFleet fleet;
+  fleet.owner = Lockstep::PlayerId{_player};
   fleet.ships = _ships;
   fleet.movingFrom = _from;
   fleet.movingTo = _to;
@@ -70,22 +70,22 @@ Frontier::FleetId Arriving(Frontier::Match& _match, std::int32_t _player, std::u
   return _match.AddFleet(fleet);
 }
 
-[[nodiscard]] Frontier::SystemId NeighborOf(const Frontier::Match& _match, Frontier::SystemId _from)
+[[nodiscard]] Lockstep::SystemId NeighborOf(const Lockstep::Match& _match, Lockstep::SystemId _from)
 {
-  const Frontier::LaneId lane = _match.GalaxyGraph().LanesAt(_from).front();
+  const Lockstep::LaneId lane = _match.GalaxyGraph().LanesAt(_from).front();
   return _match.GalaxyGraph().OtherEnd(lane, _from);
 }
 
-[[nodiscard]] Frontier::Match Fight(const Frontier::Match& _match)
+[[nodiscard]] Lockstep::Match Fight(const Lockstep::Match& _match)
 {
-  Frontier::TickLog log;
-  return Frontier::TickResolver::Resolve(_match, {}, log);
+  Lockstep::TickLog log;
+  return Lockstep::TickResolver::Resolve(_match, {}, log);
 }
 
-[[nodiscard]] bool HasDigestKind(const Frontier::TickLog& _log, std::int32_t _player, Frontier::DigestKind _kind)
+[[nodiscard]] bool HasDigestKind(const Lockstep::TickLog& _log, std::int32_t _player, Lockstep::DigestKind _kind)
 {
-  const std::vector<Frontier::DigestEntry>& digest = _log.digests[static_cast<std::size_t>(_player)];
-  return std::any_of(digest.begin(), digest.end(), [_kind](const Frontier::DigestEntry& _entry) { return _entry.kind == _kind; });
+  const std::vector<Lockstep::DigestEntry>& digest = _log.digests[static_cast<std::size_t>(_player)];
+  return std::any_of(digest.begin(), digest.end(), [_kind](const Lockstep::DigestEntry& _entry) { return _entry.kind == _kind; });
 }
 
 } // namespace
@@ -102,14 +102,14 @@ public:
   // moves a parameter, change the number here rather than the parameter.**
   TEST_METHOD(TheReferencePreviewComesOutAtSix)
   {
-    Frontier::Match match = Arena();
-    const Frontier::SystemId contested = match.GalaxyGraph().Capitals()[1];
-    const Frontier::SystemId approach = NeighborOf(match, contested);
+    Lockstep::Match match = Arena();
+    const Lockstep::SystemId contested = match.GalaxyGraph().Capitals()[1];
+    const Lockstep::SystemId approach = NeighborOf(match, contested);
 
-    const Frontier::FleetId defender = Holding(match, 1, 11, contested);
-    const Frontier::FleetId attacker = Arriving(match, 0, 14, approach, contested);
+    const Lockstep::FleetId defender = Holding(match, 1, 11, contested);
+    const Lockstep::FleetId attacker = Arriving(match, 0, 14, approach, contested);
 
-    const Frontier::Match after = Fight(match);
+    const Lockstep::Match after = Fight(match);
 
     Assert::AreEqual(6U, after.FleetAt(attacker).ships, L"fourteen against eleven with the defender bonus");
     Assert::AreEqual(0U, after.FleetAt(defender).ships);
@@ -120,14 +120,14 @@ public:
   // more of it, which is what stops a large fleet hiding behind a small one.
   TEST_METHOD(DamageSpreadsInProportionToEnemyStrength)
   {
-    Frontier::Match match = Arena();
-    const Frontier::SystemId where = match.GalaxyGraph().Capitals()[3];
+    Lockstep::Match match = Arena();
+    const Lockstep::SystemId where = match.GalaxyGraph().Capitals()[3];
 
-    const Frontier::FleetId big = Holding(match, 1, 10, where);
-    const Frontier::FleetId small = Holding(match, 2, 5, where);
+    const Lockstep::FleetId big = Holding(match, 1, 10, where);
+    const Lockstep::FleetId small = Holding(match, 2, 5, where);
     (void)Holding(match, 0, 20, where);
 
-    const Frontier::Match after = Fight(match);
+    const Lockstep::Match after = Fight(match);
 
     const std::uint32_t bigLost = 10 - after.FleetAt(big).ships;
     const std::uint32_t smallLost = 5 - after.FleetAt(small).ships;
@@ -136,15 +136,15 @@ public:
 
   TEST_METHOD(DamageSpreadsAcrossThreeEnemiesToo)
   {
-    Frontier::Match match = Arena();
-    const Frontier::SystemId where = match.GalaxyGraph().Capitals()[3];
+    Lockstep::Match match = Arena();
+    const Lockstep::SystemId where = match.GalaxyGraph().Capitals()[3];
 
-    const Frontier::FleetId first = Holding(match, 1, 12, where);
-    const Frontier::FleetId second = Holding(match, 2, 8, where);
-    const Frontier::FleetId third = Holding(match, 3, 4, where);
+    const Lockstep::FleetId first = Holding(match, 1, 12, where);
+    const Lockstep::FleetId second = Holding(match, 2, 8, where);
+    const Lockstep::FleetId third = Holding(match, 3, 4, where);
     (void)Holding(match, 0, 30, where);
 
-    const Frontier::Match after = Fight(match);
+    const Lockstep::Match after = Fight(match);
 
     const std::uint32_t firstLost = 12 - after.FleetAt(first).ships;
     const std::uint32_t secondLost = 8 - after.FleetAt(second).ships;
@@ -159,14 +159,14 @@ public:
   // comes out ahead -- which is the whole reason the defender's bet is whether to stay.
   TEST_METHOD(TheIncumbentGetsTheDefenderBonus)
   {
-    Frontier::Match match = Arena();
-    const Frontier::SystemId where = match.GalaxyGraph().Capitals()[2];
-    const Frontier::SystemId approach = NeighborOf(match, where);
+    Lockstep::Match match = Arena();
+    const Lockstep::SystemId where = match.GalaxyGraph().Capitals()[2];
+    const Lockstep::SystemId approach = NeighborOf(match, where);
 
-    const Frontier::FleetId incumbent = Holding(match, 2, 10, where);
-    const Frontier::FleetId arriving = Arriving(match, 0, 10, approach, where);
+    const Lockstep::FleetId incumbent = Holding(match, 2, 10, where);
+    const Lockstep::FleetId arriving = Arriving(match, 0, 10, approach, where);
 
-    const Frontier::Match after = Fight(match);
+    const Lockstep::Match after = Fight(match);
 
     Assert::IsTrue(after.FleetAt(incumbent).ships > after.FleetAt(arriving).ships,
                    L"equal fleets, and the one that was already there wins");
@@ -176,14 +176,14 @@ public:
   // anything -- and this is why incumbency is a property of the FLEET, not of who owns the system.
   TEST_METHOD(SimultaneousArrivalsAtAnEmptySystemGetNoBonus)
   {
-    Frontier::Match match = Arena();
+    Lockstep::Match match = Arena();
 
     // A frontier system, unowned and unoccupied.
-    Frontier::SystemId empty;
+    Lockstep::SystemId empty;
     for (std::size_t index = 0; index < match.Systems().size(); ++index)
     {
-      const Frontier::SystemId candidate{static_cast<std::int32_t>(index)};
-      if (!match.SystemAt(candidate).owner.IsValid() && match.GalaxyGraph().SystemAt(candidate).kind == Frontier::SystemKind::Frontier)
+      const Lockstep::SystemId candidate{static_cast<std::int32_t>(index)};
+      if (!match.SystemAt(candidate).owner.IsValid() && match.GalaxyGraph().SystemAt(candidate).kind == Lockstep::SystemKind::Frontier)
       {
         empty = candidate;
         break;
@@ -191,13 +191,13 @@ public:
     }
     Assert::IsTrue(empty.IsValid());
 
-    const std::vector<Frontier::LaneId>& lanes = match.GalaxyGraph().LanesAt(empty);
+    const std::vector<Lockstep::LaneId>& lanes = match.GalaxyGraph().LanesAt(empty);
     Assert::IsTrue(lanes.size() >= 2, L"this test needs two ways in");
 
-    const Frontier::FleetId first = Arriving(match, 0, 10, match.GalaxyGraph().OtherEnd(lanes[0], empty), empty);
-    const Frontier::FleetId second = Arriving(match, 1, 10, match.GalaxyGraph().OtherEnd(lanes[1], empty), empty);
+    const Lockstep::FleetId first = Arriving(match, 0, 10, match.GalaxyGraph().OtherEnd(lanes[0], empty), empty);
+    const Lockstep::FleetId second = Arriving(match, 1, 10, match.GalaxyGraph().OtherEnd(lanes[1], empty), empty);
 
-    const Frontier::Match after = Fight(match);
+    const Lockstep::Match after = Fight(match);
 
     Assert::AreEqual(after.FleetAt(first).ships, after.FleetAt(second).ships, L"neither of them was there first");
     Assert::IsFalse(after.SystemAt(empty).owner.IsValid(), L"and two survivors leave it occupied and unclaimed");
@@ -206,29 +206,29 @@ public:
   // "A tie is mutual attrition, not a coin flip."
   TEST_METHOD(ATieLeavesBothAliveAndBothSmaller)
   {
-    Frontier::Match match = Arena();
-    const Frontier::SystemId where = match.GalaxyGraph().Capitals()[4];
+    Lockstep::Match match = Arena();
+    const Lockstep::SystemId where = match.GalaxyGraph().Capitals()[4];
 
-    const Frontier::FleetId left = Holding(match, 0, 10, where);
-    const Frontier::FleetId right = Holding(match, 1, 10, where);
+    const Lockstep::FleetId left = Holding(match, 0, 10, where);
+    const Lockstep::FleetId right = Holding(match, 1, 10, where);
 
-    const Frontier::Match after = Fight(match);
+    const Lockstep::Match after = Fight(match);
 
     Assert::AreEqual(after.FleetAt(left).ships, after.FleetAt(right).ships, L"the same both sides");
     Assert::IsTrue(after.FleetAt(left).ships > 0, L"and both still standing");
     Assert::IsTrue(after.FleetAt(left).ships < 10, L"and both smaller than they were");
-    Assert::IsFalse(after.SystemAt(where).owner == Frontier::PlayerId{0}, L"nobody took it");
+    Assert::IsFalse(after.SystemAt(where).owner == Lockstep::PlayerId{0}, L"nobody took it");
   }
 
   // "Fleets pass each other on lanes; combat happens only at systems."
   TEST_METHOD(FleetsPassEachOtherOnALaneWithoutFighting)
   {
-    Frontier::Match match = Arena();
-    const Frontier::SystemId capital = match.GalaxyGraph().Capitals()[0];
+    Lockstep::Match match = Arena();
+    const Lockstep::SystemId capital = match.GalaxyGraph().Capitals()[0];
 
     // A lane that takes more than one tick, so both are still on it when the tick resolves.
-    Frontier::LaneId slow;
-    for (const Frontier::LaneId lane : match.GalaxyGraph().LanesAt(capital))
+    Lockstep::LaneId slow;
+    for (const Lockstep::LaneId lane : match.GalaxyGraph().LanesAt(capital))
     {
       if (match.GalaxyGraph().LaneAt(lane).costTicks > 1)
       {
@@ -237,25 +237,25 @@ public:
       }
     }
     Assert::IsTrue(slow.IsValid());
-    const Frontier::SystemId far = match.GalaxyGraph().OtherEnd(slow, capital);
+    const Lockstep::SystemId far = match.GalaxyGraph().OtherEnd(slow, capital);
 
-    Frontier::MatchFleet outbound;
-    outbound.owner = Frontier::PlayerId{0};
+    Lockstep::MatchFleet outbound;
+    outbound.owner = Lockstep::PlayerId{0};
     outbound.ships = 10;
     outbound.movingFrom = capital;
     outbound.movingTo = far;
     outbound.ticksRemaining = 2;
-    const Frontier::FleetId first = match.AddFleet(outbound);
+    const Lockstep::FleetId first = match.AddFleet(outbound);
 
-    Frontier::MatchFleet inbound;
-    inbound.owner = Frontier::PlayerId{1};
+    Lockstep::MatchFleet inbound;
+    inbound.owner = Lockstep::PlayerId{1};
     inbound.ships = 10;
     inbound.movingFrom = far;
     inbound.movingTo = capital;
     inbound.ticksRemaining = 2;
-    const Frontier::FleetId second = match.AddFleet(inbound);
+    const Lockstep::FleetId second = match.AddFleet(inbound);
 
-    const Frontier::Match after = Fight(match);
+    const Lockstep::Match after = Fight(match);
 
     Assert::AreEqual(10U, after.FleetAt(first).ships, L"they passed");
     Assert::AreEqual(10U, after.FleetAt(second).ships);
@@ -265,20 +265,20 @@ public:
   // that leaves would certainly have died had it stayed; movement is phase 3 and combat is phase 4.
   TEST_METHOD(LeavingStillBeatsArrivingNowThatCombatIsReal)
   {
-    Frontier::Match match = Arena();
-    const Frontier::SystemId home = match.GalaxyGraph().Capitals()[0];
-    const Frontier::SystemId away = NeighborOf(match, home);
+    Lockstep::Match match = Arena();
+    const Lockstep::SystemId home = match.GalaxyGraph().Capitals()[0];
+    const Lockstep::SystemId away = NeighborOf(match, home);
 
-    const Frontier::FleetId defender = Holding(match, 0, 5, home);
-    const Frontier::FleetId raider = Arriving(match, 1, 50, away, home);
+    const Lockstep::FleetId defender = Holding(match, 0, 5, home);
+    const Lockstep::FleetId raider = Arriving(match, 1, 50, away, home);
 
-    Frontier::OrderSet orders;
-    orders.player = Frontier::PlayerId{0};
-    orders.fleetOrders.push_back(Frontier::FleetOrder{.fleet = defender, .destination = away});
-    const std::array<Frontier::OrderSet, 1> sets = {orders};
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.fleetOrders.push_back(Lockstep::FleetOrder{.fleet = defender, .destination = away});
+    const std::array<Lockstep::OrderSet, 1> sets = {orders};
 
-    Frontier::TickLog log;
-    const Frontier::Match after = Frontier::TickResolver::Resolve(match, {.orders = sets}, log);
+    Lockstep::TickLog log;
+    const Lockstep::Match after = Lockstep::TickResolver::Resolve(match, {.orders = sets}, log);
 
     Assert::AreEqual(5U, after.FleetAt(defender).ships, L"it got out with everything");
     Assert::IsFalse(after.FleetAt(defender).destroyed);
@@ -287,14 +287,14 @@ public:
 
   TEST_METHOD(ADestroyedFleetIsMarkedRatherThanErased)
   {
-    Frontier::Match match = Arena();
-    const Frontier::SystemId where = match.GalaxyGraph().Capitals()[5];
+    Lockstep::Match match = Arena();
+    const Lockstep::SystemId where = match.GalaxyGraph().Capitals()[5];
 
-    const Frontier::FleetId doomed = Holding(match, 1, 2, where);
+    const Lockstep::FleetId doomed = Holding(match, 1, 2, where);
     (void)Holding(match, 0, 60, where);
 
     const std::size_t fleetCount = match.Fleets().size();
-    const Frontier::Match after = Fight(match);
+    const Lockstep::Match after = Fight(match);
 
     Assert::AreEqual(fleetCount, after.Fleets().size(), L"ids in an old digest still have to resolve");
     Assert::IsTrue(after.FleetAt(doomed).destroyed);
@@ -305,17 +305,17 @@ public:
 
   TEST_METHOD(ABattleReachesBothSidesDigests)
   {
-    Frontier::Match match = Arena();
-    const Frontier::SystemId where = match.GalaxyGraph().Capitals()[3];
+    Lockstep::Match match = Arena();
+    const Lockstep::SystemId where = match.GalaxyGraph().Capitals()[3];
     (void)Holding(match, 0, 10, where);
     (void)Holding(match, 3, 10, where);
 
-    Frontier::TickLog log;
-    (void)Frontier::TickResolver::Resolve(match, {}, log);
+    Lockstep::TickLog log;
+    (void)Lockstep::TickResolver::Resolve(match, {}, log);
 
-    Assert::IsTrue(HasDigestKind(log, 0, Frontier::DigestKind::Battle));
-    Assert::IsTrue(HasDigestKind(log, 3, Frontier::DigestKind::Battle));
-    Assert::IsFalse(HasDigestKind(log, 4, Frontier::DigestKind::Battle), L"and nobody else's");
+    Assert::IsTrue(HasDigestKind(log, 0, Lockstep::DigestKind::Battle));
+    Assert::IsTrue(HasDigestKind(log, 3, Lockstep::DigestKind::Battle));
+    Assert::IsFalse(HasDigestKind(log, 4, Lockstep::DigestKind::Battle), L"and nobody else's");
   }
 
   // ADR-018 at the level the one-pager cares about most: "uncertainty comes from what humans
@@ -324,8 +324,8 @@ public:
   {
     const auto build = []
     {
-      Frontier::Match match = Arena();
-      const Frontier::SystemId where = match.GalaxyGraph().Capitals()[2];
+      Lockstep::Match match = Arena();
+      const Lockstep::SystemId where = match.GalaxyGraph().Capitals()[2];
       (void)Holding(match, 0, 17, where);
       (void)Holding(match, 1, 13, where);
       (void)Holding(match, 2, 9, where);
@@ -341,12 +341,12 @@ public:
   {
     const auto run = [](std::int32_t _first, std::int32_t _second)
     {
-      Frontier::Match match = Arena();
-      const Frontier::SystemId where = match.GalaxyGraph().Capitals()[4];
-      const Frontier::SystemId approach = NeighborOf(match, where);
-      const Frontier::FleetId one = Arriving(match, _first, 12, approach, where);
-      const Frontier::FleetId two = Arriving(match, _second, 12, approach, where);
-      const Frontier::Match after = Fight(match);
+      Lockstep::Match match = Arena();
+      const Lockstep::SystemId where = match.GalaxyGraph().Capitals()[4];
+      const Lockstep::SystemId approach = NeighborOf(match, where);
+      const Lockstep::FleetId one = Arriving(match, _first, 12, approach, where);
+      const Lockstep::FleetId two = Arriving(match, _second, 12, approach, where);
+      const Lockstep::Match after = Fight(match);
       return std::pair{after.FleetAt(one).ships, after.FleetAt(two).ships};
     };
 
@@ -367,43 +367,43 @@ public:
   /// A fleet leaving a system a hostile is arriving at, in the same tick.
   struct Withdrawal
   {
-    Frontier::Match match;
-    Frontier::FleetId leaving;
-    Frontier::FleetId arriving;
-    Frontier::SystemId from;
-    Frontier::SystemId to;
+    Lockstep::Match match;
+    Lockstep::FleetId leaving;
+    Lockstep::FleetId arriving;
+    Lockstep::SystemId from;
+    Lockstep::SystemId to;
   };
 
   [[nodiscard]] static Withdrawal Setup(bool _rearGuardEnabled)
   {
-    Frontier::MatchRules rules;
+    Lockstep::MatchRules rules;
     rules.rearGuardEnabled = _rearGuardEnabled;
 
-    Frontier::Match match = Arena(rules);
-    const Frontier::SystemId home = match.GalaxyGraph().Capitals()[0];
-    const Frontier::SystemId away = NeighborOf(match, home);
+    Lockstep::Match match = Arena(rules);
+    const Lockstep::SystemId home = match.GalaxyGraph().Capitals()[0];
+    const Lockstep::SystemId away = NeighborOf(match, home);
 
-    const Frontier::FleetId leaving = Holding(match, 0, 20, home);
-    const Frontier::FleetId arriving = Arriving(match, 1, 10, away, home);
+    const Lockstep::FleetId leaving = Holding(match, 0, 20, home);
+    const Lockstep::FleetId arriving = Arriving(match, 1, 10, away, home);
     return Withdrawal{.match = match, .leaving = leaving, .arriving = arriving, .from = home, .to = away};
   }
 
-  [[nodiscard]] static Frontier::Match Withdraw(const Withdrawal& _setup, Frontier::TickLog& _log)
+  [[nodiscard]] static Lockstep::Match Withdraw(const Withdrawal& _setup, Lockstep::TickLog& _log)
   {
-    Frontier::OrderSet orders;
-    orders.player = Frontier::PlayerId{0};
-    orders.fleetOrders.push_back(Frontier::FleetOrder{.fleet = _setup.leaving, .destination = _setup.to});
-    const std::array<Frontier::OrderSet, 1> sets = {orders};
-    return Frontier::TickResolver::Resolve(_setup.match, {.orders = sets}, _log);
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.fleetOrders.push_back(Lockstep::FleetOrder{.fleet = _setup.leaving, .destination = _setup.to});
+    const std::array<Lockstep::OrderSet, 1> sets = {orders};
+    return Lockstep::TickResolver::Resolve(_setup.match, {.orders = sets}, _log);
   }
 
   TEST_METHOD(TheRearGuardIsOffByDefault)
   {
-    Assert::IsFalse(Frontier::MatchRules{}.rearGuardEnabled, L"the one-pager keeps it off until Phase 0 shows dancing dominates");
+    Assert::IsFalse(Lockstep::MatchRules{}.rearGuardEnabled, L"the one-pager keeps it off until Phase 0 shows dancing dominates");
 
     const Withdrawal setup = Setup(false);
-    Frontier::TickLog log;
-    const Frontier::Match after = Withdraw(setup, log);
+    Lockstep::TickLog log;
+    const Lockstep::Match after = Withdraw(setup, log);
 
     Assert::AreEqual(20U, after.FleetAt(setup.leaving).ships, L"dancing is free while it is off");
   }
@@ -413,11 +413,11 @@ public:
   TEST_METHOD(WhenOnTheDepartingFleetTakesExactlyOneRound)
   {
     const Withdrawal setup = Setup(true);
-    Frontier::TickLog log;
-    const Frontier::Match after = Withdraw(setup, log);
+    Lockstep::TickLog log;
+    const Lockstep::Match after = Withdraw(setup, log);
 
     // One round at the ordinary rate from ten arriving ships: five.
-    const std::uint32_t expected = 20 - (10 * Frontier::MatchRules{}.damagePercentPerRound) / 100;
+    const std::uint32_t expected = 20 - (10 * Lockstep::MatchRules{}.damagePercentPerRound) / 100;
     Assert::AreEqual(expected, after.FleetAt(setup.leaving).ships);
     Assert::IsTrue(after.FleetAt(setup.leaving).at == setup.to, L"and it still got away");
     Assert::AreEqual(10U, after.FleetAt(setup.arriving).ships, L"the arrivals take nothing back");
@@ -432,17 +432,17 @@ public:
     const Withdrawal setup = Setup(false);
     Assert::IsFalse(setup.match.Rules().rearGuardEnabled);
 
-    Frontier::TickLog log;
-    const Frontier::Match after = Withdraw(setup, log);
+    Lockstep::TickLog log;
+    const Lockstep::Match after = Withdraw(setup, log);
 
     Assert::AreEqual(static_cast<size_t>(1), log.interceptions.size(), L"one fleet was arrived on top of");
-    const Frontier::Interception& interception = log.interceptions.front();
+    const Lockstep::Interception& interception = log.interceptions.front();
 
     Assert::IsTrue(interception.dodged, L"and it left");
     Assert::IsFalse(interception.rearGuardFired, L"at no cost, because the round is off");
     Assert::IsTrue(interception.fleet == setup.leaving);
-    Assert::IsTrue(interception.defender == Frontier::PlayerId{0});
-    Assert::IsTrue(interception.arrival == Frontier::PlayerId{1});
+    Assert::IsTrue(interception.defender == Lockstep::PlayerId{0});
+    Assert::IsTrue(interception.arrival == Lockstep::PlayerId{1});
     Assert::IsTrue(interception.system == setup.from);
     Assert::AreEqual(1U, log.Dodges());
     Assert::AreEqual(20U, after.FleetAt(setup.leaving).ships, L"and the dance was free, which is what is being measured");
@@ -451,7 +451,7 @@ public:
   TEST_METHOD(WhenTheRoundIsOnTheDodgeIsRecordedAsHavingCostSomething)
   {
     const Withdrawal setup = Setup(true);
-    Frontier::TickLog log;
+    Lockstep::TickLog log;
     (void)Withdraw(setup, log);
 
     Assert::AreEqual(static_cast<size_t>(1), log.interceptions.size());
@@ -466,8 +466,8 @@ public:
     const Withdrawal setup = Setup(false);
 
     // No orders at all, so the defender holds.
-    Frontier::TickLog log;
-    (void)Frontier::TickResolver::Resolve(setup.match, {}, log);
+    Lockstep::TickLog log;
+    (void)Lockstep::TickResolver::Resolve(setup.match, {}, log);
 
     Assert::AreEqual(static_cast<size_t>(1), log.interceptions.size(), L"it was arrived on top of");
     Assert::IsFalse(log.interceptions.front().dodged, L"and it stood");
@@ -476,56 +476,56 @@ public:
 
   TEST_METHOD(NobodyIsInterceptedWhenNoHostileArrives)
   {
-    Frontier::Match match = Arena();
-    const Frontier::SystemId home = match.GalaxyGraph().Capitals()[0];
+    Lockstep::Match match = Arena();
+    const Lockstep::SystemId home = match.GalaxyGraph().Capitals()[0];
     (void)Holding(match, 0, 20, home);
 
-    Frontier::TickLog log;
-    (void)Frontier::TickResolver::Resolve(match, {}, log);
+    Lockstep::TickLog log;
+    (void)Lockstep::TickResolver::Resolve(match, {}, log);
 
     Assert::IsTrue(log.interceptions.empty(), L"an ordinary tick is not a watch item");
   }
 
   TEST_METHOD(TheRearGuardOnlyFiresWhenAHostileActuallyArrives)
   {
-    Frontier::MatchRules rules;
+    Lockstep::MatchRules rules;
     rules.rearGuardEnabled = true;
 
-    Frontier::Match match = Arena(rules);
-    const Frontier::SystemId home = match.GalaxyGraph().Capitals()[0];
-    const Frontier::SystemId away = NeighborOf(match, home);
-    const Frontier::FleetId leaving = Holding(match, 0, 20, home);
+    Lockstep::Match match = Arena(rules);
+    const Lockstep::SystemId home = match.GalaxyGraph().Capitals()[0];
+    const Lockstep::SystemId away = NeighborOf(match, home);
+    const Lockstep::FleetId leaving = Holding(match, 0, 20, home);
 
-    Frontier::OrderSet orders;
-    orders.player = Frontier::PlayerId{0};
-    orders.fleetOrders.push_back(Frontier::FleetOrder{.fleet = leaving, .destination = away});
-    const std::array<Frontier::OrderSet, 1> sets = {orders};
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.fleetOrders.push_back(Lockstep::FleetOrder{.fleet = leaving, .destination = away});
+    const std::array<Lockstep::OrderSet, 1> sets = {orders};
 
-    Frontier::TickLog log;
-    const Frontier::Match after = Frontier::TickResolver::Resolve(match, {.orders = sets}, log);
+    Lockstep::TickLog log;
+    const Lockstep::Match after = Lockstep::TickResolver::Resolve(match, {.orders = sets}, log);
 
     Assert::AreEqual(20U, after.FleetAt(leaving).ships, L"an ordinary move is not a withdrawal under fire");
   }
 
   TEST_METHOD(YourOwnFleetArrivingIsNotAHostile)
   {
-    Frontier::MatchRules rules;
+    Lockstep::MatchRules rules;
     rules.rearGuardEnabled = true;
 
-    Frontier::Match match = Arena(rules);
-    const Frontier::SystemId home = match.GalaxyGraph().Capitals()[0];
-    const Frontier::SystemId away = NeighborOf(match, home);
+    Lockstep::Match match = Arena(rules);
+    const Lockstep::SystemId home = match.GalaxyGraph().Capitals()[0];
+    const Lockstep::SystemId away = NeighborOf(match, home);
 
-    const Frontier::FleetId leaving = Holding(match, 0, 20, home);
+    const Lockstep::FleetId leaving = Holding(match, 0, 20, home);
     (void)Arriving(match, 0, 10, away, home);
 
-    Frontier::OrderSet orders;
-    orders.player = Frontier::PlayerId{0};
-    orders.fleetOrders.push_back(Frontier::FleetOrder{.fleet = leaving, .destination = away});
-    const std::array<Frontier::OrderSet, 1> sets = {orders};
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.fleetOrders.push_back(Lockstep::FleetOrder{.fleet = leaving, .destination = away});
+    const std::array<Lockstep::OrderSet, 1> sets = {orders};
 
-    Frontier::TickLog log;
-    const Frontier::Match after = Frontier::TickResolver::Resolve(match, {.orders = sets}, log);
+    Lockstep::TickLog log;
+    const Lockstep::Match after = Lockstep::TickResolver::Resolve(match, {.orders = sets}, log);
 
     Assert::AreEqual(20U, after.FleetAt(leaving).ships, L"a relief column does not shoot the garrison");
   }
@@ -534,31 +534,31 @@ public:
   // so in as many words -- "production feeds movement, 4a feeds 4b".
   TEST_METHOD(TheRearGuardsLossesCarryIntoTheBattleAtTheDestination)
   {
-    Frontier::MatchRules rules;
+    Lockstep::MatchRules rules;
     rules.rearGuardEnabled = true;
 
-    Frontier::Match match = Arena(rules);
-    const Frontier::SystemId home = match.GalaxyGraph().Capitals()[0];
-    const Frontier::SystemId away = NeighborOf(match, home);
+    Lockstep::Match match = Arena(rules);
+    const Lockstep::SystemId home = match.GalaxyGraph().Capitals()[0];
+    const Lockstep::SystemId away = NeighborOf(match, home);
 
-    const Frontier::FleetId leaving = Holding(match, 0, 20, home);
+    const Lockstep::FleetId leaving = Holding(match, 0, 20, home);
     (void)Arriving(match, 1, 10, away, home);
-    const Frontier::FleetId waiting = Holding(match, 2, 12, away);
+    const Lockstep::FleetId waiting = Holding(match, 2, 12, away);
 
-    Frontier::OrderSet orders;
-    orders.player = Frontier::PlayerId{0};
-    orders.fleetOrders.push_back(Frontier::FleetOrder{.fleet = leaving, .destination = away});
-    const std::array<Frontier::OrderSet, 1> sets = {orders};
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.fleetOrders.push_back(Lockstep::FleetOrder{.fleet = leaving, .destination = away});
+    const std::array<Lockstep::OrderSet, 1> sets = {orders};
 
-    Frontier::TickLog log;
-    const Frontier::Match after = Frontier::TickResolver::Resolve(match, {.orders = sets}, log);
+    Lockstep::TickLog log;
+    const Lockstep::Match after = Lockstep::TickResolver::Resolve(match, {.orders = sets}, log);
 
     // It left with twenty, five were taken on the way out, and it arrived into a fight with an
     // incumbent twelve. What is being asserted is the ordering, not the arithmetic: it must be
     // worse off than the same withdrawal into an empty system.
     const Withdrawal quiet = Setup(true);
-    Frontier::TickLog quietLog;
-    const Frontier::Match quietAfter = Withdraw(quiet, quietLog);
+    Lockstep::TickLog quietLog;
+    const Lockstep::Match quietAfter = Withdraw(quiet, quietLog);
 
     Assert::IsTrue(after.FleetAt(leaving).ships < quietAfter.FleetAt(quiet.leaving).ships,
                    L"the rear-guard's losses were still gone when the second fight started");

@@ -3,7 +3,7 @@
 # Usage: powershell -ExecutionPolicy Bypass -File Build\TapRehearsal.ps1 -ProcessId <pid> -Taps 3
 #
 # Start the game yourself first, with a compressed clock:
-#   Start-Process x64\Release\FrontierOutpost.exe -ArgumentList '--tick','30' -PassThru
+#   Start-Process x64\Release\Lockstep.exe -ArgumentList '--tick','30' -PassThru
 #
 # RUN IT WITH `powershell.exe`, NOT `pwsh` -- it needs System.Drawing, which PowerShell 7 does not
 # load. IT MOVES THE REAL CURSOR: the client takes input through the Windows Pointer API

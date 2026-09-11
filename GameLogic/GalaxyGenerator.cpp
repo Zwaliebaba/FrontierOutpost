@@ -10,7 +10,7 @@
 #include "Prng.h"
 #include "Turns16.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -327,4 +327,4 @@ GeneratedGalaxy GalaxyGenerator::Generate(const MatchRules& _rules, std::uint64_
   return result;
 }
 
-} // namespace Frontier
+} // namespace Lockstep

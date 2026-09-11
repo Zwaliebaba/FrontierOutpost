@@ -9,7 +9,7 @@
 #include "pch.h"
 #include "MatchSimulation.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -226,7 +226,7 @@ void MatchSimulation::Resolve()
     }
   }
 
-  m_match = TickResolver::Resolve(m_match, Frontier::TickInput{.orders = orders, .present = present, .presenceUnknown = false}, m_lastTick);
+  m_match = TickResolver::Resolve(m_match, Lockstep::TickInput{.orders = orders, .present = present, .presenceUnknown = false}, m_lastTick);
 
   // What was locked is what a store keeps. Moved rather than copied, and the pending slate is
   // cleared in the same breath -- an order that survived into the next tick would be an order the
@@ -380,4 +380,4 @@ std::vector<std::uint8_t> MatchSimulation::DigestFor(std::int32_t _player) const
   return writer.Bytes();
 }
 
-} // namespace Frontier
+} // namespace Lockstep

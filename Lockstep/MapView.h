@@ -2,7 +2,7 @@
 
 #include "OrbitCamera.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// The galaxy's ground plane, and the camera looking at it.
@@ -128,4 +128,4 @@ private:
   float m_viewportAspect = 1.0F;
 };
 
-} // namespace Frontier
+} // namespace Lockstep

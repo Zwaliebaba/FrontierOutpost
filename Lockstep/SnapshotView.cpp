@@ -8,7 +8,7 @@
 #include "pch.h"
 #include "SnapshotView.h"
 
-namespace Frontier
+namespace Lockstep
 {
 
 namespace
@@ -456,4 +456,4 @@ OrderSet OrdersOf(const MatchState& _state)
   return orders;
 }
 
-} // namespace Frontier
+} // namespace Lockstep

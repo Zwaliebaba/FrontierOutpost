@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// The two conversions between what the server sends and what the screen reads.
@@ -31,4 +31,4 @@ namespace Frontier
 /// back would be the client asserting state it does not own.
 [[nodiscard]] OrderSet OrdersOf(const MatchState& _state);
 
-} // namespace Frontier
+} // namespace Lockstep

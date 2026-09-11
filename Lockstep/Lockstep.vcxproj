@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
-    FrontierOutpost. x64 is the only platform (AGENTS.md 3); Debug and Release differ only in
+    Lockstep. x64 is the only platform (AGENTS.md 3); Debug and Release differ only in
     optimisation, _DEBUG/NDEBUG and the linker folding switches. Every other setting is
     written identically into both configurations on purpose: a Release built under a
     different language standard or a shorter include path is a Release nobody builds
@@ -21,7 +21,7 @@
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{E3C624C0-557C-442F-B033-A83846A21997}</ProjectGuid>
-    <RootNamespace>FrontierOutpost</RootNamespace>
+    <RootNamespace>Lockstep</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -61,7 +61,7 @@
     defines SolutionDir only for a solution build, so `msbuild NeuronCore\NeuronCore.vcxproj`
     resolves every path here against the project folder instead of the repository root: output
     in the wrong place, and cross-project includes not found at all. CI builds
-    FrontierOutpost.slnx for exactly that reason (AGENTS.md 3).
+    Lockstep.slnx for exactly that reason (AGENTS.md 3).
   -->
   <PropertyGroup>
     <OutDir>$(SolutionDir)x64\$(Configuration)\</OutDir>
@@ -133,7 +133,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="FrontierOutpost.cpp" />
+    <ClCompile Include="Lockstep.cpp" />
     <ClCompile Include="SnapshotView.cpp" />
     <ClCompile Include="DigestView.cpp" />
     <ClCompile Include="HostedServer.cpp" />
@@ -147,7 +147,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="FrontierOutpost.h" />
+    <ClInclude Include="Lockstep.h" />
     <ClInclude Include="SnapshotView.h" />
     <ClInclude Include="DigestView.h" />
     <ClInclude Include="HostedServer.h" />

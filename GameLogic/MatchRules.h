@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace Frontier
+namespace Lockstep
 {
 
 /// Every number the game is played with, in one place.
@@ -362,4 +362,4 @@ enum class RulesProblem : std::uint8_t
   return RulesProblem::None;
 }
 
-} // namespace Frontier
+} // namespace Lockstep

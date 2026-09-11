@@ -24,13 +24,13 @@
 and gives the dependency graph in which `NeuronServer.lib` references `NeuronCore` and nothing
 more.
 
-Both cannot be true as written. A `Session` that owns a `Frontier::World` is a `NeuronServer` that
+Both cannot be true as written. A `Session` that owns a `Lockstep::World` is a `NeuronServer` that
 links `GameLogic`, which is the edge the repository map forbids. This is the contradiction that
 step 0 of the plan asks a session to find and report, and it is reported here rather than resolved
 silently.
 
 Two further facts constrain the answer. `NeuronCore` is the only library both halves of the
-process share. And `FrontierOutpost.exe` references all four libraries, so it is the one place
+process share. And `Lockstep.exe` references all four libraries, so it is the one place
 that is allowed to know about the engine and the game at once.
 
 ## Options considered
@@ -38,7 +38,7 @@ that is allowed to know about the engine and the game at once.
 ### A. Let `NeuronServer` reference `GameLogic`
 
 Implement the plan's sentence literally: add `$(SolutionDir)GameLogic` to `NeuronServer`'s include
-directories and a project reference, and have `Session` hold a `Frontier::World`.
+directories and a project reference, and have `Session` hold a `Lockstep::World`.
 
 It is the least code. It also deletes the rule: once the engine's server links the game, there is
 no mechanical difference between engine and game any more, and `AGENTS.md` §2's line about the day
@@ -48,7 +48,7 @@ ship's kinematics changed.
 
 ### B. Make `Session` a template on the simulation type
 
-`Session<Frontier::World>`, instantiated by the executable. No virtual calls, no abstraction, and
+`Session<Lockstep::World>`, instantiated by the executable. No virtual calls, no abstraction, and
 the dependency graph is untouched — the engine genuinely never names the game.
 
 It costs putting the whole of `Session` in a header, including its thread and its schedule, which
@@ -58,8 +58,8 @@ and a clock, that is the tail wagging the dog.
 
 ### C. Declare an abstract `Simulation` in `NeuronCore`
 
-`Session` owns a `std::unique_ptr<Neuron::Simulation>`. `Frontier::World` implements it.
-`FrontierOutpost.exe` puts the two together. The engine's server still owns the simulation and
+`Session` owns a `std::unique_ptr<Neuron::Simulation>`. `Lockstep::World` implements it.
+`Lockstep.exe` puts the two together. The engine's server still owns the simulation and
 still ticks it; it just does not know what it is.
 
 Costs one virtual call per tick — twenty a second — and one indirection.
@@ -68,7 +68,7 @@ Costs one virtual call per tick — twenty a second — and one indirection.
 
 **C.** `NeuronCore/Simulation.h` declares an abstract `Simulation` with `ApplyOrder`, `Tick` and
 `Snapshot`. `NeuronServer::Session` owns one. `GameLogic`'s `World` implements it.
-`FrontierOutpost.cpp` calls `session.Start(std::make_unique<Frontier::World>(), transport)`.
+`Lockstep.cpp` calls `session.Start(std::make_unique<Lockstep::World>(), transport)`.
 
 Both documents end up true: the plan's `Session` owns and ticks the simulation, and `NeuronServer`
 still references `NeuronCore` and nothing else.
@@ -109,7 +109,7 @@ simulation needs to be sharded across threads, this is the interface that change
 ## What this changes elsewhere
 
 - **Code:** `NeuronCore/Simulation.h`, `NeuronServer/Session.{h,cpp}`, `GameLogic/World.h`,
-  `FrontierOutpost.cpp`.
+  `Lockstep.cpp`.
 - **Design/:** `Design/Plans/MVP-01-IsometricShip.md` step 5's "a `Session` that owns a `World`"
   is implemented as "a `Session` that owns a `Simulation`, which the executable makes a `World`".
   The plan is archived by this session, so the departure is recorded here rather than by editing

@@ -1,4 +1,4 @@
-// FrontierOutpost.cpp -- process entry point, and the composition root of the main page.
+// Lockstep.cpp -- process entry point, and the composition root of the main page.
 //
 // WHAT THIS EXECUTABLE SHOWS, as of 2026-09-11, is the ops console in Design/Screens: digest, map,
 // orders. It used to show the MVP-01 isometric ship scene, and that code -- MeshRenderer,
@@ -19,7 +19,7 @@
 // flash and nothing else (AGENTS.md 4, NOGDI).
 
 #include "pch.h"
-#include "FrontierOutpost.h"
+#include "Lockstep.h"
 
 #include "Color.h"
 #include "Device.h"
@@ -52,8 +52,8 @@ namespace
 constexpr int CLIENT_WIDTH = static_cast<int>(Neuron::SceneTarget::WIDTH_PIXELS);
 constexpr int CLIENT_HEIGHT = static_cast<int>(Neuron::SceneTarget::HEIGHT_PIXELS);
 
-constexpr wchar_t WINDOW_CLASS_NAME[] = L"FrontierOutpostWindow";
-constexpr wchar_t WINDOW_TITLE[] = L"Frontier Outpost";
+constexpr wchar_t WINDOW_CLASS_NAME[] = L"LockstepWindow";
+constexpr wchar_t WINDOW_TITLE[] = L"LockStep: Universe";
 
 /// What this process is doing.
 ///
@@ -350,7 +350,7 @@ int RunGame(HWND _window, const Startup& _startup)
   // until six people are waiting. The host's own client is a socket client like everybody else.
   const auto startedAt = std::chrono::steady_clock::now();
 
-  Frontier::MatchConnection connection;
+  Lockstep::MatchConnection connection;
 
   // The server may still be binding its port when we get here, so this retries rather than
   // assuming. A bounded retry, because a client that spins forever on a server that will never
@@ -365,17 +365,17 @@ int RunGame(HWND _window, const Startup& _startup)
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
-  if (connection.State() == Frontier::MatchConnection::Status::Idle)
+  if (connection.State() == Lockstep::MatchConnection::Status::Idle)
   {
-    MessageBoxA(nullptr, "Could not reach the match server.", "Frontier Outpost", MB_OK | MB_ICONERROR);
+    MessageBoxA(nullptr, "Could not reach the match server.", "LockStep: Universe", MB_OK | MB_ICONERROR);
     return EXIT_FAILURE;
   }
 
   // Something has to be on screen before the first state arrives. The design reference's fixture is
   // exactly that and nothing more -- it is a test fixture now, and this is the one place it is
   // still drawn: for the fraction of a second between connecting and being welcomed.
-  Frontier::MainPage page;
-  page.Create(Frontier::MakeReferenceMatch());
+  Lockstep::MainPage page;
+  page.Create(Lockstep::MakeReferenceMatch());
 
   auto lastPing = std::chrono::steady_clock::now();
   bool wasLive = false;
@@ -400,16 +400,16 @@ int RunGame(HWND _window, const Startup& _startup)
     // redraws when the server says the tick moved.
     connection.Pump(std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count());
 
-    if (connection.State() == Frontier::MatchConnection::Status::Refused)
+    if (connection.State() == Lockstep::MatchConnection::Status::Refused)
     {
-      MessageBoxA(nullptr, Neuron::Describe(connection.Refusal()), "Frontier Outpost", MB_OK | MB_ICONERROR);
+      MessageBoxA(nullptr, Neuron::Describe(connection.Refusal()), "LockStep: Universe", MB_OK | MB_ICONERROR);
       return EXIT_FAILURE;
     }
 
     if (connection.Live() != wasLive)
     {
       wasLive = connection.Live();
-      Frontier::MatchState state = page.State();
+      Lockstep::MatchState state = page.State();
       state.connected = wasLive;
       page.Create(std::move(state));
     }
@@ -417,10 +417,10 @@ int RunGame(HWND _window, const Startup& _startup)
     if (connection.TakeFreshState() && !connection.Snapshot().empty())
     {
       Neuron::ByteReader reader{connection.Snapshot()};
-      const Frontier::Snapshot snapshot = Frontier::Snapshot::Read(reader);
+      const Lockstep::Snapshot snapshot = Lockstep::Snapshot::Read(reader);
 
       Neuron::ByteReader digestReader{connection.Digest()};
-      Frontier::MatchState state = Frontier::ViewOf(snapshot, Frontier::Snapshot::ReadDigest(digestReader), connection.SecondsToLock());
+      Lockstep::MatchState state = Lockstep::ViewOf(snapshot, Lockstep::Snapshot::ReadDigest(digestReader), connection.SecondsToLock());
       state.connected = true;
 
       // ---- How much happened while nobody was looking ----------------------------------------
@@ -472,8 +472,8 @@ int RunGame(HWND _window, const Startup& _startup)
       {
         // Every edit goes over the wire at once and the server keeps the latest. That is what makes
         // "editable until the lock" work without the client having to know when the lock is.
-        Frontier::OrderSet orders = Frontier::OrdersOf(page.State());
-        orders.player = Frontier::PlayerId{connection.Player()};
+        Lockstep::OrderSet orders = Lockstep::OrdersOf(page.State());
+        orders.player = Lockstep::PlayerId{connection.Player()};
 
         Neuron::ByteWriter writer;
         orders.Write(writer);
@@ -552,19 +552,19 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   // R13 binds the shipped client and names the match store as its one exception (ADR-024). With one
   // executable in two roles the rule is about the ROLE and not the binary: a process acting as the
   // server writes a store, and a process that is only a client never does.
-  std::unique_ptr<Frontier::HostedServer> hosted;
+  std::unique_ptr<Lockstep::HostedServer> hosted;
   if (startup.role != Role::Join)
   {
     constexpr std::uint64_t GALAXY_SEED = 0x4652'4F4E'5449'4552ULL;
 
-    Frontier::MatchRules rules = startup.phaseZero ? Frontier::PhaseZeroRules() : Frontier::MatchRules{};
+    Lockstep::MatchRules rules = startup.phaseZero ? Lockstep::PhaseZeroRules() : Lockstep::MatchRules{};
     if (startup.tickSeconds > 0)
     {
       rules.tickIntervalSeconds = startup.tickSeconds;
     }
 
-    hosted = std::make_unique<Frontier::HostedServer>(startup.port, PhaseZeroTokens(), BesideTheExecutable("frontier-match.store"),
-                                                      BesideTheExecutable("frontier-match.log"), GALAXY_SEED, rules);
+    hosted = std::make_unique<Lockstep::HostedServer>(startup.port, PhaseZeroTokens(), BesideTheExecutable("lockstep-match.store"),
+                                                      BesideTheExecutable("lockstep-match.log"), GALAXY_SEED, rules);
   }
 
   // ---- Headless -------------------------------------------------------------------------------
@@ -608,7 +608,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   }
   catch (const std::exception& error)
   {
-    MessageBoxA(nullptr, error.what(), "Frontier Outpost", MB_OK | MB_ICONERROR);
+    MessageBoxA(nullptr, error.what(), "LockStep: Universe", MB_OK | MB_ICONERROR);
     return EXIT_FAILURE;
   }
 }

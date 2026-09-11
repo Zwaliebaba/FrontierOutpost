@@ -1,6 +1,6 @@
 # Screenshot.ps1 -- capture the game's CLIENT AREA, for looking at what it actually drew.
 #
-# Usage:  powershell -ExecutionPolicy Bypass -File Build\Screenshot.ps1 -Exe x64\Release\FrontierOutpost.exe -Out shot.png
+# Usage:  powershell -ExecutionPolicy Bypass -File Build\Screenshot.ps1 -Exe x64\Release\Lockstep.exe -Out shot.png
 #
 # RUN IT WITH `powershell.exe`, NOT `pwsh`. Windows PowerShell 5.1 loads System.Drawing; PowerShell
 # 7 does not, and the Add-Type below fails there with eight CS1069s about types "forwarded to

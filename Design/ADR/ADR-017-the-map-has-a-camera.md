@@ -61,7 +61,7 @@ the reference than one that does, not closer.
 ## Decision
 
 **B.** `NeuronClient::OrbitCamera` is a perspective camera that orbits a target;
-`Frontier::MapView` owns one, maps the handoff's 800×560 design space onto the ground plane, and
+`Lockstep::MapView` owns one, maps the handoff's 800×560 design space onto the ground plane, and
 frames the galaxy. `MapProjection` is deleted.
 
 **The camera lives in `NeuronClient`.** It is generic maths with no game vocabulary in it, and
@@ -157,8 +157,8 @@ clean scripted gesture from press to release with a screenshot at each end.
 
 ## What this changes elsewhere
 
-- **Code:** `NeuronClient/OrbitCamera.{h,cpp}` and `FrontierOutpost/MapView.h` are new.
-  `FrontierOutpost/MapProjection.h` is deleted. `MainPage`'s map pass is rewritten around the
+- **Code:** `NeuronClient/OrbitCamera.{h,cpp}` and `Lockstep/MapView.h` are new.
+  `Lockstep/MapProjection.h` is deleted. `MainPage`'s map pass is rewritten around the
   camera, gains depth sorting and `DrawGroundCircle`, and draws before the rails.
   `NeuronClient/FontRenderer` gains a clip rectangle.
 - **Design/Screens/README.md:** the "Interactions" line is amended again — the perspective is not
