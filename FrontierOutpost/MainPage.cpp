@@ -557,6 +557,49 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
   const std::size_t columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(textWidth));
 
   float y = TOP_BAR_HEIGHT + 28.0F;
+
+  // ---- An empty digest says which kind of empty it is -------------------------------------------
+  //
+  // A three-hundred-pixel column reading "0 EVENTS" and nothing else is the first thing a new
+  // player sees, and it reads as a screen that has not finished loading. There are two different
+  // nothings here and they want different words:
+  //
+  // **Before the first lock**, nothing has happened because nothing has resolved yet. The useful
+  // thing to say is what the countdown is counting towards.
+  //
+  // **After a lock with no digest**, something did happen and none of it was visible to this
+  // player -- which is a fact about the fog (ADR-022) rather than about the tick. Saying so is the
+  // difference between "the game is broken" and "you cannot see that far".
+  //
+  // Neither is a notification and neither is free text: this is the same rail saying what it holds,
+  // which the one-pager's exclusions are not about.
+  if (m_state.digest.empty())
+  {
+    const bool beforeTheFirstLock = m_state.match.tick == 0;
+    const std::string_view title = beforeTheFirstLock ? "NOTHING HAS HAPPENED YET" : "A QUIET TICK";
+    const std::string_view detail = beforeTheFirstLock
+                                      ? "The first tick resolves when the countdown ends. What you order before then is what it resolves."
+                                      : "Nothing you could see changed. Systems you have not scouted may have.";
+
+    _shapes.FillRect(0.0F, y, DIGEST_WIDTH - 1.0F, 1.0F, DIVIDER);
+
+    std::int32_t lineY = static_cast<std::int32_t>(y) + 11;
+    for (const std::string& line : FontRenderer::Wrap(title, columns))
+    {
+      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), lineY, line, TEXT_PRIMARY);
+      lineY += LINE_HEIGHT;
+    }
+
+    lineY += 2;
+    for (const std::string& line : FontRenderer::Wrap(detail, columns))
+    {
+      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), lineY, line, TEXT_DETAIL);
+      lineY += LINE_HEIGHT;
+    }
+
+    return;
+  }
+
   for (std::size_t index = 0; index < m_state.digest.size(); ++index)
   {
     const DigestEvent& event = m_state.digest[index];

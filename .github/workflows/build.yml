@@ -47,6 +47,30 @@ jobs:
       CONFIGURATION: Debug
       PLATFORM: x64
 
+      # ── Why clang-tidy is pinned and the rest of the toolchain is not ──────────────────────
+      #
+      # The clang-format job below pins clang-format 18 and says why: "18 and 22 break a long
+      # argument list in different places, so a floating version would flap." clang-tidy floated,
+      # and on 2026-09-11 it flapped -- the runner image moved to LLVM 20.1.8 and the build went
+      # red on code that had not changed, with three findings in two families:
+      #
+      #   clang-analyzer-optin.core.EnumCastOutOfRange on SystemFlags, a BIT-FLAG enum where
+      #   Capital|Contested is 3 and no enumerator has that value. Deliberate, correct, and not
+      #   reported by 22.
+      #
+      #   clang-analyzer-cplusplus.NewDeleteLeaks on a std::unique_ptr inside an aggregate
+      #   returned by value. Correct C++, and not reported by 22 either.
+      #
+      # A third finding from the same run was REAL -- MessageKind had no zero enumerator and the
+      # decoder cast one in -- and it is fixed in the code rather than pinned away. That is the
+      # distinction this pin is drawn on: a version change should not be able to turn main red on
+      # its own, and the way to bump it is to change the number here, run it, and fix what it says.
+      #
+      # From pip rather than from the image, because that is the only way a developer can run the
+      # same binary the gate runs. `python -m pip install clang-tidy==<this>` gets it on any
+      # machine; the runner's bundled LLVM cannot be asked for by version at all.
+      CLANG_TIDY_VERSION: 22.1.8
+
     steps:
       - uses: actions/checkout@v4
 
@@ -73,7 +97,12 @@ jobs:
             }
           }
           "VSWHERE_INSTALL=$install" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "$env:ProgramFiles\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      # PINNED, and not taken from the runner image. CLANG_TIDY_VERSION at the top of this job
+      # carries the version and the reason.
+      - name: Install the pinned clang-tidy
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check "clang-tidy==$env:CLANG_TIDY_VERSION"
 
       - name: Record the toolchain
         shell: pwsh
@@ -81,7 +110,7 @@ jobs:
           Write-Output "runner image : $env:ImageOS / $env:ImageVersion"
           Write-Output "visual studio: $env:VSWHERE_INSTALL"
           msbuild -version -nologo
-          Write-Output "--- clang-tidy ---"
+          Write-Output "--- clang-tidy (pinned to $env:CLANG_TIDY_VERSION) ---"
           clang-tidy --version
           Write-Output "--- python ---"
           python --version

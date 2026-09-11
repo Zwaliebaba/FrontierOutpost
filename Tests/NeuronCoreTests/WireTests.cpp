@@ -243,7 +243,13 @@ public:
   TEST_METHOD(TheKindIsTheFirstByte)
   {
     Assert::IsTrue(Neuron::Protocol::KindOf(Neuron::Protocol::EncodePing()) == Neuron::MessageKind::Ping);
-    Assert::IsTrue(Neuron::Protocol::KindOf({}) == static_cast<Neuron::MessageKind>(0), L"an empty payload has no kind");
+    Assert::IsTrue(Neuron::Protocol::KindOf({}) == Neuron::MessageKind::None, L"an empty payload has no kind");
+
+    // And neither has a payload whose first byte names nothing. 249 of the 256 values a socket can
+    // deliver land here, so this is the ordinary case rather than the edge one.
+    Assert::IsTrue(Neuron::Protocol::KindOf(std::vector<std::uint8_t>{0}) == Neuron::MessageKind::None);
+    Assert::IsTrue(Neuron::Protocol::KindOf(std::vector<std::uint8_t>{7}) == Neuron::MessageKind::None);
+    Assert::IsTrue(Neuron::Protocol::KindOf(std::vector<std::uint8_t>{255}) == Neuron::MessageKind::None);
   }
 
   // A decoder asked for the wrong kind must refuse rather than reinterpret. Otherwise a `State`

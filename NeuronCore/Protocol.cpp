@@ -65,8 +65,12 @@ void WriteBlob(ByteWriter& _writer, std::span<const std::uint8_t> _blob)
 [[nodiscard]] ByteReader Opened(std::span<const std::uint8_t> _payload, MessageKind _expected, bool& _outOk)
 {
   ByteReader reader{_payload};
-  const auto kind = static_cast<MessageKind>(reader.ReadU8());
-  _outOk = !reader.Failed() && kind == _expected;
+
+  // The EXPECTED kind is widened to a byte, rather than the byte being narrowed to a kind. Both
+  // comparisons give the same answer and only one of them invents an enum value: a wire byte is any
+  // of 256 things and only seven of them name a `MessageKind`.
+  const std::uint8_t kind = reader.ReadU8();
+  _outOk = !reader.Failed() && kind == static_cast<std::uint8_t>(_expected);
   return reader;
 }
 
@@ -74,7 +78,34 @@ void WriteBlob(ByteWriter& _writer, std::span<const std::uint8_t> _blob)
 
 MessageKind KindOf(std::span<const std::uint8_t> _payload) noexcept
 {
-  return _payload.empty() ? static_cast<MessageKind>(0) : static_cast<MessageKind>(_payload[0]);
+  if (_payload.empty())
+  {
+    return MessageKind::None;
+  }
+
+  // **Spelled out, rather than cast.** This is the one place an untrusted byte becomes a kind, and
+  // the byte comes off a socket: 249 of its 256 values name nothing. Casting would hand callers an
+  // enum holding a number no enumerator has -- legal, since the underlying type is `std::uint8_t`,
+  // and still a value that every switch has to have a `default` for and no reader can reason about.
+  // Mapping it makes the unknown byte `None`, which is the same thing every caller already does
+  // with it, said once here instead of six times at the far end.
+  switch (_payload[0])
+  {
+  case static_cast<std::uint8_t>(MessageKind::Hello):
+    return MessageKind::Hello;
+  case static_cast<std::uint8_t>(MessageKind::Welcome):
+    return MessageKind::Welcome;
+  case static_cast<std::uint8_t>(MessageKind::Refused):
+    return MessageKind::Refused;
+  case static_cast<std::uint8_t>(MessageKind::Orders):
+    return MessageKind::Orders;
+  case static_cast<std::uint8_t>(MessageKind::State):
+    return MessageKind::State;
+  case static_cast<std::uint8_t>(MessageKind::Ping):
+    return MessageKind::Ping;
+  default:
+    return MessageKind::None;
+  }
 }
 
 std::vector<std::uint8_t> EncodeHello(const std::string& _token)

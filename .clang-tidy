@@ -31,8 +31,19 @@
 # so `IDC_ARROW` is `MAKEINTRESOURCEW`; without the defines clang-tidy reports a type error at
 # every `LoadCursorW` call that MSVC compiles without complaint.
 #
-# THE VERSION MATTERS. clang-tidy 22 finds defects clang-tidy 18 does not, so "clean" is always
-# clean *under something*. The workflow prints the version it used every run.
+# THE VERSION MATTERS, and since 2026-09-11 the workflow PINS it -- `CLANG_TIDY_VERSION` in
+# .github/workflows/build.yml, installed from pip so that the same binary is available on any
+# machine. "Clean" is always clean *under something*, and that something now has a number.
+#
+# It is pinned because it flapped: the runner image moved to LLVM 20, which reports two things 22
+# does not -- a bit-flag enum whose OR-ed value names no enumerator, and a std::unique_ptr inside
+# an aggregate returned by value. Both are correct code. The same run also found a real defect, a
+# decoder casting zero into an enum with no zero, and that one was fixed rather than pinned away.
+#
+# To run exactly what CI runs:
+#
+#   python -m pip install clang-tidy==22.1.8
+#   python Build/RunClangTidy.py
 
 # Four rules of AGENTS.md §1 this file cannot express — R2's banned type affixes, R7's file naming
 # and .vcxproj/.filters registration, R11's standing spelling families, and §3's flat project

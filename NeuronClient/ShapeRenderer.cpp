@@ -312,8 +312,15 @@ void ShapeRenderer::FillVerticalGradient(float _xPixels, float _yPixels, float _
   const std::uint32_t middle = Pack(_middle);
   const std::uint32_t low = Pack(_bottom);
 
-  // Two bands, each two triangles. The interpolator does the rest -- there is no banding to
-  // worry about because the hardware interpolates in full precision and dithers nothing.
+  // Two bands, each two triangles. The interpolator does the rest.
+  //
+  // **It interpolates in full precision and then quantizes to eight bits, which is where banding
+  // comes from rather than where it is avoided.** An earlier version of this comment claimed the
+  // opposite. Measured down the map's own gradient, the steps are one level at a time -- red every
+  // 40 pixels, blue every 15 -- which is as smooth as R8G8B8A8 can be and is still a step somebody
+  // with a good display may see on an area this large. Removing it needs a dither in the pixel
+  // shader, which nobody has asked for; what is written here is what is actually true so that the
+  // next person to look does not have to measure it again.
   AppendShadedTriangle(_xPixels, _yPixels, top, right, _yPixels, top, right, split, middle);
   AppendShadedTriangle(_xPixels, _yPixels, top, right, split, middle, _xPixels, split, middle);
   AppendShadedTriangle(_xPixels, split, middle, right, split, middle, right, bottom, low);

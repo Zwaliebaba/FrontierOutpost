@@ -17,6 +17,17 @@ namespace Neuron
 /// a protocol with room to grow is a protocol somebody grows.
 enum class MessageKind : std::uint8_t
 {
+  /// Not a message. What an empty payload, or one whose first byte names nothing, decodes to.
+  ///
+  /// **It is an enumerator rather than a cast of zero**, which is what it used to be. The value has
+  /// to exist either way -- `KindOf` has to answer something for a payload with no bytes in it --
+  /// and a `static_cast<MessageKind>(0)` is that value without a name, so every reader has to work
+  /// out what zero meant and `clang-analyzer-optin.core.EnumCastOutOfRange` is right to object.
+  /// `RefusalReason` beside this one has had its `None` from the start.
+  ///
+  /// It is never sent. A frame carrying it would be a frame whose first byte is zero, which is what
+  /// this value exists to reject.
+  None = 0,
   /// Client to server, first thing: a token. Nothing else is accepted before it.
   Hello = 1,
   /// Server to client: you are this player, and here is where the match is.
