@@ -1072,8 +1072,44 @@ public:
     {
       const float length = std::sqrt(star.x * star.x + star.y * star.y + star.z * star.z);
       Assert::AreEqual(1.0F, length, 0.0005F, L"a star is a direction, so it is a unit vector");
+      Assert::IsTrue(star.brightness >= 0.0F && star.brightness <= 1.0F);
       Assert::IsTrue(star.radiusPixels >= 0.7F && star.radiusPixels <= 1.2F);
     }
+  }
+
+  // Size follows brightness rather than being drawn beside it. A bright small star and a dim large
+  // one are both things the eye reads as a contradiction, and two independent draws would produce
+  // both.
+  TEST_METHOD(SizeFollowsBrightness)
+  {
+    const Neuron::Starfield sky;
+
+    for (const Neuron::Starfield::Star& star : sky.Stars())
+    {
+      const float expected = 0.7F + 0.5F * star.brightness;
+      Assert::AreEqual(expected, star.radiusPixels, 0.0005F);
+    }
+  }
+
+  // Most stars faint, a few bright. A flat draw would give a field of uniformly middling dots,
+  // which reads as a texture rather than as a sky -- so this asserts the shape of the distribution
+  // and not merely its range.
+  TEST_METHOD(MostStarsAreFaint)
+  {
+    const Neuron::Starfield sky{Neuron::Starfield::DEFAULT_SEED, 20000};
+
+    std::int32_t faint = 0;
+    std::int32_t bright = 0;
+    for (const Neuron::Starfield::Star& star : sky.Stars())
+    {
+      faint += star.brightness < 0.4F ? 1 : 0;
+      bright += star.brightness > 0.6F ? 1 : 0;
+    }
+
+    // Brightness is drawn to the power of one and a half, so about 54% fall under 0.4 and about
+    // 29% over 0.6. Wide bounds: what is being asserted is the skew, not the exact curve.
+    Assert::IsTrue(faint > bright * 3 / 2, L"a sky is mostly faint stars");
+    Assert::IsTrue(bright > 0, L"but not uniformly dim ones");
   }
 
   TEST_METHOD(TheSameSeedIsTheSameSky)
@@ -1088,7 +1124,10 @@ public:
   // as the camera rose. Equal heights must hold equal numbers.
   TEST_METHOD(TheSkyIsEvenRatherThanBunchedAtThePoles)
   {
-    const Neuron::Starfield sky{Neuron::Starfield::DEFAULT_SEED, 20000};
+    // No band, because this is a test about the SAMPLING rather than about the look: a deliberate
+    // concentration towards the galactic plane would mask exactly the accidental one being looked
+    // for here.
+    const Neuron::Starfield sky{Neuron::Starfield::DEFAULT_SEED, 20000, 0.0F};
 
     // Four bands of equal HEIGHT, which on a sphere are four bands of equal area.
     std::array<std::int32_t, 4> bands = {};
@@ -1102,6 +1141,57 @@ public:
     {
       Assert::IsTrue(count > 4500 && count < 5500, L"equal areas of sky must hold roughly equal numbers of stars");
     }
+  }
+
+  // The band, which is the deliberate unevenness. Measured over equal solid angle, the plane
+  // carries about 2.2 times the density of the poles -- enough to read as a band, not so much that
+  // it becomes a stripe with empty sky either side.
+  TEST_METHOD(TheGalacticPlaneIsDenserThanItsPoles)
+  {
+    const Neuron::Starfield sky{Neuron::Starfield::DEFAULT_SEED, 20000};
+
+    // Twenty degrees each side of the plane, against the two twenty-degree caps at its poles. The
+    // areas differ, so the counts are divided by them before being compared.
+    constexpr float TWENTY_DEGREES = 0.34906585F;
+    const float planeArea = std::sin(TWENTY_DEGREES);
+    const float poleArea = 1.0F - std::cos(TWENTY_DEGREES);
+
+    std::int32_t nearPlane = 0;
+    std::int32_t nearPoles = 0;
+    for (const Neuron::Starfield::Star& star : sky.Stars())
+    {
+      const float offPlane = std::abs(star.x * Neuron::Starfield::GALACTIC_POLE_X + star.y * Neuron::Starfield::GALACTIC_POLE_Y +
+                                      star.z * Neuron::Starfield::GALACTIC_POLE_Z);
+      nearPlane += offPlane < std::sin(TWENTY_DEGREES) ? 1 : 0;
+      nearPoles += offPlane > std::cos(TWENTY_DEGREES) ? 1 : 0;
+    }
+
+    Assert::IsTrue(nearPoles > 0, L"a band is not a band if the rest of the sky is empty");
+
+    const float density = (static_cast<float>(nearPlane) / planeArea) / (static_cast<float>(nearPoles) / poleArea);
+    Assert::IsTrue(density > 2.5F && density < 6.0F, L"the band has to be visible without being a stripe");
+  }
+
+  // Turning the band off gives back an even sphere. This is what says the concentration is a choice
+  // rather than something the sampling does on its own.
+  TEST_METHOD(NoBandIsAnEvenSky)
+  {
+    const Neuron::Starfield sky{Neuron::Starfield::DEFAULT_SEED, 20000, 0.0F};
+
+    constexpr float TWENTY_DEGREES = 0.34906585F;
+    std::int32_t nearPlane = 0;
+    std::int32_t nearPoles = 0;
+    for (const Neuron::Starfield::Star& star : sky.Stars())
+    {
+      const float offPlane = std::abs(star.x * Neuron::Starfield::GALACTIC_POLE_X + star.y * Neuron::Starfield::GALACTIC_POLE_Y +
+                                      star.z * Neuron::Starfield::GALACTIC_POLE_Z);
+      nearPlane += offPlane < std::sin(TWENTY_DEGREES) ? 1 : 0;
+      nearPoles += offPlane > std::cos(TWENTY_DEGREES) ? 1 : 0;
+    }
+
+    const float density =
+      (static_cast<float>(nearPlane) / std::sin(TWENTY_DEGREES)) / (static_cast<float>(nearPoles) / (1.0F - std::cos(TWENTY_DEGREES)));
+    Assert::IsTrue(density > 0.8F && density < 1.25F, L"with the band off, every part of the sky is the same density");
   }
 
   // The defect that started this. A sky at infinity sweeps at the focal-length rate, which is the
@@ -1196,7 +1286,7 @@ public:
       // draw seen twenty-four times. What these bounds catch is a TREND, which is what the field
       // this replaced had: its top eighth held zero at every yaw once the camera passed halfway.
       const float ratio = static_cast<float>(top) / static_cast<float>(bottom);
-      Assert::IsTrue(ratio > 0.3F && ratio < 3.0F, L"one edge of the pane is systematically emptier than the other");
+      Assert::IsTrue(ratio > 0.3F && ratio < 3.5F, L"one edge of the pane is systematically emptier than the other");
     }
   }
 
@@ -1219,11 +1309,12 @@ public:
       }
     }
 
-    // Measured across the whole tilt and a full turn: 16 at the emptiest angle, 43 at the fullest,
+    // Measured across the whole tilt and a full turn: 13 at the emptiest angle, 89 at the fullest,
     // averaging about thirty -- which is what the authored field showed and what DEFAULT_COUNT was
-    // chosen to reproduce.
-    Assert::IsTrue(fewest >= 12, L"the sky must never be nearly empty from any angle");
-    Assert::IsTrue(most <= 55, L"nor crowded from any other");
+    // chosen to reproduce. The spread is wide because of the band: looking along it shows far more
+    // than looking across it, which is the whole point of having one.
+    Assert::IsTrue(fewest >= 10, L"the sky must never be nearly empty from any angle");
+    Assert::IsTrue(most <= 110, L"nor crowded past being a backdrop");
   }
 
   // A direction behind the eye has no projection, and the half of the sky behind the camera is

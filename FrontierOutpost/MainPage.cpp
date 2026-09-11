@@ -46,7 +46,12 @@ constexpr Color NEUTRAL_DIM = {214, 220, 228, 115};
 constexpr Color GRID_LINE = {94, 196, 255, 18};
 constexpr Color HORIZON_GLOW = {94, 196, 255, 26};
 constexpr Color HORIZON_GLOW_RIM = {94, 196, 255, 0};
-constexpr Color STAR = {214, 220, 228, 140};
+/// The BRIGHTEST star. Every other one is drawn at a share of this alpha, down to about a third,
+/// so this is the top of a range rather than the whole sky's one tone -- which is why it is higher
+/// than the flat 140 the old uniform field used: the faintest star here lands at 110 and the mean
+/// near 150, so the field as a whole is about as present as it was and the bright ones stand out
+/// of it (ADR-033).
+constexpr Color STAR = {214, 220, 228, 220};
 constexpr Color LANE_PLAIN = {214, 220, 228, 71};
 
 constexpr float SCREEN_WIDTH = 1280.0F;

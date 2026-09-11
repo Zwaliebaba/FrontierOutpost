@@ -39,12 +39,22 @@ class ShapeRenderer;
 class Starfield
 {
 public:
-  /// A star: a unit direction, and how big a dot it draws.
+  /// A star: a unit direction, how bright it is, and how big a dot that makes.
   struct Star
   {
     float x;
     float y;
     float z;
+
+    /// Nought to one, and the only thing that varies between stars.
+    ///
+    /// **Brightness is the cue, and size follows it rather than the other way round.** A point
+    /// source has no size to see -- what the eye reads as a nearer or larger star is that it is
+    /// brighter, and a renderer has to spend a pixel or two to say so. Most stars are faint,
+    /// because that is what a sky looks like and because a field of uniformly middling dots reads
+    /// as a texture rather than as distance (ADR-033).
+    float brightness;
+
     /// In screen pixels, and it does NOT scale with zoom. A star is a point source: what changes
     /// with a telescope is how many you can see, not how wide one is.
     float radiusPixels;
@@ -54,13 +64,41 @@ public:
   ///
   /// Only the frustum's share is ever on screen -- about one part in twenty-six at the map's field
   /// of view -- so this is roughly thirty visible at a time, which is what the authored field had.
+  /// The band widens that: looking along it shows far more than looking across it, measured at 13
+  /// at the emptiest angle and 89 at the fullest.
   /// `AboutThirtyStarsAreVisibleFromAnywhere` is the test that keeps that true.
-  static constexpr std::int32_t DEFAULT_COUNT = 800;
+  static constexpr std::int32_t DEFAULT_COUNT = 1100;
 
   /// Pinned by value, like every other seed in this tree. Changing it changes the sky.
   static constexpr std::uint64_t DEFAULT_SEED = 0x5354'4152'4649'454CULL;
 
-  explicit Starfield(std::uint64_t _seed = DEFAULT_SEED, std::int32_t _count = DEFAULT_COUNT);
+  /// The pole of the galactic plane: stars crowd towards the great circle at right angles to this.
+  ///
+  /// **It is deliberately not the map's own plane.** The systems lie on y = 0, so an in-fiction
+  /// galactic band would run exactly along the horizon -- under the ground grid, mostly off the
+  /// bottom of a pane whose camera always looks down. Tilted, the band crosses the sky where it can
+  /// be seen, and it gives the sky an orientation: you can tell which way you are facing from the
+  /// background alone, which is most of the argument for having a band at all (ADR-033).
+  static constexpr float GALACTIC_POLE_X = 0.32444F;
+  static constexpr float GALACTIC_POLE_Y = 0.81111F;
+  static constexpr float GALACTIC_POLE_Z = -0.48667F;
+
+  static_assert(GALACTIC_POLE_X * GALACTIC_POLE_X + GALACTIC_POLE_Y * GALACTIC_POLE_Y + GALACTIC_POLE_Z * GALACTIC_POLE_Z > 0.9999F &&
+                  GALACTIC_POLE_X * GALACTIC_POLE_X + GALACTIC_POLE_Y * GALACTIC_POLE_Y + GALACTIC_POLE_Z * GALACTIC_POLE_Z < 1.0001F,
+                "the galactic pole has to be a unit direction");
+
+  /// What share of the sky is drawn towards the band rather than spread evenly.
+  ///
+  /// Measured at this value: the plane carries **3.8 times** the density of the poles, over equal
+  /// solid angle. Enough to read as a band and not so much that it becomes a stripe with empty sky
+  /// either side. Zero gives a uniform sphere, which is what the pole-bunching test asks for.
+  ///
+  /// 0.6 was tried first and measured 2.2 times, which is a real difference that you cannot see:
+  /// at a 40-degree field of view a band only reads as one if it is markedly denser than what is
+  /// beside it, because so little of the sky is in the pane at once.
+  static constexpr float DEFAULT_BAND_STRENGTH = 0.82F;
+
+  explicit Starfield(std::uint64_t _seed = DEFAULT_SEED, std::int32_t _count = DEFAULT_COUNT, float _bandStrength = DEFAULT_BAND_STRENGTH);
 
   [[nodiscard]] std::span<const Star> Stars() const noexcept
   {
@@ -68,6 +106,10 @@ public:
   }
 
   /// Draws every star in front of the eye and inside the camera's viewport.
+  ///
+  /// `_color` is the BRIGHTEST star. Every other one is drawn at a share of its alpha, down to
+  /// about a third, so the colour a caller passes is the top of a range rather than the whole
+  /// field's one tone.
   ///
   /// Call it before anything else in the pane: it writes a backdrop and does no depth test, so
   /// whatever is drawn after it covers it.
