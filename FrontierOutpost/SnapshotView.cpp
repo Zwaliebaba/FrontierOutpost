@@ -83,6 +83,41 @@ namespace
   return "SOMEBODY";
 }
 
+/// `Shipyard - Dothan` becomes `SHIPYARD DOTHAN`: a button is 8px text in a 400px column and the
+/// separator costs three characters it cannot spare.
+[[nodiscard]] std::string Shortened(std::string_view _title)
+{
+  std::string out;
+  out.reserve(_title.size());
+  for (const char letter : _title)
+  {
+    if (letter == '-')
+    {
+      continue;
+    }
+    out.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(letter))));
+  }
+
+  // The dash left a double space behind it.
+  const auto doubled = out.find("  ");
+  if (doubled != std::string::npos)
+  {
+    out.erase(doubled, 1);
+  }
+  return out;
+}
+
+/// The name to put in a verdict sentence. `They` when the rival is not named, which happens when
+/// the contact is with somebody the fog has not introduced yet.
+[[nodiscard]] std::string NameFor(const MatchState& _state, OwnerId _owner)
+{
+  if (_owner == NOBODY || _owner >= static_cast<OwnerId>(_state.players.size()))
+  {
+    return "They";
+  }
+  return _state.players[static_cast<std::size_t>(_owner)].label;
+}
+
 } // namespace
 
 MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _digest, std::int64_t _secondsToLock)
@@ -273,13 +308,97 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
   state.orders.availableBuilds = static_cast<std::uint32_t>(state.orders.builds.size());
 
   // ---- Digest ------------------------------------------------------------------------------------
+  //
+  // The digest is the order surface (ADR-034), so an event arrives carrying what can be done about
+  // it. Only actions the client can actually carry out are attached: a drawn button that does
+  // nothing is worse than a missing one, and the four the design asks for that are not here --
+  // REBUILD LANE, PLAN ROUTE, WITHDRAW, HOLD FIRE -- are all outgoing signals, which nothing in
+  // this state can express yet.
   for (const DigestEntry& entry : _digest)
   {
-    state.digest.push_back(
-      DigestEvent{.kind = ColorOf(entry.kind),
-                  .title = entry.title,
-                  .detail = entry.detail,
-                  .refs = EventRefs{.system = positionOf(entry.system), .lane = entry.lane.Index(), .fleet = entry.fleet.Index()}});
+    DigestEvent event{.kind = ColorOf(entry.kind),
+                      .title = entry.title,
+                      .detail = entry.detail,
+                      .refs = EventRefs{.system = positionOf(entry.system), .lane = entry.lane.Index(), .fleet = entry.fleet.Index()}};
+    event.actor = entry.other.IsValid() ? entry.other.Index() : NOBODY;
+
+    // A proposal is answered on the proposal, which is where the player is reading about it.
+    if (event.kind == EventKind::Proposal)
+    {
+      for (std::size_t index = 0; index < state.proposals.size(); ++index)
+      {
+        if (state.proposals[index].id == entry.other.Index() || state.proposals.size() == 1)
+        {
+          event.actions.push_back(EventAction{
+            .label = "ACCEPT", .kind = EventActionKind::AcceptProposal, .target = static_cast<std::int32_t>(index), .primary = true});
+          event.actions.push_back(
+            EventAction{.label = "DECLINE", .kind = EventActionKind::DeclineProposal, .target = static_cast<std::int32_t>(index)});
+          break;
+        }
+      }
+    }
+
+    // A contact the player is flying into gets the verdict and the fleet that earns it.
+    if (event.kind == EventKind::Contact)
+    {
+      for (std::size_t index = 0; index < state.fleets.size(); ++index)
+      {
+        const Fleet& fleet = state.fleets[index];
+        if (fleet.owner != state.viewer || fleet.preview.empty() || fleet.to != event.refs.system)
+        {
+          continue;
+        }
+
+        event.actions.push_back(EventAction{.label = std::format("REDIRECT {}", fleet.name),
+                                            .kind = EventActionKind::RedirectFleet,
+                                            .target = static_cast<std::int32_t>(index),
+                                            .primary = true});
+        break;
+      }
+    }
+
+    if (event.kind == EventKind::Economy && !state.orders.builds.empty())
+    {
+      event.actions.push_back(EventAction{
+        .label = Shortened(state.orders.builds.front().title), .kind = EventActionKind::QueueBuild, .target = 0, .primary = true});
+    }
+
+    if (event.refs.system != EventRefs::NONE)
+    {
+      event.actions.push_back(EventAction{.label = "MAP", .kind = EventActionKind::Focus, .target = event.refs.system});
+    }
+
+    state.digest.push_back(std::move(event));
+  }
+
+  // The verdict, from the numbers rather than from the phrase. `SnapshotFleet` carries both sides
+  // of the fight now, so the client can say what it means instead of repeating `14 v 11`.
+  for (std::size_t index = 0; index < _snapshot.Fleets().size(); ++index)
+  {
+    const SnapshotFleet& source = _snapshot.Fleets()[index];
+    if (source.owner.Index() != state.viewer || source.preview.empty() || source.previewTheirs == 0)
+    {
+      continue;
+    }
+
+    const std::int32_t destination = positionOf(source.movingTo);
+    for (DigestEvent& event : state.digest)
+    {
+      if (event.kind != EventKind::Contact || event.refs.system != destination)
+      {
+        continue;
+      }
+
+      const bool win = source.previewMineAfter > 0 && source.previewTheirsAfter == 0;
+      const bool hold = source.previewMineAfter > 0 && source.previewTheirsAfter > 0;
+      const char* outcome = win ? "YOU WIN" : (hold ? "HOLD" : "YOU LOSE");
+
+      event.verdict = std::format("FLT{} ARRIVES T{} - {}", source.id.Index() + 1, state.match.tick + source.ticksRemaining, outcome);
+      event.verdictDetail =
+        std::format("You arrive {}. {} holds {}{}. {} of theirs remain, {} of yours.", source.previewMine, NameFor(state, event.actor),
+                    source.previewTheirs, source.previewDefended ? " +def" : "", source.previewTheirsAfter, source.previewMineAfter);
+      break;
+    }
   }
 
   // ---- The region ---------------------------------------------------------------------------------

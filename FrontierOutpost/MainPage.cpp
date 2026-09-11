@@ -7,6 +7,8 @@
 #include "pch.h"
 #include "MainPage.h"
 
+#include "DigestView.h"
+
 #include "MapView.h"
 
 #include <queue>
@@ -555,104 +557,207 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
 
 void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 {
+  // **The digest is the order surface** (ADR-034, SCREENS.md 01). Every event carries what can be
+  // done about it, because the thing a player wants to do is always about something that happened,
+  // and a menu somewhere else is a second place to look.
   _shapes.FillRect(0.0F, TOP_BAR_HEIGHT, DIGEST_WIDTH, SCREEN_HEIGHT - TOP_BAR_HEIGHT, APP_BACKGROUND);
   _shapes.FillRect(DIGEST_WIDTH - 1.0F, TOP_BAR_HEIGHT, 1.0F, SCREEN_HEIGHT - TOP_BAR_HEIGHT, CARD_BORDER);
 
   const std::int32_t headerY = static_cast<std::int32_t>(TOP_BAR_HEIGHT) + 12;
-  _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), headerY, std::format("DIGEST - TICK {}", m_state.match.tick), TEXT_MUTED);
-  DrawRight(_text, DIGEST_WIDTH - RAIL_PADDING, headerY, std::format("{} EVENTS", m_state.digest.size()), TEXT_MUTED);
+  const bool returning = m_state.unreadTicks >= 2;
 
-  // The rail is 300 wide; a row spends 14 on each margin, 8 on the dot and 10 on the gap, which
-  // leaves 254 -- 31 characters of an 8px font. Most of the reference's copy is longer than that,
-  // so it wraps rather than truncating: a digest that hides its second half is not a digest.
+  if (returning)
+  {
+    // `SINCE YOU LOOKED - T43 > T46` and a chip. It is the first line a returning player reads and
+    // it says how much of the match happened without them.
+    _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), headerY,
+                   std::format("SINCE YOU LOOKED - T{} > T{}", m_state.lastSeenTick, m_state.match.tick), TEXT_MUTED);
+
+    const std::string chip = std::format("{} TICKS", m_state.unreadTicks);
+    const float chipWidth = static_cast<float>(FontRenderer::MeasurePixels(chip)) + 14.0F;
+    _shapes.StrokeRect(DIGEST_WIDTH - RAIL_PADDING - chipWidth, static_cast<float>(headerY) - 5.0F, chipWidth, 18.0F, AMBER);
+    _text.DrawText(static_cast<std::int32_t>(DIGEST_WIDTH - RAIL_PADDING - chipWidth + 7.0F), headerY, chip, AMBER);
+  }
+  else
+  {
+    _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), headerY, std::format("DIGEST - TICK {}", m_state.match.tick), TEXT_MUTED);
+    DrawRight(_text, DIGEST_WIDTH - RAIL_PADDING, headerY, std::format("{} EVENTS", m_state.digest.size()), TEXT_MUTED);
+  }
+
   constexpr float TEXT_LEFT = RAIL_PADDING + 8.0F + 10.0F;
   const float textWidth = DIGEST_WIDTH - TEXT_LEFT - RAIL_PADDING;
   const std::size_t columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(textWidth));
 
   float y = TOP_BAR_HEIGHT + 28.0F;
 
-  // ---- An empty digest says which kind of empty it is -------------------------------------------
-  //
-  // A three-hundred-pixel column reading "0 EVENTS" and nothing else is the first thing a new
-  // player sees, and it reads as a screen that has not finished loading. There are two different
-  // nothings here and they want different words:
-  //
-  // **Before the first lock**, nothing has happened because nothing has resolved yet. The useful
-  // thing to say is what the countdown is counting towards.
-  //
-  // **After a lock with no digest**, something did happen and none of it was visible to this
-  // player -- which is a fact about the fog (ADR-022) rather than about the tick. Saying so is the
-  // difference between "the game is broken" and "you cannot see that far".
-  //
-  // Neither is a notification and neither is free text: this is the same rail saying what it holds,
-  // which the one-pager's exclusions are not about.
+  // ---- The delta -----------------------------------------------------------------------------------
+  const DigestDelta delta = DeltaOf(m_state);
+  if (delta.Any())
+  {
+    // Two cells to a row, rounded up. The division is integer ON PURPOSE -- three cells is two rows
+    // -- and it is done before the conversion rather than inside it, because a `/` under a
+    // `static_cast<float>` reads like a float division somebody got wrong.
+    const std::size_t rows = (delta.cells.size() + 1) / 2;
+    const float boxHeight = static_cast<float>(rows) * static_cast<float>(LINE_HEIGHT) + 12.0F;
+    _shapes.StrokeRect(RAIL_PADDING, y, DIGEST_WIDTH - 2.0F * RAIL_PADDING, boxHeight, AMBER);
+
+    // Two columns, because four short facts in one line wrap badly at 8px and four stacked lines
+    // are a list rather than a summary.
+    for (std::size_t index = 0; index < delta.cells.size(); ++index)
+    {
+      const float cellX = RAIL_PADDING + 8.0F + static_cast<float>(index % 2) * (DIGEST_WIDTH - 2.0F * RAIL_PADDING) * 0.5F;
+      const std::int32_t cellY = static_cast<std::int32_t>(y) + 6 + static_cast<std::int32_t>(index / 2) * LINE_HEIGHT;
+      _text.DrawText(static_cast<std::int32_t>(cellX), cellY, delta.cells[index], delta.cells[index].front() == '-' ? RED : AMBER);
+    }
+    y += boxHeight + 6.0F;
+  }
+
   if (m_state.digest.empty())
   {
-    const bool beforeTheFirstLock = m_state.match.tick == 0;
-    const std::string_view title = beforeTheFirstLock ? "NOTHING HAS HAPPENED YET" : "A QUIET TICK";
-    const std::string_view detail = beforeTheFirstLock
-                                      ? "The first tick resolves when the countdown ends. What you order before then is what it resolves."
-                                      : "Nothing you could see changed. Systems you have not scouted may have.";
-
-    _shapes.FillRect(0.0F, y, DIGEST_WIDTH - 1.0F, 1.0F, DIVIDER);
-
-    std::int32_t lineY = static_cast<std::int32_t>(y) + 11;
-    for (const std::string& line : FontRenderer::Wrap(title, columns))
-    {
-      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), lineY, line, TEXT_PRIMARY);
-      lineY += LINE_HEIGHT;
-    }
-
-    lineY += 2;
-    for (const std::string& line : FontRenderer::Wrap(detail, columns))
-    {
-      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), lineY, line, TEXT_DETAIL);
-      lineY += LINE_HEIGHT;
-    }
-
+    DrawEmptyDigest(_shapes, _text, y, columns);
     return;
   }
 
-  for (std::size_t index = 0; index < m_state.digest.size(); ++index)
+  // ---- The cards -----------------------------------------------------------------------------------
+  const std::vector<DigestCard> cards = CardsOf(m_state);
+  for (const DigestCard& card : cards)
   {
-    const DigestEvent& event = m_state.digest[index];
-    const std::vector<std::string> title = FontRenderer::Wrap(event.title, columns);
-    const std::vector<std::string> detail = FontRenderer::Wrap(event.detail, columns);
-
-    const auto lines = static_cast<float>(title.size() + detail.size());
-    const float height = 20.0F + lines * static_cast<float>(LINE_HEIGHT) + 2.0F;
+    const Color accent = EventColor(card.kind);
+    const float top = y;
 
     _shapes.FillRect(0.0F, y, DIGEST_WIDTH - 1.0F, 1.0F, DIVIDER);
-    if (m_focusedSystem != EventRefs::NONE && event.refs.system == m_focusedSystem)
-    {
-      _shapes.FillRect(0.0F, y + 1.0F, DIGEST_WIDTH - 1.0F, height - 1.0F, HOVER_FILL);
-    }
-
-    const Color accent = EventColor(event.kind);
-    // The top event carries a 2px bar in its colour: the digest is sorted by consequence and the
-    // first row is what the tick was actually about.
-    if (index == 0)
-    {
-      _shapes.FillRect(0.0F, y + 1.0F, 2.0F, height - 1.0F, accent);
-    }
-
     std::int32_t lineY = static_cast<std::int32_t>(y) + 11;
+
     _shapes.FillEllipse(RAIL_PADDING + 4.0F, static_cast<float>(lineY) + 4.0F, 4.0F, 4.0F, accent);
-
-    for (const std::string& line : title)
+    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, Uppercased(card.title), TEXT_PRIMARY);
+    if (!card.stamp.empty())
     {
-      _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, line, TEXT_PRIMARY);
-      lineY += LINE_HEIGHT;
+      DrawRight(_text, DIGEST_WIDTH - RAIL_PADDING, lineY, card.stamp, TEXT_MUTED);
     }
-    lineY += 2;
-    for (const std::string& line : detail)
+    lineY += LINE_HEIGHT + 2;
+
+    for (const std::string& detail : card.lines)
     {
-      _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, line, TEXT_DETAIL);
-      lineY += LINE_HEIGHT;
+      for (const std::string& line : FontRenderer::Wrap(detail, columns))
+      {
+        _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, line, TEXT_DETAIL);
+        lineY += LINE_HEIGHT;
+      }
     }
 
-    AddHit(0.0F, y, DIGEST_WIDTH - 1.0F, height, Action::FocusEvent, static_cast<std::int32_t>(index));
-    y += height;
+    // ---- The verdict box ---------------------------------------------------------------------------
+    //
+    // Always a verdict and never a bare `A v B` (DESIGN-GUIDELINES "Copy"), and the second line
+    // always says whose ships remain -- which is why the snapshot carries both sides now.
+    if (!card.verdict.empty())
+    {
+      lineY += 4;
+      const std::vector<std::string> detail = FontRenderer::Wrap(card.verdictDetail, columns - 2);
+      const float boxTop = static_cast<float>(lineY) - 5.0F;
+      const float boxHeight = static_cast<float>(1 + detail.size()) * static_cast<float>(LINE_HEIGHT) + 10.0F;
+      _shapes.StrokeRect(TEXT_LEFT, boxTop, DIGEST_WIDTH - TEXT_LEFT - RAIL_PADDING, boxHeight, AMBER);
+
+      _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT) + 6, lineY, card.verdict, AMBER);
+      lineY += LINE_HEIGHT;
+      for (const std::string& line : detail)
+      {
+        _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT) + 6, lineY, line, TEXT_DETAIL);
+        lineY += LINE_HEIGHT;
+      }
+      lineY += 6;
+    }
+
+    // ---- The actions -------------------------------------------------------------------------------
+    if (!card.actions.empty())
+    {
+      lineY += 4;
+      float buttonX = TEXT_LEFT;
+      const float buttonY = static_cast<float>(lineY) - 5.0F;
+
+      for (const EventAction& action : card.actions)
+      {
+        const float width = static_cast<float>(FontRenderer::MeasurePixels(action.label)) + 12.0F;
+        if (buttonX + width > DIGEST_WIDTH - RAIL_PADDING)
+        {
+          break;
+        }
+
+        // One filled button per card at most: the thing the digest thinks you should do.
+        if (action.primary && !m_state.orders.locked)
+        {
+          _shapes.FillRect(buttonX, buttonY, width, 18.0F, BLUE);
+          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, action.label, APP_BACKGROUND);
+        }
+        else
+        {
+          _shapes.StrokeRect(buttonX, buttonY, width, 18.0F, OUTLINE);
+          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, action.label, m_state.orders.locked ? NEUTRAL_DIM : TEXT_PRIMARY);
+        }
+
+        if (!m_state.orders.locked || action.kind == EventActionKind::Focus)
+        {
+          AddHit(buttonX, buttonY, width, 18.0F, ActionFor(action.kind), action.target);
+        }
+        buttonX += width + 6.0F;
+      }
+      lineY += LINE_HEIGHT + 4;
+    }
+
+    y = static_cast<float>(lineY) + 4.0F;
+    AddHit(0.0F, top, DIGEST_WIDTH - 1.0F, y - top, Action::FocusEvent, card.leadEvent);
+
+    if (y > SCREEN_HEIGHT)
+    {
+      break;
+    }
+  }
+}
+
+/// Which screen action a digest button performs. The two enums are separate on purpose: what an
+/// event OFFERS is a fact about the match (`MatchState`), and what a tap DOES is a fact about this
+/// screen, and the state has no business knowing the second.
+MainPage::Action MainPage::ActionFor(EventActionKind _kind) noexcept
+{
+  switch (_kind)
+  {
+  case EventActionKind::RedirectFleet:
+    return Action::OpenFleet;
+  case EventActionKind::QueueBuild:
+    return Action::ToggleBuild;
+  case EventActionKind::AcceptProposal:
+    return Action::AcceptProposal;
+  case EventActionKind::DeclineProposal:
+    return Action::DeclineProposal;
+  case EventActionKind::Focus:
+  default:
+    return Action::FocusEvent;
+  }
+}
+
+void MainPage::DrawEmptyDigest(ShapeRenderer& _shapes, FontRenderer& _text, float _y, std::size_t _columns)
+{
+  // Two different nothings, and they want different words (see the commit that added this): before
+  // the first lock nothing has resolved, and after one an empty digest is a fact about the fog.
+  const bool beforeTheFirstLock = m_state.match.tick == 0;
+  const std::string_view title = beforeTheFirstLock ? "NOTHING HAS HAPPENED YET" : "A QUIET TICK";
+  const std::string_view detail = beforeTheFirstLock
+                                    ? "The first tick resolves when the countdown ends. What you order before then is what it resolves."
+                                    : "Nothing you could see changed. Systems you have not scouted may have.";
+
+  _shapes.FillRect(0.0F, _y, DIGEST_WIDTH - 1.0F, 1.0F, DIVIDER);
+
+  std::int32_t lineY = static_cast<std::int32_t>(_y) + 11;
+  for (const std::string& line : FontRenderer::Wrap(title, _columns))
+  {
+    _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), lineY, line, TEXT_PRIMARY);
+    lineY += LINE_HEIGHT;
+  }
+
+  lineY += 2;
+  for (const std::string& line : FontRenderer::Wrap(detail, _columns))
+  {
+    _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), lineY, line, TEXT_DETAIL);
+    lineY += LINE_HEIGHT;
   }
 }
 

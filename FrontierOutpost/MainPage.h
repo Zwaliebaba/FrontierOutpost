@@ -146,6 +146,8 @@ private:
 
   void DrawTopBar(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawDigestRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
+  void DrawEmptyDigest(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, float _y, std::size_t _columns);
+  [[nodiscard]] static Action ActionFor(EventActionKind _kind) noexcept;
   void DrawMap(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawLocksRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawSystem(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, std::int32_t _index);

@@ -2,6 +2,10 @@
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File Build\Screenshot.ps1 -Exe x64\Release\FrontierOutpost.exe -Out shot.png
 #
+# RUN IT WITH `powershell.exe`, NOT `pwsh`. Windows PowerShell 5.1 loads System.Drawing; PowerShell
+# 7 does not, and the Add-Type below fails there with eight CS1069s about types "forwarded to
+# System.Drawing.Common". Nothing here needs 7.
+#
 # WHY THIS EXISTS, AND WHY IT IS NOT THREE LINES OF PrintWindow.
 #
 # `PrintWindow` draws the WHOLE WINDOW -- caption bar and borders included -- into the device
@@ -28,8 +32,21 @@
 param(
   [Parameter(Mandatory = $true)][string]$Exe,
   [Parameter(Mandatory = $true)][string]$Out,
-  [int]$SettleMilliseconds = 2000
+  [int]$SettleMilliseconds = 2000,
+  # Arguments for the executable, as ONE string: `-Arguments "--tick 4"`.
+  #
+  # One string and split here, rather than a `[string[]]` the caller builds, because this script is
+  # invoked from several shells and only PowerShell parses `"a","b"` as two arguments -- from bash
+  # the same text arrives as the single token `a,b`, which reaches the game as one unrecognised
+  # word and is silently ignored. That cost a round of "why is the tick still six hours".
+  #
+  # `--tick 4` is the flag worth knowing: it runs the match at four seconds a tick, which is how you
+  # reach a screen state that has anything on it without playing for six hours. Pair it with a
+  # -SettleMilliseconds longer than the tick.
+  [string]$Arguments = ''
 )
+
+$argumentList = @($Arguments -split '\s+' | Where-Object { $_ -ne '' })
 
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
@@ -77,7 +94,8 @@ public class ClientAreaGrab {
 
 [ClientAreaGrab]::SetProcessDPIAware() | Out-Null
 
-$process = Start-Process -FilePath $Exe -PassThru
+$process = if ($argumentList.Count -gt 0) { Start-Process -FilePath $Exe -ArgumentList $argumentList -PassThru }
+           else { Start-Process -FilePath $Exe -PassThru }
 $window = [IntPtr]::Zero
 for ($attempt = 0; $attempt -lt 40 -and $window -eq [IntPtr]::Zero; $attempt++) {
   Start-Sleep -Milliseconds 250

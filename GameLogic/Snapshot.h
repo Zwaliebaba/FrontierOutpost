@@ -71,6 +71,24 @@ struct SnapshotFleet
   /// nothing to fight. Computed here (`TickResolver::Preview`) rather than on the client, which
   /// does not link `GameLogic` and must not learn a rule to phrase a number.
   std::string preview;
+
+  /// The same fight as NUMBERS, so the client can say what it means.
+  ///
+  /// **The server owns the arithmetic and the client owns the sentence**, which is the split
+  /// ADR-021 implies and this record did not previously honour: `preview` is a phrase, and a
+  /// phrase cannot be re-worded by a screen that wants to say "YOU LOSE" first. The design is
+  /// explicit that a preview must be a verdict and never a bare `A v B`, and that it must always
+  /// state *whose* ships remain -- which the phrase could not, because it only ever reported the
+  /// viewer's own survivors.
+  ///
+  /// Zero everywhere when there is nothing to fight, which is the same condition as an empty
+  /// `preview`.
+  std::uint32_t previewMine = 0;
+  std::uint32_t previewTheirs = 0;
+  std::uint32_t previewMineAfter = 0;
+  std::uint32_t previewTheirsAfter = 0;
+  /// Whether the defender holds the system, and so fights with the incumbent's bonus.
+  bool previewDefended = false;
 };
 
 struct SnapshotProposal

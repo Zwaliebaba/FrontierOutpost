@@ -90,12 +90,59 @@ struct EventRefs
   std::int32_t fleet = NONE;
 };
 
+/// What tapping an action on a digest event does.
+///
+/// **The digest is the order surface now** (ADR-034, SCREENS.md 01), so this is the complete
+/// vocabulary of what an event can offer. It is deliberately short: every entry here is something
+/// the client can already carry out, because a button that draws and does nothing is worse than a
+/// button that is not there. The design also asks for REBUILD LANE, PLAN ROUTE, WITHDRAW and
+/// HOLD FIRE -- all four are outgoing signals, which `MatchState` cannot express at all yet, and
+/// they arrive when it can.
+enum class EventActionKind : std::uint8_t
+{
+  /// Focus the map on what this event is about.
+  Focus,
+  /// Open this fleet's destination picker, lane-constrained.
+  RedirectFleet,
+  /// Queue a build. An order: local until the lock.
+  QueueBuild,
+  AcceptProposal,
+  DeclineProposal
+};
+
+/// One button on an event.
+struct EventAction
+{
+  std::string label;
+  EventActionKind kind = EventActionKind::Focus;
+  /// An index into whatever the kind names: a fleet, a build row, a proposal.
+  std::int32_t target = EventRefs::NONE;
+  /// The one filled button on an event, at most (DESIGN-GUIDELINES "Components"). Everything else
+  /// is outlined, so a glance finds the thing the digest thinks you should do.
+  bool primary = false;
+};
+
 struct DigestEvent
 {
   EventKind kind;
   std::string title;
   std::string detail;
   EventRefs refs;
+
+  /// Who this event is about, when it is about somebody. `NOBODY` for the ones that are about the
+  /// world rather than a player -- income, the region's timer. Actor grouping is built on it.
+  OwnerId actor = NOBODY;
+
+  /// The combat verdict, when the player has a fleet flying into this.
+  ///
+  /// Two strings because the design draws two lines and colours them differently: the verdict
+  /// itself (`FLT3 ARRIVES T47 - YOU LOSE`) in amber, and the numbers under it in muted text. The
+  /// numbers always say whose ships remain, which is the half the old `14 v 11 - 6 left` phrase
+  /// could not (`SnapshotFleet::previewTheirsAfter`).
+  std::string verdict;
+  std::string verdictDetail;
+
+  std::vector<EventAction> actions;
 };
 
 /// A system's standing flags. Bitwise rather than an enum per state because they combine: a
@@ -327,6 +374,17 @@ struct MatchState
   /// Every player in the match, indexed by `OwnerId`.
   std::vector<PlayerBadge> players;
   std::vector<DigestEvent> digest;
+
+  /// How many ticks resolved while this client had nothing on the screen.
+  ///
+  /// **It is a fact about this SESSION and cannot be more than that.** R13 leaves the client
+  /// nothing to write, so a restarted client has no memory of what it had already read and always
+  /// opens at zero. Within a session it is exact: the composition root notices when a new state
+  /// arrives more than one tick after the last one it drew, which is what happens after a
+  /// disconnection, a closed lid, or a night's sleep.
+  std::uint32_t unreadTicks = 0;
+  /// The tick this client last had on the screen. Meaningless when `unreadTicks` is zero.
+  std::uint32_t lastSeenTick = 0;
   Graph graph;
   std::vector<Fleet> fleets;
   Orders orders;

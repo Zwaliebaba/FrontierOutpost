@@ -23,7 +23,12 @@ namespace
 {
 
 /// "14 v 11 (+def) - 6 left", in the form the orders rail draws.
-[[nodiscard]] std::string DescribePreview(const Match& _match, PlayerId _viewer, SystemId _destination, std::uint32_t _ships)
+/// The preview, as numbers and as the phrase the rail has always shown.
+///
+/// One walk of the fleets rather than two, because the caller wants both and they are the same
+/// fight. `outEntry.preview` stays what it was so nothing that reads it changes; the numbers
+/// beside it are what a verdict is built from.
+void DescribePreview(const Match& _match, PlayerId _viewer, SystemId _destination, std::uint32_t _ships, SnapshotFleet& _outEntry)
 {
   const std::array<MeleeSide, 1> incoming = {MeleeSide{.player = _viewer, .ships = _ships, .incumbent = false}};
   const std::vector<MeleeSide> after = TickResolver::Preview(_match, _destination, incoming);
@@ -31,11 +36,18 @@ namespace
   std::uint32_t defenders = 0;
   bool defenderIsIncumbent = false;
   std::uint32_t mine = 0;
+  std::uint32_t theirs = 0;
   for (const MeleeSide& side : after)
   {
     if (side.player == _viewer)
     {
       mine = side.ships;
+    }
+    else
+    {
+      // **Summed, not taken.** More than one rival can be standing on the same system, and a
+      // verdict that reported only the first would understate what the player is flying into.
+      theirs += side.ships;
     }
   }
 
@@ -53,10 +65,15 @@ namespace
 
   if (defenders == 0)
   {
-    return {};
+    return;
   }
 
-  return std::format("{} v {}{} - {} left", _ships, defenders, defenderIsIncumbent ? " (+def)" : "", mine);
+  _outEntry.preview = std::format("{} v {}{} - {} left", _ships, defenders, defenderIsIncumbent ? " (+def)" : "", mine);
+  _outEntry.previewMine = _ships;
+  _outEntry.previewTheirs = defenders;
+  _outEntry.previewMineAfter = mine;
+  _outEntry.previewTheirsAfter = theirs;
+  _outEntry.previewDefended = defenderIsIncumbent;
 }
 
 } // namespace
@@ -170,7 +187,7 @@ Snapshot Snapshot::For(const Match& _match, PlayerId _player)
 
     if (mine && fleet.InTransit() && fleet.movingTo.IsValid())
     {
-      entry.preview = DescribePreview(_match, _player, fleet.movingTo, fleet.ships);
+      DescribePreview(_match, _player, fleet.movingTo, fleet.ships, entry);
     }
 
     view.m_fleets.push_back(std::move(entry));
@@ -343,6 +360,11 @@ void Snapshot::Write(Neuron::ByteWriter& _writer) const
     _writer.WriteI32(fleet.movingTo.Index());
     _writer.WriteU32(fleet.ticksRemaining);
     _writer.WriteString(fleet.preview);
+    _writer.WriteU32(fleet.previewMine);
+    _writer.WriteU32(fleet.previewTheirs);
+    _writer.WriteU32(fleet.previewMineAfter);
+    _writer.WriteU32(fleet.previewTheirsAfter);
+    _writer.WriteU8(fleet.previewDefended ? 1U : 0U);
   }
 
   _writer.WriteU32(static_cast<std::uint32_t>(m_proposals.size()));
@@ -438,6 +460,11 @@ Snapshot Snapshot::Read(Neuron::ByteReader& _reader)
     fleet.movingTo = SystemId{_reader.ReadI32()};
     fleet.ticksRemaining = _reader.ReadU32();
     fleet.preview = _reader.ReadString();
+    fleet.previewMine = _reader.ReadU32();
+    fleet.previewTheirs = _reader.ReadU32();
+    fleet.previewMineAfter = _reader.ReadU32();
+    fleet.previewTheirsAfter = _reader.ReadU32();
+    fleet.previewDefended = _reader.ReadU8() != 0U;
     view.m_fleets.push_back(std::move(fleet));
   }
 
