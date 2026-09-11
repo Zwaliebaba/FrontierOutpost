@@ -113,6 +113,41 @@ OrbitCamera::ScreenPoint OrbitCamera::Project(const WorldPoint& _world) const no
   };
 }
 
+OrbitCamera::ScreenPoint OrbitCamera::ProjectDirection(const WorldPoint& _direction) const noexcept
+{
+  const Basis basis = ViewBasis();
+
+  // The same arithmetic as `Project`, with the eye subtraction gone. That single missing line is
+  // what makes this exact at infinity: there is no position to be parallax against.
+  const float depth = Dot(_direction, basis.forward);
+  if (depth < MINIMUM_DEPTH)
+  {
+    return ScreenPoint{0.0F, 0.0F, depth, false};
+  }
+
+  const float across = Dot(_direction, basis.right);
+  const float upward = Dot(_direction, basis.up);
+
+  const float halfHeightAtUnitDepth = std::tan(m_fieldOfViewRadians * 0.5F);
+  const float aspect = m_viewportWidthPixels / m_viewportHeightPixels;
+
+  const float normalizedX = (across / depth) / (halfHeightAtUnitDepth * aspect);
+  const float normalizedY = (upward / depth) / halfHeightAtUnitDepth;
+
+  return ScreenPoint{
+    m_viewportXPixels + (normalizedX * 0.5F + 0.5F) * m_viewportWidthPixels,
+    m_viewportYPixels + (0.5F - normalizedY * 0.5F) * m_viewportHeightPixels,
+    depth,
+    true,
+  };
+}
+
+bool OrbitCamera::InsideViewport(const ScreenPoint& _point) const noexcept
+{
+  return _point.visible && _point.xPixels >= m_viewportXPixels && _point.xPixels < m_viewportXPixels + m_viewportWidthPixels &&
+         _point.yPixels >= m_viewportYPixels && _point.yPixels < m_viewportYPixels + m_viewportHeightPixels;
+}
+
 float OrbitCamera::PixelsPerWorldUnitAt(float _depth) const noexcept
 {
   if (_depth < MINIMUM_DEPTH)

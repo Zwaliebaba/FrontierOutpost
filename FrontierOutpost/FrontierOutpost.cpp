@@ -1,11 +1,12 @@
 // FrontierOutpost.cpp -- process entry point, and the composition root of the main page.
 //
-// WHAT THIS EXECUTABLE SHOWS, as of 2026-09-10, is the ops console in Design/Screens: digest,
-// map, orders. It used to show the MVP-01 isometric ship scene, and that code -- MeshRenderer,
-// IsometricCamera, Starfield, ShipMesh, StationMesh, ShipView, World, Session -- is still in the
-// tree and still built and tested. It is not reachable from here, because the main page is a
-// different screen of the same game rather than a mode of that one, and a mode switch is not
-// something this task was asked for (ADR-014).
+// WHAT THIS EXECUTABLE SHOWS, as of 2026-09-11, is the ops console in Design/Screens: digest, map,
+// orders. It used to show the MVP-01 isometric ship scene, and that code -- MeshRenderer,
+// IsometricCamera, ShipMesh, StationMesh, ShipView, World and the old parallax Starfield -- was
+// DELETED with the screen it served (ADR-015). This comment said it was "still in the tree and
+// still built and tested" for a day after it was gone, which sent somebody looking for a starfield
+// that no longer existed; the one in `NeuronClient/Starfield` today is a different thing at the
+// same name (ADR-032).
 //
 // This is the wizard's wWinMain reduced to what the game actually needs: one fixed-size,
 // non-resizable window, no menu and no About dialog. The window is the presentation target

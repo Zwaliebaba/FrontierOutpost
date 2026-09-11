@@ -2,6 +2,8 @@
 
 #include "FontRenderer.h"
 #include "MapView.h"
+
+#include "Starfield.h"
 #include "MatchState.h"
 #include "PointerInput.h"
 #include "ShapeRenderer.h"
@@ -167,6 +169,10 @@ private:
 
   /// The camera looking at the galaxy, and the ground plane it orbits (ADR-017).
   MapView m_mapView;
+
+  /// The sky. Built once and never changed: it is the same stars from every angle, which is what
+  /// makes turning the map feel like turning rather than like sliding a backdrop (ADR-032).
+  Neuron::Starfield m_sky;
 
   /// The bounding sphere of everything the map draws, in world space. What the camera frames.
   Neuron::OrbitCamera::WorldPoint m_contentCenter = {0.0F, 0.0F, 0.0F};

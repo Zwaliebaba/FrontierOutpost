@@ -176,6 +176,7 @@
     <ClCompile Include="PointerInput.cpp" />
     <ClCompile Include="SceneTarget.cpp" />
     <ClCompile Include="ShapeRenderer.cpp" />
+    <ClCompile Include="Starfield.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="D3D12Defaults.h" />
@@ -189,6 +190,7 @@
     <ClInclude Include="PointerInput.h" />
     <ClInclude Include="SceneTarget.h" />
     <ClInclude Include="ShapeRenderer.h" />
+    <ClInclude Include="Starfield.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>

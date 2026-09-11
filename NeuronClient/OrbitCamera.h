@@ -96,6 +96,28 @@ public:
 
   [[nodiscard]] ScreenPoint Project(const WorldPoint& _world) const noexcept;
 
+  /// Projects a DIRECTION rather than a place: where something infinitely far away in `_direction`
+  /// lands on the screen.
+  ///
+  /// **This is not `Project` of a point a long way off, and the difference is the whole reason it
+  /// exists.** A point at a distance has parallax -- move the eye and it shifts -- and the only way
+  /// to make that shift vanish is to pick a distance so large the arithmetic drops it, which is a
+  /// fudge factor whose right value depends on the scene. A direction has no position to have
+  /// parallax with: the eye cancels out of the subtraction before it is ever done, so this is the
+  /// exact answer for infinity rather than a close approximation of it.
+  ///
+  /// The returned `depth` is the cosine of the angle from the view axis, not a distance. It is
+  /// positive in front of the eye, which is what `visible` is decided on; sorting distant things
+  /// against each other by it is meaningless and nothing should try.
+  [[nodiscard]] ScreenPoint ProjectDirection(const WorldPoint& _direction) const noexcept;
+
+  /// Whether a projected point lands inside the rectangle this camera draws into.
+  ///
+  /// Tests the CENTRE only, so a dot straddling the edge is either drawn whole or not at all. For
+  /// the sky, whose stars are a pixel across and whose renderer does not clip, that is at most a
+  /// pixel of error at the boundary; anything larger wants a clip rectangle rather than this.
+  [[nodiscard]] bool InsideViewport(const ScreenPoint& _point) const noexcept;
+
   /// How many screen pixels one world unit spans at a given depth. What node radii, stem heights
   /// and ground circles are sized with, so that a system genuinely gets larger as it comes
   /// nearer rather than being scaled by a rule about where it is.

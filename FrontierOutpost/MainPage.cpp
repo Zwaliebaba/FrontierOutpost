@@ -62,11 +62,6 @@ constexpr float GRID_MAX_DESIGN = 1040.0F;
 constexpr float GRID_STEP = 80.0F;
 constexpr std::uint32_t GRID_LINES_ACROSS = static_cast<std::uint32_t>((GRID_MAX_DESIGN - GRID_MIN_DESIGN) / GRID_STEP);
 
-/// How far the sky slides for a radian of camera movement. The star field is at infinity, so it
-/// has no parallax -- but a sky that did not move at all would read as painted on the screen
-/// (ADR-017).
-constexpr float SKY_PIXELS_PER_RADIAN = 90.0F;
-
 /// Node geometry, in WORLD units now rather than as multiples of a depth scale: the camera turns
 /// a world size into a screen size, which is what makes a system genuinely larger when it is
 /// nearer (ADR-017). The numbers are the reference's, read as world units.
@@ -84,23 +79,6 @@ constexpr float REGION_RADIUS = 62.0F;
 /// How high the sealed region's second ring floats. The reference lifted it by the ellipse's own
 /// half-height; in world units that is about a quarter of the radius.
 constexpr float REGION_VOLUME_HEIGHT = 26.0F;
-
-/// The background star field: thirty dots in the map's projected space, unprojected (README).
-/// They are a texture, not geometry, which is why they are literals rather than graph data.
-struct Star
-{
-  float x;
-  float y;
-  float radius;
-};
-
-constexpr std::array<Star, 30> STARS = {{
-  {40, 60, 1.0F},   {120, 30, 0.8F},  {210, 90, 1.2F},  {330, 40, 0.7F},  {450, 70, 1.0F},  {560, 20, 0.9F},
-  {690, 60, 1.1F},  {760, 130, 0.8F}, {70, 180, 0.9F},  {160, 140, 0.7F}, {240, 170, 1.0F}, {410, 150, 0.8F},
-  {520, 110, 1.2F}, {600, 200, 0.8F}, {740, 220, 1.0F}, {30, 300, 0.9F},  {90, 400, 1.0F},  {200, 440, 0.8F},
-  {290, 500, 1.1F}, {380, 360, 0.7F}, {470, 470, 1.0F}, {600, 520, 0.9F}, {720, 330, 0.8F}, {770, 480, 1.0F},
-  {140, 530, 0.8F}, {50, 480, 1.1F},  {640, 440, 0.7F}, {350, 230, 0.9F}, {500, 380, 0.8F}, {250, 280, 0.7F},
-}};
 
 [[nodiscard]] Color WithAlpha(const Color& _color, std::uint8_t _alpha) noexcept
 {
@@ -629,21 +607,10 @@ void MainPage::DrawMap(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.FillVerticalGradient(paneX, TOP_BAR_HEIGHT, paneWidth, paneHeight, MAP_TOP, MAP_MIDDLE, 0.45F, MAP_BOTTOM);
   _text.SetClipRect(paneX, TOP_BAR_HEIGHT, paneWidth, paneHeight);
 
-  // The star field is a backdrop at infinity, so it does not project -- it SLIDES with the
-  // camera's yaw and rises and falls with its pitch. That is what a sky does: no parallax, but
-  // not painted on the screen either (ADR-017).
-  const float skyX = -camera.YawRadians() * SKY_PIXELS_PER_RADIAN;
-  const float skyY = camera.PitchRadians() * SKY_PIXELS_PER_RADIAN;
-  for (const Star& star : STARS)
-  {
-    const float wrappedX = std::fmod(std::fmod(star.x + skyX, MapView::DESIGN_WIDTH) + MapView::DESIGN_WIDTH, MapView::DESIGN_WIDTH);
-    const float x = paneX + wrappedX * (paneWidth / MapView::DESIGN_WIDTH);
-    const float y = TOP_BAR_HEIGHT + star.y + skyY;
-    if (y >= TOP_BAR_HEIGHT && y < TOP_BAR_HEIGHT + paneHeight)
-    {
-      _shapes.FillEllipse(x, y, star.radius, star.radius, STAR);
-    }
-  }
+  // The sky goes through the same camera as everything else, because it is in the same world --
+  // infinitely far away in it, which is a direction rather than a place (ADR-032). It is drawn
+  // first and depth-tests against nothing, so the galaxy covers it.
+  m_sky.Draw(_shapes, camera, STAR);
 
   const auto project = [&camera](const Neuron::OrbitCamera::WorldPoint& _world) { return camera.Project(_world); };
   const auto groundOf = [&](std::int32_t _system)
