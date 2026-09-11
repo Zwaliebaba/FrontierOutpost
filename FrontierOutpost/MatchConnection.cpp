@@ -8,8 +8,22 @@
 namespace Frontier
 {
 
+namespace
+{
+/// How long to wait between reconnection attempts. Long enough not to hammer a server that is
+/// restarting, short enough that a player who closed their lid for a minute is back before the next
+/// hourly lock.
+constexpr double RECONNECT_INTERVAL_SECONDS = 2.0;
+} // namespace
+
 bool MatchConnection::Open(const std::string& _host, std::uint16_t _port, const std::string& _token)
 {
+  // Remembered, so a reconnect needs nothing from the caller and cannot use a different token by
+  // accident -- which would make the player a different empire.
+  m_host = _host;
+  m_port = _port;
+  m_token = _token;
+
   m_socket = Neuron::Socket::Connect(_host, _port);
   if (!m_socket.Valid())
   {
@@ -90,8 +104,31 @@ void MatchConnection::Handle(std::span<const std::uint8_t> _payload)
   }
 }
 
-void MatchConnection::Pump()
+void MatchConnection::Pump(double _secondsSinceStart)
 {
+  // ---- Coming back ---------------------------------------------------------------------------
+  //
+  // A refusal is final -- an unknown token will still be unknown in three seconds -- but a lost
+  // connection is not. Attempts are spaced rather than spun on, because a client reconnecting sixty
+  // times a second to a server that is down is a client nobody can debug next to.
+  if (m_status == Status::Lost)
+  {
+    if (_secondsSinceStart < m_nextAttemptAt)
+    {
+      return;
+    }
+    m_nextAttemptAt = _secondsSinceStart + RECONNECT_INTERVAL_SECONDS;
+
+    const std::string host = m_host;
+    const std::uint16_t port = m_port;
+    const std::string token = m_token;
+    if (Open(host, port, token))
+    {
+      ++m_reconnects;
+    }
+    return;
+  }
+
   if (m_status != Status::Greeting && m_status != Status::Playing)
   {
     return;

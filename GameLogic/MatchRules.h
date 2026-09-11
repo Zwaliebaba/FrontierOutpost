@@ -207,6 +207,46 @@ struct MatchRules
   std::uint32_t regionSiteCount = 3;
 };
 
+/// The test plan's Phase 0 setup: six players, a one-hour tick, forty-eight hours.
+///
+/// **Three defaults do not survive being compressed, and this is where that is dealt with.** The
+/// defaults are authored for a 21-day match at four ticks a day; Phase 0 is 48 ticks at an hourly
+/// one. Left alone, `firstWeekTicks` at 28 would cover well over half the match -- so "a first-week
+/// custodian scores nothing" would apply to nearly everybody who lapsed at all -- and
+/// `regionOpensAtTick` at 60 would never arrive.
+///
+/// Scaled rather than re-guessed: the first week is a third of a three-week match and stays a third
+/// here; the region opens at five-sevenths of the way through and stays there. Phase 0 is for
+/// tuning these, and a tuner needs a starting point that means the same thing at both lengths.
+///
+/// *A third, not a quarter* -- 28 of 84 ticks. This comment said a quarter and the code below
+/// agreed with the comment rather than with the default it was scaling, which is the failure mode
+/// a derived constant has: it looks right and is off by a third.
+///
+/// **`custodianAbsenceTicks` scales by the clock and not by the match, and that is the one
+/// exception.** The other three are fractions of a match because they are about how far through the
+/// game you are. Absence is not: it is about how long a person has been away from their life, and
+/// three ticks means eighteen hours at the authored interval and three hours at this one. Left
+/// alone it says a player who sleeps has stopped playing -- which a compressed rehearsal showed
+/// directly, with every one of six players a custodian by T3 and every final score zero, because a
+/// first-week custodian forfeits and never recovers. Eighteen ticks is the same eighteen hours.
+[[nodiscard]] constexpr MatchRules PhaseZeroRules() noexcept
+{
+  MatchRules rules;
+  rules.playerCount = 6;
+  rules.tickIntervalSeconds = 60 * 60;
+  rules.matchLengthTicks = 48;
+
+  rules.firstWeekTicks = rules.matchLengthTicks / 3;
+  rules.regionOpensAtTick = (rules.matchLengthTicks * 5) / 7;
+  rules.custodianAbsenceTicks = 18;
+
+  // The capital guard is twelve ticks of a 84-tick match -- a seventh. At 48 that is seven, and
+  // seven hours of an hourly tick is a night's sleep, which is the thing the guard is protecting.
+  rules.capitalGuardTicks = rules.matchLengthTicks / 7;
+  return rules;
+}
+
 /// The bounds the one-pager fixes on player count. Outside these the generator refuses rather than
 /// producing a galaxy nobody designed for.
 inline constexpr std::uint32_t MINIMUM_PLAYERS = 6;

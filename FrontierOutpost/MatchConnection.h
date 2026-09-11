@@ -42,8 +42,16 @@ public:
   /// process means the server thread has not come up yet and the caller should try again.
   [[nodiscard]] bool Open(const std::string& _host, std::uint16_t _port, const std::string& _token);
 
-  /// Reads whatever arrived. Call it every frame; it never blocks.
-  void Pump();
+  /// Reads whatever arrived, and reconnects if the connection has gone. Call it every frame; it
+  /// never blocks.
+  ///
+  /// **Reconnection is not optional for Phase 0.** Six people over forty-eight hours will close a
+  /// lid, lose a wifi connection or walk through a lift, and a client that gave up on the first
+  /// dropped packet would end their match. The server already sends a snapshot on `Hello`, so
+  /// coming back is a reconnect and nothing more -- there is no state on this side to reconcile.
+  ///
+  /// `_secondsSinceStart` is the caller's clock, used only to space the attempts.
+  void Pump(double _secondsSinceStart);
 
   /// Sends an order set, replacing whatever was sent before. Silently does nothing when not
   /// playing — an order given while disconnected is not an error the player can act on, and the
@@ -88,6 +96,19 @@ public:
   /// than rebuilding it every frame.
   [[nodiscard]] bool TakeFreshState() noexcept;
 
+  /// How many times this connection has come back. Shown on the screen, because a player whose
+  /// orders are not arriving needs to know that rather than wonder.
+  [[nodiscard]] std::uint32_t Reconnects() const noexcept
+  {
+    return m_reconnects;
+  }
+
+  /// Whether the client is currently able to reach the server.
+  [[nodiscard]] bool Live() const noexcept
+  {
+    return m_status == Status::Playing;
+  }
+
 private:
   void Send(std::span<const std::uint8_t> _payload);
   void Handle(std::span<const std::uint8_t> _payload);
@@ -105,6 +126,14 @@ private:
   std::vector<std::uint8_t> m_snapshot;
   std::vector<std::uint8_t> m_digest;
   bool m_fresh = false;
+
+  /// Kept so a reconnect needs nothing from the caller.
+  std::string m_host;
+  std::uint16_t m_port = 0;
+  std::string m_token;
+
+  double m_nextAttemptAt = 0.0;
+  std::uint32_t m_reconnects = 0;
 };
 
 } // namespace Frontier

@@ -144,6 +144,7 @@
     </ClCompile>
     <ClCompile Include="NeuronServerTests.cpp" />
     <ClCompile Include="MatchServerTests.cpp" />
+    <ClCompile Include="MatchLogTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CountingSimulation.h" />

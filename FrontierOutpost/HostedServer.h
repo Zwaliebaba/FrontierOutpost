@@ -2,6 +2,8 @@
 
 #include "MatchServer.h"
 
+#include "MatchRules.h"
+
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -25,7 +27,8 @@ class HostedServer
 {
 public:
   /// Starts a match and begins listening. `_port` of zero asks the OS for one; `Port()` says which.
-  HostedServer(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::uint64_t _seed);
+  HostedServer(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath, std::uint64_t _seed,
+               const MatchRules& _rules);
   ~HostedServer();
 
   HostedServer(const HostedServer&) = delete;
@@ -48,7 +51,8 @@ public:
   void Stop() noexcept;
 
 private:
-  void Run(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::uint64_t _seed);
+  void Run(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath, std::uint64_t _seed,
+           MatchRules _rules);
 
   std::thread m_thread;
   std::atomic<bool> m_running{true};

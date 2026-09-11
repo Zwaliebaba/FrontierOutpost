@@ -70,6 +70,9 @@ public:
   /// agree about when the tick is rather than each running its own timer.
   [[nodiscard]] std::int64_t SecondsUntilNextLock(Instant _now) const;
 
+  /// The game's instrumentation for the ticks just resolved, taken and cleared.
+  [[nodiscard]] std::vector<std::string> TakeEvents();
+
   [[nodiscard]] std::vector<std::uint8_t> SnapshotFor(std::int32_t _player) const;
   [[nodiscard]] std::vector<std::uint8_t> DigestFor(std::int32_t _player) const;
 

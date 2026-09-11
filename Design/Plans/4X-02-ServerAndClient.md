@@ -324,3 +324,68 @@ which never arrives in either. The region has no rules until Phase 2 so the seco
 now; the first means "a first-week custodian scores nothing" covers most of a Phase 0 run. Setting
 them per phase is a one-line change and belongs to whoever configures the match, but somebody has
 to notice, so it is written down here.
+
+---
+
+## 6. Phase 0 preparation — what was built after Step 4, and what a rehearsal found
+
+**2026-09-11.** Five of the six items above were built, and the sixth is unchanged. They are listed
+here rather than folded into Step 4 because they are not this plan's steps: they are the list Step 4
+produced, closed.
+
+**1. Reconnection** — `MatchConnection::Pump(double)` retries a lost connection every two seconds,
+remembering host, port and token so a reconnect cannot come back as a different empire.
+`MatchState::connected` carries it to the screen and the top bar draws `RECONNECTING` in red. A
+refusal is still final: an unknown token will still be unknown in three seconds.
+
+**2. The instrumentation reaches a file** — `NeuronServer/MatchLog`, and **ADR-030**, which is the
+second sanctioned exception to R13. Plain text, UTC-stamped, flushed and reopened per line.
+
+**3. "Fleet order after capital fall" is emitted** — via `Simulation::TakeEvents`, the answer
+ADR-025 named for its own open question. The game narrates and the server writes it down; the seam
+stays a seam.
+
+**4. Order edits are still not reported.** Unchanged, and now the only item on the test plan's
+instrumentation list that nothing produces. Recorded in ADR-030's open questions so that H4 is known
+to be unanswerable before the weekend rather than after it.
+
+**5. Phase parameters** — `PhaseZeroRules()` and `--phase0`.
+
+**6. The host leaving** — unchanged, and still a thing to say out loud.
+
+### `--tick <seconds>`, and why a rehearsal was worth it
+
+A flag that overrides the interval. At two seconds a tick, a whole 48-tick Phase 0 match runs in a
+hundred seconds over real sockets, with the same server, store and log as the real thing. **It found
+two bugs that a reading of the code did not**, and both would have cost the weekend rather than an
+afternoon:
+
+**Every score was zero.** `custodianAbsenceTicks` is three, which is eighteen hours at the authored
+six-hour interval and *three hours* at Phase 0's hourly one. All six players were custodians by T3,
+all six had lapsed inside the first week, and a first-week custodian forfeits the match and never
+recovers it. Six people sleeping one night would have finished a weekend on nothing. `PhaseZeroRules`
+now scales it by the clock rather than by the match — eighteen ticks, the same eighteen hours — and
+the trade is that the first-week forfeit cannot fire at this length, which is the better failure.
+
+**One custodian was logged as six, five of them named wrongly.** Every player is told when somebody
+enters custody, so the event arrives once per reader; the line was written from the reader's index
+rather than the subject's. H2 is counted off those lines. Returning from custody was logged as
+entering it, too, so a player who lapsed and came back read as two lapses.
+
+Neither is a rules bug. Both are instrumentation bugs, which is the class this file was least able
+to catch by inspection, because a wrong line looks exactly like a right one.
+
+**What a compressed clock does not tell you**, and the test plan is explicit about it: nothing about
+session shape, retention, or how an hourly tick feels. It rehearses mechanics. That is all it is for.
+
+### The rehearsal, as run
+
+`--serve 7401 --phase0 --tick 2`, with two clients joining. Forty-eight ticks resolved, the four
+players who never connected went into custody at T18 — one line each, correctly named — and the
+match ended with a line per player. The loop turns end to end over sockets, which had not been
+observed before this.
+
+### What Phase 0 still needs from a person
+
+Six people, forty-eight hours, and the one step nobody has taken: **two machines, one match, one
+tick.** Everything above was verified on loopback.

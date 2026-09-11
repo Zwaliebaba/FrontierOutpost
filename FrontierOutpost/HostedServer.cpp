@@ -3,6 +3,7 @@
 #include "pch.h"
 #include "HostedServer.h"
 
+#include "MatchLog.h"
 #include "MatchSimulation.h"
 #include "Session.h"
 #include "TickSchedule.h"
@@ -19,10 +20,11 @@ namespace
 constexpr std::chrono::milliseconds POLL_INTERVAL{16};
 } // namespace
 
-HostedServer::HostedServer(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::uint64_t _seed)
+HostedServer::HostedServer(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath,
+                           std::uint64_t _seed, const MatchRules& _rules)
 {
-  m_thread = std::thread([this, _port, tokens = std::move(_tokens), path = std::move(_storePath), _seed]() mutable
-                         { Run(_port, std::move(tokens), std::move(path), _seed); });
+  m_thread = std::thread([this, _port, tokens = std::move(_tokens), store = std::move(_storePath), log = std::move(_logPath), _seed,
+                          rules = _rules]() mutable { Run(_port, std::move(tokens), std::move(store), std::move(log), _seed, rules); });
 }
 
 HostedServer::~HostedServer()
@@ -47,9 +49,16 @@ std::vector<std::string> HostedServer::TakeLog()
   return taken;
 }
 
-void HostedServer::Run(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::uint64_t _seed)
+void HostedServer::Run(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath,
+                       std::uint64_t _seed, MatchRules _rules)
 {
-  const MatchRules rules;
+  const MatchRules rules = _rules;
+
+  // The instrumentation log (ADR-030). Opened on this thread and written from it, so it needs no
+  // lock either -- the same reason nothing else here does.
+  Neuron::MatchLog log{std::move(_logPath)};
+  log.Write(std::format("match-start seed={} players={} tick-seconds={} length={}", _seed, rules.playerCount, rules.tickIntervalSeconds,
+                        rules.matchLengthTicks));
 
   // Everything below is created on this thread and destroyed on it. The simulation, the session and
   // the server never leave, which is what makes the absence of a lock correct rather than lucky.
@@ -74,6 +83,8 @@ void HostedServer::Run(std::uint16_t _port, std::vector<std::string> _tokens, st
     std::vector<std::string> lines = server.TakeLog();
     if (!lines.empty())
     {
+      log.Write(lines);
+
       std::lock_guard<std::mutex> held{m_logLock};
       for (std::string& line : lines)
       {

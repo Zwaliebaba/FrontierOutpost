@@ -119,6 +119,7 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="MatchLog.cpp" />
     <ClCompile Include="MatchServer.cpp" />
     <ClCompile Include="MatchStore.cpp" />
     <ClCompile Include="Session.cpp" />
@@ -128,6 +129,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="MatchLog.h" />
     <ClInclude Include="MatchServer.h" />
     <ClInclude Include="MatchStore.h" />
     <ClInclude Include="NeuronServer.h" />

@@ -499,6 +499,16 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   }
   _text.DrawText(16 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("FRONTIER OUTPOST")) + 10, centered, matchLine, TEXT_MUTED);
 
+  // A disconnected client says so, in the one place a player is already looking. Everything else on
+  // this screen is the last thing the server said, and without this there is no way to tell that
+  // from the current thing the server is saying.
+  if (!m_state.connected)
+  {
+    const std::int32_t offlineX = 16 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("FRONTIER OUTPOST")) + 10 +
+                                  static_cast<std::int32_t>(FontRenderer::MeasurePixels(matchLine)) + 12;
+    _text.DrawText(offlineX, centered, "RECONNECTING", RED);
+  }
+
   // The right group is laid out right to left, because it is anchored to the frame edge and its
   // widest member -- the leader's name -- is the one that changes.
   float cursor = SCREEN_WIDTH - 16.0F;

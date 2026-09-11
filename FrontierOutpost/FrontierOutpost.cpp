@@ -75,6 +75,19 @@ struct Startup
   std::string host = "127.0.0.1";
   std::uint16_t port = 7341;
   std::string token = "alpha";
+  /// `--phase0` runs the test plan's Phase 0 setup: six players, an hourly tick, forty-eight hours.
+  /// Without it the defaults are the production three-week match, which nobody is going to sit
+  /// through to find a broken mechanic.
+  bool phaseZero = false;
+
+  /// `--tick <seconds>` overrides the interval, for rehearsing a match rather than playing one.
+  ///
+  /// **This is how you find out the loop works before asking six people for a weekend.** At three
+  /// seconds a tick a whole Phase 0 match runs in under three minutes, with the same server, the
+  /// same sockets, the same store and the same log as the real thing -- everything except the
+  /// waiting. The test plan is explicit that a compressed clock hides anything about session shape
+  /// or retention, so this is for mechanics only, which is exactly what Phase 0 is for.
+  std::uint32_t tickSeconds = 0;
 };
 
 /// The six Phase 0 tokens.
@@ -86,6 +99,37 @@ struct Startup
 [[nodiscard]] std::vector<std::string> PhaseZeroTokens()
 {
   return {"alpha", "bravo", "charlie", "delta", "echo", "foxtrot"};
+}
+
+/// A file name, resolved to sit beside the executable.
+///
+/// **Not relative to the working directory**, which is wherever the shell happened to be. A match
+/// store and a log that land somewhere different depending on how the game was launched are a match
+/// that does not resume and a Phase 0 whose instrumentation nobody can find. Beside the executable
+/// is where somebody looks.
+[[nodiscard]] std::string BesideTheExecutable(const char* _name)
+{
+  wchar_t module[MAX_PATH] = {};
+  const DWORD length = GetModuleFileNameW(nullptr, module, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH)
+  {
+    return _name;
+  }
+
+  std::wstring path{module, length};
+  const std::size_t slash = path.find_last_of(L'\\');
+  if (slash == std::wstring::npos)
+  {
+    return _name;
+  }
+
+  std::string folder;
+  folder.reserve(slash + 1);
+  for (std::size_t index = 0; index <= slash; ++index)
+  {
+    folder.push_back(path[index] < 128 ? static_cast<char>(path[index]) : '?');
+  }
+  return folder + _name;
 }
 
 /// `--serve [port]`, `--join <host[:port]>`, `--token <token>`. Anything else is host-and-play.
@@ -157,6 +201,15 @@ struct Startup
     else if (words[index] == "--token" && index + 1 < words.size())
     {
       startup.token = words[++index];
+    }
+    else if (words[index] == "--phase0")
+    {
+      startup.phaseZero = true;
+    }
+    else if (words[index] == "--tick" && index + 1 < words.size())
+    {
+      const unsigned long seconds = std::strtoul(words[++index].c_str(), nullptr, 10);
+      startup.tickSeconds = seconds > 0 ? static_cast<std::uint32_t>(seconds) : 0;
     }
   }
 
@@ -294,6 +347,8 @@ int RunGame(HWND _window, const Startup& _startup)
   // THE CLIENT TALKS TCP EVEN WHEN THE SERVER IS ON THE NEXT THREAD (ADR-028). That is deliberate:
   // a local path that bypassed the wire would be a path that works and a network path nobody runs
   // until six people are waiting. The host's own client is a socket client like everybody else.
+  const auto startedAt = std::chrono::steady_clock::now();
+
   Frontier::MatchConnection connection;
 
   // The server may still be binding its port when we get here, so this retries rather than
@@ -322,6 +377,7 @@ int RunGame(HWND _window, const Startup& _startup)
   page.Create(Frontier::MakeReferenceMatch());
 
   auto lastPing = std::chrono::steady_clock::now();
+  bool wasLive = false;
 
   Neuron::PointerInput pointer;
   pointer.Create(_window);
@@ -339,12 +395,20 @@ int RunGame(HWND _window, const Startup& _startup)
     //
     // The client never asks for a resolution and could not provoke one. It reads what arrived and
     // redraws when the server says the tick moved.
-    connection.Pump();
+    connection.Pump(std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count());
 
     if (connection.State() == Frontier::MatchConnection::Status::Refused)
     {
       MessageBoxA(nullptr, Neuron::Describe(connection.Refusal()), "Frontier Outpost", MB_OK | MB_ICONERROR);
       return EXIT_FAILURE;
+    }
+
+    if (connection.Live() != wasLive)
+    {
+      wasLive = connection.Live();
+      Frontier::MatchState state = page.State();
+      state.connected = wasLive;
+      page.Create(std::move(state));
     }
 
     if (connection.TakeFreshState() && !connection.Snapshot().empty())
@@ -353,7 +417,9 @@ int RunGame(HWND _window, const Startup& _startup)
       const Frontier::Snapshot snapshot = Frontier::Snapshot::Read(reader);
 
       Neuron::ByteReader digestReader{connection.Digest()};
-      page.Create(Frontier::ViewOf(snapshot, Frontier::Snapshot::ReadDigest(digestReader), connection.SecondsToLock()));
+      Frontier::MatchState state = Frontier::ViewOf(snapshot, Frontier::Snapshot::ReadDigest(digestReader), connection.SecondsToLock());
+      state.connected = true;
+      page.Create(std::move(state));
     }
 
     // Presence, once a second. It is a fact about being seen rather than about submitting, and it
@@ -463,7 +529,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   if (startup.role != Role::Join)
   {
     constexpr std::uint64_t GALAXY_SEED = 0x4652'4F4E'5449'4552ULL;
-    hosted = std::make_unique<Frontier::HostedServer>(startup.port, PhaseZeroTokens(), std::string{"frontier-match.store"}, GALAXY_SEED);
+
+    Frontier::MatchRules rules = startup.phaseZero ? Frontier::PhaseZeroRules() : Frontier::MatchRules{};
+    if (startup.tickSeconds > 0)
+    {
+      rules.tickIntervalSeconds = startup.tickSeconds;
+    }
+
+    hosted = std::make_unique<Frontier::HostedServer>(startup.port, PhaseZeroTokens(), BesideTheExecutable("frontier-match.store"),
+                                                      BesideTheExecutable("frontier-match.log"), GALAXY_SEED, rules);
   }
 
   // ---- Headless -------------------------------------------------------------------------------

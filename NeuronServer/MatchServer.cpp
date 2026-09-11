@@ -279,6 +279,13 @@ std::uint32_t MatchServer::Poll(Instant _now)
     }
   }
 
+  // The game's own instrumentation, taken every poll rather than only after a lock -- a tick that
+  // resolved and whose events were left behind is a gap in the record with no way to notice it.
+  for (std::string& line : m_session->TakeEvents())
+  {
+    m_log.push_back(std::move(line));
+  }
+
   // State goes out when the tick moved, and once when a match first has connections -- so a client
   // that joined mid-tick is not looking at nothing until the next lock.
   const bool tickMoved = resolved > 0 || !m_pushedOnce || m_session->Match().Tick() != m_pushedTick;

@@ -126,6 +126,7 @@ MatchSimulation::MatchSimulation(const MatchRules& _rules, std::uint64_t _seed)
   : m_match(Match::Create(_rules, _seed))
 {
   m_pending.assign(_rules.playerCount, Neuron::PlayerTurn{});
+  m_capitalFellAt.assign(_rules.playerCount, 0);
 }
 
 MatchSimulation MatchSimulation::FromConfiguration(std::span<const std::uint8_t> _configuration)
@@ -232,6 +233,122 @@ void MatchSimulation::Resolve()
   // player never gave twice.
   m_locked = std::move(m_pending);
   m_pending.assign(static_cast<std::size_t>(PlayerCount()), Neuron::PlayerTurn{});
+
+  RecordEvents();
+}
+
+void MatchSimulation::RecordEvents()
+{
+  const std::uint32_t tick = m_match.Tick();
+
+  // ---- H3: a fleet order from somebody whose capital has already fallen --------------------------
+  //
+  // Read BEFORE this tick's losses are folded in, so "after" means a strictly earlier tick. A
+  // player who lost their capital and moved a fleet in the same tick had not yet lost it when they
+  // gave the order.
+  for (std::size_t player = 0; player < m_locked.size(); ++player)
+  {
+    if (m_capitalFellAt[player] == 0 || m_locked[player].orders.empty())
+    {
+      continue;
+    }
+
+    Neuron::ByteReader reader{m_locked[player].orders};
+    const OrderSet decoded = OrderSet::Read(reader);
+    if (!reader.Failed() && !decoded.fleetOrders.empty())
+    {
+      m_events.push_back(std::format("T{} fleet-order-after-capital-fall player={} fell-at=T{} orders={}", tick, player,
+                                     m_capitalFellAt[player], decoded.fleetOrders.size()));
+    }
+  }
+
+  // ---- Everything the digests already know ---------------------------------------------------------
+  //
+  // The test plan's list, drawn from what the resolver reported rather than recomputed. A second
+  // implementation of "did a capital fall" would be a second thing to keep right.
+  for (std::size_t player = 0; player < m_lastTick.digests.size(); ++player)
+  {
+    for (const DigestEntry& entry : m_lastTick.digests[player])
+    {
+      switch (entry.kind)
+      {
+      case DigestKind::SystemLost:
+        if (entry.system.IsValid() && m_match.GalaxyGraph().SystemAt(entry.system).kind == SystemKind::Capital)
+        {
+          m_events.push_back(std::format("T{} capital-fall player={} to={}", tick, player, entry.other.Index()));
+          if (m_capitalFellAt[player] == 0)
+          {
+            m_capitalFellAt[player] = tick;
+          }
+        }
+        break;
+
+      case DigestKind::Custodian:
+        // **Every player is told when somebody goes into custody**, so one event arrives here six
+        // times -- and in those copies `player` is the reader while `entry.other` is the subject.
+        // Logging the reader would have put six custodians in the log where there was one, and
+        // named five of them wrongly. H2 is counted off these lines, so that is the whole
+        // measurement rather than a cosmetic slip.
+        if (entry.other.IsValid())
+        {
+          if (entry.other.Index() == static_cast<std::int32_t>(player))
+          {
+            m_events.push_back(std::format("T{} custodian player={}", tick, player));
+          }
+        }
+        else
+        {
+          // The one Custodian entry with no subject is the returning player's own "you are back",
+          // which is the opposite event and was previously logged as another entry into custody.
+          m_events.push_back(std::format("T{} custodian-ended player={}", tick, player));
+        }
+        break;
+
+      case DigestKind::ProposalReceived:
+        m_events.push_back(std::format("T{} proposal-sent to={} from={}", tick, player, entry.other.Index()));
+        break;
+      case DigestKind::ProposalAnswered:
+        m_events.push_back(std::format("T{} proposal-answered player={} by={}", tick, player, entry.other.Index()));
+        break;
+      case DigestKind::ProposalIgnored:
+        m_events.push_back(std::format("T{} proposal-ignored player={}", tick, player));
+        break;
+      case DigestKind::LaneOpened:
+        m_events.push_back(std::format("T{} lane-opened player={} with={}", tick, player, entry.other.Index()));
+        break;
+      case DigestKind::LaneCanceled:
+        m_events.push_back(std::format("T{} lane-canceled player={} detail=\"{}\"", tick, player, entry.detail));
+        break;
+      case DigestKind::Contact:
+        m_events.push_back(std::format("T{} first-contact player={} with={}", tick, player, entry.other.Index()));
+        break;
+      case DigestKind::MatchEnded:
+        m_events.push_back(std::format("T{} match-ended player={} score={}", tick, player, m_match.Players()[player].score));
+        break;
+
+      default:
+        break;
+      }
+    }
+  }
+
+  // ---- Phase 0's watch item ------------------------------------------------------------------------
+  //
+  // "Log every departure that coincides with a hostile arrival at the same system." The fraction is
+  // what decides whether the rear-guard round gets switched on, so it is logged every tick it is
+  // non-zero rather than only when somebody remembers to ask.
+  if (!m_lastTick.interceptions.empty())
+  {
+    m_events.push_back(std::format("T{} dancing dodged={} targeted={} rear-guard={}", tick, m_lastTick.Dodges(),
+                                   m_lastTick.interceptions.size(), m_match.Rules().rearGuardEnabled ? "on" : "off"));
+  }
+}
+
+std::vector<std::string> MatchSimulation::TakeEvents()
+{
+  std::vector<std::string> taken;
+  taken.swap(m_events);
+  return taken;
 }
 
 std::vector<Neuron::PlayerTurn> MatchSimulation::LockedTurn() const

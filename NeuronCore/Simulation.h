@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace Neuron
@@ -82,6 +83,18 @@ public:
 
   [[nodiscard]] virtual std::vector<std::uint8_t> SnapshotFor(std::int32_t _player) const = 0;
   [[nodiscard]] virtual std::vector<std::uint8_t> DigestFor(std::int32_t _player) const = 0;
+
+  /// What happened, in words, for the instrumentation log. Taken and cleared.
+  ///
+  /// **The game writes these, not the server**, and that is the resolution of the question ADR-025
+  /// left open. The test plan wants proposals, lanes, captures and custodians logged, and all of
+  /// those are things only the simulation knows -- but the server cannot read a digest to find
+  /// them, because the seam is bytes and a server that could read one could act on one. So the game
+  /// says what happened and the server decides where it goes and stamps it with a time.
+  ///
+  /// Lines are plain text because their reader is a person with a Phase 0 spreadsheet, not a
+  /// program. A format nobody has asked for yet would be a format guessed at.
+  [[nodiscard]] virtual std::vector<std::string> TakeEvents() = 0;
 };
 
 } // namespace Neuron

@@ -143,6 +143,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="GameLogicTests.cpp" />
+    <ClCompile Include="InstrumentationTests.cpp" />
     <ClCompile Include="MatchTests.cpp" />
     <ClCompile Include="CombatTests.cpp" />
     <ClCompile Include="DiplomacyTests.cpp" />

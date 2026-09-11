@@ -8,6 +8,7 @@
 #include "Simulation.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace Frontier
@@ -46,6 +47,7 @@ public:
   [[nodiscard]] std::vector<Neuron::PlayerTurn> LockedTurn() const override;
   [[nodiscard]] std::vector<std::uint8_t> SnapshotFor(std::int32_t _player) const override;
   [[nodiscard]] std::vector<std::uint8_t> DigestFor(std::int32_t _player) const override;
+  [[nodiscard]] std::vector<std::string> TakeEvents() override;
 
   /// The match itself. The executable draws from it and the tests assert on it; the server never
   /// sees it, which is the point of the interface above.
@@ -71,6 +73,9 @@ public:
 private:
   MatchSimulation() = default;
 
+  /// Turns the tick just resolved into instrumentation lines.
+  void RecordEvents();
+
   Match m_match;
   TickLog m_lastTick;
 
@@ -80,6 +85,14 @@ private:
   std::vector<Neuron::PlayerTurn> m_locked;
 
   std::uint32_t m_rejectedSubmissions = 0;
+
+  /// What the instrumentation log has not been told yet.
+  std::vector<std::string> m_events;
+
+  /// The tick each player's capital fell, or zero. **This is H3's entire measurement**: the test
+  /// plan asks whether losers keep playing, which is a fleet order from somebody whose capital fell
+  /// on an EARLIER tick. It is a join across ticks and this is the only thing holding both halves.
+  std::vector<std::uint32_t> m_capitalFellAt;
 };
 
 } // namespace Frontier

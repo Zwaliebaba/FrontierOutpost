@@ -312,6 +312,13 @@ struct MatchHeader
 /// Everything the main page reads.
 struct MatchState
 {
+  /// Whether the client can currently reach the server.
+  ///
+  /// It is on the state because it has to be on the SCREEN. A player whose orders are silently not
+  /// arriving will keep giving them, discover at the lock that nothing happened, and have no way to
+  /// tell a bug from a network -- and at an hourly tick they lose an hour finding out.
+  bool connected = true;
+
   /// Whose screen this is. Every "you" on it is relative to this.
   OwnerId viewer = 0;
 

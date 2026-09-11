@@ -18,6 +18,9 @@
     <ClCompile Include="MatchServerTests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="MatchLogTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="NeuronServerTests.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

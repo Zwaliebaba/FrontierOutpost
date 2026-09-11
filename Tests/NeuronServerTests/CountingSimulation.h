@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -115,6 +116,15 @@ public:
   {
     return {static_cast<std::uint8_t>(0xD0), static_cast<std::uint8_t>(_player)};
   }
+
+  [[nodiscard]] std::vector<std::string> TakeEvents() override
+  {
+    std::vector<std::string> taken;
+    taken.swap(events);
+    return taken;
+  }
+
+  std::vector<std::string> events;
 
   void SetLength(std::uint32_t _ticks) noexcept
   {

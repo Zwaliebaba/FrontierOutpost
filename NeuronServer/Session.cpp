@@ -97,6 +97,11 @@ std::int64_t Session::SecondsUntilNextLock(Instant _now) const
   return m_schedule.SecondsUntilLockOf(m_simulation->Tick(), _now);
 }
 
+std::vector<std::string> Session::TakeEvents()
+{
+  return m_simulation->TakeEvents();
+}
+
 std::vector<std::uint8_t> Session::SnapshotFor(std::int32_t _player) const
 {
   return m_simulation->SnapshotFor(_player);
