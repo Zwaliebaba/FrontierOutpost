@@ -138,10 +138,10 @@
     <ClCompile Include="DigestView.cpp" />
     <ClCompile Include="JoinPage.cpp" />
     <ClCompile Include="SeatsPage.cpp" />
+    <ClCompile Include="ConnectionDialog.cpp" />
     <ClCompile Include="HostedServer.cpp" />
     <ClCompile Include="MainPage.cpp" />
     <ClCompile Include="MatchConnection.cpp" />
-    <ClCompile Include="MatchFixture.cpp" />
     <ClCompile Include="MatchState.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -154,11 +154,11 @@
     <ClInclude Include="DigestView.h" />
     <ClInclude Include="JoinPage.h" />
     <ClInclude Include="SeatsPage.h" />
+    <ClInclude Include="ConnectionDialog.h" />
     <ClInclude Include="HostedServer.h" />
     <ClInclude Include="MainPage.h" />
     <ClInclude Include="MatchConnection.h" />
     <ClInclude Include="MapView.h" />
-    <ClInclude Include="MatchFixture.h" />
     <ClInclude Include="MatchState.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>

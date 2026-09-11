@@ -66,10 +66,19 @@ public:
     return m_token.Text();
   }
 
+  /// Asks to join without the player pressing anything. `RETRY` on a refusal dialog is this: the
+  /// fields already hold what should be sent, so the retry goes through the one path that opens a
+  /// connection rather than a second copy of it.
+  void AskToJoin() noexcept;
+
   /// True once, when the player has asked to join. Taken, so a held finger does not reconnect.
   [[nodiscard]] bool TakeJoinRequest() noexcept;
 
   void SetStatus(Status _status, std::string_view _detail = {});
+
+  /// Puts the caret back in the token field. `EDIT TOKEN` on a refusal dialog is this, and it is
+  /// worth a method because the commonest refusal is a typo in exactly one of the two fields.
+  void FocusToken() noexcept;
   [[nodiscard]] Status CurrentStatus() const noexcept
   {
     return m_status;

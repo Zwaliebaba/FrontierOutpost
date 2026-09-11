@@ -31,10 +31,10 @@
 
 #include "HostedServer.h"
 #include "MainPage.h"
+#include "ConnectionDialog.h"
 #include "JoinPage.h"
 #include "SeatsPage.h"
 #include "MatchConnection.h"
-#include "MatchFixture.h"
 #include "SnapshotView.h"
 
 #include "Socket.h"
@@ -490,6 +490,10 @@ bool PumpMessages()
   Lockstep::JoinPage page;
   page.Offer(_server, _token);
 
+  // Screen 05 over screen 03. The card underneath keeps saying what the player typed, because the
+  // dialog is about to send them back to it.
+  Lockstep::ConnectionDialog dialog;
+
   auto lastFrame = std::chrono::steady_clock::now();
 
   while (PumpMessages())
@@ -510,7 +514,42 @@ bool PumpMessages()
     float tapYPixels = 0.0F;
     if (_pointer.TakeClick(tapXPixels, tapYPixels))
     {
-      (void)page.HandleTap(tapXPixels, tapYPixels);
+      // The dialog first, and it swallows whatever it does not use. A tap that fell through to the
+      // fields behind a refusal would edit a token the player cannot see.
+      if (!dialog.HandleTap(tapXPixels, tapYPixels))
+      {
+        (void)page.HandleTap(tapXPixels, tapYPixels);
+      }
+    }
+
+    // ---- What the dialog was told to do --------------------------------------------------------
+    switch (dialog.TakeAction())
+    {
+    case Lockstep::ConnectionDialog::Action::Quit:
+      return false;
+
+    case Lockstep::ConnectionDialog::Action::EditToken:
+      page.FocusToken();
+      [[fallthrough]];
+
+    case Lockstep::ConnectionDialog::Action::Cancel:
+    case Lockstep::ConnectionDialog::Action::Back:
+      // A refusal is final for the connection that earned it, so going back means putting the
+      // connection back to where it was before the attempt rather than merely hiding the dialog.
+      _connection.Reset();
+      page.SetStatus(Lockstep::JoinPage::Status::Ready);
+      break;
+
+    case Lockstep::ConnectionDialog::Action::Retry:
+      _connection.Reset();
+      page.SetStatus(Lockstep::JoinPage::Status::Ready);
+      page.AskToJoin();
+      break;
+
+    case Lockstep::ConnectionDialog::Action::ViewLastDigest:
+    case Lockstep::ConnectionDialog::Action::None:
+    default:
+      break;
     }
 
     // ---- What the player asked for -------------------------------------------------------------
@@ -544,6 +583,19 @@ bool PumpMessages()
     // ---- What the server said ------------------------------------------------------------------
     _connection.Pump(std::chrono::duration<double>(now - _startedAt).count());
 
+    const double secondsSinceStart = std::chrono::duration<double>(now - _startedAt).count();
+
+    Lockstep::ConnectionDialog::Kind kind = Lockstep::ConnectionDialog::Kind::None;
+    Lockstep::ConnectionDialog::Facts facts;
+    facts.server = _connection.Server();
+    facts.reason = _connection.Refusal();
+    facts.reconnects = _connection.Reconnects();
+    facts.secondsToNextAttempt = _connection.SecondsToNextAttempt(secondsSinceStart);
+
+    // There IS a screen behind this dialog, and it is the one that asks the question the refusal is
+    // an answer to. This is the only place that is true.
+    facts.canGoBack = true;
+
     switch (_connection.State())
     {
     case Lockstep::MatchConnection::Status::Playing:
@@ -554,18 +606,23 @@ bool PumpMessages()
       return true;
 
     case Lockstep::MatchConnection::Status::Refused:
-      page.SetStatus(Lockstep::JoinPage::Status::Refused, Neuron::Describe(_connection.Refusal()));
+      kind = Lockstep::ConnectionDialog::Kind::Refused;
       break;
 
     case Lockstep::MatchConnection::Status::Lost:
-      page.SetStatus(Lockstep::JoinPage::Status::Refused, "The connection was lost.");
+      kind = Lockstep::ConnectionDialog::Kind::Lost;
       break;
 
     case Lockstep::MatchConnection::Status::Greeting:
+      kind = Lockstep::ConnectionDialog::Kind::Connecting;
+      break;
+
     case Lockstep::MatchConnection::Status::Idle:
     default:
       break;
     }
+
+    dialog.Update(kind, facts, elapsedSeconds);
 
     // ---- The frame -----------------------------------------------------------------------------
     ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
@@ -579,6 +636,12 @@ bool PumpMessages()
     _text.Flush(commandList);
 
     page.DrawInterface(_shapes, _text);
+    _shapes.Flush(commandList);
+    _text.Flush(commandList);
+
+    // A third layer, for the same reason there is a second: each renderer is one batch, so the
+    // dialog's scrim would be drawn under the card it is meant to dim if it shared a flush.
+    dialog.Draw(_shapes, _text);
     _shapes.Flush(commandList);
     _text.Flush(commandList);
 
@@ -654,15 +717,14 @@ int RunGame(HWND _window, const Startup& _startup)
   // asks for, so a client given both goes straight to the match. Everything else -- including the
   // host's own client -- starts here, because the host needs a seat too and until now took player
   // zero by being first through the door (ADR-029's first open question).
-  if (!_startup.joinGiven)
-  {
-    const std::string offered = std::format("{}:{}", _startup.host, _startup.port);
-    if (!RunJoinScreen(device, screen, shapes, text, pointer, keyboard, connection, offered, hostToken, _startup.port, startedAt))
-    {
-      return EXIT_SUCCESS;
-    }
-  }
-  else
+  //
+  // **A `--join` that cannot reach anything falls through to the screen rather than to a message
+  // box.** It used to put up a `MessageBoxA` and exit, which told a player their address was wrong
+  // and then took away the only place they could fix it. The join screen is pre-filled with what
+  // the command line asked for, so the fix is one character and a tap.
+  bool askForAServer = !_startup.joinGiven;
+
+  if (_startup.joinGiven)
   {
     // The server may still be binding its port when we get here, so this retries rather than
     // assuming. A bounded retry, because a client that spins forever on a server that will never
@@ -677,10 +739,40 @@ int RunGame(HWND _window, const Startup& _startup)
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    if (connection.State() == Lockstep::MatchConnection::Status::Idle)
+    askForAServer = connection.State() == Lockstep::MatchConnection::Status::Idle;
+
+    // ---- Wait long enough to be told no --------------------------------------------------------
+    //
+    // **An open socket is not an accepted token.** `Open` only means the TCP connection was made;
+    // the refusal arrives on the first `Pump` after it. Without this the client walked into the
+    // match loop and put up a refusal dialog there, where the only button that can honestly be
+    // offered is QUIT -- and a player whose token has a typo in it needs the screen with the field
+    // on it, not a dead end.
+    constexpr std::int32_t GREETING_ATTEMPTS = 200;
+    for (std::int32_t attempt = 0; attempt < GREETING_ATTEMPTS && !askForAServer; ++attempt)
     {
-      MessageBoxA(nullptr, "Could not reach the match server.", "LockStep: Universe", MB_OK | MB_ICONERROR);
-      return EXIT_FAILURE;
+      connection.Pump(std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count());
+      if (connection.State() != Lockstep::MatchConnection::Status::Greeting)
+      {
+        askForAServer = connection.State() != Lockstep::MatchConnection::Status::Playing;
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    // Deliberately NOT reset here. The join screen reads the refusal off the connection and puts up
+    // screen 05 over its own card, so the player lands on the field they need to edit AND is told
+    // why they are looking at it. Resetting first put them on a blank join screen with no
+    // explanation, which is a worse answer than the message box it replaced.
+  }
+
+  if (askForAServer)
+  {
+    const std::string offered = std::format("{}:{}", _startup.host, _startup.port);
+    const std::string offeredToken = _startup.joinGiven ? _startup.token : hostToken;
+    if (!RunJoinScreen(device, screen, shapes, text, pointer, keyboard, connection, offered, offeredToken, _startup.port, startedAt))
+    {
+      return EXIT_SUCCESS;
     }
   }
 
@@ -717,11 +809,23 @@ int RunGame(HWND _window, const Startup& _startup)
     }
   }
 
-  // Something has to be on screen before the first state arrives. The design reference's fixture is
-  // exactly that and nothing more -- it is a test fixture now, and this is the one place it is
-  // still drawn: for the fraction of a second between connecting and being welcomed.
+  // **Empty until the server says otherwise, and THE REFERENCE FIXTURE IS GONE.**
+  //
+  // This used to boot with `MakeReferenceMatch()` -- the design sheet's twelve-player mid-match --
+  // on the argument that it was only up "for the fraction of a second between connecting and being
+  // welcomed". That stopped being true the day the lobby started existing before the match did: a
+  // player who joins before the host taps ENTER MATCH is welcomed immediately and sent no state at
+  // all, so the fixture was what they looked at for as long as the host took. A fake match is the
+  // worst possible thing to put in front of somebody waiting for a real one, because it is not
+  // distinguishable from one. `ConnectionDialog` says what is actually happening instead.
   Lockstep::MainPage page;
-  page.Create(Lockstep::MakeReferenceMatch());
+  page.Create(Lockstep::MatchState{});
+
+  Lockstep::ConnectionDialog dialog;
+
+  /// Whether the player has dismissed the MATCH FINISHED dialog to look at the last digest. Once,
+  /// and it stays dismissed -- a dialog that came back every frame would make the digest unreadable.
+  bool finishedDismissed = false;
 
   auto lastPing = std::chrono::steady_clock::now();
   bool wasLive = false;
@@ -740,13 +844,8 @@ int RunGame(HWND _window, const Startup& _startup)
     //
     // The client never asks for a resolution and could not provoke one. It reads what arrived and
     // redraws when the server says the tick moved.
-    connection.Pump(std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count());
-
-    if (connection.State() == Lockstep::MatchConnection::Status::Refused)
-    {
-      MessageBoxA(nullptr, Neuron::Describe(connection.Refusal()), "LockStep: Universe", MB_OK | MB_ICONERROR);
-      return EXIT_FAILURE;
-    }
+    const double secondsSinceStart = std::chrono::duration<double>(now - startedAt).count();
+    connection.Pump(secondsSinceStart);
 
     if (connection.Live() != wasLive)
     {
@@ -785,6 +884,80 @@ int RunGame(HWND _window, const Startup& _startup)
       page.Create(std::move(state));
     }
 
+    // ---- What is wrong, if anything (screens 04 and 05) ----------------------------------------
+    //
+    // Chosen from the connection and the state together, in one place, so that two of these can
+    // never be true at once on the screen. The order is the order of severity: a refusal is final,
+    // a lost link is not, a match with no first state has not started yet, and a finished match is
+    // the only one of the four that is not a problem.
+    Lockstep::ConnectionDialog::Kind kind = Lockstep::ConnectionDialog::Kind::None;
+    Lockstep::ConnectionDialog::Facts facts;
+    facts.server = connection.Server();
+    facts.reason = connection.Refusal();
+    facts.seat = connection.Player();
+    facts.reconnects = connection.Reconnects();
+    facts.secondsToNextAttempt = connection.SecondsToNextAttempt(secondsSinceStart);
+
+    // No `BACK`: the join screen is behind the seats screen and a whole match, and for the host
+    // there is no join screen to return to at all. `QUIT` is the honest button here.
+    facts.canGoBack = false;
+
+    if (connection.State() == Lockstep::MatchConnection::Status::Refused)
+    {
+      kind = Lockstep::ConnectionDialog::Kind::Refused;
+    }
+    else if (connection.State() == Lockstep::MatchConnection::Status::Lost)
+    {
+      kind = Lockstep::ConnectionDialog::Kind::Lost;
+      facts.lockCountdown = drawnTick == 0 ? std::string{} : Lockstep::MainPage::FormatCountdown(page.State().match.secondsToLock);
+    }
+    else if (drawnTick == 0)
+    {
+      // Welcomed, and nothing has ever arrived. Either the host has not started the match or the
+      // first state is still in flight -- and from where the player is sitting those are the same
+      // thing, so one screen covers both and it resolves the moment a tick arrives.
+      kind = Lockstep::ConnectionDialog::Kind::Waiting;
+    }
+    else if (page.State().match.finished && !finishedDismissed)
+    {
+      kind = Lockstep::ConnectionDialog::Kind::Finished;
+      facts.standings = std::format("{} OF {} - SCORE {} - LEADER {} {}", page.State().player.placement, page.State().player.playerCount,
+                                    page.State().player.score, page.State().player.leader.name, page.State().player.leader.score);
+    }
+
+    dialog.Update(kind, facts, elapsedSeconds);
+
+    switch (dialog.TakeAction())
+    {
+    case Lockstep::ConnectionDialog::Action::Quit:
+      return EXIT_SUCCESS;
+
+    case Lockstep::ConnectionDialog::Action::Retry:
+      // Two different retries, because the two states they come from are different. A LOST link is
+      // already being retried on a timer and the player is only saying "now"; a REFUSED one is not
+      // being retried at all, and asking for it again means opening a new connection.
+      if (connection.State() == Lockstep::MatchConnection::Status::Refused)
+      {
+        (void)connection.Reopen();
+      }
+      else
+      {
+        connection.RetryNow();
+      }
+      break;
+
+    case Lockstep::ConnectionDialog::Action::ViewLastDigest:
+      finishedDismissed = true;
+      break;
+
+    case Lockstep::ConnectionDialog::Action::Cancel:
+    case Lockstep::ConnectionDialog::Action::Back:
+    case Lockstep::ConnectionDialog::Action::EditToken:
+    case Lockstep::ConnectionDialog::Action::None:
+    default:
+      break;
+    }
+
     // Presence, once a second. It is a fact about being seen rather than about submitting, and it
     // is what keeps a player who is sitting and thinking out of custody.
     if (std::chrono::steady_clock::now() - lastPing > std::chrono::seconds(1))
@@ -801,7 +974,7 @@ int RunGame(HWND _window, const Startup& _startup)
     // a press was, and reports only that one -- so the order is about reading rather than about
     // correctness: the rotation is applied before the frame that a tap would be tested against.
     Neuron::PointerInput::Drag drag = {};
-    if (pointer.TakeDrag(drag))
+    if (pointer.TakeDrag(drag) && !dialog.Visible())
     {
       page.HandleDrag(drag);
     }
@@ -810,7 +983,10 @@ int RunGame(HWND _window, const Startup& _startup)
     float tapYPixels = 0.0F;
     if (pointer.TakeClick(tapXPixels, tapYPixels))
     {
-      if (page.HandleTap(tapXPixels, tapYPixels))
+      // The dialog swallows everything it is over, the map included. A tap that reached the board
+      // behind a CONNECTION LOST dialog would be an order edit this client cannot send, and the
+      // player would have no way to tell which of their taps counted.
+      if (!dialog.HandleTap(tapXPixels, tapYPixels) && page.HandleTap(tapXPixels, tapYPixels))
       {
         // Every edit goes over the wire at once and the server keeps the latest. That is what makes
         // "editable until the lock" work without the client having to know when the lock is.
@@ -840,6 +1016,11 @@ int RunGame(HWND _window, const Startup& _startup)
     // Shapes first, then text, in two draw calls rather than interleaved. Painter's order still
     // holds within each pass, and the one place it matters across them -- a caption on a card --
     // is fine because every glyph is drawn after every rectangle.
+    shapes.Flush(commandList);
+    text.Flush(commandList);
+
+    // A third layer. The dialog dims everything above it, so it cannot share a flush with it.
+    dialog.Draw(shapes, text);
     shapes.Flush(commandList);
     text.Flush(commandList);
 

@@ -111,6 +111,16 @@ void JoinPage::SetStatus(Status _status, std::string_view _detail)
   m_detail = _detail;
 }
 
+void JoinPage::AskToJoin() noexcept
+{
+  m_joinRequested = true;
+}
+
+void JoinPage::FocusToken() noexcept
+{
+  m_focus = Focus::Token;
+}
+
 void JoinPage::SetSeat(std::int32_t _seat, std::int32_t _players, const Color& _color)
 {
   m_seat = _seat;
@@ -372,6 +382,11 @@ void JoinPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   }
 
   // A refusal is said next to the button that caused it, in the colour refusals are said in.
+  //
+  // **This line is for failures on THIS machine only** -- an address that resolves to nothing, a
+  // port with nothing behind it. Anything the server actually answered with goes to
+  // `ConnectionDialog` instead (screen 05), because a refusal that came back over the wire has
+  // something to explain and two things the player can do about it, and neither fits on one line.
   if (m_status == Status::Refused && !m_detail.empty())
   {
     _text.DrawText(static_cast<std::int32_t>(FIELD_X), CenterTextY(BUTTON_Y, BUTTON_HEIGHT), m_detail, RED);

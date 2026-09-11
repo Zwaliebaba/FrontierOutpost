@@ -4,7 +4,9 @@
 #include "Protocol.h"
 #include "Socket.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <format>
 #include <string>
 #include <vector>
 
@@ -42,6 +44,36 @@ public:
   /// process means the server thread has not come up yet and the caller should try again.
   [[nodiscard]] bool Open(const std::string& _host, std::uint16_t _port, const std::string& _token);
 
+  /// Connects again with the host, port and token this connection already has.
+  ///
+  /// **`RETRY` on a refusal needs this and `RetryNow` will not do.** A refusal is deliberately
+  /// final -- `Pump` stops pumping a refused connection, because an unknown token will still be
+  /// unknown in three seconds -- so the only way back from one is to open a new connection. SEAT IN
+  /// USE is the refusal this is for: it stops being true the moment the other link drops.
+  [[nodiscard]] bool Reopen()
+  {
+    const std::string host = m_host;
+    const std::uint16_t port = m_port;
+    const std::string token = m_token;
+    Reset();
+    return Open(host, port, token);
+  }
+
+  /// Tries the next reconnection now rather than at the end of the interval. `RETRY NOW` on
+  /// screen 04 is this, and it is the whole of what that button can honestly promise: the loop was
+  /// going to try anyway, and this is the player saying they would rather not wait for it.
+  void RetryNow() noexcept
+  {
+    m_nextAttemptAt = 0.0;
+  }
+
+  /// Puts this back to `Idle`: socket closed, refusal forgotten, nothing being retried.
+  ///
+  /// **What `BACK` on a refusal dialog does.** Without it a refused connection stays refused for
+  /// the life of the process, because a refusal is deliberately final -- which is right while the
+  /// dialog is up and wrong the moment the player has edited the token and wants to try again.
+  void Reset() noexcept;
+
   /// Reads whatever arrived, and reconnects if the connection has gone. Call it every frame; it
   /// never blocks.
   ///
@@ -53,9 +85,13 @@ public:
   /// `_secondsSinceStart` is the caller's clock, used only to space the attempts.
   void Pump(double _secondsSinceStart);
 
-  /// Sends an order set, replacing whatever was sent before. Silently does nothing when not
-  /// playing — an order given while disconnected is not an error the player can act on, and the
-  /// reconnect will send the current rail anyway.
+  /// Sends an order set, replacing whatever was sent before.
+  ///
+  /// **Silently does nothing when not playing, and nothing re-sends it afterwards.** This comment
+  /// used to say the reconnect would send the current rail anyway; it does not, and never did --
+  /// there is no code on either side of the socket that replays an order given while the link was
+  /// down. Screen 04 says so rather than promising otherwise (`ConnectionDialog`), which is the
+  /// cheap half of the fix; the other half is an open question in ADR-038.
   void SendOrders(std::span<const std::uint8_t> _orderSet);
 
   /// Says "still here" without submitting anything. Presence is a fact about being seen.
@@ -107,6 +143,22 @@ public:
   [[nodiscard]] bool Live() const noexcept
   {
     return m_status == Status::Playing;
+  }
+
+  /// How long until the next reconnection attempt, from the same clock `Pump` is given. Zero when
+  /// nothing is being retried.
+  ///
+  /// Screen 04 counts this down: a dialog that says "reconnecting" and nothing else is
+  /// indistinguishable from a dialog that has given up.
+  [[nodiscard]] double SecondsToNextAttempt(double _secondsSinceStart) const noexcept
+  {
+    return m_status == Status::Lost ? std::max(0.0, m_nextAttemptAt - _secondsSinceStart) : 0.0;
+  }
+
+  /// Where this connection points, for a dialog that has to name it.
+  [[nodiscard]] std::string Server() const
+  {
+    return m_port == 0 ? m_host : std::format("{}:{}", m_host, m_port);
   }
 
 private:

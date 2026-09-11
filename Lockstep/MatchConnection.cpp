@@ -39,6 +39,19 @@ bool MatchConnection::Open(const std::string& _host, std::uint16_t _port, const 
   return true;
 }
 
+void MatchConnection::Reset() noexcept
+{
+  m_socket.Close();
+  m_incoming.Reset();
+  m_outgoing.clear();
+  m_status = Status::Idle;
+  m_refusal = Neuron::RefusalReason::None;
+  m_player = -1;
+  m_snapshot.clear();
+  m_digest.clear();
+  m_fresh = false;
+}
+
 void MatchConnection::Send(std::span<const std::uint8_t> _payload)
 {
   const std::vector<std::uint8_t> framed = Neuron::FrameStream::Frame(_payload);

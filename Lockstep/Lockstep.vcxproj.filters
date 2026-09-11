@@ -2,6 +2,7 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClInclude Include="Lockstep.h" />
+    <ClInclude Include="ConnectionDialog.h" />
     <ClInclude Include="HostedServer.h" />
     <ClInclude Include="MainPage.h" />
     <ClInclude Include="MatchConnection.h" />
@@ -10,12 +11,12 @@
     <ClInclude Include="DigestView.h" />
     <ClInclude Include="JoinPage.h" />
     <ClInclude Include="SeatsPage.h" />
-    <ClInclude Include="MatchFixture.h" />
     <ClInclude Include="MatchState.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Lockstep.cpp" />
+    <ClCompile Include="ConnectionDialog.cpp" />
     <ClCompile Include="HostedServer.cpp" />
     <ClCompile Include="MainPage.cpp" />
     <ClCompile Include="MatchConnection.cpp" />
@@ -23,7 +24,6 @@
     <ClCompile Include="DigestView.cpp" />
     <ClCompile Include="JoinPage.cpp" />
     <ClCompile Include="SeatsPage.cpp" />
-    <ClCompile Include="MatchFixture.cpp" />
     <ClCompile Include="MatchState.cpp" />
     <ClCompile Include="pch.cpp" />
   </ItemGroup>
