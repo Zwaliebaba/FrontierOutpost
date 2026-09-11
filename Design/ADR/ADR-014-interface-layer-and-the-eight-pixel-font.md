@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 
-**Date:** 2026-09-11
+**Date:** 2026-09-10
 **Decided by:** Build session implementing `Design/Screens` (the main page). The handoff settled colour, layout and copy; this ADR records what it did not settle, and the places where the game's one font could not carry its copy.
 **Supersedes:** —
 
@@ -165,7 +165,7 @@ into `NeuronClient`; neither was done here, and the second is probably right.
 
 ## Verification
 
-Measured on 2026-09-11 from the running executable at 1280×720:
+Measured on 2026-09-10 from the running executable at 1280×720:
 
 - The screen renders and matches the reference's layout, colour and content. The map letterboxes
   to 650×455 in a 650×672 pane at scale 0.8125, which places the horizon at y=205 and the near

@@ -1,6 +1,6 @@
 # ADR-010 — The starfield is a hash, in three parallax layers
 
-**Status:** Deprecated by ADR-015 — `NeuronClient/Starfield` was deleted on 2026-09-11. The main page draws its own star field as thirty literal dots behind the map plane, which needs none of this. The hash-over-stored-field argument still holds for any backdrop that has to scroll.
+**Status:** Deprecated by ADR-015 — `NeuronClient/Starfield` was deleted on 2026-09-10. The main page draws its own star field as thirty literal dots behind the map plane, which needs none of this. The hash-over-stored-field argument still holds for any backdrop that has to scroll.
 
 **Date:** 2026-09-10
 **Decided by:** Build session, at the owner's request for a starfield.

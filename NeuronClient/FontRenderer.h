@@ -22,8 +22,8 @@ public:
 
   /// How many screen pixels a glyph texel occupies, on both axes, when a caller does not say.
   ///
-  /// The scale is a PER-CALL argument rather than the compile-time constant it was between
-  /// 2026-09-10 and 2026-09-11, because the UI design has now settled the question ADR-013 left
+  /// The scale is a PER-CALL argument rather than the compile-time constant it was until ADR-014
+  /// on 2026-09-10, because the UI design has now settled the question ADR-013 left
   /// open: 1x (8px) everywhere on the main page, 2x (16px) for the lock countdown and nothing
   /// else (ADR-014). One number could not say that.
   ///

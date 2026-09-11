@@ -1,6 +1,6 @@
 # ADR-005 — The server sends a 32-byte state every tick; the client interpolates and never extrapolates
 
-**Status:** Deprecated by ADR-015 — `ShipView` and the `ShipState` record were deleted on 2026-09-11. The principle it rests on (the client holds no rules and renders what the server told it) is carried forward in `MatchState`; the interpolation it specifies has nothing left to interpolate at four ticks a day.
+**Status:** Deprecated by ADR-015 — `ShipView` and the `ShipState` record were deleted on 2026-09-10. The principle it rests on (the client holds no rules and renders what the server told it) is carried forward in `MatchState`; the interpolation it specifies has nothing left to interpolate at four ticks a day.
 
 **Date:** 2026-09-09
 **Decided by:** Build session MVP-01, step 5.

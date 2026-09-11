@@ -8,7 +8,7 @@ namespace NeuronServerTests
 
 // NeuronServer has no behaviour left to test.
 //
-// It held the Session that owned the authoritative loop until 2026-09-11, when ADR-015 removed the MVP-01 vertical slice. What remains
+// It held the Session that owned the authoritative loop until 2026-09-10, when ADR-015 removed the MVP-01 vertical slice. What remains
 // is the library's umbrella header and its precompiled header -- the shape of a project waiting
 // for the 4X authoritative loop that will replace it.
 //

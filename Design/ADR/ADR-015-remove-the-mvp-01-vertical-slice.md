@@ -2,8 +2,8 @@
 
 **Status:** Accepted
 
-**Date:** 2026-09-11
-**Decided by:** Owner decision, 2026-09-11, choosing between the three scopes offered in the session that built the main page.
+**Date:** 2026-09-10
+**Decided by:** Owner decision, 2026-09-10, choosing between the three scopes offered in the session that built the main page.
 **Supersedes:** —
 
 ---
@@ -105,7 +105,7 @@ mitigation is that ADR-005, ADR-006 and ADR-007 are *deprecated rather than dele
 reasoning is intact and findable, and a future ADR that re-decides transport or replication should
 read them first and say what it takes and what it leaves.
 
-**What it costs.** Test count drops from 108 to 41, measured on 2026-09-11. The sixty-seven that
+**What it costs.** Test count drops from 108 to 41, measured on 2026-09-10. The sixty-seven that
 went were about ship kinematics, the isometric camera, the starfield's scroll arithmetic,
 fixed-point trigonometry, wire serialization, transport queues and the session thread — real tests
 of real code, none of which exists any more. Three of the forty-one that remain are `SuiteSmoke`

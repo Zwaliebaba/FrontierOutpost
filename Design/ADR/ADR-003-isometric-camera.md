@@ -1,6 +1,6 @@
 # ADR-003 — The camera is 2:1 dimetric, written in whole pixels, and snaps to the pixel grid
 
-**Status:** Deprecated by ADR-015 — `IsometricCamera` was deleted with the MVP-01 scene on 2026-09-11. The 2:1 projection, the whole-pixel lattice and the snapping argument describe code that is no longer in the tree; the main page's map uses the different projection in `MapProjection.h`. The reasoning is kept because a future camera will meet the same problem.
+**Status:** Deprecated by ADR-015 — `IsometricCamera` was deleted with the MVP-01 scene on 2026-09-10. The 2:1 projection, the whole-pixel lattice and the snapping argument describe code that is no longer in the tree; the main page's map uses the different projection in `MapProjection.h`. The reasoning is kept because a future camera will meet the same problem.
 
 **Date:** 2026-09-09
 **Decided by:** Build session MVP-01, step 4. `Design/Plans/MVP-01-IsometricShip.md` §3 recommends "2:1 dimetric (yaw 45°, pitch `atan(0.5)` ≈ 26.565°)". This ADR keeps the 2:1 and departs from the angle, for the reason in *Options considered*.

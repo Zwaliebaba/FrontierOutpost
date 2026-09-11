@@ -1,9 +1,9 @@
 # ADR-016 — Dragging the map spins the galaxy on its plane, and a tap is now a press and a lift
 
-**Status:** Superseded by ADR-017 — the turntable was built, tried and rejected on 2026-09-11: it spun the picture but could not move the viewpoint, which is what "it does not feel like a camera" meant. Its tap-versus-drag decision survives unchanged in ADR-017; only the rotation model was replaced.
+**Status:** Superseded by ADR-017 — the turntable was built, tried and rejected on 2026-09-10: it spun the picture but could not move the viewpoint, which is what "it does not feel like a camera" meant. Its tap-versus-drag decision survives unchanged in ADR-017; only the rotation model was replaced.
 
-**Date:** 2026-09-11
-**Decided by:** Owner decision, 2026-09-11, choosing between the three rotation models offered in the session that built it.
+**Date:** 2026-09-10
+**Decided by:** Owner decision, 2026-09-10, choosing between the three rotation models offered in the session that built it.
 **Supersedes:** —
 
 ---
@@ -137,7 +137,7 @@ a camera rather than because rotation was wanted.
 
 ## Verification
 
-Measured on 2026-09-11 from the running executable:
+Measured on 2026-09-10 from the running executable:
 
 - With a forced yaw of 0.6 rad the galaxy spins about the plane's centre: Pell and the sealed
   region come forward and grow, Idris and Vesk recede and shrink, the horizon and grid do not move.

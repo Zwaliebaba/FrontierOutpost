@@ -1,6 +1,6 @@
 // FrontierOutpost.cpp -- process entry point, and the composition root of the main page.
 //
-// WHAT THIS EXECUTABLE SHOWS, as of 2026-09-11, is the ops console in Design/Screens: digest,
+// WHAT THIS EXECUTABLE SHOWS, as of 2026-09-10, is the ops console in Design/Screens: digest,
 // map, orders. It used to show the MVP-01 isometric ship scene, and that code -- MeshRenderer,
 // IsometricCamera, Starfield, ShipMesh, StationMesh, ShipView, World, Session -- is still in the
 // tree and still built and tested. It is not reachable from here, because the main page is a

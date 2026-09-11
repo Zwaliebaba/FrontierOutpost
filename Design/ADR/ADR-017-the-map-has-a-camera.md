@@ -2,8 +2,8 @@
 
 **Status:** Accepted
 
-**Date:** 2026-09-11
-**Decided by:** Owner decision, 2026-09-11. ADR-016's turntable was tried and rejected — "it just doesn't feel like a camera" — and the owner chose the orbit camera that ADR-016 had recorded as its rejected alternative.
+**Date:** 2026-09-10
+**Decided by:** Owner decision, 2026-09-10. ADR-016's turntable was tried and rejected — "it just doesn't feel like a camera" — and the owner chose the orbit camera that ADR-016 had recorded as its rejected alternative.
 **Supersedes:** ADR-016
 
 ---
@@ -136,7 +136,7 @@ camera, and none of them were against a curve.
 
 ## Verification
 
-Measured on 2026-09-11 from the running executable:
+Measured on 2026-09-10 from the running executable:
 
 - Drag reaches the camera and moves it: instrumented counters recorded 134 drags in a session, with
   yaw at 3.07 rad (176°, the far side of the galaxy) and pitch at 0.49.
