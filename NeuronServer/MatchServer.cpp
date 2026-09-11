@@ -11,6 +11,8 @@
 #include "pch.h"
 #include "MatchServer.h"
 
+#include <algorithm>
+
 namespace Neuron
 {
 
@@ -26,6 +28,8 @@ MatchServer::MatchServer(std::unique_ptr<Session> _session, std::uint16_t _port,
     m_tokens(std::move(_tokens))
 {
   ASSERT_TEXT(m_session != nullptr, L"A server without a session has no match to serve.");
+
+  m_submissionsThisTick.assign(static_cast<std::size_t>(m_session->Match().PlayerCount()), 0);
 
   if (!m_listener.Valid())
   {
@@ -198,6 +202,31 @@ void MatchServer::Handle(Connection& _connection, std::span<const std::uint8_t> 
     // will say so in the digest.
     (void)m_session->Submit(_connection.player, orders);
     m_session->MarkPresent(_connection.player);
+
+    // ---- H4's measurement ------------------------------------------------------------------------
+    //
+    // "At least 80% of sessions include an order edit." An edit is a second or later order set for
+    // the same tick: the first one is a turn being given, and every one after it replaces what was
+    // there. The server can count this without decoding anything, because *how many envelopes
+    // arrived* is a fact about the envelopes -- which is the whole reason the count lives here
+    // rather than behind the seam, where only the last set survives to the lock (ADR-031).
+    //
+    // A set the game goes on to refuse as malformed is still counted. The server does not know and
+    // must not look; `MatchSimulation::RejectedSubmissions` is where that shows up instead.
+    const std::size_t player = static_cast<std::size_t>(_connection.player);
+    ++_connection.ordersSent;
+
+    if (player < m_submissionsThisTick.size())
+    {
+      ++m_submissionsThisTick[player];
+      if (m_submissionsThisTick[player] > 1)
+      {
+        ++_connection.editsMade;
+        Log(std::format("order-edit player={} this-tick={}", _connection.player, m_submissionsThisTick[player]));
+        return;
+      }
+    }
+
     Log(std::format("orders from player {}", _connection.player));
     return;
   }
@@ -272,6 +301,10 @@ std::uint32_t MatchServer::Poll(Instant _now)
   const std::uint32_t resolved = m_session->Advance(_now);
   if (resolved > 0)
   {
+    // The lock is what makes the next order set a turn rather than an edit, so the per-tick counts
+    // are cleared here and nowhere else.
+    std::ranges::fill(m_submissionsThisTick, 0U);
+
     Log(std::format("resolved {} tick(s)", resolved));
     if (!m_session->Persisted())
     {
@@ -313,7 +346,10 @@ std::uint32_t MatchServer::Poll(Instant _now)
   {
     if (connection.closing && connection.player >= 0)
     {
-      Log(std::format("player {} disconnected", connection.player));
+      // The session's totals go on the line that ends it, so that H4 -- "what share of sessions
+      // included an edit" -- is one column of one row per session rather than a join somebody has
+      // to do by hand across a forty-eight-hour log.
+      Log(std::format("player {} disconnected orders={} edits={}", connection.player, connection.ordersSent, connection.editsMade));
     }
   }
   std::erase_if(m_connections, [](const Connection& _connection) { return _connection.closing; });

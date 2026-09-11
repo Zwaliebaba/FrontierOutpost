@@ -71,6 +71,13 @@ private:
     /// said hello may send nothing else.
     std::int32_t player = -1;
     bool closing = false;
+
+    /// How many order sets this connection sent, and how many of them replaced one it had already
+    /// sent for the same tick. **This is H4's measurement** -- "at least 80% of sessions include an
+    /// order edit" -- and it is per connection rather than per player because a session is a
+    /// connection: somebody who plays, closes their lid and comes back has had two of them.
+    std::uint32_t ordersSent = 0;
+    std::uint32_t editsMade = 0;
   };
 
   void Accept();
@@ -90,6 +97,17 @@ private:
   std::vector<std::string> m_tokens;
   std::vector<Connection> m_connections;
   std::vector<std::string> m_log;
+
+  /// Order sets received per player since the last lock, cleared by it.
+  ///
+  /// Per player rather than per connection, because *whether a submission replaced one* is a fact
+  /// about the player's turn and survives them reconnecting mid-tick, while *whether a session
+  /// contained an edit* is a fact about the connection. They are different questions and H4 asks
+  /// the second one off the first.
+  ///
+  /// **It never reaches the simulation.** A count that varied with how somebody's network behaved
+  /// would be a count that could change a resolution, and the hash with it (R16).
+  std::vector<std::uint32_t> m_submissionsThisTick;
   std::uint32_t m_pushedTick = 0;
   bool m_pushedOnce = false;
 };

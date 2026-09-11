@@ -20,6 +20,7 @@
 #include "Protocol.h"
 #include "Session.h"
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <string>
@@ -158,6 +159,34 @@ void Settle(Neuron::MatchServer& _server, TestClient& _client, Neuron::Instant _
   {
     (void)_server.Poll(_now);
     (void)_client.Pump();
+  }
+}
+
+/// Some bytes to send as an order set. The server never opens one, so what is in it is irrelevant
+/// -- but they differ from each other so that a test reading the wire can tell them apart.
+[[nodiscard]] std::vector<std::uint8_t> SomeOrders(std::uint8_t _tag)
+{
+  return {_tag, static_cast<std::uint8_t>(_tag + 1), static_cast<std::uint8_t>(_tag + 2)};
+}
+
+[[nodiscard]] bool Mentions(const std::vector<std::string>& _log, const std::string& _text)
+{
+  return std::ranges::any_of(_log, [&_text](const std::string& _line) { return _line.find(_text) != std::string::npos; });
+}
+
+[[nodiscard]] std::size_t CountOf(const std::vector<std::string>& _log, const std::string& _text)
+{
+  return static_cast<std::size_t>(
+    std::ranges::count_if(_log, [&_text](const std::string& _line) { return _line.find(_text) != std::string::npos; }));
+}
+
+/// Polls only the server. What a test wants after a client has gone: the disconnect is noticed on
+/// the next failed read, and there is no longer a client to pump.
+void SettleServer(Neuron::MatchServer& _server, Neuron::Instant _now = 0, std::int32_t _rounds = 24)
+{
+  for (std::int32_t round = 0; round < _rounds; ++round)
+  {
+    (void)_server.Poll(_now);
   }
 }
 
@@ -471,6 +500,146 @@ public:
     }
     Assert::IsTrue(sawLogin, L"the login curve is the test plan's primary instrument");
     Assert::IsTrue(running.server->TakeLog().empty(), L"and taking it clears it");
+  }
+
+  // ---- H4: the order edit ------------------------------------------------------------------------
+  //
+  // "At least 80% of sessions include an order edit." The server counts envelopes and never opens
+  // one (ADR-031), so what these tests drive is exactly what a client does: an order set per tap.
+
+  TEST_METHOD(TheFirstOrderSetOfATickIsATurnAndTheNextIsAnEdit)
+  {
+    Running running = Start();
+
+    TestClient client;
+    Assert::IsTrue(client.Connect(running.server->Port()));
+    client.Send(Neuron::Protocol::EncodeHello("alpha"));
+    Settle(*running.server, client);
+
+    client.Send(Neuron::Protocol::EncodeOrders(SomeOrders(1)));
+    Settle(*running.server, client);
+    Assert::IsFalse(Mentions(running.server->TakeLog(), "order-edit"), L"a turn given once is not an edit");
+
+    client.Send(Neuron::Protocol::EncodeOrders(SomeOrders(2)));
+    client.Send(Neuron::Protocol::EncodeOrders(SomeOrders(3)));
+    Settle(*running.server, client);
+
+    const std::vector<std::string> log = running.server->TakeLog();
+    Assert::AreEqual(std::size_t{2}, CountOf(log, "order-edit"), L"two replacements, two edits");
+    Assert::IsTrue(Mentions(log, "order-edit player=0 this-tick=2"));
+    Assert::IsTrue(Mentions(log, "order-edit player=0 this-tick=3"));
+  }
+
+  // The lock is what makes the next set a turn again. Without this the second day of a match would
+  // read as one enormous edit, and H4 would be answered off a number that only ever goes up.
+  TEST_METHOD(TheLockMakesTheNextOrderSetATurnAgain)
+  {
+    Running running = Start();
+
+    TestClient client;
+    Assert::IsTrue(client.Connect(running.server->Port()));
+    client.Send(Neuron::Protocol::EncodeHello("alpha"));
+    Settle(*running.server, client);
+
+    client.Send(Neuron::Protocol::EncodeOrders(SomeOrders(1)));
+    client.Send(Neuron::Protocol::EncodeOrders(SomeOrders(2)));
+    Settle(*running.server, client);
+    (void)running.server->TakeLog();
+
+    // Six hours later, which is one lock.
+    Settle(*running.server, client, SIX_HOURS);
+    client.Send(Neuron::Protocol::EncodeOrders(SomeOrders(3)));
+    Settle(*running.server, client, SIX_HOURS);
+
+    Assert::IsFalse(Mentions(running.server->TakeLog(), "order-edit"), L"the first set after a lock is a new turn");
+  }
+
+  // H4 counts sessions, not order sets, so the totals go on the line that ends one. Otherwise the
+  // question "what share of sessions included an edit" is a join across a forty-eight-hour log that
+  // somebody has to do by hand and will do differently each time.
+  TEST_METHOD(ASessionEndsWithItsOwnTotals)
+  {
+    Running running = Start();
+
+    {
+      TestClient client;
+      Assert::IsTrue(client.Connect(running.server->Port()));
+      client.Send(Neuron::Protocol::EncodeHello("bravo"));
+      Settle(*running.server, client);
+
+      client.Send(Neuron::Protocol::EncodeOrders(SomeOrders(1)));
+      client.Send(Neuron::Protocol::EncodeOrders(SomeOrders(2)));
+      Settle(*running.server, client);
+      (void)running.server->TakeLog();
+    }
+
+    // The client is gone. The server notices on the next failed read.
+    SettleServer(*running.server);
+
+    Assert::IsTrue(Mentions(running.server->TakeLog(), "player 1 disconnected orders=2 edits=1"));
+  }
+
+  // A second session starts its own count. A player who edits on Saturday and not on Sunday has one
+  // session of each, and H4 is a fraction of sessions.
+  TEST_METHOD(ASecondSessionCountsFromZero)
+  {
+    Running running = Start();
+
+    {
+      TestClient first;
+      Assert::IsTrue(first.Connect(running.server->Port()));
+      first.Send(Neuron::Protocol::EncodeHello("alpha"));
+      Settle(*running.server, first);
+      first.Send(Neuron::Protocol::EncodeOrders(SomeOrders(1)));
+      first.Send(Neuron::Protocol::EncodeOrders(SomeOrders(2)));
+      Settle(*running.server, first);
+    }
+
+    SettleServer(*running.server);
+    (void)running.server->TakeLog();
+
+    // Back after the lock, so the new session's first set is a turn rather than a replacement.
+    {
+      TestClient second;
+      Assert::IsTrue(second.Connect(running.server->Port()));
+      second.Send(Neuron::Protocol::EncodeHello("alpha"));
+      Settle(*running.server, second, SIX_HOURS);
+      second.Send(Neuron::Protocol::EncodeOrders(SomeOrders(3)));
+      Settle(*running.server, second, SIX_HOURS);
+    }
+    SettleServer(*running.server, SIX_HOURS);
+
+    Assert::IsTrue(Mentions(running.server->TakeLog(), "player 0 disconnected orders=1 edits=0"), L"the second session is its own session");
+  }
+
+  // The one that survives a reconnect. Whether a submission REPLACED one is a fact about the
+  // player's turn, not about the socket it arrived on -- so somebody who submits, drops and comes
+  // back inside the same tick has still edited their turn.
+  TEST_METHOD(AReplacementAfterAReconnectIsStillAnEdit)
+  {
+    Running running = Start();
+
+    {
+      TestClient first;
+      Assert::IsTrue(first.Connect(running.server->Port()));
+      first.Send(Neuron::Protocol::EncodeHello("charlie"));
+      Settle(*running.server, first);
+      first.Send(Neuron::Protocol::EncodeOrders(SomeOrders(1)));
+      Settle(*running.server, first);
+    }
+
+    SettleServer(*running.server);
+    (void)running.server->TakeLog();
+
+    TestClient second;
+    Assert::IsTrue(second.Connect(running.server->Port()));
+    second.Send(Neuron::Protocol::EncodeHello("charlie"));
+    Settle(*running.server, second);
+    second.Send(Neuron::Protocol::EncodeOrders(SomeOrders(2)));
+    Settle(*running.server, second);
+
+    Assert::IsTrue(Mentions(running.server->TakeLog(), "order-edit player=2 this-tick=2"),
+                   L"the same tick had two order sets, however many sockets carried them");
   }
 };
 

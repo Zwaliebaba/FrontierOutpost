@@ -345,9 +345,17 @@ second sanctioned exception to R13. Plain text, UTC-stamped, flushed and reopene
 ADR-025 named for its own open question. The game narrates and the server writes it down; the seam
 stays a seam.
 
-**4. Order edits are still not reported.** Unchanged, and now the only item on the test plan's
-instrumentation list that nothing produces. Recorded in ADR-030's open questions so that H4 is known
-to be unanswerable before the weekend rather than after it.
+**4. Order edits are reported** -- **ADR-031**, which closes the open question ADR-030 left and
+corrects it. ADR-030 said the count was "a fact only the client holds". Half true: the game does
+lose it, because `Submit` overwrites the pending slate and only the last set survives to the lock.
+But the *server* sees every arrival, and counting arrivals requires opening none of them. An edit is
+the second or later order set for the same tick; the lock makes the next one a turn again. It is
+logged twice over -- `order-edit player=0 this-tick=2` when it happens, because the plan asks for a
+timestamped event, and `player 0 disconnected orders=5 edits=3` on the line that ends the session,
+because H4 is a fraction of sessions rather than of order sets. No count reaches the simulation,
+which is the property that keeps it out of the hash.
+
+With that, **every item on the test plan's instrumentation list is produced by something.**
 
 **5. Phase parameters** — `PhaseZeroRules()` and `--phase0`.
 
@@ -384,6 +392,18 @@ session shape, retention, or how an hourly tick feels. It rehearses mechanics. T
 players who never connected went into custody at T18 — one line each, correctly named — and the
 match ended with a line per player. The loop turns end to end over sockets, which had not been
 observed before this.
+
+### What the H4 work is verified by
+
+Five tests in `MatchServerTests`, over real loopback sockets, driving the same `Orders` messages a
+client sends: a turn is not an edit, a second set is, the lock resets it, a session carries its own
+totals, a second session starts from zero, and a replacement that arrives on a *different socket
+after a reconnect* is still an edit. That last one is the case the per-player and per-connection
+counters exist to tell apart.
+
+It is not verified by a run, and cannot be without somebody tapping: the client sends an order set
+on a tap that changed something, so an idle rehearsal produces no orders at all. The socket-level
+tests are the end-to-end evidence here.
 
 ### What Phase 0 still needs from a person
 
