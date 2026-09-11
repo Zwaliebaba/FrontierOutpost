@@ -1,6 +1,6 @@
 # ADR-036 — Seats are chosen before the match, and a token is generated per seat
 
-**Status:** Accepted
+**Status:** Accepted — amended twice by the owner on 2026-09-11. **(1)** The screen runs *after* login, not before: the server opens as a lobby with no match and `ENTER MATCH` creates it, which is the order a player expects and the one that lets the screen show who has arrived. The "What this gives up" section below is therefore spent — the live CONNECTED column exists, by the second route it names. **(2)** The screen shows **six** seats rather than twelve, so every seat is required (`MINIMUM_PLAYERS`) and `EMPTY` is gone: a seat that cannot be empty needs no button saying it could be. `MAXIMUM_PLAYERS` is still twelve and nothing but the layout assumes six.
 
 **Date:** 2026-09-11
 **Decided by:** Owner, on the seats screen mockup, 2026-09-11.

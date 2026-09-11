@@ -30,10 +30,10 @@ constexpr float PANEL_WIDTH = 260.0F;
 constexpr float GRID_X = 12.0F;
 constexpr float GRID_TOP = TOP_BAR_HEIGHT + 12.0F;
 constexpr float GRID_WIDTH = SCREEN_WIDTH - PANEL_WIDTH - 2.0F * GRID_X;
-constexpr std::int32_t GRID_COLUMNS = 4;
+constexpr std::int32_t GRID_COLUMNS = 3;
 constexpr float CARD_GAP = 8.0F;
 constexpr float CARD_WIDTH = (GRID_WIDTH - CARD_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
-constexpr float CARD_HEIGHT = 104.0F;
+constexpr float CARD_HEIGHT = 132.0F;
 
 constexpr std::int32_t LINE_HEIGHT = 12;
 
@@ -51,7 +51,6 @@ constexpr Color AMBER = {255, 196, 87, 255};
 constexpr Color RED = {255, 110, 96, 255};
 
 constexpr std::int32_t ACTION_SELECT = 1;
-constexpr std::int32_t ACTION_EMPTY = 2;
 constexpr std::int32_t ACTION_HUMAN = 3;
 constexpr std::int32_t ACTION_BOT = 4;
 constexpr std::int32_t ACTION_COPY = 5;
@@ -64,8 +63,7 @@ constexpr std::int32_t ACTION_ENTER = 11;
 
 /// The twelve empires, in the order the generator hands out player indices. The same list the match
 /// uses, so a host can tell somebody which empire they are before anybody has connected.
-constexpr std::array<const char*, SeatsPage::SEAT_COUNT> EMPIRE_NAMES = {"HALVORSEN", "SORNE", "OKONKWO", "TAMSIN", "VARGA", "IDRIS",
-                                                                         "DUNMORE",   "NARTH", "VESK",    "ORUNE",  "PELL",  "KEPLER"};
+constexpr std::array<const char*, SeatsPage::SEAT_COUNT> EMPIRE_NAMES = {"HALVORSEN", "SORNE", "OKONKWO", "TAMSIN", "VARGA", "IDRIS"};
 
 /// No `0`/`O` and no `1`/`I`. These are read off one screen and typed into another, usually after
 /// a trip through a chat window, and the two pairs people confuse are the two that cost a support
@@ -121,9 +119,9 @@ SeatsPage::SeatsPage(std::vector<std::string> _tokens)
 
     // Six to begin with, the smallest playable match (`MINIMUM_PLAYERS`), so the screen is usable
     // before the host has decided anything.
-    seat.kind = index < static_cast<std::int32_t>(MINIMUM_PLAYERS) ? Kind::Human : Kind::Empty;
+    seat.kind = Kind::Human;
   }
-  m_seatCount = static_cast<std::int32_t>(MINIMUM_PLAYERS);
+  m_seatCount = SEAT_COUNT;
 }
 
 void SeatsPage::SetConnected(const std::vector<bool>& _connected)
@@ -189,14 +187,6 @@ std::string SeatsPage::TakeCopyRequest()
   return taken;
 }
 
-void SeatsPage::ApplyBoundary()
-{
-  for (std::int32_t index = 0; index < SEAT_COUNT; ++index)
-  {
-    m_seats[static_cast<std::size_t>(index)].kind = index < m_seatCount ? Kind::Human : Kind::Empty;
-  }
-}
-
 void SeatsPage::AddHit(float _x, float _y, float _width, float _height, std::int32_t _action, std::int32_t _seat)
 {
   m_hits.push_back(Hit{_x, _y, _width, _height, _action, _seat});
@@ -227,25 +217,9 @@ bool SeatsPage::HandleTap(float _xPixels, float _yPixels)
       m_selected = hit->seat;
       return true;
 
-    case ACTION_EMPTY:
-      m_selected = hit->seat;
-      // Seats are a suffix: emptying this one empties everything below it. Anything else would
-      // renumber players whose tokens are already on the server.
-      if (hit->seat > static_cast<std::int32_t>(MINIMUM_PLAYERS) - 1)
-      {
-        m_seatCount = hit->seat;
-      }
-      else
-      {
-        m_refusal = std::format("A match needs at least {} seats.", MINIMUM_PLAYERS);
-      }
-      ApplyBoundary();
-      return true;
-
     case ACTION_HUMAN:
       m_selected = hit->seat;
-      m_seatCount = hit->seat + 1;
-      ApplyBoundary();
+      seat.kind = Kind::Human;
       return true;
 
     case ACTION_BOT:
@@ -321,82 +295,59 @@ void SeatsPage::DrawSeatCard(ShapeRenderer& _shapes, FontRenderer& _text, std::i
 {
   const Seat& seat = m_seats[static_cast<std::size_t>(_index)];
   const bool selected = _index == m_selected;
-  const bool empty = seat.kind == Kind::Empty;
+  const bool here = m_connected[static_cast<std::size_t>(_index)];
+  const bool mine = m_hostSeat == _index;
 
   _shapes.FillRect(_x, _y, _width, _height, CARD_FILL);
   _shapes.StrokeRect(_x, _y, _width, _height, selected ? BLUE : CARD_BORDER);
   AddHit(_x, _y, _width, _height, ACTION_SELECT, _index);
 
-  // The swatch is the empire's colour, and it is the only place on this screen a player's colour
-  // appears before the map does (ADR-027).
-  const std::int32_t player = PlayerIndexOf(_index);
-  const std::int32_t headerY = static_cast<std::int32_t>(_y) + 10;
-  if (!empty)
-  {
-    _shapes.FillRect(_x + 10.0F, static_cast<float>(headerY), 8.0F, 8.0F, OwnerColor(player, m_hostSeat == _index ? player : -1));
-  }
-  else
-  {
-    _shapes.StrokeRect(_x + 10.0F, static_cast<float>(headerY), 8.0F, 8.0F, OUTLINE);
-  }
+  // The swatch is the empire's colour, and this is the only place a player's colour appears before
+  // the map does (ADR-027).
+  const std::int32_t headerY = static_cast<std::int32_t>(_y) + 12;
+  _shapes.FillRect(_x + 12.0F, static_cast<float>(headerY), 8.0F, 8.0F, OwnerColor(_index, mine ? _index : -1));
+  _text.DrawText(static_cast<std::int32_t>(_x) + 26, headerY, std::format("SEAT {:02}", _index + 1), TEXT_PRIMARY);
 
-  _text.DrawText(static_cast<std::int32_t>(_x) + 24, headerY, std::format("SEAT {:02}", _index + 1), empty ? NEUTRAL_DIM : TEXT_PRIMARY);
-
-  const std::string right = empty ? "-" : (m_hostSeat == _index ? std::string{"YOU"} : seat.name);
+  const std::string right = mine ? std::string{"YOU"} : seat.name;
   const auto rightWidth = static_cast<float>(FontRenderer::MeasurePixels(right));
-  _text.DrawText(static_cast<std::int32_t>(_x + _width - rightWidth) - 10, headerY, right,
-                 empty ? NEUTRAL_DIM : (m_hostSeat == _index ? BLUE : TEXT_MUTED));
+  _text.DrawText(static_cast<std::int32_t>(_x + _width - rightWidth) - 12, headerY, right, mine ? BLUE : TEXT_MUTED);
 
-  // ---- The body ----------------------------------------------------------------------------------
-  std::int32_t lineY = headerY + LINE_HEIGHT + 8;
-  const std::size_t columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(_width - 20.0F));
+  // ---- The token, which is the whole reason this card exists ------------------------------------
+  std::int32_t lineY = headerY + LINE_HEIGHT + 12;
+  _text.DrawText(static_cast<std::int32_t>(_x) + 12, lineY, "TOKEN", TEXT_MUTED);
+  lineY += LINE_HEIGHT + 2;
+  _text.DrawText(static_cast<std::int32_t>(_x) + 12, lineY, seat.token, TEXT_PRIMARY);
+  lineY += LINE_HEIGHT + 8;
 
-  if (empty)
-  {
-    for (const std::string& line : FontRenderer::Wrap("Empty. Nobody plays this seat.", columns))
-    {
-      _text.DrawText(static_cast<std::int32_t>(_x) + 10, lineY, line, NEUTRAL_DIM);
-      lineY += LINE_HEIGHT;
-    }
-  }
-  else
-  {
-    _text.DrawText(static_cast<std::int32_t>(_x) + 10, lineY, "TOKEN", TEXT_MUTED);
-    _text.DrawText(static_cast<std::int32_t>(_x) + 10 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("TOKEN ")), lineY, seat.token,
-                   TEXT_PRIMARY);
-    lineY += LINE_HEIGHT;
-    const bool here = m_connected[static_cast<std::size_t>(_index)];
-    _text.DrawText(static_cast<std::int32_t>(_x) + 10, lineY,
-                   m_hostSeat == _index ? "CONNECTED - YOU" : (here ? "CONNECTED" : "WAITING FOR PLAYER"), here ? BLUE : AMBER);
-    lineY += LINE_HEIGHT;
-  }
+  _text.DrawText(static_cast<std::int32_t>(_x) + 12, lineY, mine ? "CONNECTED - YOU" : (here ? "CONNECTED" : "WAITING FOR PLAYER"),
+                 here ? BLUE : AMBER);
 
-  // ---- EMPTY | HUMAN | BOT -----------------------------------------------------------------------
-  const float toggleY = _y + _height - 26.0F;
-  const float toggleWidth = (_width - 20.0F) / 3.0F;
-  const std::array<const char*, 3> labels = {"EMPTY", "HUMAN", "BOT"};
-  const std::array<std::int32_t, 3> actions = {ACTION_EMPTY, ACTION_HUMAN, ACTION_BOT};
-  const std::array<Kind, 3> kinds = {Kind::Empty, Kind::Human, Kind::Bot};
+  // ---- HUMAN | BOT -------------------------------------------------------------------------------
+  const float toggleY = _y + _height - 28.0F;
+  const float toggleWidth = (_width - 24.0F) / 2.0F;
+  const std::array<const char*, 2> labels = {"HUMAN", "BOT"};
+  const std::array<std::int32_t, 2> actions = {ACTION_HUMAN, ACTION_BOT};
+  const std::array<Kind, 2> kinds = {Kind::Human, Kind::Bot};
 
   for (std::size_t slot = 0; slot < labels.size(); ++slot)
   {
-    const float toggleX = _x + 10.0F + static_cast<float>(slot) * toggleWidth;
+    const float toggleX = _x + 12.0F + static_cast<float>(slot) * toggleWidth;
     const bool on = seat.kind == kinds[slot];
     const bool possible = kinds[slot] != Kind::Bot;
 
     if (on)
     {
-      _shapes.FillRect(toggleX, toggleY, toggleWidth - 2.0F, 18.0F, BLUE);
+      _shapes.FillRect(toggleX, toggleY, toggleWidth - 3.0F, 18.0F, BLUE);
     }
     else
     {
-      _shapes.StrokeRect(toggleX, toggleY, toggleWidth - 2.0F, 18.0F, possible ? OUTLINE : DIVIDER);
+      _shapes.StrokeRect(toggleX, toggleY, toggleWidth - 3.0F, 18.0F, possible ? OUTLINE : DIVIDER);
     }
 
     const auto labelWidth = static_cast<float>(FontRenderer::MeasurePixels(labels[slot]));
-    _text.DrawText(static_cast<std::int32_t>(toggleX + (toggleWidth - 2.0F - labelWidth) * 0.5F), CenterTextY(toggleY, 18.0F), labels[slot],
+    _text.DrawText(static_cast<std::int32_t>(toggleX + (toggleWidth - 3.0F - labelWidth) * 0.5F), CenterTextY(toggleY, 18.0F), labels[slot],
                    on ? APP_BACKGROUND : (possible ? TEXT_PRIMARY : NEUTRAL_DIM));
-    AddHit(toggleX, toggleY, toggleWidth - 2.0F, 18.0F, actions[slot], _index);
+    AddHit(toggleX, toggleY, toggleWidth - 3.0F, 18.0F, actions[slot], _index);
   }
 }
 
@@ -411,60 +362,53 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.FillRect(panelX, TOP_BAR_HEIGHT, 1.0F, SCREEN_HEIGHT - TOP_BAR_HEIGHT - FOOTER_HEIGHT, CARD_BORDER);
 
   const Seat& seat = m_seats[static_cast<std::size_t>(m_selected)];
-  const bool empty = seat.kind == Kind::Empty;
 
   std::int32_t y = static_cast<std::int32_t>(TOP_BAR_HEIGHT) + 14;
-  _text.DrawText(static_cast<std::int32_t>(contentX), y, std::format("SEAT {:02} - {}", m_selected + 1, empty ? "EMPTY" : seat.name),
-                 TEXT_PRIMARY);
+  _text.DrawText(static_cast<std::int32_t>(contentX), y, std::format("SEAT {:02} - {}", m_selected + 1, seat.name), TEXT_PRIMARY);
   y += LINE_HEIGHT + 8;
 
-  const std::string_view blurb = empty ? "Nobody plays this seat. It is not in the match and its empire is not generated."
-                                       : "A human seat. The token is the seat: whoever enters it plays this empire.";
-  for (const std::string& line : FontRenderer::Wrap(blurb, columns))
+  for (const std::string& line :
+       FontRenderer::Wrap("The token is the seat: whoever enters it plays this empire. Send it to the person playing.", columns))
   {
     _text.DrawText(static_cast<std::int32_t>(contentX), y, line, TEXT_DETAIL);
     y += LINE_HEIGHT;
   }
-  y += 8;
+  y += 10;
 
-  if (!empty)
+  // ---- The token, and the two things you do with it ---------------------------------------------
+  _shapes.StrokeRect(contentX, static_cast<float>(y), contentRight - contentX, 24.0F, CARD_BORDER);
+  _text.DrawText(static_cast<std::int32_t>(contentX) + 8, CenterTextY(static_cast<float>(y), 24.0F), seat.token, TEXT_PRIMARY);
+
+  const auto copyWidth = static_cast<float>(FontRenderer::MeasurePixels("COPY"));
+  _text.DrawText(static_cast<std::int32_t>(contentRight - copyWidth) - 8, CenterTextY(static_cast<float>(y), 24.0F), "COPY", BLUE);
+  AddHit(contentRight - copyWidth - 16.0F, static_cast<float>(y), copyWidth + 16.0F, 24.0F, ACTION_COPY, m_selected);
+  y += 32;
+
+  const float halfWidth = (contentRight - contentX - 8.0F) * 0.5F;
+  _shapes.StrokeRect(contentX, static_cast<float>(y), halfWidth, 22.0F, OUTLINE);
+  _text.DrawText(static_cast<std::int32_t>(contentX) + 10, CenterTextY(static_cast<float>(y), 22.0F), "NEW TOKEN", TEXT_PRIMARY);
+  AddHit(contentX, static_cast<float>(y), halfWidth, 22.0F, ACTION_NEW_TOKEN, m_selected);
+
+  _shapes.StrokeRect(contentX + halfWidth + 8.0F, static_cast<float>(y), halfWidth, 22.0F, OUTLINE);
+  _text.DrawText(static_cast<std::int32_t>(contentX + halfWidth) + 18, CenterTextY(static_cast<float>(y), 22.0F), "TAKE SEAT",
+                 m_hostSeat == m_selected ? NEUTRAL_DIM : TEXT_PRIMARY);
+  if (m_hostSeat != m_selected)
   {
-    // ---- The token, and the two things you do with it -------------------------------------------
-    _shapes.StrokeRect(contentX, static_cast<float>(y), contentRight - contentX, 24.0F, CARD_BORDER);
-    _text.DrawText(static_cast<std::int32_t>(contentX) + 8, CenterTextY(static_cast<float>(y), 24.0F), seat.token, TEXT_PRIMARY);
-
-    const auto copyWidth = static_cast<float>(FontRenderer::MeasurePixels("COPY"));
-    _text.DrawText(static_cast<std::int32_t>(contentRight - copyWidth) - 8, CenterTextY(static_cast<float>(y), 24.0F), "COPY", BLUE);
-    AddHit(contentRight - copyWidth - 16.0F, static_cast<float>(y), copyWidth + 16.0F, 24.0F, ACTION_COPY, m_selected);
-    y += 32;
-
-    const float halfWidth = (contentRight - contentX - 8.0F) * 0.5F;
-    _shapes.StrokeRect(contentX, static_cast<float>(y), halfWidth, 22.0F, OUTLINE);
-    _text.DrawText(static_cast<std::int32_t>(contentX) + 10, CenterTextY(static_cast<float>(y), 22.0F), "NEW TOKEN", TEXT_PRIMARY);
-    AddHit(contentX, static_cast<float>(y), halfWidth, 22.0F, ACTION_NEW_TOKEN, m_selected);
-
-    _shapes.StrokeRect(contentX + halfWidth + 8.0F, static_cast<float>(y), halfWidth, 22.0F, OUTLINE);
-    _text.DrawText(static_cast<std::int32_t>(contentX + halfWidth) + 18, CenterTextY(static_cast<float>(y), 22.0F), "TAKE SEAT",
-                   m_hostSeat == m_selected ? NEUTRAL_DIM : TEXT_PRIMARY);
-    if (m_hostSeat != m_selected)
-    {
-      AddHit(contentX + halfWidth + 8.0F, static_cast<float>(y), halfWidth, 22.0F, ACTION_TAKE_SEAT, m_selected);
-    }
-    y += 34;
+    AddHit(contentX + halfWidth + 8.0F, static_cast<float>(y), halfWidth, 22.0F, ACTION_TAKE_SEAT, m_selected);
   }
+  y += 34;
 
-  // ---- If still waiting at the lock -------------------------------------------------------------
+  // ---- If still waiting at the lock --------------------------------------------------------------
   _shapes.FillRect(panelX + 1.0F, static_cast<float>(y), PANEL_WIDTH - 1.0F, 1.0F, DIVIDER);
   y += 10;
   _text.DrawText(static_cast<std::int32_t>(contentX), y, "IF STILL WAITING AT T1 LOCK", TEXT_MUTED);
   y += LINE_HEIGHT + 6;
 
-  const float halfWidth = (contentRight - contentX - 8.0F) * 0.5F;
   const bool takesOver = seat.ifWaiting == IfWaiting::BotTakesOver;
 
   _shapes.StrokeRect(contentX, static_cast<float>(y), halfWidth, 30.0F, takesOver ? BLUE : DIVIDER);
-  _text.DrawText(static_cast<std::int32_t>(contentX) + 6, static_cast<std::int32_t>(y) + 11, "BOT TAKES OVER",
-                 takesOver ? BLUE : NEUTRAL_DIM);
+  _text.DrawText(static_cast<std::int32_t>(contentX) + 6, static_cast<std::int32_t>(y) + 5, "BOT TAKES", takesOver ? BLUE : NEUTRAL_DIM);
+  _text.DrawText(static_cast<std::int32_t>(contentX) + 6, static_cast<std::int32_t>(y) + 17, "OVER", takesOver ? BLUE : NEUTRAL_DIM);
   AddHit(contentX, static_cast<float>(y), halfWidth, 30.0F, ACTION_BOT_TAKES_OVER, m_selected);
 
   _shapes.StrokeRect(contentX + halfWidth + 8.0F, static_cast<float>(y), halfWidth, 30.0F, takesOver ? DIVIDER : BLUE);
@@ -577,11 +521,9 @@ void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
                  TEXT_MUTED);
 
   std::int32_t humans = 0;
-  std::int32_t empties = 0;
   for (const Seat& seat : m_seats)
   {
     humans += seat.kind == Kind::Human ? 1 : 0;
-    empties += seat.kind == Kind::Empty ? 1 : 0;
   }
 
   std::int32_t here = 0;
@@ -589,7 +531,7 @@ void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     here += m_connected[static_cast<std::size_t>(index)] ? 1 : 0;
   }
-  const std::string census = std::format("{} SEATS - {} CONNECTED - {} EMPTY", humans, here, empties);
+  const std::string census = std::format("{} SEATS - {} CONNECTED", humans, here);
   const auto censusWidth = static_cast<float>(FontRenderer::MeasurePixels(census));
   _text.DrawText(static_cast<std::int32_t>(SCREEN_WIDTH - censusWidth) - 16, centered, census, TEXT_MUTED);
 

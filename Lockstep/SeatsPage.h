@@ -37,7 +37,6 @@ public:
   /// yet (ADR-036).
   enum class Kind : std::uint8_t
   {
-    Empty,
     Human,
     Bot
   };
@@ -52,7 +51,7 @@ public:
 
   struct Seat
   {
-    Kind kind = Kind::Empty;
+    Kind kind = Kind::Human;
     IfWaiting ifWaiting = IfWaiting::GoesCustodian;
     /// `XXXX-XXXX`, generated. Empty seats carry one too, so that turning a seat on does not have
     /// to invent one while somebody is looking at it.
@@ -62,7 +61,17 @@ public:
     std::string name;
   };
 
-  static constexpr std::int32_t SEAT_COUNT = 12;
+  /// Six seats, which is `MINIMUM_PLAYERS` and therefore every seat a match must have.
+  ///
+  /// **The screen shrank to six and lost a control by doing so** (owner, 2026-09-11). With twelve
+  /// cards a host could choose how many were playing; with six they cannot, because `MatchRules`
+  /// refuses fewer than six and this screen shows no more. So `EMPTY` went: a seat that cannot be
+  /// empty needs no button saying it could be. What is left is the thing the screen is actually
+  /// for -- a token per seat, and whether that seat's player has arrived.
+  ///
+  /// Going back to twelve is changing this number and the column count beside it. The rules have
+  /// always allowed up to twelve (`MAXIMUM_PLAYERS`) and nothing here assumes six beyond layout.
+  static constexpr std::int32_t SEAT_COUNT = 6;
 
   /// The tokens come from the caller now, because the lobby was opened with them before this
   /// screen existed: a token has to be on the server's list before anybody can present it.
