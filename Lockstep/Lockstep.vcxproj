@@ -137,6 +137,7 @@
     <ClCompile Include="SnapshotView.cpp" />
     <ClCompile Include="DigestView.cpp" />
     <ClCompile Include="JoinPage.cpp" />
+    <ClCompile Include="SeatsPage.cpp" />
     <ClCompile Include="HostedServer.cpp" />
     <ClCompile Include="MainPage.cpp" />
     <ClCompile Include="MatchConnection.cpp" />
@@ -152,6 +153,7 @@
     <ClInclude Include="SnapshotView.h" />
     <ClInclude Include="DigestView.h" />
     <ClInclude Include="JoinPage.h" />
+    <ClInclude Include="SeatsPage.h" />
     <ClInclude Include="HostedServer.h" />
     <ClInclude Include="MainPage.h" />
     <ClInclude Include="MatchConnection.h" />

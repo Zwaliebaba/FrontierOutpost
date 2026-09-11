@@ -32,6 +32,7 @@
 #include "HostedServer.h"
 #include "MainPage.h"
 #include "JoinPage.h"
+#include "SeatsPage.h"
 #include "MatchConnection.h"
 #include "MatchFixture.h"
 #include "SnapshotView.h"
@@ -338,6 +339,107 @@ bool PumpMessages()
   return !g_quitRequested;
 }
 
+/// Builds the match server. One function because two callers need it and they must not drift: the
+/// headless `--serve` path starts one before any window exists, and the host's path starts one
+/// after the seats screen has decided how many seats there are (ADR-036).
+[[nodiscard]] std::unique_ptr<Lockstep::HostedServer> StartHostedServer(const Startup& _startup, std::vector<std::string> _tokens)
+{
+  constexpr std::uint64_t GALAXY_SEED = 0x4652'4F4E'5449'4552ULL;
+
+  Lockstep::MatchRules rules = _startup.phaseZero ? Lockstep::PhaseZeroRules() : Lockstep::MatchRules{};
+  if (_startup.tickSeconds > 0)
+  {
+    rules.tickIntervalSeconds = _startup.tickSeconds;
+  }
+
+  // The seats screen is what makes this true of a hosted match: the galaxy is generated for the
+  // number of seats somebody chose, not for a constant.
+  if (!_tokens.empty())
+  {
+    rules.playerCount = static_cast<std::uint32_t>(_tokens.size());
+  }
+
+  return std::make_unique<Lockstep::HostedServer>(_startup.port, std::move(_tokens), BesideTheExecutable("lockstep-match.store"),
+                                                  BesideTheExecutable("lockstep-match.log"), GALAXY_SEED, rules);
+}
+
+/// The seats screen, in its own frame loop, until the host enters the match or closes the window.
+///
+/// **It runs before anything exists** (ADR-036): no server, no galaxy, no tick. The number of seats
+/// is what `Match::Create` needs to generate a galaxy, so it has to be settled here and `ENTER
+/// MATCH` is what starts everything. That is also why nothing on it is live -- the mockup's
+/// CONNECTED badges need a running server, which needs the count this screen is choosing.
+///
+/// Fills `_outTokens` and returns the host's seat, or -1 when the window closed first.
+[[nodiscard]] std::int32_t RunSeatsScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::ShapeRenderer& _shapes,
+                                          Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer, Neuron::KeyboardInput& _keyboard,
+                                          HWND _window, std::vector<std::string>& _outTokens)
+{
+  Lockstep::SeatsPage page;
+
+  while (PumpMessages())
+  {
+    for (const Neuron::KeyboardInput::Key key : _keyboard.TakeKeys())
+    {
+      page.HandleKey(key);
+    }
+    (void)_keyboard.TakeTyped();
+
+    float tapXPixels = 0.0F;
+    float tapYPixels = 0.0F;
+    if (_pointer.TakeClick(tapXPixels, tapYPixels))
+    {
+      (void)page.HandleTap(tapXPixels, tapYPixels);
+    }
+
+    // COPY puts a token on the clipboard. It is the only thing this screen does to the machine
+    // outside its own window, and it is what the host needs: twelve tokens have to reach twelve
+    // people somehow, and retyping them off a screen is how a seat gets typed wrong.
+    const std::string copy = page.TakeCopyRequest();
+    if (!copy.empty() && OpenClipboard(_window) != 0)
+    {
+      EmptyClipboard();
+      const HGLOBAL handle = GlobalAlloc(GMEM_MOVEABLE, copy.size() + 1);
+      if (handle != nullptr)
+      {
+        void* memory = GlobalLock(handle);
+        if (memory != nullptr)
+        {
+          std::memcpy(memory, copy.c_str(), copy.size() + 1);
+          GlobalUnlock(handle);
+          SetClipboardData(CF_TEXT, handle);
+        }
+      }
+      CloseClipboard();
+    }
+
+    if (page.TakeEnterRequest())
+    {
+      _outTokens = page.PlayingTokens();
+      return page.HostSeat();
+    }
+
+    ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
+    _screen.BeginScene(commandList, _device.BackBufferView());
+
+    _shapes.BeginFrame(_device.FrameIndex());
+    _text.BeginFrame(_device.FrameIndex());
+
+    page.DrawWorld(_shapes, _text);
+    _shapes.Flush(commandList);
+    _text.Flush(commandList);
+
+    page.DrawInterface(_shapes, _text);
+    _shapes.Flush(commandList);
+    _text.Flush(commandList);
+
+    _device.EndFrameAndPresent();
+    _device.DrainDebugMessages();
+  }
+
+  return -1;
+}
+
 /// Screen 03, in its own frame loop, until the server welcomes this client or the window closes.
 ///
 /// **A loop of its own rather than a mode inside the match loop.** The two screens share no state:
@@ -491,6 +593,25 @@ int RunGame(HWND _window, const Startup& _startup)
 
   Lockstep::MatchConnection connection;
 
+  // ---- The seats screen, when this process is the host -------------------------------------------
+  //
+  // Before the server, because the number of seats is what the galaxy is generated for (ADR-036).
+  // A client that was told where to join with `--join` never sees it -- somebody else is hosting.
+  std::unique_ptr<Lockstep::HostedServer> hosted;
+  std::string hostToken = _startup.token;
+  if (_startup.role == Role::HostAndPlay)
+  {
+    std::vector<std::string> tokens;
+    const std::int32_t hostSeat = RunSeatsScreen(device, screen, shapes, text, pointer, keyboard, _window, tokens);
+    if (hostSeat < 0)
+    {
+      return EXIT_SUCCESS;
+    }
+
+    hostToken = tokens[static_cast<std::size_t>(hostSeat)];
+    hosted = StartHostedServer(_startup, std::move(tokens));
+  }
+
   // ---- Screen 03, unless the command line already answered it ----------------------------------
   //
   // `--join host:port --token x` names a server and a seat, which is exactly what the join screen
@@ -500,7 +621,7 @@ int RunGame(HWND _window, const Startup& _startup)
   if (!_startup.joinGiven)
   {
     const std::string offered = std::format("{}:{}", _startup.host, _startup.port);
-    if (!RunJoinScreen(device, screen, shapes, text, pointer, keyboard, connection, offered, _startup.token, _startup.port, startedAt))
+    if (!RunJoinScreen(device, screen, shapes, text, pointer, keyboard, connection, offered, hostToken, _startup.port, startedAt))
     {
       return EXIT_SUCCESS;
     }
@@ -706,18 +827,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   // executable in two roles the rule is about the ROLE and not the binary: a process acting as the
   // server writes a store, and a process that is only a client never does.
   std::unique_ptr<Lockstep::HostedServer> hosted;
-  if (startup.role != Role::Join)
+  if (startup.role == Role::Serve)
   {
-    constexpr std::uint64_t GALAXY_SEED = 0x4652'4F4E'5449'4552ULL;
-
-    Lockstep::MatchRules rules = startup.phaseZero ? Lockstep::PhaseZeroRules() : Lockstep::MatchRules{};
-    if (startup.tickSeconds > 0)
-    {
-      rules.tickIntervalSeconds = startup.tickSeconds;
-    }
-
-    hosted = std::make_unique<Lockstep::HostedServer>(startup.port, PhaseZeroTokens(), BesideTheExecutable("lockstep-match.store"),
-                                                      BesideTheExecutable("lockstep-match.log"), GALAXY_SEED, rules);
+    // Headless has no seats screen to choose with, so it keeps the fixed list. ADR-036 replaced
+    // those for a host who can see a screen; `--serve` is the dedicated server and whoever runs it
+    // reads the tokens out of the source exactly as they did before.
+    hosted = StartHostedServer(startup, PhaseZeroTokens());
   }
 
   // ---- Headless -------------------------------------------------------------------------------
