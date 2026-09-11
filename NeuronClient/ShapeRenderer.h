@@ -87,6 +87,16 @@ public:
                           const Color& _rim);
 
   /// Issues everything appended since BeginFrame as a single draw call.
+  /// Draws everything recorded SINCE THE LAST FLUSH, and remembers where it stopped.
+  ///
+  /// **Called more than once a frame, it is what puts one layer over another.** The interface is
+  /// two renderers (ADR-014), and each is one batch: every shape, then every glyph. Flushed once at
+  /// the end of a frame that meant all text landed on top of all shapes whatever order they were
+  /// recorded in -- so a panel drawn over the map covered the map's dots and lanes and left its
+  /// LABELS floating on top of the panel, which is what a modal is not allowed to do.
+  ///
+  /// Draining rather than redrawing is the whole of the fix: the caller flushes both renderers
+  /// between the world and the interface, and each flush draws only what is new.
   void Flush(ID3D12GraphicsCommandList* _commandList);
 
 private:
@@ -130,6 +140,8 @@ private:
   ShapeVertex* m_mappedVertices = nullptr;
   std::uint32_t m_frameIndex = 0;
   std::uint32_t m_usedThisFrame = 0;
+  /// How much of `m_usedThisFrame` has already been drawn this frame. See `Flush`.
+  std::uint32_t m_flushedThisFrame = 0;
 };
 
 } // namespace Neuron

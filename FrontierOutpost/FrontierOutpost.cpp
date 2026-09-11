@@ -487,7 +487,13 @@ int RunGame(HWND _window, const Startup& _startup)
     shapes.BeginFrame(device.FrameIndex());
     text.BeginFrame(device.FrameIndex());
 
-    page.Draw(shapes, text);
+    // Two layers, flushed apart. See `MainPage::DrawWorld`: one flush per frame would put the map's
+    // labels on top of the panels drawn over them.
+    page.DrawWorld(shapes, text);
+    shapes.Flush(commandList);
+    text.Flush(commandList);
+
+    page.DrawInterface(shapes, text);
 
     // Shapes first, then text, in two draw calls rather than interleaved. Painter's order still
     // holds within each pass, and the one place it matters across them -- a caption on a card --

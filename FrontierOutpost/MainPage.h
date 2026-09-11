@@ -104,7 +104,17 @@ public:
     return m_mapView;
   }
 
-  void Draw(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
+  /// The frame, in two layers, because the caller has to flush between them.
+  ///
+  /// **The interface is two renderers and each is one batch** (ADR-014): every shape, then every
+  /// glyph. Drawn as one layer, that put every glyph over every shape whatever order they were
+  /// recorded in -- so a panel opened over the map covered the map's dots and lanes and left its
+  /// LABELS floating on top of the panel. A modal that text shows through is not a modal.
+  ///
+  /// So the world is drawn, both renderers are flushed, and then the interface is drawn over it.
+  /// `DrawWorld` starts the frame: it clears the hit list, which `DrawInterface` then fills.
+  void DrawWorld(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
+  void DrawInterface(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
   [[nodiscard]] const MatchState& State() const noexcept
   {
@@ -146,7 +156,6 @@ private:
 
   void DrawTopBar(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawDigestRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
-  void DrawEmptyDigest(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, float _y, std::size_t _columns);
   [[nodiscard]] static Action ActionFor(EventActionKind _kind) noexcept;
   void DrawMap(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawLocksRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);

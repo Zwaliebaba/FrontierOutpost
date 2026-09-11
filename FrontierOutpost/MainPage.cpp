@@ -361,6 +361,14 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
     {
       // Tapping a digest event focuses what it is about. Reading and acting are the same gesture:
       // the event says a rival is at Kepler-Reach, and the tap puts Kepler-Reach under your eye.
+      //
+      // Bounds-checked, because the index came from a card and a card can be synthetic. This read
+      // was unguarded and a -1 crashed the client; the region that produced it is gone now, and
+      // this stays so the next one cannot.
+      if (region->index < 0 || region->index >= static_cast<std::int32_t>(m_state.digest.size()))
+      {
+        return true;
+      }
       const DigestEvent& event = m_state.digest[static_cast<std::size_t>(region->index)];
       m_focusedSystem = event.refs.system;
       m_panel = Panel::None;
@@ -455,17 +463,20 @@ void MainPage::DrawRight(FontRenderer& _text, float _rightXPixels, std::int32_t 
   _text.DrawText(static_cast<std::int32_t>(std::lround(_rightXPixels - width)), _yPixels, _string, _color, _scale);
 }
 
-void MainPage::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
+void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text)
 {
   m_hits.clear();
 
   _shapes.FillRect(0.0F, 0.0F, SCREEN_WIDTH, SCREEN_HEIGHT, APP_BACKGROUND);
 
   // THE MAP GOES FIRST, and the rails are painted over it. With the authored curve the map could
-  // not leave its pane; a camera can put a projected label or a lane anywhere on the screen, so
-  // the rails' own opaque backgrounds are what confine it (ADR-017). Text is a separate pass and
-  // cannot be covered that way, so the map's text clips itself instead.
+  // not leave its pane; a camera can put a projected label or a lane anywhere on the screen, so the
+  // rails' own opaque backgrounds are what confine it (ADR-017).
   DrawMap(_shapes, _text);
+}
+
+void MainPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
+{
   DrawTopBar(_shapes, _text);
   DrawDigestRail(_shapes, _text);
   DrawLocksRail(_shapes, _text);
@@ -478,35 +489,14 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.FillRect(0.0F, 0.0F, SCREEN_WIDTH, TOP_BAR_HEIGHT, APP_BACKGROUND);
   _shapes.FillRect(0.0F, TOP_BAR_HEIGHT - 1.0F, SCREEN_WIDTH, 1.0F, CARD_BORDER);
 
-  _text.DrawText(16, centered, "FRONTIER OUTPOST", TEXT_PRIMARY);
-
-  // "DAY 12/21" rather than "DAY 12 / 21", and the countdown and replay labels use T-notation:
-  // at 8px the reference's spelled-out bar is 63px wider than the frame (ADR-014).
+  // ---- The right-hand block goes first, and it decides how much room the left one gets ----------
   //
-  // The end time is dropped rather than left dangling when the state has none. A match generated
-  // without a server has no schedule to report (GeneratedMatch.h), and "- ENDS" followed by
-  // nothing reads as a truncation bug rather than as an absence.
-  // `M0419 - D12/21 - 12 PLAYERS - 61 SYSTEMS` (SCREENS.md 01). The census moved up here from the
-  // map pane, where it was a caption on a picture; on the top bar it sits with the other facts
-  // about the match that do not change from tick to tick.
-  std::string matchLine = std::format("M{} - D{}/{} - {} PLAYERS - {} SYSTEMS", m_state.match.id, m_state.match.day,
-                                      m_state.match.totalDays, m_state.player.playerCount, m_state.totalSystems);
-  if (!m_state.match.endsAt.empty())
-  {
-    matchLine += std::format(" - ENDS {}", m_state.match.endsAt);
-  }
-  _text.DrawText(16 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("FRONTIER OUTPOST")) + 10, centered, matchLine, TEXT_MUTED);
-
-  // A disconnected client says so, in the one place a player is already looking. Everything else on
-  // this screen is the last thing the server said, and without this there is no way to tell that
-  // from the current thing the server is saying.
-  if (!m_state.connected)
-  {
-    const std::int32_t offlineX = 16 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("FRONTIER OUTPOST")) + 10 +
-                                  static_cast<std::int32_t>(FontRenderer::MeasurePixels(matchLine)) + 12;
-    _text.DrawText(offlineX, centered, "RECONNECTING", RED);
-  }
-
+  // The left half is a sentence that grows -- the match id, the day, the player and system counts,
+  // and an end time when there is one -- and the right half is a fixed set of facts laid out from
+  // the edge inwards. Drawn in the obvious order, the sentence ran under the countdown: `ENDS 22
+  // SEP 18:00Z` and `T47 LOCKS` printed on top of each other, which is what a fixed 1280 costs when
+  // one side is authored and the other is data. So the right side is measured first and the left is
+  // trimmed to fit in front of it.
   // The right group is laid out right to left, because it is anchored to the frame edge and its
   // widest member -- the leader's name -- is the one that changes.
   float cursor = SCREEN_WIDTH - 16.0F;
@@ -554,6 +544,57 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
 
   DrawRight(_text, cursor, centered, m_state.match.finished ? std::string{"MATCH ENDED"} : std::format("T{} LOCKS", m_state.OrdersTick()),
             TEXT_MUTED);
+
+  // ---- The left half, trimmed to what is left --------------------------------------------------
+  const float titleWidth = static_cast<float>(FontRenderer::MeasurePixels("FRONTIER OUTPOST"));
+  const float lineX = 16.0F + titleWidth + 10.0F;
+  const float room = cursor - 14.0F - lineX;
+
+  _text.DrawText(16, centered, "FRONTIER OUTPOST", TEXT_PRIMARY);
+
+  // "DAY 12/21" rather than "DAY 12 / 21", and the countdown and replay labels use T-notation: at
+  // 8px the reference's spelled-out bar is 63px wider than the frame (ADR-014).
+  //
+  // `M0419 - D12/21 - 12 PLAYERS - 61 SYSTEMS` (SCREENS.md 01). The census moved up here from the
+  // map pane, where it was a caption on a picture; on the top bar it sits with the other facts
+  // about the match that do not change from tick to tick.
+  //
+  // Dropped a clause at a time rather than clipped mid-word: every version below is a true and
+  // readable line, and the end time goes before the census because a player who wants the end date
+  // can read it off the day counter. The end time is also dropped rather than left dangling when
+  // the state has none -- a match generated without a server has no schedule to report
+  // (GeneratedMatch.h), and "- ENDS" followed by nothing reads as a truncation bug.
+  const std::string census = std::format("{} PLAYERS - {} SYSTEMS", m_state.player.playerCount, m_state.totalSystems);
+  const std::string stem = std::format("M{} - D{}/{}", m_state.match.id, m_state.match.day, m_state.match.totalDays);
+
+  std::vector<std::string> candidates;
+  if (!m_state.match.endsAt.empty())
+  {
+    candidates.push_back(std::format("{} - {} - ENDS {}", stem, census, m_state.match.endsAt));
+  }
+  candidates.push_back(std::format("{} - {}", stem, census));
+  candidates.push_back(stem);
+
+  for (const std::string& candidate : candidates)
+  {
+    if (static_cast<float>(FontRenderer::MeasurePixels(candidate)) <= room || &candidate == &candidates.back())
+    {
+      _text.DrawText(static_cast<std::int32_t>(lineX), centered, candidate, TEXT_MUTED);
+
+      // A disconnected client says so, in the one place a player is already looking. Everything
+      // else on this screen is the last thing the server said, and without this there is no way to
+      // tell that from the current thing the server is saying.
+      if (!m_state.connected)
+      {
+        const float offlineX = lineX + static_cast<float>(FontRenderer::MeasurePixels(candidate)) + 12.0F;
+        if (offlineX + static_cast<float>(FontRenderer::MeasurePixels("RECONNECTING")) < cursor - 14.0F)
+        {
+          _text.DrawText(static_cast<std::int32_t>(offlineX), centered, "RECONNECTING", RED);
+        }
+      }
+      break;
+    }
+  }
 }
 
 void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
@@ -613,18 +654,20 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     y += boxHeight + 6.0F;
   }
 
-  if (m_state.digest.empty())
-  {
-    DrawEmptyDigest(_shapes, _text, y, columns);
-    return;
-  }
-
   // ---- The cards -----------------------------------------------------------------------------------
   const std::vector<DigestCard> cards = CardsOf(m_state);
   for (const DigestCard& card : cards)
   {
     const Color accent = EventColor(card.kind);
     const float top = y;
+
+    // Where this card's hits begin. The card as a whole is tappable -- reading and focusing are the
+    // same gesture -- but its buttons sit inside it, and `HandleTap` reads the list BACKWARDS so
+    // that the thing drawn last wins. A card-wide region appended after the buttons therefore
+    // swallows every one of them, which is exactly what happened: tapping BUILD focused the event
+    // instead, and the only reason it looked like it worked is that any handled tap sends the
+    // order set. The card's region is inserted here instead, in front of its own buttons.
+    const std::size_t cardHitsBegin = m_hits.size();
 
     _shapes.FillRect(0.0F, y, DIGEST_WIDTH - 1.0F, 1.0F, DIVIDER);
     std::int32_t lineY = static_cast<std::int32_t>(y) + 11;
@@ -705,7 +748,15 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     }
 
     y = static_cast<float>(lineY) + 4.0F;
-    AddHit(0.0F, top, DIGEST_WIDTH - 1.0F, y - top, Action::FocusEvent, card.leadEvent);
+
+    // Only when there is something to focus. The card a tick-zero digest shows is synthetic -- it
+    // reports that nothing has happened and carries the opening moves -- so it leads no event, and
+    // a `FocusEvent` for event number -1 is an out-of-bounds read that took the whole client down.
+    if (card.leadEvent != EventRefs::NONE)
+    {
+      m_hits.insert(m_hits.begin() + static_cast<std::ptrdiff_t>(cardHitsBegin),
+                    HitRegion{0.0F, top, DIGEST_WIDTH - 1.0F, y - top, Action::FocusEvent, card.leadEvent});
+    }
 
     if (y > SCREEN_HEIGHT)
     {
@@ -732,33 +783,6 @@ MainPage::Action MainPage::ActionFor(EventActionKind _kind) noexcept
   case EventActionKind::Focus:
   default:
     return Action::FocusEvent;
-  }
-}
-
-void MainPage::DrawEmptyDigest(ShapeRenderer& _shapes, FontRenderer& _text, float _y, std::size_t _columns)
-{
-  // Two different nothings, and they want different words (see the commit that added this): before
-  // the first lock nothing has resolved, and after one an empty digest is a fact about the fog.
-  const bool beforeTheFirstLock = m_state.match.tick == 0;
-  const std::string_view title = beforeTheFirstLock ? "NOTHING HAS HAPPENED YET" : "A QUIET TICK";
-  const std::string_view detail = beforeTheFirstLock
-                                    ? "The first tick resolves when the countdown ends. What you order before then is what it resolves."
-                                    : "Nothing you could see changed. Systems you have not scouted may have.";
-
-  _shapes.FillRect(0.0F, _y, DIGEST_WIDTH - 1.0F, 1.0F, DIVIDER);
-
-  std::int32_t lineY = static_cast<std::int32_t>(_y) + 11;
-  for (const std::string& line : FontRenderer::Wrap(title, _columns))
-  {
-    _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), lineY, line, TEXT_PRIMARY);
-    lineY += LINE_HEIGHT;
-  }
-
-  lineY += 2;
-  for (const std::string& line : FontRenderer::Wrap(detail, _columns))
-  {
-    _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), lineY, line, TEXT_DETAIL);
-    lineY += LINE_HEIGHT;
   }
 }
 
@@ -1406,16 +1430,29 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   std::vector<std::int32_t> rowTargets;
   std::string title;
 
+  // What tapping a row does. It differs per panel, and it used to not exist: every row went to
+  // `ChooseDestination`, so the BUILD panel listed two things a player could not tap. Opening a
+  // panel that offers nothing is worse than having no panel.
+  Action rowAction = Action::ChooseDestination;
+
   switch (m_panel)
   {
   case Panel::BuildList:
   {
     const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(m_panelSubject)];
     title = std::format("BUILD - {}", node.name);
-    for (const BuildRow& row : m_state.orders.builds)
+    rowAction = Action::ToggleBuild;
+
+    for (std::size_t index = 0; index < m_state.orders.builds.size(); ++index)
     {
-      rows.push_back(row.title);
-      rowTargets.push_back(EventRefs::NONE);
+      const BuildRow& row = m_state.orders.builds[index];
+      const bool queued =
+        std::ranges::find(m_state.orders.queuedBuilds, static_cast<std::int32_t>(index)) != m_state.orders.queuedBuilds.end();
+
+      // A queued row says so, because tapping it again is how you take it back and nothing else
+      // on this panel would tell you that you had already chosen it.
+      rows.push_back(queued ? std::format("{}  - QUEUED", row.title) : row.title);
+      rowTargets.push_back(m_state.orders.locked ? EventRefs::NONE : static_cast<std::int32_t>(index));
     }
     break;
   }
@@ -1476,7 +1513,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), static_cast<std::int32_t>(rowY) + 6, rows[index], TEXT_DETAIL);
     if (rowTargets[index] != EventRefs::NONE)
     {
-      AddHit(x, rowY, width, 20.0F, Action::ChooseDestination, rowTargets[index]);
+      AddHit(x, rowY, width, 20.0F, rowAction, rowTargets[index]);
     }
     rowY += 20.0F;
   }

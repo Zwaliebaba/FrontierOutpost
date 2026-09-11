@@ -94,6 +94,7 @@ void ShapeRenderer::BeginFrame(std::uint32_t _frameIndex) noexcept
 {
   m_frameIndex = _frameIndex;
   m_usedThisFrame = 0;
+  m_flushedThisFrame = 0;
 }
 
 void ShapeRenderer::AppendShadedTriangle(float _axPixels, float _ayPixels, std::uint32_t _aColor, float _bxPixels, float _byPixels,
@@ -354,7 +355,9 @@ void ShapeRenderer::FillRadialGradient(float _centerXPixels, float _centerYPixel
 
 void ShapeRenderer::Flush(ID3D12GraphicsCommandList* _commandList)
 {
-  if (m_usedThisFrame == 0)
+  // Only what has been recorded since the last flush. See the header: this is what lets a caller
+  // put the interface over the world instead of having every glyph land on top of everything.
+  if (m_usedThisFrame == m_flushedThisFrame)
   {
     return;
   }
@@ -375,7 +378,8 @@ void ShapeRenderer::Flush(ID3D12GraphicsCommandList* _commandList)
 
   _commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   _commandList->IASetVertexBuffers(0, 1, &vertexView);
-  _commandList->DrawInstanced(m_usedThisFrame, 1, 0, 0);
+  _commandList->DrawInstanced(m_usedThisFrame - m_flushedThisFrame, 1, m_flushedThisFrame, 0);
+  m_flushedThisFrame = m_usedThisFrame;
 }
 
 } // namespace Neuron

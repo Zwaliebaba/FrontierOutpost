@@ -35,6 +35,32 @@ namespace
   return digits;
 }
 
+/// What a player can do when the digest has nothing to act on.
+///
+/// The standing moves: start a building, and send the fleet somewhere. They are the same actions
+/// the events carry mid-match -- this is not a second way to give an order, it is the same way with
+/// nothing yet to hang it on.
+[[nodiscard]] std::vector<EventAction> OpeningActions(const MatchState& _state)
+{
+  std::vector<EventAction> actions;
+
+  if (!_state.orders.builds.empty())
+  {
+    actions.push_back(EventAction{.label = "BUILD >", .kind = EventActionKind::QueueBuild, .target = 0, .primary = true});
+  }
+
+  for (std::size_t index = 0; index < _state.fleets.size(); ++index)
+  {
+    if (_state.fleets[index].owner == _state.viewer)
+    {
+      actions.push_back(EventAction{
+        .label = "MOVE " + _state.fleets[index].name, .kind = EventActionKind::RedirectFleet, .target = static_cast<std::int32_t>(index)});
+      break;
+    }
+  }
+  return actions;
+}
+
 } // namespace
 
 std::int32_t ConsequenceRank(EventKind _kind) noexcept
@@ -62,6 +88,27 @@ std::int32_t ConsequenceRank(EventKind _kind) noexcept
 
 std::vector<DigestCard> CardsOf(const MatchState& _state)
 {
+  // ---- Nothing to report, which is not the same as nothing to do ---------------------------------
+  //
+  // Two different empties and they want different words: before the first lock nothing has
+  // resolved, and after one an empty digest is a fact about the fog rather than about the tick.
+  // Both carry the opening moves, unless the match is over, when there are none.
+  if (_state.digest.empty())
+  {
+    const bool beforeTheFirstLock = _state.match.tick == 0;
+    DigestCard card;
+    card.kind = EventKind::Economy;
+    card.title = beforeTheFirstLock ? "NOTHING HAS HAPPENED YET" : "A QUIET TICK";
+    card.lines.push_back(beforeTheFirstLock
+                           ? "The first tick resolves when the countdown ends. What you order before then is what it resolves."
+                           : "Nothing you could see changed. Systems you have not scouted may have.");
+    if (!_state.orders.locked)
+    {
+      card.actions = OpeningActions(_state);
+    }
+    return {card};
+  }
+
   // ---- Who produced more than one event ----------------------------------------------------------
   //
   // `std::map` and not an unordered one: the grouping order reaches the screen, and an order that
