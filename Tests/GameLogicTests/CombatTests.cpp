@@ -423,6 +423,69 @@ public:
     Assert::AreEqual(10U, after.FleetAt(setup.arriving).ships, L"the arrivals take nothing back");
   }
 
+  // The test plan's Phase 0 watch item, and the reason it is a separate concern from the rear guard
+  // itself: the fraction it asks for is what decides whether to switch the rear guard ON, so it has
+  // to be collectable while the rear guard is OFF. An earlier version computed it inside the
+  // rear-guard branch, which made the number that makes the decision conditional on the decision.
+  TEST_METHOD(ADodgeIsRecordedEvenWithTheRearGuardOff)
+  {
+    const Withdrawal setup = Setup(false);
+    Assert::IsFalse(setup.match.Rules().rearGuardEnabled);
+
+    Frontier::TickLog log;
+    const Frontier::Match after = Withdraw(setup, log);
+
+    Assert::AreEqual(static_cast<size_t>(1), log.interceptions.size(), L"one fleet was arrived on top of");
+    const Frontier::Interception& interception = log.interceptions.front();
+
+    Assert::IsTrue(interception.dodged, L"and it left");
+    Assert::IsFalse(interception.rearGuardFired, L"at no cost, because the round is off");
+    Assert::IsTrue(interception.fleet == setup.leaving);
+    Assert::IsTrue(interception.defender == Frontier::PlayerId{0});
+    Assert::IsTrue(interception.arrival == Frontier::PlayerId{1});
+    Assert::IsTrue(interception.system == setup.from);
+    Assert::AreEqual(1U, log.Dodges());
+    Assert::AreEqual(20U, after.FleetAt(setup.leaving).ships, L"and the dance was free, which is what is being measured");
+  }
+
+  TEST_METHOD(WhenTheRoundIsOnTheDodgeIsRecordedAsHavingCostSomething)
+  {
+    const Withdrawal setup = Setup(true);
+    Frontier::TickLog log;
+    (void)Withdraw(setup, log);
+
+    Assert::AreEqual(static_cast<size_t>(1), log.interceptions.size());
+    Assert::IsTrue(log.interceptions.front().dodged);
+    Assert::IsTrue(log.interceptions.front().rearGuardFired, L"the same dance, and now it is not free");
+  }
+
+  // The denominator. A fleet that stayed and fought was targeted too, and the watch item is a
+  // fraction of the times a fleet is targeted rather than a count of departures.
+  TEST_METHOD(AFleetThatStaysIsRecordedAsTargetedAndNotAsADodge)
+  {
+    const Withdrawal setup = Setup(false);
+
+    // No orders at all, so the defender holds.
+    Frontier::TickLog log;
+    (void)Frontier::TickResolver::Resolve(setup.match, {}, log);
+
+    Assert::AreEqual(static_cast<size_t>(1), log.interceptions.size(), L"it was arrived on top of");
+    Assert::IsFalse(log.interceptions.front().dodged, L"and it stood");
+    Assert::AreEqual(0U, log.Dodges());
+  }
+
+  TEST_METHOD(NobodyIsInterceptedWhenNoHostileArrives)
+  {
+    Frontier::Match match = Arena();
+    const Frontier::SystemId home = match.GalaxyGraph().Capitals()[0];
+    (void)Holding(match, 0, 20, home);
+
+    Frontier::TickLog log;
+    (void)Frontier::TickResolver::Resolve(match, {}, log);
+
+    Assert::IsTrue(log.interceptions.empty(), L"an ordinary tick is not a watch item");
+  }
+
   TEST_METHOD(TheRearGuardOnlyFiresWhenAHostileActuallyArrives)
   {
     Frontier::MatchRules rules;

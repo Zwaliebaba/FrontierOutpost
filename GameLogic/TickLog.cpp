@@ -74,6 +74,16 @@ const char* Describe(DigestKind _kind) noexcept
   }
 }
 
+std::uint32_t TickLog::Dodges() const
+{
+  std::uint32_t dodged = 0;
+  for (const Interception& interception : interceptions)
+  {
+    dodged += interception.dodged ? 1U : 0U;
+  }
+  return dodged;
+}
+
 const PhaseRecord* TickLog::Find(Phase _phase) const
 {
   for (const PhaseRecord& record : phases)

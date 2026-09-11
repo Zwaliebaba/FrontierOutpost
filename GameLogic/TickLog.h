@@ -104,6 +104,40 @@ struct DigestEntry
   PlayerId other;
 };
 
+/// A fleet that was targeted: a hostile arrived, this tick, at the system it was standing on when
+/// the tick began.
+///
+/// **This exists for the test plan's Phase 0 watch item**, which is quoted here because the reason
+/// it must be recorded unconditionally is not obvious:
+///
+/// > log every departure that coincides with a hostile arrival at the same system. If a fleet
+/// > escapes this way more than a third of the time it is targeted, and the dodging player retains
+/// > or retakes the system, enable the rear-guard round and re-run.
+///
+/// That fraction is what decides whether `MatchRules::rearGuardEnabled` gets turned on. It was
+/// briefly computed only *inside* the rear-guard branch, which made it uncollectable while the rear
+/// guard was off -- the one number that decides whether to enable the mechanic, gated behind the
+/// mechanic being enabled. It is now computed every tick regardless.
+///
+/// `dodged` is the numerator and the whole list is the denominator: a fleet that stayed and fought
+/// was targeted too. The second half of the watch item -- whether the dodger *retains or retakes*
+/// the system -- spans later ticks and is the reader's to work out; the simulation reports what
+/// happened in this one.
+struct Interception
+{
+  SystemId system;
+  FleetId fleet;
+  PlayerId defender;
+  /// The hostile that arrived. The lowest player id when several did, so the record is the same on
+  /// every machine.
+  PlayerId arrival;
+  /// Whether the fleet left rather than staying to fight. This is the dance.
+  bool dodged = false;
+  /// Whether sub-phase 4a actually cost the dodger anything, which it only does when the rear guard
+  /// is switched on. False on every dodge while it is off, which is the state Phase 0 measures.
+  bool rearGuardFired = false;
+};
+
 /// What one phase did, as prose, for *Replay tick N*.
 struct PhaseRecord
 {
@@ -125,6 +159,13 @@ struct TickLog
   std::vector<PhaseRecord> phases;
   /// One list per player, indexed by player id.
   std::vector<std::vector<DigestEntry>> digests;
+
+  /// Every fleet a hostile arrived on top of this tick, and whether it stayed. The test plan's
+  /// defender-dancing watch item is a fraction of this list (Interception).
+  std::vector<Interception> interceptions;
+
+  /// How many of `interceptions` were dodges. The watch item's threshold is a third.
+  [[nodiscard]] std::uint32_t Dodges() const;
 
   [[nodiscard]] const PhaseRecord* Find(Phase _phase) const;
 

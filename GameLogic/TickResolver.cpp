@@ -854,66 +854,92 @@ Match TickResolver::Fight(const Match& _in, TickLog& _log)
   Match next = _in;
   PhaseRecord& record = OpenPhase(_log, Phase::Combat);
 
-  // ---- 4a, the rear-guard ----------------------------------------------------------------------
+  // ---- 4a, the rear-guard, and the measurement that decides whether to switch it on -------------
   //
   // "Fleets that departed a system this tick while a hostile arrived there take one free round from
-  // the arrivals, computed from the arrivals' end-of-movement strength." Off by default, because
-  // the one-pager keeps it off "until Phase 0 shows dancing dominates".
+  // the arrivals, computed from the arrivals' end-of-movement strength." The one-pager keeps the
+  // round itself off "until Phase 0 shows dancing dominates".
   //
-  // It runs first and 4b reads what it leaves, which is why the phases are numbered rather than
-  // merged: a fleet weakened on its way out is weaker wherever it landed.
-  if (_in.Rules().rearGuardEnabled)
+  // THE DETECTION RUNS WHETHER OR NOT THE ROUND DOES, and that is the point. The test plan's Phase 0
+  // watch item asks for every departure that coincides with a hostile arrival, and uses the fraction
+  // to decide whether to enable the round. Computing it inside the branch would have gated the
+  // number that makes the decision behind the decision having been made (TickLog.h, Interception).
+  //
+  // It runs before 4b and 4b reads what it leaves, which is why the sub-phases are numbered rather
+  // than merged: a fleet weakened on its way out is weaker wherever it landed.
+  for (std::size_t index = 0; index < _in.Systems().size(); ++index)
   {
-    for (std::size_t index = 0; index < _in.Systems().size(); ++index)
+    const SystemId system{static_cast<std::int32_t>(index)};
+
+    // Arrival strength per player, at end of movement.
+    std::vector<std::uint32_t> arriving(_in.Players().size(), 0);
+    for (const MatchFleet& fleet : _in.Fleets())
     {
-      const SystemId system{static_cast<std::int32_t>(index)};
-
-      // Arrival strength per player, at end of movement.
-      std::vector<std::uint32_t> arriving(_in.Players().size(), 0);
-      for (const MatchFleet& fleet : _in.Fleets())
+      if (!fleet.destroyed && fleet.arrivedThisTick && fleet.at == system && fleet.owner.IsValid())
       {
-        if (!fleet.destroyed && fleet.arrivedThisTick && fleet.at == system && fleet.owner.IsValid())
-        {
-          arriving[fleet.owner.AsSize()] += fleet.ships;
-        }
+        arriving[fleet.owner.AsSize()] += fleet.ships;
       }
+    }
 
-      std::vector<FleetId> departed;
-      for (std::size_t fleetIndex = 0; fleetIndex < _in.Fleets().size(); ++fleetIndex)
+    // Everything that was standing here when the tick began, whether it left or stayed. A fleet
+    // that departed carries `departedFrom`; one that held is still here and did not arrive.
+    std::vector<std::pair<FleetId, bool>> wasHere;
+    for (std::size_t fleetIndex = 0; fleetIndex < _in.Fleets().size(); ++fleetIndex)
+    {
+      const MatchFleet& fleet = _in.Fleets()[fleetIndex];
+      if (fleet.destroyed || !fleet.owner.IsValid())
       {
-        const MatchFleet& fleet = _in.Fleets()[fleetIndex];
-        if (!fleet.destroyed && fleet.departedFrom == system)
-        {
-          departed.emplace_back(static_cast<std::int32_t>(fleetIndex));
-        }
+        continue;
       }
-
-      for (const FleetId leaving : departed)
+      const FleetId id{static_cast<std::int32_t>(fleetIndex)};
+      if (fleet.departedFrom == system)
       {
-        const PlayerId owner = _in.FleetAt(leaving).owner;
+        wasHere.emplace_back(id, true);
+      }
+      else if (!fleet.InTransit() && fleet.at == system && !fleet.arrivedThisTick)
+      {
+        wasHere.emplace_back(id, false);
+      }
+    }
 
-        std::uint64_t hostileStrength = 0;
-        for (std::size_t player = 0; player < arriving.size(); ++player)
+    for (const auto& [id, left] : wasHere)
+    {
+      const PlayerId owner = _in.FleetAt(id).owner;
+
+      // The lowest-id hostile that arrived, and how much of them there is.
+      PlayerId arrival;
+      std::uint64_t hostileStrength = 0;
+      for (std::size_t player = 0; player < arriving.size(); ++player)
+      {
+        const PlayerId candidate{static_cast<std::int32_t>(player)};
+        if (candidate != owner && arriving[player] > 0)
         {
-          if (PlayerId{static_cast<std::int32_t>(player)} != owner)
+          hostileStrength += arriving[player];
+          if (!arrival.IsValid())
           {
-            hostileStrength += arriving[player];
+            arrival = candidate;
           }
         }
-        if (hostileStrength == 0)
-        {
-          continue;
-        }
+      }
+      if (!arrival.IsValid())
+      {
+        continue;
+      }
 
+      Interception interception{
+        .system = system, .fleet = id, .defender = owner, .arrival = arrival, .dodged = left, .rearGuardFired = false};
+
+      if (left && _in.Rules().rearGuardEnabled)
+      {
         // One round, at the ordinary rate, with no defender bonus for anyone: the departing fleet
         // is not an incumbent any more and the arrivals have not landed on anything to defend.
         const auto damage = static_cast<std::uint32_t>((hostileStrength * _in.Rules().damagePercentPerRound) / 100);
-        MatchFleet& fleet = next.MutableFleets()[leaving.AsSize()];
+        MatchFleet& fleet = next.MutableFleets()[id.AsSize()];
         const std::uint32_t lost = std::min(damage, fleet.ships);
         fleet.ships -= lost;
+        interception.rearGuardFired = lost > 0;
 
-        record.lines.push_back(
-          std::format("rear-guard at {}: fleet {} lost {} on its way out", NameOf(_in, system), leaving.Index(), lost));
+        record.lines.push_back(std::format("rear-guard at {}: fleet {} lost {} on its way out", NameOf(_in, system), id.Index(), lost));
 
         if (fleet.ships == 0)
         {
@@ -930,8 +956,14 @@ Match TickResolver::Fight(const Match& _in, TickLog& _log)
                          .title = std::format("Rear-guard action at {}", NameOf(_in, system)),
                          .detail = std::format("Lost {} covering the withdrawal", lost),
                          .system = system,
-                         .fleet = leaving});
+                         .fleet = id});
       }
+      else if (left)
+      {
+        record.lines.push_back(std::format("fleet {} slipped out of {} as a hostile arrived", id.Index(), NameOf(_in, system)));
+      }
+
+      _log.interceptions.push_back(interception);
     }
   }
 

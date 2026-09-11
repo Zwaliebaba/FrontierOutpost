@@ -190,7 +190,33 @@ mid-message. A reader that is merely *not undefined* is not the same as a server
 A `--serve` flag or a second executable; the choice belongs to the transport ADR. Note that a second
 executable changes AGENTS.md §2's "nine projects" and that **R13 binds the client** either way.
 
-The server logs every event the test plan lists, timestamped UTC.
+**The server logs every event the test plan lists, timestamped UTC.** That sentence used to be the
+whole specification and it was not enough: the list is short, specific, and three of its entries are
+awkward in ways that are only obvious once you try to emit them. It is written out here so nobody
+has to rediscover which ones.
+
+| Event | Where it comes from |
+|---|---|
+| login | The server. The **primary instrument** — the login curve is what Phase 1's H2 is measured on |
+| session start / end | The server. A session is a connection, so "end" includes a disconnect nobody asked for |
+| order edit | **The client**, and only the client. Edits happen before the lock and the server never sees the ones that were replaced. H4 needs it (≥ 80% of sessions include an order edit), so the client has to report it |
+| order lock | The session, at each lock |
+| message | **Does not exist.** v1 has no free text, and `NoOrderCarriesFreeText` asserts it structurally. Log nothing and say so, rather than leaving a reader wondering what happened to it |
+| proposal sent / accepted / declined | `TickLog` digests: `ProposalReceived`, `ProposalAnswered`, `ProposalWithdrawn`, `ProposalIgnored`, `ProposalVoided` |
+| trade lane opened / cancelled | `TickLog` digests: `LaneOpened`, `LaneCanceled` — and the **two cancel reasons are distinguished in the detail text**, which is the whole point of them being distinguished |
+| capital fall | `TickLog` digest `SystemLost` on a system whose `kind` is `Capital` |
+| custodian takeover | `TickLog` digest `Custodian`, and `PlayerState::custodianSince` |
+| **fleet order after capital fall** | **Nothing emits this today.** It is H3's entire measurement — whether losers keep playing — and it is a *join*: a `FleetOrder` in a locked `OrderSet` from a player whose capital fell on some earlier tick. The session has both halves and is the only thing that does |
+
+Two more the test plan asks for outside that list:
+
+- **Defender dancing** (Phase 0's watch item) is already emitted by the simulation as
+  `TickLog::interceptions`, with `Dodges()` as the numerator. The server logs the pair per tick.
+  Note that the watch item has **two** clauses — dodged more than a third of the time it was
+  targeted, *and* the dodging player retains or retakes the system. Only the first is in the
+  `TickLog`; the second spans ticks and is the reader's join.
+- **H5, custodian neutrality**, needs the winner's adjacency to custodian-run empires across
+  several matches. That is analysis over finished match stores, not a live event.
 
 **Tests:** framing round-trip; the fuzz cases above; a client reconnecting after a server restart
 getting the current snapshot; a token not on the match's list refused. And the real one: two
@@ -240,3 +266,12 @@ last looked, and a player who was away for three ticks has three digests waiting
 
 **Whether one server process holds one match or several.** Phase 0 needs one. Building for several
 before anyone has run one is the mistake this plan's predecessor avoided by being a stub.
+
+**Whether `MatchRules`' defaults survive the test plan's compressed phases.** They are authored for
+a 21-day match at four ticks a day and every phase is shorter: Phase 0 is 48 ticks at a one-hour
+tick, Phase 1 is 56 at six hours. Two defaults do not scale with that on their own —
+`firstWeekTicks` is 28, which is well over half a Phase 0 match, and `regionOpensAtTick` is 60,
+which never arrives in either. The region has no rules until Phase 2 so the second is harmless for
+now; the first means "a first-week custodian scores nothing" covers most of a Phase 0 run. Setting
+them per phase is a one-line change and belongs to whoever configures the match, but somebody has
+to notice, so it is written down here.

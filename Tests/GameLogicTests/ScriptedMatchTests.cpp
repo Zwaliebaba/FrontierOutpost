@@ -399,6 +399,10 @@ struct Played
   std::size_t mostTradeLanes = 0;
   bool absenteeWentIntoCustody = false;
   std::uint32_t proposalsMade = 0;
+  /// The test plan's Phase 0 watch item, summed over the match: how often a fleet was arrived on
+  /// top of, and how often it left instead of fighting.
+  std::uint32_t timesTargeted = 0;
+  std::uint32_t timesDodged = 0;
   std::uint32_t diplomatTouchedARival = 0;
   std::uint32_t absenteeCustodyTick = 0;
   double totalResolveMilliseconds = 0.0;
@@ -461,6 +465,8 @@ struct Played
 
     ++played.ticks;
     played.mostTradeLanes = std::max(played.mostTradeLanes, played.match.TradeLanes().size());
+    played.timesTargeted += static_cast<std::uint32_t>(log.interceptions.size());
+    played.timesDodged += log.Dodges();
 
     if (!played.absenteeWentIntoCustody && played.match.PlayerAt(Frontier::PlayerId{ABSENTEE}).status == Frontier::PlayerStatus::Custodian)
     {
@@ -505,6 +511,29 @@ public:
     Logger::WriteMessage(std::format("scripted match: {} ticks, ended {}\n", played.ticks,
                                      played.match.DominanceWinner().IsValid() ? "by dominance" : "at the fixed tick")
                            .c_str());
+  }
+
+  // The test plan's Phase 0 watch item, over a whole match rather than a contrived tick:
+  //
+  // > If a fleet escapes this way more than a third of the time it is targeted, and the dodging
+  // > player retains or retakes the system, enable the rear-guard round and re-run.
+  //
+  // This asserts that the measurement is *collectable*, not that it is below the threshold. These
+  // bots do not dance on purpose and a real Phase 0 is six humans who might; whether the fraction
+  // crosses a third is a finding for the owner, not a thing the build should fail on.
+  TEST_METHOD(TheDefenderDancingWatchItemIsCollectable)
+  {
+    const Played played = PlayAMatch();
+
+    const double fraction = played.timesTargeted > 0 ? static_cast<double>(played.timesDodged) / played.timesTargeted : 0.0;
+
+    Logger::WriteMessage(std::format("defender dancing: {} dodges of {} times targeted ({:.0f}%), rear guard {}\n", played.timesDodged,
+                                     played.timesTargeted, fraction * 100.0, Frontier::MatchRules{}.rearGuardEnabled ? "on" : "off")
+                           .c_str());
+
+    Assert::IsTrue(played.timesTargeted > 0, L"a match in which nobody was ever arrived on top of would make the watch item unmeasurable");
+    Assert::IsTrue(played.timesDodged <= played.timesTargeted, L"the dodges are a subset of the times targeted");
+    Assert::IsFalse(Frontier::MatchRules{}.rearGuardEnabled, L"and it is measured with the round off, which is the state Phase 0 measures");
   }
 
   // ADR-018 at full scale. Everything before this proved one tick reproducible; this proves
