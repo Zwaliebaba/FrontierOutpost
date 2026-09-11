@@ -11,7 +11,7 @@
 namespace Frontier
 {
 
-/// The single screen of Frontier Outpost: digest, map, orders.
+/// The single screen of Frontier Outpost: digest, map, locks.
 ///
 /// It is the screen a player opens once or twice a day (Design/Screens/README.md). The three
 /// panes are not three features -- they are one loop: read what changed, look at where it
@@ -29,10 +29,15 @@ class MainPage
 {
 public:
   /// Fixed 1280x720, and the three-column grid inside it. Every number below is from
-  /// Design/Screens/README.md "Frame".
-  static constexpr float TOP_BAR_HEIGHT = 48.0F;
-  static constexpr float DIGEST_WIDTH = 300.0F;
-  static constexpr float ORDERS_WIDTH = 330.0F;
+  /// Design/UI/DESIGN-GUIDELINES.md "Frame": rows `44 | fill`, columns `400 | fill | 260`.
+  ///
+  /// **The digest got a hundred pixels and the right rail lost seventy, and that is the whole
+  /// redesign in two numbers.** The digest is now where orders are given -- every event carries
+  /// its own actions -- and the right rail is a read-only summary of what goes in at the lock. It
+  /// needs the width for buttons; the rail no longer does, because it has no controls.
+  static constexpr float TOP_BAR_HEIGHT = 44.0F;
+  static constexpr float DIGEST_WIDTH = 400.0F;
+  static constexpr float ORDERS_WIDTH = 260.0F;
   static constexpr float RAIL_PADDING = 14.0F;
   static constexpr float CARD_PADDING = 10.0F;
   /// Line-height 1.5 on an 8px font (README "Frame").
@@ -142,7 +147,7 @@ private:
   void DrawTopBar(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawDigestRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawMap(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
-  void DrawOrdersRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
+  void DrawLocksRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawSystem(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, std::int32_t _index);
   void DrawFleet(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, std::int32_t _index);
 

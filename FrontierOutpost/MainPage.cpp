@@ -85,6 +85,15 @@ constexpr float REGION_RADIUS = 62.0F;
 /// half-height; in world units that is about a quarter of the radius.
 constexpr float REGION_VOLUME_HEIGHT = 26.0F;
 
+/// A name in the rail's voice. Labels and headers are uppercase (DESIGN-GUIDELINES "Font"), and
+/// the font has no case of its own to fall back on.
+[[nodiscard]] std::string Uppercased(std::string_view _text)
+{
+  std::string out{_text};
+  std::transform(out.begin(), out.end(), out.begin(), [](unsigned char _c) { return static_cast<char>(std::toupper(_c)); });
+  return out;
+}
+
 [[nodiscard]] Color WithAlpha(const Color& _color, std::uint8_t _alpha) noexcept
 {
   return Color{_color.red, _color.green, _color.blue, _alpha};
@@ -457,7 +466,7 @@ void MainPage::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
   DrawMap(_shapes, _text);
   DrawTopBar(_shapes, _text);
   DrawDigestRail(_shapes, _text);
-  DrawOrdersRail(_shapes, _text);
+  DrawLocksRail(_shapes, _text);
   DrawPanel(_shapes, _text);
 }
 
@@ -475,7 +484,11 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // The end time is dropped rather than left dangling when the state has none. A match generated
   // without a server has no schedule to report (GeneratedMatch.h), and "- ENDS" followed by
   // nothing reads as a truncation bug rather than as an absence.
-  std::string matchLine = std::format("MATCH {} - DAY {}/{}", m_state.match.id, m_state.match.day, m_state.match.totalDays);
+  // `M0419 - D12/21 - 12 PLAYERS - 61 SYSTEMS` (SCREENS.md 01). The census moved up here from the
+  // map pane, where it was a caption on a picture; on the top bar it sits with the other facts
+  // about the match that do not change from tick to tick.
+  std::string matchLine = std::format("M{} - D{}/{} - {} PLAYERS - {} SYSTEMS", m_state.match.id, m_state.match.day,
+                                      m_state.match.totalDays, m_state.player.playerCount, m_state.totalSystems);
   if (!m_state.match.endsAt.empty())
   {
     matchLine += std::format(" - ENDS {}", m_state.match.endsAt);
@@ -510,7 +523,7 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.FillRect(cursor, 13.0F, 1.0F, 22.0F, CARD_BORDER);
   cursor -= 15.0F;
 
-  const std::string leaderLine = std::format("LEAD {} {}", m_state.player.leader.name, FormatScore(m_state.player.leader.score));
+  const std::string leaderLine = std::format("LDR {} {}", m_state.player.leader.name, FormatScore(m_state.player.leader.score));
   DrawRight(_text, cursor, centered, leaderLine, TEXT_MUTED);
   cursor -= static_cast<float>(FontRenderer::MeasurePixels(leaderLine)) + 8.0F;
 
@@ -537,7 +550,7 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   DrawRight(_text, cursor, bigY, countdown, AMBER, FontRenderer::COUNTDOWN_SCALE);
   cursor -= static_cast<float>(FontRenderer::MeasurePixels(countdown, FontRenderer::COUNTDOWN_SCALE)) + 8.0F;
 
-  DrawRight(_text, cursor, centered, std::format("T{} LOCKS IN", m_state.OrdersTick()), TEXT_MUTED);
+  DrawRight(_text, cursor, centered, std::format("T{} LOCKS", m_state.OrdersTick()), TEXT_MUTED);
 }
 
 void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
@@ -822,10 +835,16 @@ void MainPage::DrawMap(ShapeRenderer& _shapes, FontRenderer& _text)
     }
   }
 
-  DrawRight(
-    _text, paneX + paneWidth - 12.0F, static_cast<std::int32_t>(TOP_BAR_HEIGHT) + 12,
-    std::format("{} PLAYERS - {} SYSTEMS - {} UNCLAIMED", m_state.player.playerCount, m_state.totalSystems, m_state.unclaimedSystems),
-    TEXT_DETAIL);
+  // `MAP - FOCUS: HALVORSEN` in the top-left corner (DESIGN-GUIDELINES "Map"). The map is no
+  // longer captioned with a census -- that is on the top bar now -- and says instead what it is
+  // currently pointed at, because the digest can point it somewhere.
+  std::string focusLine = "MAP";
+  if (m_focusedSystem != EventRefs::NONE && m_focusedSystem < static_cast<std::int32_t>(m_state.graph.systems.size()))
+  {
+    const SystemNode& focused = m_state.graph.systems[static_cast<std::size_t>(m_focusedSystem)];
+    focusLine += focused.name.empty() ? " - FOCUS: THE FALLOW" : " - FOCUS: " + Uppercased(focused.name);
+  }
+  _text.DrawText(static_cast<std::int32_t>(paneX) + 12, static_cast<std::int32_t>(TOP_BAR_HEIGHT) + 12, focusLine, TEXT_DETAIL);
 
   // The legend earns its place: the owner colours are also the semantic colours, so a player who
   // learns this row can read every other coloured thing on the screen.
@@ -1087,25 +1106,36 @@ void MainPage::DrawFleet(ShapeRenderer& _shapes, FontRenderer& _text, std::int32
   }
 }
 
-void MainPage::DrawOrdersRail(ShapeRenderer& _shapes, FontRenderer& _text)
+void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
 {
+  // **Nothing here is a control, and that is the point of the redesign** (SCREENS.md 01). This rail
+  // used to own the buttons; now every order is given on the event that caused it, and this is a
+  // read-only answer to one question: what goes in when the clock hits zero. A player who reads
+  // only this column still knows what they have committed.
   const float railX = SCREEN_WIDTH - ORDERS_WIDTH;
   const float contentX = railX + RAIL_PADDING;
   const float contentRight = SCREEN_WIDTH - RAIL_PADDING;
-  const float cardWidth = contentRight - contentX;
-  const std::size_t columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(cardWidth - 2.0F * CARD_PADDING));
+  const std::size_t columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(contentRight - contentX));
 
   _shapes.FillRect(railX, TOP_BAR_HEIGHT, ORDERS_WIDTH, SCREEN_HEIGHT - TOP_BAR_HEIGHT, APP_BACKGROUND);
   _shapes.FillRect(railX, TOP_BAR_HEIGHT, 1.0F, SCREEN_HEIGHT - TOP_BAR_HEIGHT, CARD_BORDER);
 
   const std::int32_t headerY = static_cast<std::int32_t>(TOP_BAR_HEIGHT) + 12;
-  _text.DrawText(static_cast<std::int32_t>(contentX), headerY, std::format("ORDERS - TICK {}", m_state.OrdersTick()), TEXT_MUTED);
-  // The one word that says whether anything on this rail can still be changed.
+  _text.DrawText(static_cast<std::int32_t>(contentX), headerY, std::format("LOCKS T{}", m_state.OrdersTick()), TEXT_MUTED);
   DrawRight(_text, contentRight, headerY, m_state.orders.locked ? "LOCKED" : "UNLOCKED", m_state.orders.locked ? TEXT_MUTED : AMBER);
 
   float y = TOP_BAR_HEIGHT + 28.0F;
 
-  const auto sectionHeader = [&](std::string_view _label, std::string_view _count)
+  // One line of help, and only one. It says where the controls went, because a player who used the
+  // old rail will look for them here first.
+  for (const std::string& line : FontRenderer::Wrap("What goes in when the clock hits zero. Change it from the digest.", columns))
+  {
+    _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), line, TEXT_DETAIL);
+    y += static_cast<float>(LINE_HEIGHT);
+  }
+  y += 6.0F;
+
+  const auto section = [&](std::string_view _label, std::string_view _count)
   {
     _shapes.FillRect(railX + 1.0F, y, ORDERS_WIDTH - 1.0F, 1.0F, DIVIDER);
     _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y) + 8, _label, TEXT_MUTED);
@@ -1113,187 +1143,130 @@ void MainPage::DrawOrdersRail(ShapeRenderer& _shapes, FontRenderer& _text)
     y += 22.0F;
   };
 
-  // ---- FLEETS -------------------------------------------------------------------------------
+  /// A row: what it is on the left, where it stands on the right. The status carries the colour --
+  /// it is the half a player scans down the column for.
+  const auto row = [&](std::string_view _label, std::string_view _status, const Color& _statusColor)
+  {
+    const std::int32_t lineY = static_cast<std::int32_t>(y);
+    const std::size_t room = FontRenderer::FitCharacters(
+      static_cast<std::uint32_t>(contentRight - contentX - static_cast<float>(FontRenderer::MeasurePixels(_status)) - 8.0F));
+
+    const std::vector<std::string> wrapped = FontRenderer::Wrap(_label, room);
+    for (std::size_t index = 0; index < wrapped.size(); ++index)
+    {
+      _text.DrawText(static_cast<std::int32_t>(contentX), lineY + static_cast<std::int32_t>(index) * LINE_HEIGHT, wrapped[index],
+                     TEXT_PRIMARY);
+    }
+    DrawRight(_text, contentRight, lineY, _status, _statusColor);
+    y += static_cast<float>(std::max<std::size_t>(1, wrapped.size())) * static_cast<float>(LINE_HEIGHT) + 4.0F;
+  };
+
+  const auto nothing = [&](std::string_view _text2)
+  {
+    _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), _text2, NEUTRAL_DIM);
+    y += static_cast<float>(LINE_HEIGHT) + 4.0F;
+  };
+
+  // ---- FLEETS ------------------------------------------------------------------------------------
   std::uint32_t yours = 0;
   for (const Fleet& fleet : m_state.fleets)
   {
     yours += fleet.owner == m_state.viewer ? 1U : 0U;
   }
-  sectionHeader("FLEETS", std::to_string(yours));
+  section("FLEETS", std::to_string(yours));
 
-  for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
+  if (yours == 0)
   {
-    const Fleet& fleet = m_state.fleets[index];
+    nothing("- none -");
+  }
+  for (const Fleet& fleet : m_state.fleets)
+  {
     if (fleet.owner != m_state.viewer)
     {
       continue;
     }
 
-    const std::vector<std::string> status = FontRenderer::Wrap(fleet.status, columns);
-    const std::vector<std::string> preview = FontRenderer::Wrap(fleet.preview, columns);
-    const auto lines = static_cast<float>(1 + status.size() + preview.size());
-    const float height = 2.0F * CARD_PADDING - 4.0F + lines * static_cast<float>(LINE_HEIGHT);
+    const bool moving = fleet.eta > 0 && fleet.to != fleet.from;
+    const SystemNode* destination = fleet.to >= 0 && fleet.to < static_cast<std::int32_t>(m_state.graph.systems.size())
+                                      ? &m_state.graph.systems[static_cast<std::size_t>(fleet.to)]
+                                      : nullptr;
+    const std::string where = destination == nullptr ? std::string{} : Uppercased(destination->name);
 
-    _shapes.FillRect(contentX, y, cardWidth, height, CARD_FILL);
-    _shapes.StrokeRect(contentX, y, cardWidth, height, CARD_BORDER);
+    // `FLT3 14 > KEPLER-REACH` moving, `FLT1 9 HOLD VESK` standing (SCREENS.md 01).
+    const std::string label = moving ? std::format("{} {} > {}", Uppercased(fleet.name), fleet.ships, where)
+                                     : std::format("{} {} HOLD {}", Uppercased(fleet.name), fleet.ships, where);
 
-    std::int32_t lineY = static_cast<std::int32_t>(y) + 8;
-    _text.DrawText(static_cast<std::int32_t>(contentX + CARD_PADDING), lineY, std::format("{} - {} ships", fleet.name, fleet.ships),
-                   TEXT_PRIMARY);
-
-    const std::string destination = fleet.order == FleetStance::Move
-                                      ? std::format("> {}", m_state.graph.systems[static_cast<std::size_t>(fleet.to)].name)
-                                      : std::format("HOLD {}", m_state.graph.systems[static_cast<std::size_t>(fleet.from)].name);
-    DrawRight(_text, contentRight - CARD_PADDING, lineY, destination, fleet.order == FleetStance::Move ? BLUE : TEXT_DETAIL);
-    lineY += LINE_HEIGHT;
-
-    // "change >" sits on the STATUS line, whose right half is the only part of a fleet card that
-    // is reliably free: line one carries the destination and the last line carries the combat
-    // preview, which is the longest string on the card.
-    bool changeDrawn = m_state.orders.locked;
-    for (const std::string& line : status)
+    // The verdict tokens the design asks for -- LOSE, +DEF -- are the combat preview's, and the
+    // preview is a sentence today rather than a verdict. Until the digest's verdict box is built
+    // this says the fact the state actually carries: when it arrives, or that it is dug in.
+    if (moving)
     {
-      _text.DrawText(static_cast<std::int32_t>(contentX + CARD_PADDING), lineY, line, TEXT_DETAIL);
-      if (!changeDrawn)
-      {
-        DrawRight(_text, contentRight - CARD_PADDING, lineY, "change >", BLUE);
-        changeDrawn = true;
-      }
-      lineY += LINE_HEIGHT;
+      row(label, std::format("T{}", fleet.eta), TEXT_MUTED);
     }
-    for (const std::string& line : preview)
+    else if (fleet.status.find("incumbent") != std::string::npos)
     {
-      // The engagement preview. Combat is deterministic, so this is not a guess -- it is what
-      // will happen if both fleets are still there at the lock (one-pager, "Shape of a game").
-      _text.DrawText(static_cast<std::int32_t>(contentX + CARD_PADDING), lineY, line, TEXT_DETAIL);
-      lineY += LINE_HEIGHT;
+      row(label, "+DEF", BLUE);
     }
-
-    AddHit(contentX, y, cardWidth, height, Action::OpenFleet, static_cast<std::int32_t>(index));
-    y += height + 6.0F;
+    else
+    {
+      row(label, "HOLD", TEXT_MUTED);
+    }
   }
 
-  // ---- BUILDS -------------------------------------------------------------------------------
+  // ---- BUILDS ------------------------------------------------------------------------------------
+  section("BUILDS", std::format("{} AVAIL", m_state.orders.availableBuilds));
+
+  if (m_state.orders.queuedBuilds.empty())
+  {
+    nothing("- nothing queued -");
+  }
+  for (const std::int32_t queued : m_state.orders.queuedBuilds)
+  {
+    if (queued >= 0 && queued < static_cast<std::int32_t>(m_state.orders.builds.size()))
+    {
+      row(Uppercased(m_state.orders.builds[static_cast<std::size_t>(queued)].title), "QUEUED", BLUE);
+    }
+  }
+  for (const BuildRow& build : m_state.orders.builds)
+  {
+    if (build.isTradeLane)
+    {
+      row(Uppercased(build.title), "PROPOSE", AMBER);
+    }
+  }
+
+  // ---- SIGNALS -----------------------------------------------------------------------------------
   //
-  // From the state, not a literal. It read "38 AVAILABLE" until 2026-09-10, which was right for
-  // the design reference and a plain untruth over any other state -- a generated match has no
-  // build list and said 38 anyway.
-  sectionHeader("BUILDS", std::format("{} AVAILABLE", m_state.orders.availableBuilds));
+  // Empty, and honestly so: a signal this player SENT is not in `MatchState` at all. The client
+  // models offers arriving (`proposals`) and not offers going out, so there is nothing here to
+  // report yet. The section is drawn rather than hidden because its absence is the finding.
+  section("SIGNALS", "");
+  nothing("- none sent -");
 
-  for (std::size_t index = 0; index < m_state.orders.builds.size(); ++index)
+  // ---- PROPOSALS ---------------------------------------------------------------------------------
+  section("PROPOSALS", std::format("{} OPEN", m_state.proposals.size()));
+
+  if (m_state.proposals.empty())
   {
-    const BuildRow& row = m_state.orders.builds[index];
-    const bool queued = std::find(m_state.orders.queuedBuilds.begin(), m_state.orders.queuedBuilds.end(),
-                                  static_cast<std::int32_t>(index)) != m_state.orders.queuedBuilds.end();
-
-    const std::string label = row.isTradeLane ? "PROPOSE" : (queued ? "QUEUED" : "BUILD");
-    const float buttonWidth = static_cast<float>(FontRenderer::MeasurePixels(label)) + 20.0F;
-    const std::size_t rowColumns =
-      FontRenderer::FitCharacters(static_cast<std::uint32_t>(cardWidth - 2.0F * CARD_PADDING - buttonWidth - 8.0F));
-
-    const std::vector<std::string> detail = FontRenderer::Wrap(row.detail, rowColumns);
-    const auto lines = static_cast<float>(1 + detail.size());
-    const float height = 2.0F * CARD_PADDING - 4.0F + lines * static_cast<float>(LINE_HEIGHT);
-
-    // The trade lane is a building with two owners, so it sits here with the shipyard rather than
-    // in a diplomacy tab that does not exist -- dashed and amber until the neighbour accepts.
-    if (row.isTradeLane)
-    {
-      _shapes.DashedLine(contentX, y, contentX + cardWidth, y, WithAlpha(AMBER, 128), 1.0F, 4.0F, 3.0F);
-      _shapes.DashedLine(contentX, y + height, contentX + cardWidth, y + height, WithAlpha(AMBER, 128), 1.0F, 4.0F, 3.0F);
-      _shapes.DashedLine(contentX, y, contentX, y + height, WithAlpha(AMBER, 128), 1.0F, 4.0F, 3.0F);
-      _shapes.DashedLine(contentX + cardWidth, y, contentX + cardWidth, y + height, WithAlpha(AMBER, 128), 1.0F, 4.0F, 3.0F);
-    }
-    else
-    {
-      _shapes.StrokeRect(contentX, y, cardWidth, height, CARD_BORDER);
-    }
-
-    std::int32_t lineY = static_cast<std::int32_t>(y) + 8;
-    _text.DrawText(static_cast<std::int32_t>(contentX + CARD_PADDING), lineY, row.title, TEXT_PRIMARY);
-    lineY += LINE_HEIGHT;
-    for (const std::string& line : detail)
-    {
-      _text.DrawText(static_cast<std::int32_t>(contentX + CARD_PADDING), lineY, line, TEXT_DETAIL);
-      lineY += LINE_HEIGHT;
-    }
-
-    const float buttonX = contentRight - CARD_PADDING - buttonWidth;
-    const float buttonY = y + (height - 18.0F) * 0.5F;
-    const bool inert = m_state.orders.locked;
-    if (row.isTradeLane)
-    {
-      _shapes.StrokeRect(buttonX, buttonY, buttonWidth, 18.0F, inert ? OUTLINE : AMBER);
-      _text.DrawText(static_cast<std::int32_t>(buttonX + 10.0F), CenterTextY(buttonY, 18.0F), label, inert ? TEXT_MUTED : AMBER);
-    }
-    else if (queued)
-    {
-      _shapes.StrokeRect(buttonX, buttonY, buttonWidth, 18.0F, BLUE);
-      _text.DrawText(static_cast<std::int32_t>(buttonX + 10.0F), CenterTextY(buttonY, 18.0F), label, BLUE);
-    }
-    else
-    {
-      _shapes.FillRect(buttonX, buttonY, buttonWidth, 18.0F, inert ? OUTLINE : BLUE);
-      _text.DrawText(static_cast<std::int32_t>(buttonX + 10.0F), CenterTextY(buttonY, 18.0F), label, APP_BACKGROUND);
-    }
-
-    AddHit(buttonX, buttonY, buttonWidth, 18.0F, Action::ToggleBuild, static_cast<std::int32_t>(index));
-    y += height + 6.0F;
+    nothing("- none -");
+  }
+  for (const Proposal& proposal : m_state.proposals)
+  {
+    const char* what = proposal.type == ProposalType::OpenLane        ? "LANE"
+                       : proposal.type == ProposalType::ShareScouting ? "SCOUTING"
+                                                                      : "HOLD FIRE";
+    row(std::format("{} {}", Uppercased(proposal.from), what), std::format("{} TICKS", proposal.ticksLeft), AMBER);
   }
 
-  // ---- PROPOSALS ----------------------------------------------------------------------------
-  sectionHeader("PROPOSALS", std::format("{} OPEN", m_state.proposals.size()));
-
-  for (std::size_t index = 0; index < m_state.proposals.size(); ++index)
-  {
-    const Proposal& proposal = m_state.proposals[index];
-    const std::vector<std::string> terms = FontRenderer::Wrap(proposal.terms, columns);
-    const float height = 2.0F * CARD_PADDING + static_cast<float>(1 + terms.size()) * static_cast<float>(LINE_HEIGHT) + 24.0F;
-
-    _shapes.FillRect(contentX, y, cardWidth, height, WithAlpha(BLUE, 15));
-    _shapes.StrokeRect(contentX, y, cardWidth, height, WithAlpha(BLUE, 102));
-
-    std::int32_t lineY = static_cast<std::int32_t>(y) + 8;
-    _text.DrawText(static_cast<std::int32_t>(contentX + CARD_PADDING), lineY, std::format("{} - open lane", proposal.from), TEXT_PRIMARY);
-    // The countdown on a proposal is the same form as a fleet's ETA, because it is the same kind
-    // of thing: something in flight with a tick attached (one-pager, "Diplomacy UI").
-    DrawRight(_text, contentRight - CARD_PADDING, lineY, std::format("{} TICKS", proposal.ticksLeft), AMBER);
-    lineY += LINE_HEIGHT;
-
-    for (const std::string& line : terms)
-    {
-      _text.DrawText(static_cast<std::int32_t>(contentX + CARD_PADDING), lineY, line, TEXT_DETAIL);
-      lineY += LINE_HEIGHT;
-    }
-
-    const bool answered = m_state.orders.answeredProposal == static_cast<std::int32_t>(index);
-    const bool accepted = answered && m_state.orders.acceptedProposal;
-    const float buttonY = y + height - CARD_PADDING - 18.0F;
-    const float buttonWidth = (cardWidth - 2.0F * CARD_PADDING - 6.0F) * 0.5F;
-
-    _shapes.FillRect(contentX + CARD_PADDING, buttonY, buttonWidth, 18.0F, accepted || !answered ? BLUE : OUTLINE);
-    DrawCentered(_text, contentX + CARD_PADDING + buttonWidth * 0.5F, CenterTextY(buttonY, 18.0F), accepted ? "ACCEPTED" : "ACCEPT",
-                 APP_BACKGROUND);
-
-    const float declineX = contentX + CARD_PADDING + buttonWidth + 6.0F;
-    const bool declined = answered && !m_state.orders.acceptedProposal;
-    _shapes.StrokeRect(declineX, buttonY, buttonWidth, 18.0F, declined ? RED : OUTLINE);
-    DrawCentered(_text, declineX + buttonWidth * 0.5F, CenterTextY(buttonY, 18.0F), declined ? "DECLINED" : "DECLINE",
-                 declined ? RED : TEXT_PRIMARY);
-
-    AddHit(contentX + CARD_PADDING, buttonY, buttonWidth, 18.0F, Action::AcceptProposal, static_cast<std::int32_t>(index));
-    AddHit(declineX, buttonY, buttonWidth, 18.0F, Action::DeclineProposal, static_cast<std::int32_t>(index));
-    y += height + 6.0F;
-  }
-
-  // ---- FOOTER -------------------------------------------------------------------------------
-  // The sentence that explains the whole rail: the three columns are one commitment.
-  constexpr float FOOTER_HEIGHT = 36.0F;
-  const float footerY = SCREEN_HEIGHT - FOOTER_HEIGHT;
-  _shapes.FillRect(railX + 1.0F, footerY, ORDERS_WIDTH - 1.0F, 1.0F, CARD_BORDER);
-  _text.DrawText(static_cast<std::int32_t>(contentX), CenterTextY(footerY, FOOTER_HEIGHT), "ALL 3 LOCK TOGETHER", TEXT_DETAIL);
-  DrawRight(_text, contentRight, CenterTextY(footerY, FOOTER_HEIGHT, FontRenderer::COUNTDOWN_SCALE),
-            FormatCountdown(m_state.match.secondsToLock), AMBER, FontRenderer::COUNTDOWN_SCALE);
+  // ---- The footer --------------------------------------------------------------------------------
+  //
+  // Pinned to the bottom rather than following the sections, because it is the one line that is
+  // true whatever else the rail says: all three columns go in together (one-pager, decision 3).
+  const float footerY = SCREEN_HEIGHT - 30.0F;
+  _shapes.FillRect(railX + 1.0F, footerY, ORDERS_WIDTH - 1.0F, 1.0F, DIVIDER);
+  const std::int32_t footerText = static_cast<std::int32_t>(footerY) + 11;
+  _text.DrawText(static_cast<std::int32_t>(contentX), footerText, "ALL LOCK TOGETHER", TEXT_MUTED);
+  DrawRight(_text, contentRight, footerText, FormatCountdown(m_state.match.secondsToLock), AMBER);
 }
 
 void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
