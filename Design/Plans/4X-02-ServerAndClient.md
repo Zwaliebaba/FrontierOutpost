@@ -401,9 +401,30 @@ totals, a second session starts from zero, and a replacement that arrives on a *
 after a reconnect* is still an edit. That last one is the case the per-player and per-connection
 counters exist to tell apart.
 
-It is not verified by a run, and cannot be without somebody tapping: the client sends an order set
-on a tap that changed something, so an idle rehearsal produces no orders at all. The socket-level
-tests are the end-to-end evidence here.
+**And by a run, which an earlier version of this paragraph said was impossible.** It claimed the
+client could not be exercised without somebody tapping, and therefore that the socket-level tests
+were the only evidence. That was wrong: `Build/TapRehearsal.ps1` taps for you, through the real
+pointer path, and a match at thirty seconds a tick produced
+
+```
+T1 orders from player 0
+T1 order-edit player=0 this-tick=2
+T1 order-edit player=0 this-tick=3
+T2 resolved 1 tick(s)
+T2 orders from player 0
+T2 order-edit player=0 this-tick=2
+T2 player 0 disconnected orders=5 edits=3
+```
+
+-- a turn, two edits, the lock resetting the count, and the session totals. Every rule in ADR-031,
+observed rather than asserted.
+
+**The rehearsal also found a hole nothing had noticed.** The first run ended early on dominance, and
+the client went on offering its buttons while the server counted every tap as an edit into a tick
+that would never resolve -- inflating exactly the number H4 is measured from. `Snapshot::IsFinished`
+had been on the wire the whole time and the client ignored it. The server now refuses orders for a
+finished match and logs once per session that somebody tried; the screen says `MATCH ENDED` and
+stops offering what it cannot deliver.
 
 ### What Phase 0 still needs from a person
 

@@ -78,6 +78,10 @@ private:
     /// connection: somebody who plays, closes their lid and comes back has had two of them.
     std::uint32_t ordersSent = 0;
     std::uint32_t editsMade = 0;
+
+    /// Whether this connection has already been logged for ordering at a match that has ended.
+    /// One line per session: a player tapping at a finished game is one fact, not twenty.
+    bool orderedAfterTheEnd = false;
   };
 
   void Accept();

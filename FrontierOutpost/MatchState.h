@@ -354,6 +354,14 @@ struct MatchHeader
   std::uint32_t tick = 0;
   /// Seconds until the next fixed UTC tick. Counted down live; at zero the orders lock.
   double secondsToLock = 0.0;
+
+  /// Whether the match is over -- the length ran out, or somebody was dominant long enough.
+  ///
+  /// **It has always been on the wire and the client ignored it** (`Snapshot::IsFinished`). The
+  /// cost of ignoring it was not cosmetic: the screen went on offering buttons for a tick that
+  /// would never resolve, and every tap was counted by the server as an order edit, which is the
+  /// number H4 is measured from.
+  bool finished = false;
 };
 
 /// Everything the main page reads.

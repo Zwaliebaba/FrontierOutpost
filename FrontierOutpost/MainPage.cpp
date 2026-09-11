@@ -547,12 +547,13 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
 
   // The countdown is the one thing on the screen drawn at 2x, and it is amber because amber is
   // the warning colour: this is the deadline every order on the rail is racing (README "Frame").
-  const std::string countdown = FormatCountdown(m_state.match.secondsToLock);
+  const std::string countdown = m_state.match.finished ? std::string{"--:--:--"} : FormatCountdown(m_state.match.secondsToLock);
   const std::int32_t bigY = CenterTextY(0.0F, TOP_BAR_HEIGHT, FontRenderer::COUNTDOWN_SCALE);
   DrawRight(_text, cursor, bigY, countdown, AMBER, FontRenderer::COUNTDOWN_SCALE);
   cursor -= static_cast<float>(FontRenderer::MeasurePixels(countdown, FontRenderer::COUNTDOWN_SCALE)) + 8.0F;
 
-  DrawRight(_text, cursor, centered, std::format("T{} LOCKS", m_state.OrdersTick()), TEXT_MUTED);
+  DrawRight(_text, cursor, centered, m_state.match.finished ? std::string{"MATCH ENDED"} : std::format("T{} LOCKS", m_state.OrdersTick()),
+            TEXT_MUTED);
 }
 
 void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
@@ -1226,14 +1227,18 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.FillRect(railX, TOP_BAR_HEIGHT, 1.0F, SCREEN_HEIGHT - TOP_BAR_HEIGHT, CARD_BORDER);
 
   const std::int32_t headerY = static_cast<std::int32_t>(TOP_BAR_HEIGHT) + 12;
-  _text.DrawText(static_cast<std::int32_t>(contentX), headerY, std::format("LOCKS T{}", m_state.OrdersTick()), TEXT_MUTED);
-  DrawRight(_text, contentRight, headerY, m_state.orders.locked ? "LOCKED" : "UNLOCKED", m_state.orders.locked ? TEXT_MUTED : AMBER);
+  _text.DrawText(static_cast<std::int32_t>(contentX), headerY,
+                 m_state.match.finished ? std::string{"FINAL"} : std::format("LOCKS T{}", m_state.OrdersTick()), TEXT_MUTED);
+  DrawRight(_text, contentRight, headerY, m_state.match.finished ? "MATCH ENDED" : (m_state.orders.locked ? "LOCKED" : "UNLOCKED"),
+            m_state.match.finished ? RED : (m_state.orders.locked ? TEXT_MUTED : AMBER));
 
   float y = TOP_BAR_HEIGHT + 28.0F;
 
   // One line of help, and only one. It says where the controls went, because a player who used the
   // old rail will look for them here first.
-  for (const std::string& line : FontRenderer::Wrap("What goes in when the clock hits zero. Change it from the digest.", columns))
+  const std::string_view help = m_state.match.finished ? "The match is over. This is what you finished with."
+                                                       : "What goes in when the clock hits zero. Change it from the digest.";
+  for (const std::string& line : FontRenderer::Wrap(help, columns))
   {
     _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), line, TEXT_DETAIL);
     y += static_cast<float>(LINE_HEIGHT);
@@ -1370,8 +1375,16 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   const float footerY = SCREEN_HEIGHT - 30.0F;
   _shapes.FillRect(railX + 1.0F, footerY, ORDERS_WIDTH - 1.0F, 1.0F, DIVIDER);
   const std::int32_t footerText = static_cast<std::int32_t>(footerY) + 11;
-  _text.DrawText(static_cast<std::int32_t>(contentX), footerText, "ALL LOCK TOGETHER", TEXT_MUTED);
-  DrawRight(_text, contentRight, footerText, FormatCountdown(m_state.match.secondsToLock), AMBER);
+  if (m_state.match.finished)
+  {
+    _text.DrawText(static_cast<std::int32_t>(contentX), footerText, "NOTHING MORE LOCKS", TEXT_MUTED);
+    DrawRight(_text, contentRight, footerText, std::format("T{} FINAL", m_state.match.tick), RED);
+  }
+  else
+  {
+    _text.DrawText(static_cast<std::int32_t>(contentX), footerText, "ALL LOCK TOGETHER", TEXT_MUTED);
+    DrawRight(_text, contentRight, footerText, FormatCountdown(m_state.match.secondsToLock), AMBER);
+  }
 }
 
 void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
