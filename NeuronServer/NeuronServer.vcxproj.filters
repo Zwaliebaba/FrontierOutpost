@@ -2,9 +2,13 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="MatchStore.h" />
     <ClInclude Include="NeuronServer.h" />
+    <ClInclude Include="Session.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="MatchStore.cpp" />
+    <ClCompile Include="Session.cpp" />
     <ClCompile Include="pch.cpp" />
   </ItemGroup>
 </Project>

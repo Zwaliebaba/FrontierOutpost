@@ -129,6 +129,8 @@
     <ClInclude Include="Id.h" />
     <ClInclude Include="NeuronCore.h" />
     <ClInclude Include="Prng.h" />
+    <ClInclude Include="Simulation.h" />
+    <ClInclude Include="TickSchedule.h" />
     <ClInclude Include="Turns16.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
