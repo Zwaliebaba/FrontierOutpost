@@ -25,11 +25,13 @@
 #include "Device.h"
 #include "FontRenderer.h"
 #include "PointerInput.h"
+#include "KeyboardInput.h"
 #include "SceneTarget.h"
 #include "ShapeRenderer.h"
 
 #include "HostedServer.h"
 #include "MainPage.h"
+#include "JoinPage.h"
 #include "MatchConnection.h"
 #include "MatchFixture.h"
 #include "SnapshotView.h"
@@ -80,6 +82,11 @@ struct Startup
   /// Without it the defaults are the production three-week match, which nobody is going to sit
   /// through to find a broken mechanic.
   bool phaseZero = false;
+
+  /// Whether `--join` was given. It decides whether screen 03 appears: a command line that already
+  /// names a server and a token has answered the question the screen asks, and asking it again
+  /// would make the flag useless.
+  bool joinGiven = false;
 
   /// `--tick <seconds>` overrides the interval, for rehearsing a match rather than playing one.
   ///
@@ -190,6 +197,7 @@ struct Startup
     else if (words[index] == "--join" && index + 1 < words.size())
     {
       startup.role = Role::Join;
+      startup.joinGiven = true;
       std::string target = words[++index];
       const std::size_t colon = target.find(':');
       if (colon != std::string::npos)
@@ -225,8 +233,18 @@ bool g_quitRequested = false;
 /// already does with g_instance; it is set once, before the first message is dispatched.
 Neuron::PointerInput* g_pointerInput = nullptr;
 
+/// The keyboard, which only the join screen uses (ADR-034). Null everywhere else, and the window
+/// procedure checks: a game that types nothing should not be holding a keyboard.
+Neuron::KeyboardInput* g_keyboardInput = nullptr;
+
 LRESULT CALLBACK WndProc(HWND _window, UINT _message, WPARAM _wParam, LPARAM _lParam)
 {
+  if (g_keyboardInput != nullptr &&
+      g_keyboardInput->HandleMessage(_message, static_cast<std::uint64_t>(_wParam), static_cast<std::int64_t>(_lParam)))
+  {
+    return 0;
+  }
+
   if (g_pointerInput != nullptr && g_pointerInput->HandleMessage(_message, _wParam, _lParam))
   {
     return 0;
@@ -320,6 +338,119 @@ bool PumpMessages()
   return !g_quitRequested;
 }
 
+/// Screen 03, in its own frame loop, until the server welcomes this client or the window closes.
+///
+/// **A loop of its own rather than a mode inside the match loop.** The two screens share no state:
+/// this one has no match, no orders and no camera the player drives, and folding it into `RunGame`
+/// would put a `if (joined)` around every line of a function that is already the longest in the
+/// tree. It returns true when there is a match to show.
+[[nodiscard]] bool RunJoinScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::ShapeRenderer& _shapes,
+                                 Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer, Neuron::KeyboardInput& _keyboard,
+                                 Lockstep::MatchConnection& _connection, const std::string& _server, const std::string& _token,
+                                 std::uint16_t _defaultPort, std::chrono::steady_clock::time_point _startedAt)
+{
+  Lockstep::JoinPage page;
+  page.Offer(_server, _token);
+
+  auto lastFrame = std::chrono::steady_clock::now();
+
+  while (PumpMessages())
+  {
+    const auto now = std::chrono::steady_clock::now();
+    const double elapsedSeconds = std::chrono::duration<double>(now - lastFrame).count();
+    lastFrame = now;
+    page.Update(elapsedSeconds);
+
+    // ---- What the player did -------------------------------------------------------------------
+    page.HandleTyped(_keyboard.TakeTyped());
+    for (const Neuron::KeyboardInput::Key key : _keyboard.TakeKeys())
+    {
+      page.HandleKey(key);
+    }
+
+    float tapXPixels = 0.0F;
+    float tapYPixels = 0.0F;
+    if (_pointer.TakeClick(tapXPixels, tapYPixels))
+    {
+      (void)page.HandleTap(tapXPixels, tapYPixels);
+    }
+
+    // ---- What the player asked for -------------------------------------------------------------
+    if (page.TakeJoinRequest())
+    {
+      // `host:port`, split here rather than in the field, because a field that validated as you
+      // typed would refuse a half-typed address and there is nothing useful to say about one.
+      std::string host = page.Server();
+      std::uint16_t port = _defaultPort;
+      const std::size_t colon = host.rfind(':');
+      if (colon != std::string::npos)
+      {
+        const unsigned long parsed = std::strtoul(host.substr(colon + 1).c_str(), nullptr, 10);
+        if (parsed > 0 && parsed <= 65535)
+        {
+          port = static_cast<std::uint16_t>(parsed);
+        }
+        host = host.substr(0, colon);
+      }
+
+      if (_connection.Open(host, port, page.Token()))
+      {
+        page.SetStatus(Lockstep::JoinPage::Status::Connecting);
+      }
+      else
+      {
+        page.SetStatus(Lockstep::JoinPage::Status::Refused, "No answer from that server.");
+      }
+    }
+
+    // ---- What the server said ------------------------------------------------------------------
+    _connection.Pump(std::chrono::duration<double>(now - _startedAt).count());
+
+    switch (_connection.State())
+    {
+    case Lockstep::MatchConnection::Status::Playing:
+      // Welcomed. The seat is shown for a moment before the match replaces this screen, because a
+      // player who typed a token wants to see which empire it bought.
+      page.SetSeat(_connection.Player(), 0, Lockstep::OwnerColor(_connection.Player(), _connection.Player()));
+      page.SetStatus(Lockstep::JoinPage::Status::Joined);
+      return true;
+
+    case Lockstep::MatchConnection::Status::Refused:
+      page.SetStatus(Lockstep::JoinPage::Status::Refused, Neuron::Describe(_connection.Refusal()));
+      break;
+
+    case Lockstep::MatchConnection::Status::Lost:
+      page.SetStatus(Lockstep::JoinPage::Status::Refused, "The connection was lost.");
+      break;
+
+    case Lockstep::MatchConnection::Status::Greeting:
+    case Lockstep::MatchConnection::Status::Idle:
+    default:
+      break;
+    }
+
+    // ---- The frame -----------------------------------------------------------------------------
+    ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
+    _screen.BeginScene(commandList, _device.BackBufferView());
+
+    _shapes.BeginFrame(_device.FrameIndex());
+    _text.BeginFrame(_device.FrameIndex());
+
+    page.DrawWorld(_shapes, _text);
+    _shapes.Flush(commandList);
+    _text.Flush(commandList);
+
+    page.DrawInterface(_shapes, _text);
+    _shapes.Flush(commandList);
+    _text.Flush(commandList);
+
+    _device.EndFrameAndPresent();
+    _device.DrainDebugMessages();
+  }
+
+  return false;
+}
+
 int RunGame(HWND _window, const Startup& _startup)
 {
   Neuron::Device device;
@@ -350,25 +481,50 @@ int RunGame(HWND _window, const Startup& _startup)
   // until six people are waiting. The host's own client is a socket client like everybody else.
   const auto startedAt = std::chrono::steady_clock::now();
 
+  // Input first: the join screen reads both, and it runs before the match does.
+  Neuron::PointerInput pointer;
+  pointer.Create(_window);
+  g_pointerInput = &pointer;
+
+  Neuron::KeyboardInput keyboard;
+  g_keyboardInput = &keyboard;
+
   Lockstep::MatchConnection connection;
 
-  // The server may still be binding its port when we get here, so this retries rather than
-  // assuming. A bounded retry, because a client that spins forever on a server that will never
-  // come up is a window that never draws and never says why.
-  constexpr std::int32_t CONNECT_ATTEMPTS = 200;
-  for (std::int32_t attempt = 0; attempt < CONNECT_ATTEMPTS; ++attempt)
+  // ---- Screen 03, unless the command line already answered it ----------------------------------
+  //
+  // `--join host:port --token x` names a server and a seat, which is exactly what the join screen
+  // asks for, so a client given both goes straight to the match. Everything else -- including the
+  // host's own client -- starts here, because the host needs a seat too and until now took player
+  // zero by being first through the door (ADR-029's first open question).
+  if (!_startup.joinGiven)
   {
-    if (connection.Open(_startup.host, _startup.port, _startup.token))
+    const std::string offered = std::format("{}:{}", _startup.host, _startup.port);
+    if (!RunJoinScreen(device, screen, shapes, text, pointer, keyboard, connection, offered, _startup.token, _startup.port, startedAt))
     {
-      break;
+      return EXIT_SUCCESS;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
-
-  if (connection.State() == Lockstep::MatchConnection::Status::Idle)
+  else
   {
-    MessageBoxA(nullptr, "Could not reach the match server.", "LockStep: Universe", MB_OK | MB_ICONERROR);
-    return EXIT_FAILURE;
+    // The server may still be binding its port when we get here, so this retries rather than
+    // assuming. A bounded retry, because a client that spins forever on a server that will never
+    // come up is a window that never draws and never says why.
+    constexpr std::int32_t CONNECT_ATTEMPTS = 200;
+    for (std::int32_t attempt = 0; attempt < CONNECT_ATTEMPTS; ++attempt)
+    {
+      if (connection.Open(_startup.host, _startup.port, _startup.token))
+      {
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    if (connection.State() == Lockstep::MatchConnection::Status::Idle)
+    {
+      MessageBoxA(nullptr, "Could not reach the match server.", "LockStep: Universe", MB_OK | MB_ICONERROR);
+      return EXIT_FAILURE;
+    }
   }
 
   // Something has to be on screen before the first state arrives. The design reference's fixture is
@@ -381,10 +537,6 @@ int RunGame(HWND _window, const Startup& _startup)
   bool wasLive = false;
   /// The tick this process last put on the screen. Zero until the first state arrives.
   std::uint32_t drawnTick = 0;
-
-  Neuron::PointerInput pointer;
-  pointer.Create(_window);
-  g_pointerInput = &pointer;
 
   auto previousFrame = std::chrono::steady_clock::now();
 
@@ -506,6 +658,7 @@ int RunGame(HWND _window, const Startup& _startup)
   }
 
   g_pointerInput = nullptr;
+  g_keyboardInput = nullptr;
 
   // Drain the GPU here, not in ~Device. Destructors run in reverse declaration order, so the
   // SceneTarget's depth buffer would otherwise be released while the last submitted command list

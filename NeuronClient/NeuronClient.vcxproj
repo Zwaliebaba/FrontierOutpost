@@ -176,6 +176,8 @@
     <ClCompile Include="PointerInput.cpp" />
     <ClCompile Include="SceneTarget.cpp" />
     <ClCompile Include="ShapeRenderer.cpp" />
+    <ClCompile Include="TextField.cpp" />
+    <ClCompile Include="KeyboardInput.cpp" />
     <ClCompile Include="Starfield.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -190,6 +192,8 @@
     <ClInclude Include="PointerInput.h" />
     <ClInclude Include="SceneTarget.h" />
     <ClInclude Include="ShapeRenderer.h" />
+    <ClInclude Include="TextField.h" />
+    <ClInclude Include="KeyboardInput.h" />
     <ClInclude Include="Starfield.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
