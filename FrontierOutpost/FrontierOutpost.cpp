@@ -27,14 +27,19 @@
 #include "SceneTarget.h"
 #include "ShapeRenderer.h"
 
+#include "HostedServer.h"
 #include "MainPage.h"
+#include "MatchConnection.h"
 #include "MatchFixture.h"
 #include "SnapshotView.h"
 
-#include "MatchSimulation.h"
-#include "Session.h"
+#include "Socket.h"
 
 #include <chrono>
+#include <memory>
+#include <string>
+#include <thread>
+#include <vector>
 
 namespace
 {
@@ -48,6 +53,115 @@ constexpr int CLIENT_HEIGHT = static_cast<int>(Neuron::SceneTarget::HEIGHT_PIXEL
 
 constexpr wchar_t WINDOW_CLASS_NAME[] = L"FrontierOutpostWindow";
 constexpr wchar_t WINDOW_TITLE[] = L"Frontier Outpost";
+
+/// What this process is doing.
+///
+/// One executable, three roles (ADR-028). The client talks TCP in every one of them, including the
+/// one where the server is on the next thread -- so there is no local path that works and a network
+/// path nobody runs. Every launch exercises the transport.
+enum class Role : std::uint8_t
+{
+  /// Run a server and play on it. The default, and what a host does.
+  HostAndPlay,
+  /// Play on somebody else's.
+  Join,
+  /// Run a server and draw nothing. Also the headless runner.
+  Serve
+};
+
+struct Startup
+{
+  Role role = Role::HostAndPlay;
+  std::string host = "127.0.0.1";
+  std::uint16_t port = 7341;
+  std::string token = "alpha";
+};
+
+/// The six Phase 0 tokens.
+///
+/// **Typed once into a client by six people who know each other** (ADR-029). They are not
+/// authentication and this tree does not pretend otherwise: they are in the binary, they go over
+/// the wire in the clear, and they exist so that two players cannot accidentally be the same
+/// player. Phase 1 needs better; Phase 0 needs a login log.
+[[nodiscard]] std::vector<std::string> PhaseZeroTokens()
+{
+  return {"alpha", "bravo", "charlie", "delta", "echo", "foxtrot"};
+}
+
+/// `--serve [port]`, `--join <host[:port]>`, `--token <token>`. Anything else is host-and-play.
+[[nodiscard]] Startup ParseCommandLine(LPWSTR _commandLine)
+{
+  Startup startup;
+
+  std::vector<std::string> words;
+  {
+    const std::wstring wide = _commandLine == nullptr ? std::wstring{} : std::wstring{_commandLine};
+    std::string narrow;
+    narrow.reserve(wide.size());
+    for (const wchar_t letter : wide)
+    {
+      // The command line is a host name, a port and a token, all of which are ASCII by
+      // construction. Anything else is not something this accepts rather than something it
+      // mangles.
+      narrow.push_back(letter < 128 ? static_cast<char>(letter) : '?');
+    }
+
+    std::string word;
+    for (const char letter : narrow)
+    {
+      if (letter == ' ' || letter == '\t')
+      {
+        if (!word.empty())
+        {
+          words.push_back(word);
+          word.clear();
+        }
+        continue;
+      }
+      word.push_back(letter);
+    }
+    if (!word.empty())
+    {
+      words.push_back(word);
+    }
+  }
+
+  const auto asPort = [](const std::string& _text, std::uint16_t _fallback)
+  {
+    const unsigned long value = std::strtoul(_text.c_str(), nullptr, 10);
+    return value > 0 && value < 65536 ? static_cast<std::uint16_t>(value) : _fallback;
+  };
+
+  for (std::size_t index = 0; index < words.size(); ++index)
+  {
+    if (words[index] == "--serve")
+    {
+      startup.role = Role::Serve;
+      if (index + 1 < words.size() && words[index + 1].rfind("--", 0) != 0)
+      {
+        startup.port = asPort(words[++index], startup.port);
+      }
+    }
+    else if (words[index] == "--join" && index + 1 < words.size())
+    {
+      startup.role = Role::Join;
+      std::string target = words[++index];
+      const std::size_t colon = target.find(':');
+      if (colon != std::string::npos)
+      {
+        startup.port = asPort(target.substr(colon + 1), startup.port);
+        target = target.substr(0, colon);
+      }
+      startup.host = target;
+    }
+    else if (words[index] == "--token" && index + 1 < words.size())
+    {
+      startup.token = words[++index];
+    }
+  }
+
+  return startup;
+}
 
 HINSTANCE g_instance = nullptr;
 bool g_quitRequested = false;
@@ -152,7 +266,7 @@ bool PumpMessages()
   return !g_quitRequested;
 }
 
-int RunGame(HWND _window)
+int RunGame(HWND _window, const Startup& _startup)
 {
   Neuron::Device device;
   device.Create(_window, Neuron::SceneTarget::WIDTH_PIXELS, Neuron::SceneTarget::HEIGHT_PIXELS);
@@ -175,55 +289,39 @@ int RunGame(HWND _window)
   Neuron::FontRenderer text;
   text.Create(device, shaderVisibleHeap);
 
-  // ---- The match, behind a real session -----------------------------------------------------------
+  // ---- The match, over a socket ------------------------------------------------------------------
   //
-  // THIS IS THE COMPOSITION ROOT AND THE ONLY PLACE THAT SEES BOTH HALVES. `MatchSimulation` is the
-  // game behind `Neuron::Simulation`; the session drives it on a schedule and cannot see inside it;
-  // the client reads snapshots and knows nothing else (ADR-025). Each of those three ignorances is
-  // enforced by the project graph, and this function is where they are wired together.
-  //
-  // In-process, as `4X-02` Step 2 asks for: verifiable before a network exists. The seed is FIXED,
-  // so two runs are the same galaxy and a screenshot means something.
-  constexpr std::uint64_t GALAXY_SEED = 0x4652'4F4E'5449'4552ULL;
-  constexpr std::int32_t VIEWER = 0;
+  // THE CLIENT TALKS TCP EVEN WHEN THE SERVER IS ON THE NEXT THREAD (ADR-028). That is deliberate:
+  // a local path that bypassed the wire would be a path that works and a network path nobody runs
+  // until six people are waiting. The host's own client is a socket client like everybody else.
+  Frontier::MatchConnection connection;
 
-  const Frontier::MatchRules rules;
-  auto simulation = std::make_unique<Frontier::MatchSimulation>(rules, GALAXY_SEED);
-  Frontier::MatchSimulation* game = simulation.get();
-
-  // The store path is EMPTY, which means this match does not survive the process -- and that is
-  // deliberate rather than unfinished. ADR-024 lets a *server* write one file and R13 still binds
-  // the client; in-process the two are the same executable, so writing one here would be the client
-  // writing it. The separate server in Step 3 is what gets a store.
-  Neuron::Session session{std::move(simulation), Neuron::TickSchedule{0, rules.tickIntervalSeconds}, std::string{}};
-
-  // Wall time, as seconds since the process started. The session is told the instant and never
-  // reads one (ADR-026), so this is the one clock in the whole stack and it is here, at the top.
-  const auto startedAt = std::chrono::steady_clock::now();
-  const auto instantNow = [startedAt]
+  // The server may still be binding its port when we get here, so this retries rather than
+  // assuming. A bounded retry, because a client that spins forever on a server that will never
+  // come up is a window that never draws and never says why.
+  constexpr std::int32_t CONNECT_ATTEMPTS = 200;
+  for (std::int32_t attempt = 0; attempt < CONNECT_ATTEMPTS; ++attempt)
   {
-    return static_cast<Neuron::Instant>(
-      std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - startedAt).count());
-  };
+    if (connection.Open(_startup.host, _startup.port, _startup.token))
+    {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
 
-  const auto currentView = [&session, game, &instantNow]
+  if (connection.State() == Frontier::MatchConnection::Status::Idle)
   {
-    // The bytes are held in a NAMED local. `ByteReader` keeps a `std::span` into what it was given
-    // and does not own it, so reading from a temporary works right up until the temporary dies at
-    // the end of its statement -- which it does, one line before the read. That bug shipped in this
-    // function for exactly one build and produced an empty screen rather than a crash, because a
-    // freed buffer still decodes into something.
-    const std::vector<std::uint8_t> bytes = game->SnapshotFor(VIEWER);
-    Neuron::ByteReader reader{bytes};
+    MessageBoxA(nullptr, "Could not reach the match server.", "Frontier Outpost", MB_OK | MB_ICONERROR);
+    return EXIT_FAILURE;
+  }
 
-    return Frontier::ViewOf(Frontier::Snapshot::Read(reader), Frontier::Snapshot::DigestFor(game->LastTick(), Frontier::PlayerId{VIEWER}),
-                            session.SecondsUntilNextLock(instantNow()));
-  };
-
+  // Something has to be on screen before the first state arrives. The design reference's fixture is
+  // exactly that and nothing more -- it is a test fixture now, and this is the one place it is
+  // still drawn: for the fraction of a second between connecting and being welcomed.
   Frontier::MainPage page;
-  page.Create(currentView());
+  page.Create(Frontier::MakeReferenceMatch());
 
-  std::uint32_t shownTick = game->Tick();
+  auto lastPing = std::chrono::steady_clock::now();
 
   Neuron::PointerInput pointer;
   pointer.Create(_window);
@@ -237,22 +335,33 @@ int RunGame(HWND _window)
     const double elapsedSeconds = std::chrono::duration<double>{now - previousFrame}.count();
     previousFrame = now;
 
-    // ---- The lock ---------------------------------------------------------------------------------
+    // ---- The wire ----------------------------------------------------------------------------
     //
-    // The session decides whether a tick is due, resolves every one that is, and the client finds
-    // out by noticing the tick changed. The client never asks for a resolution and could not
-    // provoke one -- a client that could would be a client that could see the future half a tick
-    // early.
-    const Neuron::Instant nowSeconds = instantNow();
+    // The client never asks for a resolution and could not provoke one. It reads what arrived and
+    // redraws when the server says the tick moved.
+    connection.Pump();
 
-    // Present because the window is open. Presence is a fact about being seen, and in-process the
-    // thing that sees is the frame loop.
-    session.MarkPresent(VIEWER);
-
-    if (session.Advance(nowSeconds) > 0 || game->Tick() != shownTick)
+    if (connection.State() == Frontier::MatchConnection::Status::Refused)
     {
-      shownTick = game->Tick();
-      page.Create(currentView());
+      MessageBoxA(nullptr, Neuron::Describe(connection.Refusal()), "Frontier Outpost", MB_OK | MB_ICONERROR);
+      return EXIT_FAILURE;
+    }
+
+    if (connection.TakeFreshState() && !connection.Snapshot().empty())
+    {
+      Neuron::ByteReader reader{connection.Snapshot()};
+      const Frontier::Snapshot snapshot = Frontier::Snapshot::Read(reader);
+
+      Neuron::ByteReader digestReader{connection.Digest()};
+      page.Create(Frontier::ViewOf(snapshot, Frontier::Snapshot::ReadDigest(digestReader), connection.SecondsToLock()));
+    }
+
+    // Presence, once a second. It is a fact about being seen rather than about submitting, and it
+    // is what keeps a player who is sitting and thinking out of custody.
+    if (std::chrono::steady_clock::now() - lastPing > std::chrono::seconds(1))
+    {
+      connection.SendPing();
+      lastPing = std::chrono::steady_clock::now();
     }
 
     // The countdown is the only thing on this screen that moves on its own. Everything else
@@ -274,13 +383,14 @@ int RunGame(HWND _window)
     {
       if (page.HandleTap(tapXPixels, tapYPixels))
       {
-        // Anything the player changed goes to the session immediately, and the session holds the
-        // latest set until the lock. That is what makes "editable until the lock" work without the
-        // client having to know when the lock is: it sends every edit and the last one counts.
-        const Frontier::OrderSet orders = Frontier::OrdersOf(page.State());
+        // Every edit goes over the wire at once and the server keeps the latest. That is what makes
+        // "editable until the lock" work without the client having to know when the lock is.
+        Frontier::OrderSet orders = Frontier::OrdersOf(page.State());
+        orders.player = Frontier::PlayerId{connection.Player()};
+
         Neuron::ByteWriter writer;
         orders.Write(writer);
-        (void)session.Submit(VIEWER, writer.Bytes());
+        connection.SendOrders(writer.Bytes());
       }
     }
 
@@ -342,6 +452,36 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
 
   g_instance = _instance;
 
+  const Startup startup = ParseCommandLine(_commandLine);
+
+  // ---- The server half, when this process is one -----------------------------------------------
+  //
+  // R13 binds the shipped client and names the match store as its one exception (ADR-024). With one
+  // executable in two roles the rule is about the ROLE and not the binary: a process acting as the
+  // server writes a store, and a process that is only a client never does.
+  std::unique_ptr<Frontier::HostedServer> hosted;
+  if (startup.role != Role::Join)
+  {
+    constexpr std::uint64_t GALAXY_SEED = 0x4652'4F4E'5449'4552ULL;
+    hosted = std::make_unique<Frontier::HostedServer>(startup.port, PhaseZeroTokens(), std::string{"frontier-match.store"}, GALAXY_SEED);
+  }
+
+  // ---- Headless -------------------------------------------------------------------------------
+  //
+  // `--serve` draws nothing and runs until it is killed. It is the dedicated server and it is also
+  // the headless runner: a match resolving on a schedule with nobody watching.
+  if (startup.role == Role::Serve)
+  {
+    while (true)
+    {
+      for (const std::string& line : hosted->TakeLog())
+      {
+        Neuron::DebugTrace("{}\n", line);
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+  }
+
   if (!RegisterWindowClass(_instance))
   {
     return EXIT_FAILURE;
@@ -358,7 +498,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   // that there is one place to tell a person about it.
   try
   {
-    return RunGame(window);
+    return RunGame(window, startup);
   }
   catch (const winrt::hresult_error& error)
   {

@@ -237,6 +237,56 @@ std::vector<DigestEntry> Snapshot::DigestFor(const TickLog& _log, PlayerId _play
   return _log.digests[_player.AsSize()];
 }
 
+void Snapshot::WriteDigest(Neuron::ByteWriter& _writer, const std::vector<DigestEntry>& _digest)
+{
+  _writer.WriteU32(static_cast<std::uint32_t>(_digest.size()));
+  for (const DigestEntry& entry : _digest)
+  {
+    _writer.WriteU8(static_cast<std::uint8_t>(entry.kind));
+    _writer.WriteU32(entry.severity);
+    _writer.WriteString(entry.title);
+    _writer.WriteString(entry.detail);
+    _writer.WriteI32(entry.system.Index());
+    _writer.WriteI32(entry.lane.Index());
+    _writer.WriteI32(entry.fleet.Index());
+    _writer.WriteI32(entry.other.Index());
+  }
+}
+
+std::vector<DigestEntry> Snapshot::ReadDigest(Neuron::ByteReader& _reader)
+{
+  /// The same bound and the same reason as everywhere else: this count came off a socket.
+  constexpr std::uint32_t MAXIMUM_ENTRIES = 4096;
+
+  const std::uint32_t declared = _reader.ReadU32();
+  if (_reader.Failed() || declared > MAXIMUM_ENTRIES)
+  {
+    return {};
+  }
+
+  std::vector<DigestEntry> digest;
+  digest.reserve(declared);
+  for (std::uint32_t index = 0; index < declared; ++index)
+  {
+    DigestEntry entry;
+    entry.kind = static_cast<DigestKind>(_reader.ReadU8());
+    entry.severity = _reader.ReadU32();
+    entry.title = _reader.ReadString();
+    entry.detail = _reader.ReadString();
+    entry.system = SystemId{_reader.ReadI32()};
+    entry.lane = LaneId{_reader.ReadI32()};
+    entry.fleet = FleetId{_reader.ReadI32()};
+    entry.other = PlayerId{_reader.ReadI32()};
+
+    if (_reader.Failed())
+    {
+      return {};
+    }
+    digest.push_back(std::move(entry));
+  }
+  return digest;
+}
+
 bool Snapshot::Knows(SystemId _system) const
 {
   for (const SnapshotSystem& system : m_systems)

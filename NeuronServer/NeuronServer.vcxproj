@@ -119,6 +119,7 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="MatchServer.cpp" />
     <ClCompile Include="MatchStore.cpp" />
     <ClCompile Include="Session.cpp" />
     <ClCompile Include="pch.cpp">
@@ -127,6 +128,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="MatchServer.h" />
     <ClInclude Include="MatchStore.h" />
     <ClInclude Include="NeuronServer.h" />
     <ClInclude Include="Session.h" />

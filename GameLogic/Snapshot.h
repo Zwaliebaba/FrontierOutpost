@@ -112,6 +112,11 @@ public:
   /// The player's digest for the tick just resolved, sorted as the resolver sorted it.
   [[nodiscard]] static std::vector<DigestEntry> DigestFor(const TickLog& _log, PlayerId _player);
 
+  /// A digest, encoded and decoded. Both halves live here so they cannot drift into different
+  /// files and disagree about a field.
+  static void WriteDigest(Neuron::ByteWriter& _writer, const std::vector<DigestEntry>& _digest);
+  [[nodiscard]] static std::vector<DigestEntry> ReadDigest(Neuron::ByteReader& _reader);
+
   [[nodiscard]] PlayerId Viewer() const noexcept
   {
     return m_viewer;

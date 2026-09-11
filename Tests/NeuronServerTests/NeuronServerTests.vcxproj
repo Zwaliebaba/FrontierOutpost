@@ -143,8 +143,10 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="NeuronServerTests.cpp" />
+    <ClCompile Include="MatchServerTests.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CountingSimulation.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>

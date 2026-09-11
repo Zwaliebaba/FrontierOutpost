@@ -117,6 +117,9 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="FrameStream.cpp" />
+    <ClCompile Include="Protocol.cpp" />
+    <ClCompile Include="Socket.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
@@ -126,6 +129,9 @@
     <ClInclude Include="ByteReader.h" />
     <ClInclude Include="ByteWriter.h" />
     <ClInclude Include="Debug.h" />
+    <ClInclude Include="FrameStream.h" />
+    <ClInclude Include="Protocol.h" />
+    <ClInclude Include="Socket.h" />
     <ClInclude Include="Id.h" />
     <ClInclude Include="NeuronCore.h" />
     <ClInclude Include="Prng.h" />

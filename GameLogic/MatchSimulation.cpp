@@ -258,21 +258,8 @@ std::vector<std::uint8_t> MatchSimulation::DigestFor(std::int32_t _player) const
     return {};
   }
 
-  const std::vector<DigestEntry> digest = Snapshot::DigestFor(m_lastTick, PlayerId{_player});
-
   Neuron::ByteWriter writer;
-  writer.WriteU32(static_cast<std::uint32_t>(digest.size()));
-  for (const DigestEntry& entry : digest)
-  {
-    writer.WriteU8(static_cast<std::uint8_t>(entry.kind));
-    writer.WriteU32(entry.severity);
-    writer.WriteString(entry.title);
-    writer.WriteString(entry.detail);
-    writer.WriteI32(entry.system.Index());
-    writer.WriteI32(entry.lane.Index());
-    writer.WriteI32(entry.fleet.Index());
-    writer.WriteI32(entry.other.Index());
-  }
+  Snapshot::WriteDigest(writer, Snapshot::DigestFor(m_lastTick, PlayerId{_player}));
   return writer.Bytes();
 }
 

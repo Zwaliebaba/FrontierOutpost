@@ -1,7 +1,7 @@
 # 4X-02 — The server, the client and the network
 
-**Status:** Plan, not started. Written properly 2026-09-11, when `4X-01` closed Stage A and the
-shapes this plan is specified against became facts. **Both owner decisions are taken** (2026-09-11):
+**Status:** Steps 1–3 done 2026-09-11; Step 4 outstanding. Written properly 2026-09-11. When it was written, `4X-01` had just
+closed Stage A and the shapes this plan is specified against had become facts. **Both owner decisions are taken** (2026-09-11):
 persistence is ADR-024, and `MatchState::Owner` widens to twelve authored colours, so nothing blocks
 Step 1. Written against `space-4x-one-pager-v10.md` (v0.7) and
 `space-4x-prototype-test-plan.md` (v0.4).
@@ -108,15 +108,14 @@ tests drive it and the simulation still never sees one (R16). **Decide what happ
 server slept through** — the recommendation is to resolve each missed tick in order with the orders
 it has, because a match that skips a tick has a hole in its order list and stops replaying.
 
-**ADR — Transport.** ADR-006's queues were 20 Hz in one process and are Deprecated. This game is
-four messages a day per player and cares about reliability rather than latency, so TCP with
-length-prefixed frames is the obvious answer and the ADR mostly exists to say why nothing cleverer
-is needed. `NeuronCore.h` already includes WinSock2 and links `ws2_32`.
+**~~ADR — Transport.~~ Decided: ADR-028**, owner decision on the shape. TCP, and **one executable
+with three roles** — host-and-play, `--join`, `--serve`. The client talks TCP in all three, so there
+is no local shortcut and every launch exercises the wire. R13's amendment was re-worded from a
+binary to a role in the same commit.
 
-**ADR — Identity for Phase 0.** A per-match, per-player token, issued by whoever starts the server
-and typed once into the client. The ADR should be honest that this is not authentication and says
-what it would take to become it. **Log every login**: the login curve is the test plan's primary
-instrument, and a Phase 0 that cannot draw it answers nothing.
+**~~ADR — Identity for Phase 0.~~ Decided: ADR-029.** Six fixed tokens, one per seat. Not
+authentication and the ADR's title says so. A refused token is never logged; a successful login
+always is.
 
 ---
 
@@ -221,6 +220,26 @@ Two more the test plan asks for outside that list:
 **Tests:** framing round-trip; the fuzz cases above; a client reconnecting after a server restart
 getting the current snapshot; a token not on the match's list refused. And the real one: two
 machines, one match, one tick.
+
+**Done 2026-09-11, except the last sentence.** ADR-028 and ADR-029.
+
+`FrameStream` handles what TCP actually does — a message split across reads, several in one read —
+and what a hostile peer does, which is a length field it chose. `Protocol` has six kinds and every
+decoder checks `AtEnd`, so trailing bytes are as refused as missing ones. Both are fuzzed.
+
+`MatchServer`'s tests are **real sockets on 127.0.0.1**, not fakes: the listener listening, a
+non-blocking read meaning what this tree thinks it means, a connection closing being noticed. They
+include a client that sends four bytes claiming four billion, a client that sends a message only a
+server sends, and twelve clients that send pure noise — after which the server is still up and still
+serves an honest one.
+
+**Not done, and it cannot be done here: two machines, one match, one tick.** Everything up to it is
+tested; the last step needs two machines and a person. What is ready for that is the executable
+itself: one host runs it, five others run `--join <host>` with their token.
+
+The client is wired reconnection-free: a dropped connection stops it. The server already sends a
+snapshot on `Hello`, so the missing half is the client's, and it is the first thing to write when
+somebody's laptop lid closes during a Phase 0 run.
 
 #### Step 4 — Close out
 
