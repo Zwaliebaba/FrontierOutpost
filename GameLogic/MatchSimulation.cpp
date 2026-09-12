@@ -138,7 +138,7 @@ MatchSimulation::MatchSimulation(const MatchRules& _rules, std::uint64_t _seed, 
   m_bots.resize(static_cast<std::size_t>(_rules.playerCount));
 }
 
-MatchSimulation MatchSimulation::FromConfiguration(std::span<const std::uint8_t> _configuration)
+std::unique_ptr<MatchSimulation> MatchSimulation::FromConfiguration(std::span<const std::uint8_t> _configuration)
 {
   Neuron::ByteReader reader{_configuration};
   const MatchRules rules = ReadRules(reader);
@@ -172,7 +172,7 @@ MatchSimulation MatchSimulation::FromConfiguration(std::span<const std::uint8_t>
     Neuron::Fatal("This match store's configuration is not the shape this build writes.");
   }
 
-  return MatchSimulation{Reloaded{}, rules, seed, std::move(bots)};
+  return std::unique_ptr<MatchSimulation>(new MatchSimulation{Reloaded{}, rules, seed, std::move(bots)});
 }
 
 MatchSimulation::MatchSimulation(Reloaded, const MatchRules& _rules, std::uint64_t _acceptedSeed,

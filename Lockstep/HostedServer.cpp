@@ -199,7 +199,7 @@ void HostedServer::RunResumed(Neuron::MatchLog& _log, std::uint16_t _port, const
   // The replay is the load (ADR-024): a fresh simulation from the stored configuration, every
   // locked turn resolved through it in order, and the hash it ends on compared with the one the
   // store was written with. A mismatch is not a state to recover from.
-  auto simulation = std::make_unique<MatchSimulation>(MatchSimulation::FromConfiguration(_contents.configuration));
+  std::unique_ptr<MatchSimulation> simulation = MatchSimulation::FromConfiguration(_contents.configuration);
   std::unique_ptr<Neuron::Session> session = Neuron::Session::Resume(std::move(simulation), _contents, std::move(_storePath));
   if (session == nullptr)
   {

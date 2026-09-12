@@ -135,7 +135,7 @@ private:
 
   /// The only thing two threads touch, and it is a vector of strings behind a mutex rather than
   /// anything clever -- a few lines a tick is not a performance problem.
-  std::mutex m_logLock;
+  mutable std::mutex m_logLock;
   std::vector<std::string> m_log;
   std::string m_failure;
   std::atomic<bool> m_failed{false};
