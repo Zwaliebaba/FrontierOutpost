@@ -10,6 +10,7 @@
   </Configurations>
   <Folder Name="/Tests/">
     <Project Path="Tests/GameLogicTests/GameLogicTests.vcxproj" Id="1c8daad5-06f9-f54f-d508-9714512d9af0" />
+    <Project Path="Tests/LockstepTests/LockstepTests.vcxproj" Id="3e92bdc1-9220-4d58-bcd1-957de49e85f4" />
     <Project Path="Tests/NeuronClientTests/NeuronClientTests.vcxproj" Id="82ff8212-c7c5-789c-299a-717affb644a4" />
     <Project Path="Tests/NeuronCoreTests/NeuronCoreTests.vcxproj" Id="751fa0ba-2b31-0b79-bbad-782e911726df" />
     <Project Path="Tests/NeuronServerTests/NeuronServerTests.vcxproj" Id="96d8b9a7-2d2d-10ef-4802-cba34eb98cc8" />

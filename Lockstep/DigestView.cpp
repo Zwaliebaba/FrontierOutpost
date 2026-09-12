@@ -132,8 +132,13 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
 
     if (!grouped)
     {
+      // **`NOBODY`, not `event.actor`.** `DigestCard::actor` means "this card GROUPS a player's
+      // events", which is what the header says and what a reader would assume; copying the actor
+      // onto an ungrouped card made `actor != NOBODY` untrue as a test for one. Nothing drew from
+      // it yet, which is exactly why it was worth fixing before something did -- the obvious use is
+      // an owner swatch, and it would have gone on cards that are not about that owner.
       DigestCard card{.kind = event.kind,
-                      .actor = event.actor,
+                      .actor = NOBODY,
                       .title = event.title,
                       .stamp = {},
                       .lines = {event.detail},

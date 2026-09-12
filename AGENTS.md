@@ -145,7 +145,7 @@ private:
 | `.github/workflows/build.yml` | CI. All of it blocks | Yes, carefully |
 | `x64/`, `.vs/`, `*.user` | Build and IDE output | **No — and never commit them** |
 
-**Nine projects, and the edges run one way.** `Lockstep.slnx` is the solution; its only platform is `x64`.
+**Ten projects, and the edges run one way.** `Lockstep.slnx` is the solution; its only platform is `x64`.
 
 ```
 NeuronCore.lib          ← the engine everything else builds on
@@ -158,7 +158,26 @@ NeuronCoreTests.dll     ← NeuronCore
 NeuronClientTests.dll   ← NeuronClient, NeuronCore
 NeuronServerTests.dll   ← NeuronServer, NeuronCore
 GameLogicTests.dll      ← GameLogic, NeuronCore
+LockstepTests.dll       ← NeuronClient, GameLogic, NeuronCore + four of Lockstep's own .cpp files
 ```
+
+**`LockstepTests` is the one that does not follow the pattern, and it is worth knowing why.** The
+other four test a library. `Lockstep` is an **executable** -- R13 says the game ships as one file --
+and a test DLL cannot link one, so for a long time `ViewOf`, `OrdersOf`, `ComposeSignals`,
+`DigestView` and `FormatCountdown` were reachable by no test at all. Two changes in a row ended with
+a throwaway harness compiled outside the repository to prove they worked, and the second of them
+found an arithmetic bug in `FormatCountdown` by photographing a running client (ADR-040).
+
+It compiles `MatchState.cpp`, `SnapshotView.cpp`, `DigestView.cpp` and `MainPage.cpp` a **second
+time**, with `PrecompiledHeader NotUsing` so that their `#include "pch.h"` still resolves to
+`Lockstep/pch.h`. The alternative was to carve the client's view model into a fifth library purely
+so a test could reach it, which is a change to what ships made for the benefit of the tests. Nothing
+about `Lockstep.exe` changes.
+
+**What belongs in it: everything in those files that DECIDES something.** The drawing does not --
+a `DrawWorld` needs a device, a swap chain and a frame, and it produces pixels nobody can assert
+about. Screens are verified by photographing them (ADR-038, ADR-039). The line is exactly that: if
+it decides, it is tested here; if it draws, it is a screenshot.
 
 **`GameLogic` is referenced by the executable and by nothing else.** It is server-side game code; the day a client-side file reaches for it is the day the server stopped being authoritative. `NeuronServer` drives a game it cannot see, through the byte-shaped `Neuron::Simulation` seam (ADR-025), which is what keeps that edge absent rather than merely discouraged. Likewise nothing in `NeuronClient` may reach `NeuronServer` or the reverse — they share `NeuronCore` and that is the whole of their common ground.
 
@@ -180,7 +199,7 @@ GameLogicTests.dll      ← GameLogic, NeuronCore
 That check matters more than it looks, because **CI builds Debug only** (§6). Release is compiled by whoever ships, and a Release that quietly lost an include directory or sat on an older language standard would not be discovered until then. The static check is what stands in for the build nobody runs.
 
 ```powershell
-# Build everything: the executable, the four libraries it references, and the four test DLLs.
+# Build everything: the executable, the four libraries it references, and the five test DLLs.
 msbuild Lockstep.slnx /p:Configuration=Debug /p:Platform=x64 /m /v:minimal /nologo
 
 # Just the game and its libraries, still through the solution.
@@ -196,11 +215,12 @@ All commands run from the repository root, and all of them name the **solution**
 
 **A project does not put its own directory on the include path.** `cl.exe` already searches the directory of the including file first for a quoted include, so `#include "FileSys.h"` from `NeuronCore\FileSys.cpp` resolves without help. Only the directories of *other* projects are listed, as `$(SolutionDir)<Project>`.
 
-**Run the tests.** All four suites, through `vstest.console.exe`:
+**Run the tests.** All five suites, through `vstest.console.exe`:
 
 ```powershell
 vstest.console.exe x64\Debug\NeuronCoreTests.dll x64\Debug\NeuronClientTests.dll `
-                   x64\Debug\NeuronServerTests.dll x64\Debug\GameLogicTests.dll /Platform:x64
+                   x64\Debug\NeuronServerTests.dll x64\Debug\GameLogicTests.dll `
+                   x64\Debug\LockstepTests.dll /Platform:x64
 ```
 
 **vstest reports "no tests found" as a pass.** An empty suite is therefore worse than no suite: it is a green check mark over a library nobody exercised. Each project ships a placeholder `SuiteSmoke` for exactly this reason; delete it when the first real test lands, never before.
@@ -273,7 +293,7 @@ x64\Debug\Lockstep.exe
 
 | Job | Steps |
 |---|---|
-| **Windows** | `CheckProjectFiles.py` → build **Debug\|x64** → build the four test DLLs → `vstest.console.exe` over all four → `RunClangTidy.py` over the whole tree |
+| **Windows** | `CheckProjectFiles.py` → build **Debug\|x64** → build the five test DLLs → `vstest.console.exe` over all five → `RunClangTidy.py` over the whole tree |
 | **Linux** | `CheckFormat.py` on clang-format 18.1.3 |
 
 **CI does not build Release** (owner decision, 2026-09-09). The Windows build is the slow half of the pipeline and a second configuration roughly doubles it for a tree where the two differ only in optimisation. What stands in for it is the static alignment check in `CheckProjectFiles.py` (§3) — and, before a release, an actual `Configuration=Release` build by whoever is shipping. If you change something that could plausibly break only under optimisation, build Release yourself and say so.

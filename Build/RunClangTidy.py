@@ -48,6 +48,7 @@ PROJECTS = {
     "NeuronClientTests": os.path.join("Tests", "NeuronClientTests"),
     "NeuronServerTests": os.path.join("Tests", "NeuronServerTests"),
     "GameLogicTests": os.path.join("Tests", "GameLogicTests"),
+    "LockstepTests": os.path.join("Tests", "LockstepTests"),
 }
 
 VSWHERE = r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -96,8 +97,17 @@ def translation_units(project_file: str) -> list[str]:
     units = []
     for element in tree.iter(f"{{{MSBUILD_NAMESPACE}}}ClCompile"):
         include = element.get("Include")
-        if include and include.endswith(".cpp"):
-            units.append(include.replace("/", os.sep))
+        if not include or not include.endswith(".cpp"):
+            continue
+
+        # A .cpp borrowed from another project is checked where it lives, not here. LockstepTests
+        # compiles four of Lockstep's own translation units a second time (AGENTS.md 2); linting
+        # them twice would double every finding in them and report the same line under two
+        # different projects.
+        if include.startswith(os.pardir) or os.pardir + os.sep in include or os.pardir + "/" in include:
+            continue
+
+        units.append(include.replace("/", os.sep))
     return units
 
 

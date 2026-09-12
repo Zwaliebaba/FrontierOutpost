@@ -47,6 +47,7 @@ PROJECTS = {
     "NeuronClientTests": os.path.join("Tests", "NeuronClientTests"),
     "NeuronServerTests": os.path.join("Tests", "NeuronServerTests"),
     "GameLogicTests": os.path.join("Tests", "GameLogicTests"),
+    "LockstepTests": os.path.join("Tests", "LockstepTests"),
 }
 
 REQUIRED_CONFIGURATIONS = {"Debug|x64", "Release|x64"}

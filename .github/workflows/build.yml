@@ -141,7 +141,8 @@ jobs:
             "x64\$env:CONFIGURATION\NeuronCoreTests.dll",
             "x64\$env:CONFIGURATION\NeuronClientTests.dll",
             "x64\$env:CONFIGURATION\NeuronServerTests.dll",
-            "x64\$env:CONFIGURATION\GameLogicTests.dll"
+            "x64\$env:CONFIGURATION\GameLogicTests.dll",
+            "x64\$env:CONFIGURATION\LockstepTests.dll"
           )
           foreach ($suite in $suites) {
             if (-not (Test-Path $suite)) { throw "$suite was not built. A suite that does not exist is not a suite that passed." }
