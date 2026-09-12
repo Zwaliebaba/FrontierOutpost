@@ -86,9 +86,12 @@ seventh reported. No mockup exists for any of them; the captures are `01-build-s
   refuses what the purse cannot cover).
 - **Destination** (`MOVE FLT 1 - PICK LANE`): opened by `MOVE`/`REDIRECT` on a card or by tapping
   your fleet's marker; one row per lane out of where the fleet is or is going: owner square,
-  `PELL`, `UNCLAIMED` / `YOURS` / `P3` with `- CAPITAL` / `- CONTESTED` appended, and `2 TICKS - ETA
-  T9` on the right — the lane cost and the arrival tick as two facts. Picking a row orders the move
-  (drawn at progress zero until the lock) and closes the sheet.
+  `PELL`, `UNCLAIMED` / `YOURS` / `P3` with the hostile ships standing there and `+DEF` appended
+  (`P3 - 11 +DEF`, ADR-063), then `- CAPITAL` / `- CONTESTED`, and `2 TICKS - ETA T9` on the right —
+  the lane cost and the arrival tick as two facts. Picking a row orders the move (drawn at progress
+  zero until the lock) and closes the sheet. *Not built:* the verdict under the right-hand column
+  (`YOU WIN` / `HOLD` / `YOU LOSE`). It needs a preview per candidate destination on
+  `SnapshotFleet`; the client must not compute one (ADR-063).
 - **Signal** (`SIGNAL - PICK ONE`): opened from the rail's `SIGNALS` header; the six kinds of
   ADR-039 as rows with `SENDING` / `TAP AGAIN TO CONFIRM` on the right; `Concede` always last and
   needing two taps; `Concede` alone when the empire has met nobody — the `NOTHING TO SAY YET` row is

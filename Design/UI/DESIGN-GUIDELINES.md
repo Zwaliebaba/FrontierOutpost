@@ -137,7 +137,10 @@ Semantic / owner (ADR-027: you are always blue)
 - Under `SINCE YOU LOOKED` only, fold a run of repeats into one card with the total and the window's
   span — `PRODUCTION +18 - T6 > T9` (ADR-062). Never a contact, a capture, a proposal or a verdict.
 - Combat preview is a verdict: `FLT1 ARRIVES T47 - YOU LOSE` / `YOU WIN` / `HOLD`, then
-  `You arrive 14. P3 holds 11 +def. 6 of theirs remain, 0 of yours.` Never a bare `A v B`.
+  `You arrive 14. P3 holds 11 +def. 6 of theirs remain, 0 of yours.` Never a bare `A v B`. The
+  destination sheet says what is standing on a candidate (`P3 - 11 +DEF`) and not how it would go:
+  the verdict is the server's arithmetic and the wire carries one only for where a fleet is already
+  flying (ADR-063).
 - **Every event carries its own actions**, from a fixed vocabulary: `MAP`; `REDIRECT FLT 1` on a
   contact your fleet is flying into; `ACCEPT` / `DECLINE` on a proposal; one priced build
   (`SHIPYARD JANDAL 20 CR`) — on a claimed system for that system, on a production line for whatever

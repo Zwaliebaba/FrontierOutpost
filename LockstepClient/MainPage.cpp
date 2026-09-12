@@ -1502,6 +1502,24 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       {
         held = "RIVAL";
       }
+      // **What is standing there, which is what the lane is a fight or an expansion by.** Every
+      // hostile fleet parked on a system is an incumbent by the time a fleet ordered this tick
+      // lands on it -- the rule `TickResolver::Preview` applies -- so anything here fights with the
+      // defender's bonus and the row says so in the words the verdict box uses (ADR-063).
+      std::uint32_t garrison = 0;
+      for (const Fleet& standing : m_state.fleets)
+      {
+        const bool hostile = standing.owner != NOBODY && standing.owner != m_state.viewer;
+        if (hostile && standing.from == standing.to && standing.to == other)
+        {
+          garrison += standing.ships;
+        }
+      }
+      if (garrison > 0)
+      {
+        held += std::format(" - {} +DEF", garrison);
+      }
+
       if (HasFlag(node.flags, SystemFlags::Capital))
       {
         held += " - CAPITAL";

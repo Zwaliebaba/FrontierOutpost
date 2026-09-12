@@ -80,10 +80,14 @@ The complete list, so nobody goes looking. Each item is also under its screen in
    distances. Built: a dashed purple ground circle, one lifted ring, three pins and
    `SEALED - OPENS T<n>`. Zoom: `PointerInput` banks wheel notches and pinches, and nothing reads
    them; `MainPage::ResetView` exists and no control reaches it.
-7. **The trade lane as a `PROPOSE` row under BUILDS.** `BuildRow::isTradeLane` is set by nothing,
+7. **The destination sheet's verdict.** A row says what is standing on a candidate (`P3 - 11 +DEF`,
+   ADR-063) and not how the fight would go. `YOU WIN` / `HOLD` / `YOU LOSE` per candidate needs a
+   preview per candidate on `SnapshotFleet`; the combat parameters are not on the wire and the
+   client must not learn the rule (`GameLogic/Snapshot.h`).
+8. **The trade lane as a `PROPOSE` row under BUILDS.** `BuildRow::isTradeLane` is set by nothing,
    so the amber row never appears; a lane offer is made from the signal picker instead (ADR-039's
    open question).
-8. **Twelve seats** on the seats screen. Six are drawn, every one required (ADR-036 amendment 3).
+9. **Twelve seats** on the seats screen. Six are drawn, every one required (ADR-036 amendment 3).
 
 Found while reading the code for this record, not design gaps: the replay stub's own note row
 (`NOT YET WIRED TO A RESOLVED TICK`) is the seventh row of a six-row sheet and is clipped, so the
