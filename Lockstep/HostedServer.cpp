@@ -59,9 +59,8 @@ HostedServer::HostedServer(std::uint16_t _port, std::vector<std::string> _tokens
 
 HostedServer::HostedServer(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath)
 {
-  m_thread =
-    std::thread([this, _port, tokens = std::move(_tokens), store = std::move(_storePath), log = std::move(_logPath)]() mutable
-                { Guarded(std::move(log), [&](Neuron::MatchLog& _log) { RunLobby(_log, _port, std::move(tokens), std::move(store)); }); });
+  m_thread = std::thread([this, _port, tokens = std::move(_tokens), store = std::move(_storePath), log = std::move(_logPath)]() mutable
+                         { Guarded(std::move(log), [&](Neuron::MatchLog& _log) { RunLobby(_log, _port, std::move(tokens), store); }); });
 }
 
 HostedServer::HostedServer(std::uint16_t _port, Neuron::MatchStore::Contents _contents, std::string _storePath, std::string _logPath)
@@ -216,7 +215,7 @@ void HostedServer::RunResumed(Neuron::MatchLog& _log, std::uint16_t _port, const
   Serve(server, _log);
 }
 
-void HostedServer::RunLobby(Neuron::MatchLog& _log, std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath)
+void HostedServer::RunLobby(Neuron::MatchLog& _log, std::uint16_t _port, std::vector<std::string> _tokens, const std::string& _storePath)
 {
   // The log opens with the lobby rather than with the match, because who arrived and when is part
   // of the record even for a match that never starts (ADR-030's login curve begins here).

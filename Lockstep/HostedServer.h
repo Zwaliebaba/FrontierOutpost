@@ -123,7 +123,7 @@ private:
            const MatchRules& _rules, std::vector<std::optional<BotPolicy>> _bots);
 
   /// The lobby's loop: listen, seat people, and watch for a `Begin`.
-  void RunLobby(Neuron::MatchLog& _log, std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath);
+  void RunLobby(Neuron::MatchLog& _log, std::uint16_t _port, std::vector<std::string> _tokens, const std::string& _storePath);
 
   void RunResumed(Neuron::MatchLog& _log, std::uint16_t _port, const Neuron::MatchStore::Contents& _contents, std::string _storePath);
 

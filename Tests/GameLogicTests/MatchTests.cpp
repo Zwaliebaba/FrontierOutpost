@@ -283,8 +283,23 @@ public:
     const std::array<Lockstep::OrderSet, 1> sets = {orders};
     const Lockstep::Match after = Advance(match, sets);
     Assert::IsTrue(after.SystemAt(capital).hasMiningStation, L"the build at index zero was legal and must happen");
-    Assert::AreEqual(match.PlayerAt(Lockstep::PlayerId{0}).credits - match.Rules().miningStationCost,
-                     after.PlayerAt(Lockstep::PlayerId{0}).credits, L"and was paid for");
+
+    // **Against the same build with nothing refused beside it.** Not against the opening balance:
+    // a tick pays as well as charges -- production runs in it, and a mining station yields on the
+    // tick it is built -- so `startingCredits - miningStationCost` is not what the player holds
+    // afterwards and never was. What this test is actually about is that the refusal beside the
+    // build changed nothing about it, and the way to say that is to run the build without one.
+    Lockstep::OrderSet alone;
+    alone.player = orders.player;
+    alone.builds.push_back(Lockstep::BuildOrder{.system = capital, .kind = Lockstep::BuildKind::MiningStation});
+    const std::array<Lockstep::OrderSet, 1> aloneSets = {alone};
+    const Lockstep::Match cleanly = Advance(match, aloneSets);
+
+    Assert::AreEqual(cleanly.PlayerAt(Lockstep::PlayerId{0}).credits, after.PlayerAt(Lockstep::PlayerId{0}).credits,
+                     L"a refused fleet order beside it changed what the build cost");
+    Assert::IsTrue(after.PlayerAt(Lockstep::PlayerId{0}).credits <
+                     match.PlayerAt(Lockstep::PlayerId{0}).credits + match.Rules().miningStationCost,
+                   L"the build was not charged for at all");
   }
 
   TEST_METHOD(AnOrderSetFromNobodyIsRefused)

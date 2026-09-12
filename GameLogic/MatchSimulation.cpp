@@ -9,6 +9,8 @@
 #include "pch.h"
 #include "MatchSimulation.h"
 
+#include <initializer_list>
+
 namespace Lockstep
 {
 
@@ -68,8 +70,12 @@ namespace
 /// `MatchRules`: add it to `MATCH_RULES_FIELDS` in wire order, then update this number.
 static_assert(sizeof(MatchRules) == 152, "MatchRules changed shape; add the field to MATCH_RULES_FIELDS and update this size");
 
-#define COUNT_ONE_FIELD(name) +1
-constexpr std::uint32_t CONFIGURATION_FIELDS = 0 MATCH_RULES_FIELDS(COUNT_ONE_FIELD);
+/// Counted as a list of ones rather than as a run of `+1`. A macro whose replacement list is an
+/// operator cannot be parenthesised and so cannot satisfy `bugprone-macro-parentheses`, and this
+/// tree suppresses no check inline (`.clang-tidy` excludes one generated header and nothing else).
+#define COUNT_ONE_FIELD(name) 1,
+constexpr std::uint32_t CONFIGURATION_FIELDS =
+  static_cast<std::uint32_t>(std::initializer_list<int>{MATCH_RULES_FIELDS(COUNT_ONE_FIELD)}.size());
 #undef COUNT_ONE_FIELD
 
 /// The roster byte for a seat a person sits in. Not a `BotPolicy` value and deliberately far from

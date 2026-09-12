@@ -46,13 +46,16 @@ template <class... Types> void DebugTrace(const std::wstring_view _fmt, [[maybe_
 /// The breakpoint instruction runs only when a debugger is attached. Without one it raises an
 /// exception nothing handles, and the process dies before the throw below, which on a headless
 /// server is a crash with no message anywhere.
-[[noreturn]] inline void FatalMessage(std::string _message)
+/// By const reference, and thrown as one. `std::runtime_error` has no constructor taking an rvalue
+/// string -- only `const std::string&` and `const char*` -- so a by-value parameter here copies for
+/// nothing and the `std::move` that used to follow it moved nothing.
+[[noreturn]] inline void FatalMessage(const std::string& _message)
 {
   if (IsDebuggerPresent() != FALSE)
   {
     __debugbreak();
   }
-  throw std::runtime_error(std::move(_message));
+  throw std::runtime_error(_message);
 }
 
 template <class... Types> [[noreturn]] void Fatal(const std::format_string<Types...> _fmt, Types&&... _args)
