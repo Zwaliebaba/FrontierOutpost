@@ -38,6 +38,7 @@
 #include "Socket.h"
 
 #include <chrono>
+#include <cstdio>
 #include <memory>
 #include <optional>
 #include <string>
@@ -379,6 +380,57 @@ bool PumpMessages()
 /// on top of a real one, and the file is left where it is for somebody to look at. A store whose
 /// match has finished is the record of that match, not something to resume into: it is moved
 /// aside under a `.finished` name and a new match starts.
+/// Gives `--serve` somewhere to speak, and says whether it got one.
+///
+/// **The dedicated server was mute.** This is a Windows-subsystem binary, so it has no console
+/// unless it asks for one, and every line it produced went to `DebugTrace` -- which is
+/// `OutputDebugStringA` in Debug and `__noop` in Release. A person running the server the way a
+/// server is run therefore saw nothing at all: not the port, not a login, not the reason it
+/// stopped. The match log had it, which is no help to somebody watching a window to see whether
+/// their friends have arrived.
+///
+/// Attached to the launching shell's console when there is one, because that is where the person
+/// who typed the command is looking. A fresh console when there is not -- a double-click, or a
+/// service -- because a window that appears is better than silence, even though it closes with the
+/// process.
+/// **A redirected handle is honored before a console is asked for**, because `--serve > today.txt`
+/// is how anybody would keep a day of it, and a process that attached a console instead would write
+/// to a window and leave the file empty. A Windows-subsystem process inherits its parent's standard
+/// handles exactly as a console one does; what it does not get is a console of its own.
+[[nodiscard]] bool OpenConsole()
+{
+  const HANDLE inherited = GetStdHandle(STD_OUTPUT_HANDLE);
+  if (inherited != nullptr && inherited != INVALID_HANDLE_VALUE)
+  {
+    return true;
+  }
+
+  if (AttachConsole(ATTACH_PARENT_PROCESS) == FALSE && AllocConsole() == FALSE)
+  {
+    return false;
+  }
+
+  const HANDLE opened = GetStdHandle(STD_OUTPUT_HANDLE);
+  return opened != nullptr && opened != INVALID_HANDLE_VALUE;
+}
+
+/// One line to whoever is watching. The match log keeps the permanent copy (ADR-030); this is the
+/// live one, and it is flushed because a server that crashes must not take its last words with it.
+void Say(bool _console, std::string_view _line)
+{
+  // Written to the handle rather than through the CRT's `stdout`. A GUI-subsystem process starts
+  // with the CRT's streams pointing at nothing, and reopening them onto `CONOUT$` would write to a
+  // console even when the caller asked for a file.
+  const HANDLE out = _console ? GetStdHandle(STD_OUTPUT_HANDLE) : INVALID_HANDLE_VALUE;
+  if (out != nullptr && out != INVALID_HANDLE_VALUE)
+  {
+    const std::string text = std::string{_line} + "\r\n";
+    DWORD written = 0;
+    (void)WriteFile(out, text.data(), static_cast<DWORD>(text.size()), &written, nullptr);
+  }
+  Neuron::DebugTrace("{}\n", _line);
+}
+
 /// Where this match's store and log live. One function, because they have to agree: a store found
 /// under one name and a log written under another is a match nobody can read the history of.
 struct MatchPaths
@@ -970,13 +1022,38 @@ int RunGame(HWND _window, const Startup& _startup)
       Neuron::ByteReader reader{connection.Snapshot()};
       const Lockstep::Snapshot snapshot = Lockstep::Snapshot::Read(reader);
 
-      Neuron::ByteReader digestReader{connection.Digest()};
-      const std::vector<Lockstep::DigestEntry> digest = Lockstep::Snapshot::ReadDigest(digestReader);
+      // ---- Everything since this client last looked --------------------------------------------
+      //
+      // **The digests are concatenated, oldest first, and the ones already read are dropped**
+      // (ADR-044). SCREENS.md 01 asks for exactly this -- "digest from `TickLog` + previous unread
+      // ticks" -- and until the server kept more than one there was nothing to concatenate, so a
+      // player who closed a lid overnight was told how many ticks they had missed and shown the
+      // events of only the last of them.
+      //
+      // `drawnTick` is this process's memory, and R13 leaves the client nothing to write: a
+      // restarted client has read nothing and takes the lot. That is honest rather than wrong --
+      // it has not looked at any of this.
+      std::vector<Lockstep::DigestEntry> digest;
+      bool digestsDecoded = true;
+      for (const Neuron::Protocol::TickDigest& carried : connection.Digests())
+      {
+        if (carried.tick <= drawnTick)
+        {
+          continue;
+        }
+
+        Neuron::ByteReader digestReader{carried.bytes};
+        for (Lockstep::DigestEntry& entry : Lockstep::Snapshot::ReadDigest(digestReader))
+        {
+          digest.push_back(std::move(entry));
+        }
+        digestsDecoded = digestsDecoded && !digestReader.Failed() && digestReader.AtEnd();
+      }
 
       // A state that did not decode is not a state. The reader fills a short record with zeros and
       // refuses a byte that names no enumerator, and either way what came out is not what the
       // server sent -- so the screen keeps the last state it could trust rather than drawing this.
-      if (reader.Failed() || !reader.AtEnd() || digestReader.Failed() || !digestReader.AtEnd())
+      if (reader.Failed() || !reader.AtEnd() || !digestsDecoded)
       {
         Neuron::DebugTrace("A state message from the server did not decode; keeping the last one.\n");
       }
@@ -1212,19 +1289,25 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   // place somebody running a headless server is going to look.
   if (startup.role == Role::Serve)
   {
+    const bool console = OpenConsole();
     try
     {
       // Headless has no seats screen to choose with, so a new match keeps the fixed list. ADR-036
       // replaced those for a host who can see a screen; `--serve` is the dedicated server and
       // whoever runs it reads the tokens out of the source exactly as they did before. A resumed
       // match uses the seats it was stored with.
+      const MatchPaths paths = PathsFor(startup);
+      Say(console, std::format("Lockstep server on port {}", startup.port));
+      Say(console, std::format("store {}", paths.store));
+      Say(console, std::format("log   {}", paths.log));
+
       const std::unique_ptr<Lockstep::HostedServer> hosted = StartHostedServer(startup, PhaseZeroTokens());
 
       while (true)
       {
         for (const std::string& line : hosted->TakeLog())
         {
-          Neuron::DebugTrace("{}\n", line);
+          Say(console, line);
         }
 
         // A server thread that has stopped on a fatal has already written why to the match log.
@@ -1232,7 +1315,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
         // exit code, so whatever started it can see that it did.
         if (hosted->Failed())
         {
-          Neuron::DebugTrace("{}\n", hosted->Failure());
+          Say(console, hosted->Failure());
           return EXIT_FAILURE;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -1242,7 +1325,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
     {
       Neuron::MatchLog log{PathsFor(startup).log};
       log.Write(std::string("FATAL ") + error.what());
-      Neuron::DebugTrace("{}\n", error.what());
+      Say(console, std::string("FATAL ") + error.what());
       return EXIT_FAILURE;
     }
   }

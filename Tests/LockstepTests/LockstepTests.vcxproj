@@ -181,6 +181,12 @@
     <ClCompile Include="..\..\Lockstep\JoinPage.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="..\..\Lockstep\DesignTokens.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\Lockstep\MapRender.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\..\Lockstep\MainPage.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>

@@ -86,7 +86,7 @@ void MatchConnection::Reset() noexcept
   m_connectDeadline = 0.0;
   m_player = -1;
   m_snapshot.clear();
-  m_digest.clear();
+  m_digests.clear();
   m_fresh = false;
 }
 
@@ -137,7 +137,7 @@ void MatchConnection::Handle(std::span<const std::uint8_t> _payload)
     return;
 
   case Neuron::MessageKind::State:
-    if (Neuron::Protocol::DecodeState(_payload, m_tick, m_secondsToLock, m_snapshot, m_digest))
+    if (Neuron::Protocol::DecodeState(_payload, m_tick, m_secondsToLock, m_snapshot, m_digests))
     {
       m_fresh = true;
     }

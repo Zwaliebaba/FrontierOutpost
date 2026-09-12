@@ -102,6 +102,7 @@ std::uint32_t Session::Advance(Instant _now)
     }
 
     m_simulation->Resolve();
+    RememberDigests();
     m_contents.ticks.push_back(m_simulation->LockedTurn());
     m_contents.hash = m_simulation->Hash();
     m_contents.finished = m_simulation->IsFinished();
@@ -134,6 +135,35 @@ std::vector<std::uint8_t> Session::SnapshotFor(std::int32_t _player) const
 std::vector<std::uint8_t> Session::DigestFor(std::int32_t _player) const
 {
   return m_simulation->DigestFor(_player);
+}
+
+std::vector<Protocol::TickDigest> Session::DigestsFor(std::int32_t _player) const
+{
+  if (_player < 0 || static_cast<std::size_t>(_player) >= m_digests.size())
+  {
+    return {};
+  }
+  return m_digests[static_cast<std::size_t>(_player)];
+}
+
+void Session::RememberDigests()
+{
+  const std::size_t players = static_cast<std::size_t>(m_simulation->PlayerCount());
+  m_digests.resize(players);
+
+  const std::uint32_t tick = m_simulation->Tick();
+  for (std::size_t player = 0; player < players; ++player)
+  {
+    std::vector<Protocol::TickDigest>& kept = m_digests[player];
+    kept.push_back(Protocol::TickDigest{.tick = tick, .bytes = m_simulation->DigestFor(static_cast<std::int32_t>(player))});
+
+    // Oldest first, so the front is what falls off. A deque would save the shift and cost a
+    // container nobody else in this tree uses, for eight elements four times a day.
+    if (kept.size() > DIGEST_HISTORY)
+    {
+      kept.erase(kept.begin(), kept.begin() + static_cast<std::ptrdiff_t>(kept.size() - DIGEST_HISTORY));
+    }
+  }
 }
 
 void Session::Persist()

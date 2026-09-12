@@ -140,6 +140,8 @@
     <ClCompile Include="SeatsPage.cpp" />
     <ClCompile Include="ConnectionDialog.cpp" />
     <ClCompile Include="HostedServer.cpp" />
+    <ClCompile Include="DesignTokens.cpp" />
+    <ClCompile Include="MapRender.cpp" />
     <ClCompile Include="MainPage.cpp" />
     <ClCompile Include="MatchConnection.cpp" />
     <ClCompile Include="MatchState.cpp" />
@@ -156,6 +158,8 @@
     <ClInclude Include="SeatsPage.h" />
     <ClInclude Include="ConnectionDialog.h" />
     <ClInclude Include="HostedServer.h" />
+    <ClInclude Include="DesignTokens.h" />
+    <ClInclude Include="MapRender.h" />
     <ClInclude Include="MainPage.h" />
     <ClInclude Include="MatchConnection.h" />
     <ClInclude Include="MapView.h" />

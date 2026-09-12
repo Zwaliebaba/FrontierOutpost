@@ -111,7 +111,14 @@ private:
   void Handle(Connection& _connection, std::span<const std::uint8_t> _payload);
   void Flush(Connection& _connection);
   void Send(Connection& _connection, std::span<const std::uint8_t> _payload);
-  void PushState(Connection& _connection, Instant _now);
+  /// Whether a state carries the digests a client may have missed, or only the newest.
+  enum class Backlog : std::uint8_t
+  {
+    Everything,
+    Latest
+  };
+
+  void PushState(Connection& _connection, Instant _now, Backlog _backlog);
   void Log(std::string _line);
 
   [[nodiscard]] std::int32_t PlayerFor(const std::string& _token) const;

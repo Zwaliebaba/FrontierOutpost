@@ -129,6 +129,23 @@ public:
     return false;
   }
 
+  /// The LAST message of a kind. `Find` returns the first, which for a client that has been
+  /// watching several ticks is the state it was welcomed with -- sent before anything had resolved,
+  /// and so the one message guaranteed to say nothing about the match.
+  [[nodiscard]] bool FindLast(Neuron::MessageKind _kind, std::vector<std::uint8_t>& _out) const
+  {
+    bool found = false;
+    for (const std::vector<std::uint8_t>& message : m_received)
+    {
+      if (Neuron::Protocol::KindOf(message) == _kind)
+      {
+        _out = message;
+        found = true;
+      }
+    }
+    return found;
+  }
+
   [[nodiscard]] std::size_t Count(Neuron::MessageKind _kind) const
   {
     std::size_t count = 0;
@@ -290,8 +307,8 @@ public:
     std::vector<std::uint8_t> state;
     Assert::IsTrue(client.Find(Neuron::MessageKind::State, state));
     std::vector<std::uint8_t> snapshot;
-    std::vector<std::uint8_t> digest;
-    Assert::IsTrue(Neuron::Protocol::DecodeState(state, tick, seconds, snapshot, digest));
+    std::vector<Neuron::Protocol::TickDigest> digests;
+    Assert::IsTrue(Neuron::Protocol::DecodeState(state, tick, seconds, snapshot, digests));
     Assert::AreEqual(static_cast<std::int64_t>(SIX_HOURS - AN_HOUR_IN), seconds, L"and so does the state that follows it");
   }
 
@@ -749,6 +766,123 @@ public:
 
     Assert::IsTrue(Mentions(running.server->TakeLog(), "order-edit player=2 this-tick=2"),
                    L"the same tick had two order sets, however many sockets carried them");
+  }
+
+  // ---- What a player who was not looking is owed (ADR-044) --------------------------------------
+
+  /// The digests a client's most recent `State` carried.
+  [[nodiscard]] static std::vector<Neuron::Protocol::TickDigest> DigestsSeen(TestClient& _client)
+  {
+    std::vector<std::uint8_t> state;
+    if (!_client.FindLast(Neuron::MessageKind::State, state))
+    {
+      return {};
+    }
+
+    std::uint32_t tick = 0;
+    std::int64_t seconds = 0;
+    std::vector<std::uint8_t> snapshot;
+    std::vector<Neuron::Protocol::TickDigest> digests;
+    return Neuron::Protocol::DecodeState(state, tick, seconds, snapshot, digests) ? digests : std::vector<Neuron::Protocol::TickDigest>{};
+  }
+
+  TEST_METHOD(AClientThatWasAwayIsSentWhatItMissed)
+  {
+    // **The finding this closes**: a player who closed a lid for a night came back to a count of
+    // the ticks they had missed and the events of only the last one.
+    Running running = Start();
+
+    {
+      TestClient present;
+      Assert::IsTrue(present.Connect(running.server->Port()));
+      present.Send(Neuron::Protocol::EncodeHello("alpha"));
+      Settle(*running.server, present);
+    }
+
+    // Three ticks with nobody watching.
+    for (std::int32_t tick = 1; tick <= 3; ++tick)
+    {
+      (void)running.server->Poll(SIX_HOURS * static_cast<Neuron::Instant>(tick));
+    }
+
+    TestClient returning;
+    Assert::IsTrue(returning.Connect(running.server->Port()));
+    returning.Send(Neuron::Protocol::EncodeHello("alpha"));
+    Settle(*running.server, returning);
+
+    const std::vector<Neuron::Protocol::TickDigest> digests = DigestsSeen(returning);
+    Assert::AreEqual(std::size_t{3}, digests.size(), L"a returning client was not sent the ticks it missed");
+    Assert::AreEqual(1U, digests.front().tick, L"the backlog does not start at the oldest tick kept");
+    Assert::AreEqual(3U, digests.back().tick, L"the backlog does not end at the tick that just resolved");
+  }
+
+  TEST_METHOD(AClientThatStayedGetsOnlyTheNewTick)
+  {
+    // The other half, and the reason the backlog is not simply sent every time: a client that has
+    // been watching already has the rest, and four ticks a day times twelve people is a match
+    // re-sent to everybody who did not miss it.
+    Running running = Start();
+
+    TestClient watching;
+    Assert::IsTrue(watching.Connect(running.server->Port()));
+    watching.Send(Neuron::Protocol::EncodeHello("alpha"));
+    Settle(*running.server, watching);
+
+    for (std::int32_t tick = 1; tick <= 3; ++tick)
+    {
+      (void)running.server->Poll(SIX_HOURS * static_cast<Neuron::Instant>(tick));
+      Settle(*running.server, watching);
+    }
+
+    const std::vector<Neuron::Protocol::TickDigest> digests = DigestsSeen(watching);
+    Assert::AreEqual(std::size_t{1}, digests.size(), L"a client that never left was sent the whole backlog");
+    Assert::AreEqual(3U, digests.front().tick);
+  }
+
+  TEST_METHOD(TheBacklogIsBoundedByWhatTheSessionKeeps)
+  {
+    // A player away longer than the history is shown what is kept and told nothing about the rest.
+    // Bounded on purpose: a three-week match is eighty-four ticks and keeping every digest for
+    // twelve players would be keeping the match twice.
+    Running running = Start();
+
+    {
+      TestClient present;
+      Assert::IsTrue(present.Connect(running.server->Port()));
+      present.Send(Neuron::Protocol::EncodeHello("alpha"));
+      Settle(*running.server, present);
+    }
+
+    const std::uint32_t away = Neuron::Session::DIGEST_HISTORY + 4;
+    for (std::uint32_t tick = 1; tick <= away; ++tick)
+    {
+      (void)running.server->Poll(SIX_HOURS * static_cast<Neuron::Instant>(tick));
+    }
+
+    TestClient returning;
+    Assert::IsTrue(returning.Connect(running.server->Port()));
+    returning.Send(Neuron::Protocol::EncodeHello("alpha"));
+    Settle(*running.server, returning);
+
+    const std::vector<Neuron::Protocol::TickDigest> digests = DigestsSeen(returning);
+    Assert::AreEqual(static_cast<std::size_t>(Neuron::Session::DIGEST_HISTORY), digests.size(),
+                     L"the backlog is not bounded by what the session keeps");
+    Assert::AreEqual(away, digests.back().tick, L"the newest tick is not the one that just resolved");
+    Assert::AreEqual(away - Neuron::Session::DIGEST_HISTORY + 1, digests.front().tick, L"the oldest kept tick is wrong");
+  }
+
+  TEST_METHOD(ABacklogArrivesBeforeTheFirstTick)
+  {
+    // A client joining a match that has resolved nothing gets a state with no digest in it at all,
+    // which is not the same as a digest with nothing in it: there has been no tick to report.
+    Running running = Start();
+
+    TestClient early;
+    Assert::IsTrue(early.Connect(running.server->Port()));
+    early.Send(Neuron::Protocol::EncodeHello("alpha"));
+    Settle(*running.server, early);
+
+    Assert::IsTrue(DigestsSeen(early).empty(), L"a match with no resolved tick produced a digest");
   }
 };
 

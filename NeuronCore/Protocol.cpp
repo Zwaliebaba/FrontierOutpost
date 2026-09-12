@@ -197,19 +197,25 @@ bool DecodeOrders(std::span<const std::uint8_t> _payload, std::vector<std::uint8
 }
 
 std::vector<std::uint8_t> EncodeState(std::uint32_t _tick, std::int64_t _secondsToLock, std::span<const std::uint8_t> _snapshot,
-                                      std::span<const std::uint8_t> _digest)
+                                      std::span<const TickDigest> _digests)
 {
   ByteWriter writer;
   writer.WriteU8(static_cast<std::uint8_t>(MessageKind::State));
   writer.WriteU32(_tick);
   writer.WriteU64(static_cast<std::uint64_t>(_secondsToLock));
   WriteBlob(writer, _snapshot);
-  WriteBlob(writer, _digest);
+
+  writer.WriteU32(static_cast<std::uint32_t>(_digests.size()));
+  for (const TickDigest& digest : _digests)
+  {
+    writer.WriteU32(digest.tick);
+    WriteBlob(writer, digest.bytes);
+  }
   return writer.Bytes();
 }
 
 bool DecodeState(std::span<const std::uint8_t> _payload, std::uint32_t& _outTick, std::int64_t& _outSecondsToLock,
-                 std::vector<std::uint8_t>& _outSnapshot, std::vector<std::uint8_t>& _outDigest)
+                 std::vector<std::uint8_t>& _outSnapshot, std::vector<TickDigest>& _outDigests)
 {
   bool ok = false;
   ByteReader reader = Opened(_payload, MessageKind::State, ok);
@@ -220,7 +226,33 @@ bool DecodeState(std::span<const std::uint8_t> _payload, std::uint32_t& _outTick
 
   _outTick = reader.ReadU32();
   _outSecondsToLock = static_cast<std::int64_t>(reader.ReadU64());
-  return ReadBlob(reader, _outSnapshot) && ReadBlob(reader, _outDigest) && reader.AtEnd();
+  if (!ReadBlob(reader, _outSnapshot))
+  {
+    return false;
+  }
+
+  // The count is checked against a constant before it is used to reserve anything. A peer that
+  // says four billion digests is a peer, not a server, and this is the allocation it would like.
+  const std::uint32_t count = reader.ReadU32();
+  if (reader.Failed() || count > MAXIMUM_DIGESTS)
+  {
+    return false;
+  }
+
+  _outDigests.clear();
+  _outDigests.reserve(count);
+  for (std::uint32_t index = 0; index < count; ++index)
+  {
+    TickDigest digest;
+    digest.tick = reader.ReadU32();
+    if (!ReadBlob(reader, digest.bytes))
+    {
+      return false;
+    }
+    _outDigests.push_back(std::move(digest));
+  }
+
+  return reader.AtEnd();
 }
 
 std::vector<std::uint8_t> EncodePing()

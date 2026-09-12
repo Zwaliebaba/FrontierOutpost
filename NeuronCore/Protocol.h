@@ -77,10 +77,27 @@ namespace Protocol
 [[nodiscard]] std::vector<std::uint8_t> EncodeOrders(std::span<const std::uint8_t> _orderSet);
 [[nodiscard]] bool DecodeOrders(std::span<const std::uint8_t> _payload, std::vector<std::uint8_t>& _outOrderSet);
 
+/// One resolved tick's digest, and which tick it is.
+///
+/// **A `State` carries a LIST of these** (ADR-044). It used to carry one, which was right while a
+/// client was assumed to be watching: the digest was always the tick that had just resolved and the
+/// tick number was the message's own. A client coming back after a night is owed the ones it
+/// missed, and a digest with no tick on it cannot be filed against what the player last read.
+struct TickDigest
+{
+  std::uint32_t tick = 0;
+  std::vector<std::uint8_t> bytes;
+};
+
+/// The digests a `State` may carry. Bounded on the wire because it is bounded at the server
+/// (`Session::DIGEST_HISTORY`), and a decoder that trusted a count from a peer would be a decoder
+/// that allocates whatever it is told to.
+inline constexpr std::uint32_t MAXIMUM_DIGESTS = 32;
+
 [[nodiscard]] std::vector<std::uint8_t> EncodeState(std::uint32_t _tick, std::int64_t _secondsToLock,
-                                                    std::span<const std::uint8_t> _snapshot, std::span<const std::uint8_t> _digest);
+                                                    std::span<const std::uint8_t> _snapshot, std::span<const TickDigest> _digests);
 [[nodiscard]] bool DecodeState(std::span<const std::uint8_t> _payload, std::uint32_t& _outTick, std::int64_t& _outSecondsToLock,
-                               std::vector<std::uint8_t>& _outSnapshot, std::vector<std::uint8_t>& _outDigest);
+                               std::vector<std::uint8_t>& _outSnapshot, std::vector<TickDigest>& _outDigests);
 
 [[nodiscard]] std::vector<std::uint8_t> EncodePing();
 

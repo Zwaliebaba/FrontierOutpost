@@ -225,18 +225,25 @@ public:
     }
     {
       const std::vector<std::uint8_t> snapshot = Bytes({1, 1, 2, 3, 5, 8});
-      const std::vector<std::uint8_t> digest = Bytes({9, 9});
+      const std::vector<Neuron::Protocol::TickDigest> digests = {{.tick = 11, .bytes = Bytes({9, 9})}, {.tick = 12, .bytes = Bytes({8})}};
       std::uint32_t tick = 0;
       std::int64_t seconds = 0;
       std::vector<std::uint8_t> outSnapshot;
-      std::vector<std::uint8_t> outDigest;
+      std::vector<Neuron::Protocol::TickDigest> outDigests;
 
       Assert::IsTrue(
-        Neuron::Protocol::DecodeState(Neuron::Protocol::EncodeState(12, 900, snapshot, digest), tick, seconds, outSnapshot, outDigest));
+        Neuron::Protocol::DecodeState(Neuron::Protocol::EncodeState(12, 900, snapshot, digests), tick, seconds, outSnapshot, outDigests));
       Assert::AreEqual(12U, tick);
       Assert::AreEqual(static_cast<std::int64_t>(900), seconds);
       Assert::AreEqual(snapshot.size(), outSnapshot.size());
-      Assert::AreEqual(digest.size(), outDigest.size());
+
+      // Each digest keeps the tick it belongs to, which is the point of carrying several: a client
+      // files them against what it last read (ADR-044).
+      Assert::AreEqual(std::size_t{2}, outDigests.size());
+      Assert::AreEqual(11U, outDigests[0].tick);
+      Assert::AreEqual(std::size_t{2}, outDigests[0].bytes.size());
+      Assert::AreEqual(12U, outDigests[1].tick);
+      Assert::AreEqual(std::size_t{1}, outDigests[1].bytes.size());
     }
   }
 
@@ -267,16 +274,17 @@ public:
 
   TEST_METHOD(ATruncatedMessageIsRefused)
   {
-    const std::vector<std::uint8_t> state = Neuron::Protocol::EncodeState(5, 10, Bytes({1, 2, 3, 4, 5, 6, 7, 8}), Bytes({9}));
+    const std::vector<Neuron::Protocol::TickDigest> carried = {{.tick = 5, .bytes = Bytes({9})}};
+    const std::vector<std::uint8_t> state = Neuron::Protocol::EncodeState(5, 10, Bytes({1, 2, 3, 4, 5, 6, 7, 8}), carried);
 
     for (std::size_t cut = 0; cut < state.size(); ++cut)
     {
       std::uint32_t tick = 0;
       std::int64_t seconds = 0;
       std::vector<std::uint8_t> snapshot;
-      std::vector<std::uint8_t> digest;
+      std::vector<Neuron::Protocol::TickDigest> digests;
 
-      Assert::IsFalse(Neuron::Protocol::DecodeState(std::span{state.data(), cut}, tick, seconds, snapshot, digest),
+      Assert::IsFalse(Neuron::Protocol::DecodeState(std::span{state.data(), cut}, tick, seconds, snapshot, digests),
                       (std::wstring(L"accepted a message cut at ") + std::to_wstring(cut)).c_str());
     }
   }
@@ -349,8 +357,8 @@ public:
       (void)Neuron::Protocol::DecodeOrders(noise, orders);
 
       std::vector<std::uint8_t> snapshot;
-      std::vector<std::uint8_t> digest;
-      (void)Neuron::Protocol::DecodeState(noise, tick, seconds, snapshot, digest);
+      std::vector<Neuron::Protocol::TickDigest> digests;
+      (void)Neuron::Protocol::DecodeState(noise, tick, seconds, snapshot, digests);
 
       // Surviving is the assertion. What is being tested is the absence of a crash and of a read
       // past the end, neither of which a return value can express.

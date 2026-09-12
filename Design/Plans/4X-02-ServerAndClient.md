@@ -470,12 +470,13 @@ machines have still not played a tick. Everything else in this document has happ
 
 1. **Two machines, one match, one tick.** Unchanged, and still the only thing that needs people.
    Everything is verified on loopback.
-2. **A reconnecting player is not sent the digests they missed.** The server keeps the latest only
-   (ADR-028's open question, restated by ADR-042). A player who closes a lid for a night comes back
-   to a tick count and no account of it. Screen 08 is drawn and waiting on the same thing.
+2. ~~**A reconnecting player is not sent the digests they missed.**~~ **Done 2026-09-12, ADR-044:**
+   the session keeps eight ticks of digest per player and sends the backlog on arrival. Screen 08's
+   tabs are now buildable and are not built.
 3. **`getaddrinfo` still blocks** on a hostname, though the connect no longer does (ADR-043). Six
    people typing a dotted address are unaffected; six people typing a name are not.
-4. **The remaining nine items** of the codebase review's §4, in its order — a client library, one
+4. **The remaining seven items** of the codebase review's §4 -- items 1, 2, 5 and 11 are done
+   (ADR-043, ADR-044, ADR-045), and so is the console its §2 asked for — a client library, one
    bidirectional serialize function, sanitizers, idle throttling, IPv6, Release in CI, matches per
    server.
 

@@ -161,23 +161,14 @@ private:
   void DrawTopBar(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawDigestRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   [[nodiscard]] static Action ActionFor(EventActionKind _kind) noexcept;
-  void DrawMap(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawLocksRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
-  void DrawSystem(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, std::int32_t _index);
-  void DrawFleet(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, std::int32_t _index);
 
   /// A circle lying ON the ground plane, projected. Shadows and the sealed region are both this:
   /// what shape they make on screen is the camera's business, not theirs (ADR-017).
-  void DrawGroundCircle(Neuron::ShapeRenderer& _shapes, float _designX, float _designY, float _radius, const Neuron::Color& _fill,
-                        const Neuron::Color& _outline, bool _dashed, float _height = 0.0F);
   void DrawPanel(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
   /// Text centred on a point, snapped to a whole pixel. Every centred label on the map goes
   /// through this so that none of them lands on a half pixel.
-  static void DrawCentered(Neuron::FontRenderer& _text, float _centerXPixels, std::int32_t _yPixels, std::string_view _string,
-                           const Neuron::Color& _color, std::uint32_t _scale = Neuron::FontRenderer::DEFAULT_SCALE);
-  static void DrawRight(Neuron::FontRenderer& _text, float _rightXPixels, std::int32_t _yPixels, std::string_view _string,
-                        const Neuron::Color& _color, std::uint32_t _scale = Neuron::FontRenderer::DEFAULT_SCALE);
 
   MatchState m_state;
 

@@ -14,6 +14,8 @@
     <ClCompile Include="..\..\Lockstep\ConnectionDialog.cpp" />
     <ClCompile Include="..\..\Lockstep\SeatsPage.cpp" />
     <ClCompile Include="..\..\Lockstep\JoinPage.cpp" />
+    <ClCompile Include="..\..\Lockstep\DesignTokens.cpp" />
+    <ClCompile Include="..\..\Lockstep\MapRender.cpp" />
     <ClCompile Include="..\..\Lockstep\MainPage.cpp" />
   </ItemGroup>
   <ItemGroup>

@@ -128,14 +128,19 @@ public:
     return m_secondsToLock;
   }
 
-  /// The latest snapshot and digest, as bytes. Empty until the first `State` arrives.
+  /// The latest snapshot, as bytes. Empty until the first `State` arrives.
   [[nodiscard]] const std::vector<std::uint8_t>& Snapshot() const noexcept
   {
     return m_snapshot;
   }
-  [[nodiscard]] const std::vector<std::uint8_t>& Digest() const noexcept
+  /// Every digest the last `State` carried, oldest first.
+  ///
+  /// **One on an ordinary tick, and as many as the server kept on arrival** (ADR-044). A client
+  /// that has been watching gets the tick that just resolved; one that has been away gets what it
+  /// missed, which is the whole point of the server keeping them.
+  [[nodiscard]] const std::vector<Neuron::Protocol::TickDigest>& Digests() const noexcept
   {
-    return m_digest;
+    return m_digests;
   }
 
   /// True once, after each new state arrives, so the caller knows to rebuild the screen rather
@@ -196,7 +201,7 @@ private:
   std::int64_t m_secondsToLock = 0;
 
   std::vector<std::uint8_t> m_snapshot;
-  std::vector<std::uint8_t> m_digest;
+  std::vector<Neuron::Protocol::TickDigest> m_digests;
   bool m_fresh = false;
 
   /// Kept so a reconnect needs nothing from the caller.

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MatchStore.h"
+#include "Protocol.h"
 #include "Simulation.h"
 #include "TickSchedule.h"
 
@@ -89,8 +90,26 @@ public:
   /// The game's instrumentation for the ticks just resolved, taken and cleared.
   [[nodiscard]] std::vector<std::string> TakeEvents();
 
+  /// How many ticks of digest the session keeps for a returning player.
+  ///
+  /// **Eight, which is two days at the authored four locks a day** (ADR-044). Not unbounded: a
+  /// three-week match is eighty-four ticks and a server that kept every digest for twelve players
+  /// would be keeping the match twice, once as orders in the store and once as prose. Not one,
+  /// which is what it used to be and which meant a player who closed a lid overnight came back to a
+  /// count of what they had missed and no account of it.
+  ///
+  /// A player away longer than this is told how many ticks they missed and shown the eight most
+  /// recent. That is a worse answer than all of them and a much better one than a number.
+  static constexpr std::uint32_t DIGEST_HISTORY = 8;
+
   [[nodiscard]] std::vector<std::uint8_t> SnapshotFor(std::int32_t _player) const;
   [[nodiscard]] std::vector<std::uint8_t> DigestFor(std::int32_t _player) const;
+
+  /// Every digest still held for a player, oldest first, at most `DIGEST_HISTORY`.
+  ///
+  /// Empty before the first tick resolves, which is not the same as a tick with nothing in it: a
+  /// match at tick zero has produced no digest at all and a client must not draw one.
+  [[nodiscard]] std::vector<Protocol::TickDigest> DigestsFor(std::int32_t _player) const;
 
   /// How many ticks this session has resolved since it was constructed. Distinct from the
   /// simulation's tick, which counts a reloaded match's replayed ticks too.
@@ -109,11 +128,20 @@ public:
 private:
   void Persist();
 
+  /// Files the digest of the tick that just resolved, for every player, and drops the oldest.
+  void RememberDigests();
+
   std::unique_ptr<Simulation> m_simulation;
   TickSchedule m_schedule;
   std::string m_storePath;
 
   MatchStore::Contents m_contents;
+
+  /// The last `DIGEST_HISTORY` ticks' digests, per player, oldest first. Captured as each tick
+  /// resolves, because a digest is made from the `TickLog` of the tick that just ran and there is
+  /// no way back to an earlier one once the next has replaced it.
+  std::vector<std::vector<Protocol::TickDigest>> m_digests;
+
   std::uint32_t m_resolvedHere = 0;
   bool m_persisted = true;
 };

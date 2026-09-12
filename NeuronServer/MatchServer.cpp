@@ -243,7 +243,8 @@ void MatchServer::Handle(Connection& _connection, std::span<const std::uint8_t> 
     // without waiting up to six hours for the next lock. Stamped with the poll's instant: a
     // countdown measured from zero is the lock's absolute time, and a client that joined an hour
     // into a tick would count down the whole interval again.
-    PushState(_connection, m_now);
+    // Everything it may have missed, which is what a reconnect after a closed lid is for.
+    PushState(_connection, m_now, Backlog::Everything);
     return;
   }
 
@@ -374,7 +375,7 @@ void MatchServer::Flush(Connection& _connection)
   }
 }
 
-void MatchServer::PushState(Connection& _connection, Instant _now)
+void MatchServer::PushState(Connection& _connection, Instant _now, Backlog _backlog)
 {
   if (m_session == nullptr)
   {
@@ -386,8 +387,17 @@ void MatchServer::PushState(Connection& _connection, Instant _now)
     return;
   }
 
+  // **The whole backlog on arrival, the newest tick on every tick after** (ADR-044). A client that
+  // has been watching already has the rest, and sending them again four times a day to twelve
+  // people would be re-sending a match nobody missed.
+  std::vector<Protocol::TickDigest> digests = m_session->DigestsFor(_connection.player);
+  if (_backlog == Backlog::Latest && digests.size() > 1)
+  {
+    digests.erase(digests.begin(), digests.end() - 1);
+  }
+
   Send(_connection, Protocol::EncodeState(m_session->Match().Tick(), m_session->SecondsUntilNextLock(_now),
-                                          m_session->SnapshotFor(_connection.player), m_session->DigestFor(_connection.player)));
+                                          m_session->SnapshotFor(_connection.player), digests));
 }
 
 std::uint32_t MatchServer::Poll(Instant _now)
@@ -451,7 +461,7 @@ std::uint32_t MatchServer::Poll(Instant _now)
     {
       if (connection.player >= 0 && !connection.closing)
       {
-        PushState(connection, _now);
+        PushState(connection, _now, Backlog::Latest);
       }
     }
     m_pushedTick = m_session->Match().Tick();
