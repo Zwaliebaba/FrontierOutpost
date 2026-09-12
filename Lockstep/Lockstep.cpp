@@ -30,6 +30,8 @@
 #include "ShapeRenderer.h"
 
 #include "HostedServer.h"
+#include "MatchLog.h"
+#include "MatchStore.h"
 #include "MainPage.h"
 #include "ConnectionDialog.h"
 #include "JoinPage.h"
@@ -80,6 +82,9 @@ struct Startup
   std::string host = "127.0.0.1";
   std::uint16_t port = 7341;
   std::string token = "alpha";
+  /// Whether `--token` was given. A resumed match offers the host its first stored seat unless the
+  /// command line chose one.
+  bool tokenGiven = false;
   /// `--phase0` runs the test plan's Phase 0 setup: six players, an hourly tick, forty-eight hours.
   /// Without it the defaults are the production three-week match, which nobody is going to sit
   /// through to find a broken mechanic.
@@ -221,6 +226,7 @@ struct Startup
     else if (words[index] == "--token" && index + 1 < words.size())
     {
       startup.token = words[++index];
+      startup.tokenGiven = true;
     }
     else if (words[index] == "--phase0")
     {
@@ -353,12 +359,59 @@ bool PumpMessages()
   return !g_quitRequested;
 }
 
+/// The match store beside the executable, if there is a match in it to resume (ADR-042).
+///
+/// Three answers. No file means a new match. A file that is not a store, or is cut short, is a
+/// fatal: ADR-024 is explicit that a corrupt store must fail loudly rather than start an empty match
+/// on top of a real one, and the file is left where it is for somebody to look at. A store whose
+/// match has finished is the record of that match, not something to resume into: it is moved
+/// aside under a `.finished` name and a new match starts.
+[[nodiscard]] std::optional<Neuron::MatchStore::Contents> LoadStoredMatch(const std::string& _storePath)
+{
+  Neuron::MatchStore::Contents contents;
+  const Neuron::MatchStore::Problem problem = Neuron::MatchStore::Load(_storePath, contents);
+
+  if (problem == Neuron::MatchStore::Problem::NotFound)
+  {
+    return std::nullopt;
+  }
+  if (problem != Neuron::MatchStore::Problem::None)
+  {
+    Neuron::Fatal("The match store at {} could not be read: {}. It has been left as it is; move it aside to start a new match.", _storePath,
+                  Neuron::MatchStore::Describe(problem));
+  }
+
+  if (contents.finished)
+  {
+    const std::wstring from = Neuron::Utf8ToWide(_storePath);
+    const std::wstring to = from + L".finished";
+    (void)_wremove(to.c_str());
+    if (_wrename(from.c_str(), to.c_str()) != 0)
+    {
+      Neuron::Fatal("The match store at {} holds a finished match and could not be moved aside.", _storePath);
+    }
+    Neuron::DebugTrace("The stored match had finished; it is kept as {}.finished and a new match starts.\n", _storePath);
+    return std::nullopt;
+  }
+
+  return contents;
+}
+
 /// Builds the match server. One function because two callers need it and they must not drift: the
 /// headless `--serve` path starts one before any window exists, and the host's path starts one
 /// after the seats screen has decided how many seats there are (ADR-036).
 [[nodiscard]] std::unique_ptr<Lockstep::HostedServer> StartHostedServer(const Startup& _startup, std::vector<std::string> _tokens)
 {
   constexpr std::uint64_t GALAXY_SEED = 0x4652'4F4E'5449'4552ULL;
+
+  // A stored match resumes, whatever the command line said about rules: the rules are in the store
+  // and the match was played under them (ADR-042).
+  const std::string storePath = BesideTheExecutable("lockstep-match.store");
+  const std::string logPath = BesideTheExecutable("lockstep-match.log");
+  if (std::optional<Neuron::MatchStore::Contents> stored = LoadStoredMatch(storePath))
+  {
+    return std::make_unique<Lockstep::HostedServer>(_startup.port, std::move(*stored), storePath, logPath);
+  }
 
   Lockstep::MatchRules rules = _startup.phaseZero ? Lockstep::PhaseZeroRules() : Lockstep::MatchRules{};
   if (_startup.tickSeconds > 0)
@@ -382,8 +435,8 @@ bool PumpMessages()
     bots[seat] = Lockstep::BotPolicy::ExpandNear;
   }
 
-  return std::make_unique<Lockstep::HostedServer>(_startup.port, std::move(_tokens), BesideTheExecutable("lockstep-match.store"),
-                                                  BesideTheExecutable("lockstep-match.log"), GALAXY_SEED, rules, std::move(bots));
+  return std::make_unique<Lockstep::HostedServer>(_startup.port, std::move(_tokens), storePath, logPath, GALAXY_SEED, rules,
+                                                  std::move(bots));
 }
 
 /// The seats screen, in its own frame loop, until the host enters the match or closes the window.
@@ -700,11 +753,26 @@ int RunGame(HWND _window, const Startup& _startup)
 
   if (_startup.role == Role::HostAndPlay)
   {
-    seatTokens = Lockstep::GenerateSeatTokens(Lockstep::SeatsPage::SEAT_COUNT);
-    hostToken = seatTokens.front();
+    const std::string storePath = BesideTheExecutable("lockstep-match.store");
+    const std::string logPath = BesideTheExecutable("lockstep-match.log");
 
-    hosted = std::make_unique<Lockstep::HostedServer>(_startup.port, seatTokens, BesideTheExecutable("lockstep-match.store"),
-                                                      BesideTheExecutable("lockstep-match.log"));
+    // A match already in the store resumes, with the seats it was played with (ADR-042). The host
+    // takes the first stored seat unless the command line named one; there is no seats screen to
+    // choose from, because the seats were chosen when the match began.
+    if (std::optional<Neuron::MatchStore::Contents> stored = LoadStoredMatch(storePath))
+    {
+      if (!_startup.tokenGiven && !stored->tokens.empty())
+      {
+        hostToken = stored->tokens.front();
+      }
+      hosted = std::make_unique<Lockstep::HostedServer>(_startup.port, std::move(*stored), storePath, logPath);
+    }
+    else
+    {
+      seatTokens = Lockstep::GenerateSeatTokens(Lockstep::SeatsPage::SEAT_COUNT);
+      hostToken = seatTokens.front();
+      hosted = std::make_unique<Lockstep::HostedServer>(_startup.port, seatTokens, storePath, logPath);
+    }
 
     // The lobby has to be listening before there is any point drawing a screen that asks people to
     // join it. A port that could not be bound is a fatal here, where the composition root turns it
@@ -788,8 +856,9 @@ int RunGame(HWND _window, const Startup& _startup)
   // ---- The host arranges the match, now that they are logged in ---------------------------------
   //
   // Seats after login, which is the order the owner asked for and the only one in which the screen
-  // can say who is here. `ENTER MATCH` waits for every human seat to be connected.
-  if (hosted != nullptr)
+  // can say who is here. `ENTER MATCH` waits for every human seat to be connected. A resumed match
+  // has its seats already and skips this.
+  if (hosted != nullptr && !hosted->Resumed())
   {
     std::vector<std::string> playing;
     std::vector<std::optional<Lockstep::BotPolicy>> bots;
@@ -1098,37 +1167,47 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   // R13 binds the shipped client and names the match store as its one exception (ADR-024). With one
   // executable in two roles the rule is about the ROLE and not the binary: a process acting as the
   // server writes a store, and a process that is only a client never does.
-  std::unique_ptr<Lockstep::HostedServer> hosted;
-  if (startup.role == Role::Serve)
-  {
-    // Headless has no seats screen to choose with, so it keeps the fixed list. ADR-036 replaced
-    // those for a host who can see a screen; `--serve` is the dedicated server and whoever runs it
-    // reads the tokens out of the source exactly as they did before.
-    hosted = StartHostedServer(startup, PhaseZeroTokens());
-  }
-
   // ---- Headless -------------------------------------------------------------------------------
   //
   // `--serve` draws nothing and runs until it is killed. It is the dedicated server and it is also
   // the headless runner: a match resolving on a schedule with nobody watching.
+  //
+  // A fatal on this path has no window to be shown in, so it goes to the match log -- the one
+  // place somebody running a headless server is going to look.
   if (startup.role == Role::Serve)
   {
-    while (true)
+    try
     {
-      for (const std::string& line : hosted->TakeLog())
-      {
-        Neuron::DebugTrace("{}\n", line);
-      }
+      // Headless has no seats screen to choose with, so a new match keeps the fixed list. ADR-036
+      // replaced those for a host who can see a screen; `--serve` is the dedicated server and
+      // whoever runs it reads the tokens out of the source exactly as they did before. A resumed
+      // match uses the seats it was stored with.
+      const std::unique_ptr<Lockstep::HostedServer> hosted = StartHostedServer(startup, PhaseZeroTokens());
 
-      // A server thread that has stopped on a fatal has already written why to the match log. What
-      // is left is to not sit here forever looking alive: the process ends, with a failing exit
-      // code, so whatever started it can see that it did.
-      if (hosted->Failed())
+      while (true)
       {
-        Neuron::DebugTrace("{}\n", hosted->Failure());
-        return EXIT_FAILURE;
+        for (const std::string& line : hosted->TakeLog())
+        {
+          Neuron::DebugTrace("{}\n", line);
+        }
+
+        // A server thread that has stopped on a fatal has already written why to the match log.
+        // What is left is to not sit here forever looking alive: the process ends, with a failing
+        // exit code, so whatever started it can see that it did.
+        if (hosted->Failed())
+        {
+          Neuron::DebugTrace("{}\n", hosted->Failure());
+          return EXIT_FAILURE;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    catch (const std::exception& error)
+    {
+      Neuron::MatchLog log{BesideTheExecutable("lockstep-match.log")};
+      log.Write(std::string("FATAL ") + error.what());
+      Neuron::DebugTrace("{}\n", error.what());
+      return EXIT_FAILURE;
     }
   }
 

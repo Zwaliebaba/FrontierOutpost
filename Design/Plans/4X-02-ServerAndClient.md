@@ -68,7 +68,8 @@ draws real state, and the server's log answers every question the test plan's Ph
 each player logged in, what they ordered, what resolved, and what they saw.
 
 A server restarted mid-match resumes it, and says so: the replayed hash matches the one it last
-wrote. A client reconnecting gets the current snapshot without the server having kept anything
+wrote. **Until 2026-09-12 this sentence was not true of the executable** — the store was written
+and never read, and the schedule ran on a process-relative clock. ADR-042 records what was wired. A client reconnecting gets the current snapshot without the server having kept anything
 about that client.
 
 Not in "done": more than one match per server process, matchmaking, accounts that outlive a match,
@@ -359,7 +360,9 @@ With that, **every item on the test plan's instrumentation list is produced by s
 
 **5. Phase parameters** — `PhaseZeroRules()` and `--phase0`.
 
-**6. The host leaving** — unchanged, and still a thing to say out loud.
+**6. The host leaving** — the store resumes the match when the host starts again, on the same
+schedule and with the same seats (ADR-042, 2026-09-12). The other five are disconnected until
+then, which is still a thing to say out loud.
 
 ### `--tick <seconds>`, and why a rehearsal was worth it
 

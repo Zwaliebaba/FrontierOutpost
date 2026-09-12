@@ -1,6 +1,6 @@
 # ADR-024 — A match is a seed and its orders, and the server may write one file
 
-**Status:** Accepted
+**Status:** Accepted — the open questions on where the file lives, what a missing or corrupt store does, and how a match ends its file are closed by ADR-042 (2026-09-12).
 
 **Date:** 2026-09-11
 **Decided by:** **Owner decision, 2026-09-11**, choosing between the three options offered at the close of `4X-01`. This is the decision `4X-02-ServerAndClient.md` §2 names as blocking its first step.

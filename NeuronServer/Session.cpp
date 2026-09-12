@@ -10,7 +10,7 @@
 namespace Neuron
 {
 
-Session::Session(std::unique_ptr<Simulation> _simulation, TickSchedule _schedule, std::string _storePath)
+Session::Session(std::unique_ptr<Simulation> _simulation, TickSchedule _schedule, std::string _storePath, std::vector<std::string> _tokens)
   : m_simulation(std::move(_simulation)),
     m_schedule(_schedule),
     m_storePath(std::move(_storePath))
@@ -18,6 +18,10 @@ Session::Session(std::unique_ptr<Simulation> _simulation, TickSchedule _schedule
   ASSERT_TEXT(m_simulation != nullptr, L"A session without a simulation has nothing to run.");
   m_contents.configuration = m_simulation->Configuration();
   m_contents.hash = m_simulation->Hash();
+  m_contents.startedAt = m_schedule.StartedAt();
+  m_contents.intervalSeconds = m_schedule.IntervalSeconds();
+  m_contents.finished = m_simulation->IsFinished();
+  m_contents.tokens = std::move(_tokens);
 }
 
 bool Session::Reload(Simulation& _simulation, const MatchStore::Contents& _contents)
@@ -44,6 +48,25 @@ bool Session::Reload(Simulation& _simulation, const MatchStore::Contents& _conte
   // The check ADR-024 rests on. A store replayed into a different state than it was written from
   // means the rules have moved under a live match, and the only safe thing to do is refuse.
   return _simulation.Hash() == _contents.hash;
+}
+
+std::unique_ptr<Session> Session::Resume(std::unique_ptr<Simulation> _simulation, const MatchStore::Contents& _contents,
+                                         std::string _storePath)
+{
+  ASSERT_TEXT(_simulation != nullptr, L"Resuming into no simulation resumes nothing.");
+  if (!Reload(*_simulation, _contents))
+  {
+    return nullptr;
+  }
+
+  auto session = std::make_unique<Session>(std::move(_simulation), TickSchedule{_contents.startedAt, _contents.intervalSeconds},
+                                           std::move(_storePath), _contents.tokens);
+
+  // The stored turns are kept, so that the next persist writes the whole history and not a match
+  // that appears to have begun at the restart. The hash is the replayed one, which Reload has just
+  // shown to be the stored one.
+  session->m_contents = _contents;
+  return session;
 }
 
 void Session::MarkPresent(std::int32_t _player)
@@ -81,6 +104,7 @@ std::uint32_t Session::Advance(Instant _now)
     m_simulation->Resolve();
     m_contents.ticks.push_back(m_simulation->LockedTurn());
     m_contents.hash = m_simulation->Hash();
+    m_contents.finished = m_simulation->IsFinished();
     ++resolved;
     ++m_resolvedHere;
 

@@ -39,6 +39,16 @@ std::vector<std::uint8_t> MatchStore::Encode(const Contents& _contents)
   writer.WriteU32(VERSION);
   writer.WriteU64(_contents.hash);
 
+  writer.WriteU64(static_cast<std::uint64_t>(_contents.startedAt));
+  writer.WriteU32(_contents.intervalSeconds);
+  writer.WriteBool(_contents.finished);
+
+  writer.WriteU32(static_cast<std::uint32_t>(_contents.tokens.size()));
+  for (const std::string& token : _contents.tokens)
+  {
+    writer.WriteString(token);
+  }
+
   writer.WriteU32(static_cast<std::uint32_t>(_contents.configuration.size()));
   for (const std::uint8_t byte : _contents.configuration)
   {
@@ -79,6 +89,26 @@ MatchStore::Problem MatchStore::Decode(std::span<const std::uint8_t> _bytes, Con
   }
 
   _outContents.hash = reader.ReadU64();
+
+  _outContents.startedAt = static_cast<Instant>(reader.ReadU64());
+  _outContents.intervalSeconds = reader.ReadU32();
+  _outContents.finished = reader.ReadBool();
+
+  const std::uint32_t tokenCount = reader.ReadU32();
+  if (reader.Failed() || tokenCount > MAXIMUM_PLAYERS)
+  {
+    return Problem::Truncated;
+  }
+  _outContents.tokens.reserve(tokenCount);
+  for (std::uint32_t index = 0; index < tokenCount; ++index)
+  {
+    std::string token = reader.ReadString();
+    if (reader.Failed() || token.size() > Protocol::MAXIMUM_TOKEN_LENGTH)
+    {
+      return Problem::Truncated;
+    }
+    _outContents.tokens.push_back(std::move(token));
+  }
 
   const std::uint32_t configurationSize = reader.ReadU32();
   if (reader.Failed() || configurationSize > MAXIMUM_BLOB_BYTES || configurationSize > reader.Remaining())

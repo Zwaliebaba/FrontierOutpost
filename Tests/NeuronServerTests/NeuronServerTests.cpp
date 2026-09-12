@@ -146,6 +146,10 @@ public:
     Neuron::MatchStore::Contents contents;
     contents.configuration = {1, 2, 3, 4, 5};
     contents.hash = 0xABCDEF0123456789ULL;
+    contents.startedAt = 1'757'700'000;
+    contents.intervalSeconds = SIX_HOUR_INTERVAL;
+    contents.finished = false;
+    contents.tokens = {"ABCD-EFGH", "JKLM-NPQR", "STUV-WXYZ", "2345-6789"};
 
     for (std::uint32_t tick = 0; tick < 3; ++tick)
     {
@@ -168,6 +172,14 @@ public:
   static void AssertSame(const Neuron::MatchStore::Contents& _expected, const Neuron::MatchStore::Contents& _actual)
   {
     Assert::AreEqual(_expected.hash, _actual.hash);
+    Assert::AreEqual(_expected.startedAt, _actual.startedAt, L"the schedule's anchor survives, or a restart cannot owe its locks");
+    Assert::AreEqual(_expected.intervalSeconds, _actual.intervalSeconds);
+    Assert::AreEqual(_expected.finished, _actual.finished);
+    Assert::AreEqual(_expected.tokens.size(), _actual.tokens.size());
+    for (std::size_t index = 0; index < _expected.tokens.size(); ++index)
+    {
+      Assert::AreEqual(_expected.tokens[index], _actual.tokens[index]);
+    }
     Assert::AreEqual(_expected.configuration.size(), _actual.configuration.size());
     Assert::AreEqual(_expected.ticks.size(), _actual.ticks.size());
 
@@ -511,6 +523,96 @@ public:
     Running running = Start();
     Assert::AreEqual(3U, running.session->Advance(3 * SIX_HOURS));
     Assert::IsTrue(running.session->Persisted(), L"nothing to write is not a failure to write");
+  }
+
+  // ---- Resumption (ADR-042) -------------------------------------------------------------------------
+  //
+  // A restarted server picks up the schedule, the seats and the history it stored, and owes exactly
+  // the locks it slept through: not none, because its clock started again, and not all of them,
+  // because the store already holds the ones it resolved.
+
+  TEST_METHOD(AResumedSessionContinuesTheScheduleAndKeepsTheHistory)
+  {
+    const std::string path = TemporaryStorePath("resume");
+    constexpr Neuron::Instant STARTED_AT = 1'757'700'000;
+    const std::vector<std::string> tokens = {"ABCD-EFGH", "JKLM-NPQR"};
+
+    {
+      auto simulation = std::make_unique<CountingSimulation>();
+      Neuron::Session session{std::move(simulation), Neuron::TickSchedule{STARTED_AT, SIX_HOUR_INTERVAL}, path, tokens};
+      session.MarkPresent(0);
+      (void)session.Submit(0, SomeOrders(11));
+      Assert::AreEqual(2U, session.Advance(STARTED_AT + 2 * SIX_HOURS), L"two locks before the process died");
+    }
+
+    Neuron::MatchStore::Contents contents;
+    Assert::IsTrue(Neuron::MatchStore::Load(path, contents) == Neuron::MatchStore::Problem::None);
+    Assert::AreEqual(STARTED_AT, contents.startedAt);
+    Assert::AreEqual(SIX_HOUR_INTERVAL, contents.intervalSeconds);
+    Assert::AreEqual(static_cast<size_t>(2), contents.tokens.size());
+
+    auto fresh = std::make_unique<CountingSimulation>();
+    CountingSimulation* observed = fresh.get();
+    std::unique_ptr<Neuron::Session> resumed = Neuron::Session::Resume(std::move(fresh), contents, path);
+    Assert::IsNotNull(resumed.get(), L"the store replays to its hash, so it resumes");
+    Assert::AreEqual(2U, observed->Tick(), L"the replay reached where the match was");
+    Assert::AreEqual(STARTED_AT, resumed->Schedule().StartedAt(), L"the same schedule, not a clock started again");
+    Assert::AreEqual(std::string("JKLM-NPQR"), resumed->Tokens()[1], L"the same seats");
+
+    // Three locks have passed since the match began and two were resolved before the restart, so
+    // exactly one is owed -- and the store afterwards holds three ticks, not one.
+    Assert::AreEqual(1U, resumed->Advance(STARTED_AT + 3 * SIX_HOURS));
+    Assert::AreEqual(3U, observed->Tick());
+
+    Neuron::MatchStore::Contents after;
+    Assert::IsTrue(Neuron::MatchStore::Load(path, after) == Neuron::MatchStore::Problem::None);
+    Assert::AreEqual(static_cast<size_t>(3), after.ticks.size(), L"the history is kept, not restarted");
+    Assert::AreEqual(observed->Hash(), after.hash);
+
+    (void)std::remove(path.c_str());
+  }
+
+  TEST_METHOD(AResumeThatDoesNotReproduceTheHashIsRefused)
+  {
+    // The hash of an honest match: one lock, nobody ordered anything.
+    Neuron::Session honest{std::make_unique<CountingSimulation>(), Neuron::TickSchedule{0, SIX_HOUR_INTERVAL}, {}};
+    (void)honest.Advance(SIX_HOURS);
+
+    // A store claiming that hash over turns that are not what was played: an order set that was
+    // never given. Nothing about the file is malformed; it simply is not that match.
+    Neuron::MatchStore::Contents contents;
+    contents.hash = honest.Match().Hash();
+    contents.intervalSeconds = SIX_HOUR_INTERVAL;
+    contents.ticks.push_back(std::vector<Neuron::PlayerTurn>(PLAYERS));
+    contents.ticks[0][2].orders = SomeOrders(9);
+
+    Assert::IsNull(Neuron::Session::Resume(std::make_unique<CountingSimulation>(), contents, {}).get(),
+                   L"a match that replays differently must not be resumed into");
+  }
+
+  // The composition root decides what to do with a finished store, so the store has to say so
+  // without anybody decoding the game inside it.
+  TEST_METHOD(AFinishedMatchIsMarkedInItsStore)
+  {
+    const std::string path = TemporaryStorePath("finished");
+
+    {
+      Running running = Start(path);
+      running.fake->SetLength(2);
+      (void)running.session->Advance(SIX_HOURS);
+
+      Neuron::MatchStore::Contents midway;
+      Assert::IsTrue(Neuron::MatchStore::Load(path, midway) == Neuron::MatchStore::Problem::None);
+      Assert::IsFalse(midway.finished, L"one tick into a two-tick match");
+
+      (void)running.session->Advance(2 * SIX_HOURS);
+    }
+
+    Neuron::MatchStore::Contents ended;
+    Assert::IsTrue(Neuron::MatchStore::Load(path, ended) == Neuron::MatchStore::Problem::None);
+    Assert::IsTrue(ended.finished, L"and after the last one");
+
+    (void)std::remove(path.c_str());
   }
 };
 
