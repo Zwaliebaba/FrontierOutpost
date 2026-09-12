@@ -56,6 +56,10 @@ public:
     OpenFleet,
     /// Queue or unqueue a build. An order: local until the lock.
     ToggleBuild,
+    /// Open the list of things this player could say to somebody (ADR-039).
+    OpenSignals,
+    /// Queue or unqueue one of them. Also an order, and it locks with the rest.
+    ToggleSignal,
     /// Answer a proposal. Also an order, and it locks with the others.
     AcceptProposal,
     DeclineProposal,
@@ -72,6 +76,7 @@ public:
     None,
     BuildList,
     Destination,
+    SignalList,
     Replay
   };
 
@@ -176,6 +181,15 @@ private:
                         const Neuron::Color& _color, std::uint32_t _scale = Neuron::FontRenderer::DEFAULT_SCALE);
 
   MatchState m_state;
+
+  /// Which `Concede` row the player has tapped once. NONE unless one is armed.
+  ///
+  /// **Conceding is the only order on this screen that cannot be taken back**, because it resolves
+  /// into handing the empire to a custodian permanently. Everything else here is an edit until the
+  /// lock, so the second tap is not a modal dialog -- it is the row itself changing to say what the
+  /// next tap will do. It disarms on any other tap, and it is per-screen rather than per-order
+  /// state: the arming is about fingers, not about what is sent.
+  std::int32_t m_armedConcede = EventRefs::NONE;
 
   Panel m_panel = Panel::None;
   /// Which system's build list or which fleet's picker is open.

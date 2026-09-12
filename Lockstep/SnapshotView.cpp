@@ -118,6 +118,157 @@ namespace
   return _state.players[static_cast<std::size_t>(_owner)].label;
 }
 
+/// Everything this player could say to somebody else this tick.
+///
+/// **Composed on the client from the snapshot, exactly as the build rows are**, and for the same
+/// reason: the server has no opinion about what an offer should be called, and everything needed to
+/// find one is already on the wire. A lane carries whether a trade lane runs on it; a proposal is
+/// sent to both parties, so this player's own offers are here to be withdrawn; a system carries its
+/// owner, so a border is two systems on one lane with two owners.
+///
+/// Rows are built in snapshot order -- lanes then players, both already sorted by id -- so the list
+/// does not reshuffle under a finger between one tick and the next.
+void ComposeSignals(MatchState& _state, const Snapshot& _snapshot)
+{
+  /// What the panel can show without scrolling, which it cannot do. Everything composed past this
+  /// is counted and not listed, the same bargain `availableBuilds` makes.
+  constexpr std::size_t MAXIMUM_ROWS = 14;
+  /// The one number in an offer that the player does not choose. Three ticks is the one-pager's
+  /// own example, and a hold nobody can enforce is not improved by making its length adjustable.
+  constexpr std::uint32_t HOLD_TICKS = 3;
+
+  const std::int32_t viewer = _state.viewer;
+  std::vector<SignalRow>& rows = _state.orders.signals;
+
+  const auto nameOf = [&_state](std::int32_t _player) { return NameOfPlayer(_state.players, _player); };
+
+  const auto ownerOf = [&_snapshot](SystemId _system) -> std::int32_t
+  {
+    const SnapshotSystem* system = _snapshot.System(_system);
+    return system != nullptr && system->live && system->owner.IsValid() ? system->owner.Index() : EventRefs::NONE;
+  };
+
+  const auto nameOfSystem = [&_snapshot](SystemId _system)
+  {
+    const SnapshotSystem* system = _snapshot.System(_system);
+    return system != nullptr ? system->name : std::string{"?"};
+  };
+
+  // ---- Offers this player made and can take back ---------------------------------------------
+  //
+  // First, because a retraction is time-critical in a way an opening offer is not: an offer that
+  // has been sitting for three of its four ticks is about to be reported as ignored.
+  for (const SnapshotProposal& proposal : _snapshot.Proposals())
+  {
+    if (proposal.from.Index() != viewer)
+    {
+      continue;
+    }
+    const char* what = proposal.kind == ProposalKind::OpenLane        ? "lane"
+                       : proposal.kind == ProposalKind::ShareScouting ? "scouting"
+                                                                      : "hold fire";
+    rows.push_back(SignalRow{.kind = SignalKind::Withdraw,
+                             .title = std::format("Withdraw {} - {}", what, nameOf(proposal.to.Index())),
+                             .detail = std::format("Unanswered for {} more tick(s)", proposal.ticksLeft),
+                             .proposal = proposal.id.Index()});
+  }
+
+  // ---- Trade lanes this player is on -----------------------------------------------------------
+  for (const SnapshotLane& lane : _snapshot.Lanes())
+  {
+    const std::int32_t a = ownerOf(lane.a);
+    const std::int32_t b = ownerOf(lane.b);
+    if (!lane.tradeLane || (a != viewer && b != viewer))
+    {
+      continue;
+    }
+    rows.push_back(SignalRow{.kind = SignalKind::CancelLane,
+                             .title = std::format("Close lane - {} to {}", nameOfSystem(lane.a), nameOfSystem(lane.b)),
+                             .detail = "Instant, and everybody sees it",
+                             .lane = lane.id.Index()});
+  }
+
+  // ---- Borders worth opening a lane on ---------------------------------------------------------
+  //
+  // A lane with one of this player's systems at one end and somebody else's at the other. That is
+  // the same rule the Diplomat bot uses to find an offer, which is not a coincidence: it is where
+  // a trade lane can exist.
+  for (const SnapshotLane& lane : _snapshot.Lanes())
+  {
+    if (lane.tradeLane)
+    {
+      continue;
+    }
+    const std::int32_t a = ownerOf(lane.a);
+    const std::int32_t b = ownerOf(lane.b);
+    const bool mineThenTheirs = a == viewer && b != viewer && b != EventRefs::NONE;
+    const bool theirsThenMine = b == viewer && a != viewer && a != EventRefs::NONE;
+    if (!mineThenTheirs && !theirsThenMine)
+    {
+      continue;
+    }
+
+    const std::int32_t other = mineThenTheirs ? b : a;
+    rows.push_back(SignalRow{.kind = SignalKind::OpenLane,
+                             .title = std::format("Open lane - {} to {}", nameOfSystem(lane.a), nameOfSystem(lane.b)),
+                             .detail = std::format("With {} - pays both sides", nameOf(other)),
+                             .to = other,
+                             .lane = lane.id.Index()});
+  }
+
+  // ---- Everybody this player has actually met ---------------------------------------------------
+  //
+  // Met means "owns a system this player can see now", which is the same thing first contact is
+  // reported on. Offering to share maps with an empire nobody has found yet would be offering to
+  // share a map of somewhere neither of them has been.
+  std::vector<std::int32_t> met;
+  for (const SnapshotSystem& system : _snapshot.Systems())
+  {
+    if (!system.live || !system.owner.IsValid() || system.owner.Index() == viewer)
+    {
+      continue;
+    }
+    if (std::ranges::find(met, system.owner.Index()) == met.end())
+    {
+      met.push_back(system.owner.Index());
+    }
+  }
+  std::ranges::sort(met);
+
+  for (const std::int32_t other : met)
+  {
+    rows.push_back(SignalRow{.kind = SignalKind::ShareScouting,
+                             .title = std::format("Share scouting - {}", nameOf(other)),
+                             .detail = "Their map is your map, while it stands",
+                             .to = other});
+  }
+  for (const std::int32_t other : met)
+  {
+    rows.push_back(SignalRow{.kind = SignalKind::HoldFire,
+                             .title = std::format("Hold fire {} ticks - {}", HOLD_TICKS, nameOf(other)),
+                             .detail = "Nothing enforces it. That is the point of it",
+                             .to = other,
+                             .ticks = HOLD_TICKS});
+  }
+
+  _state.orders.availableSignals = static_cast<std::uint32_t>(rows.size());
+  if (rows.size() > MAXIMUM_ROWS)
+  {
+    rows.resize(MAXIMUM_ROWS);
+  }
+
+  // ---- Conceding -------------------------------------------------------------------------------
+  //
+  // Last, always, and never trimmed away. It is the one thing on this list a player cannot undo
+  // after it resolves, so it is also the one that must not move around: a row that changes
+  // position between ticks is a row somebody double-taps by accident.
+  if (!_snapshot.IsFinished())
+  {
+    rows.push_back(SignalRow{.kind = SignalKind::Concede, .title = "Concede", .detail = "Hand this empire to a custodian. Permanent."});
+    ++_state.orders.availableSignals;
+  }
+}
+
 } // namespace
 
 MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _digest, std::int64_t _secondsToLock)
@@ -256,8 +407,9 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
   {
     if (proposal.to != _snapshot.Viewer())
     {
-      // An offer this player made rather than received. It belongs in the rail eventually; the
-      // reference's rail shows offers awaiting an answer, so it is left out here.
+      // An offer this player MADE. It is not in the PROPOSALS rail, which is the list of things
+      // awaiting this player's answer, but it is not dropped either any more: it becomes a
+      // `Withdraw` row below, which is the only thing a player can still do about it (ADR-039).
       continue;
     }
 
@@ -311,6 +463,8 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     }
   }
   state.orders.availableBuilds = static_cast<std::uint32_t>(state.orders.builds.size());
+
+  ComposeSignals(state, _snapshot);
 
   // ---- Digest ------------------------------------------------------------------------------------
   //
@@ -444,6 +598,51 @@ OrderSet OrdersOf(const MatchState& _state)
     }
     orders.builds.push_back(
       BuildOrder{.system = SystemId{row.system}, .kind = row.kind == 0 ? BuildKind::Shipyard : BuildKind::MiningStation});
+  }
+
+  // ---- Signals ---------------------------------------------------------------------------------
+  //
+  // Four order kinds that had no way out of this client until ADR-039. Each row knows which one it
+  // is and carries the one or two fields that order needs, which is why a `SignalRow` holds a lane
+  // id and a proposal id rather than a screen position: a row has to be able to BECOME an order.
+  for (const std::int32_t queued : _state.orders.queuedSignals)
+  {
+    if (queued < 0 || queued >= static_cast<std::int32_t>(_state.orders.signals.size()))
+    {
+      continue;
+    }
+    const SignalRow& row = _state.orders.signals[static_cast<std::size_t>(queued)];
+
+    switch (row.kind)
+    {
+    case SignalKind::OpenLane:
+      orders.proposals.push_back(
+        ProposalOrder{.to = PlayerId{row.to}, .kind = ProposalKind::OpenLane, .lane = LaneId{row.lane}, .ticks = 0});
+      break;
+
+    case SignalKind::ShareScouting:
+      orders.proposals.push_back(ProposalOrder{.to = PlayerId{row.to}, .kind = ProposalKind::ShareScouting});
+      break;
+
+    case SignalKind::HoldFire:
+      orders.proposals.push_back(ProposalOrder{.to = PlayerId{row.to}, .kind = ProposalKind::HoldForTicks, .ticks = row.ticks});
+      break;
+
+    case SignalKind::Withdraw:
+      orders.withdrawals.push_back(WithdrawOrder{.proposal = ProposalId{row.proposal}});
+      break;
+
+    case SignalKind::CancelLane:
+      orders.cancellations.push_back(CancelLaneOrder{.lane = LaneId{row.lane}});
+      break;
+
+    case SignalKind::Concede:
+      orders.concede = true;
+      break;
+
+    default:
+      break;
+    }
   }
 
   const std::int32_t answered = _state.orders.answeredProposal;

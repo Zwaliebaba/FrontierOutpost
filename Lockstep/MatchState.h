@@ -295,6 +295,50 @@ struct Proposal
   std::int32_t conditionalLane = EventRefs::NONE;
 };
 
+/// A signal going OUT: an offer to somebody, a retraction, or the end of something.
+///
+/// **These are the four order kinds the client could not express** (ADR-039). `OrdersOf` could
+/// build fleet moves, builds and one answer to a proposal, and nothing else -- so a player could
+/// accept or decline what was sent to them and could never open a lane, take an offer back, close
+/// a lane they were on, or concede. `GameLogic` has implemented all four the whole time, and the
+/// Diplomat bot policy uses one of them every tick: a machine in a seat could do something a person
+/// at a keyboard could not.
+enum class SignalKind : std::uint8_t
+{
+  /// Offer a trade lane on one specific lane. The one-pager puts this in the build menu with
+  /// *Propose* where *Build* would be -- it is a building with two owners -- but it is an offer on
+  /// the wire and it belongs with the other offers.
+  OpenLane,
+  /// Offer to share maps. Their scouting is yours while it stands.
+  ShareScouting,
+  /// Offer to hold off for a few ticks. Nothing enforces it; that is the point of it.
+  HoldFire,
+  /// Take back an offer this player made and nobody has answered.
+  Withdraw,
+  /// Close a trade lane. Unilateral, instant, and public -- "cancelling one is a tell".
+  CancelLane,
+  /// Hand the empire to a custodian, permanently. Needs two taps and says so.
+  Concede
+};
+
+struct SignalRow
+{
+  SignalKind kind = SignalKind::OpenLane;
+  /// What it is, in the client's words. The server has no opinion about what an offer is called.
+  std::string title;
+  std::string detail;
+  /// Who it is to, as an `OwnerId`. NONE for `CancelLane` and `Concede`, which are addressed to
+  /// nobody, and for `Withdraw`, whose recipient is already fixed by the proposal.
+  std::int32_t to = EventRefs::NONE;
+  /// The lane this is about (`OpenLane`, `CancelLane`), as the lane's own id and NOT an index into
+  /// `Graph::lanes` -- it has to survive as a `LaneId` in an order.
+  std::int32_t lane = EventRefs::NONE;
+  /// The proposal this withdraws, as its id.
+  std::int32_t proposal = EventRefs::NONE;
+  /// `HoldFire` only.
+  std::uint32_t ticks = 0;
+};
+
 /// What the player has decided this tick and has not yet committed.
 ///
 /// `locked` is the whole of the tick discipline on the client: edits are local until the lock, and
@@ -312,6 +356,19 @@ struct Orders
   bool acceptedProposal = false;
   /// Which build rows the player has queued this tick, as indices into `builds`.
   std::vector<std::int32_t> queuedBuilds;
+
+  /// Every signal this player could send this tick, composed from the snapshot.
+  std::vector<SignalRow> signals;
+  /// How many there were before the list was trimmed to what a panel can show.
+  std::uint32_t availableSignals = 0;
+  /// Which of them the player has queued, as indices into `signals`.
+  ///
+  /// **A queued signal is an order like any other**: local until the lock, sent with the fleet
+  /// moves and the builds, and takeable back by tapping it again. The one exception is `Concede`,
+  /// which cannot be taken back once it resolves and so is armed before it is queued -- that part
+  /// lives on the screen, because it is about tapping and not about the order.
+  std::vector<std::int32_t> queuedSignals;
+
   bool locked = false;
 };
 

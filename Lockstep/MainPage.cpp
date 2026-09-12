@@ -45,6 +45,10 @@ constexpr Color RED = {255, 110, 96, 255};
 constexpr Color PURPLE = {170, 140, 255, 255};
 constexpr Color NEUTRAL_DIM = {214, 220, 228, 115};
 
+/// The filled grey a locked rail wears (SCREENS.md 06). Solid rather than an outline, because at
+/// the lock the rail stops being a list of things you could change and becomes a receipt.
+constexpr Color LOCKED_FILL = {214, 220, 228, 150};
+
 constexpr Color GRID_LINE = {94, 196, 255, 18};
 constexpr Color HORIZON_GLOW = {94, 196, 255, 26};
 constexpr Color HORIZON_GLOW_RIM = {94, 196, 255, 0};
@@ -232,7 +236,13 @@ void MainPage::MeasureContent()
 
 std::string MainPage::FormatCountdown(double _seconds)
 {
-  const auto total = static_cast<std::int64_t>(std::max(0.0, _seconds));
+  // **Rounded UP, and that is the whole of it.** Truncating showed `00:00:00` for the entire last
+  // second, while the rail still said UNLOCKED and still took edits -- so the screen said the
+  // deadline had passed and then went on accepting orders, which is precisely the confusion screen
+  // 06 exists to remove. With a ceiling, `00:00:01` means there is still a second of it and
+  // `00:00:00` means there is not, so the clock reading zero and the rail reading LOCKED are the
+  // same event.
+  const auto total = static_cast<std::int64_t>(std::ceil(std::max(0.0, _seconds)));
   const std::int64_t hours = total / 3600;
   const std::int64_t minutes = (total % 3600) / 60;
   const std::int64_t remainder = total % 60;
@@ -378,6 +388,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       m_focusedSystem = region->index;
       m_panel = Panel::BuildList;
       m_panelSubject = region->index;
+      m_armedConcede = EventRefs::NONE;
       return true;
 
     case Action::OpenFleet:
@@ -401,6 +412,43 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       {
         queued.erase(found);
       }
+      return true;
+    }
+
+    case Action::OpenSignals:
+      m_panel = Panel::SignalList;
+      m_panelSubject = 0;
+      m_armedConcede = EventRefs::NONE;
+      return true;
+
+    case Action::ToggleSignal:
+    {
+      if (!editable || region->index < 0 || region->index >= static_cast<std::int32_t>(m_state.orders.signals.size()))
+      {
+        return true;
+      }
+
+      auto& queued = m_state.orders.queuedSignals;
+      const auto found = std::find(queued.begin(), queued.end(), region->index);
+      if (found != queued.end())
+      {
+        // Taking one back, including a concede that was queued a moment ago. It has not resolved,
+        // so it is still an edit like any other.
+        queued.erase(found);
+        m_armedConcede = EventRefs::NONE;
+        return true;
+      }
+
+      // Conceding takes two taps on the same row. The first arms it and the row says so; anything
+      // else disarms it.
+      if (m_state.orders.signals[static_cast<std::size_t>(region->index)].kind == SignalKind::Concede && m_armedConcede != region->index)
+      {
+        m_armedConcede = region->index;
+        return true;
+      }
+
+      queued.push_back(region->index);
+      m_armedConcede = EventRefs::NONE;
       return true;
     }
 
@@ -539,11 +587,18 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // the warning colour: this is the deadline every order on the rail is racing (README "Frame").
   const std::string countdown = m_state.match.finished ? std::string{"--:--:--"} : FormatCountdown(m_state.match.secondsToLock);
   const std::int32_t bigY = CenterTextY(0.0F, TOP_BAR_HEIGHT, FontRenderer::COUNTDOWN_SCALE);
-  DrawRight(_text, cursor, bigY, countdown, AMBER, FontRenderer::COUNTDOWN_SCALE);
+
+  // **Amber is the deadline colour, and at zero there is no deadline left to warn about** (screen
+  // 06). A countdown that stayed amber on 00:00:00 read as "hurry" to a player who could no longer
+  // do anything, which is the opposite of what the number means once it has run out.
+  const bool atLock = m_state.orders.locked && !m_state.match.finished;
+  DrawRight(_text, cursor, bigY, countdown, atLock ? NEUTRAL_DIM : AMBER, FontRenderer::COUNTDOWN_SCALE);
   cursor -= static_cast<float>(FontRenderer::MeasurePixels(countdown, FontRenderer::COUNTDOWN_SCALE)) + 8.0F;
 
-  DrawRight(_text, cursor, centered, m_state.match.finished ? std::string{"MATCH ENDED"} : std::format("T{} LOCKS", m_state.OrdersTick()),
-            TEXT_MUTED);
+  const std::string lockLabel = m_state.match.finished ? std::string{"MATCH ENDED"}
+                                : atLock               ? std::format("T{} LOCKED", m_state.OrdersTick())
+                                                       : std::format("T{} LOCKS", m_state.OrdersTick());
+  DrawRight(_text, cursor, centered, lockLabel, TEXT_MUTED);
 
   // ---- The left half, trimmed to what is left --------------------------------------------------
   const float titleWidth = static_cast<float>(FontRenderer::MeasurePixels("LOCKSTEP"));
@@ -623,7 +678,14 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
   else
   {
     _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), headerY, std::format("DIGEST - TICK {}", m_state.match.tick), TEXT_MUTED);
-    DrawRight(_text, DIGEST_WIDTH - RAIL_PADDING, headerY, std::format("{} EVENTS", m_state.digest.size()), TEXT_MUTED);
+
+    // At the lock the right-hand figure stops being a count of what is here and becomes the tick
+    // that is being resolved. It is the only thing on this column that changes at zero, and it is
+    // what says the digest below is about to be replaced rather than simply short.
+    const bool pending = m_state.orders.locked && !m_state.match.finished;
+    DrawRight(_text, DIGEST_WIDTH - RAIL_PADDING, headerY,
+              pending ? std::format("T{} PENDING", m_state.OrdersTick()) : std::format("{} EVENTS", m_state.digest.size()),
+              pending ? AMBER : TEXT_MUTED);
   }
 
   constexpr float TEXT_LEFT = RAIL_PADDING + 8.0F + 10.0F;
@@ -1250,21 +1312,37 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.FillRect(railX, TOP_BAR_HEIGHT, ORDERS_WIDTH, SCREEN_HEIGHT - TOP_BAR_HEIGHT, APP_BACKGROUND);
   _shapes.FillRect(railX, TOP_BAR_HEIGHT, 1.0F, SCREEN_HEIGHT - TOP_BAR_HEIGHT, CARD_BORDER);
 
+  const bool atLock = m_state.orders.locked && !m_state.match.finished;
+
   const std::int32_t headerY = static_cast<std::int32_t>(TOP_BAR_HEIGHT) + 12;
   _text.DrawText(static_cast<std::int32_t>(contentX), headerY,
                  m_state.match.finished ? std::string{"FINAL"} : std::format("LOCKS T{}", m_state.OrdersTick()), TEXT_MUTED);
-  DrawRight(_text, contentRight, headerY, m_state.match.finished ? "MATCH ENDED" : (m_state.orders.locked ? "LOCKED" : "UNLOCKED"),
-            m_state.match.finished ? RED : (m_state.orders.locked ? TEXT_MUTED : AMBER));
+
+  if (atLock)
+  {
+    // A filled chip rather than a word (screen 06). LOCKED in muted grey was the same weight as
+    // UNLOCKED in amber and read as a label; filled, it reads as a state the rail is IN.
+    const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels("LOCKED")) + 12.0F;
+    _shapes.FillRect(contentRight - chipWidth, static_cast<float>(headerY) - 4.0F, chipWidth, 16.0F, LOCKED_FILL);
+    _text.DrawText(static_cast<std::int32_t>(contentRight - chipWidth) + 6, headerY, "LOCKED", APP_BACKGROUND);
+  }
+  else
+  {
+    DrawRight(_text, contentRight, headerY, m_state.match.finished ? "MATCH ENDED" : "UNLOCKED", m_state.match.finished ? RED : AMBER);
+  }
 
   float y = TOP_BAR_HEIGHT + 28.0F;
 
   // One line of help, and only one. It says where the controls went, because a player who used the
   // old rail will look for them here first.
-  const std::string_view help = m_state.match.finished ? "The match is over. This is what you finished with."
-                                                       : "What goes in when the clock hits zero. Change it from the digest.";
+  const std::string help = m_state.match.finished ? std::string{"The match is over. This is what you finished with."}
+                           : atLock ? std::format("Resolving T{}. Controls return with the new digest. Anything you tap now is an "
+                                                  "order for T{}.",
+                                                  m_state.OrdersTick(), m_state.OrdersTick() + 1)
+                                    : std::string{"What goes in when the clock hits zero. Change it from the digest."};
   for (const std::string& line : FontRenderer::Wrap(help, columns))
   {
-    _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), line, TEXT_DETAIL);
+    _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), line, atLock ? AMBER : TEXT_DETAIL);
     y += static_cast<float>(LINE_HEIGHT);
   }
   y += 6.0F;
@@ -1371,11 +1449,33 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
   // ---- SIGNALS -----------------------------------------------------------------------------------
   //
-  // Empty, and honestly so: a signal this player SENT is not in `MatchState` at all. The client
-  // models offers arriving (`proposals`) and not offers going out, so there is nothing here to
-  // report yet. The section is drawn rather than hidden because its absence is the finding.
-  section("SIGNALS", "");
-  nothing("- none sent -");
+  // What is going OUT this tick. This rail said "- none sent -" for as long as it existed, because
+  // the client had no model of an offer leaving; ADR-039 gave it one, and the count on the right is
+  // the way in -- it is the only section header on this rail that is a control.
+  const std::int32_t signalsY = static_cast<std::int32_t>(y);
+  section("SIGNALS", m_state.orders.locked ? std::string{"LOCKED"} : std::format("{} TO SEND >", m_state.orders.availableSignals));
+  if (!m_state.orders.locked)
+  {
+    AddHit(railX, static_cast<float>(signalsY), ORDERS_WIDTH, 22.0F, Action::OpenSignals, 0);
+  }
+
+  if (m_state.orders.queuedSignals.empty())
+  {
+    nothing("- none sent -");
+  }
+  for (const std::int32_t queued : m_state.orders.queuedSignals)
+  {
+    if (queued < 0 || queued >= static_cast<std::int32_t>(m_state.orders.signals.size()))
+    {
+      continue;
+    }
+    const SignalRow& signal = m_state.orders.signals[static_cast<std::size_t>(queued)];
+
+    // A concede is red on the rail and nothing else is. It is the one row here that ends the
+    // player's match rather than changing it.
+    row(Uppercased(signal.title), signal.kind == SignalKind::Concede ? "CONCEDE" : "SENDING",
+        signal.kind == SignalKind::Concede ? RED : BLUE);
+  }
 
   // ---- PROPOSALS ---------------------------------------------------------------------------------
   section("PROPOSALS", std::format("{} OPEN", m_state.proposals.size()));
@@ -1403,6 +1503,11 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     _text.DrawText(static_cast<std::int32_t>(contentX), footerText, "NOTHING MORE LOCKS", TEXT_MUTED);
     DrawRight(_text, contentRight, footerText, std::format("T{} FINAL", m_state.match.tick), RED);
+  }
+  else if (atLock)
+  {
+    _text.DrawText(static_cast<std::int32_t>(contentX), footerText, "LOCKED TOGETHER", TEXT_MUTED);
+    DrawRight(_text, contentRight, footerText, std::format("T{} RESOLVING", m_state.OrdersTick()), NEUTRAL_DIM);
   }
   else
   {
@@ -1482,6 +1587,41 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       rows.push_back(
         std::format("{} - ETA T{}", m_state.graph.systems[static_cast<std::size_t>(other)].name, m_state.OrdersTick() + lane.cost - 1));
       rowTargets.push_back(other);
+    }
+    break;
+  }
+  case Panel::SignalList:
+  {
+    title = "SIGNAL - PICK ONE";
+    rowAction = Action::ToggleSignal;
+
+    for (std::size_t index = 0; index < m_state.orders.signals.size(); ++index)
+    {
+      const SignalRow& signal = m_state.orders.signals[index];
+      const bool queued =
+        std::ranges::find(m_state.orders.queuedSignals, static_cast<std::int32_t>(index)) != m_state.orders.queuedSignals.end();
+      const bool armed = m_armedConcede == static_cast<std::int32_t>(index);
+
+      // Three states on one line, because the panel has one line per row: queued, armed to be
+      // queued, or neither. The armed one says what the NEXT tap does rather than what this row is,
+      // which is the only warning a concede gets and the only one it needs.
+      rows.push_back(queued  ? std::format("{}  - SENDING", signal.title)
+                     : armed ? std::format("{}  - TAP AGAIN TO CONFIRM", signal.title)
+                             : signal.title);
+      rowTargets.push_back(m_state.orders.locked ? EventRefs::NONE : static_cast<std::int32_t>(index));
+    }
+
+    if (m_state.orders.signals.empty())
+    {
+      rows.emplace_back("Nothing to say yet. Offers need a border or a");
+      rows.emplace_back("neighbour you have actually met.");
+      rowTargets.assign(rows.size(), EventRefs::NONE);
+    }
+    else if (m_state.orders.availableSignals > static_cast<std::uint32_t>(m_state.orders.signals.size()))
+    {
+      rows.push_back(std::format("(+{} more than this panel can show)",
+                                 m_state.orders.availableSignals - static_cast<std::uint32_t>(m_state.orders.signals.size())));
+      rowTargets.push_back(EventRefs::NONE);
     }
     break;
   }
