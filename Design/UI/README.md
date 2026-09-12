@@ -16,26 +16,34 @@ from the tree, not from the plan.
 
 Built from `Design/space-4x-one-pager-v10.md`, ADR-014 (interface layer), ADR-027 (owner colours),
 ADR-028/029 (roles, tokens) and the decisions since: ADR-034 (what the handoff left open) and
-ADR-036 through ADR-059, which are cited where they apply.
+ADR-036 through ADR-066, which are cited where they apply.
 
 ## Screens
 
 | # | Screen | Status | In `screens/` | Code |
 |---|---|---|---|---|
-| 01 | Main page — digest as order surface, map, locks rail | **Built** (ADR-034; then 045, 052, 053, 055–059) | `01-main-page.png` (tick 2 of a practice match: a contact, a claim with its priced build, production), `01-orders-queued.png` (tick 0: a move ordered and a build queued, before the lock), `01-fleet-under-way.png` (tick 1: the route and its marker), the sheets `01-build-sheet.png`, `01-destination-sheet.png`, `01-signal-sheet.png`, and `01-finished.png`. The map's unbuilt details are item 6 below | `LockstepClient/MainPage.cpp`, `DigestView.cpp`, `MapRender.cpp` |
+| 01 | Main page — digest as order surface, map, locks rail | **Built** (ADR-034; then 045, 052, 053, 055–066) | `01-main-page.png` (tick 2 of a practice match: a contact, a claim with its priced build, production), `01-orders-queued.png` (tick 0: a move ordered and a build queued, before the lock), `01-fleet-under-way.png` (tick 1: the route and its marker), `01-rail-hover.png` (the locks rail with the pointer on a row, ADR-060), the sheets `01-build-sheet.png`, `01-destination-sheet.png`, `01-signal-sheet.png` and `01-signal-sheet-armed.png` (the concede armed under its band, ADR-064), and `01-finished.png`. The map's unbuilt details are item 6 below | `LockstepClient/MainPage.cpp`, `DigestView.cpp`, `MapRender.cpp` |
 | 02 | Share tick — 480×640 export | **Not built.** No button, no export; ADR-034 §2 says clipboard-only if it is ever built, and its open question asks whether it should be | none; the mockup that was the target, if it stays one, is in the design file and the history | — |
 | 03 | Join | **Built** (ADR-034 §3, ADR-041) | `03-join.png` | `LockstepClient/JoinPage.cpp`, `NeuronClient/TextField.h` |
 | 04 | Connection lost | **Built** (ADR-038, ADR-043) | `04-connection-lost.png` | `LockstepClient/ConnectionDialog.cpp` |
 | 05 | Connection states | **Built** as one component with seven states. The WELCOME dialog is not one of them | `05-connecting.png`, `05-refused-unknown-token.png`, `05-refused-seat-in-use.png`, `05-waiting-for-the-host.png`, `05-match-finished.png` | `LockstepClient/ConnectionDialog.cpp` |
-| 06 | At lock | **Built** (ADR-039) | `06-at-lock.png` | `LockstepClient/MainPage.cpp` |
+| 06 | At lock | **Built** (ADR-039, ADR-065) | `06-at-lock.png`, `06-at-lock-sheet.png` (a sheet left open across the lock: dim rows, the `LOCKED` chip in its header, the rail's sentence in amber) | `LockstepClient/MainPage.cpp` |
 | 07 | Replay — phase step-through | **Stub**, and its title says so (`REPLAY TICK 7 - NOT YET WIRED`). A sheet listing the six phases; nothing steps | `07-replay.png` is the stub as built; the step-through the mockup drew is item 2 below, its centred panel superseded by the sheet (ADR-052) | `MainPage::DrawPanel` |
-| 08 | Missed digests | **Partial.** The backlog is kept and concatenated (ADR-044); no tabs | `08-missed-digests.png`; the tabs the mockup drew are item 3 below | `Lockstep/Lockstep.cpp` (match loop), `DigestView.cpp` |
-| 09 | Seats — the host's lobby | **Built**, and not in the handoff (ADR-036, 037, 041, 051) | `09-seats.png` (the host alone), `09-seats-joined.png` (a second seat connected and selected) | `Lockstep/SeatsPage.cpp` |
+| 08 | Missed digests | **Partial.** The backlog is kept and concatenated (ADR-044) and its repeats are folded (ADR-062); no tabs | `08-missed-digests.png` (`SINCE YOU LOOKED - T1 > T7`, the delta box, and two folded `PRODUCTION +18 - T1 > T7` cards); the tabs the mockup drew are item 3 below | `Lockstep/Lockstep.cpp` (match loop), `DigestView.cpp` |
+| 09 | Seats — the host's lobby | **Built**, and not in the handoff (ADR-036, 037, 041, 051, 066) | `09-seats.png` (the host alone), `09-seats-joined.png` (a second seat connected and selected, and the three-way on every card) | `Lockstep/SeatsPage.cpp` |
 
 Also built with no mockup, all described in `SCREENS.md` and all captured but one: the four
 **sheets** (build, destination, signal, replay — ADR-052), the **WAITING FOR THE HOST** and
 **REFUSED · NOT UNDERSTOOD** dialogs (ADR-038), and the main page's **finished-match** state. The
 one not captured is REFUSED · NOT UNDERSTOOD, which needs a malformed hello that no client sends.
+
+**Two states of the build have no capture and cannot get one from a practice match**, which is worth
+saying rather than leaving a reader to look for them. The digest's **page band** (ADR-061) needs a
+card stack taller than a 648-pixel column, and six players over eight ticks produce three cards;
+`DigestOverflowTapTests` builds a twenty-card digest and presses the band instead. The destination
+row's **garrison line** (`P3 - 11 +DEF`, ADR-063) needs a rival fleet parked on a neighbour of the
+fleet being moved, which the opening board never has — `01-destination-sheet.png` is the ordinary
+case, every candidate `UNCLAIMED`.
 
 ## Flow
 
@@ -102,8 +110,9 @@ claim is true again, of a different mechanism: a row links to the thing it names
 
 Done on 2026-09-12: every screen and state above was captured from the Debug build of the tree at
 a4c9235, and the eight mockups left `screens/` the same day — the four the build had superseded and
-the four whose targets the list above keeps in words. What is known about doing it, measured on
-2026-09-12:
+the four whose targets the list above keeps in words. Every capture the eight changes of ADR-060 to
+ADR-066 touched was retaken the same day from the Debug build carrying them. What is known about
+doing it, measured on 2026-09-12:
 
 - `Build/Screenshot.ps1 -Exe x64\Debug\Lockstep.exe -Out shot.png -Arguments "--tick 4 --store scratch"`
   captures the client area (DPI-aware, cropped to the 1280×720) and gets you screen 03 as it opens.
@@ -115,7 +124,13 @@ the four whose targets the list above keeps in words. What is known about doing 
   is, the window will report itself foreground and no tap will happen.
 - Client-pixel targets: JOIN (826, 479); PRACTICE MATCH (744, 482); `REPLAY T<n>` (1210, 24); a
   sheet's `CANCEL` bar (700, 688); the `SIGNALS` header on a fresh rail (1150, 201). The filled
-  build button moves with the digest — scan column x=40 for solid blue, as `TapBuild` does.
+  build button moves with the digest — scan column x=40 for solid blue, as `TapBuild` does. **The
+  `SIGNALS` header moves too**: it sits under BUILDS, so a queued build or a second fleet pushes it
+  down 16 pixels a line, and 201 is only right on an opening rail.
+- **The rail's hover is read back, not eyeballed** (ADR-060). `HOVER_FILL` is white at 20/255 over
+  the ink, which lands on `30,33,38` against a background of `11,14,20` — plain in place and easy to
+  miss in a thumbnail, so a capture script should assert the pixel. Measured that way on 2026-09-12,
+  and it is what found that a moving mouse produces no `WM_POINTERUPDATE` at all.
 - States: 09 = JOIN as the host; 01 = PRACTICE MATCH (`--tick 4` overrides the preset's two
   minutes); the sheets = a held system on the map, `MOVE`/`REDIRECT`, the `SIGNALS` header, `REPLAY`;
   06 = a `--serve` process suspended past a lock (`NtSuspendProcess`); 04 = that process killed;
@@ -131,9 +146,18 @@ the four whose targets the list above keeps in words. What is known about doing 
   y≈645.
 - **06, 04 and 08 from one dedicated server:** `--serve 7351 --phase0 --tick 30 --bots 5 --store
   <name>` and a client `--join 127.0.0.1:7351 --token alpha`. `NtSuspendProcess` the server and
-  wait for the client's countdown to pass zero (06); resume it and it catches up; kill it mid-tick
-  (04); a minute later start it again with the same `--store` and it resumes (ADR-042) while the
-  client reconnects on its own (08, `SINCE YOU LOOKED - T6 > T9`).
+  wait for the client's countdown to pass zero (06); open the `SIGNALS` sheet first and suspend it
+  again for 06 with a sheet across the lock (ADR-065); resume it and it catches up; kill it mid-tick
+  (04).
+- **08 needs the CLIENT to be the one that was away**, which is not what the line above used to say
+  and cost a run to find out on 2026-09-12. The whole backlog is sent on ARRIVAL and the newest tick
+  on every tick after (ADR-044, `MatchServer::PushState`), so a client that merely watched a
+  restarted server catch up has one digest and no gap at all, and one that was connected throughout
+  a suspension gets the gap with a single event in it. What produces `SINCE YOU LOOKED - T1 > T7`
+  over several ticks of events is: suspend the CLIENT, kill the server under it, restart the server
+  with the same `--store` and let it run five or six ticks, then resume the client — its socket is
+  dead, it reconnects, and a reconnect is an arrival with a `drawnTick` several ticks old.
+  `--tick 20` makes that about two minutes.
 - **MATCH FINISHED** from a practice match on `--tick 4`, which ends in two minutes; `VIEW LAST
   DIGEST` is the filled button at about (806, 403). **WAITING FOR THE HOST:** on 09 tap seat 02's
   card (500, 230) and its `COPY` (1080, 274), then start a joiner with the clipboard's token.

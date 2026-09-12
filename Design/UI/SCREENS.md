@@ -78,7 +78,8 @@ drawn from `BuildRow::isTradeLane`, which nothing sets.
 **Sheets (ADR-052).** The four panels — build, destination, signal, replay — are one component
 (`DrawPanel`), drawn as a sheet against the bottom of the map pane, 44px rows, six at most, a
 seventh reported. No mockup exists for any of them; the captures are `01-build-sheet.png`,
-`01-destination-sheet.png`, `01-signal-sheet.png` and `07-replay.png`.
+`01-destination-sheet.png`, `01-signal-sheet.png`, `01-signal-sheet-armed.png`, `07-replay.png`
+and, for a sheet left open across the lock, `06-at-lock-sheet.png`.
 - **Build** (`BUILD - DOTHAN`): opened by tapping a system you hold; lists that system's buildings
   and nothing else (ADR-058) — `Shipyard - Dothan` with `20 CR`, or `QUEUED`, or
   `20 CR - NEED 7 MORE` dim; a system with both built says `NOTHING LEFT TO BUILD HERE`; a system you
