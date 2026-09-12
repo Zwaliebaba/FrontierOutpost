@@ -87,11 +87,10 @@ public:
 
   /// Sends an order set, replacing whatever was sent before.
   ///
-  /// **Silently does nothing when not playing, and nothing re-sends it afterwards.** This comment
-  /// used to say the reconnect would send the current rail anyway; it does not, and never did --
-  /// there is no code on either side of the socket that replays an order given while the link was
-  /// down. Screen 04 says so rather than promising otherwise (`ConnectionDialog`), which is the
-  /// cheap half of the fix; the other half is an open question in ADR-038.
+  /// **Silently does nothing when not playing, and nothing re-sends it afterwards.** There is no
+  /// code on either side of the socket that replays an order given while the link was down. Screen
+  /// 04 says so rather than promising otherwise (`ConnectionDialog`); replaying it is an open
+  /// question in ADR-038.
   void SendOrders(std::span<const std::uint8_t> _orderSet);
 
   /// Says "still here" without submitting anything. Presence is a fact about being seen.

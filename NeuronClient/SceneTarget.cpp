@@ -1,6 +1,4 @@
-// SceneTarget.cpp -- the depth buffer for the 1280x720 screen, and what a frame opens with.
-// ADR-011 is the decision this file implements; ADR-001, which it supersedes, is the shape this
-// file used to have.
+// SceneTarget.cpp -- the depth buffer for the 1280x720 screen, and what a frame opens with (ADR-011).
 
 #include "pch.h"
 #include "SceneTarget.h"

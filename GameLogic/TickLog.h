@@ -114,10 +114,9 @@ struct DigestEntry
 /// > escapes this way more than a third of the time it is targeted, and the dodging player retains
 /// > or retakes the system, enable the rear-guard round and re-run.
 ///
-/// That fraction is what decides whether `MatchRules::rearGuardEnabled` gets turned on. It was
-/// briefly computed only *inside* the rear-guard branch, which made it uncollectable while the rear
-/// guard was off -- the one number that decides whether to enable the mechanic, gated behind the
-/// mechanic being enabled. It is now computed every tick regardless.
+/// That fraction is what decides whether `MatchRules::rearGuardEnabled` gets turned on, so it is
+/// computed every tick whether or not the rear guard is on: the number that decides whether to
+/// enable a mechanic cannot be gated behind the mechanic being enabled.
 ///
 /// `dodged` is the numerator and the whole list is the denominator: a fleet that stayed and fought
 /// was targeted too. The second half of the watch item -- whether the dodger *retains or retakes*

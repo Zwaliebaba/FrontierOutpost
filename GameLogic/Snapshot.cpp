@@ -286,7 +286,7 @@ std::vector<DigestEntry> Snapshot::ReadDigest(Neuron::ByteReader& _reader)
   for (std::uint32_t index = 0; index < declared; ++index)
   {
     DigestEntry entry;
-    entry.kind = static_cast<DigestKind>(_reader.ReadU8());
+    entry.kind = _reader.ReadEnum(DigestKind::MatchEnded);
     entry.severity = _reader.ReadU32();
     entry.title = _reader.ReadString();
     entry.detail = _reader.ReadString();
@@ -434,7 +434,7 @@ Snapshot Snapshot::Read(Neuron::ByteReader& _reader)
     system.name = _reader.ReadString();
     system.positionX = _reader.ReadI32();
     system.positionY = _reader.ReadI32();
-    system.kind = static_cast<SystemKind>(_reader.ReadU8());
+    system.kind = _reader.ReadEnum(SystemKind::RegionAnchor);
     system.live = _reader.ReadBool();
     system.asOfTick = _reader.ReadU32();
     system.owner = PlayerId{_reader.ReadI32()};
@@ -488,7 +488,7 @@ Snapshot Snapshot::Read(Neuron::ByteReader& _reader)
     proposal.id = ProposalId{_reader.ReadI32()};
     proposal.from = PlayerId{_reader.ReadI32()};
     proposal.to = PlayerId{_reader.ReadI32()};
-    proposal.kind = static_cast<ProposalKind>(_reader.ReadU8());
+    proposal.kind = _reader.ReadEnum(ProposalKind::HoldForTicks);
     proposal.lane = LaneId{_reader.ReadI32()};
     proposal.conditionalLane = LaneId{_reader.ReadI32()};
     proposal.ticks = _reader.ReadU32();
@@ -504,7 +504,7 @@ Snapshot Snapshot::Read(Neuron::ByteReader& _reader)
     standing.player = PlayerId{_reader.ReadI32()};
     standing.score = _reader.ReadU32();
     standing.placement = _reader.ReadU32();
-    standing.status = static_cast<PlayerStatus>(_reader.ReadU8());
+    standing.status = _reader.ReadEnum(PlayerStatus::Gone);
     standing.custodianSince = _reader.ReadU32();
     view.m_standings.push_back(standing);
   }

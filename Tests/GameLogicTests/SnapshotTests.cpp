@@ -518,6 +518,27 @@ public:
     }
   }
 
+  // A byte that names no digest kind fails the record rather than becoming a kind no switch has a
+  // case for. The client reads these off a socket; a server that is not this program can write
+  // anything into that byte.
+  TEST_METHOD(ADigestKindByteNamingNothingFailsTheRecord)
+  {
+    Lockstep::DigestEntry entry;
+    entry.kind = Lockstep::DigestKind::Economy;
+    entry.title = "Production +4";
+
+    Neuron::ByteWriter writer;
+    Lockstep::Snapshot::WriteDigest(writer, {entry});
+
+    // Four bytes of count, then the kind.
+    std::vector<std::uint8_t> bytes = writer.Bytes();
+    bytes[4] = 250;
+
+    Neuron::ByteReader reader{bytes};
+    Assert::IsTrue(Lockstep::Snapshot::ReadDigest(reader).empty());
+    Assert::IsTrue(reader.Failed());
+  }
+
   TEST_METHOD(ADigestIsFetchedPerPlayer)
   {
     Lockstep::Match match = Settled();

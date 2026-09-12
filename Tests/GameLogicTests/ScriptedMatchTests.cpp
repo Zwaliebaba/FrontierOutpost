@@ -283,6 +283,28 @@ public:
     }
   }
 
+  // ADR-018 across builds, not only within one. The test above compares two runs of the same
+  // binary, which cannot see a compiler, a standard library or a configuration disagreeing about
+  // the same sum. This pins the number.
+  //
+  // **The pinned value was computed with clang 18 and libstdc++ 13 on Linux, on 2026-09-12**, by
+  // compiling `GameLogic` against a shim of the Windows headers and playing this same match. MSVC
+  // Debug and Release must both agree with it. If this fails and nothing in `GameLogic` was meant
+  // to change a rule, the failure IS the finding: two toolchains disagree about an integer
+  // simulation, which means undefined or unspecified behavior somewhere in it. If a rule was meant
+  // to change, re-pin -- and know that every stored match is now unloadable (ADR-024).
+  TEST_METHOD(TheWholeMatchHashIsPinnedAcrossToolchains)
+  {
+    constexpr std::uint64_t PINNED_HASH = 0x7BA43C4BB0F0125FULL;
+    constexpr std::uint64_t PINNED_SEED = 0xC7920238303AD5D8ULL;
+
+    const Played played = PlayAMatch(false);
+
+    Assert::AreEqual(PINNED_SEED, played.match.Seed(), L"the generator accepted a different seed: the galaxy itself has changed");
+    Assert::AreEqual(84U, played.ticks, L"the match ran a different number of ticks");
+    Assert::AreEqual(PINNED_HASH, played.match.Hash(), L"the same seed and the same bots must produce this match on every toolchain");
+  }
+
   // The absentee never logs in, so custody should arrive on the tick the rule says and not later.
   TEST_METHOD(TheAbsenteeGoesIntoCustodyOnSchedule)
   {

@@ -1,12 +1,8 @@
 // Lockstep.cpp -- process entry point, and the composition root of the main page.
 //
-// WHAT THIS EXECUTABLE SHOWS, as of 2026-09-11, is the ops console in Design/Screens: digest, map,
-// orders. It used to show the MVP-01 isometric ship scene, and that code -- MeshRenderer,
-// IsometricCamera, ShipMesh, StationMesh, ShipView, World and the old parallax Starfield -- was
-// DELETED with the screen it served (ADR-015). This comment said it was "still in the tree and
-// still built and tested" for a day after it was gone, which sent somebody looking for a starfield
-// that no longer existed; the one in `NeuronClient/Starfield` today is a different thing at the
-// same name (ADR-032).
+// What this executable shows is the ops console in Design/UI: digest, map, orders. The sky it
+// draws is `NeuronClient/Starfield`, the sphere of directions of ADR-032, and nothing of the
+// MVP-01 ship scene ADR-015 deleted remains in the tree.
 //
 // This is the wizard's wWinMain reduced to what the game actually needs: one fixed-size,
 // non-resizable window, no menu and no About dialog. The window is the presentation target
@@ -30,6 +26,8 @@
 #include "ShapeRenderer.h"
 
 #include "HostedServer.h"
+#include "MatchLog.h"
+#include "MatchStore.h"
 #include "MainPage.h"
 #include "ConnectionDialog.h"
 #include "JoinPage.h"
@@ -80,6 +78,9 @@ struct Startup
   std::string host = "127.0.0.1";
   std::uint16_t port = 7341;
   std::string token = "alpha";
+  /// Whether `--token` was given. A resumed match offers the host its first stored seat unless the
+  /// command line chose one.
+  bool tokenGiven = false;
   /// `--phase0` runs the test plan's Phase 0 setup: six players, an hourly tick, forty-eight hours.
   /// Without it the defaults are the production three-week match, which nobody is going to sit
   /// through to find a broken mechanic.
@@ -102,8 +103,8 @@ struct Startup
   /// `--bots <n>` puts bots in the LAST n seats of a `--serve` match.
   ///
   /// **Without it the headless runner runs a match nobody plays.** `--serve` listens and ticks on
-  /// schedule whether or not anybody connects, so a Phase 0 rehearsal with no clients was six
-  /// absent players going into custody -- a match that resolves and proves nothing. `--serve
+  /// schedule whether or not anybody connects, so a headless run with no clients is six absent
+  /// players going into custody -- a match that resolves and proves nothing. `--serve
   /// --phase0 --tick 3 --bots 6` is a whole match, played, in under three minutes, and the
   /// instrumentation log (ADR-030) is the output.
   ///
@@ -138,20 +139,16 @@ struct Startup
     return _name;
   }
 
-  std::wstring path{module, length};
+  const std::wstring_view path{module, length};
   const std::size_t slash = path.find_last_of(L'\\');
-  if (slash == std::wstring::npos)
+  if (slash == std::wstring_view::npos)
   {
     return _name;
   }
 
-  std::string folder;
-  folder.reserve(slash + 1);
-  for (std::size_t index = 0; index <= slash; ++index)
-  {
-    folder.push_back(path[index] < 128 ? static_cast<char>(path[index]) : '?');
-  }
-  return folder + _name;
+  // UTF-8, like every path in this tree, and opened wide again at the file (MatchStore, MatchLog).
+  // A folder with a diacritic in its name is an ordinary place for an executable to sit.
+  return Neuron::WideToUtf8(path.substr(0, slash + 1)) + _name;
 }
 
 /// `--serve [port]`, `--join <host[:port]>`, `--token <token>`, `--phase0`, `--tick <seconds>`,
@@ -225,6 +222,7 @@ struct Startup
     else if (words[index] == "--token" && index + 1 < words.size())
     {
       startup.token = words[++index];
+      startup.tokenGiven = true;
     }
     else if (words[index] == "--phase0")
     {
@@ -357,12 +355,59 @@ bool PumpMessages()
   return !g_quitRequested;
 }
 
+/// The match store beside the executable, if there is a match in it to resume (ADR-042).
+///
+/// Three answers. No file means a new match. A file that is not a store, or is cut short, is a
+/// fatal: ADR-024 is explicit that a corrupt store must fail loudly rather than start an empty match
+/// on top of a real one, and the file is left where it is for somebody to look at. A store whose
+/// match has finished is the record of that match, not something to resume into: it is moved
+/// aside under a `.finished` name and a new match starts.
+[[nodiscard]] std::optional<Neuron::MatchStore::Contents> LoadStoredMatch(const std::string& _storePath)
+{
+  Neuron::MatchStore::Contents contents;
+  const Neuron::MatchStore::Problem problem = Neuron::MatchStore::Load(_storePath, contents);
+
+  if (problem == Neuron::MatchStore::Problem::NotFound)
+  {
+    return std::nullopt;
+  }
+  if (problem != Neuron::MatchStore::Problem::None)
+  {
+    Neuron::Fatal("The match store at {} could not be read: {}. It has been left as it is; move it aside to start a new match.", _storePath,
+                  Neuron::MatchStore::Describe(problem));
+  }
+
+  if (contents.finished)
+  {
+    const std::wstring from = Neuron::Utf8ToWide(_storePath);
+    const std::wstring to = from + L".finished";
+    (void)_wremove(to.c_str());
+    if (_wrename(from.c_str(), to.c_str()) != 0)
+    {
+      Neuron::Fatal("The match store at {} holds a finished match and could not be moved aside.", _storePath);
+    }
+    Neuron::DebugTrace("The stored match had finished; it is kept as {}.finished and a new match starts.\n", _storePath);
+    return std::nullopt;
+  }
+
+  return contents;
+}
+
 /// Builds the match server. One function because two callers need it and they must not drift: the
 /// headless `--serve` path starts one before any window exists, and the host's path starts one
 /// after the seats screen has decided how many seats there are (ADR-036).
 [[nodiscard]] std::unique_ptr<Lockstep::HostedServer> StartHostedServer(const Startup& _startup, std::vector<std::string> _tokens)
 {
   constexpr std::uint64_t GALAXY_SEED = 0x4652'4F4E'5449'4552ULL;
+
+  // A stored match resumes, whatever the command line said about rules: the rules are in the store
+  // and the match was played under them (ADR-042).
+  const std::string storePath = BesideTheExecutable("lockstep-match.store");
+  const std::string logPath = BesideTheExecutable("lockstep-match.log");
+  if (std::optional<Neuron::MatchStore::Contents> stored = LoadStoredMatch(storePath))
+  {
+    return std::make_unique<Lockstep::HostedServer>(_startup.port, std::move(*stored), storePath, logPath);
+  }
 
   Lockstep::MatchRules rules = _startup.phaseZero ? Lockstep::PhaseZeroRules() : Lockstep::MatchRules{};
   if (_startup.tickSeconds > 0)
@@ -386,8 +431,8 @@ bool PumpMessages()
     bots[seat] = Lockstep::BotPolicy::ExpandNear;
   }
 
-  return std::make_unique<Lockstep::HostedServer>(_startup.port, std::move(_tokens), BesideTheExecutable("lockstep-match.store"),
-                                                  BesideTheExecutable("lockstep-match.log"), GALAXY_SEED, rules, std::move(bots));
+  return std::make_unique<Lockstep::HostedServer>(_startup.port, std::move(_tokens), storePath, logPath, GALAXY_SEED, rules,
+                                                  std::move(bots));
 }
 
 /// The seats screen, in its own frame loop, until the host enters the match or closes the window.
@@ -704,24 +749,52 @@ int RunGame(HWND _window, const Startup& _startup)
 
   if (_startup.role == Role::HostAndPlay)
   {
-    seatTokens = Lockstep::GenerateSeatTokens(Lockstep::SeatsPage::SEAT_COUNT);
-    hostToken = seatTokens.front();
+    const std::string storePath = BesideTheExecutable("lockstep-match.store");
+    const std::string logPath = BesideTheExecutable("lockstep-match.log");
 
-    hosted = std::make_unique<Lockstep::HostedServer>(_startup.port, seatTokens, BesideTheExecutable("lockstep-match.store"),
-                                                      BesideTheExecutable("lockstep-match.log"));
+    // A match already in the store resumes, with the seats it was played with (ADR-042). The host
+    // takes the first stored seat unless the command line named one; there is no seats screen to
+    // choose from, because the seats were chosen when the match began.
+    if (std::optional<Neuron::MatchStore::Contents> stored = LoadStoredMatch(storePath))
+    {
+      if (!_startup.tokenGiven && !stored->tokens.empty())
+      {
+        hostToken = stored->tokens.front();
+      }
+      hosted = std::make_unique<Lockstep::HostedServer>(_startup.port, std::move(*stored), storePath, logPath);
+    }
+    else
+    {
+      seatTokens = Lockstep::GenerateSeatTokens(Lockstep::SeatsPage::SEAT_COUNT);
+      hostToken = seatTokens.front();
+      hosted = std::make_unique<Lockstep::HostedServer>(_startup.port, seatTokens, storePath, logPath);
+    }
+
+    // The lobby has to be listening before there is any point drawing a screen that asks people to
+    // join it. A port that could not be bound is a fatal here, where the composition root turns it
+    // into a message box, rather than a join screen that says "no answer" about the host's own
+    // machine.
+    for (std::int32_t attempt = 0; attempt < 200 && !hosted->Listening() && !hosted->Failed(); ++attempt)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (hosted->Failed())
+    {
+      Neuron::Fatal("{}", hosted->Failure());
+    }
   }
 
   // ---- Screen 03, unless the command line already answered it ----------------------------------
   //
   // `--join host:port --token x` names a server and a seat, which is exactly what the join screen
   // asks for, so a client given both goes straight to the match. Everything else -- including the
-  // host's own client -- starts here, because the host needs a seat too and until now took player
-  // zero by being first through the door (ADR-029's first open question).
+  // host's own client -- starts here, because the host needs a seat too (ADR-029's first open
+  // question, closed by ADR-036).
   //
   // **A `--join` that cannot reach anything falls through to the screen rather than to a message
-  // box.** It used to put up a `MessageBoxA` and exit, which told a player their address was wrong
-  // and then took away the only place they could fix it. The join screen is pre-filled with what
-  // the command line asked for, so the fix is one character and a tap.
+  // box.** A message box tells a player their address was wrong and takes away the only place they
+  // could fix it; the join screen is pre-filled with what the command line asked for, so the fix
+  // is one character and a tap.
   bool askForAServer = !_startup.joinGiven;
 
   if (_startup.joinGiven)
@@ -779,8 +852,9 @@ int RunGame(HWND _window, const Startup& _startup)
   // ---- The host arranges the match, now that they are logged in ---------------------------------
   //
   // Seats after login, which is the order the owner asked for and the only one in which the screen
-  // can say who is here. `ENTER MATCH` waits for every human seat to be connected.
-  if (hosted != nullptr)
+  // can say who is here. `ENTER MATCH` waits for every human seat to be connected. A resumed match
+  // has its seats already and skips this.
+  if (hosted != nullptr && !hosted->Resumed())
   {
     std::vector<std::string> playing;
     std::vector<std::optional<Lockstep::BotPolicy>> bots;
@@ -809,15 +883,10 @@ int RunGame(HWND _window, const Startup& _startup)
     }
   }
 
-  // **Empty until the server says otherwise, and THE REFERENCE FIXTURE IS GONE.**
-  //
-  // This used to boot with `MakeReferenceMatch()` -- the design sheet's twelve-player mid-match --
-  // on the argument that it was only up "for the fraction of a second between connecting and being
-  // welcomed". That stopped being true the day the lobby started existing before the match did: a
-  // player who joins before the host taps ENTER MATCH is welcomed immediately and sent no state at
-  // all, so the fixture was what they looked at for as long as the host took. A fake match is the
-  // worst possible thing to put in front of somebody waiting for a real one, because it is not
-  // distinguishable from one. `ConnectionDialog` says what is actually happening instead.
+  // **Empty until the server says otherwise.** A player who joins before the host taps ENTER MATCH
+  // is welcomed immediately and sent no state, and a fixture in that gap would be a fake match in
+  // front of somebody waiting for a real one, indistinguishable from it. `ConnectionDialog` says
+  // what is actually happening instead.
   Lockstep::MainPage page;
   page.Create(Lockstep::MatchState{});
 
@@ -861,27 +930,40 @@ int RunGame(HWND _window, const Startup& _startup)
       const Lockstep::Snapshot snapshot = Lockstep::Snapshot::Read(reader);
 
       Neuron::ByteReader digestReader{connection.Digest()};
-      Lockstep::MatchState state = Lockstep::ViewOf(snapshot, Lockstep::Snapshot::ReadDigest(digestReader), connection.SecondsToLock());
-      state.connected = true;
+      const std::vector<Lockstep::DigestEntry> digest = Lockstep::Snapshot::ReadDigest(digestReader);
 
-      // ---- How much happened while nobody was looking ----------------------------------------
-      //
-      // **The composition root is the only thing that can know this**, because it is the only
-      // thing that sees one state replaced by the next. A client that stayed connected gets every
-      // tick as it resolves and is never behind; one that closed its lid for a night comes back to
-      // a tick several later than the one it last drew, and the difference is what it missed.
-      //
-      // It cannot survive a restart. R13 leaves the client nothing to write, so a fresh process
-      // opens at zero however long the player was away -- which is honest rather than wrong: this
-      // process has not looked at anything yet.
-      if (drawnTick != 0 && state.match.tick > drawnTick + 1)
+      // A state that did not decode is not a state. The reader fills a short record with zeros and
+      // refuses a byte that names no enumerator, and either way what came out is not what the
+      // server sent -- so the screen keeps the last state it could trust rather than drawing this.
+      if (reader.Failed() || !reader.AtEnd() || digestReader.Failed() || !digestReader.AtEnd())
       {
-        state.unreadTicks = state.match.tick - drawnTick;
-        state.lastSeenTick = drawnTick;
+        Neuron::DebugTrace("A state message from the server did not decode; keeping the last one.\n");
       }
-      drawnTick = state.match.tick;
+      else
+      {
+        Lockstep::MatchState state = Lockstep::ViewOf(snapshot, digest, connection.SecondsToLock());
+        state.connected = true;
 
-      page.Create(std::move(state));
+        // ---- How much happened while nobody was looking --------------------------------------
+        //
+        // **The composition root is the only thing that can know this**, because it is the only
+        // thing that sees one state replaced by the next. A client that stayed connected gets
+        // every tick as it resolves and is never behind; one that closed its lid for a night comes
+        // back to a tick several later than the one it last drew, and the difference is what it
+        // missed.
+        //
+        // It cannot survive a restart. R13 leaves the client nothing to write, so a fresh process
+        // opens at zero however long the player was away -- which is honest rather than wrong:
+        // this process has not looked at anything yet.
+        if (drawnTick != 0 && state.match.tick > drawnTick + 1)
+        {
+          state.unreadTicks = state.match.tick - drawnTick;
+          state.lastSeenTick = drawnTick;
+        }
+        drawnTick = state.match.tick;
+
+        page.Create(std::move(state));
+      }
     }
 
     // ---- What is wrong, if anything (screens 04 and 05) ----------------------------------------
@@ -1076,28 +1158,47 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   // R13 binds the shipped client and names the match store as its one exception (ADR-024). With one
   // executable in two roles the rule is about the ROLE and not the binary: a process acting as the
   // server writes a store, and a process that is only a client never does.
-  std::unique_ptr<Lockstep::HostedServer> hosted;
-  if (startup.role == Role::Serve)
-  {
-    // Headless has no seats screen to choose with, so it keeps the fixed list. ADR-036 replaced
-    // those for a host who can see a screen; `--serve` is the dedicated server and whoever runs it
-    // reads the tokens out of the source exactly as they did before.
-    hosted = StartHostedServer(startup, PhaseZeroTokens());
-  }
-
   // ---- Headless -------------------------------------------------------------------------------
   //
   // `--serve` draws nothing and runs until it is killed. It is the dedicated server and it is also
   // the headless runner: a match resolving on a schedule with nobody watching.
+  //
+  // A fatal on this path has no window to be shown in, so it goes to the match log -- the one
+  // place somebody running a headless server is going to look.
   if (startup.role == Role::Serve)
   {
-    while (true)
+    try
     {
-      for (const std::string& line : hosted->TakeLog())
+      // Headless has no seats screen to choose with, so a new match keeps the fixed list. ADR-036
+      // replaced those for a host who can see a screen; `--serve` is the dedicated server and
+      // whoever runs it reads the tokens out of the source exactly as they did before. A resumed
+      // match uses the seats it was stored with.
+      const std::unique_ptr<Lockstep::HostedServer> hosted = StartHostedServer(startup, PhaseZeroTokens());
+
+      while (true)
       {
-        Neuron::DebugTrace("{}\n", line);
+        for (const std::string& line : hosted->TakeLog())
+        {
+          Neuron::DebugTrace("{}\n", line);
+        }
+
+        // A server thread that has stopped on a fatal has already written why to the match log.
+        // What is left is to not sit here forever looking alive: the process ends, with a failing
+        // exit code, so whatever started it can see that it did.
+        if (hosted->Failed())
+        {
+          Neuron::DebugTrace("{}\n", hosted->Failure());
+          return EXIT_FAILURE;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    catch (const std::exception& error)
+    {
+      Neuron::MatchLog log{BesideTheExecutable("lockstep-match.log")};
+      log.Write(std::string("FATAL ") + error.what());
+      Neuron::DebugTrace("{}\n", error.what());
+      return EXIT_FAILURE;
     }
   }
 

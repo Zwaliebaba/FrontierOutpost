@@ -1,6 +1,8 @@
 #pragma once
 
+#include "Protocol.h"
 #include "Simulation.h"
+#include "TickSchedule.h"
 
 #include <cstdint>
 #include <span>
@@ -33,6 +35,19 @@ public:
     /// The hash the match had when this was last written. A reload that does not reproduce it is a
     /// simulation that has changed under a live match.
     std::uint64_t hash = 0;
+
+    /// The schedule, as UTC seconds and an interval, so a restarted server owes exactly the locks it
+    /// slept through rather than starting its clock again (ADR-026, ADR-042).
+    Instant startedAt = 0;
+    std::uint32_t intervalSeconds = 0;
+
+    /// Whether the match had ended when this was written. A finished store is the record of a match,
+    /// not something to resume into; the composition root moves one aside and starts fresh.
+    bool finished = false;
+
+    /// The seat tokens, so a restarted server admits the same people to the same seats (ADR-036's
+    /// open question, closed by ADR-042). The server's, not the game's: the game never sees them.
+    std::vector<std::string> tokens;
   };
 
   /// Why a store could not be read.
@@ -67,7 +82,7 @@ public:
 
   /// The bytes a store starts with, so a file that is not one can be refused rather than parsed.
   static constexpr std::uint32_t MAGIC = 0x4D544E46U; // "FNTM", little-endian
-  static constexpr std::uint32_t VERSION = 1;
+  static constexpr std::uint32_t VERSION = 2;
 
 private:
   /// Bounds on what a declared count may be, for the same reason `OrderSet::Read` has them: these

@@ -184,13 +184,30 @@ enum class OrderRejection : std::uint8_t
 
 [[nodiscard]] const char* Describe(OrderRejection _rejection) noexcept;
 
+/// Which of an order set's lists a rejection points into.
+///
+/// An index alone is ambiguous: fleet order zero and build zero are different orders, and a lock
+/// that skipped "whatever is at index zero" would drop a legal build because an unrelated fleet
+/// order was refused. `Set` is for a refusal of the whole set, where the index means nothing.
+enum class OrderList : std::uint8_t
+{
+  Set,
+  FleetOrders,
+  Builds,
+  Proposals,
+  Answers,
+  Withdrawals,
+  Cancellations
+};
+
 /// Which order was refused and why.
 ///
-/// `index` is the position within its own list, so a client can point at the row the player typed
-/// rather than at "an order".
+/// `index` is the position within the named list, so a client can point at the row the player
+/// typed rather than at "an order".
 struct RejectedOrder
 {
   OrderRejection reason = OrderRejection::None;
+  OrderList list = OrderList::Set;
   std::int32_t index = -1;
 };
 

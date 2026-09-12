@@ -1048,8 +1048,8 @@ void MainPage::DrawMap(ShapeRenderer& _shapes, FontRenderer& _text)
     bool dashed;
   };
 
-  // Three fixed empires until 2026-09-11, and now the ones this player can actually see. A
-  // twelve-swatch legend would fill the bar with colours for empires nobody has met, and the
+  // The empires this player can actually see, not all twelve. A twelve-swatch legend would fill
+  // the bar with colours for empires nobody has met, and the
   // entries that earn their place are the ones already on the map (ADR-027).
   const auto labelOf = [this](OwnerId _player)
   {

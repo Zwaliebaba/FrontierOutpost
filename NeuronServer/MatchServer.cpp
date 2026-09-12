@@ -237,10 +237,13 @@ void MatchServer::Handle(Connection& _connection, std::span<const std::uint8_t> 
     _connection.player = player;
     Log(std::format("login player {}", player));
 
-    Send(_connection, Protocol::EncodeWelcome(player, m_session == nullptr ? 0 : m_session->Match().Tick(), 0));
+    Send(_connection, Protocol::EncodeWelcome(player, m_session == nullptr ? 0 : m_session->Match().Tick(),
+                                              m_session == nullptr ? 0 : m_session->SecondsUntilNextLock(m_now)));
     // The state follows immediately, so a client that has just connected has something to draw
-    // without waiting up to six hours for the next lock.
-    PushState(_connection, 0);
+    // without waiting up to six hours for the next lock. Stamped with the poll's instant: a
+    // countdown measured from zero is the lock's absolute time, and a client that joined an hour
+    // into a tick would count down the whole interval again.
+    PushState(_connection, m_now);
     return;
   }
 
@@ -273,8 +276,7 @@ void MatchServer::Handle(Connection& _connection, std::span<const std::uint8_t> 
     //
     // **The tick these would go into will never resolve**, so accepting them is a promise the
     // server cannot keep, and counting them corrupts H4 -- which is the share of sessions that
-    // included an edit while the game was still a game. A rehearsal found this by tapping after a
-    // dominance ending and watching the edit counter climb into a tick that no longer existed.
+    // included an edit while the game was still a game.
     //
     // Logged once per connection rather than per tap, because a player who keeps tapping at a
     // finished match is one fact about that session, not twenty. The client learns the match is
@@ -390,6 +392,7 @@ void MatchServer::PushState(Connection& _connection, Instant _now)
 
 std::uint32_t MatchServer::Poll(Instant _now)
 {
+  m_now = _now;
   Accept();
 
   for (Connection& connection : m_connections)

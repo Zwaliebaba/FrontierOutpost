@@ -1,6 +1,6 @@
 # ADR-026 — The schedule is arithmetic, and a sleeping server owes every lock it missed
 
-**Status:** Accepted
+**Status:** Accepted — until 2026-09-12 the executable handed the schedule a process-relative instant, so the UTC anchor this ADR describes existed only in the tests; ADR-042 made it true of the server.
 
 **Date:** 2026-09-11
 **Decided by:** Build session for `Design/Plans/4X-02-ServerAndClient.md`, Step 1.

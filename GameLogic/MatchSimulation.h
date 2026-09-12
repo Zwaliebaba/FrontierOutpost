@@ -9,6 +9,7 @@
 #include "Simulation.h"
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -40,8 +41,10 @@ public:
   /// bots existed decodes to.
   MatchSimulation(const MatchRules& _rules, std::uint64_t _seed, std::vector<std::optional<BotPolicy>> _bots);
 
-  /// The same match, from what `Configuration()` wrote. Used when a store is reloaded.
-  [[nodiscard]] static MatchSimulation FromConfiguration(std::span<const std::uint8_t> _configuration);
+  /// The same match, from what `Configuration()` wrote. Used when a store is reloaded. Owned by a
+  /// pointer because a `Simulation` is neither copied nor moved, and the session that takes it
+  /// wants one anyway.
+  [[nodiscard]] static std::unique_ptr<MatchSimulation> FromConfiguration(std::span<const std::uint8_t> _configuration);
 
   [[nodiscard]] std::int32_t PlayerCount() const override;
   [[nodiscard]] std::uint32_t Tick() const override;

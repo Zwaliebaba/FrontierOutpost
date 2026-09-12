@@ -136,6 +136,10 @@ private:
   std::vector<std::uint32_t> m_submissionsThisTick;
   std::uint32_t m_pushedTick = 0;
   bool m_pushedOnce = false;
+
+  /// The instant the poll in progress was given. A message handled inside that poll -- a welcome,
+  /// the state that follows it -- has to say how long until the lock as of now, not as of zero.
+  Instant m_now = 0;
 };
 
 } // namespace Neuron

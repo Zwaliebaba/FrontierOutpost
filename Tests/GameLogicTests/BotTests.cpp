@@ -122,17 +122,17 @@ public:
     roster[4] = Lockstep::BotPolicy::Turtle;
 
     Lockstep::MatchSimulation original{rules, BOT_SEED, roster};
-    Lockstep::MatchSimulation reloaded = Lockstep::MatchSimulation::FromConfiguration(original.Configuration());
+    const std::unique_ptr<Lockstep::MatchSimulation> reloaded = Lockstep::MatchSimulation::FromConfiguration(original.Configuration());
 
-    Assert::AreEqual(original.Hash(), reloaded.Hash(), L"the reloaded match started from a different galaxy");
+    Assert::AreEqual(original.Hash(), reloaded->Hash(), L"the reloaded match started from a different galaxy");
 
     // Played rather than inspected, because the roster has no accessor and does not need one: what
     // it is for is which seats move, so that is what is asserted.
     original.Resolve();
-    reloaded.Resolve();
-    Assert::AreEqual(original.Hash(), reloaded.Hash(), L"the reloaded match played a different tick");
+    reloaded->Resolve();
+    Assert::AreEqual(original.Hash(), reloaded->Hash(), L"the reloaded match played a different tick");
 
-    const std::vector<Neuron::PlayerTurn> locked = reloaded.LockedTurn();
+    const std::vector<Neuron::PlayerTurn> locked = reloaded->LockedTurn();
     Assert::IsTrue(locked[0].orders.empty(), L"the human seat came back as a bot");
     Assert::IsFalse(locked[4].orders.empty(), L"a bot seat came back empty");
   }
@@ -148,10 +148,10 @@ public:
     std::vector<std::uint8_t> configuration = withBots.Configuration();
     configuration.resize(configuration.size() - rules.playerCount);
 
-    Lockstep::MatchSimulation reloaded = Lockstep::MatchSimulation::FromConfiguration(configuration);
-    reloaded.Resolve();
+    const std::unique_ptr<Lockstep::MatchSimulation> reloaded = Lockstep::MatchSimulation::FromConfiguration(configuration);
+    reloaded->Resolve();
 
-    for (const Neuron::PlayerTurn& turn : reloaded.LockedTurn())
+    for (const Neuron::PlayerTurn& turn : reloaded->LockedTurn())
     {
       Assert::IsTrue(turn.orders.empty(), L"an old store grew bots it never had");
     }

@@ -15,60 +15,93 @@ namespace Lockstep
 namespace
 {
 
-/// The match's configuration, as bytes. Every field of `MatchRules` plus the seed.
+/// Every field of `MatchRules`, in wire order, ONCE.
 ///
-/// Written field by field rather than as a memory image: the same argument as `ByteWriter`'s, which
-/// is that a store read back by a different build has to see what was written rather than whatever
-/// the compiler laid out. A field added to `MatchRules` without being added here is a field that
-/// silently reverts to its default on reload, which is why the count is checked on read.
-constexpr std::uint32_t CONFIGURATION_FIELDS = 34;
+/// The writer, the reader and the field count are all expanded from this list, so they cannot
+/// disagree with each other. What the list cannot see is a field added to the struct and not to it,
+/// and the `static_assert` on the struct's size below is the tripwire for that: adding a field
+/// changes the size, the build fails here, and the fix is one line in this list and one number.
+///
+/// Written field by field rather than as a memory image: a store read back by a different build has
+/// to see what was written rather than whatever the compiler laid out.
+#define MATCH_RULES_FIELDS(X)    \
+  X(playerCount)                 \
+  X(matchLengthTicks)            \
+  X(tickIntervalSeconds)         \
+  X(capitalGuardTicks)           \
+  X(proposalWindowTicks)         \
+  X(custodianAbsenceTicks)       \
+  X(siegeTicks)                  \
+  X(satellitesPerCapital)        \
+  X(frontierSystemsPerPlayer)    \
+  X(maximumTicksToNearestRival)  \
+  X(frontierLaneMinimumTicks)    \
+  X(frontierLaneMaximumTicks)    \
+  X(maximumSeedAttempts)         \
+  X(startingShips)               \
+  X(startingCredits)             \
+  X(creditsPerSystem)            \
+  X(capitalCreditsBonus)         \
+  X(miningStationCredits)        \
+  X(shipsPerShipyard)            \
+  X(internalLaneIncome)          \
+  X(tradeLaneIncome)             \
+  X(combatRounds)                \
+  X(damagePercentPerRound)       \
+  X(defenderBonusPercent)        \
+  X(rearGuardEnabled)            \
+  X(shipyardCost)                \
+  X(miningStationCost)           \
+  X(tradeLaneCost)               \
+  X(scorePerSystem)              \
+  X(capitalScoreBonus)           \
+  X(garrisonDecayPercent)        \
+  X(custodianSpoilsYieldPercent) \
+  X(firstWeekTicks)              \
+  X(dominanceSharePercent)       \
+  X(dominanceHoldTicks)          \
+  X(scoutingRangeLanes)          \
+  X(regionOpensAtTick)           \
+  X(regionSiteCount)
+
+/// Thirty-seven 32-bit fields and one bool, padded, on x64. If this fires, a field was added to
+/// `MatchRules`: add it to `MATCH_RULES_FIELDS` in wire order, then update this number.
+static_assert(sizeof(MatchRules) == 152, "MatchRules changed shape; add the field to MATCH_RULES_FIELDS and update this size");
+
+#define COUNT_ONE_FIELD(name) +1
+constexpr std::uint32_t CONFIGURATION_FIELDS = 0 MATCH_RULES_FIELDS(COUNT_ONE_FIELD);
+#undef COUNT_ONE_FIELD
 
 /// The roster byte for a seat a person sits in. Not a `BotPolicy` value and deliberately far from
 /// one, so a roster read out of a truncated store cannot land on a policy by accident.
 constexpr std::uint8_t HUMAN_SEAT = 0xFF;
 
+void WriteField(Neuron::ByteWriter& _writer, std::uint32_t _value)
+{
+  _writer.WriteU32(_value);
+}
+
+void WriteField(Neuron::ByteWriter& _writer, bool _value)
+{
+  _writer.WriteBool(_value);
+}
+
+void ReadField(Neuron::ByteReader& _reader, std::uint32_t& _value)
+{
+  _value = _reader.ReadU32();
+}
+
+void ReadField(Neuron::ByteReader& _reader, bool& _value)
+{
+  _value = _reader.ReadBool();
+}
+
 void WriteRules(Neuron::ByteWriter& _writer, const MatchRules& _rules)
 {
   _writer.WriteU32(CONFIGURATION_FIELDS);
-
-  _writer.WriteU32(_rules.playerCount);
-  _writer.WriteU32(_rules.matchLengthTicks);
-  _writer.WriteU32(_rules.tickIntervalSeconds);
-  _writer.WriteU32(_rules.capitalGuardTicks);
-  _writer.WriteU32(_rules.proposalWindowTicks);
-  _writer.WriteU32(_rules.custodianAbsenceTicks);
-  _writer.WriteU32(_rules.siegeTicks);
-  _writer.WriteU32(_rules.satellitesPerCapital);
-  _writer.WriteU32(_rules.frontierSystemsPerPlayer);
-  _writer.WriteU32(_rules.maximumTicksToNearestRival);
-  _writer.WriteU32(_rules.frontierLaneMinimumTicks);
-  _writer.WriteU32(_rules.frontierLaneMaximumTicks);
-  _writer.WriteU32(_rules.maximumSeedAttempts);
-  _writer.WriteU32(_rules.startingShips);
-  _writer.WriteU32(_rules.startingCredits);
-  _writer.WriteU32(_rules.creditsPerSystem);
-  _writer.WriteU32(_rules.capitalCreditsBonus);
-  _writer.WriteU32(_rules.miningStationCredits);
-  _writer.WriteU32(_rules.shipsPerShipyard);
-  _writer.WriteU32(_rules.internalLaneIncome);
-  _writer.WriteU32(_rules.tradeLaneIncome);
-  _writer.WriteU32(_rules.combatRounds);
-  _writer.WriteU32(_rules.damagePercentPerRound);
-  _writer.WriteU32(_rules.defenderBonusPercent);
-  _writer.WriteBool(_rules.rearGuardEnabled);
-  _writer.WriteU32(_rules.shipyardCost);
-  _writer.WriteU32(_rules.miningStationCost);
-  _writer.WriteU32(_rules.tradeLaneCost);
-  _writer.WriteU32(_rules.scorePerSystem);
-  _writer.WriteU32(_rules.capitalScoreBonus);
-  _writer.WriteU32(_rules.garrisonDecayPercent);
-  _writer.WriteU32(_rules.custodianSpoilsYieldPercent);
-  _writer.WriteU32(_rules.firstWeekTicks);
-  _writer.WriteU32(_rules.dominanceSharePercent);
-  _writer.WriteU32(_rules.dominanceHoldTicks);
-  _writer.WriteU32(_rules.scoutingRangeLanes);
-  _writer.WriteU32(_rules.regionOpensAtTick);
-  _writer.WriteU32(_rules.regionSiteCount);
+#define WRITE_RULES_FIELD(name) WriteField(_writer, _rules.name);
+  MATCH_RULES_FIELDS(WRITE_RULES_FIELD)
+#undef WRITE_RULES_FIELD
 }
 
 [[nodiscard]] MatchRules ReadRules(Neuron::ByteReader& _reader)
@@ -83,44 +116,9 @@ void WriteRules(Neuron::ByteWriter& _writer, const MatchRules& _rules)
   }
 
   MatchRules rules;
-  rules.playerCount = _reader.ReadU32();
-  rules.matchLengthTicks = _reader.ReadU32();
-  rules.tickIntervalSeconds = _reader.ReadU32();
-  rules.capitalGuardTicks = _reader.ReadU32();
-  rules.proposalWindowTicks = _reader.ReadU32();
-  rules.custodianAbsenceTicks = _reader.ReadU32();
-  rules.siegeTicks = _reader.ReadU32();
-  rules.satellitesPerCapital = _reader.ReadU32();
-  rules.frontierSystemsPerPlayer = _reader.ReadU32();
-  rules.maximumTicksToNearestRival = _reader.ReadU32();
-  rules.frontierLaneMinimumTicks = _reader.ReadU32();
-  rules.frontierLaneMaximumTicks = _reader.ReadU32();
-  rules.maximumSeedAttempts = _reader.ReadU32();
-  rules.startingShips = _reader.ReadU32();
-  rules.startingCredits = _reader.ReadU32();
-  rules.creditsPerSystem = _reader.ReadU32();
-  rules.capitalCreditsBonus = _reader.ReadU32();
-  rules.miningStationCredits = _reader.ReadU32();
-  rules.shipsPerShipyard = _reader.ReadU32();
-  rules.internalLaneIncome = _reader.ReadU32();
-  rules.tradeLaneIncome = _reader.ReadU32();
-  rules.combatRounds = _reader.ReadU32();
-  rules.damagePercentPerRound = _reader.ReadU32();
-  rules.defenderBonusPercent = _reader.ReadU32();
-  rules.rearGuardEnabled = _reader.ReadBool();
-  rules.shipyardCost = _reader.ReadU32();
-  rules.miningStationCost = _reader.ReadU32();
-  rules.tradeLaneCost = _reader.ReadU32();
-  rules.scorePerSystem = _reader.ReadU32();
-  rules.capitalScoreBonus = _reader.ReadU32();
-  rules.garrisonDecayPercent = _reader.ReadU32();
-  rules.custodianSpoilsYieldPercent = _reader.ReadU32();
-  rules.firstWeekTicks = _reader.ReadU32();
-  rules.dominanceSharePercent = _reader.ReadU32();
-  rules.dominanceHoldTicks = _reader.ReadU32();
-  rules.scoutingRangeLanes = _reader.ReadU32();
-  rules.regionOpensAtTick = _reader.ReadU32();
-  rules.regionSiteCount = _reader.ReadU32();
+#define READ_RULES_FIELD(name) ReadField(_reader, rules.name);
+  MATCH_RULES_FIELDS(READ_RULES_FIELD)
+#undef READ_RULES_FIELD
   return rules;
 }
 
@@ -140,7 +138,7 @@ MatchSimulation::MatchSimulation(const MatchRules& _rules, std::uint64_t _seed, 
   m_bots.resize(static_cast<std::size_t>(_rules.playerCount));
 }
 
-MatchSimulation MatchSimulation::FromConfiguration(std::span<const std::uint8_t> _configuration)
+std::unique_ptr<MatchSimulation> MatchSimulation::FromConfiguration(std::span<const std::uint8_t> _configuration)
 {
   Neuron::ByteReader reader{_configuration};
   const MatchRules rules = ReadRules(reader);
@@ -154,16 +152,27 @@ MatchSimulation MatchSimulation::FromConfiguration(std::span<const std::uint8_t>
     for (std::uint32_t player = 0; player < rules.playerCount; ++player)
     {
       const std::uint8_t style = reader.ReadU8();
-      bots.push_back(style == HUMAN_SEAT ? std::optional<BotPolicy>{} : std::optional<BotPolicy>{static_cast<BotPolicy>(style)});
+      if (style == HUMAN_SEAT)
+      {
+        bots.emplace_back();
+      }
+      else if (style <= static_cast<std::uint8_t>(BotPolicy::Absentee))
+      {
+        bots.emplace_back(static_cast<BotPolicy>(style));
+      }
+      else
+      {
+        Neuron::Fatal("This match store names a bot style ({}) this build does not have.", style);
+      }
     }
   }
 
-  if (reader.Failed())
+  if (reader.Failed() || !reader.AtEnd())
   {
-    Neuron::Fatal("This match store's configuration is truncated.");
+    Neuron::Fatal("This match store's configuration is not the shape this build writes.");
   }
 
-  return MatchSimulation{Reloaded{}, rules, seed, std::move(bots)};
+  return std::unique_ptr<MatchSimulation>(new MatchSimulation{Reloaded{}, rules, seed, std::move(bots)});
 }
 
 MatchSimulation::MatchSimulation(Reloaded, const MatchRules& _rules, std::uint64_t _acceptedSeed,
@@ -369,7 +378,7 @@ void MatchSimulation::RecordEvents()
         else
         {
           // The one Custodian entry with no subject is the returning player's own "you are back",
-          // which is the opposite event and was previously logged as another entry into custody.
+          // which is the opposite event.
           m_events.push_back(std::format("T{} custodian-ended player={}", tick, player));
         }
         break;

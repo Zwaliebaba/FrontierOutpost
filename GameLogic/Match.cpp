@@ -374,12 +374,12 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
 {
   std::vector<RejectedOrder> rejected;
 
-  const auto refuse = [&rejected](OrderRejection _reason, std::size_t _index)
-  { rejected.push_back(RejectedOrder{.reason = _reason, .index = static_cast<std::int32_t>(_index)}); };
+  const auto refuse = [&rejected](OrderRejection _reason, OrderList _list, std::size_t _index)
+  { rejected.push_back(RejectedOrder{.reason = _reason, .list = _list, .index = static_cast<std::int32_t>(_index)}); };
 
   if (!HasPlayer(_orders.player))
   {
-    refuse(OrderRejection::NoSuchPlayer, 0);
+    refuse(OrderRejection::NoSuchPlayer, OrderList::Set, 0);
     return rejected;
   }
 
@@ -388,7 +388,7 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
     // One refusal for the whole set rather than one per order. A custodian is not making mistakes;
     // its territory defends and never expands or attacks, so there are no orders to refuse
     // individually and a digest full of identical refusals would say nothing extra.
-    refuse(PlayerAt(_orders.player).conceded ? OrderRejection::AlreadyConceded : OrderRejection::YouAreACustodian, 0);
+    refuse(PlayerAt(_orders.player).conceded ? OrderRejection::AlreadyConceded : OrderRejection::YouAreACustodian, OrderList::Set, 0);
     return rejected;
   }
 
@@ -400,13 +400,13 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
 
     if (!HasFleet(order.fleet) || FleetAt(order.fleet).owner != _orders.player || FleetAt(order.fleet).destroyed)
     {
-      refuse(OrderRejection::NotYourFleet, index);
+      refuse(OrderRejection::NotYourFleet, OrderList::FleetOrders, index);
       continue;
     }
 
     if (std::find(ordered.begin(), ordered.end(), order.fleet) != ordered.end())
     {
-      refuse(OrderRejection::FleetOrderedTwice, index);
+      refuse(OrderRejection::FleetOrderedTwice, OrderList::FleetOrders, index);
       continue;
     }
     ordered.push_back(order.fleet);
@@ -414,13 +414,13 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
     const MatchFleet& fleet = FleetAt(order.fleet);
     if (fleet.InTransit())
     {
-      refuse(OrderRejection::FleetInTransit, index);
+      refuse(OrderRejection::FleetInTransit, OrderList::FleetOrders, index);
       continue;
     }
 
     if (!HasSystem(order.destination))
     {
-      refuse(OrderRejection::NoLaneToDestination, index);
+      refuse(OrderRejection::NoLaneToDestination, OrderList::FleetOrders, index);
       continue;
     }
 
@@ -441,7 +441,7 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
     }
     if (!reachable)
     {
-      refuse(OrderRejection::NoLaneToDestination, index);
+      refuse(OrderRejection::NoLaneToDestination, OrderList::FleetOrders, index);
     }
   }
 
@@ -459,7 +459,7 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
 
     if (!HasSystem(order.system) || SystemAt(order.system).owner != _orders.player)
     {
-      refuse(OrderRejection::NotYourSystem, index);
+      refuse(OrderRejection::NotYourSystem, OrderList::Builds, index);
       continue;
     }
 
@@ -467,14 +467,14 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
     const bool already = order.kind == BuildKind::Shipyard ? system.hasShipyard : system.hasMiningStation;
     if (already)
     {
-      refuse(OrderRejection::AlreadyBuilt, index);
+      refuse(OrderRejection::AlreadyBuilt, OrderList::Builds, index);
       continue;
     }
 
     const std::uint32_t cost = order.kind == BuildKind::Shipyard ? m_rules.shipyardCost : m_rules.miningStationCost;
     if (spent + cost > purse)
     {
-      refuse(OrderRejection::CannotAfford, index);
+      refuse(OrderRejection::CannotAfford, OrderList::Builds, index);
       continue;
     }
     spent += cost;
@@ -487,7 +487,7 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
 
     if (!HasPlayer(order.to) || order.to == _orders.player)
     {
-      refuse(OrderRejection::NoSuchRecipient, index);
+      refuse(OrderRejection::NoSuchRecipient, OrderList::Proposals, index);
       continue;
     }
 
@@ -495,7 +495,7 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
     {
       if (!order.lane.IsValid() || order.lane.AsSize() >= m_galaxy.Lanes().size())
       {
-        refuse(OrderRejection::LaneNotBetweenYou, index);
+        refuse(OrderRejection::LaneNotBetweenYou, OrderList::Proposals, index);
         continue;
       }
 
@@ -509,13 +509,13 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
       const bool joinsThem = (first == _orders.player && second == order.to) || (second == _orders.player && first == order.to);
       if (!joinsThem)
       {
-        refuse(OrderRejection::LaneNotBetweenYou, index);
+        refuse(OrderRejection::LaneNotBetweenYou, OrderList::Proposals, index);
         continue;
       }
 
       if (spent + m_rules.tradeLaneCost > purse)
       {
-        refuse(OrderRejection::CannotAfford, index);
+        refuse(OrderRejection::CannotAfford, OrderList::Proposals, index);
         continue;
       }
       spent += m_rules.tradeLaneCost;
@@ -523,7 +523,7 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
 
     if (order.kind == ProposalKind::HoldForTicks && (order.ticks == 0 || order.ticks > m_rules.proposalWindowTicks))
     {
-      refuse(OrderRejection::BadHoldWindow, index);
+      refuse(OrderRejection::BadHoldWindow, OrderList::Proposals, index);
       continue;
     }
 
@@ -534,7 +534,7 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
     {
       if (order.conditionalLane.AsSize() >= m_galaxy.Lanes().size())
       {
-        refuse(OrderRejection::ConditionalLaneNotBetweenYou, index);
+        refuse(OrderRejection::ConditionalLaneNotBetweenYou, OrderList::Proposals, index);
         continue;
       }
       const GalaxyLane& conditional = m_galaxy.LaneAt(order.conditionalLane);
@@ -542,7 +542,7 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
       const PlayerId second = SystemAt(conditional.b).owner;
       if (!((first == _orders.player && second == order.to) || (second == _orders.player && first == order.to)))
       {
-        refuse(OrderRejection::ConditionalLaneNotBetweenYou, index);
+        refuse(OrderRejection::ConditionalLaneNotBetweenYou, OrderList::Proposals, index);
       }
     }
   }
@@ -553,11 +553,11 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
     const OpenProposal* proposal = FindProposal(_orders.answers[index].proposal);
     if (proposal == nullptr)
     {
-      refuse(OrderRejection::NoSuchProposal, index);
+      refuse(OrderRejection::NoSuchProposal, OrderList::Answers, index);
     }
     else if (proposal->to != _orders.player)
     {
-      refuse(OrderRejection::NotYoursToAnswer, index);
+      refuse(OrderRejection::NotYoursToAnswer, OrderList::Answers, index);
     }
   }
 
@@ -566,11 +566,11 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
     const OpenProposal* proposal = FindProposal(_orders.withdrawals[index].proposal);
     if (proposal == nullptr)
     {
-      refuse(OrderRejection::NoSuchProposal, index);
+      refuse(OrderRejection::NoSuchProposal, OrderList::Withdrawals, index);
     }
     else if (proposal->from != _orders.player)
     {
-      refuse(OrderRejection::NotYoursToWithdraw, index);
+      refuse(OrderRejection::NotYoursToWithdraw, OrderList::Withdrawals, index);
     }
   }
 
@@ -581,7 +581,7 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
     const ActiveTradeLane* lane = FindTradeLane(_orders.cancellations[index].lane);
     if (lane == nullptr || (lane->a != _orders.player && lane->b != _orders.player))
     {
-      refuse(OrderRejection::NotYourTradeLane, index);
+      refuse(OrderRejection::NotYourTradeLane, OrderList::Cancellations, index);
     }
   }
 

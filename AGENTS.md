@@ -2,7 +2,7 @@
 
 Operating instructions for every agent (and human) writing code in this repository. **Read this before generating a single line.**
 
-*LockStep: Universe* is a greenfield C++23 space MMO: a Direct3D 12 client and an authoritative server, hosted in **one executable**, presenting a fixed **1280×720 R8G8B8A8** screen, drawn straight into the swap chain's back buffer and presented 1:1. There is no legacy tree here and nothing is grandfathered. A rule below is not a target to migrate towards; it describes the code as it must be written today, and a whole-tree run of any checker comes back clean.
+*LockStep: Universe* is a greenfield C++23 asynchronous multiplayer 4X for six to twelve players: a Direct3D 12 client and an authoritative server, hosted in **one executable**, presenting a fixed **1280×720 R8G8B8A8** screen, drawn straight into the swap chain's back buffer and presented 1:1. There is no legacy tree here and nothing is grandfathered. A rule below is not a target to migrate towards; it describes the code as it must be written today, and a whole-tree run of any checker comes back clean.
 
 **What is authoritative, in order:**
 
@@ -133,7 +133,7 @@ private:
 
 | Path | What it is | May you edit it? |
 |---|---|---|
-| `NeuronCore/` | Engine static library used by **both** halves. Holds `Debug.h`, the typed index `Id`, the pinned PRNG, integer trigonometry, the byte reader and writer, the `Simulation` seam, the `TickSchedule`, and the wire protocol — `Socket`, `FrameStream`, `Protocol` | Yes |
+| `NeuronCore/` | Engine static library used by **both** halves. Holds `Debug.h`, the UTF-8/UTF-16 helpers in `Text.h`, the typed index `Id`, the pinned PRNG, integer trigonometry, the byte reader and writer, the `Simulation` seam, the `TickSchedule`, and the wire protocol — `Socket`, `FrameStream`, `Protocol` | Yes |
 | `NeuronClient/` | Engine static library used by the **client only**: the window, the D3D12 device and swap chain, the 1280×720 colour target, input, audio, UI | Yes |
 | `NeuronServer/` | Engine static library used by the **server only**: `Session` owns a simulation and drives it on a schedule, `MatchStore` persists a match as its orders, `MatchServer` puts it on a socket. It never names a game type — the seam speaks in bytes (ADR-025) | Yes |
 | `GameLogic/` | The game itself — the galaxy and its generator, `MatchRules`, `Match`, `Orders`, `TickResolver` and its six phases, `Melee`, `Snapshot`, and `MatchSimulation` behind the seam. Server-side; the client never links it | Yes |
@@ -254,6 +254,7 @@ x64\Debug\Lockstep.exe
 - **`NeuronCore.h` owns the Windows macro family, and nothing else defines any of it.** `NOMINMAX`, `WIN32_LEAN_AND_MEAN`, `NODRAWTEXT`, `NOGDI`, `NOBITMAP`, `NOMCX`, `NOSERVICE`, `NOHELP` are set there, before `<windows.h>`, and the `.vcxproj` files deliberately define none of them. Two owners of one macro is C4005, and `/WX` makes that fatal — `/D` spells a bare macro as `1` where a `#define` spells it as nothing, so the collision is guaranteed rather than possible. If you need `<windows.h>`, include `NeuronCore.h`; do not add the macros yourself.
 - **`NOGDI` means GDI is genuinely gone**, not discouraged. `GetStockObject`, `TextOut` and their kin are not declared. That is the point: the swap chain owns every pixel, and there is no case in this game where a GDI call is the right answer.
 - Do not silence a diagnostic with `#pragma warning(disable: ...)` to make a build pass. Fix the cause, or report it.
+- **A comment carries the invariant and its citation, never its history.** Say what must be true here and why, and point at the ADR, plan or reference that decided it. What a line used to say, what a rehearsal found, which day something changed, and what an earlier version got wrong belong in git, in an ADR or in a plan — not beside the code, where they go stale the moment the code moves and where every refactor has to edit prose describing a state that no longer exists. [Design/README.md](Design/README.md) §3.5 says link, do not duplicate; this is that rule applied to comments. A comment that begins "used to", "until 2026-", "an earlier version" or "this comment said" is the pattern to remove, and the tree was swept clean of it on 2026-09-12.
 
 ---
 
@@ -265,7 +266,7 @@ x64\Debug\Lockstep.exe
 
 **R13 — The executable ships alone.** There is no assets folder, no data directory, nothing beside `Lockstep.exe` at runtime. Art, colours, fonts, meshes and sound are embedded as `constexpr` arrays in headers — `NeuronClient/Font.h` is the pattern: 96 glyphs, 8×8, one bit a pixel, 768 bytes, and nothing to load. **Shaders are compiled at build time**, never at runtime: `<Library>/Shaders/<Shader>VS.hlsl` goes through the `.vcxproj`'s `FXCompile` step into `<Library>/CompiledShaders/<Shader>VS.h` as `g_<Shader>VS` (§2). No `D3DCompile`, no `d3dcompiler_47.dll` beside the executable, no `.cso` on disk. Never add a runtime file dependency, a working-directory assumption or a "just for development" loose-file path; the loose path is the one that ships.
 
-**R13 binds a process acting as the CLIENT, and has exactly two sanctioned exceptions** (ADR-024, ADR-028 and ADR-030, owner decisions, 2026-09-11). A process **acting as the server** may write **one match store** — the rules, the seed, and every locked order set, from which a match is loaded by re-resolving it — and **one instrumentation log**, the timestamped event stream the test plan's first section requires. Nothing else, and never a client.
+**R13 binds a process acting as the CLIENT, and has exactly two sanctioned exceptions** (ADR-024, ADR-028 and ADR-030, owner decisions, 2026-09-11). A process **acting as the server** may write **one match store** — the rules, the seed, the schedule, the seats, and every locked order set, from which a match is loaded by re-resolving it (ADR-042) — and **one instrumentation log**, the timestamped event stream the test plan's first section requires. A finished store is renamed once, beside itself, to `.finished`. Nothing else, and never a client.
 
 **It is a role and not a binary**, because there is one executable and it has three of them (ADR-028): `--serve` and the default host-and-play act as the server and may write those two files; `--join` is only a client and must not. The exceptions are named rather than general — the next thing that wants to write a file is a new decision, not an inference from these. The shipped executable still needs nothing beside it: art, colours, fonts and compiled shaders are all embedded, a client reads nothing at all, and both permitted files are ones the server *creates*, never ones it requires in order to start.
 
@@ -306,6 +307,7 @@ x64\Debug\Lockstep.exe
 
 - [ ] Naming conforms to §1 — `_` on parameters, `m_` on class state, `UPPER_CASE` constants, `PascalCase` enumerators, no `I`/`C`/`Base` affixes.
 - [ ] Only the lines the task required were changed; no reformatting, no drive-by fixes.
+- [ ] Every comment added or touched states an invariant and cites its decision; none narrates history (§4).
 - [ ] New, removed or moved files are in the `.vcxproj` **and** the `.filters` of every project involved.
 - [ ] No project's `ConformanceMode`, `LanguageStandard`, `WarningLevel` or `TreatWarningAsError` was changed, and no warning was silenced with a pragma.
 - [ ] Debug and Release still agree on everything §3 says they must.

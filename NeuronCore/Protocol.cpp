@@ -172,7 +172,7 @@ bool DecodeRefused(std::span<const std::uint8_t> _payload, RefusalReason& _outRe
     return false;
   }
 
-  _outReason = static_cast<RefusalReason>(reader.ReadU8());
+  _outReason = reader.ReadEnum(RefusalReason::Malformed);
   return !reader.Failed() && reader.AtEnd();
 }
 

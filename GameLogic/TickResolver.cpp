@@ -306,10 +306,12 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
            DigestEntry{.kind = DigestKind::OrderRejected, .severity = Severity::ORDER_REFUSED, .title = "Order refused", .detail = reason});
     }
 
-    const auto wasRejected = [&rejected](std::size_t _at)
+    // By list AND index. Fleet order zero and build zero are different orders, and a refusal of
+    // one must not take the other with it.
+    const auto wasRejected = [&rejected](OrderList _list, std::size_t _at)
     {
-      return std::any_of(rejected.begin(), rejected.end(),
-                         [_at](const RejectedOrder& _refusal) { return _refusal.index == static_cast<std::int32_t>(_at); });
+      return std::any_of(rejected.begin(), rejected.end(), [_list, _at](const RejectedOrder& _refusal)
+                         { return _refusal.list == _list && _refusal.index == static_cast<std::int32_t>(_at); });
     };
 
     // A custodian's whole set is discarded -- its territory defends and never expands or attacks.
@@ -348,7 +350,7 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
     // Fleet orders become an intent the movement phase consumes.
     for (std::size_t order = 0; order < set->fleetOrders.size(); ++order)
     {
-      if (wasRejected(order))
+      if (wasRejected(OrderList::FleetOrders, order))
       {
         continue;
       }
@@ -359,7 +361,7 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
     // Builds complete at the lock and are paid for at the lock.
     for (std::size_t order = 0; order < set->builds.size(); ++order)
     {
-      if (wasRejected(order))
+      if (wasRejected(OrderList::Builds, order))
       {
         continue;
       }
@@ -383,7 +385,7 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
     // partner accepts it, which is also the lock it starts paying.
     for (std::size_t order = 0; order < set->proposals.size(); ++order)
     {
-      if (wasRejected(order))
+      if (wasRejected(OrderList::Proposals, order))
       {
         continue;
       }
@@ -1432,7 +1434,7 @@ Match TickResolver::Reckon(const Match& _in, TickLog& _log)
   //
   // ADR-022. The pass itself lives on `Match`, because `Create` needs it too -- a match at tick zero
   // is a state a client can be shown, and a player whose own capital was hidden would open the game
-  // to a blank map. Running it only here meant exactly that, until 2026-09-11.
+  // to a blank map.
   next.RecomputeVisibility();
 
   return next;

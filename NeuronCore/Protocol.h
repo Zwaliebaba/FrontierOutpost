@@ -19,11 +19,9 @@ enum class MessageKind : std::uint8_t
 {
   /// Not a message. What an empty payload, or one whose first byte names nothing, decodes to.
   ///
-  /// **It is an enumerator rather than a cast of zero**, which is what it used to be. The value has
-  /// to exist either way -- `KindOf` has to answer something for a payload with no bytes in it --
-  /// and a `static_cast<MessageKind>(0)` is that value without a name, so every reader has to work
-  /// out what zero meant and `clang-analyzer-optin.core.EnumCastOutOfRange` is right to object.
-  /// `RefusalReason` beside this one has had its `None` from the start.
+  /// A named enumerator rather than a cast of zero: `KindOf` has to answer something for a payload
+  /// with no bytes in it, and a value every switch has to handle deserves a name rather than a
+  /// number every reader has to decode.
   ///
   /// It is never sent. A frame carrying it would be a frame whose first byte is zero, which is what
   /// this value exists to reject.

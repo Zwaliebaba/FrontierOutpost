@@ -5,6 +5,7 @@
 #include "TickSchedule.h"
 
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 #include <vector>
@@ -30,7 +31,10 @@ class Session
 public:
   /// Takes ownership of the simulation. `_storePath` may be empty, which means a match that does
   /// not survive the process -- useful in tests and honest about what it is.
-  Session(std::unique_ptr<Simulation> _simulation, TickSchedule _schedule, std::string _storePath);
+  ///
+  /// `_tokens` are the seats' tokens, kept in the store beside the schedule so that a restarted
+  /// server admits the same people (ADR-042). The session never reads them; it carries them.
+  Session(std::unique_ptr<Simulation> _simulation, TickSchedule _schedule, std::string _storePath, std::vector<std::string> _tokens = {});
 
   /// Replays a stored match into a fresh simulation, then asserts the result against the hash the
   /// store was written with.
@@ -41,6 +45,14 @@ public:
   /// they left.
   [[nodiscard]] static bool Reload(Simulation& _simulation, const MatchStore::Contents& _contents);
 
+  /// A session picking up where a stored match left off: the same schedule, the same tokens, and
+  /// the stored turns kept so the next lock is appended to the history rather than starting one.
+  ///
+  /// Null when the replay does not reproduce the stored hash. That is the one answer this cannot
+  /// paper over, and the caller decides how loudly to say it (ADR-042).
+  [[nodiscard]] static std::unique_ptr<Session> Resume(std::unique_ptr<Simulation> _simulation, const MatchStore::Contents& _contents,
+                                                       std::string _storePath);
+
   [[nodiscard]] const Simulation& Match() const noexcept
   {
     return *m_simulation;
@@ -48,6 +60,10 @@ public:
   [[nodiscard]] const TickSchedule& Schedule() const noexcept
   {
     return m_schedule;
+  }
+  [[nodiscard]] const std::vector<std::string>& Tokens() const noexcept
+  {
+    return m_contents.tokens;
   }
 
   /// A player was seen. Presence is a fact about being here, not about submitting -- a player who

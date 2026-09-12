@@ -31,32 +31,13 @@ namespace
   return mine;
 }
 
-/// Every lane out of `_from` the player knows about, as (destination, cost), lowest id first.
-[[nodiscard]] std::vector<std::pair<SystemId, std::uint32_t>> Exits(const Snapshot& _view, SystemId _from)
-{
-  std::vector<std::pair<SystemId, std::uint32_t>> out;
-  for (const SnapshotLane& lane : _view.Lanes())
-  {
-    if (lane.a == _from)
-    {
-      out.emplace_back(lane.b, lane.costTicks);
-    }
-    else if (lane.b == _from)
-    {
-      out.emplace_back(lane.a, lane.costTicks);
-    }
-  }
-  return out;
-}
-
 /// Where this fleet should go, by policy. An invalid id means hold.
 ///
 /// A breadth-first walk over the lanes the player KNOWS ABOUT, to the nearest (or furthest) system
-/// worth having, returning the first hop toward it. An earlier version of these bots looked only one
-/// lane ahead, and every one of them stalled the moment it ran out of adjacent open ground -- six
-/// empires sat on two systems each for eighty ticks and never met. That was a harness failure that
-/// looked exactly like a rules failure, which is worth remembering: a bot too simple to reach a
-/// mechanic will report that the mechanic does not work.
+/// worth having, returning the first hop toward it. Not one lane ahead: a bot that stalls when the
+/// adjacent open ground runs out never meets anybody, and a bot too simple to reach a mechanic
+/// reports that the mechanic does not work -- a harness failure that looks exactly like a rules
+/// failure (ADR-037).
 [[nodiscard]] SystemId ChooseDestination(BotPolicy _policy, const Snapshot& _view, SystemId _at)
 {
   if (_policy == BotPolicy::Turtle)

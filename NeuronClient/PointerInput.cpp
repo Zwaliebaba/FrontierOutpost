@@ -28,9 +28,8 @@ bool PointerInput::ScreenToClientPixels(LPARAM _lParam, float& _outXPixels, floa
     return false;
   }
 
-  // And that is the whole conversion. Until 2026-09-10 a division by the present scale followed,
-  // because the client area was twice the virtual screen; the client area is now exactly the
-  // screen the game renders, so there is nothing left to divide by (ADR-011).
+  // And that is the whole conversion: the client area is exactly the screen the game renders, so
+  // there is nothing to divide by (ADR-011).
   _outXPixels = static_cast<float>(point.x);
   _outYPixels = static_cast<float>(point.y);
   return true;
@@ -44,9 +43,7 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
   {
   // WM_POINTERWHEEL and not WM_MOUSEWHEEL. Measured rather than assumed: with
   // EnableMouseInPointer on, a real wheel notch on real hardware arrives here as 0x024E
-  // (ADR-009). A WM_MOUSEWHEEL case was carried for a while against the possibility that it did
-  // not, and came out once the measurement existed -- it is the same second input path MVP-01
-  // section 2 rules out.
+  // (ADR-009), so a WM_MOUSEWHEEL case would be the second input path MVP-01 section 2 rules out.
   case WM_POINTERWHEEL:
   {
     // The wheel reports in multiples of WHEEL_DELTA, but not necessarily whole ones. Bank the
