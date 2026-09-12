@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include <type_traits>
 
 namespace Neuron
 {
@@ -73,6 +74,24 @@ public:
   [[nodiscard]] bool ReadBool() noexcept
   {
     return ReadU8() != 0;
+  }
+
+  /// A byte that names an enumerator, or a failed read.
+  ///
+  /// `_last` is the highest enumerator the type has. A byte past it came from a peer that is not
+  /// this program, and casting it into the enum anyway hands every switch downstream a value no
+  /// case names -- which is legal, since the underlying type is a byte, and is precisely the kind
+  /// of plausible wrong record this reader exists to refuse.
+  template <typename Enum> [[nodiscard]] Enum ReadEnum(Enum _last) noexcept
+  {
+    static_assert(std::is_same_v<std::underlying_type_t<Enum>, std::uint8_t>, "wire enums are one byte");
+    const std::uint8_t raw = ReadU8();
+    if (raw > static_cast<std::uint8_t>(_last))
+    {
+      m_failed = true;
+      return Enum{};
+    }
+    return static_cast<Enum>(raw);
   }
 
   /// Refuses a length the buffer cannot hold rather than reading that many bytes one at a time and

@@ -624,6 +624,26 @@ public:
     AssertSame(original, returned);
   }
 
+  // A byte that names no build kind fails the record. Before this the byte was cast straight into
+  // the enum, and a hostile client could hand the resolver a kind no switch has a case for.
+  TEST_METHOD(ABuildKindByteNamingNothingFailsTheRecord)
+  {
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.builds.push_back(Lockstep::BuildOrder{.system = Lockstep::SystemId{1}, .kind = Lockstep::BuildKind::Shipyard});
+
+    Neuron::ByteWriter writer;
+    orders.Write(writer);
+
+    // Player id, fleet count, build count, system id: sixteen bytes, then the kind.
+    std::vector<std::uint8_t> bytes = writer.Bytes();
+    bytes[16] = 9;
+
+    Neuron::ByteReader reader{bytes};
+    (void)Lockstep::OrderSet::Read(reader);
+    Assert::IsTrue(reader.Failed(), L"a kind byte past the last enumerator is a broken record");
+  }
+
   TEST_METHOD(AnEmptySetSurvivesTheRoundTrip)
   {
     const Lockstep::OrderSet original;

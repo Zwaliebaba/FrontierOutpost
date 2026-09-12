@@ -870,27 +870,40 @@ int RunGame(HWND _window, const Startup& _startup)
       const Lockstep::Snapshot snapshot = Lockstep::Snapshot::Read(reader);
 
       Neuron::ByteReader digestReader{connection.Digest()};
-      Lockstep::MatchState state = Lockstep::ViewOf(snapshot, Lockstep::Snapshot::ReadDigest(digestReader), connection.SecondsToLock());
-      state.connected = true;
+      const std::vector<Lockstep::DigestEntry> digest = Lockstep::Snapshot::ReadDigest(digestReader);
 
-      // ---- How much happened while nobody was looking ----------------------------------------
-      //
-      // **The composition root is the only thing that can know this**, because it is the only
-      // thing that sees one state replaced by the next. A client that stayed connected gets every
-      // tick as it resolves and is never behind; one that closed its lid for a night comes back to
-      // a tick several later than the one it last drew, and the difference is what it missed.
-      //
-      // It cannot survive a restart. R13 leaves the client nothing to write, so a fresh process
-      // opens at zero however long the player was away -- which is honest rather than wrong: this
-      // process has not looked at anything yet.
-      if (drawnTick != 0 && state.match.tick > drawnTick + 1)
+      // A state that did not decode is not a state. The reader fills a short record with zeros and
+      // refuses a byte that names no enumerator, and either way what came out is not what the
+      // server sent -- so the screen keeps the last state it could trust rather than drawing this.
+      if (reader.Failed() || !reader.AtEnd() || digestReader.Failed() || !digestReader.AtEnd())
       {
-        state.unreadTicks = state.match.tick - drawnTick;
-        state.lastSeenTick = drawnTick;
+        Neuron::DebugTrace("A state message from the server did not decode; keeping the last one.\n");
       }
-      drawnTick = state.match.tick;
+      else
+      {
+        Lockstep::MatchState state = Lockstep::ViewOf(snapshot, digest, connection.SecondsToLock());
+        state.connected = true;
 
-      page.Create(std::move(state));
+        // ---- How much happened while nobody was looking --------------------------------------
+        //
+        // **The composition root is the only thing that can know this**, because it is the only
+        // thing that sees one state replaced by the next. A client that stayed connected gets
+        // every tick as it resolves and is never behind; one that closed its lid for a night comes
+        // back to a tick several later than the one it last drew, and the difference is what it
+        // missed.
+        //
+        // It cannot survive a restart. R13 leaves the client nothing to write, so a fresh process
+        // opens at zero however long the player was away -- which is honest rather than wrong:
+        // this process has not looked at anything yet.
+        if (drawnTick != 0 && state.match.tick > drawnTick + 1)
+        {
+          state.unreadTicks = state.match.tick - drawnTick;
+          state.lastSeenTick = drawnTick;
+        }
+        drawnTick = state.match.tick;
+
+        page.Create(std::move(state));
+      }
     }
 
     // ---- What is wrong, if anything (screens 04 and 05) ----------------------------------------

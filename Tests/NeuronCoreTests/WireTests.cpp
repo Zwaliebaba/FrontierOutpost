@@ -358,6 +358,18 @@ public:
     }
   }
 
+  // A byte that names no reason is refused, not cast into the enum. The same reader helper guards
+  // every enum that crosses the wire, and this is the one place NeuronCore can test it end to end.
+  TEST_METHOD(ARefusalByteNamingNothingIsRefused)
+  {
+    Neuron::ByteWriter writer;
+    writer.WriteU8(static_cast<std::uint8_t>(Neuron::MessageKind::Refused));
+    writer.WriteU8(200);
+
+    Neuron::RefusalReason reason = Neuron::RefusalReason::None;
+    Assert::IsFalse(Neuron::Protocol::DecodeRefused(writer.Bytes(), reason));
+  }
+
   TEST_METHOD(EveryRefusalDescribesItself)
   {
     for (std::uint8_t reason = 0; reason <= static_cast<std::uint8_t>(Neuron::RefusalReason::Malformed); ++reason)

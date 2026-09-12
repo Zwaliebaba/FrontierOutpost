@@ -158,7 +158,7 @@ OrderSet OrderSet::Read(Neuron::ByteReader& _reader)
   {
     BuildOrder order;
     order.system = SystemId{_reader.ReadI32()};
-    order.kind = static_cast<BuildKind>(_reader.ReadU8());
+    order.kind = _reader.ReadEnum(BuildKind::MiningStation);
     set.builds.push_back(order);
   }
 
@@ -168,7 +168,7 @@ OrderSet OrderSet::Read(Neuron::ByteReader& _reader)
   {
     ProposalOrder order;
     order.to = PlayerId{_reader.ReadI32()};
-    order.kind = static_cast<ProposalKind>(_reader.ReadU8());
+    order.kind = _reader.ReadEnum(ProposalKind::HoldForTicks);
     order.lane = LaneId{_reader.ReadI32()};
     order.ticks = _reader.ReadU32();
     order.conditionalLane = LaneId{_reader.ReadI32()};
@@ -181,7 +181,7 @@ OrderSet OrderSet::Read(Neuron::ByteReader& _reader)
   {
     AnswerOrder order;
     order.proposal = ProposalId{_reader.ReadI32()};
-    order.answer = static_cast<Answer>(_reader.ReadU8());
+    order.answer = _reader.ReadEnum(Answer::Decline);
     set.answers.push_back(order);
   }
 
