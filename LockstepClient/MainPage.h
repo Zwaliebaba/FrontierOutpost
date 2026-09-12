@@ -65,6 +65,9 @@ public:
   static constexpr float SHEET_ROW_HEIGHT = 44.0F;
   static constexpr float SHEET_HEADER_HEIGHT = 36.0F;
   static constexpr float SHEET_ACTION_HEIGHT = 40.0F;
+  /// A section band inside a sheet: a label over the rows under it, and not a target. The same 22
+  /// the locks rail's section headers take, because it is the same thing (ADR-064).
+  static constexpr float SHEET_BAND_HEIGHT = 22.0F;
   /// The row that says how many did not fit, which is shorter because nothing taps it.
   static constexpr float SHEET_CLIPPED_HEIGHT = 24.0F;
   static constexpr std::size_t SHEET_MAXIMUM_ROWS = 6;

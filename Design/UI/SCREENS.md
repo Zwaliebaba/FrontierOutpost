@@ -93,8 +93,10 @@ seventh reported. No mockup exists for any of them; the captures are `01-build-s
   (`YOU WIN` / `HOLD` / `YOU LOSE`). It needs a preview per candidate destination on
   `SnapshotFleet`; the client must not compute one (ADR-063).
 - **Signal** (`SIGNAL - PICK ONE`): opened from the rail's `SIGNALS` header; the six kinds of
-  ADR-039 as rows with `SENDING` / `TAP AGAIN TO CONFIRM` on the right; `Concede` always last and
-  needing two taps; `Concede` alone when the empire has met nobody — the `NOTHING TO SAY YET` row is
+  ADR-039 as rows with `SENDING` / `TAP AGAIN TO CONFIRM` on the right; `Concede` always last,
+  needing two taps, under a 22px `CONCEDE` band of its own and said in red from the first tap
+  (ADR-064) — the band counts against the six-row cap and is dropped, never the row, when the sheet
+  is full; `Concede` alone when the empire has met nobody — the `NOTHING TO SAY YET` row is
   written for an empty list, and the list is never empty because `Concede` is always on it; fourteen
   rows offered and the rest counted.
 - **Replay** (`REPLAY TICK 7`): the stub of screen 07.

@@ -486,6 +486,65 @@ public:
     Assert::IsTrue(again.State().orders.queuedSignals.empty(), L"a queued concede could not be taken back");
   }
 
+  TEST_METHOD(AFullSheetDropsTheBandRatherThanTheConcede)
+  {
+    // The `CONCEDE` band counts against the six-row cap (ADR-064), so on a sheet that is already
+    // full it is dropped rather than pushing the row it labels into `+N MORE`. A label must never
+    // cost a control its place.
+    const auto simulation = PlayedMatch(14);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+    // Five offers and a concede: six rows, which is exactly the cap, so the band cannot also fit.
+    state.orders.signals.clear();
+    state.orders.queuedSignals.clear();
+    for (std::int32_t index = 0; index < 5; ++index)
+    {
+      state.orders.signals.push_back(Lockstep::SignalRow{
+        .kind = Lockstep::SignalKind::ShareScouting, .title = std::format("Share scouting - P{}", index + 2), .to = index + 1});
+    }
+    state.orders.signals.push_back(Lockstep::SignalRow{.kind = Lockstep::SignalKind::Concede, .title = "Concede"});
+    state.orders.availableSignals = 6;
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    std::int32_t openX = 0;
+    std::int32_t openY = 0;
+    Assert::IsTrue(OpenThePicker(page, renderers, openX, openY));
+
+    // Two taps on the same place, bottom-up. The concede is the only row that needs a pair; the
+    // five above it queue and unqueue within one, so the sweep leaves nothing behind it.
+    bool stale = true;
+    const auto tap = [&page, &renderers, &stale](std::int32_t _x, std::int32_t _y)
+    {
+      if (stale)
+      {
+        renderers.Begin();
+        DrawPage(page, renderers);
+      }
+      stale = page.HandleTap(static_cast<float>(_x), static_cast<float>(_y));
+    };
+
+    bool queued = false;
+    for (std::int32_t y = SCREEN_HEIGHT - STEP; y > TOP_BAR && !queued; y -= STEP)
+    {
+      for (std::int32_t x = 0; x < SCREEN_WIDTH && !queued; x += STEP)
+      {
+        if (page.OpenPanel() != Lockstep::MainPage::Panel::SignalList)
+        {
+          tap(openX, openY);
+        }
+        tap(x, y);
+        tap(x, y);
+
+        const std::vector<std::int32_t>& sent = page.State().orders.queuedSignals;
+        queued = std::ranges::find(sent, 5) != sent.end();
+      }
+    }
+    Assert::IsTrue(queued, L"the concede row was pushed off the sheet by its own band");
+  }
+
   TEST_METHOD(ALockedRailQueuesNothing)
   {
     // Screen 06. At the lock every control on this screen is inert, and "inert" has to mean the tap

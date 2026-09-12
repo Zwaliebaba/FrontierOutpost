@@ -1394,6 +1394,12 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     Color accent;
     /// What tapping this row acts on, or `EventRefs::NONE` for a row that is only read.
     std::int32_t target;
+    /// A 22px section band rather than a 44px row: a label over what follows it, never a target
+    /// (ADR-064). It counts against the six-row cap, because it takes the room a row would.
+    bool band = false;
+    /// Whether this row is said in the loss colour. The one row on any sheet that cannot be taken
+    /// back once it resolves, and nothing else.
+    bool alarm = false;
   };
 
   constexpr Color NO_ACCENT = {0, 0, 0, 0};
@@ -1541,18 +1547,31 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     title = "SIGNAL - PICK ONE";
     rowAction = Action::ToggleSignal;
 
+    // **The concede is lifted out and put back at the end, under a band of its own** (ADR-064). It
+    // is always the last row `ComposeSignals` writes, so this does not move it -- what it buys is
+    // the 22 pixels between it and `Hold fire 3 ticks - P2`, which is the row a thumb aiming at one
+    // of them would otherwise hit by being a target-height out.
+    std::int32_t concede = EventRefs::NONE;
     for (std::size_t index = 0; index < m_state.orders.signals.size(); ++index)
     {
+      if (m_state.orders.signals[index].kind == SignalKind::Concede)
+      {
+        concede = static_cast<std::int32_t>(index);
+      }
+    }
+
+    for (std::size_t index = 0; index < m_state.orders.signals.size(); ++index)
+    {
+      if (static_cast<std::int32_t>(index) == concede)
+      {
+        continue;
+      }
+
       const SignalRow& signal = m_state.orders.signals[index];
       const bool queued =
         std::ranges::find(m_state.orders.queuedSignals, static_cast<std::int32_t>(index)) != m_state.orders.queuedSignals.end();
-      const bool armed = m_armedConcede == static_cast<std::int32_t>(index);
 
-      // Three states, in the right-hand column: queued, armed to be queued, or neither. The armed
-      // one says what the NEXT tap does rather than what this row is, which is the only warning a
-      // concede gets and the only one it needs.
-      rows.push_back(SheetRow{signal.title, std::string{}, queued ? "SENDING" : (armed ? "TAP AGAIN TO CONFIRM" : std::string{}),
-                              armed ? Ink::AMBER : (queued ? Ink::BLUE : NO_ACCENT),
+      rows.push_back(SheetRow{signal.title, std::string{}, queued ? "SENDING" : std::string{}, queued ? Ink::BLUE : NO_ACCENT,
                               m_state.orders.locked ? EventRefs::NONE : static_cast<std::int32_t>(index)});
     }
 
@@ -1566,6 +1585,28 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       rows.push_back(SheetRow{std::format("+{} MORE THAN THIS SHEET CAN SHOW",
                                           m_state.orders.availableSignals - static_cast<std::uint32_t>(m_state.orders.signals.size())),
                               std::string{}, std::string{}, NO_ACCENT, EventRefs::NONE});
+    }
+
+    if (concede != EventRefs::NONE)
+    {
+      const SignalRow& signal = m_state.orders.signals[static_cast<std::size_t>(concede)];
+      const bool queued = std::ranges::find(m_state.orders.queuedSignals, concede) != m_state.orders.queuedSignals.end();
+      const bool armed = m_armedConcede == concede;
+
+      // The band is a label and a label must not cost a row anything. Added only when it and the
+      // row under it both fit inside the cap; beyond that the red text carries the warning alone.
+      if (rows.size() + 2 <= SHEET_MAXIMUM_ROWS)
+      {
+        rows.push_back(SheetRow{.title = "CONCEDE", .accent = NO_ACCENT, .target = EventRefs::NONE, .band = true});
+      }
+
+      // Red from the first tap, and the armed row says what the NEXT tap does rather than what this
+      // row is -- the only warning a concede gets and the only one it needs.
+      rows.push_back(SheetRow{.title = signal.title,
+                              .right = queued ? "SENDING" : (armed ? "TAP AGAIN TO CONFIRM" : std::string{}),
+                              .accent = armed || queued ? Ink::RED : NO_ACCENT,
+                              .target = m_state.orders.locked ? EventRefs::NONE : concede,
+                              .alarm = armed || queued});
     }
     break;
   }
@@ -1598,7 +1639,13 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   const float width = paneWidth - 2.0F * SHEET_MARGIN;
   const float x = paneX + SHEET_MARGIN;
 
-  const float listHeight = static_cast<float>(shown) * SHEET_ROW_HEIGHT + (clipped ? SHEET_CLIPPED_HEIGHT : 0.0F);
+  // Summed rather than multiplied, because a band is 22 and a row is 44 and both count as one of
+  // the six (ADR-064).
+  float listHeight = clipped ? SHEET_CLIPPED_HEIGHT : 0.0F;
+  for (std::size_t index = 0; index < shown; ++index)
+  {
+    listHeight += rows[index].band ? SHEET_BAND_HEIGHT : SHEET_ROW_HEIGHT;
+  }
   const float height = SHEET_HEADER_HEIGHT + listHeight + SHEET_ACTION_HEIGHT;
   const float y = Frame::SCREEN_HEIGHT - SHEET_MARGIN - height;
 
@@ -1620,7 +1667,18 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     const SheetRow& row = rows[index];
     const bool tappable = row.target != EventRefs::NONE;
 
-    if (index > 0)
+    // A band is a label over what follows it, drawn like the rails' section headers: a rule, then
+    // the label, and nothing to tap.
+    if (row.band)
+    {
+      _shapes.FillRect(x + CARD_PADDING, rowY, width - 2.0F * CARD_PADDING, 1.0F, Ink::DIVIDER);
+      _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(rowY, SHEET_BAND_HEIGHT), row.title, Ink::TEXT_MUTED);
+      rowY += SHEET_BAND_HEIGHT;
+      continue;
+    }
+
+    // No second rule directly under a band's: one line is a section header and two is a box.
+    if (index > 0 && !rows[index - 1].band)
     {
       _shapes.FillRect(x + CARD_PADDING, rowY, width - 2.0F * CARD_PADDING, 1.0F, Ink::DIVIDER);
     }
@@ -1635,7 +1693,8 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     // One line centres in the row; two sit either side of its middle. THE ROW HEIGHT DOES NOT
     // CHANGE with the content -- a column of rows of one height is what a finger aims at.
     const std::int32_t titleY = row.detail.empty() ? CenterTextY(rowY, SHEET_ROW_HEIGHT) : static_cast<std::int32_t>(rowY) + 12;
-    _text.DrawText(static_cast<std::int32_t>(textX), titleY, row.title, tappable ? Ink::TEXT_PRIMARY : Ink::NEUTRAL_DIM);
+    const Color titleColor = !tappable ? Ink::NEUTRAL_DIM : (row.alarm ? Ink::RED : Ink::TEXT_PRIMARY);
+    _text.DrawText(static_cast<std::int32_t>(textX), titleY, row.title, titleColor);
 
     if (!row.detail.empty())
     {
@@ -1644,7 +1703,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     if (!row.right.empty())
     {
       DrawRight(_text, x + width - CARD_PADDING, CenterTextY(rowY, SHEET_ROW_HEIGHT), row.right,
-                tappable ? Ink::TEXT_DETAIL : Ink::NEUTRAL_DIM);
+                !tappable ? Ink::NEUTRAL_DIM : (row.alarm ? Ink::RED : Ink::TEXT_DETAIL));
     }
 
     if (tappable)

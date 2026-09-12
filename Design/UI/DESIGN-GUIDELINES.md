@@ -150,9 +150,9 @@ Semantic / owner (ADR-027: you are always blue)
   (`NOTHING HAS HAPPENED YET` before the first lock, `A QUIET TICK` after) with the same moves.
 - Signals are the picker's rows (ADR-039), not free text: `Open lane - Pell to Dothan`,
   `Share scouting - P2`, `Hold fire 3 ticks - P2`, `Withdraw <offer> - P2`, `Close lane - A to B`,
-  `Concede` — the last always last and needing two taps, the row saying `TAP AGAIN TO CONFIRM`
-  between them. The handoff's `REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE` card actions
-  are these rows.
+  `Concede` — the last always last, under a `CONCEDE` band and in red from the first tap (ADR-064),
+  needing two taps, the row saying `TAP AGAIN TO CONFIRM` between them. The handoff's `REBUILD
+  LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE` card actions are these rows.
 - The price is on every build control and the purse is on the top bar (`26 CR`) and the BUILDS
   header (`2 AVAIL - 26 CR`); a queued row reads `QUEUED -20` and a line under the queue says what
   is left at the lock (ADR-053).
