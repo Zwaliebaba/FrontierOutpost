@@ -1689,14 +1689,16 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   }
   case Panel::Replay:
   {
-    title = std::format("REPLAY TICK {}", m_panelSubject);
-    // A stub, and labelled as one. The six phases are the tick resolution order from the
-    // one-pager; stepping through them needs the resolved state the server has not sent yet.
+    // **A stub says so in its title.** The six phases are the tick resolution order from the
+    // one-pager and stepping through them needs `PhaseRecord`s the snapshot does not carry, so this
+    // sheet lists what a replay would walk and nothing more. It said that in a seventh row, which
+    // the six-row cap then clipped into `+1 MORE THAN THIS SHEET CAN SHOW` -- a sheet reporting an
+    // overflow it did not have, about a row explaining that there is nothing here.
+    title = std::format("REPLAY TICK {} - NOT YET WIRED", m_panelSubject);
     for (const char* phase : {"1. LOCK", "2. PRODUCTION", "3. MOVEMENT", "4. COMBAT", "5. CLAIMS", "6. DIGEST"})
     {
       rows.push_back(SheetRow{phase, std::string{}, std::string{}, NO_ACCENT, EventRefs::NONE});
     }
-    rows.push_back(SheetRow{"NOT YET WIRED TO A RESOLVED TICK", std::string{}, std::string{}, NO_ACCENT, EventRefs::NONE});
     break;
   }
   case Panel::None:

@@ -28,7 +28,7 @@ ADR-036 through ADR-059, which are cited where they apply.
 | 04 | Connection lost | **Built** (ADR-038, ADR-043) | `04-connection-lost.png` | `LockstepClient/ConnectionDialog.cpp` |
 | 05 | Connection states | **Built** as one component with seven states. The WELCOME dialog is not one of them | `05-connecting.png`, `05-refused-unknown-token.png`, `05-refused-seat-in-use.png`, `05-waiting-for-the-host.png`, `05-match-finished.png` | `LockstepClient/ConnectionDialog.cpp` |
 | 06 | At lock | **Built** (ADR-039) | `06-at-lock.png` | `LockstepClient/MainPage.cpp` |
-| 07 | Replay — phase step-through | **Stub.** A sheet listing the six phases; nothing steps | `07-replay.png` is the stub as built; the step-through the mockup drew is item 2 below, its centred panel superseded by the sheet (ADR-052) | `MainPage::DrawPanel` |
+| 07 | Replay — phase step-through | **Stub**, and its title says so (`REPLAY TICK 7 - NOT YET WIRED`). A sheet listing the six phases; nothing steps | `07-replay.png` is the stub as built; the step-through the mockup drew is item 2 below, its centred panel superseded by the sheet (ADR-052) | `MainPage::DrawPanel` |
 | 08 | Missed digests | **Partial.** The backlog is kept and concatenated (ADR-044); no tabs | `08-missed-digests.png`; the tabs the mockup drew are item 3 below | `Lockstep/Lockstep.cpp` (match loop), `DigestView.cpp` |
 | 09 | Seats — the host's lobby | **Built**, and not in the handoff (ADR-036, 037, 041, 051) | `09-seats.png` (the host alone), `09-seats-joined.png` (a second seat connected and selected) | `Lockstep/SeatsPage.cpp` |
 
@@ -59,9 +59,9 @@ match loop draws the main page and the dialog over it, and redraws only when som
 The complete list, so nobody goes looking. Each item is also under its screen in `SCREENS.md`.
 
 1. **Screen 02, entirely.** No `SHARE TICK` button on the top bar, no card, no clipboard.
-2. **Screen 07's step-through.** `REPLAY T<n>` opens a sheet naming six phases and nothing else: no
-   per-phase entries, no PREV/NEXT, no board snapshot per phase. The snapshot carries no
-   `PhaseRecord`s, so this needs the wire before it needs a screen.
+2. **Screen 07's step-through.** `REPLAY T<n> - NOT YET WIRED` opens a sheet naming six phases and
+   nothing else: no per-phase entries, no PREV/NEXT, no board snapshot per phase. The snapshot
+   carries no `PhaseRecord`s, so this needs the wire before it needs a screen.
 3. **Screen 08's tabs**, per-tick event counts, the collapsed older ticks and read marks. What
    exists is the data (eight ticks per player, ADR-044) shown as one concatenated list under
    `SINCE YOU LOOKED`. A restarted client cannot know what it has read — R13 leaves it nothing to
@@ -89,9 +89,7 @@ The complete list, so nobody goes looking. Each item is also under its screen in
    open question).
 9. **Twelve seats** on the seats screen. Six are drawn, every one required (ADR-036 amendment 3).
 
-Found while reading the code for this record, not design gaps: the replay stub's own note row
-(`NOT YET WIRED TO A RESOLVED TICK`) is the seventh row of a six-row sheet and is clipped, so the
-sheet reads `+1 MORE THAN THIS SHEET CAN SHOW` instead of saying it is a stub; the top bar's
+Found while reading the code for this record, not design gaps: the top bar's
 `M<id>` is the tick number zero-padded (`SnapshotView.cpp`, the snapshot carries no match id) and
 `D<n>/21` assumes four ticks a day and twenty-one days (ADR-051 records it); and
 `JoinPage::SetMatchSummary` has no caller, so the join screen's footer line never appears.
