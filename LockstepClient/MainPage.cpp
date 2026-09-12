@@ -1209,11 +1209,21 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
   float y = Frame::TOP_BAR_HEIGHT + 28.0F;
 
-  // One line of help, and only one. It says where the controls went, because a player who used the
-  // old rail will look for them here first.
-  const std::string help = m_state.match.finished ? std::string{"The match is over. This is what you finished with."}
-                           : atLock ? LockSentence()
-                                    : std::string{"What goes in when the clock hits zero. Tap a row to go to what it is about."};
+  // One line of help, and only one. It says what the column is and what its rows do, because a
+  // player who used the old rail will look for the controls here first.
+  //
+  // A branch rather than a chained ternary, and that is about the formatter rather than the code:
+  // clang-format 18 and 22 align the second `?` of a chain differently, so an expression written
+  // that way is one the tree cannot be clean under both at once, and CI's is 18 (`build.yml`).
+  std::string help{"What goes in when the clock hits zero. Tap a row to go to what it is about."};
+  if (m_state.match.finished)
+  {
+    help = "The match is over. This is what you finished with.";
+  }
+  else if (atLock)
+  {
+    help = LockSentence();
+  }
   for (const std::string& line : FontRenderer::Wrap(help, columns))
   {
     _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), line, atLock ? Ink::AMBER : Ink::TEXT_DETAIL);
