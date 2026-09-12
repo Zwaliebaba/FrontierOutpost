@@ -55,7 +55,6 @@ constexpr std::int32_t ACTION_HUMAN = 3;
 constexpr std::int32_t ACTION_BOT = 4;
 constexpr std::int32_t ACTION_COPY = 5;
 constexpr std::int32_t ACTION_NEW_TOKEN = 6;
-constexpr std::int32_t ACTION_TAKE_SEAT = 7;
 constexpr std::int32_t ACTION_BOT_TAKES_OVER = 8;
 constexpr std::int32_t ACTION_GOES_CUSTODIAN = 9;
 constexpr std::int32_t ACTION_FILL = 10;
@@ -279,12 +278,6 @@ bool SeatsPage::HandleTap(float _xPixels, float _yPixels)
       return true;
     }
 
-    case ACTION_TAKE_SEAT:
-      // Taking a seat fills it, because the host is a player and an empty seat cannot be one.
-      m_hostSeat = m_selected;
-      m_seats[static_cast<std::size_t>(m_selected)].kind = Kind::Human;
-      return true;
-
     case ACTION_BOT_TAKES_OVER:
       seat.ifWaiting = IfWaiting::BotTakesOver;
       m_refusal.clear();
@@ -488,14 +481,17 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
   _text.DrawText(static_cast<std::int32_t>(contentX) + 10, CenterTextY(static_cast<float>(y), 22.0F), "NEW TOKEN", TEXT_PRIMARY);
   AddHit(contentX, static_cast<float>(y), halfWidth, 22.0F, ACTION_NEW_TOKEN, m_selected);
 
-  _shapes.StrokeRect(contentX + halfWidth + 8.0F, static_cast<float>(y), halfWidth, 22.0F, OUTLINE);
-  _text.DrawText(static_cast<std::int32_t>(contentX + halfWidth) + 18, CenterTextY(static_cast<float>(y), 22.0F), "TAKE SEAT",
-                 m_hostSeat == m_selected ? NEUTRAL_DIM : TEXT_PRIMARY);
-  if (m_hostSeat != m_selected)
-  {
-    AddHit(contentX + halfWidth + 8.0F, static_cast<float>(y), halfWidth, 22.0F, ACTION_TAKE_SEAT, m_selected);
-  }
-  y += 34;
+  // **`TAKE SEAT` was here and it lied.** It moved `m_hostSeat`, which is what decides whose seat
+  // is protected from the BOT toggle and which seats FILL WAITING skips -- while the host's actual
+  // seat is fixed by the token their client presented before this screen opened, and nothing here
+  // can change that. A host who took another seat could then hand their own empire to a bot and
+  // enter a match somebody else was playing for them. Removed rather than repaired: making it real
+  // means reconnecting with a different token, which is the composition root's to do (ADR-041).
+  _text.DrawText(static_cast<std::int32_t>(contentX), y,
+                 m_hostSeat == m_selected ? "This is your seat: you logged in with this token."
+                                          : "Not yours. You hold the seat you logged in with.",
+                 m_hostSeat == m_selected ? BLUE : NEUTRAL_DIM);
+  y += LINE_HEIGHT + 14;
 
   _shapes.FillRect(panelX + 1.0F, static_cast<float>(y), PANEL_WIDTH - 1.0F, 1.0F, DIVIDER);
   y += 10;

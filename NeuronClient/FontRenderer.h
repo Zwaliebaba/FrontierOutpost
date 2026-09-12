@@ -110,6 +110,22 @@ public:
   /// machinery of tracking a pending upload.
   void Create(Device& _device, DescriptorHeap& _shaderVisibleHeap);
 
+  /// Creates the renderer with NO DEVICE BEHIND IT: appended geometry lands in ordinary memory
+  /// and `Flush` is refused.
+  ///
+  /// **This is the seam that makes a screen's LAYOUT testable.** Every page in this game builds its
+  /// hit list while it draws -- `AddHit` sits beside the `FillRect` that put the button there, which
+  /// is what stops the two drifting apart -- so a test that wants to press a button has to be able
+  /// to run the draw. It could not: an append writes through a pointer into an upload heap, and
+  /// without a device that pointer is null. Whoever wanted to test a tap had the choice of standing
+  /// up D3D12 in a test DLL that CI runs on a machine with no GPU, or writing the layout out a
+  /// second time in the test and asserting against a copy of the thing under test.
+  ///
+  /// A headless renderer records the same geometry into a vector instead. Nothing about the append
+  /// path changes -- it is the same code writing to a different address -- so what a test drives is
+  /// what ships.
+  void CreateHeadless();
+
   /// Resets this frame's vertex slice. Every frame writes its own slice of the buffer, so the CPU
   /// never overwrites vertices the GPU is still reading. Also clears the clip rectangle.
   void BeginFrame(std::uint32_t _frameIndex) noexcept;
@@ -179,6 +195,11 @@ private:
   /// The whole vertex buffer, mapped for the life of the renderer. An upload heap is CPU-visible
   /// and GPU-readable; for a few hundred vertices a frame there is nothing a default-heap copy
   /// would buy.
+  /// Where a headless renderer's geometry goes. Empty in the shipped path, where the vertices
+  /// live in an upload heap the GPU reads directly.
+  std::vector<TextVertex> m_headlessVertices;
+  bool m_headless = false;
+
   TextVertex* m_mappedVertices = nullptr;
   std::uint32_t m_frameIndex = 0;
   std::uint32_t m_usedThisFrame = 0;

@@ -146,6 +146,7 @@
     <ClCompile Include="SignalTests.cpp" />
     <ClCompile Include="DigestViewTests.cpp" />
     <ClCompile Include="CountdownTests.cpp" />
+    <ClCompile Include="TapTests.cpp" />
   </ItemGroup>
   <!--
     THE EXECUTABLE'S OWN TRANSLATION UNITS, COMPILED A SECOND TIME.
@@ -168,6 +169,12 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="..\..\Lockstep\DigestView.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\Lockstep\ConnectionDialog.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\Lockstep\SeatsPage.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="..\..\Lockstep\MainPage.cpp">

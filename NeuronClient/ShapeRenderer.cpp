@@ -26,6 +26,13 @@ void ShapeRenderer::Create(ID3D12Device* _device)
   CreatePipeline(_device);
 }
 
+void ShapeRenderer::CreateHeadless()
+{
+  m_headlessVertices.assign(static_cast<std::size_t>(Device::FRAME_COUNT) * MAX_VERTICES_PER_FRAME, ShapeVertex{});
+  m_mappedVertices = m_headlessVertices.data();
+  m_headless = true;
+}
+
 void ShapeRenderer::CreateVertexBuffer(ID3D12Device* _device)
 {
   const std::uint64_t sizeBytes = static_cast<std::uint64_t>(Device::FRAME_COUNT) * MAX_VERTICES_PER_FRAME * sizeof(ShapeVertex);
@@ -355,6 +362,11 @@ void ShapeRenderer::FillRadialGradient(float _centerXPixels, float _centerYPixel
 
 void ShapeRenderer::Flush(ID3D12GraphicsCommandList* _commandList)
 {
+  // A headless renderer has no pipeline, no root signature and no buffer the GPU can read. This
+  // is fatal rather than a silent return, because a caller that reached here is a caller that
+  // believes it is drawing to a screen.
+  ASSERT_TEXT(!m_headless, L"Flushing a headless renderer. CreateHeadless is for layout, not for drawing.");
+
   // Only what has been recorded since the last flush. See the header: this is what lets a caller
   // put the interface over the world instead of having every glyph land on top of everything.
   if (m_usedThisFrame == m_flushedThisFrame)

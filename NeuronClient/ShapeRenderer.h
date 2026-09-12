@@ -41,6 +41,22 @@ public:
 
   void Create(ID3D12Device* _device);
 
+  /// Creates the renderer with NO DEVICE BEHIND IT: appended geometry lands in ordinary memory
+  /// and `Flush` is refused.
+  ///
+  /// **This is the seam that makes a screen's LAYOUT testable.** Every page in this game builds its
+  /// hit list while it draws -- `AddHit` sits beside the `FillRect` that put the button there, which
+  /// is what stops the two drifting apart -- so a test that wants to press a button has to be able
+  /// to run the draw. It could not: an append writes through a pointer into an upload heap, and
+  /// without a device that pointer is null. Whoever wanted to test a tap had the choice of standing
+  /// up D3D12 in a test DLL that CI runs on a machine with no GPU, or writing the layout out a
+  /// second time in the test and asserting against a copy of the thing under test.
+  ///
+  /// A headless renderer records the same geometry into a vector instead. Nothing about the append
+  /// path changes -- it is the same code writing to a different address -- so what a test drives is
+  /// what ships.
+  void CreateHeadless();
+
   /// Resets this frame's slice. Every frame writes its own, so the CPU never overwrites vertices
   /// the GPU is still reading -- the same arrangement FontRenderer uses.
   void BeginFrame(std::uint32_t _frameIndex) noexcept;
@@ -137,6 +153,11 @@ private:
   winrt::com_ptr<ID3D12PipelineState> m_pipeline;
 
   /// The whole vertex buffer, mapped for the life of the renderer (FontRenderer.h says why).
+  /// Where a headless renderer's geometry goes. Empty in the shipped path, where the vertices
+  /// live in an upload heap the GPU reads directly.
+  std::vector<ShapeVertex> m_headlessVertices;
+  bool m_headless = false;
+
   ShapeVertex* m_mappedVertices = nullptr;
   std::uint32_t m_frameIndex = 0;
   std::uint32_t m_usedThisFrame = 0;

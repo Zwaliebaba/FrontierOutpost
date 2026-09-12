@@ -163,6 +163,13 @@ private:
   std::array<bool, SEAT_COUNT> m_connected = {};
   std::int32_t m_seatCount = 6;
   std::int32_t m_selected = 0;
+  /// Which seat the host holds. **Zero, always, and not a choice this screen makes.**
+  ///
+  /// The host's client logs into its own lobby before this screen opens, with the first of the
+  /// tokens it generated, so the seat is settled by the time anybody sees a card. There was a
+  /// `TAKE SEAT` button here that moved this, and it moved nothing else -- the connection kept the
+  /// token it presented -- which meant the seat the screen protected and the seat the host actually
+  /// played could come apart (ADR-041).
   std::int32_t m_hostSeat = 0;
 
   bool m_enterRequested = false;

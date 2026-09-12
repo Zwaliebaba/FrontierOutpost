@@ -139,6 +139,13 @@ void FontRenderer::CreateAtlas(Device& _device, DescriptorHeap& _shaderVisibleHe
   device->CreateShaderResourceView(m_atlas.get(), &atlasView, _shaderVisibleHeap.CpuHandle(m_atlasSlot));
 }
 
+void FontRenderer::CreateHeadless()
+{
+  m_headlessVertices.assign(static_cast<std::size_t>(Device::FRAME_COUNT) * MAX_VERTICES_PER_FRAME, TextVertex{});
+  m_mappedVertices = m_headlessVertices.data();
+  m_headless = true;
+}
+
 void FontRenderer::CreateVertexBuffer(ID3D12Device* _device)
 {
   const std::uint64_t sizeBytes = static_cast<std::uint64_t>(Device::FRAME_COUNT) * MAX_VERTICES_PER_FRAME * sizeof(TextVertex);
@@ -355,6 +362,11 @@ void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::s
 
 void FontRenderer::Flush(ID3D12GraphicsCommandList* _commandList)
 {
+  // A headless renderer has no pipeline, no root signature and no buffer the GPU can read. This
+  // is fatal rather than a silent return, because a caller that reached here is a caller that
+  // believes it is drawing to a screen.
+  ASSERT_TEXT(!m_headless, L"Flushing a headless renderer. CreateHeadless is for layout, not for drawing.");
+
   // Only what has been recorded since the last flush, so that a second layer's glyphs can sit over
   // a second layer's shapes rather than over the whole frame. See the header.
   if (m_usedThisFrame == m_flushedThisFrame)
