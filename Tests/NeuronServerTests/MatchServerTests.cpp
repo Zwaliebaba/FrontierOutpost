@@ -247,6 +247,35 @@ public:
     Assert::AreEqual(1, running.server->Connected());
   }
 
+  // The countdown a joining client is handed is measured from the poll that welcomed it. It used
+  // to be measured from instant zero, which is the lock's absolute time, so a player joining an
+  // hour into a six-hour tick counted down six hours and kept editing after the lock.
+  TEST_METHOD(AJoiningClientIsToldHowLongUntilTheLockAsOfNow)
+  {
+    Running running = Start();
+    constexpr Neuron::Instant AN_HOUR_IN = 3600;
+
+    TestClient client;
+    Assert::IsTrue(client.Connect(running.server->Port()));
+    client.Send(Neuron::Protocol::EncodeHello("alpha"));
+    Settle(*running.server, client, AN_HOUR_IN);
+
+    std::vector<std::uint8_t> welcome;
+    Assert::IsTrue(client.Find(Neuron::MessageKind::Welcome, welcome));
+    std::int32_t player = -1;
+    std::uint32_t tick = 0;
+    std::int64_t seconds = 0;
+    Assert::IsTrue(Neuron::Protocol::DecodeWelcome(welcome, player, tick, seconds));
+    Assert::AreEqual(static_cast<std::int64_t>(SIX_HOURS - AN_HOUR_IN), seconds, L"the welcome says what is left, not the whole interval");
+
+    std::vector<std::uint8_t> state;
+    Assert::IsTrue(client.Find(Neuron::MessageKind::State, state));
+    std::vector<std::uint8_t> snapshot;
+    std::vector<std::uint8_t> digest;
+    Assert::IsTrue(Neuron::Protocol::DecodeState(state, tick, seconds, snapshot, digest));
+    Assert::AreEqual(static_cast<std::int64_t>(SIX_HOURS - AN_HOUR_IN), seconds, L"and so does the state that follows it");
+  }
+
   TEST_METHOD(AnUnknownTokenIsRefusedAndTheConnectionClosed)
   {
     Running running = Start();
