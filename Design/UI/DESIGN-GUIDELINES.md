@@ -118,7 +118,9 @@ Semantic / owner (ADR-027: you are always blue)
   Left/Right/Home/End, Tab between fields, Enter submits; 48 characters for a server, 32 for a token.
 - **Seat card** — swatch, `SEAT 01`, `YOU` or the empire name, `TOKEN` and the token, a status line
   (`CONNECTED - YOU` / `CONNECTED` / `WAITING FOR PLAYER` / `BOT WILL TAKE OVER` / `BOT - STEADY`),
-  and a `HUMAN | BOT` toggle; blue border when selected.
+  and the three-way `HUMAN | BOT AT T1 | BOT` — one control for who plays this seat (ADR-066), its
+  segments sized to their labels because a third of a 212px card is seven glyphs and `BOT AT T1` is
+  nine; blue border when selected.
 - **Tabs (unread ticks)** — not built.
 - **Locks list row** — label primary left, wrapped to leave room; status right, coloured:
   `T7`/`HOLD` muted, `+DEF`/`QUEUED -20`/`SENDING` blue, `PROPOSE`/`3 TICKS` amber, `CONCEDE` red.

@@ -257,21 +257,22 @@ The host's lobby, after they have joined their own server with the first token i
 (ADR-036 as amended; ADR-037, 041, 051). A joiner never sees it. On the join screen's sky:
 `LOCKSTEP` at 2×, `SEATS - BEFORE THE MATCH STARTS`, and `6 SEATS - 1 OF 6 CONNECTED` on the right;
 a 960px console holding a 3×2 grid of seat cards (swatch, `SEAT 01`, `YOU` or the empire name,
-the token, a status line, `HUMAN | BOT`), the practice box under the grid (`FIRST MATCH?` and an
-amber `PRACTICE MATCH >` with the two numbers that differ — a tick every two minutes against six
-hours, five bots, thirty ticks), a detail panel for the selected seat on the right (what a token is;
-the token with `COPY` to the clipboard and `NEW TOKEN`; whose seat it is; for a bot seat `HOW IT
-PLAYS` with three styles; for a human seat `IF STILL WAITING AT T1 LOCK` — `BOT TAKES OVER` |
-`SEAT GOES CUSTODIAN`), and a footer with the summary (`WAITING FOR SORNE, TAMSIN - 4 OF 6 HERE`
+the token, a status line, and the three-way `HUMAN | BOT AT T1 | BOT` — one control for one
+question, ADR-066, its segments sized to their labels), the practice box under the grid (`FIRST
+MATCH?` and an amber `PRACTICE MATCH >` with the two numbers that differ — a tick every two minutes
+against six hours, five bots, thirty ticks), a detail panel for the selected seat on the right (what
+a token is; the token with `COPY` to the clipboard and `NEW TOKEN`; whose seat it is; for a bot seat
+`HOW IT PLAYS` with three styles; for a human seat one line saying what the card's setting does),
+and a footer with the summary (`WAITING FOR SORNE, TAMSIN - 4 OF 6 HERE`
 in amber, `ALL 6 SEATS CONNECTED - YOU ARE SEAT 01` in blue) or the refusal to the last tap,
 `FILL WAITING WITH BOTS`, and `ENTER MATCH >` — filled only when every seat is connected, a bot, or
 marked to be taken over; Enter is the same. `CONNECTED` is live from the server this process runs.
 
 Decisions on this screen: six seats and no `EMPTY` (ADR-036 amendment 3); `TAKE SEAT` removed —
 the host's seat is the token their client presented (ADR-041); entering is what turns a seat nobody
-came to into a bot (ADR-037); `PRACTICE MATCH` hands every seat but the host's and anybody
-connected to a bot and enters at once (ADR-051). The screen is not throttled (ADR-047's open
-question).
+came to into a bot (ADR-037); one three-way rather than a card toggle and a panel pair (ADR-066);
+`PRACTICE MATCH` hands every seat but the host's and anybody connected to a bot and enters at once
+(ADR-051). The screen is not throttled (ADR-047's open question).
 
 **Code.** `Lockstep/SeatsPage.{h,cpp}` (in the executable because it names `BotPolicy`, ADR-050),
 `RunSeatsScreen` in `Lockstep.cpp` (the clipboard). Tests: `SeatsPageTapTests` in `TapTests.cpp`.

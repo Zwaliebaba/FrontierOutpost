@@ -614,6 +614,31 @@ public:
     Assert::IsTrue(reissued, L"no control on the seats screen reissues a token");
   }
 
+  TEST_METHOD(AWaitingSeatCanBeMarkedWithoutBecomingABot)
+  {
+    // ADR-066's middle segment. `BOT AT T1` is the answer between "wait for them" and "play it
+    // yourself", and the claim it has to make is that the seat is READY while still a person's --
+    // which is what makes ENTER MATCH reachable when a friend does not show, without handing their
+    // empire to a machine before they have had the chance to arrive.
+    Lockstep::SeatsPage page{Lockstep::GenerateSeatTokens(Lockstep::SeatsPage::SEAT_COUNT)};
+    page.SetConnected(std::vector<bool>{true, false, false, false, false, false});
+
+    Headless renderers;
+    const bool marked = SweepFor(page, renderers, DrawSeats, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page]
+                                 {
+                                   for (std::int32_t seat = 0; seat < Lockstep::SeatsPage::SEAT_COUNT; ++seat)
+                                   {
+                                     if (page.BotTakesOverSeat(seat) && !page.Roster()[static_cast<std::size_t>(seat)].has_value())
+                                     {
+                                       return true;
+                                     }
+                                   }
+                                   return false;
+                                 });
+    Assert::IsTrue(marked, L"no control marks a waiting seat for a bot without making it one now");
+  }
+
   TEST_METHOD(EveryoneIsHereOnceTheSeatsAreBots)
   {
     // The rule that makes ENTER MATCH reachable when a friend does not show: a bot seat is never

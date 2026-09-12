@@ -61,6 +61,10 @@ public:
   /// `BotTakesOver` counts as ready even while empty, and becomes a bot the moment the host
   /// enters; a seat set to `GoesCustodian` holds the whole lobby until its player connects, which
   /// is the right default because the host usually does want to wait for a friend.
+  ///
+  /// **It is the middle of the card's three-way and not a control of its own** (ADR-066). Paired
+  /// with `Kind` it makes three states -- `HUMAN`, `HUMAN, BOT AT T1`, `BOT` -- and those are the
+  /// three answers to one question, which is why the detail panel no longer asks it a second time.
   enum class IfWaiting : std::uint8_t
   {
     BotTakesOver,
@@ -144,6 +148,13 @@ public:
 
   /// Which seat the host took, as an index into `PlayingTokens`, or -1 when they have not said.
   [[nodiscard]] std::int32_t HostSeat() const;
+
+  /// Whether this seat is a person's and a bot takes it at the first lock if they have not arrived
+  /// -- the middle of the card's three-way (ADR-066).
+  ///
+  /// It is public for the reason `Roster` is: the control is a state of the card, and a control
+  /// nothing can observe is a control nothing can press.
+  [[nodiscard]] bool BotTakesOverSeat(std::int32_t _seat) const;
 
   /// What the clipboard was last given, for the caller to put there. Taken and cleared.
   [[nodiscard]] std::string TakeCopyRequest();

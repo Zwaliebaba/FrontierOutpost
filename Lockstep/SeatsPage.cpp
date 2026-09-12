@@ -91,8 +91,9 @@ constexpr std::int32_t ACTION_BOT = 4;
 constexpr std::int32_t ACTION_COPY = 5;
 constexpr std::int32_t ACTION_NEW_TOKEN = 6;
 constexpr std::int32_t ACTION_PRACTICE = 7;
+/// The middle of the card's three-way: a person's seat that a bot takes at the first lock if they
+/// have not arrived (ADR-066). There is no opposite action, because `ACTION_HUMAN` is it.
 constexpr std::int32_t ACTION_BOT_TAKES_OVER = 8;
-constexpr std::int32_t ACTION_GOES_CUSTODIAN = 9;
 constexpr std::int32_t ACTION_FILL = 10;
 constexpr std::int32_t ACTION_ENTER = 11;
 /// One per offered style rather than one action carrying an index, because a hit is (action, seat)
@@ -241,6 +242,16 @@ std::int32_t SeatsPage::HostSeat() const
   return PlayerIndexOf(m_hostSeat);
 }
 
+bool SeatsPage::BotTakesOverSeat(std::int32_t _seat) const
+{
+  if (_seat < 0 || _seat >= SEAT_COUNT)
+  {
+    return false;
+  }
+  const Seat& seat = m_seats[static_cast<std::size_t>(_seat)];
+  return seat.kind == Kind::Human && seat.ifWaiting == IfWaiting::BotTakesOver;
+}
+
 std::optional<SeatsPage::Entry> SeatsPage::TakeEnterRequest() noexcept
 {
   std::optional<Entry> asked = m_entry;
@@ -307,8 +318,13 @@ bool SeatsPage::HandleTap(float _xPixels, float _yPixels)
       return true;
 
     case ACTION_HUMAN:
+      // The plain human seat, which is also the one that waits: the three-way's left segment is
+      // `Kind::Human` and `GoesCustodian` together (ADR-066), so picking it takes back a takeover
+      // the host had already agreed to.
       m_selected = hit->seat;
       seat.kind = Kind::Human;
+      seat.ifWaiting = IfWaiting::GoesCustodian;
+      m_refusal.clear();
       return true;
 
     case ACTION_BOT:
@@ -343,12 +359,16 @@ bool SeatsPage::HandleTap(float _xPixels, float _yPixels)
     }
 
     case ACTION_BOT_TAKES_OVER:
+      m_selected = hit->seat;
+      if (hit->seat == m_hostSeat)
+      {
+        // The host is sitting in it and cannot be the player who did not turn up.
+        m_refusal = "That is your seat. You are already here.";
+        return true;
+      }
+      seat.kind = Kind::Human;
       seat.ifWaiting = IfWaiting::BotTakesOver;
       m_refusal.clear();
-      return true;
-
-    case ACTION_GOES_CUSTODIAN:
-      seat.ifWaiting = IfWaiting::GoesCustodian;
       return true;
 
     case ACTION_FILL:
@@ -471,34 +491,53 @@ void SeatsPage::DrawSeatCard(ShapeRenderer& _shapes, FontRenderer& _text, std::i
   }
   _text.DrawText(static_cast<std::int32_t>(_x) + 12, lineY, status, statusColor);
 
-  // ---- HUMAN | BOT -------------------------------------------------------------------------------
+  // ---- HUMAN | BOT AT T1 | BOT -------------------------------------------------------------------
+  //
+  // **One control for one question** (ADR-066). Who plays this seat has three answers -- a person, a
+  // person a bot takes over from at the first lock, or a bot now -- and they used to be asked twice,
+  // once on the card and once in the detail panel, in words that did not obviously belong to the
+  // same question.
+  //
+  // The segments are sized to their labels rather than cut into equal thirds: `BOT AT T1` is nine
+  // glyphs and a third of a 212-pixel card is seven.
   const float toggleY = _y + _height - 28.0F;
-  const float toggleWidth = (_width - 24.0F) / 2.0F;
-  const std::array<const char*, 2> labels = {"HUMAN", "BOT"};
-  const std::array<std::int32_t, 2> actions = {ACTION_HUMAN, ACTION_BOT};
-  const std::array<Kind, 2> kinds = {Kind::Human, Kind::Bot};
+  const float room = _width - 24.0F;
+  const std::array<const char*, 3> labels = {"HUMAN", "BOT AT T1", "BOT"};
+  const std::array<std::int32_t, 3> actions = {ACTION_HUMAN, ACTION_BOT_TAKES_OVER, ACTION_BOT};
 
+  float measured = 0.0F;
+  for (const char* label : labels)
+  {
+    measured += static_cast<float>(FontRenderer::MeasurePixels(label)) + 12.0F;
+  }
+  const float gap = std::max(2.0F, (room - measured) / static_cast<float>(labels.size() - 1));
+
+  const bool waits = seat.kind == Kind::Human && seat.ifWaiting == IfWaiting::BotTakesOver;
+  const std::array<bool, 3> lit = {seat.kind == Kind::Human && !waits, waits, seat.kind == Kind::Bot};
+
+  // A seat somebody is already sitting on cannot be handed to a bot, and neither can the host's --
+  // and the host is never the player who did not turn up, so the middle is theirs to skip too.
+  const std::array<bool, 3> possible = {true, !mine, !here && !mine};
+
+  float toggleX = _x + 12.0F;
   for (std::size_t slot = 0; slot < labels.size(); ++slot)
   {
-    const float toggleX = _x + 12.0F + static_cast<float>(slot) * toggleWidth;
-    const bool on = seat.kind == kinds[slot];
+    const auto labelWidth = static_cast<float>(FontRenderer::MeasurePixels(labels[slot]));
+    const float segmentWidth = labelWidth + 12.0F;
 
-    // A seat somebody is already sitting on cannot be handed to a bot, and neither can the host's.
-    const bool possible = kinds[slot] != Kind::Bot || (!here && !mine);
-
-    if (on)
+    if (lit[slot])
     {
-      _shapes.FillRect(toggleX, toggleY, toggleWidth - 3.0F, 18.0F, BLUE);
+      _shapes.FillRect(toggleX, toggleY, segmentWidth, 18.0F, BLUE);
     }
     else
     {
-      _shapes.StrokeRect(toggleX, toggleY, toggleWidth - 3.0F, 18.0F, possible ? OUTLINE : DIVIDER);
+      _shapes.StrokeRect(toggleX, toggleY, segmentWidth, 18.0F, possible[slot] ? OUTLINE : DIVIDER);
     }
 
-    const auto labelWidth = static_cast<float>(FontRenderer::MeasurePixels(labels[slot]));
-    _text.DrawText(static_cast<std::int32_t>(toggleX + (toggleWidth - 3.0F - labelWidth) * 0.5F), CenterTextY(toggleY, 18.0F), labels[slot],
-                   on ? APP_BACKGROUND : (possible ? TEXT_PRIMARY : NEUTRAL_DIM));
-    AddHit(toggleX, toggleY, toggleWidth - 3.0F, 18.0F, actions[slot], _index);
+    _text.DrawText(static_cast<std::int32_t>(toggleX + (segmentWidth - labelWidth) * 0.5F), CenterTextY(toggleY, 18.0F), labels[slot],
+                   lit[slot] ? APP_BACKGROUND : (possible[slot] ? TEXT_PRIMARY : NEUTRAL_DIM));
+    AddHit(toggleX, toggleY, segmentWidth, 18.0F, actions[slot], _index);
+    toggleX += segmentWidth + gap;
   }
 }
 
@@ -591,28 +630,17 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
     return;
   }
 
-  // ---- If still waiting at the lock --------------------------------------------------------------
-  _text.DrawText(static_cast<std::int32_t>(contentX), y, "IF STILL WAITING AT T1 LOCK", TEXT_MUTED);
-  y += LINE_HEIGHT + 6;
-
+  // ---- What the card's three-way means for this seat ---------------------------------------------
+  //
+  // **The panel says what the setting DOES and does not offer a second way to change it** (ADR-066).
+  // `IF STILL WAITING AT T1 LOCK`, with `BOT TAKES OVER | SEAT GOES CUSTODIAN` under it, asked the
+  // same question the card asks and answered it in different words, so a host reading both had two
+  // controls and one setting.
   const bool takesOver = seat.ifWaiting == IfWaiting::BotTakesOver;
 
-  _shapes.StrokeRect(contentX, static_cast<float>(y), halfWidth, 30.0F, takesOver ? BLUE : DIVIDER);
-  _text.DrawText(static_cast<std::int32_t>(contentX) + 6, static_cast<std::int32_t>(y) + 5, "BOT TAKES", takesOver ? BLUE : NEUTRAL_DIM);
-  _text.DrawText(static_cast<std::int32_t>(contentX) + 6, static_cast<std::int32_t>(y) + 17, "OVER", takesOver ? BLUE : NEUTRAL_DIM);
-  AddHit(contentX, static_cast<float>(y), halfWidth, 30.0F, ACTION_BOT_TAKES_OVER, m_selected);
-
-  _shapes.StrokeRect(contentX + halfWidth + 8.0F, static_cast<float>(y), halfWidth, 30.0F, takesOver ? DIVIDER : BLUE);
-  _text.DrawText(static_cast<std::int32_t>(contentX + halfWidth) + 14, static_cast<std::int32_t>(y) + 5, "SEAT GOES",
-                 takesOver ? TEXT_MUTED : BLUE);
-  _text.DrawText(static_cast<std::int32_t>(contentX + halfWidth) + 14, static_cast<std::int32_t>(y) + 17, "CUSTODIAN",
-                 takesOver ? TEXT_MUTED : BLUE);
-  AddHit(contentX + halfWidth + 8.0F, static_cast<float>(y), halfWidth, 30.0F, ACTION_GOES_CUSTODIAN, m_selected);
-  y += 40;
-
   for (const std::string& line :
-       FontRenderer::Wrap(takesOver ? "This seat is ready to start without its player: entering makes it a bot."
-                                    : "Entering waits for this player. Switch to BOT TAKES OVER to start without them.",
+       FontRenderer::Wrap(takesOver ? "BOT AT T1: this seat is ready to start without its player, and entering makes it a bot."
+                                    : "HUMAN: entering waits for this player. Set the card to BOT AT T1 to start without them.",
                           columns))
   {
     _text.DrawText(static_cast<std::int32_t>(contentX), y, line, NEUTRAL_DIM);
