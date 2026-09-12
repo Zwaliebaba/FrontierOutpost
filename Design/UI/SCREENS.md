@@ -52,16 +52,21 @@ an ordered-but-unlocked move (progress zero) is not drawn on the node it is leav
 for that draws it in the middle. `01-orders-queued.png` is the ordered-but-unlocked case and
 `01-fleet-under-way.png` the same fleet a tick out.
 
-**Locks rail (260px, right) — read-only (`DrawLocksRail`).** `LOCKS T8` / `UNLOCKED` (amber); one
-line of help; sections `FLEETS n` (rows `FLT 1 10 > PELL` with `T9`, or `FLT 1 10 HOLD DOTHAN` with
-`HOLD`, `+DEF` in blue when it is the incumbent), `BUILDS 2 AVAIL - 26 CR` (queued rows
-`SHIPYARD - PELL` / `QUEUED -20`, a `- 6 cr left at the lock -` line, `- nothing queued -`
-otherwise), `SIGNALS 9 TO SEND >` (rows `SENDING`, a concede in red), `PROPOSALS 1 OPEN` (rows
-`P3 LANE` / `3 TICKS` amber). Footer `ALL LOCK TOGETHER` + the countdown.
+**Locks rail (260px, right) — orders no order, links to all of them (`DrawLocksRail`).** `LOCKS T8`
+/ `UNLOCKED` (amber); one line of help; sections `FLEETS n` (rows `FLT 1 10 > PELL` with `T9`, or
+`FLT 1 10 HOLD DOTHAN` with `HOLD`, `+DEF` in blue when it is the incumbent), `BUILDS 2 AVAIL - 26
+CR` (queued rows `SHIPYARD - PELL` / `QUEUED -20`, a `- 6 cr left at the lock -` line, `- nothing
+queued -` otherwise), `SIGNALS 9 TO SEND >` (rows `SENDING`, a concede in red), `PROPOSALS 1 OPEN`
+(rows `P3 LANE` / `3 TICKS` amber). Footer `ALL LOCK TOGETHER` + the countdown.
 
-*Differs:* **rows are not tappable** — the handoff's "tapping a row jumps to the event that owns it"
-is not built; the `SIGNALS` header is the rail's only control (it opens the signal sheet). The
-trade-lane `PROPOSE` row is drawn from `BuildRow::isTradeLane`, which nothing sets.
+**Rows are links (ADR-060).** A BUILDS row opens the build sheet for the system its build is on; a
+FLEETS row focuses where the fleet stands, or opens the destination picker when it is under way; a
+PROPOSALS row focuses the far end of the lane the offer is about. None of them gives an order. The
+row under the pointer is filled with `HOVER_FILL`, and only a row that is a target draws one. At the
+lock and in a finished match every row is focus-only.
+
+*Differs:* the `SIGNALS` section's queued rows are not links, and the trade-lane `PROPOSE` row is
+drawn from `BuildRow::isTradeLane`, which nothing sets.
 
 **Sheets (ADR-052).** The four panels — build, destination, signal, replay — are one component
 (`DrawPanel`), drawn as a sheet against the bottom of the map pane, 44px rows, six at most, a

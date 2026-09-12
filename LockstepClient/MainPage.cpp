@@ -71,6 +71,52 @@ constexpr float REGION_VOLUME_HEIGHT = 26.0F;
   }
 }
 
+/// Where a system with this id sits in the view's own list, or NONE.
+///
+/// **A system id and a position in `graph.systems` are different numbers** (ADR-057): the graph is
+/// fogged, so the tenth system a player can see is not system ten. A `BuildRow` carries the id,
+/// because an order names one; everything the screen focuses names a position.
+[[nodiscard]] std::int32_t PositionOfSystem(const MatchState& _state, std::int32_t _systemId) noexcept
+{
+  for (std::size_t index = 0; index < _state.graph.systems.size(); ++index)
+  {
+    if (_state.graph.systems[index].id == _systemId)
+    {
+      return static_cast<std::int32_t>(index);
+    }
+  }
+  return EventRefs::NONE;
+}
+
+/// Which system a proposal is about: the far end of the lane it offers.
+///
+/// **The far end and not the near one**, because the near one is this player's own and the thing
+/// they have not looked at is whose border the offer arrives from. A proposal that names no lane --
+/// scouting, a hold -- is about nobody's system and focuses nothing.
+[[nodiscard]] std::int32_t ProposalSystem(const MatchState& _state, const Proposal& _proposal) noexcept
+{
+  if (_proposal.conditionalLane == EventRefs::NONE)
+  {
+    return EventRefs::NONE;
+  }
+
+  for (const Lane& lane : _state.graph.lanes)
+  {
+    if (lane.id != _proposal.conditionalLane)
+    {
+      continue;
+    }
+
+    const auto systems = static_cast<std::int32_t>(_state.graph.systems.size());
+    if (lane.a < 0 || lane.a >= systems || lane.b < 0 || lane.b >= systems)
+    {
+      return EventRefs::NONE;
+    }
+    return _state.graph.systems[static_cast<std::size_t>(lane.a)].owner == _state.viewer ? lane.b : lane.a;
+  }
+  return EventRefs::NONE;
+}
+
 /// 1284 -> "1,284". The reference groups thousands and the score is the number a player checks
 /// first, so it is grouped here rather than left as a run of digits.
 [[nodiscard]] std::string FormatScore(std::uint32_t _score)
@@ -119,6 +165,12 @@ void MainPage::Create(MatchState _state)
   m_focusedSystem = EventRefs::NONE;
 
   MeasureContent();
+}
+
+std::string MainPage::LockSentence() const
+{
+  return std::format("Resolving T{}. Controls return with the new digest. Anything you tap now is an order for T{}.", m_state.OrdersTick(),
+                     m_state.OrdersTick() + 1);
 }
 
 void MainPage::MeasureContent()
@@ -294,6 +346,37 @@ bool MainPage::HandleDrag(const Neuron::PointerInput::Drag& _drag)
 void MainPage::AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index)
 {
   m_hits.push_back(HitRegion{_xPixels, _yPixels, _widthPixels, _heightPixels, _action, _index});
+}
+
+std::int32_t MainPage::RailRowUnderPointer() const noexcept
+{
+  for (std::size_t index = 0; index < m_railRows.size(); ++index)
+  {
+    const RailRow& row = m_railRows[index];
+    const bool inside = m_pointerXPixels >= row.x && m_pointerXPixels < row.x + row.width && m_pointerYPixels >= row.y &&
+                        m_pointerYPixels < row.y + row.height;
+    if (inside)
+    {
+      return static_cast<std::int32_t>(index);
+    }
+  }
+  return EventRefs::NONE;
+}
+
+bool MainPage::SetPointer(float _xPixels, float _yPixels)
+{
+  m_pointerXPixels = _xPixels;
+  m_pointerYPixels = _yPixels;
+
+  // Tested against the PREVIOUS frame's rows, exactly as a tap is: layout and hit testing are the
+  // same code, so there is only one list and it is a frame old.
+  const std::int32_t under = RailRowUnderPointer();
+  if (under == m_hoveredRailRow)
+  {
+    return false;
+  }
+  m_hoveredRailRow = under;
+  return true;
 }
 
 bool MainPage::Animating() const noexcept
@@ -895,6 +978,8 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   const float contentRight = Frame::SCREEN_WIDTH - RAIL_PADDING;
   const std::size_t columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(contentRight - contentX));
 
+  m_railRows.clear();
+
   _shapes.FillRect(railX, Frame::TOP_BAR_HEIGHT, Frame::ORDERS_WIDTH, Frame::SCREEN_HEIGHT - Frame::TOP_BAR_HEIGHT, Ink::APP_BACKGROUND);
   _shapes.FillRect(railX, Frame::TOP_BAR_HEIGHT, 1.0F, Frame::SCREEN_HEIGHT - Frame::TOP_BAR_HEIGHT, Ink::CARD_BORDER);
 
@@ -923,10 +1008,8 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   // One line of help, and only one. It says where the controls went, because a player who used the
   // old rail will look for them here first.
   const std::string help = m_state.match.finished ? std::string{"The match is over. This is what you finished with."}
-                           : atLock ? std::format("Resolving T{}. Controls return with the new digest. Anything you tap now is an "
-                                                  "order for T{}.",
-                                                  m_state.OrdersTick(), m_state.OrdersTick() + 1)
-                                    : std::string{"What goes in when the clock hits zero. Change it from the digest."};
+                           : atLock ? LockSentence()
+                                    : std::string{"What goes in when the clock hits zero. Tap a row to go to what it is about."};
   for (const std::string& line : FontRenderer::Wrap(help, columns))
   {
     _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), line, atLock ? Ink::AMBER : Ink::TEXT_DETAIL);
@@ -944,20 +1027,39 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
   /// A row: what it is on the left, where it stands on the right. The status carries the colour --
   /// it is the half a player scans down the column for.
-  const auto row = [&](std::string_view _label, std::string_view _status, const Color& _statusColor)
+  ///
+  /// **A row is a link to what it is about** (ADR-060). It gives no order -- the digest is still
+  /// the order surface -- it takes the eye to the thing the row names, which is the question a
+  /// player reading this column keeps having to answer somewhere else. `Action::None` is a row with
+  /// nothing to point at, and it is not a target and draws no hover.
+  const auto row = [&](std::string_view _label, std::string_view _status, const Color& _statusColor, Action _action, std::int32_t _index)
   {
     const std::int32_t lineY = static_cast<std::int32_t>(y);
     const std::size_t room = FontRenderer::FitCharacters(
       static_cast<std::uint32_t>(contentRight - contentX - static_cast<float>(FontRenderer::MeasurePixels(_status)) - 8.0F));
 
     const std::vector<std::string> wrapped = FontRenderer::Wrap(_label, room);
+    const float height = static_cast<float>(std::max<std::size_t>(1, wrapped.size())) * static_cast<float>(LINE_HEIGHT) + 4.0F;
+    const bool target = _action != Action::None;
+
+    if (target)
+    {
+      const bool hovered = m_pointerXPixels >= railX && m_pointerYPixels >= y && m_pointerYPixels < y + height;
+      if (hovered)
+      {
+        _shapes.FillRect(railX + 1.0F, y, Frame::ORDERS_WIDTH - 1.0F, height, Ink::HOVER_FILL);
+      }
+      AddHit(railX, y, Frame::ORDERS_WIDTH, height, _action, _index);
+      m_railRows.push_back(RailRow{railX, y, Frame::ORDERS_WIDTH, height});
+    }
+
     for (std::size_t index = 0; index < wrapped.size(); ++index)
     {
       _text.DrawText(static_cast<std::int32_t>(contentX), lineY + static_cast<std::int32_t>(index) * LINE_HEIGHT, wrapped[index],
                      Ink::TEXT_PRIMARY);
     }
     DrawRight(_text, contentRight, lineY, _status, _statusColor);
-    y += static_cast<float>(std::max<std::size_t>(1, wrapped.size())) * static_cast<float>(LINE_HEIGHT) + 4.0F;
+    y += height;
   };
 
   const auto nothing = [&](std::string_view _text2)
@@ -965,6 +1067,11 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
     _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), _text2, Ink::NEUTRAL_DIM);
     y += static_cast<float>(LINE_HEIGHT) + 4.0F;
   };
+
+  // **Every row below is focus-only once the orders are locked or the match is over**, matching
+  // every other control on the screen: a tap still moves the eye, and nothing opens a sheet that
+  // could take an order for a tick that is already resolving (ADR-060, screen 06).
+  const bool navigateOnly = m_state.orders.locked || m_state.match.finished;
 
   // ---- FLEETS ------------------------------------------------------------------------------------
   std::uint32_t yours = 0;
@@ -978,8 +1085,9 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     nothing("- none -");
   }
-  for (const Fleet& fleet : m_state.fleets)
+  for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
   {
+    const Fleet& fleet = m_state.fleets[index];
     if (fleet.owner != m_state.viewer)
     {
       continue;
@@ -995,20 +1103,26 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
     const std::string label = moving ? std::format("{} {} > {}", Uppercased(fleet.name), fleet.ships, where)
                                      : std::format("{} {} HOLD {}", Uppercased(fleet.name), fleet.ships, where);
 
+    // A fleet under way opens its destination picker, which is what tapping its marker on the map
+    // does; one standing still focuses where it is standing. Both are the same question -- where is
+    // this fleet, and where is it going -- asked from the column that lists them (ADR-060).
+    const Action fleetAction = navigateOnly ? Action::FocusSystem : (moving ? Action::OpenFleet : Action::FocusSystem);
+    const std::int32_t fleetTarget = fleetAction == Action::OpenFleet ? static_cast<std::int32_t>(index) : fleet.to;
+
     // The verdict tokens the design asks for -- LOSE, +DEF -- are the combat preview's, and the
     // preview is a sentence today rather than a verdict. Until the digest's verdict box is built
     // this says the fact the state actually carries: when it arrives, or that it is dug in.
     if (moving)
     {
-      row(label, std::format("T{}", fleet.eta), Ink::TEXT_MUTED);
+      row(label, std::format("T{}", fleet.eta), Ink::TEXT_MUTED, fleetAction, fleetTarget);
     }
     else if (fleet.status.find("incumbent") != std::string::npos)
     {
-      row(label, "+DEF", Ink::BLUE);
+      row(label, "+DEF", Ink::BLUE, fleetAction, fleetTarget);
     }
     else
     {
-      row(label, "HOLD", Ink::TEXT_MUTED);
+      row(label, "HOLD", Ink::TEXT_MUTED, fleetAction, fleetTarget);
     }
   }
 
@@ -1027,7 +1141,12 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
     if (queued >= 0 && queued < static_cast<std::int32_t>(m_state.orders.builds.size()))
     {
       const BuildRow& build = m_state.orders.builds[static_cast<std::size_t>(queued)];
-      row(Uppercased(build.title), std::format("QUEUED -{}", build.cost), Ink::BLUE);
+
+      // To the sheet that queued it, which is where it is taken back (ADR-060). `BuildRow::system`
+      // is an id and `OpenSystem` names a position, so the row has to look the system up.
+      const std::int32_t at = PositionOfSystem(m_state, build.system);
+      const Action buildAction = at == EventRefs::NONE ? Action::None : (navigateOnly ? Action::FocusSystem : Action::OpenSystem);
+      row(Uppercased(build.title), std::format("QUEUED -{}", build.cost), Ink::BLUE, buildAction, at);
     }
   }
   if (!m_state.orders.queuedBuilds.empty())
@@ -1039,7 +1158,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     if (build.isTradeLane)
     {
-      row(Uppercased(build.title), "PROPOSE", Ink::AMBER);
+      row(Uppercased(build.title), "PROPOSE", Ink::AMBER, Action::None, EventRefs::NONE);
     }
   }
 
@@ -1070,7 +1189,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // A concede is red on the rail and nothing else is. It is the one row here that ends the
     // player's match rather than changing it.
     row(Uppercased(signal.title), signal.kind == SignalKind::Concede ? "CONCEDE" : "SENDING",
-        signal.kind == SignalKind::Concede ? Ink::RED : Ink::BLUE);
+        signal.kind == SignalKind::Concede ? Ink::RED : Ink::BLUE, Action::None, EventRefs::NONE);
   }
 
   // ---- PROPOSALS ---------------------------------------------------------------------------------
@@ -1085,7 +1204,12 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
     const char* what = proposal.type == ProposalType::OpenLane        ? "LANE"
                        : proposal.type == ProposalType::ShareScouting ? "SCOUTING"
                                                                       : "HOLD FIRE";
-    row(std::format("{} {}", Uppercased(proposal.from), what), std::format("{} TICKS", proposal.ticksLeft), Ink::AMBER);
+
+    // An offer about a lane focuses the lane's far end; an offer about a map or a truce is about
+    // no system at all and so is read rather than tapped.
+    const std::int32_t about = ProposalSystem(m_state, proposal);
+    row(std::format("{} {}", Uppercased(proposal.from), what), std::format("{} TICKS", proposal.ticksLeft), Ink::AMBER,
+        about == EventRefs::NONE ? Action::None : Action::FocusSystem, about);
   }
 
   // ---- The footer --------------------------------------------------------------------------------

@@ -113,6 +113,14 @@ public:
   /// the drag was consumed.
   bool HandleDrag(const Neuron::PointerInput::Drag& _drag);
 
+  /// Where the pointer is, so the locks rail can fill the row under it (`Ink::HOVER_FILL`).
+  ///
+  /// **It returns whether the ROW changed, not whether the pointer moved**, because the page
+  /// redraws only when something on it is different (ADR-047) and a mouse crossing a row is the
+  /// only movement that changes a pixel. Pass a point off the screen when the pointer has left the
+  /// window.
+  bool SetPointer(float _xPixels, float _yPixels);
+
   /// Puts the camera back where the screen opened. There is no other way back to the authored
   /// framing once the map has been orbited, and hunting for it by eye is not a thing to ask
   /// (ADR-017).
@@ -179,9 +187,26 @@ private:
     std::int32_t index;
   };
 
+  /// One tappable row of the locks rail, kept so `SetPointer` can tell when the pointer crossed
+  /// from one to another. Only the rail's rows are here: it is the only list that draws a hover.
+  struct RailRow
+  {
+    float x;
+    float y;
+    float width;
+    float height;
+  };
+
   /// Measures the galaxy's bounding sphere, so the camera can frame it. Called once, from
   /// Create: the graph does not move between ticks.
   void MeasureContent();
+
+  /// Which of `m_railRows` the pointer is over, or `EventRefs::NONE`.
+  [[nodiscard]] std::int32_t RailRowUnderPointer() const noexcept;
+
+  /// What the rail and an open sheet both say at the lock. One sentence, said once, because two
+  /// copies of it is one wrong tick number waiting.
+  [[nodiscard]] std::string LockSentence() const;
 
   void AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index);
 
@@ -238,6 +263,12 @@ private:
   /// invisible at any frame rate a person can tap through and is what lets layout and hit
   /// testing be the same code rather than two that must agree.
   std::vector<HitRegion> m_hits;
+
+  /// The locks rail's rows, rebuilt with it, and where the pointer is over them.
+  std::vector<RailRow> m_railRows;
+  float m_pointerXPixels = -1.0F;
+  float m_pointerYPixels = -1.0F;
+  std::int32_t m_hoveredRailRow = EventRefs::NONE;
 };
 
 } // namespace Lockstep

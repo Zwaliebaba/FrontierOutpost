@@ -93,7 +93,8 @@ sheet reads `+1 MORE THAN THIS SHEET CAN SHOW` instead of saying it is a stub; t
 `JoinPage::SetMatchSummary` has no caller, so the join screen's footer line never appears.
 `Design/GETTING-STARTED.md` said rail rows jump to their event, that the map zooms, that a player
 starts with twenty credits and that missed digests are one tick deep; none was true of the tree, and
-it was corrected on 2026-09-12.
+it was corrected on 2026-09-12. (Rail rows became links later the same day — ADR-060 — so that first
+claim is true again, of a different mechanism: a row links to the thing it names, not to an event.)
 
 ## Photographing the build
 

@@ -568,6 +568,62 @@ public:
   }
 };
 
+// The locks rail's rows are links to what they are about (ADR-060). They give no order -- the
+// digest is still the order surface -- so what is asserted here is where a tap LANDS you.
+TEST_CLASS(LocksRailTapTests)
+{
+public:
+  /// A state with one build queued, so the rail has a BUILDS row to tap.
+  [[nodiscard]] static Lockstep::MatchState WithAQueuedBuild(const Lockstep::MatchSimulation& _simulation)
+  {
+    Lockstep::MatchState state = ViewOfSeatZero(_simulation);
+    Assert::IsFalse(state.orders.builds.empty(), L"a fresh match offers something to build");
+    state.orders.queuedBuilds.push_back(0);
+    return state;
+  }
+
+  TEST_METHOD(AQueuedBuildRowOpensTheSheetThatQueuedIt)
+  {
+    // The row says `SHIPYARD - PELL` / `QUEUED -20` and the only way to take it back was to find
+    // Pell on the map again. Tapping the row is the shorter route to the same sheet.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = WithAQueuedBuild(*simulation);
+    const std::int32_t system = state.orders.builds.front().system;
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    const bool opened = SweepFor(page, renderers, DrawPage, SCREEN_WIDTH - ORDERS_RAIL, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::BuildList; });
+    Assert::IsTrue(opened, L"no row on the locks rail opens the build sheet");
+
+    const std::int32_t focused = page.FocusedSystem();
+    Assert::IsTrue(focused >= 0 && focused < static_cast<std::int32_t>(page.State().graph.systems.size()));
+    Assert::AreEqual(system, page.State().graph.systems[static_cast<std::size_t>(focused)].id,
+                     L"the row opened a sheet about somebody else's system");
+  }
+
+  TEST_METHOD(ALockedRailRowFocusesAndOpensNothing)
+  {
+    // Screen 06: at the lock every control on this screen is inert, and a row that opened a sheet
+    // would be a sheet offering orders for a tick that is already resolving. Focusing is not an
+    // order, so it survives.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = WithAQueuedBuild(*simulation);
+    state.orders.locked = true;
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    const bool opened = SweepFor(page, renderers, DrawPage, SCREEN_WIDTH - ORDERS_RAIL, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() != Lockstep::MainPage::Panel::None; });
+    Assert::IsFalse(opened, L"a locked rail row opened a sheet");
+    Assert::IsTrue(page.FocusedSystem() != Lockstep::EventRefs::NONE, L"and it focused nothing either, so the tap did nothing at all");
+  }
+};
+
 // The price is on the button (ADR-053): a build the purse cannot cover is refused at the tap, by
 // the same running-total rule the lock would refuse it by, rather than a tick later in the digest.
 TEST_CLASS(BuildQueueTapTests)

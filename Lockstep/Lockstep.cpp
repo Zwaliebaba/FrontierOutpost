@@ -1257,6 +1257,16 @@ int RunGame(HWND _window, const Startup& _startup)
     // changes because the player did something or because a tick resolved.
     page.Update(elapsedSeconds);
 
+    // Where the pointer is, for the row the locks rail fills under it. The page answers whether
+    // that changed anything, so a mouse crossing the map costs no frame at all (ADR-047, ADR-060).
+    float hoverXPixels = -1.0F;
+    float hoverYPixels = -1.0F;
+    (void)pointer.PointerPosition(hoverXPixels, hoverYPixels);
+    if (page.SetPointer(hoverXPixels, hoverYPixels))
+    {
+      redraw = true;
+    }
+
     // Drag before tap. They are mutually exclusive by construction -- PointerInput decides which
     // a press was, and reports only that one -- so the order is about reading rather than about
     // correctness: the rotation is applied before the frame that a tap would be tested against.

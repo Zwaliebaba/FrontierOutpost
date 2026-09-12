@@ -64,6 +64,9 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
     }
 
     AddContact(pointerId, xPixels, yPixels);
+    m_hasPointer = true;
+    m_pointerXPixels = xPixels;
+    m_pointerYPixels = yPixels;
 
     if (m_contactCount >= MAX_CONTACTS)
     {
@@ -99,6 +102,11 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
     }
 
     MoveContact(pointerId, xPixels, yPixels);
+    // A hovering mouse arrives here with no contact at all -- EnableMouseInPointer turns a mouse
+    // move into WM_POINTERUPDATE -- which is the whole source of the hover position.
+    m_hasPointer = true;
+    m_pointerXPixels = xPixels;
+    m_pointerYPixels = yPixels;
 
     if (m_pressActive && m_contactCount < MAX_CONTACTS)
     {
@@ -141,6 +149,33 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
     m_pressBecameDrag = false;
 
     RemoveContact(pointerId);
+    return true;
+  }
+
+  case WM_MOUSEMOVE:
+  {
+    // **The one legacy mouse message this class reads, and it reads it for hover only.**
+    // `EnableMouseInPointer` promotes every mouse BUTTON to a pointer message, which is what makes
+    // touch and mouse one path (MVP-01 section 2) -- and measured on this machine on 2026-09-12, a
+    // mouse that is merely moving over the client area produces no `WM_POINTERUPDATE` at all: the
+    // position last seen stayed where the previous press put it while the cursor crossed two rows.
+    // Hover is a mouse's alone, nothing on the screen depends on it, and this is where it comes
+    // from; it takes no tap and starts no drag, and it is NOT consumed, so the default handling a
+    // window expects for a moving mouse still happens.
+    //
+    // Its lParam is in CLIENT pixels already, unlike a pointer message's.
+    m_hasPointer = true;
+    m_pointerXPixels = static_cast<float>(static_cast<std::int16_t>(LOWORD(_lParam)));
+    m_pointerYPixels = static_cast<float>(static_cast<std::int16_t>(HIWORD(_lParam)));
+    return false;
+  }
+
+  case WM_MOUSELEAVE:
+  case WM_POINTERLEAVE:
+  {
+    // Nothing is under the pointer any more, so nothing is drawn as hovered. A finger's lift sends
+    // this too, which is right: a finger that is up is not over anything.
+    m_hasPointer = false;
     return true;
   }
 
@@ -275,6 +310,18 @@ bool PointerInput::TakeClick(float& _outXPixels, float& _outYPixels) noexcept
   _outXPixels = m_clickXPixels;
   _outYPixels = m_clickYPixels;
   m_hasClick = false;
+  return true;
+}
+
+bool PointerInput::PointerPosition(float& _outXPixels, float& _outYPixels) const noexcept
+{
+  if (!m_hasPointer)
+  {
+    return false;
+  }
+
+  _outXPixels = m_pointerXPixels;
+  _outYPixels = m_pointerYPixels;
   return true;
 }
 

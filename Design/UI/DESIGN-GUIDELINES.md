@@ -44,7 +44,8 @@ UI
 - `rgb(11,14,20)` background / ink (`APP_BACKGROUND`); a dialog's card is `rgb(17,21,29)`.
 - `rgba(255,255,255,0.10)` structural line (`CARD_BORDER`) · `0.07` row divider (`DIVIDER`) ·
   **`0.20`** outlined-button border (`OUTLINE`, 51/255; the handoff said 0.25) · `0.04` card fill
-  (`CARD_FILL`) · `0.08` hover (`HOVER_FILL`, drawn by nothing yet).
+  (`CARD_FILL`) · `0.08` hover (`HOVER_FILL`, drawn on the locks rail row under the pointer and
+  nowhere else, ADR-060).
 - `rgb(240,243,247)` primary text · body/detail `rgba(214,220,228,0.60)` (`TEXT_DETAIL`) ·
   muted **`0.55`** (`TEXT_MUTED`, 140/255) · dim `0.45` (`NEUTRAL_DIM`).
 - `rgba(214,220,228,0.59)` the filled grey a locked rail wears (`LOCKED_FILL`, SCREENS.md 06).
@@ -111,6 +112,9 @@ Semantic / owner (ADR-027: you are always blue)
 - **Tabs (unread ticks)** — not built.
 - **Locks list row** — label primary left, wrapped to leave room; status right, coloured:
   `T7`/`HOLD` muted, `+DEF`/`QUEUED -20`/`SENDING` blue, `PROPOSE`/`3 TICKS` amber, `CONCEDE` red.
+  A row is a **link** to what it names (ADR-060) — the build sheet, the fleet's location or
+  destination picker, the far end of a proposed lane — and gives no order; a row with nothing to
+  point at is not a target. `HOVER_FILL` under the pointer, on targets only. Focus-only at the lock.
 
 ## Copy
 - Ops-console terse, numbers first, ` - ` between facts: `PRODUCTION +17`, `CLAIMED PELL`,
@@ -142,9 +146,9 @@ Semantic / owner (ADR-027: you are always blue)
 - The price is on every build control and the purse is on the top bar (`26 CR`) and the BUILDS
   header (`2 AVAIL - 26 CR`); a queued row reads `QUEUED -20` and a line under the queue says what
   is left at the lock (ADR-053).
-- The rail's one line of help says where the controls went: *What goes in when the clock hits
-  zero. Change it from the digest.* — or, at the lock, *Resolving T47. Controls return with the new
-  digest. Anything you tap now is an order for T48.*
+- The rail's one line of help says what the column is and what its rows do: *What goes in when the
+  clock hits zero. Tap a row to go to what it is about.* — or, at the lock, *Resolving T47. Controls
+  return with the new digest. Anything you tap now is an order for T48.*
 - System count and player count come from the match, never hard-coded. The census on the top bar
   is dropped a clause at a time to fit in front of the countdown, never clipped mid-word.
 

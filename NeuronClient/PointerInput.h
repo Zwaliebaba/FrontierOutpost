@@ -88,6 +88,13 @@ public:
   /// Positive zooms in. Zero when they have not asked for any, which is almost every frame.
   [[nodiscard]] std::int32_t TakeZoomSteps() noexcept;
 
+  /// Where the pointer is now, in client pixels. False when it is not over the client area.
+  ///
+  /// **Read rather than taken, because a hover is a state and not an event.** It is what draws the
+  /// row under the pointer (`Ink::HOVER_FILL`), and a finger reports one only while it is down --
+  /// so nothing may depend on it, and everything it decorates is reachable by a tap.
+  [[nodiscard]] bool PointerPosition(float& _outXPixels, float& _outYPixels) const noexcept;
+
 private:
   struct Contact
   {
@@ -129,6 +136,12 @@ private:
   bool m_hasClick = false;
   float m_clickXPixels = 0.0F;
   float m_clickYPixels = 0.0F;
+
+  /// The last position any pointer reported, and whether it is still over the client area. A mouse
+  /// reports one while it hovers; a finger only while it is down.
+  bool m_hasPointer = false;
+  float m_pointerXPixels = 0.0F;
+  float m_pointerYPixels = 0.0F;
 
   std::array<Contact, MAX_CONTACTS> m_contacts = {};
   std::size_t m_contactCount = 0;
