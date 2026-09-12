@@ -10,7 +10,7 @@ from the tree, not from the plan.
 ## Contents
 - `SCREENS.md` — per screen: what is built, what the design asked for that is not, and where the code is.
 - `DESIGN-GUIDELINES.md` — frame, font, palette, components, copy and map rules **as built**, with the design's intent kept where the build stops short of it.
-- `screens/` — the eight mockups of 2026-09-11, PNG at 1×, 1280×720 unless noted. **None of them is a photograph of the build.** The table below says which still describe a target and which the build has superseded; replacing the superseded ones with captures of the running client is owed and not done here.
+- `screens/` — **captures of the running client**, one per screen and state, taken 2026-09-12 from the Debug build of the tree at a4c9235 (PNG, 1280×720, the client area exactly as drawn), and the four mockups of 2026-09-11 that still describe a target the build has not reached: `01-main-page-5a.png`, `02-share-tick-5b.png`, `07-replay-3d.png` and `08-missed-digests-3e.png`. The mockups of 03, 04, 05 and 06 were superseded by the build and are deleted. The table below names each file.
 - The handoff's work plan, `PROMPT.md`, is finished as far as it is going to be and lives in [`Design/Archive/2026-09-11-ui-v2-prompt.md`](../Archive/2026-09-11-ui-v2-prompt.md) with a note per step. ADR-034, ADR-038 and ADR-039 cite it by its old name.
 - Live design reference: the project file `Frontier Outpost Main Page.dc.html` (all mockups on one canvas; design reference, not production code). **The filename predates the rename to LockStep: Universe and is deliberately left alone** — the file lives outside this repository, so renaming it here would break the pointer without renaming anything (ADR-035).
 
@@ -20,21 +20,22 @@ ADR-036 through ADR-059, which are cited where they apply.
 
 ## Screens
 
-| # | Screen | Status | Mockup in `screens/` | Code |
+| # | Screen | Status | In `screens/` | Code |
 |---|---|---|---|---|
-| 01 | Main page — digest as order surface, map, locks rail | **Built** (ADR-034; then 045, 052, 053, 055–059) | `01-main-page-5a.png` — still the reference for the map's unbuilt details | `LockstepClient/MainPage.cpp`, `DigestView.cpp`, `MapRender.cpp` |
+| 01 | Main page — digest as order surface, map, locks rail | **Built** (ADR-034; then 045, 052, 053, 055–059) | `01-main-page.png` (tick 2 of a practice match: a contact, a claim with its priced build, production), `01-orders-queued.png` (tick 0: a move ordered and a build queued, before the lock), `01-fleet-under-way.png` (tick 1: the route and its marker), the sheets `01-build-sheet.png`, `01-destination-sheet.png`, `01-signal-sheet.png`, and `01-finished.png`. Mockup `01-main-page-5a.png` kept — still the reference for the map's unbuilt details | `LockstepClient/MainPage.cpp`, `DigestView.cpp`, `MapRender.cpp` |
 | 02 | Share tick — 480×640 export | **Not built.** No button, no export; ADR-034 §2 says clipboard-only if it is ever built, and its open question asks whether it should be | `02-share-tick-5b.png` — the target, if there is one | — |
-| 03 | Join | **Built** (ADR-034 §3, ADR-041) | `03-join-3a.png` — superseded by the build | `LockstepClient/JoinPage.cpp`, `NeuronClient/TextField.h` |
-| 04 | Connection lost | **Built** (ADR-038, ADR-043) | `04-connection-lost-3b.png` — superseded; drawn on the v1 page | `LockstepClient/ConnectionDialog.cpp` |
-| 05 | Connection states | **Built** as one component with seven states. The WELCOME dialog is not one of them | `05-connection-states-3b.png` — superseded | `LockstepClient/ConnectionDialog.cpp` |
-| 06 | At lock | **Built** (ADR-039) | `06-orders-locked-3c.png` — superseded; v1 layout | `LockstepClient/MainPage.cpp` |
-| 07 | Replay — phase step-through | **Stub.** A sheet listing the six phases; nothing steps | `07-replay-3d.png` — the content is still the target; the centred panel it draws is superseded by the sheet (ADR-052) | `MainPage::DrawPanel` |
-| 08 | Missed digests | **Partial.** The backlog is kept and concatenated (ADR-044); no tabs | `08-missed-digests-3e.png` — the tabs are still the target; v1 layout | `Lockstep/Lockstep.cpp` (match loop), `DigestView.cpp` |
-| 09 | Seats — the host's lobby | **Built**, and not in the handoff (ADR-036, 037, 041, 051) | none | `Lockstep/SeatsPage.cpp` |
+| 03 | Join | **Built** (ADR-034 §3, ADR-041) | `03-join.png` | `LockstepClient/JoinPage.cpp`, `NeuronClient/TextField.h` |
+| 04 | Connection lost | **Built** (ADR-038, ADR-043) | `04-connection-lost.png` | `LockstepClient/ConnectionDialog.cpp` |
+| 05 | Connection states | **Built** as one component with seven states. The WELCOME dialog is not one of them | `05-connecting.png`, `05-refused-unknown-token.png`, `05-refused-seat-in-use.png`, `05-waiting-for-the-host.png`, `05-match-finished.png` | `LockstepClient/ConnectionDialog.cpp` |
+| 06 | At lock | **Built** (ADR-039) | `06-at-lock.png` | `LockstepClient/MainPage.cpp` |
+| 07 | Replay — phase step-through | **Stub.** A sheet listing the six phases; nothing steps | `07-replay.png` is the stub as built. Mockup `07-replay-3d.png` kept — the content is still the target; the centred panel it draws is superseded by the sheet (ADR-052) | `MainPage::DrawPanel` |
+| 08 | Missed digests | **Partial.** The backlog is kept and concatenated (ADR-044); no tabs | `08-missed-digests.png` is the capture. Mockup `08-missed-digests-3e.png` kept — the tabs are still the target; v1 layout | `Lockstep/Lockstep.cpp` (match loop), `DigestView.cpp` |
+| 09 | Seats — the host's lobby | **Built**, and not in the handoff (ADR-036, 037, 041, 051) | `09-seats.png` (the host alone), `09-seats-joined.png` (a second seat connected and selected) | `Lockstep/SeatsPage.cpp` |
 
-Also built with no mockup, all described in `SCREENS.md`: the four **sheets** (build, destination,
-signal, replay — ADR-052), the **WAITING FOR THE HOST** and **REFUSED · NOT UNDERSTOOD** dialogs
-(ADR-038), and the main page's **finished-match** state.
+Also built with no mockup, all described in `SCREENS.md` and all captured but one: the four
+**sheets** (build, destination, signal, replay — ADR-052), the **WAITING FOR THE HOST** and
+**REFUSED · NOT UNDERSTOOD** dialogs (ADR-038), and the main page's **finished-match** state. The
+one not captured is REFUSED · NOT UNDERSTOOD, which needs a malformed hello that no client sends.
 
 ## Flow
 
@@ -96,8 +97,9 @@ it was corrected on 2026-09-12.
 
 ## Photographing the build
 
-The mockups in `screens/` should be replaced by captures of the running client, screen by screen.
-What is known about doing that, measured on 2026-09-12:
+Done on 2026-09-12: every screen and state above was captured from the Debug build of the tree at
+a4c9235, the four mockups the build had superseded (03, 04, 05, 06) were deleted, and the four that
+still describe a target stay. What is known about doing it, measured on 2026-09-12:
 
 - `Build/Screenshot.ps1 -Exe x64\Debug\Lockstep.exe -Out shot.png -Arguments "--tick 4 --store scratch"`
   captures the client area (DPI-aware, cropped to the 1280×720) and gets you screen 03 as it opens.
@@ -118,6 +120,22 @@ What is known about doing that, measured on 2026-09-12:
   `--join 192.0.2.1:7341`; MATCH FINISHED = `--serve --phase0 --tick 2 --bots 5` and a client as
   `alpha`, about a hundred seconds; WAITING FOR THE HOST = a joiner into a lobby whose host is still
   on 09 (its token is on the host's screen or on the clipboard after `COPY`).
+- **A parked fleet has no marker** (`MapRender.cpp` draws a fleet only while it moves), so the
+  destination sheet opens only from a `MOVE FLT n` standing move — tick zero, or any tick on which
+  no card offers a control (ADR-056) — or from `REDIRECT`. On `--tick 60` there is time to open it,
+  read the rows and pick one; a sheet's rows sit 44px apart up from the `CANCEL` bar, the last at
+  y≈645.
+- **06, 04 and 08 from one dedicated server:** `--serve 7351 --phase0 --tick 30 --bots 5 --store
+  <name>` and a client `--join 127.0.0.1:7351 --token alpha`. `NtSuspendProcess` the server and
+  wait for the client's countdown to pass zero (06); resume it and it catches up; kill it mid-tick
+  (04); a minute later start it again with the same `--store` and it resumes (ADR-042) while the
+  client reconnects on its own (08, `SINCE YOU LOOKED - T6 > T9`).
+- **MATCH FINISHED** from a practice match on `--tick 4`, which ends in two minutes; `VIEW LAST
+  DIGEST` is the filled button at about (806, 403). **WAITING FOR THE HOST:** on 09 tap seat 02's
+  card (500, 230) and its `COPY` (1080, 274), then start a joiner with the clipboard's token.
+- The helper that took these — `PrintWindow` capture, `SendInput` taps, a posted Enter,
+  suspend/resume — was `Build/TapRehearsal.ps1`'s class extended in a scratch script; it is not in
+  the tree.
 
 ## Non-negotiables
 1280×720 logical, drawn 1:1 (ADR-011). One 8×8 bitmap font at 1×, and 2× only where the

@@ -1,11 +1,12 @@
 # Screens
 
 Per screen: what the build draws, what the 2026-09-11 handoff asked for that it does not, and where
-the code is. Status is as of 2026-09-12. Numbers 01–08 are the handoff's; 09 was added by ADR-036
-and sits between 03 and 01 in the flow (`README.md` draws it). "Not built" is stated as such, and
-nothing below is in the present tense unless the tree does it.
+the code is. Status is as of 2026-09-12, and each heading names its capture in `screens/`, taken
+that day, beside any mockup that still describes a target. Numbers 01–08 are the handoff's; 09 was
+added by ADR-036 and sits between 03 and 01 in the flow (`README.md` draws it). "Not built" is
+stated as such, and nothing below is in the present tense unless the tree does it.
 
-## 01 · Main page — **built** (`01-main-page-5a.png` is the mockup)
+## 01 · Main page — **built** (`01-main-page.png` is the capture, tick 2 of a practice match; `01-main-page-5a.png` the mockup)
 
 **Top bar (44px, `MainPage::DrawTopBar`).** `LOCKSTEP` · `M0007 - D2/21 - 6 PLAYERS - 26 SYSTEMS`
 · spacer · `T8 LOCKS` + the countdown at 2× in amber · `26 CR` · `SCORE 1,284` + chip `4TH / 6` ·
@@ -47,7 +48,8 @@ legend. Drag orbits. The not-drawn list is in the guidelines and in `README.md` 
 to its destination in its owner's colour; the marker sits at `(cost − left) / cost` of the lane.
 **The marker keeps clear of both ends (ADR-059):** held a label's half-width from either system, so
 an ordered-but-unlocked move (progress zero) is not drawn on the node it is leaving; a lane too short
-for that draws it in the middle.
+for that draws it in the middle. `01-orders-queued.png` is the ordered-but-unlocked case and
+`01-fleet-under-way.png` the same fleet a tick out.
 
 **Locks rail (260px, right) — read-only (`DrawLocksRail`).** `LOCKS T8` / `UNLOCKED` (amber); one
 line of help; sections `FLEETS n` (rows `FLT 1 10 > PELL` with `T9`, or `FLT 1 10 HOLD DOTHAN` with
@@ -62,7 +64,8 @@ trade-lane `PROPOSE` row is drawn from `BuildRow::isTradeLane`, which nothing se
 
 **Sheets (ADR-052).** The four panels — build, destination, signal, replay — are one component
 (`DrawPanel`), drawn as a sheet against the bottom of the map pane, 44px rows, six at most, a
-seventh reported. No mockup exists for any of them.
+seventh reported. No mockup exists for any of them; the captures are `01-build-sheet.png`,
+`01-destination-sheet.png`, `01-signal-sheet.png` and `07-replay.png`.
 - **Build** (`BUILD - DOTHAN`): opened by tapping a system you hold; lists that system's buildings
   and nothing else (ADR-058) — `Shipyard - Dothan` with `20 CR`, or `QUEUED`, or
   `20 CR - NEED 7 MORE` dim; a system with both built says `NOTHING LEFT TO BUILD HERE`; a system you
@@ -75,8 +78,9 @@ seventh reported. No mockup exists for any of them.
   (drawn at progress zero until the lock) and closes the sheet.
 - **Signal** (`SIGNAL - PICK ONE`): opened from the rail's `SIGNALS` header; the six kinds of
   ADR-039 as rows with `SENDING` / `TAP AGAIN TO CONFIRM` on the right; `Concede` always last and
-  needing two taps; `NOTHING TO SAY YET` when the empire has met nobody; fourteen rows offered and
-  the rest counted.
+  needing two taps; `Concede` alone when the empire has met nobody — the `NOTHING TO SAY YET` row is
+  written for an empty list, and the list is never empty because `Concede` is always on it; fourteen
+  rows offered and the rest counted.
 - **Replay** (`REPLAY TICK 7`): the stub of screen 07.
 
 **Behaviour.** The countdown is live and rounds up (`00:00:00` and `LOCKED` are the same event,
@@ -85,10 +89,10 @@ the server keeps the latest, which is what makes "editable until the lock" true 
 knowing when the lock is. Accept/decline is an order. The page redraws only on a change (ADR-047)
 and continuously while a fleet is under way (ADR-055).
 
-**Finished match (no mockup).** After `VIEW LAST DIGEST` on the MATCH FINISHED dialog: top bar
-`MATCH ENDED --:--:--`, rail header `FINAL` / `MATCH ENDED` in red, help *The match is over. This is
-what you finished with.*, footer `NOTHING MORE LOCKS` / `T30 FINAL`, every control inert, the digest
-carrying no standing moves.
+**Finished match (`01-finished.png`; no mockup).** After `VIEW LAST DIGEST` on the MATCH FINISHED
+dialog: top bar `MATCH ENDED --:--:--`, rail header `FINAL` / `MATCH ENDED` in red, help *The match
+is over. This is what you finished with.*, footer `NOTHING MORE LOCKS` / `T30 FINAL`, every control
+inert, the digest carrying no standing moves.
 
 **Code.** `LockstepClient/MainPage.{h,cpp}` (bar, two rails, sheets, hits), `DigestView.{h,cpp}`
 (ranking, grouping, standing moves, the delta), `MapRender.{h,cpp}`, `MapView.h`, `MatchState.h`
@@ -105,7 +109,7 @@ is built it goes to the clipboard and never to a file (ADR-034 §2 — a client 
 would be R13's first client-side exception). Whether it should exist before anyone has played a
 match is ADR-034's third open question, still open.
 
-## 03 · Join — **built** (`03-join-3a.png` is the mockup)
+## 03 · Join — **built** (`03-join.png`)
 
 `JoinPage`: the sky (a fixed camera on the same star field as the map) with a 480px column centred:
 `LOCKSTEP` at 2× and `JOIN A MATCH - ONE SEAT PER TOKEN`; a card with a `SERVER` field (`LAST USED`
@@ -130,7 +134,7 @@ that carries more than a seat (`Protocol.h`) and a screen that waits to show it.
 **Code.** `LockstepClient/JoinPage.{h,cpp}`, `NeuronClient/TextField.h`, `KeyboardInput`;
 `RunJoinScreen` in `Lockstep/Lockstep.cpp`. Tests: `JoinPageTests.cpp` (typing and taps).
 
-## 04 · Connection lost — **built** (`04-connection-lost-3b.png` is the mockup, on the v1 page)
+## 04 · Connection lost — **built** (`04-connection-lost.png`)
 
 `ConnectionDialog::Kind::Lost` over the live 01 (the scrim dims it; the top bar behind reads
 `RECONNECTING`). Amber: `CONNECTION LOST` · *The server stopped answering.* · *Reconnecting - next
@@ -145,7 +149,7 @@ the map included.
 them, so the dialog says the true, smaller thing (ADR-038). Whether pending edits should survive a
 drop is ADR-038's open question.
 
-## 05 · Connection states — **built** as one component (`05-connection-states-3b.png` is the mockup)
+## 05 · Connection states — **built** as one component (`05-connecting.png`, `05-refused-unknown-token.png`, `05-refused-seat-in-use.png`, `05-waiting-for-the-host.png`, `05-match-finished.png`; CONNECTION LOST is `04-connection-lost.png`; NOT UNDERSTOOD is not captured)
 
 Seven states of `ConnectionDialog`, chosen in one place from the connection and the state so two can
 never be true at once (`Lockstep.cpp`, the match loop; `RunJoinScreen` for the join screen):
@@ -174,7 +178,7 @@ is no host-left state.
 **Code.** `LockstepClient/ConnectionDialog.{h,cpp}`. Tests: `ConnectionDialogTapTests` in
 `TapTests.cpp` — every button pressed, the scrim swallowing, no `BACK` without a screen behind.
 
-## 06 · At lock — **built** (`06-orders-locked-3c.png` is the mockup, on the v1 layout)
+## 06 · At lock — **built** (`06-at-lock.png`)
 
 Applies to 01 when the countdown reaches zero (ADR-039): top bar `T8 LOCKED 00:00:00` with the
 countdown in grey rather than amber; digest header right side `T8 PENDING` in amber; every action
@@ -188,7 +192,7 @@ what a player sees when the server is late, which is when it matters.
 `FormatCountdown` rounds up so that `00:00:00` and the rail reading `LOCKED` are the same instant
 (the bug ADR-039 found by photographing the client).
 
-## 07 · Replay — **stub** (`07-replay-3d.png` shows the target content on a superseded panel)
+## 07 · Replay — **stub** (`07-replay.png` is the stub as built; `07-replay-3d.png` shows the target content on a superseded panel)
 
 Built: `▶ REPLAY T7` on the top bar opens a sheet titled `REPLAY TICK 7` listing `1. LOCK` …
 `6. DIGEST` as dim, untappable rows, and `CANCEL`. That is all. The sheet's own seventh row, `NOT
@@ -201,7 +205,7 @@ phase behind it. The snapshot carries no phase records, so the wire comes first
 (`Design/Plans/4X-02-ServerAndClient.md` still lists pointing *Replay tick N* at the server's
 `TickLog`). When it is built it is a sheet, not the handoff's 600px centred panel (ADR-052).
 
-## 08 · Missed digests — **partial** (`08-missed-digests-3e.png` shows the target on the v1 layout)
+## 08 · Missed digests — **partial** (`08-missed-digests.png` is the capture; `08-missed-digests-3e.png` shows the target on the v1 layout)
 
 Built (ADR-044): the server keeps eight ticks of digest per player and sends the whole backlog on
 arrival; the match loop concatenates the digests newer than the last tick it drew, oldest first,
@@ -219,7 +223,7 @@ the tabs are where that belongs).
 **Code.** `Lockstep/Lockstep.cpp` (the match loop: `drawnTick`, `unreadTicks`),
 `LockstepClient/DigestView.cpp` (`DeltaOf`). Tests: `DeltaTests` in `DigestViewTests.cpp`.
 
-## 09 · Seats — **built**, not in the handoff (no mockup)
+## 09 · Seats — **built**, not in the handoff (`09-seats.png`, `09-seats-joined.png`; no mockup)
 
 The host's lobby, after they have joined their own server with the first token it generated
 (ADR-036 as amended; ADR-037, 041, 051). A joiner never sees it. On the join screen's sky:
