@@ -32,11 +32,48 @@ bool MatchConnection::Open(const std::string& _host, std::uint16_t _port, const 
 
   m_incoming.Reset();
   m_outgoing.clear();
-  m_status = Status::Greeting;
+  m_status = Status::Connecting;
   m_refusal = Neuron::RefusalReason::None;
-
-  Send(Neuron::Protocol::EncodeHello(_token));
+  m_connectDeadline = 0.0;
   return true;
+}
+
+bool MatchConnection::Settle(double _secondsSinceStart)
+{
+  // The deadline is set on the first poll rather than in `Open`, which has no clock and should not
+  // grow one: the caller's seconds are the only clock this class has ever been told about.
+  if (m_connectDeadline == 0.0)
+  {
+    m_connectDeadline = _secondsSinceStart + CONNECT_DEADLINE_SECONDS;
+  }
+
+  switch (m_socket.Progress())
+  {
+  case Neuron::Socket::Connection::Ready:
+    m_status = Status::Greeting;
+    m_connectDeadline = 0.0;
+
+    // The hello waits for the handshake. Queuing it in `Open` would have been queuing bytes for a
+    // peer that had not agreed to exist yet.
+    Send(Neuron::Protocol::EncodeHello(m_token));
+    return true;
+
+  case Neuron::Socket::Connection::Failed:
+    m_status = Status::Lost;
+    m_socket.Close();
+    m_connectDeadline = 0.0;
+    return false;
+
+  case Neuron::Socket::Connection::Pending:
+  default:
+    if (_secondsSinceStart >= m_connectDeadline)
+    {
+      m_status = Status::Lost;
+      m_socket.Close();
+      m_connectDeadline = 0.0;
+    }
+    return false;
+  }
 }
 
 void MatchConnection::Reset() noexcept
@@ -46,6 +83,7 @@ void MatchConnection::Reset() noexcept
   m_outgoing.clear();
   m_status = Status::Idle;
   m_refusal = Neuron::RefusalReason::None;
+  m_connectDeadline = 0.0;
   m_player = -1;
   m_snapshot.clear();
   m_digest.clear();
@@ -139,6 +177,15 @@ void MatchConnection::Pump(double _secondsSinceStart)
     {
       ++m_reconnects;
     }
+    return;
+  }
+
+  // ---- Landing --------------------------------------------------------------------------------
+  //
+  // A connect in flight is asked how it is doing, once a frame, and nothing else happens until it
+  // has answered. This is the polling half of the change that stopped `Socket::Connect` blocking.
+  if (m_status == Status::Connecting && !Settle(_secondsSinceStart))
+  {
     return;
   }
 

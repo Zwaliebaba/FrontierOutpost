@@ -30,6 +30,13 @@ public:
   {
     /// Nothing has been attempted yet.
     Idle,
+    /// The handshake is in flight. Nothing has been sent, because there is nowhere to send it yet.
+    ///
+    /// **This state exists because the connect stopped blocking** (ADR-043). It used to be over
+    /// before `Open` returned -- along with up to twenty seconds of the client's frame loop -- so
+    /// there was nothing to be in the middle of. Screen 05's CONNECTING dialog covers this and
+    /// `Greeting` both, which is what its CANCEL button was always meant to be able to interrupt.
+    Connecting,
     /// Connected, hello sent, waiting to be welcomed.
     Greeting,
     /// Welcomed. Playing.
@@ -40,8 +47,12 @@ public:
     Lost
   };
 
-  /// Connects and sends a hello. Returns false if nothing is listening, which for a host-and-play
-  /// process means the server thread has not come up yet and the caller should try again.
+  /// STARTS connecting. Returns false only when the address does not resolve.
+  ///
+  /// **It no longer waits, and it no longer sends the hello.** Both happen in `Pump`, once the peer
+  /// has answered. A caller that used to read `false` as "nothing is listening" now learns that
+  /// from the status going `Lost` a moment later -- which is the same answer, arriving on a frame
+  /// boundary instead of after a stall.
   [[nodiscard]] bool Open(const std::string& _host, std::uint16_t _port, const std::string& _token);
 
   /// Connects again with the host, port and token this connection already has.
@@ -138,6 +149,13 @@ public:
     return m_reconnects;
   }
 
+  /// How long a half-open connection is given before it is called dead.
+  ///
+  /// The OS gives up eventually, and much later. This is shorter because the reconnect loop is
+  /// going to try again anyway and a connection that has not landed in five seconds is not about
+  /// to: what the number really sets is how quickly the screen stops saying CONNECTING.
+  static constexpr double CONNECT_DEADLINE_SECONDS = 5.0;
+
   /// Whether the client is currently able to reach the server.
   [[nodiscard]] bool Live() const noexcept
   {
@@ -161,6 +179,9 @@ public:
   }
 
 private:
+  /// Advances a connect in flight. True once the peer has answered and the hello has gone out.
+  bool Settle(double _secondsSinceStart);
+
   void Send(std::span<const std::uint8_t> _payload);
   void Handle(std::span<const std::uint8_t> _payload);
 
@@ -182,6 +203,9 @@ private:
   std::string m_host;
   std::uint16_t m_port = 0;
   std::string m_token;
+
+  /// When the connect in flight is abandoned, on the caller's clock. Zero when nothing is pending.
+  double m_connectDeadline = 0.0;
 
   double m_nextAttemptAt = 0.0;
   std::uint32_t m_reconnects = 0;

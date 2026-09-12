@@ -102,7 +102,7 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
   case Kind::Connecting:
     _outTitle = "CONNECTING";
     _outBody.push_back(m_facts.server);
-    _outBody.push_back("Sending token - waiting for Welcome.");
+    _outBody.push_back(m_facts.greeted ? "Sending token - waiting for Welcome." : "Reaching the server.");
     _outBody.push_back(std::format("Waiting {}.", Seconds(m_shownSeconds)));
     _outButtons.push_back(Button{"CANCEL", Action::Cancel, false});
     return;

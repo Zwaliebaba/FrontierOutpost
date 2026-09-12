@@ -1,6 +1,6 @@
 # 4X-02 — The server, the client and the network
 
-**Status:** **Done 2026-09-11**, with one thing outstanding that this tree cannot do: six people on six machines. Everything up to that is built and tested. Written properly 2026-09-11. When it was written, `4X-01` had just
+**Status:** **Done 2026-09-11**, with one thing outstanding that this tree cannot do: six people on six machines. **§7 (2026-09-12) records what was built since, including all six items §3 said Phase 0 still needed.** Everything up to that is built and tested. Written properly 2026-09-11. When it was written, `4X-01` had just
 closed Stage A and the shapes this plan is specified against had become facts. **Both owner decisions are taken** (2026-09-11):
 persistence is ADR-024, and `MatchState::Owner` widens to twelve authored colours, so nothing blocks
 Step 1. Written against `space-4x-one-pager-v10.md` (v0.7) and
@@ -262,7 +262,10 @@ Every §2 ADR exists: **ADR-024** persistence, **ADR-025** the seam, **ADR-026**
 **ADR-028** transport, **ADR-029** identity — plus **ADR-027**, the twelve colours, which the owner
 decided and Step 2 owed.
 
-**What Phase 0 needs that this plan did not build**, in the order it will hurt:
+**What Phase 0 needs that this plan did not build**, in the order it will hurt. *Written
+2026-09-11; every item is answered in §7 below, which was added on 2026-09-12 rather than editing
+this list, because a retrospective that is quietly brought up to date stops being evidence of what
+was known when.*
 
 1. **Reconnection.** A dropped connection stops the client. Six people over forty-eight hours will
    close a lid. The server already sends a snapshot on `Hello`, so this is client-side and small,
@@ -433,3 +436,48 @@ stops offering what it cannot deliver.
 
 Six people, forty-eight hours, and the one step nobody has taken: **two machines, one match, one
 tick.** Everything above was verified on loopback.
+
+---
+
+## 7. What was built after §6, and what is left — 2026-09-12
+
+§3's Step 4 listed six things Phase 0 needed that this plan did not build, and §6 added the H4 work.
+**All six are now built**, along with the screens the client was missing and a test project for the
+executable. This section says which ADR did what, so that the list above can stay as it was written.
+
+| Step 4 asked for | Answer |
+|---|---|
+| 1. Reconnection | `MatchConnection` reconnects on a spaced retry, and **says so on the screen**: ADR-038's screen 04, with a live attempt countdown and the lock still running behind it |
+| 2. Instrumentation is a debug trace | ADR-030: the server writes a timestamped file beside the executable, named after the match since ADR-043 |
+| 3. Fleet order after capital fall | ADR-030: `MatchSimulation` holds the tick each capital fell and joins it against the locked orders. H3's measurement exists |
+| 4. Order edits not reported | ADR-031: an edit is an envelope, counted per connection and per player, in the log |
+| 5. Phase parameters | `PhaseZeroRules()` and `--phase0`, with `--tick <seconds>` for a compressed rehearsal (§6) |
+| 6. The host leaving ends the match | **ADR-042.** A restarted server loads its store and resumes on UTC time. The store was always the answer; nothing called it until now |
+
+**What else was built, in the order it happened.** Bots that play a seat (ADR-037), so a match no
+longer needs six people to start; the login and seats screens (ADR-036) and the connection dialogs
+(ADR-038), so a player never sees an invented match while waiting for a real one; outgoing signals
+(ADR-039), so diplomacy stopped being receive-only — until then a bot in a seat could send an offer
+a person could not; a test project for the executable (ADR-040) and a headless renderer that lets a
+test press a button (ADR-041); and a whole-tree review, answered (`Design/Archive/`).
+
+### What is still true of this plan
+
+**It does not move to `Archive/` yet, and for the same reason as before.** Six people on six
+machines have still not played a tick. Everything else in this document has happened.
+
+### What Phase 0 now needs, in the order it will hurt
+
+1. **Two machines, one match, one tick.** Unchanged, and still the only thing that needs people.
+   Everything is verified on loopback.
+2. **A reconnecting player is not sent the digests they missed.** The server keeps the latest only
+   (ADR-028's open question, restated by ADR-042). A player who closes a lid for a night comes back
+   to a tick count and no account of it. Screen 08 is drawn and waiting on the same thing.
+3. **`getaddrinfo` still blocks** on a hostname, though the connect no longer does (ADR-043). Six
+   people typing a dotted address are unaffected; six people typing a name are not.
+4. **The remaining nine items** of the codebase review's §4, in its order — a client library, one
+   bidirectional serialize function, sanitizers, idle throttling, IPv6, Release in CI, matches per
+   server.
+
+*A plan is not an ADR: this section is dated rather than immutable, and the next person to finish
+something on it should add to it rather than rewrite §3.*

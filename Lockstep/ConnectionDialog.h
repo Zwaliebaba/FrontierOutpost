@@ -76,6 +76,14 @@ public:
     /// refusal path to it and finds the dialog already covered.
     Neuron::RefusalReason reason = Neuron::RefusalReason::None;
 
+    /// Connecting: whether the peer has answered and the token is on its way.
+    ///
+    /// The two halves of getting in are one dialog, and until ADR-043 they were one state too --
+    /// the handshake finished inside `Open`, so by the time anything could be drawn the token had
+    /// always gone. Saying "sending token" during a handshake that has not landed is a small lie
+    /// with a clear fix.
+    bool greeted = false;
+
     /// Waiting: which seat this client holds. -1 when it does not know.
     std::int32_t seat = -1;
 

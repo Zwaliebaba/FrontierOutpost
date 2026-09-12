@@ -5,7 +5,11 @@
 
 #include "Id.h"
 #include "Prng.h"
+#include "Socket.h"
 #include "Turns16.h"
+
+#include <chrono>
+#include <thread>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
@@ -177,6 +181,95 @@ public:
 // The galaxy is laid out on a ring, and the ring is computed in integers because std::cos is not
 // bit-identical between standard libraries (ADR-018). These check the approximation is good enough
 // to place things with and exact enough to place them the same way twice.
+/// The connect, which stopped blocking (ADR-043).
+///
+/// **The thing under test is that `Connect` RETURNS**, not that it succeeds. It used to sit in the
+/// OS connect timeout on the thread that draws the client's frames, so a host that resolved and
+/// then never answered froze the window for twenty seconds at a time.
+TEST_CLASS(SocketConnectTests)
+{
+public:
+  TEST_METHOD(AConnectToSomethingListeningLands)
+  {
+    Neuron::Socket listener = Neuron::Socket::Listen(0);
+    Assert::IsTrue(listener.Valid(), L"could not listen on a free port");
+
+    Neuron::Socket client = Neuron::Socket::Connect("127.0.0.1", listener.Port());
+    Assert::IsTrue(client.Valid());
+    Assert::IsTrue(Settle(client) == Neuron::Socket::Connection::Ready, L"a connect to a live listener never landed");
+
+    // And `Progress` keeps saying so, because a caller polls it every frame.
+    Assert::IsTrue(client.Progress() == Neuron::Socket::Connection::Ready);
+  }
+
+  TEST_METHOD(AConnectToNothingFails)
+  {
+    // A port nobody is on. Bound and closed, so the number is known to be free rather than assumed.
+    std::uint16_t port = 0;
+    {
+      Neuron::Socket listener = Neuron::Socket::Listen(0);
+      port = listener.Port();
+    }
+
+    Neuron::Socket client = Neuron::Socket::Connect("127.0.0.1", port);
+    if (client.Valid())
+    {
+      Assert::IsTrue(Settle(client) == Neuron::Socket::Connection::Failed, L"a connect to a closed port reported success");
+    }
+  }
+
+  TEST_METHOD(ConnectReturnsWithoutWaitingForThePeer)
+  {
+    // **The regression.** 192.0.2.1 is TEST-NET-1 (RFC 5737): reserved for documentation, routed
+    // nowhere. A network that answers "unreachable" makes this pass trivially; one that drops the
+    // packet makes it pass only because the connect no longer waits, which is the case that used to
+    // take twenty seconds.
+    const auto before = std::chrono::steady_clock::now();
+    Neuron::Socket client = Neuron::Socket::Connect("192.0.2.1", 7341);
+    const auto took = std::chrono::steady_clock::now() - before;
+
+    Assert::IsTrue(took < std::chrono::seconds(1), L"Connect waited for a peer that will never answer");
+    (void)client.Progress();
+  }
+
+  TEST_METHOD(AnAcceptedSocketIsReadyWithoutAsking)
+  {
+    // `Progress` is about a connect in flight. A socket that never started one -- a listener, or
+    // the peer an accept handed back -- is ready by virtue of existing, and must not report
+    // otherwise to a caller that polls everything it holds.
+    Neuron::Socket listener = Neuron::Socket::Listen(0);
+    Neuron::Socket client = Neuron::Socket::Connect("127.0.0.1", listener.Port());
+    Assert::IsTrue(Settle(client) == Neuron::Socket::Connection::Ready);
+
+    Neuron::Socket accepted;
+    for (std::int32_t attempt = 0; attempt < 500 && !accepted.Valid(); ++attempt)
+    {
+      accepted = listener.Accept();
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    Assert::IsTrue(accepted.Valid(), L"the listener never produced the peer");
+    Assert::IsTrue(accepted.Progress() == Neuron::Socket::Connection::Ready);
+    Assert::IsTrue(listener.Progress() == Neuron::Socket::Connection::Ready);
+  }
+
+private:
+  /// Polls until the handshake is one thing or the other. Bounded: a poll loop with no end is a
+  /// hung suite rather than a failing one.
+  [[nodiscard]] static Neuron::Socket::Connection Settle(Neuron::Socket& _socket)
+  {
+    for (std::int32_t attempt = 0; attempt < 2000; ++attempt)
+    {
+      const Neuron::Socket::Connection progress = _socket.Progress();
+      if (progress != Neuron::Socket::Connection::Pending)
+      {
+        return progress;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return Neuron::Socket::Connection::Pending;
+  }
+};
+
 TEST_CLASS(Turns16Tests)
 {
 public:

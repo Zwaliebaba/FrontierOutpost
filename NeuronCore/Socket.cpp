@@ -59,10 +59,15 @@ Socket::~Socket()
   Close();
 }
 
+// A half-finished connect moves with its handle. `MatchConnection` starts one and move-assigns it
+// into place, so a move that dropped the flag would make `Progress` report an unconnected socket
+// ready and the first `Send` would fail for no visible reason.
 Socket::Socket(Socket&& _other) noexcept
-  : m_handle(_other.m_handle)
+  : m_connecting(_other.m_connecting),
+    m_handle(_other.m_handle)
 {
   _other.m_handle = NOTHING;
+  _other.m_connecting = false;
 }
 
 Socket& Socket::operator=(Socket&& _other) noexcept
@@ -70,8 +75,10 @@ Socket& Socket::operator=(Socket&& _other) noexcept
   if (this != &_other)
   {
     Close();
+    m_connecting = _other.m_connecting;
     m_handle = _other.m_handle;
     _other.m_handle = NOTHING;
+    _other.m_connecting = false;
   }
   return *this;
 }
@@ -87,6 +94,7 @@ void Socket::Close() noexcept
   {
     (void)closesocket(static_cast<SOCKET>(m_handle));
     m_handle = NOTHING;
+    m_connecting = false;
     Shutdown();
   }
 }
@@ -147,6 +155,7 @@ Socket Socket::Connect(const std::string& _host, std::uint16_t _port)
   }
 
   SOCKET handle = INVALID_SOCKET;
+  bool pending = false;
   for (const addrinfo* candidate = found; candidate != nullptr; candidate = candidate->ai_next)
   {
     handle = socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol);
@@ -155,10 +164,19 @@ Socket Socket::Connect(const std::string& _host, std::uint16_t _port)
       continue;
     }
 
-    // Connected while still blocking, so a refusal is reported here rather than surfacing later as
-    // a socket that never produces anything. Everything after this point is non-blocking.
+    // Non-blocking BEFORE the connect, which is the whole change: `connect` returns immediately
+    // with WSAEWOULDBLOCK and the handshake carries on underneath. `Progress` is where it lands.
+    MakeNonBlocking(handle);
+
     if (connect(handle, candidate->ai_addr, static_cast<int>(candidate->ai_addrlen)) != SOCKET_ERROR)
     {
+      // A loopback peer can answer inside the call. Nothing to wait for.
+      break;
+    }
+
+    if (WSAGetLastError() == WSAEWOULDBLOCK)
+    {
+      pending = true;
       break;
     }
 
@@ -174,8 +192,56 @@ Socket Socket::Connect(const std::string& _host, std::uint16_t _port)
     return {};
   }
 
-  MakeNonBlocking(handle);
-  return Socket{static_cast<std::uintptr_t>(handle)};
+  Socket started{static_cast<std::uintptr_t>(handle)};
+  started.m_connecting = pending;
+  return started;
+}
+
+Socket::Connection Socket::Progress()
+{
+  if (!Valid())
+  {
+    return Connection::Failed;
+  }
+  if (!m_connecting)
+  {
+    return Connection::Ready;
+  }
+
+  const SOCKET handle = static_cast<SOCKET>(m_handle);
+
+  // Writable means the handshake finished; the exception set is how Windows reports one that was
+  // refused. Both are asked at once, with no wait, because this is called from a frame.
+  fd_set writable = {};
+  fd_set failed = {};
+  FD_ZERO(&writable);
+  FD_ZERO(&failed);
+  FD_SET(handle, &writable);
+  FD_SET(handle, &failed);
+
+  timeval immediately = {};
+  const int ready = select(0, nullptr, &writable, &failed, &immediately);
+  if (ready <= 0)
+  {
+    return ready == 0 ? Connection::Pending : Connection::Failed;
+  }
+
+  if (FD_ISSET(handle, &failed))
+  {
+    return Connection::Failed;
+  }
+
+  // Writable is not the same as connected: a socket that failed after the select can still be
+  // reported writable, and SO_ERROR is the authority on which it was.
+  int problem = 0;
+  int size = static_cast<int>(sizeof(problem));
+  if (getsockopt(handle, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&problem), &size) == SOCKET_ERROR || problem != 0)
+  {
+    return Connection::Failed;
+  }
+
+  m_connecting = false;
+  return Connection::Ready;
 }
 
 Socket Socket::Accept()

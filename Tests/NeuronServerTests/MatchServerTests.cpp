@@ -22,8 +22,10 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -44,7 +46,24 @@ public:
   [[nodiscard]] bool Connect(std::uint16_t _port)
   {
     m_socket = Neuron::Socket::Connect("127.0.0.1", _port);
-    return m_socket.Valid();
+
+    // Settled rather than assumed. A loopback connect usually finishes inside the call, but since
+    // ADR-043 it is allowed not to, and a test that sent into a half-open socket would fail on a
+    // busy machine and nowhere else.
+    for (std::int32_t attempt = 0; attempt < 500; ++attempt)
+    {
+      const Neuron::Socket::Connection progress = m_socket.Progress();
+      if (progress == Neuron::Socket::Connection::Ready)
+      {
+        return true;
+      }
+      if (progress == Neuron::Socket::Connection::Failed)
+      {
+        return false;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return false;
   }
 
   void Send(std::span<const std::uint8_t> _payload)

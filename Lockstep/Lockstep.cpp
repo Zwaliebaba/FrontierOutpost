@@ -111,6 +111,19 @@ struct Startup
   /// The last seats rather than the first, so `--bots 5` leaves seat one for whoever joins with
   /// `alpha`.
   std::uint32_t bots = 0;
+
+  /// `--store <name>` names the files this match is written under, without an extension.
+  ///
+  /// **Empty means "derive it from the port", and that is the fix rather than the flag.** Both
+  /// files used to be called `lockstep-match`, so two servers beside one executable overwrote each
+  /// other's store and each other's log -- and since a store is now a match that can be resumed
+  /// (ADR-042), the second server did not merely lose a log, it ate a match. A port is already
+  /// unique per server on one machine, so the default collides only when the servers could not
+  /// both have started.
+  ///
+  /// The log takes the same name. A store and the log of the match it holds must not come apart:
+  /// the log is how anybody works out what the store contains.
+  std::string storeName;
 };
 
 /// The six Phase 0 tokens.
@@ -130,7 +143,7 @@ struct Startup
 /// store and a log that land somewhere different depending on how the game was launched are a match
 /// that does not resume and a Phase 0 whose instrumentation nobody can find. Beside the executable
 /// is where somebody looks.
-[[nodiscard]] std::string BesideTheExecutable(const char* _name)
+[[nodiscard]] std::string BesideTheExecutable(const std::string& _name)
 {
   wchar_t module[MAX_PATH] = {};
   const DWORD length = GetModuleFileNameW(nullptr, module, MAX_PATH);
@@ -152,7 +165,7 @@ struct Startup
 }
 
 /// `--serve [port]`, `--join <host[:port]>`, `--token <token>`, `--phase0`, `--tick <seconds>`,
-/// `--bots <n>`. Anything else is host-and-play.
+/// `--bots <n>`, `--store <name>`. Anything else is host-and-play.
 [[nodiscard]] Startup ParseCommandLine(LPWSTR _commandLine)
 {
   Startup startup;
@@ -236,6 +249,10 @@ struct Startup
     else if (words[index] == "--bots" && index + 1 < words.size())
     {
       startup.bots = static_cast<std::uint32_t>(std::strtoul(words[++index].c_str(), nullptr, 10));
+    }
+    else if (words[index] == "--store" && index + 1 < words.size())
+    {
+      startup.storeName = words[++index];
     }
   }
 
@@ -362,6 +379,21 @@ bool PumpMessages()
 /// on top of a real one, and the file is left where it is for somebody to look at. A store whose
 /// match has finished is the record of that match, not something to resume into: it is moved
 /// aside under a `.finished` name and a new match starts.
+/// Where this match's store and log live. One function, because they have to agree: a store found
+/// under one name and a log written under another is a match nobody can read the history of.
+struct MatchPaths
+{
+  std::string store;
+  std::string log;
+};
+
+[[nodiscard]] MatchPaths PathsFor(const Startup& _startup)
+{
+  // The stem the owner asked for, or the port. Not a constant: see `Startup::storeName`.
+  const std::string stem = _startup.storeName.empty() ? std::format("lockstep-{}", _startup.port) : _startup.storeName;
+  return MatchPaths{BesideTheExecutable(stem + ".store"), BesideTheExecutable(stem + ".log")};
+}
+
 [[nodiscard]] std::optional<Neuron::MatchStore::Contents> LoadStoredMatch(const std::string& _storePath)
 {
   Neuron::MatchStore::Contents contents;
@@ -402,8 +434,9 @@ bool PumpMessages()
 
   // A stored match resumes, whatever the command line said about rules: the rules are in the store
   // and the match was played under them (ADR-042).
-  const std::string storePath = BesideTheExecutable("lockstep-match.store");
-  const std::string logPath = BesideTheExecutable("lockstep-match.log");
+  const MatchPaths paths = PathsFor(_startup);
+  const std::string& storePath = paths.store;
+  const std::string& logPath = paths.log;
   if (std::optional<Neuron::MatchStore::Contents> stored = LoadStoredMatch(storePath))
   {
     return std::make_unique<Lockstep::HostedServer>(_startup.port, std::move(*stored), storePath, logPath);
@@ -640,6 +673,7 @@ bool PumpMessages()
     // There IS a screen behind this dialog, and it is the one that asks the question the refusal is
     // an answer to. This is the only place that is true.
     facts.canGoBack = true;
+    facts.greeted = _connection.State() == Lockstep::MatchConnection::Status::Greeting;
 
     switch (_connection.State())
     {
@@ -658,7 +692,11 @@ bool PumpMessages()
       kind = Lockstep::ConnectionDialog::Kind::Lost;
       break;
 
+    case Lockstep::MatchConnection::Status::Connecting:
     case Lockstep::MatchConnection::Status::Greeting:
+      // One dialog for both halves of getting in: reaching the peer, and waiting to be welcomed by
+      // it. A player cannot tell them apart and does not need to -- and until the connect stopped
+      // blocking (ADR-043) the first half was not a state anything could draw.
       kind = Lockstep::ConnectionDialog::Kind::Connecting;
       break;
 
@@ -749,8 +787,9 @@ int RunGame(HWND _window, const Startup& _startup)
 
   if (_startup.role == Role::HostAndPlay)
   {
-    const std::string storePath = BesideTheExecutable("lockstep-match.store");
-    const std::string logPath = BesideTheExecutable("lockstep-match.log");
+    const MatchPaths paths = PathsFor(_startup);
+    const std::string& storePath = paths.store;
+    const std::string& logPath = paths.log;
 
     // A match already in the store resumes, with the seats it was played with (ADR-042). The host
     // takes the first stored seat unless the command line named one; there is no seats screen to
@@ -799,39 +838,41 @@ int RunGame(HWND _window, const Startup& _startup)
 
   if (_startup.joinGiven)
   {
-    // The server may still be binding its port when we get here, so this retries rather than
-    // assuming. A bounded retry, because a client that spins forever on a server that will never
-    // come up is a window that never draws and never says why.
-    constexpr std::int32_t CONNECT_ATTEMPTS = 200;
-    for (std::int32_t attempt = 0; attempt < CONNECT_ATTEMPTS; ++attempt)
-    {
-      if (connection.Open(_startup.host, _startup.port, _startup.token))
-      {
-        break;
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    askForAServer = connection.State() == Lockstep::MatchConnection::Status::Idle;
-
-    // ---- Wait long enough to be told no --------------------------------------------------------
+    // ---- Connect, and wait long enough to be told no --------------------------------------------
     //
-    // **An open socket is not an accepted token.** `Open` only means the TCP connection was made;
-    // the refusal arrives on the first `Pump` after it. Without this the client walked into the
-    // match loop and put up a refusal dialog there, where the only button that can honestly be
-    // offered is QUIT -- and a player whose token has a typo in it needs the screen with the field
-    // on it, not a dead end.
-    constexpr std::int32_t GREETING_ATTEMPTS = 200;
-    for (std::int32_t attempt = 0; attempt < GREETING_ATTEMPTS && !askForAServer; ++attempt)
+    // **An open socket is not an accepted token, and since ADR-043 it is not even a connection.**
+    // `Open` starts a handshake; the peer answering, and then the refusal or the welcome, both
+    // arrive on later `Pump` calls. So this waits for a settled answer rather than for a return
+    // value, and re-opens whenever an attempt dies -- the server may still be binding its port,
+    // which used to be handled by retrying `Open` until it stopped failing.
+    //
+    // Bounded, because a client that spins forever on a server that will never come up is a window
+    // that never draws and never says why. What it does instead is open the join screen, where the
+    // address it could not reach is in a field the player can edit.
+    using namespace std::chrono_literals;
+    const auto giveUpAt = std::chrono::steady_clock::now() + 2s;
+    for (;;)
     {
-      connection.Pump(std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count());
-      if (connection.State() != Lockstep::MatchConnection::Status::Greeting)
+      using Status = Lockstep::MatchConnection::Status;
+      const Status status = connection.State();
+      if (status == Status::Playing || status == Status::Refused)
       {
-        askForAServer = connection.State() != Lockstep::MatchConnection::Status::Playing;
         break;
       }
+      if (std::chrono::steady_clock::now() >= giveUpAt)
+      {
+        break;
+      }
+      if (status == Status::Idle || status == Status::Lost)
+      {
+        (void)connection.Open(_startup.host, _startup.port, _startup.token);
+      }
+
+      connection.Pump(std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count());
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
+
+    askForAServer = connection.State() != Lockstep::MatchConnection::Status::Playing;
 
     // Deliberately NOT reset here. The join screen reads the refusal off the connection and puts up
     // screen 05 over its own card, so the player lands on the field they need to edit AND is told
@@ -988,8 +1029,12 @@ int RunGame(HWND _window, const Startup& _startup)
     {
       kind = Lockstep::ConnectionDialog::Kind::Refused;
     }
-    else if (connection.State() == Lockstep::MatchConnection::Status::Lost)
+    else if (connection.State() == Lockstep::MatchConnection::Status::Lost ||
+             connection.State() == Lockstep::MatchConnection::Status::Connecting)
     {
+      // A reconnect passes through `Connecting` on its way back, and from the player's side that
+      // is still the link being down. Letting the dialog blink out for the length of a handshake
+      // and back in would read as the connection returning and going again.
       kind = Lockstep::ConnectionDialog::Kind::Lost;
       facts.lockCountdown = drawnTick == 0 ? std::string{} : Lockstep::MainPage::FormatCountdown(page.State().match.secondsToLock);
     }
@@ -1195,7 +1240,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
     }
     catch (const std::exception& error)
     {
-      Neuron::MatchLog log{BesideTheExecutable("lockstep-match.log")};
+      Neuron::MatchLog log{PathsFor(startup).log};
       log.Write(std::string("FATAL ") + error.what());
       Neuron::DebugTrace("{}\n", error.what());
       return EXIT_FAILURE;

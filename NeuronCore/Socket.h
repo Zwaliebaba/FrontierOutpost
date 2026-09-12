@@ -34,10 +34,37 @@ public:
   /// a test wants and what a host offering "any port" would use.
   [[nodiscard]] static Socket Listen(std::uint16_t _port);
 
-  /// Connects to a host. Returns an invalid socket if the name does not resolve or nothing is
-  /// listening. Blocking for the duration of the connect and only that -- a connect that cannot be
-  /// waited for is a connect whose failure nobody can report.
+  /// How a connection started by `Connect` is getting on.
+  enum class Connection : std::uint8_t
+  {
+    /// Still reaching for the peer. Ask again next frame.
+    Pending,
+    /// The peer answered. The socket can be sent on.
+    Ready,
+    /// Refused, unreachable, or the peer never answered.
+    Failed
+  };
+
+  /// STARTS connecting to a host, and does not wait for it. Returns an invalid socket only when the
+  /// name does not resolve; everything after that is reported by `Progress`.
+  ///
+  /// **It used to block, and the client draws on the thread that called it.** A host that is merely
+  /// wrong resolves and then never answers, so the connect sat in the OS timeout -- twenty seconds
+  /// of a frozen window on the first attempt, and, because the reconnect loop tries every two
+  /// seconds, a window that froze in bursts for as long as the player left it open. The comment
+  /// here used to argue that a connect which cannot be waited for is a connect whose failure nobody
+  /// can report; that is only true of a caller with nowhere to put the answer, and this one has a
+  /// dialog for it (screen 05).
+  ///
+  /// **`getaddrinfo` is still synchronous**, which is instant for the dotted address the game
+  /// offers by default and can block on a name server for a real hostname. That one needs a thread
+  /// rather than a poll, and is not fixed here.
   [[nodiscard]] static Socket Connect(const std::string& _host, std::uint16_t _port);
+
+  /// Where the connection begun by `Connect` has got to. Cheap enough to call every frame, and
+  /// meaningless on a socket that came from `Listen` or `Accept` -- those are ready when they
+  /// exist, and this says so.
+  [[nodiscard]] Connection Progress();
 
   /// The next pending connection, or an invalid socket if there is none right now.
   [[nodiscard]] Socket Accept();
@@ -66,6 +93,10 @@ public:
 
 private:
   explicit Socket(std::uintptr_t _handle) noexcept;
+
+  /// Whether this socket is still finishing a connect. False for a listener, for an accepted
+  /// peer, and for a connection that has already been reported `Ready` or `Failed`.
+  bool m_connecting = false;
 
   /// `INVALID_SOCKET`, spelled without needing WinSock2 in this header.
   static constexpr std::uintptr_t NOTHING = static_cast<std::uintptr_t>(~0ULL);
