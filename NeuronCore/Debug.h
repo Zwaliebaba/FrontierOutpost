@@ -1,5 +1,13 @@
 #pragma once
 
+#include "Text.h"
+
+#include <format>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+
 #if defined(_DEBUG)
 #   include <crtdbg.h>
 #   define NEW new (_NORMAL_BLOCK, __FILE__, __LINE__)
@@ -12,7 +20,7 @@ namespace Neuron
 template <class... Types> void DebugTrace(const std::string_view _fmt, [[maybe_unused]] Types&&... _args)
 {
 #ifdef _DEBUG
-  const std::string message = vformat(_fmt, std::make_format_args(_args...));
+  const std::string message = std::vformat(_fmt, std::make_format_args(_args...));
   OutputDebugStringA(message.c_str());
 #else
   __noop(_fmt);
@@ -22,25 +30,39 @@ template <class... Types> void DebugTrace(const std::string_view _fmt, [[maybe_u
 template <class... Types> void DebugTrace(const std::wstring_view _fmt, [[maybe_unused]] Types&&... _args)
 {
 #ifdef _DEBUG
-  const std::wstring message = vformat(_fmt, std::make_wformat_args(_args...));
+  const std::wstring message = std::vformat(_fmt, std::make_wformat_args(_args...));
   OutputDebugStringW(message.c_str());
 #else
   __noop(_fmt);
 #endif
 }
 
-template <class... Types>
-[[noreturn]] void Fatal([[maybe_unused]] const std::format_string<Types...> _fmt, [[maybe_unused]] Types&&... _args)
+/// Stops the program on a broken invariant, and says which one.
+///
+/// The message travels in the exception. The composition root is the only place that can tell a
+/// person anything, and it can only say what it was handed -- a fatal that throws a fixed string
+/// turns every diagnostic in the tree into dead text.
+///
+/// The breakpoint instruction runs only when a debugger is attached. Without one it raises an
+/// exception nothing handles, and the process dies before the throw below, which on a headless
+/// server is a crash with no message anywhere.
+[[noreturn]] inline void FatalMessage(std::string _message)
 {
-  __debugbreak();
-  throw std::exception("Fatal Error");
+  if (IsDebuggerPresent() != FALSE)
+  {
+    __debugbreak();
+  }
+  throw std::runtime_error(std::move(_message));
 }
 
-template <class... Types>
-[[noreturn]] void Fatal([[maybe_unused]] const std::wformat_string<Types...> _fmt, [[maybe_unused]] Types&&... _args)
+template <class... Types> [[noreturn]] void Fatal(const std::format_string<Types...> _fmt, Types&&... _args)
 {
-  __debugbreak();
-  throw std::exception("Fatal Error");
+  FatalMessage(std::format(_fmt, std::forward<Types>(_args)...));
+}
+
+template <class... Types> [[noreturn]] void Fatal(const std::wformat_string<Types...> _fmt, Types&&... _args)
+{
+  FatalMessage(WideToUtf8(std::format(_fmt, std::forward<Types>(_args)...)));
 }
 
 // There is no third error path. An HRESULT that had to succeed goes through
@@ -54,13 +76,13 @@ template <class... Types>
 // a malformed mesh is the author's mistake, not the program's.
 } // namespace Neuron
 
-#define ASSERT(expression) (void)((!!(expression)) || (Neuron::Fatal(_CRT_WIDE("Assert Failure")), 0))
+#define ASSERT(expression) (void)((!!(expression)) || (Neuron::Fatal("Assertion failed: {}", #expression), 0))
 #define ASSERT_TEXT(expression, ...) (void)((!!(expression)) || (Neuron::Fatal(__VA_ARGS__), 0))
 
 #ifdef _DEBUG
 #   define DEBUG_ASSERT(expression) ASSERT(expression)
 #   define DEBUG_ASSERT_TEXT(expression, ...) ASSERT_TEXT(expression, __VA_ARGS__)
-#   define DEBUG_WARNING(expression, ...) (void)((!(expression)) || (DebugTrace(__VA_ARGS__), 0))
+#   define DEBUG_WARNING(expression, ...) (void)((!(expression)) || (Neuron::DebugTrace(__VA_ARGS__), 0))
 
 #else
 #   define DEBUG_ASSERT(expression) (__noop(expression))

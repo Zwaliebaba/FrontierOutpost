@@ -14,6 +14,7 @@
 #include <memory>
 #include <mutex>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -54,8 +55,7 @@
 // conflict with Storyboard::GetCurrentTime
 #undef GetCurrentTime
 
+#include "Text.h"
 #include "Debug.h"
-
-using namespace Neuron;
 
 #pragma comment(lib, "ws2_32.lib")

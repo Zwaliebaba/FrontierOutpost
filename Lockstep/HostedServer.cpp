@@ -72,6 +72,22 @@ std::vector<std::string> HostedServer::TakeLog()
   return taken;
 }
 
+std::string HostedServer::Failure() const
+{
+  std::lock_guard<std::mutex> held{m_logLock};
+  return m_failure;
+}
+
+void HostedServer::Fail(const std::string& _what)
+{
+  {
+    std::lock_guard<std::mutex> held{m_logLock};
+    m_failure = _what;
+    m_log.push_back("FATAL " + _what);
+  }
+  m_failed.store(true);
+}
+
 void HostedServer::Run(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath,
                        std::uint64_t _seed, MatchRules _rules, std::vector<std::optional<BotPolicy>> _bots)
 {
@@ -80,51 +96,65 @@ void HostedServer::Run(std::uint16_t _port, std::vector<std::string> _tokens, st
   // The instrumentation log (ADR-030). Opened on this thread and written from it, so it needs no
   // lock either -- the same reason nothing else here does.
   Neuron::MatchLog log{std::move(_logPath)};
-  const auto botCount = static_cast<std::size_t>(
-    std::count_if(_bots.begin(), _bots.end(), [](const std::optional<BotPolicy>& _bot) { return _bot.has_value(); }));
-  log.Write(std::format("match-start seed={} players={} bots={} tick-seconds={} length={}", _seed, rules.playerCount, botCount,
-                        rules.tickIntervalSeconds, rules.matchLengthTicks));
-  for (std::size_t seat = 0; seat < _bots.size(); ++seat)
-  {
-    if (_bots[seat].has_value())
-    {
-      log.Write(std::format("bot-seat player={} style={}", seat + 1, Describe(*_bots[seat])));
-    }
-  }
 
   // Everything below is created on this thread and destroyed on it. The simulation, the session and
   // the server never leave, which is what makes the absence of a lock correct rather than lucky.
-  auto simulation = std::make_unique<MatchSimulation>(rules, _seed, std::move(_bots));
-  auto session =
-    std::make_unique<Neuron::Session>(std::move(simulation), Neuron::TickSchedule{0, rules.tickIntervalSeconds}, std::move(_storePath));
-  Neuron::MatchServer server{std::move(session), _port, std::move(_tokens)};
-
-  m_port.store(server.Port());
-  m_listening.store(server.Listening());
-
-  const auto startedAt = std::chrono::steady_clock::now();
-
-  while (m_running.load())
+  // A fatal thrown anywhere in it is caught here, where the log still exists to record it.
+  try
   {
-    // The one clock on the server side, and it is here rather than inside anything (ADR-026).
-    const auto now =
-      static_cast<Neuron::Instant>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - startedAt).count());
-
-    (void)server.Poll(now);
-
-    std::vector<std::string> lines = server.TakeLog();
-    if (!lines.empty())
+    const auto botCount = static_cast<std::size_t>(
+      std::count_if(_bots.begin(), _bots.end(), [](const std::optional<BotPolicy>& _bot) { return _bot.has_value(); }));
+    log.Write(std::format("match-start seed={} players={} bots={} tick-seconds={} length={}", _seed, rules.playerCount, botCount,
+                          rules.tickIntervalSeconds, rules.matchLengthTicks));
+    for (std::size_t seat = 0; seat < _bots.size(); ++seat)
     {
-      log.Write(lines);
-
-      std::lock_guard<std::mutex> held{m_logLock};
-      for (std::string& line : lines)
+      if (_bots[seat].has_value())
       {
-        m_log.push_back(std::move(line));
+        log.Write(std::format("bot-seat player={} style={}", seat + 1, Describe(*_bots[seat])));
       }
     }
 
-    std::this_thread::sleep_for(POLL_INTERVAL);
+    auto simulation = std::make_unique<MatchSimulation>(rules, _seed, std::move(_bots));
+    auto session =
+      std::make_unique<Neuron::Session>(std::move(simulation), Neuron::TickSchedule{0, rules.tickIntervalSeconds}, std::move(_storePath));
+    Neuron::MatchServer server{std::move(session), _port, std::move(_tokens)};
+
+    m_port.store(server.Port());
+    m_listening.store(server.Listening());
+    if (!server.Listening())
+    {
+      Neuron::Fatal("Could not listen on port {}. Another program holds it, or a connection from a previous run is still draining.", _port);
+    }
+
+    const auto startedAt = std::chrono::steady_clock::now();
+
+    while (m_running.load())
+    {
+      // The one clock on the server side, and it is here rather than inside anything (ADR-026).
+      const auto now = static_cast<Neuron::Instant>(
+        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - startedAt).count());
+
+      (void)server.Poll(now);
+
+      std::vector<std::string> lines = server.TakeLog();
+      if (!lines.empty())
+      {
+        log.Write(lines);
+
+        std::lock_guard<std::mutex> held{m_logLock};
+        for (std::string& line : lines)
+        {
+          m_log.push_back(std::move(line));
+        }
+      }
+
+      std::this_thread::sleep_for(POLL_INTERVAL);
+    }
+  }
+  catch (const std::exception& error)
+  {
+    log.Write(std::string("FATAL ") + error.what());
+    Fail(error.what());
   }
 }
 
@@ -133,13 +163,31 @@ void HostedServer::RunLobby(std::uint16_t _port, std::vector<std::string> _token
   // The log opens with the lobby rather than with the match, because who arrived and when is part
   // of the record even for a match that never starts (ADR-030's login curve begins here).
   Neuron::MatchLog log{std::move(_logPath)};
-  log.Write(std::format("lobby-open seats={}", _tokens.size()));
+
+  try
+  {
+    RunLobbyGuarded(log, _port, std::move(_tokens), std::move(_storePath));
+  }
+  catch (const std::exception& error)
+  {
+    log.Write(std::string("FATAL ") + error.what());
+    Fail(error.what());
+  }
+}
+
+void HostedServer::RunLobbyGuarded(Neuron::MatchLog& _log, std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath)
+{
+  _log.Write(std::format("lobby-open seats={}", _tokens.size()));
 
   const std::size_t seatCount = _tokens.size();
   Neuron::MatchServer server{_port, std::move(_tokens)};
 
   m_port.store(server.Port());
   m_listening.store(server.Listening());
+  if (!server.Listening())
+  {
+    Neuron::Fatal("Could not listen on port {}. Another program holds it, or a connection from a previous run is still draining.", _port);
+  }
 
   const auto startedAt = std::chrono::steady_clock::now();
   std::string storePath = std::move(_storePath);
@@ -169,8 +217,8 @@ void HostedServer::RunLobby(std::uint16_t _port, std::vector<std::string> _token
       {
         const auto botCount = static_cast<std::size_t>(
           std::count_if(bots.begin(), bots.end(), [](const std::optional<BotPolicy>& _bot) { return _bot.has_value(); }));
-        log.Write(std::format("match-start seed={} players={} bots={} tick-seconds={} length={}", seed, rules.playerCount, botCount,
-                              rules.tickIntervalSeconds, rules.matchLengthTicks));
+        _log.Write(std::format("match-start seed={} players={} bots={} tick-seconds={} length={}", seed, rules.playerCount, botCount,
+                               rules.tickIntervalSeconds, rules.matchLengthTicks));
 
         // Named in the log, because a match's result means something different when three of the
         // empires were played by the machine and nothing else records which (ADR-030).
@@ -178,7 +226,7 @@ void HostedServer::RunLobby(std::uint16_t _port, std::vector<std::string> _token
         {
           if (bots[seat].has_value())
           {
-            log.Write(std::format("bot-seat player={} style={}", seat + 1, Describe(*bots[seat])));
+            _log.Write(std::format("bot-seat player={} style={}", seat + 1, Describe(*bots[seat])));
           }
         }
 
@@ -203,7 +251,7 @@ void HostedServer::RunLobby(std::uint16_t _port, std::vector<std::string> _token
     std::vector<std::string> lines = server.TakeLog();
     if (!lines.empty())
     {
-      log.Write(lines);
+      _log.Write(lines);
 
       std::lock_guard<std::mutex> held{m_logLock};
       for (std::string& line : lines)

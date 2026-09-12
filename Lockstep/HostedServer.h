@@ -1,5 +1,6 @@
 #pragma once
 
+#include "MatchLog.h"
 #include "MatchServer.h"
 
 #include "BotPolicy.h"
@@ -77,14 +78,30 @@ public:
   /// Everything the server logged, taken and cleared. Safe from any thread.
   [[nodiscard]] std::vector<std::string> TakeLog();
 
+  /// Whether the server thread has stopped on a fatal, and what it said.
+  ///
+  /// An exception on the server thread has no composition root to reach: left alone it is
+  /// `std::terminate`, which on a headless server is a process that vanished with no line in any
+  /// log. The thread catches it, writes it to the match log, and leaves it here for whoever owns the
+  /// object to report and act on. Safe from any thread.
+  [[nodiscard]] bool Failed() const noexcept
+  {
+    return m_failed.load();
+  }
+  [[nodiscard]] std::string Failure() const;
+
   void Stop() noexcept;
 
 private:
+  /// Records a fatal from the server thread. The thread ends after this.
+  void Fail(const std::string& _what);
   void Run(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath, std::uint64_t _seed,
            MatchRules _rules, std::vector<std::optional<BotPolicy>> _bots);
 
-  /// The lobby's loop: listen, seat people, and watch for a `Begin`.
+  /// The lobby's loop: listen, seat people, and watch for a `Begin`. Opens the log and catches
+  /// whatever the guarded half throws, so the log can record it.
   void RunLobby(std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath, std::string _logPath);
+  void RunLobbyGuarded(Neuron::MatchLog& _log, std::uint16_t _port, std::vector<std::string> _tokens, std::string _storePath);
 
   std::thread m_thread;
   std::atomic<bool> m_running{true};
@@ -95,6 +112,8 @@ private:
   /// anything clever -- a few lines a tick is not a performance problem.
   std::mutex m_logLock;
   std::vector<std::string> m_log;
+  std::string m_failure;
+  std::atomic<bool> m_failed{false};
 
   /// The lobby's shared state, and the only other thing two threads touch. Same discipline as the
   /// log: a mutex and plain data, because a few seats a poll is not a performance problem.
