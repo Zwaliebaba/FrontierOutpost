@@ -47,7 +47,7 @@ Design/
   Plans/                    ← work in flight: what is being built, in what order
   Reference/                ← things that are true rather than decided (formats, tables, maths)
   Archive/                  ← superseded plans and finished reviews, kept for the record
-  UI/                       ← the screens: PNGs, guidelines, per-screen spec, work plan
+  UI/                       ← the client's screens: per-screen status against the code, guidelines, the 2026-09-11 mockups
 ```
 
 **`Design/Screens/` is gone.** It held the v1 main page and was superseded by `Design/UI/` on
@@ -55,6 +55,11 @@ Design/
 021, 022 and 027 — and those citations are left as they are, because an Accepted ADR is immutable
 except for its status line. **Read them against `Design/UI/` instead.** Where the two disagree the
 newer document wins, except on the map projection, where neither does: see ADR-034.
+
+**`Design/UI/PROMPT.md` is in `Archive/`**, as `2026-09-11-ui-v2-prompt.md`, since 2026-09-12. It was
+the handoff's work plan, and a finished plan is archived (§2 below); ADR-034, ADR-038 and ADR-039
+cite it by the old name and are left as they are, for the reason given above. `Design/UI/` itself
+is no longer a handoff but the record of the client's screens as built, status per screen.
 
 **The rename to *LockStep: Universe* reached the ADRs, and that is an exception worth naming.** On
 2026-09-11 the game stopped being *Frontier Outpost*; the `Frontier` namespace became `Lockstep` and

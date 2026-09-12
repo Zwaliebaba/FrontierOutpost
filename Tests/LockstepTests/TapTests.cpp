@@ -604,6 +604,39 @@ public:
     Assert::IsTrue(Lockstep::OrdersOf(page.State()).builds.empty(), L"and nothing went out");
   }
 
+  TEST_METHOD(ARivalsSystemOpensNoBuildSheet)
+  {
+    // You cannot build on somebody else's ground -- `Match::Validate` refuses it outright -- so a
+    // BUILD sheet over a rival's capital lists orders that system cannot take (ADR-058). Tapping
+    // one still focuses it, because a tap that does nothing visible is the defect this screen has
+    // been bitten by before.
+    const auto simulation = PlayedMatch(12);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    // A system on the map that somebody else holds. Twelve ticks of six bots is enough to have met
+    // one, and the test says so rather than assuming it.
+    const Lockstep::MatchState& state = page.State();
+    std::int32_t theirs = Lockstep::EventRefs::NONE;
+    for (std::size_t index = 0; index < state.graph.systems.size(); ++index)
+    {
+      const Lockstep::SystemNode& node = state.graph.systems[index];
+      if (node.owner != Lockstep::NOBODY && node.owner != state.viewer)
+      {
+        theirs = static_cast<std::int32_t>(index);
+        break;
+      }
+    }
+    Assert::IsTrue(theirs != Lockstep::EventRefs::NONE, L"twelve ticks met nobody, so this test proved nothing");
+
+    // Swept until the rival's system is the focused one, which is what tapping it does.
+    Headless renderers;
+    const bool focused = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                  [&page, theirs] { return page.FocusedSystem() == theirs; });
+    Assert::IsTrue(focused, L"a rival's system could not be focused by any tap");
+    Assert::IsTrue(page.OpenPanel() != Lockstep::MainPage::Panel::BuildList, L"a rival's system opened a build sheet");
+  }
+
   TEST_METHOD(TheQueueNeverExceedsThePurse)
   {
     // Two rows and a purse that covers either but not both: whatever the sweep queues and takes

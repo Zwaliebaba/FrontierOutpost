@@ -73,6 +73,24 @@ constexpr float ROUTE_SPEED_PIXELS_PER_SECOND = 18.0F;
 /// The route is under the fleet that flies it, not beside it.
 constexpr std::uint8_t ROUTE_ALPHA = 180;
 
+/// How far, in screen pixels, a fleet marker is kept clear of the systems at either end of its
+/// lane (ADR-059).
+///
+/// **A fleet is drawn where its remaining ticks put it, and at the ends of a lane that is on top of
+/// a system.** A move ordered and not yet locked sits at zero, which is exactly on the node it is
+/// leaving; the first tick of a four-tick crossing is a quarter along, which on a short lane is
+/// still inside that node's disc.
+///
+/// **Measured against the LABEL, not the marker**, because the label is the wide part: `FLT 1 - ETA
+/// T6` is about fourteen glyphs, drawn centred on the marker, so half of it is ~56px either side --
+/// and a capital's halo adds another twelve. Clearing only the arrowhead moved the triangle off the
+/// node and left the text running through it.
+///
+/// A lane with no room for that at both ends puts the marker in the MIDDLE, which is the honest
+/// answer when there is no room to say anything more precise, and is what a short lane will
+/// usually get.
+constexpr float FLEET_END_CLEARANCE = 68.0F;
+
 void DrawGroundCircle(ShapeRenderer& _shapes, const MapFrame& _frame, float _designX, float _designY, float _radius, const Color& _fill,
                       const Color& _outline, bool _dashed, float _height = 0.0F)
 {
@@ -197,6 +215,32 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
                          .system = _index});
 }
 
+/// Where along its lane a fleet is DRAWN, which is where it is except near the ends.
+///
+/// The clamp is computed in SCREEN pixels and applied to the design-space fraction, because what
+/// has to be cleared is drawn at a fixed size at every zoom -- a node's radius and a label's
+/// glyphs -- while the lane's length in pixels changes with the camera.
+[[nodiscard]] float DrawnProgress(const Neuron::OrbitCamera& _camera, const SystemNode& _from, const SystemNode& _to, float _progress)
+{
+  const Neuron::OrbitCamera::ScreenPoint a = _camera.Project(MapView::Ground(_from.positionX, _from.positionY));
+  const Neuron::OrbitCamera::ScreenPoint b = _camera.Project(MapView::Ground(_to.positionX, _to.positionY));
+  if (!a.visible || !b.visible)
+  {
+    return _progress;
+  }
+
+  const float runX = b.xPixels - a.xPixels;
+  const float runY = b.yPixels - a.yPixels;
+  const float length = std::sqrt(runX * runX + runY * runY);
+  if (length <= 2.0F * FLEET_END_CLEARANCE)
+  {
+    return 0.5F;
+  }
+
+  const float margin = FLEET_END_CLEARANCE / length;
+  return std::clamp(_progress, margin, 1.0F - margin);
+}
+
 void DrawFleet(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame, std::vector<MapHit>& _hits, std::int32_t _index)
 {
   const Neuron::OrbitCamera& camera = _frame.view.Camera();
@@ -204,8 +248,9 @@ void DrawFleet(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fra
 
   const SystemNode& from = _frame.state.graph.systems[static_cast<std::size_t>(fleet.from)];
   const SystemNode& to = _frame.state.graph.systems[static_cast<std::size_t>(fleet.to)];
-  const float designX = from.positionX + (to.positionX - from.positionX) * fleet.progress;
-  const float designY = from.positionY + (to.positionY - from.positionY) * fleet.progress;
+  const float drawnAt = DrawnProgress(camera, from, to, fleet.progress);
+  const float designX = from.positionX + (to.positionX - from.positionX) * drawnAt;
+  const float designY = from.positionY + (to.positionY - from.positionY) * drawnAt;
 
   const Neuron::OrbitCamera::ScreenPoint foot = camera.Project(MapView::Ground(designX, designY));
   const Neuron::OrbitCamera::ScreenPoint head = camera.Project(MapView::Above(designX, designY, FLEET_HOVER));
@@ -454,10 +499,13 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
     {
       continue;
     }
+    // The same position `DrawFleet` will use, clamp included: a depth sorted from one point and
+    // drawn at another puts a fleet in front of a system it is behind.
     const SystemNode& from = _frame.state.graph.systems[static_cast<std::size_t>(fleet.from)];
     const SystemNode& to = _frame.state.graph.systems[static_cast<std::size_t>(fleet.to)];
-    const float designX = from.positionX + (to.positionX - from.positionX) * fleet.progress;
-    const float designY = from.positionY + (to.positionY - from.positionY) * fleet.progress;
+    const float drawnAt = DrawnProgress(camera, from, to, fleet.progress);
+    const float designX = from.positionX + (to.positionX - from.positionX) * drawnAt;
+    const float designY = from.positionY + (to.positionY - from.positionY) * drawnAt;
     const Neuron::OrbitCamera::ScreenPoint at = project(MapView::Ground(designX, designY));
     if (at.visible)
     {
