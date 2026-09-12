@@ -29,6 +29,7 @@
 #include "BotPolicy.h"
 #include "MatchSimulation.h"
 
+#include <format>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -565,6 +566,129 @@ public:
     Headless renderers;
     (void)SweepFor(page, renderers, DrawSeats, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, [&page] { return page.EveryoneIsHere(); });
     Assert::IsTrue(page.EveryoneIsHere(), L"a screen full of bots is still waiting for somebody");
+  }
+};
+
+// The digest is taller than the column it is drawn in, and nothing scrolls (ADR-052 option C). An
+// actor card collapses and the stack pages (ADR-061), and both are controls that have to be pressed.
+TEST_CLASS(DigestOverflowTapTests)
+{
+public:
+  /// A digest event about `_actor`, added to a real state so the page has a galaxy under it.
+  static void AddEvent(Lockstep::MatchState& _state, Lockstep::OwnerId _actor, std::string _title)
+  {
+    Lockstep::DigestEvent event;
+    event.kind = Lockstep::EventKind::Economy;
+    event.actor = _actor;
+    event.title = std::move(_title);
+    event.detail = "Something happened, and here is the line that says so.";
+    _state.digest.push_back(std::move(event));
+  }
+
+  /// Sweeps the digest column and reports where the tap that satisfied `_done` was.
+  [[nodiscard]] static bool SweepDigest(Lockstep::MainPage& _page, Headless& _renderers, const std::function<bool()>& _done,
+                                        std::int32_t& _outX, std::int32_t& _outY)
+  {
+    bool stale = true;
+    for (std::int32_t y = TOP_BAR; y < SCREEN_HEIGHT; y += STEP)
+    {
+      for (std::int32_t x = 0; x < static_cast<std::int32_t>(Lockstep::MainPage::DIGEST_WIDTH); x += STEP)
+      {
+        if (stale)
+        {
+          _renderers.Begin();
+          DrawPage(_page, _renderers);
+        }
+        stale = _page.HandleTap(static_cast<float>(x), static_cast<float>(y));
+        if (_done())
+        {
+          _outX = x;
+          _outY = y;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  TEST_METHOD(AnActorCardOpensAndClosesFromItsTitle)
+  {
+    // An actor card is the only card whose body is a LIST, and the only one that can be dropped
+    // without losing a fact: the title still names the rival and the stamp still counts them.
+    const auto simulation = PlayedMatch(2);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    state.digest.clear();
+    AddEvent(state, 1, "Halvorsen took Pell");
+    AddEvent(state, 1, "Halvorsen proposes a lane");
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+    Assert::IsTrue(page.ExpandedActor() == Lockstep::NOBODY, L"a digest opened with a card already open");
+
+    Headless renderers;
+    std::int32_t x = 0;
+    std::int32_t y = 0;
+    Assert::IsTrue(
+      SweepDigest(page, renderers, [&page] { return page.ExpandedActor() == 1; }, x, y), L"nothing in the digest opens an actor card");
+
+    renderers.Begin();
+    DrawPage(page, renderers);
+    (void)page.HandleTap(static_cast<float>(x), static_cast<float>(y));
+    Assert::IsTrue(page.ExpandedActor() == Lockstep::NOBODY, L"the same title did not close the card again");
+  }
+
+  TEST_METHOD(OnlyOneActorCardIsOpenAtATime)
+  {
+    const auto simulation = PlayedMatch(2);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    state.digest.clear();
+    AddEvent(state, 1, "Halvorsen took Pell");
+    AddEvent(state, 1, "Halvorsen proposes a lane");
+    AddEvent(state, 2, "Sorne took Dothan");
+    AddEvent(state, 2, "Sorne proposes a lane");
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    std::int32_t x = 0;
+    std::int32_t y = 0;
+    Assert::IsTrue(SweepDigest(page, renderers, [&page] { return page.ExpandedActor() != Lockstep::NOBODY; }, x, y));
+    const Lockstep::OwnerId first = page.ExpandedActor();
+
+    // Another card OPEN, not merely the first one shut: the sweep passes over the first title again
+    // on its way down and closing it is not what is being claimed here.
+    Assert::IsTrue(
+      SweepDigest(
+        page, renderers, [&page, first] { return page.ExpandedActor() != first && page.ExpandedActor() != Lockstep::NOBODY; }, x, y),
+      L"the second actor card could not be opened");
+    Assert::IsTrue(page.ExpandedActor() != first, L"two actor cards were open at once");
+  }
+
+  TEST_METHOD(ADigestTallerThanTheColumnPages)
+  {
+    // Twenty cards is more than the column holds however they are laid out, which is the condition
+    // the band exists for. What it must never do is drop one: page one has to be reachable again.
+    const auto simulation = PlayedMatch(2);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    state.digest.clear();
+    for (std::int32_t index = 0; index < 20; ++index)
+    {
+      AddEvent(state, Lockstep::NOBODY, std::format("Production +{}", index + 1));
+    }
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+    Assert::AreEqual(std::size_t{0}, page.DigestPage());
+
+    Headless renderers;
+    std::int32_t x = 0;
+    std::int32_t y = 0;
+    Assert::IsTrue(SweepDigest(
+                     page, renderers, [&page] { return page.DigestPage() > 0; }, x, y),
+                   L"a digest taller than the column offers no way to the rest of it");
+
+    Assert::IsTrue(SweepDigest(page, renderers, [&page] { return page.DigestPage() == 0; }, x, y), L"there is no way back to page one");
   }
 };
 

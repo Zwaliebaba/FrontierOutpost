@@ -88,7 +88,12 @@ Semantic / owner (ADR-027: you are always blue)
   the right for a plain event (the handoff's `T45`), and no highlighted variant.
 - **Actor card** — an event card whose title is the player (`P3 - LEADER 1,610` when they lead),
   stamp `3 EVENTS`, one line per event, the verdict from whichever of their events carries one, and
-  every action of every event in one row. Ranked by its worst event.
+  every action of every event in one row. Ranked by its worst event. **Collapsed unless it is the
+  open one** (ADR-061): the per-event lines sit behind a tap on the 22px title band, everything else
+  is drawn either way, and one card is open at a time.
+- **Digest page band** — 22px at the foot of the digest, drawn only when the card stack is taller
+  than the column: `1 / 3 - MORE >` right, `< PREV` left once past page one, both muted (ADR-061).
+  Page breaks fall between cards; page 1 always carries the leading card and so the standing moves.
 - **Verdict box** — 1px amber border inside the card; line 1 amber `FLT1 ARRIVES T47 - YOU LOSE`,
   then the numbers in body colour, always saying whose ships remain.
 - **Sheet** — the panel component (ADR-052): ink background, 1px border; 36px header with the title

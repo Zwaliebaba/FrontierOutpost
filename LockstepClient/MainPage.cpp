@@ -164,6 +164,12 @@ void MainPage::Create(MatchState _state)
   m_panelSubject = EventRefs::NONE;
   m_focusedSystem = EventRefs::NONE;
 
+  // A digest is replaced wholesale every tick, so nothing about how the last one was being READ
+  // survives it: page three is nowhere in the new one, and the rival whose card was open may have
+  // no card at all (ADR-061).
+  m_digestPage = 0;
+  m_expandedActor = NOBODY;
+
   MeasureContent();
 }
 
@@ -553,6 +559,16 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       m_panel = Panel::None;
       return true;
 
+    case Action::ToggleActorCard:
+      // One open at a time, so tapping a second card's title closes the first. The column has room
+      // for one card's worth of lines and paging two open cards apart is not reading them.
+      m_expandedActor = m_expandedActor == region->index ? NOBODY : region->index;
+      return true;
+
+    case Action::ShowDigestPage:
+      m_digestPage = static_cast<std::size_t>(std::max(0, region->index));
+      return true;
+
     case Action::OpenReplay:
       m_panel = Panel::Replay;
       m_panelSubject = static_cast<std::int32_t>(m_state.match.tick);
@@ -746,6 +762,50 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   }
 }
 
+MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::size_t _columns) const
+{
+  CardLayout layout;
+
+  // **An actor card is collapsed unless it is the open one** (ADR-061). It is the only card whose
+  // lines are a LIST -- one per event the rival produced -- so it is the only one whose body can be
+  // dropped without dropping a fact the card is the only record of: the title still names the
+  // rival, the stamp still counts them, and opening it is one tap away.
+  layout.collapsible = _card.actor != NOBODY;
+  const bool collapsed = layout.collapsible && _card.actor != m_expandedActor;
+
+  if (!collapsed)
+  {
+    for (const std::string& detail : _card.lines)
+    {
+      for (std::string& line : FontRenderer::Wrap(detail, _columns))
+      {
+        layout.details.push_back(std::move(line));
+      }
+    }
+  }
+
+  layout.hasVerdict = !_card.verdict.empty();
+  if (layout.hasVerdict)
+  {
+    layout.verdictDetail = FontRenderer::Wrap(_card.verdictDetail, _columns - 2);
+  }
+  layout.hasActions = !_card.actions.empty();
+
+  // The same arithmetic the draw below walks, in one expression: the title block, a line per detail,
+  // the verdict box, the action row, and the gap to the next card's divider.
+  const auto lines = static_cast<float>(LINE_HEIGHT);
+  layout.height = 11.0F + lines + 2.0F + static_cast<float>(layout.details.size()) * lines + 4.0F;
+  if (layout.hasVerdict)
+  {
+    layout.height += 4.0F + (1.0F + static_cast<float>(layout.verdictDetail.size())) * lines + 6.0F;
+  }
+  if (layout.hasActions)
+  {
+    layout.height += 4.0F + lines + 4.0F;
+  }
+  return layout;
+}
+
 void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 {
   // **The digest is the order surface** (ADR-034, SCREENS.md 01). Every event carries what can be
@@ -811,10 +871,49 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     y += boxHeight + 6.0F;
   }
 
-  // ---- The cards -----------------------------------------------------------------------------------
+  // ---- The cards, and which of them are on this page -------------------------------------------------
+  //
+  // **Nothing scrolls (ADR-052 option C), so a stack that does not fit is PAGED** (ADR-061). The
+  // whole stack is measured first, because a page break has to fall between two cards and the only
+  // way to know where one card ends is to have worked out how tall it is.
   const std::vector<DigestCard> cards = CardsOf(m_state);
+  std::vector<CardLayout> layouts;
+  layouts.reserve(cards.size());
+  float stackHeight = 0.0F;
   for (const DigestCard& card : cards)
   {
+    layouts.push_back(LayoutCard(card, columns));
+    stackHeight += layouts.back().height;
+  }
+
+  const float cardsTop = y;
+  const bool paged = stackHeight > Frame::SCREEN_HEIGHT - cardsTop;
+  const float room = Frame::SCREEN_HEIGHT - cardsTop - (paged ? DIGEST_PAGE_HEIGHT : 0.0F);
+
+  // The first card of each page. A page always takes at least one card, even one taller than the
+  // column: a card that fits nowhere is still better read cut off than not drawn at all.
+  std::vector<std::size_t> pageStarts{0};
+  float used = 0.0F;
+  for (std::size_t index = 0; index < layouts.size(); ++index)
+  {
+    if (used > 0.0F && used + layouts[index].height > room)
+    {
+      pageStarts.push_back(index);
+      used = 0.0F;
+    }
+    used += layouts[index].height;
+  }
+
+  // **The leading card is always on page one**, which is what keeps the standing moves reachable
+  // (ADR-056): they are attached to `cards.front()` and page one starts there by construction.
+  m_digestPage = std::min(m_digestPage, pageStarts.size() - 1);
+  const std::size_t firstCard = pageStarts[m_digestPage];
+  const std::size_t lastCard = m_digestPage + 1 < pageStarts.size() ? pageStarts[m_digestPage + 1] : cards.size();
+
+  for (std::size_t cardIndex = firstCard; cardIndex < lastCard; ++cardIndex)
+  {
+    const DigestCard& card = cards[cardIndex];
+    const CardLayout& layout = layouts[cardIndex];
     const Color accent = EventColor(card.kind);
     const float top = y;
 
@@ -835,25 +934,30 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     {
       DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, lineY, card.stamp, Ink::TEXT_MUTED);
     }
+
+    // The title of an actor card opens and closes it. Registered here rather than after the card's
+    // own region, so that it wins: the region is INSERTED at `cardHitsBegin` below, which puts
+    // everything added during the card in front of it in the reverse walk `HandleTap` makes.
+    if (layout.collapsible)
+    {
+      AddHit(0.0F, top, Frame::DIGEST_WIDTH - 1.0F, DIGEST_TITLE_HEIGHT, Action::ToggleActorCard, card.actor);
+    }
     lineY += LINE_HEIGHT + 2;
 
-    for (const std::string& detail : card.lines)
+    for (const std::string& line : layout.details)
     {
-      for (const std::string& line : FontRenderer::Wrap(detail, columns))
-      {
-        _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, line, Ink::TEXT_DETAIL);
-        lineY += LINE_HEIGHT;
-      }
+      _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, line, Ink::TEXT_DETAIL);
+      lineY += LINE_HEIGHT;
     }
 
     // ---- The verdict box ---------------------------------------------------------------------------
     //
     // Always a verdict and never a bare `A v B` (DESIGN-GUIDELINES "Copy"), and the second line
     // always says whose ships remain -- which is why the snapshot carries both sides now.
-    if (!card.verdict.empty())
+    if (layout.hasVerdict)
     {
       lineY += 4;
-      const std::vector<std::string> detail = FontRenderer::Wrap(card.verdictDetail, columns - 2);
+      const std::vector<std::string>& detail = layout.verdictDetail;
       const float boxTop = static_cast<float>(lineY) - 5.0F;
       const float boxHeight = static_cast<float>(1 + detail.size()) * static_cast<float>(LINE_HEIGHT) + 10.0F;
       _shapes.StrokeRect(TEXT_LEFT, boxTop, Frame::DIGEST_WIDTH - TEXT_LEFT - RAIL_PADDING, boxHeight, Ink::AMBER);
@@ -869,7 +973,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     }
 
     // ---- The actions -------------------------------------------------------------------------------
-    if (!card.actions.empty())
+    if (layout.hasActions)
     {
       lineY += 4;
       float buttonX = TEXT_LEFT;
@@ -937,10 +1041,33 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
       m_hits.insert(m_hits.begin() + static_cast<std::ptrdiff_t>(cardHitsBegin),
                     HitRegion{0.0F, top, Frame::DIGEST_WIDTH - 1.0F, y - top, Action::FocusEvent, card.leadEvent});
     }
+  }
 
-    if (y > Frame::SCREEN_HEIGHT)
+  // ---- The page band -------------------------------------------------------------------------------
+  //
+  // At the foot of the column, where the stack it is about ends. `1 / 3 - MORE >` is the ops-console
+  // form -- numbers first, ` - ` between facts -- and `< PREV` appears only once there is a page to
+  // go back to, so the band never offers a direction that does nothing.
+  if (paged)
+  {
+    const float bandY = Frame::SCREEN_HEIGHT - DIGEST_PAGE_HEIGHT;
+    const std::int32_t bandText = CenterTextY(bandY, DIGEST_PAGE_HEIGHT);
+    _shapes.FillRect(0.0F, bandY, Frame::DIGEST_WIDTH - 1.0F, 1.0F, Ink::DIVIDER);
+
+    if (m_digestPage > 0)
     {
-      break;
+      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), bandText, "< PREV", Ink::TEXT_MUTED);
+      AddHit(0.0F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
+             static_cast<std::int32_t>(m_digestPage) - 1);
+    }
+
+    const bool more = m_digestPage + 1 < pageStarts.size();
+    const std::string count = std::format("{} / {}", m_digestPage + 1, pageStarts.size());
+    DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, bandText, more ? count + " - MORE >" : count, Ink::TEXT_MUTED);
+    if (more)
+    {
+      AddHit(Frame::DIGEST_WIDTH * 0.5F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
+             static_cast<std::int32_t>(m_digestPage) + 1);
     }
   }
 }

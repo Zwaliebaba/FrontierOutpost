@@ -35,11 +35,18 @@ system. When no card offers a real control the standing moves go on the leading 
 `- NEED 7 MORE` (dim, inert) per ADR-053. Tapping a card focuses the system it is about; `MAP`
 focuses the system the action names.
 
+**Overflow (ADR-061).** An **actor card is collapsed** unless it is the open one: dot, title, `3
+EVENTS`, the verdict box and the whole action row, with the per-event lines behind a tap on its
+22px title band; one card is open at a time. A stack that still does not fit is **paged**, with a
+22px band at the foot of the column — `1 / 3 - MORE >`, and `< PREV` once past page one — drawn only
+when it is needed. Page breaks fall between cards; the page and the open card reset when a new
+digest arrives; the leading card, which carries the standing moves (ADR-056), is always on page 1.
+
 *Differs / not built:* no tick stamp on the right of a plain event card; no highlighted card
-variant; the actor card is always expanded; buttons that do not fit the column are dropped rather
-than wrapped; **the digest does not scroll** — cards past y=720 are cut. The handoff's four
-card-level signals (`REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE`) are the signal sheet's
-rows instead (ADR-039).
+variant; buttons that do not fit the column are dropped rather than wrapped; **nothing scrolls**
+(ADR-052 option C) — overflow is the collapse and the pages above. The handoff's four card-level
+signals (`REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE`) are the signal sheet's rows instead
+(ADR-039).
 
 **Map (centre, `MapRender.cpp`).** Per `DESIGN-GUIDELINES.md` "Map": camera, grid, stars, lanes
 with costs, routes, the sealed region, systems and fleets depth-sorted, `MAP - FOCUS: PELL`, and the

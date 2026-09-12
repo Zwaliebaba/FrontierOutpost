@@ -11,6 +11,10 @@
 namespace Lockstep
 {
 
+/// Ranked and grouped by `DigestView.h`, which this header does not include: what a card IS belongs
+/// to the digest, and all this screen needs to say is that it lays one out.
+struct DigestCard;
+
 /// The single screen of Lockstep: digest, map, locks.
 ///
 /// It is the screen a player opens once or twice a day (Design/Screens/README.md). The three
@@ -41,6 +45,15 @@ public:
   static constexpr float CARD_PADDING = 10.0F;
   /// Line-height 1.5 on an 8px font (README "Frame").
   static constexpr std::int32_t LINE_HEIGHT = 12;
+
+  /// The digest's own two bands, both 22 pixels (ADR-061).
+  ///
+  /// **22 is what a label that is also a control costs on this screen** -- it is the section header
+  /// on the locks rail, and the `SIGNALS` one has been a control since ADR-039. An actor card's
+  /// title is the first of these and the page band at the foot of the column is the second, so the
+  /// two things a player taps to see more of the digest are the same size as each other.
+  static constexpr float DIGEST_TITLE_HEIGHT = 22.0F;
+  static constexpr float DIGEST_PAGE_HEIGHT = 22.0F;
 
   /// The sheet a panel is drawn as, anchored to the bottom of the map pane (ADR-052).
   ///
@@ -80,6 +93,11 @@ public:
     /// Answer a proposal. Also an order, and it locks with the others.
     AcceptProposal,
     DeclineProposal,
+    /// Open or close one actor card's per-event lines. Its index is an `OwnerId`, because that is
+    /// what a card groups and the index a card sits at changes with the ranking.
+    ToggleActorCard,
+    /// Show one page of the digest. Its index is the page, counted from zero.
+    ShowDigestPage,
     /// Step through the last resolved tick.
     OpenReplay,
     /// Pick a destination in the open picker.
@@ -155,6 +173,18 @@ public:
     return m_panel;
   }
 
+  /// Which rival's card is open, and which page of the digest is on the screen (ADR-061). Both are
+  /// how a player is READING the digest rather than anything about the match, and both are here for
+  /// the same reason `OpenPanel` is: a control that cannot be observed cannot be pressed by a test.
+  [[nodiscard]] OwnerId ExpandedActor() const noexcept
+  {
+    return m_expandedActor;
+  }
+  [[nodiscard]] std::size_t DigestPage() const noexcept
+  {
+    return m_digestPage;
+  }
+
   /// Whether anything on this page moves on its own and so needs a frame even when nobody has
   /// touched anything.
   ///
@@ -197,6 +227,27 @@ private:
     float height;
   };
 
+  /// What one digest card takes, worked out once and used twice (ADR-061).
+  ///
+  /// **The wrap is the expensive half and the height depends on it**, so a pass that measured and
+  /// a pass that drew would wrap every line twice and could disagree about the answer. This is
+  /// computed before anything is drawn -- it is what decides which page a card falls on -- and the
+  /// draw then reads the same strings back rather than recomputing them.
+  struct CardLayout
+  {
+    /// The detail, wrapped. Empty on a collapsed actor card, which is the whole of collapsing.
+    std::vector<std::string> details;
+    /// The verdict box's second and later lines, wrapped two characters narrower for its border.
+    std::vector<std::string> verdictDetail;
+    bool hasVerdict = false;
+    bool hasActions = false;
+    /// Whether this card's title is a target that opens and closes it.
+    bool collapsible = false;
+    float height = 0.0F;
+  };
+
+  [[nodiscard]] CardLayout LayoutCard(const DigestCard& _card, std::size_t _columns) const;
+
   /// Measures the galaxy's bounding sphere, so the camera can frame it. Called once, from
   /// Create: the graph does not move between ticks.
   void MeasureContent();
@@ -236,6 +287,14 @@ private:
   /// next tap will do. It disarms on any other tap, and it is per-screen rather than per-order
   /// state: the arming is about fingers, not about what is sent.
   std::int32_t m_armedConcede = EventRefs::NONE;
+
+  /// Which rival's card is open, or `NOBODY`. **One at a time** (ADR-061): a column that can only
+  /// show one card's worth of lines should not be able to hold two open and page them apart.
+  OwnerId m_expandedActor = NOBODY;
+
+  /// Which page of the digest is on the screen, counted from zero. Reset by `Create`, because a
+  /// digest is replaced wholesale and page three of the last one is nowhere in this one.
+  std::size_t m_digestPage = 0;
 
   Panel m_panel = Panel::None;
   /// Which system's build list or which fleet's picker is open.

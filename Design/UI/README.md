@@ -69,10 +69,10 @@ The complete list, so nobody goes looking. Each item is also under its screen in
 4. **Screen 05's `WELCOME · SEAT n OF 12` dialog.** A welcome goes straight to the match; the seat
    is said on the join screen's seat line and the missed ticks by the digest header. Two dialogs the
    design did not have exist instead (WAITING FOR THE HOST, REFUSED · NOT UNDERSTOOD).
-5. **On the main page:** the locks rail's rows are not links (tapping one does nothing; only the
-   `SIGNALS` header is a control); an event card has no highlighted variant and no tick stamp on the
-   right (`T45`); an actor card does not collapse; the digest does not scroll — cards past the bottom
-   of the screen are cut, and nothing in the client scrolls (ADR-052 option C).
+5. **On the main page:** an event card has no highlighted variant and no tick stamp on the right
+   (`T45`); nothing in the client scrolls (ADR-052 option C) — a digest too tall for its column
+   collapses its actor cards and then pages, which is ADR-061 rather than a scroll. The locks rail's
+   rows became links on 2026-09-12 (ADR-060), except the `SIGNALS` section's.
 6. **On the map:** owner tags beside names (`NARTH · OKO`), the contact spotlight, a verdict label
    under a node (`T47 · YOU LOSE`), the rival's approach lane in amber, a proposed lane in amber
    (built: blue dashed), focus by actor (built: by system), and the Fallow's whole distinct
