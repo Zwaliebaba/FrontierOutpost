@@ -56,6 +56,23 @@ constexpr float HALO_SCALE = 2.4F;
 constexpr float RING_SCALE = 2.2F;
 constexpr float FLEET_HOVER = 14.0F;
 
+// ---- A fleet's route (ADR-055) -----------------------------------------------------------------
+//
+// **Dots rather than dashes, and they travel.** A route has to be distinguishable at a glance from
+// the two other lines that can run between the same two systems -- a trade lane, solid and blue,
+// and a proposed one, dashed and blue -- and it carries its owner's colour like everything else a
+// player owns, so colour alone cannot do it. What separates it is the SHAPE and the MOTION: a
+// short dot on a long gap, walking toward the destination at a steady speed in pixels, which no
+// static line on this map does.
+constexpr float ROUTE_DOT = 2.5F;
+constexpr float ROUTE_GAP = 7.5F;
+constexpr float ROUTE_THICKNESS = 2.0F;
+/// Pixels a dot travels each second. Slow enough to read as "under way" rather than as a barber's
+/// pole, and fast enough that a glance of a second sees it move.
+constexpr float ROUTE_SPEED_PIXELS_PER_SECOND = 18.0F;
+/// The route is under the fleet that flies it, not beside it.
+constexpr std::uint8_t ROUTE_ALPHA = 180;
+
 void DrawGroundCircle(ShapeRenderer& _shapes, const MapFrame& _frame, float _designX, float _designY, float _radius, const Color& _fill,
                       const Color& _outline, bool _dashed, float _height = 0.0F)
 {
@@ -328,6 +345,38 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
                  std::to_string(lane.cost), Ink::TEXT_DETAIL);
   }
 
+  // ---- Routes ----------------------------------------------------------------------------------
+  //
+  // **Where every fleet under way is GOING, drawn from origin to destination** (ADR-055). On the
+  // plane with the lanes and under everything that stands on it: a route is a fact about the
+  // ground, and one drawn over the systems would hide the two it is about.
+  //
+  // Every route, not only the viewer's. A fleet in transit is public once departed -- commitment
+  // is blind at the moment of choice and visible afterwards -- and the whole point of the rule is
+  // that a rival's committed move can be read and answered.
+  //
+  // The line is drawn origin first, and a growing offset walks the pattern toward the SECOND
+  // endpoint -- so the dots travel the way the fleet is going, which is the only direction that
+  // means anything.
+  for (const Fleet& fleet : _frame.state.fleets)
+  {
+    if (fleet.order != FleetStance::Move || fleet.from == fleet.to)
+    {
+      continue;
+    }
+
+    const Neuron::OrbitCamera::ScreenPoint origin = groundOf(fleet.from);
+    const Neuron::OrbitCamera::ScreenPoint destination = groundOf(fleet.to);
+    if (!origin.visible || !destination.visible)
+    {
+      continue;
+    }
+
+    _shapes.DashedLine(origin.xPixels, origin.yPixels, destination.xPixels, destination.yPixels,
+                       WithAlpha(OwnerColor(fleet.owner, _frame.state.viewer), ROUTE_ALPHA), ROUTE_THICKNESS, ROUTE_DOT, ROUTE_GAP,
+                       _frame.animationSeconds * ROUTE_SPEED_PIXELS_PER_SECOND);
+  }
+
   // The sealed region: everyone can see it and count down to it, which is what makes it a race
   // rather than a reward (one-pager, "Pacing devices").
   //
@@ -484,6 +533,15 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
 
   legend.push_back({"PROPOSED LANE", Ink::BLUE, true, true});
   legend.push_back({"TRADE LANE", Ink::BLUE, true, false});
+
+  // Only when there is one on the map. A legend entry for a thing nobody can see is a colour to
+  // learn for nothing, which is the rule the rival swatches above already follow (ADR-027).
+  const bool anyMoving = std::any_of(_frame.state.fleets.begin(), _frame.state.fleets.end(),
+                                     [](const Fleet& _fleet) { return _fleet.order == FleetStance::Move && _fleet.from != _fleet.to; });
+  if (anyMoving)
+  {
+    legend.push_back({"FLEET UNDER WAY", Ink::TEXT_MUTED, true, true});
+  }
 
   float legendX = paneX + 12.0F;
   const float legendY = Frame::SCREEN_HEIGHT - 20.0F;

@@ -1,6 +1,6 @@
 # ADR-042 — A restarted server resumes the match it stored, on UTC time
 
-**Status:** Accepted
+**Status:** Accepted â€” narrowed by ADR-054: resumption is `--serve`'s; a host-and-play process erases its store on exit
 
 **Date:** 2026-09-12
 **Decided by:** Owner decision, 2026-09-12, on the first finding of the codebase review

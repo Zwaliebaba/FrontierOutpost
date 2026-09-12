@@ -179,7 +179,7 @@ void ShapeRenderer::Line(float _x0Pixels, float _y0Pixels, float _x1Pixels, floa
 }
 
 void ShapeRenderer::DashedLine(float _x0Pixels, float _y0Pixels, float _x1Pixels, float _y1Pixels, const Color& _color,
-                               float _thicknessPixels, float _dashPixels, float _gapPixels)
+                               float _thicknessPixels, float _dashPixels, float _gapPixels, float _offsetPixels)
 {
   const float deltaX = _x1Pixels - _x0Pixels;
   const float deltaY = _y1Pixels - _y0Pixels;
@@ -193,14 +193,31 @@ void ShapeRenderer::DashedLine(float _x0Pixels, float _y0Pixels, float _x1Pixels
   const float stepX = deltaX / length;
   const float stepY = deltaY / length;
 
+  // The offset is taken modulo the period, so an animation driven by a clock that has been running
+  // for an hour is the same arithmetic as one that started a moment ago. Reduced first and made
+  // positive, because `fmod` keeps the sign of its left operand and a negative phase would start
+  // the walk past the first endpoint.
+  float phase = std::fmod(_offsetPixels, period);
+  if (phase < 0.0F)
+  {
+    phase += period;
+  }
+
   // Counted by dash INDEX rather than by accumulating a float, so the last dash of a long line
-  // lands where arithmetic says it should rather than where the accumulated error left it.
-  const auto dashes = static_cast<std::uint32_t>(std::ceil(length / period));
+  // lands where arithmetic says it should rather than where the accumulated error left it. The
+  // walk starts one whole period behind the first endpoint: the dash that the phase has pushed
+  // only partly onto the line is the one that makes the pattern appear to enter it.
+  const auto dashes = static_cast<std::uint32_t>(std::ceil((length + period) / period));
   for (std::uint32_t dash = 0; dash < dashes; ++dash)
   {
-    const float travelled = static_cast<float>(dash) * period;
+    const float travelled = static_cast<float>(dash) * period - period + phase;
+    const float dashStart = std::max(travelled, 0.0F);
     const float dashEnd = std::min(travelled + _dashPixels, length);
-    Line(_x0Pixels + stepX * travelled, _y0Pixels + stepY * travelled, _x0Pixels + stepX * dashEnd, _y0Pixels + stepY * dashEnd, _color,
+    if (dashEnd <= dashStart)
+    {
+      continue;
+    }
+    Line(_x0Pixels + stepX * dashStart, _y0Pixels + stepY * dashStart, _x0Pixels + stepX * dashEnd, _y0Pixels + stepY * dashEnd, _color,
          _thicknessPixels);
   }
 }

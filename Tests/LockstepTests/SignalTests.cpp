@@ -14,12 +14,14 @@
 #include "pch.h"
 #include "CppUnitTest.h"
 
+#include "MainPage.h"
 #include "SnapshotView.h"
 
 #include "BotPolicy.h"
 #include "ByteWriter.h"
 #include "MatchSimulation.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -97,6 +99,166 @@ constexpr std::uint64_t SIGNAL_SEED = 0x5349'474E'414C'5321ULL;
 }
 
 } // namespace
+
+// Where a fleet under way is drawn, and whether the page knows it has to keep drawing it (ADR-055).
+// The dots themselves are a screenshot; the fraction they run along and the request for a frame
+// are decisions, and these are them.
+TEST_CLASS(FleetRouteTests)
+{
+public:
+  /// A match in which SEAT ZERO moves too, which the shared helper deliberately does not do.
+  ///
+  /// `ViewOf` carries a fleet only when both ends of its lane are systems the viewer can see, so a
+  /// rival crossing the dark is public and undrawable. The fleet this test needs to find is the
+  /// viewer's own, and the viewer's own fleet moves only if something orders it.
+  [[nodiscard]] static std::unique_ptr<Lockstep::MatchSimulation> MatchWhereEverybodyMoves(std::int32_t _ticks)
+  {
+    Lockstep::MatchRules rules;
+    rules.playerCount = 6;
+
+    const std::vector<std::optional<Lockstep::BotPolicy>> bots(6, std::optional<Lockstep::BotPolicy>{Lockstep::BotPolicy::ExpandNear});
+    auto simulation = std::make_unique<Lockstep::MatchSimulation>(rules, SIGNAL_SEED, bots);
+    for (std::int32_t tick = 0; tick < _ticks; ++tick)
+    {
+      simulation->Resolve();
+    }
+    return simulation;
+  }
+
+  TEST_METHOD(AFleetInTransitStandsWhereItsRemainingTicksSay)
+  {
+    // Played far enough that a fleet is on a lane of more than one tick. A one-tick lane is crossed
+    // inside the tick and is never seen in transit, which is why the fixed midpoint survived as
+    // long as it did: on a two-tick lane it is the right answer.
+    bool sawOne = false;
+    for (std::int32_t ticks = 1; ticks <= 14 && !sawOne; ++ticks)
+    {
+      const auto simulation = MatchWhereEverybodyMoves(ticks);
+      const Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+      for (const Lockstep::Fleet& fleet : state.fleets)
+      {
+        if (fleet.order != Lockstep::FleetStance::Move || fleet.from == fleet.to)
+        {
+          continue;
+        }
+
+        // The lane it is on, and the ticks it has left, both read off the same state the map draws
+        // from. `progress` has to be what those two say, and nothing else.
+        std::uint32_t cost = 0;
+        for (const Lockstep::Lane& lane : state.graph.lanes)
+        {
+          if ((lane.a == fleet.from && lane.b == fleet.to) || (lane.a == fleet.to && lane.b == fleet.from))
+          {
+            cost = lane.cost;
+            break;
+          }
+        }
+        if (cost == 0)
+        {
+          continue;
+        }
+
+        const std::uint32_t left = fleet.eta - state.match.tick;
+        const float expected = static_cast<float>(cost - left) / static_cast<float>(cost);
+        Assert::AreEqual(expected, fleet.progress, 0.001F, L"a fleet is drawn somewhere other than where its remaining ticks put it");
+        Assert::IsTrue(fleet.progress > 0.0F && fleet.progress < 1.0F, L"and it is on the lane rather than at either end of it");
+        sawOne = true;
+      }
+    }
+    Assert::IsTrue(sawOne, L"fourteen ticks of six bots put nothing in transit, so this test proved nothing");
+  }
+
+  TEST_METHOD(NoTwoEventsOfferTheSameBuild)
+  {
+    // `EventKind::Economy` is the collapsed kind: a claim, a lane, a refusal and a production line
+    // all wear it. Testing it put the same `MINING STATION DOTHAN` button on every economy event in
+    // the tick, and a digest of three carried three copies of one order (ADR-057).
+    for (std::int32_t ticks = 1; ticks <= 14; ++ticks)
+    {
+      const auto simulation = MatchWhereEverybodyMoves(ticks);
+      const Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+      std::vector<std::int32_t> offered;
+      for (const Lockstep::DigestEvent& event : state.digest)
+      {
+        for (const Lockstep::EventAction& action : event.actions)
+        {
+          if (action.kind != Lockstep::EventActionKind::QueueBuild)
+          {
+            continue;
+          }
+          Assert::IsTrue(std::ranges::find(offered, action.target) == offered.end(), L"two events offered the same build row");
+          Assert::IsTrue(action.target >= 0 && action.target < static_cast<std::int32_t>(state.orders.builds.size()),
+                         L"a build button names a row that does not exist");
+          offered.push_back(action.target);
+        }
+      }
+    }
+  }
+
+  TEST_METHOD(AMapButtonNamesASystemAndNotADigestEntry)
+  {
+    // The bug this pins is an index meaning two things. MAP carries the system it points at, and it
+    // was routed to an action that read the DIGEST with it -- so the bounds check swallowed every
+    // tap whose system sat past the end of a short digest, and the button did nothing (ADR-057).
+    for (std::int32_t ticks = 1; ticks <= 14; ++ticks)
+    {
+      const auto simulation = MatchWhereEverybodyMoves(ticks);
+      const Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+      for (const Lockstep::DigestEvent& event : state.digest)
+      {
+        for (const Lockstep::EventAction& action : event.actions)
+        {
+          if (action.kind == Lockstep::EventActionKind::Focus)
+          {
+            Assert::IsTrue(action.target >= 0 && action.target < static_cast<std::int32_t>(state.graph.systems.size()),
+                           L"a MAP button names something that is not a system on this map");
+          }
+        }
+      }
+    }
+  }
+
+  TEST_METHOD(TheLeaderLineNamesSomebodyElseOrIsNotThere)
+  {
+    // ADR-056. "Public score, the leader is always visible" is about knowing who is ahead of you,
+    // so the one player it never has to name is the viewer -- the chip beside it already says
+    // `1ST / 6` and the score beside that is the same number.
+    const auto simulation = PlayedMatch(0);
+    const Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+    Assert::AreEqual(1U, state.player.placement, L"at tick zero the tiebreak puts seat zero first");
+    Assert::AreEqual(std::string{"YOU"}, state.player.leader.name, L"and the leader IS the viewer, which is what the bar must not say");
+  }
+
+  TEST_METHOD(ThePageAsksForFramesOnlyWhileSomethingIsUnderWay)
+  {
+    // The idle throttle is what this protects: a board with nothing moving must not ask the loop
+    // to redraw it sixty times a second.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState still = ViewOfSeatZero(*simulation);
+    for (Lockstep::Fleet& fleet : still.fleets)
+    {
+      fleet.order = Lockstep::FleetStance::Hold;
+    }
+
+    Lockstep::MainPage idle;
+    idle.Create(std::move(still));
+    Assert::IsFalse(idle.Animating(), L"a still board asked for frames it does not need");
+
+    Lockstep::MatchState moving = ViewOfSeatZero(*simulation);
+    Assert::IsFalse(moving.fleets.empty(), L"the opening board has a fleet");
+    moving.fleets.front().order = Lockstep::FleetStance::Move;
+    moving.fleets.front().from = 0;
+    moving.fleets.front().to = 1;
+
+    Lockstep::MainPage animated;
+    animated.Create(std::move(moving));
+    Assert::IsTrue(animated.Animating(), L"a fleet under way did not ask for a frame, so its route would not move");
+  }
+};
 
 TEST_CLASS(SignalTests)
 {

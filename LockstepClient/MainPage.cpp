@@ -248,6 +248,11 @@ std::uint32_t MainPage::TicksTo(std::int32_t _fromSystem, std::int32_t _toSystem
 
 void MainPage::Update(double _elapsedSeconds)
 {
+  // Before the lock check, and deliberately: a fleet crossing a lane is crossing it while the tick
+  // resolves, and a route that froze the moment the orders locked would say the opposite
+  // (ADR-055).
+  m_animationSeconds += static_cast<float>(_elapsedSeconds);
+
   if (m_state.orders.locked)
   {
     return;
@@ -289,6 +294,12 @@ bool MainPage::HandleDrag(const Neuron::PointerInput::Drag& _drag)
 void MainPage::AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index)
 {
   m_hits.push_back(HitRegion{_xPixels, _yPixels, _widthPixels, _heightPixels, _action, _index});
+}
+
+bool MainPage::Animating() const noexcept
+{
+  return std::ranges::any_of(m_state.fleets,
+                             [](const Fleet& _fleet) { return _fleet.order == FleetStance::Move && _fleet.from != _fleet.to; });
 }
 
 std::uint32_t MainPage::BuildShortfall(std::int32_t _index) const noexcept
@@ -334,12 +345,35 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       m_panel = Panel::None;
       return true;
     }
-    case Action::OpenSystem:
+
+    case Action::FocusSystem:
+    {
+      // Bounds-checked against the SYSTEMS, which is the array this index names.
+      if (region->index < 0 || region->index >= static_cast<std::int32_t>(m_state.graph.systems.size()))
+      {
+        return true;
+      }
       m_focusedSystem = region->index;
-      m_panel = Panel::BuildList;
-      m_panelSubject = region->index;
-      m_armedConcede = EventRefs::NONE;
+      m_panel = Panel::None;
       return true;
+    }
+    case Action::OpenSystem:
+    {
+      // **A build sheet opens on a system you HOLD, and on nothing else** (ADR-058). You cannot
+      // build on somebody else's ground -- `Match::Validate` refuses it as `NotYourSystem` -- so a
+      // sheet over a rival's capital is a list of orders that system cannot take.
+      //
+      // A rival's system still focuses, because the tap has to do something visible: a control
+      // that silently ignores you is the defect this screen has already been bitten by twice.
+      m_focusedSystem = region->index;
+      m_armedConcede = EventRefs::NONE;
+
+      const bool yours = region->index >= 0 && region->index < static_cast<std::int32_t>(m_state.graph.systems.size()) &&
+                         m_state.graph.systems[static_cast<std::size_t>(region->index)].owner == m_state.viewer;
+      m_panel = yours ? Panel::BuildList : Panel::None;
+      m_panelSubject = yours ? region->index : EventRefs::NONE;
+      return true;
+    }
 
     case Action::OpenFleet:
       m_panel = Panel::Destination;
@@ -472,7 +506,8 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text)
                        .sky = m_sky,
                        .contentCenter = m_contentCenter,
                        .contentRadius = m_contentRadius,
-                       .focusedSystem = m_focusedSystem};
+                       .focusedSystem = m_focusedSystem,
+                       .animationSeconds = m_animationSeconds};
 
   for (const MapHit& hit : Lockstep::DrawMap(_shapes, _text, frame))
   {
@@ -521,9 +556,17 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.FillRect(cursor, 13.0F, 1.0F, 22.0F, Ink::CARD_BORDER);
   cursor -= 15.0F;
 
-  const std::string leaderLine = std::format("LDR {} {}", m_state.player.leader.name, FormatScore(m_state.player.leader.score));
-  DrawRight(_text, cursor, centered, leaderLine, Ink::TEXT_MUTED);
-  cursor -= static_cast<float>(FontRenderer::MeasurePixels(leaderLine)) + 8.0F;
+  // **Only when the leader is somebody else** (ADR-056). "Public score, the leader is always
+  // visible" is the anti-snowball, and it is about knowing who is ahead of you -- so when that is
+  // you, the line says your own score back to you next to the chip that already says `1ST / 6`,
+  // and `LDR YOU 0` is three words for a fact the bar states twice over.
+  const bool someoneElseLeads = m_state.player.placement != 1 && !m_state.player.leader.name.empty();
+  if (someoneElseLeads)
+  {
+    const std::string leaderLine = std::format("LDR {} {}", m_state.player.leader.name, FormatScore(m_state.player.leader.score));
+    DrawRight(_text, cursor, centered, leaderLine, Ink::TEXT_MUTED);
+    cursor -= static_cast<float>(FontRenderer::MeasurePixels(leaderLine)) + 8.0F;
+  }
 
   const std::string placement = std::format("{} / {}", FormatPlacement(m_state.player.placement), m_state.player.playerCount);
   const float chipWidth = static_cast<float>(FontRenderer::MeasurePixels(placement)) + 14.0F;
@@ -836,7 +879,8 @@ MainPage::Action MainPage::ActionFor(EventActionKind _kind) noexcept
     return Action::DeclineProposal;
   case EventActionKind::Focus:
   default:
-    return Action::FocusEvent;
+    // MAP carries the system it points at, not the event it sits on.
+    return Action::FocusSystem;
   }
 }
 
@@ -1114,13 +1158,28 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   {
   case Panel::BuildList:
   {
+    if (m_panelSubject < 0 || m_panelSubject >= static_cast<std::int32_t>(m_state.graph.systems.size()))
+    {
+      return;
+    }
     const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(m_panelSubject)];
     title = std::format("BUILD - {}", Uppercased(node.name));
     rowAction = Action::ToggleBuild;
 
+    // **This system's buildings and nobody else's** (ADR-058). `Orders::builds` is the whole
+    // empire's list -- the rail counts it, and the digest offers from it -- so drawing it whole
+    // under a title naming ONE system offered `Shipyard - Pell` on the sheet for Dothan.
+    //
+    // `BuildRow::system` is a system id and `m_panelSubject` is a position in the view's own list,
+    // which are different numbers for the same system (ADR-057). The node carries both.
     for (std::size_t index = 0; index < m_state.orders.builds.size(); ++index)
     {
       const BuildRow& row = m_state.orders.builds[index];
+      if (row.system != node.id)
+      {
+        continue;
+      }
+
       const bool queued =
         std::ranges::find(m_state.orders.queuedBuilds, static_cast<std::int32_t>(index)) != m_state.orders.queuedBuilds.end();
 
@@ -1135,6 +1194,14 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
                                    : std::format("{} CR - NEED {} MORE", row.cost, BuildShortfall(static_cast<std::int32_t>(index)));
       rows.push_back(SheetRow{row.title, std::string{}, status, queued ? Ink::BLUE : NO_ACCENT,
                               m_state.orders.locked || !affordable ? EventRefs::NONE : static_cast<std::int32_t>(index)});
+    }
+
+    // A system with both buildings on it says so, rather than opening an empty sheet. The same
+    // bargain the signal picker makes with an empire that has nobody to talk to.
+    if (rows.empty())
+    {
+      rows.push_back(SheetRow{"NOTHING LEFT TO BUILD HERE", "It already has a shipyard and a mining station.", std::string{}, NO_ACCENT,
+                              EventRefs::NONE});
     }
     break;
   }

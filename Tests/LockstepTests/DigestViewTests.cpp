@@ -15,6 +15,7 @@
 
 #include "DigestView.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -212,6 +213,82 @@ public:
     const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(StateWith({}));
     Assert::IsTrue(cards[0].leadEvent == Lockstep::EventRefs::NONE || cards[0].leadEvent >= 0);
     Assert::IsTrue(cards[0].leadEvent < 1, L"the opening card leads with a digest entry that does not exist");
+  }
+};
+
+/// The state that put a real player in front of a screen with no controls on it: a tick whose only
+/// event is production, every held system already built, and two fleets standing (ADR-056).
+[[nodiscard]] Lockstep::MatchState QuietProductionTick()
+{
+  Lockstep::MatchState state = StateWith({Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +17")});
+  state.orders.builds.clear();
+  state.orders.availableBuilds = 0;
+
+  state.fleets.push_back(Lockstep::Fleet{.id = 1, .name = "FLT 1", .owner = 0, .ships = 14});
+  state.fleets.push_back(Lockstep::Fleet{.id = 7, .name = "FLT 7", .owner = 0, .ships = 4});
+  return state;
+}
+
+TEST_CLASS(NothingToActOnTests)
+{
+public:
+  TEST_METHOD(ATickThatReportsSomethingStillOffersAnOrder)
+  {
+    // The digest IS the order surface and the orders rail says so in as many words. A card that
+    // reports production and carries no button is the screen telling a player with two fleets and
+    // credits in hand that there is nothing to do.
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(QuietProductionTick());
+
+    Assert::AreEqual(std::size_t{1}, cards.size());
+    const bool givesAnOrder = std::any_of(cards[0].actions.begin(), cards[0].actions.end(), [](const Lockstep::EventAction& _action)
+                                          { return _action.kind != Lockstep::EventActionKind::Focus; });
+    Assert::IsTrue(givesAnOrder, L"a reported tick left the player with no control at all");
+  }
+
+  TEST_METHOD(TheStandingMovesOfferEveryStandingFleetAndNotTheFlyingOne)
+  {
+    Lockstep::MatchState state = QuietProductionTick();
+    // One of the two is already under way, and `Match::Validate` refuses a redirect.
+    state.fleets[0].order = Lockstep::FleetStance::Move;
+    state.fleets[0].from = 3;
+    state.fleets[0].to = 5;
+
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(state);
+
+    std::vector<std::int32_t> moves;
+    for (const Lockstep::EventAction& action : cards[0].actions)
+    {
+      if (action.kind == Lockstep::EventActionKind::RedirectFleet)
+      {
+        moves.push_back(action.target);
+      }
+    }
+    Assert::AreEqual(std::size_t{1}, moves.size(), L"the fleet in transit was offered a redirect the lock would refuse");
+    Assert::AreEqual(1, moves.front(), L"and it is the one still standing");
+  }
+
+  TEST_METHOD(ACardThatAlreadyOffersSomethingIsLeftAlone)
+  {
+    // The standing moves are a floor, not a second copy of every control: a card that can already
+    // be acted on keeps exactly the actions its event gave it.
+    Lockstep::MatchState state = QuietProductionTick();
+    state.digest[0].actions.push_back(
+      Lockstep::EventAction{.label = "ACCEPT", .kind = Lockstep::EventActionKind::AcceptProposal, .target = 0, .primary = true});
+
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(state);
+    Assert::AreEqual(std::size_t{1}, cards[0].actions.size(), L"the standing moves were added to a card that did not need them");
+    Assert::IsTrue(cards[0].actions.front().kind == Lockstep::EventActionKind::AcceptProposal);
+  }
+
+  TEST_METHOD(LockedOrdersOfferNothing)
+  {
+    Lockstep::MatchState state = QuietProductionTick();
+    state.orders.locked = true;
+
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(state);
+    const bool givesAnOrder = std::any_of(cards[0].actions.begin(), cards[0].actions.end(), [](const Lockstep::EventAction& _action)
+                                          { return _action.kind != Lockstep::EventActionKind::Focus; });
+    Assert::IsFalse(givesAnOrder, L"a locked tick offered an order that cannot be given");
   }
 };
 

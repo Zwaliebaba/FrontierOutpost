@@ -74,8 +74,13 @@ public:
   /// _dashPixels on, _gapPixels off, starting with a dash at the first endpoint. The pattern is
   /// walked in pixels rather than in a fraction of the length, so two dashed lanes of different
   /// lengths read as the same material.
+  ///
+  /// `_offsetPixels` slides the pattern along the line, toward the second endpoint. It is what
+  /// makes a dashed line ROLL: pass a distance that grows with time and the dashes travel while
+  /// the line itself stays put. The line is unchanged in every other way, and an offset of a whole
+  /// period draws exactly what an offset of zero draws, so the animation never accumulates.
   void DashedLine(float _x0Pixels, float _y0Pixels, float _x1Pixels, float _y1Pixels, const Color& _color, float _thicknessPixels,
-                  float _dashPixels, float _gapPixels);
+                  float _dashPixels, float _gapPixels, float _offsetPixels = 0.0F);
 
   void FillEllipse(float _centerXPixels, float _centerYPixels, float _radiusXPixels, float _radiusYPixels, const Color& _color);
 

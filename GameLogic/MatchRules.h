@@ -89,9 +89,10 @@ struct MatchRules
   /// fleet moving.
   std::uint32_t startingShips = 10;
 
-  /// Credits each player starts with. Enough for one building, so the first lock is a real choice
-  /// rather than a wait.
-  std::uint32_t startingCredits = 20;
+  /// Credits each player starts with. Enough for several buildings at once, so the first lock is a
+  /// PLAN -- what to build, where, and what to keep back for a lane -- rather than the single
+  /// affordable move (ADR-055). At one building it was a choice with one option in it.
+  std::uint32_t startingCredits = 100;
 
   // ---- Production (resolution phase 2) ---------------------------------------------------------
   //

@@ -61,8 +61,12 @@ public:
   enum class Action : std::uint8_t
   {
     None,
-    /// Focus the map on what this digest event is about.
+    /// Focus the map on what this digest event is about. Its index is a DIGEST index.
     FocusEvent,
+    /// Focus the map on one system. Its index is a SYSTEM position, which is why it is not
+    /// `FocusEvent` (ADR-057): one action carrying two kinds of index is an action that reads the
+    /// wrong array, and the bounds check turned that into a button that did nothing at all.
+    FocusSystem,
     /// Open a system's build list.
     OpenSystem,
     /// Open a fleet's destination picker, lane-constrained.
@@ -142,6 +146,15 @@ public:
   {
     return m_panel;
   }
+
+  /// Whether anything on this page moves on its own and so needs a frame even when nobody has
+  /// touched anything.
+  ///
+  /// **The idle throttle is what this exists for.** The loop sleeps rather than redrawing when
+  /// nothing has changed, which is right for a board where the only moving thing is a countdown
+  /// that ticks once a second -- and wrong for a fleet whose route is animated. Asked rather than
+  /// assumed, so a map with nothing in transit still costs nothing to sit in front of.
+  [[nodiscard]] bool Animating() const noexcept;
   [[nodiscard]] std::int32_t FocusedSystem() const noexcept
   {
     return m_focusedSystem;
@@ -207,6 +220,11 @@ private:
 
   /// The camera looking at the galaxy, and the ground plane it orbits (ADR-017).
   MapView m_mapView;
+
+  /// How long this page has been on the screen. It drives the rolling dashes on a fleet's route
+  /// and nothing else (ADR-055), and it runs whether or not the orders are locked: a fleet under
+  /// way is under way while the tick resolves.
+  float m_animationSeconds = 0.0F;
 
   /// The sky. Built once and never changed: it is the same stars from every angle, which is what
   /// makes turning the map feel like turning rather than like sliding a backdrop (ADR-032).

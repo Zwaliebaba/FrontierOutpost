@@ -37,11 +37,22 @@ namespace
 
 /// What a player can do when the digest has nothing to act on.
 ///
-/// The standing moves: start a building, and send the fleet somewhere. They are the same actions
-/// the events carry mid-match -- this is not a second way to give an order, it is the same way with
-/// nothing yet to hang it on.
-[[nodiscard]] std::vector<EventAction> OpeningActions(const MatchState& _state)
+/// The standing moves: start a building, and send a fleet somewhere. They are the same actions the
+/// events carry mid-match -- this is not a second way to give an order, it is the same way with
+/// nothing to hang it on.
+///
+/// **Not only at the opening** (ADR-056). A tick can resolve, be reported, and carry nothing to
+/// act on: a production line with every held system already built is the common one, and it leaves
+/// a digest of one card and no buttons while the player still has fleets standing and credits in
+/// hand. The orders rail says "Change it from the digest", so a digest with no control on it is
+/// the screen saying there is nothing to do when there is.
+[[nodiscard]] std::vector<EventAction> StandingMoves(const MatchState& _state)
 {
+  /// Two fleets' worth, because the digest column fits about that many buttons beside a build and
+  /// a player with six fleets does not need six of them here -- the map is where a fleet is picked
+  /// when the choice is which fleet.
+  constexpr std::size_t MOST_FLEETS_OFFERED = 2;
+
   std::vector<EventAction> actions;
 
   if (!_state.orders.builds.empty())
@@ -53,14 +64,27 @@ namespace
                                   .primary = true});
   }
 
-  for (std::size_t index = 0; index < _state.fleets.size(); ++index)
+  std::size_t offered = 0;
+  for (std::size_t index = 0; index < _state.fleets.size() && offered < MOST_FLEETS_OFFERED; ++index)
   {
-    if (_state.fleets[index].owner == _state.viewer)
+    const Fleet& fleet = _state.fleets[index];
+    if (fleet.owner != _state.viewer)
     {
-      actions.push_back(EventAction{
-        .label = "MOVE " + _state.fleets[index].name, .kind = EventActionKind::RedirectFleet, .target = static_cast<std::int32_t>(index)});
-      break;
+      continue;
     }
+
+    // A fleet already under way is not redirectable -- `Match::Validate` refuses it, and a button
+    // whose order the lock is certain to refuse is the thing ADR-053 took off this screen.
+    if (fleet.order == FleetStance::Move && fleet.from != fleet.to)
+    {
+      continue;
+    }
+
+    actions.push_back(EventAction{.label = "MOVE " + fleet.name,
+                                  .kind = EventActionKind::RedirectFleet,
+                                  .target = static_cast<std::int32_t>(index),
+                                  .primary = actions.empty()});
+    ++offered;
   }
   return actions;
 }
@@ -108,7 +132,7 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
                            : "Nothing you could see changed. Systems you have not scouted may have.");
     if (!_state.orders.locked)
     {
-      card.actions = OpeningActions(_state);
+      card.actions = StandingMoves(_state);
     }
     return {card};
   }
@@ -211,6 +235,24 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
   // the severity ADR-020 carried, and the better tiebreak than anything decided here.
   std::ranges::stable_sort(cards,
                            [](const DigestCard& _a, const DigestCard& _b) { return ConsequenceRank(_a.kind) < ConsequenceRank(_b.kind); });
+
+  // ---- A digest that reports something but offers nothing ------------------------------------------
+  //
+  // **Nothing to act on is not the same as nothing to do** (ADR-056). FOCUS does not count: it
+  // moves the eye and gives no order, so a card carrying only a MAP button is still a card the
+  // player cannot do anything with. When no card offers a real control the standing moves go on
+  // the leading one, which is where the eye already is.
+  const bool anythingToActOn = std::ranges::any_of(
+    cards, [](const DigestCard& _card)
+    { return std::ranges::any_of(_card.actions, [](const EventAction& _action) { return _action.kind != EventActionKind::Focus; }); });
+  if (!anythingToActOn && !cards.empty() && !_state.orders.locked)
+  {
+    // In front of whatever the card already carried, which is a MAP button at most: the control
+    // that gives an order comes before the one that only looks at something.
+    const std::vector<EventAction> standing = StandingMoves(_state);
+    cards.front().actions.insert(cards.front().actions.begin(), standing.begin(), standing.end());
+  }
+
   return cards;
 }
 

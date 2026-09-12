@@ -49,6 +49,12 @@ struct MapFrame
 
   /// The system the digest last pointed at, drawn with a spotlight. `EventRefs::NONE` for none.
   std::int32_t focusedSystem = EventRefs::NONE;
+
+  /// A clock for the one thing on this map that moves on its own: the dashes travelling along a
+  /// fleet's route (ADR-055). Seconds since the page was created, and nothing reads it but the
+  /// dash offset -- a map drawn twice at the same value is identical, which is what keeps a
+  /// screenshot test meaningful.
+  float animationSeconds = 0.0F;
 };
 
 /// Draws the galaxy, and returns what can be tapped in it.

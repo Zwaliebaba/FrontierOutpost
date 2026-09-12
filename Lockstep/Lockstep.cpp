@@ -868,6 +868,23 @@ int RunGame(HWND _window, const Startup& _startup)
   // game, and it cannot be anything else: how many are playing is not knowable until they have
   // arrived, and the galaxy cannot be generated until it is known. So the server listens first and
   // the match is created later, on the same thread, from a seed and a struct of numbers.
+  // **A local game does not outlive its window** (ADR-054). The store a host-and-play process
+  // writes is erased when the process ends, so a restart is a new match; only `--serve` resumes
+  // (ADR-042). Declared BEFORE the server so it is destroyed AFTER it: the server's thread has to
+  // have joined before the file it writes at every lock is removed from under it. The path is
+  // held already widened, so the destructor allocates nothing and cannot throw.
+  struct LocalStoreEraser
+  {
+    std::wstring path;
+    ~LocalStoreEraser()
+    {
+      if (!path.empty())
+      {
+        (void)_wremove(path.c_str());
+      }
+    }
+  } localStore;
+
   std::unique_ptr<Lockstep::HostedServer> hosted;
   std::vector<std::string> seatTokens;
   std::string hostToken = _startup.token;
@@ -878,23 +895,14 @@ int RunGame(HWND _window, const Startup& _startup)
     const std::string& storePath = paths.store;
     const std::string& logPath = paths.log;
 
-    // A match already in the store resumes, with the seats it was played with (ADR-042). The host
-    // takes the first stored seat unless the command line named one; there is no seats screen to
-    // choose from, because the seats were chosen when the match began.
-    if (std::optional<Neuron::MatchStore::Contents> stored = LoadStoredMatch(storePath))
-    {
-      if (!_startup.tokenGiven && !stored->tokens.empty())
-      {
-        hostToken = stored->tokens.front();
-      }
-      hosted = std::make_unique<Lockstep::HostedServer>(_startup.port, std::move(*stored), storePath, logPath);
-    }
-    else
-    {
-      seatTokens = Lockstep::GenerateSeatTokens(Lockstep::SeatsPage::SEAT_COUNT);
-      hostToken = seatTokens.front();
-      hosted = std::make_unique<Lockstep::HostedServer>(_startup.port, seatTokens, storePath, logPath);
-    }
+    // Whatever a previous process left behind -- a crash, a kill -- is not resumed either; the
+    // rule is that a local game starts fresh, not that it is tidy on exit (ADR-054).
+    localStore.path = Neuron::Utf8ToWide(storePath);
+    (void)_wremove(localStore.path.c_str());
+
+    seatTokens = Lockstep::GenerateSeatTokens(Lockstep::SeatsPage::SEAT_COUNT);
+    hostToken = seatTokens.front();
+    hosted = std::make_unique<Lockstep::HostedServer>(_startup.port, seatTokens, storePath, logPath);
 
     // The lobby has to be listening before there is any point drawing a screen that asks people to
     // join it. A port that could not be bound is a fatal here, where the composition root turns it
@@ -1289,6 +1297,14 @@ int RunGame(HWND _window, const Startup& _startup)
     {
       redraw = true;
       drawnSecond = second;
+    }
+
+    // A fleet's route is animated, and an animation needs a frame nobody asked for (ADR-055). The
+    // page is asked rather than assumed: a board with nothing in transit still falls through to
+    // the sleep below, which is what the idle throttle is for.
+    if (page.Animating())
+    {
+      redraw = true;
     }
 
     if (!redraw)

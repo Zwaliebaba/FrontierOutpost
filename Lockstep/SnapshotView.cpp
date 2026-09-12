@@ -393,7 +393,26 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     entry.from = from;
     entry.to = to;
     entry.order = moving ? FleetStance::Move : FleetStance::Hold;
-    entry.progress = moving ? 0.5F : 0.0F;
+
+    // **How far along the lane it actually is** (ADR-055), from two numbers already on the wire:
+    // the lane's cost and the ticks left. Departure sets the remaining ticks to the whole cost and
+    // spends one immediately, so a fleet visible in transit has between one tick and cost-minus-one
+    // left, and `(cost - left) / cost` is where it stands. A fixed midpoint was right only for the
+    // two-tick lane and put a three-tick fleet in the wrong place twice.
+    std::uint32_t costTicks = 0;
+    for (const SnapshotLane& lane : _snapshot.Lanes())
+    {
+      const bool joins =
+        (positionOf(lane.a) == from && positionOf(lane.b) == to) || (positionOf(lane.a) == to && positionOf(lane.b) == from);
+      if (joins)
+      {
+        costTicks = lane.costTicks;
+        break;
+      }
+    }
+    entry.progress = moving && costTicks > 0 && fleet.ticksRemaining < costTicks
+                       ? static_cast<float>(costTicks - fleet.ticksRemaining) / static_cast<float>(costTicks)
+                       : (moving ? 0.5F : 0.0F);
     entry.eta = _snapshot.Tick() + fleet.ticksRemaining;
     entry.preview = fleet.preview;
     entry.name = std::format("FLT {}", fleet.id.Index() + 1);
@@ -482,6 +501,9 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
   // nothing is worse than a missing one, and the four the design asks for that are not here --
   // REBUILD LANE, PLAN ROUTE, WITHDRAW, HOLD FIRE -- are all outgoing signals, which nothing in
   // this state can express yet.
+  /// Which build rows the digest has already put a button on, so no two cards offer the same one.
+  std::vector<std::int32_t> offeredBuilds;
+
   for (const DigestEntry& entry : _digest)
   {
     DigestEvent event{.kind = ColorOf(entry.kind),
@@ -525,14 +547,49 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
       }
     }
 
-    if (event.kind == EventKind::Economy && !state.orders.builds.empty())
+    // **A build is offered on the event that would make a player want it, and never twice**
+    // (ADR-057). `EventKind::Economy` is the COLLAPSED kind -- a claim, a lane and a production
+    // line all wear it -- so testing it put the same button on every one of them, and a digest of
+    // three economy events carried three copies of `MINING STATION DOTHAN`.
+    //
+    // A claimed system offers a building AT THAT SYSTEM, which is the order the event causes. A
+    // production line offers whatever is still unoffered, which is what the credits are for.
+    std::int32_t offeredRow = EventRefs::NONE;
+    const auto unoffered = [&offeredBuilds](std::int32_t _row) { return std::ranges::find(offeredBuilds, _row) == offeredBuilds.end(); };
+
+    if (entry.kind == DigestKind::SystemClaimed && event.refs.system != EventRefs::NONE)
+    {
+      for (std::size_t row = 0; row < state.orders.builds.size(); ++row)
+      {
+        const std::int32_t at = positionOf(SystemId{state.orders.builds[row].system});
+        if (at == event.refs.system && unoffered(static_cast<std::int32_t>(row)))
+        {
+          offeredRow = static_cast<std::int32_t>(row);
+          break;
+        }
+      }
+    }
+    else if (entry.kind == DigestKind::Economy)
+    {
+      for (std::size_t row = 0; row < state.orders.builds.size(); ++row)
+      {
+        if (unoffered(static_cast<std::int32_t>(row)))
+        {
+          offeredRow = static_cast<std::int32_t>(row);
+          break;
+        }
+      }
+    }
+
+    if (offeredRow != EventRefs::NONE)
     {
       // `SHIPYARD JANDAL 20 CR`: the price is on the button (ADR-053).
-      const BuildRow& offered = state.orders.builds.front();
+      const BuildRow& offered = state.orders.builds[static_cast<std::size_t>(offeredRow)];
       event.actions.push_back(EventAction{.label = std::format("{} {} CR", Shortened(offered.title), offered.cost),
                                           .kind = EventActionKind::QueueBuild,
-                                          .target = 0,
+                                          .target = offeredRow,
                                           .primary = true});
+      offeredBuilds.push_back(offeredRow);
     }
 
     if (event.refs.system != EventRefs::NONE)

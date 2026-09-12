@@ -287,15 +287,16 @@ public:
   // binary, which cannot see a compiler, a standard library or a configuration disagreeing about
   // the same sum. This pins the number.
   //
-  // **The pinned value was computed with clang 18 and libstdc++ 13 on Linux, on 2026-09-12**, by
-  // compiling `GameLogic` against a shim of the Windows headers and playing this same match. MSVC
-  // Debug and Release must both agree with it. If this fails and nothing in `GameLogic` was meant
-  // to change a rule, the failure IS the finding: two toolchains disagree about an integer
+  // **The value is pinned under MSVC, Debug and Release, and both agree** (re-pinned 2026-09-12
+  // when ADR-055 raised `startingCredits`; the value before it was computed with clang 18 and
+  // libstdc++ 13 on Linux and agreed with both MSVC configurations, which is the evidence that
+  // this simulation does not depend on a toolchain). If this fails and nothing in `GameLogic` was
+  // meant to change a rule, the failure IS the finding: two builds disagree about an integer
   // simulation, which means undefined or unspecified behavior somewhere in it. If a rule was meant
   // to change, re-pin -- and know that every stored match is now unloadable (ADR-024).
   TEST_METHOD(TheWholeMatchHashIsPinnedAcrossToolchains)
   {
-    constexpr std::uint64_t PINNED_HASH = 0x7BA43C4BB0F0125FULL;
+    constexpr std::uint64_t PINNED_HASH = 0xC204BAED2104E2E7ULL;
     constexpr std::uint64_t PINNED_SEED = 0xC7920238303AD5D8ULL;
 
     const Played played = PlayAMatch(false);

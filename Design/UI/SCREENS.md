@@ -13,10 +13,16 @@ Header `SINCE YOU LOOKED · T43 > T46` + chip `3 TICKS`; four-cell delta box. Th
 6. red `SORNE SILENT 4 TICKS` — WITHDRAW · HOLD FIRE >
 Rows: 6px vertical padding; must fit 720 with all six visible at reference data. Overflow scrolls.
 
-**Map (centre):** per guidelines; focus = Halvorsen; legend YOU / LANE / PROPOSED / FALLOW.
+**Map (centre):** per guidelines; focus = Halvorsen; legend YOU / LANE / PROPOSED / FALLOW, and `FLEET UNDER WAY` while anything is in transit.
+
+**A fleet's route (ADR-055).** Every fleet under way draws a line of travelling dots from its origin to its destination, in its owner's colour, on the plane with the lanes. The dots walk toward the destination; the marker sits at the fraction of the lane the fleet's remaining ticks put it at. It is the only thing on the map that moves on its own.
 
 **Locks (260px, right) — read-only summary of what goes in.**
 `LOCKS T47` / `UNLOCKED` (amber). One line of help. Sections FLEETS · BUILDS · SIGNALS · PROPOSALS, each row label + status. Footer `ALL LOCK TOGETHER · 02:14:09`. Tapping a row jumps to the event that owns it; no controls live here.
+
+**One order per event (ADR-057).** A build button is offered on the event that would make you want it and never on two cards at once: a claimed system offers a building at *that* system, a production line offers whatever is still unoffered. `MAP` focuses the system the event is about.
+
+**Always one control (ADR-056).** The top bar's `LDR` field is drawn only when the leader is somebody else; while you lead, the `1ST / 6` chip and the score beside it already say it. A digest card that offers nothing to act on gets the standing moves - a priced BUILD and up to two `MOVE <fleet>` buttons for fleets that are not already under way - so a quiet tick is never a screen with no way to give an order.
 
 **The price is on the button (ADR-053).** The top bar carries the purse (`26 CR`) beside the score. The BUILDS header reads `2 AVAIL - 26 CR`, a queued row reads `QUEUED -20`, and a line under the queue says what is left at the lock. Every build control — the digest's filled button (`SHIPYARD JANDAL 20 CR`), the build sheet's rows (`20 CR`) — carries its price; a queued one says `QUEUED` and is outlined rather than filled; one the purse cannot cover says `NEED 7 MORE`, is drawn dim, and is not a target. A refusal in the digest names the building, the system, the price and the purse (`Shipyard at Jandal - costs 20, you had 13`) and focuses the system.
 
