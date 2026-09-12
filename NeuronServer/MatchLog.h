@@ -47,7 +47,9 @@ public:
   void Write(const std::vector<std::string>& _lines);
 
 private:
+  /// UTF-8, as every path in this tree is; the wide copy is what the CRT is handed, converted once.
   std::string m_path;
+  std::wstring m_widePath;
   bool m_open = false;
   bool m_complained = false;
 };

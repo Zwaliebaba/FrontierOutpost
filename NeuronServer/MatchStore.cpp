@@ -142,11 +142,15 @@ MatchStore::Problem MatchStore::Decode(std::span<const std::uint8_t> _bytes, Con
 bool MatchStore::Save(const std::string& _path, const Contents& _contents)
 {
   const std::vector<std::uint8_t> bytes = Encode(_contents);
-  const std::string temporary = _path + ".writing";
+
+  // Paths are UTF-8 in this tree and the CRT's narrow file functions take the system code page, so
+  // the conversion happens here, once, at the one place a path meets the filesystem.
+  const std::wstring path = Utf8ToWide(_path);
+  const std::wstring temporary = path + L".writing";
 
   {
     std::FILE* file = nullptr;
-    if (fopen_s(&file, temporary.c_str(), "wb") != 0 || file == nullptr)
+    if (_wfopen_s(&file, temporary.c_str(), L"wb") != 0 || file == nullptr)
     {
       return false;
     }
@@ -157,7 +161,7 @@ bool MatchStore::Save(const std::string& _path, const Contents& _contents)
 
     if (written != bytes.size() || !flushed || !closed)
     {
-      std::remove(temporary.c_str());
+      (void)_wremove(temporary.c_str());
       return false;
     }
   }
@@ -165,10 +169,10 @@ bool MatchStore::Save(const std::string& _path, const Contents& _contents)
   // Rename over the target. A process that dies before this line leaves the previous store whole;
   // one that dies after it leaves the new one whole. There is no instant at which the file on disk
   // is half of either.
-  std::remove(_path.c_str());
-  if (std::rename(temporary.c_str(), _path.c_str()) != 0)
+  (void)_wremove(path.c_str());
+  if (_wrename(temporary.c_str(), path.c_str()) != 0)
   {
-    std::remove(temporary.c_str());
+    (void)_wremove(temporary.c_str());
     return false;
   }
   return true;
@@ -177,7 +181,7 @@ bool MatchStore::Save(const std::string& _path, const Contents& _contents)
 MatchStore::Problem MatchStore::Load(const std::string& _path, Contents& _outContents)
 {
   std::FILE* file = nullptr;
-  if (fopen_s(&file, _path.c_str(), "rb") != 0 || file == nullptr)
+  if (_wfopen_s(&file, Utf8ToWide(_path).c_str(), L"rb") != 0 || file == nullptr)
   {
     return Problem::NotFound;
   }

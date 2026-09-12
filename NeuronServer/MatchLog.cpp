@@ -33,8 +33,9 @@ MatchLog::MatchLog(std::string _path)
   // Opened once to prove it can be, then closed. Each write reopens: a file handle held for three
   // weeks is a file nobody can move, copy or read while the match is running, and reading the log
   // mid-match is exactly what somebody watching a Phase 0 run wants to do.
+  m_widePath = Utf8ToWide(m_path);
   std::FILE* file = nullptr;
-  if (fopen_s(&file, m_path.c_str(), "ab") == 0 && file != nullptr)
+  if (_wfopen_s(&file, m_widePath.c_str(), L"ab") == 0 && file != nullptr)
   {
     m_open = true;
     (void)std::fclose(file);
@@ -49,7 +50,7 @@ void MatchLog::Write(const std::string& _line)
   }
 
   std::FILE* file = nullptr;
-  if (fopen_s(&file, m_path.c_str(), "ab") != 0 || file == nullptr)
+  if (_wfopen_s(&file, m_widePath.c_str(), L"ab") != 0 || file == nullptr)
   {
     if (!m_complained)
     {

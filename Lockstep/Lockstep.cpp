@@ -138,20 +138,16 @@ struct Startup
     return _name;
   }
 
-  std::wstring path{module, length};
+  const std::wstring_view path{module, length};
   const std::size_t slash = path.find_last_of(L'\\');
-  if (slash == std::wstring::npos)
+  if (slash == std::wstring_view::npos)
   {
     return _name;
   }
 
-  std::string folder;
-  folder.reserve(slash + 1);
-  for (std::size_t index = 0; index <= slash; ++index)
-  {
-    folder.push_back(path[index] < 128 ? static_cast<char>(path[index]) : '?');
-  }
-  return folder + _name;
+  // UTF-8, like every path in this tree, and opened wide again at the file (MatchStore, MatchLog).
+  // A folder with a diacritic in its name is an ordinary place for an executable to sit.
+  return Neuron::WideToUtf8(path.substr(0, slash + 1)) + _name;
 }
 
 /// `--serve [port]`, `--join <host[:port]>`, `--token <token>`, `--phase0`, `--tick <seconds>`,
@@ -709,6 +705,19 @@ int RunGame(HWND _window, const Startup& _startup)
 
     hosted = std::make_unique<Lockstep::HostedServer>(_startup.port, seatTokens, BesideTheExecutable("lockstep-match.store"),
                                                       BesideTheExecutable("lockstep-match.log"));
+
+    // The lobby has to be listening before there is any point drawing a screen that asks people to
+    // join it. A port that could not be bound is a fatal here, where the composition root turns it
+    // into a message box, rather than a join screen that says "no answer" about the host's own
+    // machine.
+    for (std::int32_t attempt = 0; attempt < 200 && !hosted->Listening() && !hosted->Failed(); ++attempt)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    if (hosted->Failed())
+    {
+      Neuron::Fatal("{}", hosted->Failure());
+    }
   }
 
   // ---- Screen 03, unless the command line already answered it ----------------------------------
@@ -1096,6 +1105,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
       for (const std::string& line : hosted->TakeLog())
       {
         Neuron::DebugTrace("{}\n", line);
+      }
+
+      // A server thread that has stopped on a fatal has already written why to the match log. What
+      // is left is to not sit here forever looking alive: the process ends, with a failing exit
+      // code, so whatever started it can see that it did.
+      if (hosted->Failed())
+      {
+        Neuron::DebugTrace("{}\n", hosted->Failure());
+        return EXIT_FAILURE;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
