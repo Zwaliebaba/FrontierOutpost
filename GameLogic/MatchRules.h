@@ -219,17 +219,13 @@ struct MatchRules
 /// here; the region opens at five-sevenths of the way through and stays there. Phase 0 is for
 /// tuning these, and a tuner needs a starting point that means the same thing at both lengths.
 ///
-/// *A third, not a quarter* -- 28 of 84 ticks. This comment said a quarter and the code below
-/// agreed with the comment rather than with the default it was scaling, which is the failure mode
-/// a derived constant has: it looks right and is off by a third.
-///
 /// **`custodianAbsenceTicks` scales by the clock and not by the match, and that is the one
 /// exception.** The other three are fractions of a match because they are about how far through the
 /// game you are. Absence is not: it is about how long a person has been away from their life, and
 /// three ticks means eighteen hours at the authored interval and three hours at this one. Left
-/// alone it says a player who sleeps has stopped playing -- which a compressed rehearsal showed
-/// directly, with every one of six players a custodian by T3 and every final score zero, because a
-/// first-week custodian forfeits and never recovers. Eighteen ticks is the same eighteen hours.
+/// alone it says a player who sleeps has stopped playing: every seat a custodian by T3 and every
+/// score forfeited (`Design/Plans/4X-02-ServerAndClient.md` §6). Eighteen ticks is the same
+/// eighteen hours.
 [[nodiscard]] constexpr MatchRules PhaseZeroRules() noexcept
 {
   MatchRules rules;

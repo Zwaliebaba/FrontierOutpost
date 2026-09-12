@@ -378,7 +378,7 @@ void MatchSimulation::RecordEvents()
         else
         {
           // The one Custodian entry with no subject is the returning player's own "you are back",
-          // which is the opposite event and was previously logged as another entry into custody.
+          // which is the opposite event.
           m_events.push_back(std::format("T{} custodian-ended player={}", tick, player));
         }
         break;

@@ -13,8 +13,8 @@
 // same number of times from the same start land in the same place on any machine, and it is a
 // property of the code rather than of what this header includes.
 //
-// WHAT IT DOES CHANGE. Every translation unit in this library now parses <windows.h> and
-// <WinSock2.h>, which it did not before 2026-09-10. GameLogic contains no platform code and needs
+// WHAT IT DOES CHANGE. Every translation unit in this library parses <windows.h> and
+// <WinSock2.h>. GameLogic contains no platform code and needs
 // none of that surface; the include is here for uniformity across the four libraries rather than
 // because anything in the simulation asks for it. Design/Reference/mobile-portability.md 3 is the
 // place that says what that costs.

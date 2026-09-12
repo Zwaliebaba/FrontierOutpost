@@ -1434,7 +1434,7 @@ Match TickResolver::Reckon(const Match& _in, TickLog& _log)
   //
   // ADR-022. The pass itself lives on `Match`, because `Create` needs it too -- a match at tick zero
   // is a state a client can be shown, and a player whose own capital was hidden would open the game
-  // to a blank map. Running it only here meant exactly that, until 2026-09-11.
+  // to a blank map.
   next.RecomputeVisibility();
 
   return next;

@@ -28,11 +28,9 @@ namespace Lockstep
 
 /// Who owns a thing: a player index, or `NOBODY`.
 ///
-/// It was a four-value enum -- You, Halvorsen, Sorne, Neutral -- until 2026-09-11, which was right
-/// for the design reference's three-empire drawing and wrong for a match of six to twelve. The
-/// thing an enum could not express is that **"you" is relative to the viewer**: the same system is
-/// blue on one player's screen and somebody else's colour on another's, and with the answer baked
-/// into the state there was nowhere for that to live (ADR-027).
+/// Not an enum of named empires: **"you" is relative to the viewer** -- the same system is blue on
+/// one player's screen and somebody else's colour on another's -- and a match has six to twelve of
+/// them, so the answer cannot be baked into the state (ADR-027).
 using OwnerId = std::int32_t;
 
 inline constexpr OwnerId NOBODY = -1;

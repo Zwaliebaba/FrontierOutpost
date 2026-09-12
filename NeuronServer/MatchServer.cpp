@@ -276,8 +276,7 @@ void MatchServer::Handle(Connection& _connection, std::span<const std::uint8_t> 
     //
     // **The tick these would go into will never resolve**, so accepting them is a promise the
     // server cannot keep, and counting them corrupts H4 -- which is the share of sessions that
-    // included an edit while the game was still a game. A rehearsal found this by tapping after a
-    // dominance ending and watching the edit counter climb into a tick that no longer existed.
+    // included an edit while the game was still a game.
     //
     // Logged once per connection rather than per tap, because a player who keeps tapping at a
     // finished match is one fact about that session, not twenty. The client learns the match is

@@ -7,11 +7,8 @@ namespace Neuron
 ///
 /// R8: a public aggregate handed to the GPU, so plain fields and brace initialization.
 ///
-/// There is no palette and no index. Until 2026-09-10 every pass in this renderer wrote a 4-bit
-/// index into an R8_UINT target and one resolve pass looked it up in a 16-entry table; ADR-011
-/// replaced that with a color the passes write directly. What survives is the TABLE OF NAMES
-/// below -- the game still refers to its colors by name rather than by literal -- and what went
-/// is the limit of sixteen.
+/// There is no palette and no index (ADR-011): every pass writes a color directly. What the game
+/// keeps is the TABLE OF NAMES below -- it refers to its colors by name rather than by literal.
 struct Color
 {
   std::uint8_t red;
@@ -46,11 +43,10 @@ inline constexpr std::uint8_t OPAQUE_ALPHA = 0xFF;
 
 /// The colors this game refers to by name.
 ///
-/// The values are the EGA default 16, which is where this game started and which is a good
-/// starting set rather than a constraint any more: the framebuffer holds any of 2^24 colors, so
-/// a seventeenth name is a line in this file and nothing else (ADR-011). The pairing that made
-/// index n and index n+8 the shaded and lit tone of one hue is now written out explicitly, as a
-/// ColorPair per material, because with no index there is no arithmetic left to imply it.
+/// The values are the EGA default 16, a starting set rather than a constraint: the framebuffer
+/// holds any of 2^24 colors, so a seventeenth name is a line in this file and nothing else
+/// (ADR-011). The shaded and lit tone of one hue are paired explicitly, as a ColorPair per
+/// material, because with no index there is no arithmetic to imply the pairing.
 ///
 /// Pinned value-by-value by NeuronClientTests: these are the numbers every pixel on the screen is
 /// one of, and a typo in one of them is a bug nobody would spot by looking at the screen.

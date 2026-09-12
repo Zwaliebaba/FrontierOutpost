@@ -31,10 +31,9 @@ public:
   /// Fixed 1280x720, and the three-column grid inside it. Every number below is from
   /// Design/UI/DESIGN-GUIDELINES.md "Frame": rows `44 | fill`, columns `400 | fill | 260`.
   ///
-  /// **The digest got a hundred pixels and the right rail lost seventy, and that is the whole
-  /// redesign in two numbers.** The digest is now where orders are given -- every event carries
-  /// its own actions -- and the right rail is a read-only summary of what goes in at the lock. It
-  /// needs the width for buttons; the rail no longer does, because it has no controls.
+  /// **The digest is where orders are given** -- every event carries its own actions -- so it needs
+  /// the width for buttons; the right rail is a read-only summary of what goes in at the lock and
+  /// has no controls (ADR-034).
   static constexpr float TOP_BAR_HEIGHT = 44.0F;
   static constexpr float DIGEST_WIDTH = 400.0F;
   static constexpr float ORDERS_WIDTH = 260.0F;

@@ -1,12 +1,8 @@
 // Lockstep.cpp -- process entry point, and the composition root of the main page.
 //
-// WHAT THIS EXECUTABLE SHOWS, as of 2026-09-11, is the ops console in Design/Screens: digest, map,
-// orders. It used to show the MVP-01 isometric ship scene, and that code -- MeshRenderer,
-// IsometricCamera, ShipMesh, StationMesh, ShipView, World and the old parallax Starfield -- was
-// DELETED with the screen it served (ADR-015). This comment said it was "still in the tree and
-// still built and tested" for a day after it was gone, which sent somebody looking for a starfield
-// that no longer existed; the one in `NeuronClient/Starfield` today is a different thing at the
-// same name (ADR-032).
+// What this executable shows is the ops console in Design/UI: digest, map, orders. The sky it
+// draws is `NeuronClient/Starfield`, the sphere of directions of ADR-032, and nothing of the
+// MVP-01 ship scene ADR-015 deleted remains in the tree.
 //
 // This is the wizard's wWinMain reduced to what the game actually needs: one fixed-size,
 // non-resizable window, no menu and no About dialog. The window is the presentation target
@@ -107,8 +103,8 @@ struct Startup
   /// `--bots <n>` puts bots in the LAST n seats of a `--serve` match.
   ///
   /// **Without it the headless runner runs a match nobody plays.** `--serve` listens and ticks on
-  /// schedule whether or not anybody connects, so a Phase 0 rehearsal with no clients was six
-  /// absent players going into custody -- a match that resolves and proves nothing. `--serve
+  /// schedule whether or not anybody connects, so a headless run with no clients is six absent
+  /// players going into custody -- a match that resolves and proves nothing. `--serve
   /// --phase0 --tick 3 --bots 6` is a whole match, played, in under three minutes, and the
   /// instrumentation log (ADR-030) is the output.
   ///
@@ -792,13 +788,13 @@ int RunGame(HWND _window, const Startup& _startup)
   //
   // `--join host:port --token x` names a server and a seat, which is exactly what the join screen
   // asks for, so a client given both goes straight to the match. Everything else -- including the
-  // host's own client -- starts here, because the host needs a seat too and until now took player
-  // zero by being first through the door (ADR-029's first open question).
+  // host's own client -- starts here, because the host needs a seat too (ADR-029's first open
+  // question, closed by ADR-036).
   //
   // **A `--join` that cannot reach anything falls through to the screen rather than to a message
-  // box.** It used to put up a `MessageBoxA` and exit, which told a player their address was wrong
-  // and then took away the only place they could fix it. The join screen is pre-filled with what
-  // the command line asked for, so the fix is one character and a tap.
+  // box.** A message box tells a player their address was wrong and takes away the only place they
+  // could fix it; the join screen is pre-filled with what the command line asked for, so the fix
+  // is one character and a tap.
   bool askForAServer = !_startup.joinGiven;
 
   if (_startup.joinGiven)
@@ -887,15 +883,10 @@ int RunGame(HWND _window, const Startup& _startup)
     }
   }
 
-  // **Empty until the server says otherwise, and THE REFERENCE FIXTURE IS GONE.**
-  //
-  // This used to boot with `MakeReferenceMatch()` -- the design sheet's twelve-player mid-match --
-  // on the argument that it was only up "for the fraction of a second between connecting and being
-  // welcomed". That stopped being true the day the lobby started existing before the match did: a
-  // player who joins before the host taps ENTER MATCH is welcomed immediately and sent no state at
-  // all, so the fixture was what they looked at for as long as the host took. A fake match is the
-  // worst possible thing to put in front of somebody waiting for a real one, because it is not
-  // distinguishable from one. `ConnectionDialog` says what is actually happening instead.
+  // **Empty until the server says otherwise.** A player who joins before the host taps ENTER MATCH
+  // is welcomed immediately and sent no state, and a fixture in that gap would be a fake match in
+  // front of somebody waiting for a real one, indistinguishable from it. `ConnectionDialog` says
+  // what is actually happening instead.
   Lockstep::MainPage page;
   page.Create(Lockstep::MatchState{});
 

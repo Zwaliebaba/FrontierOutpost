@@ -75,11 +75,10 @@ struct SnapshotFleet
   /// The same fight as NUMBERS, so the client can say what it means.
   ///
   /// **The server owns the arithmetic and the client owns the sentence**, which is the split
-  /// ADR-021 implies and this record did not previously honour: `preview` is a phrase, and a
-  /// phrase cannot be re-worded by a screen that wants to say "YOU LOSE" first. The design is
-  /// explicit that a preview must be a verdict and never a bare `A v B`, and that it must always
-  /// state *whose* ships remain -- which the phrase could not, because it only ever reported the
-  /// viewer's own survivors.
+  /// ADR-021 implies: `preview` is a phrase, and a phrase cannot be re-worded by a screen that
+  /// wants to say "YOU LOSE" first. The design is explicit that a preview must be a verdict and
+  /// never a bare `A v B`, and that it must always state *whose* ships remain, which a phrase
+  /// reporting only the viewer's survivors cannot.
   ///
   /// Zero everywhere when there is nothing to fight, which is the same condition as an empty
   /// `preview`.
