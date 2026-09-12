@@ -85,7 +85,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;$(SolutionDir)NeuronClient;$(SolutionDir)NeuronServer;$(SolutionDir)GameLogic;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;$(SolutionDir)NeuronClient;$(SolutionDir)LockstepClient;$(SolutionDir)NeuronServer;$(SolutionDir)GameLogic;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
     </ClCompile>
@@ -116,7 +116,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;$(SolutionDir)NeuronClient;$(SolutionDir)NeuronServer;$(SolutionDir)GameLogic;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;$(SolutionDir)NeuronClient;$(SolutionDir)LockstepClient;$(SolutionDir)NeuronServer;$(SolutionDir)GameLogic;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
     </ClCompile>
@@ -135,16 +135,8 @@
   <ItemGroup>
     <ClCompile Include="Lockstep.cpp" />
     <ClCompile Include="SnapshotView.cpp" />
-    <ClCompile Include="DigestView.cpp" />
-    <ClCompile Include="JoinPage.cpp" />
     <ClCompile Include="SeatsPage.cpp" />
-    <ClCompile Include="ConnectionDialog.cpp" />
     <ClCompile Include="HostedServer.cpp" />
-    <ClCompile Include="DesignTokens.cpp" />
-    <ClCompile Include="MapRender.cpp" />
-    <ClCompile Include="MainPage.cpp" />
-    <ClCompile Include="MatchConnection.cpp" />
-    <ClCompile Include="MatchState.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
@@ -153,22 +145,16 @@
   <ItemGroup>
     <ClInclude Include="Lockstep.h" />
     <ClInclude Include="SnapshotView.h" />
-    <ClInclude Include="DigestView.h" />
-    <ClInclude Include="JoinPage.h" />
     <ClInclude Include="SeatsPage.h" />
-    <ClInclude Include="ConnectionDialog.h" />
     <ClInclude Include="HostedServer.h" />
-    <ClInclude Include="DesignTokens.h" />
-    <ClInclude Include="MapRender.h" />
-    <ClInclude Include="MainPage.h" />
-    <ClInclude Include="MatchConnection.h" />
-    <ClInclude Include="MapView.h" />
-    <ClInclude Include="MatchState.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\NeuronCore\NeuronCore.vcxproj">
       <Project>{fe68f2f7-3314-472a-84d0-d020a1f56ab2}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\LockstepClient\LockstepClient.vcxproj">
+      <Project>{7b1e4c9a-2d63-4f58-9e07-8c4a1b2d6e35}</Project>
     </ProjectReference>
     <ProjectReference Include="..\NeuronClient\NeuronClient.vcxproj">
       <Project>{4165082c-73dc-4258-8fb7-b39bb55ce704}</Project>

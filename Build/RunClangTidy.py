@@ -44,6 +44,7 @@ PROJECTS = {
     "NeuronServer": "NeuronServer",
     "GameLogic": "GameLogic",
     "Lockstep": "Lockstep",
+    "LockstepClient": "LockstepClient",
     "NeuronCoreTests": os.path.join("Tests", "NeuronCoreTests"),
     "NeuronClientTests": os.path.join("Tests", "NeuronClientTests"),
     "NeuronServerTests": os.path.join("Tests", "NeuronServerTests"),

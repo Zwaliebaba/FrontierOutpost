@@ -17,6 +17,7 @@
   </Folder>
   <Project Path="Lockstep/Lockstep.vcxproj" Id="e3c624c0-557c-442f-b033-a83846a21997" />
   <Project Path="GameLogic/GameLogic.vcxproj" Id="3823cbca-81bb-434e-b3b8-c9ddaecacdfd" />
+  <Project Path="LockstepClient/LockstepClient.vcxproj" Id="7b1e4c9a-2d63-4f58-9e07-8c4a1b2d6e35" />
   <Project Path="NeuronClient/NeuronClient.vcxproj" Id="4165082c-73dc-4258-8fb7-b39bb55ce704" />
   <Project Path="NeuronCore/NeuronCore.vcxproj" Id="fe68f2f7-3314-472a-84d0-d020a1f56ab2" />
   <Project Path="NeuronServer/NeuronServer.vcxproj" Id="3c56e845-4b0a-45f2-8772-ad1f93d1540d" />

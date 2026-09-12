@@ -145,20 +145,21 @@ private:
 | `.github/workflows/build.yml` | CI. All of it blocks | Yes, carefully |
 | `x64/`, `.vs/`, `*.user` | Build and IDE output | **No — and never commit them** |
 
-**Ten projects, and the edges run one way.** `Lockstep.slnx` is the solution; its only platform is `x64`.
+**Eleven projects, and the edges run one way.** `Lockstep.slnx` is the solution; its only platform is `x64`.
 
 ```
 NeuronCore.lib          ← the engine everything else builds on
 ├── NeuronClient.lib    ← references NeuronCore
 ├── NeuronServer.lib    ← references NeuronCore
 ├── GameLogic.lib       ← references NeuronCore
-└── Lockstep.exe ← references all four
+├── LockstepClient.lib  ← references NeuronClient, NeuronCore. The screens and the view model
+└── Lockstep.exe ← references all five
 
 NeuronCoreTests.dll     ← NeuronCore
 NeuronClientTests.dll   ← NeuronClient, NeuronCore
 NeuronServerTests.dll   ← NeuronServer, NeuronCore
 GameLogicTests.dll      ← GameLogic, NeuronCore
-LockstepTests.dll       ← NeuronClient, GameLogic, NeuronCore + four of Lockstep's own .cpp files
+LockstepTests.dll       ← LockstepClient, GameLogic, NeuronCore + the three bridge files
 ```
 
 **`LockstepTests` is the one that does not follow the pattern, and it is worth knowing why.** The
@@ -168,16 +169,28 @@ and a test DLL cannot link one, so for a long time `ViewOf`, `OrdersOf`, `Compos
 a throwaway harness compiled outside the repository to prove they worked, and the second of them
 found an arithmetic bug in `FormatCountdown` by photographing a running client (ADR-040).
 
-It compiles `MatchState.cpp`, `SnapshotView.cpp`, `DigestView.cpp` and `MainPage.cpp` a **second
-time**, with `PrecompiledHeader NotUsing` so that their `#include "pch.h"` still resolves to
-`Lockstep/pch.h`. The alternative was to carve the client's view model into a fifth library purely
-so a test could reach it, which is a change to what ships made for the benefit of the tests. Nothing
-about `Lockstep.exe` changes.
+**That argument was wrong and the review said so** (2026-09-12): a static library is a link unit,
+not a runtime file, and R13 is about what sits beside the executable at runtime. `LockstepClient`
+now holds the view model and the screens, and the double compile is down to the three bridge files
+named above -- which stay in the executable because they reach `GameLogic`, not because a library
+was impossible. They keep `PrecompiledHeader NotUsing`, so their `#include "pch.h"` still resolves
+to `Lockstep/pch.h`.
 
 **What belongs in it: everything in those files that DECIDES something.** The drawing does not --
 a `DrawWorld` needs a device, a swap chain and a frame, and it produces pixels nobody can assert
 about. Screens are verified by photographing them (ADR-038, ADR-039). The line is exactly that: if
 it decides, it is tested here; if it draws, it is a screenshot.
+
+**`LockstepClient` is the client, and it does not know the game exists.** The view model, the four
+screens, the map renderer and the socket: everything a player looks at, in a static library the
+executable and `LockstepTests` both link. It references `NeuronClient` and `NeuronCore` and **not
+`GameLogic`**, which is not a coincidence but the reason the library can exist at all -- and it is
+the rule below, enforced by a build edge rather than by good intentions.
+
+Three files stayed in the executable because they are bridges and a bridge belongs in the
+composition root: `HostedServer` (NeuronServer and GameLogic), `SnapshotView` (GameLogic's wire
+records into `MatchState`), and `SeatsPage` (which names `BotPolicy` for its roster). They are the
+only ones `LockstepTests` still compiles a second time, down from nine.
 
 **`GameLogic` is referenced by the executable and by nothing else.** It is server-side game code; the day a client-side file reaches for it is the day the server stopped being authoritative. `NeuronServer` drives a game it cannot see, through the byte-shaped `Neuron::Simulation` seam (ADR-025), which is what keeps that edge absent rather than merely discouraged. Likewise nothing in `NeuronClient` may reach `NeuronServer` or the reverse — they share `NeuronCore` and that is the whole of their common ground.
 
@@ -199,7 +212,7 @@ it decides, it is tested here; if it draws, it is a screenshot.
 That check matters more than it looks, because **CI builds Debug only** (§6). Release is compiled by whoever ships, and a Release that quietly lost an include directory or sat on an older language standard would not be discovered until then. The static check is what stands in for the build nobody runs.
 
 ```powershell
-# Build everything: the executable, the four libraries it references, and the five test DLLs.
+# Build everything: the executable, the five libraries it references, and the five test DLLs.
 msbuild Lockstep.slnx /p:Configuration=Debug /p:Platform=x64 /m /v:minimal /nologo
 
 # Just the game and its libraries, still through the solution.
