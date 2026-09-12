@@ -102,11 +102,15 @@ Socket Socket::Listen(std::uint16_t _port)
     return {};
   }
 
-  // A listener that has just closed leaves the port in TIME_WAIT, and a server restarted inside
-  // that window would refuse to bind -- which at four locks a day means a deploy that cannot come
-  // back up for a couple of minutes for no reason anybody can see.
-  BOOL reuse = TRUE;
-  (void)setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+  // SO_EXCLUSIVEADDRUSE, not SO_REUSEADDR. On Windows the reuse option is not the POSIX one: it
+  // lets a second socket bind the port this one is listening on, after which which of the two gets a
+  // connection is undefined -- Microsoft's own guidance is that a server setting it "must be
+  // considered to be not secure". The exclusive option refuses that bind. Its cost is documented
+  // too: a listener cannot be rebound while a connection it accepted is still draining, so a server
+  // restarted seconds after an abrupt exit can fail to bind until the old connections are gone. That
+  // failure is reported by the caller rather than papered over, and the answer is to start again.
+  BOOL exclusive = TRUE;
+  (void)setsockopt(handle, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&exclusive), sizeof(exclusive));
 
   sockaddr_in address = {};
   address.sin_family = AF_INET;
