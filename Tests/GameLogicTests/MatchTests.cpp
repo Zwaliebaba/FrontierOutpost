@@ -263,6 +263,30 @@ public:
     Assert::IsTrue(match.Validate(orders).empty(), L"a legal set is refused for no reason");
   }
 
+  // A refusal names its list as well as its index. Without the list, fleet order zero being
+  // refused took build zero with it at the lock: a legal building silently never built.
+  TEST_METHOD(ARefusedFleetOrderDoesNotTakeTheBuildAtTheSameIndexWithIt)
+  {
+    const Lockstep::Match match = SixPlayerMatch();
+    const Lockstep::SystemId capital = CapitalOf(match, 0);
+
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.fleetOrders.push_back(Lockstep::FleetOrder{.fleet = FleetOf(match, 1), .destination = NeighborOf(match, CapitalOf(match, 1))});
+    orders.builds.push_back(Lockstep::BuildOrder{.system = capital, .kind = Lockstep::BuildKind::MiningStation});
+
+    const std::vector<Lockstep::RejectedOrder> rejected = match.Validate(orders);
+    Assert::AreEqual(static_cast<size_t>(1), rejected.size(), L"only the fleet order is wrong");
+    Assert::IsTrue(rejected.front().list == Lockstep::OrderList::FleetOrders);
+    Assert::AreEqual(0, rejected.front().index);
+
+    const std::array<Lockstep::OrderSet, 1> sets = {orders};
+    const Lockstep::Match after = Advance(match, sets);
+    Assert::IsTrue(after.SystemAt(capital).hasMiningStation, L"the build at index zero was legal and must happen");
+    Assert::AreEqual(match.PlayerAt(Lockstep::PlayerId{0}).credits - match.Rules().miningStationCost,
+                     after.PlayerAt(Lockstep::PlayerId{0}).credits, L"and was paid for");
+  }
+
   TEST_METHOD(AnOrderSetFromNobodyIsRefused)
   {
     const Lockstep::Match match = SixPlayerMatch();
