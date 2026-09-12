@@ -331,6 +331,137 @@ public:
     state.unreadTicks = 3;
     Assert::IsFalse(Lockstep::DeltaOf(state).Any(), L"an empty digest produced a delta box");
   }
+
+  TEST_METHOD(MergingRepeatsDoesNotChangeTheDelta)
+  {
+    // **The box counts the digest, not the cards** (ADR-062). Three production lines folding into
+    // one card must not make three contacts into one either, and the delta is computed from
+    // `MatchState::digest` for exactly that reason: it is the tick's arithmetic, not the screen's.
+    Lockstep::MatchState state = StateWith({
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+      Event(Lockstep::EventKind::Contact, 2, "Contact: Sorne"),
+    });
+    state.unreadTicks = 3;
+    state.lastSeenTick = 6;
+
+    const Lockstep::DigestDelta delta = Lockstep::DeltaOf(state);
+    Assert::AreEqual(std::size_t{1}, delta.cells.size(), L"the delta gained or lost a cell to the merge");
+    Assert::AreEqual(std::string{"1 CONTACT"}, delta.cells.front(), L"the delta stopped counting the raw digest");
+  }
+};
+
+/// Repeats said once (ADR-062). Only under `SINCE YOU LOOKED`, and never over anything that is a
+/// consequence in its own right.
+TEST_CLASS(MergedRepeatTests)
+{
+public:
+  /// A window three ticks wide, which is the condition the merge needs.
+  [[nodiscard]] static Lockstep::MatchState AwayFor(std::vector<Lockstep::DigestEvent> _digest)
+  {
+    Lockstep::MatchState state = StateWith(std::move(_digest));
+    state.match.tick = 9;
+    state.unreadTicks = 3;
+    state.lastSeenTick = 6;
+    return state;
+  }
+
+  TEST_METHOD(ThreeProductionLinesBecomeOneWithTheTotal)
+  {
+    Lockstep::MatchState state = AwayFor({
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+    });
+    state.digest[2].detail = "154 credits in hand";
+
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(state);
+    Assert::AreEqual(std::size_t{1}, cards.size(), L"three goes at the same thing produced three cards");
+    Assert::AreEqual(std::string{"Production +18 - T6 > T9"}, cards[0].title, L"the run was not summed over its span");
+    Assert::AreEqual(std::size_t{1}, cards[0].lines.size());
+    Assert::AreEqual(std::string{"154 credits in hand"}, cards[0].lines.front(), L"the card kept a stale running total");
+  }
+
+  TEST_METHOD(APlayerWhoMissedNothingSeesEveryLine)
+  {
+    // Within one tick two production lines would be two different things that read alike, and the
+    // header says `DIGEST - TICK 9` rather than a span for them to be summed over.
+    Lockstep::MatchState state = AwayFor({
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+    });
+    state.unreadTicks = 0;
+
+    Assert::AreEqual(std::size_t{2}, Lockstep::CardsOf(state).size(), L"a tick's own digest was folded");
+  }
+
+  TEST_METHOD(ConsequencesAreNeverMerged)
+  {
+    // Two contacts is two rivals arriving, and two captures is two systems gone. The count is the
+    // whole of what those events say.
+    const std::vector<Lockstep::DigestCard> contacts = Lockstep::CardsOf(AwayFor({
+      Event(Lockstep::EventKind::Contact, Lockstep::NOBODY, "Contact: Sorne"),
+      Event(Lockstep::EventKind::Contact, Lockstep::NOBODY, "Contact: Sorne"),
+    }));
+    Assert::AreEqual(std::size_t{2}, contacts.size(), L"two contacts were reported as one");
+
+    const std::vector<Lockstep::DigestCard> losses = Lockstep::CardsOf(AwayFor({
+      Event(Lockstep::EventKind::Loss, Lockstep::NOBODY, "Lost Pell"),
+      Event(Lockstep::EventKind::Loss, Lockstep::NOBODY, "Lost Pell"),
+    }));
+    Assert::AreEqual(std::size_t{2}, losses.size(), L"two captures were reported as one");
+  }
+
+  TEST_METHOD(AVerdictStopsAMerge)
+  {
+    std::vector<Lockstep::DigestEvent> digest = {
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+    };
+    digest[1].verdict = "FLT1 ARRIVES T10 - YOU LOSE";
+
+    Assert::AreEqual(std::size_t{2}, Lockstep::CardsOf(AwayFor(digest)).size(), L"a card carrying a verdict was folded away");
+  }
+
+  TEST_METHOD(ANumberInsideANameIsNotACount)
+  {
+    // `Claimed Vega 7` twice is not `Claimed Vega 14`. Only a `+` or `-` in front of the digits
+    // makes them a quantity, and without one the two titles must match exactly to fold.
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(AwayFor({
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Claimed Vega 7"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Claimed Vega 9"),
+    }));
+
+    Assert::AreEqual(std::size_t{2}, cards.size(), L"two different systems were summed into one");
+  }
+
+  TEST_METHOD(AMergedRunKeepsEveryActionOnce)
+  {
+    // A build is offered on exactly one card (ADR-057). Folding two cards into one must carry the
+    // second's button across, drop the duplicate MAP, and leave one filled button at most.
+    std::vector<Lockstep::DigestEvent> digest = {
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+    };
+    digest[0].actions.push_back(
+      Lockstep::EventAction{.label = "SHIPYARD 20 CR", .kind = Lockstep::EventActionKind::QueueBuild, .target = 0, .primary = true});
+    digest[0].actions.push_back(Lockstep::EventAction{.label = "MAP", .kind = Lockstep::EventActionKind::Focus, .target = 3});
+    digest[1].actions.push_back(
+      Lockstep::EventAction{.label = "MINING 14 CR", .kind = Lockstep::EventActionKind::QueueBuild, .target = 1, .primary = true});
+    digest[1].actions.push_back(Lockstep::EventAction{.label = "MAP", .kind = Lockstep::EventActionKind::Focus, .target = 3});
+
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(AwayFor(digest));
+    Assert::AreEqual(std::size_t{1}, cards.size());
+    Assert::AreEqual(std::size_t{3}, cards[0].actions.size(), L"the merge dropped a control or kept a duplicate");
+
+    std::size_t primaries = 0;
+    for (const Lockstep::EventAction& action : cards[0].actions)
+    {
+      primaries += action.primary ? 1U : 0U;
+    }
+    Assert::AreEqual(std::size_t{1}, primaries, L"a merged card carries more than one filled button");
+  }
 };
 
 } // namespace LockstepTests

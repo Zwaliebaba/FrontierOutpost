@@ -226,6 +226,12 @@ into one list, and when the new state is two or more ticks past that the header 
 LOOKED - T4 > T7` with a `3 TICKS` chip and the four-cell delta counted over that list. Ranking and
 grouping run over the whole window, so a rival busy across three ticks is one actor card.
 
+**Repeats are folded (ADR-062).** In that window only, a run of consecutive events of the same kind
+about the same subject becomes one card: `PRODUCTION +18 - T6 > T9`, detail from the newest of them
+(`154 credits in hand`), every control the run offered carried across once. Never a contact, a
+capture, a proposal or anything carrying a verdict, and a title's trailing digits are summed only
+when a `+` or `-` introduces them. The delta box still counts the raw digest.
+
 Not built: the per-tick tabs (`T44 · 5 | T45 · 4 | T46 · 7`), the `3 TICKS WAITING · 16 EVENTS`
 header, older ticks collapsed at the bottom with `OPEN >`, and marking a tick read. Two limits are
 inherent: a restarted client has no memory of what it read (R13) and so opens with the backlog as a

@@ -134,6 +134,8 @@ Semantic / owner (ADR-027: you are always blue)
   silence (`ConsequenceRank`); stable, so ties keep the server's severity order (ADR-020).
 - Group by actor when one rival produces ≥2 events; the card is ranked by its worst; `LEADER 1,610`
   in the title when they lead.
+- Under `SINCE YOU LOOKED` only, fold a run of repeats into one card with the total and the window's
+  span — `PRODUCTION +18 - T6 > T9` (ADR-062). Never a contact, a capture, a proposal or a verdict.
 - Combat preview is a verdict: `FLT1 ARRIVES T47 - YOU LOSE` / `YOU WIN` / `HOLD`, then
   `You arrive 14. P3 holds 11 +def. 6 of theirs remain, 0 of yours.` Never a bare `A v B`.
 - **Every event carries its own actions**, from a fixed vocabulary: `MAP`; `REDIRECT FLT 1` on a

@@ -4,8 +4,10 @@
 #include "DigestView.h"
 
 #include <algorithm>
+#include <charconv>
 #include <format>
 #include <map>
+#include <utility>
 
 namespace Lockstep
 {
@@ -89,6 +91,146 @@ namespace
   return actions;
 }
 
+/// Whether this event may be folded into a run of the same thing (ADR-062).
+///
+/// **Never a contact, a capture or a proposal.** Each of those is a consequence, and a consequence
+/// reported once with a bigger number is a consequence the player was not told about -- two rivals
+/// arriving at two systems is not one arrival. Nor anything carrying a verdict, which is a fight
+/// and so the least foldable thing in the digest.
+[[nodiscard]] bool CanMerge(const DigestEvent& _event) noexcept
+{
+  const bool consequence = _event.kind == EventKind::Contact || _event.kind == EventKind::Loss || _event.kind == EventKind::Proposal;
+  return !consequence && _event.verdict.empty();
+}
+
+/// A title split into the words in front and the SIGNED number at the end: `Production +6` is
+/// `Production ` and 6.
+///
+/// **The sign is what makes this safe.** It is the difference between a quantity a run can be
+/// summed into and a number that happens to end a name -- `Claimed Vega 7` twice is not
+/// `Claimed Vega 14` -- so a title whose trailing digits are not introduced by `+` or `-` reports
+/// no count at all and can only merge with a title identical to it.
+[[nodiscard]] bool SplitCount(const std::string& _title, std::string& _outStem, std::int64_t& _outCount)
+{
+  std::size_t digits = _title.size();
+  while (digits > 0 && _title[digits - 1] >= '0' && _title[digits - 1] <= '9')
+  {
+    --digits;
+  }
+  if (digits == _title.size() || digits == 0)
+  {
+    return false;
+  }
+
+  const char sign = _title[digits - 1];
+  if (sign != '+' && sign != '-')
+  {
+    return false;
+  }
+
+  std::int64_t value = 0;
+  const std::from_chars_result parsed = std::from_chars(_title.data() + digits, _title.data() + _title.size(), value);
+  if (parsed.ec != std::errc{} || parsed.ptr != _title.data() + _title.size())
+  {
+    return false;
+  }
+
+  _outStem = _title.substr(0, digits - 1);
+  _outCount = sign == '-' ? -value : value;
+  return true;
+}
+
+/// Whether `_next` is another go at the thing `_previous` already reported.
+[[nodiscard]] bool Repeats(const DigestEvent& _previous, const DigestEvent& _next)
+{
+  if (!CanMerge(_previous) || !CanMerge(_next) || _previous.kind != _next.kind || _previous.actor != _next.actor ||
+      _previous.refs.system != _next.refs.system)
+  {
+    return false;
+  }
+
+  std::string wasStem;
+  std::string isStem;
+  std::int64_t was = 0;
+  std::int64_t is = 0;
+  if (SplitCount(_previous.title, wasStem, was) && SplitCount(_next.title, isStem, is))
+  {
+    return wasStem == isStem;
+  }
+  return _previous.title == _next.title;
+}
+
+/// The digest with each run of repeats folded into one event, and the digest index each of them
+/// leads with so a tap still focuses what the server pointed at.
+///
+/// **Only for a player who was away** (ADR-062). Within one tick a repeat is two different things
+/// that read alike; across four it is one thing said four times, and the header above already
+/// frames the whole window as one span.
+void MergeRepeats(const MatchState& _state, std::vector<DigestEvent>& _outEvents, std::vector<std::int32_t>& _outSource)
+{
+  std::vector<std::pair<std::size_t, std::size_t>> runs;
+  for (std::size_t index = 0; index < _state.digest.size(); ++index)
+  {
+    const bool folds = _state.unreadTicks >= 2 && !runs.empty() && Repeats(_state.digest[runs.back().second], _state.digest[index]);
+    if (folds)
+    {
+      runs.back().second = index;
+      continue;
+    }
+    runs.emplace_back(index, index);
+  }
+
+  for (const auto& [first, last] : runs)
+  {
+    DigestEvent merged = _state.digest[first];
+    _outSource.push_back(static_cast<std::int32_t>(first));
+
+    if (last > first)
+    {
+      // The sum, when the run counts something, and the newest detail either way: `154 credits in
+      // hand` is a running total, so the one that is still true is the last.
+      std::string stem;
+      std::int64_t total = 0;
+      if (SplitCount(merged.title, stem, total))
+      {
+        for (std::size_t index = first + 1; index <= last; ++index)
+        {
+          std::string other;
+          std::int64_t value = 0;
+          if (SplitCount(_state.digest[index].title, other, value))
+          {
+            total += value;
+          }
+        }
+        merged.title = std::format("{}{}{}", stem, total < 0 ? '-' : '+', total < 0 ? -total : total);
+      }
+      merged.title += std::format(" - T{} > T{}", _state.lastSeenTick, _state.match.tick);
+      merged.detail = _state.digest[last].detail;
+
+      // Every action the run offered, once each. A build is offered on exactly one card (ADR-057),
+      // and folding two cards into one must not drop the second's button or draw two filled ones.
+      for (std::size_t index = first + 1; index <= last; ++index)
+      {
+        for (const EventAction& action : _state.digest[index].actions)
+        {
+          const bool already = std::ranges::any_of(merged.actions, [&action](const EventAction& _mine)
+                                                   { return _mine.kind == action.kind && _mine.target == action.target; });
+          if (already)
+          {
+            continue;
+          }
+          const bool primaryTaken = std::ranges::any_of(merged.actions, [](const EventAction& _mine) { return _mine.primary; });
+          EventAction carried = action;
+          carried.primary = carried.primary && !primaryTaken;
+          merged.actions.push_back(std::move(carried));
+        }
+      }
+    }
+
+    _outEvents.push_back(std::move(merged));
+  }
+}
+
 } // namespace
 
 std::int32_t ConsequenceRank(EventKind _kind) noexcept
@@ -137,12 +279,21 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
     return {card};
   }
 
+  // ---- The same thing, said once -----------------------------------------------------------------
+  //
+  // Runs of repeats are folded before anything is ranked or grouped (ADR-062), so a fold counts as
+  // one event everywhere below -- including in the actor count, where three production lines about
+  // one rival should not be the reason their card exists.
+  std::vector<DigestEvent> events;
+  std::vector<std::int32_t> source;
+  MergeRepeats(_state, events, source);
+
   // ---- Who produced more than one event ----------------------------------------------------------
   //
   // `std::map` and not an unordered one: the grouping order reaches the screen, and an order that
   // depends on a hash is an order that can differ between two builds showing the same tick.
   std::map<OwnerId, std::int32_t> byActor;
-  for (const DigestEvent& event : _state.digest)
+  for (const DigestEvent& event : events)
   {
     if (event.actor != NOBODY && event.actor != _state.viewer)
     {
@@ -153,9 +304,9 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
   std::vector<DigestCard> cards;
   std::vector<OwnerId> carded;
 
-  for (std::size_t index = 0; index < _state.digest.size(); ++index)
+  for (std::size_t index = 0; index < events.size(); ++index)
   {
-    const DigestEvent& event = _state.digest[index];
+    const DigestEvent& event = events[index];
     const bool grouped = event.actor != NOBODY && byActor[event.actor] >= 2;
 
     if (!grouped)
@@ -174,7 +325,7 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
                       .verdictDetail = event.verdictDetail,
                       .actions = event.actions,
                       .refs = event.refs,
-                      .leadEvent = static_cast<std::int32_t>(index)};
+                      .leadEvent = source[index]};
       cards.push_back(std::move(card));
       continue;
     }
@@ -188,16 +339,16 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
 
     DigestCard card;
     card.actor = event.actor;
-    card.leadEvent = static_cast<std::int32_t>(index);
+    card.leadEvent = source[index];
     card.refs = event.refs;
 
     // **Ranked by its worst.** A card that led with whichever of a rival's events happened to be
     // first would bury the one that costs you something, which is the opposite of a digest.
     card.kind = EventKind::Ignored;
     std::int32_t count = 0;
-    for (std::size_t other = 0; other < _state.digest.size(); ++other)
+    for (std::size_t other = 0; other < events.size(); ++other)
     {
-      const DigestEvent& mine = _state.digest[other];
+      const DigestEvent& mine = events[other];
       if (mine.actor != event.actor)
       {
         continue;
@@ -209,7 +360,7 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
       {
         card.kind = mine.kind;
         card.refs = mine.refs;
-        card.leadEvent = static_cast<std::int32_t>(other);
+        card.leadEvent = source[other];
       }
       if (!mine.verdict.empty())
       {
