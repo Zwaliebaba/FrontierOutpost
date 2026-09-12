@@ -1,6 +1,6 @@
 # ADR-042 — A restarted server resumes the match it stored, on UTC time
 
-**Status:** Accepted â€” narrowed by ADR-054: resumption is `--serve`'s; a host-and-play process erases its store on exit
+**Status:** Accepted — narrowed by ADR-054: resumption is `--serve`'s; a host-and-play process erases its store on exit. Its second open question, what a reconnecting player is owed beyond the snapshot, is closed by ADR-044 (2026-09-12); the first, a way to start fresh beside a live store, is moot for host-and-play since ADR-054 and still open for `--serve`.
 
 **Date:** 2026-09-12
 **Decided by:** Owner decision, 2026-09-12, on the first finding of the codebase review

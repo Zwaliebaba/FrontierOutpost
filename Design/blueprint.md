@@ -3,7 +3,7 @@
 **What this is.** The one document to hand to a game designer you want to recruit, or to any team
 that needs to understand *LockStep: Universe* before it can help: what the game is, why it is worth
 making, what exists today, and where it goes next. It is written from the design record in `Design/`
-and from the code as it stands on **2026-09-11**, and it keeps the record's discipline: what is built
+and from the code as it stands on **2026-09-12**, and it keeps the record's discipline: what is built
 is described in the present tense, what is designed and not built says so, and what is undecided is
 listed as a question rather than papered over. The engineering detail is kept short here and
 collected in the appendix for the teams that need it.
@@ -13,13 +13,16 @@ to twelve humans, played four times a day for three weeks, where every order is 
 against rivals placing theirs — and where losing your capital is the start of the best story the
 game can tell, not the end of yours.
 
-**Status, honestly.** The whole core loop is built, deterministic, tested (333 automated tests across
-four suites) and running end to end over TCP: galaxy generation, the six-phase tick, combat, sieges,
-trade lanes, proposals, custodianship, fog of war, scoring, the fixed ending, a match store that
-survives restarts, and the instrumentation the playtest plan needs. What has not happened is the
-thing no code can do: six people on six machines playing a match. Exile and the sealed region's rules
-are designed and deliberately not built, gated behind the first playtests. The current client is a
-Windows desktop prototype; **the product is a mobile client** (owner decision, 2026-09-11 — see §7).
+**Status, honestly.** The whole core loop is built, deterministic, tested (451 automated tests
+across five suites, run 2026-09-12) and running end to end over TCP: galaxy generation, the
+six-phase tick, combat, sieges, trade lanes, proposals, custodianship, fog of war, scoring, the
+fixed ending, a dedicated server that resumes a stored match after a restart, and the
+instrumentation the playtest plan needs. The client has its join and seats screens, bots for the
+seats nobody takes, a practice match on a two-minute tick, and the digest as the order surface. What
+has not happened is the thing no code can do: six people on six machines playing a match. Exile and
+the sealed region's rules are designed and deliberately not built, gated behind the first playtests.
+The current client is a Windows desktop prototype; **the product is a mobile client** (owner
+decision, 2026-09-11 — see §7).
 
 **LockStep: Universe is the name**, shortened to *Lockstep* in running prose (owner decision,
 2026-09-11). It replaces *Frontier Outpost*, which had been settled as final earlier the same day;
@@ -83,32 +86,37 @@ owner wants one, and it is not yet designed (2026-09-11). It is a design session
 
 ## 2. What you see
 
-One screen. The design calls it the **ops console**, and it is deliberately a console rather than a
-cinematic: 1280×720, a single 8×8 bitmap font, terse copy, no anti-aliasing, drawn on black. Three
-columns:
+One match screen, with a join screen and the host's seats screen in front of it. The design calls it
+the **ops console**, and it is deliberately a console rather than a cinematic: 1280×720, a single
+8×8 bitmap font, terse copy, no anti-aliasing, drawn on black. Three columns:
 
-**The digest, left — the primary read.** One list per tick, never one notification per event, sorted
-by consequence: a capital lost ranks above a battle, which ranks above first contact, above a
+**The digest, left — the primary read, and the order surface.** One list per tick, never one
+notification per event, sorted by consequence: a system lost ranks above a contact, above a
 proposal, above the economy line. It is the thing you read first and the thing the whole session is
-organised around. Tap an event and the map focuses on it.
+organised around. Every event carries its own buttons — a priced build on a system you just claimed,
+ACCEPT and DECLINE on a proposal, REDIRECT on a fleet flying into a fight — and a quiet tick still
+offers a build and a move, so there is never nothing to do. A fleet flying into a contact carries
+the server's verdict on its card, *FLT1 ARRIVES T47 - YOU LOSE*, then the numbers. Tap an event and
+the map focuses on it.
 
 **The map, centre — commitments as overlays.** The galaxy is a graph: systems are nodes, lanes are
 edges, and every lane carries an integer tick cost. It is drawn on a tilted ground plane under a real
 perspective orbit camera that you drag to look around, with a procedural starry sky behind it.
-Systems rise on stems above their shadows; fleets in transit hover above their lane with a tick-ETA;
-trade lanes, proposed lanes, sieges, custodians and the sealed region are all drawn as what they are.
-Fog is remembered: a system you once saw stays on your map, greyed, stamped with the tick you last
-saw it.
+Systems rise on stems above their shadows; a fleet under way is a line of travelling dots along its
+lane with a marker and a tick-ETA; trade lanes, proposed lanes, sieges, custodians and the sealed
+region are all drawn as what they are. Tapping a system you hold opens the sheet of what it can
+build; tapping your fleet opens the sheet of where it can go. Fog is remembered (ADR-022): a system
+you once saw stays on your map at the state you last saw it. The tick it was last seen travels in
+the snapshot and is not drawn yet.
 
-**The orders, right — three columns that lock together.** Fleets, builds, proposals. A fleet card
-shows where it is going and a combat preview ("14 v 11 (+def) · 6 left") computed by the server from
-what you can see. The build list holds shipyards and mining stations — and the **trade lane**, which
-is a building with two owners, sitting in the build menu with *Propose* where *Build* would be.
-Diplomacy has no tab. An open proposal is a card with ACCEPT and DECLINE, and answering it is itself
-an order that locks with the rest.
+**The locks rail, right — a read-only receipt.** What goes in when the clock hits zero: fleets,
+builds, signals, proposals, each with its status. Its one control is the SIGNALS header, which opens
+the picker for the things you can say — open a lane, share scouting, hold fire, withdraw, concede.
+A **trade lane** is still a building with two owners; today it is proposed from that picker, and the
+*Propose* row the build list was designed to carry is drawn by nothing yet.
 
-The top bar carries the lock countdown, your score and placement, and the leader — always visible,
-because leader-ganging is the game's only anti-snowball.
+The top bar carries the lock countdown, your score and placement, and the leader when it is not you
+— always visible, because leader-ganging is the game's only anti-snowball.
 
 The screen is silent, and stays silent in v1: audio is out of scope until after the playtests, and
 so is a colour-blind mode (owner decision, 2026-09-11; both listed under §7).
@@ -119,7 +127,7 @@ so is a colour-blind mode (owner decision, 2026-09-11; both listed under §7).
 
 | | |
 |---|---|
-| **Players** | 6–8 for the prototype, up to 12 by design. No AI fills seats. |
+| **Players** | 6–8 for the prototype, up to 12 by design. A seat nobody takes can be given to a bot that plays it (ADR-037), and a practice match is one person against five of them on a two-minute tick (ADR-051). |
 | **Galaxy** | Generated per match from a seed, sized to the player count: 31 systems and 45 lanes for six players, 61 and 90 for twelve. A ring: every capital has two neighbours at the same distance, a starting cluster of two satellites on one-tick lanes, and a rival capital within three ticks. The frontier and the sealed region sit in the middle, equidistant from everyone. |
 | **Cadence** | Four ticks a day at fixed UTC times in production. The interval is a match parameter: playtests run an hourly tick. |
 | **Length** | Three weeks (84 ticks). Ends on the date it said it would, or earlier if one player holds 60% of all score for four consecutive ticks. |
@@ -224,12 +232,15 @@ One executable in three roles — host-and-play, join, or a headless dedicated s
 client talking TCP even to a server on the next thread, so every launch exercises the network. A
 match is persisted as its seed and every locked order set and reloaded by replaying them, with the
 replayed hash checked against the last one written; a whole match replays in about two milliseconds.
-A server that slept through locks resolves every one it missed, in order. Six fixed seat tokens
-identify players for Phase 0. Every event the playtest plan asks for is written to a UTC-stamped
-plain-text log. The client reconnects on its own and says so on screen. A rehearsal at two seconds a
-tick has run a full 48-tick Phase 0 match over sockets with two clients and four absentees, and
-found two instrumentation bugs that reading the code had not — the closest thing to a played match
-so far. The appendix has the detail.
+A dedicated server that slept through locks resolves every one it missed, in order, and one that was
+restarted resumes the match it stored on the same UTC schedule; a host-and-play process starts fresh
+instead. The host's seats screen generates a token per seat and the tokens live in the store, so the
+same people come back to the same seats. Every event the playtest plan asks for is written to a
+UTC-stamped plain-text log. The client reconnects on its own and says so on screen, and a returning
+player is sent the digests they missed, eight ticks deep. A rehearsal at two seconds a tick has run
+a full 48-tick Phase 0 match over sockets with two clients and four absentees, and found two
+instrumentation bugs that reading the code had not — the closest thing to a played match so far. The
+appendix has the detail.
 
 ### Designed, not built
 
@@ -242,8 +253,8 @@ so far. The appendix has the detail.
 | Hiring exiles (escrowed jobs) | v2 |
 | Research | Named in the phase list, deliberately absent. Becomes an unlock track, decided after Phase 2 |
 | Ship classes | Strength is ship count for now; classes are a v2 candidate |
-| Accounts, rank-gated matchmaking, a lobby, player names (players are "P2" on screen) | Phase 1 needs at least per-match tokens and names; the rest is v2 |
-| Missed digests on reconnect; the mobile client; audio; a colour-blind mode; chat | See §7 and §8 |
+| Accounts, rank-gated matchmaking, player names on the wire (a rival is "P2" on the map; the empire names exist only on the host's seats screen) | Phase 1 needs names; the rest is v2 |
+| The mobile client; audio; a colour-blind mode; chat | See §7 and §8 |
 
 ---
 
@@ -314,11 +325,13 @@ why the galaxy is bounded, what the sealed region is and why it opens. It should
 ops console's tone rather than against it: a setting that survives being told in 8-pixel capitals.
 Nothing in the rules waits on it, and everything in the pitch does.
 
-**Phase 1 (one to two months).** The smallest things that make strangers possible: tokens generated
-per match and printed by the host, player names on the wire, the digests a reconnecting player
-missed, and a way to fill a match. Three matches before any gate decision. This is also where the
-absence rule is judged: the owner has chosen to keep custodianship at three ticks and the first-week
-forfeit permanent and let H2 decide (§8).
+**Phase 1 (one to two months).** The smallest things that make strangers possible. Three of the four
+this paragraph first listed are built: tokens are generated per match on the host's seats screen
+(ADR-036), a reconnecting player is sent the digests they missed (ADR-044), and a match short of
+people is filled with bots (ADR-037). What is left is player names on the wire, and a hosted server
+somebody operates. Three matches before any gate decision. This is also where the absence rule is
+judged: the owner has chosen to keep custodianship at three ticks and the first-week forfeit
+permanent and let H2 decide (§8).
 
 **Phase 2 — the second act (a quarter).** Exile and the region, as designed in §6, if H3 says losers
 keep playing. If it says they don't, Exile becomes an epilogue screen and the region a plain
@@ -329,8 +342,9 @@ phone in a pocket, and the owner has confirmed that is the product: the desktop 
 prototype. The architecture was built for this. A client is anything that can read a snapshot and
 write an order set over TCP; the server is authoritative; the game logic has no floating point to
 disagree with another compiler about. `Design/Reference/mobile-portability.md` costs the move
-honestly: the renderer, the window shell and the fixed 1280×720 contract do not travel; the
-simulation, the protocol and the input core do. A portrait, digest-first client with the digest
+honestly, though it was measured against the 2026-09-10 tree and its file tables predate the 4X: the
+renderer, the window shell and the fixed 1280×720 contract do not travel; the simulation, the
+protocol and the input core do. A portrait, digest-first client with the digest
 delivered as a push notification is a new client, not a port, and it needs a hosted server that
 somebody operates. It should start as soon as Phase 1 says the loop holds, because Phase 2 with
 strangers is the first playtest that wants the real platform.
@@ -440,7 +454,7 @@ through fog from tick one.
 |---|---|
 | The rules, as designed | `Design/space-4x-one-pager-v10.md` |
 | How the playtests decide what gets built | `Design/space-4x-prototype-test-plan.md` |
-| Every decision and what it rejected | `Design/ADR/` — ADR-018 through ADR-031 are the game; 014, 017, 027, 032, 033 are the screen |
+| Every decision and what it rejected | `Design/ADR/` — ADR-018 through ADR-031 are the game; 014, 017, 027, 032, 033 are the screen; 034 through 059 are everything built since the UI handoff of 2026-09-11 |
 | What was built, step by step, with what it found | `Design/Plans/4X-01-CoreLoop.md`, `Design/Plans/4X-02-ServerAndClient.md` |
 | The screens, at reference fidelity | `Design/UI/` (README, DESIGN-GUIDELINES, SCREENS, `screens/*.png`) |
 | How code is written here | `AGENTS.md` |
@@ -469,12 +483,14 @@ second client speaks the snapshot and the order set over TCP, and nothing else.
 | A match is a seed and its orders; loading is re-resolving from tick zero with the hash asserted. About 2 ms per whole match in Release | `NeuronServer/MatchStore`, ADR-024, `Design/Reference/tick-resolution-cost.md` |
 | The schedule is arithmetic over an injected instant; missed locks are resolved in order on wake | `NeuronCore/TickSchedule`, ADR-026 |
 | Length-prefixed frames, six message kinds, every length checked at three layers, fuzzed; socket tests on real loopback sockets | `NeuronCore/{FrameStream,Protocol,Socket}`, `NeuronServer/MatchServer` |
-| Six fixed seat tokens for Phase 0 — a stable identity to log, explicitly not authentication | ADR-029 |
+| A token per seat, generated by the host's seats screen and kept in the match store — a stable identity to log, explicitly not authentication | ADR-029, ADR-036, ADR-042 |
 | Instrumentation to a UTC-stamped plain-text file, including fleet orders after a capital fall and order edits counted as envelopes | `NeuronServer/MatchLog`, ADR-030, ADR-031 |
-| Client reconnection with an on-screen indicator, `--phase0` rules and `--tick <seconds>` for compressed rehearsals | `Lockstep/MatchConnection` |
-| The ops console: immediate-mode UI, perspective orbit camera, spherical star field with a galactic band, twelve owner colours with *you* always blue | `Lockstep/MainPage`, ADR-014, -017, -027, -032, -033 |
+| Client reconnection with an on-screen indicator, `--phase0` rules and `--tick <seconds>` for compressed rehearsals | `LockstepClient/MatchConnection`, ADR-038 |
+| The ops console: immediate-mode UI, perspective orbit camera, spherical star field with a galactic band, twelve owner colours with *you* always blue, the digest as the order surface with the price on every button | `LockstepClient/MainPage`, ADR-014, -017, -027, -032, -033, -034, -052, -053 |
+| The join and seats screens, bots that play a seat, a practice match, the digest backlog on reconnect, and a client library shared by the executable and its test project | ADR-036, -037, -040, -041, -044, -050, -051 |
 
 **Hosting** a match today is one machine running `--serve` beside a store file and a log file, and
-five people running `--join`. If the host closes, the match pauses and resumes on restart. There is
-no encryption and no accounts; that is right for six friends and wrong for anything else, and ADR-028
-and ADR-029 say so.
+five people running `--join`. If that server is stopped, the match pauses and resumes when it is
+started again (ADR-042); a match hosted from the default host-and-play window ends when the window
+does (ADR-054). There is no encryption and no accounts; that is right for six friends and wrong for
+anything else, and ADR-028 and ADR-029 say so.

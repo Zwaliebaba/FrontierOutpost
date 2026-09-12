@@ -90,8 +90,9 @@ sheet reads `+1 MORE THAN THIS SHEET CAN SHOW` instead of saying it is a stub; t
 `M<id>` is the tick number zero-padded (`SnapshotView.cpp`, the snapshot carries no match id) and
 `D<n>/21` assumes four ticks a day and twenty-one days (ADR-051 records it); and
 `JoinPage::SetMatchSummary` has no caller, so the join screen's footer line never appears.
-`Design/GETTING-STARTED.md` §2 says rail rows jump to their event and that the map zooms, and §3
-says twenty starting credits — none of the three is true of the tree (ADR-055 made it a hundred).
+`Design/GETTING-STARTED.md` said rail rows jump to their event, that the map zooms, that a player
+starts with twenty credits and that missed digests are one tick deep; none was true of the tree, and
+it was corrected on 2026-09-12.
 
 ## Photographing the build
 

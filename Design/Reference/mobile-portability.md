@@ -17,6 +17,26 @@ tree is roughly half of them.
 or how it would perform. There is no mobile build of anything here to measure, so every such
 number would be an estimate dressed as a fact (`Design/README.md` §3.2).
 
+**Overtaken since it was measured — noted 2026-09-12.** The tree this document classified is mostly
+gone, and the figures below describe that tree, not this one. On the day it was measured, ADR-011
+replaced the 640×400 sixteen-colour framebuffer with 1280×720 true colour presented 1:1, and ADR-015
+deleted the real-time ship, its kinematics and interpolation, the loopback transport, the mesh
+renderer, the starfield and `IsometricCamera` — everything §1 calls "the real-time thing in the
+tree". The 4X of the one-pager has been built since: `GameLogic` is the six-phase resolver and is
+still integer-only (ADR-018); `NeuronCore` has a TCP `Socket` and a `FrameStream`, so §3's "nothing
+in the tree calls a socket function" is no longer true; `NeuronServer` is a real server (ADR-028);
+`Lockstep.cpp` is the composition root for three roles; the client's screens are a `LockstepClient`
+library (ADR-050); there are five test suites, two of them under Address Sanitizer (ADR-048); and
+the match screen redraws only when something changed or a fleet is under way (ADR-047, ADR-055), so
+§7's 20 Hz thread and vsync starfield no longer exist. The owner answered §1's question on
+2026-09-11: the game is the one-pager's, the desktop client is the prototype and mobile is the
+product (`Design/blueprint.md` §7 and §9). What still holds is the shape of the argument — the
+renderer, the window shell, the build system and the presentation contract do not travel; the
+simulation, the protocol and the input core do — and the findings in §4.3, §4.4, §4.5, §6 and §7
+that do not depend on which game. **The file tables in §2 and §3 and the arithmetic in §5 must be
+re-measured against the current tree before anything is costed from them.** Between here and §10
+nothing has been edited; §10 says where its three decisions stand.
+
 ---
 
 ## 1. The question this document cannot answer
@@ -417,10 +437,15 @@ single-platform game and it is the reason §4.1 is 2157 lines rather than a back
 
 ## 10. What this leaves open
 
-Three decisions, none of them taken here, in the order they have to be taken.
+Three decisions, none of them taken here, in the order they have to be taken. Where each stands on
+2026-09-12 is noted beneath it.
 
 **Which game.** §1. Until this is settled, every figure below §3 is being applied to a target that
 may not exist. It is not a technical question and it is not one this document can answer.
+
+*Settled by the owner on 2026-09-11: the one-pager's game. Mobile is the product and the desktop
+client is the prototype (`Design/blueprint.md` §9), so §1's first reading applies — there is no
+port, and the question is which parts of the tree a new client keeps.*
 
 **Whether 640×400 is a per-platform constant or a design constant.** `Design/README.md` §1 makes
 it a constraint; §5 shows what that constraint does to a phone in landscape and that it forbids
@@ -428,9 +453,17 @@ portrait outright. Changing it supersedes part of the baseline and touches ADR-0
 both of which reason in whole virtual pixels. Keeping it is also a decision, and the cost is
 pillarboxing and landscape-only.
 
+*Overtaken: the baseline has been 1280×720 presented 1:1 since ADR-011, and ADR-001 and ADR-003 are
+superseded and deprecated. The decision is now whether 1280×720 is a design constant, and
+`Design/blueprint.md` §9 owes an ADR revising the baseline when the mobile client starts. §5's
+arithmetic has not been redone for the new size.*
+
 **Whether the error model stays.** §7 argues that `Debug.h`'s single path is a desktop assumption
 and that surface loss is routine on both targets. This one is worth deciding early even if no port
 is ever started, because the answer changes 70 lines of header that everything includes.
+
+*Still open. `Debug.h` still holds the single path; the 2026-09-12 codebase review made `Fatal`
+reach its catch in a Release build and changed nothing about the shape.*
 
 Two smaller things do not need a decision, only a note. The push-constant budget in §4.1 is a real
 144-versus-128-byte problem whenever a Vulkan backend is written. And R14 has exactly two genuine

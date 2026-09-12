@@ -1,6 +1,6 @@
 # ADR-030 — The game narrates and the server writes it down
 
-**Status:** Accepted
+**Status:** Accepted — of its open questions, on 2026-09-12: order edits are observable, counted as envelopes (ADR-031); a second match no longer appends, because a match's files are named after it (ADR-043); rotation, size and retention are still nothing.
 
 **Date:** 2026-09-11
 **Decided by:** Build session for the Phase 0 preparation, following `Design/Plans/4X-02-ServerAndClient.md`.

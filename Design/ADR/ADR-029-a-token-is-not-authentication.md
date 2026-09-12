@@ -1,6 +1,6 @@
 # ADR-029 — A token is a seat, not authentication
 
-**Status:** Accepted
+**Status:** Accepted — of its open questions, on 2026-09-12: the host's seat is the token their client presented (ADR-036, ADR-041); tokens are generated per match and kept in its store, so they live exactly as long as the match (ADR-036, ADR-042); a connection that drops and returns mid-tick is still refused as `AlreadyConnected` until the server notices, and the SEAT IN USE dialog's RETRY is what the screen offers for it (ADR-038).
 
 **Date:** 2026-09-11
 **Decided by:** Build session for `Design/Plans/4X-02-ServerAndClient.md`, Step 3.

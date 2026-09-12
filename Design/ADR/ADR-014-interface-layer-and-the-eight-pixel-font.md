@@ -1,6 +1,6 @@
 # ADR-014 — The interface is two renderers and an immediate-mode screen, and the 8×8 font sets the copy
 
-**Status:** Accepted — amended by ADR-034 (2026-09-11): the interface layer gains one minimal text field, for the join screen's server and token. Everything else here stands.
+**Status:** Accepted — amended by ADR-034 (2026-09-11): the interface layer gains one minimal text field, for the join screen's server and token. Everything else here stands. Of its open questions, on 2026-09-12: the `MapProjection` one was overtaken by ADR-017, which replaced the projection with a camera; the digest still does not scroll, because nothing in the client scrolls (ADR-052); and *Replay tick N* is still the stub (`Design/UI/SCREENS.md`, screen 07).
 
 **Date:** 2026-09-10
 **Decided by:** Build session implementing `Design/Screens` (the main page). The handoff settled colour, layout and copy; this ADR records what it did not settle, and the places where the game's one font could not carry its copy.

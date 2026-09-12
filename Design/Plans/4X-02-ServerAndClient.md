@@ -309,16 +309,30 @@ implementation. Call it; do not write a second one that agrees with it today.
 
 ## 5. Open questions this plan leaves to the session
 
+Three of the four were answered after this was written; where each stands is noted under it
+(2026-09-12).
+
 **Whether the match should stop resolving when it ends.** `Match::IsFinished()` is reported and
 nothing enforces it — the resolver will happily run tick 85. The server is the right place to decide,
 and ADR-023 says so without saying what it should do.
+
+*Answered: `Session::Advance` stops calling the resolver once the simulation reports the match
+finished, the server refuses orders for a finished match and logs once per session that somebody
+tried (§6), and the store records that the match ended (ADR-042).*
 
 **What a reconnecting client is owed.** The current snapshot, certainly. The digests it missed,
 probably — the one-pager's whole premise is that you open the app and read what changed since you
 last looked, and a player who was away for three ticks has three digests waiting.
 
+*Answered by ADR-044, 2026-09-12: the session keeps eight ticks of digest per player and sends the
+backlog on arrival.*
+
 **Whether one server process holds one match or several.** Phase 0 needs one. Building for several
 before anyone has run one is the mistake this plan's predecessor avoided by being a stub.
+
+*Still open. A match's files are named (ADR-043), so two servers beside one executable no longer
+share a store, but one process still holds one match. Several per process is the codebase review's
+one remaining item (§7).*
 
 **Whether `MatchRules`' defaults survive the test plan's compressed phases.** They are authored for
 a 21-day match at four ticks a day and every phase is shorter: Phase 0 is 48 ticks at a one-hour
@@ -328,6 +342,10 @@ which never arrives in either. The region has no rules until Phase 2 so the seco
 now; the first means "a first-week custodian scores nothing" covers most of a Phase 0 run. Setting
 them per phase is a one-line change and belongs to whoever configures the match, but somebody has
 to notice, so it is written down here.
+
+*Answered: `PhaseZeroRules()` scales `firstWeekTicks`, `regionOpensAtTick` and the capital guard as
+fractions of the match and `custodianAbsenceTicks` by the clock (§6); `PracticeRules()` does the
+same for a practice match (ADR-051).*
 
 ---
 
@@ -461,6 +479,16 @@ longer needs six people to start; the login and seats screens (ADR-036) and the 
 a person could not; a test project for the executable (ADR-040) and a headless renderer that lets a
 test press a button (ADR-041); and a whole-tree review, answered (`Design/Archive/`).
 
+**Later on 2026-09-12**, in the order it happened: the wire reaches both address families (ADR-046);
+the match screen redraws only when something changed (ADR-047); Address Sanitizer on the two suites
+fed hostile input, and a Release build of `GameLogicTests` in CI (ADR-048); one description per wire
+record (ADR-049); the client is a library the executable and its tests share (ADR-050); a practice
+match on a two-minute tick (ADR-051); and on the main page, a sheet component (ADR-052), the price
+on every build button (ADR-053), a local game that does not outlive its window (ADR-054), a hundred
+starting credits and a fleet route that moves (ADR-055), standing moves on a quiet digest (ADR-056),
+one build offered once (ADR-057), a build sheet per system (ADR-058) and a fleet marker kept clear
+of the systems at either end (ADR-059).
+
 ### What is still true of this plan
 
 **It does not move to `Archive/` yet, and for the same reason as before.** Six people on six
@@ -475,10 +503,11 @@ machines have still not played a tick. Everything else in this document has happ
    tabs are now buildable and are not built.
 3. **`getaddrinfo` still blocks** on a hostname, though the connect no longer does (ADR-043). Six
    people typing a dotted address are unaffected; six people typing a name are not.
-4. **The remaining seven items** of the codebase review's §4 -- items 1, 2, 5 and 11 are done
-   (ADR-043, ADR-044, ADR-045), and so is the console its §2 asked for — a client library, one
-   bidirectional serialize function, sanitizers, idle throttling, IPv6, Release in CI, matches per
-   server.
+4. ~~**The remaining seven items** of the codebase review's §4~~ **Six of the seven done, later on
+   2026-09-12:** IPv6 (ADR-046), idle throttling (ADR-047), sanitizers and Release in CI (ADR-048),
+   one bidirectional serialize function (ADR-049), a client library (ADR-050). Items 1, 2, 5 and 11
+   were already done (ADR-043, ADR-044, ADR-045), and so was the console its §2 asked for. **What is
+   left of the review is item 10, matches per server**, owed only if that ceiling is ever reached.
 
 *A plan is not an ADR: this section is dated rather than immutable, and the next person to finish
 something on it should add to it rather than rewrite §3.*

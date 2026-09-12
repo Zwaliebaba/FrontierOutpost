@@ -1,6 +1,6 @@
 # ADR-018 — The simulation is a pure function, and its randomness is pinned by value
 
-**Status:** Accepted
+**Status:** Accepted — its second open question is answered in the code: `Match::Hash` covers the whole state, every field a rule reads, and the value is pinned to a literal in `GameLogicTests` that Debug and Release both reproduce in CI (ADR-048); ADR-055 records that the cross-check against clang is owed again for the re-pinned value. No rule has needed randomness yet, so the first stands as written (2026-09-12).
 
 **Date:** 2026-09-10
 **Decided by:** Build session for `Design/Plans/4X-01-CoreLoop.md`, Step 0. The plan asks for this ADR before any code because it constrains what Steps 1 and 2 are allowed to be built out of.

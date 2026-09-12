@@ -11,10 +11,11 @@ from 6 to 12 and the eight fixed seeds that file names, on `x64\Debug` — 25 te
 sizes in §3 are read off generated galaxies rather than derived, and the test that reads them fails
 if they change.
 
-**Not implemented, and not claimed:** nothing in the galaxy is *played* yet. There are no fleets, no
-production, no orders and no resolver — those are steps 3 onward of the plan. The sealed region is
-placed and drawn; nothing happens when it opens (step 9). Ownership exists only as the capital each
-player starts on.
+**Since then — noted 2026-09-12:** the galaxy is played. Fleets, production, orders and the resolver
+arrived with steps 3 to 10 of the plan on 2026-09-10 and 2026-09-11, and none of them reads a
+position or changes how a galaxy is generated. What is still true: the sealed region is placed and
+drawn, and nothing happens when it opens — that is Phase 2's, not a step of the plan. The sizes in
+§3 are still asserted by the test that read them, which passed on 2026-09-12.
 
 ---
 

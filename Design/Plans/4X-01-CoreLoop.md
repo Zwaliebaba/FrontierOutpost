@@ -1,10 +1,11 @@
 # 4X-01 — The loop, headless: a galaxy, a tick, and everything that resolves in it
 
-**Status:** **Stage A complete, 2026-09-11.** Written 2026-09-10 against
-`space-4x-one-pager-v10.md` (v0.7) and `space-4x-prototype-test-plan.md` (v0.4). Steps 0–6 done
-2026-09-10, steps 7–10 on 2026-09-11. Every row of §7 has a step and a test name; §3's ADRs are
-written. `4X-02-ServerAndClient.md` is now a plan rather than a stub. Archive this when `4X-02`
-closes, not before — it is the rule checklist anything touching the simulation is checked against.
+**Status:** **Stage A complete, 2026-09-11.** Written 2026-09-10 against `space-4x-one-pager-v10.md`
+(v0.7) and `space-4x-prototype-test-plan.md` (v0.4). Steps 0–6 done 2026-09-10, steps 7–10 on
+2026-09-11. Every row of §7 has a step and a test name; §3's ADRs are written.
+`4X-02-ServerAndClient.md` is now a plan rather than a stub, and §6's open questions have all been
+answered since, each annotated in place on 2026-09-12. Archive this when `4X-02` closes, not before
+— it is the rule checklist anything touching the simulation is checked against.
 
 This plan builds the *simulation* half of what the one-pager's *Build order* asks for: **"Loop
 first — graph generator, tick resolution, trade lanes and proposals in the build menu, custodian,
@@ -573,29 +574,59 @@ front of a resolver that is not yet right is a very good way to test the network
 
 ## 6. Open questions this plan leaves to the session
 
+Every question here was answered after the plan was written. Each answer is noted under its question
+(2026-09-12), so this section reads as what it is — the record of what Stage A did not settle — and
+not as a list of things still owed.
+
 **What research does.** The one-pager names it in phase 2 and nowhere else. Stage A makes it a
 counter that accrues and affects nothing, and reports it in the digest as the fixture does
 ("research +4"). What it unlocks is a design question for the owner.
+
+*Answered by the owner on 2026-09-11: research becomes an unlock track, decided after Phase 2 and
+not before (`Design/blueprint.md` §9). The counter was not kept — `TickResolver::Produce` says a
+field nothing reads is a number that looks tuned and is not — so there is nothing to show until
+then.*
 
 **What a shipyard and a mining station do, and cost.** The fixture shows costs and yields; the
 one-pager does not. Initial values go in `MatchRules`; the *effects* — a shipyard builds ships at
 some rate, a mining station adds production — need a sentence each from the owner.
 
+*Answered in `GameLogic/MatchRules.h`: a shipyard adds `shipsPerShipyard` ships a tick to the fleet
+at its system, a mining station adds `miningStationCredits` a tick to its system, and each has a
+cost there. ADR-053 puts the cost on the button.*
+
 **What "strength" is.** Ship count is the obvious first answer and is probably right for Phase 0.
 The combat ADR should say so and say it is provisional.
+
+*Ship count. The owner confirmed it on 2026-09-11 — one ship type for now, classes a v2 candidate
+(`Design/blueprint.md` §9).*
 
 **Scoring formula.** "On what they hold at match end" — systems, or systems weighted by
 production, or something else. Placement ties need a rule.
 
+*ADR-023: `scorePerSystem` for every held system and `capitalScoreBonus` on top for a capital,
+recomputed every tick from what is held now; placement is a total order even when scores tie
+(`PlacementsAreTotallyOrderedEvenWhenScoresTie`, §7).*
+
 **The consequence sort.** Step 4 needs a total order over digest events. A numeric severity per
 kind, with ties broken by tick of origin, is the recommendation; it is a decision.
+
+*ADR-020: each digest entry carries a severity the resolver assigns, and the digest is sorted by
+it.*
 
 **Whether the region opening does anything visible in Stage A.** The plan says no. A digest line
 ("Sealed region open. Nothing can enter it yet.") is honest and cheap and is the owner's call.
 
+*Nothing happens at the opening and no digest line was added; the region's rules are Phase 2's. What
+is visible is the countdown the map draws under the region — `SEALED - OPENS T60` — from the tick
+the snapshot carries.*
+
 **Whether Phase 0's compressed clock needs a compressed guard.** Twelve ticks of capital guard is
 three days at four a day and twelve hours at one an hour. The test plan says Phase 0 tunes it;
 `MatchRules` makes that possible; the initial Phase 0 value is the owner's.
+
+*`PhaseZeroRules()` scales it to a seventh of the match, which is what twelve ticks of eighty-four
+is: seven ticks of forty-eight. `PracticeRules()` does the same (ADR-051).*
 
 ---
 

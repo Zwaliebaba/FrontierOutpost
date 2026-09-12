@@ -38,31 +38,33 @@ The screen is three columns and a bar.
 
 **The top bar** is the state of the match in one line: which match, which day of how many, how many
 players and systems, then the countdown to the next lock, your score and placement, and who is
-leading. **The countdown is the clock everything else runs on.** When it hits zero, everything
-everybody ordered happens at once.
+leading when it is not you. **The countdown is the clock everything else runs on.** When it hits
+zero, everything everybody ordered happens at once.
 
 **The digest, on the left, is the primary screen** — not the map. It is what changed since you last
 looked, sorted by how much it matters to you: a system lost above a proposal received above income.
 Every event carries its own buttons. This is where you play from. On tick zero it says *nothing has
-happened yet*, because nothing has.
+happened yet*, because nothing has, and carries the moves you can make anyway: a priced **BUILD**
+and a **MOVE** for a fleet that is standing still.
 
 **The map, in the middle,** is the galaxy: systems as dots, lanes as lines between them, and a
 number on each lane. **That number is the lane's cost in ticks** — how long a fleet takes to cross
 it. It is authored per lane when the galaxy is generated, not derived from how far apart the dots
 look. Lanes inside your starting cluster cost one tick; lanes out toward the frontier cost two to
-four. You can drag the map to turn it and pinch or scroll to zoom.
+four. You can drag the map to turn it. There is no zoom yet.
 
 **The locks rail, on the right,** is a read-only receipt of what goes in at the next lock: your
-fleets, your builds, your signals, your proposals. It has no controls — tapping a row jumps to the
-event that owns it. It is there so that before the tick you can read what you have actually
-committed to, which is rarely quite what you thought.
+fleets, your builds, your signals, your proposals. Its rows are not buttons; the one control on it
+is the **SIGNALS** header, which opens the sheet of things you can say to another player. Change
+anything else from the digest. It is there so that before the tick you can read what you have
+actually committed to, which is rarely quite what you thought.
 
 ---
 
 ## 3. Your first three ticks
 
 You start with a capital, two satellite systems joined to it by one-tick lanes, ten ships in one
-fleet parked at the capital, and twenty credits.
+fleet parked at the capital, and a hundred credits.
 
 **Tick one: move the fleet.** In the digest, press **MOVE FLT 1**. A sheet comes up from the bottom
 listing every system that fleet can reach along a lane, with who holds it and how long it takes.
@@ -71,10 +73,13 @@ Pick something unclaimed one tick away. The locks rail now says your fleet is go
 That is the whole core verb of this game, and it is worth saying plainly: **an order is a bet placed
 now and resolved later.** Nobody else can see it until it locks. You cannot see theirs either.
 
-**Tick one, also: spend the credits.** Press **BUILD** on a system you hold. Twenty credits is
-exactly one shipyard, or a mining station with five left over. A shipyard adds two ships a tick to
-the fleet at that system; a mining station adds four credits a tick to the system. Neither is wrong.
-Build something — an empty first tick is a wasted one.
+**Tick one, also: spend the credits.** Tap a system you hold on the map. A sheet lists what that
+system can build with the price on each row: a shipyard is twenty, a mining station fifteen, and a
+hundred credits buys several of either across your three systems with something kept back for a
+lane. The **BUILD** button on the digest's first card is the shortcut; it queues the first building
+it can. A shipyard adds two ships a tick to the fleet at that system; a mining station adds four
+credits a tick to the system. Neither is wrong. Build something — an empty first tick is a wasted
+one.
 
 **Wait for the lock.** Two minutes in practice. You can change your mind about anything up to the
 moment it hits zero; orders are editable right up to the lock and hidden until it.
@@ -101,8 +106,9 @@ of two consecutive ticks — siege, then capture. So losing a system is always s
 coming and had a tick to answer. The same is true in reverse: what you are taking, they can see you
 taking.
 
-**Capitals cannot be attacked for the first twelve ticks.** There is a visible countdown. Everything
-else is takeable from tick one.
+**Capitals cannot be attacked for the first twelve ticks.** There is a visible countdown. In a
+practice match the guard is scaled to the shorter match and lasts four; the countdown says which.
+Everything else is takeable from tick one.
 
 **You can only see one lane out from what you hold.** Your systems and their immediate neighbours.
 Everything else on the map is what you were told, not what is there — and it can be out of date.
@@ -159,8 +165,9 @@ Stated so you do not go looking for them:
 
 - **Replay** opens and lists the six resolution phases, and does not step through them. It is a
   stub and says so.
-- **Missed digests** are one tick deep. If three ticks pass while you are away you get the latest,
-  not all three.
+- **Missed digests** are eight ticks deep. Come back after three ticks and you get all three under
+  one *since you looked* header; away longer than eight and you get the eight most recent, with a
+  header that counts every tick you missed and nothing that says the older ones are gone.
 - **Exile** — the mode you enter when your capital falls — is designed and not built. So is the
   Fallow, the sealed region the map draws and counts down to.
 - **There is no mobile version.** The client is Windows and Direct3D 12, at a fixed 1280×720.
@@ -180,6 +187,7 @@ optional.
 | `--tick <seconds>` | Override the tick interval. Wins over anything the seats screen chose. |
 | `--phase0` | The test plan's setup: six players, an hourly tick, forty-eight hours. |
 | `--bots <n>` | Fill the last *n* seats of a `--serve` match with bots. |
+| `--store <name>` | Name the match store and log this server writes, so two servers beside one executable do not share a file. |
 
 **To play a real match with people**, host it, then send each of them one token off the seats
 screen — each token names one seat, and the empire it plays. They run the client, put your address

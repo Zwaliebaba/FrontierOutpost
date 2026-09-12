@@ -1,6 +1,6 @@
 # ADR-015 — The MVP-01 vertical slice is deleted, not kept for reference
 
-**Status:** Accepted
+**Status:** Accepted — its first open question, the 4X's wire protocol and tick loop, was answered by ADR-018, ADR-019, ADR-025, ADR-026 and ADR-028 (2026-09-10 to 2026-09-11). The second, whether `PointerInput`'s zoom should drive the map, is still open: the steps are banked and nothing reads them (2026-09-12).
 
 **Date:** 2026-09-10
 **Decided by:** Owner decision, 2026-09-10, choosing between the three scopes offered in the session that built the main page.

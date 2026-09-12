@@ -1,6 +1,6 @@
 # ADR-038 — The connection says what it is doing, and the reference fixture goes
 
-**Status:** Accepted
+**Status:** Accepted — the second open question is closed by ADR-043: `Socket::Connect` no longer waits, and the CONNECTING dialog covers the whole wait. Whether unlocked orders should survive a disconnection is still open (2026-09-12).
 
 **Date:** 2026-09-12
 **Decided by:** Owner, "go ahead" on the connection dialogs and the waiting-for-the-host screen,

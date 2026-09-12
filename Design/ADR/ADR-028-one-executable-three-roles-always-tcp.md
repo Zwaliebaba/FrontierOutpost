@@ -1,6 +1,6 @@
 # ADR-028 — One executable, three roles, and the client always talks TCP
 
-**Status:** Accepted
+**Status:** Accepted — the first two open questions are closed: the client reconnects on a spaced retry and says so on screen (ADR-038, `4X-02` §6), and a returning player is sent the digests they missed (ADR-044). The slow-loris connection is still open (2026-09-12).
 
 **Date:** 2026-09-11
 **Decided by:** **Owner decision, 2026-09-11**, on the shape (one executable, embedded server, TCP throughout). The protocol details are the build session's, recorded here with it.

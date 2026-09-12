@@ -1,6 +1,6 @@
 # ADR-019 — A phase is a pure function from one state to the next
 
-**Status:** Accepted
+**Status:** Accepted — of its open questions, on 2026-09-12: the digests a `TickLog` produces are kept eight ticks deep per player on the session (ADR-044); the phase records are still discarded, which is why *Replay tick N* is a stub; and which phase the region belongs to is still Phase 2's.
 
 **Date:** 2026-09-10
 **Decided by:** Build session for `Design/Plans/4X-01-CoreLoop.md`, Step 4. The plan asks for this decision in the step that meets it.

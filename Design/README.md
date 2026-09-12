@@ -32,7 +32,7 @@ These are settled. They are not preferences to be re-litigated in a session; cha
 
 Every one of these constrains design work in a way that is easy to forget mid-session. A UI mock at 1920×1080, a texture atlas loaded from disk, a `std::print` of a wall-clock timestamp inside the simulation — each is a perfectly good idea that this game has already decided against.
 
-**The presentation row changed on 2026-09-10 and the rest of this record has not all caught up.** ADR-011, ADR-012 and ADR-013 are the change; ADR-001, ADR-002 and ADR-008 are superseded; ADR-003 and ADR-010 are revised in part and say so in their status lines. Anything in `Archive/` describes the 640×400 renderer and is history, not a description of the tree.
+**The presentation row changed on 2026-09-10.** ADR-011 is the change and stands. ADR-012 and ADR-013 came with it and, like ADR-003 to ADR-007 and ADR-010, have since been deprecated by ADR-015, because the MVP-01 scene they describe was deleted the same day; ADR-001, ADR-002 and ADR-008 are superseded. Every one of those says so in its status line. Anything in `Archive/` describes the 640×400 renderer and is history, not a description of the tree.
 
 ---
 

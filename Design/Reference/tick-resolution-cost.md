@@ -11,9 +11,10 @@ which plays a complete 84-tick match with six scripted policies and times only t
 `std::chrono::steady_clock`, summed across the match and divided by the ticks. One machine, one run
 per configuration, x64.
 
-**Not measured, and not claimed:** anything about a server. There is no server (`4X-02`), so there
-is no figure here for wire time, disk time, wake-up latency or how many matches one process could
-hold. Those are the numbers that would actually size a deployment and none of them exist yet.
+**Not measured, and not claimed:** anything about a server. When this was measured there was no
+server; there is one now (`4X-02`, ADR-028, 2026-09-11) and it has not been measured either — there
+is still no figure here for wire time, disk time, wake-up latency or how many matches one process
+could hold. Those are the numbers that would actually size a deployment and none of them exist yet.
 
 ---
 
@@ -30,8 +31,9 @@ busy match rather than a quiet one, which is the right thing to measure.
 
 The Debug figure is roughly **forty times** the Release one. That ratio is what an unoptimised build
 with iterator debugging costs on a workload made almost entirely of small vector walks, and it is
-worth writing down because CI builds Debug only (AGENTS.md §6) — a future session reading a CI
-timing and comparing it to this table needs to know which column it is in.
+worth writing down because CI builds everything in Debug and only `GameLogicTests` in Release
+(ADR-048) — a future session reading a CI timing and comparing it to this table needs to know which
+column it is in.
 
 ## What it means for persistence
 
@@ -46,7 +48,10 @@ whole match's orders are a few kilobytes rather than a snapshot per tick.
 **It does not decide the question**, which is an owner decision and belongs to `4X-02`: R13 says the
 executable ships alone with no runtime file dependency, and a match that survives a restart has to
 live *somewhere*. What this measurement settles is only that the cheap option is not too slow — the
-collision with R13 is unaffected.
+collision with R13 is unaffected. *The owner took it on 2026-09-11: a match is its seed and its
+orders, written beside the executable by a process acting as the server, and R13 was amended to
+allow that one file (ADR-024). A restarted `--serve` process reloads it by exactly this replay
+(ADR-042).*
 
 ## What would change these numbers
 

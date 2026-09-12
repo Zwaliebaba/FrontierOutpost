@@ -1,6 +1,6 @@
 # ADR-040 — The executable gets a test project
 
-**Status:** Accepted
+**Status:** Accepted — its open question is closed by ADR-041: a headless renderer records the same geometry a screen would draw, so a test draws the page and then taps it, and `MainPage`'s buttons are pressed by tests rather than fingers. ADR-045 then moved the map out of `MainPage` (2026-09-12).
 
 **Date:** 2026-09-12
 **Decided by:** Owner, "implement", 2026-09-12, on the open question ADR-039 left.

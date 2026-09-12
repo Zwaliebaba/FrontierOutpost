@@ -1,6 +1,6 @@
 # ADR-023 — Score is what you hold now, and the match ends two ways
 
-**Status:** Accepted
+**Status:** Accepted — of its open questions, on 2026-09-12: the match stops resolving when it ends — `Session::Advance` stops once the simulation reports it finished, and the server refuses orders for a finished match (`4X-02` §6); what placement means for a player who conceded was decided by the owner on 2026-09-11 — concession forfeits score outright in any week (`Design/blueprint.md` §9) — and the ADR and the code change are still owed, the resolver forfeiting only a first-week concession today; whether a first-week custodian should be told repeatedly is still open.
 
 **Date:** 2026-09-11
 **Decided by:** Build session for `Design/Plans/4X-01-CoreLoop.md`, Step 7. The plan asks for the placement tiebreak to be decided and recorded; the surrounding decisions are recorded with it because they are one question.

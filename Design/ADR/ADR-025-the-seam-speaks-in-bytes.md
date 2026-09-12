@@ -1,6 +1,6 @@
 # ADR-025 — The seam speaks in bytes
 
-**Status:** Accepted
+**Status:** Accepted — the second open question is closed: the game emits an instrumentation stream beside the digest, `Simulation::TakeEvents`, and the server writes it down (ADR-030, `4X-02` §6). Whether `Configuration()` should carry a version is still open (2026-09-12).
 
 **Date:** 2026-09-11
 **Decided by:** Build session for `Design/Plans/4X-02-ServerAndClient.md`, Step 1.

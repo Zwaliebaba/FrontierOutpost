@@ -1,6 +1,6 @@
 # ADR-039 — The client can say things, and the lock shows
 
-**Status:** Accepted
+**Status:** Accepted — the first open question is closed by ADR-040, which gave the executable a test project, and ADR-041, which pressed the buttons. Whether a lane offer should be reachable from the map is still open; `BuildRow::isTradeLane` is still set by nothing (2026-09-12).
 
 **Date:** 2026-09-12
 **Decided by:** Owner, "do both" on outgoing signals and the at-lock screen, 2026-09-12.
