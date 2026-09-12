@@ -18,6 +18,10 @@ Rows: 6px vertical padding; must fit 720 with all six visible at reference data.
 **Locks (260px, right) — read-only summary of what goes in.**
 `LOCKS T47` / `UNLOCKED` (amber). One line of help. Sections FLEETS · BUILDS · SIGNALS · PROPOSALS, each row label + status. Footer `ALL LOCK TOGETHER · 02:14:09`. Tapping a row jumps to the event that owns it; no controls live here.
 
+**The price is on the button (ADR-053).** The top bar carries the purse (`26 CR`) beside the score. The BUILDS header reads `2 AVAIL - 26 CR`, a queued row reads `QUEUED -20`, and a line under the queue says what is left at the lock. Every build control — the digest's filled button (`SHIPYARD JANDAL 20 CR`), the build sheet's rows (`20 CR`) — carries its price; a queued one says `QUEUED` and is outlined rather than filled; one the purse cannot cover says `NEED 7 MORE`, is drawn dim, and is not a target. A refusal in the digest names the building, the system, the price and the purse (`Shipyard at Jandal - costs 20, you had 13`) and focuses the system.
+
+**Sheets (ADR-052).** The four panels — build, destination, signal, replay — are one component, drawn as a sheet against the bottom of the map pane. The destination picker is the one that uses every field: owner square, system name, `YOURS`/`UNCLAIMED`/`<RIVAL>` with `- CAPITAL` / `- CONTESTED` appended, and a right-hand `N TICKS - ETA Tk` in which the lane cost and the arrival tick are two separate facts. Build and signal rows carry a status on the right (`QUEUED`, `SENDING`, `TAP AGAIN TO CONFIRM`) instead of folding it into the title. Replay is a six-phase list and still a stub.
+
 **Behaviour:** countdown live; at zero → screen 06 state. Actions edit local orders until lock. Accept/Decline is an order. Event `MAP` focuses the map. Actor card expands/collapses.
 **Code:** replaces the three-rail layout in `MainPage.cpp`. Digest from `TickLog` + previous unread ticks; grouping and ranking are client-side presentation over the same events. Verdict from the combat resolver preview.
 

@@ -248,6 +248,35 @@ struct MatchRules
 inline constexpr std::uint32_t MINIMUM_PLAYERS = 6;
 inline constexpr std::uint32_t MAXIMUM_PLAYERS = 12;
 
+/// A first match, to learn the loop on: bots in the other seats and a tick measured in minutes.
+///
+/// **The clock and the opponents are the only things it changes, and that is the decision**
+/// (ADR-051). A practice match that also handed out more credits or generated a smaller galaxy
+/// would teach a game the player is not about to play. What a beginner needs is the real rules at
+/// a speed where the consequence of an order arrives while they are still looking at it: two
+/// minutes a tick puts thirty ticks inside an hour, against six hours a tick over three weeks.
+///
+/// The three fractions that do not survive being compressed are scaled exactly as
+/// `PhaseZeroRules` scales them, and for the same reason -- they are fractions of a match, so they
+/// stay fractions of one.
+///
+/// `custodianAbsenceTicks` is the one that is not scaled. Absence is a rule about days away from a
+/// life and there are no days in an hour; at the match length it cannot fire, which is the honest
+/// answer for a match played in one sitting rather than a number that pretends to mean something.
+[[nodiscard]] constexpr MatchRules PracticeRules() noexcept
+{
+  MatchRules rules;
+  rules.playerCount = MINIMUM_PLAYERS;
+  rules.tickIntervalSeconds = 2 * 60;
+  rules.matchLengthTicks = 30;
+
+  rules.firstWeekTicks = rules.matchLengthTicks / 3;
+  rules.regionOpensAtTick = (rules.matchLengthTicks * 5) / 7;
+  rules.capitalGuardTicks = rules.matchLengthTicks / 7;
+  rules.custodianAbsenceTicks = rules.matchLengthTicks;
+  return rules;
+}
+
 /// A way a rules struct contradicts the game it is rules for.
 ///
 /// These are not tuning mistakes -- Phase 0 is allowed to make a lane pay badly or a match run

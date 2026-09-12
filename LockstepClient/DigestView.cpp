@@ -46,7 +46,11 @@ namespace
 
   if (!_state.orders.builds.empty())
   {
-    actions.push_back(EventAction{.label = "BUILD >", .kind = EventActionKind::QueueBuild, .target = 0, .primary = true});
+    // Priced like every other build button (ADR-053).
+    actions.push_back(EventAction{.label = std::format("BUILD {} CR", _state.orders.builds.front().cost),
+                                  .kind = EventActionKind::QueueBuild,
+                                  .target = 0,
+                                  .primary = true});
   }
 
   for (std::size_t index = 0; index < _state.fleets.size(); ++index)

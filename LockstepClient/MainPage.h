@@ -42,6 +42,20 @@ public:
   /// Line-height 1.5 on an 8px font (README "Frame").
   static constexpr std::int32_t LINE_HEIGHT = 12;
 
+  /// The sheet a panel is drawn as, anchored to the bottom of the map pane (ADR-052).
+  ///
+  /// **44 is the number that matters and the rest follow it.** It is the smallest target a finger
+  /// hits reliably, and it is also the height of the top bar, so a sheet row and the bar read as
+  /// the same unit of the frame. Six rows and the sheet still leaves over half the pane showing,
+  /// which is the constraint the other direction: the map is what the choice is about.
+  static constexpr float SHEET_MARGIN = 12.0F;
+  static constexpr float SHEET_ROW_HEIGHT = 44.0F;
+  static constexpr float SHEET_HEADER_HEIGHT = 36.0F;
+  static constexpr float SHEET_ACTION_HEIGHT = 40.0F;
+  /// The row that says how many did not fit, which is shorter because nothing taps it.
+  static constexpr float SHEET_CLIPPED_HEIGHT = 24.0F;
+  static constexpr std::size_t SHEET_MAXIMUM_ROWS = 6;
+
   /// What a tap does. The screen has no free text and no chat, so this is the complete list of
   /// things a player can express on it (one-pager, "What it is not").
   enum class Action : std::uint8_t
@@ -157,6 +171,10 @@ private:
   void MeasureContent();
 
   void AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index);
+
+  /// How many credits short the purse is of build row `_index` on top of what is already queued;
+  /// zero when it is affordable or names no row. The number a dim build control shows (ADR-053).
+  [[nodiscard]] std::uint32_t BuildShortfall(std::int32_t _index) const noexcept;
 
   void DrawTopBar(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawDigestRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);

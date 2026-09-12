@@ -302,8 +302,53 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
     {
       const std::string reason = Describe(refusal.reason);
       record.lines.push_back(std::format("{}: order {} refused -- {}", NameOf(player), refusal.index, reason));
-      Tell(_log, player,
-           DigestEntry{.kind = DigestKind::OrderRejected, .severity = Severity::ORDER_REFUSED, .title = "Order refused", .detail = reason});
+
+      // Named, and with the numbers (ADR-053). A bare "not enough credits" a tick after the tap
+      // is nothing a player can act on; "Shipyard at Jandal - costs 20, you had 13" is. The entry
+      // carries the system or fleet it is about, so the card can put it under the player's eye.
+      DigestEntry entry{.kind = DigestKind::OrderRejected, .severity = Severity::ORDER_REFUSED, .title = "Order refused", .detail = reason};
+      const auto at = static_cast<std::size_t>(std::max(refusal.index, 0));
+      if (refusal.list == OrderList::Builds && at < set->builds.size())
+      {
+        const BuildOrder& build = set->builds[at];
+        const char* what = build.kind == BuildKind::Shipyard ? "Shipyard" : "Mining station";
+        entry.system = build.system;
+        entry.detail = std::format("{} at {} - {}", what, NameOf(_in, build.system), reason);
+
+        if (refusal.reason == OrderRejection::CannotAfford)
+        {
+          // The same running total `Match::Validate` refused it by: whatever the accepted builds
+          // before this one already took comes off the purse it is quoted against.
+          std::uint32_t spent = 0;
+          for (std::size_t earlier = 0; earlier < at; ++earlier)
+          {
+            const bool accepted =
+              std::none_of(rejected.begin(), rejected.end(), [earlier](const RejectedOrder& _other)
+                           { return _other.list == OrderList::Builds && _other.index == static_cast<std::int32_t>(earlier); });
+            if (accepted)
+            {
+              spent += set->builds[earlier].kind == BuildKind::Shipyard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost;
+            }
+          }
+          const std::uint32_t cost = build.kind == BuildKind::Shipyard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost;
+          const std::uint32_t purse = next.PlayerAt(player).credits;
+          entry.detail = spent == 0 ? std::format("{} at {} - costs {}, you had {}", what, NameOf(_in, build.system), cost, purse)
+                                    : std::format("{} at {} - costs {}, {} left after the builds before it", what,
+                                                  NameOf(_in, build.system), cost, purse > spent ? purse - spent : 0);
+        }
+      }
+      else if (refusal.list == OrderList::FleetOrders && at < set->fleetOrders.size())
+      {
+        const FleetOrder& order = set->fleetOrders[at];
+        entry.fleet = order.fleet;
+        entry.system = order.destination;
+        entry.detail = std::format("Fleet {} to {} - {}", order.fleet.Index() + 1, NameOf(_in, order.destination), reason);
+      }
+      else if (refusal.list == OrderList::Proposals && at < set->proposals.size())
+      {
+        entry.detail = std::format("Offer to {} - {}", NameOf(set->proposals[at].to), reason);
+      }
+      Tell(_log, player, std::move(entry));
     }
 
     // By list AND index. Fleet order zero and build zero are different orders, and a refusal of

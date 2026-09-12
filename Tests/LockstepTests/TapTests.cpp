@@ -568,4 +568,58 @@ public:
   }
 };
 
+// The price is on the button (ADR-053): a build the purse cannot cover is refused at the tap, by
+// the same running-total rule the lock would refuse it by, rather than a tick later in the digest.
+TEST_CLASS(BuildQueueTapTests)
+{
+public:
+  TEST_METHOD(ABuildThePurseCoversCanBeQueuedFromTheScreen)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    Assert::IsFalse(page.State().orders.builds.empty(), L"a fresh match offers something to build");
+    Assert::IsTrue(page.State().orders.builds.front().cost > 0, L"and every row carries its price");
+    Assert::IsTrue(page.State().player.credits >= page.State().orders.builds.front().cost, L"the opening purse covers one building");
+
+    Headless renderers;
+    const bool queued = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return !page.State().orders.queuedBuilds.empty(); });
+    Assert::IsTrue(queued, L"no control on the screen queues a build");
+    Assert::AreEqual(std::size_t{1}, Lockstep::OrdersOf(page.State()).builds.size(), L"and it became an order");
+  }
+
+  TEST_METHOD(ABuildThePurseCannotCoverIsNotQueuedByAnyTap)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    state.player.credits = 0;
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    const bool queued = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return !page.State().orders.queuedBuilds.empty(); });
+    Assert::IsFalse(queued, L"a build the lock would refuse was queued anyway");
+    Assert::IsTrue(Lockstep::OrdersOf(page.State()).builds.empty(), L"and nothing went out");
+  }
+
+  TEST_METHOD(TheQueueNeverExceedsThePurse)
+  {
+    // Two rows and a purse that covers either but not both: whatever the sweep queues and takes
+    // back, the running total stays inside the purse, which is the rule `Match::Validate` applies.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    Assert::IsTrue(state.orders.builds.size() >= 2, L"the opening board offers two buildings");
+    state.player.credits = state.orders.builds[0].cost;
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    const bool exceeded = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                   [&page] { return page.State().orders.QueuedBuildCost() > page.State().player.credits; });
+    Assert::IsFalse(exceeded, L"the screen queued more than the purse covers");
+  }
+};
+
 } // namespace LockstepTests

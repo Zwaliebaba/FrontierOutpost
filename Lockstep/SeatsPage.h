@@ -4,7 +4,9 @@
 #include "FontRenderer.h"
 #include "KeyboardInput.h"
 #include "MatchState.h"
+#include "OrbitCamera.h"
 #include "ShapeRenderer.h"
+#include "Starfield.h"
 
 #include <array>
 #include <optional>
@@ -39,6 +41,18 @@ public:
   {
     Human,
     Bot
+  };
+
+  /// Which match the host asked for.
+  ///
+  /// The two differ in their clock and their opponents and in nothing else, which is the whole of
+  /// ADR-051: what a practice match teaches has to be true of the match it is practice for.
+  enum class Entry : std::uint8_t
+  {
+    /// The designed match, on `MatchRules`' six hours a tick, with whoever is in the seats.
+    Match,
+    /// The same rules on `PracticeRules`' two minutes, with every seat but the host's a bot.
+    Practice
   };
 
   /// What happens to a seat whose player has not turned up by the time the host wants to start.
@@ -107,8 +121,8 @@ public:
   bool HandleTap(float _xPixels, float _yPixels);
   void HandleKey(Neuron::KeyboardInput::Key _key);
 
-  /// True once, when the host has asked to start. Taken, so a held finger starts one match.
-  [[nodiscard]] bool TakeEnterRequest() noexcept;
+  /// What the host asked to start, once, or nothing. Taken, so a held finger starts one match.
+  [[nodiscard]] std::optional<Entry> TakeEnterRequest() noexcept;
 
   /// How many seats the match has. Seats fill from the top, so this is also the index one past the
   /// last playing seat, and a token's position in the list is the player index it becomes.
@@ -149,7 +163,12 @@ private:
   void DrawSeatCard(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, std::int32_t _index, float _x, float _y, float _width,
                     float _height);
   void DrawDetail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
+  void DrawPractice(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawFooter(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
+
+  /// Hands every seat but the host's and anybody already connected to a bot, and says how many it
+  /// moved. What `FILL WAITING WITH BOTS` does, and what `PRACTICE MATCH` needs done first.
+  std::int32_t FillWaitingSeatsWithBots();
 
   /// Whether this seat will not hold the match up: a bot, somebody connected, or a seat the host
   /// has already said they will not wait for.
@@ -172,11 +191,16 @@ private:
   /// played could come apart (ADR-041).
   std::int32_t m_hostSeat = 0;
 
-  bool m_enterRequested = false;
+  std::optional<Entry> m_entry;
   std::string m_copyRequest;
   std::string m_refusal;
 
   std::vector<Hit> m_hits;
+
+  /// The sky, and a fixed view of it. The same field screen 03 sits on, for the reason `JoinPage`
+  /// gives: the lobby and the join screen are one moment of the game and should look like it.
+  Neuron::Starfield m_sky;
+  Neuron::OrbitCamera m_camera;
 };
 
 } // namespace Lockstep

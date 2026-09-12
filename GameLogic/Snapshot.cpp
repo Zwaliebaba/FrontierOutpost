@@ -244,6 +244,15 @@ Snapshot Snapshot::For(const Match& _match, PlayerId _player)
     }
   }
 
+  // ---- The purse and the prices -------------------------------------------------------------------
+  //
+  // The viewer's own credits and nobody else's, and the costs `Match::Validate` will hold the
+  // next lock to (ADR-053).
+  view.m_credits = _match.PlayerAt(_player).credits;
+  view.m_shipyardCost = _match.Rules().shipyardCost;
+  view.m_miningStationCost = _match.Rules().miningStationCost;
+  view.m_tradeLaneCost = _match.Rules().tradeLaneCost;
+
   return view;
 }
 
@@ -431,6 +440,11 @@ void Snapshot::Visit(Neuron::Archive& _archive)
   _archive.U32(m_unclaimedSystems);
   _archive.U32(m_capitalGuardTicksLeft);
   _archive.Boolean(m_finished);
+
+  _archive.U32(m_credits);
+  _archive.U32(m_shipyardCost);
+  _archive.U32(m_miningStationCost);
+  _archive.U32(m_tradeLaneCost);
 }
 
 } // namespace Lockstep

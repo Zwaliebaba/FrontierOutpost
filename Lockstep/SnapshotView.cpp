@@ -310,6 +310,7 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     state.player.score = mine.score;
     state.player.placement = mine.placement;
   }
+  state.player.credits = _snapshot.Credits();
   state.player.playerCount = static_cast<std::uint32_t>(state.players.size());
 
   for (const PlayerBadge& badge : state.players)
@@ -451,15 +452,23 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
       continue;
     }
 
+    // Priced from the snapshot, never from a number the client knows (ADR-053): the server owns
+    // the rules and the client owns the sentence.
     if (!source->hasShipyard)
     {
-      state.orders.builds.push_back(BuildRow{
-        .title = std::format("Shipyard - {}", node.name), .detail = "Reinforces the fleet standing on it", .system = node.id, .kind = 0});
+      state.orders.builds.push_back(BuildRow{.title = std::format("Shipyard - {}", node.name),
+                                             .detail = "Reinforces the fleet standing on it",
+                                             .system = node.id,
+                                             .kind = 0,
+                                             .cost = _snapshot.ShipyardCost()});
     }
     if (!source->hasMiningStation)
     {
-      state.orders.builds.push_back(BuildRow{
-        .title = std::format("Mining station - {}", node.name), .detail = "More credits every tick", .system = node.id, .kind = 1});
+      state.orders.builds.push_back(BuildRow{.title = std::format("Mining station - {}", node.name),
+                                             .detail = "More credits every tick",
+                                             .system = node.id,
+                                             .kind = 1,
+                                             .cost = _snapshot.MiningStationCost()});
     }
   }
   state.orders.availableBuilds = static_cast<std::uint32_t>(state.orders.builds.size());
@@ -518,8 +527,12 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
 
     if (event.kind == EventKind::Economy && !state.orders.builds.empty())
     {
-      event.actions.push_back(EventAction{
-        .label = Shortened(state.orders.builds.front().title), .kind = EventActionKind::QueueBuild, .target = 0, .primary = true});
+      // `SHIPYARD JANDAL 20 CR`: the price is on the button (ADR-053).
+      const BuildRow& offered = state.orders.builds.front();
+      event.actions.push_back(EventAction{.label = std::format("{} {} CR", Shortened(offered.title), offered.cost),
+                                          .kind = EventActionKind::QueueBuild,
+                                          .target = 0,
+                                          .primary = true});
     }
 
     if (event.refs.system != EventRefs::NONE)

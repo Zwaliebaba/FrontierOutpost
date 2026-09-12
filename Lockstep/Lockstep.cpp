@@ -574,7 +574,8 @@ struct MatchPaths
 [[nodiscard]] std::int32_t RunSeatsScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::ShapeRenderer& _shapes,
                                           Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer, Neuron::KeyboardInput& _keyboard,
                                           HWND _window, Lockstep::HostedServer& _lobby, const std::vector<std::string>& _tokens,
-                                          std::vector<std::string>& _outTokens, std::vector<std::optional<Lockstep::BotPolicy>>& _outBots)
+                                          std::vector<std::string>& _outTokens, std::vector<std::optional<Lockstep::BotPolicy>>& _outBots,
+                                          Lockstep::SeatsPage::Entry& _outEntry)
 {
   Lockstep::SeatsPage page{_tokens};
 
@@ -618,8 +619,9 @@ struct MatchPaths
       CloseClipboard();
     }
 
-    if (page.TakeEnterRequest())
+    if (const std::optional<Lockstep::SeatsPage::Entry> entry = page.TakeEnterRequest())
     {
+      _outEntry = *entry;
       _outTokens = page.PlayingTokens();
 
       // After the request, never before: entering is what turns a seat nobody came to into a bot.
@@ -984,15 +986,22 @@ int RunGame(HWND _window, const Startup& _startup)
   {
     std::vector<std::string> playing;
     std::vector<std::optional<Lockstep::BotPolicy>> bots;
+    Lockstep::SeatsPage::Entry entry = Lockstep::SeatsPage::Entry::Match;
     const std::int32_t hostSeat =
-      RunSeatsScreen(device, screen, shapes, text, pointer, keyboard, _window, *hosted, seatTokens, playing, bots);
+      RunSeatsScreen(device, screen, shapes, text, pointer, keyboard, _window, *hosted, seatTokens, playing, bots, entry);
     if (hostSeat < 0)
     {
       return EXIT_SUCCESS;
     }
 
     constexpr std::uint64_t GALAXY_SEED = 0x4652'4F4E'5449'4552ULL;
-    Lockstep::MatchRules rules = _startup.phaseZero ? Lockstep::PhaseZeroRules() : Lockstep::MatchRules{};
+
+    // **The screen chooses the preset and the command line still wins** (ADR-051). `PRACTICE MATCH`
+    // is `--phase0`'s argument made reachable by somebody who has never seen a command line; an
+    // explicit `--tick` after it is still the thing that was typed on purpose.
+    Lockstep::MatchRules rules = entry == Lockstep::SeatsPage::Entry::Practice ? Lockstep::PracticeRules()
+                                 : _startup.phaseZero                          ? Lockstep::PhaseZeroRules()
+                                                                               : Lockstep::MatchRules{};
     if (_startup.tickSeconds > 0)
     {
       rules.tickIntervalSeconds = _startup.tickSeconds;

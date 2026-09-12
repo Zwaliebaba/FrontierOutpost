@@ -291,6 +291,16 @@ void MainPage::AddHit(float _xPixels, float _yPixels, float _widthPixels, float 
   m_hits.push_back(HitRegion{_xPixels, _yPixels, _widthPixels, _heightPixels, _action, _index});
 }
 
+std::uint32_t MainPage::BuildShortfall(std::int32_t _index) const noexcept
+{
+  if (_index < 0 || _index >= static_cast<std::int32_t>(m_state.orders.builds.size()))
+  {
+    return 0;
+  }
+  const std::uint32_t needed = m_state.orders.QueuedBuildCost() + m_state.orders.builds[static_cast<std::size_t>(_index)].cost;
+  return needed > m_state.player.credits ? needed - m_state.player.credits : 0;
+}
+
 bool MainPage::HandleTap(float _xPixels, float _yPixels)
 {
   // Reverse order, so the panel drawn last is hit first. Painter's order and hit order are the
@@ -346,6 +356,13 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       const auto found = std::find(queued.begin(), queued.end(), region->index);
       if (found == queued.end())
       {
+        // Refused here, by the rule the lock would refuse it by (ADR-053). The rows and buttons
+        // that lead here already say so and are not targets, so this is the guard behind them
+        // rather than the message.
+        if (!m_state.CanAffordBuild(region->index))
+        {
+          return true;
+        }
         queued.push_back(region->index);
       }
       else
@@ -520,6 +537,16 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
 
   DrawRight(_text, cursor, centered, "SCORE", Ink::TEXT_MUTED);
   cursor -= static_cast<float>(FontRenderer::MeasurePixels("SCORE")) + 14.0F;
+
+  _shapes.FillRect(cursor, 13.0F, 1.0F, 22.0F, Ink::CARD_BORDER);
+  cursor -= 15.0F;
+
+  // The purse, beside the score and in the same weight (ADR-053). It is the number every build
+  // on the screen is priced against, and it belongs where the eye already goes for the score
+  // rather than inside a sentence on the production card.
+  const std::string credits = std::format("{} CR", m_state.player.credits);
+  DrawRight(_text, cursor, centered, credits, Ink::TEXT_PRIMARY);
+  cursor -= static_cast<float>(FontRenderer::MeasurePixels(credits)) + 14.0F;
 
   _shapes.FillRect(cursor, 13.0F, 1.0F, 22.0F, Ink::CARD_BORDER);
   cursor -= 15.0F;
@@ -724,26 +751,48 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
       for (const EventAction& action : card.actions)
       {
-        const float width = static_cast<float>(FontRenderer::MeasurePixels(action.label)) + 12.0F;
+        // A build button has two states the other buttons do not, and it says which it is in
+        // (ADR-053): QUEUED, so the next tap is known to take it back; or beyond the purse, drawn
+        // dim with what is missing and not a target, because the lock would refuse it and a
+        // refusal a tick later is the worst way to learn a price.
+        std::string label = action.label;
+        bool queued = false;
+        bool unaffordable = false;
+        if (action.kind == EventActionKind::QueueBuild)
+        {
+          queued = std::ranges::find(m_state.orders.queuedBuilds, action.target) != m_state.orders.queuedBuilds.end();
+          unaffordable = !queued && !m_state.CanAffordBuild(action.target);
+          if (queued)
+          {
+            label += " - QUEUED";
+          }
+          else if (unaffordable)
+          {
+            label += std::format(" - NEED {} MORE", BuildShortfall(action.target));
+          }
+        }
+
+        const float width = static_cast<float>(FontRenderer::MeasurePixels(label)) + 12.0F;
         if (buttonX + width > Frame::DIGEST_WIDTH - RAIL_PADDING)
         {
           break;
         }
 
         // One filled button per card at most: the thing the digest thinks you should do.
-        if (action.primary && !m_state.orders.locked)
+        if (action.primary && !m_state.orders.locked && !queued && !unaffordable)
         {
           _shapes.FillRect(buttonX, buttonY, width, 18.0F, Ink::BLUE);
-          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, action.label, Ink::APP_BACKGROUND);
+          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label, Ink::APP_BACKGROUND);
         }
         else
         {
-          _shapes.StrokeRect(buttonX, buttonY, width, 18.0F, Ink::OUTLINE);
-          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, action.label,
-                         m_state.orders.locked ? Ink::NEUTRAL_DIM : Ink::TEXT_PRIMARY);
+          const bool dim = m_state.orders.locked || unaffordable;
+          _shapes.StrokeRect(buttonX, buttonY, width, 18.0F, queued && !dim ? Ink::BLUE : Ink::OUTLINE);
+          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label,
+                         dim ? Ink::NEUTRAL_DIM : (queued ? Ink::BLUE : Ink::TEXT_PRIMARY));
         }
 
-        if (!m_state.orders.locked || action.kind == EventActionKind::Focus)
+        if ((!m_state.orders.locked && !unaffordable) || action.kind == EventActionKind::Focus)
         {
           AddHit(buttonX, buttonY, width, 18.0F, ActionFor(action.kind), action.target);
         }
@@ -920,7 +969,10 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   }
 
   // ---- BUILDS ------------------------------------------------------------------------------------
-  section("BUILDS", std::format("{} AVAIL", m_state.orders.availableBuilds));
+  //
+  // The purse on the header and the price on every queued row, so the column adds up in front of
+  // the player (ADR-053): what is queued, what it takes, and what is left when the clock hits zero.
+  section("BUILDS", std::format("{} AVAIL - {} CR", m_state.orders.availableBuilds, m_state.player.credits));
 
   if (m_state.orders.queuedBuilds.empty())
   {
@@ -930,8 +982,14 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     if (queued >= 0 && queued < static_cast<std::int32_t>(m_state.orders.builds.size()))
     {
-      row(Uppercased(m_state.orders.builds[static_cast<std::size_t>(queued)].title), "QUEUED", Ink::BLUE);
+      const BuildRow& build = m_state.orders.builds[static_cast<std::size_t>(queued)];
+      row(Uppercased(build.title), std::format("QUEUED -{}", build.cost), Ink::BLUE);
     }
+  }
+  if (!m_state.orders.queuedBuilds.empty())
+  {
+    const std::uint32_t spent = m_state.orders.QueuedBuildCost();
+    nothing(std::format("- {} cr left at the lock -", spent <= m_state.player.credits ? m_state.player.credits - spent : 0));
   }
   for (const BuildRow& build : m_state.orders.builds)
   {
@@ -1010,6 +1068,17 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   }
 }
 
+/// A panel is a SHEET at the bottom of the map pane, and every row is a 44-pixel target.
+///
+/// **Redesigned touch-first on 2026-09-12** (ADR-052). It was a 300-pixel card floating in the
+/// middle of the pane with 20-pixel rows carrying one string each. Three things were wrong with
+/// that and only the first is about fingers: a 20-pixel row is half the smallest target anybody
+/// hits reliably; a card in the middle of the pane covers the systems the choice is about and puts
+/// the choice under the hand making it; and one string per row meant the destination picker could
+/// say where a fleet could go and not what was there or whose it was.
+///
+/// Anchored to the bottom, the map above it stays readable, the thumb reaches it, and a row has
+/// room for the three things a move is actually decided on -- where, how far, and whose.
 void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
 {
   if (m_panel == Panel::None)
@@ -1017,21 +1086,28 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     return;
   }
 
-  // Panels sit over the map and nowhere else: the digest and the orders stay readable, because
-  // the point of opening one is usually to decide something about what they say.
-  const float paneX = Frame::DIGEST_WIDTH;
-  const float paneWidth = Frame::SCREEN_WIDTH - Frame::DIGEST_WIDTH - Frame::ORDERS_WIDTH;
-  const float width = 300.0F;
-  const float x = paneX + (paneWidth - width) * 0.5F;
-  const float y = Frame::TOP_BAR_HEIGHT + 90.0F;
+  /// What one row of a sheet says. The destination picker needs all four; a panel with nothing to
+  /// put in a field leaves it empty, which is what draws a single-line row.
+  struct SheetRow
+  {
+    std::string title;
+    /// The second line, under the title. Empty draws a single-line row.
+    std::string detail;
+    /// Right-aligned, and the thing the eye scans a column of rows for.
+    std::string right;
+    /// The owner square. Fully transparent is no square, for a row that is not about a player.
+    Color accent;
+    /// What tapping this row acts on, or `EventRefs::NONE` for a row that is only read.
+    std::int32_t target;
+  };
 
-  std::vector<std::string> rows;
-  std::vector<std::int32_t> rowTargets;
+  constexpr Color NO_ACCENT = {0, 0, 0, 0};
+
+  std::vector<SheetRow> rows;
   std::string title;
 
   // What tapping a row does. It differs per panel, and it used to not exist: every row went to
-  // `ChooseDestination`, so the BUILD panel listed two things a player could not tap. Opening a
-  // panel that offers nothing is worse than having no panel.
+  // `ChooseDestination`, so the BUILD panel listed two things a player could not tap.
   Action rowAction = Action::ChooseDestination;
 
   switch (m_panel)
@@ -1039,7 +1115,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   case Panel::BuildList:
   {
     const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(m_panelSubject)];
-    title = std::format("BUILD - {}", node.name);
+    title = std::format("BUILD - {}", Uppercased(node.name));
     rowAction = Action::ToggleBuild;
 
     for (std::size_t index = 0; index < m_state.orders.builds.size(); ++index)
@@ -1048,21 +1124,29 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       const bool queued =
         std::ranges::find(m_state.orders.queuedBuilds, static_cast<std::int32_t>(index)) != m_state.orders.queuedBuilds.end();
 
-      // A queued row says so, because tapping it again is how you take it back and nothing else
-      // on this panel would tell you that you had already chosen it.
-      rows.push_back(queued ? std::format("{}  - QUEUED", row.title) : row.title);
-      rowTargets.push_back(m_state.orders.locked ? EventRefs::NONE : static_cast<std::int32_t>(index));
+      // A queued row says so in the right-hand column rather than inside its own title: tapping it
+      // again is how you take it back, and the status is what the eye is scanning the column for.
+      // An unqueued row carries its price there instead, and one the purse cannot cover says what
+      // is missing and is not a target (ADR-053).
+      const bool affordable = queued || m_state.CanAffordBuild(static_cast<std::int32_t>(index));
+      const std::string status = queued ? std::string{"QUEUED"}
+                                 : affordable
+                                   ? std::format("{} CR", row.cost)
+                                   : std::format("{} CR - NEED {} MORE", row.cost, BuildShortfall(static_cast<std::int32_t>(index)));
+      rows.push_back(SheetRow{row.title, std::string{}, status, queued ? Ink::BLUE : NO_ACCENT,
+                              m_state.orders.locked || !affordable ? EventRefs::NONE : static_cast<std::int32_t>(index)});
     }
     break;
   }
   case Panel::Destination:
   {
     const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(m_panelSubject)];
-    title = std::format("MOVE {} - PICK LANE", fleet.name);
+    title = std::format("MOVE {} - PICK LANE", Uppercased(fleet.name));
     const std::int32_t origin = fleet.order == FleetStance::Move ? fleet.to : fleet.from;
-    // Lane-constrained: only the systems this fleet can actually reach along an edge, and the
-    // tick it would arrive. A destination picker that offered anything else would be offering a
-    // move the graph cannot express (one-pager, "Shape of a game").
+
+    // Lane-constrained: only the systems this fleet can actually reach along an edge, and the tick
+    // it would arrive. A destination picker that offered anything else would be offering a move
+    // the graph cannot express (one-pager, "Shape of a game").
     for (const Lane& lane : m_state.graph.lanes)
     {
       std::int32_t other = EventRefs::NONE;
@@ -1078,9 +1162,41 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       {
         continue;
       }
-      rows.push_back(
-        std::format("{} - ETA T{}", m_state.graph.systems[static_cast<std::size_t>(other)].name, m_state.OrdersTick() + lane.cost - 1));
-      rowTargets.push_back(other);
+
+      const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(other)];
+
+      // Whose it is, in the words the digest uses. This is the line the old picker had nowhere to
+      // put, and it is the one that decides whether a lane is an expansion or a fight.
+      std::string held;
+      if (node.owner == NOBODY)
+      {
+        held = "UNCLAIMED";
+      }
+      else if (node.owner == m_state.viewer)
+      {
+        held = "YOURS";
+      }
+      else if (node.owner < static_cast<OwnerId>(m_state.players.size()))
+      {
+        held = m_state.players[static_cast<std::size_t>(node.owner)].label;
+      }
+      else
+      {
+        held = "RIVAL";
+      }
+      if (HasFlag(node.flags, SystemFlags::Capital))
+      {
+        held += " - CAPITAL";
+      }
+      if (HasFlag(node.flags, SystemFlags::Contested))
+      {
+        held += " - CONTESTED";
+      }
+
+      rows.push_back(SheetRow{Uppercased(node.name), held,
+                              std::format("{} - ETA T{}", lane.cost == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", lane.cost),
+                                          m_state.OrdersTick() + lane.cost - 1),
+                              OwnerColor(node.owner, m_state.viewer), other});
     }
     break;
   }
@@ -1096,26 +1212,24 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
         std::ranges::find(m_state.orders.queuedSignals, static_cast<std::int32_t>(index)) != m_state.orders.queuedSignals.end();
       const bool armed = m_armedConcede == static_cast<std::int32_t>(index);
 
-      // Three states on one line, because the panel has one line per row: queued, armed to be
-      // queued, or neither. The armed one says what the NEXT tap does rather than what this row is,
-      // which is the only warning a concede gets and the only one it needs.
-      rows.push_back(queued  ? std::format("{}  - SENDING", signal.title)
-                     : armed ? std::format("{}  - TAP AGAIN TO CONFIRM", signal.title)
-                             : signal.title);
-      rowTargets.push_back(m_state.orders.locked ? EventRefs::NONE : static_cast<std::int32_t>(index));
+      // Three states, in the right-hand column: queued, armed to be queued, or neither. The armed
+      // one says what the NEXT tap does rather than what this row is, which is the only warning a
+      // concede gets and the only one it needs.
+      rows.push_back(SheetRow{signal.title, std::string{}, queued ? "SENDING" : (armed ? "TAP AGAIN TO CONFIRM" : std::string{}),
+                              armed ? Ink::AMBER : (queued ? Ink::BLUE : NO_ACCENT),
+                              m_state.orders.locked ? EventRefs::NONE : static_cast<std::int32_t>(index)});
     }
 
     if (m_state.orders.signals.empty())
     {
-      rows.emplace_back("Nothing to say yet. Offers need a border or a");
-      rows.emplace_back("neighbour you have actually met.");
-      rowTargets.assign(rows.size(), EventRefs::NONE);
+      rows.push_back(SheetRow{"NOTHING TO SAY YET", "Offers need a border, or a neighbour you have actually met.", std::string{}, NO_ACCENT,
+                              EventRefs::NONE});
     }
     else if (m_state.orders.availableSignals > static_cast<std::uint32_t>(m_state.orders.signals.size()))
     {
-      rows.push_back(std::format("(+{} more than this panel can show)",
-                                 m_state.orders.availableSignals - static_cast<std::uint32_t>(m_state.orders.signals.size())));
-      rowTargets.push_back(EventRefs::NONE);
+      rows.push_back(SheetRow{std::format("+{} MORE THAN THIS SHEET CAN SHOW",
+                                          m_state.orders.availableSignals - static_cast<std::uint32_t>(m_state.orders.signals.size())),
+                              std::string{}, std::string{}, NO_ACCENT, EventRefs::NONE});
     }
     break;
   }
@@ -1124,8 +1238,11 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     title = std::format("REPLAY TICK {}", m_panelSubject);
     // A stub, and labelled as one. The six phases are the tick resolution order from the
     // one-pager; stepping through them needs the resolved state the server has not sent yet.
-    rows = {"1. LOCK", "2. PRODUCTION", "3. MOVEMENT", "4. COMBAT", "5. CLAIMS", "6. DIGEST", "", "(not yet wired to a resolved tick)"};
-    rowTargets.assign(rows.size(), EventRefs::NONE);
+    for (const char* phase : {"1. LOCK", "2. PRODUCTION", "3. MOVEMENT", "4. COMBAT", "5. CLAIMS", "6. DIGEST"})
+    {
+      rows.push_back(SheetRow{phase, std::string{}, std::string{}, NO_ACCENT, EventRefs::NONE});
+    }
+    rows.push_back(SheetRow{"NOT YET WIRED TO A RESOLVED TICK", std::string{}, std::string{}, NO_ACCENT, EventRefs::NONE});
     break;
   }
   case Panel::None:
@@ -1133,24 +1250,89 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     return;
   }
 
-  const float height = 34.0F + static_cast<float>(rows.size()) * 20.0F + 12.0F;
+  // ---- The sheet -------------------------------------------------------------------------------
+  //
+  // More rows than fit are REPORTED rather than dropped. A picker that quietly forgets a lane is a
+  // picker that cannot be trusted about the ones it did show.
+  const std::size_t shown = std::min(rows.size(), SHEET_MAXIMUM_ROWS);
+  const bool clipped = rows.size() > shown;
+
+  const float paneX = Frame::DIGEST_WIDTH;
+  const float paneWidth = Frame::SCREEN_WIDTH - Frame::DIGEST_WIDTH - Frame::ORDERS_WIDTH;
+  const float width = paneWidth - 2.0F * SHEET_MARGIN;
+  const float x = paneX + SHEET_MARGIN;
+
+  const float listHeight = static_cast<float>(shown) * SHEET_ROW_HEIGHT + (clipped ? SHEET_CLIPPED_HEIGHT : 0.0F);
+  const float height = SHEET_HEADER_HEIGHT + listHeight + SHEET_ACTION_HEIGHT;
+  const float y = Frame::SCREEN_HEIGHT - SHEET_MARGIN - height;
 
   _shapes.FillRect(x, y, width, height, Ink::APP_BACKGROUND);
   _shapes.StrokeRect(x, y, width, height, Ink::CARD_BORDER);
-  _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), static_cast<std::int32_t>(y) + 12, title, Ink::TEXT_PRIMARY);
-  DrawRight(_text, x + width - CARD_PADDING, static_cast<std::int32_t>(y) + 12, "X", Ink::TEXT_MUTED);
-  AddHit(x + width - 24.0F, y, 24.0F, 30.0F, Action::ClosePanel, 0);
 
-  float rowY = y + 30.0F;
-  for (std::size_t index = 0; index < rows.size(); ++index)
+  // ---- Header ----------------------------------------------------------------------------------
+  _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(y, SHEET_HEADER_HEIGHT), title, Ink::TEXT_PRIMARY);
+  DrawRight(_text, x + width - CARD_PADDING, CenterTextY(y, SHEET_HEADER_HEIGHT), "X", Ink::TEXT_MUTED);
+
+  // A close target the height of the header, not the width of one glyph.
+  AddHit(x + width - SHEET_HEADER_HEIGHT, y, SHEET_HEADER_HEIGHT, SHEET_HEADER_HEIGHT, Action::ClosePanel, 0);
+  _shapes.FillRect(x, y + SHEET_HEADER_HEIGHT, width, 1.0F, Ink::DIVIDER);
+
+  // ---- Rows ------------------------------------------------------------------------------------
+  float rowY = y + SHEET_HEADER_HEIGHT;
+  for (std::size_t index = 0; index < shown; ++index)
   {
-    _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), static_cast<std::int32_t>(rowY) + 6, rows[index], Ink::TEXT_DETAIL);
-    if (rowTargets[index] != EventRefs::NONE)
+    const SheetRow& row = rows[index];
+    const bool tappable = row.target != EventRefs::NONE;
+
+    if (index > 0)
     {
-      AddHit(x, rowY, width, 20.0F, rowAction, rowTargets[index]);
+      _shapes.FillRect(x + CARD_PADDING, rowY, width - 2.0F * CARD_PADDING, 1.0F, Ink::DIVIDER);
     }
-    rowY += 20.0F;
+
+    float textX = x + CARD_PADDING;
+    if (row.accent.alpha != 0)
+    {
+      _shapes.FillRect(textX, rowY + 18.0F, 8.0F, 8.0F, row.accent);
+      textX += 16.0F;
+    }
+
+    // One line centres in the row; two sit either side of its middle. THE ROW HEIGHT DOES NOT
+    // CHANGE with the content -- a column of rows of one height is what a finger aims at.
+    const std::int32_t titleY = row.detail.empty() ? CenterTextY(rowY, SHEET_ROW_HEIGHT) : static_cast<std::int32_t>(rowY) + 12;
+    _text.DrawText(static_cast<std::int32_t>(textX), titleY, row.title, tappable ? Ink::TEXT_PRIMARY : Ink::NEUTRAL_DIM);
+
+    if (!row.detail.empty())
+    {
+      _text.DrawText(static_cast<std::int32_t>(textX), static_cast<std::int32_t>(rowY) + 26, row.detail, Ink::TEXT_MUTED);
+    }
+    if (!row.right.empty())
+    {
+      DrawRight(_text, x + width - CARD_PADDING, CenterTextY(rowY, SHEET_ROW_HEIGHT), row.right,
+                tappable ? Ink::TEXT_DETAIL : Ink::NEUTRAL_DIM);
+    }
+
+    if (tappable)
+    {
+      AddHit(x, rowY, width, SHEET_ROW_HEIGHT, rowAction, row.target);
+    }
+    rowY += SHEET_ROW_HEIGHT;
   }
+
+  if (clipped)
+  {
+    _shapes.FillRect(x + CARD_PADDING, rowY, width - 2.0F * CARD_PADDING, 1.0F, Ink::DIVIDER);
+    _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(rowY, SHEET_CLIPPED_HEIGHT),
+                   std::format("+{} MORE THAN THIS SHEET CAN SHOW", rows.size() - shown), Ink::NEUTRAL_DIM);
+    rowY += SHEET_CLIPPED_HEIGHT;
+  }
+
+  // ---- Cancel ----------------------------------------------------------------------------------
+  //
+  // A bar as well as the header's X. The X is where a mouse expects it and the bar is where a thumb
+  // already is, and closing a sheet opened by mistake is the commonest thing done to one.
+  _shapes.FillRect(x, rowY, width, 1.0F, Ink::DIVIDER);
+  DrawCentered(_text, x + width * 0.5F, CenterTextY(rowY, SHEET_ACTION_HEIGHT), "CANCEL", Ink::TEXT_MUTED);
+  AddHit(x, rowY, width, SHEET_ACTION_HEIGHT, Action::ClosePanel, 0);
 }
 
 } // namespace Lockstep

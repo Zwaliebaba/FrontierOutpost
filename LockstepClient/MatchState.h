@@ -269,6 +269,9 @@ struct BuildRow
   /// stays that way until the neighbour accepts.
   bool isTradeLane = false;
   bool available = true;
+  /// What the lock will take for it, in credits. The price is on the row (ADR-053): a build the
+  /// purse cannot cover is one the lock is certain to refuse, and the row says so instead.
+  std::uint32_t cost = 0;
 };
 
 enum class ProposalType : std::uint8_t
@@ -355,6 +358,22 @@ struct Orders
   /// Which build rows the player has queued this tick, as indices into `builds`.
   std::vector<std::int32_t> queuedBuilds;
 
+  /// What the queued builds will take at the lock, summed the way `Match::Validate` sums them:
+  /// a running total, so the purse is checked against everything already queued and not against
+  /// each build alone (ADR-053).
+  [[nodiscard]] std::uint32_t QueuedBuildCost() const noexcept
+  {
+    std::uint32_t spent = 0;
+    for (const std::int32_t queued : queuedBuilds)
+    {
+      if (queued >= 0 && queued < static_cast<std::int32_t>(builds.size()))
+      {
+        spent += builds[static_cast<std::size_t>(queued)].cost;
+      }
+    }
+    return spent;
+  }
+
   /// Every signal this player could send this tick, composed from the snapshot.
   std::vector<SignalRow> signals;
   /// How many there were before the list was trimmed to what a panel can show.
@@ -392,6 +411,8 @@ struct PlayerStanding
   std::uint32_t placement = 0;
   std::uint32_t playerCount = 0;
   Leader leader;
+  /// Credits in hand, as the server reports them. The number every build row is priced against.
+  std::uint32_t credits = 0;
 };
 
 /// The line along the top of the screen: which match, which day, which tick, how long left.
@@ -459,6 +480,20 @@ struct MatchState
   /// map showing 11 is not an inconsistency, it is fog.
   std::uint32_t totalSystems = 0;
   std::uint32_t unclaimedSystems = 0;
+
+  /// Whether the lock would pay for build row `_index` on top of everything already queued.
+  ///
+  /// The same running-total rule `Match::Validate` applies, asked before the tap rather than a
+  /// tick after it (ADR-053). An index that names no row is not affordable, because it is not a
+  /// build.
+  [[nodiscard]] bool CanAffordBuild(std::int32_t _index) const noexcept
+  {
+    if (_index < 0 || _index >= static_cast<std::int32_t>(orders.builds.size()))
+    {
+      return false;
+    }
+    return orders.QueuedBuildCost() + orders.builds[static_cast<std::size_t>(_index)].cost <= player.credits;
+  }
 
   [[nodiscard]] std::uint32_t OrdersTick() const noexcept
   {

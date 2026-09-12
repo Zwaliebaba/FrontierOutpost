@@ -194,6 +194,30 @@ public:
     return m_finished;
   }
 
+  /// The viewer's purse, and the prices the lock will hold it to (ADR-053).
+  ///
+  /// **The price is on the button, and the server is the only thing that knows the price.** The
+  /// client never links `GameLogic` and so never sees `MatchRules`; without these four numbers it
+  /// can neither say what a build costs nor grey out one the lock is certain to refuse, and the
+  /// player learns the price one tick late from a refusal. The purse is the viewer's own and nobody
+  /// else's -- another player's credits are a tell, and the negative test below asks for them.
+  [[nodiscard]] std::uint32_t Credits() const noexcept
+  {
+    return m_credits;
+  }
+  [[nodiscard]] std::uint32_t ShipyardCost() const noexcept
+  {
+    return m_shipyardCost;
+  }
+  [[nodiscard]] std::uint32_t MiningStationCost() const noexcept
+  {
+    return m_miningStationCost;
+  }
+  [[nodiscard]] std::uint32_t TradeLaneCost() const noexcept
+  {
+    return m_tradeLaneCost;
+  }
+
   /// Whether this snapshot mentions a system at all. The negative test asks this.
   [[nodiscard]] bool Knows(SystemId _system) const;
 
@@ -230,6 +254,11 @@ private:
   std::uint32_t m_unclaimedSystems = 0;
   std::uint32_t m_capitalGuardTicksLeft = 0;
   bool m_finished = false;
+
+  std::uint32_t m_credits = 0;
+  std::uint32_t m_shipyardCost = 0;
+  std::uint32_t m_miningStationCost = 0;
+  std::uint32_t m_tradeLaneCost = 0;
 };
 
 } // namespace Lockstep

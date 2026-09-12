@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <array>
+#include <format>
 #include <string>
 #include <vector>
 
@@ -1274,6 +1275,33 @@ public:
     Assert::IsFalse(after.SystemAt(CapitalOf(after, 4)).hasShipyard, L"and nothing was built");
     Assert::AreEqual(start.PlayerAt(Lockstep::PlayerId{0}).credits + after.Rules().creditsPerSystem + after.Rules().capitalCreditsBonus,
                      after.PlayerAt(Lockstep::PlayerId{0}).credits, L"nor paid for");
+  }
+
+  // "Not enough credits" a tick after the tap is nothing a player can act on. The refusal names
+  // the building, the system, the price and the purse, and points at the system (ADR-053).
+  TEST_METHOD(ARefusedBuildIsNamedWithItsPriceAndThePurse)
+  {
+    Lockstep::Match start = SixPlayerMatch();
+    start.MutablePlayers()[0].credits = 5;
+    const Lockstep::SystemId capital = CapitalOf(start, 0);
+
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.builds.push_back(Lockstep::BuildOrder{.system = capital, .kind = Lockstep::BuildKind::Shipyard});
+    const std::array<Lockstep::OrderSet, 1> sets = {orders};
+
+    Lockstep::TickLog log;
+    (void)Lockstep::TickResolver::Resolve(start, {.orders = sets}, log);
+
+    const std::vector<Lockstep::DigestEntry>& digest = log.digests[0];
+    const auto refusal = std::find_if(digest.begin(), digest.end(), [](const Lockstep::DigestEntry& _entry)
+                                      { return _entry.kind == Lockstep::DigestKind::OrderRejected; });
+    Assert::IsTrue(refusal != digest.end(), L"the refusal reached the digest");
+
+    const std::string expected =
+      std::format("Shipyard at {} - costs {}, you had 5", start.GalaxyGraph().SystemAt(capital).name, start.Rules().shipyardCost);
+    Assert::AreEqual(expected, refusal->detail);
+    Assert::IsTrue(refusal->system == capital, L"and it points at the system, so the card can focus it");
   }
 
   TEST_METHOD(ASecondOrderSetFromOnePlayerIsDiscarded)

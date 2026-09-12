@@ -21,19 +21,53 @@ namespace
 
 constexpr float SCREEN_WIDTH = 1280.0F;
 constexpr float SCREEN_HEIGHT = 720.0F;
-constexpr float TOP_BAR_HEIGHT = 44.0F;
+
+/// The console: every control on this screen, in one card over the sky.
+///
+/// **Sized to its contents rather than to the screen** (owner, 2026-09-12). Six cards and one
+/// panel stretched across all 1280x720 left a third of the frame as empty background and made a
+/// six-seat lobby read as a twelve-seat one with holes in it. Centred over the star field screen
+/// 03 already sits on, the lobby and the join screen look like the one moment of the game they
+/// are, and the console is the only thing the eye has to find.
+constexpr float CONSOLE_WIDTH = 960.0F;
+constexpr float CONSOLE_X = (SCREEN_WIDTH - CONSOLE_WIDTH) * 0.5F;
+constexpr float CONSOLE_Y = 180.0F;
+constexpr float CONSOLE_PADDING = 16.0F;
+
+/// The name and what this screen is, above the console. The 2x scale is the same exception
+/// `JoinPage` takes: DESIGN-GUIDELINES allows it for the one thing on a screen read first.
+constexpr float TITLE_Y = 120.0F;
+constexpr float SUBTITLE_Y = 151.0F;
+
 constexpr float FOOTER_HEIGHT = 44.0F;
 
-/// The grid and the detail panel. The panel is the same 260 the locks rail is, so the two screens
-/// share an edge and the eye does not have to relearn where the right-hand column starts.
-constexpr float PANEL_WIDTH = 260.0F;
-constexpr float GRID_X = 12.0F;
-constexpr float GRID_TOP = TOP_BAR_HEIGHT + 12.0F;
-constexpr float GRID_WIDTH = SCREEN_WIDTH - PANEL_WIDTH - 2.0F * GRID_X;
+/// The grid and the detail panel, inside the console.
+constexpr float PANEL_WIDTH = 256.0F;
+constexpr float GRID_X = CONSOLE_X + CONSOLE_PADDING;
+constexpr float GRID_TOP = CONSOLE_Y + CONSOLE_PADDING;
+constexpr float GRID_WIDTH = CONSOLE_WIDTH - 3.0F * CONSOLE_PADDING - PANEL_WIDTH;
 constexpr std::int32_t GRID_COLUMNS = 3;
-constexpr float CARD_GAP = 8.0F;
+constexpr float CARD_GAP = 10.0F;
 constexpr float CARD_WIDTH = (GRID_WIDTH - CARD_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
-constexpr float CARD_HEIGHT = 132.0F;
+constexpr float CARD_HEIGHT = 120.0F;
+constexpr float GRID_HEIGHT = 2.0F * CARD_HEIGHT + CARD_GAP;
+
+/// The practice offer, in the space two rows of cards leave under them.
+///
+/// **It is on this screen because this is where a beginner is stuck** (ADR-051). A first match at
+/// six hours a tick answers two orders and then asks the player to come back tomorrow; the offer
+/// has to be in front of them at the moment they would otherwise start one.
+constexpr float PRACTICE_X = GRID_X;
+constexpr float PRACTICE_Y = GRID_TOP + GRID_HEIGHT + 14.0F;
+constexpr float PRACTICE_WIDTH = GRID_WIDTH;
+constexpr float PRACTICE_HEIGHT = 80.0F;
+
+constexpr float PANEL_X = CONSOLE_X + CONSOLE_WIDTH - CONSOLE_PADDING - PANEL_WIDTH;
+constexpr float PANEL_TOP = GRID_TOP;
+constexpr float PANEL_HEIGHT = GRID_HEIGHT + 14.0F + PRACTICE_HEIGHT;
+
+constexpr float FOOTER_Y = PANEL_TOP + PANEL_HEIGHT + CONSOLE_PADDING;
+constexpr float CONSOLE_HEIGHT = FOOTER_Y + FOOTER_HEIGHT - CONSOLE_Y;
 
 constexpr std::int32_t LINE_HEIGHT = 12;
 
@@ -49,12 +83,14 @@ constexpr Color NEUTRAL_DIM = {214, 220, 228, 115};
 constexpr Color BLUE = {94, 196, 255, 255};
 constexpr Color AMBER = {255, 196, 87, 255};
 constexpr Color RED = {255, 110, 96, 255};
+constexpr Color STAR = {214, 220, 228, 220};
 
 constexpr std::int32_t ACTION_SELECT = 1;
 constexpr std::int32_t ACTION_HUMAN = 3;
 constexpr std::int32_t ACTION_BOT = 4;
 constexpr std::int32_t ACTION_COPY = 5;
 constexpr std::int32_t ACTION_NEW_TOKEN = 6;
+constexpr std::int32_t ACTION_PRACTICE = 7;
 constexpr std::int32_t ACTION_BOT_TAKES_OVER = 8;
 constexpr std::int32_t ACTION_GOES_CUSTODIAN = 9;
 constexpr std::int32_t ACTION_FILL = 10;
@@ -129,6 +165,13 @@ SeatsPage::SeatsPage(std::vector<std::string> _tokens)
     seat.kind = Kind::Human;
   }
   m_seatCount = SEAT_COUNT;
+
+  // A fixed view of the sky, for `JoinPage`'s reason: nothing on this screen is worth looking away
+  // from, and a background that moved on its own would be the only thing on it that did.
+  m_camera.SetViewport(0.0F, 0.0F, SCREEN_WIDTH, SCREEN_HEIGHT);
+  m_camera.SetTarget({0.0F, 0.0F, 0.0F});
+  m_camera.SetDistance(700.0F);
+  m_camera.SetOrientation(0.6F, 0.35F);
 }
 
 void SeatsPage::SetConnected(const std::vector<bool>& _connected)
@@ -198,10 +241,10 @@ std::int32_t SeatsPage::HostSeat() const
   return PlayerIndexOf(m_hostSeat);
 }
 
-bool SeatsPage::TakeEnterRequest() noexcept
+std::optional<SeatsPage::Entry> SeatsPage::TakeEnterRequest() noexcept
 {
-  const bool asked = m_enterRequested;
-  m_enterRequested = false;
+  std::optional<Entry> asked = m_entry;
+  m_entry.reset();
   return asked;
 }
 
@@ -210,6 +253,27 @@ std::string SeatsPage::TakeCopyRequest()
   std::string taken;
   taken.swap(m_copyRequest);
   return taken;
+}
+
+std::int32_t SeatsPage::FillWaitingSeatsWithBots()
+{
+  // Every seat still waiting, except the host's and anybody already on a token. This is the
+  // one-tap version of the thing a host actually wants at the end of an evening, and the thing a
+  // practice match needs done to every seat at once.
+  std::int32_t filled = 0;
+  for (std::int32_t index = 0; index < m_seatCount; ++index)
+  {
+    if (index == m_hostSeat || m_connected[static_cast<std::size_t>(index)])
+    {
+      continue;
+    }
+    if (m_seats[static_cast<std::size_t>(index)].kind == Kind::Human)
+    {
+      m_seats[static_cast<std::size_t>(index)].kind = Kind::Bot;
+      ++filled;
+    }
+  }
+  return filled;
 }
 
 void SeatsPage::AddHit(float _x, float _y, float _width, float _height, std::int32_t _action, std::int32_t _seat)
@@ -221,7 +285,7 @@ void SeatsPage::HandleKey(Neuron::KeyboardInput::Key _key)
 {
   if (_key == Neuron::KeyboardInput::Key::Enter && PlayingCount() >= static_cast<std::int32_t>(MINIMUM_PLAYERS) && EveryoneIsHere())
   {
-    m_enterRequested = true;
+    m_entry = Entry::Match;
   }
 }
 
@@ -288,25 +352,19 @@ bool SeatsPage::HandleTap(float _xPixels, float _yPixels)
       return true;
 
     case ACTION_FILL:
-    {
-      // Every seat still waiting, except the host's and anybody already on a token. This is the
-      // one-tap version of the thing a host actually wants at the end of an evening.
-      std::int32_t filled = 0;
-      for (std::int32_t index = 0; index < m_seatCount; ++index)
-      {
-        if (index == m_hostSeat || m_connected[static_cast<std::size_t>(index)])
-        {
-          continue;
-        }
-        if (m_seats[static_cast<std::size_t>(index)].kind == Kind::Human)
-        {
-          m_seats[static_cast<std::size_t>(index)].kind = Kind::Bot;
-          ++filled;
-        }
-      }
-      m_refusal = filled == 0 ? std::string{"Every seat already has somebody in it."} : std::string{};
+      m_refusal = FillWaitingSeatsWithBots() == 0 ? std::string{"Every seat already has somebody in it."} : std::string{};
       return true;
-    }
+
+    case ACTION_PRACTICE:
+      // **It does not wait for anybody, and that is the point** (ADR-051). A practice match is one
+      // person against five bots, so every other seat becomes one here rather than the host being
+      // asked to fill them first and then enter. A player already connected keeps their seat --
+      // the host can still practise with a friend watching, and taking somebody's seat out from
+      // under them is the one thing FILL has always refused to do.
+      (void)FillWaitingSeatsWithBots();
+      m_refusal.clear();
+      m_entry = Entry::Practice;
+      return true;
 
     case ACTION_ENTER:
       if (PlayingCount() < static_cast<std::int32_t>(MINIMUM_PLAYERS))
@@ -333,7 +391,7 @@ bool SeatsPage::HandleTap(float _xPixels, float _yPixels)
           waiting.kind = Kind::Bot;
         }
       }
-      m_enterRequested = true;
+      m_entry = Entry::Match;
       return true;
 
     default:
@@ -354,6 +412,7 @@ void SeatsPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text)
   (void)_text;
   m_hits.clear();
   _shapes.FillRect(0.0F, 0.0F, SCREEN_WIDTH, SCREEN_HEIGHT, APP_BACKGROUND);
+  m_sky.Draw(_shapes, m_camera, STAR);
 }
 
 void SeatsPage::DrawSeatCard(ShapeRenderer& _shapes, FontRenderer& _text, std::int32_t _index, float _x, float _y, float _width,
@@ -445,17 +504,17 @@ void SeatsPage::DrawSeatCard(ShapeRenderer& _shapes, FontRenderer& _text, std::i
 
 void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
 {
-  const float panelX = SCREEN_WIDTH - PANEL_WIDTH;
-  const float contentX = panelX + 14.0F;
-  const float contentRight = SCREEN_WIDTH - 14.0F;
+  const float contentX = PANEL_X;
+  const float contentRight = PANEL_X + PANEL_WIDTH;
   const std::size_t columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(contentRight - contentX));
 
-  _shapes.FillRect(panelX, TOP_BAR_HEIGHT, PANEL_WIDTH, SCREEN_HEIGHT - TOP_BAR_HEIGHT - FOOTER_HEIGHT, APP_BACKGROUND);
-  _shapes.FillRect(panelX, TOP_BAR_HEIGHT, 1.0F, SCREEN_HEIGHT - TOP_BAR_HEIGHT - FOOTER_HEIGHT, CARD_BORDER);
+  // The column rule, halfway across the gutter. The console already painted the background; a
+  // second fill here would only put an opaque rectangle over the card fill it sits in.
+  _shapes.FillRect(PANEL_X - CONSOLE_PADDING * 0.5F, PANEL_TOP, 1.0F, PANEL_HEIGHT, DIVIDER);
 
   const Seat& seat = m_seats[static_cast<std::size_t>(m_selected)];
 
-  std::int32_t y = static_cast<std::int32_t>(TOP_BAR_HEIGHT) + 14;
+  std::int32_t y = static_cast<std::int32_t>(PANEL_TOP);
   _text.DrawText(static_cast<std::int32_t>(contentX), y, std::format("SEAT {:02} - {}", m_selected + 1, seat.name), TEXT_PRIMARY);
   y += LINE_HEIGHT + 8;
 
@@ -487,13 +546,18 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
   // can change that. A host who took another seat could then hand their own empire to a bot and
   // enter a match somebody else was playing for them. Removed rather than repaired: making it real
   // means reconnecting with a different token, which is the composition root's to do (ADR-041).
-  _text.DrawText(static_cast<std::int32_t>(contentX), y,
-                 m_hostSeat == m_selected ? "This is your seat: you logged in with this token."
-                                          : "Not yours. You hold the seat you logged in with.",
-                 m_hostSeat == m_selected ? BLUE : NEUTRAL_DIM);
-  y += LINE_HEIGHT + 14;
+  y += 28;
 
-  _shapes.FillRect(panelX + 1.0F, static_cast<float>(y), PANEL_WIDTH - 1.0F, 1.0F, DIVIDER);
+  for (const std::string& line : FontRenderer::Wrap(m_hostSeat == m_selected ? "This is your seat: you logged in with this token."
+                                                                             : "Not yours. You hold the seat you logged in with.",
+                                                    columns))
+  {
+    _text.DrawText(static_cast<std::int32_t>(contentX), y, line, m_hostSeat == m_selected ? BLUE : NEUTRAL_DIM);
+    y += LINE_HEIGHT;
+  }
+  y += 14;
+
+  _shapes.FillRect(contentX, static_cast<float>(y), PANEL_WIDTH, 1.0F, DIVIDER);
   y += 10;
 
   // ---- How a bot plays ---------------------------------------------------------------------------
@@ -524,15 +588,6 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
       y += LINE_HEIGHT;
     }
 
-    if (!m_refusal.empty())
-    {
-      y += 10;
-      for (const std::string& line : FontRenderer::Wrap(m_refusal, columns))
-      {
-        _text.DrawText(static_cast<std::int32_t>(contentX), y, line, AMBER);
-        y += LINE_HEIGHT;
-      }
-    }
     return;
   }
 
@@ -563,24 +618,45 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
     _text.DrawText(static_cast<std::int32_t>(contentX), y, line, NEUTRAL_DIM);
     y += LINE_HEIGHT;
   }
+}
 
-  // Whatever was last refused, said where the thing that refused it is.
-  if (!m_refusal.empty())
+/// The practice offer, and the answer to the question a six-hour tick asks a beginner.
+///
+/// **ADR-051.** It sits under the grid rather than in the footer beside `ENTER MATCH` because it is
+/// not a variant of entering -- it needs no seats filled, waits for nobody, and is the right answer
+/// for exactly one person, which a button in a row of lobby controls would not say.
+void SeatsPage::DrawPractice(ShapeRenderer& _shapes, FontRenderer& _text)
+{
+  _shapes.StrokeRect(PRACTICE_X, PRACTICE_Y, PRACTICE_WIDTH, PRACTICE_HEIGHT, CARD_BORDER);
+
+  // The label and the button share the top row, so the two lines under them run the full width of
+  // the box. Under the prose the button had to be cut into it, and both read as crowded.
+  const auto buttonWidth = static_cast<float>(FontRenderer::MeasurePixels("PRACTICE MATCH >")) + 24.0F;
+  const float buttonX = PRACTICE_X + PRACTICE_WIDTH - 12.0F - buttonWidth;
+  const float buttonY = PRACTICE_Y + 10.0F;
+
+  _text.DrawText(static_cast<std::int32_t>(PRACTICE_X) + 12, CenterTextY(buttonY, 24.0F), "FIRST MATCH?", AMBER);
+
+  _shapes.StrokeRect(buttonX, buttonY, buttonWidth, 24.0F, AMBER);
+  _text.DrawText(static_cast<std::int32_t>(buttonX) + 12, CenterTextY(buttonY, 24.0F), "PRACTICE MATCH >", AMBER);
+  AddHit(buttonX, buttonY, buttonWidth, 24.0F, ACTION_PRACTICE, -1);
+
+  // The comparison a beginner is actually making, in the two numbers that differ. Everything else
+  // about the match is the same one, which is this sentence's whole job (`PracticeRules`).
+  const std::array<const char*, 2> lines = {"The same rules and the same galaxy, on a tick every two minutes instead of six hours.",
+                                            "Five bots, thirty ticks, about an hour to play. Nobody else has to turn up."};
+  std::int32_t lineY = static_cast<std::int32_t>(PRACTICE_Y) + 44;
+  for (const char* line : lines)
   {
-    y += 10;
-    for (const std::string& line : FontRenderer::Wrap(m_refusal, columns))
-    {
-      _text.DrawText(static_cast<std::int32_t>(contentX), y, line, AMBER);
-      y += LINE_HEIGHT;
-    }
+    _text.DrawText(static_cast<std::int32_t>(PRACTICE_X) + 12, lineY, line, TEXT_DETAIL);
+    lineY += LINE_HEIGHT + 2;
   }
 }
 
 void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
 {
-  const float footerY = SCREEN_HEIGHT - FOOTER_HEIGHT;
-  _shapes.FillRect(0.0F, footerY, SCREEN_WIDTH, FOOTER_HEIGHT, APP_BACKGROUND);
-  _shapes.FillRect(0.0F, footerY, SCREEN_WIDTH, 1.0F, CARD_BORDER);
+  const float footerY = FOOTER_Y;
+  _shapes.FillRect(CONSOLE_X, footerY, CONSOLE_WIDTH, 1.0F, CARD_BORDER);
 
   const std::int32_t playing = PlayingCount();
   const bool enough = playing >= static_cast<std::int32_t>(MINIMUM_PLAYERS);
@@ -628,11 +704,17 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
     summary = bots == 0 ? std::format("ALL {} SEATS CONNECTED - YOU ARE SEAT {:02}", playing, m_hostSeat + 1)
                         : std::format("{} SEATS READY ({} BOT) - YOU ARE SEAT {:02}", playing, bots, m_hostSeat + 1);
   }
-  _text.DrawText(16, CenterTextY(footerY, FOOTER_HEIGHT), summary, !enough ? RED : (everyone ? BLUE : AMBER));
+
+  // The refusal is the answer to a button in this row, so it is said in this row. In the detail
+  // panel it answered beside the wrong question, and it was the one thing that could overrun the
+  // panel's height.
+  const bool refused = !m_refusal.empty();
+  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X + CONSOLE_PADDING), CenterTextY(footerY, FOOTER_HEIGHT), refused ? m_refusal : summary,
+                 refused ? AMBER : (!enough ? RED : (everyone ? BLUE : AMBER)));
 
   // ---- ENTER MATCH --------------------------------------------------------------------------------
   const auto enterWidth = static_cast<float>(FontRenderer::MeasurePixels("ENTER MATCH >")) + 24.0F;
-  const float enterX = SCREEN_WIDTH - 16.0F - enterWidth;
+  const float enterX = CONSOLE_X + CONSOLE_WIDTH - CONSOLE_PADDING - enterWidth;
   if (enough && everyone)
   {
     _shapes.FillRect(enterX, footerY + 10.0F, enterWidth, 24.0F, BLUE);
@@ -654,13 +736,13 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
 
 void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
 {
-  // ---- The top bar ---------------------------------------------------------------------------
-  _shapes.FillRect(0.0F, 0.0F, SCREEN_WIDTH, TOP_BAR_HEIGHT, APP_BACKGROUND);
-  _shapes.FillRect(0.0F, TOP_BAR_HEIGHT - 1.0F, SCREEN_WIDTH, 1.0F, CARD_BORDER);
-
-  const std::int32_t centered = CenterTextY(0.0F, TOP_BAR_HEIGHT);
-  _text.DrawText(16, centered, "LOCKSTEP", TEXT_PRIMARY);
-  _text.DrawText(16 + static_cast<std::int32_t>(FontRenderer::MeasurePixels("LOCKSTEP")) + 12, centered, "SEATS - BEFORE THE MATCH STARTS",
+  // ---- The name, at 2x, and what this screen is -----------------------------------------------
+  //
+  // The same title block screen 03 opens with, so that a host who has just come off the join screen
+  // sees the lobby arrive under the same two lines rather than under a bar that replaced them.
+  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY,
+                 FontRenderer::COUNTDOWN_SCALE);
+  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(SUBTITLE_Y), "SEATS - BEFORE THE MATCH STARTS",
                  TEXT_MUTED);
 
   // Seats, then the people among them. Counting seats as humans was right up until a seat could be
@@ -678,7 +760,16 @@ void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   }
   const std::string census = std::format("{} SEATS - {} OF {} CONNECTED", m_seatCount, here, humans);
   const auto censusWidth = static_cast<float>(FontRenderer::MeasurePixels(census));
-  _text.DrawText(static_cast<std::int32_t>(SCREEN_WIDTH - censusWidth) - 16, centered, census, TEXT_MUTED);
+  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X + CONSOLE_WIDTH - censusWidth), static_cast<std::int32_t>(SUBTITLE_Y), census,
+                 TEXT_MUTED);
+
+  // ---- The console ---------------------------------------------------------------------------
+  //
+  // INK FIRST, then the card's own 4% white, exactly as `JoinPage` does it and for the same reason:
+  // 4% white over stars is stars, and what is behind a card has to stop being readable.
+  _shapes.FillRect(CONSOLE_X, CONSOLE_Y, CONSOLE_WIDTH, CONSOLE_HEIGHT, APP_BACKGROUND);
+  _shapes.FillRect(CONSOLE_X, CONSOLE_Y, CONSOLE_WIDTH, CONSOLE_HEIGHT, CARD_FILL);
+  _shapes.StrokeRect(CONSOLE_X, CONSOLE_Y, CONSOLE_WIDTH, CONSOLE_HEIGHT, CARD_BORDER);
 
   // ---- The grid ------------------------------------------------------------------------------
   for (std::int32_t index = 0; index < SEAT_COUNT; ++index)
@@ -694,6 +785,7 @@ void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
     DrawSeatCard(_shapes, _text, index, cardX, cardY, CARD_WIDTH, CARD_HEIGHT);
   }
 
+  DrawPractice(_shapes, _text);
   DrawDetail(_shapes, _text);
   DrawFooter(_shapes, _text);
 }

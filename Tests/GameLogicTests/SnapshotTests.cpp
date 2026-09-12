@@ -327,6 +327,23 @@ public:
     Assert::IsFalse(view.IsFinished());
   }
 
+  // The price is on the button, and only the server knows the price (ADR-053): the viewer's own
+  // purse and the three costs the next lock will hold it to travel with the snapshot.
+  TEST_METHOD(ASnapshotCarriesThePurseAndThePrices)
+  {
+    Lockstep::Match match = Settled();
+    match.MutablePlayers()[0].credits = 37;
+    const Lockstep::Snapshot view = Lockstep::Snapshot::For(match, Lockstep::PlayerId{0});
+
+    Assert::AreEqual(37U, view.Credits(), L"the viewer's credits, as the lock will count them");
+    Assert::AreEqual(match.Rules().shipyardCost, view.ShipyardCost());
+    Assert::AreEqual(match.Rules().miningStationCost, view.MiningStationCost());
+    Assert::AreEqual(match.Rules().tradeLaneCost, view.TradeLaneCost());
+
+    const Lockstep::Snapshot theirs = Lockstep::Snapshot::For(match, Lockstep::PlayerId{1});
+    Assert::AreEqual(match.PlayerAt(Lockstep::PlayerId{1}).credits, theirs.Credits(), L"and each viewer sees only its own");
+  }
+
   // "41 systems" over a map showing eleven is not an inconsistency, it is fog. The totals are the
   // authoritative count and the list is what this player has found.
   // A match at tick zero is a real state a client can be shown: the server may hand out snapshots
@@ -567,6 +584,10 @@ public:
     Assert::AreEqual(original.Standings().size(), returned.Standings().size());
     Assert::AreEqual(original.TotalSystems(), returned.TotalSystems());
     Assert::AreEqual(original.UnclaimedSystems(), returned.UnclaimedSystems());
+    Assert::AreEqual(original.Credits(), returned.Credits());
+    Assert::AreEqual(original.ShipyardCost(), returned.ShipyardCost());
+    Assert::AreEqual(original.MiningStationCost(), returned.MiningStationCost());
+    Assert::AreEqual(original.TradeLaneCost(), returned.TradeLaneCost());
 
     for (std::size_t index = 0; index < original.Systems().size(); ++index)
     {
