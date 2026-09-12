@@ -6,37 +6,21 @@
 #include "pch.h"
 #include "Orders.h"
 
+#include "Archive.h"
+
 namespace Lockstep
 {
 
 namespace
 {
 
-/// Ids go over as their underlying index, invalid included. `Id::NONE` is -1 and `WriteI32` is
-/// defined for it, so an unset id survives the trip as an unset id rather than as zero -- which
-/// would be system 0, the sealed region, and a plausible-looking lie.
-void WriteId(Neuron::ByteWriter& _writer, std::int32_t _index)
-{
-  _writer.WriteI32(_index);
-}
-
-/// A count written as 32 bits and read back with a sanity bound.
+/// The bound every list in an order set is read back under.
 ///
-/// The bound is the whole reason this is a function. A truncated or hostile record can declare a
-/// vector of four billion entries, and a `reserve` on that number is an allocation failure at
-/// best. Nothing in this game legitimately sends more orders than a player has fleets and systems,
-/// so a count past this is a broken record, not a big turn.
+/// A truncated or hostile record can declare a vector of four billion entries, and a `reserve` on
+/// that number is an allocation failure at best. Nothing in this game legitimately sends more
+/// orders than a player has fleets and systems, so a count past this is a broken record rather than
+/// a big turn.
 constexpr std::uint32_t MAXIMUM_ORDERS_PER_LIST = 4096;
-
-[[nodiscard]] std::uint32_t ReadCount(Neuron::ByteReader& _reader)
-{
-  const std::uint32_t count = _reader.ReadU32();
-  if (count > MAXIMUM_ORDERS_PER_LIST)
-  {
-    return 0;
-  }
-  return count;
-}
 
 } // namespace
 
@@ -87,124 +71,95 @@ const char* Describe(OrderRejection _rejection) noexcept
   }
 }
 
+namespace
+{
+
+/// Every list in an order set, described once (ADR-049).
+///
+/// Read this beside `OrderSet::Write` and `OrderSet::Read` as they were: the same fields in the
+/// same order, twice, and a field added to one and forgotten in the other decoded the rest of the
+/// record shifted by four bytes -- a valid-looking record of nonsense, and no test that round-trips
+/// with itself can see it.
+///
+/// The byte layout is unchanged and `OrderWireFormatTests` pins it. It has to be: the match store
+/// holds locked order sets (ADR-024), so this is the file format of every match in progress.
+void Visit(Neuron::Archive& _archive, OrderSet& _orders)
+{
+  _archive.Identity(_orders.player);
+
+  const std::uint32_t fleetCount = _archive.Count(_orders.fleetOrders.size(), MAXIMUM_ORDERS_PER_LIST);
+  _orders.fleetOrders.resize(fleetCount);
+  for (FleetOrder& order : _orders.fleetOrders)
+  {
+    _archive.Identity(order.fleet);
+    _archive.Identity(order.destination);
+  }
+
+  const std::uint32_t buildCount = _archive.Count(_orders.builds.size(), MAXIMUM_ORDERS_PER_LIST);
+  _orders.builds.resize(buildCount);
+  for (BuildOrder& order : _orders.builds)
+  {
+    _archive.Identity(order.system);
+    _archive.Enumerator(order.kind, BuildKind::MiningStation);
+  }
+
+  const std::uint32_t proposalCount = _archive.Count(_orders.proposals.size(), MAXIMUM_ORDERS_PER_LIST);
+  _orders.proposals.resize(proposalCount);
+  for (ProposalOrder& order : _orders.proposals)
+  {
+    _archive.Identity(order.to);
+    _archive.Enumerator(order.kind, ProposalKind::HoldForTicks);
+    _archive.Identity(order.lane);
+    _archive.U32(order.ticks);
+    _archive.Identity(order.conditionalLane);
+  }
+
+  const std::uint32_t answerCount = _archive.Count(_orders.answers.size(), MAXIMUM_ORDERS_PER_LIST);
+  _orders.answers.resize(answerCount);
+  for (AnswerOrder& order : _orders.answers)
+  {
+    _archive.Identity(order.proposal);
+    _archive.Enumerator(order.answer, Answer::Decline);
+  }
+
+  const std::uint32_t withdrawCount = _archive.Count(_orders.withdrawals.size(), MAXIMUM_ORDERS_PER_LIST);
+  _orders.withdrawals.resize(withdrawCount);
+  for (WithdrawOrder& order : _orders.withdrawals)
+  {
+    _archive.Identity(order.proposal);
+  }
+
+  const std::uint32_t cancelCount = _archive.Count(_orders.cancellations.size(), MAXIMUM_ORDERS_PER_LIST);
+  _orders.cancellations.resize(cancelCount);
+  for (CancelLaneOrder& order : _orders.cancellations)
+  {
+    _archive.Identity(order.lane);
+  }
+
+  _archive.Boolean(_orders.concede);
+}
+
+} // namespace
+
 void OrderSet::Write(Neuron::ByteWriter& _writer) const
 {
-  WriteId(_writer, player.Index());
+  Neuron::Archive archive{_writer};
 
-  _writer.WriteU32(static_cast<std::uint32_t>(fleetOrders.size()));
-  for (const FleetOrder& order : fleetOrders)
-  {
-    WriteId(_writer, order.fleet.Index());
-    WriteId(_writer, order.destination.Index());
-  }
-
-  _writer.WriteU32(static_cast<std::uint32_t>(builds.size()));
-  for (const BuildOrder& order : builds)
-  {
-    WriteId(_writer, order.system.Index());
-    _writer.WriteU8(static_cast<std::uint8_t>(order.kind));
-  }
-
-  _writer.WriteU32(static_cast<std::uint32_t>(proposals.size()));
-  for (const ProposalOrder& order : proposals)
-  {
-    WriteId(_writer, order.to.Index());
-    _writer.WriteU8(static_cast<std::uint8_t>(order.kind));
-    WriteId(_writer, order.lane.Index());
-    _writer.WriteU32(order.ticks);
-    WriteId(_writer, order.conditionalLane.Index());
-  }
-
-  _writer.WriteU32(static_cast<std::uint32_t>(answers.size()));
-  for (const AnswerOrder& order : answers)
-  {
-    WriteId(_writer, order.proposal.Index());
-    _writer.WriteU8(static_cast<std::uint8_t>(order.answer));
-  }
-
-  _writer.WriteU32(static_cast<std::uint32_t>(withdrawals.size()));
-  for (const WithdrawOrder& order : withdrawals)
-  {
-    WriteId(_writer, order.proposal.Index());
-  }
-
-  _writer.WriteU32(static_cast<std::uint32_t>(cancellations.size()));
-  for (const CancelLaneOrder& order : cancellations)
-  {
-    WriteId(_writer, order.lane.Index());
-  }
-
-  _writer.WriteBool(concede);
+  // The description takes a mutable record because it serves both directions. Writing does not
+  // change anything, and a const_cast here is the cost of not having the list twice.
+  Visit(archive, const_cast<OrderSet&>(*this));
 }
 
 OrderSet OrderSet::Read(Neuron::ByteReader& _reader)
 {
   OrderSet set;
-  set.player = PlayerId{_reader.ReadI32()};
+  Neuron::Archive archive{_reader};
+  Visit(archive, set);
 
-  const std::uint32_t fleetCount = ReadCount(_reader);
-  set.fleetOrders.reserve(fleetCount);
-  for (std::uint32_t index = 0; index < fleetCount; ++index)
-  {
-    FleetOrder order;
-    order.fleet = FleetId{_reader.ReadI32()};
-    order.destination = SystemId{_reader.ReadI32()};
-    set.fleetOrders.push_back(order);
-  }
-
-  const std::uint32_t buildCount = ReadCount(_reader);
-  set.builds.reserve(buildCount);
-  for (std::uint32_t index = 0; index < buildCount; ++index)
-  {
-    BuildOrder order;
-    order.system = SystemId{_reader.ReadI32()};
-    order.kind = _reader.ReadEnum(BuildKind::MiningStation);
-    set.builds.push_back(order);
-  }
-
-  const std::uint32_t proposalCount = ReadCount(_reader);
-  set.proposals.reserve(proposalCount);
-  for (std::uint32_t index = 0; index < proposalCount; ++index)
-  {
-    ProposalOrder order;
-    order.to = PlayerId{_reader.ReadI32()};
-    order.kind = _reader.ReadEnum(ProposalKind::HoldForTicks);
-    order.lane = LaneId{_reader.ReadI32()};
-    order.ticks = _reader.ReadU32();
-    order.conditionalLane = LaneId{_reader.ReadI32()};
-    set.proposals.push_back(order);
-  }
-
-  const std::uint32_t answerCount = ReadCount(_reader);
-  set.answers.reserve(answerCount);
-  for (std::uint32_t index = 0; index < answerCount; ++index)
-  {
-    AnswerOrder order;
-    order.proposal = ProposalId{_reader.ReadI32()};
-    order.answer = _reader.ReadEnum(Answer::Decline);
-    set.answers.push_back(order);
-  }
-
-  const std::uint32_t withdrawCount = ReadCount(_reader);
-  set.withdrawals.reserve(withdrawCount);
-  for (std::uint32_t index = 0; index < withdrawCount; ++index)
-  {
-    WithdrawOrder order;
-    order.proposal = ProposalId{_reader.ReadI32()};
-    set.withdrawals.push_back(order);
-  }
-
-  const std::uint32_t cancelCount = ReadCount(_reader);
-  set.cancellations.reserve(cancelCount);
-  for (std::uint32_t index = 0; index < cancelCount; ++index)
-  {
-    CancelLaneOrder order;
-    order.lane = LaneId{_reader.ReadI32()};
-    set.cancellations.push_back(order);
-  }
-
-  set.concede = _reader.ReadBool();
-  return set;
+  // An archive that refused a count has produced a record that is not what was sent, and it has
+  // stopped short of the end -- which is what every caller already checks for, because a record
+  // with bytes left over is as wrong as one with bytes missing.
+  return archive.Failed() ? OrderSet{} : set;
 }
 
 } // namespace Lockstep

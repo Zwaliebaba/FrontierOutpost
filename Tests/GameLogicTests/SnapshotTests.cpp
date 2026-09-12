@@ -13,6 +13,7 @@
 #include "TickResolver.h"
 
 #include <algorithm>
+#include <format>
 #include <array>
 #include <string>
 #include <vector>
@@ -105,6 +106,79 @@ constexpr std::uint64_t SEED = 0x4652'4F4E'5449'4552ULL;
 }
 
 } // namespace
+
+/// The wire layout of an `OrderSet`, pinned byte for byte.
+///
+/// **The match store holds encoded order sets** (ADR-024): a match is its seed and the orders that
+/// were locked, and it is reloaded by replaying them. So the order format is not merely a wire
+/// format -- it is the file format of every match in progress, and a change to it silently turns
+/// every stored match into a different one.
+///
+/// A round trip cannot catch that. Encoding and decoding with the same wrong code agrees with
+/// itself perfectly. What catches it is a literal: these are the bytes this tree produced on
+/// 2026-09-12, and any edit that moves a field has to change them here on purpose.
+TEST_CLASS(OrderWireFormatTests)
+{
+public:
+  [[nodiscard]] static std::string Hex(const std::vector<std::uint8_t>& _bytes)
+  {
+    std::string out;
+    for (const std::uint8_t byte : _bytes)
+    {
+      out += std::format("{:02x}", byte);
+    }
+    return out;
+  }
+
+  [[nodiscard]] static Lockstep::OrderSet Everything()
+  {
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{3};
+    orders.fleetOrders.push_back(Lockstep::FleetOrder{.fleet = Lockstep::FleetId{7}, .destination = Lockstep::SystemId{11}});
+    orders.builds.push_back(Lockstep::BuildOrder{.system = Lockstep::SystemId{5}, .kind = Lockstep::BuildKind::MiningStation});
+    orders.proposals.push_back(Lockstep::ProposalOrder{.to = Lockstep::PlayerId{2},
+                                                       .kind = Lockstep::ProposalKind::HoldForTicks,
+                                                       .lane = Lockstep::LaneId{9},
+                                                       .ticks = 3,
+                                                       .conditionalLane = Lockstep::LaneId{4}});
+    orders.answers.push_back(Lockstep::AnswerOrder{.proposal = Lockstep::ProposalId{6}, .answer = Lockstep::Answer::Decline});
+    orders.withdrawals.push_back(Lockstep::WithdrawOrder{.proposal = Lockstep::ProposalId{8}});
+    orders.cancellations.push_back(Lockstep::CancelLaneOrder{.lane = Lockstep::LaneId{1}});
+    orders.concede = true;
+    return orders;
+  }
+
+  TEST_METHOD(AnOrderSetEncodesToExactlyTheseBytes)
+  {
+    Neuron::ByteWriter writer;
+    Everything().Write(writer);
+
+    Assert::AreEqual(std::string{"0300000001000000070000000b0000000100000005000000010100000002000000020900000003000000040000000100000006000"
+                                 "000010100000008000000010000000100000001"},
+                     Hex(writer.Bytes()), L"the order wire format moved; every match store in progress is now a different match");
+  }
+
+  TEST_METHOD(ThoseBytesDecodeBackToWhatMadeThem)
+  {
+    Neuron::ByteWriter writer;
+    Everything().Write(writer);
+
+    Neuron::ByteReader reader{writer.Bytes()};
+    const Lockstep::OrderSet back = Lockstep::OrderSet::Read(reader);
+
+    Assert::IsTrue(reader.AtEnd() && !reader.Failed(), L"the pinned bytes did not decode cleanly");
+    Assert::AreEqual(3, back.player.Index());
+    Assert::AreEqual(std::size_t{1}, back.fleetOrders.size());
+    Assert::AreEqual(11, back.fleetOrders[0].destination.Index());
+    Assert::IsTrue(back.builds[0].kind == Lockstep::BuildKind::MiningStation);
+    Assert::IsTrue(back.proposals[0].kind == Lockstep::ProposalKind::HoldForTicks);
+    Assert::AreEqual(3U, back.proposals[0].ticks);
+    Assert::IsTrue(back.answers[0].answer == Lockstep::Answer::Decline);
+    Assert::AreEqual(std::size_t{1}, back.withdrawals.size());
+    Assert::AreEqual(std::size_t{1}, back.cancellations.size());
+    Assert::IsTrue(back.concede);
+  }
+};
 
 TEST_CLASS(VisibilityTests)
 {

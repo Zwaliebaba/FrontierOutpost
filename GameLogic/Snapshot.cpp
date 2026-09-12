@@ -12,6 +12,8 @@
 #include "pch.h"
 #include "Snapshot.h"
 
+#include "Archive.h"
+
 #include <array>
 
 #include "TickResolver.h"
@@ -254,54 +256,124 @@ std::vector<DigestEntry> Snapshot::DigestFor(const TickLog& _log, PlayerId _play
   return _log.digests[_player.AsSize()];
 }
 
+namespace
+{
+
+/// The bound every list off a socket is read back under. A declared count is a number a peer chose,
+/// and reserving on it is an allocation failure waiting for a malformed record.
+constexpr std::uint32_t MAXIMUM_ENTRIES = 4096;
+
+/// Each record in a snapshot, described once (ADR-049).
+///
+/// These were a `Write` and a `Read` apiece -- the same fields, in the same order, listed twice.
+/// Five records, ten lists, and the failure mode of a pair that drifts is not a compile error: a
+/// field added to one side decodes everything after it shifted by four bytes, which is a
+/// valid-looking snapshot of nonsense.
+void Visit(Neuron::Archive& _archive, DigestEntry& _entry)
+{
+  _archive.Enumerator(_entry.kind, DigestKind::MatchEnded);
+  _archive.U32(_entry.severity);
+  _archive.Text(_entry.title);
+  _archive.Text(_entry.detail);
+  _archive.Identity(_entry.system);
+  _archive.Identity(_entry.lane);
+  _archive.Identity(_entry.fleet);
+  _archive.Identity(_entry.other);
+}
+
+void Visit(Neuron::Archive& _archive, SnapshotSystem& _system)
+{
+  _archive.Identity(_system.id);
+  _archive.Text(_system.name);
+  _archive.I32(_system.positionX);
+  _archive.I32(_system.positionY);
+  _archive.Enumerator(_system.kind, SystemKind::RegionAnchor);
+  _archive.Boolean(_system.live);
+  _archive.U32(_system.asOfTick);
+  _archive.Identity(_system.owner);
+  _archive.Boolean(_system.hasShipyard);
+  _archive.Boolean(_system.hasMiningStation);
+  _archive.U32(_system.siegeTicks);
+  _archive.U32(_system.capturedAt);
+  _archive.Boolean(_system.halfYield);
+}
+
+void Visit(Neuron::Archive& _archive, SnapshotLane& _lane)
+{
+  _archive.Identity(_lane.id);
+  _archive.Identity(_lane.a);
+  _archive.Identity(_lane.b);
+  _archive.U32(_lane.costTicks);
+  _archive.Boolean(_lane.tradeLane);
+}
+
+void Visit(Neuron::Archive& _archive, SnapshotFleet& _fleet)
+{
+  _archive.Identity(_fleet.id);
+  _archive.Identity(_fleet.owner);
+  _archive.U32(_fleet.ships);
+  _archive.Identity(_fleet.at);
+  _archive.Identity(_fleet.movingFrom);
+  _archive.Identity(_fleet.movingTo);
+  _archive.U32(_fleet.ticksRemaining);
+  _archive.Text(_fleet.preview);
+  _archive.U32(_fleet.previewMine);
+  _archive.U32(_fleet.previewTheirs);
+  _archive.U32(_fleet.previewMineAfter);
+  _archive.U32(_fleet.previewTheirsAfter);
+  _archive.Boolean(_fleet.previewDefended);
+}
+
+void Visit(Neuron::Archive& _archive, SnapshotProposal& _proposal)
+{
+  _archive.Identity(_proposal.id);
+  _archive.Identity(_proposal.from);
+  _archive.Identity(_proposal.to);
+  _archive.Enumerator(_proposal.kind, ProposalKind::HoldForTicks);
+  _archive.Identity(_proposal.lane);
+  _archive.Identity(_proposal.conditionalLane);
+  _archive.U32(_proposal.ticks);
+  _archive.U32(_proposal.ticksLeft);
+}
+
+void Visit(Neuron::Archive& _archive, SnapshotStanding& _standing)
+{
+  _archive.Identity(_standing.player);
+  _archive.U32(_standing.score);
+  _archive.U32(_standing.placement);
+  _archive.Enumerator(_standing.status, PlayerStatus::Gone);
+  _archive.U32(_standing.custodianSince);
+}
+
+/// A counted list of anything above. The count is written from the vector's size and read back
+/// under the bound, which is the one place either happens.
+template <typename Record> void VisitList(Neuron::Archive& _archive, std::vector<Record>& _records)
+{
+  const std::uint32_t count = _archive.Count(_records.size(), MAXIMUM_ENTRIES);
+  if (!_archive.Writing())
+  {
+    _records.assign(count, Record{});
+  }
+  for (Record& record : _records)
+  {
+    Visit(_archive, record);
+  }
+}
+
+} // namespace
+
 void Snapshot::WriteDigest(Neuron::ByteWriter& _writer, const std::vector<DigestEntry>& _digest)
 {
-  _writer.WriteU32(static_cast<std::uint32_t>(_digest.size()));
-  for (const DigestEntry& entry : _digest)
-  {
-    _writer.WriteU8(static_cast<std::uint8_t>(entry.kind));
-    _writer.WriteU32(entry.severity);
-    _writer.WriteString(entry.title);
-    _writer.WriteString(entry.detail);
-    _writer.WriteI32(entry.system.Index());
-    _writer.WriteI32(entry.lane.Index());
-    _writer.WriteI32(entry.fleet.Index());
-    _writer.WriteI32(entry.other.Index());
-  }
+  Neuron::Archive archive{_writer};
+  VisitList(archive, const_cast<std::vector<DigestEntry>&>(_digest));
 }
 
 std::vector<DigestEntry> Snapshot::ReadDigest(Neuron::ByteReader& _reader)
 {
-  /// The same bound and the same reason as everywhere else: this count came off a socket.
-  constexpr std::uint32_t MAXIMUM_ENTRIES = 4096;
-
-  const std::uint32_t declared = _reader.ReadU32();
-  if (_reader.Failed() || declared > MAXIMUM_ENTRIES)
-  {
-    return {};
-  }
-
   std::vector<DigestEntry> digest;
-  digest.reserve(declared);
-  for (std::uint32_t index = 0; index < declared; ++index)
-  {
-    DigestEntry entry;
-    entry.kind = _reader.ReadEnum(DigestKind::MatchEnded);
-    entry.severity = _reader.ReadU32();
-    entry.title = _reader.ReadString();
-    entry.detail = _reader.ReadString();
-    entry.system = SystemId{_reader.ReadI32()};
-    entry.lane = LaneId{_reader.ReadI32()};
-    entry.fleet = FleetId{_reader.ReadI32()};
-    entry.other = PlayerId{_reader.ReadI32()};
-
-    if (_reader.Failed())
-    {
-      return {};
-    }
-    digest.push_back(std::move(entry));
-  }
-  return digest;
+  Neuron::Archive archive{_reader};
+  VisitList(archive, digest);
+  return archive.Failed() ? std::vector<DigestEntry>{} : digest;
 }
 
 bool Snapshot::Knows(SystemId _system) const
@@ -330,192 +402,35 @@ const SnapshotSystem* Snapshot::System(SystemId _system) const
 
 void Snapshot::Write(Neuron::ByteWriter& _writer) const
 {
-  _writer.WriteI32(m_viewer.Index());
-  _writer.WriteU32(m_tick);
-
-  _writer.WriteU32(static_cast<std::uint32_t>(m_systems.size()));
-  for (const SnapshotSystem& system : m_systems)
-  {
-    _writer.WriteI32(system.id.Index());
-    _writer.WriteString(system.name);
-    _writer.WriteI32(system.positionX);
-    _writer.WriteI32(system.positionY);
-    _writer.WriteU8(static_cast<std::uint8_t>(system.kind));
-    _writer.WriteBool(system.live);
-    _writer.WriteU32(system.asOfTick);
-    _writer.WriteI32(system.owner.Index());
-    _writer.WriteBool(system.hasShipyard);
-    _writer.WriteBool(system.hasMiningStation);
-    _writer.WriteU32(system.siegeTicks);
-    _writer.WriteU32(system.capturedAt);
-    _writer.WriteBool(system.halfYield);
-  }
-
-  _writer.WriteU32(static_cast<std::uint32_t>(m_lanes.size()));
-  for (const SnapshotLane& lane : m_lanes)
-  {
-    _writer.WriteI32(lane.id.Index());
-    _writer.WriteI32(lane.a.Index());
-    _writer.WriteI32(lane.b.Index());
-    _writer.WriteU32(lane.costTicks);
-    _writer.WriteBool(lane.tradeLane);
-  }
-
-  _writer.WriteU32(static_cast<std::uint32_t>(m_fleets.size()));
-  for (const SnapshotFleet& fleet : m_fleets)
-  {
-    _writer.WriteI32(fleet.id.Index());
-    _writer.WriteI32(fleet.owner.Index());
-    _writer.WriteU32(fleet.ships);
-    _writer.WriteI32(fleet.at.Index());
-    _writer.WriteI32(fleet.movingFrom.Index());
-    _writer.WriteI32(fleet.movingTo.Index());
-    _writer.WriteU32(fleet.ticksRemaining);
-    _writer.WriteString(fleet.preview);
-    _writer.WriteU32(fleet.previewMine);
-    _writer.WriteU32(fleet.previewTheirs);
-    _writer.WriteU32(fleet.previewMineAfter);
-    _writer.WriteU32(fleet.previewTheirsAfter);
-    _writer.WriteU8(fleet.previewDefended ? 1U : 0U);
-  }
-
-  _writer.WriteU32(static_cast<std::uint32_t>(m_proposals.size()));
-  for (const SnapshotProposal& proposal : m_proposals)
-  {
-    _writer.WriteI32(proposal.id.Index());
-    _writer.WriteI32(proposal.from.Index());
-    _writer.WriteI32(proposal.to.Index());
-    _writer.WriteU8(static_cast<std::uint8_t>(proposal.kind));
-    _writer.WriteI32(proposal.lane.Index());
-    _writer.WriteI32(proposal.conditionalLane.Index());
-    _writer.WriteU32(proposal.ticks);
-    _writer.WriteU32(proposal.ticksLeft);
-  }
-
-  _writer.WriteU32(static_cast<std::uint32_t>(m_standings.size()));
-  for (const SnapshotStanding& standing : m_standings)
-  {
-    _writer.WriteI32(standing.player.Index());
-    _writer.WriteU32(standing.score);
-    _writer.WriteU32(standing.placement);
-    _writer.WriteU8(static_cast<std::uint8_t>(standing.status));
-    _writer.WriteU32(standing.custodianSince);
-  }
-
-  _writer.WriteI32(m_regionAnchor.Index());
-  _writer.WriteU32(m_regionOpensAt);
-  _writer.WriteU32(m_totalSystems);
-  _writer.WriteU32(m_unclaimedSystems);
-  _writer.WriteU32(m_capitalGuardTicksLeft);
-  _writer.WriteBool(m_finished);
+  Neuron::Archive archive{_writer};
+  const_cast<Snapshot*>(this)->Visit(archive);
 }
 
 Snapshot Snapshot::Read(Neuron::ByteReader& _reader)
 {
-  /// The same bound and the same reason as `OrderSet::Read`: a declared count is a number off a
-  /// socket, and reserving on it is an allocation failure waiting for a malformed record.
-  constexpr std::uint32_t MAXIMUM_ENTRIES = 4096;
-  const auto count = [&_reader]
-  {
-    const std::uint32_t declared = _reader.ReadU32();
-    return declared > MAXIMUM_ENTRIES ? 0U : declared;
-  };
-
   Snapshot view;
-  view.m_viewer = PlayerId{_reader.ReadI32()};
-  view.m_tick = _reader.ReadU32();
+  Neuron::Archive archive{_reader};
+  view.Visit(archive);
+  return archive.Failed() ? Snapshot{} : view;
+}
 
-  const std::uint32_t systemCount = count();
-  view.m_systems.reserve(systemCount);
-  for (std::uint32_t index = 0; index < systemCount; ++index)
-  {
-    SnapshotSystem system;
-    system.id = SystemId{_reader.ReadI32()};
-    system.name = _reader.ReadString();
-    system.positionX = _reader.ReadI32();
-    system.positionY = _reader.ReadI32();
-    system.kind = _reader.ReadEnum(SystemKind::RegionAnchor);
-    system.live = _reader.ReadBool();
-    system.asOfTick = _reader.ReadU32();
-    system.owner = PlayerId{_reader.ReadI32()};
-    system.hasShipyard = _reader.ReadBool();
-    system.hasMiningStation = _reader.ReadBool();
-    system.siegeTicks = _reader.ReadU32();
-    system.capturedAt = _reader.ReadU32();
-    system.halfYield = _reader.ReadBool();
-    view.m_systems.push_back(std::move(system));
-  }
+void Snapshot::Visit(Neuron::Archive& _archive)
+{
+  _archive.Identity(m_viewer);
+  _archive.U32(m_tick);
 
-  const std::uint32_t laneCount = count();
-  view.m_lanes.reserve(laneCount);
-  for (std::uint32_t index = 0; index < laneCount; ++index)
-  {
-    SnapshotLane lane;
-    lane.id = LaneId{_reader.ReadI32()};
-    lane.a = SystemId{_reader.ReadI32()};
-    lane.b = SystemId{_reader.ReadI32()};
-    lane.costTicks = _reader.ReadU32();
-    lane.tradeLane = _reader.ReadBool();
-    view.m_lanes.push_back(lane);
-  }
+  VisitList(_archive, m_systems);
+  VisitList(_archive, m_lanes);
+  VisitList(_archive, m_fleets);
+  VisitList(_archive, m_proposals);
+  VisitList(_archive, m_standings);
 
-  const std::uint32_t fleetCount = count();
-  view.m_fleets.reserve(fleetCount);
-  for (std::uint32_t index = 0; index < fleetCount; ++index)
-  {
-    SnapshotFleet fleet;
-    fleet.id = FleetId{_reader.ReadI32()};
-    fleet.owner = PlayerId{_reader.ReadI32()};
-    fleet.ships = _reader.ReadU32();
-    fleet.at = SystemId{_reader.ReadI32()};
-    fleet.movingFrom = SystemId{_reader.ReadI32()};
-    fleet.movingTo = SystemId{_reader.ReadI32()};
-    fleet.ticksRemaining = _reader.ReadU32();
-    fleet.preview = _reader.ReadString();
-    fleet.previewMine = _reader.ReadU32();
-    fleet.previewTheirs = _reader.ReadU32();
-    fleet.previewMineAfter = _reader.ReadU32();
-    fleet.previewTheirsAfter = _reader.ReadU32();
-    fleet.previewDefended = _reader.ReadU8() != 0U;
-    view.m_fleets.push_back(std::move(fleet));
-  }
-
-  const std::uint32_t proposalCount = count();
-  view.m_proposals.reserve(proposalCount);
-  for (std::uint32_t index = 0; index < proposalCount; ++index)
-  {
-    SnapshotProposal proposal;
-    proposal.id = ProposalId{_reader.ReadI32()};
-    proposal.from = PlayerId{_reader.ReadI32()};
-    proposal.to = PlayerId{_reader.ReadI32()};
-    proposal.kind = _reader.ReadEnum(ProposalKind::HoldForTicks);
-    proposal.lane = LaneId{_reader.ReadI32()};
-    proposal.conditionalLane = LaneId{_reader.ReadI32()};
-    proposal.ticks = _reader.ReadU32();
-    proposal.ticksLeft = _reader.ReadU32();
-    view.m_proposals.push_back(proposal);
-  }
-
-  const std::uint32_t standingCount = count();
-  view.m_standings.reserve(standingCount);
-  for (std::uint32_t index = 0; index < standingCount; ++index)
-  {
-    SnapshotStanding standing;
-    standing.player = PlayerId{_reader.ReadI32()};
-    standing.score = _reader.ReadU32();
-    standing.placement = _reader.ReadU32();
-    standing.status = _reader.ReadEnum(PlayerStatus::Gone);
-    standing.custodianSince = _reader.ReadU32();
-    view.m_standings.push_back(standing);
-  }
-
-  view.m_regionAnchor = SystemId{_reader.ReadI32()};
-  view.m_regionOpensAt = _reader.ReadU32();
-  view.m_totalSystems = _reader.ReadU32();
-  view.m_unclaimedSystems = _reader.ReadU32();
-  view.m_capitalGuardTicksLeft = _reader.ReadU32();
-  view.m_finished = _reader.ReadBool();
-  return view;
+  _archive.Identity(m_regionAnchor);
+  _archive.U32(m_regionOpensAt);
+  _archive.U32(m_totalSystems);
+  _archive.U32(m_unclaimedSystems);
+  _archive.U32(m_capitalGuardTicksLeft);
+  _archive.Boolean(m_finished);
 }
 
 } // namespace Lockstep

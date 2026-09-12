@@ -3,6 +3,7 @@
 #include "Match.h"
 #include "TickLog.h"
 
+#include "Archive.h"
 #include "ByteReader.h"
 #include "ByteWriter.h"
 
@@ -204,8 +205,15 @@ public:
   [[nodiscard]] const SnapshotSystem* System(SystemId _system) const;
 
   void Write(Neuron::ByteWriter& _writer) const;
+
+  /// What a snapshot is made of, in wire order, for both directions at once (ADR-049). Private
+  /// because it is the format and not the interface: `Write` and `Read` are what callers use.
   [[nodiscard]] static Snapshot Read(Neuron::ByteReader& _reader);
 
+private:
+  void Visit(Neuron::Archive& _archive);
+
+public:
 private:
   PlayerId m_viewer;
   std::uint32_t m_tick = 0;
