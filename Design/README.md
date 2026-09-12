@@ -47,7 +47,7 @@ Design/
   Plans/                    ← work in flight: what is being built, in what order
   Reference/                ← things that are true rather than decided (formats, tables, maths)
   Archive/                  ← superseded plans and finished reviews, kept for the record
-  UI/                       ← the client's screens: per-screen status against the code, guidelines, the 2026-09-11 mockups
+  UI/                       ← the client's screens: per-screen status against the code, guidelines, captures of the build (2026-09-12)
 ```
 
 **`Design/Screens/` is gone.** It held the v1 main page and was superseded by `Design/UI/` on

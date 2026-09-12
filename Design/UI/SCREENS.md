@@ -2,11 +2,12 @@
 
 Per screen: what the build draws, what the 2026-09-11 handoff asked for that it does not, and where
 the code is. Status is as of 2026-09-12, and each heading names its capture in `screens/`, taken
-that day, beside any mockup that still describes a target. Numbers 01–08 are the handoff's; 09 was
-added by ADR-036 and sits between 03 and 01 in the flow (`README.md` draws it). "Not built" is
-stated as such, and nothing below is in the present tense unless the tree does it.
+that day; the handoff's mockups are no longer in the tree (`README.md` says where they went).
+Numbers 01–08 are the handoff's; 09 was added by ADR-036 and sits between 03 and 01 in the flow
+(`README.md` draws it). "Not built" is stated as such, and nothing below is in the present tense
+unless the tree does it.
 
-## 01 · Main page — **built** (`01-main-page.png` is the capture, tick 2 of a practice match; `01-main-page-5a.png` the mockup)
+## 01 · Main page — **built** (`01-main-page.png` is the capture, tick 2 of a practice match)
 
 **Top bar (44px, `MainPage::DrawTopBar`).** `LOCKSTEP` · `M0007 - D2/21 - 6 PLAYERS - 26 SYSTEMS`
 · spacer · `T8 LOCKS` + the countdown at 2× in amber · `26 CR` · `SCORE 1,284` + chip `4TH / 6` ·
@@ -99,7 +100,7 @@ inert, the digest carrying no standing moves.
 (the view model); `Lockstep/SnapshotView.cpp` turns the snapshot and the digests into it and
 composes each event's actions. Tap tests in `Tests/LockstepTests/TapTests.cpp`.
 
-## 02 · Share tick — **not built** (`02-share-tick-5b.png` is the target, if it stays one)
+## 02 · Share tick — **not built** (no capture; the mockup that was its target is in the design file and the history)
 
 The handoff: a 480×640 PNG from `SHARE TICK` — a map crop centred on the top event's systems, a
 16px first-person headline, one amber sentence, the four-cell delta and the standings line.
@@ -192,7 +193,7 @@ what a player sees when the server is late, which is when it matters.
 `FormatCountdown` rounds up so that `00:00:00` and the rail reading `LOCKED` are the same instant
 (the bug ADR-039 found by photographing the client).
 
-## 07 · Replay — **stub** (`07-replay.png` is the stub as built; `07-replay-3d.png` shows the target content on a superseded panel)
+## 07 · Replay — **stub** (`07-replay.png` is the stub as built)
 
 Built: `▶ REPLAY T7` on the top bar opens a sheet titled `REPLAY TICK 7` listing `1. LOCK` …
 `6. DIGEST` as dim, untappable rows, and `CANCEL`. That is all. The sheet's own seventh row, `NOT
@@ -205,7 +206,7 @@ phase behind it. The snapshot carries no phase records, so the wire comes first
 (`Design/Plans/4X-02-ServerAndClient.md` still lists pointing *Replay tick N* at the server's
 `TickLog`). When it is built it is a sheet, not the handoff's 600px centred panel (ADR-052).
 
-## 08 · Missed digests — **partial** (`08-missed-digests.png` is the capture; `08-missed-digests-3e.png` shows the target on the v1 layout)
+## 08 · Missed digests — **partial** (`08-missed-digests.png` is the capture)
 
 Built (ADR-044): the server keeps eight ticks of digest per player and sends the whole backlog on
 arrival; the match loop concatenates the digests newer than the last tick it drew, oldest first,

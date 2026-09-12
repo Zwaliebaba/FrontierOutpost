@@ -10,9 +10,9 @@ from the tree, not from the plan.
 ## Contents
 - `SCREENS.md` — per screen: what is built, what the design asked for that is not, and where the code is.
 - `DESIGN-GUIDELINES.md` — frame, font, palette, components, copy and map rules **as built**, with the design's intent kept where the build stops short of it.
-- `screens/` — **captures of the running client**, one per screen and state, taken 2026-09-12 from the Debug build of the tree at a4c9235 (PNG, 1280×720, the client area exactly as drawn), and the four mockups of 2026-09-11 that still describe a target the build has not reached: `01-main-page-5a.png`, `02-share-tick-5b.png`, `07-replay-3d.png` and `08-missed-digests-3e.png`. The mockups of 03, 04, 05 and 06 were superseded by the build and are deleted. The table below names each file.
+- `screens/` — **captures of the running client**, one per screen and state, taken 2026-09-12 from the Debug build of the tree at a4c9235 (PNG, 1280×720, the client area exactly as drawn). The eight mockups of 2026-09-11 are no longer in the tree (owner decision, 2026-09-12): the build superseded 03, 04, 05 and 06, and what the other four still asked for — the map's unbuilt details, screen 02, 07's step-through, 08's tabs — is kept in words under "What the design asks for that the tree does not have" and drawn in the live design reference below. The files themselves are in the history up to a4c9235. The table below names each capture.
 - The handoff's work plan, `PROMPT.md`, is finished as far as it is going to be and lives in [`Design/Archive/2026-09-11-ui-v2-prompt.md`](../Archive/2026-09-11-ui-v2-prompt.md) with a note per step. ADR-034, ADR-038 and ADR-039 cite it by its old name.
-- Live design reference: the project file `Frontier Outpost Main Page.dc.html` (all mockups on one canvas; design reference, not production code). **The filename predates the rename to LockStep: Universe and is deliberately left alone** — the file lives outside this repository, so renaming it here would break the pointer without renaming anything (ADR-035).
+- Live design reference: the project file `Frontier Outpost Main Page.dc.html` (all mockups on one canvas, and since 2026-09-12 the only place they are drawn; design reference, not production code). **The filename predates the rename to LockStep: Universe and is deliberately left alone** — the file lives outside this repository, so renaming it here would break the pointer without renaming anything (ADR-035).
 
 Built from `Design/space-4x-one-pager-v10.md`, ADR-014 (interface layer), ADR-027 (owner colours),
 ADR-028/029 (roles, tokens) and the decisions since: ADR-034 (what the handoff left open) and
@@ -22,14 +22,14 @@ ADR-036 through ADR-059, which are cited where they apply.
 
 | # | Screen | Status | In `screens/` | Code |
 |---|---|---|---|---|
-| 01 | Main page — digest as order surface, map, locks rail | **Built** (ADR-034; then 045, 052, 053, 055–059) | `01-main-page.png` (tick 2 of a practice match: a contact, a claim with its priced build, production), `01-orders-queued.png` (tick 0: a move ordered and a build queued, before the lock), `01-fleet-under-way.png` (tick 1: the route and its marker), the sheets `01-build-sheet.png`, `01-destination-sheet.png`, `01-signal-sheet.png`, and `01-finished.png`. Mockup `01-main-page-5a.png` kept — still the reference for the map's unbuilt details | `LockstepClient/MainPage.cpp`, `DigestView.cpp`, `MapRender.cpp` |
-| 02 | Share tick — 480×640 export | **Not built.** No button, no export; ADR-034 §2 says clipboard-only if it is ever built, and its open question asks whether it should be | `02-share-tick-5b.png` — the target, if there is one | — |
+| 01 | Main page — digest as order surface, map, locks rail | **Built** (ADR-034; then 045, 052, 053, 055–059) | `01-main-page.png` (tick 2 of a practice match: a contact, a claim with its priced build, production), `01-orders-queued.png` (tick 0: a move ordered and a build queued, before the lock), `01-fleet-under-way.png` (tick 1: the route and its marker), the sheets `01-build-sheet.png`, `01-destination-sheet.png`, `01-signal-sheet.png`, and `01-finished.png`. The map's unbuilt details are item 6 below | `LockstepClient/MainPage.cpp`, `DigestView.cpp`, `MapRender.cpp` |
+| 02 | Share tick — 480×640 export | **Not built.** No button, no export; ADR-034 §2 says clipboard-only if it is ever built, and its open question asks whether it should be | none; the mockup that was the target, if it stays one, is in the design file and the history | — |
 | 03 | Join | **Built** (ADR-034 §3, ADR-041) | `03-join.png` | `LockstepClient/JoinPage.cpp`, `NeuronClient/TextField.h` |
 | 04 | Connection lost | **Built** (ADR-038, ADR-043) | `04-connection-lost.png` | `LockstepClient/ConnectionDialog.cpp` |
 | 05 | Connection states | **Built** as one component with seven states. The WELCOME dialog is not one of them | `05-connecting.png`, `05-refused-unknown-token.png`, `05-refused-seat-in-use.png`, `05-waiting-for-the-host.png`, `05-match-finished.png` | `LockstepClient/ConnectionDialog.cpp` |
 | 06 | At lock | **Built** (ADR-039) | `06-at-lock.png` | `LockstepClient/MainPage.cpp` |
-| 07 | Replay — phase step-through | **Stub.** A sheet listing the six phases; nothing steps | `07-replay.png` is the stub as built. Mockup `07-replay-3d.png` kept — the content is still the target; the centred panel it draws is superseded by the sheet (ADR-052) | `MainPage::DrawPanel` |
-| 08 | Missed digests | **Partial.** The backlog is kept and concatenated (ADR-044); no tabs | `08-missed-digests.png` is the capture. Mockup `08-missed-digests-3e.png` kept — the tabs are still the target; v1 layout | `Lockstep/Lockstep.cpp` (match loop), `DigestView.cpp` |
+| 07 | Replay — phase step-through | **Stub.** A sheet listing the six phases; nothing steps | `07-replay.png` is the stub as built; the step-through the mockup drew is item 2 below, its centred panel superseded by the sheet (ADR-052) | `MainPage::DrawPanel` |
+| 08 | Missed digests | **Partial.** The backlog is kept and concatenated (ADR-044); no tabs | `08-missed-digests.png`; the tabs the mockup drew are item 3 below | `Lockstep/Lockstep.cpp` (match loop), `DigestView.cpp` |
 | 09 | Seats — the host's lobby | **Built**, and not in the handoff (ADR-036, 037, 041, 051) | `09-seats.png` (the host alone), `09-seats-joined.png` (a second seat connected and selected) | `Lockstep/SeatsPage.cpp` |
 
 Also built with no mockup, all described in `SCREENS.md` and all captured but one: the four
@@ -98,8 +98,9 @@ it was corrected on 2026-09-12.
 ## Photographing the build
 
 Done on 2026-09-12: every screen and state above was captured from the Debug build of the tree at
-a4c9235, the four mockups the build had superseded (03, 04, 05, 06) were deleted, and the four that
-still describe a target stay. What is known about doing it, measured on 2026-09-12:
+a4c9235, and the eight mockups left `screens/` the same day — the four the build had superseded and
+the four whose targets the list above keeps in words. What is known about doing it, measured on
+2026-09-12:
 
 - `Build/Screenshot.ps1 -Exe x64\Debug\Lockstep.exe -Out shot.png -Arguments "--tick 4 --store scratch"`
   captures the client area (DPI-aware, cropped to the 1280×720) and gets you screen 03 as it opens.
