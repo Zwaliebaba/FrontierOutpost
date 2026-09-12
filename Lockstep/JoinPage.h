@@ -74,6 +74,16 @@ public:
   /// True once, when the player has asked to join. Taken, so a held finger does not reconnect.
   [[nodiscard]] bool TakeJoinRequest() noexcept;
 
+  /// Whether `SHOW` is on, so the token is drawn as itself rather than as asterisks.
+  ///
+  /// **State rather than drawing**, which is why it is readable: the screen decides whether to
+  /// reveal and the renderer only obeys. Masking a field is the one thing on this screen that a
+  /// person would check by eye and a test cannot -- both spellings draw the same number of glyphs.
+  [[nodiscard]] bool TokenIsRevealed() const noexcept
+  {
+    return m_revealToken;
+  }
+
   void SetStatus(Status _status, std::string_view _detail = {});
 
   /// Puts the caret back in the token field. `EDIT TOKEN` on a refusal dialog is this, and it is

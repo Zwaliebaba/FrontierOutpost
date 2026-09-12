@@ -1,6 +1,15 @@
 # ADR-041 — The buttons get pressed
 
-**Status:** Accepted
+**Status:** Accepted — both open questions closed the same day. **(1)** `JoinPage` is covered:
+thirteen tests over the typing (the caret starting in the token, Tab, backspace, Enter-is-JOIN, a
+half-filled form refusing, and a connecting screen going inert) and the taps (focusing the server
+field, `SHOW`, the JOIN button, and its absence when the form is incomplete). `SHOW` needed
+`JoinPage::TokenIsRevealed`, because masking is the one thing on that screen a person checks by eye
+and a test cannot — both spellings draw the same number of glyphs — so the decision is readable and
+the drawing stays a screenshot. **(2)** The sweeps are five times faster: **33 seconds to 6.4**, by
+redrawing only after a tap that hit something. `HandleTap` returning false says the tap matched no
+hit, which says nothing changed, which says the frame is still good. The connection dialog is drawn
+once for a whole sweep, because nothing a tap does to it changes what it draws.
 
 **Date:** 2026-09-12
 **Decided by:** Owner, "ok proceed", 2026-09-12, on the open question ADR-040 left.

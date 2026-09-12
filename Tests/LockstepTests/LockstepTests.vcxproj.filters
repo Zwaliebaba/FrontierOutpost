@@ -7,11 +7,13 @@
     <ClCompile Include="DigestViewTests.cpp" />
     <ClCompile Include="CountdownTests.cpp" />
     <ClCompile Include="TapTests.cpp" />
+    <ClCompile Include="JoinPageTests.cpp" />
     <ClCompile Include="..\..\Lockstep\MatchState.cpp" />
     <ClCompile Include="..\..\Lockstep\SnapshotView.cpp" />
     <ClCompile Include="..\..\Lockstep\DigestView.cpp" />
     <ClCompile Include="..\..\Lockstep\ConnectionDialog.cpp" />
     <ClCompile Include="..\..\Lockstep\SeatsPage.cpp" />
+    <ClCompile Include="..\..\Lockstep\JoinPage.cpp" />
     <ClCompile Include="..\..\Lockstep\MainPage.cpp" />
   </ItemGroup>
   <ItemGroup>

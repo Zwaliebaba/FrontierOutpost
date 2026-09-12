@@ -79,37 +79,45 @@ struct Headless
   }
 };
 
-/// Sweeps a rectangle, redrawing between taps, and stops when `_done` says so.
+/// Sweeps a rectangle, and stops when `_done` says so.
 ///
-/// Redrawing between taps is not politeness: a tap changes what is on the screen, and the hit list
-/// belongs to the frame it was built in. A sweep that reused a stale list would be pressing
-/// buttons where they used to be.
+/// **It redraws only after a tap that hit something**, which is the difference between a sweep that
+/// takes a second and one that takes thirty. The hit list belongs to the frame it was built in, so
+/// a stale list would be pressing buttons where they used to be -- but a tap that matched no hit
+/// changed nothing, and `HandleTap` returning false is exactly that statement. Every page in this
+/// tree already reports it, because the composition root needs to know whether a tap was consumed
+/// before deciding whether to send an order.
 ///
 /// `_fromBottom` sweeps upward. A panel carries its close button at the top and its rows below it,
 /// so a downward sweep shuts the panel before it ever reaches a row -- which is a true thing about
 /// the screen and a useless way to find out whether a row works.
+///
+/// `_ensure` puts the screen back before a tap when a previous one wandered off it -- on the main
+/// page a stray tap on the map opens the BUILD panel over whatever was being tested. It does its
+/// own drawing and says whether it acted, because acting invalidates the frame.
 template <typename Page, typename Draw>
 [[nodiscard]] bool SweepFor(Page& _page, Headless& _renderers, Draw _draw, std::int32_t _left, std::int32_t _top, std::int32_t _right,
                             std::int32_t _bottom, const std::function<bool()>& _done, bool _fromBottom = false,
-                            const std::function<void()>& _ensure = {})
+                            const std::function<bool()>& _ensure = {})
 {
+  bool stale = true;
   for (std::int32_t row = _top; row < _bottom; row += STEP)
   {
     const std::int32_t y = _fromBottom ? _bottom - (row - _top) - STEP : row;
     for (std::int32_t x = _left; x < _right; x += STEP)
     {
-      // A sweep is indiscriminate: it presses whatever is under it, and on the main page that
-      // includes the map, where a tap opens a different panel over the one being tested. `_ensure`
-      // puts the screen back before each tap, which is what a person does without noticing.
-      if (_ensure)
+      if (_ensure && _ensure())
       {
-        _ensure();
+        stale = true;
       }
 
-      _renderers.Begin();
-      _draw(_page, _renderers);
+      if (stale)
+      {
+        _renderers.Begin();
+        _draw(_page, _renderers);
+      }
 
-      (void)_page.HandleTap(static_cast<float>(x), static_cast<float>(y));
+      stale = _page.HandleTap(static_cast<float>(x), static_cast<float>(y));
       if (_done())
       {
         return true;
@@ -134,12 +142,15 @@ void DrawDialog(Lockstep::ConnectionDialog& _dialog, Headless& _renderers)
   Lockstep::ConnectionDialog dialog;
   dialog.Update(_kind, _facts, 0.0);
 
+  // Drawn once. Nothing a tap does to this dialog changes what it draws -- an action is reported
+  // to the caller and the card is not laid out again -- so the hit list cannot go stale under it.
+  DrawDialog(dialog, renderers);
+
   Lockstep::ConnectionDialog::Action found = Lockstep::ConnectionDialog::Action::None;
   for (std::int32_t y = 0; y < SCREEN_HEIGHT && found != _wanted; y += STEP)
   {
     for (std::int32_t x = 0; x < SCREEN_WIDTH && found != _wanted; x += STEP)
     {
-      DrawDialog(dialog, renderers);
       (void)dialog.HandleTap(static_cast<float>(x), static_cast<float>(y));
       const Lockstep::ConnectionDialog::Action action = dialog.TakeAction();
       if (action != Lockstep::ConnectionDialog::Action::None)
@@ -347,11 +358,12 @@ public:
     {
       if (page.OpenPanel() == Lockstep::MainPage::Panel::SignalList)
       {
-        return;
+        return false;
       }
       renderers.Begin();
       DrawPage(page, renderers);
       (void)page.HandleTap(static_cast<float>(openX), static_cast<float>(openY));
+      return true;
     };
 
     const bool queued = SweepFor(
@@ -402,6 +414,19 @@ public:
       return std::ranges::find(queued, _row) != queued.end();
     };
 
+    // One tap, redrawing first only if the last one landed on something. Same bargain `SweepFor`
+    // makes, spelled out here because this loop presses the same place several times.
+    bool stale = true;
+    const auto tap = [&page, &renderers, &stale](std::int32_t _x, std::int32_t _y)
+    {
+      if (stale)
+      {
+        renderers.Begin();
+        DrawPage(page, renderers);
+      }
+      stale = page.HandleTap(static_cast<float>(_x), static_cast<float>(_y));
+    };
+
     std::int32_t rowX = 0;
     std::int32_t rowY = 0;
     for (std::int32_t y = SCREEN_HEIGHT - STEP; y > TOP_BAR && rowY == 0; y -= STEP)
@@ -412,17 +437,11 @@ public:
         // picker and there is nothing in the sweep's path that would put it back.
         if (page.OpenPanel() != Lockstep::MainPage::Panel::SignalList)
         {
-          renderers.Begin();
-          DrawPage(page, renderers);
-          (void)page.HandleTap(static_cast<float>(openX), static_cast<float>(openY));
+          tap(openX, openY);
         }
 
-        for (std::int32_t press = 0; press < 2; ++press)
-        {
-          renderers.Begin();
-          DrawPage(page, renderers);
-          (void)page.HandleTap(static_cast<float>(x), static_cast<float>(y));
-        }
+        tap(x, y);
+        tap(x, y);
 
         if (queuedIs(concede))
         {
@@ -432,12 +451,11 @@ public:
         }
 
         // Something else took the taps. Put it back, so the sweep does not accumulate a rail full
-        // of orders nobody asked for.
-        while (!page.State().orders.queuedSignals.empty())
+        // of orders nobody asked for. Bounded, because a loop that keeps tapping until a condition
+        // holds is a hang waiting for the day the condition stops being reachable.
+        for (std::int32_t attempt = 0; attempt < 4 && !page.State().orders.queuedSignals.empty(); ++attempt)
         {
-          renderers.Begin();
-          DrawPage(page, renderers);
-          (void)page.HandleTap(static_cast<float>(x), static_cast<float>(y));
+          tap(x, y);
         }
       }
     }
