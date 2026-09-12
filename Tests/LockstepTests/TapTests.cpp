@@ -751,6 +751,80 @@ public:
   }
 };
 
+// A sheet is where somebody is in the middle of deciding something, and neither the lock nor the
+// state that follows it takes that away (ADR-065).
+TEST_CLASS(OpenSheetTapTests)
+{
+public:
+  TEST_METHOD(ASheetSurvivesTheLockAndStillTakesNoOrder)
+  {
+    // An opening board carries `MOVE FLT n` on its one card (ADR-056), which is the only way to a
+    // destination picker when no fleet is under way.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    const bool opened = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
+    Assert::IsTrue(opened, L"no control opens a destination picker on an opening board");
+
+    // The lock arrives under it.
+    page.Update(1.0e6);
+    Assert::IsTrue(page.State().orders.locked);
+    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Destination, L"the lock closed the sheet");
+
+    std::vector<std::int32_t> before;
+    for (const Lockstep::Fleet& fleet : page.State().fleets)
+    {
+      before.push_back(fleet.to);
+    }
+
+    const bool queued = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page]
+                                 { return !page.State().orders.queuedBuilds.empty() || !page.State().orders.queuedSignals.empty(); });
+    Assert::IsFalse(queued, L"a sheet left open at the lock took an order");
+    for (std::size_t index = 0; index < before.size(); ++index)
+    {
+      Assert::AreEqual(before[index], page.State().fleets[index].to, L"a locked sheet ordered a move");
+    }
+  }
+
+  TEST_METHOD(ASheetIsRebuiltFromTheNewStateOrClosed)
+  {
+    // The subject is remembered as the id the simulation knows it by, not as a position in a fogged
+    // list (ADR-057), so a sheet reopens on the same system rather than on whichever one has moved
+    // into that slot.
+    const auto simulation = PlayedMatch(4);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    const bool opened = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::BuildList; });
+    Assert::IsTrue(opened, L"nothing opens a build sheet on a played board");
+
+    const std::int32_t about = page.FocusedSystem();
+    Assert::IsTrue(about >= 0);
+    const std::int32_t identity = page.State().graph.systems[static_cast<std::size_t>(about)].id;
+
+    page.Create(page.State());
+    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::BuildList, L"a new state closed a sheet that still had a subject");
+
+    // Taken by somebody: there is nothing left to build on it, so the sheet goes. That it closes on
+    // exactly this condition is what says the subject is tracked rather than merely kept.
+    Lockstep::MatchState lost = page.State();
+    for (Lockstep::SystemNode& node : lost.graph.systems)
+    {
+      if (node.id == identity)
+      {
+        node.owner = lost.viewer + 1;
+      }
+    }
+    page.Create(std::move(lost));
+    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::None, L"a sheet stayed open on a system that is no longer yours");
+  }
+};
+
 // The locks rail's rows are links to what they are about (ADR-060). They give no order -- the
 // digest is still the order surface -- so what is asserted here is where a tap LANDS you.
 TEST_CLASS(LocksRailTapTests)

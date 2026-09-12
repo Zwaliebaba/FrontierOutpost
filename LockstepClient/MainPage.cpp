@@ -159,10 +159,22 @@ constexpr float REGION_VOLUME_HEIGHT = 26.0F;
 
 void MainPage::Create(MatchState _state)
 {
+  // What the player had open, so that a state arriving does not shut it (ADR-065). A sheet is where
+  // somebody is in the middle of deciding something, and the tick landing under them is not a
+  // reason to take it away -- it is the reason they opened it.
+  const Panel wasOpen = m_panel;
+  const std::int32_t wasSubject = m_panelSubject;
+  const std::int32_t wasSubjectId = m_panelSubjectId;
+
   m_state = std::move(_state);
   m_panel = Panel::None;
   m_panelSubject = EventRefs::NONE;
+  m_panelSubjectId = EventRefs::NONE;
   m_focusedSystem = EventRefs::NONE;
+
+  // The arming is an index into the signal list, and the list is recomposed with the state. Kept,
+  // it would be a row armed that nobody armed.
+  m_armedConcede = EventRefs::NONE;
 
   // A digest is replaced wholesale every tick, so nothing about how the last one was being READ
   // survives it: page three is nowhere in the new one, and the rival whose card was open may have
@@ -171,6 +183,60 @@ void MainPage::Create(MatchState _state)
   m_expandedActor = NOBODY;
 
   MeasureContent();
+  ReopenPanel(wasOpen, wasSubjectId, wasSubject);
+}
+
+void MainPage::ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _subject)
+{
+  switch (_panel)
+  {
+  case Panel::BuildList:
+  {
+    // Still yours, or there is nothing to build on it. `Action::OpenSystem` applies the same rule
+    // (ADR-058) and this is the same question asked a tick later.
+    const std::int32_t at = PositionOfSystem(m_state, _subjectId);
+    if (at == EventRefs::NONE || m_state.graph.systems[static_cast<std::size_t>(at)].owner != m_state.viewer)
+    {
+      return;
+    }
+    m_panel = Panel::BuildList;
+    m_panelSubject = at;
+    m_panelSubjectId = _subjectId;
+    return;
+  }
+
+  case Panel::Destination:
+  {
+    for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
+    {
+      if (m_state.fleets[index].id != _subjectId || m_state.fleets[index].owner != m_state.viewer)
+      {
+        continue;
+      }
+      m_panel = Panel::Destination;
+      m_panelSubject = static_cast<std::int32_t>(index);
+      m_panelSubjectId = _subjectId;
+      return;
+    }
+    return;
+  }
+
+  case Panel::SignalList:
+    // Composed from the new snapshot, and never empty -- a concede is always on it (ADR-039).
+    m_panel = Panel::SignalList;
+    m_panelSubject = 0;
+    return;
+
+  case Panel::Replay:
+    // About the tick it named, which a newer tick does not make untrue.
+    m_panel = Panel::Replay;
+    m_panelSubject = _subject;
+    return;
+
+  case Panel::None:
+  default:
+    return;
+  }
 }
 
 std::string MainPage::LockSentence() const
@@ -323,9 +389,12 @@ void MainPage::Update(double _elapsedSeconds)
     // answer to the proposal -- and nothing on the rail is editable afterwards (one-pager: orders
     // are hidden until they lock). What happens NEXT is the server's: it resolves the tick and
     // sends a new digest. The client does not resolve anything, so the countdown simply stops.
+    //
+    // **An open sheet stays open** (ADR-065). It goes inert like everything else, and it says so in
+    // its own header; closing it would take the board away from somebody mid-decision at the one
+    // moment they can do nothing about it.
     m_state.match.secondsToLock = 0.0;
     m_state.orders.locked = true;
-    m_panel = Panel::None;
   }
 }
 
@@ -461,12 +530,18 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
                          m_state.graph.systems[static_cast<std::size_t>(region->index)].owner == m_state.viewer;
       m_panel = yours ? Panel::BuildList : Panel::None;
       m_panelSubject = yours ? region->index : EventRefs::NONE;
+      m_panelSubjectId = yours ? m_state.graph.systems[static_cast<std::size_t>(region->index)].id : EventRefs::NONE;
       return true;
     }
 
     case Action::OpenFleet:
+      if (region->index < 0 || region->index >= static_cast<std::int32_t>(m_state.fleets.size()))
+      {
+        return true;
+      }
       m_panel = Panel::Destination;
       m_panelSubject = region->index;
+      m_panelSubjectId = m_state.fleets[static_cast<std::size_t>(region->index)].id;
       return true;
 
     case Action::ToggleBuild:
@@ -498,6 +573,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
     case Action::OpenSignals:
       m_panel = Panel::SignalList;
       m_panelSubject = 0;
+      m_panelSubjectId = EventRefs::NONE;
       m_armedConcede = EventRefs::NONE;
       return true;
 
@@ -572,6 +648,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
     case Action::OpenReplay:
       m_panel = Panel::Replay;
       m_panelSubject = static_cast<std::int32_t>(m_state.match.tick);
+      m_panelSubjectId = EventRefs::NONE;
       return true;
 
     case Action::ClosePanel:
@@ -1538,7 +1615,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       rows.push_back(SheetRow{Uppercased(node.name), held,
                               std::format("{} - ETA T{}", lane.cost == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", lane.cost),
                                           m_state.OrdersTick() + lane.cost - 1),
-                              OwnerColor(node.owner, m_state.viewer), other});
+                              OwnerColor(node.owner, m_state.viewer), m_state.orders.locked ? EventRefs::NONE : other});
     }
     break;
   }
@@ -1646,7 +1723,17 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     listHeight += rows[index].band ? SHEET_BAND_HEIGHT : SHEET_ROW_HEIGHT;
   }
-  const float height = SHEET_HEADER_HEIGHT + listHeight + SHEET_ACTION_HEIGHT;
+
+  // **At the lock the sheet stays and goes inert** (ADR-065). Its rows are already not targets --
+  // every panel above passes `EventRefs::NONE` while the orders are locked -- so what is left is to
+  // say why, in the rail's own words and in the rail's amber.
+  const bool atLock = m_state.orders.locked && !m_state.match.finished;
+  const std::vector<std::string> lockHelp =
+    atLock ? FontRenderer::Wrap(LockSentence(), FontRenderer::FitCharacters(static_cast<std::uint32_t>(width - 2.0F * CARD_PADDING)))
+           : std::vector<std::string>{};
+  const float helpHeight = lockHelp.empty() ? 0.0F : static_cast<float>(lockHelp.size()) * static_cast<float>(LINE_HEIGHT) + 12.0F;
+
+  const float height = SHEET_HEADER_HEIGHT + helpHeight + listHeight + SHEET_ACTION_HEIGHT;
   const float y = Frame::SCREEN_HEIGHT - SHEET_MARGIN - height;
 
   _shapes.FillRect(x, y, width, height, Ink::APP_BACKGROUND);
@@ -1656,12 +1743,34 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(y, SHEET_HEADER_HEIGHT), title, Ink::TEXT_PRIMARY);
   DrawRight(_text, x + width - CARD_PADDING, CenterTextY(y, SHEET_HEADER_HEIGHT), "X", Ink::TEXT_MUTED);
 
+  // The same filled grey chip the locks rail wears, in the header's own status position -- clear of
+  // the `X`'s 36-pixel corner, which is a target and must not have a chip drawn into it.
+  if (atLock)
+  {
+    const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels("LOCKED")) + 12.0F;
+    const float chipX = x + width - SHEET_HEADER_HEIGHT - chipWidth;
+    _shapes.FillRect(chipX, y + 10.0F, chipWidth, 16.0F, Ink::LOCKED_FILL);
+    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, CenterTextY(y, SHEET_HEADER_HEIGHT), "LOCKED", Ink::APP_BACKGROUND);
+  }
+
   // A close target the height of the header, not the width of one glyph.
   AddHit(x + width - SHEET_HEADER_HEIGHT, y, SHEET_HEADER_HEIGHT, SHEET_HEADER_HEIGHT, Action::ClosePanel, 0);
   _shapes.FillRect(x, y + SHEET_HEADER_HEIGHT, width, 1.0F, Ink::DIVIDER);
 
+  // ---- Why nothing here does anything ----------------------------------------------------------
+  if (!lockHelp.empty())
+  {
+    std::int32_t helpY = static_cast<std::int32_t>(y + SHEET_HEADER_HEIGHT) + 6;
+    for (const std::string& line : lockHelp)
+    {
+      _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), helpY, line, Ink::AMBER);
+      helpY += LINE_HEIGHT;
+    }
+    _shapes.FillRect(x, y + SHEET_HEADER_HEIGHT + helpHeight, width, 1.0F, Ink::DIVIDER);
+  }
+
   // ---- Rows ------------------------------------------------------------------------------------
-  float rowY = y + SHEET_HEADER_HEIGHT;
+  float rowY = y + SHEET_HEADER_HEIGHT + helpHeight;
   for (std::size_t index = 0; index < shown; ++index)
   {
     const SheetRow& row = rows[index];

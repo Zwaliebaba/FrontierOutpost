@@ -258,6 +258,9 @@ private:
   /// Which of `m_railRows` the pointer is over, or `EventRefs::NONE`.
   [[nodiscard]] std::int32_t RailRowUnderPointer() const noexcept;
 
+  /// Puts back the sheet a new state arrived under, if what it was about is still there (ADR-065).
+  void ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _subject);
+
   /// What the rail and an open sheet both say at the lock. One sentence, said once, because two
   /// copies of it is one wrong tick number waiting.
   [[nodiscard]] std::string LockSentence() const;
@@ -300,8 +303,14 @@ private:
   std::size_t m_digestPage = 0;
 
   Panel m_panel = Panel::None;
-  /// Which system's build list or which fleet's picker is open.
+  /// Which system's build list or which fleet's picker is open, as a POSITION in the view's lists.
   std::int32_t m_panelSubject = EventRefs::NONE;
+  /// The same subject as the id the simulation knows it by, which is what survives a new state.
+  ///
+  /// **A position is not stable across a snapshot and an id is** (ADR-057): the graph is fogged, so
+  /// the tenth system a player can see this tick may be the eleventh next tick. A sheet that stayed
+  /// open on a position would be a sheet about a different system (ADR-065).
+  std::int32_t m_panelSubjectId = EventRefs::NONE;
   /// The node the digest last pointed at. Drawn with a focus ring; -1 when nothing is focused.
   std::int32_t m_focusedSystem = EventRefs::NONE;
 

@@ -203,19 +203,23 @@ countdown in grey rather than amber; digest header right side `T8 PENDING` in am
 button outlined dim and inert (`MAP` still focuses), no standing moves; the rail's header a filled
 grey `LOCKED` chip, its help line amber — *Resolving T8. Controls return with the new digest.
 Anything you tap now is an order for T9.* — its `SIGNALS` header `LOCKED` and not a control, its
-footer `LOCKED TOGETHER` / `T8 RESOLVING`; any open sheet closed. Ends when the next state arrives
-and the page is rebuilt from it. When the server is on time this screen lasts under a second; it is
-what a player sees when the server is late, which is when it matters.
+footer `LOCKED TOGETHER` / `T8 RESOLVING`; its rows focus-only (ADR-060). **An open sheet stays
+open** (ADR-065): every row dim and not a target, the same filled grey `LOCKED` chip in its header
+clear of the `X`, and the rail's lock sentence repeated under the header in amber. `X` and `CANCEL`
+still close it. Ends when the next state arrives and the page is rebuilt from it — including the
+sheet, which reopens when its system is still yours or its fleet still exists, and closes when it is
+not. When the server is on time this screen lasts under a second; it is what a player sees when the
+server is late, which is when it matters.
 
 `FormatCountdown` rounds up so that `00:00:00` and the rail reading `LOCKED` are the same instant
 (the bug ADR-039 found by photographing the client).
 
 ## 07 · Replay — **stub** (`07-replay.png` is the stub as built)
 
-Built: `▶ REPLAY T7` on the top bar opens a sheet titled `REPLAY TICK 7` listing `1. LOCK` …
-`6. DIGEST` as dim, untappable rows, and `CANCEL`. That is all. The sheet's own seventh row, `NOT
-YET WIRED TO A RESOLVED TICK`, is clipped by the six-row cap and appears as `+1 MORE THAN THIS SHEET
-CAN SHOW` — a small defect worth a line here so nobody reads it as a real overflow.
+Built: `▶ REPLAY T7` on the top bar opens a sheet titled `REPLAY TICK 7 - NOT YET WIRED` listing
+`1. LOCK` … `6. DIGEST` as dim, untappable rows, and `CANCEL`. That is all, and the title is where
+it says so: the seventh note row that used to carry that sentence was clipped by the six-row cap and
+read as `+1 MORE THAN THIS SHEET CAN SHOW`, so it was removed.
 
 Not built: the step-through — done/current/upcoming phases, one line per `PhaseRecord`, the
 rule-of-thumb line, `PREV`/`NEXT` and the `[<] [>] [D]` keys, and the board rendered as of the current
