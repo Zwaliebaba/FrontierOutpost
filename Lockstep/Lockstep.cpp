@@ -38,6 +38,7 @@
 #include "Socket.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <memory>
 #include <optional>
@@ -54,6 +55,10 @@ namespace
 // today (ADR-011).
 constexpr int CLIENT_WIDTH = static_cast<int>(Neuron::SceneTarget::WIDTH_PIXELS);
 constexpr int CLIENT_HEIGHT = static_cast<int>(Neuron::SceneTarget::HEIGHT_PIXELS);
+
+/// How long the loop sleeps when the screen has not changed. Short enough that a tap is answered
+/// within a frame of a sixty-hertz one, long enough that an idle client is not a busy one.
+constexpr std::int32_t IDLE_FRAME_MILLISECONDS = 8;
 
 constexpr wchar_t WINDOW_CLASS_NAME[] = L"LockstepWindow";
 constexpr wchar_t WINDOW_TITLE[] = L"LockStep: Universe";
@@ -165,6 +170,50 @@ struct Startup
   return Neuron::WideToUtf8(path.substr(0, slash + 1)) + _name;
 }
 
+/// Splits `host`, `host:port`, `[v6]` or `[v6]:port` into the two.
+///
+/// **Brackets, because an IPv6 literal is made of colons** (ADR-046). Splitting on a colon turned
+/// `::1:7371` into an empty host and a port that did not parse, and the client then connected to
+/// nothing on the default port -- silently, because an address that does not resolve is the same
+/// failure as a server that is not running. The bracket form is what a URL uses and what a person
+/// who has typed an IPv6 address before will reach for.
+///
+/// An unbracketed address with more than one colon is taken whole, as a host. That is the other
+/// thing somebody will type, and guessing a port out of the last group of an IPv6 address would be
+/// worse than ignoring it.
+void SplitHostAndPort(const std::string& _target, std::string& _outHost, std::uint16_t& _outPort)
+{
+  const auto asPort = [](const std::string& _digits, std::uint16_t _fallback)
+  {
+    const unsigned long parsed = std::strtoul(_digits.c_str(), nullptr, 10);
+    return parsed > 0 && parsed <= 65535 ? static_cast<std::uint16_t>(parsed) : _fallback;
+  };
+
+  if (!_target.empty() && _target.front() == '[')
+  {
+    const std::size_t close = _target.find(']');
+    if (close != std::string::npos)
+    {
+      _outHost = _target.substr(1, close - 1);
+      if (close + 1 < _target.size() && _target[close + 1] == ':')
+      {
+        _outPort = asPort(_target.substr(close + 2), _outPort);
+      }
+      return;
+    }
+  }
+
+  const std::size_t colon = _target.rfind(':');
+  if (colon != std::string::npos && _target.find(':') == colon)
+  {
+    _outPort = asPort(_target.substr(colon + 1), _outPort);
+    _outHost = _target.substr(0, colon);
+    return;
+  }
+
+  _outHost = _target;
+}
+
 /// `--serve [port]`, `--join <host[:port]>`, `--token <token>`, `--phase0`, `--tick <seconds>`,
 /// `--bots <n>`, `--store <name>`. Anything else is host-and-play.
 [[nodiscard]] Startup ParseCommandLine(LPWSTR _commandLine)
@@ -224,14 +273,7 @@ struct Startup
     {
       startup.role = Role::Join;
       startup.joinGiven = true;
-      std::string target = words[++index];
-      const std::size_t colon = target.find(':');
-      if (colon != std::string::npos)
-      {
-        startup.port = asPort(target.substr(colon + 1), startup.port);
-        target = target.substr(0, colon);
-      }
-      startup.host = target;
+      SplitHostAndPort(words[++index], startup.host, startup.port);
     }
     else if (words[index] == "--token" && index + 1 < words.size())
     {
@@ -687,18 +729,9 @@ struct MatchPaths
     {
       // `host:port`, split here rather than in the field, because a field that validated as you
       // typed would refuse a half-typed address and there is nothing useful to say about one.
-      std::string host = page.Server();
+      std::string host;
       std::uint16_t port = _defaultPort;
-      const std::size_t colon = host.rfind(':');
-      if (colon != std::string::npos)
-      {
-        const unsigned long parsed = std::strtoul(host.substr(colon + 1).c_str(), nullptr, 10);
-        if (parsed > 0 && parsed <= 65535)
-        {
-          port = static_cast<std::uint16_t>(parsed);
-        }
-        host = host.substr(0, colon);
-      }
+      SplitHostAndPort(page.Server(), host, port);
 
       if (_connection.Open(host, port, page.Token()))
       {
@@ -985,6 +1018,31 @@ int RunGame(HWND _window, const Startup& _startup)
 
   Lockstep::ConnectionDialog dialog;
 
+  /// **This screen is redrawn when it changes, not sixty times a second** (ADR-047).
+  ///
+  /// A 4X at four locks a day spends nearly all of its time showing a picture that is not moving.
+  /// Presenting it again at vsync costs a GPU and a laptop battery for no pixel anybody can see --
+  /// and it was the one real performance cost in the tree, which is otherwise resolving ticks in
+  /// microseconds.
+  ///
+  /// What counts as a change: a state from the server, a tap, a drag, a key, a dialog appearing or
+  /// going, and the countdown's displayed second turning over. The last of those is what keeps the
+  /// idle rate at one frame a second rather than none, and it is a real change: the number on the
+  /// top bar is different.
+  bool redraw = true;
+  std::int64_t drawnSecond = -1;
+
+  /// Whether any state has ever arrived.
+  ///
+  /// **Not `drawnTick != 0`, which is what this used to be and which was wrong at tick zero**
+  /// (ADR-047). A match that has started but not yet locked its first tick sends a perfectly good
+  /// state whose tick IS zero, so the test could not tell "the host has not started" from "the
+  /// first tick has not resolved" -- and told a player looking at a drawn galaxy that there was
+  /// nothing to show yet. It flashed past at a rehearsal tick and would have sat there for six
+  /// hours at the authored one.
+  bool everHadState = false;
+  Lockstep::ConnectionDialog::Kind drawnDialog = Lockstep::ConnectionDialog::Kind::None;
+
   /// Whether the player has dismissed the MATCH FINISHED dialog to look at the last digest. Once,
   /// and it stays dismissed -- a dialog that came back every frame would make the digest unreadable.
   bool finishedDismissed = false;
@@ -1011,6 +1069,7 @@ int RunGame(HWND _window, const Startup& _startup)
 
     if (connection.Live() != wasLive)
     {
+      redraw = true;
       wasLive = connection.Live();
       Lockstep::MatchState state = page.State();
       state.connected = wasLive;
@@ -1080,6 +1139,8 @@ int RunGame(HWND _window, const Startup& _startup)
         }
         drawnTick = state.match.tick;
 
+        everHadState = true;
+        redraw = true;
         page.Create(std::move(state));
       }
     }
@@ -1113,13 +1174,13 @@ int RunGame(HWND _window, const Startup& _startup)
       // is still the link being down. Letting the dialog blink out for the length of a handshake
       // and back in would read as the connection returning and going again.
       kind = Lockstep::ConnectionDialog::Kind::Lost;
-      facts.lockCountdown = drawnTick == 0 ? std::string{} : Lockstep::MainPage::FormatCountdown(page.State().match.secondsToLock);
+      facts.lockCountdown = !everHadState ? std::string{} : Lockstep::MainPage::FormatCountdown(page.State().match.secondsToLock);
     }
-    else if (drawnTick == 0)
+    else if (!everHadState)
     {
       // Welcomed, and nothing has ever arrived. Either the host has not started the match or the
       // first state is still in flight -- and from where the player is sitting those are the same
-      // thing, so one screen covers both and it resolves the moment a tick arrives.
+      // thing, so one screen covers both and it resolves the moment a state arrives.
       kind = Lockstep::ConnectionDialog::Kind::Waiting;
     }
     else if (page.State().match.finished && !finishedDismissed)
@@ -1130,6 +1191,11 @@ int RunGame(HWND _window, const Startup& _startup)
     }
 
     dialog.Update(kind, facts, elapsedSeconds);
+    if (kind != drawnDialog)
+    {
+      redraw = true;
+      drawnDialog = kind;
+    }
 
     switch (dialog.TakeAction())
     {
@@ -1180,6 +1246,7 @@ int RunGame(HWND _window, const Startup& _startup)
     Neuron::PointerInput::Drag drag = {};
     if (pointer.TakeDrag(drag) && !dialog.Visible())
     {
+      redraw = true;
       page.HandleDrag(drag);
     }
 
@@ -1187,6 +1254,8 @@ int RunGame(HWND _window, const Startup& _startup)
     float tapYPixels = 0.0F;
     if (pointer.TakeClick(tapXPixels, tapYPixels))
     {
+      redraw = true;
+
       // The dialog swallows everything it is over, the map included. A tap that reached the board
       // behind a CONNECTION LOST dialog would be an order edit this client cannot send, and the
       // player would have no way to tell which of their taps counted.
@@ -1202,6 +1271,25 @@ int RunGame(HWND _window, const Startup& _startup)
         connection.SendOrders(writer.Bytes());
       }
     }
+
+    // The countdown is the only thing here that moves on its own, and it moves once a second. Its
+    // DISPLAYED second is what matters -- `FormatCountdown` rounds up, so this is the number on the
+    // bar rather than the float behind it.
+    const std::int64_t second = static_cast<std::int64_t>(std::ceil(std::max(0.0, page.State().match.secondsToLock)));
+    if (second != drawnSecond)
+    {
+      redraw = true;
+      drawnSecond = second;
+    }
+
+    if (!redraw)
+    {
+      // Nothing has changed. The swap chain still holds the last frame, so there is nothing to
+      // present -- and a short sleep is what keeps this loop from spinning a core to do it.
+      std::this_thread::sleep_for(std::chrono::milliseconds(IDLE_FRAME_MILLISECONDS));
+      continue;
+    }
+    redraw = false;
 
     ID3D12GraphicsCommandList* commandList = device.BeginFrame();
     screen.BeginScene(commandList, device.BackBufferView());

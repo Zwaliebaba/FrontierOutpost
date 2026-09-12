@@ -295,9 +295,10 @@ x64\Debug\Lockstep.exe
 | Job | Steps |
 |---|---|
 | **Windows** | `CheckProjectFiles.py` → build **Debug\|x64** → build the five test DLLs → `vstest.console.exe` over all five → `RunClangTidy.py` over the whole tree |
+| **Windows, Release** | build `GameLogicTests` at **Release\|x64** → run it. The determinism gate, and the only thing built twice |
 | **Linux** | `CheckFormat.py` on clang-format 18.1.3 |
 
-**CI does not build Release** (owner decision, 2026-09-09). The Windows build is the slow half of the pipeline and a second configuration roughly doubles it for a tree where the two differ only in optimisation. What stands in for it is the static alignment check in `CheckProjectFiles.py` (§3) — and, before a release, an actual `Configuration=Release` build by whoever is shipping. If you change something that could plausibly break only under optimisation, build Release yourself and say so.
+**CI builds Release for one suite** (amended 2026-09-12; the decision below stands for the rest). The Windows build is the slow half of the pipeline and a second configuration roughly doubles it for a tree where the two differ only in optimisation. What changed is that there is now something Release can *disagree* about: the scripted match's final hash is pinned to a value computed under a second toolchain, so a `Release\|x64` job builds `GameLogicTests` alone and runs it, in parallel with the Debug job. It needs two libraries, not nine projects, and the wall clock is unchanged. What stands in for it is the static alignment check in `CheckProjectFiles.py` (§3) — and, before a release, an actual `Configuration=Release` build by whoever is shipping. If you change something that could plausibly break only under optimisation, build Release yourself and say so.
 
 **Commits and PRs.** Branch off `main`; small, focused commits with an imperative subject describing the change, not the process. CI must be green. Never commit build output, `.vs/` or `.user` files.
 

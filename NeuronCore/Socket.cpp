@@ -103,11 +103,23 @@ Socket Socket::Listen(std::uint16_t _port)
 {
   Startup();
 
-  const SOCKET handle = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  // **IPv6, with v4 mapped into it** (ADR-046). One socket serves both families: Windows defaults
+  // `IPV6_V6ONLY` to on, so it is turned off here and a v4 peer arrives as `::ffff:a.b.c.d`. The
+  // alternative is two listeners and two accept loops for a game whose players are as likely to be
+  // on one as the other.
+  const SOCKET handle = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
   if (handle == INVALID_SOCKET)
   {
     Shutdown();
     return {};
+  }
+
+  DWORD v6Only = 0;
+  if (setsockopt(handle, IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<const char*>(&v6Only), sizeof(v6Only)) == SOCKET_ERROR)
+  {
+    // A host with IPv4 only. Nothing to do about it here and nothing to say: `bind` below decides
+    // whether this socket can serve anybody, and it is the honest place for that to fail.
+    v6Only = 1;
   }
 
   // SO_EXCLUSIVEADDRUSE, not SO_REUSEADDR. On Windows the reuse option is not the POSIX one: it
@@ -120,10 +132,10 @@ Socket Socket::Listen(std::uint16_t _port)
   BOOL exclusive = TRUE;
   (void)setsockopt(handle, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&exclusive), sizeof(exclusive));
 
-  sockaddr_in address = {};
-  address.sin_family = AF_INET;
-  address.sin_addr.s_addr = htonl(INADDR_ANY);
-  address.sin_port = htons(_port);
+  sockaddr_in6 address = {};
+  address.sin6_family = AF_INET6;
+  address.sin6_addr = in6addr_any;
+  address.sin6_port = htons(_port);
 
   if (bind(handle, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == SOCKET_ERROR ||
       listen(handle, SOMAXCONN) == SOCKET_ERROR)
@@ -142,7 +154,9 @@ Socket Socket::Connect(const std::string& _host, std::uint16_t _port)
   Startup();
 
   addrinfo hints = {};
-  hints.ai_family = AF_INET;
+  // Whatever the name has. `getaddrinfo` returns the families in the order the system prefers and
+  // the loop below tries them in turn, so a host with both gets whichever answers.
+  hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_protocol = IPPROTO_TCP;
 
@@ -271,13 +285,25 @@ std::uint16_t Socket::Port() const
     return 0;
   }
 
-  sockaddr_in address = {};
+  // Big enough for either family, and the family is read out of what was written rather than
+  // assumed: a listener is v6 and a socket that came from `Connect` is whichever the name resolved
+  // to. The port sits at a different offset in each.
+  sockaddr_storage address = {};
   int length = sizeof(address);
   if (getsockname(static_cast<SOCKET>(m_handle), reinterpret_cast<sockaddr*>(&address), &length) == SOCKET_ERROR)
   {
     return 0;
   }
-  return ntohs(address.sin_port);
+
+  if (address.ss_family == AF_INET6)
+  {
+    return ntohs(reinterpret_cast<const sockaddr_in6*>(&address)->sin6_port);
+  }
+  if (address.ss_family == AF_INET)
+  {
+    return ntohs(reinterpret_cast<const sockaddr_in*>(&address)->sin_port);
+  }
+  return 0;
 }
 
 std::int32_t Socket::Receive(std::span<std::uint8_t> _into)

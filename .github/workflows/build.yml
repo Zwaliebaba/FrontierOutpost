@@ -172,6 +172,53 @@ jobs:
           path: TestResults
           if-no-files-found: ignore
 
+  # ── Release, for the one suite that can tell ─────────────────────────────────────────────────
+  #
+  # CI builds Debug because the Windows build is the slow half of this pipeline and a second
+  # configuration doubles it (owner decision, 2026-09-09). What changed is that there is now
+  # something Release can DISAGREE about: the scripted match's final hash is pinned to a value
+  # computed under clang, so a Release build that optimises the simulation into a different answer
+  # fails here rather than on the day somebody ships.
+  #
+  # `GameLogicTests` only, and deliberately. It is the suite that holds the determinism gate, it
+  # needs `GameLogic` and `NeuronCore` and nothing else, and it runs in parallel with the Debug job
+  # so the wall clock is unchanged. The rest of the tree is still covered by the static alignment
+  # check in CheckProjectFiles.py, which is what stands in for the build nobody runs.
+  release:
+    name: Release|x64 (determinism)
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    env:
+      CONFIGURATION: Release
+      PLATFORM: x64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build GameLogicTests
+        shell: pwsh
+        run: |
+          msbuild Lockstep.slnx /t:Tests\GameLogicTests `
+            /p:Configuration=$env:CONFIGURATION /p:Platform=$env:PLATFORM `
+            /m /nologo /v:minimal /warnaserror
+
+      - name: Run the determinism gate
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vstest = & $vswhere -latest -products * -find '**\vstest.console.exe' | Select-Object -First 1
+          if (-not $vstest) { throw "vstest.console.exe not found." }
+
+          $suite = "x64\$env:CONFIGURATION\GameLogicTests.dll"
+          if (-not (Test-Path $suite)) { throw "$suite was not built. A suite that does not exist is not a suite that passed." }
+
+          & $vstest $suite /Platform:x64
+          if ($LASTEXITCODE -ne 0) { throw "vstest reported failures." }
+
   format:
     name: clang-format
     runs-on: ubuntu-latest

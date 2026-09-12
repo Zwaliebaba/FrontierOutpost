@@ -69,7 +69,26 @@
   <PropertyGroup>
     <OutDir>$(SolutionDir)x64\$(Configuration)\</OutDir>
     <IntDir>x64\$(Configuration)\</IntDir>
-    <LinkIncremental Condition="'$(Configuration)'=='Debug'">true</LinkIncremental>
+    <!--
+      ADDRESS SANITIZER, ON THIS SUITE AND ONE OTHER.
+
+      This project and NeuronServerTests hold the fuzz tests: truncated frames, a length field a
+      peer chose, a message only a server sends, twelve clients sending noise. Their comments say
+      the point is the absence of a read past the end, and nothing was checking it: a read a few
+      bytes past a heap buffer is exactly the bug a passing test cannot see. Under ASan
+      it aborts (ADR-048).
+
+      The two annotation defines below are what a MIXED build needs. ASan's container
+      annotations require every object in the link to agree, and NeuronCore.lib is built
+      without them because the executable and the other suites link it too. Turning them off
+      gives up overflow detection INSIDE a container's spare capacity and keeps the check
+      that matters here: a read past the allocation itself.
+
+      Not the whole tree: the game and the client are not fed hostile input, and the cost is real.
+      Incremental linking is off because ASan does not support it.
+    -->
+    <EnableASAN>true</EnableASAN>
+    <LinkIncremental Condition="'$(Configuration)'=='Debug'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)'=='Release'">false</LinkIncremental>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -87,7 +106,7 @@
       <UseFullPaths>true</UseFullPaths>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_DISABLE_STRING_ANNOTATION;_DISABLE_VECTOR_ANNOTATION;_DISABLE_OPTIONAL_ANNOTATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;$(VCInstallDir)Auxiliary\VS\UnitTest\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
@@ -119,7 +138,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_DISABLE_STRING_ANNOTATION;_DISABLE_VECTOR_ANNOTATION;_DISABLE_OPTIONAL_ANNOTATION;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;$(VCInstallDir)Auxiliary\VS\UnitTest\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
