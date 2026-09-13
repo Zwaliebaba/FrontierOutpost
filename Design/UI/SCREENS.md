@@ -40,8 +40,11 @@ action (ADR-070). An **answered proposal** reads `ACCEPTED` or `DECLINED` in
 the past tense on the button that was pressed, outlined blue like a queued build, with the other
 button still imperative and still tappable, so changing an answer before the lock is one tap
 (ADR-068); each card answers the offer its digest entry names, so two open offers no longer share
-one card's buttons. Tapping a card focuses the system it is about; `MAP` focuses the system the
-action names.
+one card's buttons. Tapping a card focuses the system it is about, and **the systems it is
+about that the card's own tap does not reach are named chips** — `HOLLIS`, `NYX`, four at most and
+then `+n`, each focusing that system (ADR-081). A card carries no button labelled `MAP`: the one
+that pointed where the card body already points was one tap drawn twice, and the ones that pointed
+somewhere else said nothing about where.
 
 **Overflow (ADR-061, ADR-080).** An **actor card is collapsed** unless it is the open one: dot,
 title, `3 EVENTS`, the verdict box and the whole action row, with the per-event lines behind a tap on

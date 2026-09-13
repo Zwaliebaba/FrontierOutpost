@@ -184,6 +184,11 @@ Semantic / owner (ADR-027: you are always blue)
   battle first — or `END` in `NEUTRAL_DIM` at the bottom; `< PREV` left once there is anything above,
   both muted (ADR-061, ADR-080). The column scrolls by whole cards on a wheel notch, a drag banked
   to 44px, or `PageUp`/`PageDown`, and the band's halves move a screenful.
+- **Focus chip** — an outlined button in a card's action row carrying a SYSTEM NAME (ADR-081), one
+  per distinct system the card points at that its own body does not already focus, four at most and
+  then `+n` which focuses the first it stands for. It replaces the `MAP` button entirely. Composed
+  after the order-giving controls, so a row too narrow for all of it drops a chip and never a
+  control.
 - **Verdict box** — 1px amber border inside the card; line 1 amber `FLT1 ARRIVES T47 - YOU LOSE`,
   then the numbers in body colour, always saying whose ships remain.
 - **Sheet** — the panel component (ADR-052): ink background, 1px border; 36px header with the title

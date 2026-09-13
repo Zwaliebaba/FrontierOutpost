@@ -37,6 +37,9 @@ namespace
   return event;
 }
 
+/// **The graph is here because a `Focus` target has to name something** (ADR-081). A chip is
+/// labelled with the system it points at, so a fixture with no systems is a fixture where every one
+/// of them points nowhere -- which the card composition now drops, correctly and unhelpfully.
 [[nodiscard]] Lockstep::MatchState StateWith(std::vector<Lockstep::DigestEvent> _digest)
 {
   Lockstep::MatchState state;
@@ -44,8 +47,26 @@ namespace
   state.match.tick = 46;
   state.players = {Lockstep::PlayerBadge{.label = "YOU", .isYou = true}, Lockstep::PlayerBadge{.label = "HALVORSEN"},
                    Lockstep::PlayerBadge{.label = "SORNE"}};
+  for (const char* name : {"Pell", "Dothan", "Ulme", "Hollis", "Nyx", "Brannoc"})
+  {
+    state.graph.systems.push_back(Lockstep::SystemNode{.id = static_cast<std::int32_t>(state.graph.systems.size()), .name = name});
+  }
   state.digest = std::move(_digest);
   return state;
+}
+
+/// The systems a card's chips point at, in the order they are drawn.
+[[nodiscard]] std::vector<std::string> Chips(const Lockstep::DigestCard& _card)
+{
+  std::vector<std::string> chips;
+  for (const Lockstep::EventAction& action : _card.actions)
+  {
+    if (action.kind == Lockstep::EventActionKind::Focus)
+    {
+      chips.push_back(action.label);
+    }
+  }
+  return chips;
 }
 
 [[nodiscard]] std::size_t ActorCards(const std::vector<Lockstep::DigestCard>& _cards)
@@ -487,6 +508,7 @@ public:
     digest[0].actions.push_back(
       Lockstep::EventAction{.label = "SHIPYARD 20 CR", .kind = Lockstep::EventActionKind::QueueBuild, .target = 0, .primary = true});
     digest[0].actions.push_back(Lockstep::EventAction{.label = "MAP", .kind = Lockstep::EventActionKind::Focus, .target = 3});
+    // Both name Hollis, so the fold leaves one chip and not two (ADR-081).
     digest[1].actions.push_back(
       Lockstep::EventAction{.label = "MINING 14 CR", .kind = Lockstep::EventActionKind::QueueBuild, .target = 1, .primary = true});
     digest[1].actions.push_back(Lockstep::EventAction{.label = "MAP", .kind = Lockstep::EventActionKind::Focus, .target = 3});
@@ -494,6 +516,8 @@ public:
     const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(AwayFor(digest));
     Assert::AreEqual(std::size_t{1}, cards.size());
     Assert::AreEqual(std::size_t{3}, cards[0].actions.size(), L"the merge dropped a control or kept a duplicate");
+    Assert::AreEqual(std::size_t{1}, Chips(cards[0]).size(), L"one system became two chips");
+    Assert::AreEqual(std::string{"HOLLIS"}, Chips(cards[0]).front(), L"the chip is not named for the system it points at");
 
     std::size_t primaries = 0;
     for (const Lockstep::EventAction& action : cards[0].actions)
@@ -533,6 +557,86 @@ public:
 
     Assert::IsTrue(cards.size() >= 2U);
     Assert::IsTrue(cards[0].kind == Lockstep::EventKind::Loss, L"a building lost was read after the production line");
+  }
+};
+
+// A card says WHERE, and never says it twice (ADR-081).
+TEST_CLASS(NamedTargetTests)
+{
+public:
+  /// An event at one system, carrying the `MAP` action `SnapshotView` composes for it.
+  [[nodiscard]] static Lockstep::DigestEvent At(Lockstep::EventKind _kind, Lockstep::OwnerId _actor, std::string _title,
+                                                std::int32_t _system)
+  {
+    Lockstep::DigestEvent event = Event(_kind, _actor, std::move(_title));
+    event.refs.system = _system;
+    event.actions.push_back(Lockstep::EventAction{.label = "MAP", .kind = Lockstep::EventActionKind::Focus, .target = _system});
+    return event;
+  }
+
+  TEST_METHOD(AnActorCardNamesEverySystemItIsAbout)
+  {
+    // `P4 · 5 EVENTS` and four buttons all reading `MAP` says neither what P4 did nor where.
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(StateWith({
+      At(Lockstep::EventKind::Contact, 1, "Halvorsen at Ulme", 2),
+      At(Lockstep::EventKind::Proposal, 1, "Halvorsen proposes at Hollis", 3),
+      At(Lockstep::EventKind::Economy, 1, "Halvorsen builds at Nyx", 4),
+    }));
+
+    Assert::AreEqual(std::size_t{1}, ActorCards(cards), L"three events by one rival did not group");
+    const auto actor = std::find_if(cards.begin(), cards.end(), [](const Lockstep::DigestCard& _card) { return _card.actor == 1; });
+    Assert::IsTrue(actor != cards.end());
+
+    const std::vector<std::string> chips = Chips(*actor);
+    for (const std::string& chip : chips)
+    {
+      Assert::AreNotEqual(std::string{"MAP"}, chip, L"a card still carries an unnamed MAP button");
+    }
+
+    // The card leads with the contact at Ulme, so the card's own tap goes there and Ulme needs no
+    // chip; the other two do.
+    Assert::AreEqual(std::size_t{2}, chips.size(), L"the systems the card is about are not each named once");
+    Assert::IsTrue(std::ranges::find(chips, std::string{"HOLLIS"}) != chips.end());
+    Assert::IsTrue(std::ranges::find(chips, std::string{"NYX"}) != chips.end());
+  }
+
+  TEST_METHOD(APlainCardDropsTheButtonThatGoesWhereItAlreadyGoes)
+  {
+    // Tapping the card focuses `refs.system`, and the `MAP` button targeted the same system: one
+    // tap drawn twice, on every plain event card in the digest.
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(StateWith({
+      At(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Claimed Hollis", 3),
+    }));
+
+    Assert::AreEqual(std::size_t{1}, cards.size());
+    Assert::IsTrue(Chips(cards[0]).empty(), L"a card kept a button that focuses what tapping the card focuses");
+  }
+
+  TEST_METHOD(MoreSystemsThanChipsAreCountedAndStillGoSomewhere)
+  {
+    // Six systems, four chips and a `+2`. The overflow chip focuses the first one it stands for,
+    // because a control that says there is more and does nothing when pressed is the defect this
+    // screen has been bitten by before.
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(StateWith({
+      At(Lockstep::EventKind::Contact, 1, "Halvorsen at Pell", 0),
+      At(Lockstep::EventKind::Contact, 1, "Halvorsen at Dothan", 1),
+      At(Lockstep::EventKind::Contact, 1, "Halvorsen at Ulme", 2),
+      At(Lockstep::EventKind::Contact, 1, "Halvorsen at Hollis", 3),
+      At(Lockstep::EventKind::Contact, 1, "Halvorsen at Nyx", 4),
+      At(Lockstep::EventKind::Contact, 1, "Halvorsen at Brannoc", 5),
+    }));
+
+    const auto actor = std::find_if(cards.begin(), cards.end(), [](const Lockstep::DigestCard& _card) { return _card.actor == 1; });
+    Assert::IsTrue(actor != cards.end());
+
+    const std::vector<std::string> chips = Chips(*actor);
+    Assert::AreEqual(std::size_t{5}, chips.size(), L"six systems did not become four chips and a count");
+    Assert::AreEqual(std::string{"+1"}, chips.back(), L"the overflow chip does not say how many it stands for");
+
+    const auto overflow = std::find_if(actor->actions.begin(), actor->actions.end(),
+                                       [](const Lockstep::EventAction& _action) { return _action.label == "+1"; });
+    Assert::IsTrue(overflow != actor->actions.end());
+    Assert::IsTrue(overflow->target >= 0, L"the overflow chip points nowhere");
   }
 };
 

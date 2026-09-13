@@ -1,6 +1,6 @@
 # UI-01 — What the client's screens still cost a player
 
-**Status:** **Items 1.1 and 1.2 done 2026-09-13 (ADR-079, ADR-080); the rest not started.** Written 2026-09-13 as a UX review and revised the same day against
+**Status:** **Items 1.1, 1.2 and 1.3 done 2026-09-13 (ADR-079, ADR-080, ADR-081); the rest not started.** Written 2026-09-13 as a UX review and revised the same day against
 ADR-077 and ADR-078, which landed between the review and the first item. Item 1.1 is rescoped and
 item 2.3 carried a sentence those ADRs made false; both are marked below. Nothing else has been
 built. Archive this when the final checklist passes.
@@ -79,6 +79,10 @@ contact ahead of a rival grouped for offers — so it is pinned by a test rather
 - New ADR amending ADR-052 option C for the digest column only (sheets and rail stay unscrolled).
 
 ### 1.3 Actor cards name their targets; drop redundant `MAP`
+**Done 2026-09-13 — ADR-081.** Built except the `01-main-page.png` retake. Plain cards get named
+chips too rather than only losing the redundant button: one rule for every card beats two that have
+to agree.
+
 **Problem.** A collapsed actor card is `P4 · 5 EVENTS` and four `MAP` buttons. Nothing says what P4 did or where. Plain cards also carry `MAP` when tapping the card already focuses the same system.
 
 **Change.** In `Lockstep/SnapshotView.cpp` (action composition, ADR-057) and `DigestView.cpp`:
