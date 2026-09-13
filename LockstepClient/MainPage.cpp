@@ -990,6 +990,21 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // The purse, beside the score and in the same weight (ADR-053). It is the number every build
   // on the screen is priced against, and it belongs where the eye already goes for the score
   // rather than inside a sentence on the production card.
+  //
+  // **And what this tick has already committed, right after it** (ADR-087). `46 CR` beside a sheet
+  // refusing a 30 CR build is the contradiction a player actually hits: both numbers are right, and
+  // the 20 between them was only ever visible in the locks rail on the other side of the screen.
+  // `46 CR −20` carries the whole arithmetic in the place the bigger number is read.
+  //
+  // Drawn right to left like everything else on this bar, so the committed amount is composed first
+  // and sits outermost -- it is the qualifier, and the purse is what it qualifies.
+  const std::uint32_t committed = m_state.orders.QueuedBuildCost();
+  if (committed > 0)
+  {
+    const std::string spent = std::format("−{}", committed);
+    DrawRight(_text, cursor, centered, spent, Ink::BLUE);
+    cursor -= static_cast<float>(FontRenderer::MeasurePixels(spent)) + 6.0F;
+  }
 
   const std::string credits = std::format("{} CR", m_state.player.credits);
   DrawRight(_text, cursor, centered, credits, Ink::TEXT_PRIMARY);

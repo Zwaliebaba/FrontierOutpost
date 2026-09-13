@@ -11,8 +11,9 @@ stated as such, and nothing below is in the present tense unless the tree does i
 ## 01 · Main page — **built** (`01-main-page.png` is the capture, tick 11 of a six-seat match)
 
 **Top bar (44px, `MainPage::DrawTopBar`).** `LOCKSTEP` · `M0007 · D2/21 · 6 PLAYERS · 26 SYSTEMS`
-· spacer · `T8 LOCKS` + the countdown at 2× in amber · `26 CR` · `SCORE 1,284` + chip `4TH / 6` ·
-`LDR P3 1,610` · `▶ REPLAY T7`. The left sentence is measured against what the right block leaves
+· spacer · `T8 LOCKS` + the countdown in the 16px display cut in amber (ADR-084) · `46 CR −20` —
+the purse, then in blue what this tick's queue has already committed of it, drawn only when
+something is queued (ADR-087) · `SCORE 1,284` + chip `4TH / 6` · `LDR P3 1,610` · `▶ REPLAY T7`. The left sentence is measured against what the right block leaves
 and dropped a clause at a time (`- ENDS <date>` first, then the census, then only the stem). While
 the link is down `RECONNECTING` follows it in red. The `LDR` field is drawn only when somebody else
 leads (ADR-056). At the lock the countdown turns grey and the label reads `T8 LOCKED`; when the match
@@ -65,6 +66,11 @@ variant; buttons that do not fit the column are dropped rather than wrapped. **T
 locks rail still do not scroll** (ADR-052 option C, which ADR-080 amends for this column only). The handoff's four card-level
 signals (`REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE`) are the signal sheet's rows instead
 (ADR-039).
+
+**The top bar's purse says what is committed (ADR-087).** `46 CR −20` — the purse, then in blue
+what this tick's queue has already taken of it, drawn only when something is queued. It is the same
+`QueuedBuildCost()` the build sheet's sentence explains and the affordability guard refuses by, so
+the bar, the rail's `- 26 cr left at the lock -` and the sheet cannot disagree.
 
 **A capture is news for three ticks (ADR-082).** `CAPTURED Tn` is drawn under a system for three
 ticks after it changed hands and then not at all, in the new owner's colour when that is the viewer

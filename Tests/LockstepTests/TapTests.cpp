@@ -1793,4 +1793,36 @@ public:
   }
 };
 
+// The top bar carries the purse AND what this tick has committed of it (ADR-087).
+TEST_CLASS(CommittedPurseTests)
+{
+public:
+  TEST_METHOD(NothingQueuedCommitsNothing)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    Assert::AreEqual(0u, page.State().orders.QueuedBuildCost(), L"a fresh match has something queued already");
+  }
+
+  TEST_METHOD(TheCommittedAmountIsWhatTheSheetPricesAgainst)
+  {
+    // One number, read two ways: the bar subtracts it and the sheet says so in a sentence. They are
+    // the same call, so they cannot disagree (ADR-078, ADR-087).
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    Assert::IsFalse(state.orders.builds.empty());
+
+    state.player.credits = 46;
+    state.orders.builds.front().cost = 20;
+    state.orders.queuedBuilds.push_back(0);
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Assert::AreEqual(20u, page.State().orders.QueuedBuildCost(), L"the bar would subtract the wrong number");
+    Assert::IsTrue(page.PurseSentence().find("26") != std::string::npos, L"and the sheet would not agree with it");
+  }
+};
+
 } // namespace LockstepTests
