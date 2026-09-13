@@ -1,6 +1,6 @@
 # FONT-01 — From one hand-typed 8×8 font to five baked cuts of IBM Plex
 
-**Status:** **In flight. Stage 0 done 2026-09-13.** Written 2026-09-13 against ADR-073 and ADR-074,
+**Status:** **In flight. Stages 0 and 1 done 2026-09-13; stage 2 is next.** Written 2026-09-13 against ADR-073 and ADR-074,
 both Accepted by the owner the same day. Stage 1 is next and starts by installing the offline
 rasterizer, which this machine does not have.
 
@@ -24,6 +24,19 @@ and each is provable by a byte-for-byte screenshot comparison. The screen does n
 Stage 4, by which time the pipeline, the renderer and the shader have all been proved separately.
 Do not reorder this to see Plex sooner; the identical-screenshot test exists only while the face is
 unchanged, and it is the strongest evidence this plan has.
+
+**Stage 1 verification, as run (2026-09-13).** `--self-test` reproduces all 768 bytes of
+FONT_DATA from the legacy bake. The gate was tested in both directions: a clean legacy bake passes,
+one flipped atlas byte fails with exactly the hand-edit message, and a Plex bake re-hashes all five
+TTFs and passes. `NeuronClient/Font.h` is deliberately UNCHANGED -- the baker is proved but its
+output cannot ship until stage 2 teaches the renderer to read it.
+
+**What stage 1 measured, which settles a question ADR-074 left open.** Plex Mono is exactly 0.600em,
+so at 12px it advances **7 pixels** -- one narrower than the font it replaces, which puts 36
+characters in the digest rail's 254 where 31 fit today. Cap height is 0.698em, so capitals land
+within half a pixel of their current height and the screen stays recognisable. A line goes from
+12px to 16px, and that is the whole of the cost. Plex Sans at the same size is properly
+proportional: `A` is 8px, `i` is 3px, the arrow is 10px.
 
 ---
 
