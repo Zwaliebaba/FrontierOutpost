@@ -507,6 +507,33 @@ returns nothing. (The `pch.h → NeuronClient.h` umbrella still parses `<d3d12.h
 translation unit; that is the include-graph cut `mobile-portability.md` §3 describes, and it is
 not this plan's.)
 
+**Stage 5, as run (2026-09-13).** Three checkers green (76 translation units now, two more than
+before), both builds, 532 tests pass, the join screen at `--scale 1` is byte-identical, and the
+debug layer says nothing. **The grep this stage exists for returns nothing**, and so does the same
+grep over the two `.cpp` files. 534 lines were deleted and 186 added.
+
+**The whole list of files that name a graphics API is now exactly the one this plan predicted**:
+`Device`, `SceneTarget`, `ShapeBackend`, `FontBackend`, `D3D12Defaults.h`, `DescriptorHeap`, the
+`NeuronClient.h` umbrella and the composition root. `Color.h` matches the grep on a comment naming
+`DXGI_FORMAT_R8G8B8A8_UNORM` and depends on nothing. **`LockstepClient/` matches nowhere at all** —
+every page, `MapRender` and `DesignTokens` are platform-free, which is the result the plan was for.
+
+**`TakeUnflushed` returns a `Batch` and not the bare span the plan describes, and the reason is a
+correctness one.** A frame is drained three times — world, interface, dialog — and each batch has
+to land at its own offset inside that frame's slice. A backend that wrote every batch at offset
+zero would overwrite vertices an earlier draw *in the same command list* had been told to read and
+had not read yet. The span alone cannot say where it belongs, so the recorder says:
+`{ std::span<const Vertex> vertices; std::uint32_t firstVertex; }`. The backends therefore hold no
+per-frame state, and two backends draining the same recorder would agree.
+
+**`BeginFrame` lost its frame index, in both recorders.** Which buffer a frame's vertices land in is
+the backend's business; a recorder that knew would be a recorder with D3D12's shape pressed into
+it. Twenty-one call sites, all mechanical.
+
+**The split found a real latent coupling.** `Lockstep.cpp` was getting `DescriptorHeap.h`
+transitively through `FontRenderer.h` and stopped compiling the moment that went away. It includes
+what it uses now. That is the whole argument for cutting an include graph rather than trusting one.
+
 **Commit:** `Split each renderer into a recorder and a Direct3D 12 backend`
 
 ---

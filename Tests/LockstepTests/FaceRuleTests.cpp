@@ -125,16 +125,16 @@ struct Screen
 
   Lockstep::MainPage main;
   main.Create(state);
-  shapes.BeginFrame(0);
-  text.BeginFrame(0);
+  shapes.BeginFrame();
+  text.BeginFrame();
   main.DrawWorld(shapes, text);
   main.DrawInterface(shapes, text);
   collect("the main page");
 
   // ---- The lobby ---------------------------------------------------------------------------------
   Lockstep::SeatsPage seats{Lockstep::GenerateSeatTokens(Lockstep::SeatsPage::SEAT_COUNT)};
-  shapes.BeginFrame(0);
-  text.BeginFrame(0);
+  shapes.BeginFrame();
+  text.BeginFrame();
   seats.DrawWorld(shapes, text);
   seats.DrawInterface(shapes, text);
   collect("the lobby");
@@ -145,8 +145,8 @@ struct Screen
   // draws and it is only on the screen after the server has said no.
   Lockstep::JoinPage join;
   join.SetStatus(Lockstep::JoinPage::Status::Refused, "No answer from that server.");
-  shapes.BeginFrame(0);
-  text.BeginFrame(0);
+  shapes.BeginFrame();
+  text.BeginFrame();
   join.DrawWorld(shapes, text);
   join.DrawInterface(shapes, text);
   collect("the join screen");
@@ -170,8 +170,8 @@ struct Screen
 
     Lockstep::ConnectionDialog dialog;
     dialog.Update(kind, facts, 0.0);
-    shapes.BeginFrame(0);
-    text.BeginFrame(0);
+    shapes.BeginFrame();
+    text.BeginFrame();
     dialog.Draw(shapes, text);
     collect("the connection dialog");
   }

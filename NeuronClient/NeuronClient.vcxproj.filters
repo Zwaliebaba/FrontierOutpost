@@ -11,6 +11,8 @@
     <ClInclude Include="Color.h" />
     <ClInclude Include="SceneTarget.h" />
     <ClInclude Include="ShapeRenderer.h" />
+    <ClInclude Include="ShapeBackend.h" />
+    <ClInclude Include="FontBackend.h" />
     <ClInclude Include="TextField.h" />
     <ClInclude Include="KeyboardInput.h" />
     <ClInclude Include="Starfield.h" />
@@ -25,6 +27,8 @@
     <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="SceneTarget.cpp" />
     <ClCompile Include="ShapeRenderer.cpp" />
+    <ClCompile Include="ShapeBackend.cpp" />
+    <ClCompile Include="FontBackend.cpp" />
     <ClCompile Include="TextField.cpp" />
     <ClCompile Include="KeyboardInput.cpp" />
     <ClCompile Include="Starfield.cpp" />

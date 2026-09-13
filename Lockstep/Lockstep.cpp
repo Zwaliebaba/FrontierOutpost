@@ -18,12 +18,15 @@
 #include "Lockstep.h"
 
 #include "Color.h"
+#include "DescriptorHeap.h"
 #include "Device.h"
+#include "FontBackend.h"
 #include "FontRenderer.h"
 #include "PointerInput.h"
 #include "KeyboardInput.h"
 #include "Presentation.h"
 #include "SceneTarget.h"
+#include "ShapeBackend.h"
 #include "ShapeRenderer.h"
 
 #include "HostedServer.h"
@@ -629,7 +632,8 @@ struct MatchPaths
 /// Fills `_outTokens` and `_outBots` and returns the host's seat, or -1 when the window closed
 /// first.
 [[nodiscard]] std::int32_t RunSeatsScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, const Neuron::Presentation& _presentation,
-                                          Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer,
+                                          Neuron::ShapeRenderer& _shapes, Neuron::ShapeBackend& _shapeBackend, Neuron::FontRenderer& _text,
+                                          Neuron::FontBackend& _textBackend, Neuron::PointerInput& _pointer,
                                           Neuron::KeyboardInput& _keyboard, HWND _window, Lockstep::HostedServer& _lobby,
                                           const std::vector<std::string>& _tokens, std::vector<std::string>& _outTokens,
                                           std::vector<std::optional<Lockstep::BotPolicy>>& _outBots, Lockstep::SeatsPage::Entry& _outEntry)
@@ -689,16 +693,16 @@ struct MatchPaths
     ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
     _screen.BeginScene(commandList);
 
-    _shapes.BeginFrame(_device.FrameIndex());
-    _text.BeginFrame(_device.FrameIndex());
+    _shapes.BeginFrame();
+    _text.BeginFrame();
 
     page.DrawWorld(_shapes, _text);
-    _shapes.Flush(commandList);
-    _text.Flush(commandList);
+    _shapeBackend.Draw(commandList, _device.FrameIndex(), _shapes);
+    _textBackend.Draw(commandList, _device.FrameIndex(), _text);
 
     page.DrawInterface(_shapes, _text);
-    _shapes.Flush(commandList);
-    _text.Flush(commandList);
+    _shapeBackend.Draw(commandList, _device.FrameIndex(), _shapes);
+    _textBackend.Draw(commandList, _device.FrameIndex(), _text);
 
     _screen.Present(commandList, _device.BackBufferView(), _presentation);
     _device.EndFrameAndPresent();
@@ -715,9 +719,10 @@ struct MatchPaths
 /// would put a `if (joined)` around every line of a function that is already the longest in the
 /// tree. It returns true when there is a match to show.
 [[nodiscard]] bool RunJoinScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, const Neuron::Presentation& _presentation,
-                                 Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer,
-                                 Neuron::KeyboardInput& _keyboard, Lockstep::MatchConnection& _connection, const std::string& _server,
-                                 const std::string& _token, std::uint16_t _defaultPort, std::chrono::steady_clock::time_point _startedAt)
+                                 Neuron::ShapeRenderer& _shapes, Neuron::ShapeBackend& _shapeBackend, Neuron::FontRenderer& _text,
+                                 Neuron::FontBackend& _textBackend, Neuron::PointerInput& _pointer, Neuron::KeyboardInput& _keyboard,
+                                 Lockstep::MatchConnection& _connection, const std::string& _server, const std::string& _token,
+                                 std::uint16_t _defaultPort, std::chrono::steady_clock::time_point _startedAt)
 {
   Lockstep::JoinPage page;
   page.Offer(_server, _token);
@@ -858,22 +863,22 @@ struct MatchPaths
     ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
     _screen.BeginScene(commandList);
 
-    _shapes.BeginFrame(_device.FrameIndex());
-    _text.BeginFrame(_device.FrameIndex());
+    _shapes.BeginFrame();
+    _text.BeginFrame();
 
     page.DrawWorld(_shapes, _text);
-    _shapes.Flush(commandList);
-    _text.Flush(commandList);
+    _shapeBackend.Draw(commandList, _device.FrameIndex(), _shapes);
+    _textBackend.Draw(commandList, _device.FrameIndex(), _text);
 
     page.DrawInterface(_shapes, _text);
-    _shapes.Flush(commandList);
-    _text.Flush(commandList);
+    _shapeBackend.Draw(commandList, _device.FrameIndex(), _shapes);
+    _textBackend.Draw(commandList, _device.FrameIndex(), _text);
 
     // A third layer, for the same reason there is a second: each renderer is one batch, so the
     // dialog's scrim would be drawn under the card it is meant to dim if it shared a flush.
     dialog.Draw(_shapes, _text);
-    _shapes.Flush(commandList);
-    _text.Flush(commandList);
+    _shapeBackend.Draw(commandList, _device.FrameIndex(), _shapes);
+    _textBackend.Draw(commandList, _device.FrameIndex(), _text);
 
     _screen.Present(commandList, _device.BackBufferView(), _presentation);
     _device.EndFrameAndPresent();
@@ -917,10 +922,12 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
   // glyphs. There is no widget tree, no retained scene and no texture atlas beyond the font
   // (ADR-014).
   Neuron::ShapeRenderer shapes;
-  shapes.Create(device.Handle());
+  Neuron::ShapeBackend shapeBackend;
+  shapeBackend.Create(device.Handle());
 
   Neuron::FontRenderer text;
-  text.Create(device, shaderVisibleHeap);
+  Neuron::FontBackend textBackend;
+  textBackend.Create(device, shaderVisibleHeap);
 
   // ---- The match, over a socket ------------------------------------------------------------------
   //
@@ -1056,8 +1063,8 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
   {
     const std::string offered = std::format("{}:{}", _startup.host, _startup.port);
     const std::string offeredToken = _startup.joinGiven ? _startup.token : hostToken;
-    if (!RunJoinScreen(device, screen, presentation, shapes, text, pointer, keyboard, connection, offered, offeredToken, _startup.port,
-                       startedAt))
+    if (!RunJoinScreen(device, screen, presentation, shapes, shapeBackend, text, textBackend, pointer, keyboard, connection, offered,
+                       offeredToken, _startup.port, startedAt))
     {
       return EXIT_SUCCESS;
     }
@@ -1073,8 +1080,8 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
     std::vector<std::string> playing;
     std::vector<std::optional<Lockstep::BotPolicy>> bots;
     Lockstep::SeatsPage::Entry entry = Lockstep::SeatsPage::Entry::Match;
-    const std::int32_t hostSeat =
-      RunSeatsScreen(device, screen, presentation, shapes, text, pointer, keyboard, _window, *hosted, seatTokens, playing, bots, entry);
+    const std::int32_t hostSeat = RunSeatsScreen(device, screen, presentation, shapes, shapeBackend, text, textBackend, pointer, keyboard,
+                                                 _window, *hosted, seatTokens, playing, bots, entry);
     if (hostSeat < 0)
     {
       return EXIT_SUCCESS;
@@ -1408,27 +1415,27 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
     ID3D12GraphicsCommandList* commandList = device.BeginFrame();
     screen.BeginScene(commandList);
 
-    shapes.BeginFrame(device.FrameIndex());
-    text.BeginFrame(device.FrameIndex());
+    shapes.BeginFrame();
+    text.BeginFrame();
 
     // Two layers, flushed apart. See `MainPage::DrawWorld`: one flush per frame would put the map's
     // labels on top of the panels drawn over them.
     page.DrawWorld(shapes, text);
-    shapes.Flush(commandList);
-    text.Flush(commandList);
+    shapeBackend.Draw(commandList, device.FrameIndex(), shapes);
+    textBackend.Draw(commandList, device.FrameIndex(), text);
 
     page.DrawInterface(shapes, text);
 
     // Shapes first, then text, in two draw calls rather than interleaved. Painter's order still
     // holds within each pass, and the one place it matters across them -- a caption on a card --
     // is fine because every glyph is drawn after every rectangle.
-    shapes.Flush(commandList);
-    text.Flush(commandList);
+    shapeBackend.Draw(commandList, device.FrameIndex(), shapes);
+    textBackend.Draw(commandList, device.FrameIndex(), text);
 
     // A third layer. The dialog dims everything above it, so it cannot share a flush with it.
     dialog.Draw(shapes, text);
-    shapes.Flush(commandList);
-    text.Flush(commandList);
+    shapeBackend.Draw(commandList, device.FrameIndex(), shapes);
+    textBackend.Draw(commandList, device.FrameIndex(), text);
 
     screen.Present(commandList, device.BackBufferView(), presentation);
     device.EndFrameAndPresent();

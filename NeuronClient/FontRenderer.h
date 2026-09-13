@@ -1,14 +1,24 @@
 #pragma once
 
 #include "Color.h"
-#include "DescriptorHeap.h"
-#include "Device.h"
 #include "Font.h"
+
+#include <cstdint>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace Neuron
 {
 
-/// Draws text onto the screen, in any of the faces Font.h was baked with.
+/// RECORDS text in canvas pixels, in any of the faces Font.h was baked with. Drawing it is
+/// `FontBackend`.
+///
+/// **This header names no graphics API and no operating system, and that is the point of the
+/// split** (ADR-075). It keeps the atlas as DATA -- the glyph table, the metrics, the wrapping, the
+/// UTF-8 decoding, the clip rectangle -- and a `FontBackend` holds the atlas as a GPU RESOURCE and
+/// drains the quads. A Vulkan or Metal build is a second backend behind this same recorder.
 ///
 /// Font.h is GENERATED (ADR-073): `Build/BakeFont.py` rasterizes the faces offline and writes one
 /// coverage atlas, one glyph table and one face table as `constexpr` arrays, which are embedded in
@@ -235,6 +245,31 @@ public:
   /// to grow into.
   static constexpr std::uint32_t MAX_CHARACTERS_PER_FRAME = 4096;
 
+  /// Position in canvas pixels, the atlas texel to read, and the color to write. R8: a vertex is
+  /// a public aggregate handed to the GPU, so plain fields -- and public, because a backend is what
+  /// hands it over.
+  struct TextVertex
+  {
+    float positionXPixels;
+    float positionYPixels;
+    float glyphXTexels;
+    float glyphYTexels;
+    /// Packed by Pack(), read back by an R8G8B8A8_UNORM input element.
+    std::uint32_t color;
+  };
+
+  static constexpr std::uint32_t VERTICES_PER_GLYPH = 6;
+  static constexpr std::uint32_t MAX_VERTICES_PER_FRAME = MAX_CHARACTERS_PER_FRAME * VERTICES_PER_GLYPH;
+
+  /// One batch of recorded vertices, and where it sits in this frame's recording. See
+  /// `ShapeRenderer::Batch`: the index is what keeps a second layer off vertices the GPU has been
+  /// told to read and has not read yet.
+  struct Batch
+  {
+    std::span<const TextVertex> vertices;
+    std::uint32_t firstVertex;
+  };
+
   /// One texel of the baked atlas, which is what the upload copies and therefore what a test of
   /// the atlas can assert against without a device.
   [[nodiscard]] static constexpr std::uint8_t AtlasTexel(std::uint32_t _x, std::uint32_t _y) noexcept
@@ -242,23 +277,10 @@ public:
     return FONT_ATLAS[static_cast<std::size_t>(_y) * FONT_ATLAS_WIDTH + _x];
   }
 
-  /// Uploads the atlas and builds the pipeline. Blocks until the copy has executed, because it
-  /// runs once at startup and a startup that is a few milliseconds longer is not worth the
-  /// machinery of tracking a pending upload.
-  void Create(Device& _device, DescriptorHeap& _shaderVisibleHeap);
-
-  /// Creates the renderer with NO DEVICE BEHIND IT: appended geometry lands in ordinary memory
-  /// and `Flush` is refused.
-  ///
-  /// **This is the seam that makes a screen's LAYOUT testable.** Every page in this game builds its
-  /// hit list while it draws -- `AddHit` sits beside the `FillRect` that put the button there, which
-  /// is what stops the two drifting apart -- so a test that wants to press a button has to be able
-  /// to run the draw.
-  ///
-  /// There is no second append path for that any more. Every vertex and every string lands in an
-  /// ordinary vector, on a test machine with no GPU and in the shipped client alike, and `Flush` is
-  /// what needs a device -- so what a test drives is not a sibling of what ships; it IS what ships
-  /// (ADR-041).
+  /// **Recording is all this class does, which is what makes a screen's layout testable without a
+  /// GPU** (ADR-041). Every page builds its hit list while it draws -- `AddHit` sits beside the
+  /// `FillRect` that put the button there, which is what stops the two drifting apart -- so a test
+  /// that wants to press a button has to run the draw. It can.
 
   /// One string this renderer was asked to draw, and the face it was asked for.
   ///
@@ -289,9 +311,8 @@ public:
   /// reserves the vector, and an allocation that fails is a thing to report rather than a
   /// std::terminate (Debug.h).
   ///
-  /// _frameIndex is which of the upload heap's FRAME_COUNT slices `Flush` may write, so the CPU
-  /// never overwrites vertices the GPU is still reading.
-  void BeginFrame(std::uint32_t _frameIndex);
+  /// It takes no frame index, for the reason `ShapeRenderer::BeginFrame` does not.
+  void BeginFrame();
 
   /// Confines subsequent text to a rectangle, by GLYPH: a glyph that does not fit entirely inside
   /// is not drawn at all.
@@ -314,47 +335,19 @@ public:
   void DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color, Face _face = DEFAULT_FACE,
                 std::uint32_t _scale = DEFAULT_SCALE);
 
-  /// Issues everything DrawText appended since BeginFrame as a single draw call.
-  /// Draws everything recorded SINCE THE LAST FLUSH, and remembers where it stopped.
+  /// Everything recorded since the last take, and marks it taken. Empty when nothing is new.
   ///
   /// **Called more than once a frame, it is what puts one layer over another.** The interface is
-  /// two renderers (ADR-014), and each is one batch: every shape, then every glyph. Flushed once at
-  /// the end of a frame that meant all text landed on top of all shapes whatever order they were
-  /// recorded in -- so a panel drawn over the map covered the map's dots and lanes and left its
-  /// LABELS floating on top of the panel, which is what a modal is not allowed to do.
+  /// two renderers (ADR-014), and each is one batch: every shape, then every glyph. Drained once at
+  /// the end of a frame, all text landed on top of all shapes whatever order they were recorded in
+  /// -- so a panel drawn over the map covered the map's dots and lanes and left its LABELS floating
+  /// on top of the panel, which is what a modal is not allowed to do.
   ///
-  /// Draining rather than redrawing is the whole of the fix: the caller flushes both renderers
-  /// between the world and the interface, and each flush draws only what is new.
-  void Flush(ID3D12GraphicsCommandList* _commandList);
+  /// The span points into this recorder and stays valid until the next `BeginFrame`, which is long
+  /// enough for a backend to copy it and no longer.
+  [[nodiscard]] Batch TakeUnflushed() noexcept;
 
 private:
-  /// Position in screen pixels, the atlas texel to read, and the color to write. R8: a vertex is
-  /// a public aggregate handed to the GPU, so plain fields.
-  struct TextVertex
-  {
-    float positionXPixels;
-    float positionYPixels;
-    float glyphXTexels;
-    float glyphYTexels;
-    /// Packed by Pack(), read back by an R8G8B8A8_UNORM input element.
-    std::uint32_t color;
-  };
-
-  static constexpr std::uint32_t VERTICES_PER_GLYPH = 6;
-  static constexpr std::uint32_t MAX_VERTICES_PER_FRAME = MAX_CHARACTERS_PER_FRAME * VERTICES_PER_GLYPH;
-
-  void CreateAtlas(Device& _device, DescriptorHeap& _shaderVisibleHeap);
-  void CreateVertexBuffer(ID3D12Device* _device);
-  void CreatePipeline(ID3D12Device* _device);
-
-  winrt::com_ptr<ID3D12Resource> m_atlas;
-  winrt::com_ptr<ID3D12Resource> m_vertexBuffer;
-  winrt::com_ptr<ID3D12RootSignature> m_rootSignature;
-  winrt::com_ptr<ID3D12PipelineState> m_pipeline;
-
-  DescriptorHeap* m_shaderVisibleHeap = nullptr;
-  std::uint32_t m_atlasSlot = 0;
-
   /// This frame's geometry, and the ONE place an append lands. Reserved once to
   /// MAX_VERTICES_PER_FRAME and cleared rather than freed, so a frame's recording never allocates.
   std::vector<TextVertex> m_vertices;
@@ -362,14 +355,8 @@ private:
   /// What this renderer was ASKED to draw, beside what it drew. See `DrawnStrings`.
   std::vector<DrawnString> m_drawnStrings;
 
-  /// The upload heap, mapped for the life of the renderer. An upload heap is CPU-visible and
-  /// GPU-readable; for a few hundred vertices a frame there is nothing a default-heap copy would
-  /// buy. Its FRAME_COUNT slices are what stop the CPU overwriting vertices a frame still in
-  /// flight is reading.
-  TextVertex* m_mappedVertices = nullptr;
-  std::uint32_t m_frameIndex = 0;
-  /// How much of `m_vertices` has already been drawn this frame. See `Flush`.
-  std::uint32_t m_flushedThisFrame = 0;
+  /// How much of `m_vertices` has already been taken this frame. See `TakeUnflushed`.
+  std::size_t m_takenThisFrame = 0;
 
   /// The clip rectangle, in screen pixels. Defaults to everything, so a caller that never sets
   /// one is unaffected.

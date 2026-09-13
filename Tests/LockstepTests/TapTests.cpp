@@ -72,8 +72,8 @@ struct Headless
 
   void Begin()
   {
-    shapes.BeginFrame(0);
-    text.BeginFrame(0);
+    shapes.BeginFrame();
+    text.BeginFrame();
   }
 };
 

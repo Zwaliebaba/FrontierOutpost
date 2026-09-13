@@ -1,14 +1,9 @@
 // ShapeRenderer.cpp -- rectangles, lines and ellipses, tessellated on the CPU into one triangle
-// list. See ShapeRenderer.h for why there is no signed-distance shader here.
+// list. See ShapeRenderer.h for why there is no signed-distance shader here, and ShapeBackend for
+// how the list reaches a GPU.
 
 #include "pch.h"
 #include "ShapeRenderer.h"
-
-#include "D3D12Defaults.h"
-#include "SceneTarget.h"
-
-#include "CompiledShaders/ShapeVS.h"
-#include "CompiledShaders/ShapePS.h"
 
 namespace Neuron
 {
@@ -20,84 +15,13 @@ constexpr float TWO_PI = 6.28318530717958647692F;
 
 } // namespace
 
-void ShapeRenderer::Create(ID3D12Device* _device)
+void ShapeRenderer::BeginFrame()
 {
-  CreateVertexBuffer(_device);
-  CreatePipeline(_device);
-}
-
-void ShapeRenderer::CreateVertexBuffer(ID3D12Device* _device)
-{
-  const std::uint64_t sizeBytes = static_cast<std::uint64_t>(Device::FRAME_COUNT) * MAX_VERTICES_PER_FRAME * sizeof(ShapeVertex);
-
-  const D3D12_HEAP_PROPERTIES uploadHeap = HeapProperties(D3D12_HEAP_TYPE_UPLOAD);
-  const D3D12_RESOURCE_DESC desc = BufferDesc(sizeBytes);
-  winrt::check_hresult(_device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ,
-                                                        nullptr, IID_PPV_ARGS(m_vertexBuffer.put())));
-
-  const D3D12_RANGE readNothing = {0, 0};
-  winrt::check_hresult(m_vertexBuffer->Map(0, &readNothing, reinterpret_cast<void**>(&m_mappedVertices)));
-}
-
-void ShapeRenderer::CreatePipeline(ID3D12Device* _device)
-{
-  // One root parameter and no descriptor table: this pass reads no texture at all, which is what
-  // separates it from the text pass it otherwise resembles.
-  std::array<D3D12_ROOT_PARAMETER1, 1> parameters = {};
-  parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-  parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-  parameters[0].Constants.ShaderRegister = 0;
-  parameters[0].Constants.RegisterSpace = 0;
-  parameters[0].Constants.Num32BitValues = CONSTANT_COUNT;
-
-  const D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc = {
-    .Version = D3D_ROOT_SIGNATURE_VERSION_1_1,
-    .Desc_1_1 = {.NumParameters = static_cast<UINT>(parameters.size()),
-                 .pParameters = parameters.data(),
-                 .NumStaticSamplers = 0,
-                 .pStaticSamplers = nullptr,
-                 .Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT},
-  };
-
-  winrt::com_ptr<ID3DBlob> serialized;
-  winrt::com_ptr<ID3DBlob> errors;
-  const HRESULT serializeResult = D3D12SerializeVersionedRootSignature(&rootSignatureDesc, serialized.put(), errors.put());
-  if (FAILED(serializeResult) && errors)
-  {
-    Fatal("Shape root signature: {}", static_cast<const char*>(errors->GetBufferPointer()));
-  }
-  winrt::check_hresult(serializeResult);
-  winrt::check_hresult(
-    _device->CreateRootSignature(0, serialized->GetBufferPointer(), serialized->GetBufferSize(), IID_PPV_ARGS(m_rootSignature.put())));
-
-  const std::array<D3D12_INPUT_ELEMENT_DESC, 2> inputLayout = {
-    D3D12_INPUT_ELEMENT_DESC{"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(ShapeVertex, positionXPixels),
-                             D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
-    D3D12_INPUT_ELEMENT_DESC{"COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(ShapeVertex, color),
-                             D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
-  };
-
-  D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = DefaultGraphicsPipeline();
-  pipelineDesc.pRootSignature = m_rootSignature.get();
-  pipelineDesc.VS = {g_ShapeVS, sizeof(g_ShapeVS)};
-  pipelineDesc.PS = {g_ShapePS, sizeof(g_ShapePS)};
-  pipelineDesc.InputLayout = {inputLayout.data(), static_cast<UINT>(inputLayout.size())};
-  // This is interface, not scene: it is drawn in the order the caller asked for and neither tests
-  // nor writes depth. Painter's order is the whole of its occlusion model, and blending is what
-  // makes a 4%-white card fill mean what the design tokens say it means (ADR-014).
-  pipelineDesc.BlendState = InterfaceBlendState();
-  pipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-  winrt::check_hresult(_device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(m_pipeline.put())));
-}
-
-void ShapeRenderer::BeginFrame(std::uint32_t _frameIndex)
-{
-  m_frameIndex = _frameIndex;
   // Cleared, not freed, and reserved on the first frame only: capacity survives clear(), so this
   // is a no-op from the second frame onwards and no frame's recording allocates.
   m_vertices.clear();
   m_vertices.reserve(MAX_VERTICES_PER_FRAME);
-  m_flushedThisFrame = 0;
+  m_takenThisFrame = 0;
 }
 
 void ShapeRenderer::AppendShadedTriangle(float _axPixels, float _ayPixels, std::uint32_t _aColor, float _bxPixels, float _byPixels,
@@ -368,45 +292,14 @@ void ShapeRenderer::FillRadialGradient(float _centerXPixels, float _centerYPixel
   }
 }
 
-void ShapeRenderer::Flush(ID3D12GraphicsCommandList* _commandList)
+ShapeRenderer::Batch ShapeRenderer::TakeUnflushed() noexcept
 {
-  // A renderer that was never Created has no pipeline, no root signature and no buffer the GPU can
-  // read. This is fatal rather than a silent return, because a caller that reached here is a caller
-  // that believes it is drawing to a screen.
-  ASSERT_TEXT(m_pipeline != nullptr, L"Flushing a renderer with no device behind it. Recording works without one; drawing does not.");
-
-  // Only what has been recorded since the last flush. See the header: this is what lets a caller
-  // put the interface over the world instead of having every glyph land on top of everything.
-  const auto usedThisFrame = static_cast<std::uint32_t>(m_vertices.size());
-  if (usedThisFrame == m_flushedThisFrame)
-  {
-    return;
-  }
-
-  // The recorded range the GPU has not seen yet, into this frame's slice of the upload heap. Only
-  // the new vertices are copied: the ones before m_flushedThisFrame are already there, and a frame
-  // that flushes three times would otherwise copy its first layer three times.
-  ShapeVertex* slice = m_mappedVertices + static_cast<std::size_t>(m_frameIndex) * MAX_VERTICES_PER_FRAME;
-  std::copy(m_vertices.begin() + m_flushedThisFrame, m_vertices.end(), slice + m_flushedThisFrame);
-
-  const std::uint64_t sliceOffsetBytes = static_cast<std::uint64_t>(m_frameIndex) * MAX_VERTICES_PER_FRAME * sizeof(ShapeVertex);
-
-  D3D12_VERTEX_BUFFER_VIEW vertexView = {};
-  vertexView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress() + sliceOffsetBytes;
-  vertexView.SizeInBytes = usedThisFrame * sizeof(ShapeVertex);
-  vertexView.StrideInBytes = sizeof(ShapeVertex);
-
-  _commandList->SetGraphicsRootSignature(m_rootSignature.get());
-  _commandList->SetPipelineState(m_pipeline.get());
-
-  const std::array<float, CONSTANT_COUNT> screenPixels = {static_cast<float>(SceneTarget::WIDTH_PIXELS),
-                                                          static_cast<float>(SceneTarget::HEIGHT_PIXELS)};
-  _commandList->SetGraphicsRoot32BitConstants(0, CONSTANT_COUNT, screenPixels.data(), 0);
-
-  _commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-  _commandList->IASetVertexBuffers(0, 1, &vertexView);
-  _commandList->DrawInstanced(usedThisFrame - m_flushedThisFrame, 1, m_flushedThisFrame, 0);
-  m_flushedThisFrame = usedThisFrame;
+  const Batch batch = {
+    .vertices = std::span{m_vertices}.subspan(m_takenThisFrame),
+    .firstVertex = static_cast<std::uint32_t>(m_takenThisFrame),
+  };
+  m_takenThisFrame = m_vertices.size();
+  return batch;
 }
 
 } // namespace Neuron
