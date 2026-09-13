@@ -17,6 +17,24 @@
 // of the glyph, so the truncation below is what turns one atlas texel into an exact block of
 // screen pixels -- there is no filtering a later edit could switch on.
 
+// WHY COVERAGE IS NOT ALPHA DIRECTLY, EVEN THOUGH THAT IS WHAT IT MEANS.
+//
+// The back buffer is R8G8B8A8_UNORM and deliberately not _SRGB (ADR-011), so a channel authored as
+// 0xAA is presented as 0xAA. That is the right decision for every colour on this screen and it has
+// one consequence here: the blender does `dst * (1 - a) + src * a` on values that are sRGB-ENCODED
+// while treating them as if they were linear. Light on dark, that arithmetic lands too dark. A
+// pixel the rasterizer says is half covered should end up at about 73% of the string's brightness
+// once encoded, and blending in the wrong space puts it at 50% -- so stems thin out, and the
+// thinner the stem the more of it is half-covered pixels. It reads as a weight that was never
+// baked.
+//
+// Raising coverage to 1/2.2 is the correction, and it is not a taste value: for a black background
+// it is exactly `lin_to_srgb(coverage)`, which is the number blending in linear space would have
+// produced. The background here is near-black rather than black, so this slightly overshoots on
+// anything drawn over a lit card -- which is the direction to err, because the alternative is text
+// that looks a weight lighter than the cut it was baked from.
+static const float COVERAGE_GAMMA = 1.0 / 2.2;
+
 Texture2D<float> g_fontAtlas : register(t0);
 
 struct VertexOut
@@ -34,5 +52,5 @@ float4 main(VertexOut _input) : SV_Target
     discard;
   }
 
-  return float4(_input.color.rgb, _input.color.a * coverage);
+  return float4(_input.color.rgb, _input.color.a * pow(coverage, COVERAGE_GAMMA));
 }
