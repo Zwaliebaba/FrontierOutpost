@@ -1,6 +1,6 @@
 # ADR-011 — 1280×720 in R8G8B8A8, drawn straight into the back buffer
 
-**Status:** Accepted
+**Status:** Accepted; the 1:1 presentation clause superseded by ADR-075.
 
 **Date:** 2026-09-10
 **Decided by:** Owner decision, 2026-09-10. The owner asked for 1280×720 and an R8G8B8A8 colour format, and chose between the two ways of reading that request (below); this ADR records the choice and what it costs.

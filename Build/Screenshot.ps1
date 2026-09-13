@@ -43,10 +43,16 @@ param(
   # `--tick 4` is the flag worth knowing: it runs the match at four seconds a tick, which is how you
   # reach a screen state that has anything on it without playing for six hours. Pair it with a
   # -SettleMilliseconds longer than the tick.
+  #
+  # `--scale 1` is passed below whatever else the caller asks for, and is not this parameter's
+  # business: a capture is a 1280x720 PNG of the canvas (ADR-075).
   [string]$Arguments = ''
 )
 
-$argumentList = @($Arguments -split '\s+' | Where-Object { $_ -ne '' })
+# `--scale 1` always, so the client area is exactly the canvas on whatever monitor this runs on.
+# Without it the game picks the largest whole scale the display has room for (ADR-075) and a
+# capture taken on a 4K machine would be a 2560x1440 PNG of the same 1280x720 picture.
+$argumentList = @('--scale', '1') + @($Arguments -split '\s+' | Where-Object { $_ -ne '' })
 
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
@@ -94,8 +100,7 @@ public class ClientAreaGrab {
 
 [ClientAreaGrab]::SetProcessDPIAware() | Out-Null
 
-$process = if ($argumentList.Count -gt 0) { Start-Process -FilePath $Exe -ArgumentList $argumentList -PassThru }
-           else { Start-Process -FilePath $Exe -PassThru }
+$process = Start-Process -FilePath $Exe -ArgumentList $argumentList -PassThru
 $window = [IntPtr]::Zero
 for ($attempt = 0; $attempt -lt 40 -and $window -eq [IntPtr]::Zero; $attempt++) {
   Start-Sleep -Milliseconds 250

@@ -22,7 +22,7 @@ from the tree, not from the plan.
 ## Contents
 - `SCREENS.md` — per screen: what is built, what the design asked for that is not, and where the code is.
 - `DESIGN-GUIDELINES.md` — frame, font, palette, components, copy and map rules **as built**, with the design's intent kept where the build stops short of it.
-- `screens/` — **captures of the running client**, one per screen and state, taken 2026-09-12 from the Debug build of the tree at a4c9235 and retaken 2026-09-13 at 9b25816 wherever the changes since reach them (PNG, 1280×720, the client area exactly as drawn). The eight mockups of 2026-09-11 are no longer in the tree (owner decision, 2026-09-12): the build superseded 03, 04, 05 and 06, and what the other four still asked for — the map's unbuilt details, screen 02, 07's step-through, 08's tabs — is kept in words under "What the design asks for that the tree does not have" and drawn in the live design reference below. The files themselves are in the history up to a4c9235. The table below names each capture.
+- `screens/` — **captures of the running client**, one per screen and state, taken 2026-09-12 from the Debug build of the tree at a4c9235 and retaken 2026-09-13 at 9b25816 wherever the changes since reach them (PNG, 1280×720, the canvas exactly as drawn, captured at `--scale 1`). The eight mockups of 2026-09-11 are no longer in the tree (owner decision, 2026-09-12): the build superseded 03, 04, 05 and 06, and what the other four still asked for — the map's unbuilt details, screen 02, 07's step-through, 08's tabs — is kept in words under "What the design asks for that the tree does not have" and drawn in the live design reference below. The files themselves are in the history up to a4c9235. The table below names each capture.
 - The handoff's work plan, `PROMPT.md`, is finished as far as it is going to be and lives in [`Design/Archive/2026-09-11-ui-v2-prompt.md`](../Archive/2026-09-11-ui-v2-prompt.md) with a note per step. ADR-034, ADR-038 and ADR-039 cite it by its old name.
 - Live design reference: the project file `Frontier Outpost Main Page.dc.html` (all mockups on one canvas, and since 2026-09-12 the only place they are drawn; design reference, not production code). **The filename predates the rename to LockStep: Universe and is deliberately left alone** — the file lives outside this repository, so renaming it here would break the pointer without renaming anything (ADR-035).
 
@@ -211,6 +211,11 @@ ADR-066 touched was retaken the same day from the Debug build carrying them. Don
   the tree.
 
 ## Non-negotiables
-1280×720 logical, drawn 1:1 (ADR-011). One 8×8 bitmap font at 1×, and 2× only where the
-guidelines say. 8-bit RGBA colours from `LockstepClient/DesignTokens.h`. No anti-aliasing; text on
-integer pixels.
+1280×720 logical, drawn into a canvas presented at a whole-number scale and captured **windowed at
+`--scale 1`** (ADR-075), which is the one presentation that is exactly the canvas — fullscreen
+(ADR-076) letterboxes it and would make a capture the size of whatever monitor took it. Two IBM Plex families in four cuts, baked at 12px and hinted, drawn
+**anti-aliased** with coverage gamma-corrected into alpha — mono for data, sans for sentences, and
+2× only for the lock countdown and the `LOCKSTEP` title (ADR-073, ADR-074;
+`DESIGN-GUIDELINES.md` §Font). 8-bit RGBA colours from `LockstepClient/DesignTokens.h`. A glyph's
+coverage is the one thing on this screen a rasterizer decides rather than a designer: `DrawText`
+takes whole pixels, and every box, rule and baseline is still on one.

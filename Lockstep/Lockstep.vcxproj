@@ -146,6 +146,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Lockstep.h" />
+    <ClInclude Include="Resource.h" />
     <ClInclude Include="SnapshotView.h" />
     <ClInclude Include="SeatsPage.h" />
     <ClInclude Include="HostedServer.h" />
@@ -167,6 +168,12 @@
     <ProjectReference Include="..\GameLogic\GameLogic.vcxproj">
       <Project>{3823cbca-81bb-434e-b3b8-c9ddaecacdfd}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Lockstep.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Resources\LockStep.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

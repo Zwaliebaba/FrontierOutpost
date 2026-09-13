@@ -18,11 +18,15 @@
 #include "Lockstep.h"
 
 #include "Color.h"
+#include "DescriptorHeap.h"
 #include "Device.h"
+#include "FontBackend.h"
 #include "FontRenderer.h"
 #include "PointerInput.h"
 #include "KeyboardInput.h"
+#include "Presentation.h"
 #include "SceneTarget.h"
+#include "ShapeBackend.h"
 #include "ShapeRenderer.h"
 
 #include "HostedServer.h"
@@ -48,13 +52,6 @@
 
 namespace
 {
-
-// The screen the game presents. Not restated here: Neuron::SceneTarget owns the numbers, the
-// window is created at exactly that size, and the swap chain is told the same thing -- which is
-// what makes "the client area is the framebuffer" a fact rather than three constants that agree
-// today (ADR-011).
-constexpr int CLIENT_WIDTH = static_cast<int>(Neuron::SceneTarget::WIDTH_PIXELS);
-constexpr int CLIENT_HEIGHT = static_cast<int>(Neuron::SceneTarget::HEIGHT_PIXELS);
 
 /// How long the loop sleeps when the screen has not changed. Short enough that a tap is answered
 /// within a frame of a sixty-hertz one, long enough that an idle client is not a busy one.
@@ -130,6 +127,15 @@ struct Startup
   /// The log takes the same name. A store and the log of the match it holds must not come apart:
   /// the log is how anybody works out what the store contains.
   std::string storeName;
+
+  /// `--scale <n>` presents the canvas at n screen pixels per canvas pixel. **Zero means choose**,
+  /// which is the default and the only value a player ever wants.
+  ///
+  /// It exists for the captures. `Design/UI/screens` is 1280x720 PNGs of the canvas and stays
+  /// that way (ADR-075), so `Build/Screenshot.ps1` passes `--scale 1` and gets a client area that
+  /// is exactly the canvas no matter what monitor the capture is taken on. A value that does not
+  /// fit the monitor is clamped to the largest that does.
+  std::uint32_t scale = 0;
 };
 
 /// The six Phase 0 tokens.
@@ -297,6 +303,10 @@ void SplitHostAndPort(const std::string& _target, std::string& _outHost, std::ui
     {
       startup.storeName = words[++index];
     }
+    else if (words[index] == "--scale" && index + 1 < words.size())
+    {
+      startup.scale = static_cast<std::uint32_t>(std::strtoul(words[++index].c_str(), nullptr, 10));
+    }
   }
 
   return startup;
@@ -304,6 +314,22 @@ void SplitHostAndPort(const std::string& _target, std::string& _outHost, std::ui
 
 HINSTANCE g_instance = nullptr;
 bool g_quitRequested = false;
+
+/// Set by the window procedure when F11 arrives, consumed by whichever frame loop is running.
+///
+/// **A flag and not a call, because the toggle resizes a swap chain.** That means draining the GPU
+/// and releasing every back buffer, which is not a thing to do from inside a window procedure --
+/// the procedure runs re-entrantly from `SetWindowPos`'s own message pump, so the resize would be
+/// happening while the window is still being resized. The frame loop is where the renderer's state
+/// is nobody else's, and that is where it happens (ADR-076).
+bool g_fullscreenToggleRequested = false;
+
+/// Where the window was, and how big, before F11 put it over the whole monitor.
+///
+/// Windows remembers this shape for us: `SetWindowPlacement` restores the position AND the size, so
+/// a 1280x720 window in some corner of the desktop comes back 1280x720 in that corner. Nothing else
+/// in this file remembers anything about the toggle -- WS_POPUP on the window is the rest of it.
+WINDOWPLACEMENT g_windowedPlacement = {.length = sizeof(WINDOWPLACEMENT)};
 
 /// The window procedure runs on the client thread and needs to reach the input state, which lives
 /// in RunGame. A file-scope pointer is the plain Win32 answer and is what the rest of this file
@@ -329,6 +355,17 @@ LRESULT CALLBACK WndProc(HWND _window, UINT _message, WPARAM _wParam, LPARAM _lP
 
   switch (_message)
   {
+  // F11 here rather than in KeyboardInput, which reports "characters and a handful of named keys"
+  // for a text field and says so in its header. Which window a canvas is presented in is not that
+  // class's business, and it leaves an unknown WM_KEYDOWN unconsumed precisely so this can have it.
+  case WM_KEYDOWN:
+    if (_wParam == VK_F11)
+    {
+      g_fullscreenToggleRequested = true;
+      return 0;
+    }
+    return DefWindowProcW(_window, _message, _wParam, _lParam);
+
   case WM_DESTROY:
     g_quitRequested = true;
     PostQuitMessage(0);
@@ -356,8 +393,138 @@ bool RegisterWindowClass(HINSTANCE _instance)
   return RegisterClassExW(&windowClass) != 0;
 }
 
+// The window style, at namespace scope because ChooseScale has to ask what frame it costs before
+// there is a window to measure.
+constexpr DWORD WINDOW_STYLE = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+
+// The largest whole number of screen pixels per canvas pixel that the primary monitor has room
+// for, at least 1.
+//
+// Against the WORK AREA and not the monitor, because a window that extends under the taskbar is
+// a window with rows the player cannot see -- and the frame AdjustWindowRect reports comes off
+// too, because the caption and borders are not canvas either. What this gives on the three panels
+// that matter, arithmetic rather than measurement:
+//
+//   1920x1080          -> 1, because 2560x1440 does not fit in 1920x1080 at all.
+//   2560x1440 at 100%  -> 1, and this one surprises people: 2560x1440 of CLIENT area needs a
+//                         window taller than the monitor once a caption and a taskbar have taken
+//                         their rows, so scale 2 on that panel needs borderless fullscreen, which
+//                         is ADR-075's open question and not built.
+//   3840x2160          -> 2 at any DPI, because per-monitor-V2 awareness means the work area is
+//                         reported in physical pixels whatever the scaling is set to.
+//
+// AdjustWindowRect assumes 96 DPI and is therefore approximate here, which is fine: it is
+// subtracted from a budget of hundreds of pixels, and the window is measured and corrected after
+// creation anyway. What it must not do is UNDER-report, which would choose a scale that then does
+// not fit; a caption is never smaller than the 96 DPI one.
+[[nodiscard]] std::uint32_t ChooseScale() noexcept
+{
+  MONITORINFO monitor = {};
+  monitor.cbSize = sizeof(MONITORINFO);
+  const POINT origin = {0, 0};
+  if (GetMonitorInfoW(MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY), &monitor) == 0)
+  {
+    return 1;
+  }
+
+  RECT frame = {0, 0, 0, 0};
+  AdjustWindowRect(&frame, WINDOW_STYLE, FALSE);
+
+  const long availableWidth = (monitor.rcWork.right - monitor.rcWork.left) - (frame.right - frame.left);
+  const long availableHeight = (monitor.rcWork.bottom - monitor.rcWork.top) - (frame.bottom - frame.top);
+  if (availableWidth < 0 || availableHeight < 0)
+  {
+    return 1;
+  }
+
+  return Neuron::Presentation::LargestScaleFor(static_cast<std::uint32_t>(availableWidth), static_cast<std::uint32_t>(availableHeight));
+}
+
+// The largest whole scale a BORDERLESS window on this window's monitor has room for.
+//
+// Against rcMonitor rather than rcWork, and with no frame subtracted, which is the whole of what
+// borderless fullscreen buys: a 2560x1440 panel has room for scale 2 exactly, where the windowed
+// answer is 1 because a caption and a taskbar take rows the canvas needed (ADR-076).
+//
+// MONITOR_DEFAULTTONEAREST and the WINDOW's monitor, not the primary one: fullscreen means the
+// monitor the window is on.
+[[nodiscard]] std::uint32_t ChooseFullscreenScale(HWND _window) noexcept
+{
+  MONITORINFO monitor = {};
+  monitor.cbSize = sizeof(MONITORINFO);
+  if (GetMonitorInfoW(MonitorFromWindow(_window, MONITOR_DEFAULTTONEAREST), &monitor) == 0)
+  {
+    return 1;
+  }
+
+  return Neuron::Presentation::LargestScaleFor(static_cast<std::uint32_t>(monitor.rcMonitor.right - monitor.rcMonitor.left),
+                                               static_cast<std::uint32_t>(monitor.rcMonitor.bottom - monitor.rcMonitor.top));
+}
+
+// Applies a pending F11, and does nothing when there is none.
+//
+// **The window's own style is where "am I fullscreen" is kept.** A bool beside it would be a second
+// answer to a question the window can already be asked, and the two would disagree the first time
+// anything else touched the style. WS_POPUP is the whole difference.
+//
+// Going out, the window's placement is remembered by Windows rather than by this file:
+// SetWindowPlacement restores the position AND the size, so a window that was 1280x720 at some
+// corner of the desktop comes back 1280x720 at that corner.
+//
+// A monitor that is not a whole multiple of the canvas is already handled -- the canvas is centred
+// and the remainder is black (ADR-075). On a 1080p panel that is fullscreen at scale 1 with a
+// 320x180 border on every side, which looks deliberate rather than broken.
+void ApplyFullscreenToggle(HWND _window, Neuron::Device& _device, Neuron::PointerInput& _pointer, Neuron::Presentation& _presentation)
+{
+  if (!g_fullscreenToggleRequested)
+  {
+    return;
+  }
+  g_fullscreenToggleRequested = false;
+
+  const auto style = static_cast<DWORD>(GetWindowLongPtrW(_window, GWL_STYLE));
+  const bool goingFullscreen = (style & WS_POPUP) == 0;
+
+  if (goingFullscreen)
+  {
+    MONITORINFO monitor = {};
+    monitor.cbSize = sizeof(MONITORINFO);
+    if (GetWindowPlacement(_window, &g_windowedPlacement) == 0 ||
+        GetMonitorInfoW(MonitorFromWindow(_window, MONITOR_DEFAULTTONEAREST), &monitor) == 0)
+    {
+      // Nothing to restore to and nowhere to go. Staying windowed is the right failure.
+      return;
+    }
+
+    SetWindowLongPtrW(_window, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+    SetWindowPos(_window, HWND_TOP, monitor.rcMonitor.left, monitor.rcMonitor.top, monitor.rcMonitor.right - monitor.rcMonitor.left,
+                 monitor.rcMonitor.bottom - monitor.rcMonitor.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+  }
+  else
+  {
+    SetWindowLongPtrW(_window, GWL_STYLE, WINDOW_STYLE | WS_VISIBLE);
+    SetWindowPlacement(_window, &g_windowedPlacement);
+    SetWindowPos(_window, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+  }
+
+  // What Windows actually gave, not what it was asked for -- the same reason RunGame reads the
+  // client area back rather than recomputing it.
+  RECT clientArea = {};
+  if (GetClientRect(_window, &clientArea) == 0)
+  {
+    Neuron::Fatal("GetClientRect failed while toggling fullscreen.");
+  }
+  const auto clientWidthPixels = static_cast<std::uint32_t>(clientArea.right - clientArea.left);
+  const auto clientHeightPixels = static_cast<std::uint32_t>(clientArea.bottom - clientArea.top);
+
+  _device.Resize(clientWidthPixels, clientHeightPixels);
+  _presentation =
+    Neuron::Presentation::For(clientWidthPixels, clientHeightPixels, goingFullscreen ? ChooseFullscreenScale(_window) : ChooseScale());
+  _pointer.SetPresentation(_presentation);
+}
+
 // Sizes for the CLIENT area, not the window: AdjustWindowRect adds the border and caption, so the
-// framebuffer is presented 1:1 rather than a few rows short of it.
+// canvas is presented at a whole scale rather than a few rows short of it.
 //
 // AdjustWindowRect assumes 96 DPI, and under per-monitor awareness the caption on a scaled
 // display is not 96 DPI, so its answer is close rather than right. Rather than reach for
@@ -366,14 +533,12 @@ bool RegisterWindowClass(HINSTANCE _instance)
 // on every DPI, theme and Windows version without knowing anything about any of them -- and this
 // has to be exact, because the client area IS the framebuffer: a row short is a row of the
 // picture the player never sees.
-HWND CreateMainWindow(HINSTANCE _instance, int _showCommand)
+HWND CreateMainWindow(HINSTANCE _instance, int _showCommand, int _clientWidthPixels, int _clientHeightPixels)
 {
-  constexpr DWORD STYLE = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+  RECT bounds = {0, 0, _clientWidthPixels, _clientHeightPixels};
+  AdjustWindowRect(&bounds, WINDOW_STYLE, FALSE);
 
-  RECT bounds = {0, 0, CLIENT_WIDTH, CLIENT_HEIGHT};
-  AdjustWindowRect(&bounds, STYLE, FALSE);
-
-  HWND window = CreateWindowExW(0, WINDOW_CLASS_NAME, WINDOW_TITLE, STYLE, CW_USEDEFAULT, CW_USEDEFAULT, bounds.right - bounds.left,
+  HWND window = CreateWindowExW(0, WINDOW_CLASS_NAME, WINDOW_TITLE, WINDOW_STYLE, CW_USEDEFAULT, CW_USEDEFAULT, bounds.right - bounds.left,
                                 bounds.bottom - bounds.top, nullptr, nullptr, _instance, nullptr);
   if (window == nullptr)
   {
@@ -384,8 +549,8 @@ HWND CreateMainWindow(HINSTANCE _instance, int _showCommand)
   RECT outerArea = {};
   if (GetClientRect(window, &clientArea) != 0 && GetWindowRect(window, &outerArea) != 0)
   {
-    const int widthShortfall = CLIENT_WIDTH - (clientArea.right - clientArea.left);
-    const int heightShortfall = CLIENT_HEIGHT - (clientArea.bottom - clientArea.top);
+    const int widthShortfall = _clientWidthPixels - (clientArea.right - clientArea.left);
+    const int heightShortfall = _clientHeightPixels - (clientArea.bottom - clientArea.top);
     if (widthShortfall != 0 || heightShortfall != 0)
     {
       SetWindowPos(window, nullptr, 0, 0, (outerArea.right - outerArea.left) + widthShortfall,
@@ -571,11 +736,12 @@ struct MatchPaths
 ///
 /// Fills `_outTokens` and `_outBots` and returns the host's seat, or -1 when the window closed
 /// first.
-[[nodiscard]] std::int32_t RunSeatsScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::ShapeRenderer& _shapes,
-                                          Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer, Neuron::KeyboardInput& _keyboard,
-                                          HWND _window, Lockstep::HostedServer& _lobby, const std::vector<std::string>& _tokens,
-                                          std::vector<std::string>& _outTokens, std::vector<std::optional<Lockstep::BotPolicy>>& _outBots,
-                                          Lockstep::SeatsPage::Entry& _outEntry)
+[[nodiscard]] std::int32_t RunSeatsScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::Presentation& _presentation,
+                                          Neuron::ShapeRenderer& _shapes, Neuron::ShapeBackend& _shapeBackend, Neuron::FontRenderer& _text,
+                                          Neuron::FontBackend& _textBackend, Neuron::PointerInput& _pointer,
+                                          Neuron::KeyboardInput& _keyboard, HWND _window, Lockstep::HostedServer& _lobby,
+                                          const std::vector<std::string>& _tokens, std::vector<std::string>& _outTokens,
+                                          std::vector<std::optional<Lockstep::BotPolicy>>& _outBots, Lockstep::SeatsPage::Entry& _outEntry)
 {
   Lockstep::SeatsPage page{_tokens};
 
@@ -629,20 +795,23 @@ struct MatchPaths
       return page.HostSeat();
     }
 
-    ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
-    _screen.BeginScene(commandList, _device.BackBufferView());
+    ApplyFullscreenToggle(_window, _device, _pointer, _presentation);
 
-    _shapes.BeginFrame(_device.FrameIndex());
-    _text.BeginFrame(_device.FrameIndex());
+    ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
+    _screen.BeginScene(commandList);
+
+    _shapes.BeginFrame();
+    _text.BeginFrame();
 
     page.DrawWorld(_shapes, _text);
-    _shapes.Flush(commandList);
-    _text.Flush(commandList);
+    _shapeBackend.Draw(commandList, _device.FrameIndex(), _shapes);
+    _textBackend.Draw(commandList, _device.FrameIndex(), _text);
 
     page.DrawInterface(_shapes, _text);
-    _shapes.Flush(commandList);
-    _text.Flush(commandList);
+    _shapeBackend.Draw(commandList, _device.FrameIndex(), _shapes);
+    _textBackend.Draw(commandList, _device.FrameIndex(), _text);
 
+    _screen.Present(commandList, _device.BackBufferView(), _presentation);
     _device.EndFrameAndPresent();
     _device.DrainDebugMessages();
   }
@@ -656,10 +825,11 @@ struct MatchPaths
 /// this one has no match, no orders and no camera the player drives, and folding it into `RunGame`
 /// would put a `if (joined)` around every line of a function that is already the longest in the
 /// tree. It returns true when there is a match to show.
-[[nodiscard]] bool RunJoinScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::ShapeRenderer& _shapes,
-                                 Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer, Neuron::KeyboardInput& _keyboard,
-                                 Lockstep::MatchConnection& _connection, const std::string& _server, const std::string& _token,
-                                 std::uint16_t _defaultPort, std::chrono::steady_clock::time_point _startedAt)
+[[nodiscard]] bool RunJoinScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::Presentation& _presentation,
+                                 Neuron::ShapeRenderer& _shapes, Neuron::ShapeBackend& _shapeBackend, Neuron::FontRenderer& _text,
+                                 Neuron::FontBackend& _textBackend, HWND _window, Neuron::PointerInput& _pointer,
+                                 Neuron::KeyboardInput& _keyboard, Lockstep::MatchConnection& _connection, const std::string& _server,
+                                 const std::string& _token, std::uint16_t _defaultPort, std::chrono::steady_clock::time_point _startedAt)
 {
   Lockstep::JoinPage page;
   page.Offer(_server, _token);
@@ -797,26 +967,29 @@ struct MatchPaths
     dialog.Update(kind, facts, elapsedSeconds);
 
     // ---- The frame -----------------------------------------------------------------------------
-    ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
-    _screen.BeginScene(commandList, _device.BackBufferView());
+    ApplyFullscreenToggle(_window, _device, _pointer, _presentation);
 
-    _shapes.BeginFrame(_device.FrameIndex());
-    _text.BeginFrame(_device.FrameIndex());
+    ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
+    _screen.BeginScene(commandList);
+
+    _shapes.BeginFrame();
+    _text.BeginFrame();
 
     page.DrawWorld(_shapes, _text);
-    _shapes.Flush(commandList);
-    _text.Flush(commandList);
+    _shapeBackend.Draw(commandList, _device.FrameIndex(), _shapes);
+    _textBackend.Draw(commandList, _device.FrameIndex(), _text);
 
     page.DrawInterface(_shapes, _text);
-    _shapes.Flush(commandList);
-    _text.Flush(commandList);
+    _shapeBackend.Draw(commandList, _device.FrameIndex(), _shapes);
+    _textBackend.Draw(commandList, _device.FrameIndex(), _text);
 
     // A third layer, for the same reason there is a second: each renderer is one batch, so the
     // dialog's scrim would be drawn under the card it is meant to dim if it shared a flush.
     dialog.Draw(_shapes, _text);
-    _shapes.Flush(commandList);
-    _text.Flush(commandList);
+    _shapeBackend.Draw(commandList, _device.FrameIndex(), _shapes);
+    _textBackend.Draw(commandList, _device.FrameIndex(), _text);
 
+    _screen.Present(commandList, _device.BackBufferView(), _presentation);
     _device.EndFrameAndPresent();
     _device.DrainDebugMessages();
   }
@@ -824,28 +997,46 @@ struct MatchPaths
   return false;
 }
 
-int RunGame(HWND _window, const Startup& _startup)
+int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
 {
+  // The client area as Windows actually made it, not as it was asked for. CreateMainWindow
+  // measures and corrects, and this is the one number the swap chain, the letterbox and the
+  // pointer all have to agree on -- so it is read back rather than recomputed.
+  RECT clientArea = {};
+  if (GetClientRect(_window, &clientArea) == 0)
+  {
+    Neuron::Fatal("GetClientRect failed on the main window.");
+  }
+  const auto clientWidthPixels = static_cast<std::uint32_t>(clientArea.right - clientArea.left);
+  const auto clientHeightPixels = static_cast<std::uint32_t>(clientArea.bottom - clientArea.top);
+
   Neuron::Device device;
-  device.Create(_window, Neuron::SceneTarget::WIDTH_PIXELS, Neuron::SceneTarget::HEIGHT_PIXELS);
+  device.Create(_window, clientWidthPixels, clientHeightPixels);
 
   // One shader-visible descriptor heap for the whole client: only one can be bound at a time, so
   // every renderer allocates its slots out of this (DescriptorHeap.h).
   Neuron::DescriptorHeap shaderVisibleHeap;
   shaderVisibleHeap.Create(device.Handle(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 16, true);
 
+  // How the canvas reaches the display: where it sits in the client area and how far it is
+  // magnified (ADR-075). At scale 1 the client area is exactly the canvas and there is no
+  // letterbox at all.
+  Neuron::Presentation presentation = Neuron::Presentation::For(clientWidthPixels, clientHeightPixels, _scale);
+
   // Space is black, and on this screen it is also the colour of every rail behind every card.
   Neuron::SceneTarget screen;
-  screen.Create(device.Handle(), Neuron::BLACK);
+  screen.Create(device.Handle(), shaderVisibleHeap, Neuron::BLACK);
 
   // The two renderers the interface is made of, and the whole of what it needs: rectangles and
   // glyphs. There is no widget tree, no retained scene and no texture atlas beyond the font
   // (ADR-014).
   Neuron::ShapeRenderer shapes;
-  shapes.Create(device.Handle());
+  Neuron::ShapeBackend shapeBackend;
+  shapeBackend.Create(device.Handle());
 
   Neuron::FontRenderer text;
-  text.Create(device, shaderVisibleHeap);
+  Neuron::FontBackend textBackend;
+  textBackend.Create(device, shaderVisibleHeap);
 
   // ---- The match, over a socket ------------------------------------------------------------------
   //
@@ -856,7 +1047,7 @@ int RunGame(HWND _window, const Startup& _startup)
 
   // Input first: the join screen reads both, and it runs before the match does.
   Neuron::PointerInput pointer;
-  pointer.Create(_window);
+  pointer.Create(_window, presentation);
   g_pointerInput = &pointer;
 
   Neuron::KeyboardInput keyboard;
@@ -981,7 +1172,8 @@ int RunGame(HWND _window, const Startup& _startup)
   {
     const std::string offered = std::format("{}:{}", _startup.host, _startup.port);
     const std::string offeredToken = _startup.joinGiven ? _startup.token : hostToken;
-    if (!RunJoinScreen(device, screen, shapes, text, pointer, keyboard, connection, offered, offeredToken, _startup.port, startedAt))
+    if (!RunJoinScreen(device, screen, presentation, shapes, shapeBackend, text, textBackend, _window, pointer, keyboard, connection,
+                       offered, offeredToken, _startup.port, startedAt))
     {
       return EXIT_SUCCESS;
     }
@@ -997,8 +1189,8 @@ int RunGame(HWND _window, const Startup& _startup)
     std::vector<std::string> playing;
     std::vector<std::optional<Lockstep::BotPolicy>> bots;
     Lockstep::SeatsPage::Entry entry = Lockstep::SeatsPage::Entry::Match;
-    const std::int32_t hostSeat =
-      RunSeatsScreen(device, screen, shapes, text, pointer, keyboard, _window, *hosted, seatTokens, playing, bots, entry);
+    const std::int32_t hostSeat = RunSeatsScreen(device, screen, presentation, shapes, shapeBackend, text, textBackend, pointer, keyboard,
+                                                 _window, *hosted, seatTokens, playing, bots, entry);
     if (hostSeat < 0)
     {
       return EXIT_SUCCESS;
@@ -1329,31 +1521,34 @@ int RunGame(HWND _window, const Startup& _startup)
     }
     redraw = false;
 
-    ID3D12GraphicsCommandList* commandList = device.BeginFrame();
-    screen.BeginScene(commandList, device.BackBufferView());
+    ApplyFullscreenToggle(_window, device, pointer, presentation);
 
-    shapes.BeginFrame(device.FrameIndex());
-    text.BeginFrame(device.FrameIndex());
+    ID3D12GraphicsCommandList* commandList = device.BeginFrame();
+    screen.BeginScene(commandList);
+
+    shapes.BeginFrame();
+    text.BeginFrame();
 
     // Two layers, flushed apart. See `MainPage::DrawWorld`: one flush per frame would put the map's
     // labels on top of the panels drawn over them.
     page.DrawWorld(shapes, text);
-    shapes.Flush(commandList);
-    text.Flush(commandList);
+    shapeBackend.Draw(commandList, device.FrameIndex(), shapes);
+    textBackend.Draw(commandList, device.FrameIndex(), text);
 
     page.DrawInterface(shapes, text);
 
     // Shapes first, then text, in two draw calls rather than interleaved. Painter's order still
     // holds within each pass, and the one place it matters across them -- a caption on a card --
     // is fine because every glyph is drawn after every rectangle.
-    shapes.Flush(commandList);
-    text.Flush(commandList);
+    shapeBackend.Draw(commandList, device.FrameIndex(), shapes);
+    textBackend.Draw(commandList, device.FrameIndex(), text);
 
     // A third layer. The dialog dims everything above it, so it cannot share a flush with it.
     dialog.Draw(shapes, text);
-    shapes.Flush(commandList);
-    text.Flush(commandList);
+    shapeBackend.Draw(commandList, device.FrameIndex(), shapes);
+    textBackend.Draw(commandList, device.FrameIndex(), text);
 
+    screen.Present(commandList, device.BackBufferView(), presentation);
     device.EndFrameAndPresent();
     device.DrainDebugMessages();
   }
@@ -1362,9 +1557,9 @@ int RunGame(HWND _window, const Startup& _startup)
   g_keyboardInput = nullptr;
 
   // Drain the GPU here, not in ~Device. Destructors run in reverse declaration order, so the
-  // SceneTarget's depth buffer would otherwise be released while the last submitted command list
-  // still referenced it -- which the debug layer reports as OBJECT_DELETED_WHILE_STILL_IN_USE and
-  // a release build turns into a use-after-free.
+  // SceneTarget's canvas and depth buffer would otherwise be released while the last submitted
+  // command list still referenced them -- which the debug layer reports as
+  // OBJECT_DELETED_WHILE_STILL_IN_USE and a release build turns into a use-after-free.
   device.WaitForGpu();
   device.DrainDebugMessages();
 
@@ -1386,6 +1581,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   //
   // Not an error check: a Windows build without the call is one where the manifest default
   // applies, and there is nothing useful to do about it here.
+  //
+  // WM_DPICHANGED IS DELIBERATELY NOT HANDLED. Per-monitor V2 means Windows offers a new size when
+  // the window crosses to a monitor of a different DPI; DefWindowProcW declines it, so the window
+  // keeps its physical size and its picture stays exact. What it does NOT do is re-choose the
+  // scale, so a window dragged from a 4K monitor to a 1080p one stays too big for its new home.
+  // ADR-075 records that as an open question rather than solving it: solving it means resizing a
+  // swap chain mid-frame, which is the same machinery borderless fullscreen needs.
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
   // Before the window too. With this on, a mouse click arrives as WM_POINTERDOWN exactly as a
@@ -1461,7 +1663,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
     return EXIT_FAILURE;
   }
 
-  HWND window = CreateMainWindow(_instance, _showCommand);
+  // The scale is decided once, here, and nothing changes it afterwards -- see the WM_DPICHANGED
+  // note beside SetProcessDpiAwarenessContext above (ADR-075's first open question).
+  const std::uint32_t largestThatFits = ChooseScale();
+  std::uint32_t scale = startup.scale == 0 ? largestThatFits : startup.scale;
+  if (scale > largestThatFits)
+  {
+    Neuron::DebugTrace("Window: --scale {} does not fit this monitor; using {}.\n", scale, largestThatFits);
+    scale = largestThatFits;
+  }
+
+  HWND window = CreateMainWindow(_instance, _showCommand, static_cast<int>(Neuron::SceneTarget::WIDTH_PIXELS * scale),
+                                 static_cast<int>(Neuron::SceneTarget::HEIGHT_PIXELS * scale));
   if (window == nullptr)
   {
     return EXIT_FAILURE;
@@ -1472,7 +1685,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   // that there is one place to tell a person about it.
   try
   {
-    return RunGame(window, startup);
+    return RunGame(window, startup, scale);
   }
   catch (const winrt::hresult_error& error)
   {

@@ -1,13 +1,26 @@
 #pragma once
 
 #include "Color.h"
-#include "Device.h"
+
+#include <algorithm>
+#include <cstdint>
+#include <span>
+#include <vector>
 
 namespace Neuron
 {
 
-/// Filled and stroked 2D primitives in screen pixels, for the parts of the interface that are not
-/// text.
+/// Filled and stroked 2D primitives in canvas pixels, RECORDED. Drawing them is `ShapeBackend`.
+///
+/// **This header names no graphics API and no operating system, and that is the point of the
+/// split** (ADR-075). Every page and every test talks to this type; a `ShapeBackend` drains it and
+/// is the only half that knows about D3D12. A Vulkan or Metal build is a second backend behind this
+/// same recorder, not a second renderer -- and the pages, the layout and the tests do not move.
+///
+/// It is also what makes a screen's layout testable without a GPU (ADR-041). Every page builds its
+/// hit list while it draws -- `AddHit` sits beside the `FillRect` that put the button there, which
+/// is what stops the two drifting apart -- so a test that wants to press a button has to run the
+/// draw. It can: recording is all this class does.
 ///
 /// Everything this draws is triangles with a color per vertex, and every shape is tessellated on
 /// the CPU: a rectangle is two triangles, a line is a quad, an ellipse is a fan. That is the whole
@@ -25,6 +38,27 @@ namespace Neuron
 class ShapeRenderer
 {
 public:
+  /// Position in canvas pixels and a packed color. R8: a vertex is a public aggregate handed to
+  /// the GPU, so plain fields -- and public, because a backend is what hands it over.
+  struct ShapeVertex
+  {
+    float positionXPixels;
+    float positionYPixels;
+    std::uint32_t color;
+  };
+
+  /// One batch of recorded vertices, and where it sits in this frame's recording.
+  ///
+  /// **The index is not bookkeeping.** A frame is drained more than once -- world, interface,
+  /// dialog -- and every batch of a frame has to end up somewhere the GPU can still read when the
+  /// command list finally runs. A backend that wrote each batch at offset zero would put the
+  /// second layer on top of vertices the first draw had been told to read and had not read yet.
+  struct Batch
+  {
+    std::span<const ShapeVertex> vertices;
+    std::uint32_t firstVertex;
+  };
+
   /// One frame's worth of geometry. The map is the heavy consumer -- the ground grid alone is 26
   /// lines, and every node is a shadow ellipse, a stem and a disc -- so this is sized for the
   /// screen rather than for a widget. Overrunning it is a broken invariant rather than a case to
@@ -39,27 +73,13 @@ public:
     return std::clamp(wanted, MIN_ELLIPSE_SEGMENTS, MAX_ELLIPSE_SEGMENTS);
   }
 
-  void Create(ID3D12Device* _device);
-
-  /// Creates the renderer with NO DEVICE BEHIND IT: appended geometry lands in ordinary memory
-  /// and `Flush` is refused.
+  /// Starts a frame's recording over. Not noexcept: the first call reserves the vector, and an
+  /// allocation that fails is a thing to report rather than a std::terminate (Debug.h).
   ///
-  /// **This is the seam that makes a screen's LAYOUT testable.** Every page in this game builds its
-  /// hit list while it draws -- `AddHit` sits beside the `FillRect` that put the button there, which
-  /// is what stops the two drifting apart -- so a test that wants to press a button has to be able
-  /// to run the draw. It could not: an append writes through a pointer into an upload heap, and
-  /// without a device that pointer is null. Whoever wanted to test a tap had the choice of standing
-  /// up D3D12 in a test DLL that CI runs on a machine with no GPU, or writing the layout out a
-  /// second time in the test and asserting against a copy of the thing under test.
-  ///
-  /// A headless renderer records the same geometry into a vector instead. Nothing about the append
-  /// path changes -- it is the same code writing to a different address -- so what a test drives is
-  /// what ships.
-  void CreateHeadless();
-
-  /// Resets this frame's slice. Every frame writes its own, so the CPU never overwrites vertices
-  /// the GPU is still reading -- the same arrangement FontRenderer uses.
-  void BeginFrame(std::uint32_t _frameIndex) noexcept;
+  /// It takes no frame index. Which of the backend's buffers this frame's vertices end up in is
+  /// the backend's business, and a recorder that knew would be a recorder with a graphics API's
+  /// shape pressed into it.
+  void BeginFrame();
 
   void FillRect(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, const Color& _color);
 
@@ -107,38 +127,22 @@ public:
   void FillRadialGradient(float _centerXPixels, float _centerYPixels, float _radiusXPixels, float _radiusYPixels, const Color& _center,
                           const Color& _rim);
 
-  /// Issues everything appended since BeginFrame as a single draw call.
-  /// Draws everything recorded SINCE THE LAST FLUSH, and remembers where it stopped.
+  /// Everything recorded since the last take, and marks it taken. Empty when nothing is new.
   ///
   /// **Called more than once a frame, it is what puts one layer over another.** The interface is
-  /// two renderers (ADR-014), and each is one batch: every shape, then every glyph. Flushed once at
-  /// the end of a frame that meant all text landed on top of all shapes whatever order they were
-  /// recorded in -- so a panel drawn over the map covered the map's dots and lanes and left its
-  /// LABELS floating on top of the panel, which is what a modal is not allowed to do.
+  /// two renderers (ADR-014), and each is one batch: every shape, then every glyph. Drained once at
+  /// the end of a frame, all text landed on top of all shapes whatever order they were recorded in
+  /// -- so a panel drawn over the map covered the map's dots and lanes and left its LABELS floating
+  /// on top of the panel, which is what a modal is not allowed to do. The caller drains both
+  /// renderers between the world and the interface, and each draw covers only what is new.
   ///
-  /// Draining rather than redrawing is the whole of the fix: the caller flushes both renderers
-  /// between the world and the interface, and each flush draws only what is new.
-  void Flush(ID3D12GraphicsCommandList* _commandList);
+  /// The span points into this recorder and stays valid until the next `BeginFrame`, which is long
+  /// enough for a backend to copy it and no longer.
+  [[nodiscard]] Batch TakeUnflushed() noexcept;
 
 private:
-  /// Position in screen pixels and a packed color. R8: a vertex is a public aggregate handed to
-  /// the GPU, so plain fields -- but it is private to this class because nothing outside builds
-  /// one.
-  struct ShapeVertex
-  {
-    float positionXPixels;
-    float positionYPixels;
-    std::uint32_t color;
-  };
-
   static constexpr std::uint32_t MIN_ELLIPSE_SEGMENTS = 12;
   static constexpr std::uint32_t MAX_ELLIPSE_SEGMENTS = 64;
-
-  /// Two floats for the screen size in pixels, the same constant the text pass takes.
-  static constexpr std::uint32_t CONSTANT_COUNT = 2;
-
-  void CreateVertexBuffer(ID3D12Device* _device);
-  void CreatePipeline(ID3D12Device* _device);
 
   /// The one place vertices are appended. Every primitive above reduces to some number of calls
   /// to this, which is what makes the overrun check a single assertion rather than one per shape.
@@ -153,21 +157,12 @@ private:
   void AppendQuad(float _axPixels, float _ayPixels, float _bxPixels, float _byPixels, float _cxPixels, float _cyPixels, float _dxPixels,
                   float _dyPixels, std::uint32_t _packedColor);
 
-  winrt::com_ptr<ID3D12Resource> m_vertices;
-  winrt::com_ptr<ID3D12RootSignature> m_rootSignature;
-  winrt::com_ptr<ID3D12PipelineState> m_pipeline;
+  /// This frame's geometry, and the ONE place an append lands. Reserved once to
+  /// MAX_VERTICES_PER_FRAME and cleared rather than freed, so a frame's recording never allocates.
+  std::vector<ShapeVertex> m_vertices;
 
-  /// The whole vertex buffer, mapped for the life of the renderer (FontRenderer.h says why).
-  /// Where a headless renderer's geometry goes. Empty in the shipped path, where the vertices
-  /// live in an upload heap the GPU reads directly.
-  std::vector<ShapeVertex> m_headlessVertices;
-  bool m_headless = false;
-
-  ShapeVertex* m_mappedVertices = nullptr;
-  std::uint32_t m_frameIndex = 0;
-  std::uint32_t m_usedThisFrame = 0;
-  /// How much of `m_usedThisFrame` has already been drawn this frame. See `Flush`.
-  std::uint32_t m_flushedThisFrame = 0;
+  /// How much of `m_vertices` has already been taken this frame. See `TakeUnflushed`.
+  std::size_t m_takenThisFrame = 0;
 };
 
 } // namespace Neuron

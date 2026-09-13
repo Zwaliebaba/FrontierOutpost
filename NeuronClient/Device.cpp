@@ -155,8 +155,10 @@ void Device::CreateSwapChain(HWND _window)
   winrt::com_ptr<IDXGISwapChain1> swapChain;
   winrt::check_hresult(m_factory->CreateSwapChainForHwnd(m_queue.get(), _window, &swapChainDesc, nullptr, nullptr, swapChain.put()));
 
-  // The window is a fixed size and this game has no fullscreen mode. Alt+Enter would resize a
-  // swap chain whose whole contract is that it is exactly 1280x720.
+  // No Alt+Enter, which would put DXGI into an EXCLUSIVE fullscreen mode -- a display mode change,
+  // a lost device on alt-tab, and a second way of being fullscreen beside the one F11 gives
+  // (ADR-076). The borderless toggle resizes this swap chain through Resize() and never changes
+  // the display's mode.
   winrt::check_hresult(m_factory->MakeWindowAssociation(_window, DXGI_MWA_NO_ALT_ENTER));
 
   m_swapChain = swapChain.as<IDXGISwapChain3>();
@@ -194,6 +196,48 @@ void Device::CreateFrameResources()
   {
     winrt::throw_last_error();
   }
+}
+
+void Device::Resize(std::uint32_t _backBufferWidthPixels, std::uint32_t _backBufferHeightPixels)
+{
+  if (_backBufferWidthPixels == m_backBufferWidthPixels && _backBufferHeightPixels == m_backBufferHeightPixels)
+  {
+    return;
+  }
+
+  // Every back buffer has to be unreferenced before ResizeBuffers will touch them: the GPU has to
+  // be done with the frames in flight, and this object has to let go of its own COM pointers.
+  WaitForGpu();
+  for (winrt::com_ptr<ID3D12Resource>& backBuffer : m_backBuffers)
+  {
+    backBuffer = nullptr;
+  }
+
+  m_backBufferWidthPixels = _backBufferWidthPixels;
+  m_backBufferHeightPixels = _backBufferHeightPixels;
+  FailIfDeviceRemoved(m_swapChain->ResizeBuffers(FRAME_COUNT, m_backBufferWidthPixels, m_backBufferHeightPixels, BACK_BUFFER_FORMAT, 0),
+                      "IDXGISwapChain::ResizeBuffers");
+
+  // ResizeBuffers renumbers the buffers, so which one is current is its answer and not the one
+  // this object was holding.
+  m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+
+  // The RTV heap and the allocators survive; the views in it do not, because they described
+  // resources that no longer exist.
+  D3D12_CPU_DESCRIPTOR_HANDLE view = m_renderTargetViewHeap->GetCPUDescriptorHandleForHeapStart();
+  for (std::uint32_t frame = 0; frame < FRAME_COUNT; ++frame)
+  {
+    winrt::check_hresult(m_swapChain->GetBuffer(frame, IID_PPV_ARGS(m_backBuffers[frame].put())));
+    m_device->CreateRenderTargetView(m_backBuffers[frame].get(), nullptr, view);
+    view.ptr += m_renderTargetViewSize;
+  }
+
+  // WaitForGpu left the fence at one value for every slot, so every slot is retired. Starting the
+  // next frame one past it keeps the "a slot is free when the fence reaches its value" rule true
+  // without any slot claiming a value the GPU has already passed.
+  const std::uint64_t retired = m_fence->GetCompletedValue();
+  m_fenceValues.fill(retired);
+  m_fenceValues[m_frameIndex] = retired + 1;
 }
 
 D3D12_CPU_DESCRIPTOR_HANDLE Device::BackBufferView() const noexcept

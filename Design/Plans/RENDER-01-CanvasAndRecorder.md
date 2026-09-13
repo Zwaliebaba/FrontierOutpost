@@ -1,7 +1,10 @@
 # RENDER-01 — A canvas presented at an integer scale, and a renderer that records before it draws
 
-**Status:** Proposed. Written 2026-09-13 from a design session on how the client reaches a second
-platform without the Windows build ceasing to be one executable. Nothing in this plan is built.
+**Status:** **Built, 2026-09-13.** All eight stages, including stage 7, which was an owner decision
+and got its yes. Written the same day from a design session on how the client reaches a second
+platform without the Windows build ceasing to be one executable. ADR-075 is the decision it
+implements; ADR-076 answers the open question stage 7 was waiting on. What each stage found is
+recorded under its own heading.
 
 **What this plan is for.** Two things, in a fixed order. First, the presentation stops being
 "1280×720 physical pixels, drawn straight into the back buffer" and becomes "a 1280×720 canvas,
@@ -111,6 +114,39 @@ ever draws at native resolution.
 the Markdown for nothing, but the commit must be green). The owner reads the ADR and changes its
 status to Accepted. **Stop here until that has happened.**
 
+**The gate opened 2026-09-13.** The owner did not edit the status line; they instructed stages
+1 to 6 to be built, which is the same decision and is recorded in ADR-075's status line in those
+words. Stage 7 was not included and stays unstarted.
+
+**Stage 0, as run (2026-09-13).** ADR-075 is written and every edit it lists is made, in one commit.
+Both checkers are green. `RunClangTidy.py` was not run and is not claimed: nothing in this commit is
+C++, and the stage's gate above is the two checkers for that reason.
+
+**What stage 0 found, which is not about this plan at all.** `CheckProjectFiles.py` failed on the
+first run, with the line-endings message the merge at 671ef8d added the same day: `Build/BakeFont.py`
+was still CRLF in this working tree, checked out before `.gitattributes` pinned `*.py` to `eol=lf`,
+so it hashed to something `NeuronClient/Font.h` has never recorded. **The fix is a re-checkout of the
+file, not a re-bake** — which is exactly what the new message says, and it earned its place: the
+obvious response to "Font.h disagrees with its source" is to re-run the baker, and doing that here
+would have recorded a CRLF hash no CI runner can reproduce. `Build/CheckFormat.py` was stale the same
+way and was renormalised with it. **Anyone pulling 671ef8d onto an existing Windows checkout hits
+this**, because `.gitattributes` changes what git *would* write and touches nothing already on disk.
+
+**A staleness found beside the edit, and corrected on the owner's instruction.**
+`Design/UI/README.md`'s Non-negotiables still said "One 8×8 bitmap font at 1× … No anti-aliasing",
+which ADR-074 overtook on 2026-09-13. It was reported rather than fixed with the rest of stage 0,
+because widening a change to a neighbouring sentence is the thing stage 6 is told not to do; the
+owner asked for it directly, so the paragraph now describes the four Plex cuts and says that a
+glyph's coverage is the one thing on the screen a rasterizer decides. The passage at the top of the
+same file that describes the 8×8 font in the past tense is correct and was left alone.
+
+**One inconsistency is knowingly accepted, and it closes at stage 1.** Between this commit and stage
+1, AGENTS.md and `Design/README.md` §1 describe a canvas the code does not draw yet, which is in
+tension with AGENTS.md's own preamble — "it describes the code as it must be written today".
+`Design/README.md` §4 asks for exactly this ordering (the ADR, and everything it invalidated, in one
+commit), and the alternative is a stage 1 that deviates from R12 silently. The window is one stage
+long and the ADR is Proposed for all of it.
+
 **Commit:** `Decide that the screen is a canvas presented at an integer scale`
 
 ---
@@ -180,6 +216,55 @@ canvas. `screen.Create` now takes `device` and `shaderVisibleHeap`, so it moves 
 length, same hash. Run the Debug build and confirm `Device::DrainDebugMessages` reports nothing
 (a missing barrier shows up here, not on screen).
 
+**Stage 1, as run (2026-09-13).** Three checkers green, Debug and Release both build, 527 tests
+pass (ten of them new), and the join screen at scale 1 is **byte-identical**: SHA-256
+`a9d82e21…2880f1bf`, 19,439 bytes, the same hash the pre-stage build produced. The D3D12 debug
+layer says nothing.
+
+**The byte-identical test has a second outcome, and the plan leans on that test for five more
+stages.** The join screen's caret blinks on a **wall-clock** period of one second, lit for 0.6 of it
+(`JoinPage.cpp`, `BLINK_SECONDS`), and `Screenshot.ps1` fires a fixed time after the window appears
+— so which phase it catches depends on how long the process took to get there. The caret-off
+capture differs from the caret-on one in **exactly seven pixels**, `(492..498, 349)`, which is the
+7px Plex Mono advance of `_` in `BLUE` over the field fill. Both were seen on the same binary
+within a minute of each other:
+
+| phase | SHA-256 | bytes |
+|---|---|---|
+| caret on | `a9d82e21…2880f1bf` | 19,439 |
+| caret off | `9641ae45…90fb1970` | 19,425 |
+
+At a two-second settle the lit phase is what comes back — six runs out of six — which is why
+FONT-01 and this stage both read as clean. **A stage that gets the other hash has not broken the
+picture**, and a session that assumes otherwise will go looking for a renderer bug that is a
+blinking underscore. The check for the rest of this plan is therefore: capture until the caret-on
+hash appears, and if a different hash turns up, diff the two PNGs before concluding anything — a
+real regression is not seven pixels on row 349.
+
+**The debug-layer check was proved rather than assumed.** "DrainDebugMessages reports nothing" is
+worth nothing if the info queue is null, which it is on a machine without the Graphics Tools
+feature (`Device.h` says so). It is present on this one: with the canvas's
+`RENDER_TARGET → PIXEL_SHADER_RESOURCE` barrier temporarily deleted, the layer reported
+`RESOURCE_BARRIER_BEFORE_AFTER_MISMATCH #527` and the break fired. The barrier was put back. Reading
+`OutputDebugString` without a debugger needs a DBWIN listener — `DebugTrace` is
+`OutputDebugStringA` — and that is a scratch script, not a thing in the tree.
+
+**Two deviations from what this stage was written to do, both smaller than the plan's version.**
+`SceneTarget::Create` takes `ID3D12Device*` and not `Device&`: it creates two resources and a
+pipeline and never needs a queue, so `Device&` would have widened a dependency for symmetry with
+`FontRenderer` alone, and the call site already passed `device.Handle()`. And the canvas size now
+lives in `Presentation.h` as `CANVAS_WIDTH_PIXELS` / `CANVAS_HEIGHT_PIXELS`, with
+`SceneTarget::WIDTH_PIXELS` defined from it: `Presentation` is the header a second platform reuses
+unchanged, so it cannot take the number from a class that owns D3D12 resources, and the eleven
+existing call sites keep the spelling they have.
+
+**The gates caught two things in code written this session, which is what they are for.**
+`CheckProjectFiles` rejected a test method named `…Centres…` under R11, and `clang-tidy`
+rejected eight `constexpr Neuron::Presentation presentation` locals under R3 — a `constexpr` is
+`UPPER_CASE`. The second is worth the note because the fix improved the tests rather than
+placating a rule: they now read `EXACT`, `DOUBLED`, `LETTERBOXED` and `TOO_SMALL`, which is what
+each case is.
+
 **Commit:** `Draw into a canvas and present it through a resolve pass`
 
 ---
@@ -214,6 +299,38 @@ canvas with no letterbox; with `--scale 1` it is the old window. On a 1080p moni
 changed. Drag the window between two monitors of different DPI and confirm it neither resizes
 nor blurs (DPI awareness is per-monitor V2, so the compositor does not stretch it).
 
+**Stage 2, as run (2026-09-13).** Three checkers green, both configurations build, 527 tests pass,
+and the join screen at `--scale 1` is byte-identical (caret-on hash, as stage 1 defines it).
+`--scale 2` on this machine reports `Window: --scale 2 does not fit this monitor; using 1.` and
+gives the 1280x720 window, which is the clamp doing what it says.
+
+**This machine cannot see the change, and that is the finding.** The primary monitor is 1920x1080
+with a 1920x1020 work area, so `ChooseScale` returns 1 and the window is the window it has always
+been. **The letterbox and the magnification are therefore code that stage 2 ships without ever
+running it**, which is not a state to leave unverified, so both were photographed from a temporary
+build that let `--scale` exceed what fits and let the window be forced to a size that is not a
+multiple of the canvas. Reverted immediately afterwards; it is not in the tree.
+
+| forced | client area | what it proves |
+|---|---|---|
+| `--scale 1 --window 1920 1020` | 1920x1020 | Canvas centred at **(320, 150)** exactly. Every sampled pixel outside the canvas rectangle is pure black, and the 921,600 pixels inside it are **identical** to the scale-1 capture. |
+| `--scale 2` | 1924x1055 (Windows clamped the 2560x1440 request to the monitor) | `capture(x, y) == canvas(x/2, y/2)` for every pixel but the caret's, so the magnification is an exact nearest-neighbour 2x and the too-small-surface branch of `Presentation::For` gives a zero offset rather than an underflow. |
+
+The 28 pixels that did differ in the second row are `(492..498, 349)` doubled — the blinking
+caret again, four pixels per canvas pixel. It is the same seven pixels stage 1 recorded.
+
+**A deviation, and a correction from the gate.** `ChooseScale` takes no `HINSTANCE`: it needs the
+window STYLE and nothing else, so `WINDOW_STYLE` moved to namespace scope and the function takes
+nothing. And the loop the plan describes — multiply the canvas up until it stops fitting — was
+written that way and `clang-tidy` rejected it: `bugprone-misplaced-widening-cast`, because
+`1280 * (scale + 1)` is computed in `unsigned int` and only then widened. It is now two divisions
+and a `std::min`, which cannot overflow and is shorter.
+
+**`RunGame` builds the `Presentation` from `GetClientRect` rather than from what was asked for.**
+`CreateMainWindow` already measures and corrects, so the client area Windows actually gave is the
+one number the swap chain, the letterbox and the pointer must agree on — and as the `--scale 2`
+row above shows, Windows does not always give what was asked.
+
 **Commit:** `Size the window to the largest whole scale the monitor has room for`
 
 ---
@@ -244,6 +361,45 @@ positions; the pages already take `float`.
 **Verification.** Checkers, builds, suites (the existing `PointerInput` tests against a real HWND
 run at scale 1 and must still pass unchanged). Manually at scale 2: every button on the join and
 seats screens presses where it is drawn; a click in the letterbox does nothing.
+
+**Stage 3, as run (2026-09-13).** Three checkers green, both builds, 532 tests pass (five new), and
+the join screen at `--scale 1` is byte-identical. The existing `PointerInput` tests against a real
+HWND pass with their assertions untouched.
+
+**The bounds check is split rather than passed through, and that shape is the stage.**
+`ScreenToCanvasPixels` returns false only when `ScreenToClient` itself failed; whether the mapped
+point is ON the canvas is a second question, `Presentation::OnCanvas`, asked only where it matters.
+`WM_POINTERDOWN` asks it and refuses a press in the letterbox — no contact, and not consumed, so
+the window's default handling still happens. `WM_POINTERUPDATE` deliberately does not ask: a finger
+that started on the canvas and dragged into the letterbox is still dragging, and the coordinates are
+used negative. Putting the verdict in `ToCanvas`'s return and ignoring it at one call site would
+have read as an oversight rather than as a decision.
+
+**Verified end to end at a presentation that is not the identity**, because this machine's 1080p
+monitor chooses scale 1 and would otherwise exercise none of it. From the same temporary
+`--window` build stage 2 used, at a 1920x1020 client area with the canvas at (320, 150):
+
+- A real `SendInput` click at **canvas (826, 479)** — surface (1146, 629) — pressed JOIN and the
+  client joined the hosted match. The button was pressed where it is DRAWN, through the whole chain:
+  window, `ScreenToClient`, `ToCanvas`, `TakeClick`, the page's hit list.
+- A real click at surface (10, 10), out in the black, changed **seven pixels** — `(492..498, 349)`,
+  the caret — and nothing else.
+
+**`PointerCanvasTests` is the same two facts without a GPU**, over a real 1920x1080 `WS_POPUP`
+window and real `WM_POINTER*` lParams: a tap reports the canvas pixel it landed on, canvas (0, 0) is
+not surface (0, 0), a press in the letterbox is neither recorded nor consumed, a drag that leaves
+the canvas keeps dragging with a negative canvas x, and hover in the letterbox is no hover at all.
+
+**One asymmetry, left alone deliberately.** A `WM_POINTERUP` is consumed even for a press that
+began in the letterbox and was therefore never recorded. `RemoveContact` on an unknown id is a
+no-op, so nothing observable follows from it; making it symmetric would mean remembering which
+pointer ids were accepted, which is state bought for no behaviour.
+
+**A flaky gate, and it is not this plan's.** `GameLogicTests::ATickResolvesFastEnoughToReplayAWholeMatch`
+asserts that a whole match replays in about a second, and it FAILED at 9 s while `clang-tidy` was
+saturating this machine — then passed at 609 ms on an idle one, with the whole five-suite run
+going from 8.6 minutes to 3.2. It is a wall-clock assertion on a shared machine, so it will do
+this again to whoever runs the gate beside a build.
 
 **Commit:** `Map a pointer from the surface onto the canvas`
 
@@ -276,6 +432,39 @@ vector. Make the vector the only path.
 **Verification.** Checkers, builds, suites. Join-screen capture at `--scale 1` byte-identical.
 In the Debug build, the shape budget assertion still fires if `MAX_VERTICES_PER_FRAME` is
 temporarily set to 64 (do this once, by hand, and put it back).
+
+**Stage 4, as run (2026-09-13).** Three checkers green, both builds, 532 tests pass, and the join
+screen at `--scale 1` is byte-identical. With `MAX_VERTICES_PER_FRAME` temporarily set to 64 the
+budget assertion still fires, and with its own message — read out of the composition root's
+message box: *More interface geometry in one frame than
+ShapeRenderer::MAX_VERTICES_PER_FRAME allows.* Put back immediately.
+
+**The upload heap keeps its FRAME_COUNT slices and `Flush` copies only the UNFLUSHED range into
+one.** Copying the whole frame each time would have been simpler and wrong in a way nothing would
+have caught: a frame flushes three times (world, interface, dialog), so the first layer would be
+copied three times for no reason, and the cost would grow with the number of layers rather than
+with the geometry.
+
+**`BeginFrame` stopped being `noexcept`, in both renderers, and `clang-tidy` is what noticed.** It
+reserves on its first call, and `bugprone-exception-escape` is right that an allocation failure
+escaping a `noexcept` function is a `std::terminate` with nothing to report — which is the one
+thing `Debug.h` exists to prevent. `ShapeRenderer` was changed by hand and `FontRenderer` was
+missed; the gate caught the half that was missed.
+
+**A false alarm worth writing down, because it cost a stash and a bisect.** After the budget
+experiment, 38 tests failed with the shape-budget assertion firing out of `Starfield::Draw`. It was
+not this stage: `MAX_VERTICES_PER_FRAME = 64` was still baked into `LockstepTests.obj`, because
+restoring the header and running an incremental build did not rebuild the test DLL that includes
+it. **A `/t:Rebuild` after any experiment that edits a header**, or the next hour goes into a bug
+that is not there. The evidence that settled it was `git stash` + the same single test passing on
+the previous commit, then failing again — which pointed at the build rather than the diff.
+
+**The remaining flake is `GameLogicTests::ATickResolvesFastEnoughToReplayAWholeMatch` and it is not
+this plan's.** It asserts a whole match replays in under 2000 ms. Measured on this machine:
+**609 ms** run alone, **870–978 ms** in a quiet five-suite run, **2228 ms** and **~9 s** when
+something else was building. CI runs all five suites in one `vstest` invocation
+(`.github/workflows/build.yml`), which is the arrangement that produced the slow numbers here, so
+this will redden a busy runner. Nothing in RENDER-01 touches `GameLogic`.
 
 **Commit:** `Record every vertex before drawing any of them`
 
@@ -321,6 +510,33 @@ returns nothing. (The `pch.h → NeuronClient.h` umbrella still parses `<d3d12.h
 translation unit; that is the include-graph cut `mobile-portability.md` §3 describes, and it is
 not this plan's.)
 
+**Stage 5, as run (2026-09-13).** Three checkers green (76 translation units now, two more than
+before), both builds, 532 tests pass, the join screen at `--scale 1` is byte-identical, and the
+debug layer says nothing. **The grep this stage exists for returns nothing**, and so does the same
+grep over the two `.cpp` files. 534 lines were deleted and 186 added.
+
+**The whole list of files that name a graphics API is now exactly the one this plan predicted**:
+`Device`, `SceneTarget`, `ShapeBackend`, `FontBackend`, `D3D12Defaults.h`, `DescriptorHeap`, the
+`NeuronClient.h` umbrella and the composition root. `Color.h` matches the grep on a comment naming
+`DXGI_FORMAT_R8G8B8A8_UNORM` and depends on nothing. **`LockstepClient/` matches nowhere at all** —
+every page, `MapRender` and `DesignTokens` are platform-free, which is the result the plan was for.
+
+**`TakeUnflushed` returns a `Batch` and not the bare span the plan describes, and the reason is a
+correctness one.** A frame is drained three times — world, interface, dialog — and each batch has
+to land at its own offset inside that frame's slice. A backend that wrote every batch at offset
+zero would overwrite vertices an earlier draw *in the same command list* had been told to read and
+had not read yet. The span alone cannot say where it belongs, so the recorder says:
+`{ std::span<const Vertex> vertices; std::uint32_t firstVertex; }`. The backends therefore hold no
+per-frame state, and two backends draining the same recorder would agree.
+
+**`BeginFrame` lost its frame index, in both recorders.** Which buffer a frame's vertices land in is
+the backend's business; a recorder that knew would be a recorder with D3D12's shape pressed into
+it. Twenty-one call sites, all mechanical.
+
+**The split found a real latent coupling.** `Lockstep.cpp` was getting `DescriptorHeap.h`
+transitively through `FontRenderer.h` and stopped compiling the moment that went away. It includes
+what it uses now. That is the whole argument for cutting an include graph rather than trusting one.
+
 **Commit:** `Split each renderer into a recorder and a Direct3D 12 backend`
 
 ---
@@ -339,17 +555,47 @@ text pass has depth disabled, so it bought nothing and is a trap for a second ba
 If it is not, the cause is the alpha arithmetic above and it must be understood before this stage
 lands; do not "fix" it by widening the change.
 
+**Stage 6, as run (2026-09-13).** Three checkers green, both builds, 532 tests pass, the debug
+layer says nothing, and the join screen at `--scale 1` is **byte-identical**. The alpha arithmetic
+the plan warned about held exactly: under the text pipeline's blend state the colour channels
+compute `dst * (1 - 0) + src * 0`, which is `dst` in UNORM8 with nothing to round.
+
+**The canvas's alpha was photographed rather than reasoned about**, because three comments and an
+ADR now assert that it is inert. `CanvasPS` was temporarily changed to return `.aaa` instead of
+`.rgb`, and the canvas's alpha channel captured with `discard` and without it:
+
+- **With `discard`**, a glyph quad's uncovered pixels keep whatever alpha was already there — the
+  clear's 255 over the starfield — so the text reads as grey letters on white.
+- **Without it**, the whole glyph quad is zeroed: every string wears a black box exactly the size of
+  its quads. That is the change, and it is the only change.
+
+Neither reaches the display: `CanvasPS` writes 1. The picture also shows the canvas's alpha was
+**already** meaningless before this stage — the join card is black in it, because a 4%-white fill
+writes its own alpha of 10 (`SrcBlendAlpha = ONE`). Nothing was reading it then either.
+
+**The early return is kept rather than folded into the line below it.** `pow(0, x)` reaches zero
+through `exp2(x * log2(0))`, which is arithmetic on an infinity: right on this compiler, and not a
+thing to make a second backend depend on.
+
+**A stale build caught this stage out, and it is a different trap from stage 4's.** Restoring the
+two experiment shaders with `Copy-Item` **preserved the backups' old timestamps**, so MSBuild's
+`FXCompile` compared an older `.hlsl` against a newer generated `.h` and skipped both — and the
+next capture came back as the alpha visualisation from the experiment. The source was correct the
+whole time. **Restore an experiment by rewriting the file, not by copying a backup over it**, or
+set the timestamp; `/v:normal` and a grep for `dxc.exe` is what shows whether a shader was actually
+compiled.
+
 **Commit:** `Let the text shader write nothing rather than discard`
 
 ---
 
-## Stage 7 — Borderless fullscreen (owner decision; not started unless the owner says so)
+## Stage 7 — Borderless fullscreen
 
 **Why it is a stage and why it is last.** It is the only way a 1440p panel at 100% ever sees
 scale 2, and the only path in this plan that resizes a swap chain. Everything else works without
-it, so it waits for a yes.
+it, so it waited for a yes. **It got one on 2026-09-13, and ADR-076 records the decision.**
 
-If yes: `F11` toggles between the stage 2 window and a `WS_POPUP` window covering the monitor
+`F11` toggles between the stage 2 window and a `WS_POPUP` window covering the monitor
 (`MonitorFromWindow`, `rcMonitor`); the scale is recomputed against the *monitor*, not the work
 area; `Device` gains `Resize(width, height)` — `WaitForGpu`, release the back buffers,
 `ResizeBuffers`, recreate the RTVs, reset the fence values — and the `Presentation` is rebuilt and
@@ -358,6 +604,49 @@ the canvas.
 
 **Verification.** On a 1080p monitor fullscreen is scale 1 with a 320×180 border on each side; on
 1440p it is scale 2 exactly; toggling ten times in a row leaves `DrainDebugMessages` silent.
+
+**Stage 7, as run (2026-09-13).** Three checkers green, both builds, 535 tests pass (three new),
+and **ten toggles in a row leave the debug layer silent** — each one resizing the swap chain, which
+is a path this renderer did not have before today. The window goes 1280x720 <-> 1920x1080 and back
+ten times with no message of any severity.
+
+**On this 1080p panel, fullscreen is scale 1 with a 320x180 border on every side**, exactly as this
+stage predicted. Measured on the capture: every sampled pixel outside the canvas rectangle is pure
+black, and the 921,600 pixels inside it are **identical** to the windowed scale-1 capture. The
+canvas does not move when the surface does.
+
+**The 1440p row is the one this machine cannot run, so it was made testable instead.** There is no
+2560x1440 panel here, and the claim that fullscreen reaches scale 2 on one is the entire case for
+this stage — so the arithmetic moved out of `Lockstep.cpp` into
+`Presentation::LargestScaleFor(surfaceWidth, surfaceHeight)`, which `PresentationTests` now pins
+over all three panels in both modes. The row that matters:
+
+| panel | windowed (work area minus frame) | fullscreen (the monitor) |
+|---|---:|---:|
+| 1920x1080 | 1 | 1 |
+| **2560x1440** | **1** | **2** |
+| 3840x2160 | 2 | 3 |
+
+That difference on the middle row is the whole reason this stage exists, and it is now a test rather
+than a sentence. It also removed a duplicate: the windowed and fullscreen choosers were the same
+divide-and-take-the-smaller written twice.
+
+**Four deviations, all smaller than what was written here.**
+
+- **`F11` is read in the window procedure, not by `KeyboardInput`.** That class reports "characters
+  and a handful of named keys" for a text field and says so in its header; it leaves an unknown
+  `WM_KEYDOWN` unconsumed, which is exactly what makes this possible without widening it.
+- **The toggle is a flag the frame loop consumes, not work done in the procedure.** The procedure
+  runs re-entrantly from `SetWindowPos`'s own message pump, so resizing a swap chain there would be
+  resizing while the window is still being resized.
+- **There is no fullscreen `bool`.** `WS_POPUP` on the window is the state, and
+  `SetWindowPlacement` restores the windowed position and size, so the only thing this file
+  remembers between toggles is where the window was.
+- **The scale arithmetic moved into `Presentation`**, which is what made the 1440p row testable.
+
+**`PointerInput::SetPresentation` abandons a gesture rather than remapping it.** A drag whose origin
+was recorded in the old presentation cannot be continued in the new one; carrying it across would
+move the camera by the difference between two coordinate systems.
 
 **Commit:** `Toggle borderless fullscreen`
 
@@ -382,12 +671,20 @@ Write what each stage found under its heading before committing, as FONT-01 did 
 that found nothing say so. A stage that has to deviate from what is written here says why in
 its commit and in this file, never silently.
 
-## What is left when this plan is done
+## What is left, now that this plan is done
 
-The desktop client draws into a canvas, presents it at a whole scale, and takes its pointer in
-canvas pixels; its two renderers record into plain vectors that a D3D12 backend drains; nothing
-a page or a test includes names a graphics API. What the mobile client still needs, none of it
-started here: a portrait canvas of `floor(surface / round(density))` logical pixels with a layout
+**All eight stages are built.** The desktop client draws into a canvas, presents it at a whole
+scale in a window or over the whole monitor, and takes its pointer in canvas pixels; its two
+renderers record into plain vectors that a D3D12 backend drains; nothing a page or a test includes
+names a graphics API. `LockstepClient/` does not match a grep for `ID3D12|DXGI|winrt::|D3D12_|HWND`
+anywhere at all.
+
+**Two questions this plan raised and did not answer**, both recorded in the ADRs rather than here:
+`WM_DPICHANGED` is still unhandled, so a window dragged between monitors of different DPI keeps its
+physical size (ADR-075); and whether the map's geometry should ever draw at the display's native
+resolution rather than be magnified with the canvas is left for a screenshot on a phone to settle.
+
+What the mobile client still needs, none of it started here: a portrait canvas of `floor(surface / round(density))` logical pixels with a layout
 relative to its edges; a lifecycle in which a lost surface is routine; a decoder from
 `AMotionEvent` or `UITouch` into the gesture core; a Vulkan backend behind the same recorder, and
 a Metal one; a build that is not MSBuild; and a test harness that is not `CppUnitTest`. Each is

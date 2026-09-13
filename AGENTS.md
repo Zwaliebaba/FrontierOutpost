@@ -2,7 +2,7 @@
 
 Operating instructions for every agent (and human) writing code in this repository. **Read this before generating a single line.**
 
-*LockStep: Universe* is a greenfield C++23 asynchronous multiplayer 4X for six to twelve players: a Direct3D 12 client and an authoritative server, hosted in **one executable**, presenting a fixed **1280×720 R8G8B8A8** screen, drawn straight into the swap chain's back buffer and presented 1:1. There is no legacy tree here and nothing is grandfathered. A rule below is not a target to migrate towards; it describes the code as it must be written today, and a whole-tree run of any checker comes back clean.
+*LockStep: Universe* is a greenfield C++23 asynchronous multiplayer 4X for six to twelve players: a Direct3D 12 client and an authoritative server, hosted in **one executable**, drawing a fixed **1280×720 R8G8B8A8** canvas and presenting it at a whole-number scale (ADR-075). There is no legacy tree here and nothing is grandfathered. A rule below is not a target to migrate towards; it describes the code as it must be written today, and a whole-tree run of any checker comes back clean.
 
 **What is authoritative, in order:**
 
@@ -134,7 +134,7 @@ private:
 | Path | What it is | May you edit it? |
 |---|---|---|
 | `NeuronCore/` | Engine static library used by **both** halves. Holds `Debug.h`, the UTF-8/UTF-16 helpers in `Text.h`, the typed index `Id`, the pinned PRNG, integer trigonometry, the byte reader and writer, the `Simulation` seam, the `TickSchedule`, and the wire protocol — `Socket`, `FrameStream`, `Protocol` | Yes |
-| `NeuronClient/` | Engine static library used by the **client only**: the window, the D3D12 device and swap chain, the 1280×720 colour target, input, audio, UI | Yes |
+| `NeuronClient/` | Engine static library used by the **client only**: the window, the D3D12 device and swap chain, the 1280×720 colour target presented at an integer scale, input, audio, UI | Yes |
 | `NeuronServer/` | Engine static library used by the **server only**: `Session` owns a simulation and drives it on a schedule, `MatchStore` persists a match as its orders, `MatchServer` puts it on a socket. It never names a game type — the seam speaks in bytes (ADR-025) | Yes |
 | `GameLogic/` | The game itself — the galaxy and its generator, `MatchRules`, `Match`, `Orders`, `TickResolver` and its six phases, `Melee`, `Snapshot`, and `MatchSimulation` behind the seam. Server-side; the client never links it | Yes |
 | `Lockstep/` | The executable and the composition root — the one thing that sees both halves. The main page (`MainPage`, `MatchState`), the snapshot adapter, the client connection, and the hosted server. **One binary, three roles**: host-and-play, `--join`, `--serve` (ADR-028). Where every embedded asset and compiled shader ends up | Yes |
@@ -274,7 +274,7 @@ x64\Debug\Lockstep.exe
 
 ## 5. C++ rules for this codebase
 
-**R12 — Graphics is Direct3D 12 only**, and the screen it presents is fixed. **1280×720 `R8G8B8A8_UNORM`** — not `_SRGB`, so a channel authored as `0xAA` is presented as `0xAA` — drawn straight into the swap chain's back buffer, whose client area is those same 1280×720 pixels. There is no intermediate render target, no resolve pass and no present scale (ADR-011). No D3D11, no D3D11On12, no immediate-mode helper layers. COM lifetimes are RAII from the first line — a raw `AddRef`/`Release` pair in new code is a defect, not a style.
+**R12 — Graphics is Direct3D 12 only**, and the screen it presents is fixed. **1280×720 `R8G8B8A8_UNORM`** — not `_SRGB`, so a channel authored as `0xAA` is presented as `0xAA` — drawn into a 1280×720 canvas and presented into the back buffer at a whole-number scale by one resolve pass that reads the canvas with a texel `Load` and an integer divide — there is no sampler on that path either, and the scale is never fractional (ADR-075, superseding ADR-011's 1:1 clause). No D3D11, no D3D11On12, no immediate-mode helper layers. COM lifetimes are RAII from the first line — a raw `AddRef`/`Release` pair in new code is a defect, not a style.
 
 **There is no sampler object anywhere in this renderer, and adding one is a decision.** The font atlas is read with `Texture2D<uint>::Load()`, which takes integer texel coordinates and has no filtering to switch on; the starfield is a hash of an integer pixel; the meshes carry no textures. Likewise `D3D12Defaults.h` turns blending, multisampling and anti-aliased lines off for every pipeline built from the shared defaults. Until ADR-011 those were *impossible* — the render target held palette indices and a blend of two of them was an unrelated colour. They are now conventions, which means a pass that wants one has to say so: **blending, multisampling or a sampler in a new pass is an ADR, not a pipeline field.**
 
