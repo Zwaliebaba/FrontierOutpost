@@ -4,6 +4,32 @@
 * text=auto
 
 ###############################################################################
+# The files something takes a SHA-256 of, and what keeps that hash honest.
+#
+# `* text=auto` above stores every text file as LF and then hands the working
+# tree whatever the platform asks for -- CRLF on Windows. That is right for
+# source a compiler reads and wrong for a file something HASHES, because the
+# hash then describes a checkout rather than the content.
+#
+# Build/BakeFont.py is such a file: it records its own sha256 in the header it
+# bakes (ADR-073), and Build/CheckProjectFiles.py re-derives that from disk. On
+# 2026-09-13 main went red on exactly this -- the header carried the LF hash
+# ec81843f, the Windows runner checked the baker out as CRLF, and the identical
+# file hashed 75fae9ab. Re-baking cannot settle it: the two machines disagree
+# about the line endings, not about the font.
+#
+# `eol=lf` invents no convention. .editorconfig has declared LF for *.py all
+# along, and the bake was taken on a machine that honoured it; this is what
+# makes git hand over the file .editorconfig already says is there.
+#
+# The TTFs are left alone today because git reads a NUL byte in their first
+# 8 KiB and calls them binary. That is a heuristic, and a hashed source should
+# not rest on one, so it is stated. Content is unchanged either way.
+###############################################################################
+*.py  text eol=lf
+*.ttf binary
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by
