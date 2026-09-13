@@ -94,4 +94,18 @@ void DrawRight(Neuron::FontRenderer& _text, float _rightXPixels, std::int32_t _y
 [[nodiscard]] std::int32_t CenterTextY(float _bandTop, float _bandHeight, Neuron::Face _face = Neuron::FontRenderer::DEFAULT_FACE,
                                        std::uint32_t _scale = Neuron::FontRenderer::DEFAULT_SCALE) noexcept;
 
+/// The top of a band of `_bandHeight` that has to sit around a line of text ALREADY placed.
+///
+/// The inverse of `CenterTextY`, and it exists because a few places have it the other way round: a
+/// chip beside a section header, a button under a card's last detail line. There the text position
+/// is the fixed thing -- it is shared with something else on the same row -- and the box has to be
+/// put around it.
+///
+/// **It was three hand-tuned offsets until 2026-09-13**, each of them the number that centred an
+/// eight-pixel glyph in its own box, and each of them wrong in the same direction the moment a
+/// glyph box became 17px: the chrome crept up into the line above and drew through it. Written as
+/// the inverse of the centring it has to agree with, there is nothing left to tune.
+[[nodiscard]] float BandTopForText(std::int32_t _textY, float _bandHeight, Neuron::Face _face = Neuron::FontRenderer::DEFAULT_FACE,
+                                   std::uint32_t _scale = Neuron::FontRenderer::DEFAULT_SCALE) noexcept;
+
 } // namespace Lockstep

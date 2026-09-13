@@ -43,8 +43,24 @@ public:
   static constexpr float ORDERS_WIDTH = 260.0F;
   static constexpr float RAIL_PADDING = 14.0F;
   static constexpr float CARD_PADDING = 10.0F;
-  /// Line-height 1.5 on an 8px font (README "Frame").
-  static constexpr std::int32_t LINE_HEIGHT = 12;
+  /// A line of text, baseline to baseline, asked of the FONT rather than stated here.
+  ///
+  /// **It was 12 in five files until 2026-09-13** -- line-height 1.5 on a font whose every glyph was
+  /// eight pixels tall (ADR-014). Plex at 12px has an ascent of 13 and a descent of 4, so a 12px
+  /// advance set a 17px box: consecutive lines overlapped, and on the digest rail a card's detail
+  /// line was drawn through the button under it. A number that has to be re-derived in five places
+  /// every time the face changes is a number that will be re-derived in four.
+  static constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels());
+
+  /// A button inside an event card, and the padding inside the verdict box.
+  ///
+  /// 18 is unchanged from the 8x8 font and deliberately so: a line BOX grew from 8 to 17, but the
+  /// ink in an uppercase button label did not -- Plex's cap height at 12px is 8.4px, within half a
+  /// pixel of the height the old capitals had. Growing the chrome to match the box would inflate
+  /// every control on the rail to fit ascender room that a shouted label never uses. What had to
+  /// change is where the box is PUT, which `BandTopForText` now answers.
+  static constexpr float BUTTON_HEIGHT = 18.0F;
+  static constexpr float VERDICT_BOX_PADDING = 5.0F;
 
   /// The digest's own two bands, both 22 pixels (ADR-061).
   ///

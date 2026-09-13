@@ -86,10 +86,24 @@ public:
     return (static_cast<std::uint32_t>(FaceOf(_face).ascent) + FaceOf(_face).descent) * _scale;
   }
 
-  /// The baseline-to-baseline distance the face was baked with.
+  /// The baseline-to-baseline distance to set this face at. **Never less than the glyph box.**
+  ///
+  /// Plex at 12px is the case that makes the floor necessary: it reports an ascent of 13, a descent
+  /// of 4 and a line height of 16, so the box it asks for is a pixel TALLER than the advance it
+  /// recommends. That is legal -- the face carries a negative line gap, and hinted at this size the
+  /// extremes it reserves are rarely both occupied -- but it makes consecutive lines overlap, and
+  /// `GlyphHeightPixels` is what the clip box and every vertical centring are built from. Two
+  /// numbers that disagree about how tall a line is, used one each by the layout and the clipper,
+  /// is the shape of a bug nobody finds by reading either one.
+  ///
+  /// So the renderer guarantees the invariant instead of asking every caller to remember it: a line
+  /// always has room for its own box. For a face whose line height already exceeds its box -- which
+  /// is the normal case -- this returns exactly what was baked.
   [[nodiscard]] static constexpr std::uint32_t LineHeightPixels(Face _face = DEFAULT_FACE, std::uint32_t _scale = DEFAULT_SCALE) noexcept
   {
-    return FaceOf(_face).lineHeight * _scale;
+    const std::uint32_t baked = FaceOf(_face).lineHeight * _scale;
+    const std::uint32_t box = GlyphHeightPixels(_face, _scale);
+    return baked < box ? box : baked;
   }
 
   /// Decodes one UTF-8 codepoint, returning it and how many bytes it took.

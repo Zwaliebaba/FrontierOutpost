@@ -35,7 +35,8 @@ constexpr Color LANE_PLAIN = {214, 220, 228, 71};
 /// the camera around everything including this.
 constexpr float REGION_RADIUS = 62.0F;
 
-constexpr std::int32_t LINE_HEIGHT = 12;
+/// Baseline to baseline, from the font. See `MainPage::LINE_HEIGHT`.
+constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels());
 
 /// How far the sealed region's volume stands off the plane.
 constexpr float REGION_VOLUME_HEIGHT = 26.0F;

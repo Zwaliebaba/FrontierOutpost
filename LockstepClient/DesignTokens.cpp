@@ -40,4 +40,10 @@ std::int32_t CenterTextY(float _bandTop, float _bandHeight, Neuron::Face _face, 
   return static_cast<std::int32_t>(std::floor(_bandTop + (_bandHeight - glyph) * 0.5F));
 }
 
+float BandTopForText(std::int32_t _textY, float _bandHeight, Neuron::Face _face, std::uint32_t _scale) noexcept
+{
+  const float glyph = static_cast<float>(Neuron::FontRenderer::GlyphHeightPixels(_face, _scale));
+  return static_cast<float>(_textY) - (_bandHeight - glyph) * 0.5F;
+}
+
 } // namespace Lockstep

@@ -30,7 +30,8 @@ constexpr float BUTTON_HEIGHT = 24.0F;
 constexpr float BUTTON_GAP = 8.0F;
 constexpr float BUTTON_PADDING = 12.0F;
 
-constexpr std::int32_t LINE_HEIGHT = 12;
+/// Baseline to baseline, from the font. See `MainPage::LINE_HEIGHT`.
+constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels());
 constexpr float TITLE_GAP = 16.0F;
 constexpr float BODY_GAP = 14.0F;
 

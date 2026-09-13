@@ -922,7 +922,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
     const std::string chip = std::format("{} TICKS", m_state.unreadTicks);
     const float chipWidth = static_cast<float>(FontRenderer::MeasurePixels(chip)) + 14.0F;
-    _shapes.StrokeRect(Frame::DIGEST_WIDTH - RAIL_PADDING - chipWidth, static_cast<float>(headerY) - 5.0F, chipWidth, 18.0F, Ink::AMBER);
+    _shapes.StrokeRect(Frame::DIGEST_WIDTH - RAIL_PADDING - chipWidth, BandTopForText(headerY, 18.0F), chipWidth, 18.0F, Ink::AMBER);
     _text.DrawText(static_cast<std::int32_t>(Frame::DIGEST_WIDTH - RAIL_PADDING - chipWidth + 7.0F), headerY, chip, Ink::AMBER);
   }
   else
@@ -1054,8 +1054,8 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     {
       lineY += 4;
       const std::vector<std::string>& detail = layout.verdictDetail;
-      const float boxTop = static_cast<float>(lineY) - 5.0F;
-      const float boxHeight = static_cast<float>(1 + detail.size()) * static_cast<float>(LINE_HEIGHT) + 10.0F;
+      const float boxTop = static_cast<float>(lineY) - VERDICT_BOX_PADDING;
+      const float boxHeight = static_cast<float>(1 + detail.size()) * static_cast<float>(LINE_HEIGHT) + 2.0F * VERDICT_BOX_PADDING;
       _shapes.StrokeRect(TEXT_LEFT, boxTop, Frame::DIGEST_WIDTH - TEXT_LEFT - RAIL_PADDING, boxHeight, Ink::AMBER);
 
       _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT) + 6, lineY, card.verdict, Ink::AMBER);
@@ -1073,7 +1073,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     {
       lineY += 4;
       float buttonX = TEXT_LEFT;
-      const float buttonY = static_cast<float>(lineY) - 5.0F;
+      const float buttonY = BandTopForText(lineY, BUTTON_HEIGHT);
 
       for (const EventAction& action : card.actions)
       {
@@ -1128,20 +1128,20 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
         // One filled button per card at most: the thing the digest thinks you should do.
         if (action.primary && !m_state.orders.locked && !committed && !unaffordable)
         {
-          _shapes.FillRect(buttonX, buttonY, width, 18.0F, Ink::BLUE);
+          _shapes.FillRect(buttonX, buttonY, width, BUTTON_HEIGHT, Ink::BLUE);
           _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label, Ink::APP_BACKGROUND);
         }
         else
         {
           const bool dim = m_state.orders.locked || unaffordable;
-          _shapes.StrokeRect(buttonX, buttonY, width, 18.0F, committed && !dim ? Ink::BLUE : Ink::OUTLINE);
+          _shapes.StrokeRect(buttonX, buttonY, width, BUTTON_HEIGHT, committed && !dim ? Ink::BLUE : Ink::OUTLINE);
           _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label,
                          dim ? Ink::NEUTRAL_DIM : (committed ? Ink::BLUE : Ink::TEXT_PRIMARY));
         }
 
         if ((!m_state.orders.locked && !unaffordable) || action.kind == EventActionKind::Focus)
         {
-          AddHit(buttonX, buttonY, width, 18.0F, ActionFor(action.kind), action.target);
+          AddHit(buttonX, buttonY, width, BUTTON_HEIGHT, ActionFor(action.kind), action.target);
         }
         buttonX += width + 6.0F;
       }
@@ -1238,7 +1238,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // A filled chip rather than a word (screen 06). LOCKED in muted grey was the same weight as
     // UNLOCKED in amber and read as a label; filled, it reads as a state the rail is IN.
     const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels("LOCKED")) + 12.0F;
-    _shapes.FillRect(contentRight - chipWidth, static_cast<float>(headerY) - 4.0F, chipWidth, 16.0F, Ink::LOCKED_FILL);
+    _shapes.FillRect(contentRight - chipWidth, BandTopForText(headerY, 16.0F), chipWidth, 16.0F, Ink::LOCKED_FILL);
     _text.DrawText(static_cast<std::int32_t>(contentRight - chipWidth) + 6, headerY, "LOCKED", Ink::APP_BACKGROUND);
   }
   else

@@ -43,7 +43,8 @@ constexpr float BUTTON_Y = 468.0F;
 constexpr float BUTTON_HEIGHT = 23.0F;
 constexpr float FOOTER_Y = 534.0F;
 
-constexpr std::int32_t LINE_HEIGHT = 12;
+/// Baseline to baseline, from the font. See `MainPage::LINE_HEIGHT`.
+constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels());
 
 constexpr Color APP_BACKGROUND = {11, 14, 20, 255};
 constexpr Color CARD_FILL = {255, 255, 255, 10};
