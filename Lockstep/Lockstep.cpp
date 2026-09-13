@@ -50,13 +50,6 @@
 namespace
 {
 
-// The screen the game presents. Not restated here: Neuron::SceneTarget owns the numbers, the
-// window is created at exactly that size, and the swap chain is told the same thing -- which is
-// what makes "the client area is the framebuffer" a fact rather than three constants that agree
-// today (ADR-011).
-constexpr int CLIENT_WIDTH = static_cast<int>(Neuron::SceneTarget::WIDTH_PIXELS);
-constexpr int CLIENT_HEIGHT = static_cast<int>(Neuron::SceneTarget::HEIGHT_PIXELS);
-
 /// How long the loop sleeps when the screen has not changed. Short enough that a tap is answered
 /// within a frame of a sixty-hertz one, long enough that an idle client is not a busy one.
 constexpr std::int32_t IDLE_FRAME_MILLISECONDS = 8;
@@ -131,6 +124,15 @@ struct Startup
   /// The log takes the same name. A store and the log of the match it holds must not come apart:
   /// the log is how anybody works out what the store contains.
   std::string storeName;
+
+  /// `--scale <n>` presents the canvas at n screen pixels per canvas pixel. **Zero means choose**,
+  /// which is the default and the only value a player ever wants.
+  ///
+  /// It exists for the captures. `Design/UI/screens` is 1280x720 PNGs of the canvas and stays
+  /// that way (ADR-075), so `Build/Screenshot.ps1` passes `--scale 1` and gets a client area that
+  /// is exactly the canvas no matter what monitor the capture is taken on. A value that does not
+  /// fit the monitor is clamped to the largest that does.
+  std::uint32_t scale = 0;
 };
 
 /// The six Phase 0 tokens.
@@ -298,6 +300,10 @@ void SplitHostAndPort(const std::string& _target, std::string& _outHost, std::ui
     {
       startup.storeName = words[++index];
     }
+    else if (words[index] == "--scale" && index + 1 < words.size())
+    {
+      startup.scale = static_cast<std::uint32_t>(std::strtoul(words[++index].c_str(), nullptr, 10));
+    }
   }
 
   return startup;
@@ -357,8 +363,60 @@ bool RegisterWindowClass(HINSTANCE _instance)
   return RegisterClassExW(&windowClass) != 0;
 }
 
+// The window style, at namespace scope because ChooseScale has to ask what frame it costs before
+// there is a window to measure.
+constexpr DWORD WINDOW_STYLE = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+
+// The largest whole number of screen pixels per canvas pixel that the primary monitor has room
+// for, at least 1.
+//
+// Against the WORK AREA and not the monitor, because a window that extends under the taskbar is
+// a window with rows the player cannot see -- and the frame AdjustWindowRect reports comes off
+// too, because the caption and borders are not canvas either. What this gives on the three panels
+// that matter, arithmetic rather than measurement:
+//
+//   1920x1080          -> 1, because 2560x1440 does not fit in 1920x1080 at all.
+//   2560x1440 at 100%  -> 1, and this one surprises people: 2560x1440 of CLIENT area needs a
+//                         window taller than the monitor once a caption and a taskbar have taken
+//                         their rows, so scale 2 on that panel needs borderless fullscreen, which
+//                         is ADR-075's open question and not built.
+//   3840x2160          -> 2 at any DPI, because per-monitor-V2 awareness means the work area is
+//                         reported in physical pixels whatever the scaling is set to.
+//
+// AdjustWindowRect assumes 96 DPI and is therefore approximate here, which is fine: it is
+// subtracted from a budget of hundreds of pixels, and the window is measured and corrected after
+// creation anyway. What it must not do is UNDER-report, which would choose a scale that then does
+// not fit; a caption is never smaller than the 96 DPI one.
+[[nodiscard]] std::uint32_t ChooseScale() noexcept
+{
+  MONITORINFO monitor = {};
+  monitor.cbSize = sizeof(MONITORINFO);
+  const POINT origin = {0, 0};
+  if (GetMonitorInfoW(MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY), &monitor) == 0)
+  {
+    return 1;
+  }
+
+  RECT frame = {0, 0, 0, 0};
+  AdjustWindowRect(&frame, WINDOW_STYLE, FALSE);
+
+  const long availableWidth = (monitor.rcWork.right - monitor.rcWork.left) - (frame.right - frame.left);
+  const long availableHeight = (monitor.rcWork.bottom - monitor.rcWork.top) - (frame.bottom - frame.top);
+
+  // Two divisions and the smaller answer, rather than multiplying the canvas up until it stops
+  // fitting: the division cannot overflow and says the same thing in one line.
+  const long byWidth = availableWidth / static_cast<long>(Neuron::SceneTarget::WIDTH_PIXELS);
+  const long byHeight = availableHeight / static_cast<long>(Neuron::SceneTarget::HEIGHT_PIXELS);
+  const long fits = std::min(byWidth, byHeight);
+
+  // At least 1, always. A display too small for the canvas gets a window it cannot show all of,
+  // which is a thing the player can see and work around; a scale of zero is a division by zero in
+  // Presentation::ToCanvas.
+  return fits < 1 ? 1U : static_cast<std::uint32_t>(fits);
+}
+
 // Sizes for the CLIENT area, not the window: AdjustWindowRect adds the border and caption, so the
-// framebuffer is presented 1:1 rather than a few rows short of it.
+// canvas is presented at a whole scale rather than a few rows short of it.
 //
 // AdjustWindowRect assumes 96 DPI, and under per-monitor awareness the caption on a scaled
 // display is not 96 DPI, so its answer is close rather than right. Rather than reach for
@@ -367,14 +425,12 @@ bool RegisterWindowClass(HINSTANCE _instance)
 // on every DPI, theme and Windows version without knowing anything about any of them -- and this
 // has to be exact, because the client area IS the framebuffer: a row short is a row of the
 // picture the player never sees.
-HWND CreateMainWindow(HINSTANCE _instance, int _showCommand)
+HWND CreateMainWindow(HINSTANCE _instance, int _showCommand, int _clientWidthPixels, int _clientHeightPixels)
 {
-  constexpr DWORD STYLE = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+  RECT bounds = {0, 0, _clientWidthPixels, _clientHeightPixels};
+  AdjustWindowRect(&bounds, WINDOW_STYLE, FALSE);
 
-  RECT bounds = {0, 0, CLIENT_WIDTH, CLIENT_HEIGHT};
-  AdjustWindowRect(&bounds, STYLE, FALSE);
-
-  HWND window = CreateWindowExW(0, WINDOW_CLASS_NAME, WINDOW_TITLE, STYLE, CW_USEDEFAULT, CW_USEDEFAULT, bounds.right - bounds.left,
+  HWND window = CreateWindowExW(0, WINDOW_CLASS_NAME, WINDOW_TITLE, WINDOW_STYLE, CW_USEDEFAULT, CW_USEDEFAULT, bounds.right - bounds.left,
                                 bounds.bottom - bounds.top, nullptr, nullptr, _instance, nullptr);
   if (window == nullptr)
   {
@@ -385,8 +441,8 @@ HWND CreateMainWindow(HINSTANCE _instance, int _showCommand)
   RECT outerArea = {};
   if (GetClientRect(window, &clientArea) != 0 && GetWindowRect(window, &outerArea) != 0)
   {
-    const int widthShortfall = CLIENT_WIDTH - (clientArea.right - clientArea.left);
-    const int heightShortfall = CLIENT_HEIGHT - (clientArea.bottom - clientArea.top);
+    const int widthShortfall = _clientWidthPixels - (clientArea.right - clientArea.left);
+    const int heightShortfall = _clientHeightPixels - (clientArea.bottom - clientArea.top);
     if (widthShortfall != 0 || heightShortfall != 0)
     {
       SetWindowPos(window, nullptr, 0, 0, (outerArea.right - outerArea.left) + widthShortfall,
@@ -827,20 +883,31 @@ struct MatchPaths
   return false;
 }
 
-int RunGame(HWND _window, const Startup& _startup)
+int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
 {
+  // The client area as Windows actually made it, not as it was asked for. CreateMainWindow
+  // measures and corrects, and this is the one number the swap chain, the letterbox and the
+  // pointer all have to agree on -- so it is read back rather than recomputed.
+  RECT clientArea = {};
+  if (GetClientRect(_window, &clientArea) == 0)
+  {
+    Neuron::Fatal("GetClientRect failed on the main window.");
+  }
+  const auto clientWidthPixels = static_cast<std::uint32_t>(clientArea.right - clientArea.left);
+  const auto clientHeightPixels = static_cast<std::uint32_t>(clientArea.bottom - clientArea.top);
+
   Neuron::Device device;
-  device.Create(_window, Neuron::SceneTarget::WIDTH_PIXELS, Neuron::SceneTarget::HEIGHT_PIXELS);
+  device.Create(_window, clientWidthPixels, clientHeightPixels);
 
   // One shader-visible descriptor heap for the whole client: only one can be bound at a time, so
   // every renderer allocates its slots out of this (DescriptorHeap.h).
   Neuron::DescriptorHeap shaderVisibleHeap;
   shaderVisibleHeap.Create(device.Handle(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 16, true);
 
-  // How the canvas reaches the display. At this stage the window is exactly the canvas, so the
-  // scale is one and there is no letterbox; RENDER-01 stage 2 is what makes it bigger (ADR-075).
-  const Neuron::Presentation presentation =
-    Neuron::Presentation::For(Neuron::SceneTarget::WIDTH_PIXELS, Neuron::SceneTarget::HEIGHT_PIXELS, 1);
+  // How the canvas reaches the display: where it sits in the client area and how far it is
+  // magnified (ADR-075). At scale 1 the client area is exactly the canvas and there is no
+  // letterbox at all.
+  const Neuron::Presentation presentation = Neuron::Presentation::For(clientWidthPixels, clientHeightPixels, _scale);
 
   // Space is black, and on this screen it is also the colour of every rail behind every card.
   Neuron::SceneTarget screen;
@@ -1396,6 +1463,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   //
   // Not an error check: a Windows build without the call is one where the manifest default
   // applies, and there is nothing useful to do about it here.
+  //
+  // WM_DPICHANGED IS DELIBERATELY NOT HANDLED. Per-monitor V2 means Windows offers a new size when
+  // the window crosses to a monitor of a different DPI; DefWindowProcW declines it, so the window
+  // keeps its physical size and its picture stays exact. What it does NOT do is re-choose the
+  // scale, so a window dragged from a 4K monitor to a 1080p one stays too big for its new home.
+  // ADR-075 records that as an open question rather than solving it: solving it means resizing a
+  // swap chain mid-frame, which is the same machinery borderless fullscreen needs.
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
   // Before the window too. With this on, a mouse click arrives as WM_POINTERDOWN exactly as a
@@ -1471,7 +1545,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
     return EXIT_FAILURE;
   }
 
-  HWND window = CreateMainWindow(_instance, _showCommand);
+  // The scale is decided once, here, and nothing changes it afterwards -- see the WM_DPICHANGED
+  // note beside SetProcessDpiAwarenessContext above (ADR-075's first open question).
+  const std::uint32_t largestThatFits = ChooseScale();
+  std::uint32_t scale = startup.scale == 0 ? largestThatFits : startup.scale;
+  if (scale > largestThatFits)
+  {
+    Neuron::DebugTrace("Window: --scale {} does not fit this monitor; using {}.\n", scale, largestThatFits);
+    scale = largestThatFits;
+  }
+
+  HWND window = CreateMainWindow(_instance, _showCommand, static_cast<int>(Neuron::SceneTarget::WIDTH_PIXELS * scale),
+                                 static_cast<int>(Neuron::SceneTarget::HEIGHT_PIXELS * scale));
   if (window == nullptr)
   {
     return EXIT_FAILURE;
@@ -1482,7 +1567,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE _instance, _In_opt_ HINSTANCE _previousInst
   // that there is one place to tell a person about it.
   try
   {
-    return RunGame(window, startup);
+    return RunGame(window, startup, scale);
   }
   catch (const winrt::hresult_error& error)
   {

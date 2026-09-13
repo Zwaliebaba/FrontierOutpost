@@ -296,6 +296,38 @@ canvas with no letterbox; with `--scale 1` it is the old window. On a 1080p moni
 changed. Drag the window between two monitors of different DPI and confirm it neither resizes
 nor blurs (DPI awareness is per-monitor V2, so the compositor does not stretch it).
 
+**Stage 2, as run (2026-09-13).** Three checkers green, both configurations build, 527 tests pass,
+and the join screen at `--scale 1` is byte-identical (caret-on hash, as stage 1 defines it).
+`--scale 2` on this machine reports `Window: --scale 2 does not fit this monitor; using 1.` and
+gives the 1280x720 window, which is the clamp doing what it says.
+
+**This machine cannot see the change, and that is the finding.** The primary monitor is 1920x1080
+with a 1920x1020 work area, so `ChooseScale` returns 1 and the window is the window it has always
+been. **The letterbox and the magnification are therefore code that stage 2 ships without ever
+running it**, which is not a state to leave unverified, so both were photographed from a temporary
+build that let `--scale` exceed what fits and let the window be forced to a size that is not a
+multiple of the canvas. Reverted immediately afterwards; it is not in the tree.
+
+| forced | client area | what it proves |
+|---|---|---|
+| `--scale 1 --window 1920 1020` | 1920x1020 | Canvas centred at **(320, 150)** exactly. Every sampled pixel outside the canvas rectangle is pure black, and the 921,600 pixels inside it are **identical** to the scale-1 capture. |
+| `--scale 2` | 1924x1055 (Windows clamped the 2560x1440 request to the monitor) | `capture(x, y) == canvas(x/2, y/2)` for every pixel but the caret's, so the magnification is an exact nearest-neighbour 2x and the too-small-surface branch of `Presentation::For` gives a zero offset rather than an underflow. |
+
+The 28 pixels that did differ in the second row are `(492..498, 349)` doubled — the blinking
+caret again, four pixels per canvas pixel. It is the same seven pixels stage 1 recorded.
+
+**A deviation, and a correction from the gate.** `ChooseScale` takes no `HINSTANCE`: it needs the
+window STYLE and nothing else, so `WINDOW_STYLE` moved to namespace scope and the function takes
+nothing. And the loop the plan describes — multiply the canvas up until it stops fitting — was
+written that way and `clang-tidy` rejected it: `bugprone-misplaced-widening-cast`, because
+`1280 * (scale + 1)` is computed in `unsigned int` and only then widened. It is now two divisions
+and a `std::min`, which cannot overflow and is shorter.
+
+**`RunGame` builds the `Presentation` from `GetClientRect` rather than from what was asked for.**
+`CreateMainWindow` already measures and corrects, so the client area Windows actually gave is the
+one number the swap chain, the letterbox and the pointer must agree on — and as the `--scale 2`
+row above shows, Windows does not always give what was asked.
+
 **Commit:** `Size the window to the largest whole scale the monitor has room for`
 
 ---
