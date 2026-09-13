@@ -25,9 +25,11 @@ fixed ending, a dedicated server that resumes a stored match after a restart, an
 instrumentation the playtest plan needs. The client has its join and seats screens, bots for the
 seats nobody takes, a practice match on a two-minute tick, and the digest as the order surface. What
 has not happened is the thing no code can do: six people on six machines playing a match. Exile and
-the sealed region's rules are designed and deliberately not built, gated behind the first playtests.
-The current client is a Windows desktop prototype; **the product is a mobile client** (owner
-decision, 2026-09-11 — see §7).
+the sealed region's rules are designed and deliberately not built, gated behind the first playtests;
+so is the build system's second layer — levels, build time, a defence building and a research track
+— designed on 2026-09-13 (§3), of which levels and build time go in before Phase 0. The current
+client is a Windows desktop prototype; **the product is a mobile client** (owner decision,
+2026-09-11 — see §7).
 
 **LockStep: Universe is the name**, shortened to *Lockstep* in running prose (owner decision,
 2026-09-11). It replaces *Frontier Outpost*, which had been settled as final earlier the same day;
@@ -178,6 +180,70 @@ so that processing order can never change an outcome:
    know which.
 6. **Digest.** One per player, sorted by consequence.
 
+### Building and research — designed 2026-09-13, not built
+
+Today a player can build three things: a shipyard (20 CR; +2 ships a tick to the fleet standing on
+it, idle while a rival fleet is in the system), a mining station (15 CR; +4 CR a tick) and a trade
+lane (10 CR, paid by the proposer at the lock the partner accepts; +6 a tick to each side). One of
+each per system, complete at the lock they are ordered at, permanent, and handed over with the
+system when it is captured. That is the whole of it, and it is a checklist rather than a decision: a
+starting empire of three systems builds out for 105 credits against a purse of 100 and an income of
+about 12 a tick, after which mining only pushes income up and the one thing left to spend on is a
+10-credit lane. Credits go dead around day two of a twenty-one-day match, and nothing a player
+builds is ever in flight. Everything below exists to give credits a life and to make a build a
+commitment.
+
+**What it takes from Civilization, and what it leaves there.** The investment tradeoff transfers
+whole: income, force, defence and research compete for the same credits with different payback
+horizons, and that is a bet placed now and resolved later — this game's verb. Building roles
+transfer, and the two the game lacks, defence and research, come first. Levels transfer, as the
+sink. What does not transfer is scale and hidden knowledge: forty techs read in thirty-minute
+sittings on an eight-pixel console are unreadable, and a hidden research queue is a large-scale
+luxury in a game where leader-ganging needs information. Gatherer ships stay in Civ (owner decision,
+2026-09-13): resource collection here is territorial — systems, stations and lanes — and that is
+what makes *where to expand* a decision; gatherer units move the economy from map control into unit
+micromanagement, and civilians inside a proportional melee double the combat model for the reason
+ADR-021 held ship classes back. The worker-versus-warrior tension arrives anyway, in this game's own
+currency, once Exile makes stations and lanes raidable: a fleet parked on a lane end is guarding
+income instead of pushing.
+
+**Levels and build time.** Every building has three levels. A level costs more than the one before
+and takes ticks to complete: a build is ordered at one lock and lands at a later one, with its ETA
+on the rail like a fleet's. Rivals who can see the system see it rising — *BASTION - DONE T47* — the
+way they see a fleet in transit: blind at the choice, public once locked, a tell (owner decision,
+2026-09-13). Level one is what exists today at today's numbers; level two improves the number; level
+three opens a feature.
+
+| Role | Building | Level one | Levels two and three | Completes in |
+|---|---|---|---|---|
+| Economy | Mining station | +4 CR/tick | more credits; L3 doubles what the lanes off that system pay | 1 → 2 → 3 ticks |
+| War | Shipyard | +2 ships/tick | more ships; L3 repairs a fleet standing there | 1 → 2 → 3 ticks |
+| Defence | **Bastion** — new | +25 on the defender bonus, so the incumbent's 125% is 150% there | more bonus; L3 makes a siege of that system take three ticks | 2 → 3 → 4 ticks |
+| Research | none — an empire order (below) | — | — | 4 → 8 ticks |
+
+The numbers are Phase 0's to change. The shape is fixed: every effect is a number the game already
+has, a bastion is a term in the melee the preview already computes, so the preview stays exact; a
+system's sheet never exceeds four rows; and everything is integer.
+
+**Research is an empire order, not a building** (owner decision, 2026-09-13). It is a row in the
+build column with no system: paid in credits, taking ticks, one unlock per order. No fifth building
+kind, nothing to capture, one fewer thing to explain. The track is short, flat and public: about
+eight unlocks in two tiers, tier two needing two of tier one, sized so that a player finishes
+roughly half of it in three weeks. Every unlock is a rule *number* the game already has — your lanes
+cost one tick less, mining pays more, a siege of your systems takes three ticks, scouting range plus
+one — so nothing an unlock does is a rule the preview does not know. A completed unlock is in every
+player's digest, because a leader has to be readable to be ganged. Which eight is still open (§9).
+This is where *Discovery*, the game's second aesthetic, is meant to live: not what is over the hill,
+but what tier two opens and who gets there first.
+
+**Ship classes stay out** — v2 at the earliest, two at most, and only once the preview can show
+them. Strength is ship count.
+
+**Sequencing** (owner decision, 2026-09-13). Levels and build time are built before Phase 0: they
+are numbers plus a timer, and Phase 0 would otherwise report dead credits as its first finding. The
+bastion and the research track wait for Phase 0's evidence on the combat numbers, which both lean
+on. The risk to watch is H4 (§8).
+
 ### The three decisions the game is about
 
 **Where to expand.** Near and safe, far and rich, or toward a rival to deny them. Each is right in a
@@ -266,8 +332,10 @@ appendix has the detail.
 | Concession forfeiting score in every week | Decided 2026-09-11; the code forfeits first-week concessions only |
 | The fiction | Wanted, not yet designed. A design session before Phase 1 |
 | Hiring exiles (escrowed jobs) | v2 |
-| Research | Named in the phase list, deliberately absent. Becomes an unlock track, decided after Phase 2 |
-| Ship classes | Strength is ship count for now; classes are a v2 candidate |
+| Building levels and build time | Designed 2026-09-13 (§3). The credit sink; goes in before Phase 0 |
+| The bastion, a defence building | Designed 2026-09-13 (§3). After Phase 0 has tuned the combat numbers it is a term in |
+| Research: a short public track of unlocks, ordered as an empire order | Designed 2026-09-13 (§3), named in the phase list since the start. After Phase 0; which eight unlocks is open |
+| Ship classes | Strength is ship count for now; classes are a v2 candidate. Gatherer ships were considered and rejected on 2026-09-13 (§3) |
 | Accounts, rank-gated matchmaking, player names on the wire (a rival is "P2" on the map; the empire names exist only on the host's seats screen) | Phase 1 needs names; the rest is v2 |
 | The mobile client; audio; a colour-blind mode; chat | See §7 and §8 |
 
@@ -333,7 +401,9 @@ A view, not a plan, built on the decisions taken on 2026-09-11. Each step depend
 one holding.
 
 **Now → Phase 0 (weeks).** Six people, one weekend, on the desktop prototype. The build is ready;
-what it needs is a host, six tokens and a Saturday. Expect to change numbers, not rules.
+what it needs is a host, six tokens and a Saturday. Expect to change numbers, not rules — with one
+rules change landing ahead of it: building levels and build time (§3), so that the credits Phase 0
+spends are not dead by day two.
 
 **Before Phase 1: the fiction.** A design session that gives the game a world — who the players are,
 why the galaxy is bounded, what the sealed region is and why it opens. It should be written to the
@@ -369,14 +439,15 @@ placement points per match, summed over a season, with rank deciding who plays w
 accounts, which needs a persistence decision beyond the match store, and it needs a player pool
 large enough to gate — which is the tension §8 names. Hiring exiles lands in the same release.
 
-**Design threads, in the order they become live.** Research becomes an unlock track (cheaper lanes,
-faster ships, or something better) decided after Phase 2 and not before. Ship classes are a v2
-candidate, kept out deliberately so that the combat preview stays exact and the build menu stays
-short. A small vocabulary of one-tap signals that are not chat but let a stranger say *thank you* or
-*last warning*. Audio, at least a tick-resolved cue, once the client is the real one. A colour-blind
-mode, which at twelve hues on an 8-pixel node is a redesign of the node and not of the palette.
-Whether the sealed region should be visible through fog from tick one, as the design says and the
-code does not yet do.
+**Design threads, in the order they become live.** Research is designed (§3): a short public track
+of unlocks ordered as an empire order, built after Phase 0, with the list of unlocks the open part;
+the bastion, the defence building the game lacked, lands with it. Ship classes are a v2 candidate,
+kept out deliberately so that the combat preview stays exact and the build menu stays short. A small
+vocabulary of one-tap signals that are not chat but let a stranger say *thank you* or *last
+warning*. Audio, at least a tick-resolved cue, once the client is the real one. A colour-blind mode,
+which at twelve hues on an 8-pixel node is a redesign of the node and not of the palette. Whether
+the sealed region should be visible through fog from tick one, as the design says and the code does
+not yet do.
 
 **What the architecture makes cheap, and nobody has asked for yet.** Because a match is a seed and a
 list of orders, a finished match is a few kilobytes that replays in two milliseconds. That is a
@@ -436,13 +507,21 @@ earlier than the roadmap order suggests.
 position, and it also means every conversation about the game happens on Discord or nowhere. For a
 hobby project that is probably right; it is still a community question the record does not address.
 
+**The build menu grows, and the session with it.** Levels, build time, a bastion and a research
+track (§3) give the thirty-minute session more to decide, and H4 kills at a median over sixty
+minutes. The mitigation is in the shape — four rows per system, one research row, the price and the
+ETA on every button — and Phase 0 should time the session with levels in before anything else is
+added, so that if the session grows the record can say which layer grew it.
+
 ---
 
 ## 9. Decisions taken, and what is still open
 
 The first draft of this blueprint listed ten questions the record could not answer. The owner
-answered them on 2026-09-11, and they are recorded here so that nobody re-asks them. Those that
-change a rule or the design record still owe an ADR or a document edit, and the table says which.
+answered them on 2026-09-11, and the shape of building and research was decided on 2026-09-13 in the
+first design session held against this document; all are recorded here so that nobody re-asks them.
+Those that change a rule or the design record still owe an ADR or a document edit, and the table
+says which.
 
 | Question | Decision | Follow-up owed |
 |---|---|---|
@@ -454,12 +533,15 @@ change a rule or the design record still owe an ADR or a document edit, and the 
 | Absence and the first-week forfeit | Keep as designed; Phase 1 decides | Phase 1 log must separate the two kinds of leaving (§8) |
 | Concession | Forfeits score outright, in any week | An ADR superseding the open question in ADR-023, and a code change |
 | Audio and colour-blind mode | Neither in v1 | — |
-| Research | An unlock track, decided after Phase 2 | — |
+| Research | A short public track of unlocks, ordered as an empire order rather than through a building (2026-09-13, superseding "after Phase 2") | An ADR and `MatchRules` entries when built, after Phase 0; the list of unlocks |
+| Building levels and build time | Three levels per building, each costing more and taking ticks; a build in progress is visible to rivals who can see the system (2026-09-13) | An ADR and `MatchRules` entries; built before Phase 0 |
+| A defence building | The bastion: a term in the defender bonus, its top level lengthening a siege (2026-09-13) | An ADR when built, after Phase 0 |
+| Gatherer ships | Rejected (2026-09-13): resource collection stays territorial | — |
 | Ship classes | Ship count for now; classes a v2 candidate | — |
 
-**Still open**, and none of it blocks Phase 0: what the fiction is; what research unlocks; the season
-points table; how a player is named and identified in Phase 1; whether the sealed region is visible
-through fog from tick one.
+**Still open**, and none of it blocks Phase 0: what the fiction is; which eight unlocks the research
+track holds, and their numbers; the season points table; how a player is named and identified in
+Phase 1; whether the sealed region is visible through fog from tick one.
 
 ---
 
