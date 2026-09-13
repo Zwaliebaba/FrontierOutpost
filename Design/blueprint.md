@@ -197,15 +197,15 @@ commitment.
 whole: income, force, defence and research compete for the same credits with different payback
 horizons, and that is a bet placed now and resolved later — this game's verb. Building roles
 transfer, and the two the game lacks, defence and research, come first. Levels transfer, as the
-sink. What does not transfer is scale and hidden knowledge: forty techs read in thirty-minute
-sittings on an eight-pixel console are unreadable, and a hidden research queue is a large-scale
-luxury in a game where leader-ganging needs information. Gatherer ships stay in Civ (owner decision,
-2026-09-13): resource collection here is territorial — systems, stations and lanes — and that is
-what makes *where to expand* a decision; gatherer units move the economy from map control into unit
-micromanagement, and civilians inside a proportional melee double the combat model for the reason
-ADR-021 held ship classes back. The worker-versus-warrior tension arrives anyway, in this game's own
-currency, once Exile makes stations and lanes raidable: a fleet parked on a lane end is guarding
-income instead of pushing.
+sink. What does not transfer is scale and hidden knowledge: forty techs cannot be read in
+thirty-minute sittings twice a day on any screen — the cadence is the limit, not the console — and a
+hidden research queue is a large-scale luxury in a game where leader-ganging needs information.
+Gatherer ships stay in Civ (owner decision, 2026-09-13): resource collection here is territorial —
+systems, stations and lanes — and that is what makes *where to expand* a decision; gatherer units
+move the economy from map control into unit micromanagement, and civilians inside a proportional
+melee double the combat model for the reason ADR-021 held ship classes back. The
+worker-versus-warrior tension arrives anyway, in this game's own currency, once Exile makes stations
+and lanes raidable: a fleet parked on a lane end is guarding income instead of pushing.
 
 **Levels and build time.** Every building has three levels. A level costs more than the one before
 and takes ticks to complete: a build is ordered at one lock and lands at a later one, with its ETA
