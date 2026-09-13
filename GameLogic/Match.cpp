@@ -213,8 +213,8 @@ void Match::RecomputeVisibility()
       record.known = true;
       record.asOfTick = m_tick;
       record.owner = state.owner;
-      record.hadShipyard = state.hasShipyard;
-      record.hadMiningStation = state.hasMiningStation;
+      record.shipyardLevel = state.shipyardLevel;
+      record.miningStationLevel = state.miningStationLevel;
     }
   }
 }
@@ -463,15 +463,22 @@ std::vector<RejectedOrder> Match::Validate(const OrderSet& _orders) const
       continue;
     }
 
+    // A build order means THE NEXT LEVEL of that kind here (ADR-069), so what it costs and
+    // whether it is allowed both depend on the level the system is at.
     const SystemState& system = SystemAt(order.system);
-    const bool already = order.kind == BuildKind::Shipyard ? system.hasShipyard : system.hasMiningStation;
-    if (already)
+    const std::uint32_t level = order.kind == BuildKind::Shipyard ? system.shipyardLevel : system.miningStationLevel;
+    if (level >= BUILDING_LEVELS)
     {
-      refuse(OrderRejection::AlreadyBuilt, OrderList::Builds, index);
+      refuse(OrderRejection::AtTopLevel, OrderList::Builds, index);
+      continue;
+    }
+    if (system.construction.Rising())
+    {
+      refuse(OrderRejection::AlreadyBuilding, OrderList::Builds, index);
       continue;
     }
 
-    const std::uint32_t cost = order.kind == BuildKind::Shipyard ? m_rules.shipyardCost : m_rules.miningStationCost;
+    const std::uint32_t cost = LevelValue(order.kind == BuildKind::Shipyard ? m_rules.shipyardCost : m_rules.miningStationCost, level + 1);
     if (spent + cost > purse)
     {
       refuse(OrderRejection::CannotAfford, OrderList::Builds, index);
@@ -599,8 +606,11 @@ std::uint64_t Match::Hash() const
   for (const SystemState& system : m_systems)
   {
     hash.AbsorbId(system.owner.Index());
-    hash.Absorb(system.hasShipyard ? 1U : 0U);
-    hash.Absorb(system.hasMiningStation ? 1U : 0U);
+    hash.Absorb(system.shipyardLevel);
+    hash.Absorb(system.miningStationLevel);
+    hash.Absorb(static_cast<std::uint32_t>(system.construction.kind));
+    hash.Absorb(system.construction.toLevel);
+    hash.Absorb(system.construction.completesAt);
     hash.AbsorbId(system.siegeBy.Index());
     hash.Absorb(system.siegeTicks);
     hash.Absorb(system.capturedAt);
@@ -680,8 +690,8 @@ std::uint64_t Match::Hash() const
       hash.Absorb(seen.known ? 1U : 0U);
       hash.Absorb(seen.asOfTick);
       hash.AbsorbId(seen.owner.Index());
-      hash.Absorb(seen.hadShipyard ? 1U : 0U);
-      hash.Absorb(seen.hadMiningStation ? 1U : 0U);
+      hash.Absorb(seen.shipyardLevel);
+      hash.Absorb(seen.miningStationLevel);
     }
   }
 

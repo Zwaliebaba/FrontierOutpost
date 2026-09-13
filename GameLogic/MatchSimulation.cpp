@@ -9,6 +9,7 @@
 #include "pch.h"
 #include "MatchSimulation.h"
 
+#include <array>
 #include <initializer_list>
 
 namespace Lockstep
@@ -54,6 +55,8 @@ namespace
   X(rearGuardEnabled)            \
   X(shipyardCost)                \
   X(miningStationCost)           \
+  X(shipyardBuildTicks)          \
+  X(miningStationBuildTicks)     \
   X(tradeLaneCost)               \
   X(scorePerSystem)              \
   X(capitalScoreBonus)           \
@@ -66,9 +69,11 @@ namespace
   X(regionOpensAtTick)           \
   X(regionSiteCount)
 
-/// Thirty-seven 32-bit fields and one bool, padded, on x64. If this fires, a field was added to
-/// `MatchRules`: add it to `MATCH_RULES_FIELDS` in wire order, then update this number.
-static_assert(sizeof(MatchRules) == 152, "MatchRules changed shape; add the field to MATCH_RULES_FIELDS and update this size");
+/// Thirty-three 32-bit fields, six three-element tables and one bool, padded, on x64. If this
+/// fires, a field was added to `MatchRules`: add it to `MATCH_RULES_FIELDS` in wire order, then
+/// update this number. A table counts as one field here and as `BUILDING_LEVELS` words on the wire,
+/// which is why the header carries the level count too (ADR-069).
+static_assert(sizeof(MatchRules) == 208, "MatchRules changed shape; add the field to MATCH_RULES_FIELDS and update this size");
 
 /// Counted as a list of ones rather than as a run of `+1`. A macro whose replacement list is an
 /// operator cannot be parenthesised and so cannot satisfy `bugprone-macro-parentheses`, and this
@@ -102,9 +107,32 @@ void ReadField(Neuron::ByteReader& _reader, bool& _value)
   _value = _reader.ReadBool();
 }
 
+/// A per-level table, written element by element (ADR-069).
+///
+/// The number of elements is fixed by `BUILDING_LEVELS`, which `WriteRules` puts in the header
+/// beside the field count -- the field count cannot catch a change to it, because a table is ONE
+/// field however long it is, and a store read back with a different number of levels would decode
+/// everything after it shifted.
+template <std::size_t Count> void WriteField(Neuron::ByteWriter& _writer, const std::array<std::uint32_t, Count>& _values)
+{
+  for (const std::uint32_t value : _values)
+  {
+    _writer.WriteU32(value);
+  }
+}
+
+template <std::size_t Count> void ReadField(Neuron::ByteReader& _reader, std::array<std::uint32_t, Count>& _values)
+{
+  for (std::uint32_t& value : _values)
+  {
+    value = _reader.ReadU32();
+  }
+}
+
 void WriteRules(Neuron::ByteWriter& _writer, const MatchRules& _rules)
 {
   _writer.WriteU32(CONFIGURATION_FIELDS);
+  _writer.WriteU32(static_cast<std::uint32_t>(BUILDING_LEVELS));
 #define WRITE_RULES_FIELD(name) WriteField(_writer, _rules.name);
   MATCH_RULES_FIELDS(WRITE_RULES_FIELD)
 #undef WRITE_RULES_FIELD
@@ -113,6 +141,12 @@ void WriteRules(Neuron::ByteWriter& _writer, const MatchRules& _rules)
 [[nodiscard]] MatchRules ReadRules(Neuron::ByteReader& _reader)
 {
   const std::uint32_t fields = _reader.ReadU32();
+  const std::uint32_t levels = _reader.ReadU32();
+  if (levels != static_cast<std::uint32_t>(BUILDING_LEVELS))
+  {
+    Neuron::Fatal("This match store was written by a different build: {} building levels, expected {}.", levels,
+                  static_cast<std::uint32_t>(BUILDING_LEVELS));
+  }
   if (fields != CONFIGURATION_FIELDS)
   {
     // A store from a build whose rules had a different shape. Loading it would produce a match

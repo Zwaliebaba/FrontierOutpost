@@ -221,7 +221,8 @@ public:
     const Lockstep::Match after =
       Lockstep::TickResolver::Resolve(match, Lockstep::TickInput{.orders = sets, .present = others, .presenceUnknown = false}, log);
 
-    Assert::IsFalse(after.SystemAt(capital).hasMiningStation, L"and nothing was built");
+    Assert::AreEqual(0U, after.SystemAt(capital).miningStationLevel, L"and nothing was built");
+    Assert::IsFalse(after.SystemAt(capital).construction.Rising(), L"nor started");
   }
 
   // A custodian's fleets hold what they stand on and take nothing.

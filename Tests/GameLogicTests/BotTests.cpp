@@ -59,6 +59,59 @@ public:
     Assert::AreEqual(0U, simulation.RejectedSubmissions(), L"the bot's own orders were refused as malformed");
   }
 
+  // A build order means the next LEVEL (ADR-069), so the bots no longer run out of things to build
+  // after one pass over their territory -- they go round again and level what they have.
+  //
+  // This matters beyond the bots: a scripted match that stops spending after day two stops
+  // exercising the economy, and the scripted match is the determinism gate.
+  TEST_METHOD(TheBotsLevelUpOnceEverythingHasALevelOne)
+  {
+    Lockstep::MatchRules rules;
+    rules.playerCount = 6;
+    Lockstep::MatchSimulation simulation{rules, BOT_SEED, AllBots()};
+
+    for (std::int32_t tick = 0; tick < 40; ++tick)
+    {
+      simulation.Resolve();
+    }
+
+    std::uint32_t aboveLevelOne = 0;
+    std::uint32_t rising = 0;
+    for (const Lockstep::SystemState& system : simulation.State().Systems())
+    {
+      aboveLevelOne += (system.shipyardLevel > 1 || system.miningStationLevel > 1) ? 1U : 0U;
+      rising += system.construction.Rising() ? 1U : 0U;
+    }
+
+    Assert::IsTrue(aboveLevelOne > 0, L"forty ticks of bots and nothing was ever levelled up");
+    Assert::AreEqual(0U, simulation.RejectedSubmissions(), L"a bot ordered something the lock refused");
+    (void)rising;
+  }
+
+  // The bots skip a system that is already building rather than ordering a second level on it. A
+  // refusal every tick would make the refusal digest useless to read during a playtest, which is
+  // what Phase 0 is for.
+  TEST_METHOD(TheBotsDoNotOrderOnASystemAlreadyBuilding)
+  {
+    Lockstep::MatchRules rules;
+    rules.playerCount = 6;
+    Lockstep::MatchSimulation simulation{rules, BOT_SEED, AllBots()};
+
+    for (std::int32_t tick = 0; tick < 25; ++tick)
+    {
+      simulation.Resolve();
+
+      for (const std::vector<Lockstep::DigestEntry>& digest : simulation.LastTick().digests)
+      {
+        for (const Lockstep::DigestEntry& entry : digest)
+        {
+          Assert::IsTrue(entry.kind != Lockstep::DigestKind::OrderRejected,
+                         L"a bot produced a refusal, which is noise in the one screen a playtester reads");
+        }
+      }
+    }
+  }
+
   TEST_METHOD(ABotIsNeverAbsent)
   {
     // The custodian rules exist for a person who stopped turning up. A seat that plays itself

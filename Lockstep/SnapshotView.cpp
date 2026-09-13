@@ -38,6 +38,9 @@ namespace
   case DigestKind::Battle:
   case DigestKind::AgreementBreached:
   case DigestKind::MatchEnded:
+  // A building lost with the system it stood on is a loss, and wears a loss's colour: the credits
+  // are gone and there is nothing to answer (ADR-069).
+  case DigestKind::BuildLost:
     return EventKind::Loss;
   case DigestKind::Custodian:
     return EventKind::Custodian;
@@ -48,6 +51,11 @@ namespace
   case DigestKind::LaneCanceled:
   case DigestKind::Economy:
   case DigestKind::OrderRejected:
+  // Started, completed and a rival's rising building are all economy-coloured; what separates them
+  // on the screen is the actor, which groups a rival's tell under that rival (ADR-034).
+  case DigestKind::BuildStarted:
+  case DigestKind::BuildCompleted:
+  case DigestKind::BuildSeen:
   default:
     return EventKind::Economy;
   }
@@ -476,21 +484,53 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
 
     // Priced from the snapshot, never from a number the client knows (ADR-053): the server owns
     // the rules and the client owns the sentence.
-    if (!source->hasShipyard)
+    //
+    // A row offers THE NEXT LEVEL (ADR-069), so a system that has a level-one shipyard offers L2 at
+    // L2's price and L2's build time. A system already building offers one row that is not a
+    // target, because the lock would refuse a second order on it and a row a tap cannot use is
+    // better drawn as the reason than left out.
+    if (source->risingCompletesAt != 0)
     {
-      state.orders.builds.push_back(BuildRow{.title = std::format("Shipyard - {}", node.name),
-                                             .detail = "Reinforces the fleet standing on it",
-                                             .system = node.id,
-                                             .kind = 0,
-                                             .cost = _snapshot.ShipyardCost()});
+      const bool yard = source->risingKind == BuildKind::Shipyard;
+      state.orders.builds.push_back(
+        BuildRow{.title = std::format("{} L{} - {}", yard ? "Shipyard" : "Mining station", source->risingToLevel, node.name),
+                 .detail = std::format("Rising - done T{}", source->risingCompletesAt),
+                 .system = node.id,
+                 .kind = static_cast<std::uint8_t>(yard ? 0 : 1),
+                 .level = source->risingToLevel,
+                 .rising = true,
+                 .completesAt = source->risingCompletesAt,
+                 .available = false});
+      continue;
     }
-    if (!source->hasMiningStation)
+
+    if (source->shipyardLevel < BUILDING_LEVELS)
     {
-      state.orders.builds.push_back(BuildRow{.title = std::format("Mining station - {}", node.name),
-                                             .detail = "More credits every tick",
-                                             .system = node.id,
-                                             .kind = 1,
-                                             .cost = _snapshot.MiningStationCost()});
+      const std::uint32_t level = source->shipyardLevel + 1;
+      const std::uint32_t ticks = _snapshot.LevelTicks(BuildKind::Shipyard, level);
+      state.orders.builds.push_back(
+        BuildRow{.title = std::format("Shipyard L{} - {}", level, node.name),
+                 .detail = std::format("+{} ships a tick - {} tick{}", _snapshot.LevelYield(BuildKind::Shipyard, level), ticks,
+                                       ticks == 1 ? "" : "s"),
+                 .system = node.id,
+                 .kind = 0,
+                 .level = level,
+                 .ticks = ticks,
+                 .cost = _snapshot.LevelCost(BuildKind::Shipyard, level)});
+    }
+    if (source->miningStationLevel < BUILDING_LEVELS)
+    {
+      const std::uint32_t level = source->miningStationLevel + 1;
+      const std::uint32_t ticks = _snapshot.LevelTicks(BuildKind::MiningStation, level);
+      state.orders.builds.push_back(
+        BuildRow{.title = std::format("Mining station L{} - {}", level, node.name),
+                 .detail = std::format("+{} credits a tick - {} tick{}", _snapshot.LevelYield(BuildKind::MiningStation, level), ticks,
+                                       ticks == 1 ? "" : "s"),
+                 .system = node.id,
+                 .kind = 1,
+                 .level = level,
+                 .ticks = ticks,
+                 .cost = _snapshot.LevelCost(BuildKind::MiningStation, level)});
     }
   }
   state.orders.availableBuilds = static_cast<std::uint32_t>(state.orders.builds.size());

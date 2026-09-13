@@ -287,16 +287,18 @@ public:
   // binary, which cannot see a compiler, a standard library or a configuration disagreeing about
   // the same sum. This pins the number.
   //
-  // **The value is pinned under MSVC, Debug and Release, and both agree** (re-pinned 2026-09-12
-  // when ADR-055 raised `startingCredits`; the value before it was computed with clang 18 and
-  // libstdc++ 13 on Linux and agreed with both MSVC configurations, which is the evidence that
-  // this simulation does not depend on a toolchain). If this fails and nothing in `GameLogic` was
+  // **The value is pinned under MSVC, Debug and Release, and both agree** (re-pinned 2026-09-13
+  // when ADR-069 gave buildings levels and build time, which changes what every bot spends and
+  // when every building pays; before that, 2026-09-12 when ADR-055 raised `startingCredits`; and
+  // before that a value computed with clang 18 and libstdc++ 13 on Linux that agreed with both
+  // MSVC configurations, which is the evidence that this simulation does not depend on a
+  // toolchain). If this fails and nothing in `GameLogic` was
   // meant to change a rule, the failure IS the finding: two builds disagree about an integer
   // simulation, which means undefined or unspecified behavior somewhere in it. If a rule was meant
   // to change, re-pin -- and know that every stored match is now unloadable (ADR-024).
   TEST_METHOD(TheWholeMatchHashIsPinnedAcrossToolchains)
   {
-    constexpr std::uint64_t PINNED_HASH = 0xC204BAED2104E2E7ULL;
+    constexpr std::uint64_t PINNED_HASH = 0x22B59450A1D76F74ULL;
     constexpr std::uint64_t PINNED_SEED = 0xC7920238303AD5D8ULL;
 
     const Played played = PlayAMatch(false);
@@ -359,7 +361,7 @@ public:
     std::uint32_t withBuildings = 0;
     for (const Lockstep::SystemState& system : played.match.Systems())
     {
-      if (system.hasShipyard || system.hasMiningStation)
+      if (system.shipyardLevel > 0 || system.miningStationLevel > 0)
       {
         ++withBuildings;
       }

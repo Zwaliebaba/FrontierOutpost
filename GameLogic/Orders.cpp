@@ -42,8 +42,10 @@ const char* Describe(OrderRejection _rejection) noexcept
     return "the fleet was given two orders";
   case OrderRejection::NotYourSystem:
     return "you do not hold that system";
-  case OrderRejection::AlreadyBuilt:
-    return "that system already has one";
+  case OrderRejection::AtTopLevel:
+    return "that building is already at its top level there";
+  case OrderRejection::AlreadyBuilding:
+    return "something is already rising on that system";
   case OrderRejection::CannotAfford:
     return "not enough credits";
   case OrderRejection::NoSuchRecipient:

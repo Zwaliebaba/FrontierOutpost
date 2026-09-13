@@ -285,6 +285,100 @@ public:
     Assert::AreEqual(sawAt, remembered.asOfTick, L"and honestly labelled with when");
   }
 
+  // What is RISING is public to anyone who can see the system, and to nobody else (ADR-069).
+  //
+  // This is the tell the change was made for: a build is a commitment with an ETA, and a neighbour
+  // reading `BASTION - DONE T47` is reading the same kind of information as a departed fleet. It is
+  // also a leak if it reaches one system too far, which is why the second half of this test is the
+  // one that matters.
+  TEST_METHOD(ARivalWhoSeesTheSystemSeesItRisingAndOneWhoCannotLearnsNothing)
+  {
+    Lockstep::Match match = Settled();
+    const Lockstep::SystemId capital = match.GalaxyGraph().Capitals()[0];
+
+    match.MutableSystems()[capital.AsSize()].construction =
+      Lockstep::Construction{.kind = Lockstep::BuildKind::Shipyard, .toLevel = 2, .completesAt = match.Tick() + 3};
+    match.MutableSystems()[capital.AsSize()].shipyardLevel = 1;
+
+    const Lockstep::Snapshot mine = Lockstep::Snapshot::For(match, Lockstep::PlayerId{0});
+    const Lockstep::SnapshotSystem* own = mine.System(capital);
+    Assert::IsNotNull(own, L"a player cannot see their own capital");
+    Assert::AreEqual(2U, own->risingToLevel, L"the owner cannot see what they are building");
+    Assert::AreEqual(match.Tick() + 3, own->risingCompletesAt);
+    Assert::AreEqual(1U, own->shipyardLevel, L"and the level it is at now");
+
+    // A player who cannot see it does not have the system at all, which is the strongest form of
+    // "learns nothing": there is no entry to read a rising build out of.
+    bool checkedAStranger = false;
+    for (std::int32_t player = 1; player < 6; ++player)
+    {
+      const Lockstep::PlayerId rival{player};
+      if (match.SeenBy(rival)[capital.AsSize()].known)
+      {
+        continue;
+      }
+      const Lockstep::Snapshot theirs = Lockstep::Snapshot::For(match, rival);
+      Assert::IsFalse(theirs.Knows(capital), L"a rival who cannot see the system has it in their snapshot");
+      checkedAStranger = true;
+    }
+    Assert::IsTrue(checkedAStranger, L"every rival could already see the capital, so this test proved nothing");
+  }
+
+  // A remembered system reports the LEVELS it had when it was last seen, and never a construction:
+  // one seen three ticks ago may have landed or been captured since, and fog must not invent either
+  // (ADR-022, ADR-069). The same rule the siege marks below it follow.
+  TEST_METHOD(ARememberedSystemReportsLevelsAndNoConstruction)
+  {
+    Lockstep::Match match = Settled();
+    const Lockstep::SystemId capital = match.GalaxyGraph().Capitals()[0];
+
+    const Lockstep::SystemId beyond = TwoLanesFrom(match, capital);
+    Assert::IsTrue(beyond.IsValid());
+
+    Lockstep::SystemId hop;
+    for (const Lockstep::LaneId lane : match.GalaxyGraph().LanesAt(beyond))
+    {
+      const Lockstep::SystemId candidate = match.GalaxyGraph().OtherEnd(lane, beyond);
+      if (match.SeenBy(Lockstep::PlayerId{0})[candidate.AsSize()].live)
+      {
+        hop = candidate;
+        break;
+      }
+    }
+    Assert::IsTrue(hop.IsValid());
+    match.MutableSystems()[hop.AsSize()].owner = Lockstep::PlayerId{3};
+
+    // Somebody else's system, with a building on it and another one rising.
+    match.MutableSystems()[beyond.AsSize()].owner = Lockstep::PlayerId{3};
+    match.MutableSystems()[beyond.AsSize()].miningStationLevel = 2;
+    match.MutableSystems()[beyond.AsSize()].construction =
+      Lockstep::Construction{.kind = Lockstep::BuildKind::MiningStation, .toLevel = 3, .completesAt = match.Tick() + 5};
+
+    // Go and look, then come home.
+    match.MutableFleets()[0].at = hop;
+    match = Advance(match);
+
+    // The snapshot is held, not called through: `System` hands back a pointer INTO it, and a
+    // temporary would be destroyed at the end of the expression.
+    const Lockstep::Snapshot watching = Lockstep::Snapshot::For(match, Lockstep::PlayerId{0});
+    const Lockstep::SnapshotSystem* live = watching.System(beyond);
+    Assert::IsNotNull(live);
+    Assert::IsTrue(live->live, L"the scout is standing next to it");
+    Assert::AreEqual(3U, live->risingToLevel, L"a live system did not report what is rising on it");
+
+    match.MutableFleets()[0].at = capital;
+    match = Advance(match);
+    match = Advance(match);
+
+    const Lockstep::Snapshot later = Lockstep::Snapshot::For(match, Lockstep::PlayerId{0});
+    const Lockstep::SnapshotSystem* remembered = later.System(beyond);
+    Assert::IsNotNull(remembered, L"a system once seen is forgotten");
+    Assert::IsFalse(remembered->live);
+    Assert::AreEqual(2U, remembered->miningStationLevel, L"the level it had when it was last seen is not remembered");
+    Assert::AreEqual(0U, remembered->risingToLevel, L"fog reported a construction that may have landed since");
+    Assert::AreEqual(0U, remembered->risingCompletesAt);
+  }
+
   // "Shared scouting pays visibly, as fog lifting on the map."
   TEST_METHOD(SharedScoutingAddsAPartnersViewAndRemovingItTakesItAway)
   {
@@ -336,8 +430,8 @@ public:
     const Lockstep::Snapshot view = Lockstep::Snapshot::For(match, Lockstep::PlayerId{0});
 
     Assert::AreEqual(37U, view.Credits(), L"the viewer's credits, as the lock will count them");
-    Assert::AreEqual(match.Rules().shipyardCost, view.ShipyardCost());
-    Assert::AreEqual(match.Rules().miningStationCost, view.MiningStationCost());
+    Assert::AreEqual(Lockstep::LevelValue(match.Rules().shipyardCost, 1), view.LevelCost(Lockstep::BuildKind::Shipyard, 1));
+    Assert::AreEqual(Lockstep::LevelValue(match.Rules().miningStationCost, 1), view.LevelCost(Lockstep::BuildKind::MiningStation, 1));
     Assert::AreEqual(match.Rules().tradeLaneCost, view.TradeLaneCost());
 
     const Lockstep::Snapshot theirs = Lockstep::Snapshot::For(match, Lockstep::PlayerId{1});
@@ -393,7 +487,7 @@ public:
 
     // Put something worth knowing on it, and a fleet on it, and an offer between two other players.
     match.MutableSystems()[hidden.AsSize()].owner = Lockstep::PlayerId{3};
-    match.MutableSystems()[hidden.AsSize()].hasShipyard = true;
+    match.MutableSystems()[hidden.AsSize()].shipyardLevel = 1;
 
     Lockstep::MatchFleet garrison;
     garrison.owner = Lockstep::PlayerId{3};
@@ -585,8 +679,16 @@ public:
     Assert::AreEqual(original.TotalSystems(), returned.TotalSystems());
     Assert::AreEqual(original.UnclaimedSystems(), returned.UnclaimedSystems());
     Assert::AreEqual(original.Credits(), returned.Credits());
-    Assert::AreEqual(original.ShipyardCost(), returned.ShipyardCost());
-    Assert::AreEqual(original.MiningStationCost(), returned.MiningStationCost());
+    for (std::uint32_t level = 1; level <= Lockstep::BUILDING_LEVELS; ++level)
+    {
+      Assert::AreEqual(original.LevelCost(Lockstep::BuildKind::Shipyard, level), returned.LevelCost(Lockstep::BuildKind::Shipyard, level));
+      Assert::AreEqual(original.LevelCost(Lockstep::BuildKind::MiningStation, level),
+                       returned.LevelCost(Lockstep::BuildKind::MiningStation, level));
+      Assert::AreEqual(original.LevelTicks(Lockstep::BuildKind::Shipyard, level),
+                       returned.LevelTicks(Lockstep::BuildKind::Shipyard, level));
+      Assert::AreEqual(original.LevelYield(Lockstep::BuildKind::Shipyard, level),
+                       returned.LevelYield(Lockstep::BuildKind::Shipyard, level));
+    }
     Assert::AreEqual(original.TradeLaneCost(), returned.TradeLaneCost());
 
     for (std::size_t index = 0; index < original.Systems().size(); ++index)

@@ -18,11 +18,38 @@ namespace Lockstep
 /// board and is never written after generation, so anything that reads topology reads something
 /// that cannot have moved under it. `GalaxySystem::owner` is who STARTS there; this is who holds
 /// it now.
+/// What is rising on a system, and when it lands.
+///
+/// A build is ordered at one lock and completes at a later one (ADR-069), so a system carries the
+/// one thing it is building. `completesAt == 0` is nothing rising: tick zero cannot be a completion
+/// tick because a build ordered at tick zero completes at `0 + ticks`, and `ticks` is never zero
+/// (`RulesProblem::BuildingRisesInstantly`).
+///
+/// ONE AT A TIME. A second order on a system already building is refused
+/// (`OrderRejection::AlreadyBuilding`) rather than queued: a queue is more state on the wire, a
+/// second thing for the sheet to explain, and a floor plan by another name.
+struct Construction
+{
+  BuildKind kind = BuildKind::Shipyard;
+  /// The level it will be when it lands, so a reader never has to add one to know what is coming.
+  std::uint32_t toLevel = 0;
+  std::uint32_t completesAt = 0;
+
+  [[nodiscard]] constexpr bool Rising() const noexcept
+  {
+    return completesAt != 0;
+  }
+};
+
 struct SystemState
 {
   PlayerId owner;
-  bool hasShipyard = false;
-  bool hasMiningStation = false;
+  /// 0 is no building; otherwise the level it is at, which indexes the per-level tables in
+  /// `MatchRules` through `LevelValue` (ADR-069).
+  std::uint32_t shipyardLevel = 0;
+  std::uint32_t miningStationLevel = 0;
+  /// What is being built here, if anything.
+  Construction construction;
 
   /// Who is partway through taking this system, and for how many consecutive ticks they have held
   /// it uncontested. The one-pager's siege rule: two consecutive ticks, and one contested tick
@@ -211,8 +238,8 @@ struct SeenSystem
   std::uint32_t asOfTick = 0;
   /// Who held it then.
   PlayerId owner;
-  bool hadShipyard = false;
-  bool hadMiningStation = false;
+  std::uint32_t shipyardLevel = 0;
+  std::uint32_t miningStationLevel = 0;
 };
 
 /// The authoritative state of one match.

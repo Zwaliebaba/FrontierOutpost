@@ -51,6 +51,14 @@ enum class DigestKind : std::uint8_t
   AgreementOpened,
   AgreementBreached,
   Economy,
+  /// A building this player ordered started rising, landed, or fell with the system it was on; and
+  /// a rival's building seen rising on a system this player can see (ADR-069). Four kinds rather
+  /// than one `Economy`, because a card has to know whether it is reporting a commitment, a
+  /// payoff, a loss or somebody else's tell.
+  BuildStarted,
+  BuildCompleted,
+  BuildLost,
+  BuildSeen,
   Region,
   Custodian,
   MatchEnded
@@ -81,6 +89,9 @@ inline constexpr std::uint32_t AGREEMENT_MADE = 380;
 inline constexpr std::uint32_t ORDER_REFUSED = 350;
 inline constexpr std::uint32_t REGION = 300;
 inline constexpr std::uint32_t CUSTODIAN = 250;
+/// A rival's building seen rising. It ranks above the economy line and below everything that
+/// changes the board, because it is a tell rather than an event: something to read, not to answer.
+inline constexpr std::uint32_t RIVAL_BUILDING = 150;
 inline constexpr std::uint32_t ECONOMY = 100;
 } // namespace Severity
 

@@ -156,7 +156,10 @@ enum class OrderRejection : std::uint8_t
   /// Building on a system this player does not hold.
   NotYourSystem,
   /// A second building of a kind the system already has.
-  AlreadyBuilt,
+  /// The building is already at its top level, so there is nothing left to order here.
+  AtTopLevel,
+  /// Something is already rising on this system. One construction at a time (ADR-069).
+  AlreadyBuilding,
   /// The builds in this set cost more than the player has.
   CannotAfford,
   /// Proposing to yourself, or to a player who is not in the match.

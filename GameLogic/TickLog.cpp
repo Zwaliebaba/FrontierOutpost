@@ -63,6 +63,14 @@ const char* Describe(DigestKind _kind) noexcept
     return "agreement breached";
   case DigestKind::Economy:
     return "economy";
+  case DigestKind::BuildStarted:
+    return "build started";
+  case DigestKind::BuildCompleted:
+    return "build completed";
+  case DigestKind::BuildLost:
+    return "build lost";
+  case DigestKind::BuildSeen:
+    return "rival building";
   case DigestKind::Region:
     return "region";
   case DigestKind::Custodian:

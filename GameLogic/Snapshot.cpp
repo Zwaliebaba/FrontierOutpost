@@ -123,8 +123,17 @@ Snapshot Snapshot::For(const Match& _match, PlayerId _player)
 
     // Remembered systems report what was true when they were last seen. Live ones report now.
     entry.owner = seen[index].live ? state.owner : seen[index].owner;
-    entry.hasShipyard = seen[index].live ? state.hasShipyard : seen[index].hadShipyard;
-    entry.hasMiningStation = seen[index].live ? state.hasMiningStation : seen[index].hadMiningStation;
+    entry.shipyardLevel = seen[index].live ? state.shipyardLevel : seen[index].shipyardLevel;
+    entry.miningStationLevel = seen[index].live ? state.miningStationLevel : seen[index].miningStationLevel;
+
+    // What is rising is reported only while the system is live, like the siege below it: a
+    // remembered construction may have landed or fallen since it was seen (ADR-069).
+    if (seen[index].live && state.construction.Rising())
+    {
+      entry.risingKind = state.construction.kind;
+      entry.risingToLevel = state.construction.toLevel;
+      entry.risingCompletesAt = state.construction.completesAt;
+    }
 
     if (seen[index].live)
     {
@@ -251,6 +260,10 @@ Snapshot Snapshot::For(const Match& _match, PlayerId _player)
   view.m_credits = _match.PlayerAt(_player).credits;
   view.m_shipyardCost = _match.Rules().shipyardCost;
   view.m_miningStationCost = _match.Rules().miningStationCost;
+  view.m_shipyardBuildTicks = _match.Rules().shipyardBuildTicks;
+  view.m_miningStationBuildTicks = _match.Rules().miningStationBuildTicks;
+  view.m_shipsPerShipyard = _match.Rules().shipsPerShipyard;
+  view.m_miningStationCredits = _match.Rules().miningStationCredits;
   view.m_tradeLaneCost = _match.Rules().tradeLaneCost;
 
   return view;
@@ -301,8 +314,11 @@ void Visit(Neuron::Archive& _archive, SnapshotSystem& _system)
   _archive.Boolean(_system.live);
   _archive.U32(_system.asOfTick);
   _archive.Identity(_system.owner);
-  _archive.Boolean(_system.hasShipyard);
-  _archive.Boolean(_system.hasMiningStation);
+  _archive.U32(_system.shipyardLevel);
+  _archive.U32(_system.miningStationLevel);
+  _archive.Enumerator(_system.risingKind, BuildKind::MiningStation);
+  _archive.U32(_system.risingToLevel);
+  _archive.U32(_system.risingCompletesAt);
   _archive.U32(_system.siegeTicks);
   _archive.U32(_system.capturedAt);
   _archive.Boolean(_system.halfYield);
@@ -443,8 +459,30 @@ void Snapshot::Visit(Neuron::Archive& _archive)
   _archive.Boolean(m_finished);
 
   _archive.U32(m_credits);
-  _archive.U32(m_shipyardCost);
-  _archive.U32(m_miningStationCost);
+  for (std::uint32_t& cost : m_shipyardCost)
+  {
+    _archive.U32(cost);
+  }
+  for (std::uint32_t& cost : m_miningStationCost)
+  {
+    _archive.U32(cost);
+  }
+  for (std::uint32_t& ticks : m_shipyardBuildTicks)
+  {
+    _archive.U32(ticks);
+  }
+  for (std::uint32_t& ticks : m_miningStationBuildTicks)
+  {
+    _archive.U32(ticks);
+  }
+  for (std::uint32_t& ships : m_shipsPerShipyard)
+  {
+    _archive.U32(ships);
+  }
+  for (std::uint32_t& credits : m_miningStationCredits)
+  {
+    _archive.U32(credits);
+  }
   _archive.U32(m_tradeLaneCost);
 }
 

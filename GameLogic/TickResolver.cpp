@@ -266,6 +266,37 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
     }
   }
 
+  // ---- Constructions that land this tick, before any order is applied --------------------------
+  //
+  // A building ordered at tick N with a one-tick level lands at the lock of tick N+1 and PRODUCES
+  // IN PHASE 2 OF THAT SAME TICK (ADR-069), which is why this sits at the top of phase 1 rather
+  // than in a phase of its own: production is the next phase and reads what this leaves.
+  //
+  // Completing before orders are applied is also what makes a system free to take a new order the
+  // moment the old one lands, rather than a tick later.
+  for (std::size_t index = 0; index < next.Systems().size(); ++index)
+  {
+    SystemState& system = next.MutableSystems()[index];
+    if (!system.construction.Rising() || system.construction.completesAt > _in.Tick())
+    {
+      continue;
+    }
+
+    const SystemId id{static_cast<std::int32_t>(index)};
+    const bool yard = system.construction.kind == BuildKind::Shipyard;
+    const std::uint32_t level = system.construction.toLevel;
+    (yard ? system.shipyardLevel : system.miningStationLevel) = level;
+    system.construction = Construction{};
+
+    record.lines.push_back(std::format("{} L{} completed at {}", yard ? "shipyard" : "mining station", level, NameOf(_in, id)));
+    Tell(_log, system.owner,
+         DigestEntry{.kind = DigestKind::BuildCompleted,
+                     .severity = Severity::ECONOMY,
+                     .title = std::format("{} L{} at {}", yard ? "Shipyard" : "Mining station", level, NameOf(_in, id)),
+                     .detail = yard ? "It reinforces the fleet standing there from this tick" : "It pays from this tick",
+                     .system = id});
+  }
+
   // One set per player, first submission wins. A retried submission is a network event, not a
   // second turn, and doubling a build because a packet arrived twice would be the worst kind of
   // bug to reproduce.
@@ -329,10 +360,19 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
                            { return _other.list == OrderList::Builds && _other.index == static_cast<std::int32_t>(earlier); });
             if (accepted)
             {
-              spent += set->builds[earlier].kind == BuildKind::Shipyard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost;
+              // Priced at the level that order would have reached, which is the level the system is
+              // at now plus one -- the same arithmetic `Match::Validate` refused it by (ADR-069).
+              const BuildOrder& other = set->builds[earlier];
+              const SystemState& system = _in.SystemAt(other.system);
+              const bool otherYard = other.kind == BuildKind::Shipyard;
+              const std::uint32_t level = (otherYard ? system.shipyardLevel : system.miningStationLevel) + 1;
+              spent += LevelValue(otherYard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost, level);
             }
           }
-          const std::uint32_t cost = build.kind == BuildKind::Shipyard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost;
+          const bool yard = build.kind == BuildKind::Shipyard;
+          const SystemState& target = _in.SystemAt(build.system);
+          const std::uint32_t level = (yard ? target.shipyardLevel : target.miningStationLevel) + 1;
+          const std::uint32_t cost = LevelValue(yard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost, level);
           const std::uint32_t purse = next.PlayerAt(player).credits;
           entry.detail = spent == 0 ? std::format("{} at {} - costs {}, you had {}", what, NameOf(_in, build.system), cost, purse)
                                     : std::format("{} at {} - costs {}, {} left after the builds before it", what,
@@ -408,7 +448,9 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
       next.MutableFleets()[fleetOrder.fleet.AsSize()].orderedTo = fleetOrder.destination;
     }
 
-    // Builds complete at the lock and are paid for at the lock.
+    // Builds are PAID FOR at the lock and LAND at a later one (ADR-069). The credits go now, so
+    // that a purse a player has already spent cannot be spent twice while the building rises, and
+    // the ETA is the commitment the design wanted: something in flight that is not a fleet.
     for (std::size_t order = 0; order < set->builds.size(); ++order)
     {
       if (wasRejected(OrderList::Builds, order))
@@ -417,18 +459,23 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
       }
       const BuildOrder& build = set->builds[order];
       SystemState& system = next.MutableSystems()[build.system.AsSize()];
-      const std::uint32_t cost = build.kind == BuildKind::Shipyard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost;
+      const bool yard = build.kind == BuildKind::Shipyard;
+      const std::uint32_t toLevel = (yard ? system.shipyardLevel : system.miningStationLevel) + 1;
+      const std::uint32_t cost = LevelValue(yard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost, toLevel);
+      const std::uint32_t ticks = LevelValue(yard ? _in.Rules().shipyardBuildTicks : _in.Rules().miningStationBuildTicks, toLevel);
 
-      if (build.kind == BuildKind::Shipyard)
-      {
-        system.hasShipyard = true;
-      }
-      else
-      {
-        system.hasMiningStation = true;
-      }
+      system.construction = Construction{.kind = build.kind, .toLevel = toLevel, .completesAt = _in.Tick() + ticks};
       next.MutablePlayers()[index].credits -= cost;
-      record.lines.push_back(std::format("{} built at {}", NameOf(player), NameOf(_in, build.system)));
+
+      record.lines.push_back(
+        std::format("{} started {} L{} at {}", NameOf(player), yard ? "shipyard" : "mining station", toLevel, NameOf(_in, build.system)));
+      Tell(
+        _log, player,
+        DigestEntry{.kind = DigestKind::BuildStarted,
+                    .severity = Severity::ECONOMY,
+                    .title = std::format("{} L{} rising at {}", yard ? "Shipyard" : "Mining station", toLevel, NameOf(_in, build.system)),
+                    .detail = std::format("Done T{} - {} credits spent", _in.Tick() + ticks, cost),
+                    .system = build.system});
     }
 
     // Proposals go on the table. Nothing is charged yet -- the lane is paid for at the lock the
@@ -704,10 +751,7 @@ Match TickResolver::Produce(const Match& _in, TickLog& _log)
     {
       produced += _in.Rules().capitalCreditsBonus;
     }
-    if (state.hasMiningStation)
-    {
-      produced += _in.Rules().miningStationCredits;
-    }
+    produced += LevelValue(_in.Rules().miningStationCredits, state.miningStationLevel);
 
     // "Systems conquered from a custodian yield at half for the rest of the match, whoever holds
     // them -- the dropout's infrastructure decays under new ownership." It travels with the system,
@@ -758,10 +802,11 @@ Match TickResolver::Produce(const Match& _in, TickLog& _log)
   {
     const SystemId system{static_cast<std::int32_t>(index)};
     const SystemState& state = _in.SystemAt(system);
-    if (!state.hasShipyard || !state.owner.IsValid())
+    if (state.shipyardLevel == 0 || !state.owner.IsValid())
     {
       continue;
     }
+    const std::uint32_t ships = LevelValue(_in.Rules().shipsPerShipyard, state.shipyardLevel);
 
     const std::vector<PlayerId> present = OwnersPresent(_in, system);
     const bool contested = std::any_of(present.begin(), present.end(), [&state](PlayerId _who) { return _who != state.owner; });
@@ -789,17 +834,17 @@ Match TickResolver::Produce(const Match& _in, TickLog& _log)
 
     if (reinforced.IsValid())
     {
-      next.MutableFleets()[reinforced.AsSize()].ships += _in.Rules().shipsPerShipyard;
+      next.MutableFleets()[reinforced.AsSize()].ships += ships;
     }
     else
     {
       MatchFleet built;
       built.owner = state.owner;
-      built.ships = _in.Rules().shipsPerShipyard;
+      built.ships = ships;
       built.at = system;
       (void)next.AddFleet(built);
     }
-    record.lines.push_back(std::format("shipyard at {} produced {}", NameOf(_in, system), _in.Rules().shipsPerShipyard));
+    record.lines.push_back(std::format("shipyard at {} produced {}", NameOf(_in, system), ships));
   }
 
   // A custodian's garrisons weaken every tick of absence. It is the mechanism behind the
@@ -1288,6 +1333,25 @@ Match TickResolver::Claim(const Match& _in, TickLog& _log)
       if (_in.PlayerAt(loser).status == PlayerStatus::Custodian)
       {
         after.halfYield = true;
+      }
+
+      // A CAPTURE CANCELS WHAT WAS RISING, and the credits are gone (ADR-069). The alternative --
+      // handing a half-built level to the besieger -- is a prize the siege did not earn, and
+      // refunding it is a siege that costs the defender nothing.
+      if (before.construction.Rising())
+      {
+        const bool yard = before.construction.kind == BuildKind::Shipyard;
+        after.construction = Construction{};
+        record.lines.push_back(
+          std::format("the {} rising at {} was lost with it", yard ? "shipyard" : "mining station", NameOf(_in, system)));
+        Tell(_log, loser,
+             DigestEntry{.kind = DigestKind::BuildLost,
+                         .severity = Severity::LOST_A_SYSTEM,
+                         .title = std::format("{} L{} lost at {}", yard ? "Shipyard" : "Mining station", before.construction.toLevel,
+                                              NameOf(_in, system)),
+                         .detail = "It was still rising when the system fell",
+                         .system = system,
+                         .other = besieger});
       }
 
       record.lines.push_back(std::format("{} captured {} from {}", NameOf(besieger), NameOf(_in, system), NameOf(loser)));

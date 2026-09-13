@@ -265,6 +265,17 @@ struct BuildRow
   /// 0 shipyard, 1 mining station. Matches `Lockstep::BuildKind`, which this header cannot name --
   /// `MatchState` is the client's and `GameLogic` is the server's (AGENTS.md §2).
   std::uint8_t kind = 0;
+  /// The level this row would build, 1 upwards, and how many ticks it takes (ADR-069). A row is
+  /// always about the NEXT level: a system with a level-one shipyard offers `SHIPYARD L2`.
+  std::uint32_t level = 0;
+  std::uint32_t ticks = 0;
+
+  /// Set on the one row a system under construction offers: what is rising, and the tick it lands.
+  /// It is not a target -- the lock refuses a second order on that system -- and is drawn as the
+  /// reason there is nothing to queue there rather than being left out.
+  bool rising = false;
+  std::uint32_t completesAt = 0;
+
   /// True for the trade-lane row: dashed amber border, outlined amber PROPOSE button, and it
   /// stays that way until the neighbour accepts.
   bool isTradeLane = false;

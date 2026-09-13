@@ -8,6 +8,7 @@
 #include "BotPolicy.h"
 
 #include <algorithm>
+#include <array>
 #include <utility>
 #include <vector>
 
@@ -183,23 +184,50 @@ OrderSet BotOrdersFor(BotPolicy _policy, const Snapshot& _view, const MatchRules
   const std::vector<SystemId> mine = Held(_view);
   const bool yardFirst = _policy == BotPolicy::Turtle;
 
-  for (const SystemId system : mine)
+  // A build order means the NEXT LEVEL here (ADR-069), so a bot that has built everything once
+  // goes round again and levels it up. The cheapest affordable next level wins, which is the same
+  // "cheapest useful thing" rule as before -- it just no longer runs out after one pass.
+  //
+  // Systems already building are skipped rather than ordered on: the lock would refuse a second
+  // order (`AlreadyBuilding`), and a bot that reliably produces a refusal every tick would make
+  // the refusal digest meaningless to read during a playtest.
   {
-    const SnapshotSystem* state = _view.System(system);
-    if (state == nullptr)
+    SystemId bestSystem;
+    BuildKind bestKind = BuildKind::Shipyard;
+    std::uint32_t bestCost = 0;
+
+    for (const SystemId system : mine)
     {
-      continue;
+      const SnapshotSystem* state = _view.System(system);
+      if (state == nullptr || state->risingCompletesAt != 0)
+      {
+        continue;
+      }
+
+      // The preferred kind first, so a tie between two systems keeps the policy's character.
+      for (const BuildKind kind : yardFirst ? std::array{BuildKind::Shipyard, BuildKind::MiningStation}
+                                            : std::array{BuildKind::MiningStation, BuildKind::Shipyard})
+      {
+        const std::uint32_t level = kind == BuildKind::Shipyard ? state->shipyardLevel : state->miningStationLevel;
+        if (level >= BUILDING_LEVELS)
+        {
+          continue;
+        }
+
+        const std::uint32_t cost = _view.LevelCost(kind, level + 1);
+        if (cost > _view.Credits() || (bestCost != 0 && cost >= bestCost))
+        {
+          continue;
+        }
+        bestSystem = system;
+        bestKind = kind;
+        bestCost = cost;
+      }
     }
 
-    if (yardFirst && !state->hasShipyard)
+    if (bestSystem.IsValid())
     {
-      orders.builds.push_back(BuildOrder{.system = system, .kind = BuildKind::Shipyard});
-      break;
-    }
-    if (!yardFirst && !state->hasMiningStation)
-    {
-      orders.builds.push_back(BuildOrder{.system = system, .kind = BuildKind::MiningStation});
-      break;
+      orders.builds.push_back(BuildOrder{.system = bestSystem, .kind = bestKind});
     }
   }
 

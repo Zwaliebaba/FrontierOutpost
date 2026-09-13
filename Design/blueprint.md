@@ -207,17 +207,21 @@ melee double the combat model for the reason ADR-021 held ship classes back. The
 worker-versus-warrior tension arrives anyway, in this game's own currency, once Exile makes stations
 and lanes raidable: a fleet parked on a lane end is guarding income instead of pushing.
 
-**Levels and build time.** Every building has three levels. A level costs more than the one before
-and takes ticks to complete: a build is ordered at one lock and lands at a later one, with its ETA
-on the rail like a fleet's. Rivals who can see the system see it rising — *BASTION - DONE T47* — the
-way they see a fleet in transit: blind at the choice, public once locked, a tell (owner decision,
-2026-09-13). Level one is what exists today at today's numbers; level two improves the number; level
-three opens a feature.
+**Levels and build time** — designed and built on 2026-09-13, ADR-069. Every building has three
+levels. A level costs more than the one before and takes ticks to complete: a build is ordered at
+one lock and lands at a later one, with its ETA on the rail like a fleet's. Rivals who can see the
+system see it rising — *MINING L2 JANDAL - T47* — the way they see a fleet in transit: blind at the
+choice, public once locked, a tell (owner decision, 2026-09-13). Level one is what building was
+before this; every level above it is a bigger number on the same curve. **Level three opens no
+feature yet**: the two the session sketched were a mining station doubling its lanes, which is
+unlock-shaped and belongs with the research track, and a shipyard repairing a fleet, which means
+nothing while ships have no damage state. Features at level three arrive with the bastion, after
+Phase 0 (ADR-069).
 
 | Role | Building | Level one | Levels two and three | Completes in |
 |---|---|---|---|---|
-| Economy | Mining station | +4 CR/tick | more credits; L3 doubles what the lanes off that system pay | 1 → 2 → 3 ticks |
-| War | Shipyard | +2 ships/tick | more ships; L3 repairs a fleet standing there | 1 → 2 → 3 ticks |
+| Economy | Mining station | +4 CR/tick | +7, then +10 | 1 → 2 → 3 ticks |
+| War | Shipyard | +2 ships/tick | +3, then +4 | 1 → 2 → 3 ticks |
 | Defence | **Bastion** — new | +25 on the defender bonus, so the incumbent's 125% is 150% there | more bonus; L3 makes a siege of that system take three ticks | 2 → 3 → 4 ticks |
 | Research | none — an empire order (below) | — | — | 4 → 8 ticks |
 
@@ -304,7 +308,8 @@ An inventory, not a promise.
 | Galaxy generator: ring layout, constraint validation, seed rejection, 64 embedded system names | `GameLogic/GalaxyGenerator` |
 | `MatchRules`: every tunable in one struct with initial values, plus a check that refuses rules under which a mechanic ceases to exist | `GameLogic/MatchRules.h` |
 | The six-phase resolver, every rule in §3, with a per-tick log for *Replay tick N* | `GameLogic/TickResolver`, `Melee` |
-| Orders: fleet moves, builds, proposals with conditional lanes, answers, withdrawals, lane cancellation, concession — eighteen distinct rejection reasons, each phrased for the digest | `GameLogic/Orders`, `Match::Validate` |
+| Orders: fleet moves, builds, proposals with conditional lanes, answers, withdrawals, lane cancellation, concession — nineteen distinct rejection reasons, each phrased for the digest | `GameLogic/Orders`, `Match::Validate` |
+| Three building levels, each costing more, paying more and taking ticks to rise; one construction per system, visible to rivals who can see it, cancelled by a capture | `GameLogic/MatchRules.h`, `TickResolver`, ADR-069 |
 | Per-player snapshot as the security boundary: a player receives exactly what they are entitled to see, and a test asserts the negative | `GameLogic/Snapshot` |
 | Six scripted policies (expand-near, expand-far, turtle, raider, diplomat, absentee) playing a full 84-tick match, hash-identical across runs | `Tests/GameLogicTests/ScriptedMatchTests` |
 
@@ -332,7 +337,6 @@ appendix has the detail.
 | The sealed region's rules | It is placed, drawn and reachable; nothing happens when it opens. Phase 2. |
 | The fiction | Wanted, not yet designed. A design session before Phase 1 |
 | Hiring exiles (escrowed jobs) | v2 |
-| Building levels and build time | Designed 2026-09-13 (§3). The credit sink; goes in before Phase 0 |
 | The bastion, a defence building | Designed 2026-09-13 (§3). After Phase 0 has tuned the combat numbers it is a term in |
 | Research: a short public track of unlocks, ordered as an empire order | Designed 2026-09-13 (§3), named in the phase list since the start. After Phase 0; which eight unlocks is open |
 | Ship classes | Strength is ship count for now; classes are a v2 candidate. Gatherer ships were considered and rejected on 2026-09-13 (§3) |
@@ -401,10 +405,11 @@ A view, not a plan, built on the decisions taken on 2026-09-11. Each step depend
 one holding.
 
 **Now → Phase 0 (weeks).** Six people, one weekend, on the desktop prototype. The build is ready;
-what it needs is a host, six tokens and a Saturday. Expect to change numbers, not rules — with one
-rules change landing ahead of it: building levels and build time (§3), so that the credits Phase 0
-spends are not dead by day two. `Design/Plans/4X-03-PhaseZero.md` is that change and everything else
-the tree owes first, in order, written for Claude Code to execute.
+what it needs is a host, six tokens and a Saturday. Expect to change numbers, not rules: the one
+rules change that was to land ahead of it — building levels and build time, so that the credits
+Phase 0 spends are not dead by day two — is built (§3, ADR-069). `Design/Plans/4X-03-PhaseZero.md`
+is that change and everything else the tree owes first, in order, written for Claude Code to
+execute.
 
 **Before Phase 1: the fiction.** A design session that gives the game a world — who the players are,
 why the galaxy is bounded, what the sealed region is and why it opens. It should be written to the
@@ -535,7 +540,7 @@ says which.
 | Concession | Forfeits score outright, in any week | **Done 2026-09-13: ADR-067, and the resolver applies it** |
 | Audio and colour-blind mode | Neither in v1 | — |
 | Research | A short public track of unlocks, ordered as an empire order rather than through a building (2026-09-13, superseding "after Phase 2") | An ADR and `MatchRules` entries when built, after Phase 0; the list of unlocks |
-| Building levels and build time | Three levels per building, each costing more and taking ticks; a build in progress is visible to rivals who can see the system (2026-09-13) | An ADR and `MatchRules` entries; built before Phase 0 |
+| Building levels and build time | Three levels per building, each costing more and taking ticks; a build in progress is visible to rivals who can see the system (2026-09-13) | **Done 2026-09-13: ADR-069** |
 | A defence building | The bastion: a term in the defender bonus, its top level lengthening a siege (2026-09-13) | An ADR when built, after Phase 0 |
 | Gatherer ships | Rejected (2026-09-13): resource collection stays territorial | — |
 | A rules file | Rejected (2026-09-13): `MatchRules` is already the one place every tunable lives, validated on creation and archived with the match; a data file would add a dependency and a second place | — |

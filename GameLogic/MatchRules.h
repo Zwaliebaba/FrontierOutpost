@@ -1,9 +1,26 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 
 namespace Lockstep
 {
+
+/// How many levels a building has. Three: one to have it, one that improves it, one that is worth
+/// saving for (ADR-069).
+inline constexpr std::size_t BUILDING_LEVELS = 3;
+
+/// What a table of per-level values is worth at a level, where 0 means "no building" and pays
+/// nothing. The one place `[level - 1]` is written.
+[[nodiscard]] constexpr std::uint32_t LevelValue(const std::array<std::uint32_t, BUILDING_LEVELS>& _table, std::uint32_t _level) noexcept
+{
+  if (_level == 0)
+  {
+    return 0;
+  }
+  const std::size_t index = static_cast<std::size_t>(_level - 1);
+  return index < _table.size() ? _table[index] : _table.back();
+}
 
 /// Every number the game is played with, in one place.
 ///
@@ -105,11 +122,15 @@ struct MatchRules
   /// What a capital adds on top. A capital is worth holding beyond the guard window.
   std::uint32_t capitalCreditsBonus = 4;
 
-  /// What a mining station adds to the system it is on.
-  std::uint32_t miningStationCredits = 4;
+  /// What a mining station adds to the system it is on, by level.
+  ///
+  /// INDEXED BY LEVEL MINUS ONE, everywhere. A system's level is 0 when it has no building, so the
+  /// level is also the count of entries that apply and `[level - 1]` is what it currently pays.
+  /// `LevelValue` below is the one place that arithmetic is written.
+  std::array<std::uint32_t, BUILDING_LEVELS> miningStationCredits = {4, 7, 10};
 
-  /// Ships a shipyard adds to the fleet at its system each tick.
-  std::uint32_t shipsPerShipyard = 2;
+  /// Ships a shipyard adds to the fleet at its system each tick, by level.
+  std::array<std::uint32_t, BUILDING_LEVELS> shipsPerShipyard = {2, 3, 4};
 
   /// What a lane between two systems the same player holds pays that player each tick.
   std::uint32_t internalLaneIncome = 1;
@@ -150,8 +171,15 @@ struct MatchRules
 
   // ---- Build costs (order validation, step 3) --------------------------------------------------
 
-  std::uint32_t shipyardCost = 20;
-  std::uint32_t miningStationCost = 15;
+  /// What each LEVEL costs, and how many ticks it takes to rise.
+  ///
+  /// A level costs more than the one before and takes longer, which is what makes credits keep
+  /// meaning something past the first two days and what puts an ETA on a build (ADR-069). The
+  /// numbers are Phase 0's to change; the shape is not.
+  std::array<std::uint32_t, BUILDING_LEVELS> shipyardCost = {20, 40, 60};
+  std::array<std::uint32_t, BUILDING_LEVELS> miningStationCost = {15, 30, 50};
+  std::array<std::uint32_t, BUILDING_LEVELS> shipyardBuildTicks = {1, 2, 3};
+  std::array<std::uint32_t, BUILDING_LEVELS> miningStationBuildTicks = {1, 2, 3};
 
   /// Paid by the player who proposes the lane, at the lock the partner accepts it.
   std::uint32_t tradeLaneCost = 10;
@@ -309,7 +337,14 @@ enum class RulesProblem : std::uint8_t
   DominanceNeedsNoHolding,
   /// A defender bonus below 100%, which would make holding a system worse than arriving at it and
   /// invert the one-pager's incumbency rule.
-  DefenderBonusPunishesTheDefender
+  DefenderBonusPunishesTheDefender,
+  /// A level that costs no more than the one below it, or pays no more. Either makes a level a
+  /// button nobody has a reason not to press, which is a mechanic that has ceased to be a decision
+  /// (ADR-069).
+  BuildingLevelIsNotAStep,
+  /// A level that takes no ticks to build. A build with no ETA is the thing levels were added to
+  /// stop: nothing a player commits to is ever in flight.
+  BuildingRisesInstantly
 };
 
 [[nodiscard]] constexpr const char* Describe(RulesProblem _problem) noexcept
@@ -336,6 +371,10 @@ enum class RulesProblem : std::uint8_t
     return "dominance held for no ticks ends the match the instant somebody leads";
   case RulesProblem::DefenderBonusPunishesTheDefender:
     return "a defender bonus below one hundred percent makes holding a system worse than arriving at it";
+  case RulesProblem::BuildingLevelIsNotAStep:
+    return "each building level must cost more than the one below it and pay more, or it is not a decision";
+  case RulesProblem::BuildingRisesInstantly:
+    return "a building level of no ticks puts nothing in flight, which is what levels are for";
   default:
     return "unknown";
   }
@@ -376,6 +415,25 @@ enum class RulesProblem : std::uint8_t
   if (_rules.defenderBonusPercent < 100)
   {
     return RulesProblem::DefenderBonusPunishesTheDefender;
+  }
+  for (std::size_t level = 0; level < BUILDING_LEVELS; ++level)
+  {
+    if (_rules.shipyardBuildTicks[level] == 0 || _rules.miningStationBuildTicks[level] == 0)
+    {
+      return RulesProblem::BuildingRisesInstantly;
+    }
+    if (level == 0)
+    {
+      continue;
+    }
+    const bool costsMore =
+      _rules.shipyardCost[level] > _rules.shipyardCost[level - 1] && _rules.miningStationCost[level] > _rules.miningStationCost[level - 1];
+    const bool paysMore = _rules.shipsPerShipyard[level] > _rules.shipsPerShipyard[level - 1] &&
+                          _rules.miningStationCredits[level] > _rules.miningStationCredits[level - 1];
+    if (!costsMore || !paysMore)
+    {
+      return RulesProblem::BuildingLevelIsNotAStep;
+    }
   }
   if (_rules.dominanceSharePercent <= (100U / _rules.playerCount) || _rules.dominanceSharePercent > 100U)
   {

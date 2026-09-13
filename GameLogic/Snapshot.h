@@ -7,6 +7,7 @@
 #include "ByteReader.h"
 #include "ByteWriter.h"
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -31,8 +32,18 @@ struct SnapshotSystem
   bool live = false;
   std::uint32_t asOfTick = 0;
   PlayerId owner;
-  bool hasShipyard = false;
-  bool hasMiningStation = false;
+  /// 0 is no building. A remembered system reports the levels it had when it was last seen.
+  std::uint32_t shipyardLevel = 0;
+  std::uint32_t miningStationLevel = 0;
+
+  /// What is rising here, reported ONLY FOR A LIVE SYSTEM -- the same rule as a siege below.
+  ///
+  /// A rival who can see the system sees the building rise, with its ETA, the way a departed fleet
+  /// is public (ADR-069). A remembered system reports nothing rising: what was under construction
+  /// three ticks ago may have landed or fallen since, and fog must not invent either.
+  BuildKind risingKind = BuildKind::Shipyard;
+  std::uint32_t risingToLevel = 0;
+  std::uint32_t risingCompletesAt = 0;
 
   /// Siege and custodian marks, reported only for a system the player can see NOW. A remembered
   /// system does not report a siege that may have ended three ticks ago.
@@ -205,13 +216,31 @@ public:
   {
     return m_credits;
   }
-  [[nodiscard]] std::uint32_t ShipyardCost() const noexcept
+  /// What the LEVELS cost and how long they take, so the sheet can price a level the purse cannot
+  /// cover yet and say what it would take (ADR-053, ADR-069). Indexed the way `MatchRules` indexes
+  /// them: `LevelCost(kind, level)` with a level of 1 upwards.
+  [[nodiscard]] std::uint32_t LevelCost(BuildKind _kind, std::uint32_t _level) const noexcept
   {
-    return m_shipyardCost;
+    const std::array<std::uint32_t, BUILDING_LEVELS>& table = _kind == BuildKind::Shipyard ? m_shipyardCost : m_miningStationCost;
+    return _level == 0 || _level > table.size() ? 0 : table[static_cast<std::size_t>(_level - 1)];
   }
-  [[nodiscard]] std::uint32_t MiningStationCost() const noexcept
+  [[nodiscard]] std::uint32_t LevelTicks(BuildKind _kind, std::uint32_t _level) const noexcept
   {
-    return m_miningStationCost;
+    const std::array<std::uint32_t, BUILDING_LEVELS>& table =
+      _kind == BuildKind::Shipyard ? m_shipyardBuildTicks : m_miningStationBuildTicks;
+    return _level == 0 || _level > table.size() ? 0 : table[static_cast<std::size_t>(_level - 1)];
+  }
+
+  /// What a level PAYS: ships a tick for a shipyard, credits a tick for a mining station.
+  ///
+  /// On the wire for the same reason the prices are (ADR-053): the sheet's whole job is to let a
+  /// player weigh a shipyard level against a mining level, and it cannot do that without both
+  /// numbers. The client owns the sentence -- "ships" or "credits" -- and the server owns the
+  /// number.
+  [[nodiscard]] std::uint32_t LevelYield(BuildKind _kind, std::uint32_t _level) const noexcept
+  {
+    const std::array<std::uint32_t, BUILDING_LEVELS>& table = _kind == BuildKind::Shipyard ? m_shipsPerShipyard : m_miningStationCredits;
+    return _level == 0 || _level > table.size() ? 0 : table[static_cast<std::size_t>(_level - 1)];
   }
   [[nodiscard]] std::uint32_t TradeLaneCost() const noexcept
   {
@@ -256,8 +285,12 @@ private:
   bool m_finished = false;
 
   std::uint32_t m_credits = 0;
-  std::uint32_t m_shipyardCost = 0;
-  std::uint32_t m_miningStationCost = 0;
+  std::array<std::uint32_t, BUILDING_LEVELS> m_shipyardCost = {};
+  std::array<std::uint32_t, BUILDING_LEVELS> m_miningStationCost = {};
+  std::array<std::uint32_t, BUILDING_LEVELS> m_shipyardBuildTicks = {};
+  std::array<std::uint32_t, BUILDING_LEVELS> m_miningStationBuildTicks = {};
+  std::array<std::uint32_t, BUILDING_LEVELS> m_shipsPerShipyard = {};
+  std::array<std::uint32_t, BUILDING_LEVELS> m_miningStationCredits = {};
   std::uint32_t m_tradeLaneCost = 0;
 };
 

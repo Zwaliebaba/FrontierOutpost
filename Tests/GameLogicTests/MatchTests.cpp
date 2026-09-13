@@ -183,7 +183,7 @@ public:
 
     Assert::IsTrue(changed([](Lockstep::Match& _m) { _m.MutablePlayers()[0].credits += 1; }), L"credits");
     Assert::IsTrue(changed([](Lockstep::Match& _m) { _m.MutablePlayers()[0].conceded = true; }), L"concession");
-    Assert::IsTrue(changed([](Lockstep::Match& _m) { _m.MutableSystems()[1].hasShipyard = true; }), L"buildings");
+    Assert::IsTrue(changed([](Lockstep::Match& _m) { _m.MutableSystems()[1].shipyardLevel = 1; }), L"buildings");
     Assert::IsTrue(changed([](Lockstep::Match& _m) { _m.MutableSystems()[1].siegeTicks = 1; }), L"siege progress");
     Assert::IsTrue(changed([](Lockstep::Match& _m) { _m.MutableFleets()[0].ships += 1; }), L"fleet strength");
     Assert::IsTrue(changed([](Lockstep::Match& _m) { _m.MutableFleets()[0].orderedTo = Lockstep::SystemId{3}; }), L"pending orders");
@@ -283,7 +283,7 @@ public:
 
     const std::array<Lockstep::OrderSet, 1> sets = {orders};
     const Lockstep::Match after = Advance(match, sets);
-    Assert::IsTrue(after.SystemAt(capital).hasMiningStation, L"the build at index zero was legal and must happen");
+    Assert::IsTrue(after.SystemAt(capital).construction.Rising(), L"the build at index zero was legal and must start");
 
     // **Against the same build with nothing refused beside it.** Not against the opening balance:
     // a tick pays as well as charges -- production runs in it, and a mining station yields on the
@@ -299,7 +299,7 @@ public:
     Assert::AreEqual(cleanly.PlayerAt(Lockstep::PlayerId{0}).credits, after.PlayerAt(Lockstep::PlayerId{0}).credits,
                      L"a refused fleet order beside it changed what the build cost");
     Assert::IsTrue(after.PlayerAt(Lockstep::PlayerId{0}).credits <
-                     match.PlayerAt(Lockstep::PlayerId{0}).credits + match.Rules().miningStationCost,
+                     match.PlayerAt(Lockstep::PlayerId{0}).credits + Lockstep::LevelValue(match.Rules().miningStationCost, 1),
                    L"the build was not charged for at all");
   }
 
@@ -394,17 +394,24 @@ public:
     Assert::IsTrue(Refused(match.Validate(orders), Lockstep::OrderRejection::NotYourSystem));
   }
 
-  TEST_METHOD(ASecondBuildingOfTheSameKindIsRefused)
+  TEST_METHOD(ABuildIsRefusedAtTheTopLevelAndWhileOneIsRising)
   {
     Lockstep::Match match = SixPlayerMatch();
     const Lockstep::SystemId capital = CapitalOf(match, 0);
-    match.MutableSystems()[capital.AsSize()].hasShipyard = true;
 
     Lockstep::OrderSet orders;
     orders.player = Lockstep::PlayerId{0};
     orders.builds.push_back(Lockstep::BuildOrder{.system = capital, .kind = Lockstep::BuildKind::Shipyard});
 
-    Assert::IsTrue(Refused(match.Validate(orders), Lockstep::OrderRejection::AlreadyBuilt));
+    // At the top level there is nothing left to order (ADR-069); below it, a second order is
+    // refused because the first is still rising. Two reasons, and a player can act on each.
+    match.MutableSystems()[capital.AsSize()].shipyardLevel = static_cast<std::uint32_t>(Lockstep::BUILDING_LEVELS);
+    Assert::IsTrue(Refused(match.Validate(orders), Lockstep::OrderRejection::AtTopLevel));
+
+    match.MutableSystems()[capital.AsSize()].shipyardLevel = 1;
+    match.MutableSystems()[capital.AsSize()].construction =
+      Lockstep::Construction{.kind = Lockstep::BuildKind::Shipyard, .toLevel = 2, .completesAt = match.Tick() + 2};
+    Assert::IsTrue(Refused(match.Validate(orders), Lockstep::OrderRejection::AlreadyBuilding));
   }
 
   // The affordability check runs against a RUNNING total, so a player who can pay for one of two
@@ -415,7 +422,7 @@ public:
     const Lockstep::SystemId capital = CapitalOf(match, 0);
     const Lockstep::SystemId neighbor = NeighborOf(match, capital);
     match.MutableSystems()[neighbor.AsSize()].owner = Lockstep::PlayerId{0};
-    match.MutablePlayers()[0].credits = match.Rules().shipyardCost;
+    match.MutablePlayers()[0].credits = Lockstep::LevelValue(match.Rules().shipyardCost, 1);
 
     Lockstep::OrderSet orders;
     orders.player = Lockstep::PlayerId{0};
@@ -543,7 +550,7 @@ public:
 
   TEST_METHOD(EveryRejectionDescribesItselfDistinctly)
   {
-    constexpr std::array<Lockstep::OrderRejection, 16> ALL = {
+    constexpr std::array<Lockstep::OrderRejection, 17> ALL = {
       Lockstep::OrderRejection::None,
       Lockstep::OrderRejection::NoSuchPlayer,
       Lockstep::OrderRejection::NotYourFleet,
@@ -551,7 +558,8 @@ public:
       Lockstep::OrderRejection::NoLaneToDestination,
       Lockstep::OrderRejection::FleetOrderedTwice,
       Lockstep::OrderRejection::NotYourSystem,
-      Lockstep::OrderRejection::AlreadyBuilt,
+      Lockstep::OrderRejection::AtTopLevel,
+      Lockstep::OrderRejection::AlreadyBuilding,
       Lockstep::OrderRejection::CannotAfford,
       Lockstep::OrderRejection::NoSuchRecipient,
       Lockstep::OrderRejection::LaneNotBetweenYou,
@@ -842,19 +850,19 @@ public:
   {
     Lockstep::Match start = SixPlayerMatch();
     const Lockstep::SystemId capital = CapitalOf(start, 0);
-    start.MutableSystems()[capital.AsSize()].hasShipyard = true;
+    start.MutableSystems()[capital.AsSize()].shipyardLevel = 1;
 
     const std::uint32_t before = start.FleetAt(FleetOf(start, 0)).ships;
     const Lockstep::Match after = AdvanceQuietly(start);
 
-    Assert::AreEqual(before + start.Rules().shipsPerShipyard, after.FleetAt(FleetOf(after, 0)).ships);
+    Assert::AreEqual(before + Lockstep::LevelValue(start.Rules().shipsPerShipyard, 1), after.FleetAt(FleetOf(after, 0)).ships);
   }
 
   TEST_METHOD(AShipyardWithARivalInTheSystemIsIdle)
   {
     Lockstep::Match start = SixPlayerMatch();
     const Lockstep::SystemId capital = CapitalOf(start, 0);
-    start.MutableSystems()[capital.AsSize()].hasShipyard = true;
+    start.MutableSystems()[capital.AsSize()].shipyardLevel = 1;
 
     // A rival fleet parks on it.
     Lockstep::MatchFleet raider;
@@ -866,7 +874,7 @@ public:
     // The rival is also a battle, so an absolute ship count would be measuring combat. What this
     // test is about is the YARD, so it is measured against the same tick with no yard on it.
     Lockstep::Match withoutYard = start;
-    withoutYard.MutableSystems()[capital.AsSize()].hasShipyard = false;
+    withoutYard.MutableSystems()[capital.AsSize()].shipyardLevel = 0;
 
     Lockstep::TickLog log;
     const Lockstep::Match after = Lockstep::TickResolver::Resolve(start, {}, log);
@@ -1272,7 +1280,7 @@ public:
     const Lockstep::Match after = Lockstep::TickResolver::Resolve(start, {.orders = sets}, log);
 
     Assert::IsTrue(HasDigestKind(log, 0, Lockstep::DigestKind::OrderRejected), L"nothing is dropped silently");
-    Assert::IsFalse(after.SystemAt(CapitalOf(after, 4)).hasShipyard, L"and nothing was built");
+    Assert::AreEqual(0U, after.SystemAt(CapitalOf(after, 4)).shipyardLevel, L"and nothing was built");
     Assert::AreEqual(start.PlayerAt(Lockstep::PlayerId{0}).credits + after.Rules().creditsPerSystem + after.Rules().capitalCreditsBonus,
                      after.PlayerAt(Lockstep::PlayerId{0}).credits, L"nor paid for");
   }
@@ -1298,8 +1306,11 @@ public:
                                       { return _entry.kind == Lockstep::DigestKind::OrderRejected; });
     Assert::IsTrue(refusal != digest.end(), L"the refusal reached the digest");
 
-    const std::string expected =
-      std::format("Shipyard at {} - costs {}, you had 5", start.GalaxyGraph().SystemAt(capital).name, start.Rules().shipyardCost);
+    // Priced at the level the order would have reached -- level one here (ADR-069). Spelled through
+    // `LevelValue` rather than indexed: the table itself formats as `[20, 40, 60]` under C++23's
+    // range formatting, which compiles and prints nonsense.
+    const std::string expected = std::format("Shipyard at {} - costs {}, you had 5", start.GalaxyGraph().SystemAt(capital).name,
+                                             Lockstep::LevelValue(start.Rules().shipyardCost, 1));
     Assert::AreEqual(expected, refusal->detail);
     Assert::IsTrue(refusal->system == capital, L"and it points at the system, so the card can focus it");
   }
@@ -1318,9 +1329,9 @@ public:
     Lockstep::TickLog log;
     const Lockstep::Match after = Lockstep::TickResolver::Resolve(start, {.orders = twice}, log);
 
-    Assert::IsTrue(after.SystemAt(capital).hasMiningStation);
-    Assert::AreEqual(start.PlayerAt(Lockstep::PlayerId{0}).credits - start.Rules().miningStationCost + after.Rules().creditsPerSystem +
-                       after.Rules().capitalCreditsBonus + after.Rules().miningStationCredits,
+    Assert::IsTrue(after.SystemAt(capital).construction.Rising());
+    Assert::AreEqual(start.PlayerAt(Lockstep::PlayerId{0}).credits - Lockstep::LevelValue(start.Rules().miningStationCost, 1) +
+                       after.Rules().creditsPerSystem + after.Rules().capitalCreditsBonus,
                      after.PlayerAt(Lockstep::PlayerId{0}).credits, L"charged once, not twice");
     Assert::IsTrue(AnyLineContains(log, "submitted twice"));
   }
@@ -1397,6 +1408,207 @@ public:
     const Lockstep::PhaseRecord* combat = log.Find(Lockstep::Phase::Combat);
     Assert::IsNotNull(combat);
     Assert::IsTrue(combat->lines.empty(), L"nobody was next to anybody yet");
+  }
+};
+
+// Levels and build time (ADR-069): a building is ordered at one lock and lands at a later one, and
+// every level costs more and pays more than the one below it. THE POINT OF THE CHANGE is that
+// credits keep meaning something past the first two days and that something a player commits to is
+// in flight -- so what these pin is the timing, not only the arithmetic.
+TEST_CLASS(BuildLevelTests)
+{
+public:
+  /// Orders the next level of `_kind` at `_system` for player zero and resolves one tick.
+  [[nodiscard]] static Lockstep::Match Order(const Lockstep::Match& _match, Lockstep::SystemId _system, Lockstep::BuildKind _kind,
+                                             Lockstep::TickLog& _log)
+  {
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.builds.push_back(Lockstep::BuildOrder{.system = _system, .kind = _kind});
+    const std::array<Lockstep::OrderSet, 1> sets = {orders};
+    return Lockstep::TickResolver::Resolve(_match, {.orders = sets}, _log);
+  }
+
+  TEST_METHOD(ABuildOrderedAtTLandsAtTPlusItsTicks)
+  {
+    Lockstep::Match match = SixPlayerMatch();
+    const Lockstep::SystemId capital = CapitalOf(match, 0);
+    const std::uint32_t ticks = Lockstep::LevelValue(match.Rules().miningStationBuildTicks, 1);
+    const std::uint32_t ordered = match.Tick();
+
+    Lockstep::TickLog log;
+    match = Order(match, capital, Lockstep::BuildKind::MiningStation, log);
+
+    Assert::IsTrue(match.SystemAt(capital).construction.Rising(), L"the order started nothing");
+    Assert::AreEqual(ordered + ticks, match.SystemAt(capital).construction.completesAt, L"it does not land when its ETA says");
+    Assert::AreEqual(1U, match.SystemAt(capital).construction.toLevel);
+    Assert::AreEqual(0U, match.SystemAt(capital).miningStationLevel, L"it was built the moment it was paid for");
+    Assert::IsTrue(HasDigestKind(log, 0, Lockstep::DigestKind::BuildStarted), L"nothing said it had started");
+
+    while (match.Tick() <= ordered + ticks && match.SystemAt(capital).miningStationLevel == 0)
+    {
+      match = AdvanceQuietly(match);
+    }
+    Assert::AreEqual(1U, match.SystemAt(capital).miningStationLevel, L"it never landed");
+    Assert::IsFalse(match.SystemAt(capital).construction.Rising(), L"and the site is free again");
+  }
+
+  // It completes at the TOP of phase 1 and production is phase 2, so it pays in the tick it lands
+  // and not the one after.
+  TEST_METHOD(ALevelOneBuildProducesTheTickItCompletes)
+  {
+    Lockstep::Match match = SixPlayerMatch();
+    const Lockstep::SystemId capital = CapitalOf(match, 0);
+
+    Lockstep::TickLog log;
+    match = Order(match, capital, Lockstep::BuildKind::MiningStation, log);
+
+    const Lockstep::Match after = AdvanceQuietly(match);
+    Assert::AreEqual(1U, after.SystemAt(capital).miningStationLevel, L"this test needs a one-tick level");
+
+    // The same tick with nothing to land, as the control: everything else about it is equal.
+    Lockstep::Match without = match;
+    without.MutableSystems()[capital.AsSize()].construction = Lockstep::Construction{};
+    const Lockstep::Match controlled = AdvanceQuietly(without);
+
+    const std::uint32_t gained = after.PlayerAt(Lockstep::PlayerId{0}).credits - controlled.PlayerAt(Lockstep::PlayerId{0}).credits;
+    Assert::AreEqual(Lockstep::LevelValue(match.Rules().miningStationCredits, 1), gained, L"it did not pay in the tick it landed");
+    Assert::IsTrue(HasDigestKind(log, 0, Lockstep::DigestKind::BuildStarted));
+  }
+
+  TEST_METHOD(EachLevelCostsMoreAndPaysMore)
+  {
+    const Lockstep::MatchRules rules;
+    for (std::uint32_t level = 2; level <= Lockstep::BUILDING_LEVELS; ++level)
+    {
+      const std::wstring which = L"level " + std::to_wstring(level);
+      Assert::IsTrue(Lockstep::LevelValue(rules.shipyardCost, level) > Lockstep::LevelValue(rules.shipyardCost, level - 1),
+                     (which + L" of a shipyard costs no more").c_str());
+      Assert::IsTrue(Lockstep::LevelValue(rules.shipsPerShipyard, level) > Lockstep::LevelValue(rules.shipsPerShipyard, level - 1),
+                     (which + L" of a shipyard pays no more").c_str());
+      Assert::IsTrue(Lockstep::LevelValue(rules.miningStationCost, level) > Lockstep::LevelValue(rules.miningStationCost, level - 1),
+                     (which + L" of a mining station costs no more").c_str());
+      Assert::IsTrue(Lockstep::LevelValue(rules.miningStationCredits, level) > Lockstep::LevelValue(rules.miningStationCredits, level - 1),
+                     (which + L" of a mining station pays no more").c_str());
+    }
+  }
+
+  TEST_METHOD(RulesWithALevelThatIsNotAStepAreRefused)
+  {
+    Lockstep::MatchRules flat;
+    flat.miningStationCost[1] = flat.miningStationCost[0];
+    Assert::IsTrue(Lockstep::Check(flat) == Lockstep::RulesProblem::BuildingLevelIsNotAStep, L"a level that costs the same is a free one");
+
+    Lockstep::MatchRules instant;
+    instant.shipyardBuildTicks[0] = 0;
+    Assert::IsTrue(Lockstep::Check(instant) == Lockstep::RulesProblem::BuildingRisesInstantly,
+                   L"a build with no ETA puts nothing in flight");
+
+    Assert::IsTrue(Lockstep::Check(Lockstep::MatchRules{}) == Lockstep::RulesProblem::None, L"the authored rules are playable");
+  }
+
+  // A preset scales the fractions of a match; a build time is not one of them -- a tick is a tick
+  // however long the match is -- so it is left alone.
+  TEST_METHOD(PhaseZeroAndPracticeRulesLeaveBuildTimesAlone)
+  {
+    const Lockstep::MatchRules authored;
+    for (const Lockstep::MatchRules& preset : {Lockstep::PhaseZeroRules(), Lockstep::PracticeRules()})
+    {
+      Assert::IsTrue(preset.shipyardBuildTicks == authored.shipyardBuildTicks, L"a preset changed how long a shipyard takes");
+      Assert::IsTrue(preset.miningStationBuildTicks == authored.miningStationBuildTicks, L"a preset changed how long a station takes");
+      Assert::IsTrue(preset.shipyardCost == authored.shipyardCost, L"a preset changed what a level costs");
+    }
+  }
+
+  TEST_METHOD(ASecondOrderOnASystemUnderConstructionIsRefused)
+  {
+    Lockstep::Match match = SixPlayerMatch();
+    const Lockstep::SystemId capital = CapitalOf(match, 0);
+
+    Lockstep::TickLog log;
+    match = Order(match, capital, Lockstep::BuildKind::MiningStation, log);
+    Assert::IsTrue(match.SystemAt(capital).construction.Rising());
+
+    // Not even the other kind: one construction per system, whatever it is.
+    Lockstep::OrderSet second;
+    second.player = Lockstep::PlayerId{0};
+    second.builds.push_back(Lockstep::BuildOrder{.system = capital, .kind = Lockstep::BuildKind::Shipyard});
+    Assert::IsTrue(Refused(match.Validate(second), Lockstep::OrderRejection::AlreadyBuilding));
+  }
+
+  TEST_METHOD(ATopLevelBuildingIsRefusedAndIsNotCharged)
+  {
+    Lockstep::Match match = SixPlayerMatch();
+    const Lockstep::SystemId capital = CapitalOf(match, 0);
+    match.MutableSystems()[capital.AsSize()].shipyardLevel = static_cast<std::uint32_t>(Lockstep::BUILDING_LEVELS);
+
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.builds.push_back(Lockstep::BuildOrder{.system = capital, .kind = Lockstep::BuildKind::Shipyard});
+    Assert::IsTrue(Refused(match.Validate(orders), Lockstep::OrderRejection::AtTopLevel));
+
+    Lockstep::TickLog log;
+    const Lockstep::Match after = Order(match, capital, Lockstep::BuildKind::Shipyard, log);
+    Assert::IsTrue(HasDigestKind(log, 0, Lockstep::DigestKind::OrderRejected), L"nothing is dropped silently");
+    Assert::IsFalse(after.SystemAt(capital).construction.Rising(), L"a refused build started anyway");
+  }
+
+  // A capture takes what was rising with it. The credits are gone, and the loser is told -- which
+  // is the half that makes it a cost rather than a surprise (ADR-069).
+  TEST_METHOD(CaptureCancelsAConstructionAndTellsTheLoser)
+  {
+    Lockstep::Match match = SixPlayerMatch();
+    match.SetTick(match.Rules().capitalGuardTicks);
+
+    const Lockstep::SystemId capital = CapitalOf(match, 0);
+    const Lockstep::SystemId target = NeighborOf(match, capital);
+    match.MutableSystems()[target.AsSize()].owner = Lockstep::PlayerId{0};
+    match.MutableSystems()[target.AsSize()].construction =
+      Lockstep::Construction{.kind = Lockstep::BuildKind::MiningStation, .toLevel = 1, .completesAt = match.Tick() + 9};
+
+    Lockstep::MatchFleet raider;
+    raider.owner = Lockstep::PlayerId{1};
+    raider.ships = 40;
+    raider.at = target;
+    (void)match.AddFleet(raider);
+
+    Lockstep::TickLog log;
+    Lockstep::Match after = match;
+    for (std::uint32_t tick = 0; tick < after.Rules().siegeTicks; ++tick)
+    {
+      after = Lockstep::TickResolver::Resolve(after, {}, log);
+    }
+
+    Assert::IsTrue(after.SystemAt(target).owner == Lockstep::PlayerId{1}, L"the siege did not finish");
+    Assert::IsFalse(after.SystemAt(target).construction.Rising(), L"the besieger inherited a half-built level");
+    Assert::AreEqual(0U, after.SystemAt(target).miningStationLevel, L"and it was completed for them instead");
+    Assert::IsTrue(HasDigestKind(log, 0, Lockstep::DigestKind::BuildLost), L"the loser was not told what it cost them");
+  }
+
+  // Custodian territory "defends, never expands, never attacks" -- but a level already paid for is
+  // not an expansion, and cancelling it would take credits from somebody who has stopped playing.
+  TEST_METHOD(ACustodiansPaidBuildStillCompletes)
+  {
+    Lockstep::Match match = SixPlayerMatch();
+    const Lockstep::SystemId capital = CapitalOf(match, 0);
+
+    Lockstep::TickLog log;
+    match = Order(match, capital, Lockstep::BuildKind::MiningStation, log);
+    Assert::IsTrue(match.SystemAt(capital).construction.Rising());
+
+    std::vector<Lockstep::PlayerId> others;
+    for (std::int32_t player = 1; player < 6; ++player)
+    {
+      others.emplace_back(player);
+    }
+    for (std::uint32_t tick = 0; tick < match.Rules().custodianAbsenceTicks; ++tick)
+    {
+      Lockstep::TickLog absent;
+      match = Lockstep::TickResolver::Resolve(match, Lockstep::TickInput{.present = others, .presenceUnknown = false}, absent);
+    }
+
+    Assert::IsTrue(match.PlayerAt(Lockstep::PlayerId{0}).status == Lockstep::PlayerStatus::Custodian, L"this test needs a custodian");
+    Assert::AreEqual(1U, match.SystemAt(capital).miningStationLevel, L"a level they had already paid for was thrown away");
   }
 };
 
