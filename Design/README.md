@@ -26,9 +26,9 @@ These are settled. They are not preferences to be re-litigated in a session; cha
 | **Language** | C++23 (`/std:c++latest` under MSVC v145), `/permissive-`, `/W4` with warnings as errors. |
 | **Platform** | x64 only. |
 | **Shape** | One executable. `Lockstep.exe` starts the client and the authoritative server in the same process. |
-| **Distribution** | **The executable ships alone.** No assets folder, no data directory. Art, colour tables, fonts, audio and compiled shaders are embedded in the binary (AGENTS.md R13). |
+| **Distribution** | **The executable ships alone.** No assets folder, no data directory. Art, colour tables, fonts, audio and compiled shaders are embedded in the binary (AGENTS.md R13). The font is baked from TTF offline and its header is committed, not built (ADR-073). |
 | **Authority** | The server is authoritative. `GameLogic` is server-side and the client never links it (AGENTS.md §2). |
-| **Dependencies** | The Windows SDK and the MSVC standard library. Nothing else (AGENTS.md R14). |
+| **Dependencies** | The Windows SDK and the MSVC standard library. Nothing else *in the binary* (AGENTS.md R14). The offline font baker imports `freetype-py` and `fontTools` on the author's machine only; neither reaches the tree or CI (ADR-073). |
 
 Every one of these constrains design work in a way that is easy to forget mid-session. A UI mock at 1920×1080, a texture atlas loaded from disk, a `std::print` of a wall-clock timestamp inside the simulation — each is a perfectly good idea that this game has already decided against.
 

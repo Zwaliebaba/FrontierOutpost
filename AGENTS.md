@@ -140,7 +140,8 @@ private:
 | `Lockstep/` | The executable and the composition root — the one thing that sees both halves. The main page (`MainPage`, `MatchState`), the snapshot adapter, the client connection, and the hosted server. **One binary, three roles**: host-and-play, `--join`, `--serve` (ADR-028). Where every embedded asset and compiled shader ends up | Yes |
 | `Tests/NeuronCoreTests/`, `Tests/NeuronClientTests/`, `Tests/NeuronServerTests/`, `Tests/GameLogicTests/` | MSVC CppUnitTest DLLs, one per library, each referencing the library it tests and the libraries that library is built on. **CI builds and runs all four** | Yes |
 | `Design/` | The design record: `README.md` (the standards), `ADR/` (decisions), and plans | Yes — see §6 |
-| `Build/*.py` | Repository checkers (§6). They gate CI | Yes, carefully |
+| `Build/*.py` | Repository checkers (§6), and `BakeFont.py`, which writes `NeuronClient/Font.h` offline (R13). They gate CI | Yes, carefully |
+| `Build/Fonts/` | The five IBM Plex TTFs the font is baked from, and their OFL licence. Source, not build output: committed, and hashed into the header (R13) | Yes — re-bake after |
 | `.clang-format`, `.clang-tidy`, `.editorconfig` | Layout and naming, machine-readable (§1, §4) | Yes — with an owner decision |
 | `.github/workflows/build.yml` | CI. All of it blocks | Yes, carefully |
 | `x64/`, `.vs/`, `*.user` | Build and IDE output | **No — and never commit them** |
@@ -242,7 +243,7 @@ vstest.console.exe x64\Debug\NeuronCoreTests.dll x64\Debug\NeuronClientTests.dll
 
 ```powershell
 python Build\CheckFormat.py           # clang-format, whole tree. --fix rewrites the offenders
-python Build\CheckProjectFiles.py     # build shape, project registration, R2/R7/R11
+python Build\CheckProjectFiles.py     # build shape, project registration, R2/R7/R11, Font.h freshness
 python Build\RunClangTidy.py          # needs a Developer PowerShell (INCLUDE must be set)
 ```
 
@@ -277,7 +278,7 @@ x64\Debug\Lockstep.exe
 
 **There is no sampler object anywhere in this renderer, and adding one is a decision.** The font atlas is read with `Texture2D<uint>::Load()`, which takes integer texel coordinates and has no filtering to switch on; the starfield is a hash of an integer pixel; the meshes carry no textures. Likewise `D3D12Defaults.h` turns blending, multisampling and anti-aliased lines off for every pipeline built from the shared defaults. Until ADR-011 those were *impossible* — the render target held palette indices and a blend of two of them was an unrelated colour. They are now conventions, which means a pass that wants one has to say so: **blending, multisampling or a sampler in a new pass is an ADR, not a pipeline field.**
 
-**R13 — The executable ships alone.** There is no assets folder, no data directory, nothing beside `Lockstep.exe` at runtime. Art, colours, fonts, meshes and sound are embedded as `constexpr` arrays in headers — `NeuronClient/Font.h` is the pattern: 96 glyphs, 8×8, one bit a pixel, 768 bytes, and nothing to load. **Shaders are compiled at build time**, never at runtime: `<Library>/Shaders/<Shader>VS.hlsl` goes through the `.vcxproj`'s `FXCompile` step into `<Library>/CompiledShaders/<Shader>VS.h` as `g_<Shader>VS` (§2). No `D3DCompile`, no `d3dcompiler_47.dll` beside the executable, no `.cso` on disk. Never add a runtime file dependency, a working-directory assumption or a "just for development" loose-file path; the loose path is the one that ships.
+**R13 — The executable ships alone.** There is no assets folder, no data directory, nothing beside `Lockstep.exe` at runtime. Art, colours, fonts, meshes and sound are embedded as `constexpr` arrays in headers, and nothing is loaded at runtime. **`NeuronClient/Font.h` is GENERATED and committed** (ADR-073): `Build/Fonts/*.ttf` are the sources, `py Build/BakeFont.py` is the bake, and it runs on the author's machine — **never under MSBuild**, because a font changes twice a year and a build step for it is a standing tax on every build. `Build/CheckProjectFiles.py` fails when the three SHA-256s the header records — each source TTF, the baker, the generated text — stop agreeing with what is on disk. **Editing that header by hand is a defect**, and `Build/CheckFormat.py` skips it for the same reason. **Shaders are compiled at build time**, never at runtime: `<Library>/Shaders/<Shader>VS.hlsl` goes through the `.vcxproj`'s `FXCompile` step into `<Library>/CompiledShaders/<Shader>VS.h` as `g_<Shader>VS` (§2). No `D3DCompile`, no `d3dcompiler_47.dll` beside the executable, no `.cso` on disk. Never add a runtime file dependency, a working-directory assumption or a "just for development" loose-file path; the loose path is the one that ships.
 
 **R13 binds a process acting as the CLIENT, and has exactly two sanctioned exceptions** (ADR-024, ADR-028 and ADR-030, owner decisions, 2026-09-11). A process **acting as the server** may write **one match store** — the rules, the seed, the schedule, the seats, and every locked order set, from which a match is loaded by re-resolving it (ADR-042) — and **one instrumentation log**, the timestamped event stream the test plan's first section requires. A finished store is renamed once, beside itself, to `.finished`. Nothing else, and never a client.
 
@@ -285,7 +286,7 @@ x64\Debug\Lockstep.exe
 
 **A path a server writes resolves beside the executable, not against the working directory.** R13's ban on a working-directory assumption binds the two files it allows exactly as hard as the ones it forbids — a log written relative to the launch directory is a log that silently goes somewhere nobody looks, which is how ADR-030 found this.
 
-**R14 — No third-party dependencies and no package manager.** The Windows SDK and the MSVC standard library, and nothing else. If you believe something is unavoidable, propose it in your report with what it buys and what it costs — do not add it. This is a closed list, not a high bar.
+**R14 — No third-party dependencies and no package manager.** The Windows SDK and the MSVC standard library, and nothing else. **This binds what the executable LINKS, not what a tool on the author's machine imports** (ADR-073): `Build/BakeFont.py` uses `freetype-py` and `fontTools`, neither of which enters the tree, reaches CI, or leaves anything in the binary but a `constexpr` array. The checkers themselves are the same shape — pure standard library, so the gates run anywhere Python does. If you believe something is unavoidable, propose it in your report with what it buys and what it costs — do not add it. This is a closed list, not a high bar.
 
 **R15 — Memory is plain C++.** `new`/`delete` where it must be, RAII everywhere, standard containers by default. No pool, slab or free-list allocator without an owner decision recorded in `Design/ADR/`.
 

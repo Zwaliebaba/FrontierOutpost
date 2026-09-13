@@ -94,8 +94,13 @@ owner wants one, and it is not yet designed (2026-09-11). It is a design session
 ## 2. What you see
 
 One match screen, with a join screen and the host's seats screen in front of it. The design calls it
-the **ops console**, and it is deliberately a console rather than a cinematic: 1280×720, a single
-8×8 bitmap font, terse copy, no anti-aliasing, drawn on black. Three columns:
+the **ops console**, and it is deliberately a console rather than a cinematic: 1280×720, terse copy,
+drawn on black. Three columns:
+
+*(The font changed on 2026-09-13. It was a single 8×8 bitmap face with no anti-aliasing; it is now
+IBM Plex Mono for data and IBM Plex Sans for sentences, anti-aliased — ADR-074. §7's line about a
+setting that survives being told in 8-pixel capitals was written against the old face and is kept
+as the tone it still asks for.)*
 
 **The digest, left — the primary read, and the order surface.** One list per tick, never one
 notification per event, sorted by consequence: a system lost ranks above a contact, above a

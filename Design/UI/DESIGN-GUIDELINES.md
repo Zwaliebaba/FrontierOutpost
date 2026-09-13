@@ -24,17 +24,51 @@ ships — this document cites it and does not restate what it does not have to.
   most. A full sheet is 340px of the 676px pane, so more than half the map stays visible.
 
 ## Font
-One 8×8 fixed bitmap font, 96 printable ASCII glyphs (`NeuronClient/Font.h`), drawn at integer
-origins with no anti-aliasing (ADR-014).
-- 1× (8px) for all text; line height 12px.
+
+**This section changed on 2026-09-13 and the change is only half landed. Read the state note first.**
+
+Two families, five cuts, baked from TTF into `NeuronClient/Font.h` by `py Build/BakeFont.py`
+(ADR-073) and drawn anti-aliased (ADR-074):
+
+- **IBM Plex Mono** — Regular, Medium, SemiBold — the *data* face: every rail row, status, number,
+  chip, button label, section label, card title, top bar, countdown, sheet row and legend.
+- **IBM Plex Sans** — Regular, Medium — the *sentence* face: event-card detail lines, the rail's
+  help line, dialog paragraphs, sheet second lines, the join screen's explanatory lines.
+- **The rule.** If the text aligns with something or carries a number, it is mono. If it is a
+  sentence with a full stop or a question mark, it is sans.
+
+Both are baked at **12px**. Measured from the files on 2026-09-13: Plex Mono is exactly 0.600em, so
+a mono column is **7px** — one narrower than the 8×8 font it replaced — and cap height is 0.698em,
+which keeps capitals within half a pixel of the height they had. A line box is ascent 13 plus
+descent 4; the baked line height is 16px where the old font's was 12.
+
+**State, 2026-09-13 — what is true and what is not yet.** Stages 0 to 4 of
+[`Design/Plans/FONT-01-PlexFaces.md`](../Plans/FONT-01-PlexFaces.md) are built: the pipeline, the
+renderer, coverage-as-alpha and the bake. **Stage 5 is not**, so *every draw site still asks for
+`MonoRegular`* and nothing on any screen is in Plex Sans yet. **Stage 6 is not either**, so the
+layout still has the 8×8 font's vertical rhythm and a 17px line box sits in slots cut for 8px —
+labels crowd their fields and the spacing is visibly wrong. Do not take the current screens as the
+intended design, and do not take the numbers below as re-derived; they are the ones the 8×8 font
+left behind.
+
 - 2× (`FontRenderer::COUNTDOWN_SCALE`) **only** for the lock countdown on the top bar and the
-  `LOCKSTEP` title on the join and seats screens — the one thing read first on each. The handoff's
+  `LOCKSTEP` title on the join and seats screens — the one thing read first on each. It is a whole
+  pixel-block enlargement of the 12px face, which is the wrong tool now that a weight is available:
+  ADR-074 leaves open whether the countdown should become a larger baked cut instead. The handoff's
   other 2× use, the share-card headline, has no screen to be on.
-- No weights, no italics, no letter-spacing. Emphasis is colour and case: labels and headers
-  uppercase (`Uppercased()`), sentences mixed case. Detail text wraps by word (`FontRenderer::Wrap`).
-- **The font has no middle dot.** The handoff's `·` separator is ` - ` everywhere in the build
-  (`SINCE YOU LOOKED - T43 > T46`, `M0419 - D12/21`), and `>` is the direction glyph
-  (`FLT 1 10 > KEPLER-REACH`).
+- Emphasis is colour, case and now **weight**. Labels and headers are uppercase (`Uppercased()`),
+  sentences mixed case — **`Uppercased()`'s comment that "the font has one case" is no longer true**,
+  and whether the screen keeps shouting its labels is a design question ADR-074 deliberately left
+  open rather than answered. No italics, no letter-spacing.
+- Detail text wraps by word to a PIXEL WIDTH (`FontRenderer::WrapToWidth`). It wrapped to a
+  character count until 2026-09-13; there is no character count any more, because there is no one
+  advance for a proportional face to have.
+- **"31 characters a line" is retired.** The digest rail is 254px and always was; what fits in it is
+  the font's to answer, and at the 7px mono column that is **36**. Every such number in this
+  directory is a fact about the face and moves when the face does.
+- **The middle dot is back.** `·`, `−`, `–`, `→` and `›` are all baked, so the five substitutions
+  ADR-014 was forced into can be undone. **They have not been yet** — that is FONT-01 stage 7 — so
+  the build still reads `SINCE YOU LOOKED - T43 > T46` and `M0419 - D12/21`.
 
 ## Palette (8-bit RGBA)
 The built values are `Ink` in `DesignTokens.h`; the fractions below are the handoff's, with the

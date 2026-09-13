@@ -62,6 +62,39 @@ rather than from arithmetic.
 
 ---
 
+## Where to pick this up
+
+**Branch `font/plex-faces`, eight commits, tree clean, all three checkers green, 514 tests passing.**
+Stages 0 to 4 are built. **Stage 5 is next and nothing blocks it.**
+
+What stage 5 is: thread ADR-074's data/sentence rule through the 81 `DrawText` sites, which today
+all take the default `Face::MonoRegular`. Largest first — `MainPage.cpp` (32), `SeatsPage.cpp` (26),
+`JoinPage.cpp` (15), then `ConnectionDialog.cpp`, `MapRender.cpp` and `DesignTokens.cpp`'s two shared
+helpers. Then make the rule checkable: have a draw record its face and its string in the headless
+renderer, and assert in `LockstepTests` that no sans string carries a digit and no mono string ends
+in `.` or `?`.
+
+`Face` is already a parameter on `DrawText`, `MeasurePixels`, `PrefixThatFits`, `WrapToWidth` and on
+`Lockstep::DrawCentered` / `DrawRight` / `CenterTextY`. It is the LAST argument and defaults, so a
+call site that wants sans but not a scale has to write
+`FontRenderer::DEFAULT_SCALE, Face::SansRegular`. **If that reads badly across 81 sites, reordering
+the parameters or folding scale into the face is a fair call to make in stage 5** — ADR-074 leaves
+the countdown's 2× open for the same reason.
+
+**Two things are known-wrong on screen right now and are stage 6's, not defects to chase:** nothing
+is in Plex Sans yet, and the layout still has the 8×8 font's vertical rhythm, so a 17px line box
+sits in slots cut for 8px and labels crowd their fields.
+
+**To see the main page** you need a server: run `x64\Debug\Lockstep.exe --serve --tick 4 --bots 5`,
+read a token out of `x64\Debug\lockstep-<port>.store` (they are words — `charlie`, `foxtrot`), then
+`Build\Screenshot.ps1 -Exe x64\Debug\Lockstep.exe -Arguments "--join 127.0.0.1:7341 --token charlie"`.
+The default launch shows the join screen, and `--phase0` does not skip it. **A byte-identical capture
+of the main page is not obtainable**: the match advances on a schedule the store pins to the tick
+seconds it was created with, so two captures are never at the same tick, and `--tick 3600` on a
+resumed store does not freeze it. Run the screenshot script under `powershell.exe`, never `pwsh`.
+
+---
+
 ## 0. What you are starting from
 
 **One font, hand-typed, fixed-pitch, one bit a pixel.** `NeuronClient/Font.h` is 768 bytes: 96
