@@ -49,11 +49,18 @@ OUTPUT_HEADER = REPO_ROOT / "NeuronClient" / "Font.h"
 # and the only thing SemiBold was set in was the lock countdown, which is already separated from
 # everything near it by being 2x and amber. A third weight there carried no signal that was not
 # already being carried twice.
+#
+# FIVE SINCE 2026-09-13, and the fifth is a SIZE rather than a weight (ADR-084). `MonoDisplay` is
+# the same Medium cut at 16px, which is how a second type size reaches a renderer whose only notion
+# of "which type" is the face: a cut IS a size here, so a display size is a cut. It replaced the 2x
+# pixel-doubled countdown, which was the one thing on any screen not drawn from a rasterized cut and
+# read as an artefact beside anti-aliased Plex -- ADR-074 left exactly that open.
 FACES = [
     ("MonoRegular", "IBMPlexMono-Regular.ttf", 12),
     ("MonoMedium", "IBMPlexMono-Medium.ttf", 12),
     ("SansRegular", "IBMPlexSans-Regular.ttf", 12),
     ("SansMedium", "IBMPlexSans-Medium.ttf", 12),
+    ("MonoDisplay", "IBMPlexMono-Medium.ttf", 16),
 ]
 
 # TWELVE PIXELS, AND THE ARITHMETIC BEHIND IT (measured from the files, 2026-09-13).

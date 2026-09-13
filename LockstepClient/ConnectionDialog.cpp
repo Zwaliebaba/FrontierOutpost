@@ -248,7 +248,7 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
   const auto contentX = static_cast<std::int32_t>(CARD_X + CARD_PADDING);
   auto y = static_cast<std::int32_t>(cardY + CARD_PADDING);
 
-  _text.DrawText(contentX, y, title, look.title, Face::MonoMedium);
+  _text.DrawText(contentX, y, title, look.title, Face::MonoDisplay);
   y += static_cast<std::int32_t>(FontRenderer::GlyphHeightPixels() + TITLE_GAP);
 
   for (const Paragraph& line : lines)

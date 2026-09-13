@@ -302,12 +302,11 @@ void JoinPage::DrawField(ShapeRenderer& _shapes, FontRenderer& _text, float _y, 
 
 void JoinPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
 {
-  // ---- The name, at 2x -----------------------------------------------------------------------
+  // ---- The name, in the display cut -----------------------------------------------------------
   //
-  // The only other place this font is drawn at 2x is the lock countdown (DESIGN-GUIDELINES
-  // "Font"). Both are the one thing on their screen that has to be read first.
-  _text.DrawText(static_cast<std::int32_t>(COLUMN_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY, Face::MonoMedium,
-                 FontRenderer::COUNTDOWN_SCALE);
+  // The 16px cut, which is also the lock countdown's and every card and sheet title's (ADR-084).
+  // Both of these are the one thing on their screen that has to be read first.
+  _text.DrawText(static_cast<std::int32_t>(COLUMN_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY, Face::MonoDisplay);
   _text.DrawText(static_cast<std::int32_t>(COLUMN_X), static_cast<std::int32_t>(SUBTITLE_Y), "JOIN A MATCH - ONE SEAT PER TOKEN",
                  TEXT_MUTED);
 

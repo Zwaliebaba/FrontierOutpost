@@ -457,16 +457,32 @@ public:
   {
     Assert::AreEqual(7u, Neuron::FontRenderer::AdvancePixels());
     Assert::AreEqual(17u, Neuron::FontRenderer::GlyphHeightPixels());
-    Assert::AreEqual(14u, Neuron::FontRenderer::AdvancePixels(Neuron::FontRenderer::DEFAULT_FACE, Neuron::FontRenderer::COUNTDOWN_SCALE));
-    Assert::AreEqual(34u,
-                     Neuron::FontRenderer::GlyphHeightPixels(Neuron::FontRenderer::DEFAULT_FACE, Neuron::FontRenderer::COUNTDOWN_SCALE));
+
+    // A whole-number blow-up is still exactly that, and nothing in the game asks for one any more
+    // (ADR-084): the second size is a baked cut.
+    Assert::AreEqual(14u, Neuron::FontRenderer::AdvancePixels(Neuron::FontRenderer::DEFAULT_FACE, 2));
+    Assert::AreEqual(34u, Neuron::FontRenderer::GlyphHeightPixels(Neuron::FontRenderer::DEFAULT_FACE, 2));
+  }
+
+  // The display cut is the same Medium file at 16px, so it is wider and taller than the 12px cuts
+  // and still fixed-pitch. 0.600em at 16px is 9.6 and rounds to TEN.
+  TEST_METHOD(TheDisplayCutIsASizeAndNotAScale)
+  {
+    Assert::AreEqual(10u, Neuron::FontRenderer::AdvancePixels(Neuron::Face::MonoDisplay));
+    Assert::AreEqual(22u, Neuron::FontRenderer::GlyphHeightPixels(Neuron::Face::MonoDisplay));
+    Assert::IsTrue(Neuron::FontRenderer::AdvancePixels(Neuron::Face::MonoDisplay) > Neuron::FontRenderer::AdvancePixels(),
+                   L"the display cut is no bigger than the body cut");
+
+    // Fixed pitch, like every other mono cut: `i` and `W` take the same column.
+    Assert::AreEqual(Neuron::FontRenderer::AdvanceOf(U'i', Neuron::Face::MonoDisplay),
+                     Neuron::FontRenderer::AdvanceOf(U'W', Neuron::Face::MonoDisplay));
   }
 
   TEST_METHOD(MeasuringSumsTheAdvances)
   {
     Assert::AreEqual(56u, Neuron::FontRenderer::MeasurePixels("02:14:09"));
-    Assert::AreEqual(
-      112u, Neuron::FontRenderer::MeasurePixels("02:14:09", Neuron::FontRenderer::DEFAULT_FACE, Neuron::FontRenderer::COUNTDOWN_SCALE));
+    Assert::AreEqual(112u, Neuron::FontRenderer::MeasurePixels("02:14:09", Neuron::FontRenderer::DEFAULT_FACE, 2));
+    Assert::AreEqual(80u, Neuron::FontRenderer::MeasurePixels("02:14:09", Neuron::Face::MonoDisplay));
     Assert::AreEqual(0u, Neuron::FontRenderer::MeasurePixels(""));
   }
 

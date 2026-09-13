@@ -778,12 +778,11 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
 
 void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
 {
-  // ---- The name, at 2x, and what this screen is -----------------------------------------------
+  // ---- The name, in the display cut, and what this screen is ----------------------------------
   //
   // The same title block screen 03 opens with, so that a host who has just come off the join screen
   // sees the lobby arrive under the same two lines rather than under a bar that replaced them.
-  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY, Face::MonoMedium,
-                 FontRenderer::COUNTDOWN_SCALE);
+  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY, Face::MonoDisplay);
   _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(SUBTITLE_Y), "SEATS - BEFORE THE MATCH STARTS",
                  TEXT_MUTED);
 

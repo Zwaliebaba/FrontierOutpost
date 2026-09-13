@@ -997,17 +997,17 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.FillRect(cursor, 13.0F, 1.0F, 22.0F, Ink::CARD_BORDER);
   cursor -= 15.0F;
 
-  // The countdown is the one thing on the screen drawn at 2x, and it is amber because amber is
-  // the warning colour: this is the deadline every order on the rail is racing (README "Frame").
+  // The countdown is the one thing on the bar in the 16px cut, and it is amber because amber is the
+  // warning colour: this is the deadline every order on the rail is racing (README "Frame").
   const std::string countdown = m_state.match.finished ? std::string{"--:--:--"} : FormatCountdown(m_state.match.secondsToLock);
-  const std::int32_t bigY = CenterTextY(0.0F, Frame::TOP_BAR_HEIGHT, FontRenderer::DEFAULT_FACE, FontRenderer::COUNTDOWN_SCALE);
+  const std::int32_t bigY = CenterTextY(0.0F, Frame::TOP_BAR_HEIGHT, Face::MonoDisplay);
 
   // **Amber is the deadline colour, and at zero there is no deadline left to warn about** (screen
   // 06). A countdown that stayed amber on 00:00:00 read as "hurry" to a player who could no longer
   // do anything, which is the opposite of what the number means once it has run out.
   const bool atLock = m_state.orders.locked && !m_state.match.finished;
-  DrawRight(_text, cursor, bigY, countdown, atLock ? Ink::NEUTRAL_DIM : Ink::AMBER, Face::MonoMedium, FontRenderer::COUNTDOWN_SCALE);
-  cursor -= static_cast<float>(FontRenderer::MeasurePixels(countdown, FontRenderer::DEFAULT_FACE, FontRenderer::COUNTDOWN_SCALE)) + 8.0F;
+  DrawRight(_text, cursor, bigY, countdown, atLock ? Ink::NEUTRAL_DIM : Ink::AMBER, Face::MonoDisplay);
+  cursor -= static_cast<float>(FontRenderer::MeasurePixels(countdown, Face::MonoDisplay)) + 8.0F;
 
   const std::string lockLabel = m_state.match.finished ? std::string{"MATCH ENDED"}
                                 : atLock               ? std::format("T{} LOCKED", m_state.OrdersTick())
@@ -1101,7 +1101,7 @@ MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::uint32_t
   // The same arithmetic the draw below walks, in one expression: the title block, a line per detail,
   // the verdict box, the action row, and the gap to the next card's divider.
   const auto lines = static_cast<float>(LINE_HEIGHT);
-  layout.height = 11.0F + lines + 2.0F + static_cast<float>(layout.details.size()) * lines + 4.0F;
+  layout.height = 11.0F + static_cast<float>(TITLE_LINE_HEIGHT) + 2.0F + static_cast<float>(layout.details.size()) * lines + 4.0F;
   if (layout.hasVerdict)
   {
     layout.height += 4.0F + (1.0F + static_cast<float>(layout.verdictDetail.size())) * lines + 6.0F;
@@ -1138,7 +1138,8 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
   }
   else
   {
-    _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), headerY, std::format("DIGEST - TICK {}", m_state.match.tick), Ink::TEXT_MUTED);
+    _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), headerY, std::format("DIGEST - TICK {}", m_state.match.tick), Ink::TEXT_MUTED,
+                   Face::MonoDisplay);
 
     // At the lock the right-hand figure stops being a count of what is here and becomes the tick
     // that is being resolved. It is the only thing on this column that changes at zero, and it is
@@ -1238,7 +1239,9 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     std::int32_t lineY = static_cast<std::int32_t>(y) + 11;
 
     _shapes.FillEllipse(RAIL_PADDING + 4.0F, static_cast<float>(lineY) + 4.0F, 4.0F, 4.0F, accent);
-    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, Uppercased(card.title), Ink::TEXT_PRIMARY, Face::MonoMedium);
+    // The display cut (ADR-084): a card's title is what the card IS, and until there were two sizes
+    // it was separated from the sentences under it by a weight step nobody could see at a glance.
+    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, Uppercased(card.title), Ink::TEXT_PRIMARY, Face::MonoDisplay);
     if (!card.stamp.empty())
     {
       DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, lineY, card.stamp, Ink::TEXT_MUTED);
@@ -1251,7 +1254,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     {
       AddHit(0.0F, top, Frame::DIGEST_WIDTH - 1.0F, DIGEST_TITLE_HEIGHT, Action::ToggleActorCard, card.actor);
     }
-    lineY += LINE_HEIGHT + 2;
+    lineY += TITLE_LINE_HEIGHT + 2;
 
     for (const std::string& line : layout.details)
     {
@@ -2134,8 +2137,12 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.StrokeRect(x, y, width, height, Ink::CARD_BORDER);
 
   // ---- Header ----------------------------------------------------------------------------------
-  _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(y, SHEET_HEADER_HEIGHT), title, Ink::TEXT_PRIMARY,
-                 Face::MonoMedium);
+  //
+  // The display cut, centred by the cut's own metrics rather than the body's -- `CenterTextY` takes
+  // the face for exactly this reason, and a 36px header around a 22px box is still a 36px header
+  // (ADR-084).
+  _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(y, SHEET_HEADER_HEIGHT, Face::MonoDisplay), title,
+                 Ink::TEXT_PRIMARY, Face::MonoDisplay);
   DrawRight(_text, x + width - CARD_PADDING, CenterTextY(y, SHEET_HEADER_HEIGHT), "X", Ink::TEXT_MUTED);
 
   // The same filled grey chip the locks rail wears, in the header's own status position -- clear of

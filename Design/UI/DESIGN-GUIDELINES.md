@@ -31,19 +31,31 @@ ships — this document cites it and does not restate what it does not have to.
 
 **This section changed on 2026-09-13 and the change is only half landed. Read the state note first.**
 
-Two families, **four** cuts, baked from TTF into `NeuronClient/Font.h` by `py Build/BakeFont.py`
+Two families, **five** cuts, baked from TTF into `NeuronClient/Font.h` by `py Build/BakeFont.py`
 (ADR-073) and drawn anti-aliased (ADR-074):
 
 - **IBM Plex Mono** — Regular, Medium — the *data* face: every rail row, status, number, chip,
-  button label, section label, card title, top bar, countdown, sheet row and legend.
+  button label, section label, top bar and sheet row.
 - **IBM Plex Sans** — Regular, Medium — the *sentence* face: event-card detail lines, the rail's
   help line, dialog paragraphs, sheet second lines, the join screen's explanatory lines.
+- **IBM Plex Mono Display** — Medium at **16px** — the *naming* cut (ADR-084), and the only one that
+  is a size rather than a weight. Six things are set in it and nothing else: the lock countdown, a
+  digest card's title, the digest header, a sheet's header, a dialog's title, and `LOCKSTEP` on the
+  join and seats screens. Each of them says what a whole pane, card or screen IS.
 - **The rule.** If the text aligns with something or carries a number, it is mono. If it is a
-  sentence with a full stop or a question mark, it is sans.
+  sentence with a full stop or a question mark, it is sans. If it names the thing around it, it is
+  the display cut — which is still mono, and `FaceRuleTests` holds it to the mono half of the rule.
 
-Both are baked at **12px**, **hinted**. Measured from the files on 2026-09-13: Plex Mono is exactly
+The four body cuts are baked at **12px**, **hinted**. Measured from the files on 2026-09-13: Plex Mono is exactly
 0.600em, so a mono column is **7px** — one narrower than the 8×8 font it replaced — and cap height
 is 0.698em, which keeps capitals within half a pixel of the height they had.
+
+**The display cut, measured from the baked header on 2026-09-13:** advance **10px** against the
+body cut's 7 (0.600em at 16px is 9.6), line box ascent 17 plus descent 5 = **22px**, and the face
+reports a line height of 21 — so `LineHeightPixels` floors at 22 there for the same reason it floors
+at 17 here. `MainPage::TITLE_LINE_HEIGHT` asks the font for that number rather than stating it, and
+a card's title block is laid out from it. `02:14:09` is **80px** wide in the display cut where the
+old 2× countdown was 112.
 
 A line box is ascent 13 plus descent 4 = **17px**, and a line is set at **17px** too. The face
 reports a line height of 16 — it carries a negative line gap — which is a pixel less than the box
@@ -78,13 +90,13 @@ Decision still says five; amending it is the owner's call.**
 [`Design/Plans/FONT-01-PlexFaces.md`](../Plans/FONT-01-PlexFaces.md) are built. Stage 7 — restoring
 the five characters ADR-014 substituted and re-measuring the six strings it shortened — is not.
 
-- 2× (`FontRenderer::COUNTDOWN_SCALE`) **only** for the lock countdown on the top bar and the
-  `LOCKSTEP` title on the join and seats screens — the one thing read first on each. It is a whole
-  pixel-block enlargement of the 12px face, which is still the wrong tool: ADR-074 leaves open
-  whether the countdown should become a larger baked cut instead, and that is now the *only* way
-  left to make it heavier, since the weight above it was dropped. The handoff's other 2× use, the
-  share-card headline, has no screen to be on.
-- Emphasis is colour, case and now **weight** — one step of it, Regular against Medium. Labels and
+- **Nothing is drawn at a scale other than 1** (ADR-084). `COUNTDOWN_SCALE` is gone: pixel-doubling
+  the 12px face was the second size for as long as the font was a hand-typed 8×8 grid, and beside
+  anti-aliased Plex it read as an artefact — which is the question ADR-074 left open. The scale
+  argument stays on the renderer because a whole-number blow-up is exact and free, and nothing asks
+  for one.
+- Emphasis is colour, case, **weight** — one step, Regular against Medium — and now **size**, one
+  step, 12px against 16px. Labels and
   headers are uppercase (`Uppercased()`), sentences mixed case. **The shouting is no longer forced
   by the font**: the 8×8 face had no lowercase and Plex has both, so it is a choice the sheet is
   making, and ADR-074 left open whether it should go on being made. One thing depends on the

@@ -53,6 +53,12 @@ public:
   /// every time the face changes is a number that will be re-derived in four.
   static constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels());
 
+  /// The 16px display cut's line, for the one string on a card that is set in it (ADR-084). Asked of
+  /// the font for the same reason `LINE_HEIGHT` is: a title in a bigger cut over a line box sized
+  /// for the smaller one is the overlap that number was introduced to stop.
+  static constexpr std::int32_t TITLE_LINE_HEIGHT =
+    static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels(Neuron::Face::MonoDisplay));
+
   /// A button inside an event card, and the padding inside the verdict box.
   ///
   /// 18 is unchanged from the 8x8 font and deliberately so: a line BOX grew from 8 to 17, but the

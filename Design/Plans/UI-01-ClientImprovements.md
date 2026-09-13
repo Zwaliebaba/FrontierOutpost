@@ -1,6 +1,6 @@
 # UI-01 — What the client's screens still cost a player
 
-**Status:** **Items 1.1-1.4, 2.2 and 2.6 done 2026-09-13 (ADR-079 to ADR-083); the rest not started.** Written 2026-09-13 as a UX review and revised the same day against
+**Status:** **Items 1.1-1.4, 2.1, 2.2 and 2.6 done 2026-09-13 (ADR-079 to ADR-084); the rest not started.** Written 2026-09-13 as a UX review and revised the same day against
 ADR-077 and ADR-078, which landed between the review and the first item. Item 1.1 is rescoped and
 item 2.3 carried a sentence those ADRs made false; both are marked below. Nothing else has been
 built. Archive this when the final checklist passes.
@@ -130,6 +130,11 @@ the two answers to the owner.
 ## Phase 2 — Legibility and hierarchy
 
 ### 2.1 Second type size
+**Done 2026-09-13 — ADR-084.** The cut is `Face::MonoDisplay` rather than a size selector on the
+renderer: a cut IS a size here, so a display size is a cut and the whole mechanism already existed.
+`COUNTDOWN_SCALE` is gone. The 23 captures are NOT retaken — the desktop was locked — and every one
+of them is stale for this item.
+
 **Problem.** Every string is 12px; hierarchy is weight (one step), case and colour only. The 2× pixel-doubled countdown reads as an artefact beside anti-aliased Plex.
 
 **Change.**
