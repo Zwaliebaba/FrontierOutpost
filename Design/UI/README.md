@@ -212,5 +212,9 @@ ADR-066 touched was retaken the same day from the Debug build carrying them. Don
 
 ## Non-negotiables
 1280×720 logical, drawn into a canvas presented at a whole-number scale and captured at
-`--scale 1` (ADR-075). One 8×8 bitmap font at 1×, and 2× only where the guidelines say. 8-bit RGBA colours from `LockstepClient/DesignTokens.h`. No anti-aliasing; text on
-integer pixels.
+`--scale 1` (ADR-075). Two IBM Plex families in four cuts, baked at 12px and hinted, drawn
+**anti-aliased** with coverage gamma-corrected into alpha — mono for data, sans for sentences, and
+2× only for the lock countdown and the `LOCKSTEP` title (ADR-073, ADR-074;
+`DESIGN-GUIDELINES.md` §Font). 8-bit RGBA colours from `LockstepClient/DesignTokens.h`. A glyph's
+coverage is the one thing on this screen a rasterizer decides rather than a designer: `DrawText`
+takes whole pixels, and every box, rule and baseline is still on one.

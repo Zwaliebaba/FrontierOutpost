@@ -125,10 +125,13 @@ would have recorded a CRLF hash no CI runner can reproduce. `Build/CheckFormat.p
 way and was renormalised with it. **Anyone pulling 671ef8d onto an existing Windows checkout hits
 this**, because `.gitattributes` changes what git *would* write and touches nothing already on disk.
 
-**A staleness left alone.** `Design/UI/README.md`'s Non-negotiables still say "One 8×8 bitmap font at
-1× … No anti-aliasing", which ADR-074 overtook on 2026-09-13. Only the 1:1 clause of that paragraph
-is this plan's to edit, and widening the change to fix a neighbouring sentence is the thing stage 6
-is told not to do, so it is recorded here instead.
+**A staleness found beside the edit, and corrected on the owner's instruction.**
+`Design/UI/README.md`'s Non-negotiables still said "One 8×8 bitmap font at 1× … No anti-aliasing",
+which ADR-074 overtook on 2026-09-13. It was reported rather than fixed with the rest of stage 0,
+because widening a change to a neighbouring sentence is the thing stage 6 is told not to do; the
+owner asked for it directly, so the paragraph now describes the four Plex cuts and says that a
+glyph's coverage is the one thing on the screen a rasterizer decides. The passage at the top of the
+same file that describes the 8×8 font in the past tense is correct and was left alone.
 
 **One inconsistency is knowingly accepted, and it closes at stage 1.** Between this commit and stage
 1, AGENTS.md and `Design/README.md` §1 describe a canvas the code does not draw yet, which is in
