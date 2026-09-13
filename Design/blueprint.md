@@ -498,9 +498,15 @@ back for one coordinated snipe at T83. It should be watched deliberately in Phas
 discovered in Phase 1.
 
 **Three-way fights favour the largest.** Proportional damage means two smaller empires meeting the
-leader at a contested system shoot each other as much as the leader. That works against leader-ganging,
-which is the only anti-snowball the game has. ADR-021 flags it; it deserves a scripted scenario
-before real people find it.
+leader at a contested system shoot each other as much as the leader. That works against
+leader-ganging, which is the only anti-snowball the game has. ADR-021 flagged it and it now has a
+number: **thirty ships against fifteen and fifteen leaves the leader with sixteen and both gangers
+with nothing** (measured 2026-09-13, pinned by `ThreeWayFightsFavourTheLargest`). That is not a
+tilt, it is a rout — two empires who between them brought equal numbers are wiped out, because each
+of them spends half its damage on the other. Ganging the leader is currently worse for the gangers
+than not ganging at all, which is the opposite of what the only anti-snowball in the game is for.
+**Phase 0 should try it deliberately**, and the first lever if it holds is damage spread by threat
+rather than in proportion to strength.
 
 **Three rounds may not resolve a big fight.** Two large equal fleets end a tick attrited and still
 facing each other, which starts a siege neither can finish. Interdiction, or a stalemate generator —

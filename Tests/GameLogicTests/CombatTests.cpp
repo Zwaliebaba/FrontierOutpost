@@ -155,6 +155,81 @@ public:
     Assert::IsTrue(firstLost > 0 && thirdLost > 0, L"everybody is in the fight");
   }
 
+  // **THE THREE-WAY FIGHT, PINNED** (blueprint §8, ADR-021's open question). Proportional damage
+  // means two smaller empires meeting the leader at one system shoot each other as hard as they
+  // shoot the leader -- so leader-ganging, which is the only anti-snowball this game has, works
+  // worse the more people join in. ADR-021 flags it and says only play will tell.
+  //
+  // This does not change a rule. It puts the numbers on the record so Phase 0 has something to
+  // compare a real battle against, and so that a change to the combat constants has to come past a
+  // test that says what they were worth.
+  TEST_METHOD(ThreeWayFightsFavourTheLargest)
+  {
+    // **MEASURED ON 2026-09-13, NOT DERIVED**, under the authored constants: three rounds, 50%
+    // damage a round, 125% to an incumbent, integer division throughout.
+    //
+    // Thirty against fifteen and fifteen leaves the leader with SIXTEEN and both gangers with
+    // NOTHING. Two empires who between them brought equal numbers are wiped out, and the leader
+    // walks away with more than half its fleet -- because each fifteen spends its damage across
+    // both enemies, so half of everything they fired went into each other.
+    constexpr std::uint32_t LEADER_LEFT = 16;
+    constexpr std::uint32_t GANGER_LEFT = 0;
+
+    Lockstep::Match match = Arena();
+    const Lockstep::SystemId where = match.GalaxyGraph().Capitals()[3];
+
+    // 30 against 15 and 15, nobody an incumbent: the leader's share of the board against two
+    // neighbours who have worked out that they are next.
+    const Lockstep::FleetId leader = Holding(match, 0, 30, where);
+    const Lockstep::FleetId firstGanger = Holding(match, 1, 15, where);
+    const Lockstep::FleetId secondGanger = Holding(match, 2, 15, where);
+
+    const Lockstep::Match after = Fight(match);
+
+    const std::uint32_t leaderLeft = after.FleetAt(leader).ships;
+    const std::uint32_t firstLeft = after.FleetAt(firstGanger).ships;
+    const std::uint32_t secondLeft = after.FleetAt(secondGanger).ships;
+
+    // Measured on 2026-09-13 under the authored constants -- three rounds, 50% damage, 125% to an
+    // incumbent. If Phase 0 changes a number these move; the finding is whether the SHAPE below
+    // survives, and the figures are here so that a change to the constants has to come past them.
+    Assert::AreEqual(LEADER_LEFT, leaderLeft, L"the leader came out of a three-way with a different number");
+    Assert::AreEqual(GANGER_LEFT, firstLeft, L"a ganger came out of a three-way with a different number");
+    Assert::IsTrue(leaderLeft > 15U, L"the leader lost more than half its fleet to two equal halves");
+    Assert::AreEqual(firstLeft, secondLeft, L"two identical gangers came out differently, so something is not symmetric");
+
+    // THE FINDING, stated as the test's subject: thirty against two fifteens is not the same fight
+    // as thirty against one thirty. The two halves spend their damage on each other as well.
+    Lockstep::Match together = Arena();
+    const Lockstep::FleetId alone = Holding(together, 0, 30, where);
+    (void)Holding(together, 1, 30, where);
+    const Lockstep::Match afterTogether = Fight(together);
+
+    Assert::IsTrue(leaderLeft > afterTogether.FleetAt(alone).ships,
+                   L"splitting thirty into two fifteens did not help the leader, so the three-way penalty is gone");
+  }
+
+  // A hold-fire agreement is RECORDED AND NOT ENFORCED (blueprint §3), and a Phase 0 player will
+  // assume otherwise the first time they gang up on somebody. Two allies at one system still shoot
+  // each other, because the melee knows nothing about agreements -- which is the design, and is the
+  // thing to have written down before somebody reports it as a bug.
+  TEST_METHOD(AHoldFireAgreementDoesNotStopTheTwoSmallSidesShootingEachOther)
+  {
+    Lockstep::Match match = Arena();
+    match.MutableAgreements().push_back(
+      Lockstep::Agreement{.kind = Lockstep::AgreementKind::HoldFire, .a = Lockstep::PlayerId{1}, .b = Lockstep::PlayerId{2}});
+
+    const Lockstep::SystemId where = match.GalaxyGraph().Capitals()[3];
+    (void)Holding(match, 0, 30, where);
+    const Lockstep::FleetId firstAlly = Holding(match, 1, 15, where);
+    const Lockstep::FleetId secondAlly = Holding(match, 2, 15, where);
+
+    const Lockstep::Match after = Fight(match);
+
+    Assert::IsTrue(after.FleetAt(firstAlly).ships < 15U, L"a hold-fire agreement was enforced by the melee");
+    Assert::IsTrue(after.FleetAt(secondAlly).ships < 15U, L"a hold-fire agreement was enforced by the melee");
+  }
+
   // "An incumbent fleet gets the defender bonus." Equal fleets, and the one that was already there
   // comes out ahead -- which is the whole reason the defender's bet is whether to stay.
   TEST_METHOD(TheIncumbentGetsTheDefenderBonus)
