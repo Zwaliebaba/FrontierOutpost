@@ -288,6 +288,26 @@ public:
     }
   }
 
+  // The row states the cost rather than implying it (ADR-067). A player reads this line between
+  // arming the row and confirming it (ADR-064), and it is the only place the client says that the
+  // score goes with the empire.
+  TEST_METHOD(TheConcedeRowSaysWhatItCosts)
+  {
+    const auto simulation = PlayedMatch(14);
+    const Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+    const std::string& detail = state.orders.signals.back().detail;
+    Assert::IsTrue(detail.find("score") != std::string::npos, L"the concede row does not mention the score it forfeits");
+    Assert::IsTrue(detail.find("permanently") != std::string::npos, L"the concede row does not say it is permanent");
+
+    // It shares its row with the armed state's right-hand text, so it has to fit beside it: the
+    // sheet is 620 - 2*12 wide, less 10 of padding each side, less TAP AGAIN TO CONFIRM at 8px a
+    // character. Measured here rather than eyeballed, because an overrun draws one string over
+    // another rather than failing.
+    constexpr std::size_t ROOM_FOR_THE_DETAIL = (620 - 2 * 12 - 2 * 10 - 20 * 8) / 8;
+    Assert::IsTrue(detail.size() <= ROOM_FOR_THE_DETAIL, L"the concede row's second line runs into TAP AGAIN TO CONFIRM");
+  }
+
   TEST_METHOD(NothingIsOfferedAboutAnEmpireNobodyHasMet)
   {
     // At tick zero every empire is on its own capital and nobody has seen anybody. An offer to

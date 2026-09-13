@@ -276,14 +276,14 @@ known tick — a race, not a reward.
 
 Four states. **Active** is normal play. **Custodian** is what territory becomes when its player is
 absent for three ticks (reversible — log in and resume) or concedes (permanent): it defends, never
-expands, never attacks, is flagged on every map as "custodian since tick N", and its garrisons weaken
-each tick so it is a public race among every neighbour rather than a private farm. Systems taken from
-a custodian yield half for the rest of the match, whoever holds them. A player who goes custodian in
-the first week scores nothing for the match — the only cost that reaches someone who has already
-left. **Conceding forfeits the empire's score outright**, in any week (owner decision, 2026-09-11,
-closing the question ADR-023 left open; the code today forfeits only a first-week concession, so this
-is decided and not yet implemented). **Exile** and **Gone** are the second act described in §1 and
-specified in §6; both are declared in the code and deliberately unreachable today.
+expands, never attacks, is flagged on every map as "custodian since tick N", and its garrisons
+weaken each tick so it is a public race among every neighbour rather than a private farm. Systems
+taken from a custodian yield half for the rest of the match, whoever holds them. A player who goes
+custodian in the first week scores nothing for the match — the only cost that reaches someone who
+has already left. **Conceding forfeits the empire's score outright**, in any week (owner decision,
+2026-09-11, closing the question ADR-023 left open; ADR-067 records it and the resolver has applied
+it since 2026-09-13). **Exile** and **Gone** are the second act described in §1 and specified in §6;
+both are declared in the code and deliberately unreachable today.
 
 ### What it is not
 
@@ -330,7 +330,6 @@ appendix has the detail.
 |---|---|
 | Exile: the runway, salvage, raiding, raid fatigue, the colony core, settlement | Gated behind Phase 1's hypothesis H3 — *do losers keep playing?* |
 | The sealed region's rules | It is placed, drawn and reachable; nothing happens when it opens. Phase 2. |
-| Concession forfeiting score in every week | Decided 2026-09-11; the code forfeits first-week concessions only |
 | The fiction | Wanted, not yet designed. A design session before Phase 1 |
 | Hiring exiles (escrowed jobs) | v2 |
 | Building levels and build time | Designed 2026-09-13 (§3). The credit sink; goes in before Phase 0 |
@@ -533,7 +532,7 @@ says which.
 | Business model | Hobby project, no monetisation | — |
 | Seasons | Rank-gated matchmaking on placement points | v2; needs accounts and a points table |
 | Absence and the first-week forfeit | Keep as designed; Phase 1 decides | Phase 1 log must separate the two kinds of leaving (§8) |
-| Concession | Forfeits score outright, in any week | An ADR superseding the open question in ADR-023, and a code change |
+| Concession | Forfeits score outright, in any week | **Done 2026-09-13: ADR-067, and the resolver applies it** |
 | Audio and colour-blind mode | Neither in v1 | — |
 | Research | A short public track of unlocks, ordered as an empire order rather than through a building (2026-09-13, superseding "after Phase 2") | An ADR and `MatchRules` entries when built, after Phase 0; the list of unlocks |
 | Building levels and build time | Three levels per building, each costing more and taking ticks; a build in progress is visible to rivals who can see the system (2026-09-13) | An ADR and `MatchRules` entries; built before Phase 0 |

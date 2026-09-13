@@ -264,7 +264,10 @@ void ComposeSignals(MatchState& _state, const Snapshot& _snapshot)
   // position between ticks is a row somebody double-taps by accident.
   if (!_snapshot.IsFinished())
   {
-    rows.push_back(SignalRow{.kind = SignalKind::Concede, .title = "Concede", .detail = "Hand this empire to a custodian. Permanent."});
+    // The row states the cost rather than implying it (ADR-067): the score goes, in any week, and
+    // this line is what a player reads between the first tap and the confirming second (ADR-064).
+    rows.push_back(
+      SignalRow{.kind = SignalKind::Concede, .title = "Concede", .detail = "To a custodian, permanently - your score is forfeit"});
     ++_state.orders.availableSignals;
   }
 }

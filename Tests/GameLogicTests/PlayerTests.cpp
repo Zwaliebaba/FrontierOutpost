@@ -294,6 +294,61 @@ public:
     Assert::IsTrue(match.SystemAt(match.GalaxyGraph().Capitals()[0]).owner == Lockstep::PlayerId{0});
   }
 
+  // "Conceding forfeits the empire's score outright", in ANY week (ADR-067). The first-week window
+  // belongs to absence and not to this: a concession in the last week costs the same as one on
+  // tick zero, which is what stops a conceded empire outranking players still playing theirs.
+  TEST_METHOD(ConcedingInWeekThreeForfeitsScore)
+  {
+    // One quiet tick first: score is recomputed from what is held every tick (ADR-023) and a match
+    // that has resolved none has none, so conceding on a fresh board would forfeit nothing.
+    Lockstep::Match match = SixPlayers();
+    Lockstep::TickLog scored;
+    match = Lockstep::TickResolver::Resolve(match, {}, scored);
+
+    match.SetTick((match.Rules().matchLengthTicks * 2U) / 3U);
+    Assert::IsTrue(match.Tick() >= match.Rules().firstWeekTicks, L"this test is about a concession outside the first week");
+    Assert::IsTrue(match.PlayerAt(Lockstep::PlayerId{0}).score > 0U, L"there was no score to forfeit");
+
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.concede = true;
+    const std::array<Lockstep::OrderSet, 1> sets = {orders};
+
+    Lockstep::TickLog log;
+    match = Lockstep::TickResolver::Resolve(match, {.orders = sets}, log);
+
+    Assert::IsTrue(match.PlayerAt(Lockstep::PlayerId{0}).forfeitedScore, L"a late concession kept its score");
+    Assert::AreEqual(0U, match.PlayerAt(Lockstep::PlayerId{0}).score, L"holding a capital and scoring nothing");
+    Assert::IsTrue(match.PlayerAt(Lockstep::PlayerId{1}).score > 0U, L"and everybody else scores normally");
+    Assert::IsTrue(match.SystemAt(match.GalaxyGraph().Capitals()[0]).owner == Lockstep::PlayerId{0},
+                   L"conceding never denies an attacker their prize");
+  }
+
+  // Absence keeps its window, and this is the case that separates the two rules: a player who
+  // simply stops turning up after the first week still scores (ADR-067 changed concession only).
+  TEST_METHOD(AbsenceAfterTheFirstWeekStillKeepsItsScoreWhileAConcessionDoesNot)
+  {
+    Lockstep::Match absent = SixPlayers();
+    absent.SetTick(absent.Rules().firstWeekTicks);
+    for (std::uint32_t tick = 0; tick < absent.Rules().custodianAbsenceTicks; ++tick)
+    {
+      absent = WithoutPlayer(absent, 0);
+    }
+    Assert::IsTrue(absent.PlayerAt(Lockstep::PlayerId{0}).status == Lockstep::PlayerStatus::Custodian);
+    Assert::IsFalse(absent.PlayerAt(Lockstep::PlayerId{0}).forfeitedScore, L"absence lost its first-week window");
+
+    Lockstep::Match conceded = SixPlayers();
+    conceded.SetTick(conceded.Rules().firstWeekTicks);
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.concede = true;
+    const std::array<Lockstep::OrderSet, 1> sets = {orders};
+    Lockstep::TickLog log;
+    conceded = Lockstep::TickResolver::Resolve(conceded, {.orders = sets}, log);
+
+    Assert::IsTrue(conceded.PlayerAt(Lockstep::PlayerId{0}).forfeitedScore, L"the two ways of leaving are not distinguished");
+  }
+
   // "Systems conquered from a custodian yield at half for the rest of the match, whoever holds
   // them." Whoever -- so a second capture does not launder it.
   TEST_METHOD(HalfYieldStampsTheSystemAndSurvivesASecondCapture)

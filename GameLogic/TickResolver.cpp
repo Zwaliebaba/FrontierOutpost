@@ -374,10 +374,13 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
       state.conceded = true;
       state.status = PlayerStatus::Custodian;
       state.custodianSince = _in.Tick();
-      if (_in.Tick() < _in.Rules().firstWeekTicks)
-      {
-        state.forfeitedScore = true;
-      }
+
+      // Conceding forfeits the score outright, IN ANY WEEK (ADR-067), which is what separates it
+      // from absence: absence is a life happening and keeps the first-week window above, and a
+      // concession is a decision to give up the match rather than only the empire. A season is
+      // scored on placement, so an empire that scored for territory it had stopped defending would
+      // outrank players still playing theirs.
+      state.forfeitedScore = true;
 
       record.lines.push_back(std::format("{} conceded", NameOf(player)));
       for (std::size_t other = 0; other < next.Players().size(); ++other)
