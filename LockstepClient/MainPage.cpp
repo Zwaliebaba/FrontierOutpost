@@ -788,14 +788,15 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // The countdown is the one thing on the screen drawn at 2x, and it is amber because amber is
   // the warning colour: this is the deadline every order on the rail is racing (README "Frame").
   const std::string countdown = m_state.match.finished ? std::string{"--:--:--"} : FormatCountdown(m_state.match.secondsToLock);
-  const std::int32_t bigY = CenterTextY(0.0F, Frame::TOP_BAR_HEIGHT, FontRenderer::COUNTDOWN_SCALE);
+  const std::int32_t bigY = CenterTextY(0.0F, Frame::TOP_BAR_HEIGHT, FontRenderer::DEFAULT_FACE, FontRenderer::COUNTDOWN_SCALE);
 
   // **Amber is the deadline colour, and at zero there is no deadline left to warn about** (screen
   // 06). A countdown that stayed amber on 00:00:00 read as "hurry" to a player who could no longer
   // do anything, which is the opposite of what the number means once it has run out.
   const bool atLock = m_state.orders.locked && !m_state.match.finished;
-  DrawRight(_text, cursor, bigY, countdown, atLock ? Ink::NEUTRAL_DIM : Ink::AMBER, FontRenderer::COUNTDOWN_SCALE);
-  cursor -= static_cast<float>(FontRenderer::MeasurePixels(countdown, FontRenderer::COUNTDOWN_SCALE)) + 8.0F;
+  DrawRight(_text, cursor, bigY, countdown, atLock ? Ink::NEUTRAL_DIM : Ink::AMBER, FontRenderer::DEFAULT_FACE,
+            FontRenderer::COUNTDOWN_SCALE);
+  cursor -= static_cast<float>(FontRenderer::MeasurePixels(countdown, FontRenderer::DEFAULT_FACE, FontRenderer::COUNTDOWN_SCALE)) + 8.0F;
 
   const std::string lockLabel = m_state.match.finished ? std::string{"MATCH ENDED"}
                                 : atLock               ? std::format("T{} LOCKED", m_state.OrdersTick())

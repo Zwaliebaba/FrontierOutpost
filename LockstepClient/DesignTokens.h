@@ -81,15 +81,17 @@ inline constexpr float ORDERS_WIDTH = 260.0F;
 
 /// A string centred on a pixel column, rather than starting at one.
 void DrawCentered(Neuron::FontRenderer& _text, float _centerXPixels, std::int32_t _yPixels, std::string_view _string,
-                  const Neuron::Color& _color, std::uint32_t _scale = Neuron::FontRenderer::DEFAULT_SCALE);
+                  const Neuron::Color& _color, Neuron::Face _face = Neuron::FontRenderer::DEFAULT_FACE,
+                  std::uint32_t _scale = Neuron::FontRenderer::DEFAULT_SCALE);
 
 /// A string ending at a pixel column. The right-hand half of every rail is laid out from the edge
 /// inwards, because its widest member is the one that changes.
 void DrawRight(Neuron::FontRenderer& _text, float _rightXPixels, std::int32_t _yPixels, std::string_view _string,
-               const Neuron::Color& _color, std::uint32_t _scale = Neuron::FontRenderer::DEFAULT_SCALE);
+               const Neuron::Color& _color, Neuron::Face _face = Neuron::FontRenderer::DEFAULT_FACE,
+               std::uint32_t _scale = Neuron::FontRenderer::DEFAULT_SCALE);
 
 /// The vertical position that centres one line of text in a band.
-[[nodiscard]] std::int32_t CenterTextY(float _bandTop, float _bandHeight,
+[[nodiscard]] std::int32_t CenterTextY(float _bandTop, float _bandHeight, Neuron::Face _face = Neuron::FontRenderer::DEFAULT_FACE,
                                        std::uint32_t _scale = Neuron::FontRenderer::DEFAULT_SCALE) noexcept;
 
 } // namespace Lockstep

@@ -35,6 +35,12 @@ public:
   static constexpr std::uint32_t COUNTDOWN_SCALE = 2;
 
   /// Which cut a string is drawn in (ADR-074). Mono carries data, sans carries sentences.
+  ///
+  /// **The face comes BEFORE the scale in every signature that takes both**, which is the reverse
+  /// of the order they arrived in. Nearly every call site names a face and takes the default
+  /// scale -- five in the whole client name a scale -- so the other order made the common case
+  /// write `DEFAULT_SCALE` purely to reach past it. Argument ordering is a readability question
+  /// eighty times over and a typing question five times, and this is which way that falls.
   static constexpr Face DEFAULT_FACE = Face::MonoRegular;
 
   /// The baked metrics of one face.
@@ -75,13 +81,13 @@ public:
   /// Ascent plus descent rather than the face's line height, because this is what the CLIP box and
   /// every vertical centring on the four screens is built from, and for the 8x8 font it has to
   /// come out at exactly eight or a clipped map label would clip somewhere new.
-  [[nodiscard]] static constexpr std::uint32_t GlyphHeightPixels(std::uint32_t _scale = DEFAULT_SCALE, Face _face = DEFAULT_FACE) noexcept
+  [[nodiscard]] static constexpr std::uint32_t GlyphHeightPixels(Face _face = DEFAULT_FACE, std::uint32_t _scale = DEFAULT_SCALE) noexcept
   {
     return (static_cast<std::uint32_t>(FaceOf(_face).ascent) + FaceOf(_face).descent) * _scale;
   }
 
   /// The baseline-to-baseline distance the face was baked with.
-  [[nodiscard]] static constexpr std::uint32_t LineHeightPixels(std::uint32_t _scale = DEFAULT_SCALE, Face _face = DEFAULT_FACE) noexcept
+  [[nodiscard]] static constexpr std::uint32_t LineHeightPixels(Face _face = DEFAULT_FACE, std::uint32_t _scale = DEFAULT_SCALE) noexcept
   {
     return FaceOf(_face).lineHeight * _scale;
   }
@@ -123,8 +129,8 @@ public:
   }
 
   /// What ONE codepoint advances the cursor by. The single place that reads the advance table.
-  [[nodiscard]] static constexpr std::uint32_t AdvanceOf(char32_t _codepoint, std::uint32_t _scale = DEFAULT_SCALE,
-                                                         Face _face = DEFAULT_FACE) noexcept
+  [[nodiscard]] static constexpr std::uint32_t AdvanceOf(char32_t _codepoint, Face _face = DEFAULT_FACE,
+                                                         std::uint32_t _scale = DEFAULT_SCALE) noexcept
   {
     return GlyphOf(_codepoint, _face).advance * _scale;
   }
@@ -135,14 +141,14 @@ public:
   /// proportional face needs no edit at any of the call sites that ask this. It is a NAMED
   /// measurement because every right-aligned and centred thing on the main page is laid out
   /// against it, and a stray `* 8` somewhere else is how those drift apart.
-  [[nodiscard]] static constexpr std::uint32_t MeasurePixels(std::string_view _text, std::uint32_t _scale = DEFAULT_SCALE,
-                                                             Face _face = DEFAULT_FACE) noexcept
+  [[nodiscard]] static constexpr std::uint32_t MeasurePixels(std::string_view _text, Face _face = DEFAULT_FACE,
+                                                             std::uint32_t _scale = DEFAULT_SCALE) noexcept
   {
     std::uint32_t width = 0;
     for (std::size_t at = 0; at < _text.size();)
     {
       const Decoded decoded = DecodeUtf8(_text, at);
-      width += AdvanceOf(decoded.codepoint, _scale, _face);
+      width += AdvanceOf(decoded.codepoint, _face, _scale);
       at += decoded.bytes;
     }
     return width;
@@ -155,15 +161,15 @@ public:
   /// as a scan because the advance stops being one number when the face does (ADR-073), and a
   /// division is the shape that would have to be found and rewritten then. There is nothing to
   /// find here.
-  [[nodiscard]] static constexpr std::size_t PrefixThatFits(std::string_view _text, std::uint32_t _widthPixels,
-                                                            std::uint32_t _scale = DEFAULT_SCALE, Face _face = DEFAULT_FACE) noexcept
+  [[nodiscard]] static constexpr std::size_t PrefixThatFits(std::string_view _text, std::uint32_t _widthPixels, Face _face = DEFAULT_FACE,
+                                                            std::uint32_t _scale = DEFAULT_SCALE) noexcept
   {
     std::uint32_t used = 0;
     std::size_t fitted = 0;
     for (std::size_t at = 0; at < _text.size();)
     {
       const Decoded decoded = DecodeUtf8(_text, at);
-      const std::uint32_t advance = AdvanceOf(decoded.codepoint, _scale, _face);
+      const std::uint32_t advance = AdvanceOf(decoded.codepoint, _face, _scale);
       if (used + advance > _widthPixels)
       {
         break;
@@ -191,8 +197,8 @@ public:
   /// question while every glyph was eight pixels wide and stops being it the moment one is not
   /// (ADR-073). A caller that knows a rail is 254 pixels wide now says so, instead of dividing by
   /// eight somewhere the font cannot see.
-  [[nodiscard]] static std::vector<std::string> WrapToWidth(std::string_view _text, std::uint32_t _widthPixels,
-                                                            std::uint32_t _scale = DEFAULT_SCALE, Face _face = DEFAULT_FACE);
+  [[nodiscard]] static std::vector<std::string> WrapToWidth(std::string_view _text, std::uint32_t _widthPixels, Face _face = DEFAULT_FACE,
+                                                            std::uint32_t _scale = DEFAULT_SCALE);
 
   /// ONE COLUMN of a monospaced face, for the two things that are laid out in columns rather than
   /// measured: the join screen's caret, and the verdict box's two-character inset.
@@ -200,9 +206,9 @@ public:
   /// It is the advance of a digit, which in a mono face is every glyph's advance. **Asking it of a
   /// PROPORTIONAL face is a category error** -- there is no column there -- so a caller that wants
   /// the width of something should call `MeasurePixels` on the something.
-  [[nodiscard]] static constexpr std::uint32_t AdvancePixels(std::uint32_t _scale = DEFAULT_SCALE, Face _face = DEFAULT_FACE) noexcept
+  [[nodiscard]] static constexpr std::uint32_t AdvancePixels(Face _face = DEFAULT_FACE, std::uint32_t _scale = DEFAULT_SCALE) noexcept
   {
-    return AdvanceOf(U'0', _scale, _face);
+    return AdvanceOf(U'0', _face, _scale);
   }
 
   /// One frame's worth of text.
@@ -265,8 +271,8 @@ public:
   /// The origin is whole pixels by type, not by convention: a glyph on a half pixel is the one
   /// way this renderer could produce a soft edge, and an integer parameter makes that
   /// unreachable rather than merely discouraged.
-  void DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color,
-                std::uint32_t _scale = DEFAULT_SCALE, Face _face = DEFAULT_FACE);
+  void DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color, Face _face = DEFAULT_FACE,
+                std::uint32_t _scale = DEFAULT_SCALE);
 
   /// Issues everything DrawText appended since BeginFrame as a single draw call.
   /// Draws everything recorded SINCE THE LAST FLUSH, and remembers where it stopped.

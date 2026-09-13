@@ -769,7 +769,7 @@ void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   // The same title block screen 03 opens with, so that a host who has just come off the join screen
   // sees the lobby arrive under the same two lines rather than under a bar that replaced them.
   _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY,
-                 FontRenderer::COUNTDOWN_SCALE);
+                 FontRenderer::DEFAULT_FACE, FontRenderer::COUNTDOWN_SCALE);
   _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(SUBTITLE_Y), "SEATS - BEFORE THE MATCH STARTS",
                  TEXT_MUTED);
 

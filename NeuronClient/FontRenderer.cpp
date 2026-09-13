@@ -219,14 +219,14 @@ void FontRenderer::CreatePipeline(ID3D12Device* _device)
   winrt::check_hresult(_device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(m_pipeline.put())));
 }
 
-std::vector<std::string> FontRenderer::WrapToWidth(std::string_view _text, std::uint32_t _widthPixels, std::uint32_t _scale, Face _face)
+std::vector<std::string> FontRenderer::WrapToWidth(std::string_view _text, std::uint32_t _widthPixels, Face _face, std::uint32_t _scale)
 {
   std::vector<std::string> lines;
 
   // A line with room for no glyph at all has nowhere to put the text, and every loop below would
   // make no progress. This is the character-count form's `_maxCharacters == 0` guard, said in
   // pixels.
-  if (PrefixThatFits(" ", _widthPixels, _scale, _face) == 0)
+  if (PrefixThatFits(" ", _widthPixels, _face, _scale) == 0)
   {
     return lines;
   }
@@ -242,7 +242,7 @@ std::vector<std::string> FontRenderer::WrapToWidth(std::string_view _text, std::
     // A word wider than the line is hard-broken rather than allowed to overflow. Nothing in the
     // reference copy is, but a system name from a server is not something this screen gets to
     // assume anything about.
-    while (MeasurePixels(word, _scale, _face) > _widthPixels)
+    while (MeasurePixels(word, _face, _scale) > _widthPixels)
     {
       if (!current.empty())
       {
@@ -251,15 +251,15 @@ std::vector<std::string> FontRenderer::WrapToWidth(std::string_view _text, std::
       }
       // At least one character, always. A single glyph wider than the whole line cannot be broken
       // any smaller, and taking none of it would spin here forever.
-      const std::size_t fitted = PrefixThatFits(word, _widthPixels, _scale, _face);
+      const std::size_t fitted = PrefixThatFits(word, _widthPixels, _face, _scale);
       const std::size_t taken = (fitted == 0) ? 1 : fitted;
       lines.emplace_back(word.substr(0, taken));
       word = word.substr(taken);
     }
 
     const std::uint32_t needed =
-      current.empty() ? MeasurePixels(word, _scale, _face)
-                      : MeasurePixels(current, _scale, _face) + AdvanceOf(U' ', _scale, _face) + MeasurePixels(word, _scale, _face);
+      current.empty() ? MeasurePixels(word, _face, _scale)
+                      : MeasurePixels(current, _face, _scale) + AdvanceOf(U' ', _face, _scale) + MeasurePixels(word, _face, _scale);
     if (needed > _widthPixels && !current.empty())
     {
       lines.push_back(current);
@@ -310,8 +310,8 @@ void FontRenderer::ClearClipRect() noexcept
   m_clipping = false;
 }
 
-void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color, std::uint32_t _scale,
-                            Face _face)
+void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color, Face _face,
+                            std::uint32_t _scale)
 {
   ASSERT_TEXT(_scale > 0, L"A glyph scale of zero would draw nothing and is a caller mistake, not a way to hide text.");
 
@@ -321,7 +321,7 @@ void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::s
   // landing where its caller put it whatever the face does with bearings. The baseline is that
   // many pixels down; a glyph sits `bearingY` above the baseline.
   const std::uint32_t ascent = FaceOf(_face).ascent * _scale;
-  const std::uint32_t boxHeight = GlyphHeightPixels(_scale, _face);
+  const std::uint32_t boxHeight = GlyphHeightPixels(_face, _scale);
   const std::uint32_t color = Pack(_color);
 
   std::int32_t pen = _xPixels;

@@ -66,9 +66,9 @@ constexpr std::int32_t HIT_JOIN = 4;
 /// field is listening.
 constexpr double BLINK_SECONDS = 1.0;
 
-[[nodiscard]] std::int32_t CenterTextY(float _y, float _height, std::uint32_t _scale = 1)
+[[nodiscard]] std::int32_t CenterTextY(float _y, float _height, Neuron::Face _face = FontRenderer::DEFAULT_FACE, std::uint32_t _scale = 1)
 {
-  const auto glyph = static_cast<float>(FontRenderer::GlyphHeightPixels(_scale));
+  const auto glyph = static_cast<float>(FontRenderer::GlyphHeightPixels(_face, _scale));
   return static_cast<std::int32_t>(_y + (_height - glyph) * 0.5F);
 }
 
@@ -292,7 +292,7 @@ void JoinPage::DrawField(ShapeRenderer& _shapes, FontRenderer& _text, float _y, 
   if (_focused && lit)
   {
     const auto caretX = static_cast<std::int32_t>(FIELD_X) + 10 +
-                        static_cast<std::int32_t>(FontRenderer::AdvancePixels(1)) * static_cast<std::int32_t>(_field.CaretColumn());
+                        static_cast<std::int32_t>(FontRenderer::AdvancePixels()) * static_cast<std::int32_t>(_field.CaretColumn());
     _text.DrawText(caretX, textY, "_", BLUE);
   }
 }
@@ -304,7 +304,7 @@ void JoinPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   // The only other place this font is drawn at 2x is the lock countdown (DESIGN-GUIDELINES
   // "Font"). Both are the one thing on their screen that has to be read first.
   _text.DrawText(static_cast<std::int32_t>(COLUMN_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY,
-                 FontRenderer::COUNTDOWN_SCALE);
+                 FontRenderer::DEFAULT_FACE, FontRenderer::COUNTDOWN_SCALE);
   _text.DrawText(static_cast<std::int32_t>(COLUMN_X), static_cast<std::int32_t>(SUBTITLE_Y), "JOIN A MATCH - ONE SEAT PER TOKEN",
                  TEXT_MUTED);
 

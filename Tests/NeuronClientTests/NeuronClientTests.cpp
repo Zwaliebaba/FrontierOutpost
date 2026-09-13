@@ -307,14 +307,16 @@ public:
   {
     Assert::AreEqual(7u, Neuron::FontRenderer::AdvancePixels());
     Assert::AreEqual(17u, Neuron::FontRenderer::GlyphHeightPixels());
-    Assert::AreEqual(14u, Neuron::FontRenderer::AdvancePixels(Neuron::FontRenderer::COUNTDOWN_SCALE));
-    Assert::AreEqual(34u, Neuron::FontRenderer::GlyphHeightPixels(Neuron::FontRenderer::COUNTDOWN_SCALE));
+    Assert::AreEqual(14u, Neuron::FontRenderer::AdvancePixels(Neuron::FontRenderer::DEFAULT_FACE, Neuron::FontRenderer::COUNTDOWN_SCALE));
+    Assert::AreEqual(34u,
+                     Neuron::FontRenderer::GlyphHeightPixels(Neuron::FontRenderer::DEFAULT_FACE, Neuron::FontRenderer::COUNTDOWN_SCALE));
   }
 
   TEST_METHOD(MeasuringSumsTheAdvances)
   {
     Assert::AreEqual(56u, Neuron::FontRenderer::MeasurePixels("02:14:09"));
-    Assert::AreEqual(112u, Neuron::FontRenderer::MeasurePixels("02:14:09", Neuron::FontRenderer::COUNTDOWN_SCALE));
+    Assert::AreEqual(
+      112u, Neuron::FontRenderer::MeasurePixels("02:14:09", Neuron::FontRenderer::DEFAULT_FACE, Neuron::FontRenderer::COUNTDOWN_SCALE));
     Assert::AreEqual(0u, Neuron::FontRenderer::MeasurePixels(""));
   }
 
@@ -325,12 +327,12 @@ public:
   {
     for (const Neuron::Face face : {Neuron::Face::MonoRegular, Neuron::Face::MonoMedium, Neuron::Face::MonoSemiBold})
     {
-      Assert::AreEqual(Neuron::FontRenderer::AdvanceOf(U'i', 1, face), Neuron::FontRenderer::AdvanceOf(U'W', 1, face),
+      Assert::AreEqual(Neuron::FontRenderer::AdvanceOf(U'i', face), Neuron::FontRenderer::AdvanceOf(U'W', face),
                        L"a monospaced face advances the same for every glyph");
     }
     for (const Neuron::Face face : {Neuron::Face::SansRegular, Neuron::Face::SansMedium})
     {
-      Assert::IsTrue(Neuron::FontRenderer::AdvanceOf(U'i', 1, face) < Neuron::FontRenderer::AdvanceOf(U'W', 1, face),
+      Assert::IsTrue(Neuron::FontRenderer::AdvanceOf(U'i', face) < Neuron::FontRenderer::AdvanceOf(U'W', face),
                      L"a proportional face must not advance an 'i' as far as a 'W'");
     }
   }

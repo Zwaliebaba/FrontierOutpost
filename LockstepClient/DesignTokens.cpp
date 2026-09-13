@@ -21,22 +21,22 @@ std::string Uppercased(std::string_view _text)
 }
 
 void DrawCentered(Neuron::FontRenderer& _text, float _centerXPixels, std::int32_t _yPixels, std::string_view _string,
-                  const Neuron::Color& _color, std::uint32_t _scale)
+                  const Neuron::Color& _color, Neuron::Face _face, std::uint32_t _scale)
 {
-  const auto width = static_cast<float>(Neuron::FontRenderer::MeasurePixels(_string, _scale));
-  _text.DrawText(static_cast<std::int32_t>(std::lround(_centerXPixels - width * 0.5F)), _yPixels, _string, _color, _scale);
+  const auto width = static_cast<float>(Neuron::FontRenderer::MeasurePixels(_string, _face, _scale));
+  _text.DrawText(static_cast<std::int32_t>(std::lround(_centerXPixels - width * 0.5F)), _yPixels, _string, _color, _face, _scale);
 }
 
 void DrawRight(Neuron::FontRenderer& _text, float _rightXPixels, std::int32_t _yPixels, std::string_view _string,
-               const Neuron::Color& _color, std::uint32_t _scale)
+               const Neuron::Color& _color, Neuron::Face _face, std::uint32_t _scale)
 {
-  const auto width = static_cast<float>(Neuron::FontRenderer::MeasurePixels(_string, _scale));
-  _text.DrawText(static_cast<std::int32_t>(std::lround(_rightXPixels - width)), _yPixels, _string, _color, _scale);
+  const auto width = static_cast<float>(Neuron::FontRenderer::MeasurePixels(_string, _face, _scale));
+  _text.DrawText(static_cast<std::int32_t>(std::lround(_rightXPixels - width)), _yPixels, _string, _color, _face, _scale);
 }
 
-std::int32_t CenterTextY(float _bandTop, float _bandHeight, std::uint32_t _scale) noexcept
+std::int32_t CenterTextY(float _bandTop, float _bandHeight, Neuron::Face _face, std::uint32_t _scale) noexcept
 {
-  const float glyph = static_cast<float>(Neuron::FontRenderer::GlyphHeightPixels(_scale));
+  const float glyph = static_cast<float>(Neuron::FontRenderer::GlyphHeightPixels(_face, _scale));
   return static_cast<std::int32_t>(std::floor(_bandTop + (_bandHeight - glyph) * 0.5F));
 }
 
