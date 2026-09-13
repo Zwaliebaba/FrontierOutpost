@@ -32,9 +32,11 @@ import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# The version CI installs. A different one is allowed but reported, because a green local run
-# under another version says nothing about the gate.
-PINNED_VERSION = "18.1.3"
+# The version CI installs, which is the one Visual Studio 2026 bundles -- so the common local run
+# and the gate agree without anybody installing anything. A different one is allowed but reported,
+# because a green local run under another version says nothing about the gate: on 2026-09-13, with
+# CI on 18 and this tree's Visual Studio on 22, it said nothing and main went red.
+PINNED_VERSION = "22.1.3"
 
 SOURCE_SUFFIXES = (".cpp", ".h")
 

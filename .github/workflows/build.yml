@@ -49,8 +49,8 @@ jobs:
 
       # ── Why clang-tidy is pinned and the rest of the toolchain is not ──────────────────────
       #
-      # The clang-format job below pins clang-format 18 and says why: "18 and 22 break a long
-      # argument list in different places, so a floating version would flap." clang-tidy floated,
+      # The clang-format job below pins an exact clang-format and says why: two releases break a
+      # long argument list in different places, so a floating version would flap. clang-tidy floated,
       # and on 2026-09-11 it flapped -- the runner image moved to LLVM 20.1.8 and the build went
       # red on code that had not changed, with three findings in two families:
       #
@@ -226,16 +226,37 @@ jobs:
 
     # Its own Linux job, and not a step on the Windows one, for two reasons. It is seconds rather
     # than minutes, so it reports a formatting problem long before the build would have. And the
-    # version is reproducible here: Ubuntu ships clang-format 18.1.3 from apt, where the Windows
-    # runner's clang-format is whatever Visual Studio happened to bundle -- and 18 and 22 break a
-    # long argument list in different places, so a floating version would flap.
+    # version is an EXACT one here: `windows-latest` has clang, both a standalone LLVM and whatever
+    # Visual Studio bundles, but both move when the image does -- which is how clang-tidy went red
+    # on 2026-09-11 (see the Windows job above).
+    #
+    # ── Why 22.1.3, and why from pip ──────────────────────────────────────────────────────────
+    #
+    # **The pinned version is the one Visual Studio 2026 bundles**, and that is the whole point of
+    # the number rather than a preference for a newer release. Releases disagree: 18 puts a wrapped
+    # lambda's opening brace on the same line and 22 puts it on its own. Whichever version CI uses,
+    # a developer whose local clang-format differs is running a check that cannot tell them
+    # anything -- and on 2026-09-13 that is exactly what happened. CI pinned 18, this tree's Visual
+    # Studio shipped 22.1.3, `CheckFormat.py` was green locally, and main went red on a lambda.
+    #
+    # So the pin follows the common local tool. When Visual Studio moves, re-pin deliberately: the
+    # number here, `PINNED_VERSION` in `Build/CheckFormat.py`, and the table in `AGENTS.md` §6.
+    #
+    # From pip rather than apt because apt has what Ubuntu chose (18 on 24.04) and pip has the
+    # version this asks for, on any image. `setup-python` is what makes `pip install` work at all:
+    # Ubuntu's system Python is externally managed and refuses to install into itself.
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install clang-format 18
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format-18
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install clang-format
+        run: pip install clang-format==22.1.3
+
+      - name: What this got
+        run: clang-format --version
 
       - name: Check formatting
-        run: python3 Build/CheckFormat.py --clang-format clang-format-18
+        run: python Build/CheckFormat.py --clang-format clang-format
