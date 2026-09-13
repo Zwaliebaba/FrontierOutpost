@@ -329,8 +329,15 @@ public:
   // simply stops turning up after the first week still scores (ADR-067 changed concession only).
   TEST_METHOD(AbsenceAfterTheFirstWeekStillKeepsItsScoreWhileAConcessionDoesNot)
   {
+    // Played through the first week and then stopped, which is what "after the first week" means
+    // now that the rule is measured from when they stopped (ADR-072).
+    // Seen ON the tick the window closes, not the tick before it: the first week is ticks 0 to
+    // `firstWeekTicks - 1`, so somebody last seen at `firstWeekTicks` left after it.
     Lockstep::Match absent = SixPlayers();
-    absent.SetTick(absent.Rules().firstWeekTicks);
+    while (absent.Tick() <= absent.Rules().firstWeekTicks)
+    {
+      absent = Everyone(absent);
+    }
     for (std::uint32_t tick = 0; tick < absent.Rules().custodianAbsenceTicks; ++tick)
     {
       absent = WithoutPlayer(absent, 0);
@@ -419,10 +426,44 @@ public:
     Assert::AreEqual(0U, match.PlayerAt(Lockstep::PlayerId{0}).score, L"the cost is already incurred");
   }
 
+  // **THE PRESET THAT COULD NOT FIRE IT** (ADR-072). `PhaseZeroRules` confirms custody after 18
+  // ticks and calls the first week 16, so a rule tested against the CURRENT tick could never be
+  // true: the earliest anybody could be found absent was already past the window. Phase 0 is the
+  // playtest that was meant to judge this rule, and it would have been the one match where it did
+  // not exist.
+  //
+  // Measured from `lastActiveTick`, the question is the one the design asks -- did they leave
+  // inside the first week -- and it is the same question at every tick length.
+  TEST_METHOD(TheFirstWeekForfeitFiresUnderThePhaseZeroPresetToo)
+  {
+    Lockstep::Match match = SixPlayers(Lockstep::PhaseZeroRules());
+    Assert::IsTrue(match.Rules().custodianAbsenceTicks > match.Rules().firstWeekTicks,
+                   L"this test is about a preset where confirmation outlasts the window");
+
+    for (std::uint32_t tick = 0; tick < match.Rules().custodianAbsenceTicks; ++tick)
+    {
+      match = WithoutPlayer(match, 0);
+    }
+
+    Assert::IsTrue(match.PlayerAt(Lockstep::PlayerId{0}).status == Lockstep::PlayerStatus::Custodian, L"absence did not reach custody");
+    Assert::IsTrue(match.Tick() > match.Rules().firstWeekTicks, L"custody was confirmed inside the window, so this proves nothing");
+    Assert::IsTrue(match.PlayerAt(Lockstep::PlayerId{0}).forfeitedScore,
+                   L"somebody who was never there kept their score, because the game took too long to notice");
+  }
+
   TEST_METHOD(ACustodianAfterTheFirstWeekKeepsTheirScore)
   {
+    // **PLAYED THROUGH THE FIRST WEEK, then stopped.** This used to wind the clock forward instead,
+    // which left `lastActiveTick` at zero -- a player who never turned up at all. That read as a
+    // late departure only because the old rule asked when custody was CONFIRMED; measured from when
+    // they stopped (ADR-072), the setup has to give them a first week to have played.
     Lockstep::Match match = SixPlayers();
-    match.SetTick(match.Rules().firstWeekTicks);
+    while (match.Tick() <= match.Rules().firstWeekTicks)
+    {
+      match = Everyone(match);
+    }
+    Assert::IsTrue(match.PlayerAt(Lockstep::PlayerId{0}).lastActiveTick >= match.Rules().firstWeekTicks,
+                   L"they have to have been seen after the window closes for this to be a late departure");
 
     for (std::uint32_t tick = 0; tick < match.Rules().custodianAbsenceTicks; ++tick)
     {

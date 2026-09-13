@@ -243,7 +243,13 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
 
       // "A player who goes custodian in the first week scores nothing for the match; it is the only
       // cost that reaches someone who has already stopped playing." It never clears.
-      if (_in.Tick() < _in.Rules().firstWeekTicks)
+      //
+      // **MEASURED FROM WHEN THEY STOPPED, NOT FROM WHEN THE GAME NOTICED** (ADR-072). Custody is
+      // confirmed `custodianAbsenceTicks` after the last time the server saw them, so testing the
+      // current tick asks "did we find out inside the first week" rather than "did they leave
+      // inside it" -- and under `PhaseZeroRules`, where confirmation takes 18 ticks and the first
+      // week is 16, the answer was never yes and the rule could not fire at all.
+      if (state.lastActiveTick < _in.Rules().firstWeekTicks)
       {
         state.forfeitedScore = true;
       }
