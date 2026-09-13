@@ -1,11 +1,12 @@
 # Screens
 
 Per screen: what the build draws, what the 2026-09-11 handoff asked for that it does not, and where
-the code is. Status is as of 2026-09-12, and each heading names its capture in `screens/`, taken
-that day; the handoff's mockups are no longer in the tree (`README.md` says where they went).
-Numbers 01–08 are the handoff's; 09 was added by ADR-036 and sits between 03 and 01 in the flow
-(`README.md` draws it). "Not built" is stated as such, and nothing below is in the present tense
-unless the tree does it.
+the code is. Status is as of 2026-09-13, and each heading names its capture in `screens/`; every
+capture ADR-069 and ADR-070 touched was retaken that day from the Debug build carrying them, and the
+join and connecting screens are 2026-09-12's, which nothing since has moved. The handoff's mockups
+are no longer in the tree (`README.md` says where they went). Numbers 01–08 are the handoff's; 09
+was added by ADR-036 and sits between 03 and 01 in the flow (`README.md` draws it). "Not built" is
+stated as such, and nothing below is in the present tense unless the tree does it.
 
 ## 01 · Main page — **built** (`01-main-page.png` is the capture, tick 2 of a practice match)
 
@@ -33,7 +34,9 @@ system. When no card offers a real control the standing moves go on the leading 
 `BUILD` and up to two `MOVE FLT n` (ADR-056); before the first lock the digest is one card,
 `NOTHING HAS HAPPENED YET`, carrying them. Build buttons show `- QUEUED` (outlined blue) and
 `- NEED 7 MORE` (dim, inert) per ADR-053, and name the LEVEL they would build —
-`MINING STATION L2 JANDAL 30 CR` (ADR-069). An **answered proposal** reads `ACCEPTED` or `DECLINED` in
+`MINING STATION L2 JANDAL 30 CR` (ADR-069); a build already in flight is a card that reports and
+offers nothing, `SHIPYARD L1 RISING AT DOTHAN` / *Done T5 - 20 credits spent*, `MAP` its only
+action (ADR-070). An **answered proposal** reads `ACCEPTED` or `DECLINED` in
 the past tense on the button that was pressed, outlined blue like a queued build, with the other
 button still imperative and still tappable, so changing an answer before the lock is one tap
 (ADR-068); each card answers the offer its digest entry names, so two open offers no longer share
@@ -67,9 +70,11 @@ for that draws it in the middle. `01-orders-queued.png` is the ordered-but-unloc
 **Locks rail (260px, right) — orders no order, links to all of them (`DrawLocksRail`).** `LOCKS T8`
 / `UNLOCKED` (amber); one line of help; sections `FLEETS n` (rows `FLT 1 10 > PELL` with `T9`, or
 `FLT 1 10 HOLD DOTHAN` with `HOLD`, `+DEF` in blue when it is the incumbent), `BUILDS 2 AVAIL - 26
-CR` (queued rows `SHIPYARD - PELL` / `QUEUED -20`, a `- 6 cr left at the lock -` line, `- nothing
-queued -` otherwise), `SIGNALS 9 TO SEND >` (rows `SENDING`, a concede in red), `PROPOSALS 1 OPEN`
-(rows `P3 LANE` / `3 TICKS` amber). Footer `ALL LOCK TOGETHER` + the countdown.
+CR` (queued rows `SHIPYARD L1 - PELL` / `QUEUED -20`, then a row per build already rising,
+`SHIPYARD L1 - DOTHAN` / `T5` in muted ink — the form FLEETS uses for a fleet under way, ADR-070 —
+a `- 6 cr left at the lock -` line, `- nothing queued -` otherwise), `SIGNALS 9 TO SEND >` (rows
+`SENDING`, a concede in red), `PROPOSALS 1 OPEN` (rows `P3 LANE` / `3 TICKS` amber). Footer
+`ALL LOCK TOGETHER` + the countdown.
 
 **Rows are links (ADR-060).** A BUILDS row opens the build sheet for the system its build is on; a
 FLEETS row focuses where the fleet stands, or opens the destination picker when it is under way; a
@@ -86,10 +91,13 @@ seventh reported. No mockup exists for any of them; the captures are `01-build-s
 `01-destination-sheet.png`, `01-signal-sheet.png`, `01-signal-sheet-armed.png`, `07-replay.png`
 and, for a sheet left open across the lock, `06-at-lock-sheet.png`.
 - **Build** (`BUILD - DOTHAN`): opened by tapping a system you hold; lists that system's buildings
-  and nothing else (ADR-058) — `Shipyard - Dothan` with `20 CR`, or `QUEUED`, or
-  `20 CR - NEED 7 MORE` dim; a system with both built says `NOTHING LEFT TO BUILD HERE`; a system you
-  do not hold opens no sheet and only focuses. Tapping a row queues or unqueues (ADR-053's guard
-  refuses what the purse cannot cover).
+  and nothing else (ADR-058) — `Shipyard L1 - Dothan`, what that level pays and how long it takes
+  under it (`+2 ships a tick - 1 tick`), and `20 CR` on the right (ADR-070), or `QUEUED`, or
+  `20 CR - NEED 7 MORE` dim; a system already building shows that one row instead — `It cannot take
+  another order until this lands` / `DONE T5`, not a target (`01-build-rising.png`) — and a system
+  with both built says `NOTHING LEFT TO BUILD HERE`; a system you do not hold opens no sheet and
+  only focuses. Tapping a row queues or unqueues (ADR-053's guard refuses what the purse cannot
+  cover).
 - **Destination** (`MOVE FLT 1 - PICK LANE`): opened by `MOVE`/`REDIRECT` on a card or by tapping
   your fleet's marker; one row per lane out of where the fleet is or is going: owner square,
   `PELL`, `UNCLAIMED` / `YOURS` / `P3` with the hostile ships standing there and `+DEF` appended

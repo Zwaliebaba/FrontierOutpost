@@ -4,32 +4,32 @@ What the client shows, screen by screen, and how far each screen is built. The d
 2026-09-11 as a UI handoff — eight mockups at 1280×720, guidelines, a per-screen spec and a work
 plan ("v2", superseding the v1 `Design/Screens/`). Most of it has since been built, some of it
 deliberately not, and this directory is now the **design record for the client**, kept against the
-code in `LockstepClient/` and `Lockstep/`. Every status below is as of **2026-09-12** and was read
+code in `LockstepClient/` and `Lockstep/`. Every status below is as of **2026-09-13** and was read
 from the tree, not from the plan.
 
 ## Contents
 - `SCREENS.md` — per screen: what is built, what the design asked for that is not, and where the code is.
 - `DESIGN-GUIDELINES.md` — frame, font, palette, components, copy and map rules **as built**, with the design's intent kept where the build stops short of it.
-- `screens/` — **captures of the running client**, one per screen and state, taken 2026-09-12 from the Debug build of the tree at a4c9235 (PNG, 1280×720, the client area exactly as drawn). The eight mockups of 2026-09-11 are no longer in the tree (owner decision, 2026-09-12): the build superseded 03, 04, 05 and 06, and what the other four still asked for — the map's unbuilt details, screen 02, 07's step-through, 08's tabs — is kept in words under "What the design asks for that the tree does not have" and drawn in the live design reference below. The files themselves are in the history up to a4c9235. The table below names each capture.
+- `screens/` — **captures of the running client**, one per screen and state, taken 2026-09-12 from the Debug build of the tree at a4c9235 and retaken 2026-09-13 at 9b25816 wherever the changes since reach them (PNG, 1280×720, the client area exactly as drawn). The eight mockups of 2026-09-11 are no longer in the tree (owner decision, 2026-09-12): the build superseded 03, 04, 05 and 06, and what the other four still asked for — the map's unbuilt details, screen 02, 07's step-through, 08's tabs — is kept in words under "What the design asks for that the tree does not have" and drawn in the live design reference below. The files themselves are in the history up to a4c9235. The table below names each capture.
 - The handoff's work plan, `PROMPT.md`, is finished as far as it is going to be and lives in [`Design/Archive/2026-09-11-ui-v2-prompt.md`](../Archive/2026-09-11-ui-v2-prompt.md) with a note per step. ADR-034, ADR-038 and ADR-039 cite it by its old name.
 - Live design reference: the project file `Frontier Outpost Main Page.dc.html` (all mockups on one canvas, and since 2026-09-12 the only place they are drawn; design reference, not production code). **The filename predates the rename to LockStep: Universe and is deliberately left alone** — the file lives outside this repository, so renaming it here would break the pointer without renaming anything (ADR-035).
 
 Built from the one-pager (`Design/Archive/space-4x-one-pager-v10.md` since 2026-09-13), ADR-014
 (interface layer), ADR-027 (owner colours), ADR-028/029 (roles, tokens) and the decisions since:
-ADR-034 (what the handoff left open) and ADR-036 through ADR-066, which are cited where they apply.
+ADR-034 (what the handoff left open) and ADR-036 through ADR-071, which are cited where they apply.
 
 ## Screens
 
 | # | Screen | Status | In `screens/` | Code |
 |---|---|---|---|---|
-| 01 | Main page — digest as order surface, map, locks rail | **Built** (ADR-034; then 045, 052, 053, 055–066) | `01-main-page.png` (tick 2 of a practice match: a contact, a claim with its priced build, production), `01-orders-queued.png` (tick 0: a move ordered and a build queued, before the lock), `01-fleet-under-way.png` (tick 1: the route and its marker), `01-rail-hover.png` (the locks rail with the pointer on a row, ADR-060), the sheets `01-build-sheet.png`, `01-destination-sheet.png`, `01-signal-sheet.png` and `01-signal-sheet-armed.png` (the concede armed under its band, ADR-064), and `01-finished.png`. The map's unbuilt details are item 6 below | `LockstepClient/MainPage.cpp`, `DigestView.cpp`, `MapRender.cpp` |
+| 01 | Main page — digest as order surface, map, locks rail | **Built** (ADR-034; then 045, 052, 053, 055–066) | `01-main-page.png` (tick 2 of a practice match: a contact, a claim with its priced build, production), `01-orders-queued.png` (tick 0: a move ordered and a build queued, before the lock), `01-fleet-under-way.png` (tick 1: the route and its marker), `01-rail-hover.png` (the locks rail with the pointer on a row, ADR-060), the sheets `01-build-sheet.png`, `01-destination-sheet.png`, `01-signal-sheet.png` and `01-signal-sheet-armed.png` (the concede armed under its band, ADR-064), `01-build-rising.png` (a build in flight, one frame carrying all three places it is said: the rail's row, the sheet that will not take another order, and the digest's card, ADR-070), and `01-finished.png`. The map's unbuilt details are item 6 below | `LockstepClient/MainPage.cpp`, `DigestView.cpp`, `MapRender.cpp` |
 | 02 | Share tick — 480×640 export | **Not built.** No button, no export; ADR-034 §2 says clipboard-only if it is ever built, and its open question asks whether it should be | none; the mockup that was the target, if it stays one, is in the design file and the history | — |
 | 03 | Join | **Built** (ADR-034 §3, ADR-041) | `03-join.png` | `LockstepClient/JoinPage.cpp`, `NeuronClient/TextField.h` |
 | 04 | Connection lost | **Built** (ADR-038, ADR-043) | `04-connection-lost.png` | `LockstepClient/ConnectionDialog.cpp` |
 | 05 | Connection states | **Built** as one component with seven states. The WELCOME dialog is not one of them | `05-connecting.png`, `05-refused-unknown-token.png`, `05-refused-seat-in-use.png`, `05-waiting-for-the-host.png`, `05-match-finished.png` | `LockstepClient/ConnectionDialog.cpp` |
 | 06 | At lock | **Built** (ADR-039, ADR-065) | `06-at-lock.png`, `06-at-lock-sheet.png` (a sheet left open across the lock: dim rows, the `LOCKED` chip in its header, the rail's sentence in amber) | `LockstepClient/MainPage.cpp` |
 | 07 | Replay — phase step-through | **Stub**, and its title says so (`REPLAY TICK 7 - NOT YET WIRED`). A sheet listing the six phases; nothing steps | `07-replay.png` is the stub as built; the step-through the mockup drew is item 2 below, its centred panel superseded by the sheet (ADR-052) | `MainPage::DrawPanel` |
-| 08 | Missed digests | **Partial.** The backlog is kept and concatenated (ADR-044) and its repeats are folded (ADR-062); no tabs | `08-missed-digests.png` (`SINCE YOU LOOKED - T1 > T7`, the delta box, and two folded `PRODUCTION +18 - T1 > T7` cards); the tabs the mockup drew are item 3 below | `Lockstep/Lockstep.cpp` (match loop), `DigestView.cpp` |
+| 08 | Missed digests | **Partial.** The backlog is kept and concatenated (ADR-044) and its repeats are folded (ADR-062); no tabs | `08-missed-digests.png` (`SINCE YOU LOOKED - T1 > T7`, the delta box, two actor cards and a folded `PRODUCTION +18 - T1 > T7`); the tabs the mockup drew are item 3 below | `Lockstep/Lockstep.cpp` (match loop), `DigestView.cpp` |
 | 09 | Seats — the host's lobby | **Built**, and not in the handoff (ADR-036, 037, 041, 051, 066) | `09-seats.png` (the host alone), `09-seats-joined.png` (a second seat connected and selected, and the three-way on every card) | `Lockstep/SeatsPage.cpp` |
 
 Also built with no mockup, all described in `SCREENS.md` and all captured but one: the four
@@ -109,22 +109,23 @@ starts with twenty credits and that missed digests are one tick deep; none was t
 it was corrected on 2026-09-12. (Rail rows became links later the same day — ADR-060 — so that first
 claim is true again, of a different mechanism: a row links to the thing it names, not to an event.)
 
-**Five captures are out of date as of 2026-09-13**, and are listed here rather than quietly left to
-look current: `01-build-sheet.png`, `01-orders-queued.png`, `01-main-page.png` and
-`01-rail-hover.png` predate ADR-069 and ADR-070 — the sheet now names the level a row would build
-and what it costs in ticks, a system already building shows one row that is not a target, and the
-rail lists what is rising with its ETA — and there is no capture at all of a build in flight
-(`01-build-rising.png`, which the list below says how to stage). They could not be retaken in the
-session that changed them: the desktop was locked, and a locked desktop makes every synthetic tap
-fail silently.
+**Every capture is current as of 2026-09-13.** The five ADR-069 and ADR-070 had left stale were
+retaken that day from the Debug build at 9b25816, on an unlocked desktop, along with every other
+state those changes reach: eighteen retaken, sixteen of them different, and `01-build-rising.png`
+staged for the first time. The two that came back byte for byte what they were are
+`06-at-lock.png` and `05-waiting-for-the-host.png` — a locked tick-zero rail and a joiner with no
+board yet, which neither change reaches — and that is the check. `03-join.png`,
+`05-connecting.png` and the two refusals were left alone: nothing has touched `JoinPage` or
+`ConnectionDialog` since they were taken.
 
 ## Photographing the build
 
 Done on 2026-09-12: every screen and state above was captured from the Debug build of the tree at
 a4c9235, and the eight mockups left `screens/` the same day — the four the build had superseded and
 the four whose targets the list above keeps in words. Every capture the eight changes of ADR-060 to
-ADR-066 touched was retaken the same day from the Debug build carrying them. What is known about
-doing it, measured on 2026-09-12:
+ADR-066 touched was retaken the same day from the Debug build carrying them. Done again on
+2026-09-13 for ADR-069 and ADR-070, by the same recipe. What is known about doing it, measured on
+2026-09-12 and confirmed on 2026-09-13:
 
 - `Build/Screenshot.ps1 -Exe x64\Debug\Lockstep.exe -Out shot.png -Arguments "--tick 4 --store scratch"`
   captures the client area (DPI-aware, cropped to the 1280×720) and gets you screen 03 as it opens.
@@ -138,14 +139,18 @@ doing it, measured on 2026-09-12:
   sheet's `CANCEL` bar (700, 688); the `SIGNALS` header on a fresh rail (1150, 201). The filled
   build button moves with the digest — scan column x=40 for solid blue, as `TapBuild` does. **The
   `SIGNALS` header moves too**: it sits under BUILDS, so a queued build or a second fleet pushes it
-  down 16 pixels a line, and 201 is only right on an opening rail.
+  down 16 pixels a line, and 201 is only right on an opening rail. Since ADR-069 put the level in
+  the title a queued build wraps onto a second line and costs 28, not 16: measured at 229 with one
+  build queued and 257 with two on 2026-09-13, where a tap at 201 silently opened that build's
+  sheet instead and photographed the wrong screen.
 - **The rail's hover is read back, not eyeballed** (ADR-060). `HOVER_FILL` is white at 20/255 over
   the ink, which lands on `30,33,38` against a background of `11,14,20` — plain in place and easy to
   miss in a thumbnail, so a capture script should assert the pixel. Measured that way on 2026-09-12,
   and it is what found that a moving mouse produces no `WM_POINTERUPDATE` at all.
 - `01-build-rising.png` is a practice match one tick after queuing a level: PRACTICE MATCH, tap a
   held system, queue the top row, let one lock pass. The rail then carries the rising row and the
-  same system's sheet offers nothing (ADR-070).
+  same system's sheet offers nothing (ADR-070). Tap the system again before photographing it, so
+  the sheet, the rail row and the digest's card are all in the one frame.
 - States: 09 = JOIN as the host; 01 = PRACTICE MATCH (`--tick 4` overrides the preset's two
   minutes); the sheets = a held system on the map, `MOVE`/`REDIRECT`, the `SIGNALS` header, `REPLAY`;
   06 = a `--serve` process suspended past a lock (`NtSuspendProcess`); 04 = that process killed;
