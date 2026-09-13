@@ -93,6 +93,18 @@ namespace
   return "SOMEBODY";
 }
 
+/// Whether a build row may be put on a card: not offered on another card already, and not a row
+/// that merely reports something rising (ADR-069, ADR-070) -- that one has no button.
+///
+/// A free function rather than a lambda inside `ViewOf`, deliberately: clang-format 18 and 22
+/// disagree about where a wrapped lambda's opening brace goes, CI pins 18, and a construct the two
+/// format differently is one every session has to fight.
+[[nodiscard]] bool Offerable(const MatchState& _state, const std::vector<std::int32_t>& _offered, std::int32_t _row)
+{
+  const bool rising = _state.orders.builds[static_cast<std::size_t>(_row)].rising;
+  return !rising && std::ranges::find(_offered, _row) == _offered.end();
+}
+
 /// `Shipyard - Dothan` becomes `SHIPYARD DOTHAN`: a button is 8px text in a 400px column and the
 /// separator costs three characters it cannot spare.
 [[nodiscard]] std::string Shortened(std::string_view _title)
@@ -612,17 +624,13 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     // production line offers whatever is still unoffered, which is what the credits are for. A
     // rising row is neither: it reports what an earlier lock already took, and carries no button.
     std::int32_t offeredRow = EventRefs::NONE;
-    const auto offerable = [&offeredBuilds, &state](std::int32_t _row)
-    {
-      return !state.orders.builds[static_cast<std::size_t>(_row)].rising && std::ranges::find(offeredBuilds, _row) == offeredBuilds.end();
-    };
 
     if (entry.kind == DigestKind::SystemClaimed && event.refs.system != EventRefs::NONE)
     {
       for (std::size_t row = 0; row < state.orders.builds.size(); ++row)
       {
         const std::int32_t at = positionOf(SystemId{state.orders.builds[row].system});
-        if (at == event.refs.system && offerable(static_cast<std::int32_t>(row)))
+        if (at == event.refs.system && Offerable(state, offeredBuilds, static_cast<std::int32_t>(row)))
         {
           offeredRow = static_cast<std::int32_t>(row);
           break;
@@ -633,7 +641,7 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     {
       for (std::size_t row = 0; row < state.orders.builds.size(); ++row)
       {
-        if (offerable(static_cast<std::int32_t>(row)))
+        if (Offerable(state, offeredBuilds, static_cast<std::int32_t>(row)))
         {
           offeredRow = static_cast<std::int32_t>(row);
           break;
