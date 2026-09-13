@@ -221,9 +221,10 @@ three opens a feature.
 | Defence | **Bastion** — new | +25 on the defender bonus, so the incumbent's 125% is 150% there | more bonus; L3 makes a siege of that system take three ticks | 2 → 3 → 4 ticks |
 | Research | none — an empire order (below) | — | — | 4 → 8 ticks |
 
-The numbers are Phase 0's to change. The shape is fixed: every effect is a number the game already
-has, a bastion is a term in the melee the preview already computes, so the preview stays exact; a
-system's sheet never exceeds four rows; and everything is integer.
+The numbers are Phase 0's to change, in `GameLogic/MatchRules.h`, the one place every tunable lives.
+The shape is fixed: every effect is a number the game already has, a bastion is a term in the melee
+the preview already computes, so the preview stays exact; a system's sheet never exceeds four rows;
+and everything is integer.
 
 **Research is an empire order, not a building** (owner decision, 2026-09-13). It is a row in the
 build column with no system: paid in credits, taking ticks, one unlock per order. No fifth building
@@ -537,6 +538,7 @@ says which.
 | Building levels and build time | Three levels per building, each costing more and taking ticks; a build in progress is visible to rivals who can see the system (2026-09-13) | An ADR and `MatchRules` entries; built before Phase 0 |
 | A defence building | The bastion: a term in the defender bonus, its top level lengthening a siege (2026-09-13) | An ADR when built, after Phase 0 |
 | Gatherer ships | Rejected (2026-09-13): resource collection stays territorial | — |
+| A rules file | Rejected (2026-09-13): `MatchRules` is already the one place every tunable lives, validated on creation and archived with the match; a data file would add a dependency and a second place | — |
 | Ship classes | Ship count for now; classes a v2 candidate | — |
 
 **Still open**, and none of it blocks Phase 0: what the fiction is; which eight unlocks the research
