@@ -20,7 +20,11 @@ namespace
 // between two words would break the single batch the text pass is (ADR-014).
 constexpr std::uint32_t ATLAS_WIDTH_TEXELS = FONT_ATLAS_WIDTH;
 constexpr std::uint32_t ATLAS_HEIGHT_TEXELS = FONT_ATLAS_HEIGHT;
-constexpr DXGI_FORMAT ATLAS_FORMAT = DXGI_FORMAT_R8_UINT;
+// R8_UNORM rather than R8_UINT: the byte is COVERAGE, and the pixel shader wants it as 0..1 to
+// multiply into the string's alpha (ADR-074). The bytes on either side of this change are the
+// same bytes -- the legacy bake writes only 0 and 255, which is what lets a screen drawn from it
+// match the one-bit atlas exactly.
+constexpr DXGI_FORMAT ATLAS_FORMAT = DXGI_FORMAT_R8_UNORM;
 
 // Two floats for the screen size in pixels.
 constexpr std::uint32_t TEXT_CONSTANT_COUNT = 2;

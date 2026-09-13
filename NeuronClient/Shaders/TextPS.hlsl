@@ -1,15 +1,23 @@
-// TextPS.hlsl -- one bit a pixel, and the bit decides between the string's color and nothing.
+// TextPS.hlsl -- one byte of coverage a pixel, and the coverage decides how much of the string's
+// color lands.
 //
-// A glyph pixel that is not set is discarded rather than written as the background color: the text
-// is drawn over whatever is already on the screen, and a background-colored box around every
-// letter is not what an 8x8 font looked like. Discard rather than blend, because nothing in this
-// renderer blends (ADR-011).
+// A glyph pixel that is wholly uncovered is discarded rather than written as the background color:
+// the text is drawn over whatever is already on the screen, and a background-colored box around
+// every letter is not what text looks like.
 //
-// The atlas is read with Load(), so there is no sampler here. The quad is GLYPH_SCALE times the
-// size of the glyph, so the truncation below is what turns one atlas texel into an exact square
-// block of screen pixels -- there is no filtering a later edit could switch on.
+// COVERAGE IS ALPHA HERE, AND NOWHERE ELSE (ADR-074). ADR-014 settled that alpha in the interface
+// passes is a material and not coverage -- a card fill really is 4% white -- and this pass is the
+// one exception, because the faces ADR-074 chose are vector faces at sizes where one bit a pixel
+// is not a smaller version of the letter but noise. The shape pass is untouched, and so is every
+// scene pass. Blending was already enabled for this pipeline (InterfaceBlendState), so nothing is
+// switched on here: what changed is that the value multiplying the string's alpha is no longer
+// always one.
+//
+// The atlas is read with Load(), so there is still no sampler. The quad is `scale` times the size
+// of the glyph, so the truncation below is what turns one atlas texel into an exact block of
+// screen pixels -- there is no filtering a later edit could switch on.
 
-Texture2D<uint> g_fontAtlas : register(t0);
+Texture2D<float> g_fontAtlas : register(t0);
 
 struct VertexOut
 {
@@ -20,11 +28,11 @@ struct VertexOut
 
 float4 main(VertexOut _input) : SV_Target
 {
-  uint lit = g_fontAtlas.Load(int3(int2(_input.glyphTexels), 0));
-  if (lit == 0)
+  float coverage = g_fontAtlas.Load(int3(int2(_input.glyphTexels), 0));
+  if (coverage == 0.0)
   {
     discard;
   }
 
-  return _input.color;
+  return float4(_input.color.rgb, _input.color.a * coverage);
 }
