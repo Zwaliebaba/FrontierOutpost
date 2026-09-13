@@ -7,12 +7,17 @@ deliberately not, and this directory is now the **design record for the client**
 code in `LockstepClient/` and `Lockstep/`. Every status below is as of **2026-09-13** and was read
 from the tree, not from the plan.
 
-> **The captures in `screens/` are STALE as of 2026-09-13.** They show the 8×8 bitmap font; the client
-> now draws IBM Plex, anti-aliased (ADR-074). They are deliberately not retaken yet: FONT-01 stage 5
-> has not assigned Plex Sans to anything and stage 6 has not re-derived the layout, so a capture taken
-> today would record a half-finished screen as though it were the design. **Retake them at the end of
-> stage 6** — `Design/Plans/FONT-01-PlexFaces.md` says so too. Until then, read them for layout and
-> content, not for typography.
+> **`screens/` is PART RETAKEN as of 2026-09-13, and the split is not arbitrary.** FONT-01 stages 5
+> and 6 are done — Plex Sans is assigned, the layout is re-derived, coverage is gamma-corrected — so
+> these five are current and show what the client actually draws:
+> `01-main-page`, `03-join`, `04-connection-lost`, `05-connecting`, `05-refused-unknown-token`.
+>
+> **The other eighteen still show the 8×8 bitmap font.** Every one of them needs the client driven to
+> a state — a sheet opened, a row hovered, a replay stepped — and the client takes input through the
+> Windows Pointer API, so only a real `SendInput` tap on an **unlocked desktop** reaches it
+> (`Build/TapRehearsal.ps1` says why). The desktop was locked when stage 6 ran. Retaking them needs a
+> session at the machine, not more code. Until then, read those eighteen for layout and content, not
+> for typography.
 
 ## Contents
 - `SCREENS.md` — per screen: what is built, what the design asked for that is not, and where the code is.

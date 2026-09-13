@@ -1,6 +1,6 @@
 # FONT-01 — From one hand-typed 8×8 font to five baked cuts of IBM Plex
 
-**Status:** **In flight. Stages 0 to 5 done 2026-09-13; stage 6 is next.** Written 2026-09-13 against ADR-073 and ADR-074,
+**Status:** **In flight. Stages 0 to 6 done 2026-09-13; stage 7 is next.** Written 2026-09-13 against ADR-073 and ADR-074,
 both Accepted by the owner the same day.
 
 **Stage 0 verification, as run (2026-09-13).** The three checkers pass, Debug|x64 builds, and all
@@ -88,21 +88,22 @@ had ever been looked at on screen.
 
 ## Where to pick this up
 
-**Branch `font/plex-faces`, eleven commits, tree clean, all three checkers green, 517 tests
-passing.** Stages 0 to 5 are built. **Stage 6 is next and nothing blocks it.**
+**Branch `font/plex-faces`, fifteen commits, tree clean, all three checkers green, 517 tests
+passing.** Stages 0 to 6 are built. **Stage 7 is next and nothing blocks it.**
 
-What stage 6 is: re-derive the layout for a 17px line box, then settle from a screenshot the three
-things arithmetic cannot — the gamma on a dark background, hinted against unhinted stems, and
-whether the weights are distinguishable at the final size.
+What stage 7 is: restore the five characters ADR-014 substituted and re-measure the six strings it
+shortened. `TICK 47 LOCKS IN` was cut because the top bar was 63px over the frame at 8px; the mono
+column is 7px now and the bar was re-derived in stage 6, so **measure it, do not assume it**.
 
-**The weight assignment is stage 5's proposal, not a finding, and stage 6 is where it is judged.**
-ADR-074 says three mono cuts exist to separate a card title from a rail row from a countdown, so
-that is literally what was done: `MonoRegular` for rail rows, statuses, chips, counts and button
-labels; `MonoMedium` for the things that name a block — a card title, a sheet title, a dialog
-title, the wordmark; `MonoSemiBold` for the countdown alone. Sans went the same way: `SansRegular`
-for body sentences, `SansMedium` for the two amber blocks that explain why the controls are dead
-right now. **If a difference is invisible at the final size, ADR-074's instruction is to drop the
-cut rather than keep it.**
+**The strings are in `MainPage.cpp`, not in `Lockstep/MatchFixture.cpp`.** This plan named a file
+that does not exist and never did — `std::format("T{} LOCKS", ...)` is at `MainPage.cpp:802` and the
+63px reasoning is in the comment at `MainPage.cpp:813`.
+
+**One thing stage 6 could not finish, and it is not a code problem.** Eighteen of the twenty-three
+captures in `Design/UI/screens` still show the 8×8 font. Each needs the client driven to a state — a
+sheet opened, a row hovered, a replay stepped — and the client takes input through the Windows
+Pointer API, so only a real `SendInput` tap on an **unlocked desktop** reaches it. The desktop was
+locked. The five reachable without a tap were retaken and `Design/UI/README.md` names them.
 
 **The checkable rule is not the one this plan proposed, and the difference matters.** The proposal
 was: no sans string carries a digit, and no mono string ends in `.` or `?`. The first half is
@@ -125,10 +126,53 @@ because the other two check nothing on a screen that draws only one face — and
 dialog is nearly all prose while the map is nearly all labels, so a pooled count would stay
 comfortably non-zero through an entire page being reverted.
 
-**One thing is known-wrong on screen right now and is stage 6's, not a defect to chase:** the
-layout still has the 8×8 font's vertical rhythm, so a 17px line box sits in slots cut for 8px and
-labels crowd their fields. Sentences are now in Plex Sans beside it, which makes the crowding
-easier to see rather than worse.
+**Stage 6, as run (2026-09-13).** Four commits, and every judgment it was asked to make from a
+screenshot was made from one.
+
+**Gamma was the largest single improvement and it is arithmetic, not taste.** The back buffer is
+`R8G8B8A8_UNORM` and deliberately not `_SRGB` (ADR-011), so the blender mixes sRGB-encoded values as
+if they were linear; light on dark, a half-covered pixel reached 50% of the string's brightness
+where it should reach about 73%. The thinner the stem the more of it is partial coverage, so the
+whole face read a weight lighter than the cut it was baked from. Raising coverage to 1/2.2 in
+`TextPS.hlsl` is exactly what blending in linear space would have produced against black. Measured
+on the join screen, mean ink luminance: mono labels 63 → 70, the address field 144 → 172, the sans
+paragraph 96 → 106. **Peak luminance is 243 before and after and the floor is 14 before and after**
+— a fully covered pixel and an uncovered one both stayed put, which is what separates this from
+turning the brightness up.
+
+**The line height was wrong in five files and the renderer disagreed with itself.** `LINE_HEIGHT`
+was 12 — line-height 1.5 on a font whose every glyph was 8px — against a 17px box, so on the digest
+rail a card's detail line was drawn *through* the button under it. Worse, the face reports a line
+height of 16 against an ascent-plus-descent of 17 (a negative line gap, which is legal), and the
+layout used one while the clip box used the other. `LineHeightPixels` now floors at the glyph box,
+and nothing hard-codes a line height.
+
+**Three places had it the other way round.** A chip beside a section header, the buttons under a
+card's last line: there the TEXT position is fixed, because it is shared with something on the same
+row, and the box has to be put around it. Each carried its own hand-tuned offset — each of them the
+number that centred an 8px glyph — so all three crept up into the line above. They go through
+`BandTopForText` now, the inverse of the `CenterTextY` they have to agree with. **An 18px button is
+unchanged and deliberately**: the box grew from 8 to 17, but the ink in a shouted label did not,
+because Plex's cap height at 12px is 8.4px. Sizing the chrome to the box would inflate every control
+on the rail to fit ascender room an uppercase label never uses.
+
+**A mono cut was dropped, on ADR-074's own instruction.** Measured at 12px over `SHIPYARD L1 HOLLIS
+20 CR` as post-gamma coverage: Regular → Medium is **+15.4%** ink, Medium → SemiBold **+9.1%**; solid
+pixels go 10%, 18%, 24%. Side by side at 1× and at 2× the first step is obvious and the second is
+not. The structural argument is stronger than the measurement: SemiBold was set in exactly one
+thing, the lock countdown, which is already the only amber on the bar and already twice the size —
+a third signal on the one string that needed none, and absent everywhere two weights actually meet.
+So four cuts. **The sans pair was measured the same way and kept**: +23.1%, and 4% solid against
+15%. **ADR-074's Decision still says five cuts; amending it is the owner's call.**
+
+**Hinting was checked and stays on, which is what the baker already did.** Unhinted at 12px produces
+*zero* fully covered pixels in either family — every stem lands across two columns at partial
+coverage. Crisp beats faithful on a screen that is mostly columns of small data.
+
+**12px was left alone.** The plan left the final size open between 12, 13 and 14. At 12px capitals
+land within half a pixel of the height they had, which is what keeps the screen recognisable, and
+the digest rail's 254px holds 36 characters where it held 31. Nothing in the captures argued for
+more. It is a re-bake and a screenshot if anyone disagrees.
 
 **To see the main page** you need a server: run `x64\Debug\Lockstep.exe --serve --tick 4 --bots 5`,
 read a token out of `x64\Debug\lockstep-<port>.store` (they are words — `charlie`, `foxtrot`), then
@@ -300,7 +344,7 @@ renderer was asked to draw beside the face it was asked for — captured on the 
 string is still a sentence rather than glyph boxes — and `FaceRuleTests.cpp` asserts over it. See
 "Where you pick this up" for why the assertion is not the one proposed above.
 
-### Stage 6 — Re-derive the layout, then tune what only the eye can judge.
+### Stage 6 — Re-derive the layout, then tune what only the eye can judge. **Done 2026-09-13.**
 
 Every hard-coded width and row height on four screens. The digest rail's "31 characters a line" is
 retired. `Design/UI/DESIGN-GUIDELINES.md` §Font is rewritten; `Design/UI/screens` retaken.
@@ -314,17 +358,26 @@ Three things here are tuning, not arithmetic, and all three will look like bugs 
   faithful. Try both and look.
 - **Weights.** ADR-074 says three mono cuts exist to carry a signal. If Medium and SemiBold are
   indistinguishable at the final size on this background, drop one — a difference nobody can see is
-  not a signal, and five cuts is not a requirement.
+  not a signal, and five cuts is not a requirement. **They were, and it was dropped.**
 
 `Uppercased()`'s comment says "the font has one case", which stops being true here. Fix the comment.
 Whether the screen keeps shouting its labels is a design question ADR-074 deliberately leaves open —
 do not answer it silently while editing the comment.
 
+**Done, and one thing turned out to depend on the answer.** `FaceRuleTests` tells a label from a
+sentence by whether it carries a lowercase letter, which works only because the labels shout. Both
+the comment and the test now say so, so that whoever settles the design question finds out that a
+test is leaning on the current answer before they change it.
+
 ### Stage 7 — The copy ADR-014 could not carry.
 
-Restore the five substituted characters in `Lockstep/MatchFixture.cpp` and re-measure the six
-shortened strings. `TICK 47 LOCKS IN` was shortened because the top bar was 63px over the frame at
-8px; whether it still is depends entirely on Stages 4 and 6, so **measure, do not assume**.
+Restore the five substituted characters and re-measure the six shortened strings. `TICK 47 LOCKS IN`
+was shortened because the top bar was 63px over the frame at 8px; whether it still is depends
+entirely on Stages 4 and 6, so **measure, do not assume**.
+
+**They are in `LockstepClient/MainPage.cpp`.** This plan said `Lockstep/MatchFixture.cpp`, which does
+not exist in the tree and is not in the index — only stale `.obj` files under `x64/` carry the name.
+`std::format("T{} LOCKS", ...)` is at line 802 and the 63px reasoning is in the comment at 813.
 
 The `▶` replay glyph stays geometry. It was a triangle in the reference too, and ADR-014's reason
 for drawing rather than typing it has not changed.
@@ -356,8 +409,9 @@ take it.
 
 ## 4. Open questions this plan leaves to the session
 
-**The final sizes.** Mono at 12, 13 or 14px and Sans beside it, taken from a screenshot of the real
-screen rather than from arithmetic. Stage 6.
+**~~The final sizes.~~ Settled at 12px, stage 6.** Capitals land within half a pixel of the height
+they had, the digest rail holds 36 characters where it held 31, and nothing in the captures argued
+for more. A different answer is a re-bake and a screenshot.
 
 **Where the OFL notice lives.** ADR-073 and ADR-074 both name it and neither answers it. Five cuts
 of a licensed typeface baked into a shipped binary is unambiguously distribution, and R13 leaves

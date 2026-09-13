@@ -24,6 +24,12 @@
 // capitals. A string drawn in sans with no lowercase letter in it is a label that got the sentence
 // face -- which is the mistake worth catching, and it is catchable.
 //
+// **That discriminator is borrowed, and it can be taken away.** The screen shouts its labels
+// because the 8x8 font had no lowercase; Plex has both, and ADR-074 left open whether the shouting
+// should continue now that nothing forces it. If the answer ever becomes no, this test needs a
+// different way to tell a label from a sentence -- the face each was ASKED for would still be
+// recorded, but the strings would no longer give the rule away.
+//
 // The mono half keeps the full stop and drops the question mark, for a reason of the same kind:
 // `FIRST MATCH?` is a shouted two-word prompt sharing a row with the button it introduces, and it
 // aligns with that button. A question mark ends a sentence and also ends a short prompt; a full

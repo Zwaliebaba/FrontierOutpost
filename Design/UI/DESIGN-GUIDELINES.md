@@ -12,7 +12,8 @@ ships — this document cites it and does not restate what it does not have to.
   and is drawn first; the rails' opaque backgrounds are what confine it (ADR-017).
 - 1px separators `rgba(255,255,255,0.10)` (`Ink::CARD_BORDER`, 26/255).
 - Rail padding 14px. Card padding **10px** (`MainPage::CARD_PADDING`; the handoff said 8). Line
-  height 12px. Everything on whole pixels.
+  height **is not a number here** — it is `FontRenderer::LineHeightPixels`, 17px for the face as
+  baked; see §Font. Everything on whole pixels.
 - Join card: a 480px column centred, the card at y=228, 282 tall; fields 30px high.
 - Seats console: 960px centred at y=180, sized to its contents (owner, 2026-09-12); seat cards
   212×120 in a 3×2 grid; a 256px detail panel on the right; a 44px footer.
@@ -27,39 +28,71 @@ ships — this document cites it and does not restate what it does not have to.
 
 **This section changed on 2026-09-13 and the change is only half landed. Read the state note first.**
 
-Two families, five cuts, baked from TTF into `NeuronClient/Font.h` by `py Build/BakeFont.py`
+Two families, **four** cuts, baked from TTF into `NeuronClient/Font.h` by `py Build/BakeFont.py`
 (ADR-073) and drawn anti-aliased (ADR-074):
 
-- **IBM Plex Mono** — Regular, Medium, SemiBold — the *data* face: every rail row, status, number,
-  chip, button label, section label, card title, top bar, countdown, sheet row and legend.
+- **IBM Plex Mono** — Regular, Medium — the *data* face: every rail row, status, number, chip,
+  button label, section label, card title, top bar, countdown, sheet row and legend.
 - **IBM Plex Sans** — Regular, Medium — the *sentence* face: event-card detail lines, the rail's
   help line, dialog paragraphs, sheet second lines, the join screen's explanatory lines.
 - **The rule.** If the text aligns with something or carries a number, it is mono. If it is a
   sentence with a full stop or a question mark, it is sans.
 
-Both are baked at **12px**. Measured from the files on 2026-09-13: Plex Mono is exactly 0.600em, so
-a mono column is **7px** — one narrower than the 8×8 font it replaced — and cap height is 0.698em,
-which keeps capitals within half a pixel of the height they had. A line box is ascent 13 plus
-descent 4; the baked line height is 16px where the old font's was 12.
+Both are baked at **12px**, **hinted**. Measured from the files on 2026-09-13: Plex Mono is exactly
+0.600em, so a mono column is **7px** — one narrower than the 8×8 font it replaced — and cap height
+is 0.698em, which keeps capitals within half a pixel of the height they had.
 
-**State, 2026-09-13 — what is true and what is not yet.** Stages 0 to 4 of
-[`Design/Plans/FONT-01-PlexFaces.md`](../Plans/FONT-01-PlexFaces.md) are built: the pipeline, the
-renderer, coverage-as-alpha and the bake. **Stage 5 is not**, so *every draw site still asks for
-`MonoRegular`* and nothing on any screen is in Plex Sans yet. **Stage 6 is not either**, so the
-layout still has the 8×8 font's vertical rhythm and a 17px line box sits in slots cut for 8px —
-labels crowd their fields and the spacing is visibly wrong. Do not take the current screens as the
-intended design, and do not take the numbers below as re-derived; they are the ones the 8×8 font
-left behind.
+A line box is ascent 13 plus descent 4 = **17px**, and a line is set at **17px** too. The face
+reports a line height of 16 — it carries a negative line gap — which is a pixel less than the box
+it asks for, so `FontRenderer::LineHeightPixels` floors at the box. Two numbers that disagree about
+how tall a line is, one used by the layout and one by the clipper, is not a disagreement worth
+keeping. **Nothing hard-codes a line height any more**: it was 12 in five files until 2026-09-13,
+which is what drew a card's detail line through the button under it.
+
+**Hinting is on, and it was checked rather than assumed.** Unhinted at 12px produces *zero* fully
+covered pixels in either family — every stem lands across two columns at partial coverage. Crisp
+beats faithful on a screen that is mostly columns of small data. It is a parameter of the bake, so
+revisiting it is a re-bake and a screenshot, not a code change.
+
+**Coverage is gamma-corrected before it becomes alpha.** The back buffer is `R8G8B8A8_UNORM` and
+deliberately not `_SRGB` (ADR-011), so the blender mixes sRGB-encoded values as if they were
+linear, and light-on-dark that lands too dark — a half-covered pixel reaches 50% of the string's
+brightness where it should reach about 73%. `TextPS.hlsl` raises coverage to 1/2.2, which for a
+black background is exactly what blending in linear space would have produced. A fully covered
+pixel and an uncovered one are both untouched by it.
+
+**Why four cuts and not ADR-074's five.** Plex Mono SemiBold was dropped on 2026-09-13 under the
+ADR's own instruction — *"if at the final size two of them are indistinguishable, the answer is to
+drop a cut rather than to keep a difference nobody can see."* At 12px, as post-gamma coverage over
+`SHIPYARD L1 HOLLIS 20 CR`: Regular → Medium is **+15.4%** ink, Medium → SemiBold **+9.1%**; solid
+pixels go 10%, 18%, 24%. The first step is obvious side by side and the second is not. The sans
+pair was measured the same way and **kept** — Regular → Medium is +23.1%, and 4% solid against 15%.
+The structural argument is the stronger one: SemiBold was set in exactly one thing, the lock
+countdown, which is already the only amber on the bar and already twice the size. **ADR-074's
+Decision still says five; amending it is the owner's call.**
+
+**State, 2026-09-13.** Stages 0 to 6 of
+[`Design/Plans/FONT-01-PlexFaces.md`](../Plans/FONT-01-PlexFaces.md) are built. Stage 7 — restoring
+the five characters ADR-014 substituted and re-measuring the six strings it shortened — is not.
 
 - 2× (`FontRenderer::COUNTDOWN_SCALE`) **only** for the lock countdown on the top bar and the
   `LOCKSTEP` title on the join and seats screens — the one thing read first on each. It is a whole
-  pixel-block enlargement of the 12px face, which is the wrong tool now that a weight is available:
-  ADR-074 leaves open whether the countdown should become a larger baked cut instead. The handoff's
-  other 2× use, the share-card headline, has no screen to be on.
-- Emphasis is colour, case and now **weight**. Labels and headers are uppercase (`Uppercased()`),
-  sentences mixed case — **`Uppercased()`'s comment that "the font has one case" is no longer true**,
-  and whether the screen keeps shouting its labels is a design question ADR-074 deliberately left
-  open rather than answered. No italics, no letter-spacing.
+  pixel-block enlargement of the 12px face, which is still the wrong tool: ADR-074 leaves open
+  whether the countdown should become a larger baked cut instead, and that is now the *only* way
+  left to make it heavier, since the weight above it was dropped. The handoff's other 2× use, the
+  share-card headline, has no screen to be on.
+- Emphasis is colour, case and now **weight** — one step of it, Regular against Medium. Labels and
+  headers are uppercase (`Uppercased()`), sentences mixed case. **The shouting is no longer forced
+  by the font**: the 8×8 face had no lowercase and Plex has both, so it is a choice the sheet is
+  making, and ADR-074 left open whether it should go on being made. One thing depends on the
+  current answer — `FaceRuleTests` tells a label from a sentence by whether it carries a lowercase
+  letter — so changing it means giving that test a different discriminator. No italics, no
+  letter-spacing.
+- **Chrome that sits around already-placed text goes through `BandTopForText`**, the inverse of
+  `CenterTextY`. Three places had their own hand-tuned offset — a chip beside a section header, the
+  buttons under a card's last line — each of them the number that centred an 8px glyph, and each
+  wrong in the same direction once a box was 17px. A button is still **18px**: the box grew, the ink
+  in a shouted label did not.
 - Detail text wraps by word to a PIXEL WIDTH (`FontRenderer::WrapToWidth`). It wrapped to a
   character count until 2026-09-13; there is no character count any more, because there is no one
   advance for a proportional face to have.

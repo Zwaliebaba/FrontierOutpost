@@ -75,8 +75,18 @@ inline constexpr float ORDERS_WIDTH = 260.0F;
   return Neuron::Color{_color.red, _color.green, _color.blue, _alpha};
 }
 
-/// Labels are shouted. The font has one case and the design sheet uses it for every label, so this
-/// is where a name authored in mixed case becomes one.
+/// Labels are shouted, and this is where a name authored in mixed case becomes one.
+///
+/// **"The font has one case" was the reason until 2026-09-13, and it has stopped being true.** The
+/// 8x8 font had no lowercase at all; Plex has both (ADR-074). So the shouting is now a choice the
+/// design sheet is making rather than a constraint the font imposes -- and ADR-074 deliberately
+/// left open whether it should go on being made. **Do not answer that here.** It is a question
+/// about how the screen reads, not about what is baked.
+///
+/// One thing does depend on the current answer: `FaceRuleTests` tells a label from a sentence by
+/// whether it has a lowercase letter in it, which works because every data literal on these screens
+/// goes through here or is typed in capitals. If the labels ever stop shouting, that test needs a
+/// different discriminator, and the test says so too.
 [[nodiscard]] std::string Uppercased(std::string_view _text);
 
 /// A string centred on a pixel column, rather than starting at one.
