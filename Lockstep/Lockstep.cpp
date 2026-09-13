@@ -779,11 +779,13 @@ struct MatchPaths
       kind = Lockstep::ConnectionDialog::Kind::Lost;
       break;
 
+    case Lockstep::MatchConnection::Status::Resolving:
     case Lockstep::MatchConnection::Status::Connecting:
     case Lockstep::MatchConnection::Status::Greeting:
-      // One dialog for both halves of getting in: reaching the peer, and waiting to be welcomed by
-      // it. A player cannot tell them apart and does not need to -- and until the connect stopped
-      // blocking (ADR-043) the first half was not a state anything could draw.
+      // One dialog for all three parts of getting in: looking the name up, reaching the peer, and
+      // waiting to be welcomed by it. A player cannot tell them apart and does not need to -- and
+      // until the connect stopped blocking (ADR-043) the middle one was not a state anything could
+      // draw, nor the first until ADR-071.
       kind = Lockstep::ConnectionDialog::Kind::Connecting;
       break;
 
@@ -1185,7 +1187,8 @@ int RunGame(HWND _window, const Startup& _startup)
       kind = Lockstep::ConnectionDialog::Kind::Refused;
     }
     else if (connection.State() == Lockstep::MatchConnection::Status::Lost ||
-             connection.State() == Lockstep::MatchConnection::Status::Connecting)
+             connection.State() == Lockstep::MatchConnection::Status::Connecting ||
+             connection.State() == Lockstep::MatchConnection::Status::Resolving)
     {
       // A reconnect passes through `Connecting` on its way back, and from the player's side that
       // is still the link being down. Letting the dialog blink out for the length of a handshake

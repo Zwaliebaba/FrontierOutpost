@@ -501,8 +501,10 @@ machines have still not played a tick. Everything else in this document has happ
 2. ~~**A reconnecting player is not sent the digests they missed.**~~ **Done 2026-09-12, ADR-044:**
    the session keeps eight ticks of digest per player and sends the backlog on arrival. Screen 08's
    tabs are now buildable and are not built.
-3. **`getaddrinfo` still blocks** on a hostname, though the connect no longer does (ADR-043). Six
-   people typing a dotted address are unaffected; six people typing a name are not.
+3. ~~**`getaddrinfo` still blocks** on a hostname, though the connect no longer does (ADR-043). Six
+   people typing a dotted address are unaffected; six people typing a name are not.~~ **Done
+   2026-09-13, ADR-071:** the query runs on a worker and the frame loop polls it, measured at under
+   a millisecond a poll; a numeric host is parsed on the spot and never starts a thread.
 4. ~~**The remaining seven items** of the codebase review's §4~~ **Six of the seven done, later on
    2026-09-12:** IPv6 (ADR-046), idle throttling (ADR-047), sanitizers and Release in CI (ADR-048),
    one bidirectional serialize function (ADR-049), a client library (ADR-050). Items 1, 2, 5 and 11

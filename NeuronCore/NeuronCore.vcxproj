@@ -119,6 +119,7 @@
   <ItemGroup>
     <ClCompile Include="FrameStream.cpp" />
     <ClCompile Include="Protocol.cpp" />
+    <ClCompile Include="HostLookup.cpp" />
     <ClCompile Include="Socket.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -132,6 +133,7 @@
     <ClInclude Include="Debug.h" />
     <ClInclude Include="FrameStream.h" />
     <ClInclude Include="Protocol.h" />
+    <ClInclude Include="HostLookup.h" />
     <ClInclude Include="Socket.h" />
     <ClInclude Include="Id.h" />
     <ClInclude Include="NeuronCore.h" />

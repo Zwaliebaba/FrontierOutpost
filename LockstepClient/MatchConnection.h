@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FrameStream.h"
+#include "HostLookup.h"
 #include "Protocol.h"
 #include "Socket.h"
 
@@ -30,6 +31,14 @@ public:
   {
     /// Nothing has been attempted yet.
     Idle,
+    /// Turning a host NAME into an address. There is no socket yet.
+    ///
+    /// **This state exists because `getaddrinfo` blocks** (ADR-071). ADR-043 took the connect off
+    /// the frame loop and left the name query on it, which is instant for the dotted address the
+    /// game offers by default and seconds of frozen window for a real hostname -- repeated by every
+    /// reconnection attempt. A host that is already an address passes through this state within one
+    /// poll and never starts a thread.
+    Resolving,
     /// The handshake is in flight. Nothing has been sent, because there is nowhere to send it yet.
     ///
     /// **This state exists because the connect stopped blocking** (ADR-043). It used to be over
@@ -195,6 +204,8 @@ private:
   std::vector<std::uint8_t> m_outgoing;
 
   Status m_status = Status::Idle;
+  /// The name query in flight, if the host was a name. Not copyable, like the socket beside it.
+  Neuron::HostLookup m_lookup;
   Neuron::RefusalReason m_refusal = Neuron::RefusalReason::None;
   std::int32_t m_player = -1;
   std::uint32_t m_tick = 0;

@@ -6,9 +6,13 @@
 #include "Id.h"
 #include "Prng.h"
 #include "Socket.h"
+#include "HostLookup.h"
 #include "Turns16.h"
 
+#include <algorithm>
 #include <chrono>
+#include <cstring>
+#include <string>
 #include <thread>
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -333,6 +337,109 @@ public:
     Assert::AreEqual(-100, Neuron::OffsetAlong(100, -Neuron::TRIG_SCALE));
     Assert::AreEqual(50, Neuron::OffsetAlong(100, Neuron::TRIG_SCALE / 2));
     Assert::AreEqual(-50, Neuron::OffsetAlong(100, -Neuron::TRIG_SCALE / 2));
+  }
+};
+
+// The name query, moved off the caller's thread (ADR-071).
+//
+// "It did not block" is a NUMBER, not a feeling: the test below times the poll loop while a lookup
+// of a name that cannot resolve is in flight, and a poll that waits on a name server shows up as a
+// frame that took as long as the query did.
+TEST_CLASS(HostLookupTests)
+{
+public:
+  TEST_METHOD(ANumericHostIsAnsweredWithoutAThread)
+  {
+    // The case Phase 0 actually uses. It must be ready on the FIRST poll: a dotted address is a
+    // parse, and spawning a thread to do it would be the only cost there is.
+    for (const char* host : {"127.0.0.1", "192.0.2.1", "::1"})
+    {
+      Neuron::HostLookup lookup;
+      lookup.Start(host);
+
+      Assert::IsTrue(lookup.Progress() == Neuron::HostLookup::State::Ready,
+                     (std::wstring(L"a numeric host was not answered at once: ") + std::wstring(host, host + std::strlen(host))).c_str());
+      Assert::AreEqual(std::string{host}, lookup.Address(), L"a numeric host came back as a different address");
+    }
+  }
+
+  TEST_METHOD(ANameResolvesToAnAddressOffTheCallersThread)
+  {
+    // `localhost` rather than a public name: it is in every hosts file, so this tests the THREAD
+    // PATH -- it is not numeric, so `Start` spawns a worker -- without testing whoever runs it
+    // having a network.
+    //
+    // A name that does NOT resolve is deliberately not asserted on here. How long an NXDOMAIN takes
+    // belongs to the resolver: on this machine on 2026-09-13 a `.invalid` query had not come back
+    // after five seconds, which is what makes it a good fixture for the cadence test below and a
+    // bad one for a test that waits for an answer.
+    Neuron::HostLookup lookup;
+    lookup.Start("localhost");
+
+    const Neuron::HostLookup::State settled = Settle(lookup);
+    Assert::IsTrue(settled == Neuron::HostLookup::State::Ready, L"localhost did not resolve");
+
+    const std::string address = lookup.Address();
+    Assert::IsFalse(address.empty(), L"a ready lookup carries no address");
+    Assert::IsTrue(address == "127.0.0.1" || address == "::1", L"localhost resolved to something other than a loopback address");
+  }
+
+  TEST_METHOD(PollingALookupDoesNotStopTheCaller)
+  {
+    // The measurement. A frame loop polling a lookup of an unresolvable name must keep its cadence;
+    // before ADR-071 the equivalent call sat inside `Socket::Connect` for as long as the query took.
+    Neuron::HostLookup lookup;
+    lookup.Start("lockstep-does-not-exist.invalid");
+
+    double slowestPollMs = 0.0;
+    std::int32_t polls = 0;
+    const auto started = std::chrono::steady_clock::now();
+
+    while (lookup.Progress() == Neuron::HostLookup::State::Pending && std::chrono::steady_clock::now() - started < std::chrono::seconds(5))
+    {
+      const auto before = std::chrono::steady_clock::now();
+      (void)lookup.Progress();
+      const auto after = std::chrono::steady_clock::now();
+
+      slowestPollMs = std::max(slowestPollMs, std::chrono::duration<double, std::milli>(after - before).count());
+      ++polls;
+    }
+
+    Assert::IsTrue(polls > 0, L"the lookup was over before a single poll, so nothing was measured");
+
+    // A frame is 16ms at sixty. One millisecond is two orders of magnitude under the query this
+    // replaces and still far enough above the clock's resolution to mean something.
+    Assert::IsTrue(slowestPollMs < 1.0, (std::wstring(L"a poll took ") + std::to_wstring(slowestPollMs) + L" ms").c_str());
+  }
+
+  TEST_METHOD(AnAbandonedLookupDoesNotHoldTheCallerUp)
+  {
+    // A player who closes the window mid-query must not wait out a name server. The worker writes
+    // into shared state that outlives the lookup, so destroying one is immediate.
+    const auto started = std::chrono::steady_clock::now();
+    {
+      Neuron::HostLookup lookup;
+      lookup.Start("lockstep-does-not-exist.invalid");
+    }
+    const double elapsedMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+
+    Assert::IsTrue(elapsedMs < 100.0, (std::wstring(L"tearing down a lookup took ") + std::to_wstring(elapsedMs) + L" ms").c_str());
+  }
+
+private:
+  [[nodiscard]] static Neuron::HostLookup::State Settle(const Neuron::HostLookup& _lookup)
+  {
+    const auto started = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - started < std::chrono::seconds(5))
+    {
+      const Neuron::HostLookup::State state = _lookup.Progress();
+      if (state != Neuron::HostLookup::State::Pending)
+      {
+        return state;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    return Neuron::HostLookup::State::Pending;
   }
 };
 

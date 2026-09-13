@@ -24,27 +24,68 @@ bool MatchConnection::Open(const std::string& _host, std::uint16_t _port, const 
   m_port = _port;
   m_token = _token;
 
-  m_socket = Neuron::Socket::Connect(_host, _port);
-  if (!m_socket.Valid())
-  {
-    return false;
-  }
-
+  // **THE NAME IS RESOLVED FIRST, AND NOT HERE** (ADR-071). `Open` is called from the frame loop
+  // and must return in a frame; `getaddrinfo` cannot promise that for a name. A numeric host is
+  // answered inside `Start` without a thread, so the common case still reaches `Connect` on this
+  // same call -- through `Settle`, one poll later, which is where every other transition lives.
   m_incoming.Reset();
   m_outgoing.clear();
-  m_status = Status::Connecting;
   m_refusal = Neuron::RefusalReason::None;
   m_connectDeadline = 0.0;
+  m_socket.Close();
+
+  m_lookup.Start(_host);
+  m_status = Status::Resolving;
   return true;
 }
 
 bool MatchConnection::Settle(double _secondsSinceStart)
 {
   // The deadline is set on the first poll rather than in `Open`, which has no clock and should not
-  // grow one: the caller's seconds are the only clock this class has ever been told about.
+  // grow one: the caller's seconds are the only clock this class has ever been told about. It
+  // covers the lookup as well as the connect, because both are "reaching for a server that has not
+  // answered" and a player waiting on a name server is not waiting on something different.
   if (m_connectDeadline == 0.0)
   {
     m_connectDeadline = _secondsSinceStart + CONNECT_DEADLINE_SECONDS;
+  }
+
+  if (m_status == Status::Resolving)
+  {
+    switch (m_lookup.Progress())
+    {
+    case Neuron::HostLookup::State::Ready:
+      // Connecting to the ADDRESS the lookup returned, not to the name: `Socket::Connect` calls
+      // `getaddrinfo` too, and handing it a numeric string makes that call a parse rather than a
+      // second query. The name is queried once, off this thread, and never again.
+      m_socket = Neuron::Socket::Connect(m_lookup.Address(), m_port);
+      m_lookup.Reset();
+      if (!m_socket.Valid())
+      {
+        m_status = Status::Lost;
+        m_connectDeadline = 0.0;
+        return false;
+      }
+      m_status = Status::Connecting;
+      return false;
+
+    case Neuron::HostLookup::State::Failed:
+      m_status = Status::Lost;
+      m_lookup.Reset();
+      m_connectDeadline = 0.0;
+      return false;
+
+    case Neuron::HostLookup::State::Pending:
+    case Neuron::HostLookup::State::Idle:
+    default:
+      if (_secondsSinceStart >= m_connectDeadline)
+      {
+        m_status = Status::Lost;
+        m_lookup.Reset();
+        m_connectDeadline = 0.0;
+      }
+      return false;
+    }
   }
 
   switch (m_socket.Progress())
@@ -79,6 +120,7 @@ bool MatchConnection::Settle(double _secondsSinceStart)
 void MatchConnection::Reset() noexcept
 {
   m_socket.Close();
+  m_lookup.Reset();
   m_incoming.Reset();
   m_outgoing.clear();
   m_status = Status::Idle;
@@ -182,9 +224,10 @@ void MatchConnection::Pump(double _secondsSinceStart)
 
   // ---- Landing --------------------------------------------------------------------------------
   //
-  // A connect in flight is asked how it is doing, once a frame, and nothing else happens until it
-  // has answered. This is the polling half of the change that stopped `Socket::Connect` blocking.
-  if (m_status == Status::Connecting && !Settle(_secondsSinceStart))
+  // A name query or a connect in flight is asked how it is doing, once a frame, and nothing else
+  // happens until it has answered. This is the polling half of the change that stopped
+  // `Socket::Connect` blocking (ADR-043) and the name query with it (ADR-071).
+  if ((m_status == Status::Resolving || m_status == Status::Connecting) && !Settle(_secondsSinceStart))
   {
     return;
   }

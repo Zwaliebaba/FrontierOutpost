@@ -8,6 +8,7 @@
     <ClInclude Include="Debug.h" />
     <ClInclude Include="FrameStream.h" />
     <ClInclude Include="Protocol.h" />
+    <ClInclude Include="HostLookup.h" />
     <ClInclude Include="Socket.h" />
     <ClInclude Include="Id.h" />
     <ClInclude Include="NeuronCore.h" />
@@ -20,6 +21,7 @@
   <ItemGroup>
     <ClCompile Include="FrameStream.cpp" />
     <ClCompile Include="Protocol.cpp" />
+    <ClCompile Include="HostLookup.cpp" />
     <ClCompile Include="Socket.cpp" />
     <ClCompile Include="pch.cpp" />
   </ItemGroup>

@@ -56,9 +56,10 @@ public:
   /// can report; that is only true of a caller with nowhere to put the answer, and this one has a
   /// dialog for it (screen 05).
   ///
-  /// **`getaddrinfo` is still synchronous**, which is instant for the dotted address the game
-  /// offers by default and can block on a name server for a real hostname. That one needs a thread
-  /// rather than a poll, and is not fixed here.
+  /// **`getaddrinfo` is synchronous here and that is now the caller's problem to avoid**: it is a
+  /// parse for a numeric host and a query for a name. `HostLookup` (ADR-071) runs the query off the
+  /// frame loop and hands the ADDRESS back, so a client passes a numeric string to this and never
+  /// pays for a second query.
   [[nodiscard]] static Socket Connect(const std::string& _host, std::uint16_t _port);
 
   /// Where the connection begun by `Connect` has got to. Cheap enough to call every frame, and

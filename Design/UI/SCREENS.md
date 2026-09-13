@@ -175,6 +175,10 @@ drop is ADR-038's open question.
 
 ## 05 · Connection states — **built** as one component (`05-connecting.png`, `05-refused-unknown-token.png`, `05-refused-seat-in-use.png`, `05-waiting-for-the-host.png`, `05-match-finished.png`; CONNECTION LOST is `04-connection-lost.png`; NOT UNDERSTOOD is not captured)
 
+CONNECTING covers all three parts of getting in — looking the host name up, reaching the peer, and
+waiting to be welcomed — and does not distinguish them (ADR-071). A name is resolved on a worker
+thread and a numeric host never starts one, so this dialog is usually past the lookup within a frame.
+
 Seven states of `ConnectionDialog`, chosen in one place from the connection and the state so two can
 never be true at once (`Lockstep.cpp`, the match loop; `RunJoinScreen` for the join screen):
 
