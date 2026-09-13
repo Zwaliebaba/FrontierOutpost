@@ -42,6 +42,9 @@ constexpr float SUBTITLE_Y = 151.0F;
 
 constexpr float FOOTER_HEIGHT = 44.0F;
 
+/// Baseline to baseline, from the font. See `MainPage::LINE_HEIGHT`.
+constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels());
+
 /// The grid and the detail panel, inside the console.
 constexpr float PANEL_WIDTH = 256.0F;
 constexpr float GRID_X = CONSOLE_X + CONSOLE_PADDING;
@@ -50,7 +53,17 @@ constexpr float GRID_WIDTH = CONSOLE_WIDTH - 3.0F * CONSOLE_PADDING - PANEL_WIDT
 constexpr std::int32_t GRID_COLUMNS = 3;
 constexpr float CARD_GAP = 10.0F;
 constexpr float CARD_WIDTH = (GRID_WIDTH - CARD_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
-constexpr float CARD_HEIGHT = 120.0F;
+/// A seat card, tall enough for what it stacks rather than a number that was once tall enough.
+///
+/// **120 was right for an 8px font and wrong the moment a line became 17px.** The card fills from
+/// the top -- header, TOKEN, the token, the status -- and anchors its HUMAN/BOT AT T1/BOT toggle to
+/// the BOTTOM, so the two grew towards each other and met: the status line was drawn straight
+/// through the toggle row. Adding the pieces up is what stops that happening again the next time a
+/// face changes. The four gaps are the ones `DrawSeatCard` uses, in the order it uses them.
+constexpr float CARD_TOP_PADDING = 12.0F;
+constexpr float CARD_TOGGLE_HEIGHT = 18.0F;
+constexpr float CARD_TOGGLE_MARGIN = 10.0F;
+constexpr float CARD_HEIGHT = CARD_TOP_PADDING + static_cast<float>(4 * LINE_HEIGHT + 12 + 2 + 8) + CARD_TOGGLE_HEIGHT + CARD_TOGGLE_MARGIN;
 constexpr float GRID_HEIGHT = 2.0F * CARD_HEIGHT + CARD_GAP;
 
 /// The practice offer, in the space two rows of cards leave under them.
@@ -69,9 +82,6 @@ constexpr float PANEL_HEIGHT = GRID_HEIGHT + 14.0F + PRACTICE_HEIGHT;
 
 constexpr float FOOTER_Y = PANEL_TOP + PANEL_HEIGHT + CONSOLE_PADDING;
 constexpr float CONSOLE_HEIGHT = FOOTER_Y + FOOTER_HEIGHT - CONSOLE_Y;
-
-/// Baseline to baseline, from the font. See `MainPage::LINE_HEIGHT`.
-constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels());
 
 constexpr Color APP_BACKGROUND = {11, 14, 20, 255};
 constexpr Color CARD_FILL = {255, 255, 255, 10};
@@ -502,7 +512,7 @@ void SeatsPage::DrawSeatCard(ShapeRenderer& _shapes, FontRenderer& _text, std::i
   //
   // The segments are sized to their labels rather than cut into equal thirds: `BOT AT T1` is nine
   // glyphs and a third of a 212-pixel card is seven.
-  const float toggleY = _y + _height - 28.0F;
+  const float toggleY = _y + _height - CARD_TOGGLE_HEIGHT - CARD_TOGGLE_MARGIN;
   const float room = _width - 24.0F;
   const std::array<const char*, 3> labels = {"HUMAN", "BOT AT T1", "BOT"};
   const std::array<std::int32_t, 3> actions = {ACTION_HUMAN, ACTION_BOT_TAKES_OVER, ACTION_BOT};
@@ -529,16 +539,16 @@ void SeatsPage::DrawSeatCard(ShapeRenderer& _shapes, FontRenderer& _text, std::i
 
     if (lit[slot])
     {
-      _shapes.FillRect(toggleX, toggleY, segmentWidth, 18.0F, BLUE);
+      _shapes.FillRect(toggleX, toggleY, segmentWidth, CARD_TOGGLE_HEIGHT, BLUE);
     }
     else
     {
-      _shapes.StrokeRect(toggleX, toggleY, segmentWidth, 18.0F, possible[slot] ? OUTLINE : DIVIDER);
+      _shapes.StrokeRect(toggleX, toggleY, segmentWidth, CARD_TOGGLE_HEIGHT, possible[slot] ? OUTLINE : DIVIDER);
     }
 
-    _text.DrawText(static_cast<std::int32_t>(toggleX + (segmentWidth - labelWidth) * 0.5F), CenterTextY(toggleY, 18.0F), labels[slot],
-                   lit[slot] ? APP_BACKGROUND : (possible[slot] ? TEXT_PRIMARY : NEUTRAL_DIM));
-    AddHit(toggleX, toggleY, segmentWidth, 18.0F, actions[slot], _index);
+    _text.DrawText(static_cast<std::int32_t>(toggleX + (segmentWidth - labelWidth) * 0.5F), CenterTextY(toggleY, CARD_TOGGLE_HEIGHT),
+                   labels[slot], lit[slot] ? APP_BACKGROUND : (possible[slot] ? TEXT_PRIMARY : NEUTRAL_DIM));
+    AddHit(toggleX, toggleY, segmentWidth, CARD_TOGGLE_HEIGHT, actions[slot], _index);
     toggleX += segmentWidth + gap;
   }
 }
