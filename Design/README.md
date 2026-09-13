@@ -46,7 +46,7 @@ Design/
     ADR-001-....md
   Plans/                    ← work in flight: what is being built, in what order
   Reference/                ← things that are true rather than decided (formats, tables, maths)
-  Archive/                  ← superseded plans and finished reviews, kept for the record
+  Archive/                  ← superseded documents and finished reviews, kept for the record
   UI/                       ← the client's screens: per-screen status against the code, guidelines, captures of the build (2026-09-12)
 ```
 
@@ -60,6 +60,13 @@ newer document wins, except on the map projection, where neither does: see ADR-0
 the handoff's work plan, and a finished plan is archived (§2 below); ADR-034, ADR-038 and ADR-039
 cite it by the old name and are left as they are, for the reason given above. `Design/UI/` itself
 is no longer a handoff but the record of the client's screens as built, status per screen.
+
+**The one-pager and the prototype test plan are in `Archive/`**, at the same names, since
+2026-09-13. `blueprint.md` carries both forward — the rules in its §3, the playtest phases and
+their hypotheses in its §5 — and is the live design record; the two archived files are the longer
+statement of what they cover, and nothing in `Archive/` is authoritative. ADR-035 and both plans
+in `Plans/` cite them at their old paths and are left as they are, for the reason given above,
+and because what a plan was written against is a fact about the day it was written.
 
 **The rename to *LockStep: Universe* reached the ADRs, and that is an exception worth naming.** On
 2026-09-11 the game stopped being *Frontier Outpost*; the `Frontier` namespace became `Lockstep` and

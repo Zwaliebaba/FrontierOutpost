@@ -3,8 +3,8 @@
 **What this is.** A Reference (`Design/README.md` §2): the numbers the bounded galaxy is built to,
 and the place in the tree that each is checked. It records what is *true* on 2026-09-10, after
 steps 0–2 of [`../Plans/4X-01-CoreLoop.md`](../Plans/4X-01-CoreLoop.md). Nothing here is a decision.
-The constraints themselves come from `../space-4x-one-pager-v10.md`; the determinism they rest on is
-[ADR-018](../ADR/ADR-018-the-simulation-is-a-pure-function.md).
+The constraints themselves come from `../Archive/space-4x-one-pager-v10.md`; the determinism they
+rest on is [ADR-018](../ADR/ADR-018-the-simulation-is-a-pure-function.md).
 
 **Measured** on 2026-09-10 by `Tests/GameLogicTests/GameLogicTests.cpp`, over every player count
 from 6 to 12 and the eight fixed seeds that file names, on `x64\Debug` — 25 tests, all passing. The

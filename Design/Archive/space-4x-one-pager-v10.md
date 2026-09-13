@@ -1,3 +1,24 @@
+# Archived — the space 4X one-pager (was `Design/space-4x-one-pager-v10.md`, v0.7)
+
+**Archived 2026-09-13.** This was the game in one document, and the tree is built against it:
+`Tests/GameLogicTests` turns its sentences into assertions, one per rule. It is superseded as the
+live record by `Design/blueprint.md`, which describes the same game, says what has been built since
+and what is designed and not built, and is where work continues. Where the two disagree the
+blueprint wins; where the blueprint is short, this is the longer statement of the rule. ADR-035 and
+both plans in `Design/Plans/` cite this document at its old path; this is that file, unchanged
+below the rule.
+
+**What was open against it on the day it was archived**, all of it carried into the blueprint:
+concession forfeits score in any week (owner, 2026-09-11 — the resolver still forfeits only a
+first-week concession, and ADR-023 owes the ADR and the code change); Exile and the sealed region's
+rules, designed here and deliberately not built, gated behind the playtests; and four claims in
+*Diplomacy UI* the client does not have — the trade lane as a `PROPOSE` row in the build menu
+(ADR-039's open question), the one-tap first-contact prompt, the income screen's foregone lane
+income, and the three-column orders screen, which the digest as the order surface superseded
+(ADR-034, ADR-045).
+
+---
+
 # LockStep: Universe — Space 4X One-Pager v0.7
 
 ## Aesthetic target

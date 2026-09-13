@@ -3,7 +3,8 @@
 **What this is.** How to play your first match, for somebody who has never played this game or
 anything like it. It describes the client as it is built on 2026-09-12, not what is planned; where
 something is a stub or is not wired up yet, it says so. The design it is written against is
-[`space-4x-one-pager-v10.md`](space-4x-one-pager-v10.md), and the numbers come from
+[`space-4x-one-pager-v10.md`](Archive/space-4x-one-pager-v10.md) — archived on 2026-09-13 and
+carried forward by [`blueprint.md`](blueprint.md) — and the numbers come from
 [`GameLogic/MatchRules.h`](../GameLogic/MatchRules.h), which is where every one of them lives.
 
 ---

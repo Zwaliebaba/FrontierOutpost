@@ -1,3 +1,14 @@
+# Archived — the prototype test plan (was `Design/space-4x-prototype-test-plan.md`, v0.4)
+
+**Archived 2026-09-13.** This is how the three stacked bets — the tick loop, Exile, the sealed
+region — were to be tested: bottom-up, each layer gated on evidence rather than enthusiasm. It is
+superseded as the live record by `Design/blueprint.md` §5, which carries the same three phases and
+the same five Phase 1 hypotheses with their kill signals. None of it has been run: Phase 0 still
+needs six people on six machines, which is the one thing the tree cannot do for itself. Both plans
+in `Design/Plans/` cite this document at its old path; this is that file, unchanged below the rule.
+
+---
+
 # Prototype Test Plan — Space 4X v0.4
 
 Three bets are stacked: the tick loop, Exile, the sealed region. Exile depends on the region; both depend on the loop. Test bottom-up. Nothing above a layer is built until that layer holds with strangers.

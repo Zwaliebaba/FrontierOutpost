@@ -96,11 +96,11 @@ constexpr std::array<std::uint64_t, 8> SEEDS = {
 
 // The promises the one-pager makes about the galaxy, checked on the finished graph.
 //
-// Every one of these is a sentence from `space-4x-one-pager-v10.md` turned into an assertion: a
-// bounded galaxy, a rival capital within three ticks, one-tick lanes inside a starting cluster,
-// two-to-four-tick lanes toward the frontier, a sealed region in the middle. They run across the
-// whole supported player range because six players and twelve players are different rings, and a
-// constraint that holds for one is not thereby true for the other.
+// Every one of these is a sentence from `Design/Archive/space-4x-one-pager-v10.md` turned into an
+// assertion: a bounded galaxy, a rival capital within three ticks, one-tick lanes inside a starting
+// cluster, two-to-four-tick lanes toward the frontier, a sealed region in the middle. They run
+// across the whole supported player range because six players and twelve players are different
+// rings, and a constraint that holds for one is not thereby true for the other.
 TEST_CLASS(GalaxyGenerationTests)
 {
 public:

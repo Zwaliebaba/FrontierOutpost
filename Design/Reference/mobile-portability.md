@@ -44,12 +44,12 @@ nothing has been edited; §10 says where its three decisions stand.
 The tree and the design record describe two different games, and which one is being moved decides
 almost everything below.
 
-`Design/space-4x-one-pager-v10.md` describes an asynchronous, tick-quantised 4X: a graph of systems
-and lanes, four ticks a day at fixed UTC times, six to twelve humans, a three-week season, a digest
-as the primary screen. It says in as many words: *"Not real time. Not a coordinate map — there is no
-velocity to tune."* Its opening image is someone opening an app after work, and its diplomacy
-section is written around the observation that *"strangers click but don't write."* That is a
-portrait-orientation phone game in everything but the label.
+`Design/Archive/space-4x-one-pager-v10.md` describes an asynchronous, tick-quantised 4X: a graph of
+systems and lanes, four ticks a day at fixed UTC times, six to twelve humans, a three-week season, a
+digest as the primary screen. It says in as many words: *"Not real time. Not a coordinate map —
+there is no velocity to tune."* Its opening image is someone opening an app after work, and its
+diplomacy section is written around the observation that *"strangers click but don't write."* That
+is a portrait-orientation phone game in everything but the label.
 
 The tree implements something else: a 20 Hz real-time simulation of a ship in continuous space,
 positions in millimetres, acceleration and turn rate per tick, replicated every tick to a client

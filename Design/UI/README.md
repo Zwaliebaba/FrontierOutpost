@@ -14,9 +14,9 @@ from the tree, not from the plan.
 - The handoff's work plan, `PROMPT.md`, is finished as far as it is going to be and lives in [`Design/Archive/2026-09-11-ui-v2-prompt.md`](../Archive/2026-09-11-ui-v2-prompt.md) with a note per step. ADR-034, ADR-038 and ADR-039 cite it by its old name.
 - Live design reference: the project file `Frontier Outpost Main Page.dc.html` (all mockups on one canvas, and since 2026-09-12 the only place they are drawn; design reference, not production code). **The filename predates the rename to LockStep: Universe and is deliberately left alone** — the file lives outside this repository, so renaming it here would break the pointer without renaming anything (ADR-035).
 
-Built from `Design/space-4x-one-pager-v10.md`, ADR-014 (interface layer), ADR-027 (owner colours),
-ADR-028/029 (roles, tokens) and the decisions since: ADR-034 (what the handoff left open) and
-ADR-036 through ADR-066, which are cited where they apply.
+Built from the one-pager (`Design/Archive/space-4x-one-pager-v10.md` since 2026-09-13), ADR-014
+(interface layer), ADR-027 (owner colours), ADR-028/029 (roles, tokens) and the decisions since:
+ADR-034 (what the handoff left open) and ADR-036 through ADR-066, which are cited where they apply.
 
 ## Screens
 

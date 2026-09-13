@@ -8,6 +8,11 @@ is described in the present tense, what is designed and not built says so, and w
 listed as a question rather than papered over. The engineering detail is kept short here and
 collected in the appendix for the teams that need it.
 
+**It is the live design record.** The two documents it was written from — the one-pager and the
+prototype test plan — moved to `Design/Archive/` on 2026-09-13, unchanged but for a header saying
+where to read instead. This document carries both forward: the rules are §3, the playtest phases
+and their hypotheses §5, and what is designed and not built §4. Design work continues here.
+
 **In one sentence.** LockStep: Universe is an asynchronous, tick-quantised space strategy game for six
 to twelve humans, played four times a day for three weeks, where every order is a blind bet placed
 against rivals placing theirs — and where losing your capital is the start of the best story the
@@ -452,8 +457,8 @@ through fog from tick one.
 
 | Want | Read |
 |---|---|
-| The rules, as designed | `Design/space-4x-one-pager-v10.md` |
-| How the playtests decide what gets built | `Design/space-4x-prototype-test-plan.md` |
+| The rules, as designed, at greater length than §3 | `Design/Archive/space-4x-one-pager-v10.md` — archived 2026-09-13 |
+| The playtest phases, at greater length than §5 | `Design/Archive/space-4x-prototype-test-plan.md` — archived 2026-09-13 |
 | Every decision and what it rejected | `Design/ADR/` — ADR-018 through ADR-031 are the game; 014, 017, 027, 032, 033 are the screen; 034 through 059 are everything built since the UI handoff of 2026-09-11 |
 | What was built, step by step, with what it found | `Design/Plans/4X-01-CoreLoop.md`, `Design/Plans/4X-02-ServerAndClient.md` |
 | The screens, as built and photographed | `Design/UI/` (README, DESIGN-GUIDELINES, SCREENS, `screens/*.png`) |
