@@ -1,9 +1,21 @@
 // TextPS.hlsl -- one byte of coverage a pixel, and the coverage decides how much of the string's
 // color lands.
 //
-// A glyph pixel that is wholly uncovered is discarded rather than written as the background color:
-// the text is drawn over whatever is already on the screen, and a background-colored box around
-// every letter is not what text looks like.
+// A glyph pixel that is wholly uncovered writes NOTHING -- it returns the string's color at an
+// alpha of zero rather than discarding. The text is drawn over whatever is already on the canvas,
+// and a background-colored box around every letter is not what text looks like; an alpha of zero
+// is how that is said here.
+//
+// **It is said that way rather than with `discard` deliberately** (ADR-075). Under this pipeline's
+// blend state the two are identical on this screen: the color channels compute
+// `dst * (1 - 0) + src * 0`, which is `dst` exactly in UNORM8, so the canvas keeps the byte it had.
+// What differs is the canvas's ALPHA, which becomes zero on those pixels -- and that is inert,
+// because nothing reads destination alpha and CanvasPS writes 1 into the back buffer regardless.
+//
+// What `discard` costs is paid somewhere this renderer cannot see it. On a tile-based GPU -- which
+// is what a phone has -- a shader that may discard forces late depth testing for the whole draw.
+// This pass has depth disabled, so it bought nothing here and would be a trap for the first backend
+// that ran on hardware where it matters.
 //
 // COVERAGE IS ALPHA HERE, AND NOWHERE ELSE (ADR-074). ADR-014 settled that alpha in the interface
 // passes is a material and not coverage -- a card fill really is 4% white -- and this pass is the
@@ -47,9 +59,13 @@ struct VertexOut
 float4 main(VertexOut _input) : SV_Target
 {
   float coverage = g_fontAtlas.Load(int3(int2(_input.glyphTexels), 0));
+
+  // The early out is kept, and not because zero is a special case of the line below. `pow(0, x)`
+  // reaches zero through `exp2(x * log2(0))`, which is arithmetic on an infinity; it gives the
+  // right answer on this compiler and is not a thing to make a second backend depend on.
   if (coverage == 0.0)
   {
-    discard;
+    return float4(_input.color.rgb, 0.0);
   }
 
   return float4(_input.color.rgb, _input.color.a * pow(coverage, COVERAGE_GAMMA));

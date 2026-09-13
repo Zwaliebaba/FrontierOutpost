@@ -552,6 +552,36 @@ text pass has depth disabled, so it bought nothing and is a trap for a second ba
 If it is not, the cause is the alpha arithmetic above and it must be understood before this stage
 lands; do not "fix" it by widening the change.
 
+**Stage 6, as run (2026-09-13).** Three checkers green, both builds, 532 tests pass, the debug
+layer says nothing, and the join screen at `--scale 1` is **byte-identical**. The alpha arithmetic
+the plan warned about held exactly: under the text pipeline's blend state the colour channels
+compute `dst * (1 - 0) + src * 0`, which is `dst` in UNORM8 with nothing to round.
+
+**The canvas's alpha was photographed rather than reasoned about**, because three comments and an
+ADR now assert that it is inert. `CanvasPS` was temporarily changed to return `.aaa` instead of
+`.rgb`, and the canvas's alpha channel captured with `discard` and without it:
+
+- **With `discard`**, a glyph quad's uncovered pixels keep whatever alpha was already there — the
+  clear's 255 over the starfield — so the text reads as grey letters on white.
+- **Without it**, the whole glyph quad is zeroed: every string wears a black box exactly the size of
+  its quads. That is the change, and it is the only change.
+
+Neither reaches the display: `CanvasPS` writes 1. The picture also shows the canvas's alpha was
+**already** meaningless before this stage — the join card is black in it, because a 4%-white fill
+writes its own alpha of 10 (`SrcBlendAlpha = ONE`). Nothing was reading it then either.
+
+**The early return is kept rather than folded into the line below it.** `pow(0, x)` reaches zero
+through `exp2(x * log2(0))`, which is arithmetic on an infinity: right on this compiler, and not a
+thing to make a second backend depend on.
+
+**A stale build caught this stage out, and it is a different trap from stage 4's.** Restoring the
+two experiment shaders with `Copy-Item` **preserved the backups' old timestamps**, so MSBuild's
+`FXCompile` compared an older `.hlsl` against a newer generated `.h` and skipped both — and the
+next capture came back as the alpha visualisation from the experiment. The source was correct the
+whole time. **Restore an experiment by rewriting the file, not by copying a backup over it**, or
+set the timestamp; `/v:normal` and a grep for `dxc.exe` is what shows whether a shader was actually
+compiled.
+
 **Commit:** `Let the text shader write nothing rather than discard`
 
 ---
