@@ -270,10 +270,19 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
     DrawCentered(_text, ground.xPixels, static_cast<std::int32_t>(std::lround(ground.yPixels)) + 8,
                  std::format("CUSTODIAN T{}", node.custodianSince), Ink::TEXT_MUTED);
   }
-  if (node.capturedAt != 0)
+  // **A capture is news for three ticks and then it is the map** (ADR-082). Six standing labels on
+  // a board a player is winning is six things to read past on every tick, and none of them changed
+  // this tick or the last two.
+  //
+  // **Red is what YOU lost.** It was drawn under every captured system including the ones the viewer
+  // took, so a winning board read as a rout. Whether a rival took it FROM the viewer or from another
+  // rival is the one case this cannot tell apart -- the snapshot carries `capturedAt` and no
+  // previous owner -- and ADR-082 leaves that open rather than guessing.
+  if (CaptureIsNews(node.capturedAt, _frame.state.match.tick))
   {
+    const bool yours = node.owner == _frame.state.viewer;
     DrawCentered(_text, ground.xPixels, static_cast<std::int32_t>(std::lround(ground.yPixels)) + 8,
-                 std::format("CAPTURED T{}", node.capturedAt), Ink::RED);
+                 std::format("CAPTURED T{}", node.capturedAt), yours ? owner : Ink::RED);
   }
 
   _hits.push_back(MapHit{.x = top.xPixels - radius * 3.0F,
@@ -415,6 +424,15 @@ void DrawFleet(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fra
 }
 
 } // namespace
+
+bool CaptureIsNews(std::uint32_t _capturedAt, std::uint32_t _tick) noexcept
+{
+  /// Three ticks is the window a returning player is shown anyway (ADR-044's backlog is counted in
+  /// ticks, and a digest reports the tick it is about), so a label that outlives it is saying
+  /// something no card is still saying.
+  constexpr std::uint32_t CAPTURE_NEWS_TICKS = 3;
+  return _capturedAt != 0 && _tick <= _capturedAt + CAPTURE_NEWS_TICKS;
+}
 
 std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame)
 {
@@ -709,9 +727,13 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
     legend.push_back({"SHIPS HOLDING", Ink::BLUE, false, false, true});
   }
 
+  // **Not under a sheet** (ADR-082). The legend's row is the bottom twenty pixels of the pane and a
+  // sheet's `CANCEL` bar is the bottom fifty-two, so every sheet capture this project has taken
+  // shows `YOU  PROPOSED LANE  TRADE LANE` sliced off under it. A legend nobody can read is worse
+  // than no legend: it is a row of half-glyphs that looks like a rendering fault.
   float legendX = paneX + 12.0F;
   const float legendY = Frame::SCREEN_HEIGHT - 20.0F;
-  for (const LegendEntry& entry : legend)
+  for (const LegendEntry& entry : _frame.sheetOpen ? std::vector<LegendEntry>{} : legend)
   {
     if (entry.isLane)
     {

@@ -887,7 +887,8 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text)
                        .contentCenter = m_contentCenter,
                        .contentRadius = m_contentRadius,
                        .focusedSystem = m_focusedSystem,
-                       .animationSeconds = m_animationSeconds};
+                       .animationSeconds = m_animationSeconds,
+                       .sheetOpen = m_panel != Panel::None};
 
   for (const MapHit& hit : Lockstep::DrawMap(_shapes, _text, frame))
   {

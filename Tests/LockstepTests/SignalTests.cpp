@@ -15,6 +15,7 @@
 #include "CppUnitTest.h"
 
 #include "MainPage.h"
+#include "MapRender.h"
 #include "SnapshotView.h"
 
 #include "BotPolicy.h"
@@ -644,6 +645,19 @@ public:
     Assert::IsTrue(state.proposals.empty(), L"the withdrawn offer is still on the table");
     Assert::IsFalse(ActionOn(state, 0, Lockstep::EventActionKind::AcceptProposal).has_value(),
                     L"a withdrawn offer's card still offers an answer");
+  }
+};
+
+// Red is what you lost, and a capture is news for three ticks (ADR-082).
+TEST_CLASS(CaptureLabelTests)
+{
+public:
+  TEST_METHOD(ACaptureIsNewsForThreeTicksAndThenItIsTheMap)
+  {
+    Assert::IsTrue(Lockstep::CaptureIsNews(11, 11), L"a capture this tick is not news");
+    Assert::IsTrue(Lockstep::CaptureIsNews(11, 14), L"the third tick after is still inside the window");
+    Assert::IsFalse(Lockstep::CaptureIsNews(11, 15), L"a capture four ticks old is still being announced");
+    Assert::IsFalse(Lockstep::CaptureIsNews(0, 40), L"a system nobody has captured claims a capture");
   }
 };
 

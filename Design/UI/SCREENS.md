@@ -66,6 +66,12 @@ locks rail still do not scroll** (ADR-052 option C, which ADR-080 amends for thi
 signals (`REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE`) are the signal sheet's rows instead
 (ADR-039).
 
+**A capture is news for three ticks (ADR-082).** `CAPTURED Tn` is drawn under a system for three
+ticks after it changed hands and then not at all, in the new owner's colour when that is the viewer
+and in red otherwise. Red on this screen is what you lost; a rival taking a system from another
+rival still reads red, which is the half `SnapshotSystem` cannot yet answer. The legend is not drawn
+while a sheet is open, because the two share the bottom strip of the pane.
+
 **Map (centre, `MapRender.cpp`).** Per `DESIGN-GUIDELINES.md` "Map": camera, grid, stars, lanes
 with costs, routes, the sealed region, systems and fleets depth-sorted, `MAP - FOCUS: PELL`, and the
 legend. Drag orbits. The not-drawn list is in the guidelines and in `README.md` item 6.

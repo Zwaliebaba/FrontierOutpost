@@ -60,7 +60,21 @@ struct MapFrame
   /// dash offset -- a map drawn twice at the same value is identical, which is what keeps a
   /// screenshot test meaningful.
   float animationSeconds = 0.0F;
+
+  /// Whether a sheet is open over the pane. The legend sits in the bottom twenty pixels, which is
+  /// exactly where a sheet's `CANCEL` bar goes, so it was drawn half-clipped under one in every
+  /// sheet capture this project has taken (ADR-082). The map does not know what a panel is; it is
+  /// told whether its own bottom edge is covered.
+  bool sheetOpen = false;
 };
+
+/// Whether a capture is still news, and so still labelled on the map (ADR-082).
+///
+/// **Three ticks, and then it is the map rather than the news.** A board a player is winning wore a
+/// standing `CAPTURED Tn` under every system they had ever taken -- six of them on
+/// `01-main-page.png` -- none of which had changed that tick or the two before it. Pure and named so
+/// the rule can be asserted without a screen, which is the only half of this that is not drawing.
+[[nodiscard]] bool CaptureIsNews(std::uint32_t _capturedAt, std::uint32_t _tick) noexcept;
 
 /// Draws the galaxy, and returns what can be tapped in it.
 ///

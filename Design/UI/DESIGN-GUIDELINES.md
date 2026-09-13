@@ -298,8 +298,10 @@ Drawn, in painter's order (`MapRender.cpp`):
 - Systems and fleets back to front (a depth sort, because painter's order is the whole occlusion
   model). A system: ground shadow ellipse (owner @0.22, 2.2× wide, 0.9× tall) → 1px stem (20 units,
   capital 30) → the dot (radius 4.5·1.15, capital 6·1.15 with a halo at 2.4×). Contested: a 1px ring.
-  Custodian: a dashed ring and `CUSTODIAN T43` under the ground point. Captured: `CAPTURED T45` in
-  red. Focused: a white ring at 3× the radius. The name above every node, capitals uppercased, 8px at
+  Custodian: a dashed ring and `CUSTODIAN T43` under the ground point. Captured: `CAPTURED T45`
+  under the ground point **for three ticks and then not at all**, in the new owner's colour when it
+  is the viewer's and in `RED` otherwise -- red means what YOU lost, and a rival taking a system from
+  another rival is the case the snapshot cannot yet distinguish (ADR-082). Focused: a white ring at 3× the radius. The name above every node, capitals uppercased, 8px at
   every distance.
 - **A garrison badge** (ADR-079), for every owner with fleets STANDING at a system: a 16px filled
   chip beside the system's name carrying the total ships, placed clear of both the disc and the
@@ -314,7 +316,9 @@ Drawn, in painter's order (`MapRender.cpp`):
   lane too short for that draws it in the middle (ADR-059).
 - `MAP` in the top-left corner, `MAP - FOCUS: PELL` once the digest or a tap has pointed it at a
   system. The legend along the bottom: `YOU`, up to four rivals actually on the map, `PROPOSED LANE`,
-  `TRADE LANE`, and `FLEET UNDER WAY` while anything is in transit.
+  `TRADE LANE`, `FLEET UNDER WAY` while anything is in transit, and a blue chip with `SHIPS HOLDING`
+  while any garrison badge is drawn (ADR-079). **It is not drawn at all while a sheet is open**: the
+  legend's row and a sheet's `CANCEL` bar are the same strip of the pane (ADR-082).
 - Tapping a system you hold opens its build sheet; a system you do not hold only focuses
   (ADR-058); tapping your own fleet's marker opens its destination picker.
 

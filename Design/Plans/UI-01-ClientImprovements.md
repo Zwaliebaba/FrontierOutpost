@@ -1,6 +1,6 @@
 # UI-01 — What the client's screens still cost a player
 
-**Status:** **Items 1.1, 1.2 and 1.3 done 2026-09-13 (ADR-079, ADR-080, ADR-081); the rest not started.** Written 2026-09-13 as a UX review and revised the same day against
+**Status:** **Items 1.1-1.4 and 2.6 done 2026-09-13 (ADR-079 to ADR-082); the rest not started.** Written 2026-09-13 as a UX review and revised the same day against
 ADR-077 and ADR-078, which landed between the review and the first item. Item 1.1 is rescoped and
 item 2.3 carried a sentence those ADRs made false; both are marked below. Nothing else has been
 built. Archive this when the final checklist passes.
@@ -96,6 +96,11 @@ to agree.
 - DESIGN-GUIDELINES.md §Components "Actor card" and §Copy "Every event carries its own actions" updated.
 
 ### 1.4 Red means your loss only; captured labels age out
+**Done in part 2026-09-13 — ADR-082.** The age-out and "your own capture is not red" are built. The
+**[ASK]** is still open and is the rest of it: the snapshot carries `capturedAt` and no previous
+owner, so a rival taking a system from another rival still reads red. ADR-082's open question puts
+the two answers to the owner.
+
 **Problem.** `CAPTURED Tn` is drawn red under every captured system, including the ones you captured. Six red labels on a winning board read as six losses.
 
 **Change.** `MapRender.cpp`:
@@ -192,6 +197,8 @@ to agree.
 - README item 6 zoom sentence removed; DESIGN-GUIDELINES.md §Map updated.
 
 ### 2.6 Legend hidden under sheets
+**Done 2026-09-13 — ADR-082.** The first option, one branch, as the item asked.
+
 **Problem.** Every sheet capture shows `YOU  PROPOSED LANE  TRADE LANE` half-clipped under the `CANCEL` bar.
 
 **Change.** `MapRender.cpp` legend: skip drawing when `MainPage` reports a sheet open; or extend the sheet to the pane's bottom edge (drop the 12px lower margin). Pick the first; it is one branch.
