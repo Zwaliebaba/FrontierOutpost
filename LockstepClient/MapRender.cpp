@@ -57,6 +57,15 @@ constexpr float HALO_SCALE = 2.4F;
 constexpr float RING_SCALE = 2.2F;
 constexpr float FLEET_HOVER = 14.0F;
 
+/// The garrison badge beside a system's name (ADR-079). 16 is the `LOCKED` chip's height, which is
+/// what a chip is on this screen; there is no rounded-rectangle primitive and every other chip here
+/// is square, so this one is too.
+constexpr float BADGE_HEIGHT = 16.0F;
+constexpr float BADGE_PADDING = 4.0F;
+/// A rival's badge is a wash rather than a fill: their strength is a fact to read, and only the
+/// viewer's own badge is a thing to tap.
+constexpr std::uint8_t BADGE_RIVAL_ALPHA = 89;
+
 // ---- A fleet's route (ADR-055) -----------------------------------------------------------------
 //
 // **Dots rather than dashes, and they travel.** A route has to be distinguishable at a glance from
@@ -142,6 +151,64 @@ void DrawGroundCircle(ShapeRenderer& _shapes, const MapFrame& _frame, float _des
   }
 }
 
+/// The fleets STANDING at one system, gathered per owner. What a garrison badge says (ADR-079).
+///
+/// **Per owner rather than per fleet**, because a system holding three of your fleets is one
+/// strength to read and one thing to tap, and the number a player weighs a lane by is the total.
+/// Which fleets made it up is the fleet-list sheet's business, so the count and the first index
+/// travel with it: one fleet opens its picker, several open the sheet that picks between them.
+struct Garrison
+{
+  OwnerId owner = NOBODY;
+  std::uint32_t ships = 0;
+  std::int32_t fleets = 0;
+  std::int32_t first = EventRefs::NONE;
+};
+
+/// Every owner with fleets standing at `_system`, the viewer first and the rest by owner id.
+///
+/// The viewer first because their own badge is the one they look for, and a stable order after that
+/// because two frames of the same state must lay out the same way (`MapFrame::animationSeconds` is
+/// the only thing on this map allowed to differ between them).
+///
+/// **This reveals nothing the client was not already told.** It reads `MatchState::fleets`, which is
+/// what the snapshot sent through the fog -- a rival fleet the viewer cannot see is not in that list
+/// and cannot be badged (ADR-022).
+[[nodiscard]] std::vector<Garrison> GarrisonsAt(const MatchState& _state, std::int32_t _system)
+{
+  std::vector<Garrison> garrisons;
+  for (std::size_t index = 0; index < _state.fleets.size(); ++index)
+  {
+    const Fleet& fleet = _state.fleets[index];
+    if (fleet.OnALane() || fleet.to != _system || fleet.owner == NOBODY)
+    {
+      continue;
+    }
+
+    const auto found =
+      std::find_if(garrisons.begin(), garrisons.end(), [&fleet](const Garrison& _garrison) { return _garrison.owner == fleet.owner; });
+    if (found == garrisons.end())
+    {
+      garrisons.push_back(Garrison{.owner = fleet.owner, .ships = fleet.ships, .fleets = 1, .first = static_cast<std::int32_t>(index)});
+      continue;
+    }
+    found->ships += fleet.ships;
+    ++found->fleets;
+  }
+
+  const OwnerId viewer = _state.viewer;
+  std::sort(garrisons.begin(), garrisons.end(),
+            [viewer](const Garrison& _a, const Garrison& _b)
+            {
+              if ((_a.owner == viewer) != (_b.owner == viewer))
+              {
+                return _a.owner == viewer;
+              }
+              return _a.owner < _b.owner;
+            });
+  return garrisons;
+}
+
 void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame, std::vector<MapHit>& _hits, std::int32_t _index)
 {
   const Neuron::OrbitCamera& camera = _frame.view.Camera();
@@ -214,6 +281,43 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
                          .width = radius * 6.0F,
                          .height = (ground.yPixels - top.yPixels) + radius * 6.0F,
                          .system = _index});
+
+  // ---- What is standing here (ADR-079) ----------------------------------------------------------
+  //
+  // **A fleet that is not on a lane was drawn by nothing at all until this badge.** The map's
+  // drawables are systems and fleets in transit, so a board where the player holds ten fleets drew
+  // none of them and the locks rail carried the whole of that answer.
+  //
+  // Pushed AFTER the system's own hit, because `MainPage` tests hits in reverse: the badge sits
+  // inside the disc's generous rectangle and has to win it. The disc is the system and the badge is
+  // the fleets, which is the whole reason they are two targets and not one.
+  const std::int32_t labelY = static_cast<std::int32_t>(std::lround(top.yPixels - radius)) - 13;
+  float badgeX = std::max(top.xPixels + radius + 4.0F, top.xPixels + static_cast<float>(FontRenderer::MeasurePixels(label)) * 0.5F + 4.0F);
+
+  for (const Garrison& garrison : GarrisonsAt(_frame.state, _index))
+  {
+    const std::string ships = std::to_string(garrison.ships);
+    const float badgeWidth = static_cast<float>(FontRenderer::MeasurePixels(ships)) + BADGE_PADDING * 2.0F;
+    const float badgeTop = BandTopForText(labelY, BADGE_HEIGHT);
+    const Color color = OwnerColor(garrison.owner, _frame.state.viewer);
+    const bool yours = garrison.owner == _frame.state.viewer;
+
+    // Yours is filled and reads as a control, because it is one; a rival's is a wash of their colour
+    // and reads as a fact, because that is all it is. Both carry the number at full strength.
+    _shapes.FillRect(badgeX, badgeTop, badgeWidth, BADGE_HEIGHT, yours ? color : WithAlpha(color, BADGE_RIVAL_ALPHA));
+    _text.DrawText(static_cast<std::int32_t>(badgeX) + static_cast<std::int32_t>(BADGE_PADDING), labelY, ships,
+                   yours ? Ink::APP_BACKGROUND : color);
+
+    // A rival's badge names the system, so the tap focuses it exactly as the disc does. Yours names
+    // the fleets standing there, which is a different thing to tap and a different index (ADR-057).
+    _hits.push_back(MapHit{.x = badgeX,
+                           .y = badgeTop,
+                           .width = badgeWidth,
+                           .height = BADGE_HEIGHT,
+                           .system = yours ? EventRefs::NONE : _index,
+                           .fleetsAt = yours ? _index : EventRefs::NONE});
+    badgeX += badgeWidth + 3.0F;
+  }
 }
 
 /// Where along its lane a fleet is DRAWN, which is where it is except near the ends.
@@ -406,7 +510,7 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
   // means anything.
   for (const Fleet& fleet : _frame.state.fleets)
   {
-    if (fleet.order != FleetStance::Move || fleet.from == fleet.to)
+    if (!fleet.OnALane())
     {
       continue;
     }
@@ -496,7 +600,7 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
   for (std::size_t index = 0; index < _frame.state.fleets.size(); ++index)
   {
     const Fleet& fleet = _frame.state.fleets[index];
-    if (fleet.order != FleetStance::Move || fleet.from == fleet.to)
+    if (!fleet.OnALane())
     {
       continue;
     }
@@ -547,6 +651,9 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
     Color color;
     bool isLane;
     bool dashed;
+    /// A garrison badge rather than a dot or a lane: the legend draws the shape it is naming, and a
+    /// badge is a filled chip (ADR-079).
+    bool isBadge = false;
   };
 
   // The empires this player can actually see, not all twelve. A twelve-swatch legend would fill
@@ -585,11 +692,21 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
 
   // Only when there is one on the map. A legend entry for a thing nobody can see is a colour to
   // learn for nothing, which is the rule the rival swatches above already follow (ADR-027).
-  const bool anyMoving = std::any_of(_frame.state.fleets.begin(), _frame.state.fleets.end(),
-                                     [](const Fleet& _fleet) { return _fleet.order == FleetStance::Move && _fleet.from != _fleet.to; });
+  const bool anyMoving =
+    std::any_of(_frame.state.fleets.begin(), _frame.state.fleets.end(), [](const Fleet& _fleet) { return _fleet.OnALane(); });
   if (anyMoving)
   {
     legend.push_back({"FLEET UNDER WAY", Ink::TEXT_MUTED, true, true});
+  }
+
+  // **`SHIPS`, not `FLEETS`, because the number on the badge is ships.** A system holding three
+  // fleets of three wears one badge reading 9, and a legend calling that "fleets" would be teaching
+  // the wrong reading of the only number the map now carries.
+  const bool anyHolding = std::any_of(_frame.state.fleets.begin(), _frame.state.fleets.end(),
+                                      [](const Fleet& _fleet) { return !_fleet.OnALane() && _fleet.owner != NOBODY; });
+  if (anyHolding)
+  {
+    legend.push_back({"SHIPS HOLDING", Ink::BLUE, false, false, true});
   }
 
   float legendX = paneX + 12.0F;
@@ -607,6 +724,11 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
         _shapes.Line(legendX, legendY + 4.0F, legendX + 14.0F, legendY + 4.0F, entry.color, 2.0F);
       }
       legendX += 19.0F;
+    }
+    else if (entry.isBadge)
+    {
+      _shapes.FillRect(legendX, legendY - 1.0F, 10.0F, 10.0F, entry.color);
+      legendX += 15.0F;
     }
     else
     {

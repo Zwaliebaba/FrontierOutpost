@@ -1,6 +1,6 @@
 # UI-01 — What the client's screens still cost a player
 
-**Status:** **Not started**, written 2026-09-13 as a UX review and revised the same day against
+**Status:** **Item 1.1 done 2026-09-13 (ADR-079); the rest not started.** Written 2026-09-13 as a UX review and revised the same day against
 ADR-077 and ADR-078, which landed between the review and the first item. Item 1.1 is rescoped and
 item 2.3 carried a sentence those ADRs made false; both are marked below. Nothing else has been
 built. Archive this when the final checklist passes.
@@ -23,6 +23,10 @@ Source: UX review of `Design/UI` (README.md, SCREENS.md, DESIGN-GUIDELINES.md, 2
 ## Phase 1 — Costs a player every match
 
 ### 1.1 Fleets standing on the map
+**Done 2026-09-13 — ADR-079.** Every bullet below is built except the `01-main-page.png` retake, which needs a
+board the viewer has played and so needs an unlocked desktop; ADR-079 records what was photographed
+instead and keeps the retake as an open question.
+
 **Rescoped 2026-09-13, after ADR-077.** As written this item bundled two problems: fleets being
 invisible on the map, and the destination picker having no reliable entry point after tick 0.
 **ADR-077 fixed the second** — a FLEETS row on the locks rail opens the picker on every tick, a

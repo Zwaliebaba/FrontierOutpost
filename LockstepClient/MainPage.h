@@ -103,6 +103,10 @@ public:
     OpenSystem,
     /// Open a fleet's destination picker, lane-constrained.
     OpenFleet,
+    /// Open what is standing at one system, from its garrison badge (ADR-079). Its index is a
+    /// SYSTEM position: one fleet of the viewer's there goes straight to that fleet's picker, and
+    /// several open the sheet that picks between them first.
+    OpenFleetsAt,
     /// Queue or unqueue a build. An order: local until the lock.
     ToggleBuild,
     /// Open the list of things this player could say to somebody (ADR-039).
@@ -130,6 +134,9 @@ public:
     None,
     BuildList,
     Destination,
+    /// Which of the several fleets standing at one system (ADR-079). Its subject is a SYSTEM, and
+    /// it exists only because a badge totals ships and a picker has to be about one fleet.
+    FleetList,
     SignalList,
     Replay
   };
@@ -291,6 +298,10 @@ private:
   [[nodiscard]] std::string LockSentence() const;
 
   void AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index);
+
+  /// The viewer's own fleets standing at one system and able to take an order, as indices into
+  /// `m_state.fleets`. What a garrison badge opens, and what the fleet-list sheet lists (ADR-079).
+  [[nodiscard]] std::vector<std::int32_t> StandingFleetsAt(std::int32_t _system) const;
 
   /// How many credits short the purse is of build row `_index` on top of what is already queued;
   /// zero when it is affordable or names no row. The number a dim build control shows (ADR-053).

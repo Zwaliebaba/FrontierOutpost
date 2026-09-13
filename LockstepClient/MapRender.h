@@ -26,9 +26,14 @@ struct MapHit
   float width = 0.0F;
   float height = 0.0F;
 
-  /// Exactly one of these is set; the other is `EventRefs::NONE`.
+  /// Exactly one of these is set; the others are `EventRefs::NONE`.
+  ///
+  /// `fleetsAt` is a SYSTEM position like `system` is, and it is a separate field rather than a flag
+  /// beside that one because the two mean different things to tap: the disc is the system and the
+  /// badge beside it is the fleets standing there (ADR-079). One index, one meaning (ADR-057).
   std::int32_t system = EventRefs::NONE;
   std::int32_t fleet = EventRefs::NONE;
+  std::int32_t fleetsAt = EventRefs::NONE;
 };
 
 /// Everything the map needs and does not own.

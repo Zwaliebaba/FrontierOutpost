@@ -294,6 +294,13 @@ Drawn, in painter's order (`MapRender.cpp`):
   Custodian: a dashed ring and `CUSTODIAN T43` under the ground point. Captured: `CAPTURED T45` in
   red. Focused: a white ring at 3× the radius. The name above every node, capitals uppercased, 8px at
   every distance.
+- **A garrison badge** (ADR-079), for every owner with fleets STANDING at a system: a 16px filled
+  chip beside the system's name carrying the total ships, placed clear of both the disc and the
+  name label and stepping right when a system carries more than one. Yours is a solid `YOU` fill
+  with the number in `APP_BACKGROUND` and is a target; a rival's is their colour at 0.35 with the
+  number in their colour at full strength, and focuses like the disc does. A fleet is drawn as a
+  badge or as a marker on a lane, never as both (`Fleet::OnALane`). Legend: a blue chip and
+  `SHIPS HOLDING`, because the number is ships and not fleets.
 - A fleet in transit: a 14-unit stem, an arrowhead pointing along the lane in world space, and
   `FLT 1 - ETA T6` — yours above the head, a rival's beside and below, so two converging on one
   system cannot overlap. The marker is clamped a label's half-width (68px) clear of both ends, and a

@@ -260,6 +260,20 @@ struct Fleet
   std::string preview;
   /// "in transit", "incumbent - defender bonus" -- the status line under the fleet's name.
   std::string status;
+
+  /// Whether this fleet is drawn ON A LANE rather than standing at a system.
+  ///
+  /// **A fleet is one or the other and never both**, which is what this is for: the map draws a
+  /// marker for the first and a garrison badge for the second (ADR-079), and an expression written
+  /// out twice would eventually draw one fleet twice or not at all. It was written out four times
+  /// -- three in `MapRender` and once in `MainPage::Animating` -- before it had a name.
+  ///
+  /// Not the same question as `underWay`: a move ordered this tick is on a lane at progress zero
+  /// from the moment it is given (ADR-055) and is not under way until the lock (ADR-077).
+  [[nodiscard]] bool OnALane() const noexcept
+  {
+    return order == FleetStance::Move && from != to;
+  }
 };
 
 /// A row of the build list. A trade lane is one of these and not a diplomacy screen: it is a

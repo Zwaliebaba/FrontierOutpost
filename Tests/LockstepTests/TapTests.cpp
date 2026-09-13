@@ -1446,4 +1446,161 @@ public:
   }
 };
 
+// A fleet standing at a system is drawn there and can be tapped there (ADR-079). The map pane only:
+// the locks rail reaches the same picker (ADR-077) and would answer every one of these for the wrong
+// reason, so every sweep below stops at the rail's left edge.
+TEST_CLASS(GarrisonBadgeTapTests)
+{
+public:
+  static constexpr std::int32_t MAP_LEFT = 400;
+  static constexpr std::int32_t MAP_RIGHT = SCREEN_WIDTH - ORDERS_RAIL;
+
+  /// Where the viewer's one fleet is standing, as a system position.
+  [[nodiscard]] static std::int32_t WhereTheFleetStands(const Lockstep::MatchState& _state)
+  {
+    for (const Lockstep::Fleet& fleet : _state.fleets)
+    {
+      if (fleet.owner == _state.viewer && !fleet.OnALane())
+      {
+        return fleet.to;
+      }
+    }
+    return Lockstep::EventRefs::NONE;
+  }
+
+  TEST_METHOD(ABadgeOpensThePickerForTheFleetStandingUnderIt)
+  {
+    // The map drew nothing at all for a parked fleet before this, so no tap in this pane could
+    // reach a picker on a board with nothing in transit -- which is every board at tick zero.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Assert::IsTrue(WhereTheFleetStands(page.State()) != Lockstep::EventRefs::NONE, L"the opening board has no fleet standing anywhere");
+    Assert::IsFalse(
+      std::any_of(page.State().fleets.begin(), page.State().fleets.end(), [](const Lockstep::Fleet& _fleet) { return _fleet.OnALane(); }),
+      L"something is in transit, so a marker rather than a badge could be what answers this");
+
+    Headless renderers;
+    const bool opened = SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
+    Assert::IsTrue(opened, L"nothing on the map opens a picker for a fleet standing at a system");
+  }
+
+  TEST_METHOD(ASystemHoldingSeveralAsksWhichOneFirst)
+  {
+    // A badge totals SHIPS, so a system holding three fleets wears one badge and the tap that
+    // follows it has to be about one fleet. The sheet between them is that question.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+    const std::int32_t standing = WhereTheFleetStands(state);
+    Assert::IsTrue(standing != Lockstep::EventRefs::NONE);
+
+    Lockstep::Fleet second = state.fleets.front();
+    second.id = 77;
+    second.name = "FLT 77";
+    second.ships = 4;
+    second.from = standing;
+    second.to = standing;
+    second.order = Lockstep::FleetStance::Hold;
+    second.underWay = false;
+    state.fleets.push_back(std::move(second));
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    const bool listed = SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::FleetList; });
+    Assert::IsTrue(listed, L"a system holding two of your fleets went somewhere other than the list that picks between them");
+
+    // And the list leads on to a picker, which is the only thing it is for.
+    const bool picked = SweepFor(
+      page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
+      [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; }, true,
+      [&page, &renderers]
+      {
+        if (page.OpenPanel() != Lockstep::MainPage::Panel::None)
+        {
+          return false;
+        }
+        return SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
+                        [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::FleetList; });
+      });
+    Assert::IsTrue(picked, L"no row of the fleet list opens that fleet's picker");
+  }
+
+  TEST_METHOD(ARivalsGarrisonIsReadAndNotOrdered)
+  {
+    // A rival's badge says how strong a system is, which is the same fact ADR-063 puts on a
+    // destination row. It is not a control: there is no order to give about somebody else's ships.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    Assert::IsFalse(state.fleets.empty());
+
+    // Every fleet on the board belongs to a rival, so any picker this sweep finds is one the map
+    // offered about ships that are not the viewer's.
+    for (Lockstep::Fleet& fleet : state.fleets)
+    {
+      fleet.owner = state.viewer == 0 ? 1 : 0;
+      fleet.order = Lockstep::FleetStance::Hold;
+      fleet.underWay = false;
+      fleet.from = fleet.to;
+    }
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    const bool opened = SweepFor(
+      page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page]
+      { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination || page.OpenPanel() == Lockstep::MainPage::Panel::FleetList; });
+    Assert::IsFalse(opened, L"the screen offered an order about a rival's ships");
+  }
+
+  TEST_METHOD(ABadgeIsFocusOnlyAtTheLock)
+  {
+    // Screen 06, and the rule the locks rail's rows already follow (ADR-060): at the lock nothing
+    // opens a surface that takes an order for a tick that is already resolving.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    state.orders.locked = true;
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    const bool opened = SweepFor(
+      page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page]
+      { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination || page.OpenPanel() == Lockstep::MainPage::Panel::FleetList; });
+    Assert::IsFalse(opened, L"a badge opened a picker at the lock");
+    Assert::IsTrue(page.FocusedSystem() != Lockstep::EventRefs::NONE, L"and it focused nothing either, so the tap did nothing at all");
+  }
+
+  TEST_METHOD(AFleetOnALaneWearsNoBadge)
+  {
+    // A fleet is drawn as a marker on its lane or as a badge at a system, never as both -- which is
+    // what `Fleet::OnALane` is for. A fleet counted at the system it is LEAVING would be drawn
+    // twice and, worse, would offer a picker the lock refuses (ADR-077).
+    bool sawOne = false;
+    for (std::int32_t ticks = 1; ticks <= 14 && !sawOne; ++ticks)
+    {
+      const auto simulation = FleetMoveTapTests::EverybodyMoves(ticks);
+      const Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+      for (const Lockstep::Fleet& fleet : state.fleets)
+      {
+        if (!fleet.underWay)
+        {
+          continue;
+        }
+        sawOne = true;
+        Assert::IsTrue(fleet.OnALane(), L"a fleet the server has on a lane says it is standing somewhere");
+      }
+    }
+    Assert::IsTrue(sawOne, L"fourteen ticks of six bots put nothing in transit, so this test proved nothing");
+  }
+};
+
 } // namespace LockstepTests

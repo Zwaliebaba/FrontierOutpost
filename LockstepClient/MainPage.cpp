@@ -207,6 +207,22 @@ void MainPage::ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _
     return;
   }
 
+  case Panel::FleetList:
+  {
+    // About a system, like the build sheet above, and put back on the same terms: the system is
+    // still on this map and the viewer still has something standing on it. A garrison that left at
+    // the lock leaves nothing to pick between (ADR-065, ADR-079).
+    const std::int32_t at = PositionOfSystem(m_state, _subjectId);
+    if (at == EventRefs::NONE || StandingFleetsAt(at).empty())
+    {
+      return;
+    }
+    m_panel = Panel::FleetList;
+    m_panelSubject = at;
+    m_panelSubjectId = _subjectId;
+    return;
+  }
+
   case Panel::Destination:
   {
     for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
@@ -477,6 +493,24 @@ bool MainPage::Animating() const noexcept
                              [](const Fleet& _fleet) { return _fleet.order == FleetStance::Move && _fleet.from != _fleet.to; });
 }
 
+std::vector<std::int32_t> MainPage::StandingFleetsAt(std::int32_t _system) const
+{
+  std::vector<std::int32_t> standing;
+  for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
+  {
+    const Fleet& fleet = m_state.fleets[index];
+    // The same three questions the badge was drawn by (`GarrisonsAt`), asked of the viewer's own
+    // fleets: theirs, standing here, and orderable. `underWay` is the one the badge does not have
+    // to ask -- a fleet on a lane is not standing anywhere -- and this does, because a tap lands a
+    // frame after the badge was drawn and the lock can fall between them (ADR-077).
+    if (fleet.owner == m_state.viewer && !fleet.OnALane() && !fleet.underWay && fleet.to == _system)
+    {
+      standing.push_back(static_cast<std::int32_t>(index));
+    }
+  }
+  return standing;
+}
+
 std::uint32_t MainPage::BuildShortfall(std::int32_t _index) const noexcept
 {
   if (_index < 0 || _index >= static_cast<std::int32_t>(m_state.orders.builds.size()))
@@ -574,6 +608,39 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       m_panel = Panel::Destination;
       m_panelSubject = region->index;
       m_panelSubjectId = fleet.id;
+      return true;
+    }
+
+    case Action::OpenFleetsAt:
+    {
+      if (region->index < 0 || region->index >= static_cast<std::int32_t>(m_state.graph.systems.size()))
+      {
+        return true;
+      }
+      m_focusedSystem = region->index;
+      m_armedConcede = EventRefs::NONE;
+
+      // **One fleet needs no sheet to pick it.** A list of one row is a tap spent on a question
+      // with one answer, so a system holding a single fleet of yours goes straight to its picker
+      // and a system holding several asks which (ADR-079).
+      const std::vector<std::int32_t> standing = StandingFleetsAt(region->index);
+      if (standing.empty())
+      {
+        return true;
+      }
+      if (standing.size() == 1)
+      {
+        const Fleet& only = m_state.fleets[static_cast<std::size_t>(standing.front())];
+        m_focusedSystem = only.from;
+        m_panel = Panel::Destination;
+        m_panelSubject = standing.front();
+        m_panelSubjectId = only.id;
+        return true;
+      }
+
+      m_panel = Panel::FleetList;
+      m_panelSubject = region->index;
+      m_panelSubjectId = m_state.graph.systems[static_cast<std::size_t>(region->index)].id;
       return true;
     }
 
@@ -739,6 +806,16 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text)
 
   for (const MapHit& hit : Lockstep::DrawMap(_shapes, _text, frame))
   {
+    // **A garrison badge is focus-only at the lock, exactly as a rail row is** (ADR-060, ADR-079).
+    // It is the one control on the map that follows the rail rather than the disc beside it, and
+    // the disc's own behaviour at the lock is left alone here -- see ADR-079's open question.
+    if (hit.fleetsAt != EventRefs::NONE)
+    {
+      const bool locked = m_state.orders.locked || m_state.match.finished;
+      AddHit(hit.x, hit.y, hit.width, hit.height, locked ? Action::FocusSystem : Action::OpenFleetsAt, hit.fleetsAt);
+      continue;
+    }
+
     if (hit.system != EventRefs::NONE)
     {
       AddHit(hit.x, hit.y, hit.width, hit.height, Action::OpenSystem, hit.system);
@@ -1689,6 +1766,36 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     {
       rows.push_back(
         SheetRow{"NOTHING LEFT TO BUILD HERE", "Both buildings are at their top level.", std::string{}, NO_ACCENT, EventRefs::NONE});
+    }
+    break;
+  }
+  case Panel::FleetList:
+  {
+    if (m_panelSubject < 0 || m_panelSubject >= static_cast<std::int32_t>(m_state.graph.systems.size()))
+    {
+      return;
+    }
+    const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(m_panelSubject)];
+    title = std::format("FLEETS AT {} - PICK ONE", Uppercased(node.name));
+    rowAction = Action::OpenFleet;
+
+    // One row per fleet, and the ships on the right where every sheet on this screen puts the
+    // number the eye is scanning for. The badge that opened this totals them; this is the breakdown
+    // (ADR-079).
+    for (const std::int32_t index : StandingFleetsAt(m_panelSubject))
+    {
+      const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(index)];
+      rows.push_back(SheetRow{Uppercased(fleet.name), fleet.preview,
+                              fleet.ships == 1 ? std::string{"1 SHIP"} : std::format("{} SHIPS", fleet.ships), Ink::BLUE,
+                              m_state.orders.locked ? EventRefs::NONE : index});
+    }
+
+    // The fleets left between the frame that drew the badge and the tap that opened this -- a lock
+    // in between is the way it happens. The sheet says so rather than showing nothing, because a
+    // sheet with no rows is indistinguishable from one that failed to open.
+    if (rows.empty())
+    {
+      rows.push_back(SheetRow{"NOTHING STANDING HERE ANY MORE", "They left at the lock.", std::string{}, NO_ACCENT, EventRefs::NONE});
     }
     break;
   }

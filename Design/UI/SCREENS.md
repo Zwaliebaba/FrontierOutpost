@@ -60,6 +60,14 @@ signals (`REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE`) are the signal s
 with costs, routes, the sealed region, systems and fleets depth-sorted, `MAP - FOCUS: PELL`, and the
 legend. Drag orbits. The not-drawn list is in the guidelines and in `README.md` item 6.
 
+**What is standing where (ADR-079).** A system holding fleets wears a garrison badge beside its
+name, one per owner, carrying that owner's total ships there — `DOTHAN 10` filled in your blue,
+`Xander 16` washed in the holder's colour. **Tapping your own badge is how a parked fleet is
+ordered from the map**: one fleet there opens `MOVE FLT n - PICK LANE` directly, several open
+`FLEETS AT DOTHAN - PICK ONE` first, and the guard ADR-077 put on `OpenFleet` means neither can ever
+name a fleet the server has on a lane. A rival's badge focuses and nothing more. At the lock a badge
+is focus-only, as a locks-rail row is.
+
 **A fleet's route (ADR-055).** Every fleet under way draws a line of travelling dots from its origin
 to its destination in its owner's colour; the marker sits at `(cost − left) / cost` of the lane.
 **The marker keeps clear of both ends (ADR-059):** held a label's half-width from either system, so
@@ -103,8 +111,9 @@ and, for a sheet left open across the lock, `06-at-lock-sheet.png`.
   with both built says `NOTHING LEFT TO BUILD HERE`; a system you do not hold opens no sheet and
   only focuses. Tapping a row queues or unqueues (ADR-053's guard refuses what the purse cannot
   cover).
-- **Destination** (`MOVE FLT 1 - PICK LANE`): opened by the fleet's FLEETS row on the rail, by
-  `MOVE` on a card, or by tapping a marker of your own that has not departed yet; never for a fleet
+- **Destination** (`MOVE FLT 1 - PICK LANE`): opened by the fleet's FLEETS row on the rail, by its
+  system's garrison badge on the map (through the fleet list where a system holds several,
+  ADR-079), by `MOVE` on a card, or by tapping a marker of your own that has not departed yet; never for a fleet
   the server has on a lane, because the lock refuses a second order on one (ADR-077). One row per
   lane out of **where the fleet stands**: owner square,
   `PELL`, `UNCLAIMED` / `YOURS` / `P3` with the hostile ships standing there and `+DEF` appended
@@ -113,6 +122,11 @@ and, for a sheet left open across the lock, `06-at-lock-sheet.png`.
   zero until the lock) and closes the sheet. *Not built:* the verdict under the right-hand column
   (`YOU WIN` / `HOLD` / `YOU LOSE`). It needs a preview per candidate destination on
   `SnapshotFleet`; the client must not compute one (ADR-063).
+- **Fleet list** (`FLEETS AT DOTHAN - PICK ONE`): opened by a garrison badge on a system holding
+  more than one of your fleets (ADR-079) — a badge totals ships, and a picker has to be about one
+  fleet. Rows are `FLT 3` with the engagement preview under it and `3 SHIPS` on the right, blue
+  square, and tapping one opens that fleet's destination sheet. A garrison that left at the lock
+  leaves `NOTHING STANDING HERE ANY MORE`.
 - **Signal** (`SIGNAL - PICK ONE`): opened from the rail's `SIGNALS` header; the six kinds of
   ADR-039 as rows with `SENDING` / `TAP AGAIN TO CONFIRM` on the right; `Concede` always last,
   needing two taps, under a 22px `CONCEDE` band of its own and said in red from the first tap
