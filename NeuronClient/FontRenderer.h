@@ -253,17 +253,14 @@ public:
   /// **This is the seam that makes a screen's LAYOUT testable.** Every page in this game builds its
   /// hit list while it draws -- `AddHit` sits beside the `FillRect` that put the button there, which
   /// is what stops the two drifting apart -- so a test that wants to press a button has to be able
-  /// to run the draw. It could not: an append writes through a pointer into an upload heap, and
-  /// without a device that pointer is null. Whoever wanted to test a tap had the choice of standing
-  /// up D3D12 in a test DLL that CI runs on a machine with no GPU, or writing the layout out a
-  /// second time in the test and asserting against a copy of the thing under test.
+  /// to run the draw.
   ///
-  /// A headless renderer records the same geometry into a vector instead. Nothing about the append
-  /// path changes -- it is the same code writing to a different address -- so what a test drives is
-  /// what ships.
-  void CreateHeadless();
+  /// There is no second append path for that any more. Every vertex and every string lands in an
+  /// ordinary vector, on a test machine with no GPU and in the shipped client alike, and `Flush` is
+  /// what needs a device -- so what a test drives is not a sibling of what ships; it IS what ships
+  /// (ADR-041).
 
-  /// One string a headless renderer was asked to draw, and the face it was asked for.
+  /// One string this renderer was asked to draw, and the face it was asked for.
   ///
   /// The geometry cannot answer this: by the time a string is vertices it is glyph boxes with no
   /// word boundaries and no face, and recovering either from an atlas coordinate would be a
@@ -274,19 +271,27 @@ public:
     Face face;
   };
 
-  /// Every string this headless renderer drew since `BeginFrame`, in draw order.
+  /// Every string this renderer drew since `BeginFrame`, in draw order.
+  ///
+  /// Recorded on every frame, drawn or not. It costs a few hundred small string copies on a client
+  /// that redraws only when something changed (ADR-047), and that is cheaper than a second code
+  /// path that the tests would then be the only user of.
   ///
   /// **This exists so ADR-074's face rule can be a test rather than a convention.** The rule --
   /// data is mono, sentences are sans -- is applied at eighty-odd call sites and would otherwise
   /// have to be re-checked by reading all of them every time a line of copy changes.
   [[nodiscard]] const std::vector<DrawnString>& DrawnStrings() const noexcept
   {
-    return m_headlessStrings;
+    return m_drawnStrings;
   }
 
-  /// Resets this frame's vertex slice. Every frame writes its own slice of the buffer, so the CPU
-  /// never overwrites vertices the GPU is still reading. Also clears the clip rectangle.
-  void BeginFrame(std::uint32_t _frameIndex) noexcept;
+  /// Starts a frame's recording over, and clears the clip rectangle. Not noexcept: the first call
+  /// reserves the vector, and an allocation that fails is a thing to report rather than a
+  /// std::terminate (Debug.h).
+  ///
+  /// _frameIndex is which of the upload heap's FRAME_COUNT slices `Flush` may write, so the CPU
+  /// never overwrites vertices the GPU is still reading.
+  void BeginFrame(std::uint32_t _frameIndex);
 
   /// Confines subsequent text to a rectangle, by GLYPH: a glyph that does not fit entirely inside
   /// is not drawn at all.
@@ -343,28 +348,27 @@ private:
   void CreatePipeline(ID3D12Device* _device);
 
   winrt::com_ptr<ID3D12Resource> m_atlas;
-  winrt::com_ptr<ID3D12Resource> m_vertices;
+  winrt::com_ptr<ID3D12Resource> m_vertexBuffer;
   winrt::com_ptr<ID3D12RootSignature> m_rootSignature;
   winrt::com_ptr<ID3D12PipelineState> m_pipeline;
 
   DescriptorHeap* m_shaderVisibleHeap = nullptr;
   std::uint32_t m_atlasSlot = 0;
 
-  /// The whole vertex buffer, mapped for the life of the renderer. An upload heap is CPU-visible
-  /// and GPU-readable; for a few hundred vertices a frame there is nothing a default-heap copy
-  /// would buy.
-  /// Where a headless renderer's geometry goes. Empty in the shipped path, where the vertices
-  /// live in an upload heap the GPU reads directly.
-  std::vector<TextVertex> m_headlessVertices;
+  /// This frame's geometry, and the ONE place an append lands. Reserved once to
+  /// MAX_VERTICES_PER_FRAME and cleared rather than freed, so a frame's recording never allocates.
+  std::vector<TextVertex> m_vertices;
 
-  /// What a headless renderer was ASKED to draw, beside what it drew. See `DrawnStrings`.
-  std::vector<DrawnString> m_headlessStrings;
-  bool m_headless = false;
+  /// What this renderer was ASKED to draw, beside what it drew. See `DrawnStrings`.
+  std::vector<DrawnString> m_drawnStrings;
 
+  /// The upload heap, mapped for the life of the renderer. An upload heap is CPU-visible and
+  /// GPU-readable; for a few hundred vertices a frame there is nothing a default-heap copy would
+  /// buy. Its FRAME_COUNT slices are what stop the CPU overwriting vertices a frame still in
+  /// flight is reading.
   TextVertex* m_mappedVertices = nullptr;
   std::uint32_t m_frameIndex = 0;
-  std::uint32_t m_usedThisFrame = 0;
-  /// How much of `m_usedThisFrame` has already been drawn this frame. See `Flush`.
+  /// How much of `m_vertices` has already been drawn this frame. See `Flush`.
   std::uint32_t m_flushedThisFrame = 0;
 
   /// The clip rectangle, in screen pixels. Defaults to everything, so a caller that never sets

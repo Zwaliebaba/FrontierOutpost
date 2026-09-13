@@ -26,13 +26,6 @@ void ShapeRenderer::Create(ID3D12Device* _device)
   CreatePipeline(_device);
 }
 
-void ShapeRenderer::CreateHeadless()
-{
-  m_headlessVertices.assign(static_cast<std::size_t>(Device::FRAME_COUNT) * MAX_VERTICES_PER_FRAME, ShapeVertex{});
-  m_mappedVertices = m_headlessVertices.data();
-  m_headless = true;
-}
-
 void ShapeRenderer::CreateVertexBuffer(ID3D12Device* _device)
 {
   const std::uint64_t sizeBytes = static_cast<std::uint64_t>(Device::FRAME_COUNT) * MAX_VERTICES_PER_FRAME * sizeof(ShapeVertex);
@@ -40,10 +33,10 @@ void ShapeRenderer::CreateVertexBuffer(ID3D12Device* _device)
   const D3D12_HEAP_PROPERTIES uploadHeap = HeapProperties(D3D12_HEAP_TYPE_UPLOAD);
   const D3D12_RESOURCE_DESC desc = BufferDesc(sizeBytes);
   winrt::check_hresult(_device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ,
-                                                        nullptr, IID_PPV_ARGS(m_vertices.put())));
+                                                        nullptr, IID_PPV_ARGS(m_vertexBuffer.put())));
 
   const D3D12_RANGE readNothing = {0, 0};
-  winrt::check_hresult(m_vertices->Map(0, &readNothing, reinterpret_cast<void**>(&m_mappedVertices)));
+  winrt::check_hresult(m_vertexBuffer->Map(0, &readNothing, reinterpret_cast<void**>(&m_mappedVertices)));
 }
 
 void ShapeRenderer::CreatePipeline(ID3D12Device* _device)
@@ -97,25 +90,25 @@ void ShapeRenderer::CreatePipeline(ID3D12Device* _device)
   winrt::check_hresult(_device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(m_pipeline.put())));
 }
 
-void ShapeRenderer::BeginFrame(std::uint32_t _frameIndex) noexcept
+void ShapeRenderer::BeginFrame(std::uint32_t _frameIndex)
 {
   m_frameIndex = _frameIndex;
-  m_usedThisFrame = 0;
+  // Cleared, not freed, and reserved on the first frame only: capacity survives clear(), so this
+  // is a no-op from the second frame onwards and no frame's recording allocates.
+  m_vertices.clear();
+  m_vertices.reserve(MAX_VERTICES_PER_FRAME);
   m_flushedThisFrame = 0;
 }
 
 void ShapeRenderer::AppendShadedTriangle(float _axPixels, float _ayPixels, std::uint32_t _aColor, float _bxPixels, float _byPixels,
                                          std::uint32_t _bColor, float _cxPixels, float _cyPixels, std::uint32_t _cColor)
 {
-  ASSERT_TEXT(m_usedThisFrame + 3 <= MAX_VERTICES_PER_FRAME,
+  ASSERT_TEXT(m_vertices.size() + 3 <= MAX_VERTICES_PER_FRAME,
               L"More interface geometry in one frame than ShapeRenderer::MAX_VERTICES_PER_FRAME allows.");
 
-  ShapeVertex* slice = m_mappedVertices + static_cast<std::size_t>(m_frameIndex) * MAX_VERTICES_PER_FRAME;
-  ShapeVertex* triangle = slice + m_usedThisFrame;
-  triangle[0] = {_axPixels, _ayPixels, _aColor};
-  triangle[1] = {_bxPixels, _byPixels, _bColor};
-  triangle[2] = {_cxPixels, _cyPixels, _cColor};
-  m_usedThisFrame += 3;
+  m_vertices.push_back({_axPixels, _ayPixels, _aColor});
+  m_vertices.push_back({_bxPixels, _byPixels, _bColor});
+  m_vertices.push_back({_cxPixels, _cyPixels, _cColor});
 }
 
 void ShapeRenderer::AppendTriangle(float _axPixels, float _ayPixels, float _bxPixels, float _byPixels, float _cxPixels, float _cyPixels,
@@ -377,23 +370,30 @@ void ShapeRenderer::FillRadialGradient(float _centerXPixels, float _centerYPixel
 
 void ShapeRenderer::Flush(ID3D12GraphicsCommandList* _commandList)
 {
-  // A headless renderer has no pipeline, no root signature and no buffer the GPU can read. This
-  // is fatal rather than a silent return, because a caller that reached here is a caller that
-  // believes it is drawing to a screen.
-  ASSERT_TEXT(!m_headless, L"Flushing a headless renderer. CreateHeadless is for layout, not for drawing.");
+  // A renderer that was never Created has no pipeline, no root signature and no buffer the GPU can
+  // read. This is fatal rather than a silent return, because a caller that reached here is a caller
+  // that believes it is drawing to a screen.
+  ASSERT_TEXT(m_pipeline != nullptr, L"Flushing a renderer with no device behind it. Recording works without one; drawing does not.");
 
   // Only what has been recorded since the last flush. See the header: this is what lets a caller
   // put the interface over the world instead of having every glyph land on top of everything.
-  if (m_usedThisFrame == m_flushedThisFrame)
+  const auto usedThisFrame = static_cast<std::uint32_t>(m_vertices.size());
+  if (usedThisFrame == m_flushedThisFrame)
   {
     return;
   }
 
+  // The recorded range the GPU has not seen yet, into this frame's slice of the upload heap. Only
+  // the new vertices are copied: the ones before m_flushedThisFrame are already there, and a frame
+  // that flushes three times would otherwise copy its first layer three times.
+  ShapeVertex* slice = m_mappedVertices + static_cast<std::size_t>(m_frameIndex) * MAX_VERTICES_PER_FRAME;
+  std::copy(m_vertices.begin() + m_flushedThisFrame, m_vertices.end(), slice + m_flushedThisFrame);
+
   const std::uint64_t sliceOffsetBytes = static_cast<std::uint64_t>(m_frameIndex) * MAX_VERTICES_PER_FRAME * sizeof(ShapeVertex);
 
   D3D12_VERTEX_BUFFER_VIEW vertexView = {};
-  vertexView.BufferLocation = m_vertices->GetGPUVirtualAddress() + sliceOffsetBytes;
-  vertexView.SizeInBytes = m_usedThisFrame * sizeof(ShapeVertex);
+  vertexView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress() + sliceOffsetBytes;
+  vertexView.SizeInBytes = usedThisFrame * sizeof(ShapeVertex);
   vertexView.StrideInBytes = sizeof(ShapeVertex);
 
   _commandList->SetGraphicsRootSignature(m_rootSignature.get());
@@ -405,8 +405,8 @@ void ShapeRenderer::Flush(ID3D12GraphicsCommandList* _commandList)
 
   _commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   _commandList->IASetVertexBuffers(0, 1, &vertexView);
-  _commandList->DrawInstanced(m_usedThisFrame - m_flushedThisFrame, 1, m_flushedThisFrame, 0);
-  m_flushedThisFrame = m_usedThisFrame;
+  _commandList->DrawInstanced(usedThisFrame - m_flushedThisFrame, 1, m_flushedThisFrame, 0);
+  m_flushedThisFrame = usedThisFrame;
 }
 
 } // namespace Neuron

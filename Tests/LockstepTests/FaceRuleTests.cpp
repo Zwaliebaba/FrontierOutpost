@@ -90,8 +90,6 @@ struct Screen
 {
   Neuron::ShapeRenderer shapes;
   Neuron::FontRenderer text;
-  shapes.CreateHeadless();
-  text.CreateHeadless();
 
   std::vector<Screen> screens;
   const auto collect = [&text, &screens](const char* _name)

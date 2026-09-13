@@ -129,13 +129,6 @@ void FontRenderer::CreateAtlas(Device& _device, DescriptorHeap& _shaderVisibleHe
   device->CreateShaderResourceView(m_atlas.get(), &atlasView, _shaderVisibleHeap.CpuHandle(m_atlasSlot));
 }
 
-void FontRenderer::CreateHeadless()
-{
-  m_headlessVertices.assign(static_cast<std::size_t>(Device::FRAME_COUNT) * MAX_VERTICES_PER_FRAME, TextVertex{});
-  m_mappedVertices = m_headlessVertices.data();
-  m_headless = true;
-}
-
 void FontRenderer::CreateVertexBuffer(ID3D12Device* _device)
 {
   const std::uint64_t sizeBytes = static_cast<std::uint64_t>(Device::FRAME_COUNT) * MAX_VERTICES_PER_FRAME * sizeof(TextVertex);
@@ -143,10 +136,10 @@ void FontRenderer::CreateVertexBuffer(ID3D12Device* _device)
   const D3D12_HEAP_PROPERTIES uploadHeap = HeapProperties(D3D12_HEAP_TYPE_UPLOAD);
   const D3D12_RESOURCE_DESC desc = BufferDesc(sizeBytes);
   winrt::check_hresult(_device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ,
-                                                        nullptr, IID_PPV_ARGS(m_vertices.put())));
+                                                        nullptr, IID_PPV_ARGS(m_vertexBuffer.put())));
 
   const D3D12_RANGE readNothing = {0, 0};
-  winrt::check_hresult(m_vertices->Map(0, &readNothing, reinterpret_cast<void**>(&m_mappedVertices)));
+  winrt::check_hresult(m_vertexBuffer->Map(0, &readNothing, reinterpret_cast<void**>(&m_mappedVertices)));
 }
 
 void FontRenderer::CreatePipeline(ID3D12Device* _device)
@@ -288,12 +281,15 @@ std::vector<std::string> FontRenderer::WrapToWidth(std::string_view _text, std::
   return lines;
 }
 
-void FontRenderer::BeginFrame(std::uint32_t _frameIndex) noexcept
+void FontRenderer::BeginFrame(std::uint32_t _frameIndex)
 {
   m_frameIndex = _frameIndex;
-  m_usedThisFrame = 0;
+  // Cleared, not freed, and reserved on the first frame only: capacity survives clear(), so this
+  // is a no-op from the second frame onwards and no frame's recording allocates.
+  m_vertices.clear();
+  m_vertices.reserve(MAX_VERTICES_PER_FRAME);
   m_flushedThisFrame = 0;
-  m_headlessStrings.clear();
+  m_drawnStrings.clear();
   ClearClipRect();
 }
 
@@ -316,15 +312,10 @@ void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::s
 {
   ASSERT_TEXT(_scale > 0, L"A glyph scale of zero would draw nothing and is a caller mistake, not a way to hide text.");
 
-  // Recorded BEFORE the string becomes glyph boxes, and only with no device behind the renderer:
-  // this is what lets `LockstepTests` hold the face rule to account (ADR-074), and it must cost
-  // the shipped path nothing.
-  if (m_headless)
-  {
-    m_headlessStrings.emplace_back(std::string{_text}, _face);
-  }
-
-  TextVertex* slice = m_mappedVertices + static_cast<std::size_t>(m_frameIndex) * MAX_VERTICES_PER_FRAME;
+  // Recorded BEFORE the string becomes glyph boxes, because by then it is boxes with no word
+  // boundaries and no face. This is what lets `LockstepTests` hold the face rule to account
+  // (ADR-074).
+  m_drawnStrings.emplace_back(std::string{_text}, _face);
 
   // `_yPixels` is the top of the LINE, not the top of the first glyph's ink, so a string keeps
   // landing where its caller put it whatever the face does with bearings. The baseline is that
@@ -357,7 +348,7 @@ void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::s
     // does not shuffle up.
     if (!clipped && glyph.width != 0 && glyph.height != 0)
     {
-      ASSERT_TEXT(m_usedThisFrame + VERTICES_PER_GLYPH <= MAX_VERTICES_PER_FRAME,
+      ASSERT_TEXT(m_vertices.size() + VERTICES_PER_GLYPH <= MAX_VERTICES_PER_FRAME,
                   L"More text in one frame than FontRenderer::MAX_CHARACTERS_PER_FRAME allows.");
 
       const auto left = static_cast<float>(pen + glyph.bearingX * static_cast<std::int32_t>(_scale));
@@ -374,15 +365,12 @@ void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::s
       const float atlasRight = atlasLeft + static_cast<float>(glyph.width);
       const float atlasBottom = atlasTop + static_cast<float>(glyph.height);
 
-      TextVertex* quad = slice + m_usedThisFrame;
-      quad[0] = {left, top, atlasLeft, atlasTop, color};
-      quad[1] = {right, top, atlasRight, atlasTop, color};
-      quad[2] = {left, bottom, atlasLeft, atlasBottom, color};
-      quad[3] = {right, top, atlasRight, atlasTop, color};
-      quad[4] = {right, bottom, atlasRight, atlasBottom, color};
-      quad[5] = {left, bottom, atlasLeft, atlasBottom, color};
-
-      m_usedThisFrame += VERTICES_PER_GLYPH;
+      m_vertices.push_back({left, top, atlasLeft, atlasTop, color});
+      m_vertices.push_back({right, top, atlasRight, atlasTop, color});
+      m_vertices.push_back({left, bottom, atlasLeft, atlasBottom, color});
+      m_vertices.push_back({right, top, atlasRight, atlasTop, color});
+      m_vertices.push_back({right, bottom, atlasRight, atlasBottom, color});
+      m_vertices.push_back({left, bottom, atlasLeft, atlasBottom, color});
     }
 
     pen += advance;
@@ -391,23 +379,30 @@ void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::s
 
 void FontRenderer::Flush(ID3D12GraphicsCommandList* _commandList)
 {
-  // A headless renderer has no pipeline, no root signature and no buffer the GPU can read. This
-  // is fatal rather than a silent return, because a caller that reached here is a caller that
-  // believes it is drawing to a screen.
-  ASSERT_TEXT(!m_headless, L"Flushing a headless renderer. CreateHeadless is for layout, not for drawing.");
+  // A renderer that was never Created has no pipeline, no root signature and no buffer the GPU can
+  // read. This is fatal rather than a silent return, because a caller that reached here is a caller
+  // that believes it is drawing to a screen.
+  ASSERT_TEXT(m_pipeline != nullptr, L"Flushing a renderer with no device behind it. Recording works without one; drawing does not.");
 
   // Only what has been recorded since the last flush, so that a second layer's glyphs can sit over
   // a second layer's shapes rather than over the whole frame. See the header.
-  if (m_usedThisFrame == m_flushedThisFrame)
+  const auto usedThisFrame = static_cast<std::uint32_t>(m_vertices.size());
+  if (usedThisFrame == m_flushedThisFrame)
   {
     return;
   }
 
+  // The recorded range the GPU has not seen yet, into this frame's slice of the upload heap. Only
+  // the new vertices are copied: a frame that flushes three times would otherwise copy its first
+  // layer three times.
+  TextVertex* slice = m_mappedVertices + static_cast<std::size_t>(m_frameIndex) * MAX_VERTICES_PER_FRAME;
+  std::copy(m_vertices.begin() + m_flushedThisFrame, m_vertices.end(), slice + m_flushedThisFrame);
+
   const std::uint64_t sliceOffsetBytes = static_cast<std::uint64_t>(m_frameIndex) * MAX_VERTICES_PER_FRAME * sizeof(TextVertex);
 
   D3D12_VERTEX_BUFFER_VIEW vertexView = {};
-  vertexView.BufferLocation = m_vertices->GetGPUVirtualAddress() + sliceOffsetBytes;
-  vertexView.SizeInBytes = m_usedThisFrame * sizeof(TextVertex);
+  vertexView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress() + sliceOffsetBytes;
+  vertexView.SizeInBytes = usedThisFrame * sizeof(TextVertex);
   vertexView.StrideInBytes = sizeof(TextVertex);
 
   ID3D12DescriptorHeap* heaps[] = {m_shaderVisibleHeap->Handle()};
@@ -422,8 +417,8 @@ void FontRenderer::Flush(ID3D12GraphicsCommandList* _commandList)
 
   _commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   _commandList->IASetVertexBuffers(0, 1, &vertexView);
-  _commandList->DrawInstanced(m_usedThisFrame - m_flushedThisFrame, 1, m_flushedThisFrame, 0);
-  m_flushedThisFrame = m_usedThisFrame;
+  _commandList->DrawInstanced(usedThisFrame - m_flushedThisFrame, 1, m_flushedThisFrame, 0);
+  m_flushedThisFrame = usedThisFrame;
 }
 
 } // namespace Neuron

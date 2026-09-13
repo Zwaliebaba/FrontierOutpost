@@ -8,8 +8,9 @@
 //
 // The obstacle was never the tap. It was that every page builds its hit list WHILE IT DRAWS --
 // `AddHit` sits beside the `FillRect` that put the button there, which is exactly what stops the
-// two drifting apart -- and drawing needed a GPU. `CreateHeadless` (ADR-041) removes that: the same
-// append path, into ordinary memory.
+// two drifting apart -- and drawing needed a GPU. It does not any more (ADR-041, and RENDER-01
+// stage 4): a renderer records into an ordinary vector whether or not it was ever given a device,
+// so these drive the append path that ships rather than a sibling of it.
 //
 // THESE TESTS DO NOT KNOW WHERE ANYTHING IS. They sweep a region and look for the effect, the way
 // `Build/TapRehearsal.ps1` scans the screen for a button rather than being told a coordinate. That
@@ -68,12 +69,6 @@ struct Headless
 {
   Neuron::ShapeRenderer shapes;
   Neuron::FontRenderer text;
-
-  Headless()
-  {
-    shapes.CreateHeadless();
-    text.CreateHeadless();
-  }
 
   void Begin()
   {

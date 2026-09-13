@@ -39,27 +39,24 @@ public:
     return std::clamp(wanted, MIN_ELLIPSE_SEGMENTS, MAX_ELLIPSE_SEGMENTS);
   }
 
+  /// Gives the renderer a device to draw THROUGH. Recording works without one.
+  ///
+  /// **A renderer that was never created still records, and that is the seam that makes a screen's
+  /// layout testable** (ADR-041). Every page in this game builds its hit list while it draws --
+  /// `AddHit` sits beside the `FillRect` that put the button there, which is what stops the two
+  /// drifting apart -- so a test that wants to press a button has to be able to run the draw.
+  ///
+  /// There is no second append path for that any more. Every vertex lands in an ordinary vector,
+  /// on a test machine with no GPU and in the shipped client alike, and `Flush` is what needs a
+  /// device. So what a test drives is not a sibling of what ships; it IS what ships.
   void Create(ID3D12Device* _device);
 
-  /// Creates the renderer with NO DEVICE BEHIND IT: appended geometry lands in ordinary memory
-  /// and `Flush` is refused.
+  /// Starts a frame's recording over. Not noexcept: the first call reserves the vector, and an
+  /// allocation that fails is a thing to report rather than a std::terminate (Debug.h).
   ///
-  /// **This is the seam that makes a screen's LAYOUT testable.** Every page in this game builds its
-  /// hit list while it draws -- `AddHit` sits beside the `FillRect` that put the button there, which
-  /// is what stops the two drifting apart -- so a test that wants to press a button has to be able
-  /// to run the draw. It could not: an append writes through a pointer into an upload heap, and
-  /// without a device that pointer is null. Whoever wanted to test a tap had the choice of standing
-  /// up D3D12 in a test DLL that CI runs on a machine with no GPU, or writing the layout out a
-  /// second time in the test and asserting against a copy of the thing under test.
-  ///
-  /// A headless renderer records the same geometry into a vector instead. Nothing about the append
-  /// path changes -- it is the same code writing to a different address -- so what a test drives is
-  /// what ships.
-  void CreateHeadless();
-
-  /// Resets this frame's slice. Every frame writes its own, so the CPU never overwrites vertices
-  /// the GPU is still reading -- the same arrangement FontRenderer uses.
-  void BeginFrame(std::uint32_t _frameIndex) noexcept;
+  /// _frameIndex is which of the upload heap's FRAME_COUNT slices `Flush` may write, so the CPU
+  /// never overwrites vertices the GPU is still reading -- the same arrangement FontRenderer uses.
+  void BeginFrame(std::uint32_t _frameIndex);
 
   void FillRect(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, const Color& _color);
 
@@ -153,20 +150,20 @@ private:
   void AppendQuad(float _axPixels, float _ayPixels, float _bxPixels, float _byPixels, float _cxPixels, float _cyPixels, float _dxPixels,
                   float _dyPixels, std::uint32_t _packedColor);
 
-  winrt::com_ptr<ID3D12Resource> m_vertices;
+  winrt::com_ptr<ID3D12Resource> m_vertexBuffer;
   winrt::com_ptr<ID3D12RootSignature> m_rootSignature;
   winrt::com_ptr<ID3D12PipelineState> m_pipeline;
 
-  /// The whole vertex buffer, mapped for the life of the renderer (FontRenderer.h says why).
-  /// Where a headless renderer's geometry goes. Empty in the shipped path, where the vertices
-  /// live in an upload heap the GPU reads directly.
-  std::vector<ShapeVertex> m_headlessVertices;
-  bool m_headless = false;
+  /// This frame's geometry, and the ONE place an append lands. Reserved once to
+  /// MAX_VERTICES_PER_FRAME and cleared rather than freed, so a frame's recording never allocates.
+  std::vector<ShapeVertex> m_vertices;
 
+  /// The upload heap, mapped for the life of the renderer, and its FRAME_COUNT slices -- which is
+  /// what stops the CPU overwriting vertices a frame still in flight is reading. `Flush` copies
+  /// this frame's unflushed range into the slice for `m_frameIndex`.
   ShapeVertex* m_mappedVertices = nullptr;
   std::uint32_t m_frameIndex = 0;
-  std::uint32_t m_usedThisFrame = 0;
-  /// How much of `m_usedThisFrame` has already been drawn this frame. See `Flush`.
+  /// How much of `m_vertices` has already been drawn this frame. See `Flush`.
   std::uint32_t m_flushedThisFrame = 0;
 };
 

@@ -430,6 +430,39 @@ vector. Make the vector the only path.
 In the Debug build, the shape budget assertion still fires if `MAX_VERTICES_PER_FRAME` is
 temporarily set to 64 (do this once, by hand, and put it back).
 
+**Stage 4, as run (2026-09-13).** Three checkers green, both builds, 532 tests pass, and the join
+screen at `--scale 1` is byte-identical. With `MAX_VERTICES_PER_FRAME` temporarily set to 64 the
+budget assertion still fires, and with its own message — read out of the composition root's
+message box: *More interface geometry in one frame than
+ShapeRenderer::MAX_VERTICES_PER_FRAME allows.* Put back immediately.
+
+**The upload heap keeps its FRAME_COUNT slices and `Flush` copies only the UNFLUSHED range into
+one.** Copying the whole frame each time would have been simpler and wrong in a way nothing would
+have caught: a frame flushes three times (world, interface, dialog), so the first layer would be
+copied three times for no reason, and the cost would grow with the number of layers rather than
+with the geometry.
+
+**`BeginFrame` stopped being `noexcept`, in both renderers, and `clang-tidy` is what noticed.** It
+reserves on its first call, and `bugprone-exception-escape` is right that an allocation failure
+escaping a `noexcept` function is a `std::terminate` with nothing to report — which is the one
+thing `Debug.h` exists to prevent. `ShapeRenderer` was changed by hand and `FontRenderer` was
+missed; the gate caught the half that was missed.
+
+**A false alarm worth writing down, because it cost a stash and a bisect.** After the budget
+experiment, 38 tests failed with the shape-budget assertion firing out of `Starfield::Draw`. It was
+not this stage: `MAX_VERTICES_PER_FRAME = 64` was still baked into `LockstepTests.obj`, because
+restoring the header and running an incremental build did not rebuild the test DLL that includes
+it. **A `/t:Rebuild` after any experiment that edits a header**, or the next hour goes into a bug
+that is not there. The evidence that settled it was `git stash` + the same single test passing on
+the previous commit, then failing again — which pointed at the build rather than the diff.
+
+**The remaining flake is `GameLogicTests::ATickResolvesFastEnoughToReplayAWholeMatch` and it is not
+this plan's.** It asserts a whole match replays in under 2000 ms. Measured on this machine:
+**609 ms** run alone, **870–978 ms** in a quiet five-suite run, **2228 ms** and **~9 s** when
+something else was building. CI runs all five suites in one `vstest` invocation
+(`.github/workflows/build.yml`), which is the arrangement that produced the slow numbers here, so
+this will redden a busy runner. Nothing in RENDER-01 touches `GameLogic`.
+
 **Commit:** `Record every vertex before drawing any of them`
 
 ---

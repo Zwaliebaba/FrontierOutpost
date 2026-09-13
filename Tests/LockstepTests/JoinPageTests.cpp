@@ -37,12 +37,6 @@ struct Headless
   Neuron::ShapeRenderer shapes;
   Neuron::FontRenderer text;
 
-  Headless()
-  {
-    shapes.CreateHeadless();
-    text.CreateHeadless();
-  }
-
   void Draw(Lockstep::JoinPage& _page)
   {
     shapes.BeginFrame(0);
