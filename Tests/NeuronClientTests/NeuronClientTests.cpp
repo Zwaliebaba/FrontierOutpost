@@ -234,24 +234,34 @@ public:
   }
 
   // The digest rail is 300 wide and spends 14 + 8 + 10 + 14 on margins, the dot and the gap,
-  // which leaves 254 -- and 254 / 8 is 31, not 32. An off-by-one here is copy running under the
-  // map.
-  TEST_METHOD(TheDigestRailHoldsThirtyOneCharacters)
+  // which leaves 254 -- and at this face's eight-pixel advance that is 31 characters, not 32.
+  // An off-by-one here is copy running under the map.
+  //
+  // THIRTY-ONE IS A FACT ABOUT THE FACE, NOT ABOUT THE RAIL. The rail is 254 pixels wide and
+  // stays 254 pixels wide; what fits in it is the font's to answer (ADR-073). This asserts the
+  // answer for the face that is in the binary today.
+  TEST_METHOD(TheDigestRailFitsThirtyOneCharactersOfThisFace)
   {
-    Assert::AreEqual(static_cast<size_t>(31), Neuron::FontRenderer::FitCharacters(254));
-    Assert::AreEqual(static_cast<size_t>(31), Neuron::FontRenderer::FitCharacters(255), L"a part-character does not fit");
-    Assert::AreEqual(static_cast<size_t>(0), Neuron::FontRenderer::FitCharacters(7));
+    constexpr std::string_view LONGER_THAN_THE_RAIL = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+    Assert::AreEqual(static_cast<size_t>(31), Neuron::FontRenderer::PrefixThatFits(LONGER_THAN_THE_RAIL, 254));
+    Assert::AreEqual(static_cast<size_t>(31), Neuron::FontRenderer::PrefixThatFits(LONGER_THAN_THE_RAIL, 255),
+                     L"a part-character does not fit");
+    Assert::AreEqual(static_cast<size_t>(0), Neuron::FontRenderer::PrefixThatFits(LONGER_THAN_THE_RAIL, 7));
   }
 };
 
-// Wrapping is the piece that had to exist because the reference's copy is longer than an 8px
-// rail can hold, and it is the piece most likely to be quietly wrong (ADR-014).
+// Wrapping is the piece that had to exist because the reference's copy is longer than the
+// digest rail can hold, and it is the piece most likely to be quietly wrong (ADR-014).
+//
+// **Every width below is in PIXELS.** These tests counted characters until 2026-09-13, which
+// was the same question while every glyph was eight pixels wide (ADR-073). 254 is the digest
+// rail; 32 is four characters of the current face.
 TEST_CLASS(TextWrapTests)
 {
 public:
   TEST_METHOD(ShortTextIsOneLine)
   {
-    const std::vector<std::string> lines = Neuron::FontRenderer::Wrap("Sealed region opens T60", 31);
+    const std::vector<std::string> lines = Neuron::FontRenderer::WrapToWidth("Sealed region opens T60", 254);
     Assert::AreEqual(static_cast<size_t>(1), lines.size());
     Assert::AreEqual(std::string("Sealed region opens T60"), lines[0]);
   }
@@ -259,11 +269,11 @@ public:
   TEST_METHOD(ItBreaksOnSpacesAndNeverExceedsTheWidth)
   {
     // The first digest event, at the width the digest rail actually has.
-    const std::vector<std::string> lines = Neuron::FontRenderer::Wrap("Outpost present. Their fleet ETA T47. Ours ETA T47.", 31);
-    Assert::IsTrue(lines.size() >= 2, L"this line does not fit in 31 characters");
+    const std::vector<std::string> lines = Neuron::FontRenderer::WrapToWidth("Outpost present. Their fleet ETA T47. Ours ETA T47.", 254);
+    Assert::IsTrue(lines.size() >= 2, L"this line does not fit in the rail");
     for (const std::string& line : lines)
     {
-      Assert::IsTrue(line.size() <= 31, L"a wrapped line is wider than the rail");
+      Assert::IsTrue(Neuron::FontRenderer::MeasurePixels(line) <= 254, L"a wrapped line is wider than the rail");
       Assert::IsTrue(line.front() != ' ' && line.back() != ' ', L"a wrapped line carries no edge space");
     }
   }
@@ -272,7 +282,7 @@ public:
   {
     constexpr const char* SOURCE = "Lane income foregone: 12/tick. Shipyard Idris idle.";
     std::string rejoined;
-    for (const std::string& line : Neuron::FontRenderer::Wrap(SOURCE, 31))
+    for (const std::string& line : Neuron::FontRenderer::WrapToWidth(SOURCE, 254))
     {
       if (!rejoined.empty())
       {
@@ -286,7 +296,7 @@ public:
   // A system name from a server is not something the screen gets to assume anything about.
   TEST_METHOD(AWordLongerThanTheLineIsHardBroken)
   {
-    const std::vector<std::string> lines = Neuron::FontRenderer::Wrap("ABCDEFGHIJ", 4);
+    const std::vector<std::string> lines = Neuron::FontRenderer::WrapToWidth("ABCDEFGHIJ", 32);
     Assert::AreEqual(static_cast<size_t>(3), lines.size());
     Assert::AreEqual(std::string("ABCD"), lines[0]);
     Assert::AreEqual(std::string("EFGH"), lines[1]);
@@ -295,7 +305,7 @@ public:
 
   TEST_METHOD(AZeroWidthWrapsToNothingRatherThanLoopingForever)
   {
-    Assert::AreEqual(static_cast<size_t>(0), Neuron::FontRenderer::Wrap("anything", 0).size());
+    Assert::AreEqual(static_cast<size_t>(0), Neuron::FontRenderer::WrapToWidth("anything", 0).size());
   }
 };
 

@@ -229,10 +229,14 @@ void FontRenderer::CreatePipeline(ID3D12Device* _device)
   winrt::check_hresult(_device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(m_pipeline.put())));
 }
 
-std::vector<std::string> FontRenderer::Wrap(std::string_view _text, std::size_t _maxCharacters)
+std::vector<std::string> FontRenderer::WrapToWidth(std::string_view _text, std::uint32_t _widthPixels, std::uint32_t _scale)
 {
   std::vector<std::string> lines;
-  if (_maxCharacters == 0)
+
+  // A line with room for no glyph at all has nowhere to put the text, and every loop below would
+  // make no progress. This is the character-count form's `_maxCharacters == 0` guard, said in
+  // pixels.
+  if (PrefixThatFits(" ", _widthPixels, _scale) == 0)
   {
     return lines;
   }
@@ -245,22 +249,27 @@ std::vector<std::string> FontRenderer::Wrap(std::string_view _text, std::size_t 
     const std::size_t end = (space == std::string_view::npos) ? _text.size() : space;
     std::string_view word = _text.substr(start, end - start);
 
-    // A word longer than the line is hard-broken rather than allowed to overflow. Nothing in the
+    // A word wider than the line is hard-broken rather than allowed to overflow. Nothing in the
     // reference copy is, but a system name from a server is not something this screen gets to
     // assume anything about.
-    while (word.size() > _maxCharacters)
+    while (MeasurePixels(word, _scale) > _widthPixels)
     {
       if (!current.empty())
       {
         lines.push_back(current);
         current.clear();
       }
-      lines.emplace_back(word.substr(0, _maxCharacters));
-      word = word.substr(_maxCharacters);
+      // At least one character, always. A single glyph wider than the whole line cannot be broken
+      // any smaller, and taking none of it would spin here forever.
+      const std::size_t fitted = PrefixThatFits(word, _widthPixels, _scale);
+      const std::size_t taken = (fitted == 0) ? 1 : fitted;
+      lines.emplace_back(word.substr(0, taken));
+      word = word.substr(taken);
     }
 
-    const std::size_t needed = current.empty() ? word.size() : current.size() + 1 + word.size();
-    if (needed > _maxCharacters && !current.empty())
+    const std::uint32_t needed =
+      current.empty() ? MeasurePixels(word, _scale) : MeasurePixels(current, _scale) + AdvanceOf(' ', _scale) + MeasurePixels(word, _scale);
+    if (needed > _widthPixels && !current.empty())
     {
       lines.push_back(current);
       current.assign(word);

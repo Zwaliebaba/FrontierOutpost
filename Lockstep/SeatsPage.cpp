@@ -545,7 +545,7 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
 {
   const float contentX = PANEL_X;
   const float contentRight = PANEL_X + PANEL_WIDTH;
-  const std::size_t columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(contentRight - contentX));
+  const auto detailWidth = static_cast<std::uint32_t>(contentRight - contentX);
 
   // The column rule, halfway across the gutter. The console already painted the background; a
   // second fill here would only put an opaque rectangle over the card fill it sits in.
@@ -558,7 +558,7 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
   y += LINE_HEIGHT + 8;
 
   for (const std::string& line :
-       FontRenderer::Wrap("The token is the seat: whoever enters it plays this empire. Send it to the person playing.", columns))
+       FontRenderer::WrapToWidth("The token is the seat: whoever enters it plays this empire. Send it to the person playing.", detailWidth))
   {
     _text.DrawText(static_cast<std::int32_t>(contentX), y, line, TEXT_DETAIL);
     y += LINE_HEIGHT;
@@ -587,9 +587,9 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
   // means reconnecting with a different token, which is the composition root's to do (ADR-041).
   y += 28;
 
-  for (const std::string& line : FontRenderer::Wrap(m_hostSeat == m_selected ? "This is your seat: you logged in with this token."
-                                                                             : "Not yours. You hold the seat you logged in with.",
-                                                    columns))
+  for (const std::string& line : FontRenderer::WrapToWidth(m_hostSeat == m_selected ? "This is your seat: you logged in with this token."
+                                                                                    : "Not yours. You hold the seat you logged in with.",
+                                                           detailWidth))
   {
     _text.DrawText(static_cast<std::int32_t>(contentX), y, line, m_hostSeat == m_selected ? BLUE : NEUTRAL_DIM);
     y += LINE_HEIGHT;
@@ -621,7 +621,7 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
 
     y += 4;
     for (const std::string& line :
-         FontRenderer::Wrap("A bot sees exactly what a player in this seat would see, and nothing more.", columns))
+         FontRenderer::WrapToWidth("A bot sees exactly what a player in this seat would see, and nothing more.", detailWidth))
     {
       _text.DrawText(static_cast<std::int32_t>(contentX), y, line, NEUTRAL_DIM);
       y += LINE_HEIGHT;
@@ -639,9 +639,9 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
   const bool takesOver = seat.ifWaiting == IfWaiting::BotTakesOver;
 
   for (const std::string& line :
-       FontRenderer::Wrap(takesOver ? "BOT AT T1: this seat is ready to start without its player, and entering makes it a bot."
-                                    : "HUMAN: entering waits for this player. Set the card to BOT AT T1 to start without them.",
-                          columns))
+       FontRenderer::WrapToWidth(takesOver ? "BOT AT T1: this seat is ready to start without its player, and entering makes it a bot."
+                                           : "HUMAN: entering waits for this player. Set the card to BOT AT T1 to start without them.",
+                                 detailWidth))
   {
     _text.DrawText(static_cast<std::int32_t>(contentX), y, line, NEUTRAL_DIM);
     y += LINE_HEIGHT;

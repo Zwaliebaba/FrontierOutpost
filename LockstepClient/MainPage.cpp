@@ -854,7 +854,7 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   }
 }
 
-MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::size_t _columns) const
+MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::uint32_t _widthPixels) const
 {
   CardLayout layout;
 
@@ -869,7 +869,7 @@ MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::size_t _
   {
     for (const std::string& detail : _card.lines)
     {
-      for (std::string& line : FontRenderer::Wrap(detail, _columns))
+      for (std::string& line : FontRenderer::WrapToWidth(detail, _widthPixels))
       {
         layout.details.push_back(std::move(line));
       }
@@ -879,7 +879,10 @@ MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::size_t _
   layout.hasVerdict = !_card.verdict.empty();
   if (layout.hasVerdict)
   {
-    layout.verdictDetail = FontRenderer::Wrap(_card.verdictDetail, _columns - 2);
+    // The verdict box is inset two characters from the card's text column. It was two COLUMNS
+    // until 2026-09-13; two advances is the same inset while the font is fixed-pitch, and the
+    // one that still means "two characters" when it is not (ADR-073).
+    layout.verdictDetail = FontRenderer::WrapToWidth(_card.verdictDetail, _widthPixels - 2U * FontRenderer::AdvancePixels());
   }
   layout.hasActions = !_card.actions.empty();
 
@@ -936,7 +939,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
   constexpr float TEXT_LEFT = RAIL_PADDING + 8.0F + 10.0F;
   const float textWidth = Frame::DIGEST_WIDTH - TEXT_LEFT - RAIL_PADDING;
-  const std::size_t columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(textWidth));
+  const auto cardWidth = static_cast<std::uint32_t>(textWidth);
 
   float y = Frame::TOP_BAR_HEIGHT + 28.0F;
 
@@ -974,7 +977,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
   float stackHeight = 0.0F;
   for (const DigestCard& card : cards)
   {
-    layouts.push_back(LayoutCard(card, columns));
+    layouts.push_back(LayoutCard(card, cardWidth));
     stackHeight += layouts.back().height;
   }
 
@@ -1216,7 +1219,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   const float railX = Frame::SCREEN_WIDTH - Frame::ORDERS_WIDTH;
   const float contentX = railX + RAIL_PADDING;
   const float contentRight = Frame::SCREEN_WIDTH - RAIL_PADDING;
-  const std::size_t columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(contentRight - contentX));
+  const auto railWidth = static_cast<std::uint32_t>(contentRight - contentX);
 
   m_railRows.clear();
 
@@ -1260,7 +1263,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     help = LockSentence();
   }
-  for (const std::string& line : FontRenderer::Wrap(help, columns))
+  for (const std::string& line : FontRenderer::WrapToWidth(help, railWidth))
   {
     _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), line, atLock ? Ink::AMBER : Ink::TEXT_DETAIL);
     y += static_cast<float>(LINE_HEIGHT);
@@ -1285,10 +1288,9 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   const auto row = [&](std::string_view _label, std::string_view _status, const Color& _statusColor, Action _action, std::int32_t _index)
   {
     const std::int32_t lineY = static_cast<std::int32_t>(y);
-    const std::size_t room = FontRenderer::FitCharacters(
-      static_cast<std::uint32_t>(contentRight - contentX - static_cast<float>(FontRenderer::MeasurePixels(_status)) - 8.0F));
+    const auto room = static_cast<std::uint32_t>(contentRight - contentX - static_cast<float>(FontRenderer::MeasurePixels(_status)) - 8.0F);
 
-    const std::vector<std::string> wrapped = FontRenderer::Wrap(_label, room);
+    const std::vector<std::string> wrapped = FontRenderer::WrapToWidth(_label, room);
     const float height = static_cast<float>(std::max<std::size_t>(1, wrapped.size())) * static_cast<float>(LINE_HEIGHT) + 4.0F;
     const bool target = _action != Action::None;
 
@@ -1835,7 +1837,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   // say why, in the rail's own words and in the rail's amber.
   const bool atLock = m_state.orders.locked && !m_state.match.finished;
   const std::vector<std::string> lockHelp =
-    atLock ? FontRenderer::Wrap(LockSentence(), FontRenderer::FitCharacters(static_cast<std::uint32_t>(width - 2.0F * CARD_PADDING)))
+    atLock ? FontRenderer::WrapToWidth(LockSentence(), static_cast<std::uint32_t>(width - 2.0F * CARD_PADDING))
            : std::vector<std::string>{};
   const float helpHeight = lockHelp.empty() ? 0.0F : static_cast<float>(lockHelp.size()) * static_cast<float>(LINE_HEIGHT) + 12.0F;
 

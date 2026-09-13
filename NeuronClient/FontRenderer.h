@@ -41,37 +41,75 @@ public:
     return GLYPH_HEIGHT_TEXELS * _scale;
   }
 
-  /// How wide a string is, in screen pixels. The font is fixed-pitch, so this is a multiply --
-  /// but it is a named multiply, because every right-aligned and centred thing on the main page
-  /// is laid out against it and a stray `* 8` somewhere else is how those drift apart.
+  /// What ONE character advances the cursor by.
+  ///
+  /// It ignores the character, because the font is fixed-pitch and every glyph is eight texels
+  /// wide. The parameter is there so that the callers below ask the font per character rather than
+  /// per string -- which is the same answer today and the only one that survives a face whose
+  /// glyphs differ in width (ADR-073). This is the single place that learns the advance table.
+  [[nodiscard]] static constexpr std::uint32_t AdvanceOf(char _character, std::uint32_t _scale = DEFAULT_SCALE) noexcept
+  {
+    static_cast<void>(_character);
+    return AdvancePixels(_scale);
+  }
+
+  /// How wide a string is, in screen pixels.
+  ///
+  /// A sum over the advances rather than a multiply by the string's length -- the same number
+  /// while the font is fixed-pitch, and the reason a proportional face needs no edit at any of the
+  /// call sites that ask this. It is a NAMED measurement because every right-aligned and centred
+  /// thing on the main page is laid out against it, and a stray `* 8` somewhere else is how those
+  /// drift apart.
   [[nodiscard]] static constexpr std::uint32_t MeasurePixels(std::string_view _text, std::uint32_t _scale = DEFAULT_SCALE) noexcept
   {
-    return static_cast<std::uint32_t>(_text.size()) * AdvancePixels(_scale);
+    std::uint32_t width = 0;
+    for (const char character : _text)
+    {
+      width += AdvanceOf(character, _scale);
+    }
+    return width;
   }
 
-  /// The most characters that fit in a width. Used by the digest and the orders rail, whose copy
-  /// is wrapped to the rail rather than truncated (ADR-014).
-  [[nodiscard]] static constexpr std::size_t FitCharacters(std::uint32_t _widthPixels, std::uint32_t _scale = DEFAULT_SCALE) noexcept
-  {
-    return _widthPixels / AdvancePixels(_scale);
-  }
-
-  /// Word-wraps to a character count, breaking on spaces and hard-breaking a word longer than the
-  /// line.
+  /// How many characters of a string fit in a width, counting from the front.
   ///
-  /// It lives with the font rather than with the screen that needed it, because wrapping to a
-  /// FIXED-PITCH font is arithmetic on the font's own advance -- there is no measurement pass and
-  /// no kerning, so "how many characters fit" is the whole problem and this class is what knows
-  /// it. It is also the piece most likely to be wrong, and here it is reachable from a test
-  /// suite; in the executable it would not be.
-  [[nodiscard]] static std::vector<std::string> Wrap(std::string_view _text, std::size_t _maxCharacters);
-
-  /// The same, given a width in pixels rather than a character count.
-  [[nodiscard]] static std::vector<std::string> WrapToWidth(std::string_view _text, std::uint32_t _widthPixels,
-                                                            std::uint32_t _scale = DEFAULT_SCALE)
+  /// **It accumulates one advance at a time rather than dividing**, which today is the same answer
+  /// arrived at the long way -- the font is fixed-pitch, so the sum is a multiply. It is written
+  /// as a scan because the advance stops being one number when the face does (ADR-073), and a
+  /// division is the shape that would have to be found and rewritten then. There is nothing to
+  /// find here.
+  [[nodiscard]] static constexpr std::size_t PrefixThatFits(std::string_view _text, std::uint32_t _widthPixels,
+                                                            std::uint32_t _scale = DEFAULT_SCALE) noexcept
   {
-    return Wrap(_text, FitCharacters(_widthPixels, _scale));
+    std::uint32_t used = 0;
+    std::size_t fitted = 0;
+    for (const char character : _text)
+    {
+      const std::uint32_t advance = AdvanceOf(character, _scale);
+      if (used + advance > _widthPixels)
+      {
+        break;
+      }
+      used += advance;
+      ++fitted;
+    }
+    return fitted;
   }
+
+  /// Word-wraps to a PIXEL WIDTH, breaking on spaces and hard-breaking a word longer than the
+  /// line. The only wrap entry point; the digest and the orders rail wrap their copy to the rail
+  /// rather than truncating it (ADR-014).
+  ///
+  /// It lives with the font rather than with the screen that needed it, because wrapping is
+  /// arithmetic on the font's own advances and this class is what knows them. It is also the piece
+  /// most likely to be wrong, and here it is reachable from a test suite; in the executable it
+  /// would not be.
+  ///
+  /// **A width, not a character count.** It took a count until 2026-09-13, which was the same
+  /// question while every glyph was eight pixels wide and stops being it the moment one is not
+  /// (ADR-073). A caller that knows a rail is 254 pixels wide now says so, instead of dividing by
+  /// eight somewhere the font cannot see.
+  [[nodiscard]] static std::vector<std::string> WrapToWidth(std::string_view _text, std::uint32_t _widthPixels,
+                                                            std::uint32_t _scale = DEFAULT_SCALE);
 
   /// Space through to the last printable ASCII character. Anything outside that range draws as a
   /// space rather than as whatever byte happened to follow the table.

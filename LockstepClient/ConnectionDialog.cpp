@@ -213,7 +213,7 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
   //
   // Measured before anything is drawn, because the card is centred vertically and a card that grew
   // downward from a fixed top would put a five-line paragraph off the bottom of the screen.
-  const auto columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(CARD_WIDTH - 2.0F * CARD_PADDING));
+  const auto bodyWidth = static_cast<std::uint32_t>(CARD_WIDTH - 2.0F * CARD_PADDING);
 
   std::vector<std::string> lines;
   for (const std::string& paragraph : body)
@@ -222,7 +222,7 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
     {
       lines.emplace_back();
     }
-    for (std::string& line : FontRenderer::Wrap(paragraph, columns))
+    for (std::string& line : FontRenderer::WrapToWidth(paragraph, bodyWidth))
     {
       lines.push_back(std::move(line));
     }

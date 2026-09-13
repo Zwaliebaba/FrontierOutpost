@@ -249,7 +249,7 @@ private:
     float height = 0.0F;
   };
 
-  [[nodiscard]] CardLayout LayoutCard(const DigestCard& _card, std::size_t _columns) const;
+  [[nodiscard]] CardLayout LayoutCard(const DigestCard& _card, std::uint32_t _widthPixels) const;
 
   /// Measures the galaxy's bounding sphere, so the camera can frame it. Called once, from
   /// Create: the graph does not move between ticks.

@@ -325,10 +325,10 @@ void JoinPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   //
   // ADR-029's whole decision in two lines, because a player who thinks this is a password will
   // treat losing it as an account problem rather than as losing a seat.
-  const std::size_t columns = FontRenderer::FitCharacters(static_cast<std::uint32_t>(FIELD_WIDTH));
+  const auto explanationWidth = static_cast<std::uint32_t>(FIELD_WIDTH);
   std::int32_t lineY = static_cast<std::int32_t>(EXPLANATION_Y);
-  for (const std::string& line :
-       FontRenderer::Wrap("The match gives you a token. It names your seat, not you: whoever types it plays that empire.", columns))
+  for (const std::string& line : FontRenderer::WrapToWidth(
+         "The match gives you a token. It names your seat, not you: whoever types it plays that empire.", explanationWidth))
   {
     _text.DrawText(static_cast<std::int32_t>(FIELD_X), lineY, line, TEXT_DETAIL);
     lineY += LINE_HEIGHT;
