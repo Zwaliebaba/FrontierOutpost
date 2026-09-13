@@ -1,6 +1,6 @@
 # ADR-075 — A canvas presented at an integer scale
 
-**Status:** Proposed
+**Status:** Accepted 2026-09-13 (owner, by instructing RENDER-01 stages 1 to 6 to be built)
 
 **Date:** 2026-09-13
 **Decided by:** Owner decision, 2026-09-13, in a design session on how the client reaches a second platform without the Windows build ceasing to be one executable.

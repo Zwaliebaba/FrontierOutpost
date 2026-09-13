@@ -111,6 +111,10 @@ ever draws at native resolution.
 the Markdown for nothing, but the commit must be green). The owner reads the ADR and changes its
 status to Accepted. **Stop here until that has happened.**
 
+**The gate opened 2026-09-13.** The owner did not edit the status line; they instructed stages
+1 to 6 to be built, which is the same decision and is recorded in ADR-075's status line in those
+words. Stage 7 was not included and stays unstarted.
+
 **Stage 0, as run (2026-09-13).** ADR-075 is written and every edit it lists is made, in one commit.
 Both checkers are green. `RunClangTidy.py` was not run and is not claimed: nothing in this commit is
 C++, and the stage's gate above is the two checkers for that reason.
