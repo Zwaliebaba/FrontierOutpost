@@ -516,18 +516,25 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     event.actor = entry.other.IsValid() ? entry.other.Index() : NOBODY;
 
     // A proposal is answered on the proposal, which is where the player is reading about it.
-    if (event.kind == EventKind::Proposal)
+    //
+    // MATCHED BY THE PROPOSAL THE ENTRY NAMES (ADR-068), never by its sender: `other` is a player
+    // and the two are unrelated numbers. An entry about an offer that is no longer open -- one
+    // withdrawn, voided or already resolved -- finds nothing here and draws no buttons, which is
+    // the right answer rather than a missing case.
+    if (event.kind == EventKind::Proposal && entry.proposal.IsValid())
     {
       for (std::size_t index = 0; index < state.proposals.size(); ++index)
       {
-        if (state.proposals[index].id == entry.other.Index() || state.proposals.size() == 1)
+        if (state.proposals[index].id != entry.proposal.Index())
         {
-          event.actions.push_back(EventAction{
-            .label = "ACCEPT", .kind = EventActionKind::AcceptProposal, .target = static_cast<std::int32_t>(index), .primary = true});
-          event.actions.push_back(
-            EventAction{.label = "DECLINE", .kind = EventActionKind::DeclineProposal, .target = static_cast<std::int32_t>(index)});
-          break;
+          continue;
         }
+
+        event.actions.push_back(EventAction{
+          .label = "ACCEPT", .kind = EventActionKind::AcceptProposal, .target = static_cast<std::int32_t>(index), .primary = true});
+        event.actions.push_back(
+          EventAction{.label = "DECLINE", .kind = EventActionKind::DeclineProposal, .target = static_cast<std::int32_t>(index)});
+        break;
       }
     }
 
@@ -718,11 +725,16 @@ OrderSet OrdersOf(const MatchState& _state)
     }
   }
 
-  const std::int32_t answered = _state.orders.answeredProposal;
-  if (answered >= 0 && answered < static_cast<std::int32_t>(_state.proposals.size()))
+  // Every offer the player answered, not the last one they touched (ADR-068). The index is into
+  // the view's own proposal list and the id is what the server knows it by.
+  for (const ProposalAnswer& answered : _state.orders.answers)
   {
-    orders.answers.push_back(AnswerOrder{.proposal = ProposalId{_state.proposals[static_cast<std::size_t>(answered)].id},
-                                         .answer = _state.orders.acceptedProposal ? Answer::Accept : Answer::Decline});
+    if (answered.proposal < 0 || answered.proposal >= static_cast<std::int32_t>(_state.proposals.size()))
+    {
+      continue;
+    }
+    orders.answers.push_back(AnswerOrder{.proposal = ProposalId{_state.proposals[static_cast<std::size_t>(answered.proposal)].id},
+                                         .answer = answered.accepted ? Answer::Accept : Answer::Decline});
   }
 
   return orders;

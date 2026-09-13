@@ -102,6 +102,16 @@ struct DigestEntry
   LaneId lane;
   FleetId fleet;
   PlayerId other;
+
+  /// The offer this entry is about, for the five `DigestKind`s that are about one, and unset for
+  /// every other kind.
+  ///
+  /// AN ENTRY ABOUT A PROPOSAL NAMES THAT PROPOSAL (ADR-068). The client attaches ACCEPT and
+  /// DECLINE to a card by looking the offer up here; before this field it matched a proposal id
+  /// against `other`, which is a PLAYER id, and was right only while exactly one offer was open.
+  /// `other` keeps its own meaning -- the counterparty -- because who sent an offer and which
+  /// offer it is are different facts.
+  ProposalId proposal;
 };
 
 /// A fleet that was targeted: a hostile arrived, this tick, at the system it was standing on when

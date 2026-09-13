@@ -296,6 +296,18 @@ struct Proposal
   std::int32_t conditionalLane = EventRefs::NONE;
 };
 
+/// One answer, to one offer, this tick.
+///
+/// `proposal` is an index into `MatchState::proposals` and not a proposal id: it is what a button
+/// on a card carries (`EventAction::target`), and `OrdersOf` turns it into the id the server knows
+/// at the moment it composes the order. The same distinction `BuildRow` draws between a system id
+/// and a position in the view's own list (ADR-057).
+struct ProposalAnswer
+{
+  std::int32_t proposal = EventRefs::NONE;
+  bool accepted = false;
+};
+
 /// A signal going OUT: an offer to somebody, a retraction, or the end of something.
 ///
 /// **These are the four order kinds the client could not express** (ADR-039). `OrdersOf` could
@@ -352,9 +364,15 @@ struct Orders
   /// are worth offering here; this is the total the server reports. The same distinction as
   /// `totalSystems` below and for the same reason -- what is listed is a selection, not a census.
   std::uint32_t availableBuilds = 0;
-  /// Which proposal index the player has answered, and how. NONE means unanswered.
-  std::int32_t answeredProposal = EventRefs::NONE;
-  bool acceptedProposal = false;
+  /// Every offer the player has answered this tick, and how.
+  ///
+  /// ONE ANSWER PER OPEN PROPOSAL, NOT ONE PER TICK (ADR-068). `OrderSet::answers` is a list and
+  /// the resolver applies all of it, so a client that could hold one answer made a player with two
+  /// offers leave one until the next lock -- and an offer that runs its four-tick window out is
+  /// reported to its proposer as *ignored*, which would have been a tell the client manufactured.
+  /// Answering the same proposal twice replaces its answer; an answer is an order and is editable
+  /// until the lock like every other.
+  std::vector<ProposalAnswer> answers;
   /// Which build rows the player has queued this tick, as indices into `builds`.
   std::vector<std::int32_t> queuedBuilds;
 

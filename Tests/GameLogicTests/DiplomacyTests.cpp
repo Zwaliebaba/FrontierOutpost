@@ -243,6 +243,74 @@ public:
 TEST_CLASS(ProposalLifecycleTests)
 {
 public:
+  // An entry about an offer names the offer (ADR-068), in every kind that is about one. The client
+  // attaches ACCEPT and DECLINE by looking the id up, so an entry that does not carry it is a card
+  // whose buttons answer somebody else's proposal -- which is what happened while the id was
+  // matched against `other`, a PLAYER id, behind a fallback that was right only with one offer open.
+  TEST_METHOD(AProposalDigestEntryNamesItsProposal)
+  {
+    // Received.
+    Neighbors setup = Adjacent();
+    Lockstep::OrderSet offer;
+    offer.player = Lockstep::PlayerId{0};
+    offer.proposals.push_back(
+      Lockstep::ProposalOrder{.to = Lockstep::PlayerId{1}, .kind = Lockstep::ProposalKind::OpenLane, .lane = setup.lane});
+    const std::array<Lockstep::OrderSet, 1> offered = {offer};
+
+    Lockstep::TickLog received;
+    Lockstep::Match after = Advance(setup.match, offered, received);
+    const Lockstep::DigestEntry* arrival = Find(received, 1, Lockstep::DigestKind::ProposalReceived);
+    Assert::IsNotNull(arrival, L"the offer did not arrive at all");
+    Assert::IsTrue(arrival->proposal.IsValid(), L"an arriving offer does not say which offer it is");
+    Assert::AreEqual(after.Proposals().front().id.Index(), arrival->proposal.Index(), L"and it names a different offer");
+    Assert::IsTrue(arrival->other == Lockstep::PlayerId{0}, L"`other` stopped meaning the counterparty");
+
+    // Answered: the proposer's entry names the offer that was answered.
+    Lockstep::TickLog answered;
+    const Lockstep::Match accepted = Answer(after, Lockstep::Answer::Accept, answered);
+    const Lockstep::DigestEntry* verdict = Find(answered, 0, Lockstep::DigestKind::ProposalAnswered);
+    Assert::IsNotNull(verdict);
+    Assert::AreEqual(after.Proposals().front().id.Index(), verdict->proposal.Index(), L"an answer does not name what was answered");
+    Assert::IsTrue(accepted.Proposals().empty(), L"the answered offer is off the table");
+
+    // Withdrawn.
+    Lockstep::OrderSet pull;
+    pull.player = Lockstep::PlayerId{0};
+    pull.withdrawals.push_back(Lockstep::WithdrawOrder{.proposal = after.Proposals().front().id});
+    const std::array<Lockstep::OrderSet, 1> pulled = {pull};
+    Lockstep::TickLog withdrawn;
+    (void)Advance(after, pulled, withdrawn);
+    const Lockstep::DigestEntry* taken = Find(withdrawn, 1, Lockstep::DigestKind::ProposalWithdrawn);
+    Assert::IsNotNull(taken);
+    Assert::AreEqual(after.Proposals().front().id.Index(), taken->proposal.Index(), L"a withdrawal does not name what was withdrawn");
+
+    // Ignored, after the window runs out.
+    Lockstep::Match aging = after;
+    Lockstep::TickLog ignored;
+    for (std::uint32_t tick = 0; tick <= aging.Rules().proposalWindowTicks && !aging.Proposals().empty(); ++tick)
+    {
+      aging = Advance(aging, {}, ignored);
+    }
+    const Lockstep::DigestEntry* silence = Find(ignored, 0, Lockstep::DigestKind::ProposalIgnored);
+    Assert::IsNotNull(silence, L"an unanswered offer was never reported as ignored");
+    Assert::IsTrue(silence->proposal.IsValid(), L"an ignored offer does not say which offer went unanswered");
+
+    // Voided, when the lane stops joining the two empires.
+    Neighbors voidable = Adjacent();
+    voidable.match.SetTick(voidable.match.Rules().capitalGuardTicks);
+    voidable.match =
+      Propose(voidable.match,
+              Lockstep::ProposalOrder{.to = Lockstep::PlayerId{1}, .kind = Lockstep::ProposalKind::OpenLane, .lane = voidable.lane});
+    const Lockstep::ProposalId doomed = voidable.match.Proposals().front().id;
+    voidable.match.MutableSystems()[voidable.theirs.AsSize()].owner = Lockstep::PlayerId{3};
+
+    Lockstep::TickLog dead;
+    (void)Advance(voidable.match, {}, dead);
+    const Lockstep::DigestEntry* voided = Find(dead, 0, Lockstep::DigestKind::ProposalVoided);
+    Assert::IsNotNull(voided, L"the offer survived losing its endpoint");
+    Assert::AreEqual(doomed.Index(), voided->proposal.Index(), L"a voided offer does not name itself");
+  }
+
   // "Every open proposal is re-validated at every lock against current state (endpoints still owned
   // by the two parties, still adjacent); one that fails is voided and both digests say why."
   TEST_METHOD(AProposalWhoseEndpointIsCapturedIsVoidedInBothDigests)

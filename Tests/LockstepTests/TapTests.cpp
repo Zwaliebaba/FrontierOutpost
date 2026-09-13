@@ -28,7 +28,9 @@
 
 #include "BotPolicy.h"
 #include "MatchSimulation.h"
+#include "TickResolver.h"
 
+#include <algorithm>
 #include <format>
 #include <functional>
 #include <memory>
@@ -184,6 +186,32 @@ void DrawDialog(Lockstep::ConnectionDialog& _dialog, Headless& _renderers)
   const Lockstep::PlayerId seat{0};
   return Lockstep::ViewOf(Lockstep::Snapshot::For(_simulation.State(), seat), Lockstep::Snapshot::DigestFor(_simulation.LastTick(), seat),
                           600);
+}
+
+/// Seat zero with two offers in front of it, one from each of two rivals.
+///
+/// `HoldForTicks` because it is the offer with no board precondition (SignalTests says the same of
+/// its own helper); what these tests are about is the buttons, not how the offer got there.
+[[nodiscard]] Lockstep::MatchState SeatZeroWithTwoOffers()
+{
+  Lockstep::MatchRules rules;
+  rules.playerCount = 6;
+  Lockstep::Match match = Lockstep::Match::Create(rules, 0x5349'474E'414C'5321ULL);
+
+  std::vector<Lockstep::OrderSet> sets;
+  for (const std::int32_t sender : {1, 2})
+  {
+    Lockstep::OrderSet set;
+    set.player = Lockstep::PlayerId{sender};
+    set.proposals.push_back(Lockstep::ProposalOrder{.to = Lockstep::PlayerId{0}, .kind = Lockstep::ProposalKind::HoldForTicks, .ticks = 2});
+    sets.push_back(std::move(set));
+  }
+
+  Lockstep::TickLog log;
+  match = Lockstep::TickResolver::Resolve(match, {.orders = sets}, log);
+
+  const Lockstep::PlayerId seat{0};
+  return Lockstep::ViewOf(Lockstep::Snapshot::For(match, seat), Lockstep::Snapshot::DigestFor(log, seat), 600);
 }
 
 void DrawPage(Lockstep::MainPage& _page, Headless& _renderers)
@@ -990,6 +1018,72 @@ public:
     const bool exceeded = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
                                    [&page] { return page.State().orders.QueuedBuildCost() > page.State().player.credits; });
     Assert::IsFalse(exceeded, L"the screen queued more than the purse covers");
+  }
+};
+
+// Answering offers, which is the half of decision three the client could get wrong silently: the
+// buttons drew and the taps landed, and with two offers open they would have answered the wrong
+// one, or one of them would have had to wait a lock it could expire in (ADR-068).
+TEST_CLASS(ProposalAnswerTapTests)
+{
+public:
+  TEST_METHOD(BothOffersCanBeAnsweredBeforeOneLock)
+  {
+    Lockstep::MainPage page;
+    page.Create(SeatZeroWithTwoOffers());
+    Assert::AreEqual(std::size_t{2}, page.State().proposals.size(), L"this test needs two offers on the table");
+
+    // Sweep the digest column until both offers carry an answer. Every ACCEPT and DECLINE on the
+    // screen is pressed on the way, which is the point: the answers must end up on different
+    // offers rather than overwriting one another.
+    Headless renderers;
+    const bool answered = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH - ORDERS_RAIL, SCREEN_HEIGHT,
+                                   [&page] { return page.State().orders.answers.size() == 2U; });
+    Assert::IsTrue(answered, L"two offers on screen and no pair of taps answers both");
+
+    const Lockstep::OrderSet orders = Lockstep::OrdersOf(page.State());
+    Assert::AreEqual(std::size_t{2}, orders.answers.size(), L"both answers did not reach one order set");
+    Assert::IsTrue(orders.answers[0].proposal != orders.answers[1].proposal, L"both answers named the same offer");
+  }
+
+  TEST_METHOD(AnsweringOneOfferTwiceSendsOneAnswer)
+  {
+    Lockstep::MainPage page;
+    page.Create(SeatZeroWithTwoOffers());
+
+    Headless renderers;
+    const bool first = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH - ORDERS_RAIL, SCREEN_HEIGHT,
+                                [&page] { return !page.State().orders.answers.empty(); });
+    Assert::IsTrue(first, L"nothing on the screen answers an offer");
+
+    const std::int32_t offer = page.State().orders.answers.front().proposal;
+    const bool accepted = page.State().orders.answers.front().accepted;
+
+    // Press both buttons on that same offer as many times as they are found. However many taps it
+    // takes, one offer is one answer -- the last one given.
+    std::size_t answersForThatOffer = 0;
+    (void)SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH - ORDERS_RAIL, SCREEN_HEIGHT,
+                   [&page, offer, &answersForThatOffer]
+                   {
+                     answersForThatOffer = static_cast<std::size_t>(
+                       std::count_if(page.State().orders.answers.begin(), page.State().orders.answers.end(),
+                                     [offer](const Lockstep::ProposalAnswer& _answer) { return _answer.proposal == offer; }));
+                     return answersForThatOffer > 1U;
+                   });
+
+    Assert::AreEqual(std::size_t{1}, answersForThatOffer, L"one offer collected more than one answer");
+
+    const Lockstep::OrderSet orders = Lockstep::OrdersOf(page.State());
+    const std::size_t forThatOffer = static_cast<std::size_t>(
+      std::count_if(orders.answers.begin(), orders.answers.end(), [&page, offer](const Lockstep::AnswerOrder& _answer)
+                    { return _answer.proposal == Lockstep::ProposalId{page.State().proposals[static_cast<std::size_t>(offer)].id}; }));
+    Assert::AreEqual(std::size_t{1}, forThatOffer, L"one offer produced more than one answer order");
+
+    // And the answer that survived is a real one either way round.
+    const bool stillThere = std::any_of(page.State().orders.answers.begin(), page.State().orders.answers.end(),
+                                        [offer](const Lockstep::ProposalAnswer& _answer) { return _answer.proposal == offer; });
+    Assert::IsTrue(stillThere, L"the answer vanished rather than being replaced");
+    (void)accepted;
   }
 };
 

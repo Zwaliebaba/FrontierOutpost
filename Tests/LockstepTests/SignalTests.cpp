@@ -20,6 +20,7 @@
 #include "BotPolicy.h"
 #include "ByteWriter.h"
 #include "MatchSimulation.h"
+#include "TickResolver.h"
 
 #include <algorithm>
 #include <memory>
@@ -66,6 +67,52 @@ constexpr std::uint64_t SIGNAL_SEED = 0x5349'474E'414C'5321ULL;
   const Lockstep::PlayerId seat{0};
   return Lockstep::ViewOf(Lockstep::Snapshot::For(_simulation.State(), seat), Lockstep::Snapshot::DigestFor(_simulation.LastTick(), seat),
                           0);
+}
+
+/// Seat zero, looking at offers from `_from` -- one per entry, so a list of two rivals puts two
+/// offers on the table and a list of one rival twice puts two from the same rival.
+///
+/// `HoldForTicks` is the offer used because it is the one with no board precondition: a lane offer
+/// has to join two systems the two players hold, which would make this helper a map-building
+/// exercise about something these tests are not about.
+[[nodiscard]] Lockstep::MatchState SeatZeroLookingAtOffersFrom(std::initializer_list<std::int32_t> _from)
+{
+  Lockstep::MatchRules rules;
+  rules.playerCount = 6;
+  Lockstep::Match match = Lockstep::Match::Create(rules, SIGNAL_SEED);
+
+  std::vector<Lockstep::OrderSet> sets;
+  for (const std::int32_t sender : _from)
+  {
+    const auto existing = std::find_if(sets.begin(), sets.end(),
+                                       [sender](const Lockstep::OrderSet& _set) { return _set.player == Lockstep::PlayerId{sender}; });
+    Lockstep::OrderSet& set = existing != sets.end() ? *existing : sets.emplace_back();
+    set.player = Lockstep::PlayerId{sender};
+    set.proposals.push_back(Lockstep::ProposalOrder{.to = Lockstep::PlayerId{0}, .kind = Lockstep::ProposalKind::HoldForTicks, .ticks = 2});
+  }
+
+  Lockstep::TickLog log;
+  match = Lockstep::TickResolver::Resolve(match, {.orders = sets}, log);
+
+  const Lockstep::PlayerId seat{0};
+  return Lockstep::ViewOf(Lockstep::Snapshot::For(match, seat), Lockstep::Snapshot::DigestFor(log, seat), 0);
+}
+
+/// The action of a kind on the card about `_proposal`, or nothing.
+[[nodiscard]] std::optional<Lockstep::EventAction> ActionOn(const Lockstep::MatchState& _state, std::int32_t _proposal,
+                                                            Lockstep::EventActionKind _kind)
+{
+  for (const Lockstep::DigestEvent& event : _state.digest)
+  {
+    for (const Lockstep::EventAction& action : event.actions)
+    {
+      if (action.kind == _kind && action.target == _proposal)
+      {
+        return action;
+      }
+    }
+  }
+  return std::nullopt;
 }
 
 [[nodiscard]] std::vector<std::uint8_t> Encoded(const Lockstep::OrderSet& _orders)
@@ -468,6 +515,92 @@ public:
       }
       Assert::IsFalse(signal.title.empty(), L"a row with nothing written on it");
     }
+  }
+};
+
+// An offer is answered on the card that reports it, so the card has to know WHICH offer it is
+// about (ADR-068). Before the proposal reached the digest entry this was matched by comparing a
+// proposal id against `other` -- a player id -- behind a `size() == 1` fallback that made it right
+// exactly while one offer was open, which is every test and both rehearsals to date.
+TEST_CLASS(ProposalCardTests)
+{
+public:
+  TEST_METHOD(TwoOffersEachCarryTheirOwnButtons)
+  {
+    const Lockstep::MatchState state = SeatZeroLookingAtOffersFrom({1, 2});
+    Assert::AreEqual(std::size_t{2}, state.proposals.size(), L"two rivals did not put two offers on the table");
+
+    for (std::int32_t index = 0; index < static_cast<std::int32_t>(state.proposals.size()); ++index)
+    {
+      const std::wstring which = L"offer " + std::to_wstring(index);
+      Assert::IsTrue(ActionOn(state, index, Lockstep::EventActionKind::AcceptProposal).has_value(),
+                     (which + L" has no ACCEPT aimed at it").c_str());
+      Assert::IsTrue(ActionOn(state, index, Lockstep::EventActionKind::DeclineProposal).has_value(),
+                     (which + L" has no DECLINE aimed at it").c_str());
+    }
+  }
+
+  TEST_METHOD(TwoOffersFromOneRivalAreStillToldApart)
+  {
+    // The case sender-matching could never have got right: both cards name the same player.
+    const Lockstep::MatchState state = SeatZeroLookingAtOffersFrom({1, 1});
+    Assert::AreEqual(std::size_t{2}, state.proposals.size());
+    Assert::IsTrue(state.proposals[0].from == state.proposals[1].from, L"this test needs both offers from one rival");
+
+    Assert::IsTrue(ActionOn(state, 0, Lockstep::EventActionKind::AcceptProposal).has_value());
+    Assert::IsTrue(ActionOn(state, 1, Lockstep::EventActionKind::AcceptProposal).has_value());
+  }
+
+  TEST_METHOD(EveryAnswerReachesTheSameLock)
+  {
+    // `OrderSet::answers` is a list and the resolver applies all of it; the client used to hold one
+    // answer per tick, so the second offer waited a lock it could expire in.
+    Lockstep::MatchState state = SeatZeroLookingAtOffersFrom({1, 2});
+    state.orders.answers.push_back(Lockstep::ProposalAnswer{.proposal = 0, .accepted = true});
+    state.orders.answers.push_back(Lockstep::ProposalAnswer{.proposal = 1, .accepted = false});
+
+    const Lockstep::OrderSet orders = Lockstep::OrdersOf(state);
+    Assert::AreEqual(std::size_t{2}, orders.answers.size(), L"both answers did not reach one order set");
+    Assert::IsTrue(orders.answers[0].proposal == Lockstep::ProposalId{state.proposals[0].id}, L"the first answer names the wrong offer");
+    Assert::IsTrue(orders.answers[0].answer == Lockstep::Answer::Accept);
+    Assert::IsTrue(orders.answers[1].proposal == Lockstep::ProposalId{state.proposals[1].id}, L"the second answer names the wrong offer");
+    Assert::IsTrue(orders.answers[1].answer == Lockstep::Answer::Decline);
+  }
+
+  TEST_METHOD(AWithdrawnOffersCardCarriesNoButtons)
+  {
+    // A digest entry about an offer that is no longer open -- withdrawn here, voided or already
+    // resolved elsewhere -- names an id nothing open matches, and so draws no buttons. Under the
+    // fallback this was the dangerous case: one entry, one unrelated offer, buttons on both.
+    Lockstep::MatchRules rules;
+    rules.playerCount = 6;
+    Lockstep::Match match = Lockstep::Match::Create(rules, SIGNAL_SEED);
+
+    Lockstep::OrderSet offer;
+    offer.player = Lockstep::PlayerId{1};
+    offer.proposals.push_back(
+      Lockstep::ProposalOrder{.to = Lockstep::PlayerId{0}, .kind = Lockstep::ProposalKind::HoldForTicks, .ticks = 2});
+    const std::vector<Lockstep::OrderSet> offered = {offer};
+
+    Lockstep::TickLog opened;
+    match = Lockstep::TickResolver::Resolve(match, {.orders = offered}, opened);
+    Assert::AreEqual(std::size_t{1}, match.Proposals().size(), L"the offer never reached the table");
+
+    Lockstep::OrderSet pull;
+    pull.player = Lockstep::PlayerId{1};
+    pull.withdrawals.push_back(Lockstep::WithdrawOrder{.proposal = match.Proposals().front().id});
+    const std::vector<Lockstep::OrderSet> pulled = {pull};
+
+    Lockstep::TickLog withdrawn;
+    match = Lockstep::TickResolver::Resolve(match, {.orders = pulled}, withdrawn);
+
+    const Lockstep::PlayerId seat{0};
+    const Lockstep::MatchState state =
+      Lockstep::ViewOf(Lockstep::Snapshot::For(match, seat), Lockstep::Snapshot::DigestFor(withdrawn, seat), 0);
+
+    Assert::IsTrue(state.proposals.empty(), L"the withdrawn offer is still on the table");
+    Assert::IsFalse(ActionOn(state, 0, Lockstep::EventActionKind::AcceptProposal).has_value(),
+                    L"a withdrawn offer's card still offers an answer");
   }
 };
 

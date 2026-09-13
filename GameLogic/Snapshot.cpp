@@ -288,6 +288,7 @@ void Visit(Neuron::Archive& _archive, DigestEntry& _entry)
   _archive.Identity(_entry.lane);
   _archive.Identity(_entry.fleet);
   _archive.Identity(_entry.other);
+  _archive.Identity(_entry.proposal);
 }
 
 void Visit(Neuron::Archive& _archive, SnapshotSystem& _system)

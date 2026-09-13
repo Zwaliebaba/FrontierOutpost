@@ -108,7 +108,7 @@ void Tell(TickLog& _log, PlayerId _player, DigestEntry _entry)
 /// dead offer as acceptable" cuts both ways: the answer was honest when it was given, and the
 /// refusal has to reach both digests rather than only the payer's.
 [[nodiscard]] bool OpenTradeLane(Match& _next, TickLog& _log, PhaseRecord& _record, LaneId _lane, PlayerId _from, PlayerId _to,
-                                 std::uint32_t _tick, PlayerId _answeredBy)
+                                 std::uint32_t _tick, PlayerId _answeredBy, ProposalId _proposal)
 {
   if (_next.FindTradeLane(_lane) != nullptr)
   {
@@ -125,14 +125,16 @@ void Tell(TickLog& _log, PlayerId _player, DigestEntry _entry)
                      .title = "Lane voided",
                      .detail = "You could no longer pay for it",
                      .lane = _lane,
-                     .other = _answeredBy});
+                     .other = _answeredBy,
+                     .proposal = _proposal});
     Tell(_log, _to,
          DigestEntry{.kind = DigestKind::ProposalVoided,
                      .severity = Severity::PROPOSAL_RESOLVED,
                      .title = "Lane voided",
                      .detail = std::format("{} could no longer pay for it", NameOf(_from)),
                      .lane = _lane,
-                     .other = _from});
+                     .other = _from,
+                     .proposal = _proposal});
     return false;
   }
 
@@ -457,7 +459,8 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
                        .title = std::format("Proposal from {}", NameOf(player)),
                        .detail = "Answer at the next lock, or it is reported as ignored",
                        .lane = proposed.lane,
-                       .other = player});
+                       .other = player,
+                       .proposal = open.id});
     }
   }
 
@@ -489,7 +492,7 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
         // would miss phase 2 by one tick.
         if (decided.kind == ProposalKind::OpenLane)
         {
-          (void)OpenTradeLane(next, _log, record, decided.lane, decided.from, decided.to, _in.Tick(), player);
+          (void)OpenTradeLane(next, _log, record, decided.lane, decided.from, decided.to, _in.Tick(), player, decided.id);
         }
         else
         {
@@ -522,7 +525,7 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
         // without a second round trip."
         if (decided.conditionalLane.IsValid() && decided.conditionalLane != decided.lane)
         {
-          (void)OpenTradeLane(next, _log, record, decided.conditionalLane, decided.from, decided.to, _in.Tick(), player);
+          (void)OpenTradeLane(next, _log, record, decided.conditionalLane, decided.from, decided.to, _in.Tick(), player, decided.id);
         }
       }
 
@@ -532,7 +535,8 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
                        .title = answer.answer == Answer::Accept ? "Proposal accepted" : "Proposal declined",
                        .detail = std::format("{} answered", NameOf(player)),
                        .lane = decided.lane,
-                       .other = player});
+                       .other = player,
+                       .proposal = decided.id});
 
       std::vector<OpenProposal>& answered = next.MutableProposals();
       answered.erase(std::remove_if(answered.begin(), answered.end(),
@@ -555,7 +559,8 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
                        .title = std::format("{} withdrew a proposal", NameOf(player)),
                        .detail = "It is no longer on the table",
                        .lane = pulled.lane,
-                       .other = player});
+                       .other = player,
+                       .proposal = pulled.id});
 
       std::vector<OpenProposal>& list = next.MutableProposals();
       list.erase(std::remove_if(list.begin(), list.end(), [&pulled](const OpenProposal& _candidate) { return _candidate.id == pulled.id; }),
@@ -645,7 +650,8 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
                            .title = "Proposal voided",
                            .detail = "The lane no longer joins your two empires",
                            .lane = proposal.lane,
-                           .other = side == proposal.from ? proposal.to : proposal.from});
+                           .other = side == proposal.from ? proposal.to : proposal.from,
+                           .proposal = proposal.id});
         }
         continue;
       }
@@ -659,7 +665,8 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
                          .title = std::format("{} ignored your proposal", NameOf(proposal.to)),
                          .detail = std::format("No answer in {} ticks", _in.Rules().proposalWindowTicks),
                          .lane = proposal.lane,
-                         .other = proposal.to});
+                         .other = proposal.to,
+                         .proposal = proposal.id});
         continue;
       }
 

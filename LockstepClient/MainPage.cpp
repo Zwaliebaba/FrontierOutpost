@@ -13,6 +13,7 @@
 #include "MapRender.h"
 #include "MapView.h"
 
+#include <algorithm>
 #include <queue>
 
 namespace Lockstep
@@ -615,8 +616,19 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       // betrayal (one-pager, decision 3).
       if (editable)
       {
-        m_state.orders.answeredProposal = region->index;
-        m_state.orders.acceptedProposal = region->action == Action::AcceptProposal;
+        // One answer per offer (ADR-068). Answering the same one again replaces its answer rather
+        // than sending two, which is what makes changing an answer before the lock one tap.
+        const bool accepted = region->action == Action::AcceptProposal;
+        const auto existing = std::find_if(m_state.orders.answers.begin(), m_state.orders.answers.end(),
+                                           [region](const ProposalAnswer& _answer) { return _answer.proposal == region->index; });
+        if (existing != m_state.orders.answers.end())
+        {
+          existing->accepted = accepted;
+        }
+        else
+        {
+          m_state.orders.answers.push_back(ProposalAnswer{.proposal = region->index, .accepted = accepted});
+        }
       }
       return true;
 
@@ -1058,24 +1070,45 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
       for (const EventAction& action : card.actions)
       {
+        // `committed` is "this is already in the orders this tick goes in with", which two kinds of
+        // button can be and the rest cannot. It is drawn the same way for both: outlined in blue,
+        // never the filled primary, and still a target, because every order is editable until the
+        // lock.
+        //
         // A build button has two states the other buttons do not, and it says which it is in
         // (ADR-053): QUEUED, so the next tap is known to take it back; or beyond the purse, drawn
         // dim with what is missing and not a target, because the lock would refuse it and a
         // refusal a tick later is the worst way to learn a price.
         std::string label = action.label;
-        bool queued = false;
+        bool committed = false;
         bool unaffordable = false;
         if (action.kind == EventActionKind::QueueBuild)
         {
-          queued = std::ranges::find(m_state.orders.queuedBuilds, action.target) != m_state.orders.queuedBuilds.end();
-          unaffordable = !queued && !m_state.CanAffordBuild(action.target);
-          if (queued)
+          committed = std::ranges::find(m_state.orders.queuedBuilds, action.target) != m_state.orders.queuedBuilds.end();
+          unaffordable = !committed && !m_state.CanAffordBuild(action.target);
+          if (committed)
           {
             label += " - QUEUED";
           }
           else if (unaffordable)
           {
             label += std::format(" - NEED {} MORE", BuildShortfall(action.target));
+          }
+        }
+
+        // An answered offer says which way it was answered, in the past tense against the other
+        // button's imperative, and the pair stays tappable so that changing an answer is one tap
+        // (ADR-068).
+        if (action.kind == EventActionKind::AcceptProposal || action.kind == EventActionKind::DeclineProposal)
+        {
+          const auto answered = std::ranges::find_if(m_state.orders.answers, [&action](const ProposalAnswer& _answer)
+                                                     { return _answer.proposal == action.target; });
+          const bool thisWay =
+            answered != m_state.orders.answers.end() && answered->accepted == (action.kind == EventActionKind::AcceptProposal);
+          if (thisWay)
+          {
+            label = answered->accepted ? "ACCEPTED" : "DECLINED";
+            committed = true;
           }
         }
 
@@ -1086,7 +1119,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
         }
 
         // One filled button per card at most: the thing the digest thinks you should do.
-        if (action.primary && !m_state.orders.locked && !queued && !unaffordable)
+        if (action.primary && !m_state.orders.locked && !committed && !unaffordable)
         {
           _shapes.FillRect(buttonX, buttonY, width, 18.0F, Ink::BLUE);
           _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label, Ink::APP_BACKGROUND);
@@ -1094,9 +1127,9 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
         else
         {
           const bool dim = m_state.orders.locked || unaffordable;
-          _shapes.StrokeRect(buttonX, buttonY, width, 18.0F, queued && !dim ? Ink::BLUE : Ink::OUTLINE);
+          _shapes.StrokeRect(buttonX, buttonY, width, 18.0F, committed && !dim ? Ink::BLUE : Ink::OUTLINE);
           _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label,
-                         dim ? Ink::NEUTRAL_DIM : (queued ? Ink::BLUE : Ink::TEXT_PRIMARY));
+                         dim ? Ink::NEUTRAL_DIM : (committed ? Ink::BLUE : Ink::TEXT_PRIMARY));
         }
 
         if ((!m_state.orders.locked && !unaffordable) || action.kind == EventActionKind::Focus)
@@ -1422,7 +1455,16 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // An offer about a lane focuses the lane's far end; an offer about a map or a truce is about
     // no system at all and so is read rather than tapped.
     const std::int32_t about = ProposalSystem(m_state, proposal);
-    row(std::format("{} {}", Uppercased(proposal.from), what), std::format("{} TICKS", proposal.ticksLeft), Ink::AMBER,
+
+    // The rail is the receipt of what goes in at the lock, so an answered offer says the answer
+    // rather than the countdown it is no longer waiting out (ADR-068).
+    const std::size_t index = static_cast<std::size_t>(&proposal - m_state.proposals.data());
+    const auto answered = std::ranges::find_if(m_state.orders.answers, [index](const ProposalAnswer& _answer)
+                                               { return _answer.proposal == static_cast<std::int32_t>(index); });
+    const bool isAnswered = answered != m_state.orders.answers.end();
+    const std::string status = isAnswered ? (answered->accepted ? "ACCEPTED" : "DECLINED") : std::format("{} TICKS", proposal.ticksLeft);
+
+    row(std::format("{} {}", Uppercased(proposal.from), what), status, isAnswered ? Ink::BLUE : Ink::AMBER,
         about == EventRefs::NONE ? Action::None : Action::FocusSystem, about);
   }
 

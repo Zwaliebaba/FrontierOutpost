@@ -32,8 +32,12 @@ fleet reaches, a priced build on a claimed system or a production line, `MAP` on
 system. When no card offers a real control the standing moves go on the leading card — a priced
 `BUILD` and up to two `MOVE FLT n` (ADR-056); before the first lock the digest is one card,
 `NOTHING HAS HAPPENED YET`, carrying them. Build buttons show `- QUEUED` (outlined blue) and
-`- NEED 7 MORE` (dim, inert) per ADR-053. Tapping a card focuses the system it is about; `MAP`
-focuses the system the action names.
+`- NEED 7 MORE` (dim, inert) per ADR-053. An **answered proposal** reads `ACCEPTED` or `DECLINED` in
+the past tense on the button that was pressed, outlined blue like a queued build, with the other
+button still imperative and still tappable, so changing an answer before the lock is one tap
+(ADR-068); each card answers the offer its digest entry names, so two open offers no longer share
+one card's buttons. Tapping a card focuses the system it is about; `MAP` focuses the system the
+action names.
 
 **Overflow (ADR-061).** An **actor card is collapsed** unless it is the open one: dot, title, `3
 EVENTS`, the verdict box and the whole action row, with the per-event lines behind a tap on its
