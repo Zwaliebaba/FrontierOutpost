@@ -1,6 +1,6 @@
 # FONT-01 — From one hand-typed 8×8 font to five baked cuts of IBM Plex
 
-**Status:** **In flight. Stages 0 and 1 done 2026-09-13; stage 2 is next.** Written 2026-09-13 against ADR-073 and ADR-074,
+**Status:** **In flight. Stages 0 to 4 done 2026-09-13; stage 5 is next.** Written 2026-09-13 against ADR-073 and ADR-074,
 both Accepted by the owner the same day. Stage 1 is next and starts by installing the offline
 rasterizer, which this machine does not have.
 
@@ -37,6 +37,28 @@ characters in the digest rail's 254 where 31 fit today. Cap height is 0.698em, s
 within half a pixel of their current height and the screen stays recognisable. A line goes from
 12px to 16px, and that is the whole of the cost. Plex Sans at the same size is properly
 proportional: `A` is 8px, `i` is 3px, the arrow is 10px.
+
+**Stages 2, 3 and 4, as run (2026-09-13).** All three byte-identical checkpoints came back
+byte-identical: the join screen's PNG has the same length and the same SHA-256 across stage 2 (new
+header format, `Face`, per-glyph advances, codepoint binary search, UTF-8 decoding, baseline
+placement) and across stage 3 (`R8_UNORM` atlas, coverage multiplied into alpha). Stage 4 baked
+Plex and the screen changed; 514 tests pass. `--legacy` and `--self-test` were deleted with it.
+
+**A defect stage 2 surfaced, fixed rather than worked around.** `Build/CheckFormat.py` fed each
+file to clang-format through stdin with `text=True`, which encodes using the locale code page. 1252
+holds `·`, `–` and `›` and does **not** hold `→` or `−` — two of the five characters stage 7 puts
+back. On such a file the write raised in the parent, the child never saw EOF, and clang-format
+waited on stdin forever: no error, no diff, no exit, and through a pipe it read as a hang rather
+than an encoding fault. Both subprocess calls now name `encoding="utf-8"` and stdout is
+reconfigured, so a diff containing one of those characters prints instead of killing the checker at
+the moment it has something to say.
+
+**What stage 4 deliberately left undone.** Every draw site still asks for `MonoRegular`, so nothing
+is in Plex Sans yet — that is stage 5. The layout is not re-derived: a line box is 17px where the
+old font's was 8, so labels sit closer to their fields than the design intends and the vertical
+rhythm is visibly off on the join screen. That, the gamma on a dark background, and whether three
+mono weights are distinguishable are all stage 6, and all three are to be settled from a screenshot
+rather than from arithmetic.
 
 ---
 
