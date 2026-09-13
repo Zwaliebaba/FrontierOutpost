@@ -1534,6 +1534,10 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   constexpr Color NO_ACCENT = {0, 0, 0, 0};
 
   std::vector<SheetRow> rows;
+
+  /// Whether the LAST row composed must be drawn whatever else is dropped. Only the concede sets
+  /// it: every other row on every sheet is equal, and the first six win.
+  bool lastRowMustSurvive = false;
   std::string title;
 
   // What tapping a row does. It differs per panel, and it used to not exist: every row went to
@@ -1731,6 +1735,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
 
       // Red from the first tap, and the armed row says what the NEXT tap does rather than what this
       // row is -- the only warning a concede gets and the only one it needs.
+      lastRowMustSurvive = true;
       rows.push_back(SheetRow{.title = signal.title,
                               .right = queued ? "SENDING" : (armed ? "TAP AGAIN TO CONFIRM" : std::string{}),
                               .accent = armed || queued ? Ink::RED : NO_ACCENT,
@@ -1762,8 +1767,23 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   //
   // More rows than fit are REPORTED rather than dropped. A picker that quietly forgets a lane is a
   // picker that cannot be trusted about the ones it did show.
+  //
+  // **THE CONCEDE KEEPS THE LAST VISIBLE SLOT** (ADR-064, extended 2026-09-13). It is composed last
+  // and the sheet draws the first six, so a player with six offers on the table had no concede row
+  // at all -- the one control on this screen that must always be reachable, gone precisely when the
+  // board is busy enough to want it. The offers it displaces are counted in the `+N` line like any
+  // other. Found by `ConcedingTakesTwoTapsOnTheSameRow` when ADR-069 changed how the bots expand
+  // and seat zero's sixth offer arrived.
+  const std::size_t clippedBefore = rows.size();
+  if (lastRowMustSurvive && rows.size() > SHEET_MAXIMUM_ROWS)
+  {
+    SheetRow survivor = std::move(rows.back());
+    rows.resize(SHEET_MAXIMUM_ROWS - 1);
+    rows.push_back(std::move(survivor));
+  }
+
   const std::size_t shown = std::min(rows.size(), SHEET_MAXIMUM_ROWS);
-  const bool clipped = rows.size() > shown;
+  const bool clipped = clippedBefore > shown;
 
   const float paneX = Frame::DIGEST_WIDTH;
   const float paneWidth = Frame::SCREEN_WIDTH - Frame::DIGEST_WIDTH - Frame::ORDERS_WIDTH;
@@ -1880,7 +1900,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     _shapes.FillRect(x + CARD_PADDING, rowY, width - 2.0F * CARD_PADDING, 1.0F, Ink::DIVIDER);
     _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(rowY, SHEET_CLIPPED_HEIGHT),
-                   std::format("+{} MORE THAN THIS SHEET CAN SHOW", rows.size() - shown), Ink::NEUTRAL_DIM);
+                   std::format("+{} MORE THAN THIS SHEET CAN SHOW", clippedBefore - shown), Ink::NEUTRAL_DIM);
     rowY += SHEET_CLIPPED_HEIGHT;
   }
 

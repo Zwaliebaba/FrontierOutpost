@@ -464,9 +464,31 @@ public:
       {
         // Reopened before each pair, because a stray tap on the map puts the BUILD panel over the
         // picker and there is nothing in the sweep's path that would put it back.
+        //
+        // FOUND AGAIN RATHER THAN REMEMBERED. The SIGNALS header sits under BUILDS on the rail, so
+        // a build queued by a stray tap earlier in this sweep pushes it down a row and the opening
+        // coordinate goes stale (`Design/UI/README.md`, "Photographing the build", says the same of
+        // a capture script). A remembered coordinate made this test pass only while the rail
+        // happened not to grow.
         if (page.OpenPanel() != Lockstep::MainPage::Panel::SignalList)
         {
           tap(openX, openY);
+        }
+
+        // The cheap tap is the remembered coordinate; this is what happens when it goes stale. The
+        // SIGNALS header sits under BUILDS on the rail, so a build queued earlier in this sweep
+        // pushes it down a row (`Design/UI/README.md`, "Photographing the build", says the same of
+        // a capture script). Searching again is slow, so it runs only when the cheap tap missed.
+        if (page.OpenPanel() != Lockstep::MainPage::Panel::SignalList)
+        {
+          std::int32_t againX = 0;
+          std::int32_t againY = 0;
+          if (OpenThePicker(page, renderers, againX, againY))
+          {
+            openX = againX;
+            openY = againY;
+          }
+          stale = true;
         }
 
         tap(x, y);
@@ -571,6 +593,65 @@ public:
       }
     }
     Assert::IsTrue(queued, L"the concede row was pushed off the sheet by its own band");
+  }
+
+  TEST_METHOD(AnOverfullSheetStillOffersTheConcede)
+  {
+    // The band test above is about a sheet that is EXACTLY full. This is about one that overflows:
+    // the concede is composed last and the sheet draws the first six, so a player with six offers
+    // on the table had no concede row at all -- the one control that must always be reachable,
+    // missing exactly when the board is busy enough to want it. It keeps the last visible slot
+    // (ADR-064, extended 2026-09-13).
+    const auto simulation = PlayedMatch(14);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+    state.orders.signals.clear();
+    state.orders.queuedSignals.clear();
+    for (std::int32_t index = 0; index < 9; ++index)
+    {
+      state.orders.signals.push_back(Lockstep::SignalRow{
+        .kind = Lockstep::SignalKind::ShareScouting, .title = std::format("Share scouting - P{}", index + 2), .to = index + 1});
+    }
+    const std::int32_t concede = static_cast<std::int32_t>(state.orders.signals.size());
+    state.orders.signals.push_back(Lockstep::SignalRow{.kind = Lockstep::SignalKind::Concede, .title = "Concede"});
+    state.orders.availableSignals = static_cast<std::uint32_t>(state.orders.signals.size());
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    std::int32_t openX = 0;
+    std::int32_t openY = 0;
+    Assert::IsTrue(OpenThePicker(page, renderers, openX, openY));
+
+    bool stale = true;
+    const auto tap = [&page, &renderers, &stale](std::int32_t _x, std::int32_t _y)
+    {
+      if (stale)
+      {
+        renderers.Begin();
+        DrawPage(page, renderers);
+      }
+      stale = page.HandleTap(static_cast<float>(_x), static_cast<float>(_y));
+    };
+
+    bool queued = false;
+    for (std::int32_t y = SCREEN_HEIGHT - STEP; y > TOP_BAR && !queued; y -= STEP)
+    {
+      for (std::int32_t x = 0; x < SCREEN_WIDTH && !queued; x += STEP)
+      {
+        if (page.OpenPanel() != Lockstep::MainPage::Panel::SignalList)
+        {
+          tap(openX, openY);
+        }
+        tap(x, y);
+        tap(x, y);
+
+        const std::vector<std::int32_t>& sent = page.State().orders.queuedSignals;
+        queued = std::ranges::find(sent, concede) != sent.end();
+      }
+    }
+    Assert::IsTrue(queued, L"ten offers pushed the concede off the sheet, so the match cannot be conceded");
   }
 
   TEST_METHOD(ALockedRailQueuesNothing)
