@@ -91,7 +91,11 @@ drawn from `BuildRow::isTradeLane`, which nothing sets.
 seventh reported. No mockup exists for any of them; the captures are `01-build-sheet.png`,
 `01-destination-sheet.png`, `01-signal-sheet.png`, `01-signal-sheet-armed.png`, `07-replay.png`
 and, for a sheet left open across the lock, `06-at-lock-sheet.png`.
-- **Build** (`BUILD - DOTHAN`): opened by tapping a system you hold; lists that system's buildings
+- **Build** (`BUILD - DOTHAN`): opened by tapping a system you hold, or by a queued BUILDS row on
+  the rail; when the queue has already taken credits, a wrapped line under the header says what the
+  sheet is priced against — *Priced against the 26 credits left after the 20 already queued, not the
+  46 in hand.* — amber when a row on the sheet is dim for want of them and `TEXT_DETAIL` when it is
+  only a note, and absent with an empty queue (ADR-078). It lists that system's buildings
   and nothing else (ADR-058) — `Shipyard L1 - Dothan`, what that level pays and how long it takes
   under it (`+2 ships a tick - 1 tick`), and `20 CR` on the right (ADR-070), or `QUEUED`, or
   `20 CR - NEED 7 MORE` dim; a system already building shows that one row instead — `It cannot take

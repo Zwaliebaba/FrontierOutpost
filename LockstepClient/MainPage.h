@@ -220,6 +220,15 @@ public:
   /// The countdown as HH:MM:SS. Static and pure, so the format is testable without a screen.
   [[nodiscard]] static std::string FormatCountdown(double _seconds);
 
+  /// What a build sheet is priced against when the queue has already taken part of the purse, or
+  /// an empty string when it has not (ADR-078).
+  ///
+  /// **The purse on the top bar is not the number a sheet refuses a build by**, and until this
+  /// sentence existed nothing on the sheet said so: a row reading `30 CR - NEED 4 MORE` sat under a
+  /// bar reading `46 CR`, and both were correct. Public and pure for the reason `FormatCountdown`
+  /// is -- the arithmetic is what must be right, and asserting it needs no screen.
+  [[nodiscard]] std::string PurseSentence() const;
+
   /// Ticks for a fleet to reach a system from where it is, along lanes. Breadth-first over lane
   /// costs -- the picker shows it against every reachable destination, and it is the number the
   /// player is actually choosing between.

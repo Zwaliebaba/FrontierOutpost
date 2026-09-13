@@ -244,6 +244,18 @@ void MainPage::ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _
   }
 }
 
+std::string MainPage::PurseSentence() const
+{
+  const std::uint32_t spent = m_state.orders.QueuedBuildCost();
+  if (spent == 0)
+  {
+    return {};
+  }
+  const std::uint32_t left = spent <= m_state.player.credits ? m_state.player.credits - spent : 0;
+  return std::format("Priced against the {} credits left after the {} already queued, not the {} in hand.", left, spent,
+                     m_state.player.credits);
+}
+
 std::string MainPage::LockSentence() const
 {
   return std::format("Resolving T{}. Controls return with the new digest. Anything you tap now is an order for T{}.", m_state.OrdersTick(),
@@ -1606,6 +1618,10 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   bool lastRowMustSurvive = false;
   std::string title;
 
+  /// Whether a row on this sheet is dim for want of credits, which is what decides whether the
+  /// purse sentence above the rows is a warning or a note (ADR-078).
+  bool shortOfCredits = false;
+
   // What tapping a row does. It differs per panel, and it used to not exist: every row went to
   // `ChooseDestination`, so the BUILD panel listed two things a player could not tap.
   Action rowAction = Action::ChooseDestination;
@@ -1654,6 +1670,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       // An unqueued row carries its price there instead, and one the purse cannot cover says what
       // is missing and is not a target (ADR-053).
       const bool affordable = queued || m_state.CanAffordBuild(static_cast<std::int32_t>(index));
+      shortOfCredits = shortOfCredits || !affordable;
       const std::string status = queued ? std::string{"QUEUED"}
                                  : affordable
                                    ? std::format("{} CR", row.cost)
@@ -1879,14 +1896,23 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     listHeight += rows[index].band ? SHEET_BAND_HEIGHT : SHEET_ROW_HEIGHT;
   }
 
-  // **At the lock the sheet stays and goes inert** (ADR-065). Its rows are already not targets --
-  // every panel above passes `EventRefs::NONE` while the orders are locked -- so what is left is to
-  // say why, in the rail's own words and in the rail's amber.
+  // **One slot under the header for the thing the rows cannot say about themselves**, and two
+  // sentences compete for it.
+  //
+  // At the lock the sheet stays and goes inert (ADR-065). Its rows are already not targets -- every
+  // panel above passes `EventRefs::NONE` while the orders are locked -- so what is left is to say
+  // why, in the rail's own words and in the rail's amber.
+  //
+  // Otherwise a build sheet says what the queue has already taken (ADR-078). A row is refused
+  // against the purse MINUS what is queued, and every number that reaches the eye beside it -- the
+  // top bar's, the rail header's -- is the purse before it, so the sheet arrived at `NEED 4 MORE`
+  // under a bar reading `46 CR` and the arithmetic was nowhere. Amber only when it is the reason
+  // something here is not a target; a queue the purse still covers is a note, not a warning.
   const bool atLock = m_state.orders.locked && !m_state.match.finished;
+  const std::string help = atLock ? LockSentence() : (m_panel == Panel::BuildList ? PurseSentence() : std::string{});
   const std::vector<std::string> sheetHelp =
-    atLock ? FontRenderer::WrapToWidth(LockSentence(), static_cast<std::uint32_t>(width - 2.0F * CARD_PADDING))
-           : std::vector<std::string>{};
-  const Color helpInk = Ink::AMBER;
+    help.empty() ? std::vector<std::string>{} : FontRenderer::WrapToWidth(help, static_cast<std::uint32_t>(width - 2.0F * CARD_PADDING));
+  const Color helpInk = atLock || shortOfCredits ? Ink::AMBER : Ink::TEXT_DETAIL;
   const float helpHeight = sheetHelp.empty() ? 0.0F : static_cast<float>(sheetHelp.size()) * static_cast<float>(LINE_HEIGHT) + 12.0F;
 
   const float height = SHEET_HEADER_HEIGHT + helpHeight + listHeight + SHEET_ACTION_HEIGHT;

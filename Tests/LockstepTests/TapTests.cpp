@@ -1392,4 +1392,58 @@ public:
   }
 };
 
+// The price is on the button, and the purse it is priced against is the one the queue left
+// (ADR-053, ADR-078).
+TEST_CLASS(PurseSentenceTests)
+{
+public:
+  TEST_METHOD(NothingQueuedSaysNothing)
+  {
+    // The top bar already carries the purse. A sheet repeating it under every header would be a
+    // line that is noise on every sheet but the one it is about.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    Assert::IsTrue(page.State().orders.queuedBuilds.empty(), L"this fixture starts with an empty queue");
+    Assert::IsTrue(page.PurseSentence().empty(), L"a sheet with nothing queued explained an arithmetic nobody did");
+  }
+
+  TEST_METHOD(AQueuedBuildIsAccountedForAgainstThePurse)
+  {
+    // The complaint this answers, in its own numbers: a row reading `30 CR - NEED 4 MORE` under a
+    // top bar reading `46 CR`. Both are right and the sheet said neither why.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    Assert::IsFalse(state.orders.builds.empty(), L"a fresh match offers something to build");
+
+    state.player.credits = 46;
+    state.orders.builds.front().cost = 20;
+    state.orders.queuedBuilds.push_back(0);
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    const std::string sentence = page.PurseSentence();
+    Assert::IsTrue(sentence.find("26") != std::string::npos, L"the sentence does not say what is left at the lock");
+    Assert::IsTrue(sentence.find("20") != std::string::npos, L"nor what the queue has already taken");
+    Assert::IsTrue(sentence.find("46") != std::string::npos, L"nor the purse on the top bar it has to be reconciled with");
+  }
+
+  TEST_METHOD(AQueueBeyondThePurseLeavesNothingRatherThanGoingUnder)
+  {
+    // `QueuedBuildCost` is unsigned and so is the purse. A queue bigger than the purse is a state
+    // the guard refuses to reach, and the arithmetic that reports it must not wrap around instead.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    state.player.credits = 5;
+    state.orders.builds.front().cost = 20;
+    state.orders.queuedBuilds.push_back(0);
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+    Assert::IsTrue(page.PurseSentence().find("0 credits") != std::string::npos,
+                   L"an overdrawn purse reported something other than nothing");
+  }
+};
+
 } // namespace LockstepTests

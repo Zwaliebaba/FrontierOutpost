@@ -192,9 +192,12 @@ Semantic / owner (ADR-027: you are always blue)
   not a target. A **section band** — 22px, a rule and a muted label, never a target — separates a row
   that is different in kind from the ones above it; it counts against the six and is dropped before a
   real row is (ADR-064). A row said in red is one that cannot be taken back: today the armed or
-  queued `Concede`, and nothing else. **At the lock a sheet stays open and goes inert** (ADR-065):
-  every row dim, the filled grey `LOCKED` chip in the header clear of the `X`, and the rail's lock
-  sentence in amber under the header; `X` and `CANCEL` still close it.
+  queued `Concede`, and nothing else. **One wrapped help line sits between the header and the rows,
+  and two sentences compete for it.** At the lock a sheet stays open and goes inert (ADR-065): every
+  row dim, the filled grey `LOCKED` chip in the header clear of the `X`, and the rail's lock sentence
+  in amber there; `X` and `CANCEL` still close it. Otherwise a build sheet whose queue has taken
+  credits says what its rows are priced against (ADR-078), amber when that is why a row is dim and
+  `TEXT_DETAIL` when it is only a note. With neither, the rows start straight under the header.
 - **Dialog** — the connection component (ADR-038): a 520px card, 1px border in the tone
   (blue welcome / amber lost / red refusal / hairline neutral), the title in the tone's colour —
   primary text for a neutral tone, because the hairline at 26 alpha is unreadable as text — a
