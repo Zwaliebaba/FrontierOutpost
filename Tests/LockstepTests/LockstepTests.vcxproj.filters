@@ -9,6 +9,7 @@
     <ClCompile Include="TapTests.cpp" />
     <ClCompile Include="JoinPageTests.cpp" />
     <ClCompile Include="FaceRuleTests.cpp" />
+    <ClCompile Include="ContrastTests.cpp" />
     <ClCompile Include="..\..\Lockstep\SnapshotView.cpp" />
     <ClCompile Include="..\..\Lockstep\SeatsPage.cpp" />
   </ItemGroup>

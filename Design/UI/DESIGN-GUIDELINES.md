@@ -134,8 +134,15 @@ UI
   **`0.20`** outlined-button border (`OUTLINE`, 51/255; the handoff said 0.25) · `0.04` card fill
   (`CARD_FILL`) · `0.08` hover (`HOVER_FILL`, drawn on the locks rail row under the pointer and
   nowhere else, ADR-060).
-- `rgb(240,243,247)` primary text · body/detail `rgba(214,220,228,0.60)` (`TEXT_DETAIL`) ·
-  muted **`0.55`** (`TEXT_MUTED`, 140/255) · dim `0.45` (`NEUTRAL_DIM`).
+- `rgb(240,243,247)` primary text · body/detail and muted both `rgba(214,220,228,0.66)`
+  (`TEXT_DETAIL`, `TEXT_MUTED`, 168/255) · dim `0.55` (`NEUTRAL_DIM`, 140/255).
+  **These alphas are a measured floor** (ADR-083): every text token and every meaning colour clears
+  WCAG AA's 4.5:1 over both grounds this game paints text on — `APP_BACKGROUND` and `DIALOG_FILL`,
+  the dialog's opaque card — and `Tests/LockstepTests/ContrastTests.cpp` asserts it. `NEUTRAL_DIM`
+  measured 3.61:1 at its old 115 and is why. `TEXT_DETAIL` and `TEXT_MUTED` are the same byte and
+  keep two names, so that the day either moves it moves alone. A star is not text and is exempt.
+  **There is one palette:** `SeatsPage`, `JoinPage` and `ConnectionDialog` bind local names to
+  `Ink::` rather than carrying their own literals, which closes ADR-045's open item.
 - `rgba(214,220,228,0.59)` the filled grey a locked rail wears (`LOCKED_FILL`, SCREENS.md 06).
 - Scrim under a dialog `rgba(7,9,13,0.80)` (the handoff: `rgba(6,8,12,0.74)`).
 - Map ground: vertical gradient `rgb(8,10,16) → rgb(16,22,36) @45% → rgb(11,14,20)`; grid

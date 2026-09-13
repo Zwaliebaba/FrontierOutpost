@@ -29,15 +29,28 @@ namespace Ink
 inline constexpr Neuron::Color APP_BACKGROUND = {11, 14, 20, 255};
 
 inline constexpr Neuron::Color CARD_FILL = {255, 255, 255, 10};
+/// The connection dialog's card, which is opaque where every other card is a wash: it sits over a
+/// scrim and over the board, and a translucent card would let the map show through the one surface
+/// that has to be read before anything else. It is the second ground text is measured against
+/// (`ContrastTests`).
+inline constexpr Neuron::Color DIALOG_FILL = {17, 21, 29, 255};
 inline constexpr Neuron::Color CARD_BORDER = {255, 255, 255, 26};
 inline constexpr Neuron::Color DIVIDER = {255, 255, 255, 18};
 inline constexpr Neuron::Color OUTLINE = {255, 255, 255, 51};
 inline constexpr Neuron::Color HOVER_FILL = {255, 255, 255, 20};
 
+/// **The alphas are a measured floor, not a taste** (ADR-083). Every one of these is an alpha over a
+/// dark ground, which is exactly where a palette drifts below legible without anyone noticing: the
+/// ink still looks like the ink, it is just fainter. `ContrastTests` holds all four to WCAG AA's
+/// 4.5:1 over both grounds this game paints text on, and `NEUTRAL_DIM` at 115 measured 3.61:1.
+///
+/// `TEXT_DETAIL` and `TEXT_MUTED` are the same byte and keep two names: they mean different things
+/// -- a sentence under a title, and a label beside one -- and the day either moves it will move
+/// alone.
 inline constexpr Neuron::Color TEXT_PRIMARY = {240, 243, 247, 255};
-inline constexpr Neuron::Color TEXT_MUTED = {214, 220, 228, 140};
-inline constexpr Neuron::Color TEXT_DETAIL = {214, 220, 228, 153};
-inline constexpr Neuron::Color NEUTRAL_DIM = {214, 220, 228, 115};
+inline constexpr Neuron::Color TEXT_MUTED = {214, 220, 228, 168};
+inline constexpr Neuron::Color TEXT_DETAIL = {214, 220, 228, 168};
+inline constexpr Neuron::Color NEUTRAL_DIM = {214, 220, 228, 140};
 
 inline constexpr Neuron::Color BLUE = {94, 196, 255, 255};
 inline constexpr Neuron::Color AMBER = {255, 196, 87, 255};
@@ -47,6 +60,9 @@ inline constexpr Neuron::Color PURPLE = {170, 140, 255, 255};
 /// The filled grey a locked rail wears (SCREENS.md 06). Solid rather than an outline, because at
 /// the lock the rail stops being a list of things you could change and becomes a receipt.
 inline constexpr Neuron::Color LOCKED_FILL = {214, 220, 228, 150};
+/// A star in the sky behind every screen. Not text and not held to the contrast floor: it is meant
+/// to be faint, and a legible star is a defect.
+inline constexpr Neuron::Color STAR = {214, 220, 228, 220};
 
 } // namespace Ink
 

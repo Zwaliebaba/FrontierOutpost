@@ -3,6 +3,8 @@
 #include "pch.h"
 #include "JoinPage.h"
 
+#include "DesignTokens.h"
+
 #include <algorithm>
 #include <format>
 
@@ -46,16 +48,21 @@ constexpr float FOOTER_Y = 534.0F;
 /// Baseline to baseline, from the font. See `MainPage::LINE_HEIGHT`.
 constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels());
 
-constexpr Color APP_BACKGROUND = {11, 14, 20, 255};
-constexpr Color CARD_FILL = {255, 255, 255, 10};
-constexpr Color CARD_BORDER = {255, 255, 255, 26};
-constexpr Color OUTLINE = {255, 255, 255, 51};
-constexpr Color TEXT_PRIMARY = {240, 243, 247, 255};
-constexpr Color TEXT_MUTED = {214, 220, 228, 140};
-constexpr Color TEXT_DETAIL = {214, 220, 228, 153};
-constexpr Color BLUE = {94, 196, 255, 255};
-constexpr Color RED = {255, 110, 96, 255};
-constexpr Color STAR = {214, 220, 228, 220};
+/// **One palette, bound to local names** (ADR-083). These were thirteen literal colours copied from
+/// the same list, which is thirteen chances for one of them to be adjusted alone -- and the day the
+/// contrast floor moved, three files would have kept the old number. The names stay local because
+/// they are used a hundred times each in this file and `Ink::` at every site is noise; what moved is
+/// where the VALUE comes from, which is the half that could ever be wrong.
+constexpr Color APP_BACKGROUND = Ink::APP_BACKGROUND;
+constexpr Color CARD_FILL = Ink::CARD_FILL;
+constexpr Color CARD_BORDER = Ink::CARD_BORDER;
+constexpr Color OUTLINE = Ink::OUTLINE;
+constexpr Color TEXT_PRIMARY = Ink::TEXT_PRIMARY;
+constexpr Color TEXT_MUTED = Ink::TEXT_MUTED;
+constexpr Color TEXT_DETAIL = Ink::TEXT_DETAIL;
+constexpr Color BLUE = Ink::BLUE;
+constexpr Color RED = Ink::RED;
+constexpr Color STAR = Ink::STAR;
 
 /// What a tap can hit. Small enough to be an integer rather than an enum shared with `MainPage`:
 /// this screen's vocabulary is four things and none of them is an order.
@@ -67,12 +74,6 @@ constexpr std::int32_t HIT_JOIN = 4;
 /// The caret blinks at this period, in seconds. Slow enough not to nag, fast enough to say which
 /// field is listening.
 constexpr double BLINK_SECONDS = 1.0;
-
-[[nodiscard]] std::int32_t CenterTextY(float _y, float _height, Face _face = FontRenderer::DEFAULT_FACE, std::uint32_t _scale = 1)
-{
-  const auto glyph = static_cast<float>(FontRenderer::GlyphHeightPixels(_face, _scale));
-  return static_cast<std::int32_t>(_y + (_height - glyph) * 0.5F);
-}
 
 void DashedRect(ShapeRenderer& _shapes, float _x, float _y, float _width, float _height, const Color& _color)
 {

@@ -1,6 +1,6 @@
 # UI-01 — What the client's screens still cost a player
 
-**Status:** **Items 1.1-1.4 and 2.6 done 2026-09-13 (ADR-079 to ADR-082); the rest not started.** Written 2026-09-13 as a UX review and revised the same day against
+**Status:** **Items 1.1-1.4, 2.2 and 2.6 done 2026-09-13 (ADR-079 to ADR-083); the rest not started.** Written 2026-09-13 as a UX review and revised the same day against
 ADR-077 and ADR-078, which landed between the review and the first item. Item 1.1 is rescoped and
 item 2.3 carried a sentence those ADRs made false; both are marked below. Nothing else has been
 built. Archive this when the final checklist passes.
@@ -145,6 +145,11 @@ the two answers to the owner.
 - ADR-074's open question about the countdown is answered in a new ADR.
 
 ### 2.2 Contrast floor
+**Done 2026-09-13 — ADR-083.** The estimates below were wrong and the ADR records the measurement:
+only `NEUTRAL_DIM` was actually under 4.5:1, at 3.61. All three were raised to the values below
+anyway, and `ContrastTests` is the floor from now on. The inert-button bullet was already true in
+the tree.
+
 **Problem.** `TEXT_MUTED` (0.55 α) ≈ 4.0:1 and `NEUTRAL_DIM` (0.45 α) ≈ 3.1:1 over `APP_BACKGROUND`. Section headers, the legend, `- nothing queued -`, lane costs and the whole at-lock state fall under 4.5:1.
 
 **Change.** `LockstepClient/DesignTokens.h` only, then the private palette copies in `SeatsPage`, `JoinPage`, `ConnectionDialog` (ADR-045's open item — fold them onto the header now):

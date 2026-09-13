@@ -3,6 +3,8 @@
 #include "pch.h"
 #include "ConnectionDialog.h"
 
+#include "DesignTokens.h"
+
 #include <algorithm>
 #include <format>
 
@@ -35,25 +37,24 @@ constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRende
 constexpr float TITLE_GAP = 16.0F;
 constexpr float BODY_GAP = 14.0F;
 
-constexpr Color APP_BACKGROUND = {11, 14, 20, 255};
-constexpr Color CARD_FILL = {17, 21, 29, 255};
-constexpr Color CARD_BORDER = {255, 255, 255, 26};
-constexpr Color OUTLINE = {255, 255, 255, 51};
-constexpr Color TEXT_PRIMARY = {240, 243, 247, 255};
-constexpr Color TEXT_DETAIL = {214, 220, 228, 153};
-constexpr Color BLUE = {94, 196, 255, 255};
-constexpr Color AMBER = {255, 196, 87, 255};
-constexpr Color RED = {255, 110, 96, 255};
+/// **One palette, bound to local names** (ADR-083). These were thirteen literal colours copied from
+/// the same list, which is thirteen chances for one of them to be adjusted alone -- and the day the
+/// contrast floor moved, three files would have kept the old number. The names stay local because
+/// they are used a hundred times each in this file and `Ink::` at every site is noise; what moved is
+/// where the VALUE comes from, which is the half that could ever be wrong.
+constexpr Color APP_BACKGROUND = Ink::APP_BACKGROUND;
+constexpr Color CARD_FILL = Ink::DIALOG_FILL;
+constexpr Color CARD_BORDER = Ink::CARD_BORDER;
+constexpr Color OUTLINE = Ink::OUTLINE;
+constexpr Color TEXT_PRIMARY = Ink::TEXT_PRIMARY;
+constexpr Color TEXT_DETAIL = Ink::TEXT_DETAIL;
+constexpr Color BLUE = Ink::BLUE;
+constexpr Color AMBER = Ink::AMBER;
+constexpr Color RED = Ink::RED;
 
 /// The scrim. Opaque enough that the screen behind reads as unavailable rather than as merely
 /// dark, and transparent enough that a player can still see the map they are waiting to get back.
 constexpr Color SCRIM = {7, 9, 13, 205};
-
-[[nodiscard]] std::int32_t CenterTextY(float _y, float _height)
-{
-  const auto glyph = static_cast<float>(FontRenderer::GlyphHeightPixels());
-  return static_cast<std::int32_t>(_y + (_height - glyph) * 0.5F);
-}
 
 /// Seconds, as a person would say them. `next in 4s` rather than `next in 4.000000s`.
 [[nodiscard]] std::string Seconds(double _seconds)
