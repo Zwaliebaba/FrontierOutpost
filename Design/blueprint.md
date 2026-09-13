@@ -249,7 +249,9 @@ them. Strength is ship count.
 **Sequencing** (owner decision, 2026-09-13). Levels and build time are built before Phase 0: they
 are numbers plus a timer, and Phase 0 would otherwise report dead credits as its first finding. The
 bastion and the research track wait for Phase 0's evidence on the combat numbers, which both lean
-on. The risk to watch is H4 (§8).
+on. The risk to watch is H4 (§8). **Measured after building it** (§8): the sink now lasts to about
+tick 42 of 84, which covers Phase 0's 48-tick match and leaves the second half of a real one with
+nothing to buy.
 
 ### The three decisions the game is about
 
@@ -512,6 +514,39 @@ rather than in proportion to strength.
 **Three rounds may not resolve a big fight.** Two large equal fleets end a tick attrited and still
 facing each other, which starts a siege neither can finish. Interdiction, or a stalemate generator —
 only play will say.
+
+**The bots never take ground — and it is the bots, not the rules.** Ten bot matches under the
+authored rules and ten under the Phase 0 preset, on 2026-09-13: 115 sieges begun, 154 battles, and
+zero captures in every one of the twenty; the same 26 of 31 systems held at day five and at the end;
+no capital ever falling. That looked like a mid-game with no territorial consequence, so it was
+measured directly rather than argued about (`TheForceRatioACaptureNeeds`): **an attacker who brings
+one and a half times the garrison takes a defended system in two ticks**, which is the fastest the
+siege rule allows, and a shipyard on the defending system changes nothing because a yard is idle
+while a rival stands on it. Equal force never takes it, in twelve ticks or ever — which is the
+incumbency rule working exactly as designed. So capturing defended ground is cheap and the bots
+simply never mass for it; `ACaptureIsReachableAgainstADefendedSystem` pins that the rules allow it,
+so the day it stops being true it is a deliberate change. **What this removes is a worry, not a
+question**: whether people press an attack that costs them 1.5× is still Phase 0's to answer, and it
+is one of the things to watch for deliberately.
+
+**The credit sink still runs out, at half of a real match.** Levels moved the wall from day two to
+about tick 42 of 84 (ADR-069), and did not remove it: by the end the six players hold **23,142
+credits** between them with every building at level three and nothing left to buy, and nobody has
+started a building since tick 42. Phase 0 will not see this — its 48 ticks end just as the sink does
+— so it is a finding about the real game rather than about the playtest. The bastion and the
+research track (§3) are the designed answer and are waiting on Phase 0's combat numbers, which is
+the right order; what this says is that they are not optional.
+
+**What a bot match is worth as evidence, which is less than it looks.** Ten different galaxies
+produced near-identical matches: the same 26 systems claimed, the same 150 buildings, the same 50 at
+level three, final scores drawn from two outcomes, and a leader share of 23–28% against a dominance
+threshold of 60%. Deterministic policies on a ring produce the same game every time. So these
+numbers are evidence about **the rules** — a thing that never happens in twenty matches is worth
+investigating — and almost none about variance, drama or what a person would do. H1 through H5 still
+need people. The harness is kept, as `Tests/GameLogicTests/BalanceProbeTests.cpp`: ten seeds per
+rule set, the six scripted policies, driven through `TickResolver` a tick at a time. It asserts
+nothing, so it cannot rot into a gate somebody edits until it is quiet -- it prints, and the numbers
+above are what it printed.
 
 **The product platform does not exist yet.** Mobile is the product and nothing mobile exists. Phase 0
 and Phase 1 can run on the desktop prototype; Phase 2 with strangers should not, because it would

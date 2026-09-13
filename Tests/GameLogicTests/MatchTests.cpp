@@ -1049,6 +1049,42 @@ public:
     Assert::IsTrue(HasDigestKind(second, 0, Lockstep::DigestKind::SystemClaimed));
   }
 
+  // **IS A CAPTURE REACHABLE AGAINST A DEFENDED SYSTEM AT ALL?** The test above takes an EMPTY one:
+  // it moves the garrison out of the way first. Twenty bot matches on 2026-09-13 produced 115
+  // sieges and zero captures (`Design/blueprint.md` §8), which left the question open -- do the
+  // rules permit taking defended ground and the bots never manage it, or do the rules not permit it?
+  //
+  // They permit it, and this is the test that says so, because a rule nobody can demonstrate is a
+  // rule that quietly stops existing. An attacker who brings enough to WIPE the garrison in one
+  // tick is alone on the system the next, and the siege runs from there.
+  TEST_METHOD(ACaptureIsReachableAgainstADefendedSystem)
+  {
+    Lockstep::Match match = SixPlayerMatch();
+    match.SetTick(match.Rules().capitalGuardTicks); // past the guard, so a capital can fall
+
+    const Lockstep::SystemId target = CapitalOf(match, 1);
+    const Lockstep::FleetId garrison = FleetOf(match, 1);
+    Assert::IsTrue(match.FleetAt(garrison).at == target, L"the defender's fleet starts on their capital");
+
+    // Six times the garrison, which is the point: this asks whether it is POSSIBLE, not whether it
+    // is easy. `TheForceRatioACaptureNeeds` in BalanceProbeTests measures how much is enough.
+    Lockstep::MatchFleet raider;
+    raider.owner = Lockstep::PlayerId{0};
+    raider.ships = match.FleetAt(garrison).ships * 6;
+    raider.at = target;
+    (void)match.AddFleet(raider);
+
+    bool captured = false;
+    for (std::int32_t tick = 0; tick < 6 && !captured; ++tick)
+    {
+      match = AdvanceQuietly(match);
+      captured = match.SystemAt(target).owner == Lockstep::PlayerId{0};
+    }
+
+    Assert::IsTrue(captured, L"six times the garrison could not take a system, so nothing ever takes one");
+    Assert::IsTrue(match.FleetAt(garrison).destroyed, L"and the garrison had to be destroyed for it to happen");
+  }
+
   TEST_METHOD(OneContestedTickResetsTheSiege)
   {
     Lockstep::Match match = SixPlayerMatch();
