@@ -54,11 +54,14 @@ it. It is authored per lane when the galaxy is generated, not derived from how f
 look. Lanes inside your starting cluster cost one tick; lanes out toward the frontier cost two to
 four. You can drag the map to turn it. There is no zoom yet.
 
-**The locks rail, on the right,** is a read-only receipt of what goes in at the next lock: your
-fleets, your builds, your signals, your proposals. Its rows are not buttons; the one control on it
-is the **SIGNALS** header, which opens the sheet of things you can say to another player. Change
-anything else from the digest. It is there so that before the tick you can read what you have
-actually committed to, which is rarely quite what you thought.
+**The locks rail, on the right,** is the receipt of what goes in at the next lock: your fleets, your
+builds, your signals, your proposals. Its rows are links to what they name: a queued build opens the
+sheet that queued it, which is where you take it back; a fleet focuses where it stands, or opens its
+destination picker if it is under way; a lane offer focuses the far end of its lane. The **SIGNALS**
+header opens the sheet of things you can say to another player, with **Concede** set apart under a
+band of its own — red on the first tap, and it takes a second tap to confirm. The rail is there so
+that before the tick you can read what you have actually committed to, which is rarely quite what
+you thought.
 
 ---
 
