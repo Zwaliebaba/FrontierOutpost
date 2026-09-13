@@ -448,19 +448,23 @@ DigestDelta DeltaOf(const MatchState& _state)
   // read `0 CONTACTS` teach a player to stop reading them.
   if (lost > 0)
   {
-    delta.cells.push_back(std::format("-{} SYSTEM{}", lost, lost == 1 ? "" : "S"));
+    delta.cells.push_back(DeltaCell{std::format("−{} SYSTEM{}", lost, lost == 1 ? "" : "S"), true});
   }
   if (contacts > 0)
   {
-    delta.cells.push_back(std::format("{} CONTACT{}", contacts, contacts == 1 ? "" : "S"));
+    delta.cells.push_back(DeltaCell{std::format("{} CONTACT{}", contacts, contacts == 1 ? "" : "S")});
   }
   if (proposals > 0)
   {
-    delta.cells.push_back(std::format("{} PROPOSAL{}", proposals, proposals == 1 ? "" : "S"));
+    delta.cells.push_back(DeltaCell{std::format("{} PROPOSAL{}", proposals, proposals == 1 ? "" : "S")});
   }
   if (lanes > 0)
   {
-    delta.cells.push_back(std::format("{} LANE{} LOST", lanes, lanes == 1 ? "" : "S"));
+    // **Amber, not red, and that is unchanged rather than decided here.** A lane lost is a loss by
+    // any reading, but it has always drawn amber because it never led with a sign, and what the
+    // two colours divide in this box is a design question rather than a font one. Carrying the
+    // flag makes the current answer visible; it does not answer it.
+    delta.cells.push_back(DeltaCell{std::format("{} LANE{} LOST", lanes, lanes == 1 ? "" : "S")});
   }
   return delta;
 }

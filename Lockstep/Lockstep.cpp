@@ -1206,7 +1206,7 @@ int RunGame(HWND _window, const Startup& _startup)
     else if (page.State().match.finished && !finishedDismissed)
     {
       kind = Lockstep::ConnectionDialog::Kind::Finished;
-      facts.standings = std::format("{} OF {} - SCORE {} - LEADER {} {}", page.State().player.placement, page.State().player.playerCount,
+      facts.standings = std::format("{} OF {} · SCORE {} · LEADER {} {}", page.State().player.placement, page.State().player.playerCount,
                                     page.State().player.score, page.State().player.leader.name, page.State().player.leader.score);
     }
 

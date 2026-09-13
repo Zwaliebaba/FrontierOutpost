@@ -367,7 +367,7 @@ void JoinPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
 
   // ---- JOIN ------------------------------------------------------------------------------------
   const bool ready = m_status != Status::Connecting && !m_token.Empty() && !m_server.Empty();
-  const char* label = m_status == Status::Connecting ? "CONNECTING" : "JOIN >";
+  const char* label = m_status == Status::Connecting ? "CONNECTING" : "JOIN ›";
   const auto buttonWidth = static_cast<float>(FontRenderer::MeasurePixels(label)) + 20.0F;
   const float buttonX = FIELD_X + FIELD_WIDTH - buttonWidth;
 

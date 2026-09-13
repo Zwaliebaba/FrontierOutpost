@@ -66,15 +66,27 @@ struct DigestCard
 /// has no controls, and the first screen anybody ever sees is exactly that screen.
 [[nodiscard]] std::vector<DigestCard> CardsOf(const MatchState& _state);
 
-/// The four-cell delta above the digest: `-1 SYSTEM`, `1 CONTACT`, `2 PROPOSALS`, `1 LANE LOST`.
+/// One fact in the delta box, and whether it is a loss.
+///
+/// **The flag is CARRIED rather than read back out of the text.** The renderer used to decide the
+/// colour by testing whether the string began with `-`, which is a byte comparison against copy:
+/// it went on compiling when the hyphen became a true minus (three bytes of UTF-8, ADR-074) and
+/// would simply have stopped finding a negative. Semantics belong beside the thing they describe.
+struct DeltaCell
+{
+  std::string text;
+  bool loss = false;
+};
+
+/// The four-cell delta above the digest: `−1 SYSTEM`, `1 CONTACT`, `2 PROPOSALS`, `1 LANE LOST`.
 ///
 /// **It summarises the digest in hand, which is the latest tick only.** The header above it says
-/// `SINCE YOU LOOKED - T43 > T46`, and until the server retains more than one digest (ADR-028's
+/// `SINCE YOU LOOKED · T43 → T46`, and until the server retains more than one digest (ADR-028's
 /// open question, still owed) those two spans are not the same span. The cells are honest about
 /// what they counted; the header is honest about what was missed.
 struct DigestDelta
 {
-  std::vector<std::string> cells;
+  std::vector<DeltaCell> cells;
   [[nodiscard]] bool Any() const noexcept
   {
     return !cells.empty();

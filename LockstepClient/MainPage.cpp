@@ -822,15 +822,15 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // can read it off the day counter. The end time is also dropped rather than left dangling when
   // the state has none -- a match generated without a server has no schedule to report
   // (GeneratedMatch.h), and "- ENDS" followed by nothing reads as a truncation bug.
-  const std::string census = std::format("{} PLAYERS - {} SYSTEMS", m_state.player.playerCount, m_state.totalSystems);
-  const std::string stem = std::format("M{} - D{}/{}", m_state.match.id, m_state.match.day, m_state.match.totalDays);
+  const std::string census = std::format("{} PLAYERS · {} SYSTEMS", m_state.player.playerCount, m_state.totalSystems);
+  const std::string stem = std::format("M{} · D{}/{}", m_state.match.id, m_state.match.day, m_state.match.totalDays);
 
   std::vector<std::string> candidates;
   if (!m_state.match.endsAt.empty())
   {
-    candidates.push_back(std::format("{} - {} - ENDS {}", stem, census, m_state.match.endsAt));
+    candidates.push_back(std::format("{} · {} · ENDS {}", stem, census, m_state.match.endsAt));
   }
-  candidates.push_back(std::format("{} - {}", stem, census));
+  candidates.push_back(std::format("{} · {}", stem, census));
   candidates.push_back(stem);
 
   for (const std::string& candidate : candidates)
@@ -918,7 +918,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // `SINCE YOU LOOKED - T43 > T46` and a chip. It is the first line a returning player reads and
     // it says how much of the match happened without them.
     _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), headerY,
-                   std::format("SINCE YOU LOOKED - T{} > T{}", m_state.lastSeenTick, m_state.match.tick), Ink::TEXT_MUTED);
+                   std::format("SINCE YOU LOOKED · T{} → T{}", m_state.lastSeenTick, m_state.match.tick), Ink::TEXT_MUTED);
 
     const std::string chip = std::format("{} TICKS", m_state.unreadTicks);
     const float chipWidth = static_cast<float>(FontRenderer::MeasurePixels(chip)) + 14.0F;
@@ -961,8 +961,11 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     {
       const float cellX = RAIL_PADDING + 8.0F + static_cast<float>(index % 2) * (Frame::DIGEST_WIDTH - 2.0F * RAIL_PADDING) * 0.5F;
       const std::int32_t cellY = static_cast<std::int32_t>(y) + 6 + static_cast<std::int32_t>(index / 2) * LINE_HEIGHT;
-      _text.DrawText(static_cast<std::int32_t>(cellX), cellY, delta.cells[index],
-                     delta.cells[index].front() == '-' ? Ink::RED : Ink::AMBER);
+      // **A loss is red, and what marks one is a true minus** -- three bytes of UTF-8, not the
+      // ASCII hyphen this compared against until 2026-09-13. `front() == '-'` went on compiling
+      // when the character changed and silently stopped finding a single negative, which is the
+      // failure mode a byte comparison against text has.
+      _text.DrawText(static_cast<std::int32_t>(cellX), cellY, delta.cells[index].text, delta.cells[index].loss ? Ink::RED : Ink::AMBER);
     }
     y += boxHeight + 6.0F;
   }
@@ -1173,14 +1176,14 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
     if (m_digestPage > 0)
     {
-      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), bandText, "< PREV", Ink::TEXT_MUTED);
+      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), bandText, "‹ PREV", Ink::TEXT_MUTED);
       AddHit(0.0F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
              static_cast<std::int32_t>(m_digestPage) - 1);
     }
 
     const bool more = m_digestPage + 1 < pageStarts.size();
     const std::string count = std::format("{} / {}", m_digestPage + 1, pageStarts.size());
-    DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, bandText, more ? count + " - MORE >" : count, Ink::TEXT_MUTED);
+    DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, bandText, more ? count + " · MORE ›" : count, Ink::TEXT_MUTED);
     if (more)
     {
       AddHit(Frame::DIGEST_WIDTH * 0.5F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
@@ -1354,7 +1357,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
     const std::string where = destination == nullptr ? std::string{} : Uppercased(destination->name);
 
     // `FLT3 14 > KEPLER-REACH` moving, `FLT1 9 HOLD VESK` standing (SCREENS.md 01).
-    const std::string label = moving ? std::format("{} {} > {}", Uppercased(fleet.name), fleet.ships, where)
+    const std::string label = moving ? std::format("{} {} → {}", Uppercased(fleet.name), fleet.ships, where)
                                      : std::format("{} {} HOLD {}", Uppercased(fleet.name), fleet.ships, where);
 
     // A fleet under way opens its destination picker, which is what tapping its marker on the map
@@ -1384,7 +1387,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   //
   // The purse on the header and the price on every queued row, so the column adds up in front of
   // the player (ADR-053): what is queued, what it takes, and what is left when the clock hits zero.
-  section("BUILDS", std::format("{} AVAIL - {} CR", m_state.orders.availableBuilds, m_state.player.credits));
+  section("BUILDS", std::format("{} AVAIL · {} CR", m_state.orders.availableBuilds, m_state.player.credits));
 
   if (m_state.orders.queuedBuilds.empty())
   {
@@ -1400,7 +1403,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
       // is an id and `OpenSystem` names a position, so the row has to look the system up.
       const std::int32_t at = PositionOfSystem(m_state, build.system);
       const Action buildAction = at == EventRefs::NONE ? Action::None : (navigateOnly ? Action::FocusSystem : Action::OpenSystem);
-      row(Uppercased(build.title), std::format("QUEUED -{}", build.cost), Ink::BLUE, buildAction, at);
+      row(Uppercased(build.title), std::format("QUEUED −{}", build.cost), Ink::BLUE, buildAction, at);
     }
   }
 
@@ -1437,7 +1440,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   // the client had no model of an offer leaving; ADR-039 gave it one, and the count on the right is
   // the way in -- it is the only section header on this rail that is a control.
   const std::int32_t signalsY = static_cast<std::int32_t>(y);
-  section("SIGNALS", m_state.orders.locked ? std::string{"LOCKED"} : std::format("{} TO SEND >", m_state.orders.availableSignals));
+  section("SIGNALS", m_state.orders.locked ? std::string{"LOCKED"} : std::format("{} TO SEND ›", m_state.orders.availableSignals));
   if (!m_state.orders.locked)
   {
     AddHit(railX, static_cast<float>(signalsY), Frame::ORDERS_WIDTH, 22.0F, Action::OpenSignals, 0);
@@ -1692,20 +1695,20 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       }
       if (garrison > 0)
       {
-        held += std::format(" - {} +DEF", garrison);
+        held += std::format(" · {} +DEF", garrison);
       }
 
       if (HasFlag(node.flags, SystemFlags::Capital))
       {
-        held += " - CAPITAL";
+        held += " · CAPITAL";
       }
       if (HasFlag(node.flags, SystemFlags::Contested))
       {
-        held += " - CONTESTED";
+        held += " · CONTESTED";
       }
 
       rows.push_back(SheetRow{Uppercased(node.name), held,
-                              std::format("{} - ETA T{}", lane.cost == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", lane.cost),
+                              std::format("{} · ETA T{}", lane.cost == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", lane.cost),
                                           m_state.OrdersTick() + lane.cost - 1),
                               OwnerColor(node.owner, m_state.viewer), m_state.orders.locked ? EventRefs::NONE : other});
     }

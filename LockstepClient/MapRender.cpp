@@ -291,7 +291,7 @@ void DrawFleet(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fra
   // happening at Kepler-Reach in the reference, and is the normal case rather than an edge one.
   // Yours goes above the arrowhead, where you are already looking; a rival's goes beside and below
   // it, so the two can never overlap.
-  const std::string label = std::format("{} - ETA T{}", fleet.name, fleet.eta);
+  const std::string label = std::format("{} · ETA T{}", fleet.name, fleet.eta);
   const auto labelWidth = static_cast<float>(FontRenderer::MeasurePixels(label));
   const auto labelY = static_cast<std::int32_t>(std::lround(head.yPixels - 18.0F));
   const float paneX = Frame::DIGEST_WIDTH;

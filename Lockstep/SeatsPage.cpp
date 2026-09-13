@@ -661,14 +661,14 @@ void SeatsPage::DrawPractice(ShapeRenderer& _shapes, FontRenderer& _text)
 
   // The label and the button share the top row, so the two lines under them run the full width of
   // the box. Under the prose the button had to be cut into it, and both read as crowded.
-  const auto buttonWidth = static_cast<float>(FontRenderer::MeasurePixels("PRACTICE MATCH >")) + 24.0F;
+  const auto buttonWidth = static_cast<float>(FontRenderer::MeasurePixels("PRACTICE MATCH ›")) + 24.0F;
   const float buttonX = PRACTICE_X + PRACTICE_WIDTH - 12.0F - buttonWidth;
   const float buttonY = PRACTICE_Y + 10.0F;
 
   _text.DrawText(static_cast<std::int32_t>(PRACTICE_X) + 12, CenterTextY(buttonY, 24.0F), "FIRST MATCH?", AMBER);
 
   _shapes.StrokeRect(buttonX, buttonY, buttonWidth, 24.0F, AMBER);
-  _text.DrawText(static_cast<std::int32_t>(buttonX) + 12, CenterTextY(buttonY, 24.0F), "PRACTICE MATCH >", AMBER);
+  _text.DrawText(static_cast<std::int32_t>(buttonX) + 12, CenterTextY(buttonY, 24.0F), "PRACTICE MATCH ›", AMBER);
   AddHit(buttonX, buttonY, buttonWidth, 24.0F, ACTION_PRACTICE, -1);
 
   // The comparison a beginner is actually making, in the two numbers that differ. Everything else
@@ -727,7 +727,7 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
     {
       summary += std::format(", +{}", missing.size() - 3);
     }
-    summary += std::format(" - {} OF {} HERE", playing - static_cast<std::int32_t>(missing.size()), playing);
+    summary += std::format(" · {} OF {} HERE", playing - static_cast<std::int32_t>(missing.size()), playing);
   }
   else
   {
@@ -743,18 +743,18 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
                  refused ? AMBER : (!enough ? RED : (everyone ? BLUE : AMBER)), refused ? Face::SansRegular : Face::MonoRegular);
 
   // ---- ENTER MATCH --------------------------------------------------------------------------------
-  const auto enterWidth = static_cast<float>(FontRenderer::MeasurePixels("ENTER MATCH >")) + 24.0F;
+  const auto enterWidth = static_cast<float>(FontRenderer::MeasurePixels("ENTER MATCH ›")) + 24.0F;
   const float enterX = CONSOLE_X + CONSOLE_WIDTH - CONSOLE_PADDING - enterWidth;
   if (enough && everyone)
   {
     _shapes.FillRect(enterX, footerY + 10.0F, enterWidth, 24.0F, BLUE);
-    _text.DrawText(static_cast<std::int32_t>(enterX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "ENTER MATCH >", APP_BACKGROUND);
+    _text.DrawText(static_cast<std::int32_t>(enterX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "ENTER MATCH ›", APP_BACKGROUND);
     AddHit(enterX, footerY + 10.0F, enterWidth, 24.0F, ACTION_ENTER, -1);
   }
   else
   {
     _shapes.StrokeRect(enterX, footerY + 10.0F, enterWidth, 24.0F, DIVIDER);
-    _text.DrawText(static_cast<std::int32_t>(enterX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "ENTER MATCH >", NEUTRAL_DIM);
+    _text.DrawText(static_cast<std::int32_t>(enterX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "ENTER MATCH ›", NEUTRAL_DIM);
   }
 
   const auto fillWidth = static_cast<float>(FontRenderer::MeasurePixels("FILL WAITING WITH BOTS")) + 24.0F;
@@ -788,7 +788,7 @@ void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
     ++humans;
     here += m_connected[static_cast<std::size_t>(index)] ? 1 : 0;
   }
-  const std::string census = std::format("{} SEATS - {} OF {} CONNECTED", m_seatCount, here, humans);
+  const std::string census = std::format("{} SEATS · {} OF {} CONNECTED", m_seatCount, here, humans);
   const auto censusWidth = static_cast<float>(FontRenderer::MeasurePixels(census));
   _text.DrawText(static_cast<std::int32_t>(CONSOLE_X + CONSOLE_WIDTH - censusWidth), static_cast<std::int32_t>(SUBTITLE_Y), census,
                  TEXT_MUTED);

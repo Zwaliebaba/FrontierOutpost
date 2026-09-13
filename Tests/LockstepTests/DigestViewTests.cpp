@@ -348,7 +348,7 @@ public:
 
     const Lockstep::DigestDelta delta = Lockstep::DeltaOf(state);
     Assert::AreEqual(std::size_t{1}, delta.cells.size(), L"the delta gained or lost a cell to the merge");
-    Assert::AreEqual(std::string{"1 CONTACT"}, delta.cells.front(), L"the delta stopped counting the raw digest");
+    Assert::AreEqual(std::string{"1 CONTACT"}, delta.cells.front().text, L"the delta stopped counting the raw digest");
   }
 };
 

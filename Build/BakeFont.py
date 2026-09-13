@@ -79,7 +79,11 @@ SUBSET = [chr(code) for code in range(0x20, 0x7F)] + [
     "−",  # MINUS SIGN      -- build costs, written `-` today
     "–",  # EN DASH         -- `Orune-Kepler-Reach`, written `-` today
     "→",  # RIGHTWARDS ARROW-- `HALVORSEN > you`, written `>` today
-    "›",  # SINGLE RIGHT ANGLE QUOTE -- `change >`, written `>` today
+    "›",  # SINGLE RIGHT ANGLE QUOTE -- a trailing "go" affordance: `JOIN ›`, `MORE ›`
+    # SINGLE LEFT ANGLE QUOTE. Not one of ADR-014's five, and added 2026-09-13 for one reason: the
+    # digest pager is a matched pair, `‹ PREV` on the left against `MORE ›` on the right, and a
+    # control with a typeset half and an ASCII half reads as a defect rather than as a decision.
+    "‹",
 ]
 
 # One texel per glyph pixel, so the atlas is as wide as the widest row of glyphs needs. 512 keeps
