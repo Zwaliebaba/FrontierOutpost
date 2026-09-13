@@ -125,89 +125,156 @@ public:
   }
 };
 
-// The atlas FontRenderer uploads is built from GlyphRow, so these assertions are assertions about
-// what ends up on the screen. They are worth having because the two things that would break the
-// font are both silent: an off-by-one in the character-to-glyph mapping shifts the whole alphabet
-// by one and still draws letters, and a bit order flipped left-to-right still draws something
-// glyph-shaped.
+// The atlas FontRenderer uploads is Font.h's own bytes, and the glyph table is what says where in
+// it each letter lives -- so these assertions are assertions about what ends up on the screen.
+// They are worth having because the two things that would break the font are both silent: an
+// off-by-one in the codepoint lookup shifts the whole alphabet by one and still draws letters, and
+// a glyph pointed at the wrong atlas box still draws something glyph-shaped.
+//
+// **They are written against the SHAPE of the tables and not against one face's pixels.** The old
+// version of this class pinned the eight bytes of 'A' as hex, which was the right test of a
+// hand-typed font and is the wrong test of a baked one: it would have to be rewritten every time
+// anybody changed a size or a weight, and a test nobody can read the failure of gets deleted
+// rather than fixed (ADR-073).
 TEST_CLASS(FontTests)
 {
 public:
-  TEST_METHOD(TableIsNinetySixGlyphsOfEightBytes)
+  TEST_METHOD(EveryFaceIsBakedAndNonEmpty)
   {
-    Assert::AreEqual(static_cast<size_t>(768), FONT_DATA.size());
-    Assert::AreEqual(static_cast<size_t>(768),
-                     static_cast<size_t>(Neuron::FontRenderer::GLYPH_COUNT) * Neuron::FontRenderer::GLYPH_HEIGHT_TEXELS);
-  }
-
-  TEST_METHOD(SpaceIsTheFirstGlyph)
-  {
-    Assert::AreEqual(0u, Neuron::FontRenderer::GlyphIndex(' '));
-    for (std::uint32_t row = 0; row < Neuron::FontRenderer::GLYPH_HEIGHT_TEXELS; ++row)
+    Assert::AreEqual(static_cast<size_t>(Neuron::Face::Count), Neuron::FONT_FACES.size());
+    for (std::size_t index = 0; index < Neuron::FONT_FACES.size(); ++index)
     {
-      Assert::AreEqual(static_cast<std::uint8_t>(0), Neuron::FontRenderer::GlyphRow(' ', row), L"a space has no lit pixels");
+      const Neuron::FontFace& face = Neuron::FONT_FACES[index];
+      Assert::IsTrue(face.glyphCount > 0, L"a face with no glyphs draws nothing at all");
+      Assert::IsTrue(static_cast<std::size_t>(face.firstGlyph) + face.glyphCount <= Neuron::FONT_GLYPHS.size(),
+                     L"a face's slice runs past the end of the glyph table");
+      Assert::IsTrue(face.ascent > 0, L"a face with no ascent puts every glyph on the same row");
     }
   }
 
-  // 'A' is 0x41, so it is glyph 33 and its eight bytes start at offset 264. Written out as bits
-  // they are the letter, which is the point of pinning them:
-  //
-  //     ..####..   0x3C
-  //     .##..##.   0x66
-  //     .##..##.   0x66
-  //     .######.   0x7E
-  //     .##..##.   0x66
-  //     .##..##.   0x66
-  //     .##..##.   0x66
-  //     ........   0x00
-  TEST_METHOD(CapitalAIsTheExpectedEightBytes)
+  // The lookup is a binary search over each face's slice, which means the slice has to be sorted.
+  // Unsorted, it would still find SOME glyph for every letter, which is exactly the silent failure
+  // worth pinning.
+  TEST_METHOD(EveryFaceSliceIsSortedByCodepoint)
   {
-    Assert::AreEqual(33u, Neuron::FontRenderer::GlyphIndex('A'));
-
-    constexpr std::array<std::uint8_t, 8> EXPECTED = {0x3C, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x66, 0x00};
-    for (std::uint32_t row = 0; row < EXPECTED.size(); ++row)
+    for (const Neuron::FontFace& face : Neuron::FONT_FACES)
     {
-      Assert::AreEqual(EXPECTED[row], Neuron::FontRenderer::GlyphRow('A', row),
-                       (std::wstring(L"row ") + std::to_wstring(row) + L" of 'A'").c_str());
+      for (std::uint16_t offset = 1; offset < face.glyphCount; ++offset)
+      {
+        const std::size_t at = static_cast<std::size_t>(face.firstGlyph) + offset;
+        Assert::IsTrue(Neuron::FONT_GLYPHS[at - 1].codepoint < Neuron::FONT_GLYPHS[at].codepoint,
+                       L"the glyph table must be sorted for the binary search to be right");
+      }
     }
   }
 
-  // The atlas builder reads bit (7 - column), so the most significant bit is the leftmost pixel.
-  // Row 0 of 'A' is 0x3C: columns 2..5 lit, 0, 1, 6 and 7 dark.
-  TEST_METHOD(MostSignificantBitIsTheLeftmostPixel)
+  TEST_METHOD(ALookupFindsTheCodepointItWasAskedFor)
   {
-    const std::uint8_t topRow = Neuron::FontRenderer::GlyphRow('A', 0);
-    constexpr std::array<bool, 8> EXPECTED_LIT = {false, false, true, true, true, true, false, false};
-
-    for (std::uint32_t column = 0; column < EXPECTED_LIT.size(); ++column)
+    for (std::size_t index = 0; index < Neuron::FONT_FACES.size(); ++index)
     {
-      const bool lit = ((topRow >> (Neuron::FontRenderer::GLYPH_WIDTH_TEXELS - 1 - column)) & 1U) != 0;
-      Assert::AreEqual(EXPECTED_LIT[column], lit, (std::wstring(L"column ") + std::to_wstring(column) + L" of the top row of 'A'").c_str());
+      const auto face = static_cast<Neuron::Face>(index);
+      Assert::AreEqual(static_cast<std::uint32_t>(U'A'), Neuron::FontRenderer::GlyphOf(U'A', face).codepoint);
+      Assert::AreEqual(static_cast<std::uint32_t>(U'~'), Neuron::FontRenderer::GlyphOf(U'~', face).codepoint);
+      Assert::AreEqual(static_cast<std::uint32_t>(U' '), Neuron::FontRenderer::GlyphOf(U' ', face).codepoint);
     }
   }
 
-  TEST_METHOD(CharactersOutsideTheTableDrawAsSpace)
+  TEST_METHOD(AnUnbakedCodepointFallsBackToABlank)
   {
-    Assert::AreEqual(0u, Neuron::FontRenderer::GlyphIndex('\0'));
-    Assert::AreEqual(0u, Neuron::FontRenderer::GlyphIndex('\n'));
-    Assert::AreEqual(0u, Neuron::FontRenderer::GlyphIndex(static_cast<char>(31)), L"one below the first glyph");
-    Assert::AreEqual(0u, Neuron::FontRenderer::GlyphIndex(static_cast<char>(0x80)), L"a high byte must not index past the table");
-    Assert::AreEqual(0u, Neuron::FontRenderer::GlyphIndex(static_cast<char>(0xE9)), L"nor a UTF-8 continuation byte");
+    const Neuron::FontGlyph& missing = Neuron::FontRenderer::GlyphOf(U'\u4E2D', Neuron::Face::MonoRegular);
+    Assert::AreEqual(static_cast<std::uint32_t>(U' '), missing.codepoint,
+                     L"an unbaked codepoint must draw the blank, not index past the table");
   }
 
-  // The table runs from space to 0x7F inclusive: 96 glyphs. '~' is 0x7E and therefore glyph 94,
-  // and the 96th slot -- where DEL would be -- holds the solid block Font.h ends with. Both are
-  // in range, which is the boundary worth pinning: an off-by-one here reads past a 768-byte array.
-  TEST_METHOD(LastGlyphsAreInRange)
+  TEST_METHOD(SpaceHasNoInk)
   {
-    Assert::AreEqual(94u, Neuron::FontRenderer::GlyphIndex('~'));
-    Assert::AreEqual(Neuron::FontRenderer::GLYPH_COUNT - 1, Neuron::FontRenderer::GlyphIndex(static_cast<char>(0x7F)));
-
-    for (std::uint32_t row = 0; row < Neuron::FontRenderer::GLYPH_HEIGHT_TEXELS; ++row)
+    const Neuron::FontGlyph& space = Neuron::FontRenderer::GlyphOf(U' ', Neuron::Face::MonoRegular);
+    for (std::uint32_t row = 0; row < space.height; ++row)
     {
-      Assert::AreEqual(static_cast<std::uint8_t>(0xFF), Neuron::FontRenderer::GlyphRow(static_cast<char>(0x7F), row),
-                       L"the last glyph is a solid 8x8 block");
+      for (std::uint32_t column = 0; column < space.width; ++column)
+      {
+        Assert::AreEqual(static_cast<std::uint8_t>(0), Neuron::FontRenderer::AtlasTexel(space.atlasX + column, space.atlasY + row),
+                         L"a space has no lit pixels");
+      }
     }
+  }
+
+  TEST_METHOD(ACapitalAHasInkAndAdvancesTheCursor)
+  {
+    const Neuron::FontGlyph& letter = Neuron::FontRenderer::GlyphOf(U'A', Neuron::Face::MonoRegular);
+    Assert::IsTrue(letter.advance > 0, L"a letter that advances nothing writes the next one on top of it");
+
+    bool anyInk = false;
+    for (std::uint32_t row = 0; row < letter.height && !anyInk; ++row)
+    {
+      for (std::uint32_t column = 0; column < letter.width && !anyInk; ++column)
+      {
+        anyInk = Neuron::FontRenderer::AtlasTexel(letter.atlasX + column, letter.atlasY + row) != 0;
+      }
+    }
+    Assert::IsTrue(anyInk, L"'A' is blank, which means the bake or the atlas coordinates are wrong");
+  }
+
+  // A glyph box that runs off the atlas reads whatever is next in the array, which on screen looks
+  // like a letter with somebody else's pixels stuck to it.
+  TEST_METHOD(EveryGlyphBoxIsInsideTheAtlas)
+  {
+    for (const Neuron::FontGlyph& glyph : Neuron::FONT_GLYPHS)
+    {
+      Assert::IsTrue(static_cast<std::uint32_t>(glyph.atlasX) + glyph.width <= Neuron::FONT_ATLAS_WIDTH,
+                     L"a glyph runs off the right of the atlas");
+      Assert::IsTrue(static_cast<std::uint32_t>(glyph.atlasY) + glyph.height <= Neuron::FONT_ATLAS_HEIGHT,
+                     L"a glyph runs off the bottom of the atlas");
+    }
+    Assert::AreEqual(static_cast<size_t>(Neuron::FONT_ATLAS_WIDTH) * Neuron::FONT_ATLAS_HEIGHT, Neuron::FONT_ATLAS.size());
+  }
+};
+
+// Every std::string in this tree is UTF-8 (NeuronCore/Text.h), which nothing had to know while the
+// font was 96 bytes of ASCII and everything has to know now that the middot and the arrow are
+// glyphs rather than substitutions (ADR-074).
+TEST_CLASS(FontUtf8Tests)
+{
+public:
+  TEST_METHOD(AsciiIsOneByte)
+  {
+    const auto decoded = Neuron::FontRenderer::DecodeUtf8("A", 0);
+    Assert::AreEqual(static_cast<std::uint32_t>(U'A'), static_cast<std::uint32_t>(decoded.codepoint));
+    Assert::AreEqual(static_cast<size_t>(1), decoded.bytes);
+  }
+
+  TEST_METHOD(TheMiddotIsTwoBytesAndTheArrowIsThree)
+  {
+    // Byte escapes rather than \u: a narrow literal is encoded in the SOURCE code page, which on
+    // this machine is 1252 and cannot hold either character (MSVC C4566). These are the UTF-8
+    // bytes themselves, which is what the decoder is handed at runtime in any case.
+    const auto middot = Neuron::FontRenderer::DecodeUtf8("\xC2\xB7", 0);
+    Assert::AreEqual(static_cast<std::uint32_t>(0x00B7), static_cast<std::uint32_t>(middot.codepoint));
+    Assert::AreEqual(static_cast<size_t>(2), middot.bytes);
+
+    const auto arrow = Neuron::FontRenderer::DecodeUtf8("\xE2\x86\x92", 0);
+    Assert::AreEqual(static_cast<std::uint32_t>(0x2192), static_cast<std::uint32_t>(arrow.codepoint));
+    Assert::AreEqual(static_cast<size_t>(3), arrow.bytes);
+  }
+
+  // A stray continuation byte used to draw as a space and must still consume exactly one byte:
+  // consuming none is an infinite loop in every caller that walks a string with this.
+  TEST_METHOD(AMalformedByteIsConsumedAsOne)
+  {
+    const std::string malformed(1, static_cast<char>(0xE9));
+    const auto decoded = Neuron::FontRenderer::DecodeUtf8(malformed, 0);
+    Assert::AreEqual(static_cast<size_t>(1), decoded.bytes, L"a bad byte must not stall the cursor");
+    Assert::AreEqual(static_cast<std::uint32_t>(0xFFFD), static_cast<std::uint32_t>(decoded.codepoint));
+  }
+
+  TEST_METHOD(MeasuringCountsAMultiByteGlyphOnce)
+  {
+    // Three codepoints, five bytes. Measured as bytes it would come out nearly twice as wide.
+    // Split literal: "\xC2\xB7B" would parse `\xB7B` as one hex escape and not as a middot
+    // followed by a B.
+    Assert::AreEqual(Neuron::FontRenderer::MeasurePixels("A\xC2\xB7"
+                                                         "B"),
+                     3U * Neuron::FontRenderer::AdvanceOf(U'A'), L"the middot must measure as one glyph");
   }
 };
 

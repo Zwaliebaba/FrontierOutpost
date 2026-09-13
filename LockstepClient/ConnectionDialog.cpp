@@ -49,7 +49,7 @@ constexpr Color SCRIM = {7, 9, 13, 205};
 
 [[nodiscard]] std::int32_t CenterTextY(float _y, float _height)
 {
-  const auto glyph = static_cast<float>(FontRenderer::GLYPH_HEIGHT_TEXELS);
+  const auto glyph = static_cast<float>(FontRenderer::GlyphHeightPixels());
   return static_cast<std::int32_t>(_y + (_height - glyph) * 0.5F);
 }
 
@@ -230,7 +230,7 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
 
   const float bodyHeight = static_cast<float>(lines.size() * LINE_HEIGHT);
   const float cardHeight =
-    CARD_PADDING + static_cast<float>(FontRenderer::GLYPH_HEIGHT_TEXELS) + TITLE_GAP + bodyHeight + BODY_GAP + BUTTON_HEIGHT + CARD_PADDING;
+    CARD_PADDING + static_cast<float>(FontRenderer::GlyphHeightPixels()) + TITLE_GAP + bodyHeight + BODY_GAP + BUTTON_HEIGHT + CARD_PADDING;
   const float cardY = std::max(40.0F, (SCREEN_HEIGHT - cardHeight) * 0.5F);
 
   // ---- The scrim ---------------------------------------------------------------------------------
@@ -243,7 +243,7 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
   auto y = static_cast<std::int32_t>(cardY + CARD_PADDING);
 
   _text.DrawText(contentX, y, title, look.title);
-  y += static_cast<std::int32_t>(FontRenderer::GLYPH_HEIGHT_TEXELS + TITLE_GAP);
+  y += static_cast<std::int32_t>(FontRenderer::GlyphHeightPixels() + TITLE_GAP);
 
   for (const std::string& line : lines)
   {

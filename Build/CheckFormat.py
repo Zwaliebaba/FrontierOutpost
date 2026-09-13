@@ -50,6 +50,9 @@ SKIP_DIRECTORIES = {".git", ".vs", "x64", "packages", "__pycache__", "CompiledSh
 # the .rc, and formatting it only guarantees a diff the next time someone opens the dialog editor.
 GENERATED_FILES = {
     os.path.join("Lockstep", "Resource.h"),
+    # Written by Build/BakeFont.py, and its content hash is what CheckProjectFiles gates on
+    # (ADR-073). clang-format would reformat the tables and break that hash on the next run.
+    os.path.join("NeuronClient", "Font.h"),
 }
 
 
@@ -64,7 +67,7 @@ def find_clang_format(explicit: str | None) -> str:
 
 
 def clang_format_version(binary: str) -> str:
-    text = subprocess.run([binary, "--version"], capture_output=True, text=True, check=True).stdout
+    text = subprocess.run([binary, "--version"], capture_output=True, text=True, encoding="utf-8", check=True).stdout
     match = re.search(r"(\d+\.\d+\.\d+)", text)
     return match.group(1) if match else text.strip()
 
@@ -89,6 +92,15 @@ def main() -> int:
     parser.add_argument("--fix", action="store_true", help="rewrite offending files instead of reporting them")
     arguments = parser.parse_args()
 
+    # A diff of a file containing a non-ASCII character -- and fourteen files in this tree already
+    # do -- is printed to a console whose default encoding is the ANSI code page, which on Windows
+    # is 1252 and cannot hold `·` or `→`. Python then raises UnicodeEncodeError from inside the
+    # print, so the checker DIES AT THE MOMENT IT HAS SOMETHING TO SAY: exit code and traceback in
+    # place of the finding, and through a pipe it looks like a hang rather than a crash. That cost
+    # a round of chasing a clang-format that was never stuck. Say UTF-8 and mean it.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     binary = find_clang_format(arguments.binary)
     version = clang_format_version(binary)
     print(f"CheckFormat: {binary} ({version})")
@@ -109,11 +121,19 @@ def main() -> int:
         # it writes stdin, so passing a CRLF file through would arrive as \r\r\n and clang-format
         # would read every stray \r as a line of its own -- a diff on every line of every file,
         # with nothing actually wrong.
+        # encoding="utf-8" EXPLICITLY, and it is load-bearing rather than tidy. `text=True` alone
+        # encodes what it writes to the child's stdin with the locale's preferred encoding, which
+        # on Windows is the ANSI code page. 1252 holds `·`, `–` and `›`, and does NOT hold `→` or
+        # `−` -- two of the five characters ADR-014 had to substitute and stage 7 puts back. On a
+        # file containing either, the write raises inside the parent, the child never sees EOF, and
+        # clang-format WAITS ON STDIN FOREVER: no error, no diff, no exit. It reads as a hung
+        # checker rather than an encoding fault, which is how it cost an afternoon.
         formatted = subprocess.run(
             [binary, "--style=file", f"-assume-filename={absolute}"],
             input=original,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=True,
         ).stdout.replace("\r\n", "\n")
 

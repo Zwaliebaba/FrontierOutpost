@@ -68,7 +68,7 @@ constexpr double BLINK_SECONDS = 1.0;
 
 [[nodiscard]] std::int32_t CenterTextY(float _y, float _height, std::uint32_t _scale = 1)
 {
-  const auto glyph = static_cast<float>(FontRenderer::GLYPH_HEIGHT_TEXELS * _scale);
+  const auto glyph = static_cast<float>(FontRenderer::GlyphHeightPixels(_scale));
   return static_cast<std::int32_t>(_y + (_height - glyph) * 0.5F);
 }
 

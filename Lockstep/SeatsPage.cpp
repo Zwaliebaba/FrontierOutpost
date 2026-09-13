@@ -131,7 +131,7 @@ constexpr std::string_view TOKEN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 [[nodiscard]] std::int32_t CenterTextY(float _y, float _height)
 {
-  return static_cast<std::int32_t>(_y + (_height - static_cast<float>(FontRenderer::GLYPH_HEIGHT_TEXELS)) * 0.5F);
+  return static_cast<std::int32_t>(_y + (_height - static_cast<float>(FontRenderer::GlyphHeightPixels())) * 0.5F);
 }
 
 } // namespace

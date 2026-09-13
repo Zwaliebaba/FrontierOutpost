@@ -8,18 +8,21 @@
 namespace Neuron
 {
 
-/// Draws 8x8 text onto the screen.
+/// Draws text onto the screen, in any of the faces Font.h was baked with.
 ///
-/// Font.h holds 96 glyphs as one bit a pixel, 768 bytes, embedded in the binary (R13). This turns
-/// that into a 768x8 R8_UINT atlas once at startup -- one texel per glyph pixel, 0 or 1 -- and
-/// draws strings as quads that read it with Load(). No sampler anywhere, so a glyph texel is an
-/// exact GLYPH_SCALE x GLYPH_SCALE block of screen pixels with nothing to filter (ADR-011).
+/// Font.h is GENERATED (ADR-073): `Build/BakeFont.py` rasterizes the faces offline and writes one
+/// coverage atlas, one glyph table and one face table as `constexpr` arrays, which are embedded in
+/// the binary exactly as the hand-typed 8x8 font was (R13). This uploads the atlas once at startup
+/// and draws strings as quads that read it with Load(). No sampler anywhere, so a glyph texel is
+/// an exact block of screen pixels with nothing to filter (ADR-011).
+///
+/// **A glyph is placed against a BASELINE, not against the top-left of a box.** `DrawText` takes
+/// the top of the line, and each glyph lands at `ascent - bearingY` below it. The 8x8 font had no
+/// baseline and no bearings, which is why it could be drawn from a corner; a real face cannot be,
+/// and `y` keeps meaning what it meant so that no caller has to care.
 class FontRenderer
 {
 public:
-  static constexpr std::uint32_t GLYPH_WIDTH_TEXELS = 8;
-  static constexpr std::uint32_t GLYPH_HEIGHT_TEXELS = 8;
-
   /// How many screen pixels a glyph texel occupies, on both axes, when a caller does not say.
   ///
   /// The scale is a PER-CALL argument rather than a compile-time constant, because the UI design
@@ -31,41 +34,116 @@ public:
   static constexpr std::uint32_t DEFAULT_SCALE = 1;
   static constexpr std::uint32_t COUNTDOWN_SCALE = 2;
 
-  /// What one character advances the cursor by, and how tall a line is, at a given scale.
-  [[nodiscard]] static constexpr std::uint32_t AdvancePixels(std::uint32_t _scale = DEFAULT_SCALE) noexcept
+  /// Which cut a string is drawn in (ADR-074). Mono carries data, sans carries sentences.
+  static constexpr Face DEFAULT_FACE = Face::MonoRegular;
+
+  /// The baked metrics of one face.
+  [[nodiscard]] static constexpr const FontFace& FaceOf(Face _face) noexcept
   {
-    return GLYPH_WIDTH_TEXELS * _scale;
-  }
-  [[nodiscard]] static constexpr std::uint32_t GlyphHeightPixels(std::uint32_t _scale = DEFAULT_SCALE) noexcept
-  {
-    return GLYPH_HEIGHT_TEXELS * _scale;
+    return FONT_FACES[static_cast<std::size_t>(_face)];
   }
 
-  /// What ONE character advances the cursor by.
+  /// One glyph of one face, or the face's first glyph when the codepoint was not baked.
   ///
-  /// It ignores the character, because the font is fixed-pitch and every glyph is eight texels
-  /// wide. The parameter is there so that the callers below ask the font per character rather than
-  /// per string -- which is the same answer today and the only one that survives a face whose
-  /// glyphs differ in width (ADR-073). This is the single place that learns the advance table.
-  [[nodiscard]] static constexpr std::uint32_t AdvanceOf(char _character, std::uint32_t _scale = DEFAULT_SCALE) noexcept
+  /// The fallback keeps the property the `code - 32` table had: a string carrying something the
+  /// font does not know draws a blank rather than reading past the end of an array. The subset
+  /// always starts at space, so the first glyph IS a blank.
+  [[nodiscard]] static constexpr const FontGlyph& GlyphOf(char32_t _codepoint, Face _face) noexcept
   {
-    static_cast<void>(_character);
-    return AdvancePixels(_scale);
+    const FontFace& face = FaceOf(_face);
+    std::size_t low = face.firstGlyph;
+    std::size_t high = low + face.glyphCount;
+    while (low < high)
+    {
+      const std::size_t middle = low + (high - low) / 2;
+      if (FONT_GLYPHS[middle].codepoint < _codepoint)
+      {
+        low = middle + 1;
+      }
+      else
+      {
+        high = middle;
+      }
+    }
+    const bool found = low < static_cast<std::size_t>(face.firstGlyph) + face.glyphCount &&
+                       FONT_GLYPHS[low].codepoint == static_cast<std::uint32_t>(_codepoint);
+    return FONT_GLYPHS[found ? low : face.firstGlyph];
+  }
+
+  /// What one line of a face occupies vertically, and what a glyph box is measured against.
+  ///
+  /// Ascent plus descent rather than the face's line height, because this is what the CLIP box and
+  /// every vertical centring on the four screens is built from, and for the 8x8 font it has to
+  /// come out at exactly eight or a clipped map label would clip somewhere new.
+  [[nodiscard]] static constexpr std::uint32_t GlyphHeightPixels(std::uint32_t _scale = DEFAULT_SCALE, Face _face = DEFAULT_FACE) noexcept
+  {
+    return (static_cast<std::uint32_t>(FaceOf(_face).ascent) + FaceOf(_face).descent) * _scale;
+  }
+
+  /// The baseline-to-baseline distance the face was baked with.
+  [[nodiscard]] static constexpr std::uint32_t LineHeightPixels(std::uint32_t _scale = DEFAULT_SCALE, Face _face = DEFAULT_FACE) noexcept
+  {
+    return FaceOf(_face).lineHeight * _scale;
+  }
+
+  /// Decodes one UTF-8 codepoint, returning it and how many bytes it took.
+  ///
+  /// Every `std::string` in this tree is UTF-8 (`NeuronCore/Text.h`), which nothing needed to know
+  /// while the font was 96 bytes of ASCII and everything needs to know now that `·` and `→` are
+  /// glyphs rather than substitutions. A malformed byte is consumed as one replacement, so a bad
+  /// string cannot stall the cursor.
+  struct Decoded
+  {
+    char32_t codepoint;
+    std::size_t bytes;
+  };
+  [[nodiscard]] static constexpr Decoded DecodeUtf8(std::string_view _text, std::size_t _at) noexcept
+  {
+    const auto lead = static_cast<std::uint8_t>(_text[_at]);
+    const auto continuation = [&](std::size_t _offset) constexpr noexcept -> char32_t
+    { return (_at + _offset < _text.size()) ? static_cast<char32_t>(static_cast<std::uint8_t>(_text[_at + _offset]) & 0x3FU) : 0U; };
+
+    if (lead < 0x80U)
+    {
+      return {static_cast<char32_t>(lead), 1};
+    }
+    if ((lead & 0xE0U) == 0xC0U && _at + 1 < _text.size())
+    {
+      return {((static_cast<char32_t>(lead) & 0x1FU) << 6) | continuation(1), 2};
+    }
+    if ((lead & 0xF0U) == 0xE0U && _at + 2 < _text.size())
+    {
+      return {((static_cast<char32_t>(lead) & 0x0FU) << 12) | (continuation(1) << 6) | continuation(2), 3};
+    }
+    if ((lead & 0xF8U) == 0xF0U && _at + 3 < _text.size())
+    {
+      return {((static_cast<char32_t>(lead) & 0x07U) << 18) | (continuation(1) << 12) | (continuation(2) << 6) | continuation(3), 4};
+    }
+    return {0xFFFDU, 1};
+  }
+
+  /// What ONE codepoint advances the cursor by. The single place that reads the advance table.
+  [[nodiscard]] static constexpr std::uint32_t AdvanceOf(char32_t _codepoint, std::uint32_t _scale = DEFAULT_SCALE,
+                                                         Face _face = DEFAULT_FACE) noexcept
+  {
+    return GlyphOf(_codepoint, _face).advance * _scale;
   }
 
   /// How wide a string is, in screen pixels.
   ///
-  /// A sum over the advances rather than a multiply by the string's length -- the same number
-  /// while the font is fixed-pitch, and the reason a proportional face needs no edit at any of the
-  /// call sites that ask this. It is a NAMED measurement because every right-aligned and centred
-  /// thing on the main page is laid out against it, and a stray `* 8` somewhere else is how those
-  /// drift apart.
-  [[nodiscard]] static constexpr std::uint32_t MeasurePixels(std::string_view _text, std::uint32_t _scale = DEFAULT_SCALE) noexcept
+  /// A sum over the advances rather than a multiply by the string's length, which is why a
+  /// proportional face needs no edit at any of the call sites that ask this. It is a NAMED
+  /// measurement because every right-aligned and centred thing on the main page is laid out
+  /// against it, and a stray `* 8` somewhere else is how those drift apart.
+  [[nodiscard]] static constexpr std::uint32_t MeasurePixels(std::string_view _text, std::uint32_t _scale = DEFAULT_SCALE,
+                                                             Face _face = DEFAULT_FACE) noexcept
   {
     std::uint32_t width = 0;
-    for (const char character : _text)
+    for (std::size_t at = 0; at < _text.size();)
     {
-      width += AdvanceOf(character, _scale);
+      const Decoded decoded = DecodeUtf8(_text, at);
+      width += AdvanceOf(decoded.codepoint, _scale, _face);
+      at += decoded.bytes;
     }
     return width;
   }
@@ -78,19 +156,24 @@ public:
   /// division is the shape that would have to be found and rewritten then. There is nothing to
   /// find here.
   [[nodiscard]] static constexpr std::size_t PrefixThatFits(std::string_view _text, std::uint32_t _widthPixels,
-                                                            std::uint32_t _scale = DEFAULT_SCALE) noexcept
+                                                            std::uint32_t _scale = DEFAULT_SCALE, Face _face = DEFAULT_FACE) noexcept
   {
     std::uint32_t used = 0;
     std::size_t fitted = 0;
-    for (const char character : _text)
+    for (std::size_t at = 0; at < _text.size();)
     {
-      const std::uint32_t advance = AdvanceOf(character, _scale);
+      const Decoded decoded = DecodeUtf8(_text, at);
+      const std::uint32_t advance = AdvanceOf(decoded.codepoint, _scale, _face);
       if (used + advance > _widthPixels)
       {
         break;
       }
       used += advance;
-      ++fitted;
+      at += decoded.bytes;
+      // BYTES, not codepoints: every caller feeds the answer straight back to `substr`, and a
+      // count of characters would cut a multi-byte glyph in half the first time the copy carries
+      // one of the five ADR-014 had to substitute.
+      fitted = at;
     }
     return fitted;
   }
@@ -109,12 +192,18 @@ public:
   /// (ADR-073). A caller that knows a rail is 254 pixels wide now says so, instead of dividing by
   /// eight somewhere the font cannot see.
   [[nodiscard]] static std::vector<std::string> WrapToWidth(std::string_view _text, std::uint32_t _widthPixels,
-                                                            std::uint32_t _scale = DEFAULT_SCALE);
+                                                            std::uint32_t _scale = DEFAULT_SCALE, Face _face = DEFAULT_FACE);
 
-  /// Space through to the last printable ASCII character. Anything outside that range draws as a
-  /// space rather than as whatever byte happened to follow the table.
-  static constexpr std::uint32_t FIRST_CHARACTER = 32;
-  static constexpr std::uint32_t GLYPH_COUNT = 96;
+  /// ONE COLUMN of a monospaced face, for the two things that are laid out in columns rather than
+  /// measured: the join screen's caret, and the verdict box's two-character inset.
+  ///
+  /// It is the advance of a digit, which in a mono face is every glyph's advance. **Asking it of a
+  /// PROPORTIONAL face is a category error** -- there is no column there -- so a caller that wants
+  /// the width of something should call `MeasurePixels` on the something.
+  [[nodiscard]] static constexpr std::uint32_t AdvancePixels(std::uint32_t _scale = DEFAULT_SCALE, Face _face = DEFAULT_FACE) noexcept
+  {
+    return AdvanceOf(U'0', _scale, _face);
+  }
 
   /// One frame's worth of text.
   ///
@@ -126,20 +215,11 @@ public:
   /// to grow into.
   static constexpr std::uint32_t MAX_CHARACTERS_PER_FRAME = 4096;
 
-  /// Where a character sits in Font.h's table. Anything outside it -- control codes, high bytes,
-  /// a stray UTF-8 continuation byte -- maps to the space at index 0, so a bad string draws
-  /// blanks instead of reading past the end of a 768-byte array.
-  [[nodiscard]] static constexpr std::uint32_t GlyphIndex(char _character) noexcept
+  /// One texel of the baked atlas, which is what the upload copies and therefore what a test of
+  /// the atlas can assert against without a device.
+  [[nodiscard]] static constexpr std::uint8_t AtlasTexel(std::uint32_t _x, std::uint32_t _y) noexcept
   {
-    const auto code = static_cast<std::uint32_t>(static_cast<std::uint8_t>(_character));
-    return (code >= FIRST_CHARACTER && code < FIRST_CHARACTER + GLYPH_COUNT) ? code - FIRST_CHARACTER : 0;
-  }
-
-  /// One row of one glyph: eight pixels, most significant bit leftmost, exactly as Font.h stores
-  /// them. This is the lookup the atlas is built from, so a test of it is a test of the atlas.
-  [[nodiscard]] static constexpr std::uint8_t GlyphRow(char _character, std::uint32_t _row) noexcept
-  {
-    return FONT_DATA[static_cast<std::size_t>(GlyphIndex(_character)) * GLYPH_HEIGHT_TEXELS + _row];
+    return FONT_ATLAS[static_cast<std::size_t>(_y) * FONT_ATLAS_WIDTH + _x];
   }
 
   /// Uploads the atlas and builds the pipeline. Blocks until the copy has executed, because it
@@ -186,7 +266,7 @@ public:
   /// way this renderer could produce a soft edge, and an integer parameter makes that
   /// unreachable rather than merely discouraged.
   void DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color,
-                std::uint32_t _scale = DEFAULT_SCALE);
+                std::uint32_t _scale = DEFAULT_SCALE, Face _face = DEFAULT_FACE);
 
   /// Issues everything DrawText appended since BeginFrame as a single draw call.
   /// Draws everything recorded SINCE THE LAST FLUSH, and remembers where it stopped.

@@ -1,4 +1,4 @@
-// FontRenderer.cpp -- Font.h's 768 bytes turned into an atlas, and strings turned into quads.
+// FontRenderer.cpp -- Font.h's baked atlas uploaded once, and strings turned into quads.
 
 #include "pch.h"
 #include "FontRenderer.h"
@@ -15,11 +15,11 @@ namespace Neuron
 namespace
 {
 
-// One texel per glyph pixel, all 96 glyphs in a single row. A row is 768 texels, which is exactly
-// three times D3D12's 256-byte row pitch alignment, so the upload needs no padding -- pleasant,
-// but GetCopyableFootprints is still what decides the layout below rather than that arithmetic.
-constexpr std::uint32_t ATLAS_WIDTH_TEXELS = FontRenderer::GLYPH_COUNT * FontRenderer::GLYPH_WIDTH_TEXELS;
-constexpr std::uint32_t ATLAS_HEIGHT_TEXELS = FontRenderer::GLYPH_HEIGHT_TEXELS;
+// One texel per glyph pixel, every face shelf-packed into one texture by Build/BakeFont.py. One
+// texture rather than one per face, because a face is chosen per DRAW CALL and a texture swap
+// between two words would break the single batch the text pass is (ADR-014).
+constexpr std::uint32_t ATLAS_WIDTH_TEXELS = FONT_ATLAS_WIDTH;
+constexpr std::uint32_t ATLAS_HEIGHT_TEXELS = FONT_ATLAS_HEIGHT;
 constexpr DXGI_FORMAT ATLAS_FORMAT = DXGI_FORMAT_R8_UINT;
 
 // Two floats for the screen size in pixels.
@@ -40,25 +40,11 @@ void FontRenderer::CreateAtlas(Device& _device, DescriptorHeap& _shaderVisibleHe
 {
   ID3D12Device* device = _device.Handle();
 
-  // Unpack Font.h: byte b of glyph g is row b, most significant bit leftmost. One texel per
-  // pixel, 0 or 1; the pixel shader writes the string's color where the bit is 1 and discards the
-  // pixel where it is 0.
-  std::vector<std::uint8_t> texels(static_cast<std::size_t>(ATLAS_WIDTH_TEXELS) * ATLAS_HEIGHT_TEXELS, 0);
-  for (std::uint32_t glyph = 0; glyph < GLYPH_COUNT; ++glyph)
-  {
-    const auto character = static_cast<char>(FIRST_CHARACTER + glyph);
-    for (std::uint32_t row = 0; row < GLYPH_HEIGHT_TEXELS; ++row)
-    {
-      const std::uint8_t bits = GlyphRow(character, row);
-      for (std::uint32_t column = 0; column < GLYPH_WIDTH_TEXELS; ++column)
-      {
-        const std::uint32_t shift = GLYPH_WIDTH_TEXELS - 1 - column;
-        const std::size_t texel =
-          static_cast<std::size_t>(row) * ATLAS_WIDTH_TEXELS + static_cast<std::size_t>(glyph) * GLYPH_WIDTH_TEXELS + column;
-        texels[texel] = static_cast<std::uint8_t>((bits >> shift) & 1U);
-      }
-    }
-  }
+  // Font.h IS the atlas now: Build/BakeFont.py packed it and wrote the texels out in the layout the
+  // glyph table's atlasX/atlasY already point into, so there is nothing to unpack here. The old
+  // loop that turned 768 bytes of bit-packed rows into texels lived here because the hand-typed
+  // font stored one BIT a pixel; a baked face stores one byte, and the copy below is the whole job.
+  const std::vector<std::uint8_t> texels(FONT_ATLAS.begin(), FONT_ATLAS.end());
 
   const D3D12_HEAP_PROPERTIES defaultHeap = HeapProperties(D3D12_HEAP_TYPE_DEFAULT);
   const D3D12_RESOURCE_DESC atlasDesc = Texture2DDesc(ATLAS_FORMAT, ATLAS_WIDTH_TEXELS, ATLAS_HEIGHT_TEXELS, D3D12_RESOURCE_FLAG_NONE);
@@ -229,14 +215,14 @@ void FontRenderer::CreatePipeline(ID3D12Device* _device)
   winrt::check_hresult(_device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(m_pipeline.put())));
 }
 
-std::vector<std::string> FontRenderer::WrapToWidth(std::string_view _text, std::uint32_t _widthPixels, std::uint32_t _scale)
+std::vector<std::string> FontRenderer::WrapToWidth(std::string_view _text, std::uint32_t _widthPixels, std::uint32_t _scale, Face _face)
 {
   std::vector<std::string> lines;
 
   // A line with room for no glyph at all has nowhere to put the text, and every loop below would
   // make no progress. This is the character-count form's `_maxCharacters == 0` guard, said in
   // pixels.
-  if (PrefixThatFits(" ", _widthPixels, _scale) == 0)
+  if (PrefixThatFits(" ", _widthPixels, _scale, _face) == 0)
   {
     return lines;
   }
@@ -252,7 +238,7 @@ std::vector<std::string> FontRenderer::WrapToWidth(std::string_view _text, std::
     // A word wider than the line is hard-broken rather than allowed to overflow. Nothing in the
     // reference copy is, but a system name from a server is not something this screen gets to
     // assume anything about.
-    while (MeasurePixels(word, _scale) > _widthPixels)
+    while (MeasurePixels(word, _scale, _face) > _widthPixels)
     {
       if (!current.empty())
       {
@@ -261,14 +247,15 @@ std::vector<std::string> FontRenderer::WrapToWidth(std::string_view _text, std::
       }
       // At least one character, always. A single glyph wider than the whole line cannot be broken
       // any smaller, and taking none of it would spin here forever.
-      const std::size_t fitted = PrefixThatFits(word, _widthPixels, _scale);
+      const std::size_t fitted = PrefixThatFits(word, _widthPixels, _scale, _face);
       const std::size_t taken = (fitted == 0) ? 1 : fitted;
       lines.emplace_back(word.substr(0, taken));
       word = word.substr(taken);
     }
 
     const std::uint32_t needed =
-      current.empty() ? MeasurePixels(word, _scale) : MeasurePixels(current, _scale) + AdvanceOf(' ', _scale) + MeasurePixels(word, _scale);
+      current.empty() ? MeasurePixels(word, _scale, _face)
+                      : MeasurePixels(current, _scale, _face) + AdvanceOf(U' ', _scale, _face) + MeasurePixels(word, _scale, _face);
     if (needed > _widthPixels && !current.empty())
     {
       lines.push_back(current);
@@ -319,53 +306,73 @@ void FontRenderer::ClearClipRect() noexcept
   m_clipping = false;
 }
 
-void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color, std::uint32_t _scale)
+void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::string_view _text, const Color& _color, std::uint32_t _scale,
+                            Face _face)
 {
   ASSERT_TEXT(_scale > 0, L"A glyph scale of zero would draw nothing and is a caller mistake, not a way to hide text.");
 
   TextVertex* slice = m_mappedVertices + static_cast<std::size_t>(m_frameIndex) * MAX_VERTICES_PER_FRAME;
 
-  const std::uint32_t advance = AdvancePixels(_scale);
-  const std::uint32_t lineHeight = GlyphHeightPixels(_scale);
+  // `_yPixels` is the top of the LINE, not the top of the first glyph's ink, so a string keeps
+  // landing where its caller put it whatever the face does with bearings. The baseline is that
+  // many pixels down; a glyph sits `bearingY` above the baseline.
+  const std::uint32_t ascent = FaceOf(_face).ascent * _scale;
+  const std::uint32_t boxHeight = GlyphHeightPixels(_scale, _face);
+  const std::uint32_t color = Pack(_color);
 
-  for (std::size_t character = 0; character < _text.size(); ++character)
+  std::int32_t pen = _xPixels;
+  for (std::size_t at = 0; at < _text.size();)
   {
-    ASSERT_TEXT(m_usedThisFrame + VERTICES_PER_GLYPH <= MAX_VERTICES_PER_FRAME,
-                L"More text in one frame than FontRenderer::MAX_CHARACTERS_PER_FRAME allows.");
+    const Decoded decoded = DecodeUtf8(_text, at);
+    at += decoded.bytes;
 
-    const std::uint32_t glyph = GlyphIndex(_text[character]);
+    const FontGlyph& glyph = GlyphOf(decoded.codepoint, _face);
+    const auto advance = static_cast<std::int32_t>(glyph.advance * _scale);
 
-    // The quad spans _scale screen pixels per glyph texel. The atlas coordinates below still span
-    // exactly eight texels, so the interpolator hands the pixel shader a fractional texel and its
-    // truncation is what turns one texel into a _scale-square block of pixels -- the same integer
-    // divide the resolve pass did for the whole screen before ADR-011 removed it.
-    const auto left = static_cast<float>(_xPixels + static_cast<std::int32_t>(character * advance));
-    const auto top = static_cast<float>(_yPixels);
-    const float right = left + static_cast<float>(advance);
-    const float bottom = top + static_cast<float>(lineHeight);
+    // The clip box is the ADVANCE box and not the ink box, so that whether a glyph is clipped
+    // depends on where the cursor is rather than on how much ink the letter happens to have.
+    // Whole glyphs rather than partial ones, for the reason SetClipRect gives.
+    const auto boxLeft = static_cast<float>(pen);
+    const auto boxTop = static_cast<float>(_yPixels);
+    const float boxRight = boxLeft + static_cast<float>(advance);
+    const float boxBottom = boxTop + static_cast<float>(boxHeight);
+    const bool clipped = m_clipping && (boxLeft < m_clipLeftPixels || boxRight > m_clipRightPixels || boxTop < m_clipTopPixels ||
+                                        boxBottom > m_clipBottomPixels);
 
-    const auto atlasLeft = static_cast<float>(glyph * GLYPH_WIDTH_TEXELS);
-    const float atlasRight = atlasLeft + static_cast<float>(GLYPH_WIDTH_TEXELS);
-    constexpr float ATLAS_TOP = 0.0F;
-    constexpr float ATLAS_BOTTOM = static_cast<float>(GLYPH_HEIGHT_TEXELS);
-
-    if (m_clipping && (left < m_clipLeftPixels || right > m_clipRightPixels || top < m_clipTopPixels || bottom > m_clipBottomPixels))
+    // A space has no ink and needs no quad. The cursor still advances, so a clipped or blank glyph
+    // leaves the rest of the string where it would have been -- a clipped label loses letters, it
+    // does not shuffle up.
+    if (!clipped && glyph.width != 0 && glyph.height != 0)
     {
-      // Outside, or straddling the edge. The cursor still advances, so the rest of the string
-      // stays where it would have been -- a clipped label loses letters, it does not shuffle up.
-      continue;
+      ASSERT_TEXT(m_usedThisFrame + VERTICES_PER_GLYPH <= MAX_VERTICES_PER_FRAME,
+                  L"More text in one frame than FontRenderer::MAX_CHARACTERS_PER_FRAME allows.");
+
+      const auto left = static_cast<float>(pen + glyph.bearingX * static_cast<std::int32_t>(_scale));
+      const auto top =
+        static_cast<float>(_yPixels + static_cast<std::int32_t>(ascent) - glyph.bearingY * static_cast<std::int32_t>(_scale));
+      const float right = left + static_cast<float>(glyph.width * _scale);
+      const float bottom = top + static_cast<float>(glyph.height * _scale);
+
+      // The quad spans _scale screen pixels per texel, so the interpolator hands the pixel shader
+      // a fractional texel and its truncation is what turns one texel into a _scale-square block
+      // of pixels -- the same integer divide the resolve pass did before ADR-011 removed it.
+      const auto atlasLeft = static_cast<float>(glyph.atlasX);
+      const auto atlasTop = static_cast<float>(glyph.atlasY);
+      const float atlasRight = atlasLeft + static_cast<float>(glyph.width);
+      const float atlasBottom = atlasTop + static_cast<float>(glyph.height);
+
+      TextVertex* quad = slice + m_usedThisFrame;
+      quad[0] = {left, top, atlasLeft, atlasTop, color};
+      quad[1] = {right, top, atlasRight, atlasTop, color};
+      quad[2] = {left, bottom, atlasLeft, atlasBottom, color};
+      quad[3] = {right, top, atlasRight, atlasTop, color};
+      quad[4] = {right, bottom, atlasRight, atlasBottom, color};
+      quad[5] = {left, bottom, atlasLeft, atlasBottom, color};
+
+      m_usedThisFrame += VERTICES_PER_GLYPH;
     }
 
-    const std::uint32_t color = Pack(_color);
-    TextVertex* quad = slice + m_usedThisFrame;
-    quad[0] = {left, top, atlasLeft, ATLAS_TOP, color};
-    quad[1] = {right, top, atlasRight, ATLAS_TOP, color};
-    quad[2] = {left, bottom, atlasLeft, ATLAS_BOTTOM, color};
-    quad[3] = {right, top, atlasRight, ATLAS_TOP, color};
-    quad[4] = {right, bottom, atlasRight, ATLAS_BOTTOM, color};
-    quad[5] = {left, bottom, atlasLeft, ATLAS_BOTTOM, color};
-
-    m_usedThisFrame += VERTICES_PER_GLYPH;
+    pen += advance;
   }
 }
 
