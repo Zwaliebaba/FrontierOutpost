@@ -394,10 +394,26 @@ def check_generated_font() -> None:
             fail(f"NeuronClient/Font.h: was baked from {relative}, which is not on disk.")
             continue
         with open(source, "rb") as handle:
-            actual = hashlib.sha256(handle.read()).hexdigest()
-        if actual != digest:
-            fail(f"NeuronClient/Font.h: {relative} has changed since the bake "
-                 f"(header says {digest[:12]}, disk is {actual[:12]}). Re-run `py Build/BakeFont.py`.")
+            content = handle.read()
+        actual = hashlib.sha256(content).hexdigest()
+        if actual == digest:
+            continue
+
+        # A hash taken over bytes on disk describes the CHECKOUT unless something stops git
+        # rewriting them, and on 2026-09-13 nothing did: the baker was committed LF, the Windows
+        # runner checked it out CRLF under `* text=auto`, and main went red on a font nobody had
+        # touched. .gitattributes pins *.py to eol=lf now, and this separates that failure from a
+        # stale bake -- because "re-bake" is the wrong answer to it. Re-baking on a CRLF checkout
+        # records a hash no LF machine can reproduce, which moves the red rather than clearing it.
+        if hashlib.sha256(content.replace(b"\r\n", b"\n")).hexdigest() == digest:
+            fail(f"NeuronClient/Font.h: {relative} matches the bake apart from its LINE ENDINGS -- "
+                 f"this checkout has CRLF where the bake had LF. Do NOT re-bake; fix the checkout. "
+                 f".gitattributes pins it to eol=lf and .editorconfig agrees, so a clean clone is "
+                 f"the shortest way back.")
+            continue
+
+        fail(f"NeuronClient/Font.h: {relative} has changed since the bake "
+             f"(header says {digest[:12]}, disk is {actual[:12]}). Re-run `py Build/BakeFont.py`.")
 
     stated = re.search(r"// Content sha256 ([0-9a-f]{64})", header)
     if not stated:
