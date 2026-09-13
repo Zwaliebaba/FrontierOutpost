@@ -22,6 +22,7 @@
 #include "FontRenderer.h"
 #include "PointerInput.h"
 #include "KeyboardInput.h"
+#include "Presentation.h"
 #include "SceneTarget.h"
 #include "ShapeRenderer.h"
 
@@ -571,11 +572,11 @@ struct MatchPaths
 ///
 /// Fills `_outTokens` and `_outBots` and returns the host's seat, or -1 when the window closed
 /// first.
-[[nodiscard]] std::int32_t RunSeatsScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::ShapeRenderer& _shapes,
-                                          Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer, Neuron::KeyboardInput& _keyboard,
-                                          HWND _window, Lockstep::HostedServer& _lobby, const std::vector<std::string>& _tokens,
-                                          std::vector<std::string>& _outTokens, std::vector<std::optional<Lockstep::BotPolicy>>& _outBots,
-                                          Lockstep::SeatsPage::Entry& _outEntry)
+[[nodiscard]] std::int32_t RunSeatsScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, const Neuron::Presentation& _presentation,
+                                          Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer,
+                                          Neuron::KeyboardInput& _keyboard, HWND _window, Lockstep::HostedServer& _lobby,
+                                          const std::vector<std::string>& _tokens, std::vector<std::string>& _outTokens,
+                                          std::vector<std::optional<Lockstep::BotPolicy>>& _outBots, Lockstep::SeatsPage::Entry& _outEntry)
 {
   Lockstep::SeatsPage page{_tokens};
 
@@ -630,7 +631,7 @@ struct MatchPaths
     }
 
     ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
-    _screen.BeginScene(commandList, _device.BackBufferView());
+    _screen.BeginScene(commandList);
 
     _shapes.BeginFrame(_device.FrameIndex());
     _text.BeginFrame(_device.FrameIndex());
@@ -643,6 +644,7 @@ struct MatchPaths
     _shapes.Flush(commandList);
     _text.Flush(commandList);
 
+    _screen.Present(commandList, _device.BackBufferView(), _presentation);
     _device.EndFrameAndPresent();
     _device.DrainDebugMessages();
   }
@@ -656,10 +658,10 @@ struct MatchPaths
 /// this one has no match, no orders and no camera the player drives, and folding it into `RunGame`
 /// would put a `if (joined)` around every line of a function that is already the longest in the
 /// tree. It returns true when there is a match to show.
-[[nodiscard]] bool RunJoinScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::ShapeRenderer& _shapes,
-                                 Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer, Neuron::KeyboardInput& _keyboard,
-                                 Lockstep::MatchConnection& _connection, const std::string& _server, const std::string& _token,
-                                 std::uint16_t _defaultPort, std::chrono::steady_clock::time_point _startedAt)
+[[nodiscard]] bool RunJoinScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, const Neuron::Presentation& _presentation,
+                                 Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, Neuron::PointerInput& _pointer,
+                                 Neuron::KeyboardInput& _keyboard, Lockstep::MatchConnection& _connection, const std::string& _server,
+                                 const std::string& _token, std::uint16_t _defaultPort, std::chrono::steady_clock::time_point _startedAt)
 {
   Lockstep::JoinPage page;
   page.Offer(_server, _token);
@@ -798,7 +800,7 @@ struct MatchPaths
 
     // ---- The frame -----------------------------------------------------------------------------
     ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
-    _screen.BeginScene(commandList, _device.BackBufferView());
+    _screen.BeginScene(commandList);
 
     _shapes.BeginFrame(_device.FrameIndex());
     _text.BeginFrame(_device.FrameIndex());
@@ -817,6 +819,7 @@ struct MatchPaths
     _shapes.Flush(commandList);
     _text.Flush(commandList);
 
+    _screen.Present(commandList, _device.BackBufferView(), _presentation);
     _device.EndFrameAndPresent();
     _device.DrainDebugMessages();
   }
@@ -834,9 +837,14 @@ int RunGame(HWND _window, const Startup& _startup)
   Neuron::DescriptorHeap shaderVisibleHeap;
   shaderVisibleHeap.Create(device.Handle(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 16, true);
 
+  // How the canvas reaches the display. At this stage the window is exactly the canvas, so the
+  // scale is one and there is no letterbox; RENDER-01 stage 2 is what makes it bigger (ADR-075).
+  const Neuron::Presentation presentation =
+    Neuron::Presentation::For(Neuron::SceneTarget::WIDTH_PIXELS, Neuron::SceneTarget::HEIGHT_PIXELS, 1);
+
   // Space is black, and on this screen it is also the colour of every rail behind every card.
   Neuron::SceneTarget screen;
-  screen.Create(device.Handle(), Neuron::BLACK);
+  screen.Create(device.Handle(), shaderVisibleHeap, Neuron::BLACK);
 
   // The two renderers the interface is made of, and the whole of what it needs: rectangles and
   // glyphs. There is no widget tree, no retained scene and no texture atlas beyond the font
@@ -981,7 +989,8 @@ int RunGame(HWND _window, const Startup& _startup)
   {
     const std::string offered = std::format("{}:{}", _startup.host, _startup.port);
     const std::string offeredToken = _startup.joinGiven ? _startup.token : hostToken;
-    if (!RunJoinScreen(device, screen, shapes, text, pointer, keyboard, connection, offered, offeredToken, _startup.port, startedAt))
+    if (!RunJoinScreen(device, screen, presentation, shapes, text, pointer, keyboard, connection, offered, offeredToken, _startup.port,
+                       startedAt))
     {
       return EXIT_SUCCESS;
     }
@@ -998,7 +1007,7 @@ int RunGame(HWND _window, const Startup& _startup)
     std::vector<std::optional<Lockstep::BotPolicy>> bots;
     Lockstep::SeatsPage::Entry entry = Lockstep::SeatsPage::Entry::Match;
     const std::int32_t hostSeat =
-      RunSeatsScreen(device, screen, shapes, text, pointer, keyboard, _window, *hosted, seatTokens, playing, bots, entry);
+      RunSeatsScreen(device, screen, presentation, shapes, text, pointer, keyboard, _window, *hosted, seatTokens, playing, bots, entry);
     if (hostSeat < 0)
     {
       return EXIT_SUCCESS;
@@ -1330,7 +1339,7 @@ int RunGame(HWND _window, const Startup& _startup)
     redraw = false;
 
     ID3D12GraphicsCommandList* commandList = device.BeginFrame();
-    screen.BeginScene(commandList, device.BackBufferView());
+    screen.BeginScene(commandList);
 
     shapes.BeginFrame(device.FrameIndex());
     text.BeginFrame(device.FrameIndex());
@@ -1354,6 +1363,7 @@ int RunGame(HWND _window, const Startup& _startup)
     shapes.Flush(commandList);
     text.Flush(commandList);
 
+    screen.Present(commandList, device.BackBufferView(), presentation);
     device.EndFrameAndPresent();
     device.DrainDebugMessages();
   }
@@ -1362,9 +1372,9 @@ int RunGame(HWND _window, const Startup& _startup)
   g_keyboardInput = nullptr;
 
   // Drain the GPU here, not in ~Device. Destructors run in reverse declaration order, so the
-  // SceneTarget's depth buffer would otherwise be released while the last submitted command list
-  // still referenced it -- which the debug layer reports as OBJECT_DELETED_WHILE_STILL_IN_USE and
-  // a release build turns into a use-after-free.
+  // SceneTarget's canvas and depth buffer would otherwise be released while the last submitted
+  // command list still referenced them -- which the debug layer reports as
+  // OBJECT_DELETED_WHILE_STILL_IN_USE and a release build turns into a use-after-free.
   device.WaitForGpu();
   device.DrainDebugMessages();
 

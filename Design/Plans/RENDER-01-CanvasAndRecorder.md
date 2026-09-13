@@ -213,6 +213,55 @@ canvas. `screen.Create` now takes `device` and `shaderVisibleHeap`, so it moves 
 length, same hash. Run the Debug build and confirm `Device::DrainDebugMessages` reports nothing
 (a missing barrier shows up here, not on screen).
 
+**Stage 1, as run (2026-09-13).** Three checkers green, Debug and Release both build, 527 tests
+pass (ten of them new), and the join screen at scale 1 is **byte-identical**: SHA-256
+`a9d82e21…2880f1bf`, 19,439 bytes, the same hash the pre-stage build produced. The D3D12 debug
+layer says nothing.
+
+**The byte-identical test has a second outcome, and the plan leans on that test for five more
+stages.** The join screen's caret blinks on a **wall-clock** period of one second, lit for 0.6 of it
+(`JoinPage.cpp`, `BLINK_SECONDS`), and `Screenshot.ps1` fires a fixed time after the window appears
+— so which phase it catches depends on how long the process took to get there. The caret-off
+capture differs from the caret-on one in **exactly seven pixels**, `(492..498, 349)`, which is the
+7px Plex Mono advance of `_` in `BLUE` over the field fill. Both were seen on the same binary
+within a minute of each other:
+
+| phase | SHA-256 | bytes |
+|---|---|---|
+| caret on | `a9d82e21…2880f1bf` | 19,439 |
+| caret off | `9641ae45…90fb1970` | 19,425 |
+
+At a two-second settle the lit phase is what comes back — six runs out of six — which is why
+FONT-01 and this stage both read as clean. **A stage that gets the other hash has not broken the
+picture**, and a session that assumes otherwise will go looking for a renderer bug that is a
+blinking underscore. The check for the rest of this plan is therefore: capture until the caret-on
+hash appears, and if a different hash turns up, diff the two PNGs before concluding anything — a
+real regression is not seven pixels on row 349.
+
+**The debug-layer check was proved rather than assumed.** "DrainDebugMessages reports nothing" is
+worth nothing if the info queue is null, which it is on a machine without the Graphics Tools
+feature (`Device.h` says so). It is present on this one: with the canvas's
+`RENDER_TARGET → PIXEL_SHADER_RESOURCE` barrier temporarily deleted, the layer reported
+`RESOURCE_BARRIER_BEFORE_AFTER_MISMATCH #527` and the break fired. The barrier was put back. Reading
+`OutputDebugString` without a debugger needs a DBWIN listener — `DebugTrace` is
+`OutputDebugStringA` — and that is a scratch script, not a thing in the tree.
+
+**Two deviations from what this stage was written to do, both smaller than the plan's version.**
+`SceneTarget::Create` takes `ID3D12Device*` and not `Device&`: it creates two resources and a
+pipeline and never needs a queue, so `Device&` would have widened a dependency for symmetry with
+`FontRenderer` alone, and the call site already passed `device.Handle()`. And the canvas size now
+lives in `Presentation.h` as `CANVAS_WIDTH_PIXELS` / `CANVAS_HEIGHT_PIXELS`, with
+`SceneTarget::WIDTH_PIXELS` defined from it: `Presentation` is the header a second platform reuses
+unchanged, so it cannot take the number from a class that owns D3D12 resources, and the eleven
+existing call sites keep the spelling they have.
+
+**The gates caught two things in code written this session, which is what they are for.**
+`CheckProjectFiles` rejected a test method named `…Centres…` under R11, and `clang-tidy`
+rejected eight `constexpr Neuron::Presentation presentation` locals under R3 — a `constexpr` is
+`UPPER_CASE`. The second is worth the note because the fix improved the tests rather than
+placating a rule: they now read `EXACT`, `DOUBLED`, `LETTERBOXED` and `TOO_SMALL`, which is what
+each case is.
+
 **Commit:** `Draw into a canvas and present it through a resolve pass`
 
 ---

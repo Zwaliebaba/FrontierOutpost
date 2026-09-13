@@ -165,6 +165,12 @@
     <FXCompile Include="Shaders\ShapePS.hlsl">
       <ShaderType>Pixel</ShaderType>
     </FXCompile>
+    <FXCompile Include="Shaders\CanvasVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+    </FXCompile>
+    <FXCompile Include="Shaders\CanvasPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+    </FXCompile>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -192,6 +198,7 @@
     <ClInclude Include="NeuronClient.h" />
     <ClInclude Include="OrbitCamera.h" />
     <ClInclude Include="PointerInput.h" />
+    <ClInclude Include="Presentation.h" />
     <ClInclude Include="SceneTarget.h" />
     <ClInclude Include="ShapeRenderer.h" />
     <ClInclude Include="TextField.h" />

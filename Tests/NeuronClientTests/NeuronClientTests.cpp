@@ -14,6 +14,7 @@
 #include "FontRenderer.h"
 #include "OrbitCamera.h"
 #include "PointerInput.h"
+#include "Presentation.h"
 #include "SceneTarget.h"
 #include "ShapeRenderer.h"
 #include "Starfield.h"
@@ -122,6 +123,119 @@ public:
   {
     Assert::AreEqual(1280u, Neuron::SceneTarget::WIDTH_PIXELS);
     Assert::AreEqual(720u, Neuron::SceneTarget::HEIGHT_PIXELS);
+  }
+};
+
+// Presentation is the arithmetic that puts a 1280x720 canvas on a surface of some other size, and
+// it is the one piece of ADR-075 that a second platform reuses with no edit at all -- so it is
+// also the piece worth testing away from a device, which is what these do. There is no D3D12
+// here and no window: the type is five integers and two functions over them.
+//
+// The numbers below are the three cases that actually occur. Scale 1 in a window that IS the
+// canvas is the desktop today; scale 2 in 2560x1440 is a 4K monitor at 200%; 1920x1080 at scale 1
+// is the letterboxed case, and its offsets are the ones an off-by-one would live in.
+TEST_CLASS(PresentationTests)
+{
+public:
+  TEST_METHOD(TheCanvasIsTwelveEightyBySevenTwenty)
+  {
+    Assert::AreEqual(1280u, Neuron::Presentation::CANVAS_WIDTH_PIXELS);
+    Assert::AreEqual(720u, Neuron::Presentation::CANVAS_HEIGHT_PIXELS);
+  }
+
+  TEST_METHOD(ASurfaceThatIsTheCanvasHasNoLetterbox)
+  {
+    constexpr Neuron::Presentation EXACT = Neuron::Presentation::For(1280, 720, 1);
+
+    Assert::AreEqual(1u, EXACT.scale);
+    Assert::AreEqual(0u, EXACT.offsetXPixels);
+    Assert::AreEqual(0u, EXACT.offsetYPixels);
+  }
+
+  TEST_METHOD(ADoubledSurfaceHasNoLetterboxEither)
+  {
+    constexpr Neuron::Presentation DOUBLED = Neuron::Presentation::For(2560, 1440, 2);
+
+    Assert::AreEqual(2u, DOUBLED.scale);
+    Assert::AreEqual(0u, DOUBLED.offsetXPixels);
+    Assert::AreEqual(0u, DOUBLED.offsetYPixels);
+  }
+
+  TEST_METHOD(TenEightyPCentersTheCanvasAtScaleOne)
+  {
+    constexpr Neuron::Presentation LETTERBOXED = Neuron::Presentation::For(1920, 1080, 1);
+
+    // (1920 - 1280) / 2 and (1080 - 720) / 2: a 320x180 border on each side.
+    Assert::AreEqual(320u, LETTERBOXED.offsetXPixels);
+    Assert::AreEqual(180u, LETTERBOXED.offsetYPixels);
+  }
+
+  // An unsigned subtraction that underflows here would put the offset at two billion and the
+  // canvas nowhere. Nothing produces this today, which is exactly why it is pinned.
+  TEST_METHOD(ASurfaceTooSmallForTheCanvasGetsAZeroOffset)
+  {
+    constexpr Neuron::Presentation TOO_SMALL = Neuron::Presentation::For(800, 600, 1);
+
+    Assert::AreEqual(0u, TOO_SMALL.offsetXPixels);
+    Assert::AreEqual(0u, TOO_SMALL.offsetYPixels);
+  }
+
+  // ToCanvas divides by the scale, so a zero would be a division by zero rather than a small
+  // mistake. For() is the only producer and it is where the invariant is established.
+  TEST_METHOD(AScaleOfZeroIsNotAThing)
+  {
+    Assert::AreEqual(1u, Neuron::Presentation::For(1280, 720, 0).scale);
+  }
+
+  TEST_METHOD(AtScaleOneToCanvasIsTheIdentity)
+  {
+    constexpr Neuron::Presentation EXACT = Neuron::Presentation::For(1280, 720, 1);
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsTrue(EXACT.ToCanvas(640.0F, 360.0F, x, y));
+    Assert::AreEqual(640.0F, x);
+    Assert::AreEqual(360.0F, y);
+  }
+
+  // Half a canvas pixel, and it is deliberate: the pages take float positions, so a drag at scale
+  // 2 moves by one surface pixel rather than jumping two canvas pixels at a time.
+  TEST_METHOD(AtScaleTwoASurfacePixelIsHalfACanvasPixel)
+  {
+    constexpr Neuron::Presentation DOUBLED = Neuron::Presentation::For(2560, 1440, 2);
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsTrue(DOUBLED.ToCanvas(2559.0F, 1439.0F, x, y));
+    Assert::AreEqual(1279.5F, x);
+    Assert::AreEqual(719.5F, y);
+  }
+
+  TEST_METHOD(APointInTheLetterboxIsOutsideTheCanvas)
+  {
+    constexpr Neuron::Presentation LETTERBOXED = Neuron::Presentation::For(1920, 1080, 1);
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsFalse(LETTERBOXED.ToCanvas(10.0F, 10.0F, x, y));
+
+    // The canvas's first pixel, which is where the letterbox stops.
+    Assert::IsTrue(LETTERBOXED.ToCanvas(320.0F, 180.0F, x, y));
+    Assert::AreEqual(0.0F, x);
+    Assert::AreEqual(0.0F, y);
+  }
+
+  // The far edge is exclusive. 1280 is the first column that is NOT the canvas, and a test that
+  // said otherwise would be pinning an off-by-one that puts a tap on a control one pixel wide.
+  TEST_METHOD(TheFarEdgeOfTheCanvasIsExclusive)
+  {
+    constexpr Neuron::Presentation LETTERBOXED = Neuron::Presentation::For(1920, 1080, 1);
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsTrue(LETTERBOXED.ToCanvas(320.0F + 1279.0F, 180.0F + 719.0F, x, y));
+    Assert::IsFalse(LETTERBOXED.ToCanvas(320.0F + 1280.0F, 180.0F + 719.0F, x, y));
+    Assert::IsFalse(LETTERBOXED.ToCanvas(320.0F + 1279.0F, 180.0F + 720.0F, x, y));
   }
 };
 
