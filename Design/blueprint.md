@@ -404,7 +404,8 @@ one holding.
 **Now → Phase 0 (weeks).** Six people, one weekend, on the desktop prototype. The build is ready;
 what it needs is a host, six tokens and a Saturday. Expect to change numbers, not rules — with one
 rules change landing ahead of it: building levels and build time (§3), so that the credits Phase 0
-spends are not dead by day two.
+spends are not dead by day two. `Design/Plans/4X-03-PhaseZero.md` is that change and everything else
+the tree owes first, in order, written for Claude Code to execute.
 
 **Before Phase 1: the fiction.** A design session that gives the game a world — who the players are,
 why the galaxy is bounded, what the sealed region is and why it opens. It should be written to the
@@ -555,6 +556,7 @@ Phase 1; whether the sealed region is visible through fog from tick one.
 | The playtest phases, at greater length than §5 | `Design/Archive/space-4x-prototype-test-plan.md` — archived 2026-09-13 |
 | Every decision and what it rejected | `Design/ADR/` — ADR-018 through ADR-031 are the game; 014, 017, 027, 032, 033 are the screen; 034 through 066 are everything built since the UI handoff of 2026-09-11 |
 | What was built, step by step, with what it found | `Design/Plans/4X-01-CoreLoop.md`, `Design/Plans/4X-02-ServerAndClient.md` |
+| What the tree still owes before Phase 0, step by step | `Design/Plans/4X-03-PhaseZero.md` |
 | The screens, as built and photographed | `Design/UI/` (README, DESIGN-GUIDELINES, SCREENS, `screens/*.png`) |
 | How code is written here | `AGENTS.md` |
 | What a phone client would cost | `Design/Reference/mobile-portability.md` |
