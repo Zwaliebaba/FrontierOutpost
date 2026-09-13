@@ -99,9 +99,27 @@ the five characters ADR-014 substituted and re-measuring the six strings it shor
 - **"31 characters a line" is retired.** The digest rail is 254px and always was; what fits in it is
   the font's to answer, and at the 7px mono column that is **36**. Every such number in this
   directory is a fact about the face and moves when the face does.
-- **The middle dot is back.** `·`, `−`, `–`, `→` and `›` are all baked, so the five substitutions
-  ADR-014 was forced into can be undone. **They have not been yet** — that is FONT-01 stage 7 — so
-  the build still reads `SINCE YOU LOOKED - T43 > T46` and `M0419 - D12/21`.
+- **The middle dot is back**, and so are the rest. The build reads `SINCE YOU LOOKED · T43 → T46`
+  and `M0006 · D2/21 · 6 PLAYERS · 31 SYSTEMS`. Which character goes where is narrower than "every
+  dash":
+  - `·` separates **peer facts** on one line — things of the same kind, either of which could come
+    first. A dash joining a thing to its subject is not this and keeps its hyphen: `BUILD - HOLLIS`
+    and `SHIPYARD L2 - HALVORSEN` read "X, namely Y", which is a dash's job.
+  - `→` is movement or a range: `FLT 3 10 → ULME`, `T43 → T46`.
+  - `›` is a trailing *go* affordance on a control: `JOIN ›`, `7 TO SEND ›`, `MORE ›`. `‹` is baked
+    for its mirror — the pager's `‹ PREV` — and is the one character here ADR-014 did not list.
+  - `−` is a true minus on a negative quantity: `QUEUED −40`, `−1 SYSTEM`.
+  - `–` is baked and **has no site**. ADR-014's `Orune–Kepler-Reach` came from a fixture that no
+    longer exists, and no generated system name carries a dash.
+- **The sources are compiled `/utf-8`.** They always held UTF-8 and every `std::string` here always
+  was UTF-8, but until 2026-09-13 every literal happened to be ASCII, so nothing had noticed that
+  MSVC was reading them through the system code page. The first `·` would have come out as two
+  bytes of mojibake.
+- **None of ADR-014's six shortened strings was restored, and not because they do not fit.** They
+  do: at the 7px column the spelled-out top bar has 344px of room and needs 315. Each was
+  superseded instead — T-notation is the screen's own form (`ETA T9`, `CAPTURED T4`), `LDR` and
+  `D2/21` are UI v2's (ADR-034), `ALL LOCK TOGETHER` is correct for any player count where `ALL 3`
+  was not, and the row `Trade lane with HALVORSEN` sat on no longer exists.
 
 ## Palette (8-bit RGBA)
 The built values are `Ink` in `DesignTokens.h`; the fractions below are the handoff's, with the

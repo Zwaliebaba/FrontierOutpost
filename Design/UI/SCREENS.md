@@ -10,7 +10,7 @@ stated as such, and nothing below is in the present tense unless the tree does i
 
 ## 01 · Main page — **built** (`01-main-page.png` is the capture, tick 2 of a practice match)
 
-**Top bar (44px, `MainPage::DrawTopBar`).** `LOCKSTEP` · `M0007 - D2/21 - 6 PLAYERS - 26 SYSTEMS`
+**Top bar (44px, `MainPage::DrawTopBar`).** `LOCKSTEP` · `M0007 · D2/21 · 6 PLAYERS · 26 SYSTEMS`
 · spacer · `T8 LOCKS` + the countdown at 2× in amber · `26 CR` · `SCORE 1,284` + chip `4TH / 6` ·
 `LDR P3 1,610` · `▶ REPLAY T7`. The left sentence is measured against what the right block leaves
 and dropped a clause at a time (`- ENDS <date>` first, then the census, then only the stem). While
@@ -23,7 +23,7 @@ is over, `MATCH ENDED --:--:--`.
 (ADR-051 records the defect); `endsAt` is never filled, so the `ENDS` clause never shows.
 
 **Digest (400px, left) — the order surface (`DrawDigestRail`, `DigestView.cpp`).**
-Header `DIGEST - TICK 7` with `5 EVENTS` on the right, or `SINCE YOU LOOKED - T4 > T7` with an
+Header `DIGEST - TICK 7` with `5 EVENTS` on the right, or `SINCE YOU LOOKED · T4 → T7` with an
 amber `3 TICKS` chip and the delta box when ticks resolved unseen (see 08). Then cards in consequence
 order, each with its actions on its own row: an event card (dot, uppercased title, wrapped detail,
 verdict box when your fleet is flying into a contact, actions), or an actor card grouping a rival's
@@ -46,7 +46,7 @@ action names.
 **Overflow (ADR-061).** An **actor card is collapsed** unless it is the open one: dot, title, `3
 EVENTS`, the verdict box and the whole action row, with the per-event lines behind a tap on its
 22px title band; one card is open at a time. A stack that still does not fit is **paged**, with a
-22px band at the foot of the column — `1 / 3 - MORE >`, and `< PREV` once past page one — drawn only
+22px band at the foot of the column — `1 / 3 · MORE ›`, and `‹ PREV` once past page one — drawn only
 when it is needed. Page breaks fall between cards; the page and the open card reset when a new
 digest arrives; the leading card, which carries the standing moves (ADR-056), is always on page 1.
 
@@ -72,7 +72,7 @@ for that draws it in the middle. `01-orders-queued.png` is the ordered-but-unloc
 `FLT 1 10 HOLD DOTHAN` with `HOLD`, `+DEF` in blue when it is the incumbent), `BUILDS 2 AVAIL - 26
 CR` (queued rows `SHIPYARD L1 - PELL` / `QUEUED -20`, then a row per build already rising,
 `SHIPYARD L1 - DOTHAN` / `T5` in muted ink — the form FLEETS uses for a fleet under way, ADR-070 —
-a `- 6 cr left at the lock -` line, `- nothing queued -` otherwise), `SIGNALS 9 TO SEND >` (rows
+a `- 6 cr left at the lock -` line, `- nothing queued -` otherwise), `SIGNALS 9 TO SEND ›` (rows
 `SENDING`, a concede in red), `PROPOSALS 1 OPEN` (rows `P3 LANE` / `3 TICKS` amber). Footer
 `ALL LOCK TOGETHER` + the countdown.
 
@@ -101,7 +101,7 @@ and, for a sheet left open across the lock, `06-at-lock-sheet.png`.
 - **Destination** (`MOVE FLT 1 - PICK LANE`): opened by `MOVE`/`REDIRECT` on a card or by tapping
   your fleet's marker; one row per lane out of where the fleet is or is going: owner square,
   `PELL`, `UNCLAIMED` / `YOURS` / `P3` with the hostile ships standing there and `+DEF` appended
-  (`P3 - 11 +DEF`, ADR-063), then `- CAPITAL` / `- CONTESTED`, and `2 TICKS - ETA T9` on the right —
+  (`P3 · 11 +DEF`, ADR-063), then `· CAPITAL` / `· CONTESTED`, and `2 TICKS · ETA T9` on the right —
   the lane cost and the arrival tick as two facts. Picking a row orders the move (drawn at progress
   zero until the lock) and closes the sheet. *Not built:* the verdict under the right-hand column
   (`YOU WIN` / `HOLD` / `YOU LOSE`). It needs a preview per candidate destination on
@@ -250,7 +250,7 @@ phase behind it. The snapshot carries no phase records, so the wire comes first
 Built (ADR-044): the server keeps eight ticks of digest per player and sends the whole backlog on
 arrival; the match loop concatenates the digests newer than the last tick it drew, oldest first,
 into one list, and when the new state is two or more ticks past that the header reads `SINCE YOU
-LOOKED - T4 > T7` with a `3 TICKS` chip and the four-cell delta counted over that list. Ranking and
+LOOKED · T4 → T7` with a `3 TICKS` chip and the four-cell delta counted over that list. Ranking and
 grouping run over the whole window, so a rival busy across three ticks is one actor card.
 
 **Repeats are folded (ADR-062).** In that window only, a run of consecutive events of the same kind

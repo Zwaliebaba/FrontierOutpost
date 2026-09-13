@@ -1,7 +1,8 @@
 # FONT-01 — From one hand-typed 8×8 font to five baked cuts of IBM Plex
 
-**Status:** **In flight. Stages 0 to 6 done 2026-09-13; stage 7 is next.** Written 2026-09-13 against ADR-073 and ADR-074,
-both Accepted by the owner the same day.
+**Status:** **Done. All seven stages built 2026-09-13.** Written 2026-09-13 against ADR-073 and ADR-074,
+both Accepted by the owner the same day; ADR-074 was amended on the same day by its own contingency,
+from five cuts to four.
 
 **Stage 0 verification, as run (2026-09-13).** The three checkers pass, Debug|x64 builds, and all
 five suites pass — 507 tests. The join screen was captured from a build of each side and the two
@@ -88,22 +89,20 @@ had ever been looked at on screen.
 
 ## Where to pick this up
 
-**Branch `font/plex-faces`, fifteen commits, tree clean, all three checkers green, 517 tests
-passing.** Stages 0 to 6 are built. **Stage 7 is next and nothing blocks it.**
+**Branch `font/plex-faces`, seventeen commits, tree clean, all three checkers green, 517 tests
+passing. Every stage is built.** What is left is not code:
 
-What stage 7 is: restore the five characters ADR-014 substituted and re-measure the six strings it
-shortened. `TICK 47 LOCKS IN` was cut because the top bar was 63px over the frame at 8px; the mono
-column is 7px now and the bar was re-derived in stage 6, so **measure it, do not assume it**.
-
-**The strings are in `MainPage.cpp`, not in `Lockstep/MatchFixture.cpp`.** This plan named a file
-that does not exist and never did — `std::format("T{} LOCKS", ...)` is at `MainPage.cpp:802` and the
-63px reasoning is in the comment at `MainPage.cpp:813`.
-
-**One thing stage 6 could not finish, and it is not a code problem.** Eighteen of the twenty-three
-captures in `Design/UI/screens` still show the 8×8 font. Each needs the client driven to a state — a
-sheet opened, a row hovered, a replay stepped — and the client takes input through the Windows
-Pointer API, so only a real `SendInput` tap on an **unlocked desktop** reaches it. The desktop was
-locked. The five reachable without a tap were retaken and `Design/UI/README.md` names them.
+1. **Eighteen of the twenty-three captures in `Design/UI/screens` still show the 8×8 font.** Each
+   needs the client driven to a state — a sheet opened, a row hovered, a replay stepped — and the
+   client takes input through the Windows Pointer API, so only a real `SendInput` tap on an
+   **unlocked desktop** reaches it. The desktop was locked for all of stages 6 and 7. The five
+   reachable without a tap are current and `Design/UI/README.md` names them.
+2. **Where the OFL notice lives.** Four cuts of a licensed typeface in a shipped binary is
+   distribution, and R13 leaves nowhere beside the executable to put a licence file. Owner decision;
+   it blocks shipping rather than building.
+3. **Whether the screen keeps shouting its labels.** ADR-074 left it open and stage 6 did not answer
+   it. `FaceRuleTests` leans on the current answer — it tells a label from a sentence by whether the
+   string carries a lowercase letter — and says so.
 
 **The checkable rule is not the one this plan proposed, and the difference matters.** The proposal
 was: no sans string carries a digit, and no mono string ends in `.` or `?`. The first half is
@@ -369,7 +368,7 @@ sentence by whether it carries a lowercase letter, which works only because the 
 the comment and the test now say so, so that whoever settles the design question finds out that a
 test is leaning on the current answer before they change it.
 
-### Stage 7 — The copy ADR-014 could not carry.
+### Stage 7 — The copy ADR-014 could not carry. **Done 2026-09-13.**
 
 Restore the five substituted characters and re-measure the six shortened strings. `TICK 47 LOCKS IN`
 was shortened because the top bar was 63px over the frame at 8px; whether it still is depends
@@ -377,7 +376,42 @@ entirely on Stages 4 and 6, so **measure, do not assume**.
 
 **They are in `LockstepClient/MainPage.cpp`.** This plan said `Lockstep/MatchFixture.cpp`, which does
 not exist in the tree and is not in the index — only stale `.obj` files under `x64/` carry the name.
-`std::format("T{} LOCKS", ...)` is at line 802 and the 63px reasoning is in the comment at 813.
+
+**Stage 7, as run.** Twenty-four sites across six files.
+
+**The characters went back; the shortenings did not, and the measurement is why that is a finding
+rather than a shrug.** They all fit now — at the 7px column the fully spelled-out top bar needs
+315px against 344px of room, so the 63px overrun is gone twice over. Each was then checked for
+*why* it was short, and every one of the six had been superseded by something other than the font:
+T-notation is the screen's own form and ADR-014 says so itself (`ETA T9`, `CAPTURED T4`); `LDR` and
+`D2/21` came from UI v2 (ADR-034, commit `ce6d9c0`), not from ADR-014; `ALL LOCK TOGETHER` is
+correct for any player count where `ALL 3` was not; and the row `Trade lane with HALVORSEN` sat on
+no longer exists. **Restoring them would have undone design work, not a font compromise.**
+
+**Which character goes where is narrower than "every dash".** `·` separates peer facts — things of
+the same kind, either of which could come first. A dash joining a thing to its subject keeps its
+hyphen: `BUILD - HOLLIS` and `SHIPYARD L2 - HALVORSEN` read "X, namely Y". `→` is movement or a
+range, `›` a trailing *go* affordance, `−` a true minus.
+
+**`–` is baked and has no site.** ADR-014's `Orune–Kepler-Reach` came from the fixture that no longer
+exists, and no generated system name carries a dash.
+
+**A sixth character was added.** `‹`, for the digest pager's `‹ PREV` against `MORE ›`. A control
+with one typeset half and one ASCII half reads as a defect rather than as a decision.
+
+**The sources are compiled `/utf-8` now, and were not before.** They always held UTF-8 and every
+`std::string` here always was UTF-8 — but every literal happened to be ASCII, so nothing had noticed
+that MSVC reads a source through the system code page unless told otherwise. The first `·` would
+have compiled cleanly into two bytes of mojibake. Added to both configurations of all eleven
+projects, which is what `CheckProjectFiles` requires.
+
+**One defect the restoration surfaced, and it was not in the copy.** The delta box coloured a loss
+red by testing `cells[index].front() == '-'` — a byte comparison against display text. A true minus
+is three bytes of UTF-8, so that test would have gone on compiling and silently stopped finding a
+single negative. It had also never been true for `2 LANES LOST`, which is a loss that does not lead
+with a sign. The cell carries a `loss` flag now instead of having one inferred from its own text.
+**The colouring is unchanged** — whether `LANES LOST` should be red is a design question, and
+carrying the flag makes the current answer visible without answering it.
 
 The `▶` replay glyph stays geometry. It was a triangle in the reference too, and ADR-014's reason
 for drawing rather than typing it has not changed.

@@ -1,6 +1,10 @@
 # ADR-074 — Two faces, a data/sentence rule, and glyph coverage becomes alpha
 
-**Status:** Accepted 2026-09-13 (owner, against a mockup of the main page in the two faces)
+**Status:** Accepted 2026-09-13 (owner, against a mockup of the main page in the two faces) — **amended
+2026-09-13 by its own contingency: FOUR cuts ship, not five.** Plex Mono SemiBold was dropped at
+FONT-01 stage 6 under the sentence in the Decision below that says to drop a cut rather than keep a
+difference nobody can see; the measurements that settled it are under "What shipped" at the end. The
+data/sentence rule, the two families and coverage-as-alpha are unchanged.
 
 **Date:** 2026-09-13
 **Decided by:** Owner brief, 2026-09-13: IBM Plex Mono for data, IBM Plex Sans for sentences, with a stated rule for which is which. This ADR records the decision and the one thing the brief implies without saying — that the screen acquires anti-aliased text, reversing ADR-014 for the interface's text pass.
@@ -17,7 +21,7 @@ question ADR-073 deliberately left alone.
 
 - **IBM Plex Mono** (Regular 400, Medium 500, SemiBold 600) — the *data* face: every rail row,
   status, number, chip, button label, section label, card title, top bar, countdown, sheet row,
-  legend.
+  legend. *SemiBold did not survive the screen; see "What shipped".*
 - **IBM Plex Sans** (Regular 400, Medium 500) — the *sentence* face only: event-card detail lines,
   the rail's help line, dialog paragraphs, sheet second lines, the join screen's explanatory lines.
 
@@ -118,7 +122,8 @@ otherwise. `SetClipRect` keeps clipping by whole glyphs.
 **Weights are a signal, not decoration.** Three mono cuts exist to separate a card title from a
 rail row from a countdown, and if at the final size two of them are indistinguishable, the
 answer is to drop a cut rather than to keep a difference nobody can see. Verify this on the real
-screen before the layout is re-derived around it.
+screen before the layout is re-derived around it. **This was verified, and a cut was dropped —
+see "What shipped".**
 
 **`Uppercased()` stops being forced by the font.** Its comment says "the font has one case"; Plex
 has two. Whether the screen keeps shouting its labels is a design question this ADR does not
@@ -177,7 +182,61 @@ is the direction that helps the six shortened strings.
 
 **Whether labels stay uppercase.** Removed as a constraint, not answered as a design question.
 
-**Whether three mono weights survive contact with the screen.** See the Decision.
+**~~Whether three mono weights survive contact with the screen.~~ Answered 2026-09-13: two did.**
+See "What shipped".
 
 **Where the OFL notice lives.** Carried over from ADR-073, still an owner decision, and it binds
 this ADR harder because five cuts of a licensed typeface is unambiguously distribution.
+
+---
+
+## What shipped
+
+Added 2026-09-13, after `Design/Plans/FONT-01-PlexFaces.md` built this decision in seven stages.
+**Everything below was measured on the built client, not argued from the brief.**
+
+**Four cuts, not five.** Plex Mono SemiBold is not baked. Measured at 12px over `SHIPYARD L1 HOLLIS
+20 CR`, as coverage after the gamma correction below:
+
+| step | ink | fully covered pixels |
+|---|---|---|
+| Mono Regular → Medium | **+15.4%** | 10% → 18% |
+| Mono Medium → SemiBold | **+9.1%** | 18% → 24% |
+| Sans Regular → Medium | **+23.1%** | 4% → 15% |
+
+Side by side at 1× and at 2×, the first step is obvious and the second is not. The structural
+argument is the stronger one: SemiBold was set in exactly one thing, the lock countdown, which is
+already the only amber on the top bar and already twice the size — a third signal on the one string
+that needed none, and absent from every place two weights actually meet. The sans pair was measured
+the same way and **kept**. The countdown is Mono Medium.
+
+**Coverage is gamma-corrected before it becomes alpha, and that is not a tuning value.** The back
+buffer is `R8G8B8A8_UNORM` and deliberately not `_SRGB` (ADR-011), so the blender mixes sRGB-encoded
+values as though they were linear. Light on dark that lands too dark: a half-covered pixel reaches
+50% of the string's brightness where it should reach about 73%, and the thinner the stem the more of
+it is partial coverage — so the face read a weight lighter than the cut it was baked from, which is
+the opposite of what this ADR chose the cuts for. `TextPS.hlsl` raises coverage to 1/2.2, which
+against a black background is exactly what blending in linear space would have produced. A fully
+covered pixel and an uncovered one are untouched.
+
+**Hinting is on, and it was checked rather than assumed.** Unhinted at 12px produces *zero* fully
+covered pixels in either family — every stem lands across two columns at partial coverage. It is a
+parameter of the bake, so revisiting it is a re-bake and a screenshot.
+
+**The subset gained a sixth character.** `‹` is baked alongside this ADR's five. The digest pager is
+a matched pair — `‹ PREV` against `MORE ›` — and a control with one typeset half and one ASCII half
+reads as a defect rather than as a decision.
+
+**The rule is checked rather than remembered, and the check is not the one that was proposed.**
+`Tests/LockstepTests/FaceRuleTests.cpp` asserts over what a headless renderer was *asked* to draw.
+The obvious assertion — no sans string carries a digit — is false against this ADR's own face list:
+the rail's help line is sans by name and at the lock reads `Resolving T47. Controls return with the
+new digest. Anything you tap now is an order for T48.` Where the rule's two clauses overlap, **the
+sentence wins**: *contains a number* picks out text that IS data, not a sentence that mentions some.
+What is asserted instead is that data on these screens is shouted, so a sans string with no lowercase
+letter in it is a label that took the wrong face — which leans on `Uppercased()`, and therefore on
+the open question below.
+
+**Still open, and untouched by any of this:** whether the screen keeps shouting its labels now that
+the font no longer forces it, and where the OFL notice lives. The second blocks shipping rather than
+building.
