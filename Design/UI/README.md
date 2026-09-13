@@ -7,17 +7,17 @@ deliberately not, and this directory is now the **design record for the client**
 code in `LockstepClient/` and `Lockstep/`. Every status below is as of **2026-09-13** and was read
 from the tree, not from the plan.
 
-> **`screens/` is PART RETAKEN as of 2026-09-13, and the split is not arbitrary.** FONT-01 stages 5
-> and 6 are done — Plex Sans is assigned, the layout is re-derived, coverage is gamma-corrected — so
-> these five are current and show what the client actually draws:
-> `01-main-page`, `03-join`, `04-connection-lost`, `05-connecting`, `05-refused-unknown-token`.
+> **All twenty-three captures are current as of 2026-09-13**, retaken from the Debug build carrying
+> every stage of FONT-01: IBM Plex in four cuts, the data/sentence rule applied, the layout
+> re-derived around a 17px line, coverage gamma-corrected, and the five characters ADR-014 had to
+> substitute put back.
 >
-> **The other eighteen still show the 8×8 bitmap font.** Every one of them needs the client driven to
-> a state — a sheet opened, a row hovered, a replay stepped — and the client takes input through the
-> Windows Pointer API, so only a real `SendInput` tap on an **unlocked desktop** reaches it
-> (`Build/TapRehearsal.ps1` says why). The desktop was locked when stage 6 ran. Retaking them needs a
-> session at the machine, not more code. Until then, read those eighteen for layout and content, not
-> for typography.
+> **The check is mechanical rather than visual.** The 8×8 font was one bit a pixel, so a capture
+> carrying it has a handful of distinct luminances in it; an anti-aliased one has two hundred. Run
+> that over the directory and a stale file cannot hide: it is what caught `05-refused-seat-in-use`,
+> which looked retaken in a thumbnail and was not, and `05-connecting`, which had been committed
+> **blank** because the capture fired before the window had drawn anything. Neither was visible by
+> eye at review size.
 
 ## Contents
 - `SCREENS.md` — per screen: what is built, what the design asked for that is not, and where the code is.
@@ -34,7 +34,7 @@ ADR-034 (what the handoff left open) and ADR-036 through ADR-071, which are cite
 
 | # | Screen | Status | In `screens/` | Code |
 |---|---|---|---|---|
-| 01 | Main page — digest as order surface, map, locks rail | **Built** (ADR-034; then 045, 052, 053, 055–066) | `01-main-page.png` (tick 2 of a practice match: a contact, a claim with its priced build, production), `01-orders-queued.png` (tick 0: a move ordered and a build queued, before the lock), `01-fleet-under-way.png` (tick 1: the route and its marker), `01-rail-hover.png` (the locks rail with the pointer on a row, ADR-060), the sheets `01-build-sheet.png`, `01-destination-sheet.png`, `01-signal-sheet.png` and `01-signal-sheet-armed.png` (the concede armed under its band, ADR-064), `01-build-rising.png` (a build in flight, one frame carrying all three places it is said: the rail's row, the sheet that will not take another order, and the digest's card, ADR-070), and `01-finished.png`. The map's unbuilt details are item 6 below | `LockstepClient/MainPage.cpp`, `DigestView.cpp`, `MapRender.cpp` |
+| 01 | Main page — digest as order surface, map, locks rail | **Built** (ADR-034; then 045, 052, 053, 055–066) | `01-main-page.png` (tick 11 of a six-seat match: a battle, two grouped rivals, production with its priced build, a rising build, a claim — and a paged rail), `01-orders-queued.png` (tick 0: a move ordered and a build queued, before the lock), `01-fleet-under-way.png` (tick 1: the route and its marker), `01-rail-hover.png` (the locks rail with the pointer on a row, ADR-060), the sheets `01-build-sheet.png`, `01-destination-sheet.png`, `01-signal-sheet.png` and `01-signal-sheet-armed.png` (the concede armed under its band, ADR-064), `01-build-rising.png` (a build in flight, one frame carrying all three places it is said: the rail's row, the sheet that will not take another order, and the digest's card, ADR-070), and `01-finished.png`. The map's unbuilt details are item 6 below | `LockstepClient/MainPage.cpp`, `DigestView.cpp`, `MapRender.cpp` |
 | 02 | Share tick — 480×640 export | **Not built.** No button, no export; ADR-034 §2 says clipboard-only if it is ever built, and its open question asks whether it should be | none; the mockup that was the target, if it stays one, is in the design file and the history | — |
 | 03 | Join | **Built** (ADR-034 §3, ADR-041) | `03-join.png` | `LockstepClient/JoinPage.cpp`, `NeuronClient/TextField.h` |
 | 04 | Connection lost | **Built** (ADR-038, ADR-043) | `04-connection-lost.png` | `LockstepClient/ConnectionDialog.cpp` |
@@ -121,14 +121,16 @@ starts with twenty credits and that missed digests are one tick deep; none was t
 it was corrected on 2026-09-12. (Rail rows became links later the same day — ADR-060 — so that first
 claim is true again, of a different mechanism: a row links to the thing it names, not to an event.)
 
-**Every capture is current as of 2026-09-13.** The five ADR-069 and ADR-070 had left stale were
-retaken that day from the Debug build at 9b25816, on an unlocked desktop, along with every other
-state those changes reach: eighteen retaken, sixteen of them different, and `01-build-rising.png`
-staged for the first time. The two that came back byte for byte what they were are
-`06-at-lock.png` and `05-waiting-for-the-host.png` — a locked tick-zero rail and a joiner with no
-board yet, which neither change reaches — and that is the check. `03-join.png`,
-`05-connecting.png` and the two refusals were left alone: nothing has touched `JoinPage` or
-`ConnectionDialog` since they were taken.
+**Every capture was retaken on 2026-09-13 for FONT-01**, from the Debug build carrying all seven
+stages. All twenty-three are different, because the face changed on every screen — which is also why
+the by-eye check that served the ADR-069 and ADR-070 retakes does not serve this one, and the
+luminance-count check above replaced it.
+
+`01-main-page.png` is **no longer a practice match**. The recipe asked for one and a practice match
+at these seeds now yields a digest of one or two events, which documents the screen's typography
+poorly; it is a `--serve` match eleven ticks in instead, with thirty-five events, a paged rail and
+ten fleets. The practice match is still what the sheet captures are taken from, because it is the
+quickest way to a tick-zero board with a `MOVE FLT n` card on it.
 
 ## Photographing the build
 
@@ -147,8 +149,19 @@ ADR-066 touched was retaken the same day from the Debug build carrying them. Don
   fails with error 1002). A posted `WM_KEYDOWN` *does* land, locked or not: Enter is JOIN on
   screen 03 and ENTER MATCH on 09. `Get-Process LogonUI` says whether the desktop is locked; if it
   is, the window will report itself foreground and no tap will happen.
-- Client-pixel targets: JOIN (826, 479); PRACTICE MATCH (744, 482); `REPLAY T<n>` (1210, 24); a
-  sheet's `CANCEL` bar (700, 688); the `SIGNALS` header on a fresh rail (1150, 201). The filled
+- Client-pixel targets, **re-measured 2026-09-13 after FONT-01 stage 6 moved two of them**: JOIN
+  (826, 479); **PRACTICE MATCH (752, 502)**, which was (744, 482) until a seat card grew from 120px
+  to 130 and pushed the box below it down; `REPLAY T<n>` (1210, 24); a sheet's `CANCEL` bar
+  (700, 688); the `SIGNALS` header on a fresh rail (1150, 232), which was 201.
+- **Do not hardcode a rail position at all — scan for the section dividers.** Each section of the
+  locks rail opens with a full-width 1px divider at 7% white, so the third of them down the rail is
+  where `SIGNALS` starts and the band is the 22px under it. That is immune to a queued build, a
+  second fleet, or the next change to the line height, all of which have broken a literal.
+- **A system marker and a fleet marker are the same blue and differ only in size.** Both are exactly
+  `94,196,255`; scanning the map pane for runs of it gives system discs at 13–18px wide and a fleet
+  at about 9. Tapping a system opens its build sheet, tapping a fleet opens the destination picker,
+  and a parked fleet has no marker at all — so the picker is reachable only while something is under
+  way, or from `MOVE FLT n` on a tick-zero card. The filled
   build button moves with the digest — scan column x=40 for solid blue, as `TapBuild` does. **The
   `SIGNALS` header moves too**: it sits under BUILDS, so a queued build or a second fleet pushes it
   down 16 pixels a line, and 201 is only right on an opening rail. Since ADR-069 put the level in

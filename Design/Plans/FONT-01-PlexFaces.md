@@ -89,15 +89,19 @@ had ever been looked at on screen.
 
 ## Where to pick this up
 
-**Branch `font/plex-faces`, seventeen commits, tree clean, all three checkers green, 517 tests
-passing. Every stage is built.** What is left is not code:
+**Branch `font/plex-faces`, nineteen commits, tree clean, all three checkers green, 517 tests
+passing. Every stage is built and all twenty-three captures are retaken.** What is left is not code:
 
-1. **Eighteen of the twenty-three captures in `Design/UI/screens` still show the 8×8 font.** Each
-   needs the client driven to a state — a sheet opened, a row hovered, a replay stepped — and the
-   client takes input through the Windows Pointer API, so only a real `SendInput` tap on an
-   **unlocked desktop** reaches it. The desktop was locked for all of stages 6 and 7. The five
-   reachable without a tap are current and `Design/UI/README.md` names them.
-2. **Where the OFL notice lives.** Four cuts of a licensed typeface in a shipped binary is
+**Photographing the screens found the one defect stage 6 had missed**, and it could not have been
+found any other way: the lobby needs a keypress to reach, the desktop was locked, so a seat card
+kept the collision every other screen had had fixed. Every test passed either way — what the tests
+assert about that page is that its buttons work when pressed, and they did. Two things were drawn in
+the same place. `Design/UI/README.md` carries the mechanical check that now stands in for the eye: a
+capture of the 8×8 font has a handful of distinct luminances and an anti-aliased one has two
+hundred, which caught a file that looked retaken and was not, and another that had been committed
+blank.
+
+1. **Where the OFL notice lives.** Four cuts of a licensed typeface in a shipped binary is
    distribution, and R13 leaves nowhere beside the executable to put a licence file. Owner decision;
    it blocks shipping rather than building.
 3. **Whether the screen keeps shouting its labels.** ADR-074 left it open and stage 6 did not answer

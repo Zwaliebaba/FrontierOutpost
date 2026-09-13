@@ -8,7 +8,7 @@ are no longer in the tree (`README.md` says where they went). Numbers 01–08 ar
 was added by ADR-036 and sits between 03 and 01 in the flow (`README.md` draws it). "Not built" is
 stated as such, and nothing below is in the present tense unless the tree does it.
 
-## 01 · Main page — **built** (`01-main-page.png` is the capture, tick 2 of a practice match)
+## 01 · Main page — **built** (`01-main-page.png` is the capture, tick 11 of a six-seat match)
 
 **Top bar (44px, `MainPage::DrawTopBar`).** `LOCKSTEP` · `M0007 · D2/21 · 6 PLAYERS · 26 SYSTEMS`
 · spacer · `T8 LOCKS` + the countdown at 2× in amber · `26 CR` · `SCORE 1,284` + chip `4TH / 6` ·
