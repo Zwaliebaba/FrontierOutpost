@@ -359,6 +359,45 @@ positions; the pages already take `float`.
 run at scale 1 and must still pass unchanged). Manually at scale 2: every button on the join and
 seats screens presses where it is drawn; a click in the letterbox does nothing.
 
+**Stage 3, as run (2026-09-13).** Three checkers green, both builds, 532 tests pass (five new), and
+the join screen at `--scale 1` is byte-identical. The existing `PointerInput` tests against a real
+HWND pass with their assertions untouched.
+
+**The bounds check is split rather than passed through, and that shape is the stage.**
+`ScreenToCanvasPixels` returns false only when `ScreenToClient` itself failed; whether the mapped
+point is ON the canvas is a second question, `Presentation::OnCanvas`, asked only where it matters.
+`WM_POINTERDOWN` asks it and refuses a press in the letterbox — no contact, and not consumed, so
+the window's default handling still happens. `WM_POINTERUPDATE` deliberately does not ask: a finger
+that started on the canvas and dragged into the letterbox is still dragging, and the coordinates are
+used negative. Putting the verdict in `ToCanvas`'s return and ignoring it at one call site would
+have read as an oversight rather than as a decision.
+
+**Verified end to end at a presentation that is not the identity**, because this machine's 1080p
+monitor chooses scale 1 and would otherwise exercise none of it. From the same temporary
+`--window` build stage 2 used, at a 1920x1020 client area with the canvas at (320, 150):
+
+- A real `SendInput` click at **canvas (826, 479)** — surface (1146, 629) — pressed JOIN and the
+  client joined the hosted match. The button was pressed where it is DRAWN, through the whole chain:
+  window, `ScreenToClient`, `ToCanvas`, `TakeClick`, the page's hit list.
+- A real click at surface (10, 10), out in the black, changed **seven pixels** — `(492..498, 349)`,
+  the caret — and nothing else.
+
+**`PointerCanvasTests` is the same two facts without a GPU**, over a real 1920x1080 `WS_POPUP`
+window and real `WM_POINTER*` lParams: a tap reports the canvas pixel it landed on, canvas (0, 0) is
+not surface (0, 0), a press in the letterbox is neither recorded nor consumed, a drag that leaves
+the canvas keeps dragging with a negative canvas x, and hover in the letterbox is no hover at all.
+
+**One asymmetry, left alone deliberately.** A `WM_POINTERUP` is consumed even for a press that
+began in the letterbox and was therefore never recorded. `RemoveContact` on an unknown id is a
+no-op, so nothing observable follows from it; making it symmetric would mean remembering which
+pointer ids were accepted, which is state bought for no behaviour.
+
+**A flaky gate, and it is not this plan's.** `GameLogicTests::ATickResolvesFastEnoughToReplayAWholeMatch`
+asserts that a whole match replays in about a second, and it FAILED at 9 s while `clang-tidy` was
+saturating this machine — then passed at 609 ms on an idle one, with the whole five-suite run
+going from 8.6 minutes to 3.2. It is a wall-clock assertion on a shared machine, so it will do
+this again to whoever runs the gate beside a build.
+
 **Commit:** `Map a pointer from the surface onto the canvas`
 
 ---

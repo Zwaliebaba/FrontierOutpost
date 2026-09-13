@@ -550,6 +550,11 @@ public:
 TEST_CLASS(PointerInputTests)
 {
 public:
+  /// These tests are written at scale 1 in a window that IS the canvas, so a client pixel is a
+  /// canvas pixel and every expected number below is arithmetic on the window origin. The mapping
+  /// at other scales is PresentationTests and PointerCanvasTests (ADR-075).
+  static constexpr Neuron::Presentation AT_SCALE_ONE = Neuron::Presentation::For(1280, 720, 1);
+
   static constexpr int WINDOW_LEFT = 300;
   static constexpr int WINDOW_TOP = 200;
 
@@ -587,7 +592,7 @@ public:
   TEST_METHOD(NothingIsPendingBeforeAPointerDown)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     float x = 0.0F;
     float y = 0.0F;
@@ -597,7 +602,7 @@ public:
   TEST_METHOD(APointerDownBecomesAScreenPixel)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     // The window's client area starts at (300, 200) on screen, so this screen point is client
     // (400, 300) -- and, with the client area now exactly the framebuffer, screen pixel (400, 300)
@@ -615,7 +620,7 @@ public:
   TEST_METHOD(TheTopLeftOfTheClientAreaIsTheOrigin)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
     Assert::IsTrue(input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT, WINDOW_TOP)));
     Assert::IsTrue(input.HandleMessage(WM_POINTERUP, 0, PackScreenPoint(WINDOW_LEFT, WINDOW_TOP)));
 
@@ -629,7 +634,7 @@ public:
   TEST_METHOD(TakingAClickClearsIt)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
     input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100));
     input.HandleMessage(WM_POINTERUP, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100));
 
@@ -643,7 +648,7 @@ public:
   TEST_METHOD(ASecondTapReplacesAnUnreadFirst)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
     input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100));
     input.HandleMessage(WM_POINTERUP, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100));
     input.HandleMessage(WM_POINTERDOWN, 0, PackScreenPoint(WINDOW_LEFT + 900, WINDOW_TOP + 500));
@@ -663,7 +668,7 @@ public:
   TEST_METHOD(MessagesOutsideThePointerFamilyAreIgnored)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     Assert::IsFalse(input.HandleMessage(WM_LBUTTONDOWN, 0, PackScreenPoint(WINDOW_LEFT + 100, WINDOW_TOP + 100)));
     Assert::IsFalse(input.HandleMessage(WM_KEYDOWN, VK_SPACE, 0));
@@ -682,6 +687,156 @@ private:
 // The camera the map is seen through (ADR-017). It is the piece of this screen whose bugs are
 // hardest to see and easiest to talk yourself out of -- a mirrored axis or an inverted pitch
 // still draws a plausible picture -- so the properties below are asserted rather than eyeballed.
+// The pointer path at a presentation that is NOT the identity, which is the half of ADR-075 that
+// PresentationTests cannot reach: these go through a real window, a real WM_POINTER* lParam and
+// real ScreenToClient, and they are what says a button is pressed where it is drawn once the
+// canvas stops being the client area.
+//
+// The window is 1920x1080 at scale 1, so the canvas sits at (320, 180) with a 320x180 border on
+// every side. That is the same shape a 4K monitor gives at scale 2 and a phone gives in portrait;
+// it is used here because it is the one a test can create on any machine.
+TEST_CLASS(PointerCanvasTests)
+{
+public:
+  static constexpr int WINDOW_LEFT = 300;
+  static constexpr int WINDOW_TOP = 200;
+  static constexpr int SURFACE_WIDTH = 1920;
+  static constexpr int SURFACE_HEIGHT = 1080;
+
+  /// A 320x180 letterbox on each side. Written out rather than derived, so that a wrong offset in
+  /// Presentation::For cannot agree with a wrong offset here.
+  static constexpr float LETTERBOX_X = 320.0F;
+  static constexpr float LETTERBOX_Y = 180.0F;
+
+  static constexpr Neuron::Presentation LETTERBOXED = Neuron::Presentation::For(SURFACE_WIDTH, SURFACE_HEIGHT, 1);
+
+  TEST_METHOD_INITIALIZE(CreateHostWindow)
+  {
+    WNDCLASSEXW windowClass = {};
+    windowClass.cbSize = sizeof(WNDCLASSEXW);
+    windowClass.lpfnWndProc = DefWindowProcW;
+    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.lpszClassName = L"NeuronClientTestsCanvasHost";
+    RegisterClassExW(&windowClass);
+
+    // WS_POPUP, so the client area starts exactly at the window's top-left, as in
+    // PointerInputTests.
+    m_window = CreateWindowExW(0, L"NeuronClientTestsCanvasHost", L"", WS_POPUP, WINDOW_LEFT, WINDOW_TOP, SURFACE_WIDTH, SURFACE_HEIGHT,
+                               nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    Assert::IsNotNull(m_window, L"the test needs a window to convert screen coordinates against");
+  }
+
+  TEST_METHOD_CLEANUP(DestroyHostWindow)
+  {
+    if (m_window != nullptr)
+    {
+      DestroyWindow(m_window);
+      m_window = nullptr;
+    }
+  }
+
+  [[nodiscard]] static LPARAM PackScreenPoint(int _screenX, int _screenY)
+  {
+    return static_cast<LPARAM>((static_cast<std::uint32_t>(_screenY & 0xFFFF) << 16) | static_cast<std::uint32_t>(_screenX & 0xFFFF));
+  }
+
+  /// A screen point for a given CANVAS pixel: the window origin, plus the letterbox, plus it.
+  [[nodiscard]] static LPARAM ScreenPointForCanvas(int _canvasX, int _canvasY)
+  {
+    return PackScreenPoint(WINDOW_LEFT + static_cast<int>(LETTERBOX_X) + _canvasX, WINDOW_TOP + static_cast<int>(LETTERBOX_Y) + _canvasY);
+  }
+
+  TEST_METHOD(ATapReportsTheCanvasPixelItLandedOn)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, LETTERBOXED);
+
+    Assert::IsTrue(input.HandleMessage(WM_POINTERDOWN, 1, ScreenPointForCanvas(640, 360)));
+    Assert::IsTrue(input.HandleMessage(WM_POINTERUP, 1, ScreenPointForCanvas(640, 360)));
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsTrue(input.TakeClick(x, y));
+    Assert::AreEqual(640.0F, x);
+    Assert::AreEqual(360.0F, y);
+  }
+
+  // The whole point of the stage: the press is reported where the thing was DRAWN, not where the
+  // surface says the finger was.
+  TEST_METHOD(TheCanvasOriginIsNotTheSurfaceOrigin)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, LETTERBOXED);
+
+    Assert::IsTrue(input.HandleMessage(WM_POINTERDOWN, 1, ScreenPointForCanvas(0, 0)));
+    Assert::IsTrue(input.HandleMessage(WM_POINTERUP, 1, ScreenPointForCanvas(0, 0)));
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsTrue(input.TakeClick(x, y));
+    Assert::AreEqual(0.0F, x);
+    Assert::AreEqual(0.0F, y);
+  }
+
+  // A press out in the black border starts nothing AND is not consumed, so the window's default
+  // handling still happens. Both halves matter: consuming it would swallow a click that belongs to
+  // nobody, and recording it would put a contact at a negative canvas coordinate.
+  TEST_METHOD(APressInTheLetterboxIsNeitherRecordedNorConsumed)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, LETTERBOXED);
+
+    Assert::IsFalse(input.HandleMessage(WM_POINTERDOWN, 1, PackScreenPoint(WINDOW_LEFT + 10, WINDOW_TOP + 10)));
+    Assert::IsTrue(input.HandleMessage(WM_POINTERUP, 1, PackScreenPoint(WINDOW_LEFT + 10, WINDOW_TOP + 10)));
+
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsFalse(input.TakeClick(x, y));
+  }
+
+  // And the other half of that rule. A drag that STARTED on the canvas keeps going when it leaves,
+  // because a gesture that stuck at the edge of the canvas would be a defect a player can feel.
+  TEST_METHOD(ADragThatLeavesTheCanvasKeepsDragging)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, LETTERBOXED);
+
+    Assert::IsTrue(input.HandleMessage(WM_POINTERDOWN, 1, ScreenPointForCanvas(40, 360)));
+    // Out past the left edge of the canvas, into the letterbox: canvas x is negative here.
+    Assert::IsTrue(
+      input.HandleMessage(WM_POINTERUPDATE, 1, PackScreenPoint(WINDOW_LEFT + 10, WINDOW_TOP + static_cast<int>(LETTERBOX_Y) + 360)));
+
+    Neuron::PointerInput::Drag drag = {};
+    Assert::IsTrue(input.TakeDrag(drag));
+
+    // From canvas x=40 to canvas x=(10 - 320) = -310, so the movement is -350 canvas pixels.
+    Assert::AreEqual(-350.0F, drag.deltaXPixels);
+    Assert::AreEqual(40.0F, drag.originXPixels);
+    Assert::AreEqual(360.0F, drag.originYPixels);
+  }
+
+  // Hover is a state, and out in the letterbox the state is "nothing is under the pointer".
+  TEST_METHOD(HoverInTheLetterboxIsNoHoverAtAll)
+  {
+    Neuron::PointerInput input;
+    input.Create(m_window, LETTERBOXED);
+
+    // WM_MOUSEMOVE's lParam is CLIENT pixels already, so these are surface coordinates.
+    Assert::IsFalse(input.HandleMessage(WM_MOUSEMOVE, 0, PackScreenPoint(320 + 100, 180 + 50)));
+    float x = 0.0F;
+    float y = 0.0F;
+    Assert::IsTrue(input.PointerPosition(x, y));
+    Assert::AreEqual(100.0F, x);
+    Assert::AreEqual(50.0F, y);
+
+    Assert::IsFalse(input.HandleMessage(WM_MOUSEMOVE, 0, PackScreenPoint(10, 10)));
+    Assert::IsFalse(input.PointerPosition(x, y));
+  }
+
+private:
+  HWND m_window = nullptr;
+};
+
 TEST_CLASS(OrbitCameraTests)
 {
 public:
@@ -822,6 +977,11 @@ public:
 TEST_CLASS(DragInputTests)
 {
 public:
+  /// These tests are written at scale 1 in a window that IS the canvas, so a client pixel is a
+  /// canvas pixel and every expected number below is arithmetic on the window origin. The mapping
+  /// at other scales is PresentationTests and PointerCanvasTests (ADR-075).
+  static constexpr Neuron::Presentation AT_SCALE_ONE = Neuron::Presentation::For(1280, 720, 1);
+
   static constexpr int WINDOW_LEFT = 300;
   static constexpr int WINDOW_TOP = 200;
 
@@ -864,7 +1024,7 @@ public:
   TEST_METHOD(APressAndLiftIsATapAndArrivesOnTheLift)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
 
@@ -882,7 +1042,7 @@ public:
   TEST_METHOD(AWobbleWithinTheSlopIsStillATap)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
     input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 502, WINDOW_TOP + 301));
@@ -900,7 +1060,7 @@ public:
   TEST_METHOD(MovingPastTheSlopIsADragAndCancelsTheTap)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
     input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 560, WINDOW_TOP + 300));
@@ -916,7 +1076,7 @@ public:
   TEST_METHOD(ADragReportsEveryPixelIncludingTheSlop)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
     input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 560, WINDOW_TOP + 320));
@@ -934,7 +1094,7 @@ public:
   TEST_METHOD(MovementAccumulatesAndIsConsumedOnce)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
     input.HandleMessage(WM_POINTERUPDATE, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 540, WINDOW_TOP + 300));
@@ -953,7 +1113,7 @@ public:
   TEST_METHOD(ASecondContactCancelsTheDragAndTheTap)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
     input.HandleMessage(WM_POINTERDOWN, PackPointer(2), PackScreenPoint(WINDOW_LEFT + 700, WINDOW_TOP + 300));
@@ -972,7 +1132,7 @@ public:
   TEST_METHOD(LosingCaptureAbandonsThePress)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
     input.HandleMessage(WM_POINTERCAPTURECHANGED, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 500, WINDOW_TOP + 300));
@@ -992,6 +1152,11 @@ private:
 TEST_CLASS(ZoomInputTests)
 {
 public:
+  /// These tests are written at scale 1 in a window that IS the canvas, so a client pixel is a
+  /// canvas pixel and every expected number below is arithmetic on the window origin. The mapping
+  /// at other scales is PresentationTests and PointerCanvasTests (ADR-075).
+  static constexpr Neuron::Presentation AT_SCALE_ONE = Neuron::Presentation::For(1280, 720, 1);
+
   static constexpr int WINDOW_LEFT = 300;
   static constexpr int WINDOW_TOP = 200;
   static constexpr int CENTER_X = static_cast<int>(Neuron::SceneTarget::WIDTH_PIXELS) / 2;
@@ -1039,14 +1204,14 @@ public:
   TEST_METHOD(NoInputMeansNoZoom)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
     Assert::AreEqual(0, input.TakeZoomSteps());
   }
 
   TEST_METHOD(AWheelNotchIsOneStep)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     Assert::IsTrue(input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA), 0));
     Assert::AreEqual(1, input.TakeZoomSteps());
@@ -1062,7 +1227,7 @@ public:
   TEST_METHOD(TheClassicMouseWheelMessageIsNotHandled)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     Assert::IsFalse(input.HandleMessage(WM_MOUSEWHEEL, PackWheel(0, WHEEL_DELTA), 0));
     Assert::AreEqual(0, input.TakeZoomSteps());
@@ -1071,7 +1236,7 @@ public:
   TEST_METHOD(TakingTheZoomClearsIt)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
     input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA), 0);
 
     Assert::AreEqual(1, input.TakeZoomSteps());
@@ -1081,7 +1246,7 @@ public:
   TEST_METHOD(NotchesInOneFrameAddUp)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA), 0);
     input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, WHEEL_DELTA), 0);
@@ -1096,7 +1261,7 @@ public:
   TEST_METHOD(SubNotchWheelDeltasAccumulate)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     constexpr int THIRD_OF_A_NOTCH = WHEEL_DELTA / 3;
     input.HandleMessage(WM_POINTERWHEEL, PackWheel(1, THIRD_OF_A_NOTCH), 0);
@@ -1139,7 +1304,7 @@ public:
   TEST_METHOD(SpreadingTwoContactsZoomsIn)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     StartPinch(input, 100.0F);
     Assert::AreEqual(0, input.TakeZoomSteps(), L"putting two fingers down is not yet a zoom");
@@ -1151,7 +1316,7 @@ public:
   TEST_METHOD(PinchingTwoContactsTogetherZoomsOut)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     StartPinch(input, 200.0F);
     MovePinch(input, 200.0F / Neuron::PointerInput::PINCH_STEP_RATIO);
@@ -1164,7 +1329,7 @@ public:
   TEST_METHOD(ALargeSpreadInOneUpdateBanksSeveralSteps)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     // 64 to 125 is exactly 1.25 cubed, and every value on the way -- 64, 80, 100, 125 -- lands on
     // a whole screen pixel and is exact in a float.
@@ -1182,7 +1347,7 @@ public:
   TEST_METHOD(ASecondContactCancelsThePendingTap)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 200, WINDOW_TOP + 300));
     float x = 0.0F;
@@ -1195,7 +1360,7 @@ public:
   TEST_METHOD(OneContactStillTapsNormally)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     input.HandleMessage(WM_POINTERDOWN, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 400, WINDOW_TOP + 300));
     input.HandleMessage(WM_POINTERUP, PackPointer(1), PackScreenPoint(WINDOW_LEFT + 400, WINDOW_TOP + 300));
@@ -1213,7 +1378,7 @@ public:
   TEST_METHOD(LiftingAContactEndsThePinch)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     StartPinch(input, 100.0F);
     input.HandleMessage(WM_POINTERUP, PackPointer(2), PackScreenPoint(WINDOW_LEFT + 690, WINDOW_TOP + 400));
@@ -1227,7 +1392,7 @@ public:
   TEST_METHOD(AThirdContactIsIgnored)
   {
     Neuron::PointerInput input;
-    input.Create(m_window);
+    input.Create(m_window, AT_SCALE_ONE);
 
     StartPinch(input, 100.0F);
     input.HandleMessage(WM_POINTERDOWN, PackPointer(3), PackScreenPoint(WINDOW_LEFT + 1200, WINDOW_TOP + 700));

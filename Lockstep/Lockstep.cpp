@@ -931,7 +931,7 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
 
   // Input first: the join screen reads both, and it runs before the match does.
   Neuron::PointerInput pointer;
-  pointer.Create(_window);
+  pointer.Create(_window, presentation);
   g_pointerInput = &pointer;
 
   Neuron::KeyboardInput keyboard;

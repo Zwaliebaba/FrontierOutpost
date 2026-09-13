@@ -1,10 +1,19 @@
 #pragma once
 
+#include "Presentation.h"
+
 namespace Neuron
 {
 
 /// Turns taps, drags and wheel notches into the two things this game's input means: a point on the
-/// 1280x720 screen to go to, and a number of zoom steps.
+/// 1280x720 CANVAS to go to, and a number of zoom steps.
+///
+/// EVERYTHING THIS CLASS REPORTS IS IN CANVAS PIXELS, whatever scale the canvas is presented at
+/// (ADR-075). That is not a convenience for the pages -- though it is one, because a button is at
+/// the coordinates it was drawn at and nothing downstream has heard of a scale. It is what makes
+/// the gesture arithmetic portable: TAP_SLOP_PIXELS and PINCH_STEP_RATIO are the same numbers of
+/// canvas pixels on a 1080p window and a 4K one, so the feel of a tap does not change with the
+/// monitor, and a phone reuses this class by handing it a different Presentation.
 ///
 /// One code path for touch and mouse, through the Windows Pointer API. Touch is the primary input
 /// and the mouse is the fallback (MVP-01 section 2), and EnableMouseInPointer is what makes that
@@ -34,10 +43,12 @@ public:
   /// to report rather than to work around.
   [[nodiscard]] static bool EnableMouseAsPointer() noexcept;
 
-  /// The window whose client area the screen is. There is no scale factor to pass: the client
-  /// area is exactly the 1280x720 the game renders, so a client pixel IS a screen pixel and the
-  /// conversion is ScreenToClient and nothing else (ADR-011).
-  void Create(HWND _window) noexcept;
+  /// The window the pointer arrives over, and where the canvas sits inside its client area.
+  ///
+  /// The Presentation is stored by value: it is five integers, it is decided once at startup, and
+  /// a reference to something in the composition root is a lifetime this class should not have to
+  /// reason about (ADR-075).
+  void Create(HWND _window, const Presentation& _presentation) noexcept;
 
   /// Feeds a window message. True when it was consumed.
   bool HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) noexcept;
@@ -103,8 +114,12 @@ private:
     float yPixels;
   };
 
-  /// Desktop coordinates out of a WM_POINTER* lParam, converted to client-area pixels.
-  [[nodiscard]] bool ScreenToClientPixels(LPARAM _lParam, float& _outXPixels, float& _outYPixels) const noexcept;
+  /// Desktop coordinates out of a WM_POINTER* lParam, converted to CANVAS pixels.
+  ///
+  /// False means ScreenToClient itself failed, which for a live window does not happen -- NOT that
+  /// the point is off the canvas. Ask Presentation::OnCanvas for that, and only where it matters:
+  /// see the two WM_POINTER cases.
+  [[nodiscard]] bool ScreenToCanvasPixels(LPARAM _lParam, float& _outXPixels, float& _outYPixels) const noexcept;
 
   void AddContact(std::uint32_t _pointerId, float _xPixels, float _yPixels) noexcept;
   void MoveContact(std::uint32_t _pointerId, float _xPixels, float _yPixels) noexcept;
@@ -117,6 +132,7 @@ private:
   void EvaluatePinch() noexcept;
 
   HWND m_window = nullptr;
+  Presentation m_presentation;
 
   /// The press that is currently down, and whether it has moved far enough to stop being a tap.
   /// One finger only: a second contact turns the gesture into a pinch and cancels both.

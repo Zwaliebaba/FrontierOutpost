@@ -73,8 +73,19 @@ struct Presentation
     _outXPixels = (_surfaceXPixels - static_cast<float>(offsetXPixels)) / static_cast<float>(scale);
     _outYPixels = (_surfaceYPixels - static_cast<float>(offsetYPixels)) / static_cast<float>(scale);
 
-    return _outXPixels >= 0.0F && _outXPixels < static_cast<float>(CANVAS_WIDTH_PIXELS) && _outYPixels >= 0.0F &&
-           _outYPixels < static_cast<float>(CANVAS_HEIGHT_PIXELS);
+    return OnCanvas(_outXPixels, _outYPixels);
+  }
+
+  /// Whether a point ALREADY in canvas pixels is on the canvas. The far edge is exclusive: 1280 is
+  /// the first column that is not the canvas.
+  ///
+  /// Separate from ToCanvas because its two callers want different halves of it. Deciding whether
+  /// to BEGIN something -- a press, a hover -- asks both questions; continuing something already
+  /// begun wants the coordinates and not the verdict.
+  [[nodiscard]] static constexpr bool OnCanvas(float _canvasXPixels, float _canvasYPixels) noexcept
+  {
+    return _canvasXPixels >= 0.0F && _canvasXPixels < static_cast<float>(CANVAS_WIDTH_PIXELS) && _canvasYPixels >= 0.0F &&
+           _canvasYPixels < static_cast<float>(CANVAS_HEIGHT_PIXELS);
   }
 };
 

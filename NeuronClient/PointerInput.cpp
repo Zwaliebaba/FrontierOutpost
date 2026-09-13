@@ -1,4 +1,4 @@
-// PointerInput.cpp -- WM_POINTER* to a point on the screen and a number of zoom steps.
+// PointerInput.cpp -- WM_POINTER* to a point on the canvas and a number of zoom steps.
 
 #include "pch.h"
 #include "PointerInput.h"
@@ -11,12 +11,13 @@ bool PointerInput::EnableMouseAsPointer() noexcept
   return EnableMouseInPointer(TRUE) != FALSE;
 }
 
-void PointerInput::Create(HWND _window) noexcept
+void PointerInput::Create(HWND _window, const Presentation& _presentation) noexcept
 {
   m_window = _window;
+  m_presentation = _presentation;
 }
 
-bool PointerInput::ScreenToClientPixels(LPARAM _lParam, float& _outXPixels, float& _outYPixels) const noexcept
+bool PointerInput::ScreenToCanvasPixels(LPARAM _lParam, float& _outXPixels, float& _outYPixels) const noexcept
 {
   // WM_POINTER* carries SCREEN coordinates, unlike the mouse messages, and they are signed --
   // a second monitor to the left of the primary one has negative x. Extracting them as unsigned
@@ -28,10 +29,11 @@ bool PointerInput::ScreenToClientPixels(LPARAM _lParam, float& _outXPixels, floa
     return false;
   }
 
-  // And that is the whole conversion: the client area is exactly the screen the game renders, so
-  // there is nothing to divide by (ADR-011).
-  _outXPixels = static_cast<float>(point.x);
-  _outYPixels = static_cast<float>(point.y);
+  // Client pixels are SURFACE pixels, and the surface is not the canvas once the scale is more
+  // than one: subtract the letterbox offset and divide by the scale (ADR-075). ToCanvas's verdict
+  // is deliberately discarded here -- whether a point OFF the canvas matters depends on what the
+  // caller was about to do with it, and only the caller knows that.
+  (void)m_presentation.ToCanvas(static_cast<float>(point.x), static_cast<float>(point.y), _outXPixels, _outYPixels);
   return true;
 }
 
@@ -58,7 +60,15 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
   {
     float xPixels = 0.0F;
     float yPixels = 0.0F;
-    if (!ScreenToClientPixels(_lParam, xPixels, yPixels))
+    if (!ScreenToCanvasPixels(_lParam, xPixels, yPixels))
+    {
+      return false;
+    }
+
+    // A press that lands in the LETTERBOX starts nothing -- no contact, no press, no pinch -- and
+    // is not consumed, so the window's default handling still happens. There is nothing drawn out
+    // there to press (ADR-075).
+    if (!Presentation::OnCanvas(xPixels, yPixels))
     {
       return false;
     }
@@ -96,11 +106,15 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
   {
     float xPixels = 0.0F;
     float yPixels = 0.0F;
-    if (!ScreenToClientPixels(_lParam, xPixels, yPixels))
+    if (!ScreenToCanvasPixels(_lParam, xPixels, yPixels))
     {
       return false;
     }
 
+    // NO BOUNDS CHECK HERE, and that is the difference from the press above. A finger that started
+    // on the canvas and dragged into the letterbox is still dragging, and a rotation that stopped
+    // at the edge of the canvas would be a rotation that sticks. The coordinates are used as they
+    // come, negative or past 1280 (ADR-075).
     MoveContact(pointerId, xPixels, yPixels);
     // A hovering mouse arrives here with no contact at all -- EnableMouseInPointer turns a mouse
     // move into WM_POINTERUPDATE -- which is the whole source of the hover position.
@@ -163,10 +177,11 @@ bool PointerInput::HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) 
     // from; it takes no tap and starts no drag, and it is NOT consumed, so the default handling a
     // window expects for a moving mouse still happens.
     //
-    // Its lParam is in CLIENT pixels already, unlike a pointer message's.
-    m_hasPointer = true;
-    m_pointerXPixels = static_cast<float>(static_cast<std::int16_t>(LOWORD(_lParam)));
-    m_pointerYPixels = static_cast<float>(static_cast<std::int16_t>(HIWORD(_lParam)));
+    // Its lParam is in CLIENT pixels already, unlike a pointer message's -- so it needs the same
+    // mapping onto the canvas but not the ScreenToClient step.
+    m_hasPointer =
+      m_presentation.ToCanvas(static_cast<float>(static_cast<std::int16_t>(LOWORD(_lParam))),
+                              static_cast<float>(static_cast<std::int16_t>(HIWORD(_lParam))), m_pointerXPixels, m_pointerYPixels);
     return false;
   }
 
