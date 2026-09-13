@@ -1,8 +1,7 @@
 # FONT-01 — From one hand-typed 8×8 font to five baked cuts of IBM Plex
 
-**Status:** **In flight. Stages 0 to 4 done 2026-09-13; stage 5 is next.** Written 2026-09-13 against ADR-073 and ADR-074,
-both Accepted by the owner the same day. Stage 1 is next and starts by installing the offline
-rasterizer, which this machine does not have.
+**Status:** **In flight. Stages 0 to 5 done 2026-09-13; stage 6 is next.** Written 2026-09-13 against ADR-073 and ADR-074,
+both Accepted by the owner the same day.
 
 **Stage 0 verification, as run (2026-09-13).** The three checkers pass, Debug|x64 builds, and all
 five suites pass — 507 tests. The join screen was captured from a build of each side and the two
@@ -53,37 +52,83 @@ than an encoding fault. Both subprocess calls now name `encoding="utf-8"` and st
 reconfigured, so a diff containing one of those characters prints instead of killing the checker at
 the moment it has something to say.
 
-**What stage 4 deliberately left undone.** Every draw site still asks for `MonoRegular`, so nothing
-is in Plex Sans yet — that is stage 5. The layout is not re-derived: a line box is 17px where the
-old font's was 8, so labels sit closer to their fields than the design intends and the vertical
-rhythm is visibly off on the join screen. That, the gamma on a dark background, and whether three
-mono weights are distinguishable are all stage 6, and all three are to be settled from a screenshot
-rather than from arithmetic.
+**What stage 4 deliberately left undone.** The layout is not re-derived: a line box is 17px where
+the old font's was 8, so labels sit closer to their fields than the design intends and the
+vertical rhythm is visibly off on the join screen. That, the gamma on a dark background, and
+whether three mono weights are distinguishable are all stage 6, and all three are to be settled
+from a screenshot rather than from arithmetic.
+
+**Stage 5, as run (2026-09-13).** Fourteen draw sites are in Plex Sans and the rest stayed mono;
+517 tests pass, three of them new. It went in as two commits rather than one, and the first is
+worth knowing about before reading the second.
+
+**The face now comes BEFORE the scale in every signature that takes both**, which is the reverse
+of the order stage 2 left. The plan flagged the question and left it open; the deciding number is
+that **five** call sites in the whole client name a scale, so the old order made the other eighty
+write `DEFAULT_SCALE` purely to reach past a parameter they did not care about. The reorder was
+safe to make mechanically, because `Face` is an enum class and a scale is a `std::uint32_t`: a
+site that was missed is a compile error, not a silently transposed pair. Five were missed, and
+the compiler named all five.
+
+**`Face` was NOT already on `Lockstep::DrawCentered` / `DrawRight` / `CenterTextY`**, which this
+document said it was. They took a scale and nothing else. They have one now, in the same position
+as the renderer's.
+
+**Two sites draw either a sentence or a datum depending on a flag, and their face has to follow
+the string rather than the site.** The lobby footer draws `refused ? m_refusal : summary` — `That
+is your seat. Take another one first.` against `6 SEATS - A MATCH NEEDS AT LEAST 4` — so the flag
+that already picks the colour now picks the face. The connection dialog was worse: its body is a
+list of paragraphs that gets wrapped into lines before anything is drawn, and `MATCH FINISHED`
+ends that list with `3RD OF 6`, a placing. By the time a paragraph is lines, the draw site can no
+longer tell which block a line came from, so the body carries a `Paragraph{text, face}` instead of
+a bare string and wrapping preserves it. **The test found that one**, on its first run, before it
+had ever been looked at on screen.
 
 ---
 
 ## Where to pick this up
 
-**Branch `font/plex-faces`, eight commits, tree clean, all three checkers green, 514 tests passing.**
-Stages 0 to 4 are built. **Stage 5 is next and nothing blocks it.**
+**Branch `font/plex-faces`, eleven commits, tree clean, all three checkers green, 517 tests
+passing.** Stages 0 to 5 are built. **Stage 6 is next and nothing blocks it.**
 
-What stage 5 is: thread ADR-074's data/sentence rule through the 81 `DrawText` sites, which today
-all take the default `Face::MonoRegular`. Largest first — `MainPage.cpp` (32), `SeatsPage.cpp` (26),
-`JoinPage.cpp` (15), then `ConnectionDialog.cpp`, `MapRender.cpp` and `DesignTokens.cpp`'s two shared
-helpers. Then make the rule checkable: have a draw record its face and its string in the headless
-renderer, and assert in `LockstepTests` that no sans string carries a digit and no mono string ends
-in `.` or `?`.
+What stage 6 is: re-derive the layout for a 17px line box, then settle from a screenshot the three
+things arithmetic cannot — the gamma on a dark background, hinted against unhinted stems, and
+whether the weights are distinguishable at the final size.
 
-`Face` is already a parameter on `DrawText`, `MeasurePixels`, `PrefixThatFits`, `WrapToWidth` and on
-`Lockstep::DrawCentered` / `DrawRight` / `CenterTextY`. It is the LAST argument and defaults, so a
-call site that wants sans but not a scale has to write
-`FontRenderer::DEFAULT_SCALE, Face::SansRegular`. **If that reads badly across 81 sites, reordering
-the parameters or folding scale into the face is a fair call to make in stage 5** — ADR-074 leaves
-the countdown's 2× open for the same reason.
+**The weight assignment is stage 5's proposal, not a finding, and stage 6 is where it is judged.**
+ADR-074 says three mono cuts exist to separate a card title from a rail row from a countdown, so
+that is literally what was done: `MonoRegular` for rail rows, statuses, chips, counts and button
+labels; `MonoMedium` for the things that name a block — a card title, a sheet title, a dialog
+title, the wordmark; `MonoSemiBold` for the countdown alone. Sans went the same way: `SansRegular`
+for body sentences, `SansMedium` for the two amber blocks that explain why the controls are dead
+right now. **If a difference is invisible at the final size, ADR-074's instruction is to drop the
+cut rather than keep it.**
 
-**Two things are known-wrong on screen right now and are stage 6's, not defects to chase:** nothing
-is in Plex Sans yet, and the layout still has the 8×8 font's vertical rhythm, so a 17px line box
-sits in slots cut for 8px and labels crowd their fields.
+**The checkable rule is not the one this plan proposed, and the difference matters.** The proposal
+was: no sans string carries a digit, and no mono string ends in `.` or `?`. The first half is
+false on ADR-074's own face list. The rail's help line is sans by name, and at the lock it reads
+`Resolving T47. Controls return with the new digest. Anything you tap now is an order for T48.` —
+a sentence, in sans, full of numbers. An event card's detail lines and a sheet row's second line
+are the same shape: `Unanswered for 3 more tick(s)` is prose about a quantity. The rule's two
+clauses overlap, and where they do the sentence wins — *contains a number* picks out text that IS
+data, not a sentence that mentions some.
+
+So `Tests/LockstepTests/FaceRuleTests.cpp` asserts what actually separates the two faces here:
+**data on these screens is SHOUTED**, which is what `Uppercased()` is for, so a sans string with no
+lowercase letter in it is a label that took the sentence face. The mono half keeps the full stop
+and drops the question mark, for a reason of the same kind: `FIRST MATCH?` is a two-word shouted
+prompt that aligns with the button beside it. A question mark ends a sentence and also ends a short
+prompt; a full stop only ever ends a sentence.
+
+A third test asserts that **every screen reaches both families**, per screen rather than pooled,
+because the other two check nothing on a screen that draws only one face — and the connection
+dialog is nearly all prose while the map is nearly all labels, so a pooled count would stay
+comfortably non-zero through an entire page being reverted.
+
+**One thing is known-wrong on screen right now and is stage 6's, not a defect to chase:** the
+layout still has the 8×8 font's vertical rhythm, so a 17px line box sits in slots cut for 8px and
+labels crowd their fields. Sentences are now in Plex Sans beside it, which makes the crowding
+easier to see rather than worse.
 
 **To see the main page** you need a server: run `x64\Debug\Lockstep.exe --serve --tick 4 --bots 5`,
 read a token out of `x64\Debug\lockstep-<port>.store` (they are words — `charlie`, `foxtrot`), then
@@ -238,16 +283,22 @@ its em and this plan does not assume which — if it is around 0.6em then at 13p
 *narrower* than today's 8px while being far more legible, which is the direction that helps ADR-014's
 six shortened strings. Measure it; do not take that arithmetic on trust.
 
-### Stage 5 — Apply the data/sentence rule to the 81 sites.
+### Stage 5 — Apply the data/sentence rule to the 81 sites. **Done 2026-09-13.**
 
 ADR-074's rule: aligns with something or contains a number → mono; a sentence with a full stop or a
-question mark → sans. Work file by file, largest first: `MainPage.cpp` (32), `SeatsPage.cpp` (26),
-`JoinPage.cpp` (15), then the three small ones.
+question mark → sans. Worked file by file, largest first.
 
-Then make the rule checkable rather than remembered. Have a draw record its face and its string in
-the headless renderer, and assert in `LockstepTests` that no sans string contains a digit and no
-mono string ends in `.` or `?` over the fixture copy. That is cheaper than re-reading 81 call sites
-every time the copy changes, and it is the difference between a rule and a convention.
+**What is in sans, and it is a short list**: the rail's help line, an event card's detail lines and
+its verdict detail, a sheet row's second line, the sheet's "why nothing here does anything", the
+lobby's four explanations of what a seat is, the two lines under `FIRST MATCH?`, the join screen's
+paragraph about what a token is, a refusal that came back over the wire, and every dialog
+paragraph. Everything else on all four screens is data and stayed mono — `MapRender.cpp` entirely
+so, because nothing on a map is a sentence.
+
+The rule is checked rather than remembered: `FontRenderer::DrawnStrings` records what a HEADLESS
+renderer was asked to draw beside the face it was asked for — captured on the way in, where the
+string is still a sentence rather than glyph boxes — and `FaceRuleTests.cpp` asserts over it. See
+"Where you pick this up" for why the assertion is not the one proposed above.
 
 ### Stage 6 — Re-derive the layout, then tune what only the eye can judge.
 
