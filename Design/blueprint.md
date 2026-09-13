@@ -3,7 +3,7 @@
 **What this is.** The one document to hand to a game designer you want to recruit, or to any team
 that needs to understand *LockStep: Universe* before it can help: what the game is, why it is worth
 making, what exists today, and where it goes next. It is written from the design record in `Design/`
-and from the code as it stands on **2026-09-12**, and it keeps the record's discipline: what is built
+and from the code as it stands on **2026-09-13**, and it keeps the record's discipline: what is built
 is described in the present tense, what is designed and not built says so, and what is undecided is
 listed as a question rather than papered over. The engineering detail is kept short here and
 collected in the appendix for the teams that need it.
@@ -18,8 +18,8 @@ to twelve humans, played four times a day for three weeks, where every order is 
 against rivals placing theirs — and where losing your capital is the start of the best story the
 game can tell, not the end of yours.
 
-**Status, honestly.** The whole core loop is built, deterministic, tested (451 automated tests
-across five suites, run 2026-09-12) and running end to end over TCP: galaxy generation, the
+**Status, honestly.** The whole core loop is built, deterministic, tested (467 automated tests
+across five suites, run 2026-09-13) and running end to end over TCP: galaxy generation, the
 six-phase tick, combat, sieges, trade lanes, proposals, custodianship, fog of war, scoring, the
 fixed ending, a dedicated server that resumes a stored match after a restart, and the
 instrumentation the playtest plan needs. The client has its join and seats screens, bots for the
@@ -102,7 +102,9 @@ organised around. Every event carries its own buttons — a priced build on a sy
 ACCEPT and DECLINE on a proposal, REDIRECT on a fleet flying into a fight — and a quiet tick still
 offers a build and a move, so there is never nothing to do. A fleet flying into a contact carries
 the server's verdict on its card, *FLT1 ARRIVES T47 - YOU LOSE*, then the numbers. Tap an event and
-the map focuses on it.
+the map focuses on it. Nothing on the screen scrolls: a digest taller than its column collapses the
+actor cards that are not open and then pages (ADR-061), and under *SINCE YOU LOOKED* the same quiet
+event repeated across the ticks you missed is one card, *PRODUCTION +18 - T1 > T7* (ADR-062).
 
 **The map, centre — commitments as overlays.** The galaxy is a graph: systems are nodes, lanes are
 edges, and every lane carries an integer tick cost. It is drawn on a tilted ground plane under a real
@@ -110,15 +112,22 @@ perspective orbit camera that you drag to look around, with a procedural starry 
 Systems rise on stems above their shadows; a fleet under way is a line of travelling dots along its
 lane with a marker and a tick-ETA; trade lanes, proposed lanes, sieges, custodians and the sealed
 region are all drawn as what they are. Tapping a system you hold opens the sheet of what it can
-build; tapping your fleet opens the sheet of where it can go. Fog is remembered (ADR-022): a system
-you once saw stays on your map at the state you last saw it. The tick it was last seen travels in
-the snapshot and is not drawn yet.
+build; tapping your fleet opens the sheet of where it can go, and each candidate row says who is
+standing there and with how many ships — *P3 - 11 +DEF* — though not yet how the fight would go
+(ADR-063). A sheet still open when the clock hits zero stays open, dimmed, with a LOCKED chip in its
+header (ADR-065). Fog is remembered (ADR-022): a system you once saw stays on your map at the state
+you last saw it. The tick it was last seen travels in the snapshot and is not drawn yet.
 
-**The locks rail, right — a read-only receipt.** What goes in when the clock hits zero: fleets,
-builds, signals, proposals, each with its status. Its one control is the SIGNALS header, which opens
-the picker for the things you can say — open a lane, share scouting, hold fire, withdraw, concede.
-A **trade lane** is still a building with two owners; today it is proposed from that picker, and the
-*Propose* row the build list was designed to carry is drawn by nothing yet.
+**The locks rail, right — the receipt, and the way back to what it lists.** What goes in when the
+clock hits zero: fleets, builds, signals, proposals, each with its status. A fleet row, a build row
+and a proposal row about a lane are links to the thing they name (ADR-060): a queued build opens the
+sheet that queued it, which is where it is taken back; a fleet focuses where it stands, or opens its
+destination picker if it is under way; a lane offer focuses the far end of its lane. The SIGNALS
+header opens the picker for the things you can say — open a lane, share scouting, hold fire,
+withdraw — and *Concede* sits apart from those under a band of its own, red from the first tap and
+confirmed by a second (ADR-064). A **trade lane** is still a building with two owners; today it is
+proposed from that picker, and the *Propose* row the build list was designed to carry is drawn by
+nothing yet.
 
 The top bar carries the lock countdown, your score and placement, and the leader when it is not you
 — always visible, because leader-ganging is the game's only anti-snowball.
@@ -132,16 +141,17 @@ so is a colour-blind mode (owner decision, 2026-09-11; both listed under §7).
 
 | | |
 |---|---|
-| **Players** | 6–8 for the prototype, up to 12 by design. A seat nobody takes can be given to a bot that plays it (ADR-037), and a practice match is one person against five of them on a two-minute tick (ADR-051). |
+| **Players** | 6–8 for the prototype, up to 12 by design. Who plays a seat is one three-way on the host's seats card — a person, a person with a bot taking over if they have not arrived by the first lock, or a bot now (ADR-037, ADR-066) — and a practice match is one person against five bots on a two-minute tick (ADR-051). |
 | **Galaxy** | Generated per match from a seed, sized to the player count: 31 systems and 45 lanes for six players, 61 and 90 for twelve. A ring: every capital has two neighbours at the same distance, a starting cluster of two satellites on one-tick lanes, and a rival capital within three ticks. The frontier and the sealed region sit in the middle, equidistant from everyone. |
 | **Cadence** | Four ticks a day at fixed UTC times in production. The interval is a match parameter: playtests run an hourly tick. |
 | **Length** | Three weeks (84 ticks). Ends on the date it said it would, or earlier if one player holds 60% of all score for four consecutive ticks. |
 | **A session** | Thirty minutes: read the digest, adjust orders, answer a proposal, leave something in flight. A longer session plans several ticks ahead and studies rivals. Same loop, different depth. |
 
-**The loop is scout → claim → build → contest.** Starting clusters are dense so first contact happens
-on day one; lane costs grow toward the frontier so late events span several ticks. The galaxy is
-meant to be fully claimed by roughly day five, after which the only way income grows is trade lanes
-with neighbours — and the build menu keeps saying so.
+**The loop is scout → claim → build → contest.** Starting clusters are dense so first contact
+happens on day one; lane costs grow toward the frontier so late events span several ticks. The
+galaxy is meant to be fully claimed by roughly day five, after which the only way income grows is
+trade lanes with neighbours — and the build menu is meant to keep saying so, which it does not yet
+(§2: the *Propose* row is drawn by nothing).
 
 ### What resolves at the tick
 
@@ -459,7 +469,7 @@ through fog from tick one.
 |---|---|
 | The rules, as designed, at greater length than §3 | `Design/Archive/space-4x-one-pager-v10.md` — archived 2026-09-13 |
 | The playtest phases, at greater length than §5 | `Design/Archive/space-4x-prototype-test-plan.md` — archived 2026-09-13 |
-| Every decision and what it rejected | `Design/ADR/` — ADR-018 through ADR-031 are the game; 014, 017, 027, 032, 033 are the screen; 034 through 059 are everything built since the UI handoff of 2026-09-11 |
+| Every decision and what it rejected | `Design/ADR/` — ADR-018 through ADR-031 are the game; 014, 017, 027, 032, 033 are the screen; 034 through 066 are everything built since the UI handoff of 2026-09-11 |
 | What was built, step by step, with what it found | `Design/Plans/4X-01-CoreLoop.md`, `Design/Plans/4X-02-ServerAndClient.md` |
 | The screens, as built and photographed | `Design/UI/` (README, DESIGN-GUIDELINES, SCREENS, `screens/*.png`) |
 | How code is written here | `AGENTS.md` |
@@ -491,8 +501,8 @@ second client speaks the snapshot and the order set over TCP, and nothing else.
 | A token per seat, generated by the host's seats screen and kept in the match store — a stable identity to log, explicitly not authentication | ADR-029, ADR-036, ADR-042 |
 | Instrumentation to a UTC-stamped plain-text file, including fleet orders after a capital fall and order edits counted as envelopes | `NeuronServer/MatchLog`, ADR-030, ADR-031 |
 | Client reconnection with an on-screen indicator, `--phase0` rules and `--tick <seconds>` for compressed rehearsals | `LockstepClient/MatchConnection`, ADR-038 |
-| The ops console: immediate-mode UI, perspective orbit camera, spherical star field with a galactic band, twelve owner colours with *you* always blue, the digest as the order surface with the price on every button | `LockstepClient/MainPage`, ADR-014, -017, -027, -032, -033, -034, -052, -053 |
-| The join and seats screens, bots that play a seat, a practice match, the digest backlog on reconnect, and a client library shared by the executable and its test project | ADR-036, -037, -040, -041, -044, -050, -051 |
+| The ops console: immediate-mode UI, perspective orbit camera, spherical star field with a galactic band, twelve owner colours with *you* always blue, the digest as the order surface with the price on every button, a rail whose rows are links, a digest that collapses and pages rather than scrolls, sheets that survive the lock | `LockstepClient/MainPage`, ADR-014, -017, -027, -032, -033, -034, -052, -053, -060 to -065 |
+| The join and seats screens, bots that play a seat, a practice match, the digest backlog on reconnect, and a client library shared by the executable and its test project | ADR-036, -037, -040, -041, -044, -050, -051, -066 |
 
 **Hosting** a match today is one machine running `--serve` beside a store file and a log file, and
 five people running `--join`. If that server is stopped, the match pauses and resumes when it is
