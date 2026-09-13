@@ -458,6 +458,10 @@ superseded and deprecated. The decision is now whether 1280×720 is a design con
 `Design/blueprint.md` §9 owes an ADR revising the baseline when the mobile client starts. §5's
 arithmetic has not been redone for the new size.*
 
+*Decided 2026-09-13, ADR-075: 1280×720 is the desktop canvas, presented at an integer scale. The
+mobile canvas is `floor(surface / round(density))` logical pixels in portrait, and its layout is
+the new client's.*
+
 **Whether the error model stays.** §7 argues that `Debug.h`'s single path is a desktop assumption
 and that surface loss is routine on both targets. This one is worth deciding early even if no port
 is ever started, because the answer changes 70 lines of header that everything includes.

@@ -111,6 +111,32 @@ ever draws at native resolution.
 the Markdown for nothing, but the commit must be green). The owner reads the ADR and changes its
 status to Accepted. **Stop here until that has happened.**
 
+**Stage 0, as run (2026-09-13).** ADR-075 is written and every edit it lists is made, in one commit.
+Both checkers are green. `RunClangTidy.py` was not run and is not claimed: nothing in this commit is
+C++, and the stage's gate above is the two checkers for that reason.
+
+**What stage 0 found, which is not about this plan at all.** `CheckProjectFiles.py` failed on the
+first run, with the line-endings message the merge at 671ef8d added the same day: `Build/BakeFont.py`
+was still CRLF in this working tree, checked out before `.gitattributes` pinned `*.py` to `eol=lf`,
+so it hashed to something `NeuronClient/Font.h` has never recorded. **The fix is a re-checkout of the
+file, not a re-bake** — which is exactly what the new message says, and it earned its place: the
+obvious response to "Font.h disagrees with its source" is to re-run the baker, and doing that here
+would have recorded a CRLF hash no CI runner can reproduce. `Build/CheckFormat.py` was stale the same
+way and was renormalised with it. **Anyone pulling 671ef8d onto an existing Windows checkout hits
+this**, because `.gitattributes` changes what git *would* write and touches nothing already on disk.
+
+**A staleness left alone.** `Design/UI/README.md`'s Non-negotiables still say "One 8×8 bitmap font at
+1× … No anti-aliasing", which ADR-074 overtook on 2026-09-13. Only the 1:1 clause of that paragraph
+is this plan's to edit, and widening the change to fix a neighbouring sentence is the thing stage 6
+is told not to do, so it is recorded here instead.
+
+**One inconsistency is knowingly accepted, and it closes at stage 1.** Between this commit and stage
+1, AGENTS.md and `Design/README.md` §1 describe a canvas the code does not draw yet, which is in
+tension with AGENTS.md's own preamble — "it describes the code as it must be written today".
+`Design/README.md` §4 asks for exactly this ordering (the ADR, and everything it invalidated, in one
+commit), and the alternative is a stage 1 that deviates from R12 silently. The window is one stage
+long and the ADR is Proposed for all of it.
+
 **Commit:** `Decide that the screen is a canvas presented at an integer scale`
 
 ---

@@ -6,7 +6,8 @@ themselves live in `LockstepClient/DesignTokens.h` (`Ink`, `Frame`), which is th
 ships — this document cites it and does not restate what it does not have to.
 
 ## Frame
-- 1280×720 logical pixels, fixed and presented 1:1 (ADR-011). No scaling factor, no fullscreen.
+- 1280×720 logical pixels, fixed, presented at a whole-number scale chosen at startup
+  (ADR-075). Every number in this document is a canvas pixel.
 - Main page: rows `44 | fill`; columns `400 | fill | 260` (digest · map · locks) —
   `Frame::TOP_BAR_HEIGHT`, `DIGEST_WIDTH`, `ORDERS_WIDTH`. The map is what is left between the rails
   and is drawn first; the rails' opaque backgrounds are what confine it (ADR-017).

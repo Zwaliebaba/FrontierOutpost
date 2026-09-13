@@ -21,7 +21,7 @@ These are settled. They are not preferences to be re-litigated in a session; cha
 
 | | Decision |
 |---|---|
-| **Presentation** | **1280×720, R8G8B8A8**, presented **1:1**. The render target, the swap chain's back buffer and the window's client area are the same 1280×720 pixels, so nothing on the path from a vertex to the display resamples anything (ADR-011). The window is a fixed size; there is no scaling factor and no fullscreen mode. Until 2026-09-10 this was 640×400 in 16 palette-indexed colours, blown up 2× — see ADR-001 and ADR-011 for what changed and why. |
+| **Presentation** | **1280×720, R8G8B8A8**, a canvas presented at the largest **whole-number scale** the display has room for, letterboxed. Nothing on the path from a vertex to the display resamples anything: the canvas is read with an integer texel load (ADR-075). Until 2026-09-13 the canvas was the back buffer, presented 1:1 (ADR-011); until 2026-09-10 it was 640×400 in sixteen colours, blown up 2× (ADR-001). |
 | **Graphics API** | Direct3D 12, on Windows 11. The legacy look is a deliberate aesthetic on a modern stack — not a limitation being worked around, and not a reason to reach for an older API. |
 | **Language** | C++23 (`/std:c++latest` under MSVC v145), `/permissive-`, `/W4` with warnings as errors. |
 | **Platform** | x64 only. |
