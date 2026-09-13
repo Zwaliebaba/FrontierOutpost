@@ -57,12 +57,17 @@ namespace
 
   std::vector<EventAction> actions;
 
-  if (!_state.orders.builds.empty())
+  // The first row that can actually be STARTED, which is not always the first row: a system already
+  // building is on the list so the sheet and the rail can say what is rising there, and offering it
+  // would be a button the lock is certain to refuse (ADR-069, ADR-070).
+  const auto startable =
+    std::find_if(_state.orders.builds.begin(), _state.orders.builds.end(), [](const BuildRow& _row) { return !_row.rising; });
+  if (startable != _state.orders.builds.end())
   {
     // Priced like every other build button (ADR-053).
-    actions.push_back(EventAction{.label = std::format("BUILD {} CR", _state.orders.builds.front().cost),
+    actions.push_back(EventAction{.label = std::format("BUILD {} CR", startable->cost),
                                   .kind = EventActionKind::QueueBuild,
-                                  .target = 0,
+                                  .target = static_cast<std::int32_t>(std::distance(_state.orders.builds.begin(), startable)),
                                   .primary = true});
   }
 

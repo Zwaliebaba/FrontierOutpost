@@ -78,12 +78,16 @@ That is the whole core verb of this game, and it is worth saying plainly: **an o
 now and resolved later.** Nobody else can see it until it locks. You cannot see theirs either.
 
 **Tick one, also: spend the credits.** Tap a system you hold on the map. A sheet lists what that
-system can build with the price on each row: a shipyard is twenty, a mining station fifteen, and a
-hundred credits buys several of either across your three systems with something kept back for a
-lane. The **BUILD** button on the digest's first card is the shortcut; it queues the first building
-it can. A shipyard adds two ships a tick to the fleet at that system; a mining station adds four
-credits a tick to the system. Neither is wrong. Build something — an empty first tick is a wasted
-one.
+system can build next, with the price and the wait on each row: a first shipyard is twenty credits
+and one tick, a first mining station fifteen and one tick, and a hundred credits buys several of
+either across your three systems with something kept back for a lane. **A building is ordered now
+and lands later** — the row says `DONE T4`, the locks rail lists it until it arrives, and the system
+takes no other order while it rises. Each building has three levels, and a level costs more, pays
+more and takes longer than the one below it, so credits keep having somewhere to go all match. The
+**BUILD** button on the digest's first card is the shortcut; it queues the first building it can. A
+shipyard adds two ships a tick to the fleet at that system at level one, three at level two and four
+at level three; a mining station adds four credits a tick, then seven, then ten. Neither is wrong.
+Build something — an empty first tick is a wasted one.
 
 **Wait for the lock.** Two minutes in practice. You can change your mind about anything up to the
 moment it hits zero; orders are editable right up to the lock and hidden until it.

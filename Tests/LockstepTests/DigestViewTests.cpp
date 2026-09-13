@@ -464,4 +464,36 @@ public:
   }
 };
 
+// The four build cards (ADR-069). A build is the one commitment other than a fleet that has an ETA,
+// so what the digest does with it is a design rule and not a detail: a rival's is grouped under
+// that rival like any other tell, and a building lost with its system ranks with the loss.
+TEST_CLASS(BuildCardTests)
+{
+public:
+  TEST_METHOD(ARivalsRisingBuildIsGroupedUnderThatRival)
+  {
+    // Two events from one rival collapse into one actor card (ADR-034). A build seen rising is one
+    // of them: it is something P1 did, not something that happened to the world.
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(StateWith({
+      Event(Lockstep::EventKind::Contact, 1, "Halvorsen at Kepler-Reach"),
+      Event(Lockstep::EventKind::Economy, 1, "Halvorsen is building at Jandal"),
+    }));
+
+    Assert::AreEqual(std::size_t{1}, ActorCards(cards), L"a rival's build did not group with their other event");
+  }
+
+  TEST_METHOD(ABuildingLostWithItsSystemIsReadBeforeTheEconomy)
+  {
+    // `BuildLost` wears the loss colour (SnapshotView::ColorOf), so the ranking follows: credits
+    // that are gone rank with a system that is gone, above the production line.
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(StateWith({
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +38"),
+      Event(Lockstep::EventKind::Loss, 2, "Mining station L2 lost at Vesk"),
+    }));
+
+    Assert::IsTrue(cards.size() >= 2U);
+    Assert::IsTrue(cards[0].kind == Lockstep::EventKind::Loss, L"a building lost was read after the production line");
+  }
+};
+
 } // namespace LockstepTests

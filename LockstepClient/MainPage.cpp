@@ -555,10 +555,13 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       const auto found = std::find(queued.begin(), queued.end(), region->index);
       if (found == queued.end())
       {
-        // Refused here, by the rule the lock would refuse it by (ADR-053). The rows and buttons
-        // that lead here already say so and are not targets, so this is the guard behind them
-        // rather than the message.
-        if (!m_state.CanAffordBuild(region->index))
+        // Refused here, by the rules the lock would refuse it by (ADR-053, ADR-069). The rows and
+        // buttons that lead here already say so and are not targets, so this is the guard behind
+        // them rather than the message -- and it is the only place `queuedBuilds` grows, which is
+        // what makes it the guard rather than one of several.
+        const bool rising = region->index >= 0 && region->index < static_cast<std::int32_t>(m_state.orders.builds.size()) &&
+                            m_state.orders.builds[static_cast<std::size_t>(region->index)].rising;
+        if (rising || !m_state.CanAffordBuild(region->index))
         {
           return true;
         }
@@ -1396,6 +1399,21 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
       row(Uppercased(build.title), std::format("QUEUED -{}", build.cost), Ink::BLUE, buildAction, at);
     }
   }
+
+  // **What is already rising, with the tick it lands on** (ADR-069), in the form FLEETS above uses
+  // for a fleet under way: the rail is the receipt of everything this player has committed to, and
+  // a build that is paid for and in flight is exactly that. It is listed after the queue because
+  // the queue is what THIS lock will take and this is what an earlier one already did.
+  for (const BuildRow& build : m_state.orders.builds)
+  {
+    if (!build.rising)
+    {
+      continue;
+    }
+    const std::int32_t at = PositionOfSystem(m_state, build.system);
+    const Action buildAction = at == EventRefs::NONE ? Action::None : (navigateOnly ? Action::FocusSystem : Action::OpenSystem);
+    row(Uppercased(build.title), std::format("T{}", build.completesAt), Ink::TEXT_MUTED, buildAction, at);
+  }
   if (!m_state.orders.queuedBuilds.empty())
   {
     const std::uint32_t spent = m_state.orders.QueuedBuildCost();
@@ -1570,6 +1588,16 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
         continue;
       }
 
+      // A system already building offers nothing and says why, with the tick it lands on. It is
+      // not a target: the lock refuses a second order on it (ADR-069), and a row that looks live
+      // and does nothing is the defect this screen has been bitten by twice.
+      if (row.rising)
+      {
+        rows.push_back(SheetRow{row.title, "It cannot take another order until this lands", std::format("DONE T{}", row.completesAt),
+                                Ink::BLUE, EventRefs::NONE});
+        continue;
+      }
+
       const bool queued =
         std::ranges::find(m_state.orders.queuedBuilds, static_cast<std::int32_t>(index)) != m_state.orders.queuedBuilds.end();
 
@@ -1582,7 +1610,11 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
                                  : affordable
                                    ? std::format("{} CR", row.cost)
                                    : std::format("{} CR - NEED {} MORE", row.cost, BuildShortfall(static_cast<std::int32_t>(index)));
-      rows.push_back(SheetRow{row.title, std::string{}, status, queued ? Ink::BLUE : NO_ACCENT,
+
+      // The second line is what the level BUYS and what it COSTS IN TICKS -- the two numbers a
+      // player weighs a shipyard level against a mining level with, and the reason both tables are
+      // on the wire (ADR-053, ADR-069). The server wrote the sentence; this only places it.
+      rows.push_back(SheetRow{row.title, row.detail, status, queued ? Ink::BLUE : NO_ACCENT,
                               m_state.orders.locked || !affordable ? EventRefs::NONE : static_cast<std::int32_t>(index)});
     }
 
@@ -1590,8 +1622,8 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     // bargain the signal picker makes with an empire that has nobody to talk to.
     if (rows.empty())
     {
-      rows.push_back(SheetRow{"NOTHING LEFT TO BUILD HERE", "It already has a shipyard and a mining station.", std::string{}, NO_ACCENT,
-                              EventRefs::NONE});
+      rows.push_back(
+        SheetRow{"NOTHING LEFT TO BUILD HERE", "Both buildings are at their top level.", std::string{}, NO_ACCENT, EventRefs::NONE});
     }
     break;
   }

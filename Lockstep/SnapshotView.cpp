@@ -8,6 +8,8 @@
 #include "pch.h"
 #include "SnapshotView.h"
 
+#include <algorithm>
+
 namespace Lockstep
 {
 
@@ -533,7 +535,11 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
                  .cost = _snapshot.LevelCost(BuildKind::MiningStation, level)});
     }
   }
-  state.orders.availableBuilds = static_cast<std::uint32_t>(state.orders.builds.size());
+  // Counted over what can actually be STARTED. A rising row is on the list so the sheet and the
+  // rail can say what is coming (ADR-069), and `N AVAIL` counting it would offer a player a number
+  // they cannot act on.
+  state.orders.availableBuilds = static_cast<std::uint32_t>(
+    std::count_if(state.orders.builds.begin(), state.orders.builds.end(), [](const BuildRow& _row) { return !_row.rising; }));
 
   ComposeSignals(state, _snapshot);
 
@@ -603,16 +609,20 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     // three economy events carried three copies of `MINING STATION DOTHAN`.
     //
     // A claimed system offers a building AT THAT SYSTEM, which is the order the event causes. A
-    // production line offers whatever is still unoffered, which is what the credits are for.
+    // production line offers whatever is still unoffered, which is what the credits are for. A
+    // rising row is neither: it reports what an earlier lock already took, and carries no button.
     std::int32_t offeredRow = EventRefs::NONE;
-    const auto unoffered = [&offeredBuilds](std::int32_t _row) { return std::ranges::find(offeredBuilds, _row) == offeredBuilds.end(); };
+    const auto offerable = [&offeredBuilds, &state](std::int32_t _row)
+    {
+      return !state.orders.builds[static_cast<std::size_t>(_row)].rising && std::ranges::find(offeredBuilds, _row) == offeredBuilds.end();
+    };
 
     if (entry.kind == DigestKind::SystemClaimed && event.refs.system != EventRefs::NONE)
     {
       for (std::size_t row = 0; row < state.orders.builds.size(); ++row)
       {
         const std::int32_t at = positionOf(SystemId{state.orders.builds[row].system});
-        if (at == event.refs.system && unoffered(static_cast<std::int32_t>(row)))
+        if (at == event.refs.system && offerable(static_cast<std::int32_t>(row)))
         {
           offeredRow = static_cast<std::int32_t>(row);
           break;
@@ -623,7 +633,7 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     {
       for (std::size_t row = 0; row < state.orders.builds.size(); ++row)
       {
-        if (unoffered(static_cast<std::int32_t>(row)))
+        if (offerable(static_cast<std::int32_t>(row)))
         {
           offeredRow = static_cast<std::int32_t>(row);
           break;

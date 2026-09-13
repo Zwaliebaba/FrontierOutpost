@@ -109,16 +109,18 @@ actor cards that are not open and then pages (ADR-061), and under *SINCE YOU LOO
 event repeated across the ticks you missed is one card, *PRODUCTION +18 - T1 > T7* (ADR-062).
 
 **The map, centre — commitments as overlays.** The galaxy is a graph: systems are nodes, lanes are
-edges, and every lane carries an integer tick cost. It is drawn on a tilted ground plane under a real
-perspective orbit camera that you drag to look around, with a procedural starry sky behind it.
+edges, and every lane carries an integer tick cost. It is drawn on a tilted ground plane under a
+real perspective orbit camera that you drag to look around, with a procedural starry sky behind it.
 Systems rise on stems above their shadows; a fleet under way is a line of travelling dots along its
 lane with a marker and a tick-ETA; trade lanes, proposed lanes, sieges, custodians and the sealed
 region are all drawn as what they are. Tapping a system you hold opens the sheet of what it can
-build; tapping your fleet opens the sheet of where it can go, and each candidate row says who is
-standing there and with how many ships — *P3 - 11 +DEF* — though not yet how the fight would go
-(ADR-063). A sheet still open when the clock hits zero stays open, dimmed, with a LOCKED chip in its
-header (ADR-065). Fog is remembered (ADR-022): a system you once saw stays on your map at the state
-you last saw it. The tick it was last seen travels in the snapshot and is not drawn yet.
+build next — each row the level it would build, what that level pays and how many ticks it takes, or
+one row saying what is already rising there and when it lands (ADR-070); tapping your fleet opens
+the sheet of where it can go, and each candidate row says who is standing there and with how many
+ships — *P3 - 11 +DEF* — though not yet how the fight would go (ADR-063). A sheet still open when
+the clock hits zero stays open, dimmed, with a LOCKED chip in its header (ADR-065). Fog is
+remembered (ADR-022): a system you once saw stays on your map at the state you last saw it. The tick
+it was last seen travels in the snapshot and is not drawn yet.
 
 **The locks rail, right — the receipt, and the way back to what it lists.** What goes in when the
 clock hits zero: fleets, builds, signals, proposals, each with its status. A fleet row, a build row

@@ -1036,6 +1036,72 @@ public:
     Assert::AreEqual(std::size_t{1}, Lockstep::OrdersOf(page.State()).builds.size(), L"and it became an order");
   }
 
+  // A build row offers the NEXT level, and a system already building offers nothing at all
+  // (ADR-069). Both are swept for rather than read off a coordinate, like everything else here.
+  TEST_METHOD(ASystemAlreadyBuildingOffersNothingToQueue)
+  {
+    // Driven through a real order rather than by editing the list: every `EventAction::target` is
+    // an index into `orders.builds`, so a test that erases rows after `ViewOf` composed the cards
+    // is testing stale indices rather than the rule (ADR-057, one index one meaning).
+    Lockstep::MatchRules rules;
+    rules.playerCount = 6;
+    Lockstep::Match match = Lockstep::Match::Create(rules, 0x5349'474E'414C'5321ULL);
+
+    const Lockstep::SystemId capital = match.GalaxyGraph().Capitals()[0];
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.builds.push_back(Lockstep::BuildOrder{.system = capital, .kind = Lockstep::BuildKind::MiningStation});
+    const std::vector<Lockstep::OrderSet> sets = {orders};
+
+    Lockstep::TickLog log;
+    match = Lockstep::TickResolver::Resolve(match, {.orders = sets}, log);
+    Assert::IsTrue(match.SystemAt(capital).construction.Rising(), L"the order started nothing");
+
+    const Lockstep::PlayerId seat{0};
+    Lockstep::MatchState state = Lockstep::ViewOf(Lockstep::Snapshot::For(match, seat), Lockstep::Snapshot::DigestFor(log, seat), 600);
+
+    const bool offersTheRisingSystem =
+      std::any_of(state.orders.builds.begin(), state.orders.builds.end(),
+                  [capital](const Lockstep::BuildRow& _row) { return _row.system == capital.Index() && !_row.rising; });
+    Assert::IsFalse(offersTheRisingSystem, L"a system already building was offered a second order to queue");
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    const bool queued = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page, capital]
+                                 {
+                                   for (const std::int32_t row : page.State().orders.queuedBuilds)
+                                   {
+                                     if (page.State().orders.builds[static_cast<std::size_t>(row)].system == capital.Index())
+                                     {
+                                       return true;
+                                     }
+                                   }
+                                   return false;
+                                 });
+    Assert::IsFalse(queued, L"a system already building took another order from the screen");
+  }
+
+  TEST_METHOD(ABuildRowCarriesItsLevelAndWhatItTakes)
+  {
+    // The sheet's job is to let a player weigh one level against another, which needs the level,
+    // the price and the ticks -- all three from the snapshot, never from a number the client knows
+    // (ADR-053).
+    const auto simulation = PlayedMatch(0);
+    const Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+    Assert::IsFalse(state.orders.builds.empty());
+    for (const Lockstep::BuildRow& row : state.orders.builds)
+    {
+      Assert::IsTrue(row.level >= 1, L"a build row does not say which level it would build");
+      Assert::IsTrue(row.ticks >= 1, L"a build row does not say how long it takes");
+      Assert::IsTrue(row.cost > 0, L"a build row does not carry its price");
+      Assert::IsFalse(row.detail.empty(), L"a build row does not say what the level buys");
+    }
+  }
+
   TEST_METHOD(ABuildThePurseCannotCoverIsNotQueuedByAnyTap)
   {
     const auto simulation = PlayedMatch(0);

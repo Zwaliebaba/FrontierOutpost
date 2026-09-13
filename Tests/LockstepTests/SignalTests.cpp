@@ -23,6 +23,7 @@
 #include "TickResolver.h"
 
 #include <algorithm>
+#include <format>
 #include <memory>
 #include <optional>
 #include <string>
@@ -525,6 +526,48 @@ public:
 TEST_CLASS(ProposalCardTests)
 {
 public:
+  // The four build kinds reach the screen as cards (ADR-069). Driven through a real order rather
+  // than a hand-built digest, because what is under test is the whole path: the resolver writes the
+  // entry, `ColorOf` picks its dot, and the card carries the ETA the player is committing to.
+  TEST_METHOD(OrderingALevelPutsItsETAOnTheDigestAndTheRail)
+  {
+    Lockstep::MatchRules rules;
+    rules.playerCount = 6;
+    Lockstep::Match match = Lockstep::Match::Create(rules, SIGNAL_SEED);
+
+    const Lockstep::SystemId capital = match.GalaxyGraph().Capitals()[0];
+    Lockstep::OrderSet orders;
+    orders.player = Lockstep::PlayerId{0};
+    orders.builds.push_back(Lockstep::BuildOrder{.system = capital, .kind = Lockstep::BuildKind::MiningStation});
+    const std::vector<Lockstep::OrderSet> sets = {orders};
+
+    Lockstep::TickLog log;
+    match = Lockstep::TickResolver::Resolve(match, {.orders = sets}, log);
+    const std::uint32_t lands = match.SystemAt(capital).construction.completesAt;
+    Assert::IsTrue(lands > 0, L"the order started nothing");
+
+    const Lockstep::PlayerId seat{0};
+    const Lockstep::MatchState state = Lockstep::ViewOf(Lockstep::Snapshot::For(match, seat), Lockstep::Snapshot::DigestFor(log, seat), 0);
+
+    // The card. It is economy-coloured -- a commitment, not a loss -- and says when it lands.
+    const std::string when = std::format("T{}", lands);
+    const bool onACard = std::any_of(state.digest.begin(), state.digest.end(), [&when](const Lockstep::DigestEvent& _event)
+                                     { return _event.detail.find(when) != std::string::npos; });
+    Assert::IsTrue(onACard, L"nothing in the digest says when the building lands");
+
+    // And the rail lists it as in flight, with the same tick, linking to the system it is on.
+    const auto rising =
+      std::find_if(state.orders.builds.begin(), state.orders.builds.end(), [](const Lockstep::BuildRow& _row) { return _row.rising; });
+    Assert::IsTrue(rising != state.orders.builds.end(), L"the rail does not list what is rising");
+    Assert::AreEqual(lands, rising->completesAt, L"the rail and the board disagree about when it lands");
+    Assert::IsFalse(rising->available, L"a rising row is offered as something to queue");
+    Assert::AreEqual(0U,
+                     state.orders.availableBuilds -
+                       static_cast<std::uint32_t>(std::count_if(state.orders.builds.begin(), state.orders.builds.end(),
+                                                                [](const Lockstep::BuildRow& _row) { return !_row.rising; })),
+                     L"the AVAIL count includes a row that cannot be started");
+  }
+
   TEST_METHOD(TwoOffersEachCarryTheirOwnButtons)
   {
     const Lockstep::MatchState state = SeatZeroLookingAtOffersFrom({1, 2});

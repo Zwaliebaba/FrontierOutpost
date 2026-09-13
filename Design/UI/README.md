@@ -81,7 +81,10 @@ The complete list, so nobody goes looking. Each item is also under its screen in
    (`T45`); nothing in the client scrolls (ADR-052 option C) — a digest too tall for its column
    collapses its actor cards and then pages, which is ADR-061 rather than a scroll. The locks rail's
    rows became links on 2026-09-12 (ADR-060), except the `SIGNALS` section's.
-6. **On the map:** owner tags beside names (`NARTH · OKO`), the contact spotlight, a verdict label
+6. **On the map:** nothing marks a system that is building — a rising build is a row on the
+   rail, the sheet and the digest and not a mark on the node (ADR-070, whose open question is
+   whether that is enough of a tell); owner tags beside names (`NARTH · OKO`), the contact
+   spotlight, a verdict label
    under a node (`T47 · YOU LOSE`), the rival's approach lane in amber, a proposed lane in amber
    (built: blue dashed), focus by actor (built: by system), and the Fallow's whole distinct
    treatment — dithered ground, radial glow, three stepped rings, five pins, its name and the race
@@ -105,6 +108,15 @@ Found while reading the code for this record, not design gaps: the top bar's
 starts with twenty credits and that missed digests are one tick deep; none was true of the tree, and
 it was corrected on 2026-09-12. (Rail rows became links later the same day — ADR-060 — so that first
 claim is true again, of a different mechanism: a row links to the thing it names, not to an event.)
+
+**Five captures are out of date as of 2026-09-13**, and are listed here rather than quietly left to
+look current: `01-build-sheet.png`, `01-orders-queued.png`, `01-main-page.png` and
+`01-rail-hover.png` predate ADR-069 and ADR-070 — the sheet now names the level a row would build
+and what it costs in ticks, a system already building shows one row that is not a target, and the
+rail lists what is rising with its ETA — and there is no capture at all of a build in flight
+(`01-build-rising.png`, which the list below says how to stage). They could not be retaken in the
+session that changed them: the desktop was locked, and a locked desktop makes every synthetic tap
+fail silently.
 
 ## Photographing the build
 
@@ -131,6 +143,9 @@ doing it, measured on 2026-09-12:
   the ink, which lands on `30,33,38` against a background of `11,14,20` — plain in place and easy to
   miss in a thumbnail, so a capture script should assert the pixel. Measured that way on 2026-09-12,
   and it is what found that a moving mouse produces no `WM_POINTERUPDATE` at all.
+- `01-build-rising.png` is a practice match one tick after queuing a level: PRACTICE MATCH, tap a
+  held system, queue the top row, let one lock pass. The rail then carries the rising row and the
+  same system's sheet offers nothing (ADR-070).
 - States: 09 = JOIN as the host; 01 = PRACTICE MATCH (`--tick 4` overrides the preset's two
   minutes); the sheets = a held system on the map, `MOVE`/`REDIRECT`, the `SIGNALS` header, `REPLAY`;
   06 = a `--serve` process suspended past a lock (`NtSuspendProcess`); 04 = that process killed;

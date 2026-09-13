@@ -476,6 +476,30 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
                     .title = std::format("{} L{} rising at {}", yard ? "Shipyard" : "Mining station", toLevel, NameOf(_in, build.system)),
                     .detail = std::format("Done T{} - {} credits spent", _in.Tick() + ticks, cost),
                     .system = build.system});
+
+      // **AND EVERY RIVAL WHO CAN SEE THE SYSTEM IS TOLD** (ADR-069). A build is a commitment with
+      // an ETA, so it is a tell of the same kind as a departed fleet: blind at the choice, public
+      // once locked. Told ONCE, at the start, because a player gets one digest per tick and not one
+      // notification per event -- the ETA is on the card, and the system carries it after that.
+      //
+      // Visibility is read from the TICK-START state, which is who could see the system when the
+      // order was given. `Reckon` recomputes it in phase 6, and somebody who scouts the system
+      // later this tick did not watch the order being placed.
+      for (std::size_t other = 0; other < next.Players().size(); ++other)
+      {
+        const PlayerId rival{static_cast<std::int32_t>(other)};
+        if (rival == player || !_in.SeenBy(rival)[build.system.AsSize()].live)
+        {
+          continue;
+        }
+        Tell(_log, rival,
+             DigestEntry{.kind = DigestKind::BuildSeen,
+                         .severity = Severity::RIVAL_BUILDING,
+                         .title = std::format("{} is building at {}", NameOf(player), NameOf(_in, build.system)),
+                         .detail = std::format("{} L{} - done T{}", yard ? "Shipyard" : "Mining station", toLevel, _in.Tick() + ticks),
+                         .system = build.system,
+                         .other = player});
+      }
     }
 
     // Proposals go on the table. Nothing is charged yet -- the lane is paid for at the lock the
