@@ -13,6 +13,7 @@ namespace Lockstep
 {
 
 using Neuron::Color;
+using Neuron::Face;
 using Neuron::FontRenderer;
 using Neuron::ShapeRenderer;
 
@@ -560,7 +561,7 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
   for (const std::string& line :
        FontRenderer::WrapToWidth("The token is the seat: whoever enters it plays this empire. Send it to the person playing.", detailWidth))
   {
-    _text.DrawText(static_cast<std::int32_t>(contentX), y, line, TEXT_DETAIL);
+    _text.DrawText(static_cast<std::int32_t>(contentX), y, line, TEXT_DETAIL, Face::SansRegular);
     y += LINE_HEIGHT;
   }
   y += 10;
@@ -591,7 +592,7 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
                                                                                     : "Not yours. You hold the seat you logged in with.",
                                                            detailWidth))
   {
-    _text.DrawText(static_cast<std::int32_t>(contentX), y, line, m_hostSeat == m_selected ? BLUE : NEUTRAL_DIM);
+    _text.DrawText(static_cast<std::int32_t>(contentX), y, line, m_hostSeat == m_selected ? BLUE : NEUTRAL_DIM, Face::SansRegular);
     y += LINE_HEIGHT;
   }
   y += 14;
@@ -623,7 +624,7 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
     for (const std::string& line :
          FontRenderer::WrapToWidth("A bot sees exactly what a player in this seat would see, and nothing more.", detailWidth))
     {
-      _text.DrawText(static_cast<std::int32_t>(contentX), y, line, NEUTRAL_DIM);
+      _text.DrawText(static_cast<std::int32_t>(contentX), y, line, NEUTRAL_DIM, Face::SansRegular);
       y += LINE_HEIGHT;
     }
 
@@ -643,7 +644,7 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
                                            : "HUMAN: entering waits for this player. Set the card to BOT AT T1 to start without them.",
                                  detailWidth))
   {
-    _text.DrawText(static_cast<std::int32_t>(contentX), y, line, NEUTRAL_DIM);
+    _text.DrawText(static_cast<std::int32_t>(contentX), y, line, NEUTRAL_DIM, Face::SansRegular);
     y += LINE_HEIGHT;
   }
 }
@@ -676,7 +677,7 @@ void SeatsPage::DrawPractice(ShapeRenderer& _shapes, FontRenderer& _text)
   std::int32_t lineY = static_cast<std::int32_t>(PRACTICE_Y) + 44;
   for (const char* line : lines)
   {
-    _text.DrawText(static_cast<std::int32_t>(PRACTICE_X) + 12, lineY, line, TEXT_DETAIL);
+    _text.DrawText(static_cast<std::int32_t>(PRACTICE_X) + 12, lineY, line, TEXT_DETAIL, Face::SansRegular);
     lineY += LINE_HEIGHT + 2;
   }
 }
@@ -738,7 +739,7 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
   // panel's height.
   const bool refused = !m_refusal.empty();
   _text.DrawText(static_cast<std::int32_t>(CONSOLE_X + CONSOLE_PADDING), CenterTextY(footerY, FOOTER_HEIGHT), refused ? m_refusal : summary,
-                 refused ? AMBER : (!enough ? RED : (everyone ? BLUE : AMBER)));
+                 refused ? AMBER : (!enough ? RED : (everyone ? BLUE : AMBER)), refused ? Face::SansRegular : Face::MonoRegular);
 
   // ---- ENTER MATCH --------------------------------------------------------------------------------
   const auto enterWidth = static_cast<float>(FontRenderer::MeasurePixels("ENTER MATCH >")) + 24.0F;
@@ -768,8 +769,8 @@ void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   //
   // The same title block screen 03 opens with, so that a host who has just come off the join screen
   // sees the lobby arrive under the same two lines rather than under a bar that replaced them.
-  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY,
-                 FontRenderer::DEFAULT_FACE, FontRenderer::COUNTDOWN_SCALE);
+  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY, Face::MonoMedium,
+                 FontRenderer::COUNTDOWN_SCALE);
   _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(SUBTITLE_Y), "SEATS - BEFORE THE MATCH STARTS",
                  TEXT_MUTED);
 

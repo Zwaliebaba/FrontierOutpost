@@ -23,6 +23,7 @@ namespace
 {
 
 using Neuron::Color;
+using Neuron::Face;
 using Neuron::FontRenderer;
 using Neuron::ShapeRenderer;
 
@@ -794,8 +795,7 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // 06). A countdown that stayed amber on 00:00:00 read as "hurry" to a player who could no longer
   // do anything, which is the opposite of what the number means once it has run out.
   const bool atLock = m_state.orders.locked && !m_state.match.finished;
-  DrawRight(_text, cursor, bigY, countdown, atLock ? Ink::NEUTRAL_DIM : Ink::AMBER, FontRenderer::DEFAULT_FACE,
-            FontRenderer::COUNTDOWN_SCALE);
+  DrawRight(_text, cursor, bigY, countdown, atLock ? Ink::NEUTRAL_DIM : Ink::AMBER, Face::MonoSemiBold, FontRenderer::COUNTDOWN_SCALE);
   cursor -= static_cast<float>(FontRenderer::MeasurePixels(countdown, FontRenderer::DEFAULT_FACE, FontRenderer::COUNTDOWN_SCALE)) + 8.0F;
 
   const std::string lockLabel = m_state.match.finished ? std::string{"MATCH ENDED"}
@@ -808,7 +808,7 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   const float lineX = 16.0F + titleWidth + 10.0F;
   const float room = cursor - 14.0F - lineX;
 
-  _text.DrawText(16, centered, "LOCKSTEP", Ink::TEXT_PRIMARY);
+  _text.DrawText(16, centered, "LOCKSTEP", Ink::TEXT_PRIMARY, Face::MonoMedium);
 
   // "DAY 12/21" rather than "DAY 12 / 21", and the countdown and replay labels use T-notation: at
   // 8px the reference's spelled-out bar is 63px wider than the frame (ADR-014).
@@ -1025,7 +1025,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     std::int32_t lineY = static_cast<std::int32_t>(y) + 11;
 
     _shapes.FillEllipse(RAIL_PADDING + 4.0F, static_cast<float>(lineY) + 4.0F, 4.0F, 4.0F, accent);
-    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, Uppercased(card.title), Ink::TEXT_PRIMARY);
+    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, Uppercased(card.title), Ink::TEXT_PRIMARY, Face::MonoMedium);
     if (!card.stamp.empty())
     {
       DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, lineY, card.stamp, Ink::TEXT_MUTED);
@@ -1042,7 +1042,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
     for (const std::string& line : layout.details)
     {
-      _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, line, Ink::TEXT_DETAIL);
+      _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, line, Ink::TEXT_DETAIL, Face::SansRegular);
       lineY += LINE_HEIGHT;
     }
 
@@ -1062,7 +1062,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
       lineY += LINE_HEIGHT;
       for (const std::string& line : detail)
       {
-        _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT) + 6, lineY, line, Ink::TEXT_DETAIL);
+        _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT) + 6, lineY, line, Ink::TEXT_DETAIL, Face::SansRegular);
         lineY += LINE_HEIGHT;
       }
       lineY += 6;
@@ -1266,7 +1266,8 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   }
   for (const std::string& line : FontRenderer::WrapToWidth(help, railWidth))
   {
-    _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), line, atLock ? Ink::AMBER : Ink::TEXT_DETAIL);
+    _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), line, atLock ? Ink::AMBER : Ink::TEXT_DETAIL,
+                   atLock ? Face::SansMedium : Face::SansRegular);
     y += static_cast<float>(LINE_HEIGHT);
   }
   y += 6.0F;
@@ -1849,7 +1850,8 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.StrokeRect(x, y, width, height, Ink::CARD_BORDER);
 
   // ---- Header ----------------------------------------------------------------------------------
-  _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(y, SHEET_HEADER_HEIGHT), title, Ink::TEXT_PRIMARY);
+  _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(y, SHEET_HEADER_HEIGHT), title, Ink::TEXT_PRIMARY,
+                 Face::MonoMedium);
   DrawRight(_text, x + width - CARD_PADDING, CenterTextY(y, SHEET_HEADER_HEIGHT), "X", Ink::TEXT_MUTED);
 
   // The same filled grey chip the locks rail wears, in the header's own status position -- clear of
@@ -1872,7 +1874,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     std::int32_t helpY = static_cast<std::int32_t>(y + SHEET_HEADER_HEIGHT) + 6;
     for (const std::string& line : lockHelp)
     {
-      _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), helpY, line, Ink::AMBER);
+      _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), helpY, line, Ink::AMBER, Face::SansMedium);
       helpY += LINE_HEIGHT;
     }
     _shapes.FillRect(x, y + SHEET_HEADER_HEIGHT + helpHeight, width, 1.0F, Ink::DIVIDER);
@@ -1916,7 +1918,8 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
 
     if (!row.detail.empty())
     {
-      _text.DrawText(static_cast<std::int32_t>(textX), static_cast<std::int32_t>(rowY) + 26, row.detail, Ink::TEXT_MUTED);
+      _text.DrawText(static_cast<std::int32_t>(textX), static_cast<std::int32_t>(rowY) + 26, row.detail, Ink::TEXT_MUTED,
+                     Face::SansRegular);
     }
     if (!row.right.empty())
     {

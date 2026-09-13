@@ -148,6 +148,7 @@
     <ClCompile Include="CountdownTests.cpp" />
     <ClCompile Include="TapTests.cpp" />
     <ClCompile Include="JoinPageTests.cpp" />
+    <ClCompile Include="FaceRuleTests.cpp" />
   </ItemGroup>
   <!--
     THE EXECUTABLE'S OWN TRANSLATION UNITS, COMPILED A SECOND TIME.

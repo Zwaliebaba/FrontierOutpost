@@ -10,6 +10,7 @@ namespace Lockstep
 {
 
 using Neuron::Color;
+using Neuron::Face;
 using Neuron::FontRenderer;
 using Neuron::ShapeRenderer;
 
@@ -86,7 +87,7 @@ ConnectionDialog::Action ConnectionDialog::TakeAction() noexcept
   return taken;
 }
 
-void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vector<std::string>& _outBody,
+void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vector<Paragraph>& _outBody,
                                std::vector<Button>& _outButtons) const
 {
   _outTitle.clear();
@@ -101,9 +102,9 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
   {
   case Kind::Connecting:
     _outTitle = "CONNECTING";
-    _outBody.push_back(m_facts.server);
-    _outBody.push_back(m_facts.greeted ? "Sending token - waiting for Welcome." : "Reaching the server.");
-    _outBody.push_back(std::format("Waiting {}.", Seconds(m_shownSeconds)));
+    _outBody.push_back(Paragraph{m_facts.server, Neuron::Face::MonoRegular});
+    _outBody.push_back(Paragraph{m_facts.greeted ? "Sending token - waiting for Welcome." : "Reaching the server."});
+    _outBody.push_back(Paragraph{std::format("Waiting {}.", Seconds(m_shownSeconds))});
     _outButtons.push_back(Button{"CANCEL", Action::Cancel, false});
     return;
 
@@ -114,10 +115,11 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
     // galaxy, an invented countdown, indistinguishable from a real match to the person waiting.
     _outTitle = "WAITING FOR THE HOST";
     _outLook = Look{BLUE, BLUE};
-    _outBody.push_back(m_facts.seat >= 0 ? std::format("You are in. Seat {:02} is yours.", m_facts.seat + 1) : std::string{"You are in."});
-    _outBody.push_back("The host has not started the match yet. The galaxy is generated when they do, for however "
-                       "many seats they arranged, so there is nothing to show until then.");
-    _outBody.push_back("This becomes the match the moment the first tick arrives.");
+    _outBody.push_back(
+      Paragraph{m_facts.seat >= 0 ? std::format("You are in. Seat {:02} is yours.", m_facts.seat + 1) : std::string{"You are in."}});
+    _outBody.push_back(Paragraph{"The host has not started the match yet. The galaxy is generated when they do, for however "
+                                 "many seats they arranged, so there is nothing to show until then."});
+    _outBody.push_back(Paragraph{"This becomes the match the moment the first tick arrives."});
     _outButtons.push_back(Button{"QUIT", Action::Quit, false});
     return;
 
@@ -127,16 +129,16 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
     {
     case Neuron::RefusalReason::AlreadyConnected:
       _outTitle = "REFUSED - SEAT IN USE";
-      _outBody.push_back("Someone is already connected on this token. If that was you a moment ago, wait a few "
-                         "seconds and retry - the seat frees when the old link drops.");
+      _outBody.push_back(Paragraph{"Someone is already connected on this token. If that was you a moment ago, wait a few "
+                                   "seconds and retry - the seat frees when the old link drops."});
       _outButtons.push_back(Button{back, backAction, false});
       _outButtons.push_back(Button{"RETRY", Action::Retry, true});
       return;
 
     case Neuron::RefusalReason::Malformed:
       _outTitle = "REFUSED - NOT UNDERSTOOD";
-      _outBody.push_back("The server could not read what this client sent. That is a defect rather than a typo: "
-                         "the two ends disagree about the protocol, which usually means different builds.");
+      _outBody.push_back(Paragraph{"The server could not read what this client sent. That is a defect rather than a typo: "
+                                   "the two ends disagree about the protocol, which usually means different builds."});
       _outButtons.push_back(Button{back, backAction, false});
       return;
 
@@ -145,8 +147,8 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
     case Neuron::RefusalReason::None:
     default:
       _outTitle = "REFUSED - UNKNOWN TOKEN";
-      _outBody.push_back("This token is not on this match's list. Check it with the host - tokens are per match, "
-                         "and a host who restarted has issued a new set.");
+      _outBody.push_back(Paragraph{"This token is not on this match's list. Check it with the host - tokens are per match, "
+                                   "and a host who restarted has issued a new set."});
       _outButtons.push_back(Button{back, backAction, false});
       if (m_facts.canGoBack)
       {
@@ -158,21 +160,22 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
   case Kind::Lost:
     _outTitle = "CONNECTION LOST";
     _outLook = Look{AMBER, AMBER};
-    _outBody.push_back("The server stopped answering.");
-    _outBody.push_back(m_facts.reconnects == 0 ? std::format("Reconnecting - next attempt in {}.", Seconds(m_facts.secondsToNextAttempt))
-                                               : std::format("Reconnecting - back {} time(s) already - next attempt in {}.",
-                                                             m_facts.reconnects, Seconds(m_facts.secondsToNextAttempt)));
+    _outBody.push_back(Paragraph{"The server stopped answering."});
+    _outBody.push_back(Paragraph{m_facts.reconnects == 0
+                                   ? std::format("Reconnecting - next attempt in {}.", Seconds(m_facts.secondsToNextAttempt))
+                                   : std::format("Reconnecting - back {} time(s) already - next attempt in {}.", m_facts.reconnects,
+                                                 Seconds(m_facts.secondsToNextAttempt))});
 
     // **The reference sheet promises more than this client does, so this says less.** Screen 04's
     // paragraph is "your unlocked orders are kept here and re-sent when the link returns", and
     // nothing re-sends them: orders tapped while this dialog is up reach `SendOrders`, which drops
     // them because the status is not `Playing`. What IS true is that everything sent before the
     // drop is already on the server, where the latest submission for a tick wins.
-    _outBody.push_back("Orders you already sent are on the server and still count. Anything you tap while this is "
-                       "up is not sent.");
+    _outBody.push_back(Paragraph{"Orders you already sent are on the server and still count. Anything you tap while this is "
+                                 "up is not sent."});
     if (!m_facts.lockCountdown.empty())
     {
-      _outBody.push_back(std::format("The tick still locks in {} whether or not you are back.", m_facts.lockCountdown));
+      _outBody.push_back(Paragraph{std::format("The tick still locks in {} whether or not you are back.", m_facts.lockCountdown)});
     }
     _outButtons.push_back(Button{"QUIT", Action::Quit, false});
     _outButtons.push_back(Button{"RETRY NOW", Action::Retry, true});
@@ -180,10 +183,11 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
 
   case Kind::Finished:
     _outTitle = "MATCH FINISHED";
-    _outBody.push_back("This match has ended. The final standings are in the last digest.");
+    _outBody.push_back(Paragraph{"This match has ended. The final standings are in the last digest."});
     if (!m_facts.standings.empty())
     {
-      _outBody.push_back(m_facts.standings);
+      // A placing, not a sentence: the one block in any of these dialogs that is data.
+      _outBody.push_back(Paragraph{m_facts.standings, Neuron::Face::MonoRegular});
     }
     _outButtons.push_back(Button{"QUIT", Action::Quit, false});
     _outButtons.push_back(Button{"VIEW LAST DIGEST", Action::ViewLastDigest, true});
@@ -205,7 +209,7 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
 
   std::string title;
   Look look{CARD_BORDER, TEXT_PRIMARY};
-  std::vector<std::string> body;
+  std::vector<Paragraph> body;
   std::vector<Button> buttons;
   Compose(title, look, body, buttons);
 
@@ -215,16 +219,16 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
   // downward from a fixed top would put a five-line paragraph off the bottom of the screen.
   const auto bodyWidth = static_cast<std::uint32_t>(CARD_WIDTH - 2.0F * CARD_PADDING);
 
-  std::vector<std::string> lines;
-  for (const std::string& paragraph : body)
+  std::vector<Paragraph> lines;
+  for (const Paragraph& paragraph : body)
   {
     if (!lines.empty())
     {
       lines.emplace_back();
     }
-    for (std::string& line : FontRenderer::WrapToWidth(paragraph, bodyWidth))
+    for (std::string& line : FontRenderer::WrapToWidth(paragraph.text, bodyWidth))
     {
-      lines.push_back(std::move(line));
+      lines.push_back(Paragraph{std::move(line), paragraph.face});
     }
   }
 
@@ -242,12 +246,12 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
   const auto contentX = static_cast<std::int32_t>(CARD_X + CARD_PADDING);
   auto y = static_cast<std::int32_t>(cardY + CARD_PADDING);
 
-  _text.DrawText(contentX, y, title, look.title);
+  _text.DrawText(contentX, y, title, look.title, Face::MonoMedium);
   y += static_cast<std::int32_t>(FontRenderer::GlyphHeightPixels() + TITLE_GAP);
 
-  for (const std::string& line : lines)
+  for (const Paragraph& line : lines)
   {
-    _text.DrawText(contentX, y, line, TEXT_DETAIL);
+    _text.DrawText(contentX, y, line.text, TEXT_DETAIL, line.face);
     y += LINE_HEIGHT;
   }
 

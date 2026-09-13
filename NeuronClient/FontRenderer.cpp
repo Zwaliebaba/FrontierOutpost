@@ -293,6 +293,7 @@ void FontRenderer::BeginFrame(std::uint32_t _frameIndex) noexcept
   m_frameIndex = _frameIndex;
   m_usedThisFrame = 0;
   m_flushedThisFrame = 0;
+  m_headlessStrings.clear();
   ClearClipRect();
 }
 
@@ -314,6 +315,14 @@ void FontRenderer::DrawText(std::int32_t _xPixels, std::int32_t _yPixels, std::s
                             std::uint32_t _scale)
 {
   ASSERT_TEXT(_scale > 0, L"A glyph scale of zero would draw nothing and is a caller mistake, not a way to hide text.");
+
+  // Recorded BEFORE the string becomes glyph boxes, and only with no device behind the renderer:
+  // this is what lets `LockstepTests` hold the face rule to account (ADR-074), and it must cost
+  // the shipped path nothing.
+  if (m_headless)
+  {
+    m_headlessStrings.emplace_back(std::string{_text}, _face);
+  }
 
   TextVertex* slice = m_mappedVertices + static_cast<std::size_t>(m_frameIndex) * MAX_VERTICES_PER_FRAME;
 

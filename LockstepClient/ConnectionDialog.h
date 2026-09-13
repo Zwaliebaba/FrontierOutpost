@@ -153,9 +153,22 @@ private:
     Neuron::Color title;
   };
 
+  /// One block of a dialog's body, and the face it is set in.
+  ///
+  /// **A dialog body is not all prose, which is why the face travels with the block rather than
+  /// being decided where it is drawn.** Every paragraph here is a sentence bar one: `MATCH
+  /// FINISHED` ends with a standings line -- `3RD OF 6` -- which is a placing and belongs in the
+  /// data face (ADR-074). Wrapping is what makes this necessary: by the time a paragraph is a
+  /// vector of lines the draw site can no longer tell which block a line came out of.
+  struct Paragraph
+  {
+    std::string text;
+    Neuron::Face face = Neuron::Face::SansRegular;
+  };
+
   /// The title, the look, the paragraph and the buttons, for whatever `m_kind` and `m_facts` say.
   /// Built in one place so that a state cannot end up with a red border and a reassuring sentence.
-  void Compose(std::string& _outTitle, Look& _outLook, std::vector<std::string>& _outBody, std::vector<Button>& _outButtons) const;
+  void Compose(std::string& _outTitle, Look& _outLook, std::vector<Paragraph>& _outBody, std::vector<Button>& _outButtons) const;
 
   Kind m_kind = Kind::None;
   Facts m_facts;

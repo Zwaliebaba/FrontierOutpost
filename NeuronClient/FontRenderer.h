@@ -249,6 +249,27 @@ public:
   /// what ships.
   void CreateHeadless();
 
+  /// One string a headless renderer was asked to draw, and the face it was asked for.
+  ///
+  /// The geometry cannot answer this: by the time a string is vertices it is glyph boxes with no
+  /// word boundaries and no face, and recovering either from an atlas coordinate would be a
+  /// parser. The string is captured on the way IN instead, which is where it is still a sentence.
+  struct DrawnString
+  {
+    std::string text;
+    Face face;
+  };
+
+  /// Every string this headless renderer drew since `BeginFrame`, in draw order.
+  ///
+  /// **This exists so ADR-074's face rule can be a test rather than a convention.** The rule --
+  /// data is mono, sentences are sans -- is applied at eighty-odd call sites and would otherwise
+  /// have to be re-checked by reading all of them every time a line of copy changes.
+  [[nodiscard]] const std::vector<DrawnString>& DrawnStrings() const noexcept
+  {
+    return m_headlessStrings;
+  }
+
   /// Resets this frame's vertex slice. Every frame writes its own slice of the buffer, so the CPU
   /// never overwrites vertices the GPU is still reading. Also clears the clip rectangle.
   void BeginFrame(std::uint32_t _frameIndex) noexcept;
@@ -321,6 +342,9 @@ private:
   /// Where a headless renderer's geometry goes. Empty in the shipped path, where the vertices
   /// live in an upload heap the GPU reads directly.
   std::vector<TextVertex> m_headlessVertices;
+
+  /// What a headless renderer was ASKED to draw, beside what it drew. See `DrawnStrings`.
+  std::vector<DrawnString> m_headlessStrings;
   bool m_headless = false;
 
   TextVertex* m_mappedVertices = nullptr;

@@ -10,6 +10,7 @@ namespace Lockstep
 {
 
 using Neuron::Color;
+using Neuron::Face;
 using Neuron::FontRenderer;
 using Neuron::ShapeRenderer;
 
@@ -66,7 +67,7 @@ constexpr std::int32_t HIT_JOIN = 4;
 /// field is listening.
 constexpr double BLINK_SECONDS = 1.0;
 
-[[nodiscard]] std::int32_t CenterTextY(float _y, float _height, Neuron::Face _face = FontRenderer::DEFAULT_FACE, std::uint32_t _scale = 1)
+[[nodiscard]] std::int32_t CenterTextY(float _y, float _height, Face _face = FontRenderer::DEFAULT_FACE, std::uint32_t _scale = 1)
 {
   const auto glyph = static_cast<float>(FontRenderer::GlyphHeightPixels(_face, _scale));
   return static_cast<std::int32_t>(_y + (_height - glyph) * 0.5F);
@@ -303,8 +304,8 @@ void JoinPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   //
   // The only other place this font is drawn at 2x is the lock countdown (DESIGN-GUIDELINES
   // "Font"). Both are the one thing on their screen that has to be read first.
-  _text.DrawText(static_cast<std::int32_t>(COLUMN_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY,
-                 FontRenderer::DEFAULT_FACE, FontRenderer::COUNTDOWN_SCALE);
+  _text.DrawText(static_cast<std::int32_t>(COLUMN_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY, Face::MonoMedium,
+                 FontRenderer::COUNTDOWN_SCALE);
   _text.DrawText(static_cast<std::int32_t>(COLUMN_X), static_cast<std::int32_t>(SUBTITLE_Y), "JOIN A MATCH - ONE SEAT PER TOKEN",
                  TEXT_MUTED);
 
@@ -330,7 +331,7 @@ void JoinPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   for (const std::string& line : FontRenderer::WrapToWidth(
          "The match gives you a token. It names your seat, not you: whoever types it plays that empire.", explanationWidth))
   {
-    _text.DrawText(static_cast<std::int32_t>(FIELD_X), lineY, line, TEXT_DETAIL);
+    _text.DrawText(static_cast<std::int32_t>(FIELD_X), lineY, line, TEXT_DETAIL, Face::SansRegular);
     lineY += LINE_HEIGHT;
   }
 
@@ -389,7 +390,7 @@ void JoinPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   // something to explain and two things the player can do about it, and neither fits on one line.
   if (m_status == Status::Refused && !m_detail.empty())
   {
-    _text.DrawText(static_cast<std::int32_t>(FIELD_X), CenterTextY(BUTTON_Y, BUTTON_HEIGHT), m_detail, RED);
+    _text.DrawText(static_cast<std::int32_t>(FIELD_X), CenterTextY(BUTTON_Y, BUTTON_HEIGHT), m_detail, RED, Face::SansRegular);
   }
 
   // ---- The footer ------------------------------------------------------------------------------
