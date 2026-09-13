@@ -68,6 +68,12 @@ statement of what they cover, and nothing in `Archive/` is authoritative. ADR-03
 in `Plans/` cite them at their old paths and are left as they are, for the reason given above,
 and because what a plan was written against is a fact about the day it was written.
 
+**`4X-03-PhaseZero.md` is in `Archive/`**, since 2026-09-13, the day it was written and the day it
+was finished. Its §8 records what running it found, including two defects nobody planned for; the
+decisions it produced are ADR-067 through ADR-071 and those are what is authoritative. ADR-067,
+ADR-068, ADR-069, ADR-070 and ADR-071 cite it at its old path in `Plans/` and are left as they are,
+for the reason given above.
+
 **The rename to *LockStep: Universe* reached the ADRs, and that is an exception worth naming.** On
 2026-09-11 the game stopped being *Frontier Outpost*; the `Frontier` namespace became `Lockstep` and
 `FrontierOutpost/` became `Lockstep/` (ADR-035). Nineteen Accepted ADRs — 001, 002, 003, 005, 007,

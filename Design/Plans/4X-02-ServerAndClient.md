@@ -497,7 +497,9 @@ machines have still not played a tick. Everything else in this document has happ
 ### What Phase 0 now needs, in the order it will hurt
 
 1. **Two machines, one match, one tick.** Unchanged, and still the only thing that needs people.
-   Everything is verified on loopback.
+   Everything is verified on loopback. **Everything else on this list is done, and so is
+   `4X-03-PhaseZero.md`, which was written on 2026-09-13 for what reading the tree against the
+   blueprint found.**
 2. ~~**A reconnecting player is not sent the digests they missed.**~~ **Done 2026-09-12, ADR-044:**
    the session keeps eight ticks of digest per player and sends the backlog on arrival. Screen 08's
    tabs are now buildable and are not built.

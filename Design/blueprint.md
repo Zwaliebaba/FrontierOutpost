@@ -18,7 +18,7 @@ to twelve humans, played four times a day for three weeks, where every order is 
 against rivals placing theirs — and where losing your capital is the start of the best story the
 game can tell, not the end of yours.
 
-**Status, honestly.** The whole core loop is built, deterministic, tested (467 automated tests
+**Status, honestly.** The whole core loop is built, deterministic, tested (502 automated tests
 across five suites, run 2026-09-13) and running end to end over TCP: galaxy generation, the
 six-phase tick, combat, sieges, trade lanes, proposals, custodianship, fog of war, scoring, the
 fixed ending, a dedicated server that resumes a stored match after a restart, and the
@@ -407,11 +407,12 @@ A view, not a plan, built on the decisions taken on 2026-09-11. Each step depend
 one holding.
 
 **Now → Phase 0 (weeks).** Six people, one weekend, on the desktop prototype. The build is ready;
-what it needs is a host, six tokens and a Saturday. Expect to change numbers, not rules: the one
-rules change that was to land ahead of it — building levels and build time, so that the credits
-Phase 0 spends are not dead by day two — is built (§3, ADR-069). `Design/Plans/4X-03-PhaseZero.md`
-is that change and everything else the tree owes first, in order, written for Claude Code to
-execute.
+what it needs is a host, six tokens and a Saturday. Expect to change numbers, not rules. Everything
+the tree owed first is done (`Design/Archive/4X-03-PhaseZero.md`): building levels and build time,
+so the credits Phase 0 spends are not dead by day two (ADR-069, ADR-070); a conceded empire
+forfeiting its score (ADR-067); two diplomacy faults nobody had hit because nobody had had two
+offers open at once (ADR-068); the three-way fight pinned with numbers (§8); and a hostname that no
+longer freezes the window (ADR-071).
 
 **Before Phase 1: the fiction.** A design session that gives the game a world — who the players are,
 why the galaxy is bounded, what the sealed region is and why it opens. It should be written to the
@@ -566,9 +567,9 @@ Phase 1; whether the sealed region is visible through fog from tick one.
 |---|---|
 | The rules, as designed, at greater length than §3 | `Design/Archive/space-4x-one-pager-v10.md` — archived 2026-09-13 |
 | The playtest phases, at greater length than §5 | `Design/Archive/space-4x-prototype-test-plan.md` — archived 2026-09-13 |
-| Every decision and what it rejected | `Design/ADR/` — ADR-018 through ADR-031 are the game; 014, 017, 027, 032, 033 are the screen; 034 through 066 are everything built since the UI handoff of 2026-09-11 |
+| Every decision and what it rejected | `Design/ADR/` — ADR-018 through ADR-031 are the game; 014, 017, 027, 032, 033 are the screen; 034 through 071 are everything built since the UI handoff of 2026-09-11 |
 | What was built, step by step, with what it found | `Design/Plans/4X-01-CoreLoop.md`, `Design/Plans/4X-02-ServerAndClient.md` |
-| What the tree still owes before Phase 0, step by step | `Design/Plans/4X-03-PhaseZero.md` |
+| What the tree owed before Phase 0, and what doing it found | `Design/Archive/4X-03-PhaseZero.md` |
 | The screens, as built and photographed | `Design/UI/` (README, DESIGN-GUIDELINES, SCREENS, `screens/*.png`) |
 | How code is written here | `AGENTS.md` |
 | What a phone client would cost | `Design/Reference/mobile-portability.md` |

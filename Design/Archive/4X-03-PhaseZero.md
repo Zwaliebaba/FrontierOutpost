@@ -1,6 +1,19 @@
+# Archived — the plan for what the tree owed before Phase 0 (was `Design/Plans/4X-03-PhaseZero.md`)
+
+**Archived 2026-09-13**, the day it was written and the day it was finished. Every step is done and
+§8 says what each one found, including two defects that were nobody's plan and three numbers Phase 0
+should carry into the room. A finished plan is archived (`Design/README.md` §2); the decisions it
+produced are ADR-067 through ADR-071 and those are what is authoritative, not this. `blueprint.md`
+§7 and `4X-02` §7 point here. Unchanged below the rule.
+
+---
+
 # 4X-03 — Before Phase 0: what six people would hit first
 
-**Status:** **Not started.** Written 2026-09-13 against `Design/blueprint.md` (§2, §3, §4, §7, §9 as
+**Status:** **Done 2026-09-13**, every step, in the order below. What each one found is in its
+commit and in the ADRs it owed — ADR-067 through ADR-071 — and the two things it found that were
+nobody's plan are named in §8 below. **The one thing it could not do is unchanged: six people on
+six machines.** Written 2026-09-13 against `Design/blueprint.md` (§2, §3, §4, §7, §9 as
 of commit `02f970c`) and the gap check of the same day, which read the blueprint's present-tense
 claims against the tree and found four places where they disagree. **This plan is written to be
 executed by Claude Code in build sessions**, one step per session or per commit, in the order
@@ -444,7 +457,48 @@ was dropped, and the report says so.
 
 ---
 
-### What Phase 0 still needs from a person
+---
 
-Unchanged from `4X-02` §7: **two machines, one match, one tick.** Everything in this plan is
-verified on loopback and in the suites. When this plan is done, that is the only item left.
+## 8. What this plan found, 2026-09-13
+
+Every step is done and each one's reasoning is in the ADR it owed: **ADR-067** (concession forfeits
+in any week), **ADR-068** (a digest entry names its proposal, and every open offer is answerable),
+**ADR-069** (three building levels, each taking ticks to rise), **ADR-070** (a rising build is a row
+with an ETA, and not a marker on the map), **ADR-071** (a hostname resolves off the frame loop).
+
+**Two defects turned up that were nobody's plan**, both found by a test that was written for
+something else, and both worth naming because the shape repeats:
+
+1. **A player with six or more open offers could not concede.** The signal sheet draws its first six
+   rows and `ComposeSignals` writes the concede last, so on a busy board the one control that must
+   always be reachable was clipped off the sheet entirely. It was latent for as long as seat zero
+   never had six offers at tick 14; ADR-069 changed how the bots expand, seat zero got a sixth, and
+   the concede vanished. The concede now keeps the last visible slot. ADR-064 had already ruled that
+   a *label* must not cost that row its place — nothing had protected it from the rows above it.
+2. **The quiet-tick BUILD button offered whatever row was first**, which after ADR-069 could be a
+   system already building — a button whose order the lock was certain to refuse, which is exactly
+   what ADR-053 took off this screen. The standing move now picks the first row that can be started,
+   and `Action::ToggleBuild`, the only place `queuedBuilds` grows, refuses a rising row outright.
+
+**The measured findings**, which are the ones Phase 0 should carry into the room:
+
+- **Three-way fights are a rout, not a tilt.** Thirty ships against fifteen and fifteen leaves the
+  leader with sixteen and both gangers with nothing. Ganging the leader is currently worse for the
+  gangers than not ganging at all, which inverts the only anti-snowball the game has. `blueprint.md`
+  §8 carries the figures and the first lever to try.
+- **A hostname took longer than five seconds to fail** on the machine this was built on, which is
+  the frozen window ADR-071 removes and the reason its test measures cadence rather than waiting for
+  an answer.
+- **The scripted match's hash moved** to `0x22B59450A1D76F74`, re-pinned under Debug and Release.
+
+**What was not done, and why.** The captures: `01-build-sheet.png`, `01-orders-queued.png`,
+`01-main-page.png` and `01-rail-hover.png` predate ADR-069 and ADR-070, and `01-build-rising.png`
+does not exist. The desktop was locked for the whole session and a locked desktop makes every
+synthetic tap fail silently, so they could not be retaken; `Design/UI/README.md` names them and says
+how to stage the new one rather than leaving them to look current. **That is the one piece of §1's
+"done" this plan did not reach.**
+
+### What Phase 0 needs now
+
+**Two machines, one match, one tick**, and then six people, forty-eight hours. Unchanged since
+`4X-02` §7 and now the only item on the list.
