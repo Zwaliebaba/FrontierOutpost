@@ -180,8 +180,10 @@ Semantic / owner (ADR-027: you are always blue)
   open one** (ADR-061): the per-event lines sit behind a tap on the 22px title band, everything else
   is drawn either way, and one card is open at a time.
 - **Digest page band** — 22px at the foot of the digest, drawn only when the card stack is taller
-  than the column: `1 / 3 - MORE >` right, `< PREV` left once past page one, both muted (ADR-061).
-  Page breaks fall between cards; page 1 always carries the leading card and so the standing moves.
+  than the column: `27 MORE - 1 BATTLE >` right — the hidden count and the worst hidden kind, a
+  battle first — or `END` in `NEUTRAL_DIM` at the bottom; `< PREV` left once there is anything above,
+  both muted (ADR-061, ADR-080). The column scrolls by whole cards on a wheel notch, a drag banked
+  to 44px, or `PageUp`/`PageDown`, and the band's halves move a screenful.
 - **Verdict box** — 1px amber border inside the card; line 1 amber `FLT1 ARRIVES T47 - YOU LOSE`,
   then the numbers in body colour, always saying whose ships remain.
 - **Sheet** — the panel component (ADR-052): ink background, 1px border; 36px header with the title

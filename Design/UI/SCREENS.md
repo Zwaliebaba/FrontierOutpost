@@ -43,16 +43,23 @@ button still imperative and still tappable, so changing an answer before the loc
 one card's buttons. Tapping a card focuses the system it is about; `MAP` focuses the system the
 action names.
 
-**Overflow (ADR-061).** An **actor card is collapsed** unless it is the open one: dot, title, `3
-EVENTS`, the verdict box and the whole action row, with the per-event lines behind a tap on its
-22px title band; one card is open at a time. A stack that still does not fit is **paged**, with a
-22px band at the foot of the column — `1 / 3 · MORE ›`, and `‹ PREV` once past page one — drawn only
-when it is needed. Page breaks fall between cards; the page and the open card reset when a new
-digest arrives; the leading card, which carries the standing moves (ADR-056), is always on page 1.
+**Overflow (ADR-061, ADR-080).** An **actor card is collapsed** unless it is the open one: dot,
+title, `3 EVENTS`, the verdict box and the whole action row, with the per-event lines behind a tap on
+its 22px title band; one card is open at a time. A stack that still does not fit **scrolls, by whole
+cards**: a wheel notch over the column, a drag that began on it, or `PageDown` moves the top down —
+the wheel and a key by one card and a screenful respectively, a drag when it has banked 44 pixels.
+Nothing is ever drawn part-way off the top.
+
+The 22px band at the foot of the column stays as the tap route and **says what is below it**:
+`27 MORE · 1 BATTLE ›` — the hidden count and the worst hidden thing, a battle outranking its own
+kind because the verdict is what makes it one — or `END` in dim ink when the bottom is on the
+screen, with `‹ PREV` on the left once there is anything above. Its two halves move by a screenful.
+The scroll and the open card reset when a new digest arrives. The leading card carries the standing
+moves (ADR-056) and is at the top of the stack rather than pinned to the screen.
 
 *Differs / not built:* no tick stamp on the right of a plain event card; no highlighted card
-variant; buttons that do not fit the column are dropped rather than wrapped; **nothing scrolls**
-(ADR-052 option C) — overflow is the collapse and the pages above. The handoff's four card-level
+variant; buttons that do not fit the column are dropped rather than wrapped. **The sheets and the
+locks rail still do not scroll** (ADR-052 option C, which ADR-080 amends for this column only). The handoff's four card-level
 signals (`REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE`) are the signal sheet's rows instead
 (ADR-039).
 

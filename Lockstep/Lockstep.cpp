@@ -1462,6 +1462,26 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
       redraw = true;
     }
 
+    // The wheel and the two page keys, which the digest column reads and nothing else does
+    // (ADR-080). Both were produced by the input classes and drained by nobody: the wheel has been
+    // banked since ADR-009, and the keyboard reached the join screen and stopped there.
+    //
+    // The pointer's CURRENT position decides which pane a notch was over. `TakeZoomSteps` banks a
+    // count and not a place, and a pointer does not travel measurably between the notch and the
+    // frame that reads it.
+    if (!dialog.Visible())
+    {
+      const std::int32_t zoomSteps = pointer.TakeZoomSteps();
+      if (zoomSteps != 0 && page.HandleZoom(zoomSteps, hoverXPixels, hoverYPixels))
+      {
+        redraw = true;
+      }
+      for (const Neuron::KeyboardInput::Key key : keyboard.TakeKeys())
+      {
+        redraw = page.HandleKey(key) || redraw;
+      }
+    }
+
     // Drag before tap. They are mutually exclusive by construction -- PointerInput decides which
     // a press was, and reports only that one -- so the order is about reading rather than about
     // correctness: the rotation is applied before the frame that a tap would be tested against.

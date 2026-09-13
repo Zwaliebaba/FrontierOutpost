@@ -4,6 +4,7 @@
 #include "MapView.h"
 
 #include "Starfield.h"
+#include "KeyboardInput.h"
 #include "MatchState.h"
 #include "PointerInput.h"
 #include "ShapeRenderer.h"
@@ -119,7 +120,8 @@ public:
     /// Open or close one actor card's per-event lines. Its index is an `OwnerId`, because that is
     /// what a card groups and the index a card sits at changes with the ranking.
     ToggleActorCard,
-    /// Show one page of the digest. Its index is the page, counted from zero.
+    /// Put the digest column's top at one card. Its index is a CARD position in the stack
+    /// `CardsOf` composed, which is what the band's two halves carry (ADR-080).
     ShowDigestPage,
     /// Step through the last resolved tick.
     OpenReplay,
@@ -156,6 +158,19 @@ public:
   /// ignored, so a slipped finger on the orders list never spins the galaxy. Returns true when
   /// the drag was consumed.
   bool HandleDrag(const Neuron::PointerInput::Drag& _drag);
+
+  /// A wheel notch or a pinch step, and where the pointer was when it arrived. Returns true when
+  /// something moved.
+  ///
+  /// **One entry point because there is one banked count** (`PointerInput::TakeZoomSteps`), and the
+  /// pane under the pointer is what decides its meaning: over the digest column it scrolls the card
+  /// stack (ADR-080). Positive is one notch away from the player, which scrolls DOWN the column --
+  /// the direction every other list on this platform goes.
+  bool HandleZoom(std::int32_t _steps, float _xPixels, float _yPixels);
+
+  /// A key. `PageUp` and `PageDown` move the digest a screenful, which is the keyboard's half of
+  /// ADR-080 and the only thing on this screen a key does.
+  bool HandleKey(Neuron::KeyboardInput::Key _key);
 
   /// Where the pointer is, so the locks rail can fill the row under it (`Ink::HOVER_FILL`).
   ///
@@ -199,16 +214,22 @@ public:
     return m_panel;
   }
 
-  /// Which rival's card is open, and which page of the digest is on the screen (ADR-061). Both are
-  /// how a player is READING the digest rather than anything about the match, and both are here for
-  /// the same reason `OpenPanel` is: a control that cannot be observed cannot be pressed by a test.
+  /// Which rival's card is open, and which card the digest column starts at (ADR-061, ADR-080).
+  /// Both are how a player is READING the digest rather than anything about the match, and both are
+  /// here for the same reason `OpenPanel` is: a control that cannot be observed cannot be pressed
+  /// by a test.
   [[nodiscard]] OwnerId ExpandedActor() const noexcept
   {
     return m_expandedActor;
   }
-  [[nodiscard]] std::size_t DigestPage() const noexcept
+  [[nodiscard]] std::size_t DigestTop() const noexcept
   {
-    return m_digestPage;
+    return m_digestTop;
+  }
+  /// How many cards the last frame put on the screen. What a page is, measured rather than assumed.
+  [[nodiscard]] std::size_t CardsOnScreen() const noexcept
+  {
+    return m_cardsOnScreen;
   }
 
   /// Whether anything on this page moves on its own and so needs a frame even when nobody has
@@ -290,6 +311,13 @@ private:
   /// Which of `m_railRows` the pointer is over, or `EventRefs::NONE`.
   [[nodiscard]] std::int32_t RailRowUnderPointer() const noexcept;
 
+  /// Where the digest column would start if it went back one screenful, measured from the card
+  /// heights the frame just laid out (ADR-080).
+  [[nodiscard]] std::size_t PreviousDigestTop(const std::vector<CardLayout>& _layouts, float _room) const;
+
+  /// Moves the digest by `_cards`, clamped. True when it moved.
+  bool ScrollDigest(std::int32_t _cards);
+
   /// Puts back the sheet a new state arrived under, if what it was about is still there (ADR-065).
   void ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _subject);
 
@@ -334,9 +362,17 @@ private:
   /// show one card's worth of lines should not be able to hold two open and page them apart.
   OwnerId m_expandedActor = NOBODY;
 
-  /// Which page of the digest is on the screen, counted from zero. Reset by `Create`, because a
-  /// digest is replaced wholesale and page three of the last one is nowhere in this one.
-  std::size_t m_digestPage = 0;
+  /// Which card the digest column starts at. Reset by `Create`, because a digest is replaced
+  /// wholesale and card thirty of the last one is nowhere in this one (ADR-080).
+  std::size_t m_digestTop = 0;
+  /// How many cards the last frame drew, so a page key can move by what a page actually was. Layout
+  /// is the only thing that knows, and it knows it a frame late -- which is the same frame-old hit
+  /// list every tap on this screen is already tested against.
+  std::size_t m_cardsOnScreen = 1;
+  /// Drag distance banked toward the next whole card, for the finger's half of scrolling. A drag is
+  /// continuous and the column moves in cards, so what is left over is kept rather than thrown away
+  /// -- the same bargain `PointerInput` makes with a high-resolution wheel.
+  float m_digestDragPixels = 0.0F;
 
   Panel m_panel = Panel::None;
   /// Which system's build list or which fleet's picker is open, as a POSITION in the view's lists.

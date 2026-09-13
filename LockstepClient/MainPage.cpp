@@ -181,7 +181,9 @@ void MainPage::Create(MatchState _state)
   // A digest is replaced wholesale every tick, so nothing about how the last one was being READ
   // survives it: page three is nowhere in the new one, and the rival whose card was open may have
   // no card at all (ADR-061).
-  m_digestPage = 0;
+  m_digestTop = 0;
+  m_cardsOnScreen = 1;
+  m_digestDragPixels = 0.0F;
   m_expandedActor = NOBODY;
 
   MeasureContent();
@@ -437,6 +439,35 @@ bool MainPage::HandleDrag(const Neuron::PointerInput::Drag& _drag)
   // rotating it as the finger crosses onto a rail, and a drag that began on a rail never starts.
   const float mapLeft = Frame::DIGEST_WIDTH;
   const float mapRight = Frame::SCREEN_WIDTH - Frame::ORDERS_WIDTH;
+
+  // **A drag that began on the digest scrolls it**, which is the finger's half of ADR-080: a touch
+  // device has no wheel, and the page band alone made reading a long digest a sequence of taps.
+  //
+  // The column moves in whole cards and a finger moves in pixels, so the remainder is banked rather
+  // than thrown away -- without that, a slow drag scrolls nothing at all. `DIGEST_SCROLL_PIXELS` is
+  // the frame's row unit (ADR-052): the distance a finger already associates with one row of
+  // anything on this screen.
+  const bool startedOnDigest = _drag.originXPixels >= 0.0F && _drag.originXPixels < mapLeft && _drag.originYPixels >= Frame::TOP_BAR_HEIGHT;
+  if (startedOnDigest)
+  {
+    constexpr float DIGEST_SCROLL_PIXELS = SHEET_ROW_HEIGHT;
+    m_digestDragPixels += _drag.deltaYPixels;
+
+    std::int32_t cards = 0;
+    while (m_digestDragPixels <= -DIGEST_SCROLL_PIXELS)
+    {
+      m_digestDragPixels += DIGEST_SCROLL_PIXELS;
+      ++cards;
+    }
+    while (m_digestDragPixels >= DIGEST_SCROLL_PIXELS)
+    {
+      m_digestDragPixels -= DIGEST_SCROLL_PIXELS;
+      --cards;
+    }
+    (void)ScrollDigest(cards);
+    return true;
+  }
+
   const bool startedOnMap =
     _drag.originXPixels >= mapLeft && _drag.originXPixels < mapRight && _drag.originYPixels >= Frame::TOP_BAR_HEIGHT;
   if (!startedOnMap)
@@ -449,6 +480,59 @@ bool MainPage::HandleDrag(const Neuron::PointerInput::Drag& _drag)
   // like a camera (ADR-017).
   m_mapView.Drag(_drag.deltaXPixels, _drag.deltaYPixels);
   return true;
+}
+
+bool MainPage::ScrollDigest(std::int32_t _cards)
+{
+  if (_cards == 0)
+  {
+    return false;
+  }
+  const std::size_t was = m_digestTop;
+  const std::int64_t wanted = static_cast<std::int64_t>(m_digestTop) + _cards;
+
+  // Clamped at both ends here rather than only in the draw, so a wheel spun hard against the end of
+  // the stack does not bank a hundred notches that have to be spun back.
+  m_digestTop = wanted <= 0 ? 0 : static_cast<std::size_t>(wanted);
+  return m_digestTop != was;
+}
+
+bool MainPage::HandleZoom(std::int32_t _steps, float _xPixels, float _yPixels)
+{
+  if (_steps == 0)
+  {
+    return false;
+  }
+
+  // The pane under the pointer decides what a notch means. The digest column is the only one that
+  // reads it today (ADR-080); the map's own answer is ADR-052's open question and not this.
+  const bool onTheDigest = _xPixels >= 0.0F && _xPixels < Frame::DIGEST_WIDTH && _yPixels >= Frame::TOP_BAR_HEIGHT;
+  if (!onTheDigest)
+  {
+    return false;
+  }
+
+  // A notch away from the player scrolls DOWN the column. `TakeZoomSteps` counts a notch away as
+  // negative -- it was named for a camera, where away is out -- so the sign is flipped here, at the
+  // one place that knows the gesture means a list rather than a distance.
+  m_digestDragPixels = 0.0F;
+  return ScrollDigest(-_steps);
+}
+
+bool MainPage::HandleKey(Neuron::KeyboardInput::Key _key)
+{
+  // A screenful, measured from what the last frame actually drew rather than from a number chosen
+  // here: cards are different heights and a page is however many of them fit (ADR-080).
+  const auto page = static_cast<std::int32_t>(std::max<std::size_t>(m_cardsOnScreen, 1));
+  if (_key == Neuron::KeyboardInput::Key::PageDown)
+  {
+    return ScrollDigest(page);
+  }
+  if (_key == Neuron::KeyboardInput::Key::PageUp)
+  {
+    return ScrollDigest(-page);
+  }
+  return false;
 }
 
 void MainPage::AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index)
@@ -761,7 +845,8 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       return true;
 
     case Action::ShowDigestPage:
-      m_digestPage = static_cast<std::size_t>(std::max(0, region->index));
+      m_digestTop = static_cast<std::size_t>(std::max(0, region->index));
+      m_digestDragPixels = 0.0F;
       return true;
 
     case Action::OpenReplay:
@@ -1095,11 +1180,12 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     y += boxHeight + 6.0F;
   }
 
-  // ---- The cards, and which of them are on this page -------------------------------------------------
+  // ---- The cards, and which of them are on the screen -------------------------------------------------
   //
-  // **Nothing scrolls (ADR-052 option C), so a stack that does not fit is PAGED** (ADR-061). The
-  // whole stack is measured first, because a page break has to fall between two cards and the only
-  // way to know where one card ends is to have worked out how tall it is.
+  // **The column scrolls, by whole cards** (ADR-080, which took the digest out of ADR-052 option C).
+  // The whole stack is measured first, because a card is the unit that scrolls and the only way to
+  // know where one ends is to have worked out how tall it is -- which is also what paging needed
+  // (ADR-061), so the measuring loop is unchanged and only what is done with it moved.
   const std::vector<DigestCard> cards = CardsOf(m_state);
   std::vector<CardLayout> layouts;
   layouts.reserve(cards.size());
@@ -1114,25 +1200,23 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
   const bool paged = stackHeight > Frame::SCREEN_HEIGHT - cardsTop;
   const float room = Frame::SCREEN_HEIGHT - cardsTop - (paged ? DIGEST_PAGE_HEIGHT : 0.0F);
 
-  // The first card of each page. A page always takes at least one card, even one taller than the
-  // column: a card that fits nowhere is still better read cut off than not drawn at all.
-  std::vector<std::size_t> pageStarts{0};
-  float used = 0.0F;
-  for (std::size_t index = 0; index < layouts.size(); ++index)
-  {
-    if (used > 0.0F && used + layouts[index].height > room)
-    {
-      pageStarts.push_back(index);
-      used = 0.0F;
-    }
-    used += layouts[index].height;
-  }
+  // **Clamped so the last card is always reachable and never alone past the end.** A scroll
+  // position is a card index and the player can push it anywhere; what stops it running off is
+  // that a top with nothing under it is not a position, it is an empty column.
+  const std::size_t lastTop = cards.empty() ? 0 : cards.size() - 1;
+  m_digestTop = std::min(m_digestTop, lastTop);
 
-  // **The leading card is always on page one**, which is what keeps the standing moves reachable
-  // (ADR-056): they are attached to `cards.front()` and page one starts there by construction.
-  m_digestPage = std::min(m_digestPage, pageStarts.size() - 1);
-  const std::size_t firstCard = pageStarts[m_digestPage];
-  const std::size_t lastCard = m_digestPage + 1 < pageStarts.size() ? pageStarts[m_digestPage + 1] : cards.size();
+  // What fits from here. One card always goes in even when it is taller than the column: a card
+  // that fits nowhere is still better read cut off than not drawn at all.
+  const std::size_t firstCard = m_digestTop;
+  std::size_t lastCard = firstCard;
+  float used = 0.0F;
+  while (lastCard < layouts.size() && (lastCard == firstCard || used + layouts[lastCard].height <= room))
+  {
+    used += layouts[lastCard].height;
+    ++lastCard;
+  }
+  m_cardsOnScreen = lastCard - firstCard;
 
   for (std::size_t cardIndex = firstCard; cardIndex < lastCard; ++cardIndex)
   {
@@ -1290,31 +1374,51 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
   // ---- The page band -------------------------------------------------------------------------------
   //
-  // At the foot of the column, where the stack it is about ends. `1 / 3 - MORE >` is the ops-console
-  // form -- numbers first, ` - ` between facts -- and `< PREV` appears only once there is a page to
-  // go back to, so the band never offers a direction that does nothing.
+  // At the foot of the column, where the stack it is about ends. **It says what is hidden and what
+  // the worst of it is** (ADR-080): `1 / 4 - MORE >` told a player how much column was left and
+  // nothing at all about whether the battle they had not seen was in it. `< PREV` appears only once
+  // there is something above, so the band never offers a direction that does nothing.
   if (paged)
   {
     const float bandY = Frame::SCREEN_HEIGHT - DIGEST_PAGE_HEIGHT;
     const std::int32_t bandText = CenterTextY(bandY, DIGEST_PAGE_HEIGHT);
     _shapes.FillRect(0.0F, bandY, Frame::DIGEST_WIDTH - 1.0F, 1.0F, Ink::DIVIDER);
 
-    if (m_digestPage > 0)
+    if (m_digestTop > 0)
     {
       _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), bandText, "‹ PREV", Ink::TEXT_MUTED);
       AddHit(0.0F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
-             static_cast<std::int32_t>(m_digestPage) - 1);
+             static_cast<std::int32_t>(PreviousDigestTop(layouts, room)));
     }
 
-    const bool more = m_digestPage + 1 < pageStarts.size();
-    const std::string count = std::format("{} / {}", m_digestPage + 1, pageStarts.size());
-    DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, bandText, more ? count + " · MORE ›" : count, Ink::TEXT_MUTED);
-    if (more)
+    const std::string hidden = HiddenSummary(cards, lastCard);
+    DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, bandText, hidden.empty() ? std::string{"END"} : hidden + " ›",
+              hidden.empty() ? Ink::NEUTRAL_DIM : Ink::TEXT_MUTED);
+    if (!hidden.empty())
     {
       AddHit(Frame::DIGEST_WIDTH * 0.5F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
-             static_cast<std::int32_t>(m_digestPage) + 1);
+             static_cast<std::int32_t>(lastCard));
     }
   }
+}
+
+std::size_t MainPage::PreviousDigestTop(const std::vector<CardLayout>& _layouts, float _room) const
+{
+  // A screenful backwards, measured the way a screenful forwards is measured: cards are different
+  // heights, so "one page" is however many of them fit and not a fixed number (ADR-061, ADR-080).
+  std::size_t top = m_digestTop;
+  float used = 0.0F;
+  while (top > 0)
+  {
+    const float height = _layouts[top - 1].height;
+    if (used > 0.0F && used + height > _room)
+    {
+      break;
+    }
+    used += height;
+    --top;
+  }
+  return top;
 }
 
 /// Which screen action a digest button performs. The two enums are separate on purpose: what an

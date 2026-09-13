@@ -414,6 +414,76 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
   return cards;
 }
 
+std::string HiddenSummary(const std::vector<DigestCard>& _cards, std::size_t _from)
+{
+  if (_from >= _cards.size())
+  {
+    return {};
+  }
+  const std::size_t hidden = _cards.size() - _from;
+
+  // **A battle outranks its own kind.** A fight is a `Loss` card like a system lost is, and it is
+  // the one a player most needs to know is down there -- the verdict is what tells them apart, and
+  // `CanMerge` already treats a card carrying one as unfoldable for the same reason.
+  std::size_t battles = 0;
+  std::int32_t worst = 99;
+  for (std::size_t index = _from; index < _cards.size(); ++index)
+  {
+    battles += _cards[index].verdict.empty() ? 0U : 1U;
+    worst = std::min(worst, ConsequenceRank(_cards[index].kind));
+  }
+
+  const auto plural = [](std::size_t _count, const char* _one, const char* _many)
+  { return std::format("{} {}", _count, _count == 1 ? _one : _many); };
+
+  if (battles > 0)
+  {
+    return std::format("{} MORE · {}", hidden, plural(battles, "BATTLE", "BATTLES"));
+  }
+
+  std::size_t ofThatKind = 0;
+  for (std::size_t index = _from; index < _cards.size(); ++index)
+  {
+    ofThatKind += ConsequenceRank(_cards[index].kind) == worst ? 1U : 0U;
+  }
+
+  // The words the digest already uses for these, so the band reads like the cards it is about.
+  const char* one = "EVENT";
+  const char* many = "EVENTS";
+  switch (worst)
+  {
+  case 0:
+    one = "SYSTEM LOST";
+    many = "SYSTEMS LOST";
+    break;
+  case 1:
+    one = "CONTACT";
+    many = "CONTACTS";
+    break;
+  case 2:
+    one = "OFFER";
+    many = "OFFERS";
+    break;
+  case 3:
+    one = "CUSTODIAN";
+    many = "CUSTODIANS";
+    break;
+  case 4:
+    one = "REGION";
+    many = "REGION";
+    break;
+  case 5:
+    one = "INCOME";
+    many = "INCOME";
+    break;
+  default:
+    one = "SILENCE";
+    many = "SILENCE";
+    break;
+  }
+  return std::format("{} MORE · {}", hidden, plural(ofThatKind, one, many));
+}
+
 DigestDelta DeltaOf(const MatchState& _state)
 {
   DigestDelta delta;

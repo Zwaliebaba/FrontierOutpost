@@ -79,6 +79,25 @@ public:
     }
   }
 
+  TEST_METHOD(AConsequenceOutranksAGroupedRivalWithoutOne)
+  {
+    // **What the scroll made load-bearing** (ADR-080). A column that pages can put a battle on page
+    // three, and the band naming it is only half an answer -- the other half is that the worst
+    // thing is at the top to begin with, ahead of a rival whose five events are all offers.
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(StateWith({
+      Event(Lockstep::EventKind::Proposal, 1, "Halvorsen proposes a lane"),
+      Event(Lockstep::EventKind::Proposal, 1, "Halvorsen proposes a hold"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +38"),
+      Event(Lockstep::EventKind::Loss, 2, "Pell lost to Sorne"),
+      Event(Lockstep::EventKind::Contact, 3, "Contact with Okonkwo"),
+    }));
+
+    Assert::IsTrue(cards.size() >= 3U);
+    Assert::IsTrue(cards[0].kind == Lockstep::EventKind::Loss, L"a system lost did not lead");
+    Assert::IsTrue(cards[1].kind == Lockstep::EventKind::Contact, L"a contact did not come second");
+    Assert::IsTrue(cards[2].actor == 1, L"the grouped rival sorted above a consequence");
+  }
+
   TEST_METHOD(TheWorstThingIsReadFirst)
   {
     // Authored in the wrong order on purpose. A digest arrives in whatever order the resolver

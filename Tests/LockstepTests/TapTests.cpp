@@ -23,6 +23,7 @@
 #include "CppUnitTest.h"
 
 #include "ConnectionDialog.h"
+#include "DigestView.h"
 #include "MainPage.h"
 #include "SeatsPage.h"
 #include "SnapshotView.h"
@@ -853,10 +854,111 @@ public:
     Assert::IsTrue(page.ExpandedActor() != first, L"two actor cards were open at once");
   }
 
+  /// Twenty cards is more than the column holds however they are laid out, which is the condition
+  /// the band exists for.
+  [[nodiscard]] static Lockstep::MatchState ATallDigest()
+  {
+    const auto simulation = PlayedMatch(2);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    state.digest.clear();
+    for (std::int32_t index = 0; index < 20; ++index)
+    {
+      AddEvent(state, Lockstep::NOBODY, std::format("Production +{}", index + 1));
+    }
+    return state;
+  }
+
   TEST_METHOD(ADigestTallerThanTheColumnPages)
   {
-    // Twenty cards is more than the column holds however they are laid out, which is the condition
-    // the band exists for. What it must never do is drop one: page one has to be reachable again.
+    // What the band must never do is drop a card: the top of the stack has to be reachable again.
+    Lockstep::MainPage page;
+    page.Create(ATallDigest());
+    Assert::AreEqual(std::size_t{0}, page.DigestTop());
+
+    Headless renderers;
+    std::int32_t x = 0;
+    std::int32_t y = 0;
+    Assert::IsTrue(SweepDigest(
+                     page, renderers, [&page] { return page.DigestTop() > 0; }, x, y),
+                   L"a digest taller than the column offers no way to the rest of it");
+
+    Assert::IsTrue(SweepDigest(page, renderers, [&page] { return page.DigestTop() == 0; }, x, y), L"there is no way back to the top");
+  }
+
+  TEST_METHOD(AWheelOverTheDigestScrollsItAndOverTheMapDoesNot)
+  {
+    // The wheel has been banked by `PointerInput` since ADR-009 and read by nothing (ADR-080). What
+    // decides it is the pane under the pointer, so the same notch over two panes is two answers.
+    Lockstep::MainPage page;
+    page.Create(ATallDigest());
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    Assert::IsTrue(page.HandleZoom(-1, 100.0F, 300.0F), L"a notch over the digest scrolled nothing");
+    Assert::AreEqual(std::size_t{1}, page.DigestTop(), L"and it moved by something other than one card");
+
+    Assert::IsFalse(page.HandleZoom(-1, 700.0F, 300.0F), L"a notch over the map scrolled the digest");
+    Assert::AreEqual(std::size_t{1}, page.DigestTop());
+
+    Assert::IsTrue(page.HandleZoom(1, 100.0F, 300.0F), L"a notch the other way did not come back");
+    Assert::AreEqual(std::size_t{0}, page.DigestTop());
+
+    // And it stops at the top rather than banking notches that have to be spun back.
+    Assert::IsFalse(page.HandleZoom(1, 100.0F, 300.0F));
+    Assert::AreEqual(std::size_t{0}, page.DigestTop());
+  }
+
+  TEST_METHOD(ThePageKeysMoveAScreenfulAndNotACard)
+  {
+    // A page is however many cards fit, which only the layout knows -- so the key asks the frame
+    // rather than a number chosen in the handler (ADR-080).
+    Lockstep::MainPage page;
+    page.Create(ATallDigest());
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    const std::size_t screenful = page.CardsOnScreen();
+    Assert::IsTrue(screenful > 1, L"this fixture fits one card a screen, so a page and a card are the same move");
+
+    Assert::IsTrue(page.HandleKey(Neuron::KeyboardInput::Key::PageDown));
+    Assert::AreEqual(screenful, page.DigestTop(), L"PageDown moved by something other than a screenful");
+
+    Assert::IsTrue(page.HandleKey(Neuron::KeyboardInput::Key::PageUp));
+    Assert::AreEqual(std::size_t{0}, page.DigestTop(), L"PageUp did not come back");
+
+    Assert::IsFalse(page.HandleKey(Neuron::KeyboardInput::Key::Escape), L"a key this screen does not use did something");
+  }
+
+  TEST_METHOD(ADragOverTheDigestScrollsItByWholeCards)
+  {
+    // The finger's half. A drag is continuous and the column moves in cards, so what is left over is
+    // banked: without that a slow drag scrolls nothing at all.
+    Lockstep::MainPage page;
+    page.Create(ATallDigest());
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    const Neuron::PointerInput::Drag nudge{.deltaXPixels = 0.0F, .deltaYPixels = -10.0F, .originXPixels = 100.0F, .originYPixels = 300.0F};
+    Assert::IsTrue(page.HandleDrag(nudge), L"a drag that began on the digest was not consumed by it");
+    Assert::AreEqual(std::size_t{0}, page.DigestTop(), L"ten pixels moved a whole card");
+
+    for (std::int32_t again = 0; again < 4; ++again)
+    {
+      (void)page.HandleDrag(nudge);
+    }
+    Assert::AreEqual(std::size_t{1}, page.DigestTop(), L"fifty pixels of drag banked no card at all");
+  }
+
+  TEST_METHOD(TheBandSaysWhatIsHiddenAndNotHowManyPages)
+  {
+    // `1 / 4 · MORE ›` told a player how much column was left and nothing about whether the battle
+    // they had not seen was in it (ADR-080).
     const auto simulation = PlayedMatch(2);
     Lockstep::MatchState state = ViewOfSeatZero(*simulation);
     state.digest.clear();
@@ -865,18 +967,13 @@ public:
       AddEvent(state, Lockstep::NOBODY, std::format("Production +{}", index + 1));
     }
 
-    Lockstep::MainPage page;
-    page.Create(std::move(state));
-    Assert::AreEqual(std::size_t{0}, page.DigestPage());
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(state);
+    Assert::IsTrue(cards.size() > 3U);
 
-    Headless renderers;
-    std::int32_t x = 0;
-    std::int32_t y = 0;
-    Assert::IsTrue(SweepDigest(
-                     page, renderers, [&page] { return page.DigestPage() > 0; }, x, y),
-                   L"a digest taller than the column offers no way to the rest of it");
-
-    Assert::IsTrue(SweepDigest(page, renderers, [&page] { return page.DigestPage() == 0; }, x, y), L"there is no way back to page one");
+    const std::string summary = Lockstep::HiddenSummary(cards, 3);
+    Assert::IsTrue(summary.find(std::to_string(cards.size() - 3)) != std::string::npos, L"the band does not say how many are hidden");
+    Assert::IsTrue(summary.find("MORE") != std::string::npos);
+    Assert::IsTrue(Lockstep::HiddenSummary(cards, cards.size()).empty(), L"a band with nothing below it still claimed something");
   }
 };
 

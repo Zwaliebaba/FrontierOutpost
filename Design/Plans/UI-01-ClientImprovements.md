@@ -1,6 +1,6 @@
 # UI-01 — What the client's screens still cost a player
 
-**Status:** **Item 1.1 done 2026-09-13 (ADR-079); the rest not started.** Written 2026-09-13 as a UX review and revised the same day against
+**Status:** **Items 1.1 and 1.2 done 2026-09-13 (ADR-079, ADR-080); the rest not started.** Written 2026-09-13 as a UX review and revised the same day against
 ADR-077 and ADR-078, which landed between the review and the first item. Item 1.1 is rescoped and
 item 2.3 carried a sentence those ADRs made false; both are marked below. Nothing else has been
 built. Archive this when the final checklist passes.
@@ -61,6 +61,10 @@ guards" is the tell. If badges turn out not to be discoverable enough, reopen it
 - New ADR: "Fleets standing on the map" (amends ADR-055, cites ADR-077 for the guard it reuses).
 
 ### 1.2 Digest scrolls; page band says what is hidden
+**Done 2026-09-13 — ADR-080.** Built except the `01-main-page.png` retake, which needs an unlocked
+desktop. The ranking bullet turned out to be already true — `ConsequenceRank` sorts a loss and a
+contact ahead of a rival grouped for offers — so it is pinned by a test rather than changed.
+
 **Problem.** 35 events, 8 visible, 27 behind `1 / 4 · MORE ›`. The player cannot know whether a battle is on page 3. ADR-052 option C forbids scrolling; ADR-061 introduced paging.
 
 **Change.**
