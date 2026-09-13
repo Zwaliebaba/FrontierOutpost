@@ -211,8 +211,9 @@ ADR-066 touched was retaken the same day from the Debug build carrying them. Don
   the tree.
 
 ## Non-negotiables
-1280×720 logical, drawn into a canvas presented at a whole-number scale and captured at
-`--scale 1` (ADR-075). Two IBM Plex families in four cuts, baked at 12px and hinted, drawn
+1280×720 logical, drawn into a canvas presented at a whole-number scale and captured **windowed at
+`--scale 1`** (ADR-075), which is the one presentation that is exactly the canvas — fullscreen
+(ADR-076) letterboxes it and would make a capture the size of whatever monitor took it. Two IBM Plex families in four cuts, baked at 12px and hinted, drawn
 **anti-aliased** with coverage gamma-corrected into alpha — mono for data, sans for sentences, and
 2× only for the lock countdown and the `LOCKSTEP` title (ADR-073, ADR-074;
 `DESIGN-GUIDELINES.md` §Font). 8-bit RGBA colours from `LockstepClient/DesignTokens.h`. A glyph's

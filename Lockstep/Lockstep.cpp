@@ -315,6 +315,22 @@ void SplitHostAndPort(const std::string& _target, std::string& _outHost, std::ui
 HINSTANCE g_instance = nullptr;
 bool g_quitRequested = false;
 
+/// Set by the window procedure when F11 arrives, consumed by whichever frame loop is running.
+///
+/// **A flag and not a call, because the toggle resizes a swap chain.** That means draining the GPU
+/// and releasing every back buffer, which is not a thing to do from inside a window procedure --
+/// the procedure runs re-entrantly from `SetWindowPos`'s own message pump, so the resize would be
+/// happening while the window is still being resized. The frame loop is where the renderer's state
+/// is nobody else's, and that is where it happens (ADR-076).
+bool g_fullscreenToggleRequested = false;
+
+/// Where the window was, and how big, before F11 put it over the whole monitor.
+///
+/// Windows remembers this shape for us: `SetWindowPlacement` restores the position AND the size, so
+/// a 1280x720 window in some corner of the desktop comes back 1280x720 in that corner. Nothing else
+/// in this file remembers anything about the toggle -- WS_POPUP on the window is the rest of it.
+WINDOWPLACEMENT g_windowedPlacement = {.length = sizeof(WINDOWPLACEMENT)};
+
 /// The window procedure runs on the client thread and needs to reach the input state, which lives
 /// in RunGame. A file-scope pointer is the plain Win32 answer and is what the rest of this file
 /// already does with g_instance; it is set once, before the first message is dispatched.
@@ -339,6 +355,17 @@ LRESULT CALLBACK WndProc(HWND _window, UINT _message, WPARAM _wParam, LPARAM _lP
 
   switch (_message)
   {
+  // F11 here rather than in KeyboardInput, which reports "characters and a handful of named keys"
+  // for a text field and says so in its header. Which window a canvas is presented in is not that
+  // class's business, and it leaves an unknown WM_KEYDOWN unconsumed precisely so this can have it.
+  case WM_KEYDOWN:
+    if (_wParam == VK_F11)
+    {
+      g_fullscreenToggleRequested = true;
+      return 0;
+    }
+    return DefWindowProcW(_window, _message, _wParam, _lParam);
+
   case WM_DESTROY:
     g_quitRequested = true;
     PostQuitMessage(0);
@@ -405,17 +432,95 @@ constexpr DWORD WINDOW_STYLE = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINI
 
   const long availableWidth = (monitor.rcWork.right - monitor.rcWork.left) - (frame.right - frame.left);
   const long availableHeight = (monitor.rcWork.bottom - monitor.rcWork.top) - (frame.bottom - frame.top);
+  if (availableWidth < 0 || availableHeight < 0)
+  {
+    return 1;
+  }
 
-  // Two divisions and the smaller answer, rather than multiplying the canvas up until it stops
-  // fitting: the division cannot overflow and says the same thing in one line.
-  const long byWidth = availableWidth / static_cast<long>(Neuron::SceneTarget::WIDTH_PIXELS);
-  const long byHeight = availableHeight / static_cast<long>(Neuron::SceneTarget::HEIGHT_PIXELS);
-  const long fits = std::min(byWidth, byHeight);
+  return Neuron::Presentation::LargestScaleFor(static_cast<std::uint32_t>(availableWidth), static_cast<std::uint32_t>(availableHeight));
+}
 
-  // At least 1, always. A display too small for the canvas gets a window it cannot show all of,
-  // which is a thing the player can see and work around; a scale of zero is a division by zero in
-  // Presentation::ToCanvas.
-  return fits < 1 ? 1U : static_cast<std::uint32_t>(fits);
+// The largest whole scale a BORDERLESS window on this window's monitor has room for.
+//
+// Against rcMonitor rather than rcWork, and with no frame subtracted, which is the whole of what
+// borderless fullscreen buys: a 2560x1440 panel has room for scale 2 exactly, where the windowed
+// answer is 1 because a caption and a taskbar take rows the canvas needed (ADR-076).
+//
+// MONITOR_DEFAULTTONEAREST and the WINDOW's monitor, not the primary one: fullscreen means the
+// monitor the window is on.
+[[nodiscard]] std::uint32_t ChooseFullscreenScale(HWND _window) noexcept
+{
+  MONITORINFO monitor = {};
+  monitor.cbSize = sizeof(MONITORINFO);
+  if (GetMonitorInfoW(MonitorFromWindow(_window, MONITOR_DEFAULTTONEAREST), &monitor) == 0)
+  {
+    return 1;
+  }
+
+  return Neuron::Presentation::LargestScaleFor(static_cast<std::uint32_t>(monitor.rcMonitor.right - monitor.rcMonitor.left),
+                                               static_cast<std::uint32_t>(monitor.rcMonitor.bottom - monitor.rcMonitor.top));
+}
+
+// Applies a pending F11, and does nothing when there is none.
+//
+// **The window's own style is where "am I fullscreen" is kept.** A bool beside it would be a second
+// answer to a question the window can already be asked, and the two would disagree the first time
+// anything else touched the style. WS_POPUP is the whole difference.
+//
+// Going out, the window's placement is remembered by Windows rather than by this file:
+// SetWindowPlacement restores the position AND the size, so a window that was 1280x720 at some
+// corner of the desktop comes back 1280x720 at that corner.
+//
+// A monitor that is not a whole multiple of the canvas is already handled -- the canvas is centred
+// and the remainder is black (ADR-075). On a 1080p panel that is fullscreen at scale 1 with a
+// 320x180 border on every side, which looks deliberate rather than broken.
+void ApplyFullscreenToggle(HWND _window, Neuron::Device& _device, Neuron::PointerInput& _pointer, Neuron::Presentation& _presentation)
+{
+  if (!g_fullscreenToggleRequested)
+  {
+    return;
+  }
+  g_fullscreenToggleRequested = false;
+
+  const auto style = static_cast<DWORD>(GetWindowLongPtrW(_window, GWL_STYLE));
+  const bool goingFullscreen = (style & WS_POPUP) == 0;
+
+  if (goingFullscreen)
+  {
+    MONITORINFO monitor = {};
+    monitor.cbSize = sizeof(MONITORINFO);
+    if (GetWindowPlacement(_window, &g_windowedPlacement) == 0 ||
+        GetMonitorInfoW(MonitorFromWindow(_window, MONITOR_DEFAULTTONEAREST), &monitor) == 0)
+    {
+      // Nothing to restore to and nowhere to go. Staying windowed is the right failure.
+      return;
+    }
+
+    SetWindowLongPtrW(_window, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+    SetWindowPos(_window, HWND_TOP, monitor.rcMonitor.left, monitor.rcMonitor.top, monitor.rcMonitor.right - monitor.rcMonitor.left,
+                 monitor.rcMonitor.bottom - monitor.rcMonitor.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+  }
+  else
+  {
+    SetWindowLongPtrW(_window, GWL_STYLE, WINDOW_STYLE | WS_VISIBLE);
+    SetWindowPlacement(_window, &g_windowedPlacement);
+    SetWindowPos(_window, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+  }
+
+  // What Windows actually gave, not what it was asked for -- the same reason RunGame reads the
+  // client area back rather than recomputing it.
+  RECT clientArea = {};
+  if (GetClientRect(_window, &clientArea) == 0)
+  {
+    Neuron::Fatal("GetClientRect failed while toggling fullscreen.");
+  }
+  const auto clientWidthPixels = static_cast<std::uint32_t>(clientArea.right - clientArea.left);
+  const auto clientHeightPixels = static_cast<std::uint32_t>(clientArea.bottom - clientArea.top);
+
+  _device.Resize(clientWidthPixels, clientHeightPixels);
+  _presentation =
+    Neuron::Presentation::For(clientWidthPixels, clientHeightPixels, goingFullscreen ? ChooseFullscreenScale(_window) : ChooseScale());
+  _pointer.SetPresentation(_presentation);
 }
 
 // Sizes for the CLIENT area, not the window: AdjustWindowRect adds the border and caption, so the
@@ -631,7 +736,7 @@ struct MatchPaths
 ///
 /// Fills `_outTokens` and `_outBots` and returns the host's seat, or -1 when the window closed
 /// first.
-[[nodiscard]] std::int32_t RunSeatsScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, const Neuron::Presentation& _presentation,
+[[nodiscard]] std::int32_t RunSeatsScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::Presentation& _presentation,
                                           Neuron::ShapeRenderer& _shapes, Neuron::ShapeBackend& _shapeBackend, Neuron::FontRenderer& _text,
                                           Neuron::FontBackend& _textBackend, Neuron::PointerInput& _pointer,
                                           Neuron::KeyboardInput& _keyboard, HWND _window, Lockstep::HostedServer& _lobby,
@@ -690,6 +795,8 @@ struct MatchPaths
       return page.HostSeat();
     }
 
+    ApplyFullscreenToggle(_window, _device, _pointer, _presentation);
+
     ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
     _screen.BeginScene(commandList);
 
@@ -718,11 +825,11 @@ struct MatchPaths
 /// this one has no match, no orders and no camera the player drives, and folding it into `RunGame`
 /// would put a `if (joined)` around every line of a function that is already the longest in the
 /// tree. It returns true when there is a match to show.
-[[nodiscard]] bool RunJoinScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, const Neuron::Presentation& _presentation,
+[[nodiscard]] bool RunJoinScreen(Neuron::Device& _device, Neuron::SceneTarget& _screen, Neuron::Presentation& _presentation,
                                  Neuron::ShapeRenderer& _shapes, Neuron::ShapeBackend& _shapeBackend, Neuron::FontRenderer& _text,
-                                 Neuron::FontBackend& _textBackend, Neuron::PointerInput& _pointer, Neuron::KeyboardInput& _keyboard,
-                                 Lockstep::MatchConnection& _connection, const std::string& _server, const std::string& _token,
-                                 std::uint16_t _defaultPort, std::chrono::steady_clock::time_point _startedAt)
+                                 Neuron::FontBackend& _textBackend, HWND _window, Neuron::PointerInput& _pointer,
+                                 Neuron::KeyboardInput& _keyboard, Lockstep::MatchConnection& _connection, const std::string& _server,
+                                 const std::string& _token, std::uint16_t _defaultPort, std::chrono::steady_clock::time_point _startedAt)
 {
   Lockstep::JoinPage page;
   page.Offer(_server, _token);
@@ -860,6 +967,8 @@ struct MatchPaths
     dialog.Update(kind, facts, elapsedSeconds);
 
     // ---- The frame -----------------------------------------------------------------------------
+    ApplyFullscreenToggle(_window, _device, _pointer, _presentation);
+
     ID3D12GraphicsCommandList* commandList = _device.BeginFrame();
     _screen.BeginScene(commandList);
 
@@ -912,7 +1021,7 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
   // How the canvas reaches the display: where it sits in the client area and how far it is
   // magnified (ADR-075). At scale 1 the client area is exactly the canvas and there is no
   // letterbox at all.
-  const Neuron::Presentation presentation = Neuron::Presentation::For(clientWidthPixels, clientHeightPixels, _scale);
+  Neuron::Presentation presentation = Neuron::Presentation::For(clientWidthPixels, clientHeightPixels, _scale);
 
   // Space is black, and on this screen it is also the colour of every rail behind every card.
   Neuron::SceneTarget screen;
@@ -1063,8 +1172,8 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
   {
     const std::string offered = std::format("{}:{}", _startup.host, _startup.port);
     const std::string offeredToken = _startup.joinGiven ? _startup.token : hostToken;
-    if (!RunJoinScreen(device, screen, presentation, shapes, shapeBackend, text, textBackend, pointer, keyboard, connection, offered,
-                       offeredToken, _startup.port, startedAt))
+    if (!RunJoinScreen(device, screen, presentation, shapes, shapeBackend, text, textBackend, _window, pointer, keyboard, connection,
+                       offered, offeredToken, _startup.port, startedAt))
     {
       return EXIT_SUCCESS;
     }
@@ -1411,6 +1520,8 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
       continue;
     }
     redraw = false;
+
+    ApplyFullscreenToggle(_window, device, pointer, presentation);
 
     ID3D12GraphicsCommandList* commandList = device.BeginFrame();
     screen.BeginScene(commandList);

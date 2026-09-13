@@ -50,6 +50,14 @@ public:
   /// reason about (ADR-075).
   void Create(HWND _window, const Presentation& _presentation) noexcept;
 
+  /// The canvas moved inside the surface -- a different scale, a different letterbox -- so every
+  /// pointer from here on maps through the new one (ADR-076). The window is unchanged.
+  ///
+  /// Anything in progress is abandoned rather than remapped: a drag whose origin was recorded in
+  /// the old presentation cannot be continued in the new one, and a press that was down when the
+  /// screen changed size is not a press the player still means.
+  void SetPresentation(const Presentation& _presentation) noexcept;
+
   /// Feeds a window message. True when it was consumed.
   bool HandleMessage(UINT _message, WPARAM _wParam, LPARAM _lParam) noexcept;
 

@@ -21,7 +21,7 @@ These are settled. They are not preferences to be re-litigated in a session; cha
 
 | | Decision |
 |---|---|
-| **Presentation** | **1280×720, R8G8B8A8**, a canvas presented at the largest **whole-number scale** the display has room for, letterboxed. Nothing on the path from a vertex to the display resamples anything: the canvas is read with an integer texel load (ADR-075). Until 2026-09-13 the canvas was the back buffer, presented 1:1 (ADR-011); until 2026-09-10 it was 640×400 in sixteen colours, blown up 2× (ADR-001). |
+| **Presentation** | **1280×720, R8G8B8A8**, a canvas presented at the largest **whole-number scale** the display has room for, letterboxed, in a window or in a borderless window covering the monitor (**F11**, ADR-076). Nothing on the path from a vertex to the display resamples anything: the canvas is read with an integer texel load (ADR-075). There is no exclusive fullscreen and Alt+Enter is refused. Until 2026-09-13 the canvas was the back buffer, presented 1:1 (ADR-011); until 2026-09-10 it was 640×400 in sixteen colours, blown up 2× (ADR-001). |
 | **Graphics API** | Direct3D 12, on Windows 11. The legacy look is a deliberate aesthetic on a modern stack — not a limitation being worked around, and not a reason to reach for an older API. |
 | **Language** | C++23 (`/std:c++latest` under MSVC v145), `/permissive-`, `/W4` with warnings as errors. |
 | **Platform** | x64 only. |

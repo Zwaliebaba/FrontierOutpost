@@ -1,7 +1,10 @@
 # RENDER-01 — A canvas presented at an integer scale, and a renderer that records before it draws
 
-**Status:** Proposed. Written 2026-09-13 from a design session on how the client reaches a second
-platform without the Windows build ceasing to be one executable. Nothing in this plan is built.
+**Status:** **Built, 2026-09-13.** All eight stages, including stage 7, which was an owner decision
+and got its yes. Written the same day from a design session on how the client reaches a second
+platform without the Windows build ceasing to be one executable. ADR-075 is the decision it
+implements; ADR-076 answers the open question stage 7 was waiting on. What each stage found is
+recorded under its own heading.
 
 **What this plan is for.** Two things, in a fixed order. First, the presentation stops being
 "1280×720 physical pixels, drawn straight into the back buffer" and becomes "a 1280×720 canvas,
@@ -586,13 +589,13 @@ compiled.
 
 ---
 
-## Stage 7 — Borderless fullscreen (owner decision; not started unless the owner says so)
+## Stage 7 — Borderless fullscreen
 
 **Why it is a stage and why it is last.** It is the only way a 1440p panel at 100% ever sees
 scale 2, and the only path in this plan that resizes a swap chain. Everything else works without
-it, so it waits for a yes.
+it, so it waited for a yes. **It got one on 2026-09-13, and ADR-076 records the decision.**
 
-If yes: `F11` toggles between the stage 2 window and a `WS_POPUP` window covering the monitor
+`F11` toggles between the stage 2 window and a `WS_POPUP` window covering the monitor
 (`MonitorFromWindow`, `rcMonitor`); the scale is recomputed against the *monitor*, not the work
 area; `Device` gains `Resize(width, height)` — `WaitForGpu`, release the back buffers,
 `ResizeBuffers`, recreate the RTVs, reset the fence values — and the `Presentation` is rebuilt and
@@ -601,6 +604,49 @@ the canvas.
 
 **Verification.** On a 1080p monitor fullscreen is scale 1 with a 320×180 border on each side; on
 1440p it is scale 2 exactly; toggling ten times in a row leaves `DrainDebugMessages` silent.
+
+**Stage 7, as run (2026-09-13).** Three checkers green, both builds, 535 tests pass (three new),
+and **ten toggles in a row leave the debug layer silent** — each one resizing the swap chain, which
+is a path this renderer did not have before today. The window goes 1280x720 <-> 1920x1080 and back
+ten times with no message of any severity.
+
+**On this 1080p panel, fullscreen is scale 1 with a 320x180 border on every side**, exactly as this
+stage predicted. Measured on the capture: every sampled pixel outside the canvas rectangle is pure
+black, and the 921,600 pixels inside it are **identical** to the windowed scale-1 capture. The
+canvas does not move when the surface does.
+
+**The 1440p row is the one this machine cannot run, so it was made testable instead.** There is no
+2560x1440 panel here, and the claim that fullscreen reaches scale 2 on one is the entire case for
+this stage — so the arithmetic moved out of `Lockstep.cpp` into
+`Presentation::LargestScaleFor(surfaceWidth, surfaceHeight)`, which `PresentationTests` now pins
+over all three panels in both modes. The row that matters:
+
+| panel | windowed (work area minus frame) | fullscreen (the monitor) |
+|---|---:|---:|
+| 1920x1080 | 1 | 1 |
+| **2560x1440** | **1** | **2** |
+| 3840x2160 | 2 | 3 |
+
+That difference on the middle row is the whole reason this stage exists, and it is now a test rather
+than a sentence. It also removed a duplicate: the windowed and fullscreen choosers were the same
+divide-and-take-the-smaller written twice.
+
+**Four deviations, all smaller than what was written here.**
+
+- **`F11` is read in the window procedure, not by `KeyboardInput`.** That class reports "characters
+  and a handful of named keys" for a text field and says so in its header; it leaves an unknown
+  `WM_KEYDOWN` unconsumed, which is exactly what makes this possible without widening it.
+- **The toggle is a flag the frame loop consumes, not work done in the procedure.** The procedure
+  runs re-entrantly from `SetWindowPos`'s own message pump, so resizing a swap chain there would be
+  resizing while the window is still being resized.
+- **There is no fullscreen `bool`.** `WS_POPUP` on the window is the state, and
+  `SetWindowPlacement` restores the windowed position and size, so the only thing this file
+  remembers between toggles is where the window was.
+- **The scale arithmetic moved into `Presentation`**, which is what made the 1440p row testable.
+
+**`PointerInput::SetPresentation` abandons a gesture rather than remapping it.** A drag whose origin
+was recorded in the old presentation cannot be continued in the new one; carrying it across would
+move the camera by the difference between two coordinate systems.
 
 **Commit:** `Toggle borderless fullscreen`
 
@@ -625,12 +671,20 @@ Write what each stage found under its heading before committing, as FONT-01 did 
 that found nothing say so. A stage that has to deviate from what is written here says why in
 its commit and in this file, never silently.
 
-## What is left when this plan is done
+## What is left, now that this plan is done
 
-The desktop client draws into a canvas, presents it at a whole scale, and takes its pointer in
-canvas pixels; its two renderers record into plain vectors that a D3D12 backend drains; nothing
-a page or a test includes names a graphics API. What the mobile client still needs, none of it
-started here: a portrait canvas of `floor(surface / round(density))` logical pixels with a layout
+**All eight stages are built.** The desktop client draws into a canvas, presents it at a whole
+scale in a window or over the whole monitor, and takes its pointer in canvas pixels; its two
+renderers record into plain vectors that a D3D12 backend drains; nothing a page or a test includes
+names a graphics API. `LockstepClient/` does not match a grep for `ID3D12|DXGI|winrt::|D3D12_|HWND`
+anywhere at all.
+
+**Two questions this plan raised and did not answer**, both recorded in the ADRs rather than here:
+`WM_DPICHANGED` is still unhandled, so a window dragged between monitors of different DPI keeps its
+physical size (ADR-075); and whether the map's geometry should ever draw at the display's native
+resolution rather than be magnified with the canvas is left for a screenshot on a phone to settle.
+
+What the mobile client still needs, none of it started here: a portrait canvas of `floor(surface / round(density))` logical pixels with a layout
 relative to its edges; a lifecycle in which a lost surface is routine; a decoder from
 `AMotionEvent` or `UITouch` into the gesture core; a Vulkan backend behind the same recorder, and
 a Metal one; a build that is not MSBuild; and a test harness that is not `CppUnitTest`. Each is

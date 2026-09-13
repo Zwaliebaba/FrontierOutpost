@@ -17,6 +17,23 @@ void PointerInput::Create(HWND _window, const Presentation& _presentation) noexc
   m_presentation = _presentation;
 }
 
+void PointerInput::SetPresentation(const Presentation& _presentation) noexcept
+{
+  m_presentation = _presentation;
+
+  // Everything mid-gesture goes. See the header: a drag's origin is in canvas pixels of a
+  // presentation that no longer exists, and carrying it across would move the camera by the
+  // difference between two coordinate systems.
+  m_pressActive = false;
+  m_pressBecameDrag = false;
+  m_dragDeltaXPixels = 0.0F;
+  m_dragDeltaYPixels = 0.0F;
+  m_hasClick = false;
+  m_hasPointer = false;
+  m_contactCount = 0;
+  m_pinchBaseline = 0.0F;
+}
+
 bool PointerInput::ScreenToCanvasPixels(LPARAM _lParam, float& _outXPixels, float& _outYPixels) const noexcept
 {
   // WM_POINTER* carries SCREEN coordinates, unlike the mouse messages, and they are signed --

@@ -33,6 +33,26 @@ struct Presentation
   std::uint32_t surfaceWidthPixels = CANVAS_WIDTH_PIXELS;
   std::uint32_t surfaceHeightPixels = CANVAS_HEIGHT_PIXELS;
 
+  /// The largest whole scale a surface of this size has room for, and never less than 1.
+  ///
+  /// **The arithmetic lives here rather than beside the window it is asked about**, because there
+  /// are two callers with different ideas of what the surface is -- a window's work area minus its
+  /// frame, and a whole monitor (ADR-076) -- and a phone's is a third. One divide each and the
+  /// smaller answer; no multiplication, so nothing can overflow on the way.
+  ///
+  /// Never less than 1: a display too small for the canvas gets a surface it cannot show all of,
+  /// which a person can see and work around, where a scale of zero is a division by zero in
+  /// ToCanvas.
+  [[nodiscard]] static constexpr std::uint32_t LargestScaleFor(std::uint32_t _surfaceWidthPixels,
+                                                               std::uint32_t _surfaceHeightPixels) noexcept
+  {
+    const std::uint32_t byWidth = _surfaceWidthPixels / CANVAS_WIDTH_PIXELS;
+    const std::uint32_t byHeight = _surfaceHeightPixels / CANVAS_HEIGHT_PIXELS;
+    const std::uint32_t fits = byWidth < byHeight ? byWidth : byHeight;
+
+    return fits < 1 ? 1 : fits;
+  }
+
   /// The canvas centered in a surface of the given size at the given scale.
   ///
   /// A surface SMALLER than the presented canvas gets a zero offset rather than a negative one,

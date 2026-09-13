@@ -143,6 +143,42 @@ public:
     Assert::AreEqual(720u, Neuron::Presentation::CANVAS_HEIGHT_PIXELS);
   }
 
+  // The scale a display gets, which is the one piece of ADR-076 this machine cannot run: it has a
+  // 1080p monitor, so borderless fullscreen there is scale 1 and the interesting rows below have
+  // no hardware here to be checked against. They are checked here instead.
+  //
+  // The windowed answer and the FULLSCREEN answer differ on exactly one panel, and that difference
+  // is the whole reason borderless fullscreen ships: at 2560x1440 a window has to give up rows to
+  // a caption and a taskbar and lands on 1, where the monitor itself has room for 2 exactly.
+  TEST_METHOD(TheLargestScaleAPanelHasRoomFor)
+  {
+    // Fullscreen: the whole monitor, nothing subtracted.
+    Assert::AreEqual(1u, Neuron::Presentation::LargestScaleFor(1920, 1080));
+    Assert::AreEqual(2u, Neuron::Presentation::LargestScaleFor(2560, 1440));
+    Assert::AreEqual(3u, Neuron::Presentation::LargestScaleFor(3840, 2160));
+
+    // Windowed on the same panels, with a work area and a frame taken off. 2560x1440 is the row
+    // that changes: 1418 rows of canvas fit twice, 1440 minus a taskbar and a caption do not.
+    Assert::AreEqual(1u, Neuron::Presentation::LargestScaleFor(1920 - 18, 1020 - 47));
+    Assert::AreEqual(1u, Neuron::Presentation::LargestScaleFor(2560 - 18, 1380 - 47));
+    Assert::AreEqual(2u, Neuron::Presentation::LargestScaleFor(3840 - 18, 2100 - 47));
+  }
+
+  // Never zero, whatever it is asked. A scale of zero is a division by zero in ToCanvas.
+  TEST_METHOD(ADisplayTooSmallForTheCanvasStillGetsScaleOne)
+  {
+    Assert::AreEqual(1u, Neuron::Presentation::LargestScaleFor(800, 600));
+    Assert::AreEqual(1u, Neuron::Presentation::LargestScaleFor(0, 0));
+    Assert::AreEqual(1u, Neuron::Presentation::LargestScaleFor(1280, 719));
+  }
+
+  // An exact fit is a fit. 1280x720 is scale 1 and not scale 0, and 2560x1440 is 2 and not 1.
+  TEST_METHOD(AnExactFitCounts)
+  {
+    Assert::AreEqual(1u, Neuron::Presentation::LargestScaleFor(1280, 720));
+    Assert::AreEqual(2u, Neuron::Presentation::LargestScaleFor(2560, 1440));
+  }
+
   TEST_METHOD(ASurfaceThatIsTheCanvasHasNoLetterbox)
   {
     constexpr Neuron::Presentation EXACT = Neuron::Presentation::For(1280, 720, 1);

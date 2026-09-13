@@ -50,6 +50,18 @@ public:
   /// call before tearing down anything the command lists still reference.
   void WaitForGpu() noexcept;
 
+  /// Resizes the swap chain to a new client area, for the one thing that changes it: the toggle
+  /// between a window and a borderless window covering the monitor (ADR-076).
+  ///
+  /// **It drains the GPU first, and that is not caution.** `ResizeBuffers` fails outright while any
+  /// back buffer still has an outstanding reference, and every frame in flight holds one. A toggle
+  /// costs a stall of at most FRAME_COUNT frames, which nobody notices on a keypress that is
+  /// already changing the whole screen.
+  ///
+  /// The canvas does NOT change: it is 1280x720 whatever the surface is, and what changes is the
+  /// scale and the letterbox around it (ADR-075). Rebuilding the `Presentation` is the caller's.
+  void Resize(std::uint32_t _backBufferWidthPixels, std::uint32_t _backBufferHeightPixels);
+
   /// Empties the debug layer's message queue into DebugTrace, and does nothing in a Release
   /// build. Errors and corruption already broke at the call that caused them; this is what makes
   /// the layer's warnings and info visible to somebody running the game without a debugger
