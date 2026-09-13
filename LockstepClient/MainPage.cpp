@@ -618,7 +618,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       continue;
     }
 
-    const bool editable = !m_state.orders.locked;
+    const bool editable = OrdersEditable();
     switch (region->action)
     {
     case Action::FocusEvent:
@@ -1342,20 +1342,20 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
         }
 
         // One filled button per card at most: the thing the digest thinks you should do.
-        if (action.primary && !m_state.orders.locked && !committed && !unaffordable)
+        if (action.primary && OrdersEditable() && !committed && !unaffordable)
         {
           _shapes.FillRect(buttonX, buttonY, width, BUTTON_HEIGHT, Ink::BLUE);
           _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label, Ink::APP_BACKGROUND);
         }
         else
         {
-          const bool dim = m_state.orders.locked || unaffordable;
+          const bool dim = !OrdersEditable() || unaffordable;
           _shapes.StrokeRect(buttonX, buttonY, width, BUTTON_HEIGHT, committed && !dim ? Ink::BLUE : Ink::OUTLINE);
           _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label,
                          dim ? Ink::NEUTRAL_DIM : (committed ? Ink::BLUE : Ink::TEXT_PRIMARY));
         }
 
-        if ((!m_state.orders.locked && !unaffordable) || action.kind == EventActionKind::Focus)
+        if ((OrdersEditable() && !unaffordable) || action.kind == EventActionKind::Focus)
         {
           AddHit(buttonX, buttonY, width, BUTTON_HEIGHT, ActionFor(action.kind), action.target);
         }
@@ -1678,8 +1678,9 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   // the client had no model of an offer leaving; ADR-039 gave it one, and the count on the right is
   // the way in -- it is the only section header on this rail that is a control.
   const std::int32_t signalsY = static_cast<std::int32_t>(y);
-  section("SIGNALS", m_state.orders.locked ? std::string{"LOCKED"} : std::format("{} TO SEND ›", m_state.orders.availableSignals));
-  if (!m_state.orders.locked)
+  section("SIGNALS",
+          !OrdersEditable() ? std::string{m_offline ? "OFFLINE" : "LOCKED"} : std::format("{} TO SEND ›", m_state.orders.availableSignals));
+  if (OrdersEditable())
   {
     AddHit(railX, static_cast<float>(signalsY), Frame::ORDERS_WIDTH, 22.0F, Action::OpenSignals, 0);
   }
@@ -1865,7 +1866,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       // player weighs a shipyard level against a mining level with, and the reason both tables are
       // on the wire (ADR-053, ADR-069). The server wrote the sentence; this only places it.
       rows.push_back(SheetRow{row.title, row.detail, status, queued ? Ink::BLUE : NO_ACCENT,
-                              m_state.orders.locked || !affordable ? EventRefs::NONE : static_cast<std::int32_t>(index)});
+                              !OrdersEditable() || !affordable ? EventRefs::NONE : static_cast<std::int32_t>(index)});
     }
 
     // A system with both buildings on it says so, rather than opening an empty sheet. The same
@@ -1895,7 +1896,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(index)];
       rows.push_back(SheetRow{Uppercased(fleet.name), fleet.preview,
                               fleet.ships == 1 ? std::string{"1 SHIP"} : std::format("{} SHIPS", fleet.ships), Ink::BLUE,
-                              m_state.orders.locked ? EventRefs::NONE : index});
+                              !OrdersEditable() ? EventRefs::NONE : index});
     }
 
     // The fleets left between the frame that drew the badge and the tap that opened this -- a lock
@@ -1984,7 +1985,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       rows.push_back(SheetRow{Uppercased(node.name), held,
                               std::format("{} · ETA T{}", lane.cost == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", lane.cost),
                                           m_state.OrdersTick() + lane.cost - 1),
-                              OwnerColor(node.owner, m_state.viewer), m_state.orders.locked ? EventRefs::NONE : other});
+                              OwnerColor(node.owner, m_state.viewer), !OrdersEditable() ? EventRefs::NONE : other});
     }
     break;
   }
@@ -2018,7 +2019,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
         std::ranges::find(m_state.orders.queuedSignals, static_cast<std::int32_t>(index)) != m_state.orders.queuedSignals.end();
 
       rows.push_back(SheetRow{signal.title, std::string{}, queued ? "SENDING" : std::string{}, queued ? Ink::BLUE : NO_ACCENT,
-                              m_state.orders.locked ? EventRefs::NONE : static_cast<std::int32_t>(index)});
+                              !OrdersEditable() ? EventRefs::NONE : static_cast<std::int32_t>(index)});
     }
 
     if (m_state.orders.signals.empty())
@@ -2052,7 +2053,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       rows.push_back(SheetRow{.title = signal.title,
                               .right = queued ? "SENDING" : (armed ? "TAP AGAIN TO CONFIRM" : std::string{}),
                               .accent = armed || queued ? Ink::RED : NO_ACCENT,
-                              .target = m_state.orders.locked ? EventRefs::NONE : concede,
+                              .target = !OrdersEditable() ? EventRefs::NONE : concede,
                               .alarm = armed || queued});
     }
     break;
@@ -2124,10 +2125,12 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   // under a bar reading `46 CR` and the arithmetic was nowhere. Amber only when it is the reason
   // something here is not a target; a queue the purse still covers is a note, not a warning.
   const bool atLock = m_state.orders.locked && !m_state.match.finished;
-  const std::string help = atLock ? LockSentence() : (m_panel == Panel::BuildList ? PurseSentence() : std::string{});
+  const std::string help = m_offline ? std::string{"The link is down. Nothing you tap here is sent; the board is yours to read."}
+                           : atLock  ? LockSentence()
+                                     : (m_panel == Panel::BuildList ? PurseSentence() : std::string{});
   const std::vector<std::string> sheetHelp =
     help.empty() ? std::vector<std::string>{} : FontRenderer::WrapToWidth(help, static_cast<std::uint32_t>(width - 2.0F * CARD_PADDING));
-  const Color helpInk = atLock || shortOfCredits ? Ink::AMBER : Ink::TEXT_DETAIL;
+  const Color helpInk = atLock || m_offline || shortOfCredits ? Ink::AMBER : Ink::TEXT_DETAIL;
   const float helpHeight = sheetHelp.empty() ? 0.0F : static_cast<float>(sheetHelp.size()) * static_cast<float>(LINE_HEIGHT) + 12.0F;
 
   const float height = SHEET_HEADER_HEIGHT + helpHeight + listHeight + SHEET_ACTION_HEIGHT;
@@ -2147,12 +2150,15 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
 
   // The same filled grey chip the locks rail wears, in the header's own status position -- clear of
   // the `X`'s 36-pixel corner, which is a target and must not have a chip drawn into it.
-  if (atLock)
+  if (atLock || m_offline)
   {
-    const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels("LOCKED")) + 12.0F;
+    // `OFFLINE` where `LOCKED` goes, because the two are the same shape of statement -- this sheet
+    // is showing you something it cannot take an order about -- and differ only in why (ADR-085).
+    const std::string chip = m_offline ? "OFFLINE" : "LOCKED";
+    const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels(chip)) + 12.0F;
     const float chipX = x + width - SHEET_HEADER_HEIGHT - chipWidth;
     _shapes.FillRect(chipX, y + 10.0F, chipWidth, 16.0F, Ink::LOCKED_FILL);
-    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, CenterTextY(y, SHEET_HEADER_HEIGHT), "LOCKED", Ink::APP_BACKGROUND);
+    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, CenterTextY(y, SHEET_HEADER_HEIGHT), chip, Ink::APP_BACKGROUND);
   }
 
   // A close target the height of the header, not the width of one glyph.

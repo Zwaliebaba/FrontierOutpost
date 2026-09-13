@@ -94,6 +94,9 @@ public:
     /// Lost: the lock runs whether or not you are back, so it is the most important line in the
     /// dialog. Empty when this client has never seen a tick.
     std::string lockCountdown;
+    /// Lost: which tick that countdown is about, so that once it has run out the banner can say
+    /// which one went without them rather than counting down to zero forever (ADR-085).
+    std::uint32_t lockedTick = 0;
 
     /// Finished: the standings line, already formatted by whoever has the state.
     std::string standings;
@@ -110,6 +113,23 @@ public:
   {
     return m_kind;
   }
+  /// Whether this kind covers the screen and swallows every tap.
+  ///
+  /// **`Lost` is the one that does not** (ADR-085). Its own copy says that nothing tapped while it
+  /// is up will be sent, and it was a full modal over the board -- so it told the player they could
+  /// do nothing and then stopped them doing the things they still could: reading the digest that
+  /// arrived before the drop, looking at the map, opening a sheet. A banner says the same sentence
+  /// and takes 44 pixels to say it.
+  [[nodiscard]] static constexpr bool IsModal(Kind _kind) noexcept
+  {
+    return _kind != Kind::None && _kind != Kind::Lost;
+  }
+  [[nodiscard]] bool Modal() const noexcept
+  {
+    return IsModal(m_kind);
+  }
+
+  /// Whether anything at all is drawn -- a modal or the banner.
   [[nodiscard]] bool Visible() const noexcept
   {
     return m_kind != Kind::None;
@@ -169,6 +189,11 @@ private:
   /// The title, the look, the paragraph and the buttons, for whatever `m_kind` and `m_facts` say.
   /// Built in one place so that a state cannot end up with a red border and a reassuring sentence.
   void Compose(std::string& _outTitle, Look& _outLook, std::vector<Paragraph>& _outBody, std::vector<Button>& _outButtons) const;
+
+  /// The non-modal presentation: a 44px band under the top bar, spanning all three columns, with no
+  /// scrim and the board still live behind it (ADR-085).
+  void DrawBanner(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const std::string& _title, const Look& _look,
+                  const std::vector<Button>& _buttons);
 
   Kind m_kind = Kind::None;
   Facts m_facts;

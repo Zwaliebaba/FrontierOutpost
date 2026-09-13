@@ -1,6 +1,6 @@
 # UI-01 — What the client's screens still cost a player
 
-**Status:** **Items 1.1-1.4, 2.1, 2.2 and 2.6 done 2026-09-13 (ADR-079 to ADR-084); the rest not started.** Written 2026-09-13 as a UX review and revised the same day against
+**Status:** **Phase 1 done, plus 2.1, 2.2 and 2.6 (ADR-079 to ADR-085), 2026-09-13/14. 1.4 is partly done and its [ASK] is open. The rest not started.** Written 2026-09-13 as a UX review and revised the same day against
 ADR-077 and ADR-078, which landed between the review and the first item. Item 1.1 is rescoped and
 item 2.3 carried a sentence those ADRs made false; both are marked below. Nothing else has been
 built. Archive this when the final checklist passes.
@@ -112,6 +112,9 @@ the two answers to the owner.
 - DESIGN-GUIDELINES.md §Palette semantic row and §Map updated.
 
 ### 1.5 Connection lost as a banner, not a modal
+**Done 2026-09-14 — ADR-085.** Built, including both copy defects. `04-connection-lost.png` is not
+retaken — the desktop was locked — and still shows the modal.
+
 **Problem.** `ConnectionDialog::Kind::Lost` swallows every tap while its own copy says nothing you tap is sent anyway. The player cannot read the digest or map while dropped. Copy defects: `back 4 time(s) already`; `The tick still locks in 00:00:00` shown after the lock.
 
 **Change.** `ConnectionDialog.cpp`, `MainPage.cpp`, match loop in `Lockstep/Lockstep.cpp`:

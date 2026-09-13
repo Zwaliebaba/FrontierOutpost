@@ -1387,6 +1387,7 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
       // and back in would read as the connection returning and going again.
       kind = Lockstep::ConnectionDialog::Kind::Lost;
       facts.lockCountdown = !everHadState ? std::string{} : Lockstep::MainPage::FormatCountdown(page.State().match.secondsToLock);
+      facts.lockedTick = page.State().OrdersTick();
     }
     else if (!everHadState)
     {
@@ -1408,6 +1409,11 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
       redraw = true;
       drawnDialog = kind;
     }
+
+    // **A dropped link takes the orders away and leaves the board** (ADR-085). The page dims every
+    // control that reaches the wire and leaves reading, focusing and orbiting alone; the banner over
+    // it says why. Nothing else on this screen changes.
+    page.SetOffline(kind == Lockstep::ConnectionDialog::Kind::Lost);
 
     switch (dialog.TakeAction())
     {
@@ -1469,7 +1475,7 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
     // The pointer's CURRENT position decides which pane a notch was over. `TakeZoomSteps` banks a
     // count and not a place, and a pointer does not travel measurably between the notch and the
     // frame that reads it.
-    if (!dialog.Visible())
+    if (!dialog.Modal())
     {
       const std::int32_t zoomSteps = pointer.TakeZoomSteps();
       if (zoomSteps != 0 && page.HandleZoom(zoomSteps, hoverXPixels, hoverYPixels))
@@ -1486,7 +1492,7 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
     // a press was, and reports only that one -- so the order is about reading rather than about
     // correctness: the rotation is applied before the frame that a tap would be tested against.
     Neuron::PointerInput::Drag drag = {};
-    if (pointer.TakeDrag(drag) && !dialog.Visible())
+    if (pointer.TakeDrag(drag) && !dialog.Modal())
     {
       redraw = true;
       page.HandleDrag(drag);

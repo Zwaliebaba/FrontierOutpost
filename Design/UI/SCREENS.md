@@ -205,14 +205,21 @@ that carries more than a seat (`Protocol.h`) and a screen that waits to show it.
 
 ## 04 · Connection lost — **built** (`04-connection-lost.png`)
 
-`ConnectionDialog::Kind::Lost` over the live 01 (the scrim dims it; the top bar behind reads
-`RECONNECTING`). Amber: `CONNECTION LOST` · *The server stopped answering.* · *Reconnecting - next
-attempt in 2s.* (or *back 3 time(s) already - next attempt in 1s.*) · *Orders you already sent are
-on the server and still count. Anything you tap while this is up is not sent.* · *The tick still
-locks in 00:01:40 whether or not you are back.* — live, from the page's countdown. Buttons `QUIT` ·
-`RETRY NOW` (filled). The loop retries every two seconds; `RETRY NOW` skips the wait. A reconnect
-passes through `Connecting` and the dialog stays up for it (ADR-043). The dialog swallows every tap,
-the map included.
+**A BANNER, not a modal** (ADR-085). `ConnectionDialog::Kind::Lost` draws a 44px amber-bordered
+band under the top bar spanning all three columns, with no scrim: `CONNECTION LOST - RECONNECTING IN
+2S` (or `- BACK ONCE ALREADY - RETRYING IN 1S`, or `BACK 4 TIMES`) on the left, `QUIT` outlined and
+`RETRY NOW` filled on the right. It swallows only its own two buttons.
+
+**The board under it stays live and gives no order.** Every control that reaches the wire goes inert
+by the same path the lock uses (`MainPage::OrdersEditable`) — the digest's buttons dim, and every
+row that would compose an order is not a target at all; reading a card, focusing a system, orbiting
+the map and opening a sheet all still work, because none of them reaches a socket. A sheet open
+across the drop wears an `OFFLINE` chip where `LOCKED` goes and an amber line saying *The link is
+down. Nothing you tap here is sent; the board is yours to read.*
+
+The loop retries every two seconds; `RETRY NOW` skips the wait. A reconnect passes through
+`Connecting` and the banner stays up for it (ADR-043). Past zero the band's countdown line reads
+`T10 locked while you were away.` rather than counting down to nothing.
 
 *Differs:* the handoff promised *unlocked orders are kept locally and re-sent*; nothing re-sends
 them, so the dialog says the true, smaller thing (ADR-038). Whether pending edits should survive a

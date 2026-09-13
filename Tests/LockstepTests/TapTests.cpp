@@ -301,19 +301,50 @@ public:
                    L"QUIT cannot be pressed");
   }
 
-  TEST_METHOD(TheDialogSwallowsEveryTapItIsOver)
+  TEST_METHOD(AModalSwallowsEveryTapItIsOver)
   {
-    // A tap reaching the board behind a CONNECTION LOST dialog would be an order edit the client
-    // cannot send, and the player would have no way to tell which of their taps counted.
+    // A tap reaching the board behind a REFUSED dialog would be an order edit against a connection
+    // that is not there, and the player would have no way to tell which of their taps counted.
     Headless renderers;
     Lockstep::ConnectionDialog dialog;
-    dialog.Update(Lockstep::ConnectionDialog::Kind::Lost, Lockstep::ConnectionDialog::Facts{}, 0.0);
+    dialog.Update(Lockstep::ConnectionDialog::Kind::Refused, Lockstep::ConnectionDialog::Facts{}, 0.0);
     DrawDialog(dialog, renderers);
+
+    Assert::IsTrue(dialog.Modal());
 
     // The four corners, which are as far from the card as this screen goes.
     Assert::IsTrue(dialog.HandleTap(1.0F, 1.0F), L"a tap in the corner fell through the scrim");
     Assert::IsTrue(dialog.HandleTap(static_cast<float>(SCREEN_WIDTH) - 1.0F, static_cast<float>(SCREEN_HEIGHT) - 1.0F));
     Assert::IsTrue(dialog.TakeAction() == Lockstep::ConnectionDialog::Action::None, L"the scrim pressed a button");
+  }
+
+  TEST_METHOD(ALostLinkIsABannerAndNotAModal)
+  {
+    // **The dialog told the player nothing they tapped would be sent, and then stopped them doing
+    // the things that do not need sending** (ADR-085): reading the digest that arrived before the
+    // drop, looking at the map, opening a sheet. A banner says the same sentence in 44 pixels.
+    Headless renderers;
+    Lockstep::ConnectionDialog dialog;
+    dialog.Update(Lockstep::ConnectionDialog::Kind::Lost, Lockstep::ConnectionDialog::Facts{}, 0.0);
+    DrawDialog(dialog, renderers);
+
+    Assert::IsTrue(dialog.Visible(), L"a dropped link draws nothing at all");
+    Assert::IsFalse(dialog.Modal(), L"a dropped link is still a modal");
+
+    // The board below the band is reachable: the four corners of the map pane fall through.
+    Assert::IsFalse(dialog.HandleTap(700.0F, 400.0F), L"the banner swallowed a tap on the map");
+    Assert::IsFalse(dialog.HandleTap(1.0F, static_cast<float>(SCREEN_HEIGHT) - 1.0F), L"the banner swallowed a tap on the digest");
+    Assert::IsTrue(dialog.TakeAction() == Lockstep::ConnectionDialog::Action::None);
+  }
+
+  TEST_METHOD(TheBannerStillOffersRetryAndQuit)
+  {
+    Assert::IsTrue(PressSomething(Lockstep::ConnectionDialog::Kind::Lost, Lockstep::ConnectionDialog::Facts{},
+                                  Lockstep::ConnectionDialog::Action::Retry) == Lockstep::ConnectionDialog::Action::Retry,
+                   L"the banner offers no way to retry now");
+    Assert::IsTrue(PressSomething(Lockstep::ConnectionDialog::Kind::Lost, Lockstep::ConnectionDialog::Facts{},
+                                  Lockstep::ConnectionDialog::Action::Quit) == Lockstep::ConnectionDialog::Action::Quit,
+                   L"the banner offers no way out");
   }
 
   TEST_METHOD(AHiddenDialogSwallowsNothing)
@@ -1697,6 +1728,68 @@ public:
       }
     }
     Assert::IsTrue(sawOne, L"fourteen ticks of six bots put nothing in transit, so this test proved nothing");
+  }
+};
+
+// The board is still readable while the link is down, and still gives no order (ADR-085).
+TEST_CLASS(OfflineBoardTapTests)
+{
+public:
+  TEST_METHOD(NoTapGivesAnOrderWhileTheLinkIsDown)
+  {
+    // The same claim `ALockedRailQueuesNothing` makes about the lock, about the other reason an
+    // order cannot go: a client that cannot send must not let one be composed either, or the player
+    // is editing a list that will never leave.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    page.SetOffline(true);
+    Assert::IsFalse(page.OrdersEditable(), L"a page with no link still says orders can be given");
+
+    Headless renderers;
+    const bool ordered =
+      SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+               [&page]
+               {
+                 const Lockstep::OrderSet orders = Lockstep::OrdersOf(page.State());
+                 return !orders.builds.empty() || !orders.fleetOrders.empty() || !orders.proposals.empty() || orders.concede;
+               });
+    Assert::IsFalse(ordered, L"a tap composed an order on a client that cannot send one");
+  }
+
+  TEST_METHOD(TheBoardIsStillReadableWhileTheLinkIsDown)
+  {
+    // The half the modal took away. Focusing, opening a sheet and reading the digest reach no
+    // socket, so none of them is a thing to stop.
+    const auto simulation = PlayedMatch(4);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    page.SetOffline(true);
+
+    Headless renderers;
+    const bool opened = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() != Lockstep::MainPage::Panel::None; });
+    Assert::IsTrue(opened, L"a dropped link left nothing on the board to open");
+
+    Lockstep::MainPage focusing;
+    focusing.Create(ViewOfSeatZero(*simulation));
+    focusing.SetOffline(true);
+    const bool focused = SweepFor(focusing, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                  [&focusing] { return focusing.FocusedSystem() != Lockstep::EventRefs::NONE; });
+    Assert::IsTrue(focused, L"a dropped link left nothing on the board to focus");
+  }
+
+  TEST_METHOD(ComingBackRestoresTheControls)
+  {
+    // It is a state and not a one-way door: the reconnect loop under the banner is expected to win.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    page.SetOffline(true);
+    Assert::IsFalse(page.OrdersEditable());
+    page.SetOffline(false);
+    Assert::IsTrue(page.OrdersEditable(), L"the controls did not come back with the link");
   }
 };
 

@@ -151,6 +151,25 @@ public:
 
   void Create(MatchState _state);
 
+  /// Whether the link to the server is down (ADR-085).
+  ///
+  /// **It gates ORDERS and nothing else.** A client that cannot send cannot order, so every control
+  /// that gives one goes inert exactly as it does at the lock -- but reading the digest, focusing
+  /// the map, orbiting it and opening a sheet all still work, because none of them reaches the
+  /// wire. That is the whole difference between the banner this goes with and the modal it replaced.
+  void SetOffline(bool _offline) noexcept
+  {
+    m_offline = _offline;
+  }
+
+  /// Whether an order can be given at all: the orders are unlocked, the match is running, and the
+  /// link is up. One question asked in one place, because "can this be tapped" was three
+  /// conditions in twelve places and the third was missing from all of them.
+  [[nodiscard]] bool OrdersEditable() const noexcept
+  {
+    return !m_state.orders.locked && !m_state.match.finished && !m_offline;
+  }
+
   /// Advances the live countdown. At zero the orders lock: the rail flips UNLOCKED to LOCKED and
   /// every control on it goes inert, which is the whole of the tick discipline the client
   /// enforces (the server decides what actually resolves).
@@ -391,6 +410,11 @@ private:
   std::int32_t m_panelSubjectId = EventRefs::NONE;
   /// The node the digest last pointed at. Drawn with a focus ring; -1 when nothing is focused.
   std::int32_t m_focusedSystem = EventRefs::NONE;
+
+  /// Whether the link is down (ADR-085). Set by the match loop from the connection's state; it is
+  /// not part of `MatchState` because it is a fact about this client's socket rather than about the
+  /// match, and a snapshot that carried it would be a snapshot that could disagree with the wire.
+  bool m_offline = false;
 
   /// The camera looking at the galaxy, and the ground plane it orbits (ADR-017).
   MapView m_mapView;

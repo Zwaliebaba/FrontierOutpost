@@ -163,10 +163,14 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
     _outTitle = "CONNECTION LOST";
     _outLook = Look{AMBER, AMBER};
     _outBody.push_back(Paragraph{"The server stopped answering."});
-    _outBody.push_back(Paragraph{m_facts.reconnects == 0
-                                   ? std::format("Reconnecting - next attempt in {}.", Seconds(m_facts.secondsToNextAttempt))
-                                   : std::format("Reconnecting - back {} time(s) already - next attempt in {}.", m_facts.reconnects,
-                                                 Seconds(m_facts.secondsToNextAttempt))});
+    // `back 4 time(s) already` is a placeholder that shipped. A screen that tells a player their
+    // link keeps dropping should not also look unfinished while it does it (ADR-085).
+    _outBody.push_back(
+      Paragraph{m_facts.reconnects == 0 ? std::format("Reconnecting - next attempt in {}.", Seconds(m_facts.secondsToNextAttempt))
+                : m_facts.reconnects == 1
+                  ? std::format("Reconnecting - back once already - next attempt in {}.", Seconds(m_facts.secondsToNextAttempt))
+                  : std::format("Reconnecting - back {} times already - next attempt in {}.", m_facts.reconnects,
+                                Seconds(m_facts.secondsToNextAttempt))});
 
     // **The reference sheet promises more than this client does, so this says less.** Screen 04's
     // paragraph is "your unlocked orders are kept here and re-sent when the link returns", and
@@ -175,9 +179,14 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
     // drop is already on the server, where the latest submission for a tick wins.
     _outBody.push_back(Paragraph{"Orders you already sent are on the server and still count. Anything you tap while this is "
                                  "up is not sent."});
+    // **Past zero it has already locked, and saying it "still locks in 00:00:00" is a countdown
+    // that has stopped counting.** The tick the player was editing for is gone; what they need to
+    // know is that it went without them (ADR-085).
     if (!m_facts.lockCountdown.empty())
     {
-      _outBody.push_back(Paragraph{std::format("The tick still locks in {} whether or not you are back.", m_facts.lockCountdown)});
+      _outBody.push_back(Paragraph{m_facts.lockCountdown == "00:00:00"
+                                     ? std::format("T{} locked while you were away.", m_facts.lockedTick)
+                                     : std::format("The tick still locks in {} whether or not you are back.", m_facts.lockCountdown)});
     }
     _outButtons.push_back(Button{"QUIT", Action::Quit, false});
     _outButtons.push_back(Button{"RETRY NOW", Action::Retry, true});
@@ -214,6 +223,12 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
   std::vector<Paragraph> body;
   std::vector<Button> buttons;
   Compose(title, look, body, buttons);
+
+  if (!Modal())
+  {
+    DrawBanner(_shapes, _text, title, look, buttons);
+    return;
+  }
 
   // ---- How tall this one is ----------------------------------------------------------------------
   //
@@ -286,6 +301,52 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
   }
 }
 
+/// The band under the top bar, spanning all three columns (ADR-085).
+///
+/// **No scrim, and 44 pixels.** 44 is the top bar's height and the sheet row's, so the band reads as
+/// another row of the frame rather than as something laid over it -- which is the whole point: the
+/// board behind it is still readable and still works.
+void ConnectionDialog::DrawBanner(ShapeRenderer& _shapes, FontRenderer& _text, const std::string& _title, const Look& _look,
+                                  const std::vector<Button>& _buttons)
+{
+  constexpr float BANNER_TOP = 44.0F;
+  constexpr float BANNER_HEIGHT = 44.0F;
+
+  _shapes.FillRect(0.0F, BANNER_TOP, SCREEN_WIDTH, BANNER_HEIGHT, CARD_FILL);
+  _shapes.StrokeRect(0.0F, BANNER_TOP, SCREEN_WIDTH, BANNER_HEIGHT, _look.border);
+
+  // One line, not the card's four. The band has room for what is happening and when it will next be
+  // tried, and the rest of what the card said is true whether or not it is on the screen.
+  const std::string next = m_facts.reconnects == 0
+                             ? std::format("{} - RECONNECTING IN {}", _title, Uppercased(Seconds(m_facts.secondsToNextAttempt)))
+                             : std::format("{} - BACK {} ALREADY - RETRYING IN {}", _title,
+                                           m_facts.reconnects == 1 ? std::string{"ONCE"} : std::format("{} TIMES", m_facts.reconnects),
+                                           Uppercased(Seconds(m_facts.secondsToNextAttempt)));
+  _text.DrawText(static_cast<std::int32_t>(CARD_PADDING) + 4, CenterTextY(BANNER_TOP, BANNER_HEIGHT), next, _look.title);
+
+  const float buttonY = BANNER_TOP + (BANNER_HEIGHT - BUTTON_HEIGHT) * 0.5F;
+  float right = SCREEN_WIDTH - CARD_PADDING - 4.0F;
+  for (auto button = _buttons.rbegin(); button != _buttons.rend(); ++button)
+  {
+    const float width = static_cast<float>(FontRenderer::MeasurePixels(button->label)) + 2.0F * BUTTON_PADDING;
+    const float x = right - width;
+
+    if (button->filled)
+    {
+      _shapes.FillRect(x, buttonY, width, BUTTON_HEIGHT, BLUE);
+    }
+    else
+    {
+      _shapes.StrokeRect(x, buttonY, width, BUTTON_HEIGHT, OUTLINE);
+    }
+    _text.DrawText(static_cast<std::int32_t>(x + BUTTON_PADDING), CenterTextY(buttonY, BUTTON_HEIGHT), button->label,
+                   button->filled ? APP_BACKGROUND : TEXT_PRIMARY);
+    m_hits.push_back(Hit{x, buttonY, width, BUTTON_HEIGHT, button->action});
+
+    right = x - BUTTON_GAP;
+  }
+}
+
 bool ConnectionDialog::HandleTap(float _xPixels, float _yPixels)
 {
   if (m_kind == Kind::None)
@@ -302,9 +363,11 @@ bool ConnectionDialog::HandleTap(float _xPixels, float _yPixels)
     }
   }
 
-  // Everything else is swallowed. A tap that fell through to the map behind would edit orders this
-  // client cannot send, and the player would have no way to know which of their taps counted.
-  return true;
+  // A MODAL swallows everything else: a tap that fell through to the map behind would edit orders
+  // this client cannot send, and the player would have no way to know which counted. **A banner
+  // swallows only its own buttons** (ADR-085) -- the board behind it is the thing it deliberately
+  // leaves reachable, and the page's own guards are what stop an order being given there.
+  return Modal();
 }
 
 } // namespace Lockstep
