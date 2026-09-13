@@ -81,8 +81,10 @@ namespace
     }
 
     // A fleet already under way is not redirectable -- `Match::Validate` refuses it, and a button
-    // whose order the lock is certain to refuse is the thing ADR-053 took off this screen.
-    if (fleet.order == FleetStance::Move && fleet.from != fleet.to)
+    // whose order the lock is certain to refuse is the thing ADR-053 took off this screen. A fleet
+    // the player ordered somewhere THIS tick is not that: the lock has not come, so it is still
+    // standing where it stands and the button re-opens the picker on it (ADR-077).
+    if (fleet.underWay)
     {
       continue;
     }

@@ -245,6 +245,16 @@ struct Fleet
   float progress = 0.0F;
   std::uint32_t eta = 0;
   FleetStance order = FleetStance::Hold;
+  /// Whether the SERVER has this fleet on a lane, as opposed to the player having ordered it there
+  /// and the lock not having come yet (ADR-077).
+  ///
+  /// **`order` cannot answer that and this is the whole reason the field exists.** A move ordered
+  /// this tick sets `order` to `Move` exactly as a snapshot of a fleet already flying does, and the
+  /// two take opposite treatment everywhere it matters: the ordered one is an order to send, a
+  /// picker to re-open and a `MOVE` the digest may offer, and the flying one is none of those,
+  /// because `Match::Validate` refuses a second order on a fleet in transit. Set from the
+  /// snapshot's `ticksRemaining` and never by an edit.
+  bool underWay = false;
   /// The deterministic engagement preview, from visible information only (one-pager: combat is
   /// deterministic; the client previews what it can see). Empty when there is nothing to fight.
   std::string preview;

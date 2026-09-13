@@ -211,7 +211,10 @@ void MainPage::ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _
   {
     for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
     {
-      if (m_state.fleets[index].id != _subjectId || m_state.fleets[index].owner != m_state.viewer)
+      // Still yours, and still standing. A picker left open across the lock that sent its fleet
+      // away is a picker over a fleet the lock would now refuse an order on, which is the sheet
+      // ADR-065 keeps open and ADR-077 says has nothing left to offer.
+      if (m_state.fleets[index].id != _subjectId || m_state.fleets[index].owner != m_state.viewer || m_state.fleets[index].underWay)
       {
         continue;
       }
@@ -537,14 +540,30 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
     }
 
     case Action::OpenFleet:
+    {
       if (region->index < 0 || region->index >= static_cast<std::int32_t>(m_state.fleets.size()))
       {
         return true;
       }
+      const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(region->index)];
+
+      // The guard behind the controls, by the rule the lock would refuse the order by (ADR-053,
+      // ADR-077). Every control that leads here already declines to be one for a fleet in transit,
+      // and this is what makes that the rule rather than three places that agree.
+      if (fleet.underWay)
+      {
+        return true;
+      }
+
+      // The map rings where the picker is rooted, so the sheet and the map are about one place:
+      // the sheet lists the lanes out of where this fleet stands and the ring says which system
+      // that is (ADR-060).
+      m_focusedSystem = fleet.from;
       m_panel = Panel::Destination;
       m_panelSubject = region->index;
-      m_panelSubjectId = m_state.fleets[static_cast<std::size_t>(region->index)].id;
+      m_panelSubjectId = fleet.id;
       return true;
+    }
 
     case Action::ToggleBuild:
     {
@@ -640,8 +659,13 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       if (editable && m_panelSubject >= 0)
       {
         Fleet& fleet = m_state.fleets[static_cast<std::size_t>(m_panelSubject)];
-        const std::int32_t origin = fleet.order == FleetStance::Move ? fleet.to : fleet.from;
-        fleet.from = origin;
+
+        // **`from` is where the fleet stands, whether or not a move has been ordered from here
+        // already.** A picker only opens on a fleet that is not under way (ADR-077), and ordering
+        // one sets `from` to where it is leaving -- so re-opening it lists the same lanes and
+        // picking again replaces the order rather than adding a second hop to it, which is what
+        // makes a move editable until the lock like every other order (ADR-031).
+        const std::int32_t origin = fleet.from;
         fleet.to = region->index;
         fleet.order = FleetStance::Move;
         fleet.progress = 0.0F;
@@ -703,8 +727,20 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text)
 
   for (const MapHit& hit : Lockstep::DrawMap(_shapes, _text, frame))
   {
-    const bool isSystem = hit.system != EventRefs::NONE;
-    AddHit(hit.x, hit.y, hit.width, hit.height, isSystem ? Action::OpenSystem : Action::OpenFleet, isSystem ? hit.system : hit.fleet);
+    if (hit.system != EventRefs::NONE)
+    {
+      AddHit(hit.x, hit.y, hit.width, hit.height, Action::OpenSystem, hit.system);
+      continue;
+    }
+
+    // A marker on a lane is either a move ordered this tick, drawn at progress zero until the lock
+    // (ADR-055), or a fleet the server already has in transit. Only the first takes an order
+    // (ADR-077); the second focuses where it is going, which is what a marker is asked about once
+    // there is nothing to decide about it.
+    const bool underWay = hit.fleet >= 0 && hit.fleet < static_cast<std::int32_t>(m_state.fleets.size()) &&
+                          m_state.fleets[static_cast<std::size_t>(hit.fleet)].underWay;
+    const std::int32_t destination = underWay ? m_state.fleets[static_cast<std::size_t>(hit.fleet)].to : hit.fleet;
+    AddHit(hit.x, hit.y, hit.width, hit.height, underWay ? Action::FocusSystem : Action::OpenFleet, destination);
   }
 }
 
@@ -1360,11 +1396,16 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
     const std::string label = moving ? std::format("{} {} → {}", Uppercased(fleet.name), fleet.ships, where)
                                      : std::format("{} {} HOLD {}", Uppercased(fleet.name), fleet.ships, where);
 
-    // A fleet under way opens its destination picker, which is what tapping its marker on the map
-    // does; one standing still focuses where it is standing. Both are the same question -- where is
-    // this fleet, and where is it going -- asked from the column that lists them (ADR-060).
-    const Action fleetAction = navigateOnly ? Action::FocusSystem : (moving ? Action::OpenFleet : Action::FocusSystem);
-    const std::int32_t fleetTarget = fleetAction == Action::OpenFleet ? static_cast<std::int32_t>(index) : fleet.to;
+    // **A FLEETS row opens the picker, and for a standing fleet it is the only thing that does**
+    // (ADR-077). The map draws no marker for a fleet that is not moving, and the digest's `MOVE`
+    // is a standing move offered only when nothing else on it can be acted on (ADR-056) -- so a
+    // tick that reports one build left this column naming a fleet nothing could order.
+    //
+    // A fleet already on a lane opens nothing, because the lock would refuse a second order on it,
+    // and focuses where it is going instead. At the lock every row focuses (ADR-060).
+    const bool orderable = !navigateOnly && !fleet.underWay;
+    const Action fleetAction = orderable ? Action::OpenFleet : Action::FocusSystem;
+    const std::int32_t fleetTarget = orderable ? static_cast<std::int32_t>(index) : fleet.to;
 
     // The verdict tokens the design asks for -- LOSE, +DEF -- are the combat preview's, and the
     // preview is a sentence today rather than a verdict. Until the digest's verdict box is built
@@ -1638,7 +1679,8 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(m_panelSubject)];
     title = std::format("MOVE {} - PICK LANE", Uppercased(fleet.name));
-    const std::int32_t origin = fleet.order == FleetStance::Move ? fleet.to : fleet.from;
+    // Where it stands, which is what `Action::ChooseDestination` orders from (ADR-077).
+    const std::int32_t origin = fleet.from;
 
     // Lane-constrained: only the systems this fleet can actually reach along an edge, and the tick
     // it would arrive. A destination picker that offered anything else would be offering a move
@@ -1841,10 +1883,11 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   // every panel above passes `EventRefs::NONE` while the orders are locked -- so what is left is to
   // say why, in the rail's own words and in the rail's amber.
   const bool atLock = m_state.orders.locked && !m_state.match.finished;
-  const std::vector<std::string> lockHelp =
+  const std::vector<std::string> sheetHelp =
     atLock ? FontRenderer::WrapToWidth(LockSentence(), static_cast<std::uint32_t>(width - 2.0F * CARD_PADDING))
            : std::vector<std::string>{};
-  const float helpHeight = lockHelp.empty() ? 0.0F : static_cast<float>(lockHelp.size()) * static_cast<float>(LINE_HEIGHT) + 12.0F;
+  const Color helpInk = Ink::AMBER;
+  const float helpHeight = sheetHelp.empty() ? 0.0F : static_cast<float>(sheetHelp.size()) * static_cast<float>(LINE_HEIGHT) + 12.0F;
 
   const float height = SHEET_HEADER_HEIGHT + helpHeight + listHeight + SHEET_ACTION_HEIGHT;
   const float y = Frame::SCREEN_HEIGHT - SHEET_MARGIN - height;
@@ -1871,13 +1914,13 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   AddHit(x + width - SHEET_HEADER_HEIGHT, y, SHEET_HEADER_HEIGHT, SHEET_HEADER_HEIGHT, Action::ClosePanel, 0);
   _shapes.FillRect(x, y + SHEET_HEADER_HEIGHT, width, 1.0F, Ink::DIVIDER);
 
-  // ---- Why nothing here does anything ----------------------------------------------------------
-  if (!lockHelp.empty())
+  // ---- What the rows cannot say about themselves -----------------------------------------------
+  if (!sheetHelp.empty())
   {
     std::int32_t helpY = static_cast<std::int32_t>(y + SHEET_HEADER_HEIGHT) + 6;
-    for (const std::string& line : lockHelp)
+    for (const std::string& line : sheetHelp)
     {
-      _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), helpY, line, Ink::AMBER, Face::SansMedium);
+      _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), helpY, line, helpInk, Face::SansMedium);
       helpY += LINE_HEIGHT;
     }
     _shapes.FillRect(x, y + SHEET_HEADER_HEIGHT + helpHeight, width, 1.0F, Ink::DIVIDER);

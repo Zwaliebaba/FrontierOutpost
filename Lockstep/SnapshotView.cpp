@@ -418,6 +418,7 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     entry.from = from;
     entry.to = to;
     entry.order = moving ? FleetStance::Move : FleetStance::Hold;
+    entry.underWay = moving;
 
     // **How far along the lane it actually is** (ADR-055), from two numbers already on the wire:
     // the lane's cost and the ticks left. Departure sets the remaining ticks to the whole cost and
@@ -713,9 +714,14 @@ OrderSet OrdersOf(const MatchState& _state)
   OrderSet orders;
   orders.player = PlayerId{_state.viewer};
 
+  // **A fleet already on a lane is not re-ordered** (ADR-077). It comes back from every snapshot
+  // with `order` set to `Move`, so sending one order per moving fleet sent a fresh order for a
+  // fleet in transit on every tap -- and `Match::Validate` refuses each of them as
+  // `FleetInTransit`, which reaches the player a tick later as `Order refused`. What travels is a
+  // move the player ordered this tick, which is exactly a `Move` that is not yet under way.
   for (const Fleet& fleet : _state.fleets)
   {
-    if (fleet.owner != _state.viewer || fleet.order != FleetStance::Move || fleet.id == EventRefs::NONE)
+    if (fleet.owner != _state.viewer || fleet.order != FleetStance::Move || fleet.underWay || fleet.id == EventRefs::NONE)
     {
       continue;
     }

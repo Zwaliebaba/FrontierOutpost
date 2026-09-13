@@ -1229,4 +1229,167 @@ public:
   }
 };
 
+// A fleet takes an order while it is standing still, and the screen offers one only then
+// (ADR-077). The defect these pin was reported on two screenshots of a practice match: a board with
+// credits in hand, a fleet parked at a held system, and no control anywhere that would move it.
+TEST_CLASS(FleetMoveTapTests)
+{
+public:
+  /// Six bots and no human seat, so the viewer's own fleet is the one thing on the board that does
+  /// not move unless this test moves it -- and every other seat's does, which is what puts a fleet
+  /// in transit on the map for the tests that need one.
+  [[nodiscard]] static std::unique_ptr<Lockstep::MatchSimulation> EverybodyMoves(std::int32_t _ticks)
+  {
+    Lockstep::MatchRules rules;
+    rules.playerCount = 6;
+    const std::vector<std::optional<Lockstep::BotPolicy>> bots(6, std::optional<Lockstep::BotPolicy>{Lockstep::BotPolicy::ExpandNear});
+    auto simulation = std::make_unique<Lockstep::MatchSimulation>(rules, 0x5349'474E'414C'5321ULL, bots);
+    for (std::int32_t tick = 0; tick < _ticks; ++tick)
+    {
+      simulation->Resolve();
+    }
+    return simulation;
+  }
+
+  /// Which of the viewer's fleets is standing at a system, or `EventRefs::NONE`.
+  [[nodiscard]] static std::int32_t StandingFleet(const Lockstep::MatchState& _state)
+  {
+    for (std::size_t index = 0; index < _state.fleets.size(); ++index)
+    {
+      const Lockstep::Fleet& fleet = _state.fleets[index];
+      if (fleet.owner == _state.viewer && !fleet.underWay)
+      {
+        return static_cast<std::int32_t>(index);
+      }
+    }
+    return Lockstep::EventRefs::NONE;
+  }
+
+  TEST_METHOD(AStandingFleetCanBeSentSomewhereFromTheScreen)
+  {
+    // **The tick this is about is any tick after the first.** The digest's `MOVE` is a standing
+    // move, offered only when no card can be acted on (ADR-056), and a production line the player
+    // can build from is a card that can -- so from T1 onwards the digest carries a BUILD button and
+    // no MOVE at all. The map draws no marker for a parked fleet (ADR-059), which leaves the rail.
+    const auto simulation = PlayedMatch(4);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    const std::int32_t standing = StandingFleet(page.State());
+    Assert::IsTrue(standing != Lockstep::EventRefs::NONE, L"four ticks in and the viewer has no fleet standing anywhere");
+
+    const bool digestOffersAMove =
+      std::any_of(page.State().digest.begin(), page.State().digest.end(),
+                  [](const Lockstep::DigestEvent& _event)
+                  {
+                    return std::any_of(_event.actions.begin(), _event.actions.end(), [](const Lockstep::EventAction& _action)
+                                       { return _action.kind == Lockstep::EventActionKind::RedirectFleet; });
+                  });
+    Assert::IsFalse(digestOffersAMove, L"the digest offered a MOVE, so this fixture is not the board the defect was reported on");
+
+    // Sweep the whole screen, exactly as a finger would hunt for the control. Two stages, because
+    // the order takes two taps: one to reach a picker, one to pick a lane.
+    Headless renderers;
+    const bool opened = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
+    Assert::IsTrue(opened, L"nothing on the screen opens a destination picker for a fleet that is standing still");
+
+    const std::int32_t where = page.State().fleets[static_cast<std::size_t>(standing)].from;
+    const bool ordered = SweepFor(
+      page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+      [&page, standing, where] { return page.State().fleets[static_cast<std::size_t>(standing)].to != where; }, true,
+      [&page, &renderers]
+      {
+        // A stray tap on the map closes the picker over some other system's build sheet. Put it
+        // back, so the sweep is looking for a row rather than for the panel it already found.
+        if (page.OpenPanel() == Lockstep::MainPage::Panel::Destination)
+        {
+          return false;
+        }
+        return SweepFor(page, renderers, DrawPage, SCREEN_WIDTH - ORDERS_RAIL, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                        [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
+      });
+    Assert::IsTrue(ordered, L"the picker opened and no row in it ordered the fleet anywhere");
+
+    const Lockstep::OrderSet orders = Lockstep::OrdersOf(page.State());
+    Assert::AreEqual(std::size_t{1}, orders.fleetOrders.size(), L"the move did not become an order");
+  }
+
+  TEST_METHOD(AFleetAlreadyOnALaneTakesNoOrderFromAnyTap)
+  {
+    // `Match::Validate` refuses a second order on a fleet in transit, so a control that offered one
+    // is a control whose order the lock is certain to refuse -- the thing ADR-053 took off this
+    // screen, applied to the one surface that still had it.
+    bool sawOne = false;
+    for (std::int32_t ticks = 1; ticks <= 14 && !sawOne; ++ticks)
+    {
+      const auto simulation = EverybodyMoves(ticks);
+      Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+      const auto flying = std::find_if(state.fleets.begin(), state.fleets.end(),
+                                       [&state](const Lockstep::Fleet& _fleet) { return _fleet.owner == state.viewer && _fleet.underWay; });
+      if (flying == state.fleets.end())
+      {
+        continue;
+      }
+      sawOne = true;
+
+      const auto at = static_cast<std::size_t>(std::distance(state.fleets.begin(), flying));
+      const std::int32_t id = flying->id;
+      const std::int32_t destination = flying->to;
+
+      Lockstep::MainPage page;
+      page.Create(std::move(state));
+
+      // The whole screen, and the viewer's OTHER fleets are ordered around freely on the way --
+      // what is claimed is about this one. `_done` is the defect: if any tap ever redirects it, or
+      // puts an order for it on the wire, the sweep stops there and the assertion below says so.
+      Headless renderers;
+      const bool touched =
+        SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                 [&page, at, id, destination]
+                 {
+                   if (page.State().fleets[at].to != destination)
+                   {
+                     return true;
+                   }
+                   const Lockstep::OrderSet orders = Lockstep::OrdersOf(page.State());
+                   return std::any_of(orders.fleetOrders.begin(), orders.fleetOrders.end(),
+                                      [id](const Lockstep::FleetOrder& _order) { return _order.fleet == Lockstep::FleetId{id}; });
+                 });
+      Assert::IsFalse(touched, L"a tap gave a fleet already on a lane an order the lock is certain to refuse");
+    }
+    Assert::IsTrue(sawOne, L"fourteen ticks of six bots put nothing of the viewer's in transit, so this test proved nothing");
+  }
+
+  TEST_METHOD(AFleetInTransitIsNotOrderedAgainEveryTime)
+  {
+    // **Every fleet order this client sent for a fleet already flying came back refused.** The
+    // snapshot reports an in-transit fleet as `Move`, and one order per moving fleet therefore
+    // re-sent it on every tap -- `Order refused -- that fleet is already under way`, once per tick,
+    // for an order the player never gave (ADR-077).
+    bool sawOne = false;
+    for (std::int32_t ticks = 1; ticks <= 14 && !sawOne; ++ticks)
+    {
+      const auto simulation = EverybodyMoves(ticks);
+      const Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+      if (std::none_of(state.fleets.begin(), state.fleets.end(),
+                       [&state](const Lockstep::Fleet& _fleet) { return _fleet.owner == state.viewer && _fleet.underWay; }))
+      {
+        continue;
+      }
+      sawOne = true;
+
+      Lockstep::OrderSet orders = Lockstep::OrdersOf(state);
+      orders.player = Lockstep::PlayerId{0};
+
+      const std::vector<Lockstep::RejectedOrder> rejected = simulation->State().Validate(orders);
+      const bool refused = std::any_of(rejected.begin(), rejected.end(), [](const Lockstep::RejectedOrder& _refusal)
+                                       { return _refusal.reason == Lockstep::OrderRejection::FleetInTransit; });
+      Assert::IsFalse(refused, L"the client sent an order for a fleet already under way, and the lock refused it");
+    }
+    Assert::IsTrue(sawOne, L"fourteen ticks of six bots put nothing of the viewer's in transit, so this test proved nothing");
+  }
+};
+
 } // namespace LockstepTests

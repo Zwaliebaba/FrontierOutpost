@@ -248,8 +248,11 @@ public:
   TEST_METHOD(TheStandingMovesOfferEveryStandingFleetAndNotTheFlyingOne)
   {
     Lockstep::MatchState state = QuietProductionTick();
-    // One of the two is already under way, and `Match::Validate` refuses a redirect.
+    // One of the two is already under way, and `Match::Validate` refuses a redirect. `underWay` is
+    // what says so rather than the destination differing from the origin, because a move ordered
+    // this tick differs the same way and is still redirectable (ADR-077).
     state.fleets[0].order = Lockstep::FleetStance::Move;
+    state.fleets[0].underWay = true;
     state.fleets[0].from = 3;
     state.fleets[0].to = 5;
 
@@ -265,6 +268,24 @@ public:
     }
     Assert::AreEqual(std::size_t{1}, moves.size(), L"the fleet in transit was offered a redirect the lock would refuse");
     Assert::AreEqual(1, moves.front(), L"and it is the one still standing");
+  }
+
+  TEST_METHOD(AMoveOrderedThisTickIsStillOffered)
+  {
+    // An order is an edit until the lock (ADR-031), and a fleet the player sent somewhere a moment
+    // ago has not gone anywhere: the destination differs from the origin exactly as it does for a
+    // fleet in transit, and only one of the two is something the lock would refuse (ADR-077).
+    Lockstep::MatchState state = QuietProductionTick();
+    state.fleets[0].order = Lockstep::FleetStance::Move;
+    state.fleets[0].from = 3;
+    state.fleets[0].to = 5;
+
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(state);
+
+    const auto moves =
+      static_cast<std::size_t>(std::count_if(cards[0].actions.begin(), cards[0].actions.end(), [](const Lockstep::EventAction& _action)
+                                             { return _action.kind == Lockstep::EventActionKind::RedirectFleet; }));
+    Assert::AreEqual(std::size_t{2}, moves, L"a move ordered this tick lost the control that would change it before the lock");
   }
 
   TEST_METHOD(ACardThatAlreadyOffersSomethingIsLeftAlone)

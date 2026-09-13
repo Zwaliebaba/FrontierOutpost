@@ -77,8 +77,9 @@ a `- 6 cr left at the lock -` line, `- nothing queued -` otherwise), `SIGNALS 9 
 `ALL LOCK TOGETHER` + the countdown.
 
 **Rows are links (ADR-060).** A BUILDS row opens the build sheet for the system its build is on; a
-FLEETS row focuses where the fleet stands, or opens the destination picker when it is under way; a
-PROPOSALS row focuses the far end of the lane the offer is about. None of them gives an order. The
+FLEETS row opens the fleet's destination picker, and is **the only way to move a parked fleet**
+(ADR-077) — a fleet the server already has on a lane takes no order, so its row focuses where it is
+going instead; a PROPOSALS row focuses the far end of the lane the offer is about. None of them gives an order. The
 row under the pointer is filled with `HOVER_FILL`, and only a row that is a target draws one. At the
 lock and in a finished match every row is focus-only.
 
@@ -98,8 +99,10 @@ and, for a sheet left open across the lock, `06-at-lock-sheet.png`.
   with both built says `NOTHING LEFT TO BUILD HERE`; a system you do not hold opens no sheet and
   only focuses. Tapping a row queues or unqueues (ADR-053's guard refuses what the purse cannot
   cover).
-- **Destination** (`MOVE FLT 1 - PICK LANE`): opened by `MOVE`/`REDIRECT` on a card or by tapping
-  your fleet's marker; one row per lane out of where the fleet is or is going: owner square,
+- **Destination** (`MOVE FLT 1 - PICK LANE`): opened by the fleet's FLEETS row on the rail, by
+  `MOVE` on a card, or by tapping a marker of your own that has not departed yet; never for a fleet
+  the server has on a lane, because the lock refuses a second order on one (ADR-077). One row per
+  lane out of **where the fleet stands**: owner square,
   `PELL`, `UNCLAIMED` / `YOURS` / `P3` with the hostile ships standing there and `+DEF` appended
   (`P3 · 11 +DEF`, ADR-063), then `· CAPITAL` / `· CONTESTED`, and `2 TICKS · ETA T9` on the right —
   the lane cost and the arrival tick as two facts. Picking a row orders the move (drawn at progress
