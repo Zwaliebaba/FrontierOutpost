@@ -325,7 +325,7 @@ public:
   // screen until a sentence fails to line up with nothing.
   TEST_METHOD(MonoHoldsAColumnAndSansDoesNot)
   {
-    for (const Neuron::Face face : {Neuron::Face::MonoRegular, Neuron::Face::MonoMedium, Neuron::Face::MonoSemiBold})
+    for (const Neuron::Face face : {Neuron::Face::MonoRegular, Neuron::Face::MonoMedium})
     {
       Assert::AreEqual(Neuron::FontRenderer::AdvanceOf(U'i', face), Neuron::FontRenderer::AdvanceOf(U'W', face),
                        L"a monospaced face advances the same for every glyph");

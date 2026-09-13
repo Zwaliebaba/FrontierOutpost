@@ -39,12 +39,19 @@ OUTPUT_HEADER = REPO_ROOT / "NeuronClient" / "Font.h"
 
 # ---------------------------------------------------------------------------- what gets baked
 
-# ADR-074's five cuts, in the order the Face enumerator declares them. The name is what the C++
+# The cuts that are baked, in the order the Face enumerator declares them. The name is what the C++
 # enumerator is called; the file is what is rasterized.
+#
+# FOUR, NOT ADR-074'S FIVE. Plex Mono SemiBold was dropped on 2026-09-13 under the ADR's own
+# instruction: "if at the final size two of them are indistinguishable, the answer is to drop a cut
+# rather than to keep a difference nobody can see." At 12px, measured over `SHIPYARD L1 HOLLIS 20
+# CR` as post-gamma coverage, Regular to Medium is +15.4% ink and Medium to SemiBold is +9.1% --
+# and the only thing SemiBold was set in was the lock countdown, which is already separated from
+# everything near it by being 2x and amber. A third weight there carried no signal that was not
+# already being carried twice.
 FACES = [
     ("MonoRegular", "IBMPlexMono-Regular.ttf", 12),
     ("MonoMedium", "IBMPlexMono-Medium.ttf", 12),
-    ("MonoSemiBold", "IBMPlexMono-SemiBold.ttf", 12),
     ("SansRegular", "IBMPlexSans-Regular.ttf", 12),
     ("SansMedium", "IBMPlexSans-Medium.ttf", 12),
 ]

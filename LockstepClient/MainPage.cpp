@@ -795,7 +795,7 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // 06). A countdown that stayed amber on 00:00:00 read as "hurry" to a player who could no longer
   // do anything, which is the opposite of what the number means once it has run out.
   const bool atLock = m_state.orders.locked && !m_state.match.finished;
-  DrawRight(_text, cursor, bigY, countdown, atLock ? Ink::NEUTRAL_DIM : Ink::AMBER, Face::MonoSemiBold, FontRenderer::COUNTDOWN_SCALE);
+  DrawRight(_text, cursor, bigY, countdown, atLock ? Ink::NEUTRAL_DIM : Ink::AMBER, Face::MonoMedium, FontRenderer::COUNTDOWN_SCALE);
   cursor -= static_cast<float>(FontRenderer::MeasurePixels(countdown, FontRenderer::DEFAULT_FACE, FontRenderer::COUNTDOWN_SCALE)) + 8.0F;
 
   const std::string lockLabel = m_state.match.finished ? std::string{"MATCH ENDED"}

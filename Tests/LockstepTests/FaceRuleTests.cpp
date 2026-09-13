@@ -61,7 +61,7 @@ using Neuron::Face;
 
 [[nodiscard]] bool IsMono(Face _face) noexcept
 {
-  return _face == Face::MonoRegular || _face == Face::MonoMedium || _face == Face::MonoSemiBold;
+  return _face == Face::MonoRegular || _face == Face::MonoMedium;
 }
 
 /// What one screen drew, kept under the screen's name.
