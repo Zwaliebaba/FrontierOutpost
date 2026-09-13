@@ -8,20 +8,20 @@ imports -- freetype-py and fontTools never enter the tree, and nothing it emits 
 `constexpr` array.
 
   py Build/BakeFont.py               bake the five Plex cuts into NeuronClient/Font.h
-  py Build/BakeFont.py --legacy      bake the ORIGINAL 8x8 font into the same format instead
-  py Build/BakeFont.py --self-test   prove the legacy bake reproduces FONT_DATA bit for bit
   py Build/BakeFont.py --check       re-derive the hashes and report drift, without writing
 
-WHY --legacy EXISTS, AND WHY IT IS NOT DEAD WEIGHT.
+THERE WAS A `--legacy` HERE, AND IT IS GONE ON PURPOSE.
 
-FONT-01 changes the header format, the renderer that reads it, the pixel shader and the face, and
-doing all four at once would leave no way to tell which of them broke the screen. So each lands
-separately, and the three that come before the face is swapped are proved by capturing the screen
-and requiring it to be BYTE-IDENTICAL. That test only exists while the glyphs are the old ones --
-which means the new format has to be able to carry the old font. `--legacy` is what carries it:
-the same 96 glyphs, the same eight-pixel advance, coverage that is only ever 0 or 255.
+FONT-01 changed the header format, the renderer that reads it, the pixel shader and the face, and
+doing all four at once would have left no way to tell which of them broke the screen. So each
+landed separately, and the three that came before the face was swapped were each proved by
+capturing the screen and requiring it to be BYTE-IDENTICAL -- a test that only exists while the
+glyphs are the old ones. `--legacy` carried the original 8x8 font through the new format so that
+those three checkpoints could exist at all, and `--self-test` proved it reproduced all 768 bytes
+of the old FONT_DATA.
 
-It is deleted in stage 4, when the last byte-identical checkpoint is spent.
+Both were spent the moment Plex was baked, and scaffolding nobody can exercise is scaffolding that
+rots. They are in the history at stage 1 if a future session ever needs the trick again.
 """
 
 from __future__ import annotations
@@ -36,7 +36,6 @@ import sys
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 FONT_DIRECTORY = REPO_ROOT / "Build" / "Fonts"
 OUTPUT_HEADER = REPO_ROOT / "NeuronClient" / "Font.h"
-LEGACY_REFERENCE = REPO_ROOT / "NeuronClient" / "Font.h"
 
 # ---------------------------------------------------------------------------- what gets baked
 
@@ -142,40 +141,6 @@ def rasterize_face(path: pathlib.Path, size_pixels: int) -> tuple[list[Glyph], d
     return glyphs, metrics
 
 
-def legacy_glyphs() -> tuple[list[Glyph], dict[str, int]]:
-    """The original 8x8 font, read out of the committed Font.h, in the new format.
-
-    Coverage is 0 or 255 and nothing between, so a bake of this face renders exactly what the
-    one-bit atlas rendered. See this file's docstring for why that matters.
-    """
-    data = parse_legacy_font_data(LEGACY_REFERENCE.read_text(encoding="utf-8"))
-    if len(data) != 768:
-        raise SystemExit(f"expected 768 bytes of FONT_DATA, read {len(data)}")
-
-    glyphs: list[Glyph] = []
-    for index in range(96):
-        character = chr(0x20 + index)
-        coverage = bytearray()
-        for row in range(8):
-            bits = data[index * 8 + row]
-            for column in range(8):
-                coverage.append(255 if (bits >> (7 - column)) & 1 else 0)
-        # bearingY is the distance from the baseline to the glyph's top row. The old renderer had no
-        # baseline -- it drew from the top-left of an 8x8 box -- so the baseline sits at the bottom
-        # of that box and every glyph is eight pixels above it.
-        glyphs.append(Glyph(character, 8, 8, 0, 8, 8, bytes(coverage)))
-
-    return glyphs, {"ascent": 8, "descent": 0, "lineHeight": 12}
-
-
-def parse_legacy_font_data(header_text: str) -> bytes:
-    """Pull the 768 hex bytes out of the hand-typed FONT_DATA array."""
-    match = re.search(r"FONT_DATA\s*=\s*\{(.*?)\}\s*;", header_text, re.DOTALL)
-    if not match:
-        raise SystemExit("no FONT_DATA array in " + str(LEGACY_REFERENCE))
-    return bytes(int(value, 16) for value in re.findall(r"0[xX]([0-9a-fA-F]{2})", match.group(1)))
-
-
 # ---------------------------------------------------------------------------- packing
 
 
@@ -218,7 +183,7 @@ def hex_rows(values: bytes, per_row: int = 24, indent: str = "  ") -> str:
     return "\n".join(lines)
 
 
-def emit(faces: list[tuple[str, list[Glyph], dict[str, int]]], sources: list[tuple[str, str]], legacy: bool) -> str:
+def emit(faces: list[tuple[str, list[Glyph], dict[str, int]]], sources: list[tuple[str, str, str]]) -> str:
     width, height, texels = pack([glyphs for _, glyphs, _ in faces])
 
     records, face_rows, first = [], [], 0
@@ -236,13 +201,12 @@ def emit(faces: list[tuple[str, list[Glyph], dict[str, int]]], sources: list[tup
     baker_hash = hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest()
     source_lines = "\n".join(f"//   {marker}{name}  sha256 {digest}" for marker, name, digest in sources)
     stamp = datetime.date.today().isoformat()
-    mode = "the original 8x8 font, carried into this format (see Build/BakeFont.py)" if legacy else "IBM Plex"
 
     body = f"""#pragma once
 
 // GENERATED BY Build/BakeFont.py -- DO NOT EDIT BY HAND.
 //
-// Baked {stamp} from {mode}.
+// Baked {stamp} from IBM Plex (ADR-074).
 // Re-bake with `py Build/BakeFont.py`; Build/CheckProjectFiles.py fails when the hashes below stop
 // matching what is on disk. ADR-073 is why this is committed rather than built.
 //
@@ -292,8 +256,8 @@ struct FontFace
 inline constexpr std::uint32_t FONT_ATLAS_WIDTH = {width};
 inline constexpr std::uint32_t FONT_ATLAS_HEIGHT = {height};
 
-/// Eight-bit COVERAGE, one byte a texel (ADR-074). The legacy bake writes only 0 and 255, which is
-/// what lets a screen drawn from it match the one-bit atlas byte for byte.
+/// Eight-bit COVERAGE, one byte a texel: the pixel shader multiplies it into the string's alpha
+/// (ADR-074). Zero is discarded, so a glyph still paints nothing where it has no ink.
 inline constexpr std::array<std::uint8_t, {len(texels)}> FONT_ATLAS = {{
 {hex_rows(bytes(texels))}
 }};
@@ -316,57 +280,22 @@ inline constexpr std::array<FontFace, {len(faces)}> FONT_FACES = {{{{
 # ---------------------------------------------------------------------------- entry points
 
 
-def self_test() -> int:
-    """The legacy bake must reproduce FONT_DATA exactly -- the one correctness proof available."""
-    glyphs, _ = legacy_glyphs()
-    original = parse_legacy_font_data(LEGACY_REFERENCE.read_text(encoding="utf-8"))
-
-    rebuilt = bytearray()
-    for glyph in glyphs:
-        for row in range(8):
-            bits = 0
-            for column in range(8):
-                if glyph.coverage[row * 8 + column]:
-                    bits |= 1 << (7 - column)
-            rebuilt.append(bits)
-
-    if bytes(rebuilt) == original:
-        print(f"BakeFont self-test: the legacy bake reproduces all {len(original)} bytes of FONT_DATA")
-        return 0
-    mismatches = sum(1 for a, b in zip(rebuilt, original) if a != b)
-    print(f"BakeFont self-test FAILED: {mismatches} of {len(original)} bytes differ", file=sys.stderr)
-    return 1
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Bake the game's fonts into NeuronClient/Font.h.")
-    parser.add_argument("--legacy", action="store_true", help="bake the original 8x8 font instead of Plex")
-    parser.add_argument("--self-test", action="store_true", help="prove the legacy bake round-trips FONT_DATA")
     parser.add_argument("--check", action="store_true", help="report hash drift without writing")
     arguments = parser.parse_args()
 
-    if arguments.self_test:
-        return self_test()
+    faces, sources = [], []
+    for name, file_name, size in FACES:
+        path = FONT_DIRECTORY / file_name
+        if not path.exists():
+            raise SystemExit(f"missing {path}; see ADR-073 for where the TTFs come from")
+        glyphs, metrics = rasterize_face(path, size)
+        faces.append((name, glyphs, metrics))
+        sources.append(("source ", f"Build/Fonts/{file_name} at {size}px",
+                        hashlib.sha256(path.read_bytes()).hexdigest()))
 
-    if arguments.legacy:
-        glyphs, metrics = legacy_glyphs()
-        faces = [(name, glyphs, metrics) for name, _, _ in FACES]
-        # No `source` marker, so the gate does not re-hash it: the legacy bake reads the header it
-        # is about to overwrite, so this is provenance rather than something checkable.
-        sources = [("", "NeuronClient/Font.h as it stood before this bake (provenance only)",
-                    hashlib.sha256(LEGACY_REFERENCE.read_bytes()).hexdigest())]
-    else:
-        faces, sources = [], []
-        for name, file_name, size in FACES:
-            path = FONT_DIRECTORY / file_name
-            if not path.exists():
-                raise SystemExit(f"missing {path}; see ADR-073 for where the TTFs come from")
-            glyphs, metrics = rasterize_face(path, size)
-            faces.append((name, glyphs, metrics))
-            sources.append(("source ", f"Build/Fonts/{file_name} at {size}px",
-                            hashlib.sha256(path.read_bytes()).hexdigest()))
-
-    header = emit(faces, sources, arguments.legacy)
+    header = emit(faces, sources)
     if arguments.check:
         current = OUTPUT_HEADER.read_text(encoding="utf-8") if OUTPUT_HEADER.exists() else ""
         same = current == header

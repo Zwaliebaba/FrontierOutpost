@@ -179,6 +179,21 @@ public:
     }
   }
 
+  // The five characters ADR-014 could not carry, and the whole reason the lookup stopped being
+  // `code - 32`. A font that silently drew them as blanks would look exactly like the old
+  // substitutions, which is why this asserts the codepoint rather than that something was found.
+  // The escapes are \u rather than the characters themselves because two of the five are outside
+  // code page 1252 and MSVC will not put them in a narrow literal -- char32_t is fine, but the
+  // habit is worth keeping where the file is read beside the ones that are not.
+  TEST_METHOD(TheCharactersAdr014SubstitutedAreBaked)
+  {
+    for (const char32_t codepoint : {U'\u00B7', U'\u2212', U'\u2013', U'\u2192', U'\u203A'})
+    {
+      Assert::AreEqual(static_cast<std::uint32_t>(codepoint), Neuron::FontRenderer::GlyphOf(codepoint, Neuron::Face::MonoRegular).codepoint,
+                       L"a character ADR-014 had to substitute is missing from the bake");
+    }
+  }
+
   TEST_METHOD(AnUnbakedCodepointFallsBackToABlank)
   {
     const Neuron::FontGlyph& missing = Neuron::FontRenderer::GlyphOf(U'\u4E2D', Neuron::Face::MonoRegular);
@@ -285,35 +300,55 @@ public:
 TEST_CLASS(FontMetricsTests)
 {
 public:
-  TEST_METHOD(AGlyphIsEightPixelsAtOneTimes)
+  // Plex Mono is 0.600em, so at the 12px it is baked at a column is SEVEN pixels -- one narrower
+  // than the 8x8 font it replaced, which is what gives the rails their extra characters a line. A
+  // line box is ascent 13 plus descent 4.
+  TEST_METHOD(AMonoColumnIsSevenPixels)
   {
-    Assert::AreEqual(8u, Neuron::FontRenderer::AdvancePixels());
-    Assert::AreEqual(8u, Neuron::FontRenderer::GlyphHeightPixels());
-    Assert::AreEqual(16u, Neuron::FontRenderer::AdvancePixels(Neuron::FontRenderer::COUNTDOWN_SCALE));
-    Assert::AreEqual(16u, Neuron::FontRenderer::GlyphHeightPixels(Neuron::FontRenderer::COUNTDOWN_SCALE));
+    Assert::AreEqual(7u, Neuron::FontRenderer::AdvancePixels());
+    Assert::AreEqual(17u, Neuron::FontRenderer::GlyphHeightPixels());
+    Assert::AreEqual(14u, Neuron::FontRenderer::AdvancePixels(Neuron::FontRenderer::COUNTDOWN_SCALE));
+    Assert::AreEqual(34u, Neuron::FontRenderer::GlyphHeightPixels(Neuron::FontRenderer::COUNTDOWN_SCALE));
   }
 
-  TEST_METHOD(MeasuringIsTheAdvanceTimesTheLength)
+  TEST_METHOD(MeasuringSumsTheAdvances)
   {
-    Assert::AreEqual(64u, Neuron::FontRenderer::MeasurePixels("02:14:09"));
-    Assert::AreEqual(128u, Neuron::FontRenderer::MeasurePixels("02:14:09", Neuron::FontRenderer::COUNTDOWN_SCALE));
+    Assert::AreEqual(56u, Neuron::FontRenderer::MeasurePixels("02:14:09"));
+    Assert::AreEqual(112u, Neuron::FontRenderer::MeasurePixels("02:14:09", Neuron::FontRenderer::COUNTDOWN_SCALE));
     Assert::AreEqual(0u, Neuron::FontRenderer::MeasurePixels(""));
   }
 
-  // The digest rail is 300 wide and spends 14 + 8 + 10 + 14 on margins, the dot and the gap,
-  // which leaves 254 -- and at this face's eight-pixel advance that is 31 characters, not 32.
-  // An off-by-one here is copy running under the map.
-  //
-  // THIRTY-ONE IS A FACT ABOUT THE FACE, NOT ABOUT THE RAIL. The rail is 254 pixels wide and
-  // stays 254 pixels wide; what fits in it is the font's to answer (ADR-073). This asserts the
-  // answer for the face that is in the binary today.
-  TEST_METHOD(TheDigestRailFitsThirtyOneCharactersOfThisFace)
+  // The whole point of two families (ADR-074): one holds a column and one does not. A sans that
+  // measured fixed-pitch would mean the bake had picked up the wrong file, which is invisible on
+  // screen until a sentence fails to line up with nothing.
+  TEST_METHOD(MonoHoldsAColumnAndSansDoesNot)
   {
-    constexpr std::string_view LONGER_THAN_THE_RAIL = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
-    Assert::AreEqual(static_cast<size_t>(31), Neuron::FontRenderer::PrefixThatFits(LONGER_THAN_THE_RAIL, 254));
-    Assert::AreEqual(static_cast<size_t>(31), Neuron::FontRenderer::PrefixThatFits(LONGER_THAN_THE_RAIL, 255),
+    for (const Neuron::Face face : {Neuron::Face::MonoRegular, Neuron::Face::MonoMedium, Neuron::Face::MonoSemiBold})
+    {
+      Assert::AreEqual(Neuron::FontRenderer::AdvanceOf(U'i', 1, face), Neuron::FontRenderer::AdvanceOf(U'W', 1, face),
+                       L"a monospaced face advances the same for every glyph");
+    }
+    for (const Neuron::Face face : {Neuron::Face::SansRegular, Neuron::Face::SansMedium})
+    {
+      Assert::IsTrue(Neuron::FontRenderer::AdvanceOf(U'i', 1, face) < Neuron::FontRenderer::AdvanceOf(U'W', 1, face),
+                     L"a proportional face must not advance an 'i' as far as a 'W'");
+    }
+  }
+
+  // The digest rail is 300 wide and spends 14 + 8 + 10 + 14 on margins, the dot and the gap,
+  // which leaves 254 -- and at this face's seven-pixel column that is 36 characters. It was 31
+  // under the 8x8 font: the rail did not change, the face did.
+  //
+  // THIRTY-SIX IS A FACT ABOUT THE FACE, NOT ABOUT THE RAIL. The rail is 254 pixels wide and stays
+  // 254 pixels wide; what fits in it is the font's to answer (ADR-073). This asserts the answer for
+  // the face that is in the binary today, and it is SUPPOSED to move when the face does.
+  TEST_METHOD(TheDigestRailFitsThirtySixCharactersOfThisFace)
+  {
+    constexpr std::string_view LONGER_THAN_THE_RAIL = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+    Assert::AreEqual(static_cast<size_t>(36), Neuron::FontRenderer::PrefixThatFits(LONGER_THAN_THE_RAIL, 254));
+    Assert::AreEqual(static_cast<size_t>(36), Neuron::FontRenderer::PrefixThatFits(LONGER_THAN_THE_RAIL, 255),
                      L"a part-character does not fit");
-    Assert::AreEqual(static_cast<size_t>(0), Neuron::FontRenderer::PrefixThatFits(LONGER_THAN_THE_RAIL, 7));
+    Assert::AreEqual(static_cast<size_t>(0), Neuron::FontRenderer::PrefixThatFits(LONGER_THAN_THE_RAIL, 6));
   }
 };
 
