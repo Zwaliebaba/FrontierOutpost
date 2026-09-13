@@ -172,6 +172,10 @@ the tree.
 - `06-at-lock.png`, `06-at-lock-sheet.png`, `01-finished.png` retaken.
 
 ### 2.3 Fleet rows grouped by system
+**Done 2026-09-14 — ADR-086.** Built. The row-link bullet below was corrected before the work
+started (it described ADR-077's behaviour backwards); the rail's tap tests scan for dividers and
+controls rather than coordinates, so they survived the new geometry unchanged.
+
 **Problem.** `FLT 13 10 HOLD HOLLIS` — fleet id and ship count are two bare numbers at equal weight; ten rows say `HOLD`.
 
 **Change.** `DrawLocksRail`, FLEETS section:

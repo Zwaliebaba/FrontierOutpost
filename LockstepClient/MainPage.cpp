@@ -990,6 +990,7 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // The purse, beside the score and in the same weight (ADR-053). It is the number every build
   // on the screen is priced against, and it belongs where the eye already goes for the score
   // rather than inside a sentence on the production card.
+
   const std::string credits = std::format("{} CR", m_state.player.credits);
   DrawRight(_text, cursor, centered, credits, Ink::TEXT_PRIMARY);
   cursor -= static_cast<float>(FontRenderer::MeasurePixels(credits)) + 14.0F;
@@ -1523,7 +1524,11 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   /// the order surface -- it takes the eye to the thing the row names, which is the question a
   /// player reading this column keeps having to answer somewhere else. `Action::None` is a row with
   /// nothing to point at, and it is not a target and draws no hover.
-  const auto row = [&](std::string_view _label, std::string_view _status, const Color& _statusColor, Action _action, std::int32_t _index)
+  /// `_dimHead` is how many BYTES at the front of the label are drawn muted (ADR-086): a fleet row
+  /// is `FLT 3 · 3` and the id is the half a player is not scanning for. It applies to the first
+  /// wrapped line only, which is the only line a head can be on.
+  const auto row = [&](std::string_view _label, std::string_view _status, const Color& _statusColor, Action _action, std::int32_t _index,
+                       std::size_t _dimHead = 0)
   {
     const std::int32_t lineY = static_cast<std::int32_t>(y);
     const auto room = static_cast<std::uint32_t>(contentRight - contentX - static_cast<float>(FontRenderer::MeasurePixels(_status)) - 8.0F);
@@ -1545,11 +1550,29 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
     for (std::size_t index = 0; index < wrapped.size(); ++index)
     {
-      _text.DrawText(static_cast<std::int32_t>(contentX), lineY + static_cast<std::int32_t>(index) * LINE_HEIGHT, wrapped[index],
-                     Ink::TEXT_PRIMARY);
+      const std::int32_t at = lineY + static_cast<std::int32_t>(index) * LINE_HEIGHT;
+      if (index == 0 && _dimHead > 0 && _dimHead < wrapped[0].size())
+      {
+        const std::string_view head{wrapped[0].data(), _dimHead};
+        const std::string_view tail{wrapped[0].data() + _dimHead, wrapped[0].size() - _dimHead};
+        _text.DrawText(static_cast<std::int32_t>(contentX), at, head, Ink::TEXT_MUTED);
+        _text.DrawText(static_cast<std::int32_t>(contentX) + static_cast<std::int32_t>(FontRenderer::MeasurePixels(head)), at, tail,
+                       Ink::TEXT_PRIMARY);
+        continue;
+      }
+      _text.DrawText(static_cast<std::int32_t>(contentX), at, wrapped[index], Ink::TEXT_PRIMARY);
     }
     DrawRight(_text, contentRight, lineY, _status, _statusColor);
     y += height;
+  };
+
+  /// A sub-band inside a section: a muted label over the rows it groups, never a target (ADR-086).
+  /// Lighter than `section` -- no rule and no count -- because it divides a list rather than
+  /// starting one.
+  const auto band = [&](std::string_view _label)
+  {
+    _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), _label, Ink::TEXT_MUTED);
+    y += static_cast<float>(LINE_HEIGHT) + 2.0F;
   };
 
   const auto nothing = [&](std::string_view _text2)
@@ -1575,49 +1598,85 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     nothing("- none -");
   }
-  for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
+
+  // **Grouped by where they are** (ADR-086). Ten rows reading `FLT 13 10 HOLD HOLLIS` is the
+  // system name repeated ten times, the word `HOLD` repeated ten times, and two bare numbers at
+  // equal weight -- so the one thing a player is scanning for, which of their systems is strong, is
+  // the thing the column says least clearly. The system goes on a band and the rows under it carry
+  // what differs.
+  //
+  // **A FLEETS row opens the picker, and for a standing fleet it is the only thing that does**
+  // (ADR-077). The map draws no marker for a fleet that is not moving, and the digest's `MOVE` is a
+  // standing move offered only when nothing else can be acted on (ADR-056). A fleet already on a
+  // lane opens nothing, because the lock would refuse a second order on it, and focuses where it is
+  // going instead. At the lock every row focuses (ADR-060).
+  const auto fleetRow = [&](std::size_t _index, std::string_view _tail, std::string_view _status, const Color& _statusColor)
   {
-    const Fleet& fleet = m_state.fleets[index];
-    if (fleet.owner != m_state.viewer)
-    {
-      continue;
-    }
-
-    const bool moving = fleet.eta > 0 && fleet.to != fleet.from;
-    const SystemNode* destination = fleet.to >= 0 && fleet.to < static_cast<std::int32_t>(m_state.graph.systems.size())
-                                      ? &m_state.graph.systems[static_cast<std::size_t>(fleet.to)]
-                                      : nullptr;
-    const std::string where = destination == nullptr ? std::string{} : Uppercased(destination->name);
-
-    // `FLT3 14 > KEPLER-REACH` moving, `FLT1 9 HOLD VESK` standing (SCREENS.md 01).
-    const std::string label = moving ? std::format("{} {} → {}", Uppercased(fleet.name), fleet.ships, where)
-                                     : std::format("{} {} HOLD {}", Uppercased(fleet.name), fleet.ships, where);
-
-    // **A FLEETS row opens the picker, and for a standing fleet it is the only thing that does**
-    // (ADR-077). The map draws no marker for a fleet that is not moving, and the digest's `MOVE`
-    // is a standing move offered only when nothing else on it can be acted on (ADR-056) -- so a
-    // tick that reports one build left this column naming a fleet nothing could order.
-    //
-    // A fleet already on a lane opens nothing, because the lock would refuse a second order on it,
-    // and focuses where it is going instead. At the lock every row focuses (ADR-060).
+    const Fleet& fleet = m_state.fleets[_index];
+    const std::string name = Uppercased(fleet.name);
     const bool orderable = !navigateOnly && !fleet.underWay;
-    const Action fleetAction = orderable ? Action::OpenFleet : Action::FocusSystem;
-    const std::int32_t fleetTarget = orderable ? static_cast<std::int32_t>(index) : fleet.to;
+    row(std::format("{} · {}{}", name, fleet.ships, _tail), _status, _statusColor, orderable ? Action::OpenFleet : Action::FocusSystem,
+        orderable ? static_cast<std::int32_t>(_index) : fleet.to, name.size());
+  };
 
-    // The verdict tokens the design asks for -- LOSE, +DEF -- are the combat preview's, and the
-    // preview is a sentence today rather than a verdict. Until the digest's verdict box is built
-    // this says the fact the state actually carries: when it arrives, or that it is dug in.
-    if (moving)
+  const auto nameOfSystem = [&](std::int32_t _at)
+  {
+    return _at >= 0 && _at < static_cast<std::int32_t>(m_state.graph.systems.size())
+             ? Uppercased(m_state.graph.systems[static_cast<std::size_t>(_at)].name)
+             : std::string{"THE DARK"};
+  };
+
+  // The systems holding something of yours, in the order the snapshot listed the fleets: stable
+  // between two frames of one state, which is what stops the column reordering under a finger.
+  std::vector<std::int32_t> standingAt;
+  for (const Fleet& fleet : m_state.fleets)
+  {
+    if (fleet.owner == m_state.viewer && !fleet.OnALane() && std::ranges::find(standingAt, fleet.to) == standingAt.end())
     {
-      row(label, std::format("T{}", fleet.eta), Ink::TEXT_MUTED, fleetAction, fleetTarget);
+      standingAt.push_back(fleet.to);
     }
-    else if (fleet.status.find("incumbent") != std::string::npos)
+  }
+
+  for (const std::int32_t at : standingAt)
+  {
+    std::uint32_t ships = 0;
+    for (const Fleet& fleet : m_state.fleets)
     {
-      row(label, "+DEF", Ink::BLUE, fleetAction, fleetTarget);
+      ships += fleet.owner == m_state.viewer && !fleet.OnALane() && fleet.to == at ? fleet.ships : 0U;
     }
-    else
+    band(std::format("{} · {} {}", nameOfSystem(at), ships, ships == 1 ? "SHIP" : "SHIPS"));
+
+    for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
     {
-      row(label, "HOLD", Ink::TEXT_MUTED, fleetAction, fleetTarget);
+      const Fleet& fleet = m_state.fleets[index];
+      if (fleet.owner != m_state.viewer || fleet.OnALane() || fleet.to != at)
+      {
+        continue;
+      }
+
+      // **No right-hand column on a holding row**, because the band above it already said where and
+      // `HOLD` said nothing else. The one exception is the fact that is not implied by standing
+      // still: that this fleet is the incumbent and fights with the defender's bonus.
+      const bool incumbent = fleet.status.find("incumbent") != std::string::npos;
+      fleetRow(index, std::string_view{}, incumbent ? "+DEF" : std::string_view{}, incumbent ? Ink::BLUE : Ink::TEXT_MUTED);
+    }
+  }
+
+  // Everything in transit under one band, because where they are is a lane rather than a place and
+  // the thing they have in common is that none of them can be ordered.
+  const bool anyUnderWay = std::any_of(m_state.fleets.begin(), m_state.fleets.end(),
+                                       [this](const Fleet& _fleet) { return _fleet.owner == m_state.viewer && _fleet.OnALane(); });
+  if (anyUnderWay)
+  {
+    band("UNDER WAY");
+    for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
+    {
+      const Fleet& fleet = m_state.fleets[index];
+      if (fleet.owner != m_state.viewer || !fleet.OnALane())
+      {
+        continue;
+      }
+      fleetRow(index, std::format(" → {}", nameOfSystem(fleet.to)), std::format("T{}", fleet.eta), Ink::TEXT_MUTED);
     }
   }
 

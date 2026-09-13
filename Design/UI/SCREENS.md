@@ -92,9 +92,12 @@ for that draws it in the middle. `01-orders-queued.png` is the ordered-but-unloc
 `01-fleet-under-way.png` the same fleet a tick out.
 
 **Locks rail (260px, right) — orders no order, links to all of them (`DrawLocksRail`).** `LOCKS T8`
-/ `UNLOCKED` (amber); one line of help; sections `FLEETS n` (rows `FLT 1 10 > PELL` with `T9`, or
-`FLT 1 10 HOLD DOTHAN` with `HOLD`, `+DEF` in blue when it is the incumbent), `BUILDS 2 AVAIL - 26
-CR` (queued rows `SHIPYARD L1 - PELL` / `QUEUED -20`, then a row per build already rising,
+/ `UNLOCKED` (amber); one line of help; sections `FLEETS n` — **grouped by where they are**
+(ADR-086): a muted band per system holding something of yours, `DOTHAN · 10 SHIPS`, with rows
+`FLT 1 · 10` under it (the id muted, the count primary) and no right-hand column unless the fleet is
+the incumbent, when it carries `+DEF` in blue; everything in transit under one `UNDER WAY` band as
+`FLT 8 · 4 → PELL` with `T9`. The band's total is the same number the map's garrison badge carries.
+`BUILDS 2 AVAIL - 26 CR` (queued rows `SHIPYARD L1 - PELL` / `QUEUED -20`, then a row per build already rising,
 `SHIPYARD L1 - DOTHAN` / `T5` in muted ink — the form FLEETS uses for a fleet under way, ADR-070 —
 a `- 6 cr left at the lock -` line, `- nothing queued -` otherwise), `SIGNALS 9 TO SEND ›` (rows
 `SENDING`, a concede in red), `PROPOSALS 1 OPEN` (rows `P3 LANE` / `3 TICKS` amber). Footer

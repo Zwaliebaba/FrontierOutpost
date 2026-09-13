@@ -240,10 +240,15 @@ Semantic / owner (ADR-027: you are always blue)
   nine; blue border when selected.
 - **Tabs (unread ticks)** — not built.
 - **Locks list row** — label primary left, wrapped to leave room; status right, coloured:
-  `T7`/`HOLD` muted, `+DEF`/`QUEUED -20`/`SENDING` blue, `PROPOSE`/`3 TICKS` amber, `CONCEDE` red.
-  A row is a **link** to what it names (ADR-060) — the build sheet, the fleet's location or
-  destination picker, the far end of a proposed lane — and gives no order; a row with nothing to
-  point at is not a target. `HOVER_FILL` under the pointer, on targets only. Focus-only at the lock.
+  `T7` muted, `+DEF`/`QUEUED -20`/`SENDING` blue, `PROPOSE`/`3 TICKS` amber, `CONCEDE` red. A row
+  may carry a **muted head** — the bytes at the front drawn in `TEXT_MUTED`, for the half that names
+  rather than measures: `FLT 3` in `FLT 3 · 3` (ADR-086). A row is a **link** to what it names
+  (ADR-060) — the build sheet, the fleet's destination picker, the far end of a proposed lane — and
+  gives no order; a row with nothing to point at is not a target. `HOVER_FILL` under the pointer, on
+  targets only. Focus-only at the lock.
+- **Locks list band** — a muted label grouping the rows under it, no rule and no count, never a
+  target (ADR-086): `DOTHAN · 10 SHIPS` over that system's fleets, `UNDER WAY` over the ones in
+  transit. Lighter than a section header, which starts a list rather than dividing one.
 
 ## Copy
 - Ops-console terse, numbers first, ` - ` between facts: `PRODUCTION +17`, `CLAIMED PELL`,
