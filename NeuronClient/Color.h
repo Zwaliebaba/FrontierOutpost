@@ -51,7 +51,11 @@ struct Color
   const auto channel = [toward](std::uint8_t _a, std::uint8_t _b)
   {
     const float mixed = static_cast<float>(_a) + (static_cast<float>(_b) - static_cast<float>(_a)) * toward;
-    return static_cast<std::uint8_t>(mixed + 0.5F);
+    // Rounded half up, spelled as a floor and a comparison rather than as `+ 0.5` cast to an
+    // integer: `mixed` is never negative, so the two agree, and the spelled-out form is the one
+    // that stays constexpr and the one clang-tidy accepts.
+    const auto whole = static_cast<std::uint32_t>(mixed);
+    return static_cast<std::uint8_t>(mixed - static_cast<float>(whole) >= 0.5F ? whole + 1U : whole);
   };
   return Color{channel(_from.red, _to.red), channel(_from.green, _to.green), channel(_from.blue, _to.blue),
                channel(_from.alpha, _to.alpha)};

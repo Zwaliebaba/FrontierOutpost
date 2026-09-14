@@ -481,8 +481,9 @@ void DrawStationGround(ShapeRenderer& _shapes, Neuron::MeshRenderer& _meshes, co
   // The stem, with a rung every ten units so its height is a reading and not only a comparison.
   const Color stemInk = WithAlpha(owner, Ink::STATION_STEM_ALPHA);
   _shapes.Line(station.ground.xPixels, station.ground.yPixels, station.top.xPixels, station.top.yPixels, stemInk);
-  for (float height = STEM_RUNG_SPACING; height < station.stemHeight; height += STEM_RUNG_SPACING)
+  for (std::uint32_t step = 1; static_cast<float>(step) * STEM_RUNG_SPACING < station.stemHeight; ++step)
   {
+    const float height = static_cast<float>(step) * STEM_RUNG_SPACING;
     const Neuron::OrbitCamera::ScreenPoint rung = _frame.view.Camera().Project(MapView::Above(node.positionX, node.positionY, height));
     if (rung.visible)
     {
