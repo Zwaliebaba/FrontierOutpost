@@ -1,6 +1,6 @@
 # ADR-012 — A lit face is one of two authored colours, chosen per face
 
-**Status:** Deprecated by ADR-015 — `MeshRenderer`, `Mesh` and the mesh shaders were deleted on 2026-09-10. There are no authored meshes in the tree and nothing is lit.
+**Status:** Deprecated by ADR-015 — `MeshRenderer`, `Mesh` and the mesh shaders were deleted on 2026-09-10. **Its rule is taken up again by ADR-103 (2026-09-14)**, which lights the map's stations between two authored tones chosen per pixel rather than per face; nothing else here is revived.
 
 **Date:** 2026-09-10
 **Decided by:** Build session for ADR-011. The owner decided that the named colours survive the
