@@ -360,12 +360,16 @@ Drawn, in painter's order (`MapRender.cpp`):
   it and stopping a ball's radius short of the top (ADR-105); a capital's halo at 2.4×;
   then the ball (radius 4.5·1.15, capital 6·1.15). Both are shaded by one world-fixed key light
   (normalize(−0.85, 0.45, 0.10), raked across the opening framing rather than sitting behind the
-  eye) into exactly four authored tones chosen per pixel (ADR-104, ADR-105), by two thresholds on
-  the light and one on the view: the owner's colour where the light finds it squarely,
-  `Ink::HalfLit` where it only grazes, `Ink::Shaded` where it misses, and `Ink::Rimmed` on the limb
-  the light gets past — so the bands are hard curves that turn as the camera orbits. The rim only
-  ever repaints what the light misses, and a FLAT-faced solid switches it off (`Ink::FlatRampFor`),
-  because a low dot(normal, toViewer) means "limb" on a sphere and "oblique" on a column.
+  eye) into exactly five authored tones chosen per pixel (ADR-104, ADR-105, ADR-106), by two
+  thresholds on the light, one on the view and one on the half-vector: the owner's colour where the
+  light finds it squarely, `Ink::HalfLit` where it only grazes, `Ink::Shaded` where it misses,
+  `Ink::Rimmed` on the limb the light gets past, and `Ink::Glinted` in the four-or-five-pixel
+  highlight where it bounces straight back — so the bands are hard curves that turn as the camera
+  orbits. The rim and the glint only ever repaint what they are entitled to, and a FLAT-faced solid
+  switches both off (`Ink::FlatRampFor`), because a low dot(normal, toViewer) means "limb" on a
+  sphere and merely "oblique" on a column, and a flat face's half-vector dot is constant across its
+  whole area. **There is no dither**: it was built, measured and rejected at this ball size
+  (ADR-106).
   **The shadow is cast along its own steeper direction** (normalize(−0.51, 0.86, 0.06)), landing at
   0.60 of the stem's height rather than the key light's honest 1.9 — which would put a rich
   capital's shadow 118 units away, across its neighbour. Under the
@@ -384,7 +388,10 @@ Drawn, in painter's order (`MapRender.cpp`):
   number in their colour at full strength, and focuses like the disc does. A fleet is drawn as a
   badge or as a marker on a lane, never as both (`Fleet::OnALane`). Legend: a blue chip and
   `SHIPS HOLDING`, because the number is ships and not fleets.
-- A fleet in transit: a 14-unit stem, an arrowhead pointing along the lane in world space, and
+- A fleet in transit: a 14-unit tether and a **dart** — a directed octahedron 10 world units along
+  its lane and 4.4 across, drawn in the mesh pass so it is depth-tested against the stations and
+  catches the same light (ADR-106), where it used to be a flat arrowhead in the overlay that drew
+  over the very station it was behind. It still points along the lane in world space, and
   `FLT 1 - ETA T6` — yours above the head, a rival's beside and below, so two converging on one
   system cannot overlap. The marker is clamped a label's half-width (68px) clear of both ends, and a
   lane too short for that draws it in the middle (ADR-059).

@@ -2325,6 +2325,15 @@ public:
       Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.halfLitColor).alpha);
       Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.darkColor).alpha);
       Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.rimColor).alpha);
+
+      // The glint is either brighter than the lit face -- a ball -- or exactly it, which is how a
+      // flat-faced solid opts out (`Ink::FlatRampFor`). Anything between would be a tone nobody
+      // chose for either (ADR-106).
+      const bool glintLifts = Neuron::Luminance(Unpack(vertex.glintColor)) > Neuron::Luminance(Unpack(vertex.litColor));
+      const bool glintOff = Unpack(vertex.glintColor).red == Unpack(vertex.litColor).red &&
+                            Unpack(vertex.glintColor).green == Unpack(vertex.litColor).green &&
+                            Unpack(vertex.glintColor).blue == Unpack(vertex.litColor).blue;
+      Assert::IsTrue(glintLifts || glintOff, L"a glint tone that neither lifts nor is switched off");
     }
   }
 

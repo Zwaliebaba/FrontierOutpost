@@ -65,7 +65,7 @@ void MeshBackend::CreatePipeline(ID3D12Device* _device)
   winrt::check_hresult(
     _device->CreateRootSignature(0, serialized->GetBufferPointer(), serialized->GetBufferSize(), IID_PPV_ARGS(m_rootSignature.put())));
 
-  const std::array<D3D12_INPUT_ELEMENT_DESC, 6> inputLayout = {
+  const std::array<D3D12_INPUT_ELEMENT_DESC, 7> inputLayout = {
     D3D12_INPUT_ELEMENT_DESC{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(MeshRenderer::MeshVertex, x),
                              D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
     D3D12_INPUT_ELEMENT_DESC{"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(MeshRenderer::MeshVertex, nx),
@@ -77,6 +77,8 @@ void MeshBackend::CreatePipeline(ID3D12Device* _device)
     D3D12_INPUT_ELEMENT_DESC{"COLOR", 2, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(MeshRenderer::MeshVertex, darkColor),
                              D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
     D3D12_INPUT_ELEMENT_DESC{"COLOR", 3, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(MeshRenderer::MeshVertex, rimColor),
+                             D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+    D3D12_INPUT_ELEMENT_DESC{"COLOR", 4, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(MeshRenderer::MeshVertex, glintColor),
                              D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
   };
 

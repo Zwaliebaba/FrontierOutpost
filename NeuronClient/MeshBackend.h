@@ -33,7 +33,7 @@ public:
 
 private:
   /// A float4x4 and two padded float3s, which is what the mesh shaders' cbuffer declares: sixteen
-  /// for the camera, four for the light, four for the eye the rim term is measured from.
+  /// for the camera, four for the light, four for the eye the rim and the glint are measured from.
   static constexpr std::uint32_t CONSTANT_COUNT = 24;
 
   void CreateVertexBuffer(ID3D12Device* _device);

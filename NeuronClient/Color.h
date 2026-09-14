@@ -118,6 +118,11 @@ struct ColorRamp
   Color halfLit;
   Color lit;
   Color rim;
+  /// The glint where the light bounces straight back at the eye. A SPOT rather than a band, which
+  /// is why it earns a tone on a surface too small for a fifth step of the diffuse ramp -- it does
+  /// not compete for band width (ADR-106). Equal to `lit` switches it off, which is how a flat-
+  /// faced solid opts out, exactly as `rim` equal to `shaded` switches the silhouette off.
+  Color glint;
 };
 
 } // namespace Neuron

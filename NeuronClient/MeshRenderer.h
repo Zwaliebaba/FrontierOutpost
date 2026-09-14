@@ -25,12 +25,12 @@ namespace Neuron
 /// drains it and is the only half that knows about D3D12 (ADR-075). Every page and every test talks
 /// to this type; a headless test can tessellate a sphere and count its triangles without a device.
 ///
-/// **A vertex carries four authored tones and the GPU picks one per pixel** -- two thresholds on
-/// the light choose between the shadow, the grazed band and the lit band, and a threshold on the
-/// view picks the silhouette. Never a fifth value (ADR-012's rule, kept while its count was
-/// dropped: ADR-104, ADR-105). The normal is what the choice is made from, so it is interpolated;
-/// the tones are not, because a tone that interpolated would be exactly the gradient the rule
-/// forbids.
+/// **A vertex carries five authored tones and the GPU picks one per pixel** -- two thresholds on
+/// the light choose between the shadow, the grazed band and the lit band, a threshold on the view
+/// picks the silhouette, and one on the half-vector picks the glint. Never a value that is not one
+/// of them (ADR-012's rule, kept while its count was dropped: ADR-104, ADR-105, ADR-106). The
+/// normal is what the choices are made from, so it is interpolated; the tones are not, because a
+/// tone that interpolated would be exactly the gradient the rule forbids.
 ///
 /// Nothing here is anti-aliased and nothing blends, like everything else in this renderer
 /// (ADR-011, ADR-014). A ball's edge is a staircase, and a tone is a tone.
@@ -39,7 +39,7 @@ class MeshRenderer
 public:
   using WorldPoint = OrbitCamera::WorldPoint;
 
-  /// A world position, a unit normal, and the four tones. R8: a public aggregate handed to the
+  /// A world position, a unit normal, and the five tones. R8: a public aggregate handed to the
   /// GPU, so plain fields -- and public, because a backend is what hands it over.
   struct MeshVertex
   {
@@ -56,6 +56,8 @@ public:
     /// authored tone and not a computed one: the shader selects it exactly as it selects the
     /// others, so a pixel is still a colour somebody named (ADR-104).
     std::uint32_t rimColor;
+    /// The glint. See `ColorRamp::glint`.
+    std::uint32_t glintColor;
   };
 
   /// One batch of recorded vertices, and where it sits in this frame's recording. The index is not
@@ -153,9 +155,15 @@ public:
   void Column(const WorldPoint& _foot, float _height, float _halfWidth, const ColorRamp& _tones);
 
   /// Eight faces, flat: every vertex of a face carries the face's own normal, so the light chooses
-  /// one tone per face exactly as ADR-012 had it. `_halfWidth` is the reach along x and z,
-  /// `_halfHeight` along y.
-  void Octahedron(const WorldPoint& _center, float _halfWidth, float _halfHeight, const ColorRamp& _tones);
+  /// one tone per face exactly as ADR-012 had it.
+  ///
+  /// **It is DIRECTED, which is what lets it replace an arrowhead** (ADR-106). `_forward` is the way
+  /// it points, in the ground plane; `_halfLength` is its reach along that, `_halfWidth` across it
+  /// and `_halfHeight` up. A fleet marker has to say which way the fleet is going, so a symmetric
+  /// solid would have thrown away the one thing the flat triangle it replaces was carrying. Equal
+  /// length and width give the symmetric octahedron back.
+  void Octahedron(const WorldPoint& _center, const WorldPoint& _forward, float _halfLength, float _halfWidth, float _halfHeight,
+                  const ColorRamp& _tones);
 
   /// Everything recorded since the last take, and marks it taken. Empty when nothing is new. The
   /// span points into this recorder and stays valid until the next `BeginFrame`.

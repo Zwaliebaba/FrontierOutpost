@@ -86,6 +86,10 @@ inline constexpr float STATION_HALF_SHADE = 0.30F;
 /// is still that rival.
 inline constexpr float STATION_RIM = 0.45F;
 
+/// How far the glint is lifted toward white -- further than the rim, because it is the brightest
+/// thing on a station and the one that says the surface is hard rather than matte (ADR-106).
+inline constexpr float STATION_GLINT = 0.75F;
+
 /// The station's inks, as alphas over the owner's colour: its contact shadow (black), the disc it
 /// stands on, the dashed footprint whose reach is its yield, the stem whose height is its yield,
 /// and the yield written under its foot.
@@ -114,16 +118,26 @@ inline constexpr std::uint8_t STATION_YIELD_ALPHA = 190;
   return Neuron::Mix(_lit, Neuron::WHITE, STATION_RIM);
 }
 
+/// The highlight's tone for a lit one.
+[[nodiscard]] constexpr Neuron::Color Glinted(const Neuron::Color& _lit) noexcept
+{
+  return Neuron::Mix(_lit, Neuron::WHITE, STATION_GLINT);
+}
+
 /// A surface's whole ramp from one lit colour: the four tones the mesh pass chooses between
 /// (ADR-105). **Derived rather than authored four times over**, so an owner colour is still the one
 /// thing a caller states -- which is what keeps twelve owners from becoming forty-eight literals.
 [[nodiscard]] constexpr Neuron::ColorRamp RampFor(const Neuron::Color& _lit) noexcept
 {
-  return Neuron::ColorRamp{Shaded(_lit), HalfLit(_lit), _lit, Rimmed(_lit)};
+  return Neuron::ColorRamp{Shaded(_lit), HalfLit(_lit), _lit, Rimmed(_lit), Glinted(_lit)};
 }
 
 /// The same ramp for a FLAT-FACED solid, with the silhouette tone turned off by setting it to the
 /// shadow -- which is what ADR-104's strict-superset property is for.
+///
+/// The glint is switched off the same way, by passing the lit tone: a flat face's half-vector dot
+/// is constant across the whole face, so a face that crossed the threshold would turn white all at
+/// once rather than carrying a highlight.
 ///
 /// **A rim is a curved-surface effect and a flat face cannot have one.** The shader reads a low
 /// dot(normal, toViewer) as "this is the limb", which is true on a sphere and false on a column: a
@@ -132,7 +146,7 @@ inline constexpr std::uint8_t STATION_YIELD_ALPHA = 190;
 /// existed, as a stem with a white side (ADR-105).
 [[nodiscard]] constexpr Neuron::ColorRamp FlatRampFor(const Neuron::Color& _lit) noexcept
 {
-  return Neuron::ColorRamp{Shaded(_lit), HalfLit(_lit), _lit, Shaded(_lit)};
+  return Neuron::ColorRamp{Shaded(_lit), HalfLit(_lit), _lit, Shaded(_lit), _lit};
 }
 
 // The ramp runs the right way round at every step, as ADR-012 had every pair asserted: a station is
@@ -144,6 +158,8 @@ static_assert(Neuron::Luminance(BLUE) < Neuron::Luminance(Rimmed(BLUE)));
 static_assert(Neuron::Luminance(Shaded(AMBER)) < Neuron::Luminance(HalfLit(AMBER)));
 static_assert(Neuron::Luminance(HalfLit(AMBER)) < Neuron::Luminance(AMBER));
 static_assert(Neuron::Luminance(AMBER) < Neuron::Luminance(Rimmed(AMBER)));
+static_assert(Neuron::Luminance(Rimmed(BLUE)) < Neuron::Luminance(Glinted(BLUE)));
+static_assert(Neuron::Luminance(Rimmed(AMBER)) < Neuron::Luminance(Glinted(AMBER)));
 
 } // namespace Ink
 

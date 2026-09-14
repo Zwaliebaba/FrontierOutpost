@@ -112,6 +112,14 @@ constexpr Neuron::OrbitCamera::WorldPoint SHADOW_DIRECTION = {-0.50916F, 0.85858
 /// a 1px line never could (ADR-105).
 constexpr float STEM_HALF_WIDTH = 1.2F;
 
+/// A fleet's marker, in world units (ADR-106). It is a DART -- an octahedron stretched along the
+/// lane -- rather than the flat triangle it replaces, so it is depth-tested against the stations (a
+/// fleet behind a system used to draw in front of it) and it catches the same light. Longer than it
+/// is wide, because the one thing the triangle carried was which way the fleet is going.
+constexpr float FLEET_HALF_LENGTH = 5.0F;
+constexpr float FLEET_HALF_WIDTH = 2.2F;
+constexpr float FLEET_HALF_HEIGHT = 2.2F;
+
 /// The garrison badge beside a system's name (ADR-079). 16 is the `LOCKED` chip's height, which is
 /// what a chip is on this screen; there is no rounded-rectangle primitive and every other chip here
 /// is square, so this one is too.
@@ -734,8 +742,9 @@ struct FleetMarker
   return marker;
 }
 
-/// The fleet's stem, under the balls with the stations' stems.
-void DrawFleetStem(ShapeRenderer& _shapes, const MapFrame& _frame, std::int32_t _index)
+/// The fleet's tether into the shape recorder and its dart into the mesh recorder, with the
+/// stations' stems and balls (ADR-106).
+void DrawFleetGround(ShapeRenderer& _shapes, Neuron::MeshRenderer& _meshes, const MapFrame& _frame, std::int32_t _index)
 {
   const Fleet& fleet = _frame.state.fleets[static_cast<std::size_t>(_index)];
   const FleetMarker marker = PlaceFleet(_frame, fleet);
@@ -746,14 +755,24 @@ void DrawFleetStem(ShapeRenderer& _shapes, const MapFrame& _frame, std::int32_t 
 
   const Color owner = OwnerColor(fleet.owner, _frame.state.viewer);
   _shapes.Line(marker.foot.xPixels, marker.foot.yPixels, marker.head.xPixels, marker.head.yPixels, WithAlpha(owner, 153));
+
+  // The dart points along the lane IN WORLD SPACE, so it turns with the camera and keeps meaning
+  // "that way" rather than "that way on the screen when the map happened to be seen from the
+  // front" -- which is what the projected arrowhead it replaces was careful about too.
+  const SystemNode& from = _frame.state.graph.systems[static_cast<std::size_t>(fleet.from)];
+  const SystemNode& to = _frame.state.graph.systems[static_cast<std::size_t>(fleet.to)];
+  const Neuron::OrbitCamera::WorldPoint ahead = {to.positionX - from.positionX, 0.0F, to.positionY - from.positionY};
+
+  // A flat-faced solid, so no rim and no glint: its faces are oblique across their whole area and
+  // would trip both (`Ink::FlatRampFor`).
+  _meshes.Octahedron(MapView::Above(marker.designX, marker.designY, FLEET_HOVER), ahead, FLEET_HALF_LENGTH, FLEET_HALF_WIDTH,
+                     FLEET_HALF_HEIGHT, Ink::FlatRampFor(BallTone(owner)));
 }
 
-/// The arrowhead, the label and the hit, over the balls: a marker a ball could cover is a fleet the
-/// player cannot see is there.
-void DrawFleetOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame, std::vector<MapHit>& _hits, LabelField& _labels,
-                      std::int32_t _index)
+/// The label and the hit, over the balls. The marker itself is a solid now and is drawn with them
+/// (ADR-106); what stays here is the ink a ball must not cover.
+void DrawFleetOverlay(FontRenderer& _text, const MapFrame& _frame, std::vector<MapHit>& _hits, LabelField& _labels, std::int32_t _index)
 {
-  const Neuron::OrbitCamera& camera = _frame.view.Camera();
   const Fleet& fleet = _frame.state.fleets[static_cast<std::size_t>(_index)];
   const FleetMarker marker = PlaceFleet(_frame, fleet);
   if (!marker.visible)
@@ -761,34 +780,8 @@ void DrawFleetOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFram
     return;
   }
 
-  const SystemNode& from = _frame.state.graph.systems[static_cast<std::size_t>(fleet.from)];
-  const SystemNode& to = _frame.state.graph.systems[static_cast<std::size_t>(fleet.to)];
   const Neuron::OrbitCamera::ScreenPoint& head = marker.head;
   const Color owner = OwnerColor(fleet.owner, _frame.state.viewer);
-
-  // The arrowhead points along the lane IN WORLD SPACE and is then projected, so it turns with the
-  // camera and keeps meaning "that way" rather than "that way on the screen when the map happened
-  // to be seen from the front".
-  const Neuron::OrbitCamera::ScreenPoint ahead = camera.Project(MapView::Above(
-    marker.designX + (to.positionX - from.positionX) * 0.02F, marker.designY + (to.positionY - from.positionY) * 0.02F, FLEET_HOVER));
-  float dirX = 1.0F;
-  float dirY = 0.0F;
-  if (ahead.visible)
-  {
-    const float runX = ahead.xPixels - head.xPixels;
-    const float runY = ahead.yPixels - head.yPixels;
-    const float run = std::sqrt(runX * runX + runY * runY);
-    if (run > 0.001F)
-    {
-      dirX = runX / run;
-      dirY = runY / run;
-    }
-  }
-
-  constexpr float ARROW = 6.0F;
-  _shapes.FillTriangle(head.xPixels + dirX * ARROW, head.yPixels + dirY * ARROW, head.xPixels - dirX * ARROW - dirY * ARROW * 0.8F,
-                       head.yPixels - dirY * ARROW + dirX * ARROW * 0.8F, head.xPixels - dirX * ARROW + dirY * ARROW * 0.8F,
-                       head.yPixels - dirY * ARROW - dirX * ARROW * 0.8F, owner);
 
   // Two fleets converging on one system put their labels in the same place -- which is what is
   // happening at Kepler-Reach in the reference, and is the normal case rather than an edge one.
@@ -1089,7 +1082,7 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   {
     if (drawable.isFleet)
     {
-      DrawFleetStem(_shapes, _frame, drawable.index);
+      DrawFleetGround(_shapes, _meshes, _frame, drawable.index);
     }
     else
     {
@@ -1103,7 +1096,7 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   {
     if (drawable.isFleet)
     {
-      DrawFleetOverlay(_shapes, _text, _frame, hits, labels, drawable.index);
+      DrawFleetOverlay(_text, _frame, hits, labels, drawable.index);
     }
     else
     {

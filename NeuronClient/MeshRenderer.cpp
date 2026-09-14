@@ -42,9 +42,10 @@ void MeshRenderer::AppendFlatQuad(const WorldPoint& _a, const WorldPoint& _b, co
   const std::uint32_t halfLit = Pack(_tones.halfLit);
   const std::uint32_t dark = Pack(_tones.shaded);
   const std::uint32_t rim = Pack(_tones.rim);
+  const std::uint32_t glint = Pack(_tones.glint);
 
   const auto corner = [&](const WorldPoint& _at)
-  { return MeshVertex{_at.x, _at.y, _at.z, _normal.x, _normal.y, _normal.z, lit, halfLit, dark, rim}; };
+  { return MeshVertex{_at.x, _at.y, _at.z, _normal.x, _normal.y, _normal.z, lit, halfLit, dark, rim, glint}; };
 
   AppendTriangle(corner(_a), corner(_b), corner(_c));
   AppendTriangle(corner(_a), corner(_c), corner(_d));
@@ -63,6 +64,7 @@ void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const ColorR
   const std::uint32_t halfLit = Pack(_tones.halfLit);
   const std::uint32_t dark = Pack(_tones.shaded);
   const std::uint32_t rim = Pack(_tones.rim);
+  const std::uint32_t glint = Pack(_tones.glint);
 
   // Latitude runs from the +y pole (ring 0) down to the -y pole; longitude runs from +x toward
   // +z. The normal at a point on a sphere is the direction from its centre, which is the one thing
@@ -74,7 +76,8 @@ void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const ColorR
     const float nx = std::sin(latitude) * std::cos(longitude);
     const float ny = std::cos(latitude);
     const float nz = std::sin(latitude) * std::sin(longitude);
-    return MeshVertex{_center.x + nx * _radius, _center.y + ny * _radius, _center.z + nz * _radius, nx, ny, nz, lit, halfLit, dark, rim};
+    return MeshVertex{
+      _center.x + nx * _radius, _center.y + ny * _radius, _center.z + nz * _radius, nx, ny, nz, lit, halfLit, dark, rim, glint};
   };
 
   for (std::uint32_t ring = 0; ring < rings; ++ring)
@@ -150,28 +153,39 @@ void MeshRenderer::Column(const WorldPoint& _foot, float _height, float _halfWid
                  _tones);
 }
 
-void MeshRenderer::Octahedron(const WorldPoint& _center, float _halfWidth, float _halfHeight, const ColorRamp& _tones)
+void MeshRenderer::Octahedron(const WorldPoint& _center, const WorldPoint& _forward, float _halfLength, float _halfWidth, float _halfHeight,
+                              const ColorRamp& _tones)
 {
-  if (_halfWidth <= 0.0F || _halfHeight <= 0.0F)
+  if (_halfLength <= 0.0F || _halfWidth <= 0.0F || _halfHeight <= 0.0F)
   {
     return;
   }
+
+  // The two axes across the ground, from the direction given. A forward that is straight up, or
+  // nothing at all, has no across to speak of and falls back to +x so the solid is still a solid.
+  const float forwardReach = std::sqrt(_forward.x * _forward.x + _forward.z * _forward.z);
+  const WorldPoint ahead =
+    forwardReach > 0.0001F ? WorldPoint{_forward.x / forwardReach, 0.0F, _forward.z / forwardReach} : WorldPoint{0.0F, 0.0F, -1.0F};
+  // cross(ahead, world up), which for ahead = -z is +x -- the order the rim below is written in.
+  const WorldPoint across = {-ahead.z, 0.0F, ahead.x};
 
   const std::uint32_t lit = Pack(_tones.lit);
   const std::uint32_t halfLit = Pack(_tones.halfLit);
   const std::uint32_t dark = Pack(_tones.shaded);
   const std::uint32_t rimTone = Pack(_tones.rim);
+  const std::uint32_t glint = Pack(_tones.glint);
 
   const WorldPoint top = {_center.x, _center.y + _halfHeight, _center.z};
   const WorldPoint bottom = {_center.x, _center.y - _halfHeight, _center.z};
-  // The equator, counter-clockwise seen from above (+y): +x, -z, -x, +z. Right-handed with y up
-  // means +z is toward a viewer standing at +z, so from above it runs the OTHER way round the
-  // circle than it does around the sphere's longitude, which starts at +x and turns toward +z.
+  // The equator, counter-clockwise seen from above (+y): across, ahead, -across, -ahead, which for
+  // an ahead of -z is the +x, -z, -x, +z this used to be written as. Right-handed with y up means
+  // +z is toward a viewer standing at +z, so from above it runs the OTHER way round the circle than
+  // it does around the sphere's longitude, which starts at +x and turns toward +z.
   const std::array<WorldPoint, 4> rim = {
-    WorldPoint{_center.x + _halfWidth, _center.y, _center.z},
-    WorldPoint{_center.x, _center.y, _center.z - _halfWidth},
-    WorldPoint{_center.x - _halfWidth, _center.y, _center.z},
-    WorldPoint{_center.x, _center.y, _center.z + _halfWidth},
+    WorldPoint{_center.x + across.x * _halfWidth, _center.y, _center.z + across.z * _halfWidth},
+    WorldPoint{_center.x + ahead.x * _halfLength, _center.y, _center.z + ahead.z * _halfLength},
+    WorldPoint{_center.x - across.x * _halfWidth, _center.y, _center.z - across.z * _halfWidth},
+    WorldPoint{_center.x - ahead.x * _halfLength, _center.y, _center.z - ahead.z * _halfLength},
   };
 
   // A flat face: the normal is the face's own, put on all three corners, so the shader has nothing
@@ -194,9 +208,9 @@ void MeshRenderer::Octahedron(const WorldPoint& _center, float _halfWidth, float
       ny /= length;
       nz /= length;
     }
-    AppendTriangle(MeshVertex{_a.x, _a.y, _a.z, nx, ny, nz, lit, halfLit, dark, rimTone},
-                   MeshVertex{_b.x, _b.y, _b.z, nx, ny, nz, lit, halfLit, dark, rimTone},
-                   MeshVertex{_c.x, _c.y, _c.z, nx, ny, nz, lit, halfLit, dark, rimTone});
+    AppendTriangle(MeshVertex{_a.x, _a.y, _a.z, nx, ny, nz, lit, halfLit, dark, rimTone, glint},
+                   MeshVertex{_b.x, _b.y, _b.z, nx, ny, nz, lit, halfLit, dark, rimTone, glint},
+                   MeshVertex{_c.x, _c.y, _c.z, nx, ny, nz, lit, halfLit, dark, rimTone, glint});
   };
 
   for (std::size_t index = 0; index < rim.size(); ++index)

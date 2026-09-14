@@ -1,6 +1,6 @@
 # ADR-105 — Four tones, a second light for shadows, and a stem that is a solid
 
-**Status:** Accepted
+**Status:** Accepted — **amended by ADR-106 (2026-09-14)**: a fifth authored tone, the glint, and a fleet drawn as a directed solid. ADR-106 also closes three of the open questions below — the stepped specular is built, the dither is measured and rejected on a stated condition, and four tones are confirmed to survive magnification.
 
 **Date:** 2026-09-14
 **Decided by:** Owner decision, 2026-09-14, choosing from the open road ADR-104 recorded: cast shadows and solid stems to build, a separate steeper direction for the shadow, and the fourth tone built now rather than left open — the last of those against this session's recommendation, which is noted below and was wrong for a reason worth keeping.

@@ -20,12 +20,14 @@ struct VertexIn
 {
   float3 position : POSITION;
   float3 normal : NORMAL;
-  // R8G8B8A8_UNORM, so the four bytes Pack() wrote arrive as 0-1 floats. Four of them: the band
-  // the light finds, the band it grazes, the shadow, and the silhouette it gets past (ADR-105).
+  // R8G8B8A8_UNORM, so the four bytes Pack() wrote arrive as 0-1 floats. Five of them: the band
+  // the light finds, the band it grazes, the shadow, the silhouette it gets past, and the glint it
+  // bounces straight back (ADR-105, ADR-106).
   float4 litColor : COLOR0;
   float4 halfLitColor : COLOR1;
   float4 darkColor : COLOR2;
   float4 rimColor : COLOR3;
+  float4 glintColor : COLOR4;
 };
 
 struct VertexOut
@@ -44,6 +46,7 @@ struct VertexOut
   nointerpolation float4 halfLitColor : COLOR1;
   nointerpolation float4 darkColor : COLOR2;
   nointerpolation float4 rimColor : COLOR3;
+  nointerpolation float4 glintColor : COLOR4;
 };
 
 VertexOut main(VertexIn _input)
@@ -57,6 +60,7 @@ VertexOut main(VertexIn _input)
   output.halfLitColor = _input.halfLitColor;
   output.darkColor = _input.darkColor;
   output.rimColor = _input.rimColor;
+  output.glintColor = _input.glintColor;
 
   return output;
 }

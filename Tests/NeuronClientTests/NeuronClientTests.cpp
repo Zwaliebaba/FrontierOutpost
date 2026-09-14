@@ -672,8 +672,10 @@ TEST_CLASS(MeshRendererTests)
 public:
   using MeshVertex = Neuron::MeshRenderer::MeshVertex;
 
-  /// Four tones a test can tell apart by value, in ramp order: shadow, grazed, lit, silhouette.
-  static constexpr Neuron::ColorRamp TONES = {Neuron::DARK_GRAY, Neuron::LIGHT_GRAY, Neuron::WHITE, Neuron::BRIGHT_CYAN};
+  /// Five tones a test can tell apart by value, in ramp order: shadow, grazed, lit, silhouette,
+  /// glint.
+  static constexpr Neuron::ColorRamp TONES = {Neuron::DARK_GRAY, Neuron::LIGHT_GRAY, Neuron::WHITE, Neuron::BRIGHT_CYAN,
+                                              Neuron::BRIGHT_MAGENTA};
 
   /// (b - a) x (c - a), the direction a counter-clockwise triangle faces.
   static std::array<float, 3> FaceDirection(const MeshVertex& _a, const MeshVertex& _b, const MeshVertex& _c)
@@ -728,6 +730,7 @@ public:
         Assert::AreEqual(Neuron::Pack(Neuron::LIGHT_GRAY), vertex.halfLitColor, L"the grazed band's tone did not reach the vertex");
         Assert::AreEqual(Neuron::Pack(Neuron::DARK_GRAY), vertex.darkColor);
         Assert::AreEqual(Neuron::Pack(Neuron::BRIGHT_CYAN), vertex.rimColor, L"the silhouette's tone did not reach the vertex");
+        Assert::AreEqual(Neuron::Pack(Neuron::BRIGHT_MAGENTA), vertex.glintColor, L"the glint's tone did not reach the vertex");
       }
     }
   }
@@ -736,7 +739,7 @@ public:
   {
     Neuron::MeshRenderer meshes;
     meshes.BeginFrame();
-    meshes.Octahedron({0.0F, 0.0F, 0.0F}, 3.0F, 5.0F, TONES);
+    meshes.Octahedron({0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -1.0F}, 3.0F, 3.0F, 5.0F, TONES);
 
     const std::span<const MeshVertex> vertices = meshes.Vertices();
     Assert::AreEqual(static_cast<std::size_t>(24), vertices.size(), L"eight faces of three");
@@ -757,6 +760,29 @@ public:
 
   // A stem is a column now (ADR-105). Its four sides have to face outward, or the culler removes
   // the ones the camera can see and leaves the ones it cannot.
+  // A fleet marker has to say which way the fleet is going (ADR-106), so the solid that replaced the
+  // flat arrowhead has to be longer along its heading than across it -- and along the heading it was
+  // GIVEN, not along an axis.
+  TEST_METHOD(AnOctahedronIsLongestAlongTheWayItPoints)
+  {
+    Neuron::MeshRenderer meshes;
+    meshes.BeginFrame();
+    // A heading at forty-five degrees, so an implementation that quietly used an axis fails.
+    meshes.Octahedron({0.0F, 0.0F, 0.0F}, {0.7071F, 0.0F, 0.7071F}, 10.0F, 2.0F, 2.0F, TONES);
+
+    float alongMost = 0.0F;
+    float acrossMost = 0.0F;
+    for (const MeshVertex& vertex : meshes.Vertices())
+    {
+      // The heading and the axis across it, both unit.
+      alongMost = std::max(alongMost, std::abs(vertex.x * 0.7071F + vertex.z * 0.7071F));
+      acrossMost = std::max(acrossMost, std::abs(vertex.x * -0.7071F + vertex.z * 0.7071F));
+    }
+
+    Assert::AreEqual(10.0F, alongMost, 0.01F, L"the dart does not reach its length along its heading");
+    Assert::AreEqual(2.0F, acrossMost, 0.01F, L"the dart is not its width across its heading");
+  }
+
   TEST_METHOD(AColumnStandsOnItsFootWithOutwardFaces)
   {
     Neuron::MeshRenderer meshes;

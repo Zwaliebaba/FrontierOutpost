@@ -1,4 +1,4 @@
-// MeshPS.hlsl -- four tones, decided per pixel, nothing in between.
+// MeshPS.hlsl -- five tones, decided per pixel, nothing in between.
 //
 // THIS IS THE LIGHTING AND IT IS ALL OF IT (ADR-103, ADR-104, ADR-105). The GPU decides WHICH of
 // the tones a pixel gets and never invents another: there is no Lambert ramp, no ambient term, no
@@ -26,6 +26,7 @@ struct VertexOut
   nointerpolation float4 halfLitColor : COLOR1;
   nointerpolation float4 darkColor : COLOR2;
   nointerpolation float4 rimColor : COLOR3;
+  nointerpolation float4 glintColor : COLOR4;
 };
 
 // The two steps down the light. FULL_TERMINATOR ends the band that faces the light squarely;
@@ -45,6 +46,15 @@ static const float GRAZE_TERMINATOR = 0.10;
 // and one on a far one, which is what a rim has to be to read at this size.
 static const float RIM_TERMINATOR = 0.35;
 
+// Where the glint starts, on dot(normal, halfway-between-light-and-eye). 0.97 is a cap fourteen
+// degrees across, which on a nine-pixel ball is a blob four or five pixels wide.
+//
+// **A SPOT, NOT A BAND, WHICH IS WHY IT FITS** (ADR-106). Every other tone here is a band, and a
+// band on a ball this small is two pixels; a fifth band would have been one. A highlight is a disc
+// in the middle of the lit face and it does not compete with the ramp for width -- which is what
+// earned it a tone after ADR-105 said the next one would have to.
+static const float GLINT_TERMINATOR = 0.97;
+
 float4 main(VertexOut _input) : SV_Target
 {
   float3 normal = normalize(_input.normal);
@@ -52,12 +62,17 @@ float4 main(VertexOut _input) : SV_Target
   // THE RIM IS MEASURED FROM THE EYE AND THE BANDS FROM THE LIGHT, and that is the whole difference
   // between them: one turns with the camera and the other does not. A surface facing away from the
   // viewer is at the silhouette whatever the light is doing.
-  float toViewer = dot(normal, normalize(g_eyePosition - _input.worldPosition));
+  float3 toEye = normalize(g_eyePosition - _input.worldPosition);
+  float toViewer = dot(normal, toEye);
   float facing = dot(normal, g_lightDirection);
 
   if (facing > FULL_TERMINATOR)
   {
-    return _input.litColor;
+    // The glint sits inside the lit band and nowhere else: a highlight on a surface the light is
+    // not finding would be a reflection of nothing. A flat-faced solid passes `lit` here and so
+    // never shows one, which is the same opt-out the rim has (`Ink::FlatRampFor`).
+    float gloss = dot(normal, normalize(g_lightDirection + toEye));
+    return gloss > GLINT_TERMINATOR ? _input.glintColor : _input.litColor;
   }
   if (facing > GRAZE_TERMINATOR)
   {
