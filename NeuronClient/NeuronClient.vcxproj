@@ -165,6 +165,12 @@
     <FXCompile Include="Shaders\ShapePS.hlsl">
       <ShaderType>Pixel</ShaderType>
     </FXCompile>
+    <FXCompile Include="Shaders\MeshVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+    </FXCompile>
+    <FXCompile Include="Shaders\MeshPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+    </FXCompile>
     <FXCompile Include="Shaders\CanvasVS.hlsl">
       <ShaderType>Vertex</ShaderType>
     </FXCompile>
@@ -185,6 +191,8 @@
     <ClCompile Include="SceneTarget.cpp" />
     <ClCompile Include="ShapeRenderer.cpp" />
     <ClCompile Include="ShapeBackend.cpp" />
+    <ClCompile Include="MeshRenderer.cpp" />
+    <ClCompile Include="MeshBackend.cpp" />
     <ClCompile Include="FontBackend.cpp" />
     <ClCompile Include="TextField.cpp" />
     <ClCompile Include="KeyboardInput.cpp" />
@@ -204,6 +212,8 @@
     <ClInclude Include="SceneTarget.h" />
     <ClInclude Include="ShapeRenderer.h" />
     <ClInclude Include="ShapeBackend.h" />
+    <ClInclude Include="MeshRenderer.h" />
+    <ClInclude Include="MeshBackend.h" />
     <ClInclude Include="FontBackend.h" />
     <ClInclude Include="TextField.h" />
     <ClInclude Include="KeyboardInput.h" />

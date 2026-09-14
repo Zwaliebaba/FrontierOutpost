@@ -30,6 +30,10 @@ public:
   static constexpr std::uint32_t WIDTH_PIXELS = Presentation::CANVAS_WIDTH_PIXELS;
   static constexpr std::uint32_t HEIGHT_PIXELS = Presentation::CANVAS_HEIGHT_PIXELS;
 
+  /// The depth buffer's format, public because a pipeline that tests depth has to be built against
+  /// it (`MeshBackend`), and one place should say what it is.
+  static constexpr DXGI_FORMAT DEPTH_FORMAT = DXGI_FORMAT_D32_FLOAT;
+
   /// _clearColor is the color of empty space. The canvas is this class's own resource, so the
   /// color is baked into its optimized clear value as well as kept here; a clear to any other
   /// color still works and is merely slower, which is the trade an optimized value makes.

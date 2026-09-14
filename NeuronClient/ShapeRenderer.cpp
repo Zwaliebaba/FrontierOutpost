@@ -22,6 +22,12 @@ void ShapeRenderer::BeginFrame()
   m_vertices.clear();
   m_vertices.reserve(MAX_VERTICES_PER_FRAME);
   m_takenThisFrame = 0;
+  m_layerEnds.clear();
+}
+
+void ShapeRenderer::EndLayer()
+{
+  m_layerEnds.push_back(m_vertices.size());
 }
 
 void ShapeRenderer::AppendShadedTriangle(float _axPixels, float _ayPixels, std::uint32_t _aColor, float _bxPixels, float _byPixels,
@@ -294,11 +300,19 @@ void ShapeRenderer::FillRadialGradient(float _centerXPixels, float _centerYPixel
 
 ShapeRenderer::Batch ShapeRenderer::TakeUnflushed() noexcept
 {
+  // Up to the next boundary when there is one, and that boundary is spent; otherwise everything.
+  std::size_t end = m_vertices.size();
+  if (!m_layerEnds.empty())
+  {
+    end = std::min(m_layerEnds.front(), end);
+    m_layerEnds.erase(m_layerEnds.begin());
+  }
+
   const Batch batch = {
-    .vertices = std::span{m_vertices}.subspan(m_takenThisFrame),
+    .vertices = std::span{m_vertices}.subspan(m_takenThisFrame, end - m_takenThisFrame),
     .firstVertex = static_cast<std::uint32_t>(m_takenThisFrame),
   };
-  m_takenThisFrame = m_vertices.size();
+  m_takenThisFrame = end;
   return batch;
 }
 

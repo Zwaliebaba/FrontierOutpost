@@ -16,7 +16,7 @@ namespace
 {
 
 constexpr DXGI_FORMAT CANVAS_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
-constexpr DXGI_FORMAT DEPTH_TARGET_FORMAT = DXGI_FORMAT_D32_FLOAT;
+constexpr DXGI_FORMAT DEPTH_TARGET_FORMAT = SceneTarget::DEPTH_FORMAT;
 
 /// offsetXPixels, offsetYPixels, scale -- what CanvasPS.hlsl's cbuffer declares, in that order.
 constexpr std::uint32_t CANVAS_CONSTANT_COUNT = 3;

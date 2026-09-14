@@ -137,8 +137,24 @@ public:
   /// renderers between the world and the interface, and each draw covers only what is new.
   ///
   /// The span points into this recorder and stays valid until the next `BeginFrame`, which is long
-  /// enough for a backend to copy it and no longer.
+  /// enough for a backend to copy it and no longer -- and it stops at the next layer boundary
+  /// when `EndLayer` has put one in front of it.
   [[nodiscard]] Batch TakeUnflushed() noexcept;
+
+  /// Ends a layer where the recording stands: the next `TakeUnflushed` hands over everything up to
+  /// here and nothing past it, and the take after that carries on.
+  ///
+  /// **It exists so another pass can be drawn between two of one page's shape layers** (ADR-103).
+  /// The map's balls are meshes, depth-tested and drawn by a different backend, and they have to
+  /// land over the ground, the stems and the shadows and under the rings, the arrowheads and the
+  /// badges. The page records all of that into this one recorder in that order and marks the
+  /// boundary; the caller drains it, draws the meshes, and drains it again. Without a boundary a
+  /// take drains everything, so a page that never calls this is exactly what it was.
+  ///
+  /// A boundary is consumed by the take that reaches it, so a caller owes one take per layer plus
+  /// one for the rest. An empty layer still counts: skipping it would shift every take after it
+  /// by one and put the overlay under the pass it was meant to cover.
+  void EndLayer();
 
 private:
   static constexpr std::uint32_t MIN_ELLIPSE_SEGMENTS = 12;
@@ -163,6 +179,9 @@ private:
 
   /// How much of `m_vertices` has already been taken this frame. See `TakeUnflushed`.
   std::size_t m_takenThisFrame = 0;
+
+  /// Where the layers not yet taken end, in recording order, as counts of vertices. See `EndLayer`.
+  std::vector<std::size_t> m_layerEnds;
 };
 
 } // namespace Neuron

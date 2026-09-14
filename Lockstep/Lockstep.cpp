@@ -22,6 +22,8 @@
 #include "Device.h"
 #include "FontBackend.h"
 #include "FontRenderer.h"
+#include "MeshBackend.h"
+#include "MeshRenderer.h"
 #include "PointerInput.h"
 #include "KeyboardInput.h"
 #include "Presentation.h"
@@ -1047,6 +1049,12 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
   Neuron::FontBackend textBackend;
   textBackend.Create(device, shaderVisibleHeap);
 
+  // The third renderer, and the only one that draws into the world rather than onto the canvas:
+  // the map's stations are lit solids, depth-tested against each other (ADR-103).
+  Neuron::MeshRenderer meshes;
+  Neuron::MeshBackend meshBackend;
+  meshBackend.Create(device.Handle());
+
   // ---- The match, over a socket ------------------------------------------------------------------
   //
   // THE CLIENT TALKS TCP EVEN WHEN THE SERVER IS ON THE NEXT THREAD (ADR-028). That is deliberate:
@@ -1584,10 +1592,34 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
 
     shapes.BeginFrame();
     text.BeginFrame();
+    meshes.BeginFrame();
 
     // Two layers, flushed apart. See `MainPage::DrawWorld`: one flush per frame would put the map's
     // labels on top of the panels drawn over them.
+    //
+    // Within the world, three draws: the shapes under the balls, the balls, the shapes over them.
+    // The map marks the boundary (`ShapeRenderer::EndLayer`), so the second shape draw is what it
+    // recorded past the mark -- and nothing at all until it marks one.
     page.DrawWorld(shapes, text);
+    shapeBackend.Draw(commandList, device.FrameIndex(), shapes);
+
+    // A rehearsal ball, in clip space with the camera left out: the mesh pass exists and the map
+    // does not use it yet. World +z toward the eye and depth 0.2-0.8, so the recorder's winding
+    // and the pipeline's depth test are both exercised by the one picture.
+    {
+      Neuron::MeshRenderer::View rehearsal;
+      rehearsal.viewProjection = {1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, -1.0F, 0.0F, 0.0F, 0.0F, 0.5F, 1.0F};
+      rehearsal.lightDirection = {-0.45F / 0.9925F, 0.60F / 0.9925F, 0.65F / 0.9925F};
+      rehearsal.viewportXPixels = 510.0F;
+      rehearsal.viewportYPixels = 180.0F;
+      rehearsal.viewportWidthPixels = 400.0F;
+      rehearsal.viewportHeightPixels = 400.0F;
+      meshes.SetView(rehearsal);
+      meshes.Sphere({0.0F, 0.0F, 0.0F}, 0.3F, Neuron::BRIGHT_BLUE, Neuron::BLUE, 12);
+      meshes.Sphere({0.35F, 0.2F, -0.2F}, 0.2F, Neuron::YELLOW, Neuron::BROWN, 12);
+    }
+    meshBackend.Draw(commandList, device.FrameIndex(), meshes);
+
     shapeBackend.Draw(commandList, device.FrameIndex(), shapes);
     textBackend.Draw(commandList, device.FrameIndex(), text);
 
