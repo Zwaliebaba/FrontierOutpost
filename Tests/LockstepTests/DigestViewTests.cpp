@@ -640,4 +640,69 @@ public:
   }
 };
 
+// Filled means "do this", and one screen says it once (ADR-089).
+TEST_CLASS(OneFilledPrimaryTests)
+{
+public:
+  [[nodiscard]] static std::size_t Filled(const std::vector<Lockstep::DigestCard>& _cards)
+  {
+    std::size_t count = 0;
+    for (const Lockstep::DigestCard& card : _cards)
+    {
+      for (const Lockstep::EventAction& action : card.actions)
+      {
+        count += action.primary ? 1U : 0U;
+      }
+    }
+    return count;
+  }
+
+  /// An event that offers a build of its own, which is what `SnapshotView` composes per system.
+  [[nodiscard]] static Lockstep::DigestEvent Offering(Lockstep::EventKind _kind, std::string _title, std::int32_t _row)
+  {
+    Lockstep::DigestEvent event = Event(_kind, Lockstep::NOBODY, std::move(_title));
+    event.actions.push_back(
+      Lockstep::EventAction{.label = "SHIPYARD 20 CR", .kind = Lockstep::EventActionKind::QueueBuild, .target = _row, .primary = true});
+    return event;
+  }
+
+  TEST_METHOD(ThreePricedBuildsFillOneButton)
+  {
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(StateWith({
+      Offering(Lockstep::EventKind::Economy, "Production +6", 0),
+      Offering(Lockstep::EventKind::Economy, "Claimed Ulme", 1),
+      Offering(Lockstep::EventKind::Economy, "Claimed Nyx", 2),
+    }));
+
+    Assert::AreEqual(std::size_t{1}, Filled(cards), L"a digest with three priced builds filled more than one button");
+  }
+
+  TEST_METHOD(TheFilledOneIsTheMostConsequentialThatCanBeActedOn)
+  {
+    // The leading card is the battle, and a battle's actions are chips. The filled button goes to
+    // the first card that offers an ORDER, which is what keeps a digest reporting a loss from also
+    // pointing at nothing.
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(StateWith({
+      Event(Lockstep::EventKind::Loss, 1, "Pell lost to Sorne"),
+      Offering(Lockstep::EventKind::Economy, "Production +6", 0),
+    }));
+
+    Assert::IsTrue(cards.size() >= 2U);
+    Assert::IsTrue(cards[0].kind == Lockstep::EventKind::Loss, L"the loss did not lead");
+    Assert::AreEqual(std::size_t{1}, Filled(cards), L"a digest that reports a loss and offers a build fills nothing");
+
+    const bool onTheLoss =
+      std::any_of(cards[0].actions.begin(), cards[0].actions.end(), [](const Lockstep::EventAction& _action) { return _action.primary; });
+    Assert::IsFalse(onTheLoss, L"the filled button landed on a card that gives no order");
+  }
+
+  TEST_METHOD(ADigestThatOffersNothingFillsNothing)
+  {
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(StateWith({
+      Event(Lockstep::EventKind::Contact, 1, "Halvorsen at Ulme"),
+    }));
+    Assert::AreEqual(std::size_t{0}, Filled(cards), L"a digest with no order to give filled a button anyway");
+  }
+};
+
 } // namespace LockstepTests

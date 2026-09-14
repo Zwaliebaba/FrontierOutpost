@@ -208,6 +208,10 @@ Semantic / owner (ADR-027: you are always blue)
   then `+n` which focuses the first it stands for. It replaces the `MAP` button entirely. Composed
   after the order-giving controls, so a row too narrow for all of it drops a chip and never a
   control.
+- **Filled button** — **one per SCREEN, not one per card** (ADR-089). The digest fills the first
+  primary in consequence order and outlines every other control, so the blue weight keeps meaning
+  "the thing to do" on a digest that offers three builds. A digest with no order to give fills
+  nothing.
 - **Verdict box** — 1px amber border inside the card; line 1 amber `FLT1 ARRIVES T47 - YOU LOSE`,
   then the numbers in body colour, always saying whose ships remain.
 - **Sheet** — the panel component (ADR-052): ink background, 1px border; 36px header with the title

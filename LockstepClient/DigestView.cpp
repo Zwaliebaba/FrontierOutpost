@@ -482,6 +482,32 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
     cards.front().actions.insert(cards.front().actions.begin(), standing.begin(), standing.end());
   }
 
+  // ---- One filled button on the screen -----------------------------------------------------------
+  //
+  // **Filled means "do this", and three of them mean nothing** (ADR-089). A digest reporting three
+  // systems that can each take a building gave each of them a filled primary, so the weight that is
+  // supposed to pick one thing out was carrying no information at all.
+  //
+  // **The first one in consequence order keeps it, not `cards.front()`'s.** UI-01 2.4 says the
+  // leading card's, and the leading card is the worst thing that happened -- a battle, a system
+  // lost -- which is exactly the card whose actions are chips rather than orders. Read literally it
+  // would leave a digest with nothing filled on the ticks a player most needs pointing at something
+  // to do. The cards are already sorted by consequence, so the first primary in the list is the
+  // most consequential thing that can actually be acted on.
+  bool filled = false;
+  for (DigestCard& card : cards)
+  {
+    for (EventAction& action : card.actions)
+    {
+      if (!action.primary)
+      {
+        continue;
+      }
+      action.primary = !filled;
+      filled = true;
+    }
+  }
+
   return cards;
 }
 

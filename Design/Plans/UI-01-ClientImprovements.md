@@ -192,6 +192,11 @@ controls rather than coordinates, so they survived the new geometry unchanged.
 - DESIGN-GUIDELINES.md "Locks list row" updated.
 
 ### 2.4 One filled primary per page
+**Done 2026-09-14 — ADR-089.** The **[ASK]** was answered with the default. One departure, flagged
+in the ADR: the filled button goes to the first primary in consequence order rather than to
+`cards.front()`'s, because the leading card is the worst consequence and its actions are chips —
+read literally the rule would fill nothing on a tick that reports a loss and offers a build.
+
 **Problem.** Three filled-blue build buttons on one digest. Filled stops meaning "do this".
 
 **Change.** `SnapshotView.cpp` / `DigestView.cpp`: only the leading card's primary is filled. Every other card's actions are outlined (price still on the label). Queued (outlined blue) and unaffordable (dim) states unchanged. **[ASK]** alternative: filled = affordable now; if chosen, add `AFFORDABLE` to the legend. Default to the first.
