@@ -444,6 +444,49 @@ public:
     Assert::AreEqual(std::string{"154 credits in hand"}, cards[0].lines.front(), L"the card kept a stale running total");
   }
 
+  // **The case the fold was missing, and the reason ADR-109 exists.** Production runs every tick and
+  // so does everything else, so in a concatenated window the repeats are never next to each other --
+  // they are separated by whatever else that tick reported. ADR-062 required a run to be
+  // CONSECUTIVE, so on a real board the fold almost never fired: an eight-tick window was measured
+  // on 2026-09-14 carrying twenty unfolded income cards.
+  TEST_METHOD(ARunFoldsEvenWithOtherEventsBetweenItsMembers)
+  {
+    Lockstep::MatchState state = AwayFor({
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Claimed Vega"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +7"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Mining station L2 at Pell"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +8"),
+    });
+    state.digest[4].detail = "154 credits in hand";
+
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(state);
+    Assert::AreEqual(std::size_t{3}, cards.size(), L"the three production lines did not fold across what sat between them");
+
+    // **At the FIRST occurrence** (ADR-109): the fold keeps the position of the earliest of its
+    // members, so the window still reads oldest first and nothing is reordered around it.
+    Assert::AreEqual(std::string{"Production +21 - T6 > T9"}, cards[0].title, L"the fold is not where the run began, or did not sum");
+    Assert::AreEqual(std::string{"154 credits in hand"}, cards[0].lines.front(), L"the fold kept a stale running total");
+    Assert::AreEqual(std::string{"Claimed Vega"}, cards[1].title, L"what sat between the repeats was disturbed");
+    Assert::AreEqual(std::string{"Mining station L2 at Pell"}, cards[2].title);
+  }
+
+  // Two runs of different things interleaved stay two runs, which is what makes the anchor a
+  // comparison against each run rather than against whichever one is open.
+  TEST_METHOD(TwoInterleavedRunsFoldIntoTwoCards)
+  {
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(AwayFor({
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Scouting +1"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Production +6"),
+      Event(Lockstep::EventKind::Economy, Lockstep::NOBODY, "Scouting +1"),
+    }));
+
+    Assert::AreEqual(std::size_t{2}, cards.size(), L"two interleaved runs did not fold into two cards");
+    Assert::AreEqual(std::string{"Production +12 - T6 > T9"}, cards[0].title);
+    Assert::AreEqual(std::string{"Scouting +2 - T6 > T9"}, cards[1].title);
+  }
+
   TEST_METHOD(APlayerWhoMissedNothingSeesEveryLine)
   {
     // Within one tick two production lines would be two different things that read alike, and the

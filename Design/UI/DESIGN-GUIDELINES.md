@@ -355,6 +355,10 @@ Semantic / owner (ADR-027: you are always blue)
   in the title when they lead.
 - Under `SINCE YOU LOOKED` only, fold a run of repeats into one card with the total and the window's
   span — `PRODUCTION +18 - T6 > T9` (ADR-062). Never a contact, a capture, a proposal or a verdict.
+  **A run does NOT have to be consecutive** (ADR-109): it is every matching event in the window
+  wherever it sits, and the card keeps the position of the first of them. Requiring consecutiveness
+  meant the fold almost never fired — measured at twenty unfolded income cards in one eight-tick
+  window, because a tick that produces income also produces everything else that happened in it.
 - Combat preview is a verdict: `FLT1 ARRIVES T47 - YOU LOSE` / `YOU WIN` / `HOLD`, then
   `You arrive 14. P3 holds 11 +def. 6 of theirs remain, 0 of yours.` Never a bare `A v B`. The
   destination sheet says what is standing on a candidate (`P3 - 11 +DEF`) and not how it would go:

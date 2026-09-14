@@ -235,26 +235,52 @@ void NameTheTargets(const MatchState& _state, DigestCard& _card)
 /// **Only for a player who was away** (ADR-062). Within one tick a repeat is two different things
 /// that read alike; across four it is one thing said four times, and the header above already
 /// frames the whole window as one span.
+///
+/// **A run no longer has to be CONSECUTIVE** (ADR-109, amending ADR-062). It did until 2026-09-15,
+/// and on the board a returning player actually has that meant the fold almost never fired: an
+/// eight-tick window was measured carrying twenty unfolded income cards, because production is never
+/// adjacent to itself once anything else happens in the same tick. A run is now every event in the
+/// window that matches, wherever it sits, and the folded card keeps the position of the FIRST of
+/// them.
 void MergeRepeats(const MatchState& _state, std::vector<DigestEvent>& _outEvents, std::vector<std::int32_t>& _outSource)
 {
-  std::vector<std::pair<std::size_t, std::size_t>> runs;
+  // Each run is the digest indices that belong to it, in order, anchored at the first. A vector of
+  // vectors rather than a first/last pair, because members are no longer contiguous.
+  //
+  // The scan is quadratic in the window, which is a few hundred events at ADR-044's eight ticks and
+  // is not worth an index: what it buys is that a new event is compared against every run's ANCHOR
+  // rather than only the run that happens to be open.
+  std::vector<std::vector<std::size_t>> runs;
   for (std::size_t index = 0; index < _state.digest.size(); ++index)
   {
-    const bool folds = _state.unreadTicks >= 2 && !runs.empty() && Repeats(_state.digest[runs.back().second], _state.digest[index]);
-    if (folds)
+    std::vector<std::size_t>* found = nullptr;
+    if (_state.unreadTicks >= 2)
     {
-      runs.back().second = index;
+      for (std::vector<std::size_t>& run : runs)
+      {
+        if (Repeats(_state.digest[run.front()], _state.digest[index]))
+        {
+          found = &run;
+          break;
+        }
+      }
+    }
+
+    if (found != nullptr)
+    {
+      found->push_back(index);
       continue;
     }
-    runs.emplace_back(index, index);
+    runs.push_back({index});
   }
 
-  for (const auto& [first, last] : runs)
+  for (const std::vector<std::size_t>& run : runs)
   {
+    const std::size_t first = run.front();
     DigestEvent merged = _state.digest[first];
     _outSource.push_back(static_cast<std::int32_t>(first));
 
-    if (last > first)
+    if (run.size() > 1)
     {
       // The sum, when the run counts something, and the newest detail either way: `154 credits in
       // hand` is a running total, so the one that is still true is the last.
@@ -262,11 +288,11 @@ void MergeRepeats(const MatchState& _state, std::vector<DigestEvent>& _outEvents
       std::int64_t total = 0;
       if (SplitCount(merged.title, stem, total))
       {
-        for (std::size_t index = first + 1; index <= last; ++index)
+        for (std::size_t member = 1; member < run.size(); ++member)
         {
           std::string other;
           std::int64_t value = 0;
-          if (SplitCount(_state.digest[index].title, other, value))
+          if (SplitCount(_state.digest[run[member]].title, other, value))
           {
             total += value;
           }
@@ -274,13 +300,13 @@ void MergeRepeats(const MatchState& _state, std::vector<DigestEvent>& _outEvents
         merged.title = std::format("{}{}{}", stem, total < 0 ? '-' : '+', total < 0 ? -total : total);
       }
       merged.title += std::format(" - T{} > T{}", _state.lastSeenTick, _state.match.tick);
-      merged.detail = _state.digest[last].detail;
+      merged.detail = _state.digest[run.back()].detail;
 
       // Every action the run offered, once each. A build is offered on exactly one card (ADR-057),
       // and folding two cards into one must not drop the second's button or draw two filled ones.
-      for (std::size_t index = first + 1; index <= last; ++index)
+      for (std::size_t member = 1; member < run.size(); ++member)
       {
-        for (const EventAction& action : _state.digest[index].actions)
+        for (const EventAction& action : _state.digest[run[member]].actions)
         {
           const bool already = std::ranges::any_of(merged.actions, [&action](const EventAction& _mine)
                                                    { return _mine.kind == action.kind && _mine.target == action.target; });
