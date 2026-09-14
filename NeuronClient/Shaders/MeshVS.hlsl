@@ -11,30 +11,38 @@ cbuffer MeshConstants : register(b0)
   // vector on the left: OrbitCamera::ViewProjection builds it that way round.
   row_major float4x4 g_viewProjection;
   float3 g_lightDirection;
-  float g_padding;
+  float g_lightPadding;
+  float3 g_eyePosition;
+  float g_eyePadding;
 };
 
 struct VertexIn
 {
   float3 position : POSITION;
   float3 normal : NORMAL;
-  // R8G8B8A8_UNORM, so the four bytes Pack() wrote arrive as 0-1 floats. Two of them: the tone
-  // where the light finds the surface and the tone where it misses it (ADR-012).
+  // R8G8B8A8_UNORM, so the four bytes Pack() wrote arrive as 0-1 floats. Three of them: the tone
+  // where the light finds the surface, the tone where it misses it, and the tone on the silhouette
+  // (ADR-012, ADR-104).
   float4 litColor : COLOR0;
   float4 darkColor : COLOR1;
+  float4 rimColor : COLOR2;
 };
 
 struct VertexOut
 {
   float4 position : SV_Position;
-  // INTERPOLATED, and it is the only thing here that is. The pixel shader decides which tone a
-  // pixel gets from this, so on a sphere the boundary between the two is a curve through the
-  // triangles rather than a set of triangle edges.
+  // INTERPOLATED, and the only two things here that are. The pixel shader decides which tone a
+  // pixel gets from the normal, so on a sphere the boundary between them is a curve through the
+  // triangles rather than a set of triangle edges; and it needs the world position to know which
+  // way the eye is from THIS pixel, which is what makes the rim a property of the silhouette
+  // rather than of the pane.
   float3 normal : NORMAL;
+  float3 worldPosition : POSITION;
   // NOT interpolated. A tone that interpolated would be a gradient between two authored colours,
-  // which is exactly the third value ADR-012 says nobody chose.
+  // which is exactly the value ADR-012 says nobody chose.
   nointerpolation float4 litColor : COLOR0;
   nointerpolation float4 darkColor : COLOR1;
+  nointerpolation float4 rimColor : COLOR2;
 };
 
 VertexOut main(VertexIn _input)
@@ -43,8 +51,10 @@ VertexOut main(VertexIn _input)
 
   output.position = mul(float4(_input.position, 1.0), g_viewProjection);
   output.normal = _input.normal;
+  output.worldPosition = _input.position;
   output.litColor = _input.litColor;
   output.darkColor = _input.darkColor;
+  output.rimColor = _input.rimColor;
 
   return output;
 }

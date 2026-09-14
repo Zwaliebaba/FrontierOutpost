@@ -697,7 +697,7 @@ public:
   {
     Neuron::MeshRenderer meshes;
     meshes.BeginFrame();
-    meshes.Sphere({10.0F, 20.0F, -30.0F}, 5.0F, Neuron::WHITE, Neuron::DARK_GRAY, 12);
+    meshes.Sphere({10.0F, 20.0F, -30.0F}, 5.0F, Neuron::WHITE, Neuron::DARK_GRAY, Neuron::BRIGHT_CYAN, 12);
 
     const std::span<const MeshVertex> vertices = meshes.Vertices();
     Assert::AreEqual(static_cast<std::size_t>(Neuron::MeshRenderer::SphereVertexCount(12)), vertices.size());
@@ -723,6 +723,7 @@ public:
         Assert::AreEqual(5.0F, along, 0.001F, L"and points from the centre through its vertex");
         Assert::AreEqual(Neuron::Pack(Neuron::WHITE), vertex.litColor);
         Assert::AreEqual(Neuron::Pack(Neuron::DARK_GRAY), vertex.darkColor);
+        Assert::AreEqual(Neuron::Pack(Neuron::BRIGHT_CYAN), vertex.rimColor, L"the silhouette's tone did not reach the vertex");
       }
     }
   }
@@ -731,7 +732,7 @@ public:
   {
     Neuron::MeshRenderer meshes;
     meshes.BeginFrame();
-    meshes.Octahedron({0.0F, 0.0F, 0.0F}, 3.0F, 5.0F, Neuron::WHITE, Neuron::DARK_GRAY);
+    meshes.Octahedron({0.0F, 0.0F, 0.0F}, 3.0F, 5.0F, Neuron::WHITE, Neuron::DARK_GRAY, Neuron::BRIGHT_CYAN);
 
     const std::span<const MeshVertex> vertices = meshes.Vertices();
     Assert::AreEqual(static_cast<std::size_t>(24), vertices.size(), L"eight faces of three");
@@ -754,14 +755,14 @@ public:
   {
     Neuron::MeshRenderer meshes;
     meshes.BeginFrame();
-    meshes.Sphere({0.0F, 0.0F, 0.0F}, 1.0F, Neuron::WHITE, Neuron::DARK_GRAY, 8);
+    meshes.Sphere({0.0F, 0.0F, 0.0F}, 1.0F, Neuron::WHITE, Neuron::DARK_GRAY, Neuron::BRIGHT_CYAN, 8);
     const std::size_t first = meshes.Vertices().size();
 
     const Neuron::MeshRenderer::Batch one = meshes.TakeUnflushed();
     Assert::AreEqual(first, one.vertices.size());
     Assert::AreEqual(0u, one.firstVertex);
 
-    meshes.Sphere({0.0F, 0.0F, 0.0F}, 1.0F, Neuron::WHITE, Neuron::DARK_GRAY, 8);
+    meshes.Sphere({0.0F, 0.0F, 0.0F}, 1.0F, Neuron::WHITE, Neuron::DARK_GRAY, Neuron::BRIGHT_CYAN, 8);
     const Neuron::MeshRenderer::Batch two = meshes.TakeUnflushed();
     Assert::AreEqual(first, two.vertices.size(), L"the second take is only the second ball");
     Assert::AreEqual(static_cast<std::uint32_t>(first), two.firstVertex, L"and it sits after the first in the frame");

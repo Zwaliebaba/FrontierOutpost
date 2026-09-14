@@ -2266,11 +2266,11 @@ public:
   }
 };
 
-// The stations are balls now, recorded into a third recorder and lit by the shader between two
-// authored tones (ADR-103). What is pinned here is the half of that a screenshot cannot say: that
-// every ball on a played board was recorded, whole, with its lit tone brighter than its dark one --
-// ADR-012's static_assert, made against a board rather than a header -- and that the page records
-// its shapes in two layers around them, so the rings and badges land over the balls.
+// The stations are balls now, recorded into a third recorder and lit by the shader between three
+// authored tones (ADR-103, ADR-104). What is pinned here is the half of that a screenshot cannot
+// say: that every ball on a played board was recorded, whole, with its ramp running dark, lit, rim
+// -- ADR-012's static_assert, made against a board rather than a header -- and that the page
+// records its shapes in two layers around them, so the rings and badges land over the balls.
 TEST_CLASS(StationBallTests)
 {
 public:
@@ -2280,7 +2280,7 @@ public:
                          static_cast<std::uint8_t>((_packed >> 16U) & 0xFFU), static_cast<std::uint8_t>((_packed >> 24U) & 0xFFU)};
   }
 
-  TEST_METHOD(EveryStationIsABallLitBrighterThanItIsShaded)
+  TEST_METHOD(EveryStationIsABallWhoseThreeTonesRunInOrder)
   {
     Headless renderers;
     Lockstep::MainPage page;
@@ -2304,10 +2304,15 @@ public:
 
     for (const Neuron::MeshRenderer::MeshVertex& vertex : vertices)
     {
+      // The ramp runs dark, lit, rim (ADR-104). A station is never darker where the light finds it,
+      // and never dimmer on the limb the light gets past than in the shadow beside it.
       Assert::IsTrue(Neuron::Luminance(Unpack(vertex.litColor)) > Neuron::Luminance(Unpack(vertex.darkColor)),
                      L"a ball is darker where the light finds it");
+      Assert::IsTrue(Neuron::Luminance(Unpack(vertex.rimColor)) > Neuron::Luminance(Unpack(vertex.litColor)),
+                     L"a ball's silhouette is no brighter than its lit face");
       Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.litColor).alpha, L"the mesh pass does not blend, so a tone is opaque");
       Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.darkColor).alpha);
+      Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.rimColor).alpha);
     }
   }
 

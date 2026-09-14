@@ -35,7 +35,8 @@ void MeshRenderer::AppendTriangle(const MeshVertex& _a, const MeshVertex& _b, co
   m_vertices.push_back(_c);
 }
 
-void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const Color& _lit, const Color& _dark, std::uint32_t _segments)
+void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const Color& _lit, const Color& _dark, const Color& _rim,
+                          std::uint32_t _segments)
 {
   if (_radius <= 0.0F)
   {
@@ -46,6 +47,7 @@ void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const Color&
   const std::uint32_t rings = RingsForSegments(segments);
   const std::uint32_t lit = Pack(_lit);
   const std::uint32_t dark = Pack(_dark);
+  const std::uint32_t rim = Pack(_rim);
 
   // Latitude runs from the +y pole (ring 0) down to the -y pole; longitude runs from +x toward
   // +z. The normal at a point on a sphere is the direction from its centre, which is the one thing
@@ -57,7 +59,7 @@ void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const Color&
     const float nx = std::sin(latitude) * std::cos(longitude);
     const float ny = std::cos(latitude);
     const float nz = std::sin(latitude) * std::sin(longitude);
-    return MeshVertex{_center.x + nx * _radius, _center.y + ny * _radius, _center.z + nz * _radius, nx, ny, nz, lit, dark};
+    return MeshVertex{_center.x + nx * _radius, _center.y + ny * _radius, _center.z + nz * _radius, nx, ny, nz, lit, dark, rim};
   };
 
   for (std::uint32_t ring = 0; ring < rings; ++ring)
@@ -86,7 +88,8 @@ void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const Color&
   }
 }
 
-void MeshRenderer::Octahedron(const WorldPoint& _center, float _halfWidth, float _halfHeight, const Color& _lit, const Color& _dark)
+void MeshRenderer::Octahedron(const WorldPoint& _center, float _halfWidth, float _halfHeight, const Color& _lit, const Color& _dark,
+                              const Color& _rim)
 {
   if (_halfWidth <= 0.0F || _halfHeight <= 0.0F)
   {
@@ -95,6 +98,7 @@ void MeshRenderer::Octahedron(const WorldPoint& _center, float _halfWidth, float
 
   const std::uint32_t lit = Pack(_lit);
   const std::uint32_t dark = Pack(_dark);
+  const std::uint32_t rimTone = Pack(_rim);
 
   const WorldPoint top = {_center.x, _center.y + _halfHeight, _center.z};
   const WorldPoint bottom = {_center.x, _center.y - _halfHeight, _center.z};
@@ -128,8 +132,9 @@ void MeshRenderer::Octahedron(const WorldPoint& _center, float _halfWidth, float
       ny /= length;
       nz /= length;
     }
-    AppendTriangle(MeshVertex{_a.x, _a.y, _a.z, nx, ny, nz, lit, dark}, MeshVertex{_b.x, _b.y, _b.z, nx, ny, nz, lit, dark},
-                   MeshVertex{_c.x, _c.y, _c.z, nx, ny, nz, lit, dark});
+    AppendTriangle(MeshVertex{_a.x, _a.y, _a.z, nx, ny, nz, lit, dark, rimTone},
+                   MeshVertex{_b.x, _b.y, _b.z, nx, ny, nz, lit, dark, rimTone},
+                   MeshVertex{_c.x, _c.y, _c.z, nx, ny, nz, lit, dark, rimTone});
   };
 
   for (std::size_t index = 0; index < rim.size(); ++index)

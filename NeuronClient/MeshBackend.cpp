@@ -65,7 +65,7 @@ void MeshBackend::CreatePipeline(ID3D12Device* _device)
   winrt::check_hresult(
     _device->CreateRootSignature(0, serialized->GetBufferPointer(), serialized->GetBufferSize(), IID_PPV_ARGS(m_rootSignature.put())));
 
-  const std::array<D3D12_INPUT_ELEMENT_DESC, 4> inputLayout = {
+  const std::array<D3D12_INPUT_ELEMENT_DESC, 5> inputLayout = {
     D3D12_INPUT_ELEMENT_DESC{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(MeshRenderer::MeshVertex, x),
                              D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
     D3D12_INPUT_ELEMENT_DESC{"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(MeshRenderer::MeshVertex, nx),
@@ -73,6 +73,8 @@ void MeshBackend::CreatePipeline(ID3D12Device* _device)
     D3D12_INPUT_ELEMENT_DESC{"COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(MeshRenderer::MeshVertex, litColor),
                              D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
     D3D12_INPUT_ELEMENT_DESC{"COLOR", 1, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(MeshRenderer::MeshVertex, darkColor),
+                             D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+    D3D12_INPUT_ELEMENT_DESC{"COLOR", 2, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(MeshRenderer::MeshVertex, rimColor),
                              D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
   };
 
@@ -136,6 +138,10 @@ void MeshBackend::Draw(ID3D12GraphicsCommandList* _commandList, std::uint32_t _f
   constants[17] = view.lightDirection.y;
   constants[18] = view.lightDirection.z;
   constants[19] = 0.0F;
+  constants[20] = view.eyePosition.x;
+  constants[21] = view.eyePosition.y;
+  constants[22] = view.eyePosition.z;
+  constants[23] = 0.0F;
   _commandList->SetGraphicsRoot32BitConstants(0, CONSTANT_COUNT, constants.data(), 0);
 
   _commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);

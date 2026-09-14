@@ -38,8 +38,8 @@ class MeshRenderer
 public:
   using WorldPoint = OrbitCamera::WorldPoint;
 
-  /// A world position, a unit normal, and the two tones. R8: a public aggregate handed to the GPU,
-  /// so plain fields -- and public, because a backend is what hands it over.
+  /// A world position, a unit normal, and the three tones. R8: a public aggregate handed to the
+  /// GPU, so plain fields -- and public, because a backend is what hands it over.
   struct MeshVertex
   {
     float x;
@@ -50,6 +50,10 @@ public:
     float nz;
     std::uint32_t litColor;
     std::uint32_t darkColor;
+    /// The silhouette, where the surface turns away from the EYE rather than from the light. A
+    /// third authored tone and not a computed one: the shader selects it exactly as it selects the
+    /// other two, so a pixel is still a colour somebody named (ADR-104).
+    std::uint32_t rimColor;
   };
 
   /// One batch of recorded vertices, and where it sits in this frame's recording. The index is not
@@ -74,6 +78,10 @@ public:
     /// World space, unit length, pointing TOWARD the light. Fixed to the world and not to the eye,
     /// so orbiting the camera turns the lit side of everything.
     WorldPoint lightDirection = {0.0F, 1.0F, 0.0F};
+    /// Where the eye is, in world space. The rim term needs a direction to the viewer per pixel,
+    /// which is this minus the pixel's world position -- exact, rather than the view axis, so a
+    /// ball at the edge of a wide pane rims on its own silhouette and not on the pane's.
+    WorldPoint eyePosition = {0.0F, 0.0F, 1.0F};
     /// The camera's viewport in canvas pixels: where clip space (-1..1) lands. The camera projects
     /// into a pane rather than the whole canvas, and the backend draws into the same pane.
     float viewportXPixels = 0.0F;
@@ -128,12 +136,15 @@ public:
   /// A UV sphere: `_segments` around, `RingsForSegments(_segments)` from pole to pole, with a
   /// smooth outward normal at every vertex so the terminator the shader draws is a curve rather
   /// than a set of facets.
-  void Sphere(const WorldPoint& _center, float _radius, const Color& _lit, const Color& _dark, std::uint32_t _segments);
+  ///
+  /// `_rim` is the silhouette's tone. Passing the same colour as `_dark` turns the rim off, which
+  /// is what makes this a strict superset of the two-tone scheme it grew out of (ADR-104).
+  void Sphere(const WorldPoint& _center, float _radius, const Color& _lit, const Color& _dark, const Color& _rim, std::uint32_t _segments);
 
   /// Eight faces, flat: every vertex of a face carries the face's own normal, so the light chooses
   /// one tone per face exactly as ADR-012 had it. `_halfWidth` is the reach along x and z,
   /// `_halfHeight` along y.
-  void Octahedron(const WorldPoint& _center, float _halfWidth, float _halfHeight, const Color& _lit, const Color& _dark);
+  void Octahedron(const WorldPoint& _center, float _halfWidth, float _halfHeight, const Color& _lit, const Color& _dark, const Color& _rim);
 
   /// Everything recorded since the last take, and marks it taken. Empty when nothing is new. The
   /// span points into this recorder and stays valid until the next `BeginFrame`.

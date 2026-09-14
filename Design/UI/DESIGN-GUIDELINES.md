@@ -358,8 +358,12 @@ Drawn, in painter's order (`MapRender.cpp`):
   1px stem (owner @0.71) standing 14 + 3 per credit a tick — a capital never lower than 30, an
   unpriced or unheld system at 20 — with a 4×1px rung every 10 units; a capital's halo at 2.4×;
   then the ball (radius 4.5·1.15, capital 6·1.15), shaded by one world-fixed light
-  (normalize(−0.45, 0.60, 0.65)) into exactly two tones, the owner's colour and `Ink::Shaded` of
-  it, chosen per pixel so the terminator is a curve that turns as the camera orbits. Under the
+  (normalize(−0.85, 0.45, 0.10), raked across the opening framing rather than sitting behind the
+  eye) into exactly three authored tones chosen per pixel (ADR-104): the owner's colour where the
+  light finds it, `Ink::Shaded` of it where the light misses it, and `Ink::Rimmed` of it on the
+  limb the light gets past — so the terminator is a hard curve and the silhouette a crescent, both
+  turning as the camera orbits. The rim only ever repaints what the light misses; on the lit side
+  it would be an outline. Under the
   foot, the yield as `+6` in the owner's colour @0.75, left out when it would collide with a label.
   Contested: a 1px ring. Custodian: a dashed ring and `CUSTODIAN T43` under the ground point.
   Captured: `CAPTURED T45` under the ground point **for three ticks and then not at all**

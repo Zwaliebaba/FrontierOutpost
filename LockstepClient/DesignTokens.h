@@ -73,6 +73,13 @@ inline constexpr Neuron::Color STAR = {214, 220, 228, 220};
 /// turned away from the light.
 inline constexpr float STATION_SHADE = 0.58F;
 
+/// How far the silhouette's tone is lifted toward white (ADR-104). The rim is a THIRD authored
+/// tone, not a computed one -- the shader selects it exactly as it selects the other two -- and
+/// white rather than the owner's own colour because it is the light getting past the ball rather
+/// than the ball's own material. It keeps its distance from every owner colour, so a rimmed rival
+/// is still that rival.
+inline constexpr float STATION_RIM = 0.45F;
+
 /// The station's inks, as alphas over the owner's colour: its contact shadow (black), the disc it
 /// stands on, the dashed footprint whose reach is its yield, the stem whose height is its yield,
 /// and the yield written under its foot.
@@ -89,10 +96,19 @@ inline constexpr std::uint8_t STATION_YIELD_ALPHA = 190;
   return Neuron::Mix(_lit, APP_BACKGROUND, STATION_SHADE);
 }
 
-// The pair is the right way round, as ADR-012 had every pair asserted: a station is never darker
-// where the light finds it.
+/// The silhouette's tone for a lit one. Opaque, for the reason `Shaded` is.
+[[nodiscard]] constexpr Neuron::Color Rimmed(const Neuron::Color& _lit) noexcept
+{
+  return Neuron::Mix(_lit, Neuron::WHITE, STATION_RIM);
+}
+
+// The ramp runs the right way round, as ADR-012 had every pair asserted: a station is never darker
+// where the light finds it, and never dimmer on the limb the light gets past than in the shadow
+// beside it.
 static_assert(Neuron::Luminance(Shaded(BLUE)) < Neuron::Luminance(BLUE));
 static_assert(Neuron::Luminance(Shaded(AMBER)) < Neuron::Luminance(AMBER));
+static_assert(Neuron::Luminance(Rimmed(BLUE)) > Neuron::Luminance(BLUE));
+static_assert(Neuron::Luminance(Rimmed(AMBER)) > Neuron::Luminance(AMBER));
 
 } // namespace Ink
 

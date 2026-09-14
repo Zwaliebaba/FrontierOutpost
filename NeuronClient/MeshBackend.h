@@ -32,9 +32,9 @@ public:
   void Draw(ID3D12GraphicsCommandList* _commandList, std::uint32_t _frameIndex, MeshRenderer& _recorder);
 
 private:
-  /// A float4x4 and a float3 with one float of padding, which is what MeshVS.hlsl's cbuffer
-  /// declares: sixteen for the camera, four for the light.
-  static constexpr std::uint32_t CONSTANT_COUNT = 20;
+  /// A float4x4 and two padded float3s, which is what the mesh shaders' cbuffer declares: sixteen
+  /// for the camera, four for the light, four for the eye the rim term is measured from.
+  static constexpr std::uint32_t CONSTANT_COUNT = 24;
 
   void CreateVertexBuffer(ID3D12Device* _device);
   void CreatePipeline(ID3D12Device* _device);

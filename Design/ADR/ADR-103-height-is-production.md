@@ -1,6 +1,6 @@
 # ADR-103 — Height is production, and the ball is lit in the shader
 
-**Status:** Accepted
+**Status:** Accepted — **its tone count and its light direction are amended by ADR-104 (2026-09-14)**: a lit surface is one of three authored tones rather than two, and the galaxy's light is raked across the opening framing rather than sitting behind the eye. Everything else here stands.
 
 **Date:** 2026-09-14
 **Decided by:** Owner decision, 2026-09-14, by instructing the map's stations to be converted to the *"height means something"* treatment (mockup option 1f) and station lighting to move off the CPU into the shader. This ADR records what that decision settles and what it rejects.

@@ -92,7 +92,7 @@ constexpr float OWNER_DISC_SCALE = 0.9F;
 /// the world and not to the eye, which is the whole point: orbit the camera and the lit side of
 /// every ball turns with the galaxy, and the map reads as a place seen from somewhere rather than
 /// a picture with a highlight painted on (ADR-103).
-constexpr Neuron::OrbitCamera::WorldPoint LIGHT_DIRECTION = {-0.45341F, 0.60455F, 0.65493F};
+constexpr Neuron::OrbitCamera::WorldPoint LIGHT_DIRECTION = {-0.87905F, 0.46538F, 0.10342F};
 
 /// The garrison badge beside a system's name (ADR-079). 16 is the `LOCKED` chip's height, which is
 /// what a chip is on this screen; there is no rounded-rectangle primitive and every other chip here
@@ -502,7 +502,7 @@ void DrawStationGround(ShapeRenderer& _shapes, Neuron::MeshRenderer& _meshes, co
   // the same for everybody.
   const Color lit = BallTone(owner);
   _meshes.Sphere(MapView::Above(node.positionX, node.positionY, station.stemHeight), station.worldRadius, lit, Ink::Shaded(lit),
-                 Neuron::MeshRenderer::SegmentsForRadius(station.radiusPixels));
+                 Ink::Rimmed(lit), Neuron::MeshRenderer::SegmentsForRadius(station.radiusPixels));
 }
 
 /// The half of a station that sits OVER its ball: the rings, the name, what is written under its
@@ -841,6 +841,7 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   // into. Set here, after the framing, so the balls and their labels are placed by one camera.
   _meshes.SetView(Neuron::MeshRenderer::View{.viewProjection = camera.ViewProjection(),
                                              .lightDirection = LIGHT_DIRECTION,
+                                             .eyePosition = camera.Position(),
                                              .viewportXPixels = paneX,
                                              .viewportYPixels = Frame::TOP_BAR_HEIGHT,
                                              .viewportWidthPixels = paneWidth,
