@@ -699,10 +699,13 @@ TEST_CLASS(MeshRendererTests)
 public:
   using MeshVertex = Neuron::MeshRenderer::MeshVertex;
 
-  /// Five tones a test can tell apart by value, in ramp order: shadow, grazed, lit, silhouette,
-  /// glint.
-  static constexpr Neuron::ColorRamp TONES = {Neuron::DARK_GRAY, Neuron::LIGHT_GRAY, Neuron::WHITE, Neuron::BRIGHT_CYAN,
-                                              Neuron::BRIGHT_MAGENTA};
+  /// Six tones a test can tell apart by value, in ramp order: shadow, past the terminator, grazed,
+  /// lit, silhouette, glint. The mid grey is a literal because the palette has no name between
+  /// `DARK_GRAY` and `LIGHT_GRAY`, and what this needs is six DISTINCT values rather than six
+  /// meaningful ones.
+  static constexpr Neuron::ColorRamp TONES = {Neuron::DARK_GRAY,   Neuron::Color{0x77, 0x77, 0x77, Neuron::OPAQUE_ALPHA},
+                                              Neuron::LIGHT_GRAY,  Neuron::WHITE,
+                                              Neuron::BRIGHT_CYAN, Neuron::BRIGHT_MAGENTA};
 
   /// (b - a) x (c - a), the direction a counter-clockwise triangle faces.
   static std::array<float, 3> FaceDirection(const MeshVertex& _a, const MeshVertex& _b, const MeshVertex& _c)

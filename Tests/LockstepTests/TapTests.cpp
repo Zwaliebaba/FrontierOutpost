@@ -2628,11 +2628,13 @@ public:
 
     for (const Neuron::MeshRenderer::MeshVertex& vertex : vertices)
     {
-      // The ramp runs shadow, grazed, lit, silhouette (ADR-105), and every step of it has to climb:
-      // two bands the wrong way round on a small ball read as a modelling error rather than as a
-      // palette one.
-      Assert::IsTrue(Neuron::Luminance(Unpack(vertex.halfLitColor)) > Neuron::Luminance(Unpack(vertex.darkColor)),
-                     L"a ball is darker where the light grazes it than in its shadow");
+      // The ramp runs shadow, past the terminator, grazed, lit, silhouette (ADR-105, ADR-108), and
+      // every step of it has to climb: two bands the wrong way round on a small ball read as a
+      // modelling error rather than as a palette one.
+      Assert::IsTrue(Neuron::Luminance(Unpack(vertex.quarterLitColor)) > Neuron::Luminance(Unpack(vertex.darkColor)),
+                     L"a ball is darker just past its terminator than in its shadow");
+      Assert::IsTrue(Neuron::Luminance(Unpack(vertex.halfLitColor)) > Neuron::Luminance(Unpack(vertex.quarterLitColor)),
+                     L"a ball is darker where the light grazes it than just past its terminator");
       Assert::IsTrue(Neuron::Luminance(Unpack(vertex.litColor)) > Neuron::Luminance(Unpack(vertex.halfLitColor)),
                      L"a ball is darker where the light finds it than where it grazes it");
       // The silhouette tone is either brighter than the lit face -- a ball, where the limb catches
@@ -2646,6 +2648,7 @@ public:
       Assert::IsTrue(rimLifts || rimOff, L"a silhouette tone that neither lifts nor is switched off");
       Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.litColor).alpha, L"the mesh pass does not blend, so a tone is opaque");
       Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.halfLitColor).alpha);
+      Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.quarterLitColor).alpha);
       Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.darkColor).alpha);
       Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.rimColor).alpha);
 

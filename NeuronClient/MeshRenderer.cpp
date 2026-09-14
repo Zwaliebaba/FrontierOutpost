@@ -40,12 +40,13 @@ void MeshRenderer::AppendFlatQuad(const WorldPoint& _a, const WorldPoint& _b, co
 {
   const std::uint32_t lit = Pack(_tones.lit);
   const std::uint32_t halfLit = Pack(_tones.halfLit);
+  const std::uint32_t quarterLit = Pack(_tones.quarterLit);
   const std::uint32_t dark = Pack(_tones.shaded);
   const std::uint32_t rim = Pack(_tones.rim);
   const std::uint32_t glint = Pack(_tones.glint);
 
   const auto corner = [&](const WorldPoint& _at)
-  { return MeshVertex{_at.x, _at.y, _at.z, _normal.x, _normal.y, _normal.z, lit, halfLit, dark, rim, glint}; };
+  { return MeshVertex{_at.x, _at.y, _at.z, _normal.x, _normal.y, _normal.z, lit, halfLit, quarterLit, dark, rim, glint}; };
 
   AppendTriangle(corner(_a), corner(_b), corner(_c));
   AppendTriangle(corner(_a), corner(_c), corner(_d));
@@ -62,6 +63,7 @@ void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const ColorR
   const std::uint32_t rings = RingsForSegments(segments);
   const std::uint32_t lit = Pack(_tones.lit);
   const std::uint32_t halfLit = Pack(_tones.halfLit);
+  const std::uint32_t quarterLit = Pack(_tones.quarterLit);
   const std::uint32_t dark = Pack(_tones.shaded);
   const std::uint32_t rim = Pack(_tones.rim);
   const std::uint32_t glint = Pack(_tones.glint);
@@ -77,7 +79,7 @@ void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const ColorR
     const float ny = std::cos(latitude);
     const float nz = std::sin(latitude) * std::sin(longitude);
     return MeshVertex{
-      _center.x + nx * _radius, _center.y + ny * _radius, _center.z + nz * _radius, nx, ny, nz, lit, halfLit, dark, rim, glint};
+      _center.x + nx * _radius, _center.y + ny * _radius, _center.z + nz * _radius, nx, ny, nz, lit, halfLit, quarterLit, dark, rim, glint};
   };
 
   for (std::uint32_t ring = 0; ring < rings; ++ring)
@@ -171,6 +173,7 @@ void MeshRenderer::Octahedron(const WorldPoint& _center, const WorldPoint& _forw
 
   const std::uint32_t lit = Pack(_tones.lit);
   const std::uint32_t halfLit = Pack(_tones.halfLit);
+  const std::uint32_t quarterLit = Pack(_tones.quarterLit);
   const std::uint32_t dark = Pack(_tones.shaded);
   const std::uint32_t rimTone = Pack(_tones.rim);
   const std::uint32_t glint = Pack(_tones.glint);
@@ -208,9 +211,9 @@ void MeshRenderer::Octahedron(const WorldPoint& _center, const WorldPoint& _forw
       ny /= length;
       nz /= length;
     }
-    AppendTriangle(MeshVertex{_a.x, _a.y, _a.z, nx, ny, nz, lit, halfLit, dark, rimTone, glint},
-                   MeshVertex{_b.x, _b.y, _b.z, nx, ny, nz, lit, halfLit, dark, rimTone, glint},
-                   MeshVertex{_c.x, _c.y, _c.z, nx, ny, nz, lit, halfLit, dark, rimTone, glint});
+    AppendTriangle(MeshVertex{_a.x, _a.y, _a.z, nx, ny, nz, lit, halfLit, quarterLit, dark, rimTone, glint},
+                   MeshVertex{_b.x, _b.y, _b.z, nx, ny, nz, lit, halfLit, quarterLit, dark, rimTone, glint},
+                   MeshVertex{_c.x, _c.y, _c.z, nx, ny, nz, lit, halfLit, quarterLit, dark, rimTone, glint});
   };
 
   for (std::size_t index = 0; index < rim.size(); ++index)

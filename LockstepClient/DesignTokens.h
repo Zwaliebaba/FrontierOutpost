@@ -99,6 +99,16 @@ inline constexpr float STATION_SHADE = 0.58F;
 /// this ball size.
 inline constexpr float STATION_HALF_SHADE = 0.30F;
 
+/// The first step out of the shadow (ADR-108), and **the three diffuse steps are now equal**: 0.30,
+/// 0.44, 0.58 is 0.14 at a time down the same ramp toward the background. Equal steps rather than a
+/// number chosen for this band alone, because the eye reads a ramp by its evenness and the two that
+/// existed were already 0.28 apart -- putting the new one anywhere else would have made one of the
+/// three boundaries louder than the other two.
+///
+/// In blue that is 255 → 185 → 150 → 119, which keeps 31 and 35 between adjacent bands. `Color.h`
+/// says why a tone after ADR-106 had to be measured rather than argued.
+inline constexpr float STATION_QUARTER_SHADE = 0.44F;
+
 /// How far the silhouette's tone is lifted toward white (ADR-104). The rim is a THIRD authored
 /// tone, not a computed one -- the shader selects it exactly as it selects the other two -- and
 /// white rather than the owner's own colour because it is the light getting past the ball rather
@@ -132,6 +142,12 @@ inline constexpr std::uint8_t STATION_YIELD_ALPHA = 190;
   return Neuron::Mix(_lit, APP_BACKGROUND, STATION_HALF_SHADE);
 }
 
+/// The band just past the terminator, where the light has gone but the shadow has not closed.
+[[nodiscard]] constexpr Neuron::Color QuarterLit(const Neuron::Color& _lit) noexcept
+{
+  return Neuron::Mix(_lit, APP_BACKGROUND, STATION_QUARTER_SHADE);
+}
+
 /// The silhouette's tone for a lit one. Opaque, for the reason `Shaded` is.
 [[nodiscard]] constexpr Neuron::Color Rimmed(const Neuron::Color& _lit) noexcept
 {
@@ -149,7 +165,7 @@ inline constexpr std::uint8_t STATION_YIELD_ALPHA = 190;
 /// thing a caller states -- which is what keeps twelve owners from becoming forty-eight literals.
 [[nodiscard]] constexpr Neuron::ColorRamp RampFor(const Neuron::Color& _lit) noexcept
 {
-  return Neuron::ColorRamp{Shaded(_lit), HalfLit(_lit), _lit, Rimmed(_lit), Glinted(_lit)};
+  return Neuron::ColorRamp{Shaded(_lit), QuarterLit(_lit), HalfLit(_lit), _lit, Rimmed(_lit), Glinted(_lit)};
 }
 
 /// The same ramp for a FLAT-FACED solid, with the silhouette tone turned off by setting it to the
@@ -166,16 +182,18 @@ inline constexpr std::uint8_t STATION_YIELD_ALPHA = 190;
 /// existed, as a stem with a white side (ADR-105).
 [[nodiscard]] constexpr Neuron::ColorRamp FlatRampFor(const Neuron::Color& _lit) noexcept
 {
-  return Neuron::ColorRamp{Shaded(_lit), HalfLit(_lit), _lit, Shaded(_lit), _lit};
+  return Neuron::ColorRamp{Shaded(_lit), QuarterLit(_lit), HalfLit(_lit), _lit, Shaded(_lit), _lit};
 }
 
 // The ramp runs the right way round at every step, as ADR-012 had every pair asserted: a station is
 // never darker where the light finds it than where it grazes it, never darker where it grazes than
 // in the shadow, and never dimmer on the limb the light gets past than on the face it finds.
-static_assert(Neuron::Luminance(Shaded(BLUE)) < Neuron::Luminance(HalfLit(BLUE)));
+static_assert(Neuron::Luminance(Shaded(BLUE)) < Neuron::Luminance(QuarterLit(BLUE)));
+static_assert(Neuron::Luminance(QuarterLit(BLUE)) < Neuron::Luminance(HalfLit(BLUE)));
 static_assert(Neuron::Luminance(HalfLit(BLUE)) < Neuron::Luminance(BLUE));
 static_assert(Neuron::Luminance(BLUE) < Neuron::Luminance(Rimmed(BLUE)));
-static_assert(Neuron::Luminance(Shaded(AMBER)) < Neuron::Luminance(HalfLit(AMBER)));
+static_assert(Neuron::Luminance(Shaded(AMBER)) < Neuron::Luminance(QuarterLit(AMBER)));
+static_assert(Neuron::Luminance(QuarterLit(AMBER)) < Neuron::Luminance(HalfLit(AMBER)));
 static_assert(Neuron::Luminance(HalfLit(AMBER)) < Neuron::Luminance(AMBER));
 static_assert(Neuron::Luminance(AMBER) < Neuron::Luminance(Rimmed(AMBER)));
 static_assert(Neuron::Luminance(Rimmed(BLUE)) < Neuron::Luminance(Glinted(BLUE)));

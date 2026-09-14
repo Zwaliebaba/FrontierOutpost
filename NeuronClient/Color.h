@@ -103,18 +103,26 @@ struct ColorPair
   Color lit;
 };
 
-/// A surface's four tones, brightest last: the shadow, the band the light grazes, the band it
-/// finds, and the silhouette it gets past. The mesh pass chooses one per pixel by thresholding the
-/// light, and there is nothing between them (ADR-105).
+/// A surface's tones, brightest last: the shadow, the band beyond the terminator, the band the
+/// light grazes, the band it finds, the silhouette it gets past, and the glint it bounces back. The
+/// mesh pass chooses one per pixel by thresholding the light, and there is nothing between them
+/// (ADR-105, ADR-108).
 ///
-/// **Four rather than two because two was EGA's, not this game's** (ADR-104's argument, taken one
-/// step further). The count is not a principle; every entry being a colour somebody named is.
+/// **The count is not a principle; every entry being a colour somebody named is** (ADR-104's
+/// argument). It has been two, four, five and now six, and each step was a measurement rather than
+/// a preference — see ADR-108 for the band shares this one was kept on.
 ///
-/// R8: a public aggregate handed to the GPU. Authored as `{Shaded(c), HalfLit(c), c, Rimmed(c)}`,
-/// which is why the order runs dark to bright — it reads as a ramp at the call site.
+/// R8: a public aggregate handed to the GPU. Authored as
+/// `{Shaded(c), QuarterLit(c), HalfLit(c), c, Rimmed(c), Glinted(c)}`, which is why the order runs
+/// dark to bright — it reads as a ramp at the call site.
 struct ColorRamp
 {
   Color shaded;
+  /// The first step out of the shadow, between `shaded` and `halfLit` (ADR-108). It is a DIFFUSE
+  /// band and therefore competes for width with the two above it, which is the bar ADR-105 set for
+  /// any tone after it and the reason this one had to be measured at three ball sizes before it
+  /// was kept.
+  Color quarterLit;
   Color halfLit;
   Color lit;
   Color rim;

@@ -25,9 +25,9 @@ namespace Neuron
 /// drains it and is the only half that knows about D3D12 (ADR-075). Every page and every test talks
 /// to this type; a headless test can tessellate a sphere and count its triangles without a device.
 ///
-/// **A vertex carries five authored tones and the GPU picks one per pixel** -- two thresholds on
-/// the light choose between the shadow, the grazed band and the lit band, a threshold on the view
-/// picks the silhouette, and one on the half-vector picks the glint. Never a value that is not one
+/// **A vertex carries six authored tones and the GPU picks one per pixel** -- three thresholds on
+/// the light choose between the shadow, the band past the terminator, the grazed band and the lit
+/// band, a threshold on the view picks the silhouette, and one on the half-vector picks the glint. Never a value that is not one
 /// of them (ADR-012's rule, kept while its count was dropped: ADR-104, ADR-105, ADR-106). The
 /// normal is what the choices are made from, so it is interpolated; the tones are not, because a
 /// tone that interpolated would be exactly the gradient the rule forbids.
@@ -39,7 +39,7 @@ class MeshRenderer
 public:
   using WorldPoint = OrbitCamera::WorldPoint;
 
-  /// A world position, a unit normal, and the five tones. R8: a public aggregate handed to the
+  /// A world position, a unit normal, and the six tones. R8: a public aggregate handed to the
   /// GPU, so plain fields -- and public, because a backend is what hands it over.
   struct MeshVertex
   {
@@ -51,6 +51,8 @@ public:
     float nz;
     std::uint32_t litColor;
     std::uint32_t halfLitColor;
+    /// The first step out of the shadow. See `ColorRamp::quarterLit` (ADR-108).
+    std::uint32_t quarterLitColor;
     std::uint32_t darkColor;
     /// The silhouette, where the surface turns away from the EYE rather than from the light. An
     /// authored tone and not a computed one: the shader selects it exactly as it selects the

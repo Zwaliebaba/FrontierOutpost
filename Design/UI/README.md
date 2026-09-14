@@ -33,6 +33,15 @@ from the tree, not from the plan.
 > change that touches drawing, not at the end. A locked desktop does not stop the work, it silently
 > halves what can be photographed — and the half it takes is the half with the controls in it.
 >
+> **ADR-108 then made sixteen of them stale again the same day**, which is the fifth time in two days
+> the map's lighting has invalidated the same set. Four of the five no-finger captures were retaken
+> with it — `01-main-page`, `06-at-lock`, `04-connection-lost`, `08-missed-digests` — and
+> **`05-match-finished.png` was measured to be unaffected rather than assumed to be**: its scrim
+> covers the map entirely and the final standings are deterministic from the seed, so a fresh
+> capture hashed identical to the committed one (SHA-256 `a27eb27a…`, 2026-09-14). **The eleven
+> tap-reachable captures are STALE for ADR-108** and are waiting on an unlocked desktop; the desktop
+> auto-locked twice during that session, which is the other half of the lesson above.
+>
 > **The check is mechanical rather than visual.** The 8×8 font was one bit a pixel, so a capture
 > carrying it has a handful of distinct luminances in it; an anti-aliased one has two hundred. Run
 > that over the directory and a stale file cannot hide: it is what caught `05-refused-seat-in-use`,

@@ -419,16 +419,26 @@ Drawn, in painter's order (`MapRender.cpp`):
   it and stopping a ball's radius short of the top (ADR-105); a capital's halo at 2.4×;
   then the ball (radius 4.5·1.15, capital 6·1.15). Both are shaded by one world-fixed key light
   (normalize(−0.85, 0.45, 0.10), raked across the opening framing rather than sitting behind the
-  eye) into exactly five authored tones chosen per pixel (ADR-104, ADR-105, ADR-106), by two
-  thresholds on the light, one on the view and one on the half-vector: the owner's colour where the
-  light finds it squarely, `Ink::HalfLit` where it only grazes, `Ink::Shaded` where it misses,
-  `Ink::Rimmed` on the limb the light gets past, and `Ink::Glinted` in the four-or-five-pixel
-  highlight where it bounces straight back — so the bands are hard curves that turn as the camera
-  orbits. The rim and the glint only ever repaint what they are entitled to, and a FLAT-faced solid
-  switches both off (`Ink::FlatRampFor`), because a low dot(normal, toViewer) means "limb" on a
-  sphere and merely "oblique" on a column, and a flat face's half-vector dot is constant across its
-  whole area. **There is no dither**: it was built, measured and rejected at this ball size
-  (ADR-106).
+  eye) into exactly six authored tones chosen per pixel (ADR-104, ADR-105, ADR-106, ADR-108), by
+  THREE thresholds on the light, one on the view and one on the half-vector: the owner's colour
+  where the light finds it squarely, `Ink::HalfLit` where it only grazes, `Ink::QuarterLit` just
+  past the terminator, `Ink::Shaded` where the light is gone, `Ink::Rimmed` on the limb the light
+  gets past, and `Ink::Glinted` in the four-or-five-pixel highlight where it bounces straight back —
+  so the bands are hard curves that turn as the camera orbits. The rim and the glint only ever
+  repaint what they are entitled to, and a FLAT-faced solid switches both off (`Ink::FlatRampFor`)
+  — but NOT the diffuse bands, because a step down the light is not a curved-surface effect. A low
+  dot(normal, toViewer) means "limb" on a sphere and merely "oblique" on a column, and a flat face's
+  half-vector dot is constant across its whole area. **There is no dither**: it was built, measured
+  and rejected at this ball size (ADR-106).
+- **The four diffuse steps are even and their shares are measured** (ADR-108). `Ink::Shaded` 0.58,
+  `Ink::QuarterLit` 0.44, `Ink::HalfLit` 0.30 toward the background is 0.14 at a time down one ramp
+  — in blue 255 → 185 → 150 → 119. Counted on 2026-09-14 at the authored framing, a capital
+  (r≈16.5) is lit 31% / grazed 25% / quarter 9% / shadow 11% / rim 20% / glint 5%, and an ordinary
+  system (r≈10.6) 24 / 25 / 8 / 18 / 20 / 4. **The balls are bigger than ADR-105 and ADR-106
+  assumed** — they argued against a further band on a radius near 9, and the framing gives 10.6 to
+  16.5. The new band is 2.2px wide on a capital and 1.3px on a far system, and it is kept on the
+  measurement ADR-106 rejected the dither by: **0.0% of its pixels are isolated at any ball size**,
+  the same as the grazed band. The next tone has to clear that bar rather than an argument.
   **The shadow is cast along its own steeper direction** (normalize(−0.51, 0.86, 0.06)), landing at
   0.60 of the stem's height rather than the key light's honest 1.9 — which would put a rich
   capital's shadow 118 units away, across its neighbour. Under the
