@@ -171,11 +171,24 @@ symptom is a glyph with a gap in it that reads as a rendering fault.
 ## Consequences
 
 **The sheet is shorter than the one it replaces, in every case the game can currently produce.**
-Measured from the constants on 2026-09-14: header 44 + help 0 or 33 + grid + `CANCEL` 44, where the
-grid is `4 + 96 + 12` for one row of tiles and `4 + 96 + 8 + 96 + 12` for two. A system with two
-buildings is **200 pixels**, or 233 with a help line; a full four-tile sheet will be **304**, or 337
-with one. The built sheet ADR-052 measured was 340 and ADR-078 measured at 386 with a two-line purse
-sentence. More than half the pane stays map with room to spare, which is ADR-052's constraint.
+Header 44 + help + grid + `CANCEL` 44, where the grid is `4 + 96 + 12` for one row of tiles and
+`4 + 96 + 8 + 96 + 12` for two, and the help slot is 0, 33 or **50** — a wrapped sentence takes two
+lines more often than one. A system with two buildings is **200 pixels** bare, **233** under a
+one-line sentence and **250** under a two-line one; a full four-tile sheet will be **304** bare and
+**354** under two lines. The built sheet ADR-052 measured was 340 and ADR-078 measured at 386 with a
+two-line purse sentence. More than half the pane stays map in every case the game produces today;
+the four-tile sheet at 354 would be the first to pass ADR-052's 338, and the bastion and the lane do
+not exist yet.
+
+> **Corrected 2026-09-15, on the owner's instruction, and this is an exception to `Design/README.md`
+> §4.** As first written this paragraph said the help slot was "0 or 33" and a full grid 337, which
+> was arithmetic done from the constants before the sheet had been photographed. The captures taken
+> for it the same day showed the purse sentence wrapping to two lines — `WrapToWidth` measures in
+> the mono face and the line is drawn in sans, which is a defect recorded in
+> `Design/UI/DESIGN-GUIDELINES.md` §Font — so the real figures are the ones above. An Accepted ADR
+> is immutable except for its status line and a wrong measurement would normally be corrected by a
+> new one; the owner asked for the number itself to be right, and the precedent for recording such
+> an edit in place rather than pretending it did not happen is ADR-035's.
 
 **A build tile is the largest target on the screen.** 284×96 against a 44×44 floor (ADR-100), so
 there is nothing to grow and nothing a thumb can land between two of.

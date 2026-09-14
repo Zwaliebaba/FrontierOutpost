@@ -55,8 +55,8 @@ ships — this document cites it and does not restate what it does not have to.
   four-tile grid will be 304 bare and **354** under a two-line sentence, which is the first thing on
   this sheet that would pass ADR-052's "more than half the pane stays map" (338) — the row form
   already passes it at six rows, and the grid does not until the bastion and the lane exist.
-  **ADR-107 predicted 337 for that case**, which was arithmetic done before the help line's wrap was
-  measured; see §Font.
+  **ADR-107 said 337 for that case until 2026-09-15**, which was arithmetic done before the sheet had
+  been photographed; it was corrected in place on the owner's instruction and says so.
 
 ## Font
 

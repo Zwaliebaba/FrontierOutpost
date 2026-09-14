@@ -34,13 +34,17 @@ from the tree, not from the plan.
 > halves what can be photographed — and the half it takes is the half with the controls in it.
 >
 > **ADR-108 then made sixteen of them stale again the same day**, which is the fifth time in two days
-> the map's lighting has invalidated the same set. Four of the five no-finger captures were retaken
-> with it — `01-main-page`, `06-at-lock`, `04-connection-lost`, `08-missed-digests` — and
-> **`05-match-finished.png` was measured to be unaffected rather than assumed to be**: its scrim
-> covers the map entirely and the final standings are deterministic from the seed, so a fresh
-> capture hashed identical to the committed one (SHA-256 `a27eb27a…`, 2026-09-14). **The eleven
-> tap-reachable captures are STALE for ADR-108** and are waiting on an unlocked desktop; the desktop
-> auto-locked twice during that session, which is the other half of the lesson above.
+> the map's lighting has invalidated the same set. All sixteen are retaken. Fifteen changed;
+> **`05-match-finished.png` was measured to be unaffected rather than assumed to be** — its scrim
+> covers the map entirely and the final standings are deterministic from the seed, so a fresh capture
+> hashed identical to the committed one (SHA-256 `a27eb27a…`). That is the check to reach for when a
+> capture *might* be reached by a change: hash a fresh one rather than argue about it.
+>
+> **`01-build-rising.png` improved in the retake and it is worth knowing why.** The 2026-09-14
+> version caught a level-TWO build one tick of two in; this one catches a level-THREE build one tick
+> of three, so the level ladder shows two pips held rather than one, the progress bar is at a third
+> rather than a half, and the digest behind it happens to carry a `NEED 23 MORE` build button —
+> a tile state no capture had. Ordering an L3 costs two more locks than an L2 and is worth the wait.
 >
 > **The check is mechanical rather than visual.** The 8×8 font was one bit a pixel, so a capture
 > carrying it has a handful of distinct luminances in it; an anti-aliased one has two hundred. Run
