@@ -135,6 +135,16 @@ poorly; it is a `--serve` match eleven ticks in instead, with thirty-five events
 ten fleets. The practice match is still what the sheet captures are taken from, because it is the
 quickest way to a tick-zero board with a `MOVE FLT n` card on it.
 
+**And it is taken from a BOT SEAT, which is the trick that makes a no-tap capture worth looking at**
+(2026-09-14). A human seat nobody gives orders for has one fleet and one system for the whole match,
+so every board captured without a finger was a board with nothing on it. The server plays seats 2-6
+with `--bots 5` and their tokens are the fixed phase-0 list, so `--join <host> --token bravo` puts
+the client in front of an empire that has expanded, fought and built -- eleven fleets, a rail deep
+enough to page, a digest with thirty events -- without a tap. `01-main-page`, `06-at-lock`,
+`08-missed-digests` and `04-connection-lost` are all taken that way, from one server in one run
+(scratch `RichShots.ps1`), because a store resumes on whatever tick wall-clock says and two runs are
+never at the same one.
+
 ## Photographing the build
 
 Done on 2026-09-12: every screen and state above was captured from the Debug build of the tree at
