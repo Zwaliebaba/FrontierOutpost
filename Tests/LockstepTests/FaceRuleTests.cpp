@@ -65,9 +65,12 @@ namespace
 
 using Neuron::Face;
 
+/// **The family, not the weight and not the size.** `MonoDisplay` is the 16px cut of Plex Mono
+/// (ADR-084), so it carries data and is held to the mono half of ADR-074's rule like the other two;
+/// a list written as "the two mono faces" is a list that goes wrong the next time a cut is baked.
 [[nodiscard]] bool IsMono(Face _face) noexcept
 {
-  return _face == Face::MonoRegular || _face == Face::MonoMedium;
+  return _face == Face::MonoRegular || _face == Face::MonoMedium || _face == Face::MonoDisplay;
 }
 
 /// What one screen drew, kept under the screen's name.
@@ -166,7 +169,8 @@ struct Screen
     facts.reconnects = 2;
     facts.secondsToNextAttempt = 3.0;
     facts.lockCountdown = "00:04:12";
-    facts.standings = "3RD OF 6";
+    facts.standings = {Lockstep::ConnectionDialog::Facts::Standing{.text = "1ST  P6         95", .isYou = false},
+                       Lockstep::ConnectionDialog::Facts::Standing{.text = "3RD  YOU        35", .isYou = true}};
 
     Lockstep::ConnectionDialog dialog;
     dialog.Update(kind, facts, 0.0);

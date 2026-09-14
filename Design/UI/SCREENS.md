@@ -10,9 +10,13 @@ stated as such, and nothing below is in the present tense unless the tree does i
 
 ## 01 · Main page — **built** (`01-main-page.png` is the capture, tick 11 of a six-seat match)
 
-**Top bar (44px, `MainPage::DrawTopBar`).** `LOCKSTEP` · `M0007 · D2/21 · 6 PLAYERS · 26 SYSTEMS`
-· spacer · `T8 LOCKS` + the countdown at 2× in amber · `26 CR` · `SCORE 1,284` + chip `4TH / 6` ·
-`LDR P3 1,610` · `▶ REPLAY T7`. The left sentence is measured against what the right block leaves
+**Top bar (44px, `MainPage::DrawTopBar`).** `LOCKSTEP` · `D2/21 · 6 PLAYERS · 26 SYSTEMS`
+· spacer · `T8 LOCKS` + the countdown in the 16px display cut in amber (ADR-084) · `46 CR −20` —
+the purse, then in blue what this tick's queue has already committed of it, drawn only when
+something is queued (ADR-087) · `SCORE 1,284` + chip `4TH / 6` — blue when you lead, **amber when
+your place is worse than on the last digest this client drew**, outline otherwise (ADR-091) ·
+`LDR P3 1,610` · `▶ REPLAY T7` **only under `--dev`**, because its sheet is a stub and a control
+that says its own screen is unfinished teaches that the buttons here may not work. The left sentence is measured against what the right block leaves
 and dropped a clause at a time (`- ENDS <date>` first, then the census, then only the stem). While
 the link is down `RECONNECTING` follows it in red. The `LDR` field is drawn only when somebody else
 leads (ADR-056). At the lock the countdown turns grey and the label reads `T8 LOCKED`; when the match
@@ -40,25 +44,55 @@ action (ADR-070). An **answered proposal** reads `ACCEPTED` or `DECLINED` in
 the past tense on the button that was pressed, outlined blue like a queued build, with the other
 button still imperative and still tappable, so changing an answer before the lock is one tap
 (ADR-068); each card answers the offer its digest entry names, so two open offers no longer share
-one card's buttons. Tapping a card focuses the system it is about; `MAP` focuses the system the
-action names.
+one card's buttons. Tapping a card focuses the system it is about, and **the systems it is
+about that the card's own tap does not reach are named chips** — `HOLLIS`, `NYX`, four at most and
+then `+n`, each focusing that system (ADR-081). A card carries no button labelled `MAP`: the one
+that pointed where the card body already points was one tap drawn twice, and the ones that pointed
+somewhere else said nothing about where.
 
-**Overflow (ADR-061).** An **actor card is collapsed** unless it is the open one: dot, title, `3
-EVENTS`, the verdict box and the whole action row, with the per-event lines behind a tap on its
-22px title band; one card is open at a time. A stack that still does not fit is **paged**, with a
-22px band at the foot of the column — `1 / 3 · MORE ›`, and `‹ PREV` once past page one — drawn only
-when it is needed. Page breaks fall between cards; the page and the open card reset when a new
-digest arrives; the leading card, which carries the standing moves (ADR-056), is always on page 1.
+**Overflow (ADR-061, ADR-080).** An **actor card is collapsed** unless it is the open one: dot,
+title, `3 EVENTS`, the verdict box and the whole action row, with the per-event lines behind a tap on
+its 22px title band; one card is open at a time. A stack that still does not fit **scrolls, by whole
+cards**: a wheel notch over the column, a drag that began on it, or `PageDown` moves the top down —
+the wheel and a key by one card and a screenful respectively, a drag when it has banked 44 pixels.
+Nothing is ever drawn part-way off the top.
+
+The 22px band at the foot of the column stays as the tap route and **says what is below it**:
+`27 MORE · 1 BATTLE ›` — the hidden count and the worst hidden thing, a battle outranking its own
+kind because the verdict is what makes it one — or `END` in dim ink when the bottom is on the
+screen, with `‹ PREV` on the left once there is anything above. Its two halves move by a screenful.
+The scroll and the open card reset when a new digest arrives. The leading card carries the standing
+moves (ADR-056) and is at the top of the stack rather than pinned to the screen.
 
 *Differs / not built:* no tick stamp on the right of a plain event card; no highlighted card
-variant; buttons that do not fit the column are dropped rather than wrapped; **nothing scrolls**
-(ADR-052 option C) — overflow is the collapse and the pages above. The handoff's four card-level
+variant; buttons that do not fit the column are dropped rather than wrapped. **The sheets and the
+locks rail still do not scroll** (ADR-052 option C, which ADR-080 amends for this column only). The handoff's four card-level
 signals (`REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE`) are the signal sheet's rows instead
 (ADR-039).
+
+**The top bar's purse says what is committed (ADR-087).** `46 CR −20` — the purse, then in blue
+what this tick's queue has already taken of it, drawn only when something is queued. It is the same
+`QueuedBuildCost()` the build sheet's sentence explains and the affordability guard refuses by, so
+the bar, the rail's `- 26 cr left at the lock -` and the sheet cannot disagree.
+
+**A capture is news for three ticks (ADR-082).** `CAPTURED Tn` is drawn under a system for three
+ticks after it changed hands and then not at all, in one of three inks (ADR-088): your colour when
+you took it, red when it was taken from you, and the new owner's colour at 0.7 when two rivals
+traded it. Red on this screen is what you lost and nothing else — the snapshot carries
+`capturedFrom` so the map can tell the third case from the second. The legend is not drawn while a
+sheet is open, because the two share the bottom strip of the pane.
 
 **Map (centre, `MapRender.cpp`).** Per `DESIGN-GUIDELINES.md` "Map": camera, grid, stars, lanes
 with costs, routes, the sealed region, systems and fleets depth-sorted, `MAP - FOCUS: PELL`, and the
 legend. Drag orbits. The not-drawn list is in the guidelines and in `README.md` item 6.
+
+**What is standing where (ADR-079).** A system holding fleets wears a garrison badge beside its
+name, one per owner, carrying that owner's total ships there — `DOTHAN 10` filled in your blue,
+`Xander 16` washed in the holder's colour. **Tapping your own badge is how a parked fleet is
+ordered from the map**: one fleet there opens `MOVE FLT n - PICK LANE` directly, several open
+`FLEETS AT DOTHAN - PICK ONE` first, and the guard ADR-077 put on `OpenFleet` means neither can ever
+name a fleet the server has on a lane. A rival's badge focuses and nothing more. At the lock a badge
+is focus-only, as a locks-rail row is.
 
 **A fleet's route (ADR-055).** Every fleet under way draws a line of travelling dots from its origin
 to its destination in its owner's colour; the marker sits at `(cost − left) / cost` of the lane.
@@ -68,17 +102,21 @@ for that draws it in the middle. `01-orders-queued.png` is the ordered-but-unloc
 `01-fleet-under-way.png` the same fleet a tick out.
 
 **Locks rail (260px, right) — orders no order, links to all of them (`DrawLocksRail`).** `LOCKS T8`
-/ `UNLOCKED` (amber); one line of help; sections `FLEETS n` (rows `FLT 1 10 > PELL` with `T9`, or
-`FLT 1 10 HOLD DOTHAN` with `HOLD`, `+DEF` in blue when it is the incumbent), `BUILDS 2 AVAIL - 26
-CR` (queued rows `SHIPYARD L1 - PELL` / `QUEUED -20`, then a row per build already rising,
+/ `UNLOCKED` (amber); one line of help; sections `FLEETS n` — **grouped by where they are**
+(ADR-086): a muted band per system holding something of yours, `DOTHAN · 10 SHIPS`, with rows
+`FLT 1 · 10` under it (the id muted, the count primary) and no right-hand column unless the fleet is
+the incumbent, when it carries `+DEF` in blue; everything in transit under one `UNDER WAY` band as
+`FLT 8 · 4 → PELL` with `T9`. The band's total is the same number the map's garrison badge carries.
+`BUILDS 2 AVAIL - 26 CR` (queued rows `SHIPYARD L1 - PELL` / `QUEUED -20`, then a row per build already rising,
 `SHIPYARD L1 - DOTHAN` / `T5` in muted ink — the form FLEETS uses for a fleet under way, ADR-070 —
 a `- 6 cr left at the lock -` line, `- nothing queued -` otherwise), `SIGNALS 9 TO SEND ›` (rows
 `SENDING`, a concede in red), `PROPOSALS 1 OPEN` (rows `P3 LANE` / `3 TICKS` amber). Footer
 `ALL LOCK TOGETHER` + the countdown.
 
 **Rows are links (ADR-060).** A BUILDS row opens the build sheet for the system its build is on; a
-FLEETS row focuses where the fleet stands, or opens the destination picker when it is under way; a
-PROPOSALS row focuses the far end of the lane the offer is about. None of them gives an order. The
+FLEETS row opens the fleet's destination picker, and is **the only way to move a parked fleet**
+(ADR-077) — a fleet the server already has on a lane takes no order, so its row focuses where it is
+going instead; a PROPOSALS row focuses the far end of the lane the offer is about. None of them gives an order. The
 row under the pointer is filled with `HOVER_FILL`, and only a row that is a target draws one. At the
 lock and in a finished match every row is focus-only.
 
@@ -90,7 +128,11 @@ drawn from `BuildRow::isTradeLane`, which nothing sets.
 seventh reported. No mockup exists for any of them; the captures are `01-build-sheet.png`,
 `01-destination-sheet.png`, `01-signal-sheet.png`, `01-signal-sheet-armed.png`, `07-replay.png`
 and, for a sheet left open across the lock, `06-at-lock-sheet.png`.
-- **Build** (`BUILD - DOTHAN`): opened by tapping a system you hold; lists that system's buildings
+- **Build** (`BUILD - DOTHAN`): opened by tapping a system you hold, or by a queued BUILDS row on
+  the rail; when the queue has already taken credits, a wrapped line under the header says what the
+  sheet is priced against — *Priced against the 26 credits left after the 20 already queued, not the
+  46 in hand.* — amber when a row on the sheet is dim for want of them and `TEXT_DETAIL` when it is
+  only a note, and absent with an empty queue (ADR-078). It lists that system's buildings
   and nothing else (ADR-058) — `Shipyard L1 - Dothan`, what that level pays and how long it takes
   under it (`+2 ships a tick - 1 tick`), and `20 CR` on the right (ADR-070), or `QUEUED`, or
   `20 CR - NEED 7 MORE` dim; a system already building shows that one row instead — `It cannot take
@@ -98,19 +140,30 @@ and, for a sheet left open across the lock, `06-at-lock-sheet.png`.
   with both built says `NOTHING LEFT TO BUILD HERE`; a system you do not hold opens no sheet and
   only focuses. Tapping a row queues or unqueues (ADR-053's guard refuses what the purse cannot
   cover).
-- **Destination** (`MOVE FLT 1 - PICK LANE`): opened by `MOVE`/`REDIRECT` on a card or by tapping
-  your fleet's marker; one row per lane out of where the fleet is or is going: owner square,
+- **Destination** (`MOVE FLT 1 - PICK LANE`): opened by the fleet's FLEETS row on the rail, by its
+  system's garrison badge on the map (through the fleet list where a system holds several,
+  ADR-079), by `MOVE` on a card, or by tapping a marker of your own that has not departed yet.
+  **Nearest first, then by name** (ADR-092), and a held candidate's second line is drawn in the
+  holder's colour rather than in body ink; never for a fleet
+  the server has on a lane, because the lock refuses a second order on one (ADR-077). One row per
+  lane out of **where the fleet stands**: owner square,
   `PELL`, `UNCLAIMED` / `YOURS` / `P3` with the hostile ships standing there and `+DEF` appended
   (`P3 · 11 +DEF`, ADR-063), then `· CAPITAL` / `· CONTESTED`, and `2 TICKS · ETA T9` on the right —
   the lane cost and the arrival tick as two facts. Picking a row orders the move (drawn at progress
   zero until the lock) and closes the sheet. *Not built:* the verdict under the right-hand column
   (`YOU WIN` / `HOLD` / `YOU LOSE`). It needs a preview per candidate destination on
   `SnapshotFleet`; the client must not compute one (ADR-063).
+- **Fleet list** (`FLEETS AT DOTHAN - PICK ONE`): opened by a garrison badge on a system holding
+  more than one of your fleets (ADR-079) — a badge totals ships, and a picker has to be about one
+  fleet. Rows are `FLT 3` with the engagement preview under it and `3 SHIPS` on the right, blue
+  square, and tapping one opens that fleet's destination sheet. A garrison that left at the lock
+  leaves `NOTHING STANDING HERE ANY MORE`.
 - **Signal** (`SIGNAL - PICK ONE`): opened from the rail's `SIGNALS` header; the six kinds of
   ADR-039 as rows with `SENDING` / `TAP AGAIN TO CONFIRM` on the right; `Concede` always last,
   needing two taps, under a 22px `CONCEDE` band of its own and said in red from the first tap
-  (ADR-064) — the band counts against the six-row cap and is dropped, never the row, when the sheet
-  is full; `Concede` alone when the empire has met nobody — the `NOTHING TO SAY YET` row is
+  (ADR-064). **The band and the row are pinned below the six and outside the count** (ADR-093),
+  immediately above `CANCEL`, so the sheet's six are six real signals and `+N MORE` counts only
+  them; `Concede` alone when the empire has met nobody — the `NOTHING TO SAY YET` row is
   written for an empty list, and the list is never empty because `Concede` is always on it; fourteen
   rows offered and the rest counted.
 - **Replay** (`REPLAY TICK 7`): the stub of screen 07.
@@ -144,19 +197,21 @@ match is ADR-034's third open question, still open.
 ## 03 · Join — **built** (`03-join.png`)
 
 `JoinPage`: the sky (a fixed camera on the same star field as the map) with a 480px column centred:
-`LOCKSTEP` at 2× and `JOIN A MATCH - ONE SEAT PER TOKEN`; a card with a `SERVER` field (`LAST USED`
-on its label line), a `TOKEN` field (masked; `SHOW` toggles), two lines saying a token names a seat
-and not a person, a dashed `SEAT` box reading `NOT YET CONFIRMED`, and `JOIN >` filled once both
-fields have text (outlined `CONNECTING` while a connection is in flight). Footer: `ALSO: --join
-SERVER TOKEN`. The caret starts in the token field; Tab switches, Enter is JOIN. A failure on this
+`LOCKSTEP` in the 16px display cut and `JOIN A MATCH - ONE SEAT PER TOKEN`; a 234px card with a
+`SERVER` field, a `TOKEN` field **shown by default with `HIDE` beside it** (ADR-095 — a token names a
+seat, not a person, and is not authentication), two lines saying so, and `JOIN >` filled once both
+fields have text (outlined `CONNECTING` while a connection is in flight). **No `LAST USED` label, no
+`SEAT` box and no footer**: the first promised a memory the client cannot have (R13), the second was
+never populated, and the third taught a command line to somebody already on the screen that replaces
+it — `Design/GETTING-STARTED.md` has the flags. The caret starts in the token field; Tab switches, Enter is JOIN. A failure on this
 machine (`No answer from that server.`) is one red line beside the button; anything the server
 answered with is a screen 05 dialog over the card, with `BACK` and `EDIT TOKEN` because there is a
 field to go back to.
 
 Pre-filled: the host's own client gets `127.0.0.1:7341` and the first token it generated (ADR-036);
 a `--join`/`--token` client that was refused or could not connect gets what the command line said.
-Nothing is remembered between runs — R13 leaves the client nothing to write — so `LAST USED` is a
-label, not a fact.
+Nothing is remembered between runs — R13 leaves the client nothing to write, which is why the
+`LAST USED` label went.
 
 *Differs / not built:* the seat preview (`4 OF 12 · YOU ARE BLUE`) is set only on the frame the
 Welcome arrives, and the screen hands off on that frame, so it is never read; the footer's match
@@ -168,14 +223,21 @@ that carries more than a seat (`Protocol.h`) and a screen that waits to show it.
 
 ## 04 · Connection lost — **built** (`04-connection-lost.png`)
 
-`ConnectionDialog::Kind::Lost` over the live 01 (the scrim dims it; the top bar behind reads
-`RECONNECTING`). Amber: `CONNECTION LOST` · *The server stopped answering.* · *Reconnecting - next
-attempt in 2s.* (or *back 3 time(s) already - next attempt in 1s.*) · *Orders you already sent are
-on the server and still count. Anything you tap while this is up is not sent.* · *The tick still
-locks in 00:01:40 whether or not you are back.* — live, from the page's countdown. Buttons `QUIT` ·
-`RETRY NOW` (filled). The loop retries every two seconds; `RETRY NOW` skips the wait. A reconnect
-passes through `Connecting` and the dialog stays up for it (ADR-043). The dialog swallows every tap,
-the map included.
+**A BANNER, not a modal** (ADR-085). `ConnectionDialog::Kind::Lost` draws a 44px amber-bordered
+band under the top bar spanning all three columns, with no scrim: `CONNECTION LOST - RECONNECTING IN
+2S` (or `- BACK ONCE ALREADY - RETRYING IN 1S`, or `BACK 4 TIMES`) on the left, `QUIT` outlined and
+`RETRY NOW` filled on the right. It swallows only its own two buttons.
+
+**The board under it stays live and gives no order.** Every control that reaches the wire goes inert
+by the same path the lock uses (`MainPage::OrdersEditable`) — the digest's buttons dim, and every
+row that would compose an order is not a target at all; reading a card, focusing a system, orbiting
+the map and opening a sheet all still work, because none of them reaches a socket. A sheet open
+across the drop wears an `OFFLINE` chip where `LOCKED` goes and an amber line saying *The link is
+down. Nothing you tap here is sent; the board is yours to read.*
+
+The loop retries every two seconds; `RETRY NOW` skips the wait. A reconnect passes through
+`Connecting` and the banner stays up for it (ADR-043). Past zero the band's countdown line reads
+`T10 locked while you were away.` rather than counting down to nothing.
 
 *Differs:* the handoff promised *unlocked orders are kept locally and re-sent*; nothing re-sends
 them, so the dialog says the true, smaller thing (ADR-038). Whether pending edits should survive a
@@ -201,7 +263,10 @@ never be true at once (`Lockstep.cpp`, the match loop; `RunJoinScreen` for the j
 - `WAITING FOR THE HOST` blue — *You are in. Seat 02 is yours.* and why there is nothing to show;
   `QUIT`. Not in the handoff: it is what a joiner sees between being welcomed by a lobby and the
   host's `ENTER MATCH` (ADR-038; it replaced a fake match).
-- `MATCH FINISHED` neutral — *This match has ended…* and `4 OF 6 - SCORE 1284 - LEADER P3 1610`;
+- `MATCH FINISHED` neutral — *This match has ended.* and **the whole table** (ADR-097): one
+  monospace row per player in placement order, `1ST  P6  95` down to `6TH  YOU  35`, the reader's own
+  row in their blue. Every player's score and placement is already on the wire in
+  `SnapshotStanding`;
   `QUIT` · `VIEW LAST DIGEST` (filled), which dismisses it once and shows 01 in its finished state.
   (`MatchHeader::finished`; `RefusalReason::MatchFinished` is on the wire and no server sends it.)
 - `CONNECTION LOST` — screen 04, the same component.
@@ -284,7 +349,11 @@ a token is; the token with `COPY` to the clipboard and `NEW TOKEN`; whose seat i
 and a footer with the summary (`WAITING FOR SORNE, TAMSIN - 4 OF 6 HERE`
 in amber, `ALL 6 SEATS CONNECTED - YOU ARE SEAT 01` in blue) or the refusal to the last tap,
 `FILL WAITING WITH BOTS`, and `ENTER MATCH >` — filled only when every seat is connected, a bot, or
-marked to be taken over; Enter is the same. `CONNECTED` is live from the server this process runs.
+marked to be taken over; Enter is the same. **Disabled it is `TEXT_MUTED` in an `OUTLINE` border**
+rather than nearly invisible, and the footer's own sentence is the reason (ADR-096). Under the
+summary, always drawn: *Sets every WAITING FOR PLAYER seat to BOT.* — the one control here whose
+effect is not in its label, said before it is pressed rather than on a hover a touch device never
+has. `CONNECTED` is live from the server this process runs.
 
 Decisions on this screen: six seats and no `EMPTY` (ADR-036 amendment 3); `TAKE SEAT` removed —
 the host's seat is the token their client presented (ADR-041); entering is what turns a seat nobody

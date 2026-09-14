@@ -139,6 +139,7 @@ Snapshot Snapshot::For(const Match& _match, PlayerId _player)
     {
       entry.siegeTicks = state.siegeTicks;
       entry.capturedAt = state.capturedAt;
+      entry.capturedFrom = state.capturedFrom;
       entry.halfYield = state.halfYield;
     }
 
@@ -321,6 +322,7 @@ void Visit(Neuron::Archive& _archive, SnapshotSystem& _system)
   _archive.U32(_system.risingCompletesAt);
   _archive.U32(_system.siegeTicks);
   _archive.U32(_system.capturedAt);
+  _archive.Identity(_system.capturedFrom);
   _archive.Boolean(_system.halfYield);
 }
 

@@ -1310,6 +1310,7 @@ Match TickResolver::Claim(const Match& _in, TickLog& _log)
       {
         after.owner = present.front();
         after.capturedAt = _in.Tick();
+        after.capturedFrom = before.owner;
         after.siegeBy = PlayerId{};
         after.siegeTicks = 0;
 
@@ -1355,6 +1356,7 @@ Match TickResolver::Claim(const Match& _in, TickLog& _log)
       const PlayerId loser = before.owner;
       after.owner = besieger;
       after.capturedAt = _in.Tick();
+      after.capturedFrom = loser;
       after.siegeBy = PlayerId{};
       after.siegeTicks = 0;
 

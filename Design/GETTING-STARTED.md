@@ -196,6 +196,12 @@ optional.
 | `--phase0` | The test plan's setup: six players, an hourly tick, forty-eight hours. |
 | `--bots <n>` | Fill the last *n* seats of a `--serve` match with bots. |
 | `--store <name>` | Name the match store and log this server writes, so two servers beside one executable do not share a file. |
+| `--dev` | Show the controls for screens that are not finished. One today: `REPLAY` on the top bar, whose sheet is a stub (ADR-091). |
+
+`--join` and `--token` do the same job as the join screen's two fields, which is where a player who
+has not seen this page will find them. The screen used to advertise the flags in a footer; it does
+not any more (ADR-095), because it is the first screen anybody sees and a command line is not the
+thing to teach there.
 
 **To play a real match with people**, host it, then send each of them one token off the seats
 screen — each token names one seat, and the empire it plays. They run the client, put your address

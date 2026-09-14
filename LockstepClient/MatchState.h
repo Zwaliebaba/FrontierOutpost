@@ -187,6 +187,10 @@ struct SystemNode
   std::uint32_t custodianSince = 0;
   /// The tick this system was captured, or 0.
   std::uint32_t capturedAt = 0;
+  /// Who the last capture took this from, or `NOBODY` when it was unclaimed. **Red on the map is
+  /// what YOU lost** (ADR-082, ADR-088), and this is the only thing that can say so: a rival taking
+  /// a system from another rival is not the viewer's loss and must not be drawn as one.
+  OwnerId capturedFrom = NOBODY;
 };
 
 /// What a lane is to this player. A lane's KIND is a diplomatic fact, not a graph fact: the same
@@ -245,11 +249,35 @@ struct Fleet
   float progress = 0.0F;
   std::uint32_t eta = 0;
   FleetStance order = FleetStance::Hold;
+  /// Whether the SERVER has this fleet on a lane, as opposed to the player having ordered it there
+  /// and the lock not having come yet (ADR-077).
+  ///
+  /// **`order` cannot answer that and this is the whole reason the field exists.** A move ordered
+  /// this tick sets `order` to `Move` exactly as a snapshot of a fleet already flying does, and the
+  /// two take opposite treatment everywhere it matters: the ordered one is an order to send, a
+  /// picker to re-open and a `MOVE` the digest may offer, and the flying one is none of those,
+  /// because `Match::Validate` refuses a second order on a fleet in transit. Set from the
+  /// snapshot's `ticksRemaining` and never by an edit.
+  bool underWay = false;
   /// The deterministic engagement preview, from visible information only (one-pager: combat is
   /// deterministic; the client previews what it can see). Empty when there is nothing to fight.
   std::string preview;
   /// "in transit", "incumbent - defender bonus" -- the status line under the fleet's name.
   std::string status;
+
+  /// Whether this fleet is drawn ON A LANE rather than standing at a system.
+  ///
+  /// **A fleet is one or the other and never both**, which is what this is for: the map draws a
+  /// marker for the first and a garrison badge for the second (ADR-079), and an expression written
+  /// out twice would eventually draw one fleet twice or not at all. It was written out four times
+  /// -- three in `MapRender` and once in `MainPage::Animating` -- before it had a name.
+  ///
+  /// Not the same question as `underWay`: a move ordered this tick is on a lane at progress zero
+  /// from the moment it is given (ADR-055) and is not under way until the lock (ADR-077).
+  [[nodiscard]] bool OnALane() const noexcept
+  {
+    return order == FleetStance::Move && from != to;
+  }
 };
 
 /// A row of the build list. A trade lane is one of these and not a diplomacy screen: it is a

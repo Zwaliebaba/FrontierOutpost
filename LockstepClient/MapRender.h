@@ -26,9 +26,14 @@ struct MapHit
   float width = 0.0F;
   float height = 0.0F;
 
-  /// Exactly one of these is set; the other is `EventRefs::NONE`.
+  /// Exactly one of these is set; the others are `EventRefs::NONE`.
+  ///
+  /// `fleetsAt` is a SYSTEM position like `system` is, and it is a separate field rather than a flag
+  /// beside that one because the two mean different things to tap: the disc is the system and the
+  /// badge beside it is the fleets standing there (ADR-079). One index, one meaning (ADR-057).
   std::int32_t system = EventRefs::NONE;
   std::int32_t fleet = EventRefs::NONE;
+  std::int32_t fleetsAt = EventRefs::NONE;
 };
 
 /// Everything the map needs and does not own.
@@ -55,7 +60,27 @@ struct MapFrame
   /// dash offset -- a map drawn twice at the same value is identical, which is what keeps a
   /// screenshot test meaningful.
   float animationSeconds = 0.0F;
+
+  /// Whether a sheet is open over the pane. The legend sits in the bottom twenty pixels, which is
+  /// exactly where a sheet's `CANCEL` bar goes, so it was drawn half-clipped under one in every
+  /// sheet capture this project has taken (ADR-082). The map does not know what a panel is; it is
+  /// told whether its own bottom edge is covered.
+  bool sheetOpen = false;
 };
+
+/// `MAP` or `MAP - FOCUS: PELL`: what the pane is currently pointed at, in the top-left corner.
+///
+/// Exposed because the `RESET` chip is placed immediately after it (ADR-090) and a second copy of
+/// the composition is a second place for the two to disagree about how wide it is.
+[[nodiscard]] std::string FocusLine(const MatchState& _state, std::int32_t _focusedSystem);
+
+/// Whether a capture is still news, and so still labelled on the map (ADR-082).
+///
+/// **Three ticks, and then it is the map rather than the news.** A board a player is winning wore a
+/// standing `CAPTURED Tn` under every system they had ever taken -- six of them on
+/// `01-main-page.png` -- none of which had changed that tick or the two before it. Pure and named so
+/// the rule can be asserted without a screen, which is the only half of this that is not drawing.
+[[nodiscard]] bool CaptureIsNews(std::uint32_t _capturedAt, std::uint32_t _tick) noexcept;
 
 /// Draws the galaxy, and returns what can be tapped in it.
 ///

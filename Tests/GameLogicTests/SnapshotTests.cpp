@@ -697,6 +697,9 @@ public:
       Assert::AreEqual(original.Systems()[index].name, returned.Systems()[index].name);
       Assert::AreEqual(original.Systems()[index].asOfTick, returned.Systems()[index].asOfTick);
       Assert::AreEqual(original.Systems()[index].live, returned.Systems()[index].live);
+      Assert::AreEqual(original.Systems()[index].capturedAt, returned.Systems()[index].capturedAt);
+      Assert::IsTrue(original.Systems()[index].capturedFrom == returned.Systems()[index].capturedFrom,
+                     L"the capture's loser did not survive the wire");
     }
   }
 

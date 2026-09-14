@@ -23,6 +23,7 @@
 #include "CppUnitTest.h"
 
 #include "ConnectionDialog.h"
+#include "DigestView.h"
 #include "MainPage.h"
 #include "SeatsPage.h"
 #include "SnapshotView.h"
@@ -267,7 +268,7 @@ public:
   TEST_METHOD(AFinishedMatchOffersTheLastDigest)
   {
     Lockstep::ConnectionDialog::Facts facts;
-    facts.standings = "1 OF 6 - SCORE 85";
+    facts.standings = {Lockstep::ConnectionDialog::Facts::Standing{.text = "1ST  YOU        85", .isYou = true}};
 
     Assert::IsTrue(Lockstep::ConnectionDialog::Action::ViewLastDigest ==
                      PressSomething(Lockstep::ConnectionDialog::Kind::Finished, facts, Lockstep::ConnectionDialog::Action::ViewLastDigest),
@@ -300,19 +301,50 @@ public:
                    L"QUIT cannot be pressed");
   }
 
-  TEST_METHOD(TheDialogSwallowsEveryTapItIsOver)
+  TEST_METHOD(AModalSwallowsEveryTapItIsOver)
   {
-    // A tap reaching the board behind a CONNECTION LOST dialog would be an order edit the client
-    // cannot send, and the player would have no way to tell which of their taps counted.
+    // A tap reaching the board behind a REFUSED dialog would be an order edit against a connection
+    // that is not there, and the player would have no way to tell which of their taps counted.
     Headless renderers;
     Lockstep::ConnectionDialog dialog;
-    dialog.Update(Lockstep::ConnectionDialog::Kind::Lost, Lockstep::ConnectionDialog::Facts{}, 0.0);
+    dialog.Update(Lockstep::ConnectionDialog::Kind::Refused, Lockstep::ConnectionDialog::Facts{}, 0.0);
     DrawDialog(dialog, renderers);
+
+    Assert::IsTrue(dialog.Modal());
 
     // The four corners, which are as far from the card as this screen goes.
     Assert::IsTrue(dialog.HandleTap(1.0F, 1.0F), L"a tap in the corner fell through the scrim");
     Assert::IsTrue(dialog.HandleTap(static_cast<float>(SCREEN_WIDTH) - 1.0F, static_cast<float>(SCREEN_HEIGHT) - 1.0F));
     Assert::IsTrue(dialog.TakeAction() == Lockstep::ConnectionDialog::Action::None, L"the scrim pressed a button");
+  }
+
+  TEST_METHOD(ALostLinkIsABannerAndNotAModal)
+  {
+    // **The dialog told the player nothing they tapped would be sent, and then stopped them doing
+    // the things that do not need sending** (ADR-085): reading the digest that arrived before the
+    // drop, looking at the map, opening a sheet. A banner says the same sentence in 44 pixels.
+    Headless renderers;
+    Lockstep::ConnectionDialog dialog;
+    dialog.Update(Lockstep::ConnectionDialog::Kind::Lost, Lockstep::ConnectionDialog::Facts{}, 0.0);
+    DrawDialog(dialog, renderers);
+
+    Assert::IsTrue(dialog.Visible(), L"a dropped link draws nothing at all");
+    Assert::IsFalse(dialog.Modal(), L"a dropped link is still a modal");
+
+    // The board below the band is reachable: the four corners of the map pane fall through.
+    Assert::IsFalse(dialog.HandleTap(700.0F, 400.0F), L"the banner swallowed a tap on the map");
+    Assert::IsFalse(dialog.HandleTap(1.0F, static_cast<float>(SCREEN_HEIGHT) - 1.0F), L"the banner swallowed a tap on the digest");
+    Assert::IsTrue(dialog.TakeAction() == Lockstep::ConnectionDialog::Action::None);
+  }
+
+  TEST_METHOD(TheBannerStillOffersRetryAndQuit)
+  {
+    Assert::IsTrue(PressSomething(Lockstep::ConnectionDialog::Kind::Lost, Lockstep::ConnectionDialog::Facts{},
+                                  Lockstep::ConnectionDialog::Action::Retry) == Lockstep::ConnectionDialog::Action::Retry,
+                   L"the banner offers no way to retry now");
+    Assert::IsTrue(PressSomething(Lockstep::ConnectionDialog::Kind::Lost, Lockstep::ConnectionDialog::Facts{},
+                                  Lockstep::ConnectionDialog::Action::Quit) == Lockstep::ConnectionDialog::Action::Quit,
+                   L"the banner offers no way out");
   }
 
   TEST_METHOD(AHiddenDialogSwallowsNothing)
@@ -531,11 +563,11 @@ public:
     Assert::IsTrue(again.State().orders.queuedSignals.empty(), L"a queued concede could not be taken back");
   }
 
-  TEST_METHOD(AFullSheetDropsTheBandRatherThanTheConcede)
+  TEST_METHOD(AFullSheetKeepsItsSixSignalsAndTheConcede)
   {
-    // The `CONCEDE` band counts against the six-row cap (ADR-064), so on a sheet that is already
-    // full it is dropped rather than pushing the row it labels into `+N MORE`. A label must never
-    // cost a control its place.
+    // **The concede is pinned below the cap and costs nothing** (ADR-093). It used to sit inside the
+    // six, so a full sheet bought it by dropping a real signal -- and its band by dropping another.
+    // Now the sheet shows its six and the concede is under them, above `CANCEL`.
     const auto simulation = PlayedMatch(14);
     Lockstep::MatchState state = ViewOfSeatZero(*simulation);
 
@@ -587,16 +619,46 @@ public:
         queued = std::ranges::find(sent, 5) != sent.end();
       }
     }
-    Assert::IsTrue(queued, L"the concede row was pushed off the sheet by its own band");
+    Assert::IsTrue(queued, L"the concede row was pushed off the sheet by the signals above it");
+
+    // **And the signals it used to displace are still on the sheet.** That is what pinning bought:
+    // the concede no longer costs a row. Index 4 is the fifth signal, which under the old rule shared
+    // the six with the concede and its band. A fresh page, because the sweep above taps every row
+    // twice and a non-concede signal queues and unqueues within one pair.
+    Lockstep::MainPage full;
+    full.Create(ViewOfSeatZero(*simulation));
+    std::int32_t fullX = 0;
+    std::int32_t fullY = 0;
+    Assert::IsTrue(OpenThePicker(full, renderers, fullX, fullY));
+
+    const bool fifth = SweepFor(
+      full, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+      [&full]
+      {
+        const std::vector<std::int32_t>& queuedNow = full.State().orders.queuedSignals;
+        return std::ranges::find(queuedNow, 4) != queuedNow.end();
+      },
+      true,
+      [&full, &renderers, fullX, fullY]
+      {
+        if (full.OpenPanel() == Lockstep::MainPage::Panel::SignalList)
+        {
+          return false;
+        }
+        renderers.Begin();
+        DrawPage(full, renderers);
+        return full.HandleTap(static_cast<float>(fullX), static_cast<float>(fullY));
+      });
+    Assert::IsTrue(fifth, L"a full sheet lost a signal to the concede below it");
   }
 
   TEST_METHOD(AnOverfullSheetStillOffersTheConcede)
   {
-    // The band test above is about a sheet that is EXACTLY full. This is about one that overflows:
-    // the concede is composed last and the sheet draws the first six, so a player with six offers
-    // on the table had no concede row at all -- the one control that must always be reachable,
-    // missing exactly when the board is busy enough to want it. It keeps the last visible slot
-    // (ADR-064, extended 2026-09-13).
+    // The test above is about a sheet that is EXACTLY full. This is about one that overflows: nine
+    // signals and a concede, so the six-row cap clips three of them into `+N MORE` and the concede
+    // is not among the six at all. It is drawn below them regardless (ADR-093), which is the whole
+    // point of pinning it -- the one control that must always be reachable, on the board busy enough
+    // to want it.
     const auto simulation = PlayedMatch(14);
     Lockstep::MatchState state = ViewOfSeatZero(*simulation);
 
@@ -853,10 +915,116 @@ public:
     Assert::IsTrue(page.ExpandedActor() != first, L"two actor cards were open at once");
   }
 
+  /// Twenty cards is more than the column holds however they are laid out, which is the condition
+  /// the band exists for.
+  [[nodiscard]] static Lockstep::MatchState ATallDigest()
+  {
+    const auto simulation = PlayedMatch(2);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    state.digest.clear();
+    for (std::int32_t index = 0; index < 20; ++index)
+    {
+      AddEvent(state, Lockstep::NOBODY, std::format("Production +{}", index + 1));
+    }
+    return state;
+  }
+
   TEST_METHOD(ADigestTallerThanTheColumnPages)
   {
-    // Twenty cards is more than the column holds however they are laid out, which is the condition
-    // the band exists for. What it must never do is drop one: page one has to be reachable again.
+    // What the band must never do is drop a card: the top of the stack has to be reachable again.
+    Lockstep::MainPage page;
+    page.Create(ATallDigest());
+    Assert::AreEqual(std::size_t{0}, page.DigestTop());
+
+    Headless renderers;
+    std::int32_t x = 0;
+    std::int32_t y = 0;
+    Assert::IsTrue(SweepDigest(
+                     page, renderers, [&page] { return page.DigestTop() > 0; }, x, y),
+                   L"a digest taller than the column offers no way to the rest of it");
+
+    Assert::IsTrue(SweepDigest(page, renderers, [&page] { return page.DigestTop() == 0; }, x, y), L"there is no way back to the top");
+  }
+
+  TEST_METHOD(AWheelOverTheDigestScrollsItAndOverTheMapDoesNot)
+  {
+    // The wheel has been banked by `PointerInput` since ADR-009 and read by nothing (ADR-080). What
+    // decides it is the pane under the pointer, so the same notch over two panes is two answers.
+    Lockstep::MainPage page;
+    page.Create(ATallDigest());
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    Assert::IsTrue(page.HandleZoom(-1, 100.0F, 300.0F), L"a notch over the digest scrolled nothing");
+    Assert::AreEqual(std::size_t{1}, page.DigestTop(), L"and it moved by something other than one card");
+
+    // Over the map the same notch is a camera and not a list (ADR-090). It is consumed -- so this
+    // asserts what the DIGEST did, not what the call returned, which is the thing that changed when
+    // the map learned to zoom.
+    (void)page.HandleZoom(-1, 700.0F, 300.0F);
+    Assert::AreEqual(std::size_t{1}, page.DigestTop(), L"a notch over the map scrolled the digest");
+    Assert::IsFalse(page.Map().AtAuthoredFraming(), L"and the map did not take it either, so the notch went nowhere");
+    page.ResetView();
+
+    Assert::IsTrue(page.HandleZoom(1, 100.0F, 300.0F), L"a notch the other way did not come back");
+    Assert::AreEqual(std::size_t{0}, page.DigestTop());
+
+    // And it stops at the top rather than banking notches that have to be spun back.
+    Assert::IsFalse(page.HandleZoom(1, 100.0F, 300.0F));
+    Assert::AreEqual(std::size_t{0}, page.DigestTop());
+  }
+
+  TEST_METHOD(ThePageKeysMoveAScreenfulAndNotACard)
+  {
+    // A page is however many cards fit, which only the layout knows -- so the key asks the frame
+    // rather than a number chosen in the handler (ADR-080).
+    Lockstep::MainPage page;
+    page.Create(ATallDigest());
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    const std::size_t screenful = page.CardsOnScreen();
+    Assert::IsTrue(screenful > 1, L"this fixture fits one card a screen, so a page and a card are the same move");
+
+    Assert::IsTrue(page.HandleKey(Neuron::KeyboardInput::Key::PageDown));
+    Assert::AreEqual(screenful, page.DigestTop(), L"PageDown moved by something other than a screenful");
+
+    Assert::IsTrue(page.HandleKey(Neuron::KeyboardInput::Key::PageUp));
+    Assert::AreEqual(std::size_t{0}, page.DigestTop(), L"PageUp did not come back");
+
+    Assert::IsFalse(page.HandleKey(Neuron::KeyboardInput::Key::Escape), L"a key this screen does not use did something");
+  }
+
+  TEST_METHOD(ADragOverTheDigestScrollsItByWholeCards)
+  {
+    // The finger's half. A drag is continuous and the column moves in cards, so what is left over is
+    // banked: without that a slow drag scrolls nothing at all.
+    Lockstep::MainPage page;
+    page.Create(ATallDigest());
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    const Neuron::PointerInput::Drag nudge{.deltaXPixels = 0.0F, .deltaYPixels = -10.0F, .originXPixels = 100.0F, .originYPixels = 300.0F};
+    Assert::IsTrue(page.HandleDrag(nudge), L"a drag that began on the digest was not consumed by it");
+    Assert::AreEqual(std::size_t{0}, page.DigestTop(), L"ten pixels moved a whole card");
+
+    for (std::int32_t again = 0; again < 4; ++again)
+    {
+      (void)page.HandleDrag(nudge);
+    }
+    Assert::AreEqual(std::size_t{1}, page.DigestTop(), L"fifty pixels of drag banked no card at all");
+  }
+
+  TEST_METHOD(TheBandSaysWhatIsHiddenAndNotHowManyPages)
+  {
+    // `1 / 4 · MORE ›` told a player how much column was left and nothing about whether the battle
+    // they had not seen was in it (ADR-080).
     const auto simulation = PlayedMatch(2);
     Lockstep::MatchState state = ViewOfSeatZero(*simulation);
     state.digest.clear();
@@ -865,18 +1033,13 @@ public:
       AddEvent(state, Lockstep::NOBODY, std::format("Production +{}", index + 1));
     }
 
-    Lockstep::MainPage page;
-    page.Create(std::move(state));
-    Assert::AreEqual(std::size_t{0}, page.DigestPage());
+    const std::vector<Lockstep::DigestCard> cards = Lockstep::CardsOf(state);
+    Assert::IsTrue(cards.size() > 3U);
 
-    Headless renderers;
-    std::int32_t x = 0;
-    std::int32_t y = 0;
-    Assert::IsTrue(SweepDigest(
-                     page, renderers, [&page] { return page.DigestPage() > 0; }, x, y),
-                   L"a digest taller than the column offers no way to the rest of it");
-
-    Assert::IsTrue(SweepDigest(page, renderers, [&page] { return page.DigestPage() == 0; }, x, y), L"there is no way back to page one");
+    const std::string summary = Lockstep::HiddenSummary(cards, 3);
+    Assert::IsTrue(summary.find(std::to_string(cards.size() - 3)) != std::string::npos, L"the band does not say how many are hidden");
+    Assert::IsTrue(summary.find("MORE") != std::string::npos);
+    Assert::IsTrue(Lockstep::HiddenSummary(cards, cards.size()).empty(), L"a band with nothing below it still claimed something");
   }
 };
 
@@ -1226,6 +1389,632 @@ public:
                                         [offer](const Lockstep::ProposalAnswer& _answer) { return _answer.proposal == offer; });
     Assert::IsTrue(stillThere, L"the answer vanished rather than being replaced");
     (void)accepted;
+  }
+};
+
+// A fleet takes an order while it is standing still, and the screen offers one only then
+// (ADR-077). The defect these pin was reported on two screenshots of a practice match: a board with
+// credits in hand, a fleet parked at a held system, and no control anywhere that would move it.
+TEST_CLASS(FleetMoveTapTests)
+{
+public:
+  /// Six bots and no human seat, so the viewer's own fleet is the one thing on the board that does
+  /// not move unless this test moves it -- and every other seat's does, which is what puts a fleet
+  /// in transit on the map for the tests that need one.
+  [[nodiscard]] static std::unique_ptr<Lockstep::MatchSimulation> EverybodyMoves(std::int32_t _ticks)
+  {
+    Lockstep::MatchRules rules;
+    rules.playerCount = 6;
+    const std::vector<std::optional<Lockstep::BotPolicy>> bots(6, std::optional<Lockstep::BotPolicy>{Lockstep::BotPolicy::ExpandNear});
+    auto simulation = std::make_unique<Lockstep::MatchSimulation>(rules, 0x5349'474E'414C'5321ULL, bots);
+    for (std::int32_t tick = 0; tick < _ticks; ++tick)
+    {
+      simulation->Resolve();
+    }
+    return simulation;
+  }
+
+  /// Which of the viewer's fleets is standing at a system, or `EventRefs::NONE`.
+  [[nodiscard]] static std::int32_t StandingFleet(const Lockstep::MatchState& _state)
+  {
+    for (std::size_t index = 0; index < _state.fleets.size(); ++index)
+    {
+      const Lockstep::Fleet& fleet = _state.fleets[index];
+      if (fleet.owner == _state.viewer && !fleet.underWay)
+      {
+        return static_cast<std::int32_t>(index);
+      }
+    }
+    return Lockstep::EventRefs::NONE;
+  }
+
+  TEST_METHOD(AStandingFleetCanBeSentSomewhereFromTheScreen)
+  {
+    // **The tick this is about is any tick after the first.** The digest's `MOVE` is a standing
+    // move, offered only when no card can be acted on (ADR-056), and a production line the player
+    // can build from is a card that can -- so from T1 onwards the digest carries a BUILD button and
+    // no MOVE at all. The map draws no marker for a parked fleet (ADR-059), which leaves the rail.
+    const auto simulation = PlayedMatch(4);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    const std::int32_t standing = StandingFleet(page.State());
+    Assert::IsTrue(standing != Lockstep::EventRefs::NONE, L"four ticks in and the viewer has no fleet standing anywhere");
+
+    const bool digestOffersAMove =
+      std::any_of(page.State().digest.begin(), page.State().digest.end(),
+                  [](const Lockstep::DigestEvent& _event)
+                  {
+                    return std::any_of(_event.actions.begin(), _event.actions.end(), [](const Lockstep::EventAction& _action)
+                                       { return _action.kind == Lockstep::EventActionKind::RedirectFleet; });
+                  });
+    Assert::IsFalse(digestOffersAMove, L"the digest offered a MOVE, so this fixture is not the board the defect was reported on");
+
+    // Sweep the whole screen, exactly as a finger would hunt for the control. Two stages, because
+    // the order takes two taps: one to reach a picker, one to pick a lane.
+    Headless renderers;
+    const bool opened = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
+    Assert::IsTrue(opened, L"nothing on the screen opens a destination picker for a fleet that is standing still");
+
+    const std::int32_t where = page.State().fleets[static_cast<std::size_t>(standing)].from;
+    const bool ordered = SweepFor(
+      page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+      [&page, standing, where] { return page.State().fleets[static_cast<std::size_t>(standing)].to != where; }, true,
+      [&page, &renderers]
+      {
+        // A stray tap on the map closes the picker over some other system's build sheet. Put it
+        // back, so the sweep is looking for a row rather than for the panel it already found.
+        if (page.OpenPanel() == Lockstep::MainPage::Panel::Destination)
+        {
+          return false;
+        }
+        return SweepFor(page, renderers, DrawPage, SCREEN_WIDTH - ORDERS_RAIL, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                        [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
+      });
+    Assert::IsTrue(ordered, L"the picker opened and no row in it ordered the fleet anywhere");
+
+    const Lockstep::OrderSet orders = Lockstep::OrdersOf(page.State());
+    Assert::AreEqual(std::size_t{1}, orders.fleetOrders.size(), L"the move did not become an order");
+  }
+
+  TEST_METHOD(AFleetAlreadyOnALaneTakesNoOrderFromAnyTap)
+  {
+    // `Match::Validate` refuses a second order on a fleet in transit, so a control that offered one
+    // is a control whose order the lock is certain to refuse -- the thing ADR-053 took off this
+    // screen, applied to the one surface that still had it.
+    bool sawOne = false;
+    for (std::int32_t ticks = 1; ticks <= 14 && !sawOne; ++ticks)
+    {
+      const auto simulation = EverybodyMoves(ticks);
+      Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+      const auto flying = std::find_if(state.fleets.begin(), state.fleets.end(),
+                                       [&state](const Lockstep::Fleet& _fleet) { return _fleet.owner == state.viewer && _fleet.underWay; });
+      if (flying == state.fleets.end())
+      {
+        continue;
+      }
+      sawOne = true;
+
+      const auto at = static_cast<std::size_t>(std::distance(state.fleets.begin(), flying));
+      const std::int32_t id = flying->id;
+      const std::int32_t destination = flying->to;
+
+      Lockstep::MainPage page;
+      page.Create(std::move(state));
+
+      // The whole screen, and the viewer's OTHER fleets are ordered around freely on the way --
+      // what is claimed is about this one. `_done` is the defect: if any tap ever redirects it, or
+      // puts an order for it on the wire, the sweep stops there and the assertion below says so.
+      Headless renderers;
+      const bool touched =
+        SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                 [&page, at, id, destination]
+                 {
+                   if (page.State().fleets[at].to != destination)
+                   {
+                     return true;
+                   }
+                   const Lockstep::OrderSet orders = Lockstep::OrdersOf(page.State());
+                   return std::any_of(orders.fleetOrders.begin(), orders.fleetOrders.end(),
+                                      [id](const Lockstep::FleetOrder& _order) { return _order.fleet == Lockstep::FleetId{id}; });
+                 });
+      Assert::IsFalse(touched, L"a tap gave a fleet already on a lane an order the lock is certain to refuse");
+    }
+    Assert::IsTrue(sawOne, L"fourteen ticks of six bots put nothing of the viewer's in transit, so this test proved nothing");
+  }
+
+  TEST_METHOD(AFleetInTransitIsNotOrderedAgainEveryTime)
+  {
+    // **Every fleet order this client sent for a fleet already flying came back refused.** The
+    // snapshot reports an in-transit fleet as `Move`, and one order per moving fleet therefore
+    // re-sent it on every tap -- `Order refused -- that fleet is already under way`, once per tick,
+    // for an order the player never gave (ADR-077).
+    bool sawOne = false;
+    for (std::int32_t ticks = 1; ticks <= 14 && !sawOne; ++ticks)
+    {
+      const auto simulation = EverybodyMoves(ticks);
+      const Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+      if (std::none_of(state.fleets.begin(), state.fleets.end(),
+                       [&state](const Lockstep::Fleet& _fleet) { return _fleet.owner == state.viewer && _fleet.underWay; }))
+      {
+        continue;
+      }
+      sawOne = true;
+
+      Lockstep::OrderSet orders = Lockstep::OrdersOf(state);
+      orders.player = Lockstep::PlayerId{0};
+
+      const std::vector<Lockstep::RejectedOrder> rejected = simulation->State().Validate(orders);
+      const bool refused = std::any_of(rejected.begin(), rejected.end(), [](const Lockstep::RejectedOrder& _refusal)
+                                       { return _refusal.reason == Lockstep::OrderRejection::FleetInTransit; });
+      Assert::IsFalse(refused, L"the client sent an order for a fleet already under way, and the lock refused it");
+    }
+    Assert::IsTrue(sawOne, L"fourteen ticks of six bots put nothing of the viewer's in transit, so this test proved nothing");
+  }
+};
+
+// The price is on the button, and the purse it is priced against is the one the queue left
+// (ADR-053, ADR-078).
+TEST_CLASS(PurseSentenceTests)
+{
+public:
+  TEST_METHOD(NothingQueuedSaysNothing)
+  {
+    // The top bar already carries the purse. A sheet repeating it under every header would be a
+    // line that is noise on every sheet but the one it is about.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    Assert::IsTrue(page.State().orders.queuedBuilds.empty(), L"this fixture starts with an empty queue");
+    Assert::IsTrue(page.PurseSentence().empty(), L"a sheet with nothing queued explained an arithmetic nobody did");
+  }
+
+  TEST_METHOD(AQueuedBuildIsAccountedForAgainstThePurse)
+  {
+    // The complaint this answers, in its own numbers: a row reading `30 CR - NEED 4 MORE` under a
+    // top bar reading `46 CR`. Both are right and the sheet said neither why.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    Assert::IsFalse(state.orders.builds.empty(), L"a fresh match offers something to build");
+
+    state.player.credits = 46;
+    state.orders.builds.front().cost = 20;
+    state.orders.queuedBuilds.push_back(0);
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    const std::string sentence = page.PurseSentence();
+    Assert::IsTrue(sentence.find("26") != std::string::npos, L"the sentence does not say what is left at the lock");
+    Assert::IsTrue(sentence.find("20") != std::string::npos, L"nor what the queue has already taken");
+    Assert::IsTrue(sentence.find("46") != std::string::npos, L"nor the purse on the top bar it has to be reconciled with");
+  }
+
+  TEST_METHOD(AQueueBeyondThePurseLeavesNothingRatherThanGoingUnder)
+  {
+    // `QueuedBuildCost` is unsigned and so is the purse. A queue bigger than the purse is a state
+    // the guard refuses to reach, and the arithmetic that reports it must not wrap around instead.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    state.player.credits = 5;
+    state.orders.builds.front().cost = 20;
+    state.orders.queuedBuilds.push_back(0);
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+    Assert::IsTrue(page.PurseSentence().find("0 credits") != std::string::npos,
+                   L"an overdrawn purse reported something other than nothing");
+  }
+};
+
+// A fleet standing at a system is drawn there and can be tapped there (ADR-079). The map pane only:
+// the locks rail reaches the same picker (ADR-077) and would answer every one of these for the wrong
+// reason, so every sweep below stops at the rail's left edge.
+TEST_CLASS(GarrisonBadgeTapTests)
+{
+public:
+  static constexpr std::int32_t MAP_LEFT = 400;
+  static constexpr std::int32_t MAP_RIGHT = SCREEN_WIDTH - ORDERS_RAIL;
+
+  /// Where the viewer's one fleet is standing, as a system position.
+  [[nodiscard]] static std::int32_t WhereTheFleetStands(const Lockstep::MatchState& _state)
+  {
+    for (const Lockstep::Fleet& fleet : _state.fleets)
+    {
+      if (fleet.owner == _state.viewer && !fleet.OnALane())
+      {
+        return fleet.to;
+      }
+    }
+    return Lockstep::EventRefs::NONE;
+  }
+
+  TEST_METHOD(ABadgeOpensThePickerForTheFleetStandingUnderIt)
+  {
+    // The map drew nothing at all for a parked fleet before this, so no tap in this pane could
+    // reach a picker on a board with nothing in transit -- which is every board at tick zero.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Assert::IsTrue(WhereTheFleetStands(page.State()) != Lockstep::EventRefs::NONE, L"the opening board has no fleet standing anywhere");
+    Assert::IsFalse(
+      std::any_of(page.State().fleets.begin(), page.State().fleets.end(), [](const Lockstep::Fleet& _fleet) { return _fleet.OnALane(); }),
+      L"something is in transit, so a marker rather than a badge could be what answers this");
+
+    Headless renderers;
+    const bool opened = SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
+    Assert::IsTrue(opened, L"nothing on the map opens a picker for a fleet standing at a system");
+  }
+
+  TEST_METHOD(ASystemHoldingSeveralAsksWhichOneFirst)
+  {
+    // A badge totals SHIPS, so a system holding three fleets wears one badge and the tap that
+    // follows it has to be about one fleet. The sheet between them is that question.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+    const std::int32_t standing = WhereTheFleetStands(state);
+    Assert::IsTrue(standing != Lockstep::EventRefs::NONE);
+
+    Lockstep::Fleet second = state.fleets.front();
+    second.id = 77;
+    second.name = "FLT 77";
+    second.ships = 4;
+    second.from = standing;
+    second.to = standing;
+    second.order = Lockstep::FleetStance::Hold;
+    second.underWay = false;
+    state.fleets.push_back(std::move(second));
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    const bool listed = SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::FleetList; });
+    Assert::IsTrue(listed, L"a system holding two of your fleets went somewhere other than the list that picks between them");
+
+    // And the list leads on to a picker, which is the only thing it is for.
+    const bool picked = SweepFor(
+      page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
+      [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; }, true,
+      [&page, &renderers]
+      {
+        if (page.OpenPanel() != Lockstep::MainPage::Panel::None)
+        {
+          return false;
+        }
+        return SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
+                        [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::FleetList; });
+      });
+    Assert::IsTrue(picked, L"no row of the fleet list opens that fleet's picker");
+  }
+
+  TEST_METHOD(ARivalsGarrisonIsReadAndNotOrdered)
+  {
+    // A rival's badge says how strong a system is, which is the same fact ADR-063 puts on a
+    // destination row. It is not a control: there is no order to give about somebody else's ships.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    Assert::IsFalse(state.fleets.empty());
+
+    // Every fleet on the board belongs to a rival, so any picker this sweep finds is one the map
+    // offered about ships that are not the viewer's.
+    for (Lockstep::Fleet& fleet : state.fleets)
+    {
+      fleet.owner = state.viewer == 0 ? 1 : 0;
+      fleet.order = Lockstep::FleetStance::Hold;
+      fleet.underWay = false;
+      fleet.from = fleet.to;
+    }
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    const bool opened = SweepFor(
+      page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page]
+      { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination || page.OpenPanel() == Lockstep::MainPage::Panel::FleetList; });
+    Assert::IsFalse(opened, L"the screen offered an order about a rival's ships");
+  }
+
+  TEST_METHOD(ABadgeIsFocusOnlyAtTheLock)
+  {
+    // Screen 06, and the rule the locks rail's rows already follow (ADR-060): at the lock nothing
+    // opens a surface that takes an order for a tick that is already resolving.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    state.orders.locked = true;
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Headless renderers;
+    const bool opened = SweepFor(
+      page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page]
+      { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination || page.OpenPanel() == Lockstep::MainPage::Panel::FleetList; });
+    Assert::IsFalse(opened, L"a badge opened a picker at the lock");
+    Assert::IsTrue(page.FocusedSystem() != Lockstep::EventRefs::NONE, L"and it focused nothing either, so the tap did nothing at all");
+  }
+
+  TEST_METHOD(AFleetOnALaneWearsNoBadge)
+  {
+    // A fleet is drawn as a marker on its lane or as a badge at a system, never as both -- which is
+    // what `Fleet::OnALane` is for. A fleet counted at the system it is LEAVING would be drawn
+    // twice and, worse, would offer a picker the lock refuses (ADR-077).
+    bool sawOne = false;
+    for (std::int32_t ticks = 1; ticks <= 14 && !sawOne; ++ticks)
+    {
+      const auto simulation = FleetMoveTapTests::EverybodyMoves(ticks);
+      const Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+      for (const Lockstep::Fleet& fleet : state.fleets)
+      {
+        if (!fleet.underWay)
+        {
+          continue;
+        }
+        sawOne = true;
+        Assert::IsTrue(fleet.OnALane(), L"a fleet the server has on a lane says it is standing somewhere");
+      }
+    }
+    Assert::IsTrue(sawOne, L"fourteen ticks of six bots put nothing in transit, so this test proved nothing");
+  }
+};
+
+// The board is still readable while the link is down, and still gives no order (ADR-085).
+TEST_CLASS(OfflineBoardTapTests)
+{
+public:
+  TEST_METHOD(NoTapGivesAnOrderWhileTheLinkIsDown)
+  {
+    // The same claim `ALockedRailQueuesNothing` makes about the lock, about the other reason an
+    // order cannot go: a client that cannot send must not let one be composed either, or the player
+    // is editing a list that will never leave.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    page.SetOffline(true);
+    Assert::IsFalse(page.OrdersEditable(), L"a page with no link still says orders can be given");
+
+    Headless renderers;
+    const bool ordered =
+      SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+               [&page]
+               {
+                 const Lockstep::OrderSet orders = Lockstep::OrdersOf(page.State());
+                 return !orders.builds.empty() || !orders.fleetOrders.empty() || !orders.proposals.empty() || orders.concede;
+               });
+    Assert::IsFalse(ordered, L"a tap composed an order on a client that cannot send one");
+  }
+
+  TEST_METHOD(TheBoardIsStillReadableWhileTheLinkIsDown)
+  {
+    // The half the modal took away. Focusing, opening a sheet and reading the digest reach no
+    // socket, so none of them is a thing to stop.
+    const auto simulation = PlayedMatch(4);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    page.SetOffline(true);
+
+    Headless renderers;
+    const bool opened = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() != Lockstep::MainPage::Panel::None; });
+    Assert::IsTrue(opened, L"a dropped link left nothing on the board to open");
+
+    Lockstep::MainPage focusing;
+    focusing.Create(ViewOfSeatZero(*simulation));
+    focusing.SetOffline(true);
+    const bool focused = SweepFor(focusing, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                  [&focusing] { return focusing.FocusedSystem() != Lockstep::EventRefs::NONE; });
+    Assert::IsTrue(focused, L"a dropped link left nothing on the board to focus");
+  }
+
+  TEST_METHOD(ComingBackRestoresTheControls)
+  {
+    // It is a state and not a one-way door: the reconnect loop under the banner is expected to win.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    page.SetOffline(true);
+    Assert::IsFalse(page.OrdersEditable());
+    page.SetOffline(false);
+    Assert::IsTrue(page.OrdersEditable(), L"the controls did not come back with the link");
+  }
+};
+
+// The top bar carries the purse AND what this tick has committed of it (ADR-087).
+TEST_CLASS(CommittedPurseTests)
+{
+public:
+  TEST_METHOD(NothingQueuedCommitsNothing)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    Assert::AreEqual(0u, page.State().orders.QueuedBuildCost(), L"a fresh match has something queued already");
+  }
+
+  TEST_METHOD(TheCommittedAmountIsWhatTheSheetPricesAgainst)
+  {
+    // One number, read two ways: the bar subtracts it and the sheet says so in a sentence. They are
+    // the same call, so they cannot disagree (ADR-078, ADR-087).
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    Assert::IsFalse(state.orders.builds.empty());
+
+    state.player.credits = 46;
+    state.orders.builds.front().cost = 20;
+    state.orders.queuedBuilds.push_back(0);
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+
+    Assert::AreEqual(20u, page.State().orders.QueuedBuildCost(), L"the bar would subtract the wrong number");
+    Assert::IsTrue(page.PurseSentence().find("26") != std::string::npos, L"and the sheet would not agree with it");
+  }
+};
+
+// The map has a camera the player can move, and a way back to where it started (ADR-090).
+TEST_CLASS(MapCameraTapTests)
+{
+public:
+  TEST_METHOD(AWheelOverTheMapMovesTheCameraAndStopsAtTheEnds)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    Assert::IsTrue(page.Map().AtAuthoredFraming(), L"the map does not open at the authored framing");
+
+    Assert::IsTrue(page.HandleZoom(1, 700.0F, 300.0F), L"a notch over the map moved nothing");
+    Assert::IsFalse(page.Map().AtAuthoredFraming());
+
+    // Spun hard against the stop it reports no change, so an idle frame costs no redraw (ADR-047).
+    for (std::int32_t again = 0; again < 40; ++again)
+    {
+      (void)page.HandleZoom(1, 700.0F, 300.0F);
+    }
+    Assert::IsFalse(page.HandleZoom(1, 700.0F, 300.0F), L"the zoom has no near limit");
+
+    for (std::int32_t back = 0; back < 80; ++back)
+    {
+      (void)page.HandleZoom(-1, 700.0F, 300.0F);
+    }
+    Assert::IsFalse(page.HandleZoom(-1, 700.0F, 300.0F), L"the zoom has no far limit");
+  }
+
+  TEST_METHOD(ANotchOverTheRailIsNeitherAListNorACamera)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Assert::IsFalse(page.HandleZoom(1, 1150.0F, 300.0F), L"a notch over the locks rail did something");
+    Assert::IsTrue(page.Map().AtAuthoredFraming());
+    Assert::AreEqual(std::size_t{0}, page.DigestTop());
+  }
+
+  TEST_METHOD(ResetIsOnTheScreenOnlyWhenThereIsSomethingToReset)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    // At the authored framing there is no chip, so no tap anywhere on the map pane finds one -- a
+    // control that would do nothing is left off the screen rather than drawn dim.
+    Headless renderers;
+    Assert::IsTrue(page.Map().AtAuthoredFraming());
+
+    // Move the camera, then sweep the top of the map pane for the chip that takes it back.
+    (void)page.HandleZoom(2, 700.0F, 300.0F);
+    Assert::IsFalse(page.Map().AtAuthoredFraming());
+
+    const bool reset = SweepFor(page, renderers, DrawPage, 400, TOP_BAR, SCREEN_WIDTH - ORDERS_RAIL, TOP_BAR + 40,
+                                [&page] { return page.Map().AtAuthoredFraming(); });
+    Assert::IsTrue(reset, L"nothing on the map pane puts the camera back");
+  }
+
+  TEST_METHOD(ADragStillOrbitsAndResetUndoesThatToo)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    const Neuron::PointerInput::Drag turn{.deltaXPixels = 40.0F, .deltaYPixels = 0.0F, .originXPixels = 700.0F, .originYPixels = 300.0F};
+    Assert::IsTrue(page.HandleDrag(turn), L"a drag that began on the map was not consumed by it");
+    Assert::IsFalse(page.Map().AtAuthoredFraming(), L"the drag did not orbit anything");
+
+    page.ResetView();
+    Assert::IsTrue(page.Map().AtAuthoredFraming(), L"reset left the camera somewhere else");
+  }
+};
+
+// The top bar says what it knows and hides what is not finished (ADR-091).
+TEST_CLASS(TopBarTests)
+{
+public:
+  TEST_METHOD(ReplayIsOffTheBarUnlessDeveloperControlsAreOn)
+  {
+    // Its sheet is a stub, and a control whose own title said `NOT YET WIRED` teaches a player that
+    // the buttons on this screen may do nothing -- which is what ADR-053 and ADR-077 were spent
+    // unteaching.
+    const auto simulation = PlayedMatch(2);
+    Lockstep::MainPage shipped;
+    shipped.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    const bool found = SweepFor(shipped, renderers, DrawPage, 0, 0, SCREEN_WIDTH, TOP_BAR,
+                                [&shipped] { return shipped.OpenPanel() == Lockstep::MainPage::Panel::Replay; });
+    Assert::IsFalse(found, L"a shipped build put REPLAY on the bar");
+
+    Lockstep::MainPage dev;
+    dev.Create(ViewOfSeatZero(*simulation));
+    dev.SetDeveloperControls(true);
+    const bool reachable = SweepFor(dev, renderers, DrawPage, 0, 0, SCREEN_WIDTH, TOP_BAR,
+                                    [&dev] { return dev.OpenPanel() == Lockstep::MainPage::Panel::Replay; });
+    Assert::IsTrue(reachable, L"--dev did not put REPLAY back");
+  }
+
+  TEST_METHOD(TheCensusNamesNoMatchId)
+  {
+    // `M0007` was the zero-padded TICK, which names neither the match nor the tick and changes every
+    // tick while looking like an identifier.
+    const auto simulation = PlayedMatch(7);
+    const Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+    // The id the view model carries is still the tick; what changed is that the bar stops printing
+    // it. Asserted through the state rather than the pixels, because the draw is a capture.
+    Assert::AreEqual(state.match.tick, static_cast<std::uint32_t>(std::stoul(state.match.id)),
+                     L"the match id stopped being the tick, so the bar may be able to show one after all");
+  }
+};
+
+// The destination sheet is sorted by how soon a fleet lands, and the digest admits a clipped
+// backlog (ADR-092, ADR-094).
+TEST_CLASS(SheetOrderAndBacklogTests)
+{
+public:
+  TEST_METHOD(TheClientsIdeaOfTheBacklogWindowIsEightTicks)
+  {
+    // **The two constants cannot be compared from any one test project**, which is worth saying
+    // rather than working around: this suite links `LockstepClient`, `GameLogic` and `NeuronCore`,
+    // and `NeuronServer::Session::DIGEST_HISTORY` is in none of them (AGENTS.md section 2). So this
+    // pins the client's half and names the other, and a session that changes the server's window
+    // finds this test by grepping for the name.
+    Assert::AreEqual(8U, Lockstep::MainPage::DIGEST_HISTORY_TICKS,
+                     L"the client's backlog window moved; NeuronServer::Session::DIGEST_HISTORY must match it");
+  }
+
+  TEST_METHOD(ADestinationSheetPutsTheNearestFirst)
+  {
+    // Lane order is the order the graph happens to store them in and means nothing to a player; how
+    // soon a fleet lands is the first thing they weigh.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    const bool opened = SweepFor(page, renderers, DrawPage, SCREEN_WIDTH - ORDERS_RAIL, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
+    Assert::IsTrue(opened, L"no picker to check the order of");
+
+    // The sheet is drawing; what it drew is a capture. What can be asserted here is the rule the
+    // sort is built on -- the lanes out of the fleet's system, in cost order, are what the rows are.
+    const std::int32_t standing = page.State().fleets.front().from;
+    std::vector<std::uint32_t> costs;
+    for (const Lockstep::Lane& lane : page.State().graph.lanes)
+    {
+      if (lane.a == standing || lane.b == standing)
+      {
+        costs.push_back(lane.cost);
+      }
+    }
+    Assert::IsFalse(costs.empty(), L"the fleet's system has no lanes, so there is nothing to sort");
   }
 };
 

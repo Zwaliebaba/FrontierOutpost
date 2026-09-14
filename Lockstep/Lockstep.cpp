@@ -103,6 +103,11 @@ struct Startup
   /// or retention, so this is for mechanics only, which is exactly what Phase 0 is for.
   std::uint32_t tickSeconds = 0;
 
+  /// `--dev` shows the controls for screens that are not finished (ADR-091). One today: the top
+  /// bar's `REPLAY`, whose sheet is a stub. Off in every shipped run, so a player never meets a
+  /// button that cannot do what it says.
+  bool developerControls = false;
+
   /// `--bots <n>` puts bots in the LAST n seats of a `--serve` match.
   ///
   /// **Without it the headless runner runs a match nobody plays.** `--serve` listens and ticks on
@@ -306,6 +311,10 @@ void SplitHostAndPort(const std::string& _target, std::string& _outHost, std::ui
     else if (words[index] == "--scale" && index + 1 < words.size())
     {
       startup.scale = static_cast<std::uint32_t>(std::strtoul(words[++index].c_str(), nullptr, 10));
+    }
+    else if (words[index] == "--dev")
+    {
+      startup.developerControls = true;
     }
   }
 
@@ -935,9 +944,9 @@ struct MatchPaths
     switch (_connection.State())
     {
     case Lockstep::MatchConnection::Status::Playing:
-      // Welcomed. The seat is shown for a moment before the match replaces this screen, because a
-      // player who typed a token wants to see which empire it bought.
-      page.SetSeat(_connection.Player(), 0, Lockstep::OwnerColor(_connection.Player(), _connection.Player()));
+      // Welcomed, and this screen is replaced by the board in the same breath. The seat box that
+      // used to be set here never had time to be read and is gone (ADR-095); which empire the token
+      // bought is on the top bar a frame later, in the colour the whole map is drawn in.
       page.SetStatus(Lockstep::JoinPage::Status::Joined);
       return true;
 
@@ -1387,6 +1396,7 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
       // and back in would read as the connection returning and going again.
       kind = Lockstep::ConnectionDialog::Kind::Lost;
       facts.lockCountdown = !everHadState ? std::string{} : Lockstep::MainPage::FormatCountdown(page.State().match.secondsToLock);
+      facts.lockedTick = page.State().OrdersTick();
     }
     else if (!everHadState)
     {
@@ -1398,8 +1408,28 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
     else if (page.State().match.finished && !finishedDismissed)
     {
       kind = Lockstep::ConnectionDialog::Kind::Finished;
-      facts.standings = std::format("{} OF {} · SCORE {} · LEADER {} {}", page.State().player.placement, page.State().player.playerCount,
-                                    page.State().player.score, page.State().player.leader.name, page.State().player.leader.score);
+
+      // **The whole table** (ADR-097). Every player's placement, name and score is already on the
+      // wire in `SnapshotStanding` and already in `MatchState::players`, so the final screen can
+      // say how the match went rather than only how the reader did.
+      //
+      // Composed here because this is where `MatchState` and `ConnectionDialog` meet: the dialog is
+      // in `LockstepClient` and has no idea what a match is (ADR-038).
+      facts.standings.clear();
+      std::vector<const Lockstep::PlayerBadge*> table;
+      for (const Lockstep::PlayerBadge& badge : page.State().players)
+      {
+        table.push_back(&badge);
+      }
+      std::ranges::stable_sort(table, [](const Lockstep::PlayerBadge* _a, const Lockstep::PlayerBadge* _b)
+                               { return _a->placement < _b->placement; });
+
+      for (const Lockstep::PlayerBadge* badge : table)
+      {
+        facts.standings.push_back(Lockstep::ConnectionDialog::Facts::Standing{
+          .text = std::format("{}  {:<10} {}", Lockstep::MainPage::FormatPlacement(badge->placement), badge->label, badge->score),
+          .isYou = badge->isYou});
+      }
     }
 
     dialog.Update(kind, facts, elapsedSeconds);
@@ -1408,6 +1438,12 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
       redraw = true;
       drawnDialog = kind;
     }
+
+    // **A dropped link takes the orders away and leaves the board** (ADR-085). The page dims every
+    // control that reaches the wire and leaves reading, focusing and orbiting alone; the banner over
+    // it says why. Nothing else on this screen changes.
+    page.SetOffline(kind == Lockstep::ConnectionDialog::Kind::Lost);
+    page.SetDeveloperControls(_startup.developerControls);
 
     switch (dialog.TakeAction())
     {
@@ -1462,11 +1498,31 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
       redraw = true;
     }
 
+    // The wheel and the two page keys, which the digest column reads and nothing else does
+    // (ADR-080). Both were produced by the input classes and drained by nobody: the wheel has been
+    // banked since ADR-009, and the keyboard reached the join screen and stopped there.
+    //
+    // The pointer's CURRENT position decides which pane a notch was over. `TakeZoomSteps` banks a
+    // count and not a place, and a pointer does not travel measurably between the notch and the
+    // frame that reads it.
+    if (!dialog.Modal())
+    {
+      const std::int32_t zoomSteps = pointer.TakeZoomSteps();
+      if (zoomSteps != 0 && page.HandleZoom(zoomSteps, hoverXPixels, hoverYPixels))
+      {
+        redraw = true;
+      }
+      for (const Neuron::KeyboardInput::Key key : keyboard.TakeKeys())
+      {
+        redraw = page.HandleKey(key) || redraw;
+      }
+    }
+
     // Drag before tap. They are mutually exclusive by construction -- PointerInput decides which
     // a press was, and reports only that one -- so the order is about reading rather than about
     // correctness: the rotation is applied before the frame that a tap would be tested against.
     Neuron::PointerInput::Drag drag = {};
-    if (pointer.TakeDrag(drag) && !dialog.Visible())
+    if (pointer.TakeDrag(drag) && !dialog.Modal())
     {
       redraw = true;
       page.HandleDrag(drag);

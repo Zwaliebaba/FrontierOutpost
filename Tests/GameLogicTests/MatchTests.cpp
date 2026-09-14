@@ -1045,6 +1045,12 @@ public:
     match = Lockstep::TickResolver::Resolve(match, {}, second);
     Assert::IsTrue(match.SystemAt(target).owner == Lockstep::PlayerId{0}, L"the second consecutive tick takes it");
     Assert::AreEqual(0U, match.SystemAt(target).siegeTicks, L"and the siege is spent");
+
+    // **And it records whose loss it was** (ADR-088). The client draws a capture in red only for the
+    // player it was taken from, so a capture that does not name a loser is one every player reads
+    // as their own.
+    Assert::IsTrue(match.SystemAt(target).capturedFrom == Lockstep::PlayerId{1}, L"the capture did not record who lost it");
+    Assert::AreNotEqual(0U, match.SystemAt(target).capturedAt, L"and it did not record when");
     Assert::IsTrue(HasDigestKind(second, 1, Lockstep::DigestKind::SystemLost));
     Assert::IsTrue(HasDigestKind(second, 0, Lockstep::DigestKind::SystemClaimed));
   }

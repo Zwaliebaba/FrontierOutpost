@@ -66,6 +66,15 @@ struct DigestCard
 /// has no controls, and the first screen anybody ever sees is exactly that screen.
 [[nodiscard]] std::vector<DigestCard> CardsOf(const MatchState& _state);
 
+/// What the digest's page band says about the cards below the fold: `27 MORE · 1 BATTLE`, or an
+/// empty string when nothing is hidden (ADR-080).
+///
+/// **A count is not an answer to the question a player is actually asking.** `1 / 4 · MORE ›` said
+/// how much column was left and nothing about whether the battle they had not seen was in it, on a
+/// screen whose whole job is to report what changed. So the band names the WORST hidden thing by
+/// the same consequence order the stack is sorted in, and how many of that kind there are.
+[[nodiscard]] std::string HiddenSummary(const std::vector<DigestCard>& _cards, std::size_t _from);
+
 /// One fact in the delta box, and whether it is a loss.
 ///
 /// **The flag is CARRIED rather than read back out of the text.** The renderer used to decide the

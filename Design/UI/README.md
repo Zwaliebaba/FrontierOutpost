@@ -101,8 +101,10 @@ The complete list, so nobody goes looking. Each item is also under its screen in
    (built: blue dashed), focus by actor (built: by system), and the Fallow's whole distinct
    treatment — dithered ground, radial glow, three stepped rings, five pins, its name and the race
    distances. Built: a dashed purple ground circle, one lifted ring, three pins and
-   `SEALED - OPENS T<n>`. Zoom: `PointerInput` banks wheel notches and pinches, and nothing reads
-   them; `MainPage::ResetView` exists and no control reaches it.
+   `SEALED - OPENS T<n>`. **Zoom, reset and the fleet glyph are built** (ADR-090): a wheel notch or
+   pinch step over the map pane moves the camera between 0.6x and 2.5x of the authored framing, a
+   `RESET` chip appears beside `MAP - FOCUS` once it has moved, and the legend draws a fleet as the
+   arrowhead the map draws rather than as the route's dashes.
 7. **The destination sheet's verdict.** A row says what is standing on a candidate (`P3 - 11 +DEF`,
    ADR-063) and not how the fight would go. `YOU WIN` / `HOLD` / `YOU LOSE` per candidate needs a
    preview per candidate on `SnapshotFleet`; the combat parameters are not on the wire and the
@@ -115,7 +117,8 @@ The complete list, so nobody goes looking. Each item is also under its screen in
 Found while reading the code for this record, not design gaps: the top bar's
 `M<id>` is the tick number zero-padded (`SnapshotView.cpp`, the snapshot carries no match id) and
 `D<n>/21` assumes four ticks a day and twenty-one days (ADR-051 records it); and
-`JoinPage::SetMatchSummary` has no caller, so the join screen's footer line never appears.
+`JoinPage::SetMatchSummary` had no caller, so the join screen's footer line never appeared — it and
+the never-populated seat box are gone (ADR-095).
 `Design/GETTING-STARTED.md` said rail rows jump to their event, that the map zooms, that a player
 starts with twenty credits and that missed digests are one tick deep; none was true of the tree, and
 it was corrected on 2026-09-12. (Rail rows became links later the same day — ADR-060 — so that first
@@ -159,9 +162,10 @@ ADR-066 touched was retaken the same day from the Debug build carrying them. Don
   second fleet, or the next change to the line height, all of which have broken a literal.
 - **A system marker and a fleet marker are the same blue and differ only in size.** Both are exactly
   `94,196,255`; scanning the map pane for runs of it gives system discs at 13–18px wide and a fleet
-  at about 9. Tapping a system opens its build sheet, tapping a fleet opens the destination picker,
-  and a parked fleet has no marker at all — so the picker is reachable only while something is under
-  way, or from `MOVE FLT n` on a tick-zero card. The filled
+  at about 9. Tapping a system opens its build sheet; a marker on a lane opens the picker only
+  before its fleet departs (ADR-077). A parked fleet is a **garrison badge** beside its system's
+  name (ADR-079) — a 16px filled chip, `94,196,255` when it is yours — and tapping that, or the
+  rail's FLEETS row, reaches the picker on any tick. The filled
   build button moves with the digest — scan column x=40 for solid blue, as `TapBuild` does. **The
   `SIGNALS` header moves too**: it sits under BUILDS, so a queued build or a second fleet pushes it
   down 16 pixels a line, and 201 is only right on an opening rail. Since ADR-069 put the level in
@@ -184,11 +188,20 @@ ADR-066 touched was retaken the same day from the Debug build carrying them. Don
   `--join 192.0.2.1:7341`; MATCH FINISHED = `--serve --phase0 --tick 2 --bots 5` and a client as
   `alpha`, about a hundred seconds; WAITING FOR THE HOST = a joiner into a lobby whose host is still
   on 09 (its token is on the host's screen or on the clipboard after `COPY`).
-- **A parked fleet has no marker** (`MapRender.cpp` draws a fleet only while it moves), so the
-  destination sheet opens only from a `MOVE FLT n` standing move — tick zero, or any tick on which
-  no card offers a control (ADR-056) — or from `REDIRECT`. On `--tick 60` there is time to open it,
-  read the rows and pick one; a sheet's rows sit 44px apart up from the `CANCEL` bar, the last at
-  y≈645.
+- **A parked fleet draws a garrison badge and not a lane marker** (ADR-079), so the destination
+  sheet is opened either from that badge on the map or from the fleet's row in the rail's `FLEETS`
+  section (ADR-077); both work on every tick, where the digest's `MOVE FLT n` is there only at tick
+  zero and on a tick where no card offers a control (ADR-056). The rail is the easier of the two to
+  script: scan for its first section divider and take the 22px band under it rather than a literal
+  y, for the reason the `SIGNALS` bullet above gives. On `--tick 60` there is time to open the
+  sheet, read the rows and pick one; a sheet's rows sit 44px apart up from the `CANCEL` bar, the
+  last at y≈645.
+- **A locked desktop blocks taps and not captures.** `SendInput` needs an unlocked session, so
+  `TapRehearsal.ps1` and anything built on it stops dead at `LogonUI` being alive — check for that
+  process first. `PrintWindow` with `PW_RENDERFULLCONTENT` does not need the foreground, and
+  `WM_KEYDOWN` can be POSTED, so a client started as `--join <host> --token alpha` against a
+  `--serve --bots 5` server reaches the board on one posted `VK_RETURN` (Enter is JOIN) with no tap
+  at all. That is how a board is photographed on a locked machine; it cannot open a sheet.
 - **06, 04 and 08 from one dedicated server:** `--serve 7351 --phase0 --tick 30 --bots 5 --store
   <name>` and a client `--join 127.0.0.1:7351 --token alpha`. `NtSuspendProcess` the server and
   wait for the client's countdown to pass zero (06); open the `SIGNALS` sheet first and suspend it

@@ -132,8 +132,9 @@ constexpr float REGION_VOLUME_HEIGHT = 26.0F;
   return digits;
 }
 
-/// 4 -> "4TH". Ordinals, because "4 / 12" reads as a fraction and placement is not one.
-[[nodiscard]] std::string FormatPlacement(std::uint32_t _placement)
+} // namespace
+
+std::string MainPage::FormatPlacement(std::uint32_t _placement)
 {
   const std::uint32_t lastTwo = _placement % 100;
   const char* suffix = "TH";
@@ -157,8 +158,6 @@ constexpr float REGION_VOLUME_HEIGHT = 26.0F;
   return std::to_string(_placement) + suffix;
 }
 
-} // namespace
-
 void MainPage::Create(MatchState _state)
 {
   // What the player had open, so that a state arriving does not shut it (ADR-065). A sheet is where
@@ -167,6 +166,10 @@ void MainPage::Create(MatchState _state)
   const Panel wasOpen = m_panel;
   const std::int32_t wasSubject = m_panelSubject;
   const std::int32_t wasSubjectId = m_panelSubjectId;
+
+  // Where this player stood on the digest being replaced, so the chip can say a place was lost
+  // (ADR-091). Zero on the first state, which is no placement and so never a slip.
+  m_placementDrawn = m_state.player.placement;
 
   m_state = std::move(_state);
   m_panel = Panel::None;
@@ -181,7 +184,9 @@ void MainPage::Create(MatchState _state)
   // A digest is replaced wholesale every tick, so nothing about how the last one was being READ
   // survives it: page three is nowhere in the new one, and the rival whose card was open may have
   // no card at all (ADR-061).
-  m_digestPage = 0;
+  m_digestTop = 0;
+  m_cardsOnScreen = 1;
+  m_digestDragPixels = 0.0F;
   m_expandedActor = NOBODY;
 
   MeasureContent();
@@ -207,11 +212,30 @@ void MainPage::ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _
     return;
   }
 
+  case Panel::FleetList:
+  {
+    // About a system, like the build sheet above, and put back on the same terms: the system is
+    // still on this map and the viewer still has something standing on it. A garrison that left at
+    // the lock leaves nothing to pick between (ADR-065, ADR-079).
+    const std::int32_t at = PositionOfSystem(m_state, _subjectId);
+    if (at == EventRefs::NONE || StandingFleetsAt(at).empty())
+    {
+      return;
+    }
+    m_panel = Panel::FleetList;
+    m_panelSubject = at;
+    m_panelSubjectId = _subjectId;
+    return;
+  }
+
   case Panel::Destination:
   {
     for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
     {
-      if (m_state.fleets[index].id != _subjectId || m_state.fleets[index].owner != m_state.viewer)
+      // Still yours, and still standing. A picker left open across the lock that sent its fleet
+      // away is a picker over a fleet the lock would now refuse an order on, which is the sheet
+      // ADR-065 keeps open and ADR-077 says has nothing left to offer.
+      if (m_state.fleets[index].id != _subjectId || m_state.fleets[index].owner != m_state.viewer || m_state.fleets[index].underWay)
       {
         continue;
       }
@@ -239,6 +263,18 @@ void MainPage::ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _
   default:
     return;
   }
+}
+
+std::string MainPage::PurseSentence() const
+{
+  const std::uint32_t spent = m_state.orders.QueuedBuildCost();
+  if (spent == 0)
+  {
+    return {};
+  }
+  const std::uint32_t left = spent <= m_state.player.credits ? m_state.player.credits - spent : 0;
+  return std::format("Priced against the {} credits left after the {} already queued, not the {} in hand.", left, spent,
+                     m_state.player.credits);
 }
 
 std::string MainPage::LockSentence() const
@@ -406,6 +442,35 @@ bool MainPage::HandleDrag(const Neuron::PointerInput::Drag& _drag)
   // rotating it as the finger crosses onto a rail, and a drag that began on a rail never starts.
   const float mapLeft = Frame::DIGEST_WIDTH;
   const float mapRight = Frame::SCREEN_WIDTH - Frame::ORDERS_WIDTH;
+
+  // **A drag that began on the digest scrolls it**, which is the finger's half of ADR-080: a touch
+  // device has no wheel, and the page band alone made reading a long digest a sequence of taps.
+  //
+  // The column moves in whole cards and a finger moves in pixels, so the remainder is banked rather
+  // than thrown away -- without that, a slow drag scrolls nothing at all. `DIGEST_SCROLL_PIXELS` is
+  // the frame's row unit (ADR-052): the distance a finger already associates with one row of
+  // anything on this screen.
+  const bool startedOnDigest = _drag.originXPixels >= 0.0F && _drag.originXPixels < mapLeft && _drag.originYPixels >= Frame::TOP_BAR_HEIGHT;
+  if (startedOnDigest)
+  {
+    constexpr float DIGEST_SCROLL_PIXELS = SHEET_ROW_HEIGHT;
+    m_digestDragPixels += _drag.deltaYPixels;
+
+    std::int32_t cards = 0;
+    while (m_digestDragPixels <= -DIGEST_SCROLL_PIXELS)
+    {
+      m_digestDragPixels += DIGEST_SCROLL_PIXELS;
+      ++cards;
+    }
+    while (m_digestDragPixels >= DIGEST_SCROLL_PIXELS)
+    {
+      m_digestDragPixels -= DIGEST_SCROLL_PIXELS;
+      --cards;
+    }
+    (void)ScrollDigest(cards);
+    return true;
+  }
+
   const bool startedOnMap =
     _drag.originXPixels >= mapLeft && _drag.originXPixels < mapRight && _drag.originYPixels >= Frame::TOP_BAR_HEIGHT;
   if (!startedOnMap)
@@ -418,6 +483,65 @@ bool MainPage::HandleDrag(const Neuron::PointerInput::Drag& _drag)
   // like a camera (ADR-017).
   m_mapView.Drag(_drag.deltaXPixels, _drag.deltaYPixels);
   return true;
+}
+
+bool MainPage::ScrollDigest(std::int32_t _cards)
+{
+  if (_cards == 0)
+  {
+    return false;
+  }
+  const std::size_t was = m_digestTop;
+  const std::int64_t wanted = static_cast<std::int64_t>(m_digestTop) + _cards;
+
+  // Clamped at both ends here rather than only in the draw, so a wheel spun hard against the end of
+  // the stack does not bank a hundred notches that have to be spun back.
+  m_digestTop = wanted <= 0 ? 0 : static_cast<std::size_t>(wanted);
+  return m_digestTop != was;
+}
+
+bool MainPage::HandleZoom(std::int32_t _steps, float _xPixels, float _yPixels)
+{
+  if (_steps == 0)
+  {
+    return false;
+  }
+
+  // The pane under the pointer decides what a notch means: a list over the digest (ADR-080), a
+  // camera over the map (ADR-090). One banked count, two meanings, and the pointer is what picks.
+  const bool aboveTheBar = _yPixels >= Frame::TOP_BAR_HEIGHT;
+  if (aboveTheBar && _xPixels >= 0.0F && _xPixels < Frame::DIGEST_WIDTH)
+  {
+    // A notch away from the player scrolls DOWN the column. `TakeZoomSteps` counts a notch away as
+    // negative -- it was named for a camera, where away is out -- so the sign is flipped here, at
+    // the one place that knows the gesture means a list rather than a distance.
+    m_digestDragPixels = 0.0F;
+    return ScrollDigest(-_steps);
+  }
+
+  // Over the map it means what it was banked for, sign and all: away from the player is out.
+  if (aboveTheBar && _xPixels >= Frame::DIGEST_WIDTH && _xPixels < Frame::SCREEN_WIDTH - Frame::ORDERS_WIDTH)
+  {
+    return m_mapView.Zoom(_steps);
+  }
+
+  return false;
+}
+
+bool MainPage::HandleKey(Neuron::KeyboardInput::Key _key)
+{
+  // A screenful, measured from what the last frame actually drew rather than from a number chosen
+  // here: cards are different heights and a page is however many of them fit (ADR-080).
+  const auto page = static_cast<std::int32_t>(std::max<std::size_t>(m_cardsOnScreen, 1));
+  if (_key == Neuron::KeyboardInput::Key::PageDown)
+  {
+    return ScrollDigest(page);
+  }
+  if (_key == Neuron::KeyboardInput::Key::PageUp)
+  {
+    return ScrollDigest(-page);
+  }
+  return false;
 }
 
 void MainPage::AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index)
@@ -462,6 +586,24 @@ bool MainPage::Animating() const noexcept
                              [](const Fleet& _fleet) { return _fleet.order == FleetStance::Move && _fleet.from != _fleet.to; });
 }
 
+std::vector<std::int32_t> MainPage::StandingFleetsAt(std::int32_t _system) const
+{
+  std::vector<std::int32_t> standing;
+  for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
+  {
+    const Fleet& fleet = m_state.fleets[index];
+    // The same three questions the badge was drawn by (`GarrisonsAt`), asked of the viewer's own
+    // fleets: theirs, standing here, and orderable. `underWay` is the one the badge does not have
+    // to ask -- a fleet on a lane is not standing anywhere -- and this does, because a tap lands a
+    // frame after the badge was drawn and the lock can fall between them (ADR-077).
+    if (fleet.owner == m_state.viewer && !fleet.OnALane() && !fleet.underWay && fleet.to == _system)
+    {
+      standing.push_back(static_cast<std::int32_t>(index));
+    }
+  }
+  return standing;
+}
+
 std::uint32_t MainPage::BuildShortfall(std::int32_t _index) const noexcept
 {
   if (_index < 0 || _index >= static_cast<std::int32_t>(m_state.orders.builds.size()))
@@ -485,7 +627,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       continue;
     }
 
-    const bool editable = !m_state.orders.locked;
+    const bool editable = OrdersEditable();
     switch (region->action)
     {
     case Action::FocusEvent:
@@ -537,14 +679,63 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
     }
 
     case Action::OpenFleet:
+    {
       if (region->index < 0 || region->index >= static_cast<std::int32_t>(m_state.fleets.size()))
       {
         return true;
       }
+      const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(region->index)];
+
+      // The guard behind the controls, by the rule the lock would refuse the order by (ADR-053,
+      // ADR-077). Every control that leads here already declines to be one for a fleet in transit,
+      // and this is what makes that the rule rather than three places that agree.
+      if (fleet.underWay)
+      {
+        return true;
+      }
+
+      // The map rings where the picker is rooted, so the sheet and the map are about one place:
+      // the sheet lists the lanes out of where this fleet stands and the ring says which system
+      // that is (ADR-060).
+      m_focusedSystem = fleet.from;
       m_panel = Panel::Destination;
       m_panelSubject = region->index;
-      m_panelSubjectId = m_state.fleets[static_cast<std::size_t>(region->index)].id;
+      m_panelSubjectId = fleet.id;
       return true;
+    }
+
+    case Action::OpenFleetsAt:
+    {
+      if (region->index < 0 || region->index >= static_cast<std::int32_t>(m_state.graph.systems.size()))
+      {
+        return true;
+      }
+      m_focusedSystem = region->index;
+      m_armedConcede = EventRefs::NONE;
+
+      // **One fleet needs no sheet to pick it.** A list of one row is a tap spent on a question
+      // with one answer, so a system holding a single fleet of yours goes straight to its picker
+      // and a system holding several asks which (ADR-079).
+      const std::vector<std::int32_t> standing = StandingFleetsAt(region->index);
+      if (standing.empty())
+      {
+        return true;
+      }
+      if (standing.size() == 1)
+      {
+        const Fleet& only = m_state.fleets[static_cast<std::size_t>(standing.front())];
+        m_focusedSystem = only.from;
+        m_panel = Panel::Destination;
+        m_panelSubject = standing.front();
+        m_panelSubjectId = only.id;
+        return true;
+      }
+
+      m_panel = Panel::FleetList;
+      m_panelSubject = region->index;
+      m_panelSubjectId = m_state.graph.systems[static_cast<std::size_t>(region->index)].id;
+      return true;
+    }
 
     case Action::ToggleBuild:
     {
@@ -640,8 +831,13 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       if (editable && m_panelSubject >= 0)
       {
         Fleet& fleet = m_state.fleets[static_cast<std::size_t>(m_panelSubject)];
-        const std::int32_t origin = fleet.order == FleetStance::Move ? fleet.to : fleet.from;
-        fleet.from = origin;
+
+        // **`from` is where the fleet stands, whether or not a move has been ordered from here
+        // already.** A picker only opens on a fleet that is not under way (ADR-077), and ordering
+        // one sets `from` to where it is leaving -- so re-opening it lists the same lanes and
+        // picking again replaces the order rather than adding a second hop to it, which is what
+        // makes a move editable until the lock like every other order (ADR-031).
+        const std::int32_t origin = fleet.from;
         fleet.to = region->index;
         fleet.order = FleetStance::Move;
         fleet.progress = 0.0F;
@@ -658,13 +854,18 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       return true;
 
     case Action::ShowDigestPage:
-      m_digestPage = static_cast<std::size_t>(std::max(0, region->index));
+      m_digestTop = static_cast<std::size_t>(std::max(0, region->index));
+      m_digestDragPixels = 0.0F;
       return true;
 
     case Action::OpenReplay:
       m_panel = Panel::Replay;
       m_panelSubject = static_cast<std::int32_t>(m_state.match.tick);
       m_panelSubjectId = EventRefs::NONE;
+      return true;
+
+    case Action::ResetCamera:
+      m_mapView.ResetView();
       return true;
 
     case Action::ClosePanel:
@@ -699,12 +900,53 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text)
                        .contentCenter = m_contentCenter,
                        .contentRadius = m_contentRadius,
                        .focusedSystem = m_focusedSystem,
-                       .animationSeconds = m_animationSeconds};
+                       .animationSeconds = m_animationSeconds,
+                       .sheetOpen = m_panel != Panel::None};
 
-  for (const MapHit& hit : Lockstep::DrawMap(_shapes, _text, frame))
+  const std::vector<MapHit> mapHits = Lockstep::DrawMap(_shapes, _text, frame);
+
+  // **`RESET` is drawn only when the camera is somewhere other than where the map opened**
+  // (ADR-090). There has been no way back to the authored framing since the map got a camera
+  // (ADR-017) -- `ResetView` existed and nothing called it -- and hunting for it by eye is not a
+  // thing to ask. A control that would do nothing is left off the screen rather than drawn dim,
+  // because the map pane has no chrome and one chip appearing is itself the signal.
+  if (!m_mapView.AtAuthoredFraming())
   {
-    const bool isSystem = hit.system != EventRefs::NONE;
-    AddHit(hit.x, hit.y, hit.width, hit.height, isSystem ? Action::OpenSystem : Action::OpenFleet, isSystem ? hit.system : hit.fleet);
+    const float chipX =
+      Frame::DIGEST_WIDTH + 12.0F + static_cast<float>(FontRenderer::MeasurePixels(FocusLine(m_state, m_focusedSystem))) + 10.0F;
+    const float chipY = Frame::TOP_BAR_HEIGHT + 8.0F;
+    const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels("RESET")) + 12.0F;
+    _shapes.StrokeRect(chipX, chipY, chipWidth, BUTTON_HEIGHT, Ink::OUTLINE);
+    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, CenterTextY(chipY, BUTTON_HEIGHT), "RESET", Ink::TEXT_MUTED);
+    AddHit(chipX, chipY, chipWidth, BUTTON_HEIGHT, Action::ResetCamera, 0);
+  }
+
+  for (const MapHit& hit : mapHits)
+  {
+    // **A garrison badge is focus-only at the lock, exactly as a rail row is** (ADR-060, ADR-079).
+    // It is the one control on the map that follows the rail rather than the disc beside it, and
+    // the disc's own behaviour at the lock is left alone here -- see ADR-079's open question.
+    if (hit.fleetsAt != EventRefs::NONE)
+    {
+      const bool locked = m_state.orders.locked || m_state.match.finished;
+      AddHit(hit.x, hit.y, hit.width, hit.height, locked ? Action::FocusSystem : Action::OpenFleetsAt, hit.fleetsAt);
+      continue;
+    }
+
+    if (hit.system != EventRefs::NONE)
+    {
+      AddHit(hit.x, hit.y, hit.width, hit.height, Action::OpenSystem, hit.system);
+      continue;
+    }
+
+    // A marker on a lane is either a move ordered this tick, drawn at progress zero until the lock
+    // (ADR-055), or a fleet the server already has in transit. Only the first takes an order
+    // (ADR-077); the second focuses where it is going, which is what a marker is asked about once
+    // there is nothing to decide about it.
+    const bool underWay = hit.fleet >= 0 && hit.fleet < static_cast<std::int32_t>(m_state.fleets.size()) &&
+                          m_state.fleets[static_cast<std::size_t>(hit.fleet)].underWay;
+    const std::int32_t destination = underWay ? m_state.fleets[static_cast<std::size_t>(hit.fleet)].to : hit.fleet;
+    AddHit(hit.x, hit.y, hit.width, hit.height, underWay ? Action::FocusSystem : Action::OpenFleet, destination);
   }
 }
 
@@ -734,19 +976,26 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // widest member -- the leader's name -- is the one that changes.
   float cursor = Frame::SCREEN_WIDTH - 16.0F;
 
-  const std::string replayLabel = std::format("REPLAY T{}", m_state.match.tick);
-  const float replayWidth = 10.0F + 7.0F + 6.0F + static_cast<float>(FontRenderer::MeasurePixels(replayLabel)) + 10.0F;
-  const float replayX = cursor - replayWidth;
-  _shapes.StrokeRect(replayX, 13.0F, replayWidth, 22.0F, Ink::OUTLINE);
-  // The one glyph the font does not have and does not need: the replay triangle is geometry, as
-  // it is in the reference (README "Assets").
-  _shapes.FillTriangle(replayX + 10.0F, 19.0F, replayX + 17.0F, 24.0F, replayX + 10.0F, 29.0F, Ink::TEXT_PRIMARY);
-  _text.DrawText(static_cast<std::int32_t>(replayX + 23.0F), centered, replayLabel, Ink::TEXT_PRIMARY);
-  AddHit(replayX, 13.0F, replayWidth, 22.0F, Action::OpenReplay, 0);
-  cursor = replayX - 14.0F;
+  // **`REPLAY` is behind `--dev` until screen 07 is wired** (ADR-091). Its own sheet is titled
+  // `REPLAY TICK 7 - NOT YET WIRED`, which is a control teaching a player that the buttons on this
+  // screen may do nothing -- the exact lesson ADR-053 and ADR-077 were spent unteaching. It stays on
+  // the bar for whoever is building it.
+  if (m_developerControls)
+  {
+    const std::string replayLabel = std::format("REPLAY T{}", m_state.match.tick);
+    const float replayWidth = 10.0F + 7.0F + 6.0F + static_cast<float>(FontRenderer::MeasurePixels(replayLabel)) + 10.0F;
+    const float replayX = cursor - replayWidth;
+    _shapes.StrokeRect(replayX, 13.0F, replayWidth, 22.0F, Ink::OUTLINE);
+    // The one glyph the font does not have and does not need: the replay triangle is geometry, as
+    // it is in the reference (README "Assets").
+    _shapes.FillTriangle(replayX + 10.0F, 19.0F, replayX + 17.0F, 24.0F, replayX + 10.0F, 29.0F, Ink::TEXT_PRIMARY);
+    _text.DrawText(static_cast<std::int32_t>(replayX + 23.0F), centered, replayLabel, Ink::TEXT_PRIMARY);
+    AddHit(replayX, 13.0F, replayWidth, 22.0F, Action::OpenReplay, 0);
+    cursor = replayX - 14.0F;
 
-  _shapes.FillRect(cursor, 13.0F, 1.0F, 22.0F, Ink::CARD_BORDER);
-  cursor -= 15.0F;
+    _shapes.FillRect(cursor, 13.0F, 1.0F, 22.0F, Ink::CARD_BORDER);
+    cursor -= 15.0F;
+  }
 
   // **Only when the leader is somebody else** (ADR-056). "Public score, the leader is always
   // visible" is the anti-snowball, and it is about knowing who is ahead of you -- so when that is
@@ -760,10 +1009,23 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
     cursor -= static_cast<float>(FontRenderer::MeasurePixels(leaderLine)) + 8.0F;
   }
 
+  // **The chip says whether the place MOVED, not only what it is** (ADR-091). Placement is the
+  // anti-snowball's whole instrument -- the one-pager makes the score public so a player can tell
+  // they are falling behind -- and a number that is the same ink at 1st and at 6th says only where
+  // you are, never that you are sliding.
+  //
+  // Blue when you lead, amber when you have dropped since the last digest this client drew, and the
+  // ordinary outline otherwise. `m_placementDrawn` is session memory: a client that joins mid-match
+  // has no previous place, and the chip is simply not amber until it has drawn one.
+  const bool leading = m_state.player.placement == 1;
+  const bool slipped = m_placementDrawn != 0 && m_state.player.placement > m_placementDrawn;
+  const Color chipInk = leading ? Ink::BLUE : (slipped ? Ink::AMBER : Ink::OUTLINE);
+  const Color chipText = leading ? Ink::BLUE : (slipped ? Ink::AMBER : Ink::TEXT_PRIMARY);
+
   const std::string placement = std::format("{} / {}", FormatPlacement(m_state.player.placement), m_state.player.playerCount);
   const float chipWidth = static_cast<float>(FontRenderer::MeasurePixels(placement)) + 14.0F;
-  _shapes.StrokeRect(cursor - chipWidth, 14.0F, chipWidth, 20.0F, Ink::OUTLINE);
-  _text.DrawText(static_cast<std::int32_t>(cursor - chipWidth + 7.0F), centered, placement, Ink::TEXT_PRIMARY);
+  _shapes.StrokeRect(cursor - chipWidth, 14.0F, chipWidth, 20.0F, chipInk);
+  _text.DrawText(static_cast<std::int32_t>(cursor - chipWidth + 7.0F), centered, placement, chipText);
   cursor -= chipWidth + 8.0F;
 
   const std::string score = FormatScore(m_state.player.score);
@@ -779,6 +1041,22 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // The purse, beside the score and in the same weight (ADR-053). It is the number every build
   // on the screen is priced against, and it belongs where the eye already goes for the score
   // rather than inside a sentence on the production card.
+  //
+  // **And what this tick has already committed, right after it** (ADR-087). `46 CR` beside a sheet
+  // refusing a 30 CR build is the contradiction a player actually hits: both numbers are right, and
+  // the 20 between them was only ever visible in the locks rail on the other side of the screen.
+  // `46 CR −20` carries the whole arithmetic in the place the bigger number is read.
+  //
+  // Drawn right to left like everything else on this bar, so the committed amount is composed first
+  // and sits outermost -- it is the qualifier, and the purse is what it qualifies.
+  const std::uint32_t committed = m_state.orders.QueuedBuildCost();
+  if (committed > 0)
+  {
+    const std::string spent = std::format("−{}", committed);
+    DrawRight(_text, cursor, centered, spent, Ink::BLUE);
+    cursor -= static_cast<float>(FontRenderer::MeasurePixels(spent)) + 6.0F;
+  }
+
   const std::string credits = std::format("{} CR", m_state.player.credits);
   DrawRight(_text, cursor, centered, credits, Ink::TEXT_PRIMARY);
   cursor -= static_cast<float>(FontRenderer::MeasurePixels(credits)) + 14.0F;
@@ -786,17 +1064,17 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.FillRect(cursor, 13.0F, 1.0F, 22.0F, Ink::CARD_BORDER);
   cursor -= 15.0F;
 
-  // The countdown is the one thing on the screen drawn at 2x, and it is amber because amber is
-  // the warning colour: this is the deadline every order on the rail is racing (README "Frame").
+  // The countdown is the one thing on the bar in the 16px cut, and it is amber because amber is the
+  // warning colour: this is the deadline every order on the rail is racing (README "Frame").
   const std::string countdown = m_state.match.finished ? std::string{"--:--:--"} : FormatCountdown(m_state.match.secondsToLock);
-  const std::int32_t bigY = CenterTextY(0.0F, Frame::TOP_BAR_HEIGHT, FontRenderer::DEFAULT_FACE, FontRenderer::COUNTDOWN_SCALE);
+  const std::int32_t bigY = CenterTextY(0.0F, Frame::TOP_BAR_HEIGHT, Face::MonoDisplay);
 
   // **Amber is the deadline colour, and at zero there is no deadline left to warn about** (screen
   // 06). A countdown that stayed amber on 00:00:00 read as "hurry" to a player who could no longer
   // do anything, which is the opposite of what the number means once it has run out.
   const bool atLock = m_state.orders.locked && !m_state.match.finished;
-  DrawRight(_text, cursor, bigY, countdown, atLock ? Ink::NEUTRAL_DIM : Ink::AMBER, Face::MonoMedium, FontRenderer::COUNTDOWN_SCALE);
-  cursor -= static_cast<float>(FontRenderer::MeasurePixels(countdown, FontRenderer::DEFAULT_FACE, FontRenderer::COUNTDOWN_SCALE)) + 8.0F;
+  DrawRight(_text, cursor, bigY, countdown, atLock ? Ink::NEUTRAL_DIM : Ink::AMBER, Face::MonoDisplay);
+  cursor -= static_cast<float>(FontRenderer::MeasurePixels(countdown, Face::MonoDisplay)) + 8.0F;
 
   const std::string lockLabel = m_state.match.finished ? std::string{"MATCH ENDED"}
                                 : atLock               ? std::format("T{} LOCKED", m_state.OrdersTick())
@@ -823,7 +1101,10 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // the state has none -- a match generated without a server has no schedule to report
   // (GeneratedMatch.h), and "- ENDS" followed by nothing reads as a truncation bug.
   const std::string census = std::format("{} PLAYERS · {} SYSTEMS", m_state.player.playerCount, m_state.totalSystems);
-  const std::string stem = std::format("M{} · D{}/{}", m_state.match.id, m_state.match.day, m_state.match.totalDays);
+  // **No `M<id>`** (ADR-091). The snapshot carries no match id, so `SnapshotView` was filling it
+  // with the zero-padded TICK -- a four-digit number beside `D3/21` and `T9 LOCKS` that names
+  // neither the match nor the tick, and changes every tick while looking like an identifier.
+  const std::string stem = std::format("D{}/{}", m_state.match.day, m_state.match.totalDays);
 
   std::vector<std::string> candidates;
   if (!m_state.match.endsAt.empty())
@@ -890,7 +1171,7 @@ MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::uint32_t
   // The same arithmetic the draw below walks, in one expression: the title block, a line per detail,
   // the verdict box, the action row, and the gap to the next card's divider.
   const auto lines = static_cast<float>(LINE_HEIGHT);
-  layout.height = 11.0F + lines + 2.0F + static_cast<float>(layout.details.size()) * lines + 4.0F;
+  layout.height = 11.0F + static_cast<float>(TITLE_LINE_HEIGHT) + 2.0F + static_cast<float>(layout.details.size()) * lines + 4.0F;
   if (layout.hasVerdict)
   {
     layout.height += 4.0F + (1.0F + static_cast<float>(layout.verdictDetail.size())) * lines + 6.0F;
@@ -927,7 +1208,8 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
   }
   else
   {
-    _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), headerY, std::format("DIGEST - TICK {}", m_state.match.tick), Ink::TEXT_MUTED);
+    _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), headerY, std::format("DIGEST - TICK {}", m_state.match.tick), Ink::TEXT_MUTED,
+                   Face::MonoDisplay);
 
     // At the lock the right-hand figure stops being a count of what is here and becomes the tick
     // that is being resolved. It is the only thing on this column that changes at zero, and it is
@@ -968,13 +1250,25 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
       _text.DrawText(static_cast<std::int32_t>(cellX), cellY, delta.cells[index].text, delta.cells[index].loss ? Ink::RED : Ink::AMBER);
     }
     y += boxHeight + 6.0F;
+
+    // **What the backlog could not carry** (ADR-094). The server keeps the last `DIGEST_HISTORY`
+    // ticks per player and sends the whole of it on arrival (ADR-044); a player who was away longer
+    // gets that window and no warning that anything fell off the front of it. The delta box's
+    // counts are honest about the ticks it HAS, which is exactly what makes the gap invisible.
+    if (m_state.unreadTicks > DIGEST_HISTORY_TICKS)
+    {
+      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), static_cast<std::int32_t>(y), "Older ticks were not kept.", Ink::NEUTRAL_DIM,
+                     Face::SansRegular);
+      y += static_cast<float>(LINE_HEIGHT) + 6.0F;
+    }
   }
 
-  // ---- The cards, and which of them are on this page -------------------------------------------------
+  // ---- The cards, and which of them are on the screen -------------------------------------------------
   //
-  // **Nothing scrolls (ADR-052 option C), so a stack that does not fit is PAGED** (ADR-061). The
-  // whole stack is measured first, because a page break has to fall between two cards and the only
-  // way to know where one card ends is to have worked out how tall it is.
+  // **The column scrolls, by whole cards** (ADR-080, which took the digest out of ADR-052 option C).
+  // The whole stack is measured first, because a card is the unit that scrolls and the only way to
+  // know where one ends is to have worked out how tall it is -- which is also what paging needed
+  // (ADR-061), so the measuring loop is unchanged and only what is done with it moved.
   const std::vector<DigestCard> cards = CardsOf(m_state);
   std::vector<CardLayout> layouts;
   layouts.reserve(cards.size());
@@ -989,25 +1283,23 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
   const bool paged = stackHeight > Frame::SCREEN_HEIGHT - cardsTop;
   const float room = Frame::SCREEN_HEIGHT - cardsTop - (paged ? DIGEST_PAGE_HEIGHT : 0.0F);
 
-  // The first card of each page. A page always takes at least one card, even one taller than the
-  // column: a card that fits nowhere is still better read cut off than not drawn at all.
-  std::vector<std::size_t> pageStarts{0};
-  float used = 0.0F;
-  for (std::size_t index = 0; index < layouts.size(); ++index)
-  {
-    if (used > 0.0F && used + layouts[index].height > room)
-    {
-      pageStarts.push_back(index);
-      used = 0.0F;
-    }
-    used += layouts[index].height;
-  }
+  // **Clamped so the last card is always reachable and never alone past the end.** A scroll
+  // position is a card index and the player can push it anywhere; what stops it running off is
+  // that a top with nothing under it is not a position, it is an empty column.
+  const std::size_t lastTop = cards.empty() ? 0 : cards.size() - 1;
+  m_digestTop = std::min(m_digestTop, lastTop);
 
-  // **The leading card is always on page one**, which is what keeps the standing moves reachable
-  // (ADR-056): they are attached to `cards.front()` and page one starts there by construction.
-  m_digestPage = std::min(m_digestPage, pageStarts.size() - 1);
-  const std::size_t firstCard = pageStarts[m_digestPage];
-  const std::size_t lastCard = m_digestPage + 1 < pageStarts.size() ? pageStarts[m_digestPage + 1] : cards.size();
+  // What fits from here. One card always goes in even when it is taller than the column: a card
+  // that fits nowhere is still better read cut off than not drawn at all.
+  const std::size_t firstCard = m_digestTop;
+  std::size_t lastCard = firstCard;
+  float used = 0.0F;
+  while (lastCard < layouts.size() && (lastCard == firstCard || used + layouts[lastCard].height <= room))
+  {
+    used += layouts[lastCard].height;
+    ++lastCard;
+  }
+  m_cardsOnScreen = lastCard - firstCard;
 
   for (std::size_t cardIndex = firstCard; cardIndex < lastCard; ++cardIndex)
   {
@@ -1028,7 +1320,9 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     std::int32_t lineY = static_cast<std::int32_t>(y) + 11;
 
     _shapes.FillEllipse(RAIL_PADDING + 4.0F, static_cast<float>(lineY) + 4.0F, 4.0F, 4.0F, accent);
-    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, Uppercased(card.title), Ink::TEXT_PRIMARY, Face::MonoMedium);
+    // The display cut (ADR-084): a card's title is what the card IS, and until there were two sizes
+    // it was separated from the sentences under it by a weight step nobody could see at a glance.
+    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, Uppercased(card.title), Ink::TEXT_PRIMARY, Face::MonoDisplay);
     if (!card.stamp.empty())
     {
       DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, lineY, card.stamp, Ink::TEXT_MUTED);
@@ -1041,7 +1335,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     {
       AddHit(0.0F, top, Frame::DIGEST_WIDTH - 1.0F, DIGEST_TITLE_HEIGHT, Action::ToggleActorCard, card.actor);
     }
-    lineY += LINE_HEIGHT + 2;
+    lineY += TITLE_LINE_HEIGHT + 2;
 
     for (const std::string& line : layout.details)
     {
@@ -1129,20 +1423,20 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
         }
 
         // One filled button per card at most: the thing the digest thinks you should do.
-        if (action.primary && !m_state.orders.locked && !committed && !unaffordable)
+        if (action.primary && OrdersEditable() && !committed && !unaffordable)
         {
           _shapes.FillRect(buttonX, buttonY, width, BUTTON_HEIGHT, Ink::BLUE);
           _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label, Ink::APP_BACKGROUND);
         }
         else
         {
-          const bool dim = m_state.orders.locked || unaffordable;
+          const bool dim = !OrdersEditable() || unaffordable;
           _shapes.StrokeRect(buttonX, buttonY, width, BUTTON_HEIGHT, committed && !dim ? Ink::BLUE : Ink::OUTLINE);
           _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label,
                          dim ? Ink::NEUTRAL_DIM : (committed ? Ink::BLUE : Ink::TEXT_PRIMARY));
         }
 
-        if ((!m_state.orders.locked && !unaffordable) || action.kind == EventActionKind::Focus)
+        if ((OrdersEditable() && !unaffordable) || action.kind == EventActionKind::Focus)
         {
           AddHit(buttonX, buttonY, width, BUTTON_HEIGHT, ActionFor(action.kind), action.target);
         }
@@ -1165,31 +1459,51 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
   // ---- The page band -------------------------------------------------------------------------------
   //
-  // At the foot of the column, where the stack it is about ends. `1 / 3 - MORE >` is the ops-console
-  // form -- numbers first, ` - ` between facts -- and `< PREV` appears only once there is a page to
-  // go back to, so the band never offers a direction that does nothing.
+  // At the foot of the column, where the stack it is about ends. **It says what is hidden and what
+  // the worst of it is** (ADR-080): `1 / 4 - MORE >` told a player how much column was left and
+  // nothing at all about whether the battle they had not seen was in it. `< PREV` appears only once
+  // there is something above, so the band never offers a direction that does nothing.
   if (paged)
   {
     const float bandY = Frame::SCREEN_HEIGHT - DIGEST_PAGE_HEIGHT;
     const std::int32_t bandText = CenterTextY(bandY, DIGEST_PAGE_HEIGHT);
     _shapes.FillRect(0.0F, bandY, Frame::DIGEST_WIDTH - 1.0F, 1.0F, Ink::DIVIDER);
 
-    if (m_digestPage > 0)
+    if (m_digestTop > 0)
     {
       _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), bandText, "‹ PREV", Ink::TEXT_MUTED);
       AddHit(0.0F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
-             static_cast<std::int32_t>(m_digestPage) - 1);
+             static_cast<std::int32_t>(PreviousDigestTop(layouts, room)));
     }
 
-    const bool more = m_digestPage + 1 < pageStarts.size();
-    const std::string count = std::format("{} / {}", m_digestPage + 1, pageStarts.size());
-    DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, bandText, more ? count + " · MORE ›" : count, Ink::TEXT_MUTED);
-    if (more)
+    const std::string hidden = HiddenSummary(cards, lastCard);
+    DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, bandText, hidden.empty() ? std::string{"END"} : hidden + " ›",
+              hidden.empty() ? Ink::NEUTRAL_DIM : Ink::TEXT_MUTED);
+    if (!hidden.empty())
     {
       AddHit(Frame::DIGEST_WIDTH * 0.5F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
-             static_cast<std::int32_t>(m_digestPage) + 1);
+             static_cast<std::int32_t>(lastCard));
     }
   }
+}
+
+std::size_t MainPage::PreviousDigestTop(const std::vector<CardLayout>& _layouts, float _room) const
+{
+  // A screenful backwards, measured the way a screenful forwards is measured: cards are different
+  // heights, so "one page" is however many of them fit and not a fixed number (ADR-061, ADR-080).
+  std::size_t top = m_digestTop;
+  float used = 0.0F;
+  while (top > 0)
+  {
+    const float height = _layouts[top - 1].height;
+    if (used > 0.0F && used + height > _room)
+    {
+      break;
+    }
+    used += height;
+    --top;
+  }
+  return top;
 }
 
 /// Which screen action a digest button performs. The two enums are separate on purpose: what an
@@ -1290,7 +1604,11 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   /// the order surface -- it takes the eye to the thing the row names, which is the question a
   /// player reading this column keeps having to answer somewhere else. `Action::None` is a row with
   /// nothing to point at, and it is not a target and draws no hover.
-  const auto row = [&](std::string_view _label, std::string_view _status, const Color& _statusColor, Action _action, std::int32_t _index)
+  /// `_dimHead` is how many BYTES at the front of the label are drawn muted (ADR-086): a fleet row
+  /// is `FLT 3 · 3` and the id is the half a player is not scanning for. It applies to the first
+  /// wrapped line only, which is the only line a head can be on.
+  const auto row = [&](std::string_view _label, std::string_view _status, const Color& _statusColor, Action _action, std::int32_t _index,
+                       std::size_t _dimHead = 0)
   {
     const std::int32_t lineY = static_cast<std::int32_t>(y);
     const auto room = static_cast<std::uint32_t>(contentRight - contentX - static_cast<float>(FontRenderer::MeasurePixels(_status)) - 8.0F);
@@ -1312,11 +1630,29 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
     for (std::size_t index = 0; index < wrapped.size(); ++index)
     {
-      _text.DrawText(static_cast<std::int32_t>(contentX), lineY + static_cast<std::int32_t>(index) * LINE_HEIGHT, wrapped[index],
-                     Ink::TEXT_PRIMARY);
+      const std::int32_t at = lineY + static_cast<std::int32_t>(index) * LINE_HEIGHT;
+      if (index == 0 && _dimHead > 0 && _dimHead < wrapped[0].size())
+      {
+        const std::string_view head{wrapped[0].data(), _dimHead};
+        const std::string_view tail{wrapped[0].data() + _dimHead, wrapped[0].size() - _dimHead};
+        _text.DrawText(static_cast<std::int32_t>(contentX), at, head, Ink::TEXT_MUTED);
+        _text.DrawText(static_cast<std::int32_t>(contentX) + static_cast<std::int32_t>(FontRenderer::MeasurePixels(head)), at, tail,
+                       Ink::TEXT_PRIMARY);
+        continue;
+      }
+      _text.DrawText(static_cast<std::int32_t>(contentX), at, wrapped[index], Ink::TEXT_PRIMARY);
     }
     DrawRight(_text, contentRight, lineY, _status, _statusColor);
     y += height;
+  };
+
+  /// A sub-band inside a section: a muted label over the rows it groups, never a target (ADR-086).
+  /// Lighter than `section` -- no rule and no count -- because it divides a list rather than
+  /// starting one.
+  const auto band = [&](std::string_view _label)
+  {
+    _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), _label, Ink::TEXT_MUTED);
+    y += static_cast<float>(LINE_HEIGHT) + 2.0F;
   };
 
   const auto nothing = [&](std::string_view _text2)
@@ -1342,44 +1678,85 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     nothing("- none -");
   }
-  for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
+
+  // **Grouped by where they are** (ADR-086). Ten rows reading `FLT 13 10 HOLD HOLLIS` is the
+  // system name repeated ten times, the word `HOLD` repeated ten times, and two bare numbers at
+  // equal weight -- so the one thing a player is scanning for, which of their systems is strong, is
+  // the thing the column says least clearly. The system goes on a band and the rows under it carry
+  // what differs.
+  //
+  // **A FLEETS row opens the picker, and for a standing fleet it is the only thing that does**
+  // (ADR-077). The map draws no marker for a fleet that is not moving, and the digest's `MOVE` is a
+  // standing move offered only when nothing else can be acted on (ADR-056). A fleet already on a
+  // lane opens nothing, because the lock would refuse a second order on it, and focuses where it is
+  // going instead. At the lock every row focuses (ADR-060).
+  const auto fleetRow = [&](std::size_t _index, std::string_view _tail, std::string_view _status, const Color& _statusColor)
   {
-    const Fleet& fleet = m_state.fleets[index];
-    if (fleet.owner != m_state.viewer)
+    const Fleet& fleet = m_state.fleets[_index];
+    const std::string name = Uppercased(fleet.name);
+    const bool orderable = !navigateOnly && !fleet.underWay;
+    row(std::format("{} · {}{}", name, fleet.ships, _tail), _status, _statusColor, orderable ? Action::OpenFleet : Action::FocusSystem,
+        orderable ? static_cast<std::int32_t>(_index) : fleet.to, name.size());
+  };
+
+  const auto nameOfSystem = [&](std::int32_t _at)
+  {
+    return _at >= 0 && _at < static_cast<std::int32_t>(m_state.graph.systems.size())
+             ? Uppercased(m_state.graph.systems[static_cast<std::size_t>(_at)].name)
+             : std::string{"THE DARK"};
+  };
+
+  // The systems holding something of yours, in the order the snapshot listed the fleets: stable
+  // between two frames of one state, which is what stops the column reordering under a finger.
+  std::vector<std::int32_t> standingAt;
+  for (const Fleet& fleet : m_state.fleets)
+  {
+    if (fleet.owner == m_state.viewer && !fleet.OnALane() && std::ranges::find(standingAt, fleet.to) == standingAt.end())
     {
-      continue;
+      standingAt.push_back(fleet.to);
     }
+  }
 
-    const bool moving = fleet.eta > 0 && fleet.to != fleet.from;
-    const SystemNode* destination = fleet.to >= 0 && fleet.to < static_cast<std::int32_t>(m_state.graph.systems.size())
-                                      ? &m_state.graph.systems[static_cast<std::size_t>(fleet.to)]
-                                      : nullptr;
-    const std::string where = destination == nullptr ? std::string{} : Uppercased(destination->name);
-
-    // `FLT3 14 > KEPLER-REACH` moving, `FLT1 9 HOLD VESK` standing (SCREENS.md 01).
-    const std::string label = moving ? std::format("{} {} → {}", Uppercased(fleet.name), fleet.ships, where)
-                                     : std::format("{} {} HOLD {}", Uppercased(fleet.name), fleet.ships, where);
-
-    // A fleet under way opens its destination picker, which is what tapping its marker on the map
-    // does; one standing still focuses where it is standing. Both are the same question -- where is
-    // this fleet, and where is it going -- asked from the column that lists them (ADR-060).
-    const Action fleetAction = navigateOnly ? Action::FocusSystem : (moving ? Action::OpenFleet : Action::FocusSystem);
-    const std::int32_t fleetTarget = fleetAction == Action::OpenFleet ? static_cast<std::int32_t>(index) : fleet.to;
-
-    // The verdict tokens the design asks for -- LOSE, +DEF -- are the combat preview's, and the
-    // preview is a sentence today rather than a verdict. Until the digest's verdict box is built
-    // this says the fact the state actually carries: when it arrives, or that it is dug in.
-    if (moving)
+  for (const std::int32_t at : standingAt)
+  {
+    std::uint32_t ships = 0;
+    for (const Fleet& fleet : m_state.fleets)
     {
-      row(label, std::format("T{}", fleet.eta), Ink::TEXT_MUTED, fleetAction, fleetTarget);
+      ships += fleet.owner == m_state.viewer && !fleet.OnALane() && fleet.to == at ? fleet.ships : 0U;
     }
-    else if (fleet.status.find("incumbent") != std::string::npos)
+    band(std::format("{} · {} {}", nameOfSystem(at), ships, ships == 1 ? "SHIP" : "SHIPS"));
+
+    for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
     {
-      row(label, "+DEF", Ink::BLUE, fleetAction, fleetTarget);
+      const Fleet& fleet = m_state.fleets[index];
+      if (fleet.owner != m_state.viewer || fleet.OnALane() || fleet.to != at)
+      {
+        continue;
+      }
+
+      // **No right-hand column on a holding row**, because the band above it already said where and
+      // `HOLD` said nothing else. The one exception is the fact that is not implied by standing
+      // still: that this fleet is the incumbent and fights with the defender's bonus.
+      const bool incumbent = fleet.status.find("incumbent") != std::string::npos;
+      fleetRow(index, std::string_view{}, incumbent ? "+DEF" : std::string_view{}, incumbent ? Ink::BLUE : Ink::TEXT_MUTED);
     }
-    else
+  }
+
+  // Everything in transit under one band, because where they are is a lane rather than a place and
+  // the thing they have in common is that none of them can be ordered.
+  const bool anyUnderWay = std::any_of(m_state.fleets.begin(), m_state.fleets.end(),
+                                       [this](const Fleet& _fleet) { return _fleet.owner == m_state.viewer && _fleet.OnALane(); });
+  if (anyUnderWay)
+  {
+    band("UNDER WAY");
+    for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
     {
-      row(label, "HOLD", Ink::TEXT_MUTED, fleetAction, fleetTarget);
+      const Fleet& fleet = m_state.fleets[index];
+      if (fleet.owner != m_state.viewer || !fleet.OnALane())
+      {
+        continue;
+      }
+      fleetRow(index, std::format(" → {}", nameOfSystem(fleet.to)), std::format("T{}", fleet.eta), Ink::TEXT_MUTED);
     }
   }
 
@@ -1440,8 +1817,9 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   // the client had no model of an offer leaving; ADR-039 gave it one, and the count on the right is
   // the way in -- it is the only section header on this rail that is a control.
   const std::int32_t signalsY = static_cast<std::int32_t>(y);
-  section("SIGNALS", m_state.orders.locked ? std::string{"LOCKED"} : std::format("{} TO SEND ›", m_state.orders.availableSignals));
-  if (!m_state.orders.locked)
+  section("SIGNALS",
+          !OrdersEditable() ? std::string{m_offline ? "OFFLINE" : "LOCKED"} : std::format("{} TO SEND ›", m_state.orders.availableSignals));
+  if (OrdersEditable())
   {
     AddHit(railX, static_cast<float>(signalsY), Frame::ORDERS_WIDTH, 22.0F, Action::OpenSignals, 0);
   }
@@ -1554,16 +1932,33 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     /// Whether this row is said in the loss colour. The one row on any sheet that cannot be taken
     /// back once it resolves, and nothing else.
     bool alarm = false;
+    /// What this row sorts by, where its sheet sorts at all. The destination picker's is the lane
+    /// cost, so the nearest destination is first (ADR-092); every other sheet leaves it at zero and
+    /// keeps the order it composed rows in.
+    std::uint32_t sortBy = 0;
+    /// The second line's ink. Muted unless the line is ABOUT somebody -- a destination's garrison is
+    /// the rival who is standing there, and their colour is what says which rival (ADR-092).
+    ///
+    /// **Last in the aggregate, and that is load-bearing.** Most rows on most sheets are built with
+    /// positional braces, so a field inserted in the middle of this silently rebinds every one of
+    /// them -- which it did, and the compiler caught it only because a `std::int32_t` target will
+    /// not narrow into a `Color`.
+    Color detailInk = Ink::TEXT_MUTED;
   };
 
   constexpr Color NO_ACCENT = {0, 0, 0, 0};
 
   std::vector<SheetRow> rows;
 
-  /// Whether the LAST row composed must be drawn whatever else is dropped. Only the concede sets
-  /// it: every other row on every sheet is equal, and the first six win.
-  bool lastRowMustSurvive = false;
+  /// Rows drawn BELOW the capped list and outside the count, immediately above `CANCEL`. Only the
+  /// concede uses it (ADR-093): it is the one control on this screen that must always be reachable,
+  /// and every other row on every sheet is equal, so the first six win.
+  std::vector<SheetRow> pinned;
   std::string title;
+
+  /// Whether a row on this sheet is dim for want of credits, which is what decides whether the
+  /// purse sentence above the rows is a warning or a note (ADR-078).
+  bool shortOfCredits = false;
 
   // What tapping a row does. It differs per panel, and it used to not exist: every row went to
   // `ChooseDestination`, so the BUILD panel listed two things a player could not tap.
@@ -1613,6 +2008,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       // An unqueued row carries its price there instead, and one the purse cannot cover says what
       // is missing and is not a target (ADR-053).
       const bool affordable = queued || m_state.CanAffordBuild(static_cast<std::int32_t>(index));
+      shortOfCredits = shortOfCredits || !affordable;
       const std::string status = queued ? std::string{"QUEUED"}
                                  : affordable
                                    ? std::format("{} CR", row.cost)
@@ -1622,7 +2018,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       // player weighs a shipyard level against a mining level with, and the reason both tables are
       // on the wire (ADR-053, ADR-069). The server wrote the sentence; this only places it.
       rows.push_back(SheetRow{row.title, row.detail, status, queued ? Ink::BLUE : NO_ACCENT,
-                              m_state.orders.locked || !affordable ? EventRefs::NONE : static_cast<std::int32_t>(index)});
+                              !OrdersEditable() || !affordable ? EventRefs::NONE : static_cast<std::int32_t>(index)});
     }
 
     // A system with both buildings on it says so, rather than opening an empty sheet. The same
@@ -1634,11 +2030,42 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     }
     break;
   }
+  case Panel::FleetList:
+  {
+    if (m_panelSubject < 0 || m_panelSubject >= static_cast<std::int32_t>(m_state.graph.systems.size()))
+    {
+      return;
+    }
+    const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(m_panelSubject)];
+    title = std::format("FLEETS AT {} - PICK ONE", Uppercased(node.name));
+    rowAction = Action::OpenFleet;
+
+    // One row per fleet, and the ships on the right where every sheet on this screen puts the
+    // number the eye is scanning for. The badge that opened this totals them; this is the breakdown
+    // (ADR-079).
+    for (const std::int32_t index : StandingFleetsAt(m_panelSubject))
+    {
+      const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(index)];
+      rows.push_back(SheetRow{Uppercased(fleet.name), fleet.preview,
+                              fleet.ships == 1 ? std::string{"1 SHIP"} : std::format("{} SHIPS", fleet.ships), Ink::BLUE,
+                              !OrdersEditable() ? EventRefs::NONE : index});
+    }
+
+    // The fleets left between the frame that drew the badge and the tap that opened this -- a lock
+    // in between is the way it happens. The sheet says so rather than showing nothing, because a
+    // sheet with no rows is indistinguishable from one that failed to open.
+    if (rows.empty())
+    {
+      rows.push_back(SheetRow{"NOTHING STANDING HERE ANY MORE", "They left at the lock.", std::string{}, NO_ACCENT, EventRefs::NONE});
+    }
+    break;
+  }
   case Panel::Destination:
   {
     const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(m_panelSubject)];
     title = std::format("MOVE {} - PICK LANE", Uppercased(fleet.name));
-    const std::int32_t origin = fleet.order == FleetStance::Move ? fleet.to : fleet.from;
+    // Where it stands, which is what `Action::ChooseDestination` orders from (ADR-077).
+    const std::int32_t origin = fleet.from;
 
     // Lane-constrained: only the systems this fleet can actually reach along an edge, and the tick
     // it would arrive. A destination picker that offered anything else would be offering a move
@@ -1707,11 +2134,33 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
         held += " · CONTESTED";
       }
 
-      rows.push_back(SheetRow{Uppercased(node.name), held,
-                              std::format("{} · ETA T{}", lane.cost == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", lane.cost),
-                                          m_state.OrdersTick() + lane.cost - 1),
-                              OwnerColor(node.owner, m_state.viewer), m_state.orders.locked ? EventRefs::NONE : other});
+      // **A held candidate says whose it is in their own colour** (ADR-092). The row's owner square
+      // already carries it; the line that says `P3 · 11 +DEF` is the one being read while the
+      // decision is made, and in body ink it reads as a number rather than as a rival.
+      rows.push_back(
+        SheetRow{.title = Uppercased(node.name),
+                 .detail = held,
+                 .right = std::format("{} · ETA T{}", lane.cost == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", lane.cost),
+                                      m_state.OrdersTick() + lane.cost - 1),
+                 .accent = OwnerColor(node.owner, m_state.viewer),
+                 .target = !OrdersEditable() ? EventRefs::NONE : other,
+                 .sortBy = lane.cost,
+                 .detailInk = node.owner == NOBODY ? Ink::TEXT_MUTED : OwnerColor(node.owner, m_state.viewer)});
     }
+
+    // **Nearest first, then by name** (ADR-092). The picker was in lane order, which is the order
+    // the graph happens to store them in and means nothing to a player; how soon a fleet lands is
+    // the first thing they weigh, and two lanes of the same length sort by name so the list does not
+    // reshuffle between two frames of one state.
+    std::ranges::stable_sort(rows,
+                             [](const SheetRow& _a, const SheetRow& _b)
+                             {
+                               if (_a.sortBy != _b.sortBy)
+                               {
+                                 return _a.sortBy < _b.sortBy;
+                               }
+                               return _a.title < _b.title;
+                             });
     break;
   }
   case Panel::SignalList:
@@ -1744,7 +2193,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
         std::ranges::find(m_state.orders.queuedSignals, static_cast<std::int32_t>(index)) != m_state.orders.queuedSignals.end();
 
       rows.push_back(SheetRow{signal.title, std::string{}, queued ? "SENDING" : std::string{}, queued ? Ink::BLUE : NO_ACCENT,
-                              m_state.orders.locked ? EventRefs::NONE : static_cast<std::int32_t>(index)});
+                              !OrdersEditable() ? EventRefs::NONE : static_cast<std::int32_t>(index)});
     }
 
     if (m_state.orders.signals.empty())
@@ -1767,19 +2216,15 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
 
       // The band is a label and a label must not cost a row anything. Added only when it and the
       // row under it both fit inside the cap; beyond that the red text carries the warning alone.
-      if (rows.size() + 2 <= SHEET_MAXIMUM_ROWS)
-      {
-        rows.push_back(SheetRow{.title = "CONCEDE", .accent = NO_ACCENT, .target = EventRefs::NONE, .band = true});
-      }
+      pinned.push_back(SheetRow{.title = "CONCEDE", .accent = NO_ACCENT, .target = EventRefs::NONE, .band = true});
 
       // Red from the first tap, and the armed row says what the NEXT tap does rather than what this
       // row is -- the only warning a concede gets and the only one it needs.
-      lastRowMustSurvive = true;
-      rows.push_back(SheetRow{.title = signal.title,
-                              .right = queued ? "SENDING" : (armed ? "TAP AGAIN TO CONFIRM" : std::string{}),
-                              .accent = armed || queued ? Ink::RED : NO_ACCENT,
-                              .target = m_state.orders.locked ? EventRefs::NONE : concede,
-                              .alarm = armed || queued});
+      pinned.push_back(SheetRow{.title = signal.title,
+                                .right = queued ? "SENDING" : (armed ? "TAP AGAIN TO CONFIRM" : std::string{}),
+                                .accent = armed || queued ? Ink::RED : NO_ACCENT,
+                                .target = !OrdersEditable() ? EventRefs::NONE : concede,
+                                .alarm = armed || queued});
     }
     break;
   }
@@ -1790,7 +2235,9 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     // sheet lists what a replay would walk and nothing more. It said that in a seventh row, which
     // the six-row cap then clipped into `+1 MORE THAN THIS SHEET CAN SHOW` -- a sheet reporting an
     // overflow it did not have, about a row explaining that there is nothing here.
-    title = std::format("REPLAY TICK {} - NOT YET WIRED", m_panelSubject);
+    // The `--dev` flag IS the disclosure now (ADR-091): the only way to this sheet is a button that
+    // ships hidden, so the person looking at it already knows what it is.
+    title = std::format("REPLAY TICK {}", m_panelSubject);
     for (const char* phase : {"1. LOCK", "2. PRODUCTION", "3. MOVEMENT", "4. COMBAT", "5. CLAIMS", "6. DIGEST"})
     {
       rows.push_back(SheetRow{phase, std::string{}, std::string{}, NO_ACCENT, EventRefs::NONE});
@@ -1807,20 +2254,12 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   // More rows than fit are REPORTED rather than dropped. A picker that quietly forgets a lane is a
   // picker that cannot be trusted about the ones it did show.
   //
-  // **THE CONCEDE KEEPS THE LAST VISIBLE SLOT** (ADR-064, extended 2026-09-13). It is composed last
-  // and the sheet draws the first six, so a player with six offers on the table had no concede row
-  // at all -- the one control on this screen that must always be reachable, gone precisely when the
-  // board is busy enough to want it. The offers it displaces are counted in the `+N` line like any
-  // other. Found by `ConcedingTakesTwoTapsOnTheSameRow` when ADR-069 changed how the bots expand
-  // and seat zero's sixth offer arrived.
+  // **THE CONCEDE IS PINNED BELOW THE SIX, NOT INSIDE THEM** (ADR-064, amended by ADR-093). It must
+  // always be reachable -- it is the only order on this screen that cannot be taken back and the
+  // only way out of a match -- and keeping it inside the cap made it cost a real signal every time
+  // the board got busy enough to want both. It sits above `CANCEL`, under its own band, and neither
+  // it nor the band counts against the six.
   const std::size_t clippedBefore = rows.size();
-  if (lastRowMustSurvive && rows.size() > SHEET_MAXIMUM_ROWS)
-  {
-    SheetRow survivor = std::move(rows.back());
-    rows.resize(SHEET_MAXIMUM_ROWS - 1);
-    rows.push_back(std::move(survivor));
-  }
-
   const std::size_t shown = std::min(rows.size(), SHEET_MAXIMUM_ROWS);
   const bool clipped = clippedBefore > shown;
 
@@ -1836,15 +2275,31 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     listHeight += rows[index].band ? SHEET_BAND_HEIGHT : SHEET_ROW_HEIGHT;
   }
+  for (const SheetRow& row : pinned)
+  {
+    listHeight += row.band ? SHEET_BAND_HEIGHT : SHEET_ROW_HEIGHT;
+  }
 
-  // **At the lock the sheet stays and goes inert** (ADR-065). Its rows are already not targets --
-  // every panel above passes `EventRefs::NONE` while the orders are locked -- so what is left is to
-  // say why, in the rail's own words and in the rail's amber.
+  // **One slot under the header for the thing the rows cannot say about themselves**, and two
+  // sentences compete for it.
+  //
+  // At the lock the sheet stays and goes inert (ADR-065). Its rows are already not targets -- every
+  // panel above passes `EventRefs::NONE` while the orders are locked -- so what is left is to say
+  // why, in the rail's own words and in the rail's amber.
+  //
+  // Otherwise a build sheet says what the queue has already taken (ADR-078). A row is refused
+  // against the purse MINUS what is queued, and every number that reaches the eye beside it -- the
+  // top bar's, the rail header's -- is the purse before it, so the sheet arrived at `NEED 4 MORE`
+  // under a bar reading `46 CR` and the arithmetic was nowhere. Amber only when it is the reason
+  // something here is not a target; a queue the purse still covers is a note, not a warning.
   const bool atLock = m_state.orders.locked && !m_state.match.finished;
-  const std::vector<std::string> lockHelp =
-    atLock ? FontRenderer::WrapToWidth(LockSentence(), static_cast<std::uint32_t>(width - 2.0F * CARD_PADDING))
-           : std::vector<std::string>{};
-  const float helpHeight = lockHelp.empty() ? 0.0F : static_cast<float>(lockHelp.size()) * static_cast<float>(LINE_HEIGHT) + 12.0F;
+  const std::string help = m_offline ? std::string{"The link is down. Nothing you tap here is sent; the board is yours to read."}
+                           : atLock  ? LockSentence()
+                                     : (m_panel == Panel::BuildList ? PurseSentence() : std::string{});
+  const std::vector<std::string> sheetHelp =
+    help.empty() ? std::vector<std::string>{} : FontRenderer::WrapToWidth(help, static_cast<std::uint32_t>(width - 2.0F * CARD_PADDING));
+  const Color helpInk = atLock || m_offline || shortOfCredits ? Ink::AMBER : Ink::TEXT_DETAIL;
+  const float helpHeight = sheetHelp.empty() ? 0.0F : static_cast<float>(sheetHelp.size()) * static_cast<float>(LINE_HEIGHT) + 12.0F;
 
   const float height = SHEET_HEADER_HEIGHT + helpHeight + listHeight + SHEET_ACTION_HEIGHT;
   const float y = Frame::SCREEN_HEIGHT - SHEET_MARGIN - height;
@@ -1853,88 +2308,107 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.StrokeRect(x, y, width, height, Ink::CARD_BORDER);
 
   // ---- Header ----------------------------------------------------------------------------------
-  _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(y, SHEET_HEADER_HEIGHT), title, Ink::TEXT_PRIMARY,
-                 Face::MonoMedium);
+  //
+  // The display cut, centred by the cut's own metrics rather than the body's -- `CenterTextY` takes
+  // the face for exactly this reason, and a 36px header around a 22px box is still a 36px header
+  // (ADR-084).
+  _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(y, SHEET_HEADER_HEIGHT, Face::MonoDisplay), title,
+                 Ink::TEXT_PRIMARY, Face::MonoDisplay);
   DrawRight(_text, x + width - CARD_PADDING, CenterTextY(y, SHEET_HEADER_HEIGHT), "X", Ink::TEXT_MUTED);
 
   // The same filled grey chip the locks rail wears, in the header's own status position -- clear of
   // the `X`'s 36-pixel corner, which is a target and must not have a chip drawn into it.
-  if (atLock)
+  if (atLock || m_offline)
   {
-    const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels("LOCKED")) + 12.0F;
+    // `OFFLINE` where `LOCKED` goes, because the two are the same shape of statement -- this sheet
+    // is showing you something it cannot take an order about -- and differ only in why (ADR-085).
+    const std::string chip = m_offline ? "OFFLINE" : "LOCKED";
+    const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels(chip)) + 12.0F;
     const float chipX = x + width - SHEET_HEADER_HEIGHT - chipWidth;
     _shapes.FillRect(chipX, y + 10.0F, chipWidth, 16.0F, Ink::LOCKED_FILL);
-    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, CenterTextY(y, SHEET_HEADER_HEIGHT), "LOCKED", Ink::APP_BACKGROUND);
+    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, CenterTextY(y, SHEET_HEADER_HEIGHT), chip, Ink::APP_BACKGROUND);
   }
 
   // A close target the height of the header, not the width of one glyph.
   AddHit(x + width - SHEET_HEADER_HEIGHT, y, SHEET_HEADER_HEIGHT, SHEET_HEADER_HEIGHT, Action::ClosePanel, 0);
   _shapes.FillRect(x, y + SHEET_HEADER_HEIGHT, width, 1.0F, Ink::DIVIDER);
 
-  // ---- Why nothing here does anything ----------------------------------------------------------
-  if (!lockHelp.empty())
+  // ---- What the rows cannot say about themselves -----------------------------------------------
+  if (!sheetHelp.empty())
   {
     std::int32_t helpY = static_cast<std::int32_t>(y + SHEET_HEADER_HEIGHT) + 6;
-    for (const std::string& line : lockHelp)
+    for (const std::string& line : sheetHelp)
     {
-      _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), helpY, line, Ink::AMBER, Face::SansMedium);
+      _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), helpY, line, helpInk, Face::SansMedium);
       helpY += LINE_HEIGHT;
     }
     _shapes.FillRect(x, y + SHEET_HEADER_HEIGHT + helpHeight, width, 1.0F, Ink::DIVIDER);
   }
 
   // ---- Rows ------------------------------------------------------------------------------------
+  //
+  // The capped list, then whatever is pinned below it (ADR-093). One lambda, because a pinned row is
+  // an ordinary row that is simply not counted -- a second copy of this would be a second place for
+  // a band's rule or a row's hit rectangle to drift.
   float rowY = y + SHEET_HEADER_HEIGHT + helpHeight;
-  for (std::size_t index = 0; index < shown; ++index)
+  bool previousWasBand = true;
+
+  const auto drawRow = [&](const SheetRow& _row)
   {
-    const SheetRow& row = rows[index];
-    const bool tappable = row.target != EventRefs::NONE;
+    const bool tappable = _row.target != EventRefs::NONE;
 
     // A band is a label over what follows it, drawn like the rails' section headers: a rule, then
     // the label, and nothing to tap.
-    if (row.band)
+    if (_row.band)
     {
       _shapes.FillRect(x + CARD_PADDING, rowY, width - 2.0F * CARD_PADDING, 1.0F, Ink::DIVIDER);
-      _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(rowY, SHEET_BAND_HEIGHT), row.title, Ink::TEXT_MUTED);
+      _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(rowY, SHEET_BAND_HEIGHT), _row.title, Ink::TEXT_MUTED);
       rowY += SHEET_BAND_HEIGHT;
-      continue;
+      previousWasBand = true;
+      return;
     }
 
     // No second rule directly under a band's: one line is a section header and two is a box.
-    if (index > 0 && !rows[index - 1].band)
+    if (!previousWasBand)
     {
       _shapes.FillRect(x + CARD_PADDING, rowY, width - 2.0F * CARD_PADDING, 1.0F, Ink::DIVIDER);
     }
+    previousWasBand = false;
 
     float textX = x + CARD_PADDING;
-    if (row.accent.alpha != 0)
+    if (_row.accent.alpha != 0)
     {
-      _shapes.FillRect(textX, rowY + 18.0F, 8.0F, 8.0F, row.accent);
+      _shapes.FillRect(textX, rowY + 18.0F, 8.0F, 8.0F, _row.accent);
       textX += 16.0F;
     }
 
     // One line centres in the row; two sit either side of its middle. THE ROW HEIGHT DOES NOT
     // CHANGE with the content -- a column of rows of one height is what a finger aims at.
-    const std::int32_t titleY = row.detail.empty() ? CenterTextY(rowY, SHEET_ROW_HEIGHT) : static_cast<std::int32_t>(rowY) + 12;
-    const Color titleColor = !tappable ? Ink::NEUTRAL_DIM : (row.alarm ? Ink::RED : Ink::TEXT_PRIMARY);
-    _text.DrawText(static_cast<std::int32_t>(textX), titleY, row.title, titleColor);
+    const std::int32_t titleY = _row.detail.empty() ? CenterTextY(rowY, SHEET_ROW_HEIGHT) : static_cast<std::int32_t>(rowY) + 12;
+    const Color titleColor = !tappable ? Ink::NEUTRAL_DIM : (_row.alarm ? Ink::RED : Ink::TEXT_PRIMARY);
+    _text.DrawText(static_cast<std::int32_t>(textX), titleY, _row.title, titleColor);
 
-    if (!row.detail.empty())
+    if (!_row.detail.empty())
     {
-      _text.DrawText(static_cast<std::int32_t>(textX), static_cast<std::int32_t>(rowY) + 26, row.detail, Ink::TEXT_MUTED,
-                     Face::SansRegular);
+      _text.DrawText(static_cast<std::int32_t>(textX), static_cast<std::int32_t>(rowY) + 26, _row.detail,
+                     tappable ? _row.detailInk : Ink::NEUTRAL_DIM, Face::SansRegular);
     }
-    if (!row.right.empty())
+    if (!_row.right.empty())
     {
-      DrawRight(_text, x + width - CARD_PADDING, CenterTextY(rowY, SHEET_ROW_HEIGHT), row.right,
-                !tappable ? Ink::NEUTRAL_DIM : (row.alarm ? Ink::RED : Ink::TEXT_DETAIL));
+      DrawRight(_text, x + width - CARD_PADDING, CenterTextY(rowY, SHEET_ROW_HEIGHT), _row.right,
+                !tappable ? Ink::NEUTRAL_DIM : (_row.alarm ? Ink::RED : Ink::TEXT_DETAIL));
     }
 
     if (tappable)
     {
-      AddHit(x, rowY, width, SHEET_ROW_HEIGHT, rowAction, row.target);
+      AddHit(x, rowY, width, SHEET_ROW_HEIGHT, rowAction, _row.target);
     }
     rowY += SHEET_ROW_HEIGHT;
+  };
+
+  for (std::size_t index = 0; index < shown; ++index)
+  {
+    drawRow(rows[index]);
   }
 
   if (clipped)
@@ -1943,6 +2417,13 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(rowY, SHEET_CLIPPED_HEIGHT),
                    std::format("+{} MORE THAN THIS SHEET CAN SHOW", clippedBefore - shown), Ink::NEUTRAL_DIM);
     rowY += SHEET_CLIPPED_HEIGHT;
+    previousWasBand = false;
+  }
+
+  // Below the count and above `CANCEL`: the concede, and nothing else today (ADR-093).
+  for (const SheetRow& row : pinned)
+  {
+    drawRow(row);
   }
 
   // ---- Cancel ----------------------------------------------------------------------------------

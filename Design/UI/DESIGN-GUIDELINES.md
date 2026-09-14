@@ -14,6 +14,14 @@ ships — this document cites it and does not restate what it does not have to.
   `Frame::TOP_BAR_HEIGHT`, `DIGEST_WIDTH`, `ORDERS_WIDTH`. The map is what is left between the rails
   and is drawn first; the rails' opaque backgrounds are what confine it (ADR-017).
 - 1px separators `rgba(255,255,255,0.10)` (`Ink::CARD_BORDER`, 26/255).
+- **This game is for touch, and its targets do not meet the floor yet** (ADR-098). Every
+  player-facing string says *tap*, `PointerInput` is built on the Windows Pointer API for a finger,
+  and `SHEET_ROW_HEIGHT`'s own comment names **44** as the smallest a finger hits reliably. Measured
+  2026-09-14: sheet row 44 · sheet header 36 · sheet band, digest title and page band 22 · top bar
+  chips 20–22 · **locks rail row 21** · **digest card button 18** · `RESET` chip 18 · **map garrison
+  badge 16**. The three used most are the three smallest. **Measure a new control against 44, not
+  against the one beside it** — that is how 16 happened. The work is
+  `Design/Plans/UI-02-TouchTargets.md`.
 - Rail padding 14px. Card padding **10px** (`MainPage::CARD_PADDING`; the handoff said 8). Line
   height **is not a number here** — it is `FontRenderer::LineHeightPixels`, 17px for the face as
   baked; see §Font. Everything on whole pixels.
@@ -31,19 +39,31 @@ ships — this document cites it and does not restate what it does not have to.
 
 **This section changed on 2026-09-13 and the change is only half landed. Read the state note first.**
 
-Two families, **four** cuts, baked from TTF into `NeuronClient/Font.h` by `py Build/BakeFont.py`
+Two families, **five** cuts, baked from TTF into `NeuronClient/Font.h` by `py Build/BakeFont.py`
 (ADR-073) and drawn anti-aliased (ADR-074):
 
 - **IBM Plex Mono** — Regular, Medium — the *data* face: every rail row, status, number, chip,
-  button label, section label, card title, top bar, countdown, sheet row and legend.
+  button label, section label, top bar and sheet row.
 - **IBM Plex Sans** — Regular, Medium — the *sentence* face: event-card detail lines, the rail's
   help line, dialog paragraphs, sheet second lines, the join screen's explanatory lines.
+- **IBM Plex Mono Display** — Medium at **16px** — the *naming* cut (ADR-084), and the only one that
+  is a size rather than a weight. Six things are set in it and nothing else: the lock countdown, a
+  digest card's title, the digest header, a sheet's header, a dialog's title, and `LOCKSTEP` on the
+  join and seats screens. Each of them says what a whole pane, card or screen IS.
 - **The rule.** If the text aligns with something or carries a number, it is mono. If it is a
-  sentence with a full stop or a question mark, it is sans.
+  sentence with a full stop or a question mark, it is sans. If it names the thing around it, it is
+  the display cut — which is still mono, and `FaceRuleTests` holds it to the mono half of the rule.
 
-Both are baked at **12px**, **hinted**. Measured from the files on 2026-09-13: Plex Mono is exactly
+The four body cuts are baked at **12px**, **hinted**. Measured from the files on 2026-09-13: Plex Mono is exactly
 0.600em, so a mono column is **7px** — one narrower than the 8×8 font it replaced — and cap height
 is 0.698em, which keeps capitals within half a pixel of the height they had.
+
+**The display cut, measured from the baked header on 2026-09-13:** advance **10px** against the
+body cut's 7 (0.600em at 16px is 9.6), line box ascent 17 plus descent 5 = **22px**, and the face
+reports a line height of 21 — so `LineHeightPixels` floors at 22 there for the same reason it floors
+at 17 here. `MainPage::TITLE_LINE_HEIGHT` asks the font for that number rather than stating it, and
+a card's title block is laid out from it. `02:14:09` is **80px** wide in the display cut where the
+old 2× countdown was 112.
 
 A line box is ascent 13 plus descent 4 = **17px**, and a line is set at **17px** too. The face
 reports a line height of 16 — it carries a negative line gap — which is a pixel less than the box
@@ -78,14 +98,17 @@ Decision still says five; amending it is the owner's call.**
 [`Design/Plans/FONT-01-PlexFaces.md`](../Plans/FONT-01-PlexFaces.md) are built. Stage 7 — restoring
 the five characters ADR-014 substituted and re-measuring the six strings it shortened — is not.
 
-- 2× (`FontRenderer::COUNTDOWN_SCALE`) **only** for the lock countdown on the top bar and the
-  `LOCKSTEP` title on the join and seats screens — the one thing read first on each. It is a whole
-  pixel-block enlargement of the 12px face, which is still the wrong tool: ADR-074 leaves open
-  whether the countdown should become a larger baked cut instead, and that is now the *only* way
-  left to make it heavier, since the weight above it was dropped. The handoff's other 2× use, the
-  share-card headline, has no screen to be on.
-- Emphasis is colour, case and now **weight** — one step of it, Regular against Medium. Labels and
-  headers are uppercase (`Uppercased()`), sentences mixed case. **The shouting is no longer forced
+- **Nothing is drawn at a scale other than 1** (ADR-084). `COUNTDOWN_SCALE` is gone: pixel-doubling
+  the 12px face was the second size for as long as the font was a hand-typed 8×8 grid, and beside
+  anti-aliased Plex it read as an artefact — which is the question ADR-074 left open. The scale
+  argument stays on the renderer because a whole-number blow-up is exact and free, and nothing asks
+  for one.
+- Emphasis is colour, case, **weight** — one step, Regular against Medium — and now **size**, one
+  step, 12px against 16px. Labels and
+  headers are uppercase (`Uppercased()`), sentences mixed case. **Card titles become mixed case** — `Battle at Ulme` — with uppercase kept for chips, section
+  headers and status words (ADR-099, decided and **not yet built**: it needs `FaceRuleTests` to tell
+  a label from a sentence by an explicit tag rather than by looking for a lowercase letter).
+  **The shouting is no longer forced
   by the font**: the 8×8 face had no lowercase and Plex has both, so it is a choice the sheet is
   making, and ADR-074 left open whether it should go on being made. One thing depends on the
   current answer — `FaceRuleTests` tells a label from a sentence by whether it carries a lowercase
@@ -134,8 +157,15 @@ UI
   **`0.20`** outlined-button border (`OUTLINE`, 51/255; the handoff said 0.25) · `0.04` card fill
   (`CARD_FILL`) · `0.08` hover (`HOVER_FILL`, drawn on the locks rail row under the pointer and
   nowhere else, ADR-060).
-- `rgb(240,243,247)` primary text · body/detail `rgba(214,220,228,0.60)` (`TEXT_DETAIL`) ·
-  muted **`0.55`** (`TEXT_MUTED`, 140/255) · dim `0.45` (`NEUTRAL_DIM`).
+- `rgb(240,243,247)` primary text · body/detail and muted both `rgba(214,220,228,0.66)`
+  (`TEXT_DETAIL`, `TEXT_MUTED`, 168/255) · dim `0.55` (`NEUTRAL_DIM`, 140/255).
+  **These alphas are a measured floor** (ADR-083): every text token and every meaning colour clears
+  WCAG AA's 4.5:1 over both grounds this game paints text on — `APP_BACKGROUND` and `DIALOG_FILL`,
+  the dialog's opaque card — and `Tests/LockstepTests/ContrastTests.cpp` asserts it. `NEUTRAL_DIM`
+  measured 3.61:1 at its old 115 and is why. `TEXT_DETAIL` and `TEXT_MUTED` are the same byte and
+  keep two names, so that the day either moves it moves alone. A star is not text and is exempt.
+  **There is one palette:** `SeatsPage`, `JoinPage` and `ConnectionDialog` bind local names to
+  `Ink::` rather than carrying their own literals, which closes ADR-045's open item.
 - `rgba(214,220,228,0.59)` the filled grey a locked rail wears (`LOCKED_FILL`, SCREENS.md 06).
 - Scrim under a dialog `rgba(7,9,13,0.80)` (the handoff: `rgba(6,8,12,0.74)`).
 - Map ground: vertical gradient `rgb(8,10,16) → rgb(16,22,36) @45% → rgb(11,14,20)`; grid
@@ -180,8 +210,19 @@ Semantic / owner (ADR-027: you are always blue)
   open one** (ADR-061): the per-event lines sit behind a tap on the 22px title band, everything else
   is drawn either way, and one card is open at a time.
 - **Digest page band** — 22px at the foot of the digest, drawn only when the card stack is taller
-  than the column: `1 / 3 - MORE >` right, `< PREV` left once past page one, both muted (ADR-061).
-  Page breaks fall between cards; page 1 always carries the leading card and so the standing moves.
+  than the column: `27 MORE - 1 BATTLE >` right — the hidden count and the worst hidden kind, a
+  battle first — or `END` in `NEUTRAL_DIM` at the bottom; `< PREV` left once there is anything above,
+  both muted (ADR-061, ADR-080). The column scrolls by whole cards on a wheel notch, a drag banked
+  to 44px, or `PageUp`/`PageDown`, and the band's halves move a screenful.
+- **Focus chip** — an outlined button in a card's action row carrying a SYSTEM NAME (ADR-081), one
+  per distinct system the card points at that its own body does not already focus, four at most and
+  then `+n` which focuses the first it stands for. It replaces the `MAP` button entirely. Composed
+  after the order-giving controls, so a row too narrow for all of it drops a chip and never a
+  control.
+- **Filled button** — **one per SCREEN, not one per card** (ADR-089). The digest fills the first
+  primary in consequence order and outlines every other control, so the blue weight keeps meaning
+  "the thing to do" on a digest that offers three builds. A digest with no order to give fills
+  nothing.
 - **Verdict box** — 1px amber border inside the card; line 1 amber `FLT1 ARRIVES T47 - YOU LOSE`,
   then the numbers in body colour, always saying whose ships remain.
 - **Sheet** — the panel component (ADR-052): ink background, 1px border; 36px header with the title
@@ -192,9 +233,14 @@ Semantic / owner (ADR-027: you are always blue)
   not a target. A **section band** — 22px, a rule and a muted label, never a target — separates a row
   that is different in kind from the ones above it; it counts against the six and is dropped before a
   real row is (ADR-064). A row said in red is one that cannot be taken back: today the armed or
-  queued `Concede`, and nothing else. **At the lock a sheet stays open and goes inert** (ADR-065):
-  every row dim, the filled grey `LOCKED` chip in the header clear of the `X`, and the rail's lock
-  sentence in amber under the header; `X` and `CANCEL` still close it.
+  queued `Concede`, and nothing else. **A PINNED row is drawn after the six and after the `+N` line,
+  immediately above `CANCEL`, and does not count against the cap** (ADR-093) — the concede and its
+  band, and nothing else today. **One wrapped help line sits between the header and the rows,
+  and two sentences compete for it.** At the lock a sheet stays open and goes inert (ADR-065): every
+  row dim, the filled grey `LOCKED` chip in the header clear of the `X`, and the rail's lock sentence
+  in amber there; `X` and `CANCEL` still close it. Otherwise a build sheet whose queue has taken
+  credits says what its rows are priced against (ADR-078), amber when that is why a row is dim and
+  `TEXT_DETAIL` when it is only a note. With neither, the rows start straight under the header.
 - **Dialog** — the connection component (ADR-038): a 520px card, 1px border in the tone
   (blue welcome / amber lost / red refusal / hairline neutral), the title in the tone's colour —
   primary text for a neutral tone, because the hairline at 26 alpha is unreadable as text — a
@@ -211,10 +257,15 @@ Semantic / owner (ADR-027: you are always blue)
   nine; blue border when selected.
 - **Tabs (unread ticks)** — not built.
 - **Locks list row** — label primary left, wrapped to leave room; status right, coloured:
-  `T7`/`HOLD` muted, `+DEF`/`QUEUED -20`/`SENDING` blue, `PROPOSE`/`3 TICKS` amber, `CONCEDE` red.
-  A row is a **link** to what it names (ADR-060) — the build sheet, the fleet's location or
-  destination picker, the far end of a proposed lane — and gives no order; a row with nothing to
-  point at is not a target. `HOVER_FILL` under the pointer, on targets only. Focus-only at the lock.
+  `T7` muted, `+DEF`/`QUEUED -20`/`SENDING` blue, `PROPOSE`/`3 TICKS` amber, `CONCEDE` red. A row
+  may carry a **muted head** — the bytes at the front drawn in `TEXT_MUTED`, for the half that names
+  rather than measures: `FLT 3` in `FLT 3 · 3` (ADR-086). A row is a **link** to what it names
+  (ADR-060) — the build sheet, the fleet's destination picker, the far end of a proposed lane — and
+  gives no order; a row with nothing to point at is not a target. `HOVER_FILL` under the pointer, on
+  targets only. Focus-only at the lock.
+- **Locks list band** — a muted label grouping the rows under it, no rule and no count, never a
+  target (ADR-086): `DOTHAN · 10 SHIPS` over that system's fleets, `UNDER WAY` over the ones in
+  transit. Lighter than a section header, which starts a list rather than dividing one.
 
 ## Copy
 - Ops-console terse, numbers first, ` - ` between facts: `PRODUCTION +17`, `CLAIMED PELL`,
@@ -288,18 +339,36 @@ Drawn, in painter's order (`MapRender.cpp`):
 - Systems and fleets back to front (a depth sort, because painter's order is the whole occlusion
   model). A system: ground shadow ellipse (owner @0.22, 2.2× wide, 0.9× tall) → 1px stem (20 units,
   capital 30) → the dot (radius 4.5·1.15, capital 6·1.15 with a halo at 2.4×). Contested: a 1px ring.
-  Custodian: a dashed ring and `CUSTODIAN T43` under the ground point. Captured: `CAPTURED T45` in
-  red. Focused: a white ring at 3× the radius. The name above every node, capitals uppercased, 8px at
+  Custodian: a dashed ring and `CUSTODIAN T43` under the ground point. Captured: `CAPTURED T45`
+  under the ground point **for three ticks and then not at all** (ADR-082), in one of three inks
+  (ADR-088): the viewer's own colour when they gained it, `RED` when `capturedFrom` is the viewer,
+  and the new owner's colour at 0.7 when it was between two rivals. Red means what YOU lost and
+  nothing else. Focused: a white ring at 3× the radius. The name above every node, capitals uppercased, 8px at
   every distance.
+- **A garrison badge** (ADR-079), for every owner with fleets STANDING at a system: a 16px filled
+  chip beside the system's name carrying the total ships, placed clear of both the disc and the
+  name label and stepping right when a system carries more than one. Yours is a solid `YOU` fill
+  with the number in `APP_BACKGROUND` and is a target; a rival's is their colour at 0.35 with the
+  number in their colour at full strength, and focuses like the disc does. A fleet is drawn as a
+  badge or as a marker on a lane, never as both (`Fleet::OnALane`). Legend: a blue chip and
+  `SHIPS HOLDING`, because the number is ships and not fleets.
 - A fleet in transit: a 14-unit stem, an arrowhead pointing along the lane in world space, and
   `FLT 1 - ETA T6` — yours above the head, a rival's beside and below, so two converging on one
   system cannot overlap. The marker is clamped a label's half-width (68px) clear of both ends, and a
   lane too short for that draws it in the middle (ADR-059).
 - `MAP` in the top-left corner, `MAP - FOCUS: PELL` once the digest or a tap has pointed it at a
   system. The legend along the bottom: `YOU`, up to four rivals actually on the map, `PROPOSED LANE`,
-  `TRADE LANE`, and `FLEET UNDER WAY` while anything is in transit.
+  `TRADE LANE`, `FLEET UNDER WAY` while anything is in transit, and a blue chip with `SHIPS HOLDING`
+  while any garrison badge is drawn (ADR-079). **It is not drawn at all while a sheet is open**: the
+  legend's row and a sheet's `CANCEL` bar are the same strip of the pane (ADR-082).
 - Tapping a system you hold opens its build sheet; a system you do not hold only focuses
   (ADR-058); tapping your own fleet's marker opens its destination picker.
+- **The camera** (ADR-090): drag orbits, a wheel notch or pinch step zooms between 0.6x and 2.5x of
+  the authored framing at 12% a step, and an outlined `RESET` chip sits immediately after
+  `MAP - FOCUS: PELL` — drawn only when the camera is not where the map opened. No pan.
+- **Labels keep out of the way** (ADR-090): one greedy pass nudges a name up in 12px steps, at most
+  three, until it clears every label already placed and every lane on the screen; past that it is
+  drawn where it was. A garrison badge rides on its label's baseline and joins the field.
 
 Not drawn (the handoff's list, kept as intent): owner tags beside non-own names (`NARTH · OKO`);
 the contact spotlight (an amber dashed ellipse at a contested system); a verdict label under a node

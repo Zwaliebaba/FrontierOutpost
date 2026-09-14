@@ -37,7 +37,11 @@ public:
     End,
     Enter,
     Tab,
-    Escape
+    Escape,
+    /// A screenful at a time, for a column that pages. The keyboard reached only the join screen
+    /// until the digest learned to scroll (ADR-080).
+    PageUp,
+    PageDown
   };
 
   /// How much one frame may type before the rest is dropped.

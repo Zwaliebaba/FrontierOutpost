@@ -4,6 +4,7 @@
 #include "DigestView.h"
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <format>
 #include <map>
@@ -81,8 +82,10 @@ namespace
     }
 
     // A fleet already under way is not redirectable -- `Match::Validate` refuses it, and a button
-    // whose order the lock is certain to refuse is the thing ADR-053 took off this screen.
-    if (fleet.order == FleetStance::Move && fleet.from != fleet.to)
+    // whose order the lock is certain to refuse is the thing ADR-053 took off this screen. A fleet
+    // the player ordered somewhere THIS tick is not that: the lock has not come, so it is still
+    // standing where it stands and the button re-opens the picker on it (ADR-077).
+    if (fleet.underWay)
     {
       continue;
     }
@@ -94,6 +97,67 @@ namespace
     ++offered;
   }
   return actions;
+}
+
+/// Replaces a card's `MAP` buttons with the names of the systems they point at, and drops the one
+/// that points where the card already goes (ADR-081).
+///
+/// **Four `MAP` buttons on one card is four identical labels for four different places**, and the
+/// card that carried them -- `P4 · 5 EVENTS` -- says neither what P4 did nor where. A chip per
+/// distinct system, named, is the same targets with the answer written on them.
+///
+/// **And a `MAP` that focuses what tapping the card already focuses is a button that does nothing
+/// visible.** Every plain event card had one: `EventRefs::system` is what the card body focuses and
+/// what the button targeted, so the two were the same tap drawn twice.
+void NameTheTargets(const MatchState& _state, DigestCard& _card)
+{
+  /// Four fits beside a real control at this width, and a card whose rival touched five systems is
+  /// telling a story the per-event lines already carry.
+  constexpr std::size_t MOST_CHIPS = 4;
+
+  std::vector<std::int32_t> systems;
+  std::vector<EventAction> kept;
+  for (const EventAction& action : _card.actions)
+  {
+    if (action.kind != EventActionKind::Focus)
+    {
+      kept.push_back(action);
+      continue;
+    }
+    const bool nowhere = action.target < 0 || action.target >= static_cast<std::int32_t>(_state.graph.systems.size());
+    if (nowhere || action.target == _card.refs.system)
+    {
+      continue;
+    }
+    if (std::ranges::find(systems, action.target) == systems.end())
+    {
+      systems.push_back(action.target);
+    }
+  }
+
+  const auto named = [&_state](std::int32_t _system)
+  {
+    const std::string& name = _state.graph.systems[static_cast<std::size_t>(_system)].name;
+    std::string shouted = name.empty() ? std::string{"THE FALLOW"} : name;
+    std::transform(shouted.begin(), shouted.end(), shouted.begin(), [](unsigned char _c) { return static_cast<char>(std::toupper(_c)); });
+    return shouted;
+  };
+
+  for (std::size_t index = 0; index < systems.size() && index < MOST_CHIPS; ++index)
+  {
+    kept.push_back(EventAction{.label = named(systems[index]), .kind = EventActionKind::Focus, .target = systems[index]});
+  }
+
+  // The overflow chip goes to the first one it stands for rather than nowhere: a control that says
+  // there is more and then does nothing when pressed is the defect this screen keeps being bitten
+  // by. The rest are on the card's own lines.
+  if (systems.size() > MOST_CHIPS)
+  {
+    kept.push_back(
+      EventAction{.label = std::format("+{}", systems.size() - MOST_CHIPS), .kind = EventActionKind::Focus, .target = systems[MOST_CHIPS]});
+  }
+
+  _card.actions = std::move(kept);
 }
 
 /// Whether this event may be folded into a run of the same thing (ADR-062).
@@ -385,6 +449,15 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
     cards.push_back(std::move(card));
   }
 
+  // ---- What each card points at ----------------------------------------------------------------
+  //
+  // After the cards are assembled and before they are ranked, because it is about one card at a
+  // time and a card is not finished until its events have all folded into it (ADR-081).
+  for (DigestCard& card : cards)
+  {
+    NameTheTargets(_state, card);
+  }
+
   // ---- The consequence order -----------------------------------------------------------------------
   //
   // Stable, so that two cards of the same rank keep the order the server put them in -- which is
@@ -409,7 +482,103 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
     cards.front().actions.insert(cards.front().actions.begin(), standing.begin(), standing.end());
   }
 
+  // ---- One filled button on the screen -----------------------------------------------------------
+  //
+  // **Filled means "do this", and three of them mean nothing** (ADR-089). A digest reporting three
+  // systems that can each take a building gave each of them a filled primary, so the weight that is
+  // supposed to pick one thing out was carrying no information at all.
+  //
+  // **The first one in consequence order keeps it, not `cards.front()`'s.** UI-01 2.4 says the
+  // leading card's, and the leading card is the worst thing that happened -- a battle, a system
+  // lost -- which is exactly the card whose actions are chips rather than orders. Read literally it
+  // would leave a digest with nothing filled on the ticks a player most needs pointing at something
+  // to do. The cards are already sorted by consequence, so the first primary in the list is the
+  // most consequential thing that can actually be acted on.
+  bool filled = false;
+  for (DigestCard& card : cards)
+  {
+    for (EventAction& action : card.actions)
+    {
+      if (!action.primary)
+      {
+        continue;
+      }
+      action.primary = !filled;
+      filled = true;
+    }
+  }
+
   return cards;
+}
+
+std::string HiddenSummary(const std::vector<DigestCard>& _cards, std::size_t _from)
+{
+  if (_from >= _cards.size())
+  {
+    return {};
+  }
+  const std::size_t hidden = _cards.size() - _from;
+
+  // **A battle outranks its own kind.** A fight is a `Loss` card like a system lost is, and it is
+  // the one a player most needs to know is down there -- the verdict is what tells them apart, and
+  // `CanMerge` already treats a card carrying one as unfoldable for the same reason.
+  std::size_t battles = 0;
+  std::int32_t worst = 99;
+  for (std::size_t index = _from; index < _cards.size(); ++index)
+  {
+    battles += _cards[index].verdict.empty() ? 0U : 1U;
+    worst = std::min(worst, ConsequenceRank(_cards[index].kind));
+  }
+
+  const auto plural = [](std::size_t _count, const char* _one, const char* _many)
+  { return std::format("{} {}", _count, _count == 1 ? _one : _many); };
+
+  if (battles > 0)
+  {
+    return std::format("{} MORE · {}", hidden, plural(battles, "BATTLE", "BATTLES"));
+  }
+
+  std::size_t ofThatKind = 0;
+  for (std::size_t index = _from; index < _cards.size(); ++index)
+  {
+    ofThatKind += ConsequenceRank(_cards[index].kind) == worst ? 1U : 0U;
+  }
+
+  // The words the digest already uses for these, so the band reads like the cards it is about.
+  const char* one = "EVENT";
+  const char* many = "EVENTS";
+  switch (worst)
+  {
+  case 0:
+    one = "SYSTEM LOST";
+    many = "SYSTEMS LOST";
+    break;
+  case 1:
+    one = "CONTACT";
+    many = "CONTACTS";
+    break;
+  case 2:
+    one = "OFFER";
+    many = "OFFERS";
+    break;
+  case 3:
+    one = "CUSTODIAN";
+    many = "CUSTODIANS";
+    break;
+  case 4:
+    one = "REGION";
+    many = "REGION";
+    break;
+  case 5:
+    one = "INCOME";
+    many = "INCOME";
+    break;
+  default:
+    one = "SILENCE";
+    many = "SILENCE";
+    break;
+  }
+  return std::format("{} MORE · {}", hidden, plural(ofThatKind, one, many));
 }
 
 DigestDelta DeltaOf(const MatchState& _state)

@@ -15,6 +15,7 @@
 #include "CppUnitTest.h"
 
 #include "MainPage.h"
+#include "MapRender.h"
 #include "SnapshotView.h"
 
 #include "BotPolicy.h"
@@ -644,6 +645,59 @@ public:
     Assert::IsTrue(state.proposals.empty(), L"the withdrawn offer is still on the table");
     Assert::IsFalse(ActionOn(state, 0, Lockstep::EventActionKind::AcceptProposal).has_value(),
                     L"a withdrawn offer's card still offers an answer");
+  }
+};
+
+// Red is what you lost, and a capture is news for three ticks (ADR-082).
+TEST_CLASS(CaptureLabelTests)
+{
+public:
+  TEST_METHOD(ACaptureIsNewsForThreeTicksAndThenItIsTheMap)
+  {
+    Assert::IsTrue(Lockstep::CaptureIsNews(11, 11), L"a capture this tick is not news");
+    Assert::IsTrue(Lockstep::CaptureIsNews(11, 14), L"the third tick after is still inside the window");
+    Assert::IsFalse(Lockstep::CaptureIsNews(11, 15), L"a capture four ticks old is still being announced");
+    Assert::IsFalse(Lockstep::CaptureIsNews(0, 40), L"a system nobody has captured claims a capture");
+  }
+};
+
+// Red is what YOU lost, and `capturedFrom` is what says so (ADR-088).
+TEST_CLASS(CaptureInkTests)
+{
+public:
+  [[nodiscard]] static Lockstep::MatchState BoardWithACapture(Lockstep::OwnerId _takenFrom, Lockstep::OwnerId _nowHeldBy)
+  {
+    const auto simulation = PlayedMatch(4);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    Assert::IsFalse(state.graph.systems.empty());
+
+    Lockstep::SystemNode& node = state.graph.systems.front();
+    node.capturedAt = state.match.tick;
+    node.capturedFrom = _takenFrom;
+    node.owner = _nowHeldBy;
+    return state;
+  }
+
+  TEST_METHOD(ACaptureTakenFromYouIsYourLoss)
+  {
+    const Lockstep::MatchState state = BoardWithACapture(0, 1);
+    Assert::AreEqual(0, state.graph.systems.front().capturedFrom, L"the board does not say who lost it");
+    Assert::IsTrue(Lockstep::CaptureIsNews(state.graph.systems.front().capturedAt, state.match.tick));
+  }
+
+  TEST_METHOD(ACaptureBetweenTwoRivalsIsNeitherYourLossNorYourGain)
+  {
+    // The case the client could not see before `capturedFrom` was on the wire: P2 took it from P3
+    // and the viewer is neither, so nothing about it is red.
+    const Lockstep::MatchState state = BoardWithACapture(2, 1);
+    Assert::AreNotEqual(state.viewer, state.graph.systems.front().capturedFrom, L"a rival-to-rival capture reads as the viewer's loss");
+    Assert::AreNotEqual(state.viewer, state.graph.systems.front().owner);
+  }
+
+  TEST_METHOD(AnUnclaimedSystemIsTakenFromNobody)
+  {
+    const Lockstep::MatchState state = BoardWithACapture(Lockstep::NOBODY, 0);
+    Assert::AreEqual(Lockstep::NOBODY, state.graph.systems.front().capturedFrom, L"open space was recorded as somebody's loss");
   }
 };
 

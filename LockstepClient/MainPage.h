@@ -4,6 +4,7 @@
 #include "MapView.h"
 
 #include "Starfield.h"
+#include "KeyboardInput.h"
 #include "MatchState.h"
 #include "PointerInput.h"
 #include "ShapeRenderer.h"
@@ -52,6 +53,12 @@ public:
   /// every time the face changes is a number that will be re-derived in four.
   static constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels());
 
+  /// The 16px display cut's line, for the one string on a card that is set in it (ADR-084). Asked of
+  /// the font for the same reason `LINE_HEIGHT` is: a title in a bigger cut over a line box sized
+  /// for the smaller one is the overlap that number was introduced to stop.
+  static constexpr std::int32_t TITLE_LINE_HEIGHT =
+    static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels(Neuron::Face::MonoDisplay));
+
   /// A button inside an event card, and the padding inside the verdict box.
   ///
   /// 18 is unchanged from the 8x8 font and deliberately so: a line BOX grew from 8 to 17, but the
@@ -61,6 +68,15 @@ public:
   /// change is where the box is PUT, which `BandTopForText` now answers.
   static constexpr float BUTTON_HEIGHT = 18.0F;
   static constexpr float VERDICT_BOX_PADDING = 5.0F;
+
+  /// How many ticks of digest the server keeps per player (`NeuronServer::Session::DIGEST_HISTORY`).
+  ///
+  /// **Stated here because the client cannot ask.** It does not link `NeuronServer` any more than it
+  /// links `GameLogic`, and the number is not on the wire; what it is used for is one muted line
+  /// admitting that a longer absence lost something (ADR-094). If the server's window changes and
+  /// this does not, the line appears one tick early or late -- which is a cosmetic error about a
+  /// cosmetic line, and the alternative is a wire field for a sentence.
+  static constexpr std::uint32_t DIGEST_HISTORY_TICKS = 8;
 
   /// The digest's own two bands, both 22 pixels (ADR-061).
   ///
@@ -103,6 +119,10 @@ public:
     OpenSystem,
     /// Open a fleet's destination picker, lane-constrained.
     OpenFleet,
+    /// Open what is standing at one system, from its garrison badge (ADR-079). Its index is a
+    /// SYSTEM position: one fleet of the viewer's there goes straight to that fleet's picker, and
+    /// several open the sheet that picks between them first.
+    OpenFleetsAt,
     /// Queue or unqueue a build. An order: local until the lock.
     ToggleBuild,
     /// Open the list of things this player could say to somebody (ADR-039).
@@ -115,12 +135,15 @@ public:
     /// Open or close one actor card's per-event lines. Its index is an `OwnerId`, because that is
     /// what a card groups and the index a card sits at changes with the ranking.
     ToggleActorCard,
-    /// Show one page of the digest. Its index is the page, counted from zero.
+    /// Put the digest column's top at one card. Its index is a CARD position in the stack
+    /// `CardsOf` composed, which is what the band's two halves carry (ADR-080).
     ShowDigestPage,
     /// Step through the last resolved tick.
     OpenReplay,
     /// Pick a destination in the open picker.
     ChooseDestination,
+    /// Put the camera back where the map opened (ADR-090). Drawn only when it is somewhere else.
+    ResetCamera,
     ClosePanel
   };
 
@@ -130,11 +153,44 @@ public:
     None,
     BuildList,
     Destination,
+    /// Which of the several fleets standing at one system (ADR-079). Its subject is a SYSTEM, and
+    /// it exists only because a badge totals ships and a picker has to be about one fleet.
+    FleetList,
     SignalList,
     Replay
   };
 
   void Create(MatchState _state);
+
+  /// Whether this build shows the controls that are not finished yet (ADR-091).
+  ///
+  /// **`REPLAY` is the only one, and screen 07 is a stub behind it.** A button whose own title says
+  /// `NOT YET WIRED` is a button teaching a player that this screen's controls may not work, which
+  /// is the opposite of what every other decision here has been for (ADR-053, ADR-077). It stays
+  /// reachable for whoever is building it, behind `--dev`.
+  void SetDeveloperControls(bool _shown) noexcept
+  {
+    m_developerControls = _shown;
+  }
+
+  /// Whether the link to the server is down (ADR-085).
+  ///
+  /// **It gates ORDERS and nothing else.** A client that cannot send cannot order, so every control
+  /// that gives one goes inert exactly as it does at the lock -- but reading the digest, focusing
+  /// the map, orbiting it and opening a sheet all still work, because none of them reaches the
+  /// wire. That is the whole difference between the banner this goes with and the modal it replaced.
+  void SetOffline(bool _offline) noexcept
+  {
+    m_offline = _offline;
+  }
+
+  /// Whether an order can be given at all: the orders are unlocked, the match is running, and the
+  /// link is up. One question asked in one place, because "can this be tapped" was three
+  /// conditions in twelve places and the third was missing from all of them.
+  [[nodiscard]] bool OrdersEditable() const noexcept
+  {
+    return !m_state.orders.locked && !m_state.match.finished && !m_offline;
+  }
 
   /// Advances the live countdown. At zero the orders lock: the rail flips UNLOCKED to LOCKED and
   /// every control on it goes inert, which is the whole of the tick discipline the client
@@ -149,6 +205,19 @@ public:
   /// ignored, so a slipped finger on the orders list never spins the galaxy. Returns true when
   /// the drag was consumed.
   bool HandleDrag(const Neuron::PointerInput::Drag& _drag);
+
+  /// A wheel notch or a pinch step, and where the pointer was when it arrived. Returns true when
+  /// something moved.
+  ///
+  /// **One entry point because there is one banked count** (`PointerInput::TakeZoomSteps`), and the
+  /// pane under the pointer is what decides its meaning: over the digest column it scrolls the card
+  /// stack (ADR-080). Positive is one notch away from the player, which scrolls DOWN the column --
+  /// the direction every other list on this platform goes.
+  bool HandleZoom(std::int32_t _steps, float _xPixels, float _yPixels);
+
+  /// A key. `PageUp` and `PageDown` move the digest a screenful, which is the keyboard's half of
+  /// ADR-080 and the only thing on this screen a key does.
+  bool HandleKey(Neuron::KeyboardInput::Key _key);
 
   /// Where the pointer is, so the locks rail can fill the row under it (`Ink::HOVER_FILL`).
   ///
@@ -192,16 +261,22 @@ public:
     return m_panel;
   }
 
-  /// Which rival's card is open, and which page of the digest is on the screen (ADR-061). Both are
-  /// how a player is READING the digest rather than anything about the match, and both are here for
-  /// the same reason `OpenPanel` is: a control that cannot be observed cannot be pressed by a test.
+  /// Which rival's card is open, and which card the digest column starts at (ADR-061, ADR-080).
+  /// Both are how a player is READING the digest rather than anything about the match, and both are
+  /// here for the same reason `OpenPanel` is: a control that cannot be observed cannot be pressed
+  /// by a test.
   [[nodiscard]] OwnerId ExpandedActor() const noexcept
   {
     return m_expandedActor;
   }
-  [[nodiscard]] std::size_t DigestPage() const noexcept
+  [[nodiscard]] std::size_t DigestTop() const noexcept
   {
-    return m_digestPage;
+    return m_digestTop;
+  }
+  /// How many cards the last frame put on the screen. What a page is, measured rather than assumed.
+  [[nodiscard]] std::size_t CardsOnScreen() const noexcept
+  {
+    return m_cardsOnScreen;
   }
 
   /// Whether anything on this page moves on its own and so needs a frame even when nobody has
@@ -219,6 +294,22 @@ public:
 
   /// The countdown as HH:MM:SS. Static and pure, so the format is testable without a screen.
   [[nodiscard]] static std::string FormatCountdown(double _seconds);
+
+  /// 4 -> `4TH`. Ordinals, because `4 / 12` reads as a fraction and a placement is not one.
+  ///
+  /// Public because the final standings table spells placements the same way and is composed in the
+  /// composition root, where `MatchState` and `ConnectionDialog` meet (ADR-097). Two copies of an
+  /// ordinal rule is one place for `1TH` to appear.
+  [[nodiscard]] static std::string FormatPlacement(std::uint32_t _placement);
+
+  /// What a build sheet is priced against when the queue has already taken part of the purse, or
+  /// an empty string when it has not (ADR-078).
+  ///
+  /// **The purse on the top bar is not the number a sheet refuses a build by**, and until this
+  /// sentence existed nothing on the sheet said so: a row reading `30 CR - NEED 4 MORE` sat under a
+  /// bar reading `46 CR`, and both were correct. Public and pure for the reason `FormatCountdown`
+  /// is -- the arithmetic is what must be right, and asserting it needs no screen.
+  [[nodiscard]] std::string PurseSentence() const;
 
   /// Ticks for a fleet to reach a system from where it is, along lanes. Breadth-first over lane
   /// costs -- the picker shows it against every reachable destination, and it is the number the
@@ -274,6 +365,13 @@ private:
   /// Which of `m_railRows` the pointer is over, or `EventRefs::NONE`.
   [[nodiscard]] std::int32_t RailRowUnderPointer() const noexcept;
 
+  /// Where the digest column would start if it went back one screenful, measured from the card
+  /// heights the frame just laid out (ADR-080).
+  [[nodiscard]] std::size_t PreviousDigestTop(const std::vector<CardLayout>& _layouts, float _room) const;
+
+  /// Moves the digest by `_cards`, clamped. True when it moved.
+  bool ScrollDigest(std::int32_t _cards);
+
   /// Puts back the sheet a new state arrived under, if what it was about is still there (ADR-065).
   void ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _subject);
 
@@ -282,6 +380,10 @@ private:
   [[nodiscard]] std::string LockSentence() const;
 
   void AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index);
+
+  /// The viewer's own fleets standing at one system and able to take an order, as indices into
+  /// `m_state.fleets`. What a garrison badge opens, and what the fleet-list sheet lists (ADR-079).
+  [[nodiscard]] std::vector<std::int32_t> StandingFleetsAt(std::int32_t _system) const;
 
   /// How many credits short the purse is of build row `_index` on top of what is already queued;
   /// zero when it is affordable or names no row. The number a dim build control shows (ADR-053).
@@ -314,9 +416,17 @@ private:
   /// show one card's worth of lines should not be able to hold two open and page them apart.
   OwnerId m_expandedActor = NOBODY;
 
-  /// Which page of the digest is on the screen, counted from zero. Reset by `Create`, because a
-  /// digest is replaced wholesale and page three of the last one is nowhere in this one.
-  std::size_t m_digestPage = 0;
+  /// Which card the digest column starts at. Reset by `Create`, because a digest is replaced
+  /// wholesale and card thirty of the last one is nowhere in this one (ADR-080).
+  std::size_t m_digestTop = 0;
+  /// How many cards the last frame drew, so a page key can move by what a page actually was. Layout
+  /// is the only thing that knows, and it knows it a frame late -- which is the same frame-old hit
+  /// list every tap on this screen is already tested against.
+  std::size_t m_cardsOnScreen = 1;
+  /// Drag distance banked toward the next whole card, for the finger's half of scrolling. A drag is
+  /// continuous and the column moves in cards, so what is left over is kept rather than thrown away
+  /// -- the same bargain `PointerInput` makes with a high-resolution wheel.
+  float m_digestDragPixels = 0.0F;
 
   Panel m_panel = Panel::None;
   /// Which system's build list or which fleet's picker is open, as a POSITION in the view's lists.
@@ -329,6 +439,19 @@ private:
   std::int32_t m_panelSubjectId = EventRefs::NONE;
   /// The node the digest last pointed at. Drawn with a focus ring; -1 when nothing is focused.
   std::int32_t m_focusedSystem = EventRefs::NONE;
+
+  /// Whether `--dev` was passed (ADR-091). Off in every shipped run.
+  bool m_developerControls = false;
+
+  /// The placement this page last drew, so the chip can say a place was LOST rather than only what
+  /// it is (ADR-091). Session memory and nothing more: it starts at zero, which no placement is, and
+  /// a client that joins mid-match simply has no previous place until it has drawn one.
+  std::uint32_t m_placementDrawn = 0;
+
+  /// Whether the link is down (ADR-085). Set by the match loop from the connection's state; it is
+  /// not part of `MatchState` because it is a fact about this client's socket rather than about the
+  /// match, and a snapshot that carried it would be a snapshot that could disagree with the wire.
+  bool m_offline = false;
 
   /// The camera looking at the galaxy, and the ground plane it orbits (ADR-017).
   MapView m_mapView;

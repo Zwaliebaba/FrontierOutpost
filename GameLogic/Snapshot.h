@@ -49,6 +49,12 @@ struct SnapshotSystem
   /// system does not report a siege that may have ended three ticks ago.
   std::uint32_t siegeTicks = 0;
   std::uint32_t capturedAt = 0;
+  /// Who the last capture took it from, or an invalid id when it was unowned (ADR-088).
+  ///
+  /// **This is not a leak.** A capture is already reported to everyone who can see the system, and
+  /// the digest entry that reported it names both sides; what the map lacked was a way to ask the
+  /// same question a tick later.
+  PlayerId capturedFrom;
   bool halfYield = false;
 };
 

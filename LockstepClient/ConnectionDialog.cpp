@@ -3,6 +3,8 @@
 #include "pch.h"
 #include "ConnectionDialog.h"
 
+#include "DesignTokens.h"
+
 #include <algorithm>
 #include <format>
 
@@ -35,25 +37,24 @@ constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRende
 constexpr float TITLE_GAP = 16.0F;
 constexpr float BODY_GAP = 14.0F;
 
-constexpr Color APP_BACKGROUND = {11, 14, 20, 255};
-constexpr Color CARD_FILL = {17, 21, 29, 255};
-constexpr Color CARD_BORDER = {255, 255, 255, 26};
-constexpr Color OUTLINE = {255, 255, 255, 51};
-constexpr Color TEXT_PRIMARY = {240, 243, 247, 255};
-constexpr Color TEXT_DETAIL = {214, 220, 228, 153};
-constexpr Color BLUE = {94, 196, 255, 255};
-constexpr Color AMBER = {255, 196, 87, 255};
-constexpr Color RED = {255, 110, 96, 255};
+/// **One palette, bound to local names** (ADR-083). These were thirteen literal colours copied from
+/// the same list, which is thirteen chances for one of them to be adjusted alone -- and the day the
+/// contrast floor moved, three files would have kept the old number. The names stay local because
+/// they are used a hundred times each in this file and `Ink::` at every site is noise; what moved is
+/// where the VALUE comes from, which is the half that could ever be wrong.
+constexpr Color APP_BACKGROUND = Ink::APP_BACKGROUND;
+constexpr Color CARD_FILL = Ink::DIALOG_FILL;
+constexpr Color CARD_BORDER = Ink::CARD_BORDER;
+constexpr Color OUTLINE = Ink::OUTLINE;
+constexpr Color TEXT_PRIMARY = Ink::TEXT_PRIMARY;
+constexpr Color TEXT_DETAIL = Ink::TEXT_DETAIL;
+constexpr Color BLUE = Ink::BLUE;
+constexpr Color AMBER = Ink::AMBER;
+constexpr Color RED = Ink::RED;
 
 /// The scrim. Opaque enough that the screen behind reads as unavailable rather than as merely
 /// dark, and transparent enough that a player can still see the map they are waiting to get back.
 constexpr Color SCRIM = {7, 9, 13, 205};
-
-[[nodiscard]] std::int32_t CenterTextY(float _y, float _height)
-{
-  const auto glyph = static_cast<float>(FontRenderer::GlyphHeightPixels());
-  return static_cast<std::int32_t>(_y + (_height - glyph) * 0.5F);
-}
 
 /// Seconds, as a person would say them. `next in 4s` rather than `next in 4.000000s`.
 [[nodiscard]] std::string Seconds(double _seconds)
@@ -162,10 +163,14 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
     _outTitle = "CONNECTION LOST";
     _outLook = Look{AMBER, AMBER};
     _outBody.push_back(Paragraph{"The server stopped answering."});
-    _outBody.push_back(Paragraph{m_facts.reconnects == 0
-                                   ? std::format("Reconnecting - next attempt in {}.", Seconds(m_facts.secondsToNextAttempt))
-                                   : std::format("Reconnecting - back {} time(s) already - next attempt in {}.", m_facts.reconnects,
-                                                 Seconds(m_facts.secondsToNextAttempt))});
+    // `back 4 time(s) already` is a placeholder that shipped. A screen that tells a player their
+    // link keeps dropping should not also look unfinished while it does it (ADR-085).
+    _outBody.push_back(
+      Paragraph{m_facts.reconnects == 0 ? std::format("Reconnecting - next attempt in {}.", Seconds(m_facts.secondsToNextAttempt))
+                : m_facts.reconnects == 1
+                  ? std::format("Reconnecting - back once already - next attempt in {}.", Seconds(m_facts.secondsToNextAttempt))
+                  : std::format("Reconnecting - back {} times already - next attempt in {}.", m_facts.reconnects,
+                                Seconds(m_facts.secondsToNextAttempt))});
 
     // **The reference sheet promises more than this client does, so this says less.** Screen 04's
     // paragraph is "your unlocked orders are kept here and re-sent when the link returns", and
@@ -174,9 +179,14 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
     // drop is already on the server, where the latest submission for a tick wins.
     _outBody.push_back(Paragraph{"Orders you already sent are on the server and still count. Anything you tap while this is "
                                  "up is not sent."});
+    // **Past zero it has already locked, and saying it "still locks in 00:00:00" is a countdown
+    // that has stopped counting.** The tick the player was editing for is gone; what they need to
+    // know is that it went without them (ADR-085).
     if (!m_facts.lockCountdown.empty())
     {
-      _outBody.push_back(Paragraph{std::format("The tick still locks in {} whether or not you are back.", m_facts.lockCountdown)});
+      _outBody.push_back(Paragraph{m_facts.lockCountdown == "00:00:00"
+                                     ? std::format("T{} locked while you were away.", m_facts.lockedTick)
+                                     : std::format("The tick still locks in {} whether or not you are back.", m_facts.lockCountdown)});
     }
     _outButtons.push_back(Button{"QUIT", Action::Quit, false});
     _outButtons.push_back(Button{"RETRY NOW", Action::Retry, true});
@@ -184,11 +194,15 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
 
   case Kind::Finished:
     _outTitle = "MATCH FINISHED";
-    _outBody.push_back(Paragraph{"This match has ended. The final standings are in the last digest."});
-    if (!m_facts.standings.empty())
+    _outBody.push_back(Paragraph{"This match has ended."});
+
+    // **The table, not a sentence about it** (ADR-097). `6 OF 6 · SCORE 35 · LEADER P6 95` tells a
+    // player where they came and who won and nothing about the four empires in between -- on the
+    // one screen whose entire job is to say how it went. Every row, in placement order, with the
+    // reader's own in their own blue.
+    for (const Facts::Standing& standing : m_facts.standings)
     {
-      // A placing, not a sentence: the one block in any of these dialogs that is data.
-      _outBody.push_back(Paragraph{m_facts.standings, Neuron::Face::MonoRegular});
+      _outBody.push_back(Paragraph{standing.text, Neuron::Face::MonoRegular, standing.isYou ? BLUE : Neuron::Color{0, 0, 0, 0}});
     }
     _outButtons.push_back(Button{"QUIT", Action::Quit, false});
     _outButtons.push_back(Button{"VIEW LAST DIGEST", Action::ViewLastDigest, true});
@@ -214,6 +228,12 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
   std::vector<Button> buttons;
   Compose(title, look, body, buttons);
 
+  if (!Modal())
+  {
+    DrawBanner(_shapes, _text, title, look, buttons);
+    return;
+  }
+
   // ---- How tall this one is ----------------------------------------------------------------------
   //
   // Measured before anything is drawn, because the card is centred vertically and a card that grew
@@ -229,7 +249,7 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
     }
     for (std::string& line : FontRenderer::WrapToWidth(paragraph.text, bodyWidth))
     {
-      lines.push_back(Paragraph{std::move(line), paragraph.face});
+      lines.push_back(Paragraph{std::move(line), paragraph.face, paragraph.ink});
     }
   }
 
@@ -247,12 +267,12 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
   const auto contentX = static_cast<std::int32_t>(CARD_X + CARD_PADDING);
   auto y = static_cast<std::int32_t>(cardY + CARD_PADDING);
 
-  _text.DrawText(contentX, y, title, look.title, Face::MonoMedium);
+  _text.DrawText(contentX, y, title, look.title, Face::MonoDisplay);
   y += static_cast<std::int32_t>(FontRenderer::GlyphHeightPixels() + TITLE_GAP);
 
   for (const Paragraph& line : lines)
   {
-    _text.DrawText(contentX, y, line.text, TEXT_DETAIL, line.face);
+    _text.DrawText(contentX, y, line.text, line.ink.alpha == 0 ? TEXT_DETAIL : line.ink, line.face);
     y += LINE_HEIGHT;
   }
 
@@ -285,6 +305,52 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
   }
 }
 
+/// The band under the top bar, spanning all three columns (ADR-085).
+///
+/// **No scrim, and 44 pixels.** 44 is the top bar's height and the sheet row's, so the band reads as
+/// another row of the frame rather than as something laid over it -- which is the whole point: the
+/// board behind it is still readable and still works.
+void ConnectionDialog::DrawBanner(ShapeRenderer& _shapes, FontRenderer& _text, const std::string& _title, const Look& _look,
+                                  const std::vector<Button>& _buttons)
+{
+  constexpr float BANNER_TOP = 44.0F;
+  constexpr float BANNER_HEIGHT = 44.0F;
+
+  _shapes.FillRect(0.0F, BANNER_TOP, SCREEN_WIDTH, BANNER_HEIGHT, CARD_FILL);
+  _shapes.StrokeRect(0.0F, BANNER_TOP, SCREEN_WIDTH, BANNER_HEIGHT, _look.border);
+
+  // One line, not the card's four. The band has room for what is happening and when it will next be
+  // tried, and the rest of what the card said is true whether or not it is on the screen.
+  const std::string next = m_facts.reconnects == 0
+                             ? std::format("{} - RECONNECTING IN {}", _title, Uppercased(Seconds(m_facts.secondsToNextAttempt)))
+                             : std::format("{} - BACK {} ALREADY - RETRYING IN {}", _title,
+                                           m_facts.reconnects == 1 ? std::string{"ONCE"} : std::format("{} TIMES", m_facts.reconnects),
+                                           Uppercased(Seconds(m_facts.secondsToNextAttempt)));
+  _text.DrawText(static_cast<std::int32_t>(CARD_PADDING) + 4, CenterTextY(BANNER_TOP, BANNER_HEIGHT), next, _look.title);
+
+  const float buttonY = BANNER_TOP + (BANNER_HEIGHT - BUTTON_HEIGHT) * 0.5F;
+  float right = SCREEN_WIDTH - CARD_PADDING - 4.0F;
+  for (auto button = _buttons.rbegin(); button != _buttons.rend(); ++button)
+  {
+    const float width = static_cast<float>(FontRenderer::MeasurePixels(button->label)) + 2.0F * BUTTON_PADDING;
+    const float x = right - width;
+
+    if (button->filled)
+    {
+      _shapes.FillRect(x, buttonY, width, BUTTON_HEIGHT, BLUE);
+    }
+    else
+    {
+      _shapes.StrokeRect(x, buttonY, width, BUTTON_HEIGHT, OUTLINE);
+    }
+    _text.DrawText(static_cast<std::int32_t>(x + BUTTON_PADDING), CenterTextY(buttonY, BUTTON_HEIGHT), button->label,
+                   button->filled ? APP_BACKGROUND : TEXT_PRIMARY);
+    m_hits.push_back(Hit{x, buttonY, width, BUTTON_HEIGHT, button->action});
+
+    right = x - BUTTON_GAP;
+  }
+}
+
 bool ConnectionDialog::HandleTap(float _xPixels, float _yPixels)
 {
   if (m_kind == Kind::None)
@@ -301,9 +367,11 @@ bool ConnectionDialog::HandleTap(float _xPixels, float _yPixels)
     }
   }
 
-  // Everything else is swallowed. A tap that fell through to the map behind would edit orders this
-  // client cannot send, and the player would have no way to know which of their taps counted.
-  return true;
+  // A MODAL swallows everything else: a tap that fell through to the map behind would edit orders
+  // this client cannot send, and the player would have no way to know which counted. **A banner
+  // swallows only its own buttons** (ADR-085) -- the board behind it is the thing it deliberately
+  // leaves reachable, and the page's own guards are what stop an order being given there.
+  return Modal();
 }
 
 } // namespace Lockstep

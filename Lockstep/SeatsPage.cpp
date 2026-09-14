@@ -3,6 +3,8 @@
 #include "pch.h"
 #include "SeatsPage.h"
 
+#include "DesignTokens.h"
+
 #include "MatchRules.h"
 #include "Prng.h"
 
@@ -83,19 +85,24 @@ constexpr float PANEL_HEIGHT = GRID_HEIGHT + 14.0F + PRACTICE_HEIGHT;
 constexpr float FOOTER_Y = PANEL_TOP + PANEL_HEIGHT + CONSOLE_PADDING;
 constexpr float CONSOLE_HEIGHT = FOOTER_Y + FOOTER_HEIGHT - CONSOLE_Y;
 
-constexpr Color APP_BACKGROUND = {11, 14, 20, 255};
-constexpr Color CARD_FILL = {255, 255, 255, 10};
-constexpr Color CARD_BORDER = {255, 255, 255, 26};
-constexpr Color OUTLINE = {255, 255, 255, 51};
-constexpr Color DIVIDER = {255, 255, 255, 18};
-constexpr Color TEXT_PRIMARY = {240, 243, 247, 255};
-constexpr Color TEXT_MUTED = {214, 220, 228, 140};
-constexpr Color TEXT_DETAIL = {214, 220, 228, 153};
-constexpr Color NEUTRAL_DIM = {214, 220, 228, 115};
-constexpr Color BLUE = {94, 196, 255, 255};
-constexpr Color AMBER = {255, 196, 87, 255};
-constexpr Color RED = {255, 110, 96, 255};
-constexpr Color STAR = {214, 220, 228, 220};
+/// **One palette, bound to local names** (ADR-083). These were thirteen literal colours copied from
+/// the same list, which is thirteen chances for one of them to be adjusted alone -- and the day the
+/// contrast floor moved, three files would have kept the old number. The names stay local because
+/// they are used a hundred times each in this file and `Ink::` at every site is noise; what moved is
+/// where the VALUE comes from, which is the half that could ever be wrong.
+constexpr Color APP_BACKGROUND = Ink::APP_BACKGROUND;
+constexpr Color CARD_FILL = Ink::CARD_FILL;
+constexpr Color CARD_BORDER = Ink::CARD_BORDER;
+constexpr Color OUTLINE = Ink::OUTLINE;
+constexpr Color DIVIDER = Ink::DIVIDER;
+constexpr Color TEXT_PRIMARY = Ink::TEXT_PRIMARY;
+constexpr Color TEXT_MUTED = Ink::TEXT_MUTED;
+constexpr Color TEXT_DETAIL = Ink::TEXT_DETAIL;
+constexpr Color NEUTRAL_DIM = Ink::NEUTRAL_DIM;
+constexpr Color BLUE = Ink::BLUE;
+constexpr Color AMBER = Ink::AMBER;
+constexpr Color RED = Ink::RED;
+constexpr Color STAR = Ink::STAR;
 
 constexpr std::int32_t ACTION_SELECT = 1;
 constexpr std::int32_t ACTION_HUMAN = 3;
@@ -139,11 +146,6 @@ constexpr std::string_view TOKEN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
     token.push_back(TOKEN_ALPHABET[_prng.Below(static_cast<std::uint32_t>(TOKEN_ALPHABET.size()))]);
   }
   return token;
-}
-
-[[nodiscard]] std::int32_t CenterTextY(float _y, float _height)
-{
-  return static_cast<std::int32_t>(_y + (_height - static_cast<float>(FontRenderer::GlyphHeightPixels())) * 0.5F);
 }
 
 } // namespace
@@ -749,8 +751,18 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
   // panel it answered beside the wrong question, and it was the one thing that could overrun the
   // panel's height.
   const bool refused = !m_refusal.empty();
-  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X + CONSOLE_PADDING), CenterTextY(footerY, FOOTER_HEIGHT), refused ? m_refusal : summary,
+  const std::int32_t summaryY = static_cast<std::int32_t>(footerY) + 8;
+  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X + CONSOLE_PADDING), summaryY, refused ? m_refusal : summary,
                  refused ? AMBER : (!enough ? RED : (everyone ? BLUE : AMBER)), refused ? Face::SansRegular : Face::MonoRegular);
+
+  // **What `FILL WAITING WITH BOTS` does, said before it is pressed** (ADR-096). It is the one
+  // control on this screen whose effect is not in its label -- "fill" does not say WHICH seats, and
+  // pressing it turns every person still expected into a bot.
+  //
+  // **Drawn always, not on hover.** The seats page tracks no pointer, and UI-01 3.8's answer is that
+  // this game is for touch -- where a hover hint is a hint nobody ever sees.
+  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X + CONSOLE_PADDING), summaryY + LINE_HEIGHT,
+                 "Sets every WAITING FOR PLAYER seat to BOT.", TEXT_MUTED, Face::SansRegular);
 
   // ---- ENTER MATCH --------------------------------------------------------------------------------
   const auto enterWidth = static_cast<float>(FontRenderer::MeasurePixels("ENTER MATCH ›")) + 24.0F;
@@ -763,8 +775,12 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
   }
   else
   {
-    _shapes.StrokeRect(enterX, footerY + 10.0F, enterWidth, 24.0F, DIVIDER);
-    _text.DrawText(static_cast<std::int32_t>(enterX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "ENTER MATCH ›", NEUTRAL_DIM);
+    // **Readable, and inert** (ADR-096). At `NEUTRAL_DIM` over a `DIVIDER` border the button was
+    // almost invisible, so a host who could not enter had to work out both THAT it was disabled and
+    // WHY from the same faint thing. The sentence on the left is the why; this only has to say that
+    // it is not pressable, which the outline does.
+    _shapes.StrokeRect(enterX, footerY + 10.0F, enterWidth, 24.0F, OUTLINE);
+    _text.DrawText(static_cast<std::int32_t>(enterX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "ENTER MATCH ›", TEXT_MUTED);
   }
 
   const auto fillWidth = static_cast<float>(FontRenderer::MeasurePixels("FILL WAITING WITH BOTS")) + 24.0F;
@@ -776,12 +792,11 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
 
 void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
 {
-  // ---- The name, at 2x, and what this screen is -----------------------------------------------
+  // ---- The name, in the display cut, and what this screen is ----------------------------------
   //
   // The same title block screen 03 opens with, so that a host who has just come off the join screen
   // sees the lobby arrive under the same two lines rather than under a bar that replaced them.
-  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY, Face::MonoMedium,
-                 FontRenderer::COUNTDOWN_SCALE);
+  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(TITLE_Y), "LOCKSTEP", TEXT_PRIMARY, Face::MonoDisplay);
   _text.DrawText(static_cast<std::int32_t>(CONSOLE_X), static_cast<std::int32_t>(SUBTITLE_Y), "SEATS - BEFORE THE MATCH STARTS",
                  TEXT_MUTED);
 

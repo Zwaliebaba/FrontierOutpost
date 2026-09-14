@@ -35,16 +35,19 @@ class FontRenderer
 public:
   /// How many screen pixels a glyph texel occupies, on both axes, when a caller does not say.
   ///
-  /// The scale is a PER-CALL argument rather than a compile-time constant, because the UI design
-  /// settled the question ADR-013 left open: 1x (8px) everywhere on the main page, 2x (16px) for
-  /// the lock countdown and nothing else (ADR-014). One number could not say that.
+  /// The scale multiplies a baked cut by a whole number. There is no sampler on the path, so the
+  /// enlargement is an exact block of pixels rather than a filtered one.
   ///
-  /// It is always a WHOLE number, and there is no sampler on the path, so the enlargement is an
-  /// exact block of pixels rather than a filtered one.
+  /// **Nothing in this game draws at a scale other than 1 any more** (ADR-084). The lock countdown
+  /// was 2x for as long as the font was a hand-typed 8x8 grid, where doubling WAS the second size;
+  /// beside anti-aliased Plex it read as an artefact, which is the question ADR-074 left open. A
+  /// second size is now a second baked cut -- `Face::MonoDisplay` -- and the scale stays because a
+  /// whole-number blow-up is free and may be wanted again, not because anything asks for one.
   static constexpr std::uint32_t DEFAULT_SCALE = 1;
-  static constexpr std::uint32_t COUNTDOWN_SCALE = 2;
 
-  /// Which cut a string is drawn in (ADR-074). Mono carries data, sans carries sentences.
+  /// Which cut a string is drawn in (ADR-074, ADR-084). Mono carries data, sans carries sentences,
+  /// and `MonoDisplay` is Mono Medium at 16px -- the one cut that is a SIZE rather than a weight,
+  /// for the handful of strings that name what a whole pane or card is.
   ///
   /// **The face comes BEFORE the scale in every signature that takes both**, which is the reverse
   /// of the order they arrived in. Nearly every call site names a face and takes the default

@@ -70,6 +70,12 @@ bool KeyboardInput::HandleMessage(std::uint32_t _message, std::uint64_t _wParam,
     case VK_ESCAPE:
       Remember(Key::Escape);
       return true;
+    case VK_PRIOR:
+      Remember(Key::PageUp);
+      return true;
+    case VK_NEXT:
+      Remember(Key::PageDown);
+      return true;
     default:
       // Not a key this game uses. Left unconsumed so the window procedure can do whatever it
       // would have done -- Alt+F4 is not this class's business to swallow.
