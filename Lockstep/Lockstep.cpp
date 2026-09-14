@@ -103,6 +103,11 @@ struct Startup
   /// or retention, so this is for mechanics only, which is exactly what Phase 0 is for.
   std::uint32_t tickSeconds = 0;
 
+  /// `--dev` shows the controls for screens that are not finished (ADR-091). One today: the top
+  /// bar's `REPLAY`, whose sheet is a stub. Off in every shipped run, so a player never meets a
+  /// button that cannot do what it says.
+  bool developerControls = false;
+
   /// `--bots <n>` puts bots in the LAST n seats of a `--serve` match.
   ///
   /// **Without it the headless runner runs a match nobody plays.** `--serve` listens and ticks on
@@ -306,6 +311,10 @@ void SplitHostAndPort(const std::string& _target, std::string& _outHost, std::ui
     else if (words[index] == "--scale" && index + 1 < words.size())
     {
       startup.scale = static_cast<std::uint32_t>(std::strtoul(words[++index].c_str(), nullptr, 10));
+    }
+    else if (words[index] == "--dev")
+    {
+      startup.developerControls = true;
     }
   }
 
@@ -1414,6 +1423,7 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
     // control that reaches the wire and leaves reading, focusing and orbiting alone; the banner over
     // it says why. Nothing else on this screen changes.
     page.SetOffline(kind == Lockstep::ConnectionDialog::Kind::Lost);
+    page.SetDeveloperControls(_startup.developerControls);
 
     switch (dialog.TakeAction())
     {

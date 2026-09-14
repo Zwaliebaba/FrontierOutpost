@@ -10,10 +10,13 @@ stated as such, and nothing below is in the present tense unless the tree does i
 
 ## 01 · Main page — **built** (`01-main-page.png` is the capture, tick 11 of a six-seat match)
 
-**Top bar (44px, `MainPage::DrawTopBar`).** `LOCKSTEP` · `M0007 · D2/21 · 6 PLAYERS · 26 SYSTEMS`
+**Top bar (44px, `MainPage::DrawTopBar`).** `LOCKSTEP` · `D2/21 · 6 PLAYERS · 26 SYSTEMS`
 · spacer · `T8 LOCKS` + the countdown in the 16px display cut in amber (ADR-084) · `46 CR −20` —
 the purse, then in blue what this tick's queue has already committed of it, drawn only when
-something is queued (ADR-087) · `SCORE 1,284` + chip `4TH / 6` · `LDR P3 1,610` · `▶ REPLAY T7`. The left sentence is measured against what the right block leaves
+something is queued (ADR-087) · `SCORE 1,284` + chip `4TH / 6` — blue when you lead, **amber when
+your place is worse than on the last digest this client drew**, outline otherwise (ADR-091) ·
+`LDR P3 1,610` · `▶ REPLAY T7` **only under `--dev`**, because its sheet is a stub and a control
+that says its own screen is unfinished teaches that the buttons here may not work. The left sentence is measured against what the right block leaves
 and dropped a clause at a time (`- ENDS <date>` first, then the census, then only the stem). While
 the link is down `RECONNECTING` follows it in red. The `LDR` field is drawn only when somebody else
 leads (ADR-056). At the lock the countdown turns grey and the label reads `T8 LOCKED`; when the match

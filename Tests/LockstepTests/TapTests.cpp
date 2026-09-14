@@ -1904,4 +1904,44 @@ public:
   }
 };
 
+// The top bar says what it knows and hides what is not finished (ADR-091).
+TEST_CLASS(TopBarTests)
+{
+public:
+  TEST_METHOD(ReplayIsOffTheBarUnlessDeveloperControlsAreOn)
+  {
+    // Its sheet is a stub, and a control whose own title said `NOT YET WIRED` teaches a player that
+    // the buttons on this screen may do nothing -- which is what ADR-053 and ADR-077 were spent
+    // unteaching.
+    const auto simulation = PlayedMatch(2);
+    Lockstep::MainPage shipped;
+    shipped.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    const bool found = SweepFor(shipped, renderers, DrawPage, 0, 0, SCREEN_WIDTH, TOP_BAR,
+                                [&shipped] { return shipped.OpenPanel() == Lockstep::MainPage::Panel::Replay; });
+    Assert::IsFalse(found, L"a shipped build put REPLAY on the bar");
+
+    Lockstep::MainPage dev;
+    dev.Create(ViewOfSeatZero(*simulation));
+    dev.SetDeveloperControls(true);
+    const bool reachable = SweepFor(dev, renderers, DrawPage, 0, 0, SCREEN_WIDTH, TOP_BAR,
+                                    [&dev] { return dev.OpenPanel() == Lockstep::MainPage::Panel::Replay; });
+    Assert::IsTrue(reachable, L"--dev did not put REPLAY back");
+  }
+
+  TEST_METHOD(TheCensusNamesNoMatchId)
+  {
+    // `M0007` was the zero-padded TICK, which names neither the match nor the tick and changes every
+    // tick while looking like an identifier.
+    const auto simulation = PlayedMatch(7);
+    const Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+
+    // The id the view model carries is still the tick; what changed is that the bar stops printing
+    // it. Asserted through the state rather than the pixels, because the draw is a capture.
+    Assert::AreEqual(state.match.tick, static_cast<std::uint32_t>(std::stoul(state.match.id)),
+                     L"the match id stopped being the tick, so the bar may be able to show one after all");
+  }
+};
+
 } // namespace LockstepTests

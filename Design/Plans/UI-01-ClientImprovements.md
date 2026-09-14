@@ -235,6 +235,9 @@ authored framing rather than a camera distance, for the reason the ADR gives.
 ## Phase 3 — Per screen
 
 ### 3.1 Top bar
+**Done 2026-09-14 — ADR-091.** `Ink::WARN` in the third bullet is `Ink::AMBER`; there is no `WARN`
+token.
+
 - Remove `M<id>` until the snapshot carries a match id (`SnapshotView.cpp`); the census becomes `D3/21 · 6 PLAYERS · 31 SYSTEMS`. Keep the clause-dropping order.
 - Put `▶ REPLAY Tn` behind a compile-time or command-line flag (`--dev`) until 07 is wired. Remove `NOT YET WIRED` from the stub title when the flag is on; the flag is the disclosure.
 - `3RD / 6` chip: border and text in `Ink::YOU` when you lead, `Ink::WARN` when you have dropped a place since the last digest, outline otherwise. The previous place is in the prior snapshot this client drew (session memory only).

@@ -153,6 +153,17 @@ public:
 
   void Create(MatchState _state);
 
+  /// Whether this build shows the controls that are not finished yet (ADR-091).
+  ///
+  /// **`REPLAY` is the only one, and screen 07 is a stub behind it.** A button whose own title says
+  /// `NOT YET WIRED` is a button teaching a player that this screen's controls may not work, which
+  /// is the opposite of what every other decision here has been for (ADR-053, ADR-077). It stays
+  /// reachable for whoever is building it, behind `--dev`.
+  void SetDeveloperControls(bool _shown) noexcept
+  {
+    m_developerControls = _shown;
+  }
+
   /// Whether the link to the server is down (ADR-085).
   ///
   /// **It gates ORDERS and nothing else.** A client that cannot send cannot order, so every control
@@ -412,6 +423,14 @@ private:
   std::int32_t m_panelSubjectId = EventRefs::NONE;
   /// The node the digest last pointed at. Drawn with a focus ring; -1 when nothing is focused.
   std::int32_t m_focusedSystem = EventRefs::NONE;
+
+  /// Whether `--dev` was passed (ADR-091). Off in every shipped run.
+  bool m_developerControls = false;
+
+  /// The placement this page last drew, so the chip can say a place was LOST rather than only what
+  /// it is (ADR-091). Session memory and nothing more: it starts at zero, which no placement is, and
+  /// a client that joins mid-match simply has no previous place until it has drawn one.
+  std::uint32_t m_placementDrawn = 0;
 
   /// Whether the link is down (ADR-085). Set by the match loop from the connection's state; it is
   /// not part of `MatchState` because it is a fact about this client's socket rather than about the

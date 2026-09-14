@@ -168,6 +168,10 @@ void MainPage::Create(MatchState _state)
   const std::int32_t wasSubject = m_panelSubject;
   const std::int32_t wasSubjectId = m_panelSubjectId;
 
+  // Where this player stood on the digest being replaced, so the chip can say a place was lost
+  // (ADR-091). Zero on the first state, which is no placement and so never a slip.
+  m_placementDrawn = m_state.player.placement;
+
   m_state = std::move(_state);
   m_panel = Panel::None;
   m_panelSubject = EventRefs::NONE;
@@ -973,19 +977,26 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // widest member -- the leader's name -- is the one that changes.
   float cursor = Frame::SCREEN_WIDTH - 16.0F;
 
-  const std::string replayLabel = std::format("REPLAY T{}", m_state.match.tick);
-  const float replayWidth = 10.0F + 7.0F + 6.0F + static_cast<float>(FontRenderer::MeasurePixels(replayLabel)) + 10.0F;
-  const float replayX = cursor - replayWidth;
-  _shapes.StrokeRect(replayX, 13.0F, replayWidth, 22.0F, Ink::OUTLINE);
-  // The one glyph the font does not have and does not need: the replay triangle is geometry, as
-  // it is in the reference (README "Assets").
-  _shapes.FillTriangle(replayX + 10.0F, 19.0F, replayX + 17.0F, 24.0F, replayX + 10.0F, 29.0F, Ink::TEXT_PRIMARY);
-  _text.DrawText(static_cast<std::int32_t>(replayX + 23.0F), centered, replayLabel, Ink::TEXT_PRIMARY);
-  AddHit(replayX, 13.0F, replayWidth, 22.0F, Action::OpenReplay, 0);
-  cursor = replayX - 14.0F;
+  // **`REPLAY` is behind `--dev` until screen 07 is wired** (ADR-091). Its own sheet is titled
+  // `REPLAY TICK 7 - NOT YET WIRED`, which is a control teaching a player that the buttons on this
+  // screen may do nothing -- the exact lesson ADR-053 and ADR-077 were spent unteaching. It stays on
+  // the bar for whoever is building it.
+  if (m_developerControls)
+  {
+    const std::string replayLabel = std::format("REPLAY T{}", m_state.match.tick);
+    const float replayWidth = 10.0F + 7.0F + 6.0F + static_cast<float>(FontRenderer::MeasurePixels(replayLabel)) + 10.0F;
+    const float replayX = cursor - replayWidth;
+    _shapes.StrokeRect(replayX, 13.0F, replayWidth, 22.0F, Ink::OUTLINE);
+    // The one glyph the font does not have and does not need: the replay triangle is geometry, as
+    // it is in the reference (README "Assets").
+    _shapes.FillTriangle(replayX + 10.0F, 19.0F, replayX + 17.0F, 24.0F, replayX + 10.0F, 29.0F, Ink::TEXT_PRIMARY);
+    _text.DrawText(static_cast<std::int32_t>(replayX + 23.0F), centered, replayLabel, Ink::TEXT_PRIMARY);
+    AddHit(replayX, 13.0F, replayWidth, 22.0F, Action::OpenReplay, 0);
+    cursor = replayX - 14.0F;
 
-  _shapes.FillRect(cursor, 13.0F, 1.0F, 22.0F, Ink::CARD_BORDER);
-  cursor -= 15.0F;
+    _shapes.FillRect(cursor, 13.0F, 1.0F, 22.0F, Ink::CARD_BORDER);
+    cursor -= 15.0F;
+  }
 
   // **Only when the leader is somebody else** (ADR-056). "Public score, the leader is always
   // visible" is the anti-snowball, and it is about knowing who is ahead of you -- so when that is
@@ -999,10 +1010,23 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
     cursor -= static_cast<float>(FontRenderer::MeasurePixels(leaderLine)) + 8.0F;
   }
 
+  // **The chip says whether the place MOVED, not only what it is** (ADR-091). Placement is the
+  // anti-snowball's whole instrument -- the one-pager makes the score public so a player can tell
+  // they are falling behind -- and a number that is the same ink at 1st and at 6th says only where
+  // you are, never that you are sliding.
+  //
+  // Blue when you lead, amber when you have dropped since the last digest this client drew, and the
+  // ordinary outline otherwise. `m_placementDrawn` is session memory: a client that joins mid-match
+  // has no previous place, and the chip is simply not amber until it has drawn one.
+  const bool leading = m_state.player.placement == 1;
+  const bool slipped = m_placementDrawn != 0 && m_state.player.placement > m_placementDrawn;
+  const Color chipInk = leading ? Ink::BLUE : (slipped ? Ink::AMBER : Ink::OUTLINE);
+  const Color chipText = leading ? Ink::BLUE : (slipped ? Ink::AMBER : Ink::TEXT_PRIMARY);
+
   const std::string placement = std::format("{} / {}", FormatPlacement(m_state.player.placement), m_state.player.playerCount);
   const float chipWidth = static_cast<float>(FontRenderer::MeasurePixels(placement)) + 14.0F;
-  _shapes.StrokeRect(cursor - chipWidth, 14.0F, chipWidth, 20.0F, Ink::OUTLINE);
-  _text.DrawText(static_cast<std::int32_t>(cursor - chipWidth + 7.0F), centered, placement, Ink::TEXT_PRIMARY);
+  _shapes.StrokeRect(cursor - chipWidth, 14.0F, chipWidth, 20.0F, chipInk);
+  _text.DrawText(static_cast<std::int32_t>(cursor - chipWidth + 7.0F), centered, placement, chipText);
   cursor -= chipWidth + 8.0F;
 
   const std::string score = FormatScore(m_state.player.score);
@@ -1078,7 +1102,10 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
   // the state has none -- a match generated without a server has no schedule to report
   // (GeneratedMatch.h), and "- ENDS" followed by nothing reads as a truncation bug.
   const std::string census = std::format("{} PLAYERS · {} SYSTEMS", m_state.player.playerCount, m_state.totalSystems);
-  const std::string stem = std::format("M{} · D{}/{}", m_state.match.id, m_state.match.day, m_state.match.totalDays);
+  // **No `M<id>`** (ADR-091). The snapshot carries no match id, so `SnapshotView` was filling it
+  // with the zero-padded TICK -- a four-digit number beside `D3/21` and `T9 LOCKS` that names
+  // neither the match nor the tick, and changes every tick while looking like an identifier.
+  const std::string stem = std::format("D{}/{}", m_state.match.day, m_state.match.totalDays);
 
   std::vector<std::string> candidates;
   if (!m_state.match.endsAt.empty())
@@ -2167,7 +2194,9 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     // sheet lists what a replay would walk and nothing more. It said that in a seventh row, which
     // the six-row cap then clipped into `+1 MORE THAN THIS SHEET CAN SHOW` -- a sheet reporting an
     // overflow it did not have, about a row explaining that there is nothing here.
-    title = std::format("REPLAY TICK {} - NOT YET WIRED", m_panelSubject);
+    // The `--dev` flag IS the disclosure now (ADR-091): the only way to this sheet is a button that
+    // ships hidden, so the person looking at it already knows what it is.
+    title = std::format("REPLAY TICK {}", m_panelSubject);
     for (const char* phase : {"1. LOCK", "2. PRODUCTION", "3. MOVEMENT", "4. COMBAT", "5. CLAIMS", "6. DIGEST"})
     {
       rows.push_back(SheetRow{phase, std::string{}, std::string{}, NO_ACCENT, EventRefs::NONE});
