@@ -47,11 +47,13 @@ struct Headless
 {
   Neuron::ShapeRenderer shapes;
   Neuron::FontRenderer text;
+  Neuron::MeshRenderer meshes;
 
   void Begin()
   {
     shapes.BeginFrame();
     text.BeginFrame();
+    meshes.BeginFrame();
   }
 };
 
@@ -150,7 +152,7 @@ struct Headless
 void DrawPage(Lockstep::MainPage& _page, Headless& _renderers)
 {
   _renderers.Begin();
-  _page.DrawWorld(_renderers.shapes, _renderers.text);
+  _page.DrawWorld(_renderers.shapes, _renderers.text, _renderers.meshes);
   _page.DrawInterface(_renderers.shapes, _renderers.text);
 }
 

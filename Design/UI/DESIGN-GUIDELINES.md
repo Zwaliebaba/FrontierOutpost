@@ -351,14 +351,23 @@ Drawn, in painter's order (`MapRender.cpp`):
 - The sealed region: a dashed purple ground circle of radius 62 with a faint fill, a second ring
   lifted 26 units, three site pins 14 units tall, and `SEALED - OPENS T60` under the near rim.
 - Systems and fleets back to front (a depth sort, because painter's order is the whole occlusion
-  model). A system: ground shadow ellipse (owner @0.22, 2.2× wide, 0.9× tall) → 1px stem (20 units,
-  capital 30) → the dot (radius 4.5·1.15, capital 6·1.15 with a halo at 2.4×). Contested: a 1px ring.
-  Custodian: a dashed ring and `CUSTODIAN T43` under the ground point. Captured: `CAPTURED T45`
-  under the ground point **for three ticks and then not at all** (ADR-082), in one of three inks
-  (ADR-088): the viewer's own colour when they gained it, `RED` when `capturedFrom` is the viewer,
-  and the new owner's colour at 0.7 when it was between two rivals. Red means what YOU lost and
-  nothing else. Focused: a white ring at 3× the radius. The name above every node, capitals uppercased, 8px at
-  every distance.
+  model for everything flat; the balls alone are depth-tested, against each other). **A system is
+  a lit ball on a stem, and the stem's height is its yield** (ADR-103): under it a black contact
+  shadow on the plane (1.4× the ball, @0.45) and the owner's disc (0.9×, @0.27); around it a
+  dashed footprint (1px, dash 3 / gap 3, owner @0.45) whose radius is 8 + 1 per credit a tick; a
+  1px stem (owner @0.71) standing 14 + 3 per credit a tick — a capital never lower than 30, an
+  unpriced or unheld system at 20 — with a 4×1px rung every 10 units; a capital's halo at 2.4×;
+  then the ball (radius 4.5·1.15, capital 6·1.15), shaded by one world-fixed light
+  (normalize(−0.45, 0.60, 0.65)) into exactly two tones, the owner's colour and `Ink::Shaded` of
+  it, chosen per pixel so the terminator is a curve that turns as the camera orbits. Under the
+  foot, the yield as `+6` in the owner's colour @0.75, left out when it would collide with a label.
+  Contested: a 1px ring. Custodian: a dashed ring and `CUSTODIAN T43` under the ground point.
+  Captured: `CAPTURED T45` under the ground point **for three ticks and then not at all**
+  (ADR-082), in one of three inks (ADR-088): the viewer's own colour when they gained it, `RED`
+  when `capturedFrom` is the viewer, and the new owner's colour at 0.7 when it was between two
+  rivals. Red means what YOU lost and nothing else. Focused: a white ring at 3× the radius. The
+  name above every node, capitals uppercased, 8px at every distance. Ownership is colour and
+  nothing else: every owner's station is the same shape.
 - **A garrison badge** (ADR-079), for every owner with fleets STANDING at a system: a 16px filled
   chip beside the system's name carrying the total ships, placed clear of both the disc and the
   name label and stepping right when a system carries more than one. Yours is a solid `YOU` fill

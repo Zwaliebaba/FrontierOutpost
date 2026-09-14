@@ -64,6 +64,36 @@ inline constexpr Neuron::Color LOCKED_FILL = {214, 220, 228, 150};
 /// to be faint, and a legible star is a defect.
 inline constexpr Neuron::Color STAR = {214, 220, 228, 220};
 
+/// A station's two tones (ADR-103). The lit tone is the owner's colour; the dark tone is the same
+/// colour moved this far toward the app background, made once on the CPU by `Shaded`. There is no
+/// third tone: the shader picks one of the two per pixel and never mixes them (ADR-012).
+///
+/// 0.58 rather than a halving because the owner colours are already bright on a near-black
+/// ground, and a dark side that stayed vivid read as a second owner rather than as the same ball
+/// turned away from the light.
+inline constexpr float STATION_SHADE = 0.58F;
+
+/// The station's inks, as alphas over the owner's colour: its contact shadow (black), the disc it
+/// stands on, the dashed footprint whose reach is its yield, the stem whose height is its yield,
+/// and the yield written under its foot.
+inline constexpr std::uint8_t STATION_SHADOW_ALPHA = 115;
+inline constexpr std::uint8_t STATION_DISC_ALPHA = 70;
+inline constexpr std::uint8_t STATION_FOOTPRINT_ALPHA = 115;
+inline constexpr std::uint8_t STATION_STEM_ALPHA = 180;
+inline constexpr std::uint8_t STATION_YIELD_ALPHA = 190;
+
+/// The dark tone for a lit one. Opaque, because the mesh pass does not blend and a ball with a
+/// translucent dark side would be a ball with a hole in it.
+[[nodiscard]] constexpr Neuron::Color Shaded(const Neuron::Color& _lit) noexcept
+{
+  return Neuron::Mix(_lit, APP_BACKGROUND, STATION_SHADE);
+}
+
+// The pair is the right way round, as ADR-012 had every pair asserted: a station is never darker
+// where the light finds it.
+static_assert(Neuron::Luminance(Shaded(BLUE)) < Neuron::Luminance(BLUE));
+static_assert(Neuron::Luminance(Shaded(AMBER)) < Neuron::Luminance(AMBER));
+
 } // namespace Ink
 
 /// The frame, in the one place that decides it.

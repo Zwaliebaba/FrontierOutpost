@@ -6,6 +6,7 @@
 #include "DesignTokens.h"
 #include "FontRenderer.h"
 #include "MapView.h"
+#include "MeshRenderer.h"
 
 #include "Starfield.h"
 #include "KeyboardInput.h"
@@ -279,7 +280,11 @@ public:
   ///
   /// So the world is drawn, both renderers are flushed, and then the interface is drawn over it.
   /// `DrawWorld` starts the frame: it clears the hit list, which `DrawInterface` then fills.
-  void DrawWorld(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
+  ///
+  /// The world takes a third recorder, for the map's stations: lit solids, drawn by a pass that
+  /// tests depth, between the shapes under them and the shapes over them (`DrawMap`, ADR-103).
+  /// The interface has no use for it -- nothing on a rail is a solid.
+  void DrawWorld(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, Neuron::MeshRenderer& _meshes);
   void DrawInterface(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
   [[nodiscard]] const MatchState& State() const noexcept

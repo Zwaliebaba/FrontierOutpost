@@ -64,17 +64,19 @@ constexpr std::int32_t STEP = 8;
 constexpr std::int32_t TOP_BAR = 44;
 constexpr std::int32_t ORDERS_RAIL = 260;
 
-/// Two renderers with no device behind them. One per sweep rather than one per tap: `BeginFrame`
-/// resets the slice, so a single pair can draw as many frames as a test needs.
+/// Three renderers with no device behind them. One set per sweep rather than one per tap:
+/// `BeginFrame` resets the slice, so a single set can draw as many frames as a test needs.
 struct Headless
 {
   Neuron::ShapeRenderer shapes;
   Neuron::FontRenderer text;
+  Neuron::MeshRenderer meshes;
 
   void Begin()
   {
     shapes.BeginFrame();
     text.BeginFrame();
+    meshes.BeginFrame();
   }
 };
 
@@ -212,7 +214,7 @@ void DrawDialog(Lockstep::ConnectionDialog& _dialog, Headless& _renderers)
 
 void DrawPage(Lockstep::MainPage& _page, Headless& _renderers)
 {
-  _page.DrawWorld(_renderers.shapes, _renderers.text);
+  _page.DrawWorld(_renderers.shapes, _renderers.text, _renderers.meshes);
   _page.DrawInterface(_renderers.shapes, _renderers.text);
 }
 
@@ -2261,6 +2263,67 @@ public:
 
     Assert::AreEqual(std::size_t{0}, PageBand(page).size(), L"a rail with room to spare drew a page band");
     Assert::IsFalse(WasDrawn(renderers, "END"), L"a rail with room to spare drew the band's copy");
+  }
+};
+
+// The stations are balls now, recorded into a third recorder and lit by the shader between two
+// authored tones (ADR-103). What is pinned here is the half of that a screenshot cannot say: that
+// every ball on a played board was recorded, whole, with its lit tone brighter than its dark one --
+// ADR-012's static_assert, made against a board rather than a header -- and that the page records
+// its shapes in two layers around them, so the rings and badges land over the balls.
+TEST_CLASS(StationBallTests)
+{
+public:
+  [[nodiscard]] static Neuron::Color Unpack(std::uint32_t _packed)
+  {
+    return Neuron::Color{static_cast<std::uint8_t>(_packed & 0xFFU), static_cast<std::uint8_t>((_packed >> 8U) & 0xFFU),
+                         static_cast<std::uint8_t>((_packed >> 16U) & 0xFFU), static_cast<std::uint8_t>((_packed >> 24U) & 0xFFU)};
+  }
+
+  TEST_METHOD(EveryStationIsABallLitBrighterThanItIsShaded)
+  {
+    Headless renderers;
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*PlayedMatch(6)));
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    const auto vertices = renderers.meshes.Vertices();
+    Assert::IsFalse(vertices.empty(), L"a board with systems on it recorded no balls");
+    Assert::AreEqual(static_cast<std::size_t>(0), vertices.size() % 3, L"a ball is whole triangles");
+
+    std::size_t stations = 0;
+    for (const Lockstep::SystemNode& node : page.State().graph.systems)
+    {
+      if (!Lockstep::HasFlag(node.flags, Lockstep::SystemFlags::RegionAnchor))
+      {
+        ++stations;
+      }
+    }
+    Assert::IsTrue(vertices.size() >= stations * Neuron::MeshRenderer::SphereVertexCount(8), L"fewer balls than stations on the board");
+
+    for (const Neuron::MeshRenderer::MeshVertex& vertex : vertices)
+    {
+      Assert::IsTrue(Neuron::Luminance(Unpack(vertex.litColor)) > Neuron::Luminance(Unpack(vertex.darkColor)),
+                     L"a ball is darker where the light finds it");
+      Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.litColor).alpha, L"the mesh pass does not blend, so a tone is opaque");
+      Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.darkColor).alpha);
+    }
+  }
+
+  TEST_METHOD(TheWorldIsRecordedInTwoShapeLayersAroundTheBalls)
+  {
+    Headless renderers;
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*PlayedMatch(6)));
+    renderers.Begin();
+    page.DrawWorld(renderers.shapes, renderers.text, renderers.meshes);
+
+    const Neuron::ShapeRenderer::Batch ground = renderers.shapes.TakeUnflushed();
+    const Neuron::ShapeRenderer::Batch over = renderers.shapes.TakeUnflushed();
+    Assert::IsFalse(ground.vertices.empty(), L"nothing under the balls: no ground, no lanes, no stems");
+    Assert::IsFalse(over.vertices.empty(), L"nothing over the balls: the rings and badges would be drawn under them");
+    Assert::IsTrue(renderers.shapes.TakeUnflushed().vertices.empty(), L"the world is exactly two shape layers");
   }
 };
 

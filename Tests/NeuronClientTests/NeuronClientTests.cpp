@@ -113,6 +113,27 @@ public:
                      (std::wstring(L"pair ") + std::to_wstring(index) + L" is the wrong way round").c_str());
     }
   }
+
+  // `Mix` is how a station's dark tone is made from its lit one (ADR-103), and it is the one place
+  // a third colour is ever computed from two -- so what it computes is pinned by value.
+  TEST_METHOD(MixWalksEveryChannelFromOneColorToTheOther)
+  {
+    constexpr Neuron::Color FROM = {200, 100, 0, 255};
+    constexpr Neuron::Color TO = {0, 100, 200, 55};
+
+    constexpr Neuron::Color start = Neuron::Mix(FROM, TO, 0.0F);
+    Assert::IsTrue(start.red == 200 && start.green == 100 && start.blue == 0 && start.alpha == 255,
+                   L"nought of the way is the first colour");
+
+    constexpr Neuron::Color end = Neuron::Mix(FROM, TO, 1.0F);
+    Assert::IsTrue(end.red == 0 && end.green == 100 && end.blue == 200 && end.alpha == 55, L"all of the way is the second");
+
+    constexpr Neuron::Color half = Neuron::Mix(FROM, TO, 0.5F);
+    Assert::IsTrue(half.red == 100 && half.green == 100 && half.blue == 100 && half.alpha == 155, L"halfway is halfway on every channel");
+
+    constexpr Neuron::Color past = Neuron::Mix(FROM, TO, 3.0F);
+    Assert::IsTrue(past.red == 0 && past.blue == 200, L"past the end is clamped rather than extrapolated");
+  }
 };
 
 // The screen, which is now one number rather than a virtual resolution and a scale factor

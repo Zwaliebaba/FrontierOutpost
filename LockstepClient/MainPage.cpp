@@ -908,7 +908,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
   return false;
 }
 
-void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text)
+void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::MeshRenderer& _meshes)
 {
   m_hits.clear();
 
@@ -930,7 +930,7 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text)
                        .animationSeconds = m_animationSeconds,
                        .sheetOpen = m_panel != Panel::None};
 
-  const std::vector<MapHit> mapHits = Lockstep::DrawMap(_shapes, _text, frame);
+  const std::vector<MapHit> mapHits = Lockstep::DrawMap(_shapes, _text, _meshes, frame);
 
   // **`RESET` is drawn only when the camera is somewhere other than where the map opened**
   // (ADR-090). There has been no way back to the authored framing since the map got a camera

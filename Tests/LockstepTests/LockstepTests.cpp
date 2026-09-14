@@ -20,12 +20,49 @@
 #include "pch.h"
 #include "CppUnitTest.h"
 
+#include "MapRender.h"
 #include "MatchState.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
 namespace LockstepTests
 {
+
+// The map's third axis carries data (ADR-103): a station stands as tall as its yield. The rule is
+// pure and these are the three things about it that decide what a player reads off the board.
+TEST_CLASS(StationGeometryTests)
+{
+public:
+  TEST_METHOD(AnUnknownYieldStandsAtThePlainHeightRatherThanLyingDown)
+  {
+    // Zero is a system nobody holds, or a board the server has not priced: both stand.
+    Assert::IsTrue(Lockstep::StemHeightFor(0, false) > 0.0F, L"a station lying on the ground");
+    Assert::IsTrue(Lockstep::StemHeightFor(0, true) > Lockstep::StemHeightFor(0, false), L"a capital stands taller than a plain system");
+    // And the base yield stands exactly where every system stood before the axis meant anything,
+    // so a priced board and an unpriced one look alike until a system earns more than the base.
+    Assert::AreEqual(Lockstep::StemHeightFor(0, false), Lockstep::StemHeightFor(2, false), 0.0001F);
+  }
+
+  TEST_METHOD(HeightAndFootprintRiseWithYield)
+  {
+    for (std::uint32_t yield = 1; yield < 40; ++yield)
+    {
+      Assert::IsTrue(Lockstep::StemHeightFor(yield + 1, false) > Lockstep::StemHeightFor(yield, false), L"a richer system stands lower");
+      Assert::IsTrue(Lockstep::FootprintRadiusFor(yield + 1) > Lockstep::FootprintRadiusFor(yield), L"a richer system reaches less far");
+    }
+  }
+
+  TEST_METHOD(ACapitalNeverStandsLowerThanItDid)
+  {
+    // A capital's floor is its old fixed height: a capital halved by custodian spoils is still the
+    // tallest thing in its cluster, because the capital is the thing the cluster is about.
+    const float floor = Lockstep::StemHeightFor(0, true);
+    Assert::AreEqual(floor, Lockstep::StemHeightFor(1, true), 0.0001F, L"a poor capital dropped below its floor");
+    Assert::IsTrue(Lockstep::StemHeightFor(16, true) > floor, L"a rich capital does not rise above it");
+    Assert::AreEqual(Lockstep::StemHeightFor(16, false), Lockstep::StemHeightFor(16, true), 0.0001F,
+                     L"above the floor a capital and a plain system are the same scale");
+  }
+};
 
 TEST_CLASS(OwnerColorTests)
 {

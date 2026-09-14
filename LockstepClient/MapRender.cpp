@@ -49,14 +49,50 @@ constexpr float GRID_STEP = 80.0F;
 constexpr std::uint32_t GRID_LINES_ACROSS = static_cast<std::uint32_t>((GRID_MAX_DESIGN - GRID_MIN_DESIGN) / GRID_STEP);
 constexpr float NODE_RADIUS = 4.5F * 1.15F;
 constexpr float CAPITAL_RADIUS = 6.0F * 1.15F;
+/// Where a station stands when its yield is unknown, and the least a capital ever stands (ADR-103).
 constexpr float STEM_HEIGHT = 20.0F;
 constexpr float CAPITAL_STEM_HEIGHT = 30.0F;
 constexpr float SITE_PIN_HEIGHT = 14.0F;
-constexpr float SHADOW_WIDE = 2.2F;
-constexpr float SHADOW_TALL = 0.9F;
 constexpr float HALO_SCALE = 2.4F;
 constexpr float RING_SCALE = 2.2F;
 constexpr float FLEET_HOVER = 14.0F;
+
+// ---- A station's height is its yield (ADR-103) -------------------------------------------------
+//
+// **The map's third axis carries data.** Design space is flat and height is the axis it did not
+// have (ADR-017); until now a stem was one of two fixed numbers and said only "capital" or "not".
+// Now a station stands as tall as the credits it pays a tick, its footprint on the plane reaches
+// as far, and the number is written under its foot -- three readings of one fact, so a rich system
+// is seen before it is read.
+
+/// World units at nothing, and per credit a tick on top. Fourteen and three put the base yield
+/// (two credits) at exactly `STEM_HEIGHT`, so a system that pays the base stands where every
+/// system stood before the axis meant anything and a board the server has not priced looks the
+/// same; a capital with a full mining station stands at sixty-two.
+constexpr float STEM_BASE = 14.0F;
+constexpr float STEM_PER_UNIT = 3.0F;
+/// The dashed ring on the plane, in world units at nothing and per credit. One rather than three a
+/// credit, because footprints are side by side where stems are not: a satellite is a short lane
+/// from its capital, and two footprints that met would read as one territory.
+constexpr float FOOTPRINT_BASE = 8.0F;
+constexpr float FOOTPRINT_PER_UNIT = 1.0F;
+constexpr float FOOTPRINT_DASH = 3.0F;
+/// A rung every ten world units up the stem, so a height can be READ against a scale rather than
+/// only compared with its neighbour's. Four pixels wide, one tall, centred on the stem.
+constexpr float STEM_RUNG_SPACING = 10.0F;
+constexpr float STEM_RUNG_WIDTH = 4.0F;
+/// The contact shadow under a ball and the disc it stands on, as multiples of the ball's radius.
+/// The shadow is black and wider than the ball; the disc is the owner's colour and narrower, so
+/// the two read as a ball standing on a plate rather than as a puddle of the owner's colour.
+constexpr float CONTACT_SHADOW_SCALE = 1.4F;
+constexpr float OWNER_DISC_SCALE = 0.9F;
+
+/// One light for the whole galaxy, in WORLD space: normalize(-0.45, 0.60, 0.65), from above, from
+/// the -x side, and from +z -- toward the eye at the opening yaw, so the balls open lit. Fixed to
+/// the world and not to the eye, which is the whole point: orbit the camera and the lit side of
+/// every ball turns with the galaxy, and the map reads as a place seen from somewhere rather than
+/// a picture with a highlight painted on (ADR-103).
+constexpr Neuron::OrbitCamera::WorldPoint LIGHT_DIRECTION = {-0.45341F, 0.60455F, 0.65493F};
 
 /// The garrison badge beside a system's name (ADR-079). 16 is the `LOCKED` chip's height, which is
 /// what a chip is on this screen; there is no rounded-rectangle primitive and every other chip here
@@ -157,6 +193,41 @@ void DrawGroundCircle(ShapeRenderer& _shapes, const MapFrame& _frame, float _des
       const Neuron::OrbitCamera::ScreenPoint& b = rim[(segment + 1) % SEGMENTS];
       _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, _outline, 1.0F);
     }
+  }
+}
+
+/// A dashed circle on the plane, its dash walked in SCREEN pixels around the projected rim, so two
+/// footprints of different sizes read as the same material (`ShapeRenderer::DashedLine`'s reason).
+/// The sealed region's ring keeps `DrawGroundCircle`'s dash of every other segment; this is a
+/// different thing, and it is the station's (ADR-103).
+void DrawGroundDashedRing(ShapeRenderer& _shapes, const MapFrame& _frame, float _designX, float _designY, float _radius,
+                          const Color& _color, float _dashPixels)
+{
+  constexpr std::uint32_t SEGMENTS = 40;
+  std::array<Neuron::OrbitCamera::ScreenPoint, SEGMENTS> rim = {};
+  for (std::uint32_t segment = 0; segment < SEGMENTS; ++segment)
+  {
+    const float angle = TWO_PI * static_cast<float>(segment) / static_cast<float>(SEGMENTS);
+    rim[segment] =
+      _frame.view.Camera().Project(MapView::Ground(_designX + _radius * std::cos(angle), _designY + _radius * std::sin(angle)));
+    if (!rim[segment].visible)
+    {
+      return;
+    }
+  }
+
+  // Each chord continues the pattern from where the last one left it: an offset of minus the
+  // distance walked so far is what puts the next dash boundary where the previous chord's
+  // arithmetic says it falls, so the ring is one pattern and not forty.
+  float walked = 0.0F;
+  for (std::uint32_t segment = 0; segment < SEGMENTS; ++segment)
+  {
+    const Neuron::OrbitCamera::ScreenPoint& a = rim[segment];
+    const Neuron::OrbitCamera::ScreenPoint& b = rim[(segment + 1) % SEGMENTS];
+    _shapes.DashedLine(a.xPixels, a.yPixels, b.xPixels, b.yPixels, _color, 1.0F, _dashPixels, _dashPixels, -walked);
+    const float runX = b.xPixels - a.xPixels;
+    const float runY = b.yPixels - a.yPixels;
+    walked += std::sqrt(runX * runX + runY * runY);
   }
 }
 
@@ -262,6 +333,24 @@ struct LabelField
     }
     return at;
   }
+
+  /// Claims a box at exactly `_baselineY` when nothing already placed overlaps it, and says whether
+  /// it did. For ink that is optional -- the yield under a station (ADR-103) -- which is better left
+  /// out than nudged to where it no longer belongs to its station. Lanes are not consulted: a
+  /// station's foot is where its lanes meet, and a two-glyph number a lane runs under is still a
+  /// number.
+  [[nodiscard]] bool TryPlace(float _centerX, std::int32_t _baselineY, std::uint32_t _widthPixels)
+  {
+    const auto top = static_cast<float>(_baselineY);
+    const Box box{_centerX - static_cast<float>(_widthPixels) * 0.5F, top, _centerX + static_cast<float>(_widthPixels) * 0.5F,
+                  top + static_cast<float>(FontRenderer::GlyphHeightPixels())};
+    if (std::any_of(placed.begin(), placed.end(), [&box](const Box& _other) { return Overlaps(box, _other); }))
+    {
+      return false;
+    }
+    placed.push_back(box);
+    return true;
+  }
 };
 
 /// The fleets STANDING at one system, gathered per owner. What a garrison badge says (ADR-079).
@@ -322,38 +411,118 @@ struct Garrison
   return garrisons;
 }
 
-void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame, std::vector<MapHit>& _hits, LabelField& _labels,
-                std::int32_t _index)
+/// Where a station stands on the screen this frame, from its node: what both halves of drawing it
+/// need, computed the same way twice so the ground half and the overlay half cannot disagree.
+struct Station
+{
+  bool visible = false;
+  bool capital = false;
+  float worldRadius = 0.0F;
+  float stemHeight = 0.0F;
+  Neuron::OrbitCamera::ScreenPoint ground = {};
+  Neuron::OrbitCamera::ScreenPoint top = {};
+  /// The ball's radius in pixels, sized at the depth the BALL is at rather than the ground point
+  /// below it: a stem leans away from the camera, so the two stop being the same distance once the
+  /// view is steep.
+  float radiusPixels = 0.0F;
+};
+
+[[nodiscard]] Station PlaceStation(const MapFrame& _frame, const SystemNode& _node)
 {
   const Neuron::OrbitCamera& camera = _frame.view.Camera();
+
+  Station station;
+  station.capital = HasFlag(_node.flags, SystemFlags::Capital);
+  station.worldRadius = station.capital ? CAPITAL_RADIUS : NODE_RADIUS;
+  station.stemHeight = StemHeightFor(_node.production, station.capital);
+  station.ground = camera.Project(MapView::Ground(_node.positionX, _node.positionY));
+  station.top = camera.Project(MapView::Above(_node.positionX, _node.positionY, station.stemHeight));
+  station.visible = station.ground.visible && station.top.visible;
+  station.radiusPixels = station.worldRadius * camera.PixelsPerWorldUnitAt(station.top.depth);
+  return station;
+}
+
+/// The lit tone of a station's ball: its owner's colour, made opaque against the map's ground.
+///
+/// The mesh pass does not blend (ADR-014 gives blending to the interface passes and nothing else),
+/// so a colour that carries an alpha -- unheld space is the neutral grey at 115 -- would draw at
+/// full strength as a solid. Compositing it once, here, against the ground the ball stands over is
+/// what keeps an unclaimed ball as muted as an unclaimed disc was.
+[[nodiscard]] Color BallTone(const Color& _owner)
+{
+  return WithAlpha(Neuron::Mix(Ink::APP_BACKGROUND, _owner, static_cast<float>(_owner.alpha) / 255.0F), Neuron::OPAQUE_ALPHA);
+}
+
+/// The half of a station that lies UNDER its ball: shadow, disc, footprint, stem and halo into the
+/// shape recorder, and the ball itself into the mesh recorder (ADR-103). Back to front, in the
+/// order the mockup lists them.
+void DrawStationGround(ShapeRenderer& _shapes, Neuron::MeshRenderer& _meshes, const MapFrame& _frame, std::int32_t _index)
+{
   const SystemNode& node = _frame.state.graph.systems[static_cast<std::size_t>(_index)];
-
-  const bool capital = HasFlag(node.flags, SystemFlags::Capital);
-  const float worldRadius = capital ? CAPITAL_RADIUS : NODE_RADIUS;
-  const float stemHeight = capital ? CAPITAL_STEM_HEIGHT : STEM_HEIGHT;
-
-  const Neuron::OrbitCamera::ScreenPoint ground = camera.Project(MapView::Ground(node.positionX, node.positionY));
-  const Neuron::OrbitCamera::ScreenPoint top = camera.Project(MapView::Above(node.positionX, node.positionY, stemHeight));
-  if (!ground.visible || !top.visible)
+  const Station station = PlaceStation(_frame, node);
+  if (!station.visible)
   {
     return;
   }
 
   const Color owner = OwnerColor(node.owner, _frame.state.viewer);
-  // Sized at the depth the NODE is at, not the ground point below it: a stem leans away from the
-  // camera, so the two stop being the same distance once the view is steep.
-  const float radius = worldRadius * camera.PixelsPerWorldUnitAt(top.depth);
+  constexpr Color NO_FILL = {0, 0, 0, 0};
 
-  // The shadow is a ground circle, so it deforms with the camera like everything else on the
-  // plane -- round from overhead, a sliver from low down.
-  DrawGroundCircle(_shapes, _frame, node.positionX, node.positionY, worldRadius * SHADOW_WIDE, WithAlpha(owner, 56), {0, 0, 0, 0}, false);
+  // The ground circles deform with the camera like everything else on the plane -- round from
+  // overhead, a sliver from low down. Black under the ball, the owner on the plate, and the yield
+  // as a dashed reach around both.
+  DrawGroundCircle(_shapes, _frame, node.positionX, node.positionY, station.worldRadius * CONTACT_SHADOW_SCALE,
+                   WithAlpha(Neuron::BLACK, Ink::STATION_SHADOW_ALPHA), NO_FILL, false);
+  DrawGroundCircle(_shapes, _frame, node.positionX, node.positionY, station.worldRadius * OWNER_DISC_SCALE,
+                   WithAlpha(owner, Ink::STATION_DISC_ALPHA), NO_FILL, false);
+  DrawGroundDashedRing(_shapes, _frame, node.positionX, node.positionY, FootprintRadiusFor(node.production),
+                       WithAlpha(owner, Ink::STATION_FOOTPRINT_ALPHA), FOOTPRINT_DASH);
 
-  _shapes.Line(ground.xPixels, ground.yPixels, top.xPixels, top.yPixels, WithAlpha(owner, 140));
-
-  if (capital)
+  // The stem, with a rung every ten units so its height is a reading and not only a comparison.
+  const Color stemInk = WithAlpha(owner, Ink::STATION_STEM_ALPHA);
+  _shapes.Line(station.ground.xPixels, station.ground.yPixels, station.top.xPixels, station.top.yPixels, stemInk);
+  for (float height = STEM_RUNG_SPACING; height < station.stemHeight; height += STEM_RUNG_SPACING)
   {
-    _shapes.FillEllipse(top.xPixels, top.yPixels, radius * HALO_SCALE, radius * HALO_SCALE, WithAlpha(owner, 46));
+    const Neuron::OrbitCamera::ScreenPoint rung = _frame.view.Camera().Project(MapView::Above(node.positionX, node.positionY, height));
+    if (rung.visible)
+    {
+      _shapes.FillRect(std::round(rung.xPixels) - STEM_RUNG_WIDTH * 0.5F, std::round(rung.yPixels), STEM_RUNG_WIDTH, 1.0F, stemInk);
+    }
   }
+
+  if (station.capital)
+  {
+    _shapes.FillEllipse(station.top.xPixels, station.top.yPixels, station.radiusPixels * HALO_SCALE, station.radiusPixels * HALO_SCALE,
+                        WithAlpha(owner, 46));
+  }
+
+  // The ball: a lit solid in the world at the top of the stem, its two tones authored here and
+  // chosen between per pixel by the light (ADR-103). Ownership stays colour-only -- the shape is
+  // the same for everybody.
+  const Color lit = BallTone(owner);
+  _meshes.Sphere(MapView::Above(node.positionX, node.positionY, station.stemHeight), station.worldRadius, lit, Ink::Shaded(lit),
+                 Neuron::MeshRenderer::SegmentsForRadius(station.radiusPixels));
+}
+
+/// The half of a station that sits OVER its ball: the rings, the name, what is written under its
+/// foot, its hit, and the garrison badges. Recorded after the layer boundary, so it is drawn after
+/// the mesh pass.
+void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame, std::vector<MapHit>& _hits,
+                        LabelField& _labels, std::int32_t _index)
+{
+  const SystemNode& node = _frame.state.graph.systems[static_cast<std::size_t>(_index)];
+  const Station station = PlaceStation(_frame, node);
+  if (!station.visible)
+  {
+    return;
+  }
+
+  const Neuron::OrbitCamera::ScreenPoint& ground = station.ground;
+  const Neuron::OrbitCamera::ScreenPoint& top = station.top;
+  const float radius = station.radiusPixels;
+  const bool capital = station.capital;
+  const Color owner = OwnerColor(node.owner, _frame.state.viewer);
+
   if (HasFlag(node.flags, SystemFlags::Contested))
   {
     _shapes.StrokeEllipse(top.xPixels, top.yPixels, radius * RING_SCALE, radius * RING_SCALE, owner);
@@ -367,8 +536,6 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
     _shapes.StrokeEllipse(top.xPixels, top.yPixels, radius * 3.0F, radius * 3.0F, Ink::TEXT_PRIMARY);
   }
 
-  _shapes.FillEllipse(top.xPixels, top.yPixels, radius, radius, owner);
-
   // Labels are 8px at every distance. The reference draws every map label at one size and the
   // game has one font at one size (ADR-014), so a far system's name is exactly as legible as a
   // near one's -- which on a map you read rather than admire is the right trade.
@@ -381,10 +548,12 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
     _labels.Place(top.xPixels, static_cast<std::int32_t>(std::lround(top.yPixels - radius)) - 13, FontRenderer::MeasurePixels(label));
   DrawCentered(_text, top.xPixels, labelY, label, Ink::TEXT_PRIMARY);
 
+  const std::int32_t underFoot = static_cast<std::int32_t>(std::lround(ground.yPixels)) + 8;
+  bool footTaken = false;
   if (node.custodianSince != 0)
   {
-    DrawCentered(_text, ground.xPixels, static_cast<std::int32_t>(std::lround(ground.yPixels)) + 8,
-                 std::format("CUSTODIAN T{}", node.custodianSince), Ink::TEXT_MUTED);
+    DrawCentered(_text, ground.xPixels, underFoot, std::format("CUSTODIAN T{}", node.custodianSince), Ink::TEXT_MUTED);
+    footTaken = true;
   }
   // **A capture is news for three ticks and then it is the map** (ADR-082). Six standing labels on
   // a board a player is winning is six things to read past on every tick, and none of them changed
@@ -398,8 +567,23 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
   {
     const bool lostByYou = node.capturedFrom == _frame.state.viewer;
     const Color ink = lostByYou ? Ink::RED : WithAlpha(owner, CAPTURE_GAIN_ALPHA);
-    DrawCentered(_text, ground.xPixels, static_cast<std::int32_t>(std::lround(ground.yPixels)) + 8,
-                 std::format("CAPTURED T{}", node.capturedAt), node.owner == _frame.state.viewer ? owner : ink);
+    DrawCentered(_text, ground.xPixels, underFoot, std::format("CAPTURED T{}", node.capturedAt),
+                 node.owner == _frame.state.viewer ? owner : ink);
+    footTaken = true;
+  }
+
+  // **The yield, written where the stem meets the ground** (ADR-103): the number the height is a
+  // picture of, in the owner's colour, one line lower when the foot already carries news. Left out
+  // rather than nudged when a label is already there, because a number that has moved off its
+  // station is a number about some other station.
+  if (node.production != 0)
+  {
+    const std::string yield = std::format("+{}", node.production);
+    const std::int32_t yieldY = footTaken ? underFoot + LINE_HEIGHT : underFoot;
+    if (_labels.TryPlace(ground.xPixels, yieldY, FontRenderer::MeasurePixels(yield)))
+    {
+      DrawCentered(_text, ground.xPixels, yieldY, yield, WithAlpha(owner, Ink::STATION_YIELD_ALPHA));
+    }
   }
 
   _hits.push_back(MapHit{.x = top.xPixels - radius * 3.0F,
@@ -484,33 +668,70 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
   return std::clamp(_progress, margin, 1.0F - margin);
 }
 
-void DrawFleet(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame, std::vector<MapHit>& _hits, LabelField& _labels,
-               std::int32_t _index)
+/// Where a fleet in transit is drawn this frame: its foot on the lane and its head above it,
+/// computed the same way for both halves of drawing it.
+struct FleetMarker
+{
+  bool visible = false;
+  float designX = 0.0F;
+  float designY = 0.0F;
+  Neuron::OrbitCamera::ScreenPoint foot = {};
+  Neuron::OrbitCamera::ScreenPoint head = {};
+};
+
+[[nodiscard]] FleetMarker PlaceFleet(const MapFrame& _frame, const Fleet& _fleet)
 {
   const Neuron::OrbitCamera& camera = _frame.view.Camera();
+  const SystemNode& from = _frame.state.graph.systems[static_cast<std::size_t>(_fleet.from)];
+  const SystemNode& to = _frame.state.graph.systems[static_cast<std::size_t>(_fleet.to)];
+  const float drawnAt = DrawnProgress(camera, from, to, _fleet.progress);
+
+  FleetMarker marker;
+  marker.designX = from.positionX + (to.positionX - from.positionX) * drawnAt;
+  marker.designY = from.positionY + (to.positionY - from.positionY) * drawnAt;
+  marker.foot = camera.Project(MapView::Ground(marker.designX, marker.designY));
+  marker.head = camera.Project(MapView::Above(marker.designX, marker.designY, FLEET_HOVER));
+  marker.visible = marker.foot.visible && marker.head.visible;
+  return marker;
+}
+
+/// The fleet's stem, under the balls with the stations' stems.
+void DrawFleetStem(ShapeRenderer& _shapes, const MapFrame& _frame, std::int32_t _index)
+{
   const Fleet& fleet = _frame.state.fleets[static_cast<std::size_t>(_index)];
-
-  const SystemNode& from = _frame.state.graph.systems[static_cast<std::size_t>(fleet.from)];
-  const SystemNode& to = _frame.state.graph.systems[static_cast<std::size_t>(fleet.to)];
-  const float drawnAt = DrawnProgress(camera, from, to, fleet.progress);
-  const float designX = from.positionX + (to.positionX - from.positionX) * drawnAt;
-  const float designY = from.positionY + (to.positionY - from.positionY) * drawnAt;
-
-  const Neuron::OrbitCamera::ScreenPoint foot = camera.Project(MapView::Ground(designX, designY));
-  const Neuron::OrbitCamera::ScreenPoint head = camera.Project(MapView::Above(designX, designY, FLEET_HOVER));
-  if (!foot.visible || !head.visible)
+  const FleetMarker marker = PlaceFleet(_frame, fleet);
+  if (!marker.visible)
   {
     return;
   }
 
   const Color owner = OwnerColor(fleet.owner, _frame.state.viewer);
-  _shapes.Line(foot.xPixels, foot.yPixels, head.xPixels, head.yPixels, WithAlpha(owner, 153));
+  _shapes.Line(marker.foot.xPixels, marker.foot.yPixels, marker.head.xPixels, marker.head.yPixels, WithAlpha(owner, 153));
+}
+
+/// The arrowhead, the label and the hit, over the balls: a marker a ball could cover is a fleet the
+/// player cannot see is there.
+void DrawFleetOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame, std::vector<MapHit>& _hits, LabelField& _labels,
+                      std::int32_t _index)
+{
+  const Neuron::OrbitCamera& camera = _frame.view.Camera();
+  const Fleet& fleet = _frame.state.fleets[static_cast<std::size_t>(_index)];
+  const FleetMarker marker = PlaceFleet(_frame, fleet);
+  if (!marker.visible)
+  {
+    return;
+  }
+
+  const SystemNode& from = _frame.state.graph.systems[static_cast<std::size_t>(fleet.from)];
+  const SystemNode& to = _frame.state.graph.systems[static_cast<std::size_t>(fleet.to)];
+  const Neuron::OrbitCamera::ScreenPoint& head = marker.head;
+  const Color owner = OwnerColor(fleet.owner, _frame.state.viewer);
 
   // The arrowhead points along the lane IN WORLD SPACE and is then projected, so it turns with the
   // camera and keeps meaning "that way" rather than "that way on the screen when the map happened
   // to be seen from the front".
-  const Neuron::OrbitCamera::ScreenPoint ahead = camera.Project(
-    MapView::Above(designX + (to.positionX - from.positionX) * 0.02F, designY + (to.positionY - from.positionY) * 0.02F, FLEET_HOVER));
+  const Neuron::OrbitCamera::ScreenPoint ahead = camera.Project(MapView::Above(
+    marker.designX + (to.positionX - from.positionX) * 0.02F, marker.designY + (to.positionY - from.positionY) * 0.02F, FLEET_HOVER));
   float dirX = 1.0F;
   float dirY = 0.0F;
   if (ahead.visible)
@@ -576,7 +797,22 @@ bool CaptureIsNews(std::uint32_t _capturedAt, std::uint32_t _tick) noexcept
   return _capturedAt != 0 && _tick <= _capturedAt + CAPTURE_NEWS_TICKS;
 }
 
-std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame)
+float StemHeightFor(std::uint32_t _production, bool _capital) noexcept
+{
+  if (_production == 0)
+  {
+    return _capital ? CAPITAL_STEM_HEIGHT : STEM_HEIGHT;
+  }
+  const float stands = STEM_BASE + static_cast<float>(_production) * STEM_PER_UNIT;
+  return _capital ? std::max(stands, CAPITAL_STEM_HEIGHT) : stands;
+}
+
+float FootprintRadiusFor(std::uint32_t _production) noexcept
+{
+  return FOOTPRINT_BASE + static_cast<float>(_production) * FOOTPRINT_PER_UNIT;
+}
+
+std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::MeshRenderer& _meshes, const MapFrame& _frame)
 {
   std::vector<MapHit> hits;
   LabelField labels;
@@ -585,8 +821,29 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
   const float paneWidth = Frame::SCREEN_WIDTH - Frame::DIGEST_WIDTH - Frame::ORDERS_WIDTH;
   const float paneHeight = Frame::SCREEN_HEIGHT - Frame::TOP_BAR_HEIGHT;
   _frame.view.SetViewport(paneX, Frame::TOP_BAR_HEIGHT, paneWidth, paneHeight);
-  _frame.view.FrameContent(_frame.contentCenter, _frame.contentRadius, CAPITAL_STEM_HEIGHT + CAPITAL_RADIUS);
+
+  // Framed to the tallest stem on the board, not to a constant: height is the yield now (ADR-103),
+  // and a camera framed to the old capital height would put the richest system's ball above the
+  // pane. Never less than a capital's floor, so an unpriced board frames as it always did.
+  float tallest = CAPITAL_STEM_HEIGHT;
+  for (const SystemNode& node : _frame.state.graph.systems)
+  {
+    if (!HasFlag(node.flags, SystemFlags::RegionAnchor))
+    {
+      tallest = std::max(tallest, StemHeightFor(node.production, HasFlag(node.flags, SystemFlags::Capital)));
+    }
+  }
+  _frame.view.FrameContent(_frame.contentCenter, _frame.contentRadius, tallest + CAPITAL_RADIUS);
   const Neuron::OrbitCamera& camera = _frame.view.Camera();
+
+  // The same camera, handed to the mesh pass as a matrix, with the light and the pane it projects
+  // into. Set here, after the framing, so the balls and their labels are placed by one camera.
+  _meshes.SetView(Neuron::MeshRenderer::View{.viewProjection = camera.ViewProjection(),
+                                             .lightDirection = LIGHT_DIRECTION,
+                                             .viewportXPixels = paneX,
+                                             .viewportYPixels = Frame::TOP_BAR_HEIGHT,
+                                             .viewportWidthPixels = paneWidth,
+                                             .viewportHeightPixels = paneHeight});
 
   _shapes.FillVerticalGradient(paneX, Frame::TOP_BAR_HEIGHT, paneWidth, paneHeight, MAP_TOP, MAP_MIDDLE, 0.45F, MAP_BOTTOM);
   _text.SetClipRect(paneX, Frame::TOP_BAR_HEIGHT, paneWidth, paneHeight);
@@ -782,15 +1039,35 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
 
   std::sort(drawables.begin(), drawables.end(), [](const Drawable& _a, const Drawable& _b) { return _a.depth > _b.depth; });
 
+  // Two passes over the same order, with the layer boundary between them (ADR-103). Everything
+  // UNDER a ball first -- shadows, discs, footprints, stems -- and the balls themselves into the
+  // mesh recorder; then the boundary; then everything OVER a ball -- rings, arrowheads, names,
+  // badges -- so that the mesh pass drawn between the two shape layers lands exactly where the
+  // mockup puts it. The balls are depth-tested against nothing but other balls; every flat thing
+  // still layers by this order.
   for (const Drawable& drawable : drawables)
   {
     if (drawable.isFleet)
     {
-      DrawFleet(_shapes, _text, _frame, hits, labels, drawable.index);
+      DrawFleetStem(_shapes, _frame, drawable.index);
     }
     else
     {
-      DrawSystem(_shapes, _text, _frame, hits, labels, drawable.index);
+      DrawStationGround(_shapes, _meshes, _frame, drawable.index);
+    }
+  }
+
+  _shapes.EndLayer();
+
+  for (const Drawable& drawable : drawables)
+  {
+    if (drawable.isFleet)
+    {
+      DrawFleetOverlay(_shapes, _text, _frame, hits, labels, drawable.index);
+    }
+    else
+    {
+      DrawStationOverlay(_shapes, _text, _frame, hits, labels, drawable.index);
     }
   }
 

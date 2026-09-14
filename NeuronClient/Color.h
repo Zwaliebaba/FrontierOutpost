@@ -37,6 +37,26 @@ struct Color
   return static_cast<std::uint32_t>(_color.red) + static_cast<std::uint32_t>(_color.green) + static_cast<std::uint32_t>(_color.blue);
 }
 
+/// `_from` moved `_toward` of the way to `_to`, channel by channel, alpha included: 0 is `_from`,
+/// 1 is `_to`, and the byte is rounded rather than truncated.
+///
+/// **The one place two named colours become a third, on the CPU, at authoring time.** A pass that
+/// draws two tones (ADR-012) has to get its second tone from somewhere, and the choice is either
+/// a second name per material or a rule applied once, here, to the first. This is the rule. It is
+/// deliberately not something a shader has: a colour mixed on the GPU per pixel is the gradient
+/// ADR-012 forbids, and a colour mixed here is a value a test can read.
+[[nodiscard]] inline constexpr Color Mix(const Color& _from, const Color& _to, float _toward) noexcept
+{
+  const float toward = _toward < 0.0F ? 0.0F : (_toward > 1.0F ? 1.0F : _toward);
+  const auto channel = [toward](std::uint8_t _a, std::uint8_t _b)
+  {
+    const float mixed = static_cast<float>(_a) + (static_cast<float>(_b) - static_cast<float>(_a)) * toward;
+    return static_cast<std::uint8_t>(mixed + 0.5F);
+  };
+  return Color{channel(_from.red, _to.red), channel(_from.green, _to.green), channel(_from.blue, _to.blue),
+               channel(_from.alpha, _to.alpha)};
+}
+
 /// Opaque, because nothing in this renderer blends. The alpha channel is in the format because
 /// R8G8B8A8 has one, not because anything reads it (ADR-011).
 inline constexpr std::uint8_t OPAQUE_ALPHA = 0xFF;

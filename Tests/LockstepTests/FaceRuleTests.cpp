@@ -107,6 +107,7 @@ struct Screen
 {
   Neuron::ShapeRenderer shapes;
   Neuron::FontRenderer text;
+  Neuron::MeshRenderer meshes;
 
   std::vector<Screen> screens;
   const auto collect = [&text, &screens](const char* _name)
@@ -144,7 +145,8 @@ struct Screen
   main.Create(state);
   shapes.BeginFrame();
   text.BeginFrame();
-  main.DrawWorld(shapes, text);
+  meshes.BeginFrame();
+  main.DrawWorld(shapes, text, meshes);
   main.DrawInterface(shapes, text);
   collect("the main page");
 
