@@ -1,6 +1,6 @@
 # UI-01 — What the client's screens still cost a player
 
-**Status:** **Phases 1 and 2 done (ADR-079 to ADR-090), 2026-09-13/14, every [ASK] in them answered by the owner. Phase 3 not started. No capture has been retaken — that is one pass at the end.** Written 2026-09-13 as a UX review and revised the same day against
+**Status:** **Every item done or answered, 2026-09-13/14 (ADR-079 to ADR-099).** Phases 1, 2 and 3.1–3.7 are built; 3.8 and 3.9 are owner decisions recorded as ADRs whose implementation is `Design/Plans/UI-02-TouchTargets.md`, held back because each touches every draw call. **No capture has been retaken** — that is one pass at the end, and ADR-098 argues for doing UI-02 first so it is not done twice. Written 2026-09-13 as a UX review and revised the same day against
 ADR-077 and ADR-078, which landed between the review and the first item. Item 1.1 is rescoped and
 item 2.3 carried a sentence those ADRs made false; both are marked below. Nothing else has been
 built. Archive this when the final checklist passes.
@@ -288,9 +288,15 @@ carries every player's score and placement, so nothing was added to the wire.
 - **Done when:** unit test in `DigestViewTests`; ADR-044's open question closed.
 
 ### 3.8 Input target decision **[ASK]**
+**Answered 2026-09-14 — ADR-098: touch.** The work is `Design/Plans/UI-02-TouchTargets.md` §1, as
+this item itself asks.
+
 - Copy says "tap" everywhere; buttons are 18px, rail rows 21px. Decide mouse-only or touch. If touch: buttons ≥ 32px in the digest and rail rows ≥ 32px, which changes every layout constant — do it as its own plan. If mouse-only: change "tap" → "click" in every player-facing string and in DESIGN-GUIDELINES.md, and state the decision under §Frame.
 
 ### 3.9 Case **[ASK]**
+**Answered 2026-09-14 — ADR-099: mixed case for card titles.** The work is
+`Design/Plans/UI-02-TouchTargets.md` §2, held back with §1 because both touch every draw call.
+
 - Propose mixed-case event-card titles (`Battle at Ulme`) with uppercase reserved for chips, section headers, and status words (`LOCKED`, `CAPTURED`). Blocked on `FaceRuleTests` discriminator (it tells label from sentence by lowercase presence) — replace with an explicit face tag on each string. Write the ADR and stop; do not implement without the owner's answer.
 
 ---

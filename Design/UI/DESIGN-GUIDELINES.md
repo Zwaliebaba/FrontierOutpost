@@ -14,6 +14,14 @@ ships — this document cites it and does not restate what it does not have to.
   `Frame::TOP_BAR_HEIGHT`, `DIGEST_WIDTH`, `ORDERS_WIDTH`. The map is what is left between the rails
   and is drawn first; the rails' opaque backgrounds are what confine it (ADR-017).
 - 1px separators `rgba(255,255,255,0.10)` (`Ink::CARD_BORDER`, 26/255).
+- **This game is for touch, and its targets do not meet the floor yet** (ADR-098). Every
+  player-facing string says *tap*, `PointerInput` is built on the Windows Pointer API for a finger,
+  and `SHEET_ROW_HEIGHT`'s own comment names **44** as the smallest a finger hits reliably. Measured
+  2026-09-14: sheet row 44 · sheet header 36 · sheet band, digest title and page band 22 · top bar
+  chips 20–22 · **locks rail row 21** · **digest card button 18** · `RESET` chip 18 · **map garrison
+  badge 16**. The three used most are the three smallest. **Measure a new control against 44, not
+  against the one beside it** — that is how 16 happened. The work is
+  `Design/Plans/UI-02-TouchTargets.md`.
 - Rail padding 14px. Card padding **10px** (`MainPage::CARD_PADDING`; the handoff said 8). Line
   height **is not a number here** — it is `FontRenderer::LineHeightPixels`, 17px for the face as
   baked; see §Font. Everything on whole pixels.
@@ -97,7 +105,10 @@ the five characters ADR-014 substituted and re-measuring the six strings it shor
   for one.
 - Emphasis is colour, case, **weight** — one step, Regular against Medium — and now **size**, one
   step, 12px against 16px. Labels and
-  headers are uppercase (`Uppercased()`), sentences mixed case. **The shouting is no longer forced
+  headers are uppercase (`Uppercased()`), sentences mixed case. **Card titles become mixed case** — `Battle at Ulme` — with uppercase kept for chips, section
+  headers and status words (ADR-099, decided and **not yet built**: it needs `FaceRuleTests` to tell
+  a label from a sentence by an explicit tag rather than by looking for a lowercase letter).
+  **The shouting is no longer forced
   by the font**: the 8×8 face had no lowercase and Plex has both, so it is a choice the sheet is
   making, and ADR-074 left open whether it should go on being made. One thing depends on the
   current answer — `FaceRuleTests` tells a label from a sentence by whether it carries a lowercase
