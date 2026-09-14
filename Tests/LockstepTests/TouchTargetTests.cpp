@@ -16,7 +16,10 @@
 #include "pch.h"
 #include "CppUnitTest.h"
 
+#include "ConnectionDialog.h"
+#include "JoinPage.h"
 #include "MainPage.h"
+#include "SeatsPage.h"
 #include "SnapshotView.h"
 
 #include "BotPolicy.h"
@@ -166,6 +169,33 @@ void AuditMainPage(Lockstep::MatchState _state, const wchar_t* _what)
   }
 }
 
+/// The same audit over any page's hit list, with the action printed by whatever names it.
+///
+/// **Three more pages, and they are not one page's problem.** `TouchTargetTests` walked the main
+/// page only, because that is where ADR-098's three worst offenders were. The join screen, the
+/// lobby and the connection dialog are the first three screens a player ever touches and their
+/// controls were never measured at all.
+template <typename Hits, typename Name> [[nodiscard]] std::vector<std::string> UndersizedIn(const Hits& _hits, Name _name)
+{
+  std::vector<std::string> offenders;
+  for (const auto& hit : _hits)
+  {
+    if (hit.height + 0.01F < FLOOR_PIXELS || hit.width + 0.01F < FLOOR_PIXELS)
+    {
+      offenders.push_back(std::format("{} {}x{}", _name(hit.action), hit.width, hit.height));
+    }
+  }
+  return offenders;
+}
+
+void AuditHits(const std::vector<std::string>& _offenders, const wchar_t* _what)
+{
+  if (!_offenders.empty())
+  {
+    Assert::Fail((std::wstring{_what} + L": targets under the 44px floor. " + Listed("undersized", _offenders)).c_str());
+  }
+}
+
 } // namespace
 
 TEST_CLASS(TouchTargetTests)
@@ -228,6 +258,51 @@ public:
     Lockstep::MatchState state = ViewOfSeatZero(*simulation);
     state.orders.locked = true;
     AuditMainPage(std::move(state), L"the main page at the lock");
+  }
+
+  TEST_METHOD(TheJoinScreenHasNoUndersizedTarget)
+  {
+    // The first screen anybody sees, and the one a player who typed a token wrong comes back to.
+    // Two fields, `HIDE` and `JOIN`.
+    Headless renderers;
+    Lockstep::JoinPage page;
+    page.Offer("127.0.0.1:7341", "5H7K-K2MU");
+
+    renderers.Begin();
+    page.DrawWorld(renderers.shapes, renderers.text);
+    page.DrawInterface(renderers.shapes, renderers.text);
+
+    AuditHits(UndersizedIn(page.Hits(), [](std::int32_t _action) { return std::format("join action {}", _action); }), L"the join screen");
+  }
+
+  TEST_METHOD(TheLobbyHasNoUndersizedTarget)
+  {
+    // Six seat cards with a three-way toggle each, the detail panel's `COPY` and `NEW TOKEN`, the
+    // bot styles, `PRACTICE MATCH`, and the footer's two.
+    Headless renderers;
+    Lockstep::SeatsPage page{Lockstep::GenerateSeatTokens(Lockstep::SeatsPage::SEAT_COUNT)};
+
+    renderers.Begin();
+    page.DrawWorld(renderers.shapes, renderers.text);
+    page.DrawInterface(renderers.shapes, renderers.text);
+
+    AuditHits(UndersizedIn(page.Hits(), [](std::int32_t _action) { return std::format("lobby action {}", _action); }), L"the lobby");
+  }
+
+  TEST_METHOD(TheConnectionDialogHasNoUndersizedTarget)
+  {
+    // Its buttons are the only way out of a screen that has nothing else on it, which makes them
+    // the targets it is worst to miss.
+    Headless renderers;
+    Lockstep::ConnectionDialog dialog;
+    dialog.Update(Lockstep::ConnectionDialog::Kind::Lost, Lockstep::ConnectionDialog::Facts{}, 0.0);
+
+    renderers.Begin();
+    dialog.Draw(renderers.shapes, renderers.text);
+
+    AuditHits(UndersizedIn(dialog.Hits(), [](Lockstep::ConnectionDialog::Action _action)
+                           { return std::format("dialog action {}", static_cast<std::int32_t>(_action)); }),
+              L"the connection dialog");
   }
 
   TEST_METHOD(TheDeveloperBarHasNoUndersizedTarget)

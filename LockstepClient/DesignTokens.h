@@ -82,6 +82,43 @@ inline constexpr float TOP_BAR_HEIGHT = 44.0F;
 inline constexpr float DIGEST_WIDTH = 400.0F;
 inline constexpr float ORDERS_WIDTH = 260.0F;
 
+/// **The smallest target a finger hits reliably** (ADR-098, ADR-100), in both dimensions.
+///
+/// It lives here, with the frame, because it is a rule about every screen and not a constant of
+/// one. It was `MainPage::SHEET_ROW_HEIGHT`'s comment for a year, applied to sheet rows and to
+/// nothing else, and that is exactly what a number with no home does.
+///
+/// **How a control reaches it depends on what it sits beside.** A target in a COLUMN OF SIBLINGS
+/// grows its box, and the things under it move down. An ISOLATED CHIP grows only its hit: it stays
+/// the size the layout around it needs, with a rectangle this big centred on it. A control that is
+/// neither and cannot be this big says why where it is declared.
+inline constexpr float TOUCH_FLOOR = 44.0F;
+
+/// A rectangle, for the one function below that has to return four numbers.
+struct Box
+{
+  float x;
+  float y;
+  float width;
+  float height;
+};
+
+/// One rectangle grown AROUND ITS MIDDLE to the touch floor in whichever dimension is short.
+///
+/// **For an isolated chip**, where the drawing stays the size the layout around it needs and only
+/// the target grows (ADR-100). Around the middle rather than from the corner, so the chip stays
+/// where it is drawn -- a rectangle anchored at the top-left would put the target below a badge
+/// that sits on a label's line.
+///
+/// It is here rather than in each page for the reason the palette is: four screens grow chips this
+/// way, and four copies of a `std::max` is four chances for one of them to be adjusted alone.
+[[nodiscard]] inline constexpr Box GrownToFloor(float _x, float _y, float _width, float _height) noexcept
+{
+  const float width = _width < TOUCH_FLOOR ? TOUCH_FLOOR : _width;
+  const float height = _height < TOUCH_FLOOR ? TOUCH_FLOOR : _height;
+  return Box{_x - (width - _width) * 0.5F, _y - (height - _height) * 0.5F, width, height};
+}
+
 } // namespace Frame
 
 /// The same colour at a different opacity. Fading is how this screen says *not now* -- a locked

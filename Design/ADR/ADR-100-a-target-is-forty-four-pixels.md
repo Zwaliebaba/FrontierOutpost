@@ -80,22 +80,52 @@ place the table was most confident.
 - **A control that cannot be 44 has to say why where it is declared.** The garrison badge's
   declaration says it, and so does every other isolated chip.
 
+## The other three screens
+
+Added 2026-09-14, the same day: the audit was extended to `JoinPage`, `SeatsPage` and
+`ConnectionDialog`, which had never been measured at all. It named **28 offenders** — the join
+screen's two fields (442x30), its `HIDE` (36x16) and `JOIN` (62x23); the lobby's eighteen toggle
+segments (47x18, 75x18 and **33x18**), `COPY`, `NEW TOKEN`, `PRACTICE MATCH` and the footer's two;
+and both of the dialog's buttons (24 tall).
+
+Three things came out of fixing them that the main page had not shown.
+
+**The floor moved to `Frame::TOUCH_FLOOR` in `DesignTokens.h`**, beside the palette and the frame's
+own widths, with `Frame::GrownToFloor` next to it. Four screens grow isolated chips this way, and
+four copies of a `std::max` is four chances for one of them to be adjusted alone — which is the
+argument ADR-083 already made about colour.
+
+**The floor is a floor in BOTH dimensions, and the lobby is where that earned its keep.** The
+three-way's segments were sized to their labels, so `BOT` — three glyphs — was 33 pixels wide and
+the hardest control on that screen to hit, while being the one that hands a seat to a computer.
+Equal thirds is the obvious fix and is the one that file's own comment already rules out (`BOT AT
+T1` is nine glyphs and a third of a 212-pixel card is seven), so each segment is padded to the floor
+instead and the gap between them absorbs it.
+
+**The join screen's card now adds itself up.** Making a field 44 moved everything under it, which
+was seven hand-placed Y constants — four would still have been right and three would silently have
+overlapped. They are derived from each other in the order the card stacks them, which is the lesson
+`SeatsPage::CARD_HEIGHT` already carries a paragraph about.
+
 ## What this changes elsewhere
 
 - **Design/:** `DESIGN-GUIDELINES.md` §Frame (the floor and the two methods),
   `Design/Plans/UI-02-TouchTargets.md`. `Design/UI/SCREENS.md` for the main page's new row heights.
-- **Code:** `LockstepClient/MainPage.{h,cpp}` (`TOUCH_FLOOR`, `BUTTON_HEIGHT`, `RAIL_SECTION_HEIGHT`,
-  `DIGEST_PAGE_HEIGHT`, the action row's reservation), `LockstepClient/MapRender.cpp` (the badge's
-  hit).
+- **Code:** `LockstepClient/DesignTokens.h` (`Frame::TOUCH_FLOOR`, `Frame::GrownToFloor`),
+  `LockstepClient/MainPage.{h,cpp}` (`BUTTON_HEIGHT`, `RAIL_SECTION_HEIGHT`, `DIGEST_PAGE_HEIGHT`,
+  the action row's reservation), `LockstepClient/MapRender.cpp` (the badge's hit),
+  `LockstepClient/JoinPage.cpp` (the card's derived stack), `LockstepClient/ConnectionDialog.cpp`
+  (the card's buttons and the banner's hits), `Lockstep/SeatsPage.{h,cpp}` (the three-way, the
+  detail panel's chips, the footer's band). Each of the four pages exposes `Hits()` for the audit.
 - **Tests:** `Tests/LockstepTests/TouchTargetTests.cpp` (new).
 - **AGENTS.md:** nothing.
 
 ## Verification
 
-`TouchTargetTests` over five boards -- the opening board, a played board, a sheet over the board, a
-locked board and the developer bar -- asserts that no recorded hit is under 44 in either dimension.
-Screenshots of the main page at tick 0 and mid-match, which is where the action row's overdraw was
-found.
+`TouchTargetTests` over eight screens -- the opening board, a played board, a sheet over the board, a
+locked board, the developer bar, the join screen, the lobby and the connection dialog -- asserts that
+no recorded hit is under 44 in either dimension. Screenshots of all four, which is where the action
+row's overdraw was found and where the lobby's taller cards were checked to still fit the frame.
 
 ## Open questions
 

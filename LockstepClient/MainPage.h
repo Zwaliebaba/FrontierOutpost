@@ -1,5 +1,9 @@
 #pragma once
 
+// **Included by the HEADER, not only the .cpp**, since 2026-09-14: the page's layout constants are
+// derived from `Frame::TOUCH_FLOOR`, which is a rule about every screen rather than a number this
+// page owns (ADR-100). It costs a colour list and two helpers, which this page's .cpp already had.
+#include "DesignTokens.h"
 #include "FontRenderer.h"
 #include "MapView.h"
 
@@ -69,7 +73,7 @@ public:
   /// tappable at 44 has boundaries a finger cannot see and two neighbours would overlap. An ISOLATED
   /// CHIP with space around it grows only its HIT: the map's garrison badge, the top bar's replay
   /// chip. A 44px badge beside a system name would be a different map, not a bigger box.
-  static constexpr float TOUCH_FLOOR = 44.0F;
+  static constexpr float TOUCH_FLOOR = Frame::TOUCH_FLOOR;
 
   /// A button inside an event card, and the padding inside the verdict box.
   ///

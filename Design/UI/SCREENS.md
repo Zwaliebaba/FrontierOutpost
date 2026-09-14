@@ -209,10 +209,13 @@ match is ADR-034's third open question, still open.
 ## 03 · Join — **built** (`03-join.png`)
 
 `JoinPage`: the sky (a fixed camera on the same star field as the map) with a 480px column centred:
-`LOCKSTEP` in the 16px display cut and `JOIN A MATCH - ONE SEAT PER TOKEN`; a 234px card with a
+`LOCKSTEP` in the 16px display cut and `JOIN A MATCH - ONE SEAT PER TOKEN`; a **283px** card with a
 `SERVER` field, a `TOKEN` field **shown by default with `HIDE` beside it** (ADR-095 — a token names a
 seat, not a person, and is not authentication), two lines saying so, and `JOIN >` filled once both
-fields have text (outlined `CONNECTING` while a connection is in flight). **No `LAST USED` label, no
+fields have text (outlined `CONNECTING` while a connection is in flight). **The fields and the
+button are 44px** and the card's height is the sum of what it stacks rather than a number (ADR-100);
+`HIDE` stays a 16px word on the `TOKEN` label's line with a 44px hit around it, registered before
+the field's so the overlap resolves in its favour. **No `LAST USED` label, no
 `SEAT` box and no footer**: the first promised a memory the client cannot have (R13), the second was
 never populated, and the third taught a command line to somebody already on the screen that replaces
 it — `Design/GETTING-STARTED.md` has the flags. The caret starts in the token field; Tab switches, Enter is JOIN. A failure on this
@@ -267,6 +270,11 @@ never be true at once (`Lockstep.cpp`, the match loop; `RunJoinScreen` for the j
 - `CONNECTING` neutral — the server, *Reaching the server.* then *Sending token - waiting for
   Welcome.* (ADR-043: the connect no longer blocks, so the dialog covers the whole wait), *Waiting
   3s.*, `CANCEL`. No progress bar.
+Its buttons are **44px in the card and 24px in the banner** (ADR-100). The card's height is composed
+from its button row, so growing the buttons grew the card; the banner is already exactly 44 tall, so
+a button drawn at the floor inside it would touch both edges — it stays 24 and its HIT takes the
+whole band.
+
 - `REFUSED - UNKNOWN TOKEN` red — `BACK` · `EDIT TOKEN` (filled) on the join screen; `QUIT` alone
   in the match loop, where there is nothing behind the dialog to go back to. (`RefusalReason::UnknownToken`)
 - `REFUSED - SEAT IN USE` red — `BACK`/`QUIT` · `RETRY` (filled), which opens a new connection
@@ -353,14 +361,17 @@ The host's lobby, after they have joined their own server with the first token i
 `LOCKSTEP` at 2×, `SEATS - BEFORE THE MATCH STARTS`, and `6 SEATS - 1 OF 6 CONNECTED` on the right;
 a 960px console holding a 3×2 grid of seat cards (swatch, `SEAT 01`, `YOU` or the empire name,
 the token, a status line, and the three-way `HUMAN | BOT AT T1 | BOT` — one control for one
-question, ADR-066, its segments sized to their labels), the practice box under the grid (`FIRST
+question, ADR-066, its segments sized to their labels **and never under 44px wide**, which is what
+`BOT` at three glyphs was, in a **44px** row, ADR-100), the practice box under the grid (`FIRST
 MATCH?` and an amber `PRACTICE MATCH >` with the two numbers that differ — a tick every two minutes
 against six hours, five bots, thirty ticks), a detail panel for the selected seat on the right (what
-a token is; the token with `COPY` to the clipboard and `NEW TOKEN`; whose seat it is; for a bot seat
+a token is; the token with `COPY` to the clipboard and `NEW TOKEN` — both drawn as they were, with
+44px hits around them; whose seat it is; for a bot seat
 `HOW IT PLAYS` with three styles; for a human seat one line saying what the card's setting does),
 and a footer with the summary (`WAITING FOR SORNE, TAMSIN - 4 OF 6 HERE`
 in amber, `ALL 6 SEATS CONNECTED - YOU ARE SEAT 01` in blue) or the refusal to the last tap,
-`FILL WAITING WITH BOTS`, and `ENTER MATCH >` — filled only when every seat is connected, a bot, or
+`FILL WAITING WITH BOTS` and `ENTER MATCH >`, both drawn at 24px inside the footer's own 44px band
+and tappable across the whole of it (ADR-100) — `ENTER MATCH` filled only when every seat is connected, a bot, or
 marked to be taken over; Enter is the same. **Disabled it is `TEXT_MUTED` in an `OUTLINE` border**
 rather than nearly invisible, and the footer's own sentence is the reason (ADR-096). Under the
 summary, always drawn: *Sets every WAITING FOR PLAYER seat to BOT.* — the one control here whose

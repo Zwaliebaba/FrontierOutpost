@@ -42,9 +42,10 @@ own comment names 44 as "the smallest target a finger hits reliably" and it is a
   The sheet's 36px header and its 22px section band are **not** raised: the header's close corner is
   already a 36x36 hit and the section band is never a target. Recorded in the guidelines rather than
   changed.
-- **Still to do: the other three screens.** `JoinPage`, `SeatsPage` and `ConnectionDialog` have no
-  audit over them yet -- `TouchTargetTests` walks the main page's five boards only, because those are
-  the boards `Headless` can draw. Each of the three is its own page class with its own hit list.
+- **Done.** `JoinPage`, `SeatsPage` and `ConnectionDialog`, audited the same way and by the same
+  test. It named 28 offenders across the three. The floor moved to `Frame::TOUCH_FLOOR` in
+  `DesignTokens.h` on the way, with `Frame::GrownToFloor` beside it, because four screens growing
+  chips is four copies of a `std::max` otherwise.
 - Re-derive every capture's tap coordinate in `Design/UI/README.md` §Photographing.
 
 **Done when.** Every `AddHit` rectangle on every screen is at least the floor in both dimensions,
@@ -76,5 +77,7 @@ the sheet captures retaken; `DESIGN-GUIDELINES.md` §Copy says the rule in the p
 |---|---|
 | ADR-100 | A target is 44 pixels, and a sibling grows its box while an isolated chip grows only its hit. `TouchTargetTests` is the audit. |
 | ADR-101 | The locks rail scrolls, and its page band -- not the wheel -- is the control. |
+
+Section 1 is done. What is left in this plan is section 2, and then the captures.
 
 Commits: `Hold the main page's targets to the 44px floor`, and the rail's scroll.

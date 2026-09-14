@@ -153,14 +153,6 @@ public:
   /// Taken, so a held finger presses a button once.
   [[nodiscard]] Action TakeAction() noexcept;
 
-private:
-  struct Button
-  {
-    std::string label;
-    Action action = Action::None;
-    bool filled = false;
-  };
-
   struct Hit
   {
     float x;
@@ -168,6 +160,24 @@ private:
     float width;
     float height;
     Action action;
+  };
+
+  /// Every tappable rectangle the last draw recorded.
+  ///
+  /// Public for the reason `MainPage::Hits` is: the touch-target audit (ADR-100) measures what
+  /// `AddHit` actually recorded rather than reading the constants a box is composed from, and this
+  /// is the same list `HandleTap` tests against.
+  [[nodiscard]] const std::vector<Hit>& Hits() const noexcept
+  {
+    return m_hits;
+  }
+
+private:
+  struct Button
+  {
+    std::string label;
+    Action action = Action::None;
+    bool filled = false;
   };
 
   /// How a dialog is dressed.
