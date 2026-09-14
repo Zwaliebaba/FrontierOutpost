@@ -309,6 +309,39 @@ public:
     Assert::IsTrue(tiles > 0, L"the sheet drew no tile, so the tile measurement asserted nothing");
   }
 
+  TEST_METHOD(ADigestButtonIsDrawnAtTwentyEightAndTappedAtFortyFour)
+  {
+    // **The one control on this page that is deliberately SMALLER than the floor** (ADR-110). A
+    // button's box is 28 and its target is grown to 44 around it, which is ADR-100's isolated-chip
+    // rule rather than its column one -- so the claim worth measuring is not "nothing is under the
+    // floor", which the sweeps above already make, but that the grow is happening at all. A button
+    // box that quietly became 44 again would pass every other test in this file.
+    Assert::IsTrue(Lockstep::MainPage::BUTTON_HEIGHT < FLOOR_PIXELS, L"the button box is no longer under the floor, so nothing is grown");
+    Assert::AreEqual(FLOOR_PIXELS, Lockstep::MainPage::BUTTON_HEIGHT + 2.0F * Lockstep::MainPage::BUTTON_GAP, 0.01F,
+                     L"a button and its two gaps no longer come to the floor, so two grown targets can overlap");
+
+    const auto simulation = PlayedMatch(0);
+    Headless renderers;
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    DrawPage(page, renderers);
+
+    // The standing `BUILD` the opening digest carries (ADR-056), in the digest column -- the sheet's
+    // tiles queue the same order from over the map pane and are measured by the test above.
+    std::size_t buttons = 0;
+    for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
+    {
+      if (hit.action != Lockstep::MainPage::Action::ToggleBuild || hit.x >= Lockstep::Frame::DIGEST_WIDTH)
+      {
+        continue;
+      }
+      Assert::AreEqual(FLOOR_PIXELS, hit.height, 0.01F, L"a digest button's target is not the floor exactly");
+      Assert::IsTrue(hit.width + 0.01F >= FLOOR_PIXELS, L"a digest button's target is narrower than the floor");
+      ++buttons;
+    }
+    Assert::IsTrue(buttons > 0, L"the opening digest drew no build button, so nothing was measured");
+  }
+
   TEST_METHOD(TheLockedBoardHasNoUndersizedTarget)
   {
     // At the lock most controls stop being targets at all (ADR-060, ADR-065), which is a different

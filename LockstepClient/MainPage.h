@@ -76,14 +76,32 @@ public:
   /// chip. A 44px badge beside a system name would be a different map, not a bigger box.
   static constexpr float TOUCH_FLOOR = Frame::TOUCH_FLOOR;
 
-  /// A button inside an event card, and the padding inside the verdict box.
+  /// A button's BOX, and the gap that carries it to the touch floor (ADR-110).
   ///
-  /// 18 is unchanged from the 8x8 font and deliberately so: a line BOX grew from 8 to 17, but the
-  /// ink in an uppercase button label did not -- Plex's cap height at 12px is 8.4px, within half a
-  /// pixel of the height the old capitals had. Growing the chrome to match the box would inflate
-  /// every control on the rail to fit ascender room that a shouted label never uses. What had to
-  /// change is where the box is PUT, which `BandTopForText` now answers.
-  static constexpr float BUTTON_HEIGHT = TOUCH_FLOOR;
+  /// **28 drawn and 44 tapped**, which is the isolated-chip half of ADR-100 rather than the column
+  /// half: a row of buttons under a card's last line is not a column of siblings, so growing the
+  /// box to 44 spent sixteen pixels of every card on ascender room a shouted label never uses. The
+  /// gap is what makes the grown hit safe -- 28 + 8 + 8 is exactly 44, so a hit centred on one
+  /// button reaches the middle of the gap and no further, and two neighbours cannot overlap.
+  static constexpr float BUTTON_HEIGHT = 28.0F;
+  static constexpr float BUTTON_GAP = 8.0F;
+
+  /// Inside a button: the label segment's side padding, and the number segment's (ADR-110). The
+  /// number is narrower because it is a number -- it is scanned rather than read, and the hairline
+  /// or the shade beside it is doing the separating a wider gutter would otherwise have to.
+  static constexpr float BUTTON_LABEL_PADDING = 10.0F;
+  static constexpr float BUTTON_NUMBER_PADDING = 8.0F;
+
+  /// The dash of the one dashed border in this client, which is what says *not a target*
+  /// (ADR-110, `Ink::INERT_BORDER`). The same 3-on-3 the map's footprint ring is drawn with, so
+  /// the tree has one dash pattern rather than two that nearly agree.
+  static constexpr float INERT_DASH = 3.0F;
+  static constexpr float INERT_GAP = 3.0F;
+
+  /// The square that precedes a locked button's label (ADR-110). Six pixels, which is the level
+  /// ladder's pip: a glyph this screen already draws at a size it already has.
+  static constexpr float LOCK_GLYPH_SIZE = 6.0F;
+
   static constexpr float VERDICT_BOX_PADDING = 5.0F;
 
   /// How many ticks of digest the server keeps per player (`NeuronServer::Session::DIGEST_HISTORY`).
@@ -440,9 +458,14 @@ public:
   }
 
 private:
-  /// One tappable row of the locks rail, kept so `SetPointer` can tell when the pointer crossed
-  /// from one to another. Only the rail's rows are here: it is the only list that draws a hover.
-  struct RailRow
+  /// One rectangle that draws a HOVER, kept so `SetPointer` can tell when the pointer crossed from
+  /// one to another and the page has to be redrawn (ADR-047).
+  ///
+  /// **Every control that has a hover state is here, not only the rail's rows** (ADR-110). The rail
+  /// was the one list that filled under the pointer; the control vocabulary gives a hover to every
+  /// outlined and committed button too, and a button whose hover the redraw never noticed would be
+  /// a button that lit only when something else on the screen changed.
+  struct HoverRegion
   {
     float x;
     float y;
@@ -475,8 +498,8 @@ private:
   /// Create: the graph does not move between ticks.
   void MeasureContent();
 
-  /// Which of `m_railRows` the pointer is over, or `EventRefs::NONE`.
-  [[nodiscard]] std::int32_t RailRowUnderPointer() const noexcept;
+  /// Which of `m_hoverRegions` the pointer is over, or `EventRefs::NONE`.
+  [[nodiscard]] std::int32_t RegionUnderPointer() const noexcept;
 
   /// Where the digest column would start if it went back one screenful, measured from the card
   /// heights the frame just laid out (ADR-080).
@@ -507,7 +530,19 @@ private:
 
   void DrawTopBar(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
   void DrawDigestRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
-  [[nodiscard]] static Action ActionFor(EventActionKind _kind) noexcept;
+
+  /// What a digest button does, and what it names.
+  ///
+  /// **Two numbers rather than one, because the two enums count different things.** What an event
+  /// OFFERS is a fact about the match (`EventActionKind`, whose target is a build row, a fleet or a
+  /// proposal); what a tap DOES is a fact about this screen, and the index it needs is not always
+  /// the one the action carries (ADR-057).
+  struct DigestTarget
+  {
+    Action action = Action::None;
+    std::int32_t index = EventRefs::NONE;
+  };
+  [[nodiscard]] DigestTarget TargetOf(const EventAction& _action) const noexcept;
   void DrawLocksRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
   /// A circle lying ON the ground plane, projected. Shadows and the sealed region are both this:
@@ -616,11 +651,11 @@ private:
   /// testing be the same code rather than two that must agree.
   std::vector<HitRegion> m_hits;
 
-  /// The locks rail's rows, rebuilt with it, and where the pointer is over them.
-  std::vector<RailRow> m_railRows;
+  /// Everything that fills under the pointer, rebuilt with the frame, and where the pointer is.
+  std::vector<HoverRegion> m_hoverRegions;
   float m_pointerXPixels = -1.0F;
   float m_pointerYPixels = -1.0F;
-  std::int32_t m_hoveredRailRow = EventRefs::NONE;
+  std::int32_t m_hoveredRegion = EventRefs::NONE;
 };
 
 } // namespace Lockstep

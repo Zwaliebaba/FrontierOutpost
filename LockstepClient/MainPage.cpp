@@ -134,6 +134,248 @@ constexpr float REGION_VOLUME_HEIGHT = 26.0F;
   return digits;
 }
 
+// ---- One control vocabulary (ADR-110) ----------------------------------------------------------
+
+/// What a control IS, which is the whole of how it is drawn.
+///
+/// **Four states and a lock, and the same five are applied to a button, a tile, a sheet row and a
+/// rail row** (ADR-110). The hue never changes between them -- only the fill, the border's style
+/// and the alpha -- so a player learns one vocabulary rather than one per surface, and a queued
+/// order looks the same wherever they meet it.
+enum class ControlState : std::uint8_t
+{
+  /// The one recommended thing to do. **One per screen** (ADR-089).
+  Primary,
+  /// Any other order, and every link.
+  Outlined,
+  /// Yours, queued, and the next tap takes it back (ADR-053).
+  Committed,
+  /// Cannot be ordered, and the number segment says why. **Never a target**, which is what the
+  /// dashed border means and the only thing it means.
+  Inert,
+  /// At the lock, or with the link down (ADR-065, ADR-085). Not a target, and the one state that is
+  /// about the screen rather than about the control.
+  Locked
+};
+
+/// Which surface a control is. It decides the geometry -- and, in exactly one case, an ink.
+enum class ControlKind : std::uint8_t
+{
+  Button,
+  Tile,
+  SheetRow,
+  RailRow
+};
+
+/// The chrome and the inks one state is drawn in, chosen once.
+struct ControlInk
+{
+  /// Fully transparent for a state with no border.
+  Color border;
+  /// Dashed, which only `Inert` is (ADR-110).
+  bool dashed = false;
+  /// Fully transparent for a state with no fill.
+  Color fill;
+  Color label;
+  /// The number segment: its ink, the hairline that separates it from the label, and the ground it
+  /// sits on. A filled control shades the ground and draws no line; every other state draws the
+  /// line and leaves the ground alone, because a shade over a transparent box is a grey box.
+  Color number;
+  Color segmentRule;
+  Color segmentFill;
+};
+
+/// The one state table, read by every control on this page.
+///
+/// `_moneyReason` is what makes an inert control's number amber: money is the reason a player can
+/// do something about before the lock, and the board is not.
+[[nodiscard]] ControlInk ControlInkFor(ControlState _state, ControlKind _kind, bool _hovered = false, bool _moneyReason = false) noexcept
+{
+  constexpr Color NO_INK = {0, 0, 0, 0};
+  switch (_state)
+  {
+  case ControlState::Primary:
+    // **The ring goes in the border slot, because a filled control has no room for a hover FILL**:
+    // its rest state is already the brightest thing on the screen, so the press is said by lifting
+    // the fill toward white and ringing it in the colour it came from.
+    return ControlInk{.border = _hovered ? Ink::BLUE : NO_INK,
+                      .dashed = false,
+                      .fill = _hovered ? Ink::BUTTON_PRIMARY_HOVER : Ink::BLUE,
+                      .label = Ink::APP_BACKGROUND,
+                      .number = Ink::APP_BACKGROUND,
+                      .segmentRule = NO_INK,
+                      .segmentFill = Ink::BUTTON_SEGMENT_SHADE};
+
+  case ControlState::Committed:
+    return ControlInk{.border = Ink::BLUE,
+                      .dashed = false,
+                      .fill = _hovered ? Ink::COMMITTED_HOVER_FILL : Ink::TILE_COMMITTED_FILL,
+                      .label = Ink::BLUE,
+                      .number = Ink::BLUE,
+                      .segmentRule = WithAlpha(Ink::BLUE, 90),
+                      .segmentFill = NO_INK};
+
+  case ControlState::Inert:
+    return ControlInk{.border = Ink::INERT_BORDER,
+                      .dashed = true,
+                      .fill = NO_INK,
+                      .label = Ink::NEUTRAL_DIM,
+                      .number = _moneyReason ? Ink::AMBER : Ink::NEUTRAL_DIM,
+                      .segmentRule = Ink::INERT_BORDER,
+                      .segmentFill = NO_INK};
+
+  case ControlState::Locked:
+    // **A BUTTON at the lock is the filled grey the rail's chip wears; a tile, a sheet row and a
+    // rail row dim in place** (ADR-065, amended by ADR-110). The grey says "this is a receipt now"
+    // on a control the size of a chip, and it is the same statement the `LOCKED` chip above it
+    // makes. At the size of a 284x96 tile or a 260-pixel row it is not that statement at all: a
+    // locked sheet would become four light-grey boxes, which is the screen inverted rather than
+    // gone quiet, and ADR-065 settled that a sheet at the lock stays where it is and fades.
+    if (_kind == ControlKind::Button)
+    {
+      return ControlInk{.border = NO_INK,
+                        .dashed = false,
+                        .fill = Ink::LOCKED_FILL,
+                        .label = Ink::APP_BACKGROUND,
+                        .number = Ink::APP_BACKGROUND,
+                        .segmentRule = NO_INK,
+                        .segmentFill = Ink::BUTTON_SEGMENT_SHADE};
+    }
+    return ControlInk{.border = Ink::DIVIDER,
+                      .dashed = false,
+                      .fill = NO_INK,
+                      .label = Ink::NEUTRAL_DIM,
+                      .number = Ink::NEUTRAL_DIM,
+                      .segmentRule = Ink::DIVIDER,
+                      .segmentFill = NO_INK};
+
+  case ControlState::Outlined:
+  default:
+    return ControlInk{.border = _hovered ? Ink::OUTLINE_HOVER : Ink::OUTLINE,
+                      .dashed = false,
+                      .fill = _hovered ? Ink::HOVER_FILL : NO_INK,
+                      .label = Ink::TEXT_PRIMARY,
+                      .number = Ink::TEXT_MUTED,
+                      .segmentRule = Ink::DIVIDER,
+                      .segmentFill = NO_INK};
+  }
+}
+
+/// One control's box: its fill, then its border.
+///
+/// **Four dashed edges rather than a dashed rectangle**, because `ShapeRenderer` dashes a line and
+/// has no dashed box, and a fifth primitive for one border style is a primitive to keep in step
+/// with `StrokeRect` forever. Each edge is drawn half a pixel inside the bounds for the reason
+/// `StrokeRect` insets its own: a 1px border lies INSIDE the box it was given, so it never bleeds
+/// into the pixel the thing beside it owns.
+void DrawControlBox(ShapeRenderer& _shapes, float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, const ControlInk& _ink)
+{
+  if (_ink.fill.alpha != 0)
+  {
+    _shapes.FillRect(_xPixels, _yPixels, _widthPixels, _heightPixels, _ink.fill);
+  }
+  if (_ink.border.alpha == 0)
+  {
+    return;
+  }
+  if (!_ink.dashed)
+  {
+    _shapes.StrokeRect(_xPixels, _yPixels, _widthPixels, _heightPixels, _ink.border);
+    return;
+  }
+
+  const float right = _xPixels + _widthPixels;
+  const float bottom = _yPixels + _heightPixels;
+  const float dash = MainPage::INERT_DASH;
+  const float gap = MainPage::INERT_GAP;
+  _shapes.DashedLine(_xPixels, _yPixels + 0.5F, right, _yPixels + 0.5F, _ink.border, 1.0F, dash, gap);
+  _shapes.DashedLine(_xPixels, bottom - 0.5F, right, bottom - 0.5F, _ink.border, 1.0F, dash, gap);
+  _shapes.DashedLine(_xPixels + 0.5F, _yPixels, _xPixels + 0.5F, bottom, _ink.border, 1.0F, dash, gap);
+  _shapes.DashedLine(right - 0.5F, _yPixels, right - 0.5F, bottom, _ink.border, 1.0F, dash, gap);
+}
+
+/// One button, composed before it is measured and drawn.
+///
+/// **A number never lives inside the label** (ADR-110). `BUILD 20 CR` was one string, so a queued
+/// one became `BUILD 20 CR - QUEUED` and a dear one `BUILD 45 CR - NEED 19 MORE`: a label that
+/// grows a suffix every time the state changes, in a column that drops a button that does not fit.
+/// The number is its own cell, and the state is said by the chrome rather than spelled out.
+struct Button
+{
+  /// Shouted, mono Medium.
+  std::string label;
+  /// The second cell: `20 CR`, `-20`, `10 SHIPS`, `NEED 19 MORE`, `AFTER T14`. Empty draws one cell.
+  std::string number;
+  ControlState state = ControlState::Outlined;
+  /// Whether an inert button's reason is money, which is the one an amber number is for.
+  bool moneyReason = false;
+};
+
+/// How wide a button comes out, in the face it is drawn in.
+///
+/// Measured rather than assumed, and measured with the segment INCLUDED, because the digest drops a
+/// button that does not fit its column and a measurement of the label alone would drop the wrong
+/// ones (ADR-053).
+[[nodiscard]] float ButtonWidth(const Button& _button)
+{
+  float width = 2.0F * MainPage::BUTTON_LABEL_PADDING + static_cast<float>(FontRenderer::MeasurePixels(_button.label, Face::MonoMedium));
+  if (_button.state == ControlState::Locked)
+  {
+    width += MainPage::LOCK_GLYPH_SIZE + 6.0F;
+  }
+  if (!_button.number.empty())
+  {
+    width +=
+      1.0F + 2.0F * MainPage::BUTTON_NUMBER_PADDING + static_cast<float>(FontRenderer::MeasurePixels(_button.number, Face::MonoMedium));
+  }
+  return width;
+}
+
+/// A button's two cells, drawn at a width the caller has already decided it can afford.
+void DrawButton(ShapeRenderer& _shapes, FontRenderer& _text, float _xPixels, float _yPixels, float _widthPixels, const Button& _button,
+                const ControlInk& _ink)
+{
+  DrawControlBox(_shapes, _xPixels, _yPixels, _widthPixels, MainPage::BUTTON_HEIGHT, _ink);
+
+  const std::int32_t labelY = CenterTextY(_yPixels, MainPage::BUTTON_HEIGHT, Face::MonoMedium);
+  float labelX = _xPixels + MainPage::BUTTON_LABEL_PADDING;
+  if (_button.state == ControlState::Locked)
+  {
+    // A square rather than a padlock: at six pixels a padlock is four grey dots, and the ladder on
+    // a build tile already teaches this screen's reader that a small square is a state.
+    _shapes.FillRect(labelX, _yPixels + (MainPage::BUTTON_HEIGHT - MainPage::LOCK_GLYPH_SIZE) * 0.5F, MainPage::LOCK_GLYPH_SIZE,
+                     MainPage::LOCK_GLYPH_SIZE, _ink.label);
+    labelX += MainPage::LOCK_GLYPH_SIZE + 6.0F;
+  }
+  _text.DrawText(static_cast<std::int32_t>(labelX), labelY, _button.label, _ink.label, Face::MonoMedium);
+
+  if (_button.number.empty())
+  {
+    return;
+  }
+
+  const float segmentWidth =
+    2.0F * MainPage::BUTTON_NUMBER_PADDING + static_cast<float>(FontRenderer::MeasurePixels(_button.number, Face::MonoMedium));
+  const float segmentX = _xPixels + _widthPixels - segmentWidth;
+
+  if (_ink.segmentFill.alpha != 0)
+  {
+    _shapes.FillRect(segmentX, _yPixels, segmentWidth, MainPage::BUTTON_HEIGHT, _ink.segmentFill);
+  }
+  else if (_ink.dashed)
+  {
+    _shapes.DashedLine(segmentX - 0.5F, _yPixels, segmentX - 0.5F, _yPixels + MainPage::BUTTON_HEIGHT, _ink.segmentRule, 1.0F,
+                       MainPage::INERT_DASH, MainPage::INERT_GAP);
+  }
+  else if (_ink.segmentRule.alpha != 0)
+  {
+    _shapes.FillRect(segmentX - 1.0F, _yPixels, 1.0F, MainPage::BUTTON_HEIGHT, _ink.segmentRule);
+  }
+
+  _text.DrawText(static_cast<std::int32_t>(segmentX + MainPage::BUTTON_NUMBER_PADDING), labelY, _button.number, _ink.number,
+                 Face::MonoMedium);
+}
+
 // ---- The build sheet's tiles (ADR-107) ---------------------------------------------------------
 
 /// What a build tile IS, which is the whole of how it is drawn.
@@ -807,13 +1049,13 @@ void MainPage::AddHit(float _xPixels, float _yPixels, float _widthPixels, float 
   m_hits.push_back(HitRegion{_xPixels, _yPixels, _widthPixels, _heightPixels, _action, _index});
 }
 
-std::int32_t MainPage::RailRowUnderPointer() const noexcept
+std::int32_t MainPage::RegionUnderPointer() const noexcept
 {
-  for (std::size_t index = 0; index < m_railRows.size(); ++index)
+  for (std::size_t index = 0; index < m_hoverRegions.size(); ++index)
   {
-    const RailRow& row = m_railRows[index];
-    const bool inside = m_pointerXPixels >= row.x && m_pointerXPixels < row.x + row.width && m_pointerYPixels >= row.y &&
-                        m_pointerYPixels < row.y + row.height;
+    const HoverRegion& region = m_hoverRegions[index];
+    const bool inside = m_pointerXPixels >= region.x && m_pointerXPixels < region.x + region.width && m_pointerYPixels >= region.y &&
+                        m_pointerYPixels < region.y + region.height;
     if (inside)
     {
       return static_cast<std::int32_t>(index);
@@ -827,14 +1069,14 @@ bool MainPage::SetPointer(float _xPixels, float _yPixels)
   m_pointerXPixels = _xPixels;
   m_pointerYPixels = _yPixels;
 
-  // Tested against the PREVIOUS frame's rows, exactly as a tap is: layout and hit testing are the
-  // same code, so there is only one list and it is a frame old.
-  const std::int32_t under = RailRowUnderPointer();
-  if (under == m_hoveredRailRow)
+  // Tested against the PREVIOUS frame's rectangles, exactly as a tap is: layout and hit testing are
+  // the same code, so there is only one list and it is a frame old.
+  const std::int32_t under = RegionUnderPointer();
+  if (under == m_hoveredRegion)
   {
     return false;
   }
-  m_hoveredRailRow = under;
+  m_hoveredRegion = under;
   return true;
 }
 
@@ -1150,6 +1392,9 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
 void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::MeshRenderer& _meshes)
 {
   m_hits.clear();
+  // Cleared with the hit list rather than inside the rail, because the digest's buttons fill under
+  // the pointer too and the rail is drawn after them (ADR-110).
+  m_hoverRegions.clear();
 
   _shapes.FillRect(0.0F, 0.0F, Frame::SCREEN_WIDTH, Frame::SCREEN_HEIGHT, Ink::APP_BACKGROUND);
 
@@ -1448,14 +1693,15 @@ MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::uint32_t
   {
     layout.height += 4.0F + (1.0F + static_cast<float>(layout.verdictDetail.size())) * lines + 6.0F;
   }
-  // **The action row is a BUTTON tall, not a line tall** (ADR-100). It reserved one `LINE_HEIGHT`
-  // while a button was 18 and centred on that line's baseline, which was near enough to true to go
-  // unnoticed; at 44 the button reached a whole line above its row and painted over the detail line
-  // there. A row that reserves less than it draws is the defect `LINE_HEIGHT` was introduced for,
-  // one control further on.
+  // **The action row is a BUTTON tall plus its two gaps** (ADR-100, ADR-110). It reserved one
+  // `LINE_HEIGHT` while a button was 18 and centred on that line's baseline, which was near enough
+  // to true to go unnoticed; at 44 the button reached a whole line above its row and painted over
+  // the detail line there. A row that reserves less than it draws is the defect `LINE_HEIGHT` was
+  // introduced for, one control further on. The gaps are reserved rather than borrowed from the
+  // line above, because they are what the grown 44-pixel target reaches into.
   if (layout.hasActions)
   {
-    layout.height += 4.0F + BUTTON_HEIGHT + 4.0F;
+    layout.height += BUTTON_GAP + BUTTON_HEIGHT + BUTTON_GAP;
   }
   return layout;
 }
@@ -1656,41 +1902,39 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // ---- The actions -------------------------------------------------------------------------------
     if (layout.hasActions)
     {
-      lineY += 4;
+      // **A gap above and below, and the hit fills both** (ADR-110). A button is 28 and a target is
+      // 44, so the eight pixels either side are what the grown rectangle reaches into -- which is
+      // why they are reserved here rather than left as whatever the line before happened to leave.
+      lineY += static_cast<std::int32_t>(BUTTON_GAP);
       float buttonX = TEXT_LEFT;
 
-      // The row's top IS the button's top now, and the label centres inside it. `BandTopForText`
-      // was right while a button was a line with a box around it and is wrong for a box that is
-      // taller than its line: it would centre the box on the baseline and hang it over the line
-      // above (ADR-100).
       const auto buttonY = static_cast<float>(lineY);
-      const std::int32_t labelY = CenterTextY(buttonY, BUTTON_HEIGHT);
 
       for (const EventAction& action : card.actions)
       {
         // `committed` is "this is already in the orders this tick goes in with", which two kinds of
-        // button can be and the rest cannot. It is drawn the same way for both: outlined in blue,
-        // never the filled primary, and still a target, because every order is editable until the
-        // lock.
+        // control can be and the rest cannot. It is the same state a queued tile and a queued rail
+        // row wear, and it is still a target, because every order is editable until the lock.
         //
-        // A build button has two states the other buttons do not, and it says which it is in
-        // (ADR-053): QUEUED, so the next tap is known to take it back; or beyond the purse, drawn
-        // dim with what is missing and not a target, because the lock would refuse it and a
-        // refusal a tick later is the worst way to learn a price.
-        std::string label = action.label;
+        // A build has two more states and the NUMBER SEGMENT says which (ADR-053, ADR-110): queued,
+        // so the next tap is known to take it back; or beyond the purse, dashed and dim with what is
+        // missing, because the lock would refuse it and a refusal a tick later is the worst way to
+        // learn a price.
+        Button button{.label = action.label, .number = action.number};
         bool committed = false;
         bool unaffordable = false;
         if (action.kind == EventActionKind::QueueBuild)
         {
           committed = std::ranges::find(m_state.orders.queuedBuilds, action.target) != m_state.orders.queuedBuilds.end();
           unaffordable = !committed && !m_state.CanAffordBuild(action.target);
-          if (committed)
+          if (committed && action.target >= 0 && action.target < static_cast<std::int32_t>(m_state.orders.builds.size()))
           {
-            label += " - QUEUED";
+            button.number = std::format("−{}", m_state.orders.builds[static_cast<std::size_t>(action.target)].cost);
           }
           else if (unaffordable)
           {
-            label += std::format(" - NEED {} MORE", BuildShortfall(action.target));
+            button.number = std::format("NEED {} MORE", BuildShortfall(action.target));
+            button.moneyReason = true;
           }
         }
 
@@ -1705,41 +1949,77 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
             answered != m_state.orders.answers.end() && answered->accepted == (action.kind == EventActionKind::AcceptProposal);
           if (thisWay)
           {
-            label = answered->accepted ? "ACCEPTED" : "DECLINED";
+            button.label = answered->accepted ? "ACCEPTED" : "DECLINED";
             committed = true;
           }
         }
 
-        // **Wide enough for a finger as well as for its label** (ADR-100). `MAP` was 33 pixels
-        // across; a named chip is wider, but the floor is what makes that true of every label
-        // rather than of the ones that happen to be long.
-        const float width = std::max(TOUCH_FLOOR, static_cast<float>(FontRenderer::MeasurePixels(label)) + 12.0F);
+        // **A focus chip is never inert and never locked** (ADR-081): it takes the eye somewhere and
+        // reaches no wire, so it goes on working while every order on the screen is frozen.
+        const bool focusOnly = action.kind == EventActionKind::Focus;
+        button.state = ControlState::Outlined;
+        if (unaffordable)
+        {
+          button.state = ControlState::Inert;
+        }
+        else if (committed)
+        {
+          button.state = ControlState::Committed;
+        }
+        else if (!OrdersEditable() && !focusOnly)
+        {
+          button.state = ControlState::Locked;
+        }
+        else if (action.primary && OrdersEditable())
+        {
+          button.state = ControlState::Primary;
+        }
+
+        // **Wide enough for a finger as well as for its label** (ADR-100, ADR-110). The box is what
+        // the two cells need; the target is grown around it, because a row of buttons with gaps
+        // between them is the isolated-chip case rather than the column one.
+        float width = ButtonWidth(button);
         if (buttonX + width > Frame::DIGEST_WIDTH - RAIL_PADDING)
         {
           break;
         }
 
-        // One filled button per card at most: the thing the digest thinks you should do.
-        if (action.primary && OrdersEditable() && !committed && !unaffordable)
+        const bool hovered = button.state != ControlState::Inert && button.state != ControlState::Locked && m_pointerXPixels >= buttonX &&
+                             m_pointerXPixels < buttonX + width && m_pointerYPixels >= buttonY &&
+                             m_pointerYPixels < buttonY + BUTTON_HEIGHT;
+
+        // **A committed control says what the next tap does while the finger is on it** (ADR-110),
+        // so taking an order back is never a surprise. The width is remeasured, because `TAKE BACK`
+        // is not the width of the label it replaces -- and it is clamped to the resting width, so a
+        // button under the pointer never pushes the one beside it along.
+        if (hovered && button.state == ControlState::Committed && !focusOnly)
         {
-          _shapes.FillRect(buttonX, buttonY, width, BUTTON_HEIGHT, Ink::BLUE);
-          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, labelY, label, Ink::APP_BACKGROUND);
-        }
-        else
-        {
-          const bool dim = !OrdersEditable() || unaffordable;
-          _shapes.StrokeRect(buttonX, buttonY, width, BUTTON_HEIGHT, committed && !dim ? Ink::BLUE : Ink::OUTLINE);
-          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, labelY, label,
-                         dim ? Ink::NEUTRAL_DIM : (committed ? Ink::BLUE : Ink::TEXT_PRIMARY));
+          Button flipped = button;
+          flipped.label = "TAKE BACK";
+          if (action.kind == EventActionKind::QueueBuild && action.target >= 0 &&
+              action.target < static_cast<std::int32_t>(m_state.orders.builds.size()))
+          {
+            flipped.number = std::format("+{}", m_state.orders.builds[static_cast<std::size_t>(action.target)].cost);
+          }
+          if (ButtonWidth(flipped) <= width)
+          {
+            button = flipped;
+          }
         }
 
-        if ((OrdersEditable() && !unaffordable) || action.kind == EventActionKind::Focus)
+        DrawButton(_shapes, _text, buttonX, buttonY, width, button,
+                   ControlInkFor(button.state, ControlKind::Button, hovered, button.moneyReason));
+
+        if ((OrdersEditable() && !unaffordable) || focusOnly)
         {
-          AddHit(buttonX, buttonY, width, BUTTON_HEIGHT, ActionFor(action.kind), action.target);
+          const Frame::Box target = Frame::GrownToFloor(buttonX, buttonY, width, BUTTON_HEIGHT);
+          const DigestTarget destination = TargetOf(action);
+          AddHit(target.x, target.y, target.width, target.height, destination.action, destination.index);
+          m_hoverRegions.push_back(HoverRegion{buttonX, buttonY, width, BUTTON_HEIGHT});
         }
-        buttonX += width + 6.0F;
+        buttonX += width + BUTTON_GAP;
       }
-      lineY += static_cast<std::int32_t>(BUTTON_HEIGHT) + 4;
+      lineY += static_cast<std::int32_t>(BUTTON_HEIGHT + BUTTON_GAP);
     }
 
     y = static_cast<float>(lineY) + 4.0F;
@@ -1803,25 +2083,22 @@ std::size_t MainPage::PreviousDigestTop(const std::vector<CardLayout>& _layouts,
   return top;
 }
 
-/// Which screen action a digest button performs. The two enums are separate on purpose: what an
-/// event OFFERS is a fact about the match (`MatchState`), and what a tap DOES is a fact about this
-/// screen, and the state has no business knowing the second.
-MainPage::Action MainPage::ActionFor(EventActionKind _kind) noexcept
+MainPage::DigestTarget MainPage::TargetOf(const EventAction& _action) const noexcept
 {
-  switch (_kind)
+  switch (_action.kind)
   {
   case EventActionKind::RedirectFleet:
-    return Action::OpenFleet;
+    return DigestTarget{Action::OpenFleet, _action.target};
   case EventActionKind::QueueBuild:
-    return Action::ToggleBuild;
+    return DigestTarget{Action::ToggleBuild, _action.target};
   case EventActionKind::AcceptProposal:
-    return Action::AcceptProposal;
+    return DigestTarget{Action::AcceptProposal, _action.target};
   case EventActionKind::DeclineProposal:
-    return Action::DeclineProposal;
+    return DigestTarget{Action::DeclineProposal, _action.target};
   case EventActionKind::Focus:
   default:
-    // MAP carries the system it points at, not the event it sits on.
-    return Action::FocusSystem;
+    // A focus chip carries the system it points at, not the event it sits on.
+    return DigestTarget{Action::FocusSystem, _action.target};
   }
 }
 
@@ -1835,8 +2112,6 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   const float contentX = railX + RAIL_PADDING;
   const float contentRight = Frame::SCREEN_WIDTH - RAIL_PADDING;
   const auto railWidth = static_cast<std::uint32_t>(contentRight - contentX);
-
-  m_railRows.clear();
 
   _shapes.FillRect(railX, Frame::TOP_BAR_HEIGHT, Frame::ORDERS_WIDTH, Frame::SCREEN_HEIGHT - Frame::TOP_BAR_HEIGHT, Ink::APP_BACKGROUND);
   _shapes.FillRect(railX, Frame::TOP_BAR_HEIGHT, 1.0F, Frame::SCREEN_HEIGHT - Frame::TOP_BAR_HEIGHT, Ink::CARD_BORDER);
@@ -1986,7 +2261,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
         _shapes.FillRect(railX + 1.0F, y, Frame::ORDERS_WIDTH - 1.0F, height, Ink::HOVER_FILL);
       }
       AddHit(railX, y, Frame::ORDERS_WIDTH, height, _action, _index);
-      m_railRows.push_back(RailRow{railX, y, Frame::ORDERS_WIDTH, height});
+      m_hoverRegions.push_back(HoverRegion{railX, y, Frame::ORDERS_WIDTH, height});
     }
 
     // Centred as a block: one line sits in the middle of the row, two sit either side of it, which is

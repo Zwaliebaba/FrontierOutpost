@@ -1173,9 +1173,17 @@ public:
       before.push_back(fleet.to);
     }
 
-    const bool queued = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page]
-                                 { return !page.State().orders.queuedBuilds.empty() || !page.State().orders.queuedSignals.empty(); });
-    Assert::IsFalse(queued, L"a sheet left open at the lock took an order");
+    // **What the sweep above happened to queue on its way to the picker is the baseline, not zero.**
+    // It is an unlocked board and the digest offers a build on it, so a sweep that finds the picker
+    // may well have queued one first. What this test is about is whether anything can be ordered
+    // AFTER the lock, which is a change rather than a count.
+    const std::size_t builds = page.State().orders.queuedBuilds.size();
+    const std::size_t signals = page.State().orders.queuedSignals.size();
+
+    const bool ordered =
+      SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page, builds, signals]
+               { return page.State().orders.queuedBuilds.size() != builds || page.State().orders.queuedSignals.size() != signals; });
+    Assert::IsFalse(ordered, L"a sheet left open at the lock took an order");
     for (std::size_t index = 0; index < before.size(); ++index)
     {
       Assert::AreEqual(before[index], page.State().fleets[index].to, L"a locked sheet ordered a move");
@@ -1412,9 +1420,34 @@ public:
     Assert::IsTrue(theirs != Lockstep::EventRefs::NONE, L"twelve ticks met nobody, so this test proved nothing");
 
     // Swept until the rival's system is the focused one, which is what tapping it does.
+    //
+    // **The sheet the previous row opened is closed before each tap, and this sweep needs that.**
+    // A row that crosses the rail's `SIGNALS` header opens the picker, which covers the map from a
+    // third of the way down the pane -- so every later row lands on a sheet rather than on a
+    // system, and a system under it can never be reached. `_ensure` is the hook for exactly this.
     Headless renderers;
-    const bool focused = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
-                                  [&page, theirs] { return page.FocusedSystem() == theirs; });
+    const auto closeAnySheet = [&page, &renderers]
+    {
+      if (page.OpenPanel() == Lockstep::MainPage::Panel::None)
+      {
+        return false;
+      }
+      renderers.Begin();
+      DrawPage(page, renderers);
+      for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
+      {
+        if (hit.action == Lockstep::MainPage::Action::ClosePanel)
+        {
+          (void)page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+          break;
+        }
+      }
+      return true;
+    };
+
+    const bool focused = SweepFor(
+      page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page, theirs] { return page.FocusedSystem() == theirs; }, false,
+      closeAnySheet);
     Assert::IsTrue(focused, L"a rival's system could not be focused by any tap");
     Assert::IsTrue(page.OpenPanel() != Lockstep::MainPage::Panel::BuildList, L"a rival's system opened a build sheet");
   }

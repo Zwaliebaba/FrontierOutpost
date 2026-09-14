@@ -37,9 +37,11 @@ composed per event (ADR-057): `ACCEPT`/`DECLINE` on a proposal, `REDIRECT FLT 1`
 fleet reaches, a priced build on a claimed system or a production line, `MAP` on anything about a
 system. When no card offers a real control the standing moves go on the leading card — a priced
 `BUILD` and up to two `MOVE FLT n` (ADR-056); before the first lock the digest is one card,
-`Nothing has happened yet`, carrying them. Build buttons show `- QUEUED` (outlined blue) and
-`- NEED 7 MORE` (dim, inert) per ADR-053, and name the LEVEL they would build —
-`MINING STATION L2 JANDAL 30 CR` (ADR-069); a build already in flight is a card that reports and
+`Nothing has happened yet`, carrying them. Every button is a **28px box with its number in a
+second cell** and wears one of the four control states (ADR-110): a queued build is Committed,
+`MINING STATION L2 JANDAL | −30`, and says `TAKE BACK | +30` under the pointer; one the purse
+cannot cover is Inert, dashed, `NEED 7 MORE` in amber, and is not a target. The label names the
+LEVEL it would build (ADR-069); a build already in flight is a card that reports and
 offers nothing, `Shipyard L1 rising at Dothan` / *Done T5 - 20 credits spent*, `MAP` its only
 action (ADR-070). An **answered proposal** reads `ACCEPTED` or `DECLINED` in
 the past tense on the button that was pressed, outlined blue like a queued build, with the other

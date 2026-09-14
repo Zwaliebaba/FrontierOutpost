@@ -685,9 +685,10 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
 
     if (offeredRow != EventRefs::NONE)
     {
-      // `SHIPYARD JANDAL 20 CR`: the price is on the button (ADR-053).
+      // `SHIPYARD JANDAL | 20 CR`: the price is on the button, in its own cell (ADR-053, ADR-110).
       const BuildRow& offered = state.orders.builds[static_cast<std::size_t>(offeredRow)];
-      event.actions.push_back(EventAction{.label = std::format("{} {} CR", Shortened(offered.title), offered.cost),
+      event.actions.push_back(EventAction{.label = Shortened(offered.title),
+                                          .number = std::format("{} CR", offered.cost),
                                           .kind = EventActionKind::QueueBuild,
                                           .target = offeredRow,
                                           .primary = true});

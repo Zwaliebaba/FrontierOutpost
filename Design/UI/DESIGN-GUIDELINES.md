@@ -190,9 +190,17 @@ byte the build uses where it differs by more than rounding.
 UI
 - `rgb(11,14,20)` background / ink (`APP_BACKGROUND`); a dialog's card is `rgb(17,21,29)`.
 - `rgba(255,255,255,0.10)` structural line (`CARD_BORDER`) · `0.07` row divider (`DIVIDER`) ·
-  **`0.20`** outlined-button border (`OUTLINE`, 51/255; the handoff said 0.25) · `0.04` card fill
-  (`CARD_FILL`) · `0.08` hover (`HOVER_FILL`, drawn on the locks rail row under the pointer and
-  nowhere else, ADR-060).
+  **`0.20`** outlined-button border (`OUTLINE`, 51/255; the handoff said 0.25) and `0.40` the same
+  border under the pointer (`OUTLINE_HOVER`, ADR-110) · `0.04` card fill
+  (`CARD_FILL`) · `0.08` hover (`HOVER_FILL`, drawn on a locks rail row and on an outlined control
+  under the pointer, ADR-060, ADR-110).
+- **The control states' own inks** (ADR-110): `rgb(141,214,255)` a filled button under the pointer
+  (`BUTTON_PRIMARY_HOVER`, `BLUE` lifted about a third toward white) · `rgba(0,0,0,0.14)` the number
+  segment's ground on a filled button (`BUTTON_SEGMENT_SHADE`) · `rgba(255,255,255,0.14)` the
+  **dashed** border of a control that cannot be ordered (`INERT_BORDER`, dash 3 / gap 3, and the
+  only dashed border in the client) · `rgba(94,196,255,0.14)` a committed control under the pointer
+  (`COMMITTED_HOVER_FILL`) · `rgba(94,196,255,0.08)` the map banner's ground while a move is being
+  chosen (`MOVE_MODE_WASH`).
 - `rgb(240,243,247)` primary text · body/detail and muted both `rgba(214,220,228,0.66)`
   (`TEXT_DETAIL`, `TEXT_MUTED`, 168/255) · dim `0.55` (`NEUTRAL_DIM`, 140/255).
   **These alphas are a measured floor** (ADR-083): every text token and every meaning colour clears
@@ -231,15 +239,36 @@ Semantic / owner (ADR-027: you are always blue)
 (ADR-045's open item); the values are the same today and the header is the one to change.
 
 ## Components
-- **Button, filled** — `you` blue, ink text, 18px high in the digest (24 in a dialog, 22–24 on the
-  seats and join screens), 6px side padding. **At most one per card**: the action the digest thinks
-  you should take (`EventAction::primary`).
-- **Button, outlined** — 1px `OUTLINE`, primary text. A build button carries its price and has two
-  more states (ADR-053): queued → outlined blue with ` - QUEUED`, so the next tap is known to take it
-  back; beyond the purse → dim, ` - NEED 7 MORE`, and not a target. At the lock every button is dim
-  and inert except `MAP`, which still focuses. Buttons that do not fit the column's width are dropped,
-  not wrapped. The amber warning variant (`PROPOSE`) is drawn on the rail's trade-lane row, which
-  nothing produces yet.
+- **Control states — one vocabulary, four of them and a lock** (ADR-110). The same table is applied
+  to a button, a build tile, a sheet row and a rail row, so *queued* looks the same wherever a
+  player meets it. **The hue never changes between states** — only the fill, the border's style and
+  the alpha do.
+
+  | State | Border | Fill | Ink | Target? | Meaning |
+  | --- | --- | --- | --- | --- | --- |
+  | Primary | none; 1px `BLUE` ring on hover | `BLUE`, hover `BUTTON_PRIMARY_HOVER` | `APP_BACKGROUND` | yes | the one thing to do; **one per screen** (ADR-089) |
+  | Outlined | 1px `OUTLINE`, hover `OUTLINE_HOVER` | none, hover `HOVER_FILL` | `TEXT_PRIMARY`; number `TEXT_MUTED` | yes | any other order, and every link |
+  | Committed | 1px `BLUE` | `TILE_COMMITTED_FILL`, hover `COMMITTED_HOVER_FILL` | `BLUE` | yes | yours, queued; hover flips the label to `TAKE BACK` and the number to `+20` |
+  | Inert | 1px **dashed** `INERT_BORDER` | none | `NEUTRAL_DIM`; number `AMBER` when the reason is money | **no** | cannot be ordered; the number says why |
+  | Locked | none | `LOCKED_FILL` | `APP_BACKGROUND` | no | at the lock (ADR-065); a 6px square precedes the label |
+
+  **A dashed border is the only one in this client and it means one thing: not a target.** The
+  locked row is a BUTTON's; a tile, a sheet row and a rail row dim in place at the lock instead,
+  because four light-grey boxes is the screen inverted rather than gone quiet (ADR-065, ADR-110).
+- **Button** — a **28px** box with a **8px** gap to its sibling, 10px of side padding on the label
+  and 8px on the number, in mono **Medium**; the target is grown to 44 around it, which is 28 + 8 +
+  8 exactly (ADR-100's isolated-chip rule, ADR-110). It was 18 with 6px padding until 2026-09-14,
+  and 44 for four days before that. A dialog's is 24 and the seats and join screens' are 22–24;
+  neither has been moved. **At most one filled per SCREEN** (ADR-089).
+- **Number segment** — a second cell inside a button, separated from the label by a 1px rule
+  (`BUTTON_SEGMENT_SHADE` as a ground and no rule on a filled button; `DIVIDER` on an outlined one;
+  `BLUE` at 90 on a committed one; the dashed border's own ink on an inert one). It carries
+  `20 CR`, `−20`, `10 SHIPS`, `NEED 19 MORE`, `AFTER T14`. **A number never lives inside the
+  label** (ADR-110) — it did until 2026-09-14, as the ` - QUEUED` and ` - NEED 7 MORE` suffixes
+  ADR-053 asked for, which made a control's width a function of a state the player did not choose
+  on a rail that drops a button rather than wrapping it. Buttons that do not fit the column's width
+  are still dropped, and label and number are measured together. The amber warning variant
+  (`PROPOSE`) is drawn on the rail's trade-lane row, which nothing produces yet.
 - **Chip** — 1px border, 7px side padding, text in the border colour: `3 TICKS` (amber, digest
   header), `4TH / 12` (outline, top bar; ordinal because `4/12` reads as a fraction). The rail's
   `LOCKED` chip is filled grey rather than outlined.

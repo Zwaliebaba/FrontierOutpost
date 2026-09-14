@@ -65,8 +65,9 @@ namespace
     std::find_if(_state.orders.builds.begin(), _state.orders.builds.end(), [](const BuildRow& _row) { return !_row.rising; });
   if (startable != _state.orders.builds.end())
   {
-    // Priced like every other build button (ADR-053).
-    actions.push_back(EventAction{.label = std::format("BUILD {} CR", startable->cost),
+    // Priced like every other build button, with the price in its own cell (ADR-053, ADR-110).
+    actions.push_back(EventAction{.label = "BUILD",
+                                  .number = std::format("{} CR", startable->cost),
                                   .kind = EventActionKind::QueueBuild,
                                   .target = static_cast<std::int32_t>(std::distance(_state.orders.builds.begin(), startable)),
                                   .primary = true});
@@ -90,7 +91,10 @@ namespace
       continue;
     }
 
+    // The ships are the number a player weighs a move by, so they go in the button's second cell
+    // exactly as a build's price does (ADR-110).
     actions.push_back(EventAction{.label = "MOVE " + fleet.name,
+                                  .number = fleet.ships == 1 ? std::string{"1 SHIP"} : std::format("{} SHIPS", fleet.ships),
                                   .kind = EventActionKind::RedirectFleet,
                                   .target = static_cast<std::int32_t>(index),
                                   .primary = actions.empty()});
