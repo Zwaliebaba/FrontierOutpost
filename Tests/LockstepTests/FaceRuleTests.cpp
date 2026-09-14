@@ -150,6 +150,32 @@ struct Screen
   main.DrawInterface(shapes, text);
   collect("the main page");
 
+  // ---- And the same page with a build sheet open -------------------------------------------------
+  //
+  // **A sheet is where most of this screen's copy lives and none of it was being checked.** The
+  // build sheet is the densest of the four -- a mono title, a sans detail and two mono status lines
+  // per tile (ADR-107) -- and until it was drawn here the face rule was asserted over a screen that
+  // never opened one. Collected under the main page's name, which `collect` merges.
+  const std::vector<Lockstep::MainPage::HitRegion> candidates = main.Hits();
+  for (const Lockstep::MainPage::HitRegion& hit : candidates)
+  {
+    if (hit.action != Lockstep::MainPage::Action::OpenSystem || hit.index < 0)
+    {
+      continue;
+    }
+    (void)main.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+    if (main.OpenPanel() == Lockstep::MainPage::Panel::BuildList)
+    {
+      break;
+    }
+  }
+  shapes.BeginFrame();
+  text.BeginFrame();
+  meshes.BeginFrame();
+  main.DrawWorld(shapes, text, meshes);
+  main.DrawInterface(shapes, text);
+  collect("the main page");
+
   // ---- The lobby ---------------------------------------------------------------------------------
   Lockstep::SeatsPage seats{Lockstep::GenerateSeatTokens(Lockstep::SeatsPage::SEAT_COUNT)};
   shapes.BeginFrame();
@@ -305,6 +331,58 @@ public:
 
     Assert::IsTrue(titles > 0, L"no card title was drawn at all, so this asserts nothing");
     Assert::IsTrue(offenders.empty(), Listed("a card title, shouted (ADR-099: a card title is a sentence)", offenders).c_str());
+  }
+
+  // ADR-099 on a build tile: the building is a NAME and the levels are STATUS WORDS, in one string
+  // (`Shipyard L1 → L2`). It is the one title on this screen made of both, which is why reading it
+  // off the bytes is worth doing -- shouting it would be one call to `Uppercased` and would look
+  // like every other label on the sheet.
+  TEST_METHOD(ABuildTileNamesItsBuildingInSentenceCaseAndItsLevelsInCapitals)
+  {
+    // A tile title is the only string on this screen whose LAST word is a bare level -- `Shipyard
+    // L1`, `Mining station L2 → L3`. The rail says the same fact as `SHIPYARD L1 - DOTHAN` and the
+    // digest's button as `MINING STATION L2 JANDAL 30 CR`; both carry the system after the level,
+    // which is what tells them apart from this without naming a face two of them also use.
+    const auto endsInALevel = [](std::string_view _text)
+    {
+      const std::size_t space = _text.rfind(' ');
+      if (space == std::string_view::npos || space + 2 >= _text.size())
+      {
+        return false;
+      }
+      const std::string_view last = _text.substr(space + 1);
+      return (last[0] == 'L' || last[0] == 'l') &&
+             std::all_of(last.begin() + 1, last.end(), [](unsigned char _c) { return std::isdigit(_c) != 0; });
+    };
+
+    std::vector<std::string> offenders;
+    std::size_t titles = 0;
+    for (const Screen& screen : EverythingDrawn())
+    {
+      for (const Neuron::FontRenderer::DrawnString& drawn : screen.drawn)
+      {
+        if (!IsMono(drawn.face) || !endsInALevel(drawn.text))
+        {
+          continue;
+        }
+        ++titles;
+
+        // The building is a name: it has lowercase in it. The level is a status word: its `L` is a
+        // capital. Both halves in one string is what ADR-099 asks a title to do.
+        if (!std::ranges::any_of(drawn.text, [](unsigned char _c) { return std::islower(_c) != 0; }))
+        {
+          offenders.push_back(std::string{screen.name} + ": " + drawn.text + " (a building is a name, not a shout)");
+        }
+        if (drawn.text[drawn.text.rfind(' ') + 1] != 'L')
+        {
+          offenders.push_back(std::string{screen.name} + ": " + drawn.text + " (a level is a status word and keeps its capital)");
+        }
+      }
+    }
+
+    Assert::IsTrue(titles > 0, L"no build tile title was drawn at all, so this asserts nothing");
+    Assert::IsTrue(offenders.empty(),
+                   Listed("a build tile's title (ADR-099: a name is a sentence, a level is a status word)", offenders).c_str());
   }
 
   // **Every screen has to reach both families**, or the two tests above pass on it by drawing

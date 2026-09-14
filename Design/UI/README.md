@@ -7,10 +7,27 @@ deliberately not, and this directory is now the **design record for the client**
 code in `LockstepClient/` and `Lockstep/`. Every status below is as of **2026-09-13** and was read
 from the tree, not from the plan.
 
-> **All twenty-three captures are current as of 2026-09-13**, retaken from the Debug build carrying
-> every stage of FONT-01: IBM Plex in four cuts, the data/sentence rule applied, the layout
-> re-derived around a 17px line, coverage gamma-corrected, and the five characters ADR-014 had to
-> substitute put back.
+> **Twenty-one of the twenty-three captures are current as of 2026-09-13**, retaken from the Debug
+> build carrying every stage of FONT-01: IBM Plex in four cuts, the data/sentence rule applied, the
+> layout re-derived around a 17px line, coverage gamma-corrected, and the five characters ADR-014
+> had to substitute put back.
+>
+> **`01-build-sheet.png` and `01-build-rising.png` are STALE as of 2026-09-14** and are kept only so
+> the list is not shorter than the screens. They show the build sheet as a column of 44px rows;
+> ADR-107 made its body a 2×2 grid of 96px tiles, so neither picture is of anything the client draws
+> any more. **They could not be retaken in the session that made the change**: opening a sheet needs
+> a tap, a tap needs `SendInput`, and `SendInput` needs an unlocked desktop — `Get-Process LogonUI`
+> answered yes throughout. The change was run against the real client as far as a locked desktop
+> reaches, which is the board itself (a `--serve --bots 5` process and a `--join --token alpha`
+> client on one posted Enter, per "Photographing the build" below): the rail's `BUILDS n AVAIL · n
+> CR` and the digest's priced build button both draw, and both are paths ADR-107 touched. **The
+> recipe for the two retakes is below under `01-build-rising.png`** and needs somebody at an
+> unlocked session.
+>
+> The other three sheets moved by **4 pixels** and their captures are not being called stale for it:
+> the help slot's padding went from 12 to 16 (ADR-107), which lowers `01-destination-sheet.png`,
+> `01-signal-sheet.png`, `01-signal-sheet-armed.png`, `06-at-lock-sheet.png` and `07-replay.png` by
+> two pixels each at the top and bottom and changes nothing else on them.
 >
 > **The check is mechanical rather than visual.** The 8×8 font was one bit a pixel, so a capture
 > carrying it has a handful of distinct luminances in it; an anti-aliased one has two hundred. Run
@@ -109,9 +126,14 @@ The complete list, so nobody goes looking. Each item is also under its screen in
    ADR-063) and not how the fight would go. `YOU WIN` / `HOLD` / `YOU LOSE` per candidate needs a
    preview per candidate on `SnapshotFleet`; the combat parameters are not on the wire and the
    client must not learn the rule (`GameLogic/Snapshot.h`).
-8. **The trade lane as a `PROPOSE` row under BUILDS.** `BuildRow::isTradeLane` is set by nothing,
-   so the amber row never appears; a lane offer is made from the signal picker instead (ADR-039's
-   open question).
+8. **The trade lane as a `PROPOSE` row under BUILDS, and as the build sheet's fourth tile.**
+   `BuildRow::isTradeLane` is set by nothing, and since ADR-107 `BuildRow::partner` is beside it and
+   is set by nothing either; a lane offer is made from the signal picker instead (ADR-039's open
+   question). The tile is styled and tested behind a forced flag, so the day the flag is set the
+   first thing anybody finds out is not whether it renders. **The bastion is the same case one step
+   further back** — the grid reserves its slot and nothing composes a row for it (blueprint §3,
+   after Phase 0) — and so is a tile at its top level, for which `SnapshotView` composes no row at
+   all.
 9. **Twelve seats** on the seats screen. Six are drawn, every one required (ADR-036 amendment 3).
 
 Found while reading the code for this record, not design gaps: the top bar's
@@ -187,9 +209,14 @@ ADR-066 touched was retaken the same day from the Debug build carrying them. Don
   miss in a thumbnail, so a capture script should assert the pixel. Measured that way on 2026-09-12,
   and it is what found that a moving mouse produces no `WM_POINTERUPDATE` at all.
 - `01-build-rising.png` is a practice match one tick after queuing a level: PRACTICE MATCH, tap a
-  held system, queue the top row, let one lock pass. The rail then carries the rising row and the
-  same system's sheet offers nothing (ADR-070). Tap the system again before photographing it, so
-  the sheet, the rail row and the digest's card are all in the one frame.
+  held system, queue the top tile, let one lock pass. The rail then carries the rising row and the
+  same system's sheet draws that build rising with its progress bar, with the tiles beside it inert
+  and marked `AFTER T<n>` (ADR-107, amending ADR-070). Tap the system again before photographing it,
+  so the sheet, the rail row and the digest's card are all in the one frame. `01-build-sheet.png` is
+  the same match before the lock: PRACTICE MATCH, tap a held system, and photograph the four-state
+  grid with one tile queued, so `QUEUED −20` / `TAP TO TAKE BACK` and the purse's ` −20` in the
+  header are both in the frame. **Both need an unlocked desktop**, which is the whole of why they
+  were not retaken with the change that made them stale.
 - States: 09 = JOIN as the host; 01 = PRACTICE MATCH (`--tick 4` overrides the preset's two
   minutes); the sheets = a held system on the map, `MOVE`/`REDIRECT`, the `SIGNALS` header, `REPLAY`;
   06 = a `--serve` process suspended past a lock (`NtSuspendProcess`); 04 = that process killed;

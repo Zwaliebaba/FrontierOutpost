@@ -93,16 +93,19 @@ namespace
   return "SOMEBODY";
 }
 
-/// Whether a build row may be put on a card: not offered on another card already, and not a row
-/// that merely reports something rising (ADR-069, ADR-070) -- that one has no button.
+/// Whether a build row may be put on a card: one the lock would actually start, and not one offered
+/// on another card already.
+///
+/// **`available` rather than `!rising`** since a system that is building composes the rows it cannot
+/// take yet as well as the one it is taking (ADR-107): both are rows a button would be a lie on, and
+/// one field says so for the sheet, the digest and the rail's `N AVAIL` alike.
 ///
 /// A free function rather than a lambda inside `ViewOf`, deliberately: clang-format 18 and 22
 /// disagree about where a wrapped lambda's opening brace goes, CI pins 18, and a construct the two
 /// format differently is one every session has to fight.
 [[nodiscard]] bool Offerable(const MatchState& _state, const std::vector<std::int32_t>& _offered, std::int32_t _row)
 {
-  const bool rising = _state.orders.builds[static_cast<std::size_t>(_row)].rising;
-  return !rising && std::ranges::find(_offered, _row) == _offered.end();
+  return _state.orders.builds[static_cast<std::size_t>(_row)].available && std::ranges::find(_offered, _row) == _offered.end();
 }
 
 /// `Shipyard - Dothan` becomes `SHIPYARD DOTHAN`: a button is 8px text in a 400px column and the
@@ -503,58 +506,86 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     // the rules and the client owns the sentence.
     //
     // A row offers THE NEXT LEVEL (ADR-069), so a system that has a level-one shipyard offers L2 at
-    // L2's price and L2's build time. A system already building offers one row that is not a
-    // target, because the lock would refuse a second order on it and a row a tap cannot use is
-    // better drawn as the reason than left out.
-    if (source->risingCompletesAt != 0)
+    // L2's price and L2's build time.
+    //
+    // **A system that is building composes its OTHER rows too, marked unavailable** (ADR-107,
+    // amending ADR-070). It used to compose the rising row and stop, which left the build sheet
+    // with one row on it and nothing to say what that system will be able to take when the build
+    // lands. `available` is what carries "the lock would start this" from here to the three readers
+    // that have to agree about it -- the sheet, the digest's offer, and `N AVAIL` on the rail --
+    // and the building that is ALREADY rising composes no second row, because the rising row is
+    // that building's next level.
+    const bool building = source->risingCompletesAt != 0;
+    const bool yardRising = building && source->risingKind == BuildKind::Shipyard;
+    const bool mineRising = building && source->risingKind == BuildKind::MiningStation;
+
+    if (building)
     {
       const bool yard = source->risingKind == BuildKind::Shipyard;
+      const std::uint32_t risingTicks = _snapshot.LevelTicks(source->risingKind, source->risingToLevel);
+      const std::uint32_t risingCost = _snapshot.LevelCost(source->risingKind, source->risingToLevel);
+
+      // **What an earlier lock already took, and what it buys when it lands** (ADR-107). The tick
+      // it was ordered on is derived rather than sent: a construction completes `ticks` after the
+      // lock that started it (ADR-069), so `completesAt - ticks` is the tick the credits left the
+      // purse on. It is also what the sheet's progress bar is a fraction of.
+      const std::uint32_t orderedAt = source->risingCompletesAt > risingTicks ? source->risingCompletesAt - risingTicks : 0;
       state.orders.builds.push_back(
         BuildRow{.title = std::format("{} L{} - {}", yard ? "Shipyard" : "Mining station", source->risingToLevel, node.name),
-                 .detail = std::format("Rising - done T{}", source->risingCompletesAt),
+                 .detail = std::format("Ordered T{} · {} credits spent · +{} a tick", orderedAt, risingCost,
+                                       _snapshot.LevelYield(source->risingKind, source->risingToLevel)),
+                 .building = yard ? "Shipyard" : "Mining station",
                  .system = node.id,
                  .kind = static_cast<std::uint8_t>(yard ? 0 : 1),
                  .level = source->risingToLevel,
+                 .ticks = risingTicks,
                  .rising = true,
                  .completesAt = source->risingCompletesAt,
-                 .available = false});
-      continue;
+                 .available = false,
+                 .cost = risingCost});
     }
 
-    if (source->shipyardLevel < BUILDING_LEVELS)
+    if (!yardRising && source->shipyardLevel < BUILDING_LEVELS)
     {
       const std::uint32_t level = source->shipyardLevel + 1;
       const std::uint32_t ticks = _snapshot.LevelTicks(BuildKind::Shipyard, level);
       state.orders.builds.push_back(
         BuildRow{.title = std::format("Shipyard L{} - {}", level, node.name),
-                 .detail = std::format("+{} ships a tick - {} tick{}", _snapshot.LevelYield(BuildKind::Shipyard, level), ticks,
+                 // `·` between two peer facts, `-` only where a thing is joined to its subject
+                 // (DESIGN-GUIDELINES §Font). What the level pays and how long it takes are peers.
+                 .detail = std::format("+{} ships a tick · {} tick{}", _snapshot.LevelYield(BuildKind::Shipyard, level), ticks,
                                        ticks == 1 ? "" : "s"),
+                 .building = "Shipyard",
                  .system = node.id,
                  .kind = 0,
                  .level = level,
                  .ticks = ticks,
+                 .available = !building,
                  .cost = _snapshot.LevelCost(BuildKind::Shipyard, level)});
     }
-    if (source->miningStationLevel < BUILDING_LEVELS)
+    if (!mineRising && source->miningStationLevel < BUILDING_LEVELS)
     {
       const std::uint32_t level = source->miningStationLevel + 1;
       const std::uint32_t ticks = _snapshot.LevelTicks(BuildKind::MiningStation, level);
       state.orders.builds.push_back(
         BuildRow{.title = std::format("Mining station L{} - {}", level, node.name),
-                 .detail = std::format("+{} credits a tick - {} tick{}", _snapshot.LevelYield(BuildKind::MiningStation, level), ticks,
+                 .detail = std::format("+{} credits a tick · {} tick{}", _snapshot.LevelYield(BuildKind::MiningStation, level), ticks,
                                        ticks == 1 ? "" : "s"),
+                 .building = "Mining station",
                  .system = node.id,
                  .kind = 1,
                  .level = level,
                  .ticks = ticks,
+                 .available = !building,
                  .cost = _snapshot.LevelCost(BuildKind::MiningStation, level)});
     }
   }
-  // Counted over what can actually be STARTED. A rising row is on the list so the sheet and the
-  // rail can say what is coming (ADR-069), and `N AVAIL` counting it would offer a player a number
-  // they cannot act on.
+  // Counted over what can actually be STARTED, which is exactly what `available` says. A rising row
+  // and the rows beside it on a system that is building are both on the list so the sheet can say
+  // what is coming and what it will cost (ADR-069, ADR-107); `N AVAIL` counting either would offer
+  // a player a number they cannot act on.
   state.orders.availableBuilds = static_cast<std::uint32_t>(
-    std::count_if(state.orders.builds.begin(), state.orders.builds.end(), [](const BuildRow& _row) { return !_row.rising; }));
+    std::count_if(state.orders.builds.begin(), state.orders.builds.end(), [](const BuildRow& _row) { return _row.available; }));
 
   ComposeSignals(state, _snapshot);
 

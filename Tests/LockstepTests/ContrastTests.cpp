@@ -5,10 +5,14 @@
 // without anyone noticing: the ink still looks like the ink, it is just fainter, and the person who
 // chose it is the person least able to see that.
 //
-// So the floor is asserted. WCAG 2.1's contrast ratio, over the two grounds this game actually
-// paints text on -- the app background and the dialog card -- at 4.5:1, which is the AA threshold
-// for body text. Anything the design deliberately puts below it says so here by being excluded, and
-// there is nothing excluded today.
+// So the floor is asserted. WCAG 2.1's contrast ratio, over the three grounds this game actually
+// paints text on -- the app background, the dialog card, and a committed build tile's blue wash
+// (ADR-107) -- at 4.5:1, which is the AA threshold for body text.
+//
+// **One thing is deliberately below it and is asserted to BE below it**, so that raising it is a
+// decision rather than a drive-by: `TILE_BLOCKED_INK`, the ink of a build tile that is inert
+// because something else on its system is rising. Its declaration in `DesignTokens.h` carries the
+// reason, which is that the tile is not read.
 
 #include "pch.h"
 #include "CppUnitTest.h"
@@ -99,6 +103,40 @@ public:
     AssertReadable(L"AMBER", Lockstep::Ink::AMBER);
     AssertReadable(L"RED", Lockstep::Ink::RED);
     AssertReadable(L"PURPLE", Lockstep::Ink::PURPLE);
+  }
+
+  // A build tile the player has committed to is filled with `BLUE` at 15/255, and four strings are
+  // drawn ON that fill (ADR-107). It is the only place on the main page where text sits over
+  // anything but the ink, so it is the only ground the two tests above do not already cover.
+  TEST_METHOD(EveryInkOnACommittedTileClearsTheFloorOverItsWash)
+  {
+    const Neuron::Color wash = Over(Lockstep::Ink::TILE_COMMITTED_FILL, Lockstep::Ink::APP_BACKGROUND);
+
+    for (const auto& [ink, name] :
+         {std::pair{Lockstep::Ink::TEXT_PRIMARY, L"TEXT_PRIMARY"}, std::pair{Lockstep::Ink::TEXT_DETAIL, L"TEXT_DETAIL"},
+          std::pair{Lockstep::Ink::TEXT_MUTED, L"TEXT_MUTED"}, std::pair{Lockstep::Ink::NEUTRAL_DIM, L"NEUTRAL_DIM"},
+          std::pair{Lockstep::Ink::BLUE, L"BLUE"}})
+    {
+      const double ratio = Contrast(ink, wash);
+      if (ratio < FLOOR)
+      {
+        Assert::Fail(
+          (std::wstring{name} + L" is " + std::to_wstring(ratio) + L":1 over a committed tile's wash, under the 4.5:1 floor").c_str());
+      }
+    }
+  }
+
+  // **The one exemption, asserted as one.** A blocked tile is drawn at 90/255 white and is meant to
+  // be: the sheet's help line above it says why nothing there can be ordered, and an ink that
+  // cleared the floor would put three inert tiles in competition with the build that is actually
+  // happening (ADR-107). If somebody raises it, this fails and they read the declaration.
+  TEST_METHOD(TheBlockedTilesInkIsBelowTheFloorOnPurpose)
+  {
+    Assert::IsTrue(Contrast(Lockstep::Ink::TILE_BLOCKED_INK, Lockstep::Ink::APP_BACKGROUND) < FLOOR,
+                   L"the blocked tile's ink now clears the floor, so the exemption in DesignTokens.h is stale");
+    Assert::IsTrue(Contrast(Lockstep::Ink::TILE_BLOCKED_INK, Lockstep::Ink::APP_BACKGROUND) <
+                     Contrast(Lockstep::Ink::NEUTRAL_DIM, Lockstep::Ink::APP_BACKGROUND),
+                   L"the blocked tile's ink is no fainter than the dim one, so one of the two is pointless");
   }
 
   TEST_METHOD(TheDimmestTokenIsTheOneThatDefinesTheFloor)

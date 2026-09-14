@@ -252,6 +252,63 @@ public:
     Assert::IsTrue(offenders.empty(), Listed("a sheet is open and these targets are under the floor", offenders).c_str());
   }
 
+  TEST_METHOD(ABuildSheetsTilesAndCloseCornerAreAtTheFloor)
+  {
+    // The build sheet is the one that is a GRID (ADR-107), so its rectangles are composed from
+    // different numbers than a row's: a tile's width is the sheet's less two paddings and a gap,
+    // halved, and its height is stated. Both are well over the floor by construction -- which is
+    // exactly the kind of claim this file exists to measure rather than to read off a constant.
+    const auto simulation = PlayedMatch(0);
+    Headless renderers;
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    DrawPage(page, renderers);
+    const std::vector<Lockstep::MainPage::HitRegion> candidates = page.Hits();
+    for (const Lockstep::MainPage::HitRegion& hit : candidates)
+    {
+      if (hit.action != Lockstep::MainPage::Action::OpenSystem || hit.index < 0)
+      {
+        continue;
+      }
+      (void)page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+      DrawPage(page, renderers);
+      if (page.OpenPanel() == Lockstep::MainPage::Panel::BuildList)
+      {
+        break;
+      }
+    }
+    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::BuildList, L"no build sheet opened, so nothing was audited");
+
+    const std::vector<std::string> offenders = Undersized(page);
+    Assert::IsTrue(offenders.empty(), Listed("a build sheet is open and these targets are under the floor", offenders).c_str());
+
+    // The close corner is the header's own height, in both dimensions: 36 until ADR-100 grew it,
+    // and the one target on a sheet that is a square rather than a bar.
+    std::size_t corners = 0;
+    std::size_t tiles = 0;
+    for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
+    {
+      // Two things close a sheet and they are told apart by shape: the `X` is the header's own
+      // square corner and `CANCEL` is a bar the width of the sheet (ADR-052).
+      if (hit.action == Lockstep::MainPage::Action::ClosePanel && hit.width < hit.height * 2.0F)
+      {
+        Assert::AreEqual(FLOOR_PIXELS, hit.width, 0.01F, L"the sheet's close corner is not 44 wide");
+        Assert::AreEqual(FLOOR_PIXELS, hit.height, 0.01F, L"the sheet's close corner is not 44 tall");
+        ++corners;
+      }
+      // A tile, and not the digest's priced build button, which queues the same order from the
+      // other column and so carries the same action (ADR-053). The sheet is over the map pane.
+      if (hit.action == Lockstep::MainPage::Action::ToggleBuild && hit.x >= Lockstep::Frame::DIGEST_WIDTH)
+      {
+        Assert::IsTrue(hit.height >= 96.0F, L"a build tile is shorter than the 96 it is drawn at");
+        ++tiles;
+      }
+    }
+    Assert::AreEqual(std::size_t{1}, corners, L"the sheet has no close corner, or more than one");
+    Assert::IsTrue(tiles > 0, L"the sheet drew no tile, so the tile measurement asserted nothing");
+  }
+
   TEST_METHOD(TheLockedBoardHasNoUndersizedTarget)
   {
     // At the lock most controls stop being targets at all (ADR-060, ADR-065), which is a different

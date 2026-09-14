@@ -562,10 +562,14 @@ public:
     Assert::IsTrue(rising != state.orders.builds.end(), L"the rail does not list what is rising");
     Assert::AreEqual(lands, rising->completesAt, L"the rail and the board disagree about when it lands");
     Assert::IsFalse(rising->available, L"a rising row is offered as something to queue");
+
+    // **`available` is what "can be started" means** (ADR-107): a system that is building composes
+    // the rows it cannot take yet as well, so counting `!rising` would count those too. The claim
+    // is unchanged -- `N AVAIL` is the number of builds a tap could actually start.
     Assert::AreEqual(0U,
                      state.orders.availableBuilds -
                        static_cast<std::uint32_t>(std::count_if(state.orders.builds.begin(), state.orders.builds.end(),
-                                                                [](const Lockstep::BuildRow& _row) { return !_row.rising; })),
+                                                                [](const Lockstep::BuildRow& _row) { return _row.available; })),
                      L"the AVAIL count includes a row that cannot be started");
   }
 

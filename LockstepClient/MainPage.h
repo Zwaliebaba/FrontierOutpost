@@ -131,6 +131,61 @@ public:
   static constexpr float SHEET_CLIPPED_HEIGHT = 24.0F;
   static constexpr std::size_t SHEET_MAXIMUM_ROWS = 6;
 
+  /// The build sheet's body, which is a GRID OF TILES where the other three sheets are a column of
+  /// rows (ADR-107).
+  ///
+  /// **A build is a choice between four things of the same kind and a move is a choice between
+  /// lanes**, which is why only this sheet changed: four tiles side by side can be compared at a
+  /// glance, and four rows one under another are read in order. 96 is the height that takes an icon
+  /// row, a detail line and a bottom line at the font's own 17px line without any of them being
+  /// cramped, and it is more than twice the touch floor in the dimension a thumb is least accurate
+  /// in.
+  ///
+  /// **Two columns, and the grid is inset by `CARD_PADDING` like everything else on the sheet** --
+  /// so `(596 - 20 - 8) / 2` is 284, and a tile's text is 260 wide. The design reference drew the
+  /// whole sheet at a 12-pixel inset and arrived at 282; this tree's sheet header, help line and
+  /// rows are all at 10, and a grid inset two pixels further than the title above it reads as a
+  /// mistake.
+  ///
+  /// Two rather than three because of the TOP LINE, which is the crowded one: an icon, ten pixels,
+  /// the title, and a 24-pixel ladder against the right edge leaves 196 for the title, and the
+  /// widest one the two built buildings can produce -- `Mining station L2 rising` -- measures 168.
+  /// Three columns make a tile 186 and leave 98, so that title overruns by 70 into the tile beside
+  /// it, which `ShapeRenderer` has no clip rectangle to prevent.
+  static constexpr float SHEET_TILE_HEIGHT = 96.0F;
+  static constexpr float SHEET_TILE_GAP = 8.0F;
+  /// Above the first row of tiles and below the last, inside the sheet.
+  static constexpr float SHEET_TILE_TOP = 4.0F;
+  static constexpr float SHEET_TILE_BOTTOM = 12.0F;
+  static constexpr std::size_t SHEET_TILE_COLUMNS = 2;
+  /// Four roles, one tile each: mining station, shipyard, bastion, trade lane (blueprint §3). Two of
+  /// them are drawn by nothing yet, and an EMPTY SLOT IS NOT DRAWN -- a two-row system is one row of
+  /// two tiles and the sheet is `96 + 8` shorter.
+  static constexpr std::size_t SHEET_TILE_SLOTS = 4;
+
+  /// Inside a tile. **12 across and 10 down**, which is not `CARD_PADDING`: a tile is a box with a
+  /// border, where a digest card is a region of a rail, so its ink has to clear a line rather than
+  /// an edge. 10 + 22 + 10 + 17 + 10 + 17 + 10 is exactly 96, which is what fixes the vertical one.
+  static constexpr float TILE_PADDING_X = 12.0F;
+  static constexpr float TILE_PADDING_Y = 10.0F;
+
+  /// A tile's own furniture: the icon, and one square of the level ladder beside its neighbour.
+  static constexpr float TILE_ICON_SIZE = 22.0F;
+  static constexpr float TILE_ICON_GAP = 10.0F;
+  static constexpr float TILE_PIP_SIZE = 6.0F;
+  static constexpr float TILE_PIP_GAP = 3.0F;
+  /// The bar along a rising tile's bottom inside edge, showing the ticks that are in.
+  static constexpr float TILE_PROGRESS_HEIGHT = 3.0F;
+
+  /// How many levels a building has, which is how many squares a level ladder draws (ADR-069).
+  ///
+  /// **The one number about the RULES this screen states rather than reads**, and it is stated
+  /// because a ladder is a picture of the whole curve: the snapshot carries the level a row would
+  /// build and what that level costs, pays and takes, and nothing on the wire says how many there
+  /// are in total. It agrees with `GameLogic/MatchRules.h`'s `BUILDING_LEVELS` by hand; if that
+  /// moves, a ladder draws the wrong number of squares and nothing else breaks (ADR-107).
+  static constexpr std::uint32_t BUILDING_LEVELS = 3;
+
   /// What a tap does. The screen has no free text and no chat, so this is the complete list of
   /// things a player can express on it (one-pager, "What it is not").
   enum class Action : std::uint8_t
@@ -345,6 +400,16 @@ public:
   /// bar reading `46 CR`, and both were correct. Public and pure for the reason `FormatCountdown`
   /// is -- the arithmetic is what must be right, and asserting it needs no screen.
   [[nodiscard]] std::string PurseSentence() const;
+
+  /// What a build sheet says above a system that is already building: *Xerev cannot take another
+  /// order until this lands. Two of three ticks are in.* (ADR-070, ADR-107).
+  ///
+  /// **The count is spelled in words below ten**, because this is a sentence in the sans face and
+  /// not a status column -- `2 of 3` is data and belongs on the tile, which carries it as
+  /// `2 OF 3 TICKS`. Static and pure for the reason `PurseSentence` is: the arithmetic is what must
+  /// be right, and asserting it must not need a screen. Empty when there are no ticks to count,
+  /// which is a remembered system carrying no construction (ADR-022).
+  [[nodiscard]] static std::string RisingSentence(std::string_view _systemName, std::uint32_t _ticksIn, std::uint32_t _ticks);
 
   /// Ticks for a fleet to reach a system from where it is, along lanes. Breadth-first over lane
   /// costs -- the picker shows it against every reachable destination, and it is the number the

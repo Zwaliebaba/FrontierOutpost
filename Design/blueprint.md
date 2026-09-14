@@ -119,8 +119,10 @@ real perspective orbit camera that you drag to look around, with a procedural st
 Systems rise on stems above their shadows; a fleet under way is a line of travelling dots along its
 lane with a marker and a tick-ETA; trade lanes, proposed lanes, sieges, custodians and the sealed
 region are all drawn as what they are. Tapping a system you hold opens the sheet of what it can
-build next — each row the level it would build, what that level pays and how many ticks it takes, or
-one row saying what is already rising there and when it lands (ADR-070); tapping your fleet opens
+build next, **as tiles** — a 2×2 grid, one tile per role, each carrying its glyph, the level it would
+build as a ladder of three, what that level pays and how many ticks it takes, and its price; a system
+already building shows the tile that is rising with a progress bar and the tiles beside it inert and
+priced, so there is still something to plan against (ADR-070, ADR-107); tapping your fleet opens
 the sheet of where it can go, and each candidate row says who is standing there and with how many
 ships — *P3 - 11 +DEF* — though not yet how the fight would go (ADR-063). A sheet still open when
 the clock hits zero stays open, dimmed, with a LOCKED chip in its header (ADR-065). Fog is

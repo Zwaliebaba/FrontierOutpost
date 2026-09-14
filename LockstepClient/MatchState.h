@@ -292,6 +292,16 @@ struct BuildRow
 {
   std::string title;
   std::string detail;
+  /// The building's own name and nothing else -- `Shipyard`, `Mining station` -- in sentence case
+  /// (ADR-099).
+  ///
+  /// **`title` names the system and a build TILE must not** (ADR-107). The rail and the digest read
+  /// a row out of context, so `Shipyard L2 - Dothan` is what they need; a tile sits on a sheet whose
+  /// header already says `BUILD - DOTHAN`, and it composes `Shipyard L1 → L2` from this and
+  /// `level`. Composed here rather than derived from `kind` for the reason `title` is: the client
+  /// does not name the game's buildings, and `kind` is a number whose third value is a bastion
+  /// nothing emits yet (blueprint §3).
+  std::string building;
   /// What this row would build, and where. A row the player can queue has to be able to become a
   /// `BuildOrder`, and a title is not an instruction.
   std::int32_t system = EventRefs::NONE;
@@ -301,6 +311,9 @@ struct BuildRow
   /// The level this row would build, 1 upwards, and how many ticks it takes (ADR-069). A row is
   /// always about the NEXT level: a system with a level-one shipyard offers `SHIPYARD L2`.
   std::uint32_t level = 0;
+  /// How many ticks the level takes to rise. **On a TRADE-LANE row it is how long the offer stays
+  /// open instead** (blueprint §3): a lane is paid at the lock its partner accepts rather than
+  /// taking ticks of its own, so the number a lane tile has to show in that slot is the window.
   std::uint32_t ticks = 0;
 
   /// Set on the one row a system under construction offers: what is rising, and the tick it lands.
@@ -309,9 +322,27 @@ struct BuildRow
   bool rising = false;
   std::uint32_t completesAt = 0;
 
-  /// True for the trade-lane row: dashed amber border, outlined amber PROPOSE button, and it
-  /// stays that way until the neighbour accepts.
+  /// True for the trade-lane row: an amber icon, `PROPOSE 10 CR` where a price goes, and it stays
+  /// that way until the neighbour accepts.
   bool isTradeLane = false;
+  /// Who has to accept it, as the label the rest of the screen calls them by (`P2`). Empty on
+  /// every other kind of row.
+  ///
+  /// **Set with `isTradeLane`, and nothing sets either** (ADR-039's open question). A lane is the
+  /// one building whose other end is a player rather than a place, so its tile shows the partner
+  /// where every other tile shows the level ladder (ADR-107); without the label the tile can be
+  /// drawn and cannot say whose agreement it is waiting on.
+  std::string partner;
+
+  /// Whether THE LOCK WOULD START THIS, which is not the same question as whether the purse covers
+  /// it.
+  ///
+  /// False on the row that reports what is already rising, and on every other row of a system that
+  /// is building -- the lock refuses a second construction whatever its kind (ADR-069), and those
+  /// rows are composed so the sheet can show what that system will be able to take and what it will
+  /// cost (ADR-107). **Three readers have to agree about it**: the build sheet draws such a tile
+  /// inert, the digest puts no button on it (`Offerable`), and `Orders::availableBuilds` counts
+  /// exactly the rows where this is true. It was written and never read until ADR-107.
   bool available = true;
   /// What the lock will take for it, in credits. The price is on the row (ADR-053): a build the
   /// purse cannot cover is one the lock is certain to refuse, and the row says so instead.

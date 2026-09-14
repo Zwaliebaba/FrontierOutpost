@@ -60,6 +60,26 @@ inline constexpr Neuron::Color PURPLE = {170, 140, 255, 255};
 /// The filled grey a locked rail wears (SCREENS.md 06). Solid rather than an outline, because at
 /// the lock the rail stops being a list of things you could change and becomes a receipt.
 inline constexpr Neuron::Color LOCKED_FILL = {214, 220, 228, 150};
+
+/// The wash under a build tile the player has committed to -- queued this tick, or already rising
+/// (ADR-107). `BLUE` at a card fill's alpha, so a committed tile reads as filled at a glance and
+/// the four lines of text on it keep a ground they clear the contrast floor over.
+///
+/// **It is the second ground on the main page that carries text**, which is why `ContrastTests`
+/// measures every ink a tile can draw over this as well as over `APP_BACKGROUND` (ADR-083). Every
+/// other fill on this screen sits under chrome rather than under words.
+inline constexpr Neuron::Color TILE_COMMITTED_FILL = {94, 196, 255, 15};
+
+/// The ink of a build tile that is inert because something else on its system is already rising
+/// (ADR-070, ADR-107).
+///
+/// **Deliberately under the 4.5:1 floor, and this is the place that has to say so** (ADR-083).
+/// Every other token here clears it over both grounds. A blocked tile is not READ: the sheet's help
+/// line above it says the system cannot take another order until the build lands, and the tile is
+/// kept on the grid so a player can see what will be orderable and what it will cost -- not so they
+/// can weigh it now. At an ink that cleared the floor, three inert tiles would compete with the one
+/// thing actually happening on that system.
+inline constexpr Neuron::Color TILE_BLOCKED_INK = {255, 255, 255, 90};
 /// A star in the sky behind every screen. Not text and not held to the contrast floor: it is meant
 /// to be faint, and a legible star is a defect.
 inline constexpr Neuron::Color STAR = {214, 220, 228, 220};

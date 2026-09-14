@@ -24,8 +24,12 @@ ships — this document cites it and does not restate what it does not have to.
   where it is declared. **Reading the constants is not the audit**: a box is composed from several of
   them and the one that goes wrong is the one nobody added up, so
   `Tests/LockstepTests/TouchTargetTests.cpp` draws the real screens and measures what `AddHit`
-  recorded, in both dimensions, naming each offender by its `Action`. Still under the floor: the
-  sheet's 36px header and close corner, and the 22px sheet section band (never a target).
+  recorded, in both dimensions, naming each offender by its `Action`. Still under the floor: the 22px
+  sheet section band and the 22px digest title band, neither of which is a target in its own right.
+  **The sheet's header and close corner are 44** — ADR-100's open question left them at 36 and the
+  same commit's `SHEET_HEADER_HEIGHT = TOUCH_FLOOR` took them to 44; this document and that ADR's
+  open question both said 36 until 2026-09-14, when `TouchTargetTests` was made to measure the
+  corner rather than to skip it (ADR-107).
 - Rail padding 14px. Card padding **10px** (`MainPage::CARD_PADDING`; the handoff said 8). Line
   height **is not a number here** — it is `FontRenderer::LineHeightPixels`, 17px for the face as
   baked; see §Font. Everything on whole pixels.
@@ -35,9 +39,15 @@ ships — this document cites it and does not restate what it does not have to.
 - Dialog: **520px** wide (the handoff drew 440 for five side by side; one at a time over 1280 can
   afford the room and the CONNECTION LOST paragraph needs it), 18px padding, centred vertically
   with its top never above y=40.
-- Sheet (ADR-052): the map pane's width less a 12px margin, anchored to the pane's bottom; 36px
-  header, **44px rows**, 40px `CANCEL` bar, a 24px row for the count that did not fit, six rows at
-  most. A full sheet is 340px of the 676px pane, so more than half the map stays visible.
+- Sheet (ADR-052): the map pane's width less a 12px margin, anchored to the pane's bottom — 596px
+  wide at x=412; **44px** header, **44px rows**, **44px** `CANCEL` bar (all three grown from 36, 44
+  and 40 by ADR-100), a 24px row for the count that did not fit, six rows at most, and one wrapped
+  help line with 8px above and below it. A full row sheet is 340px of the 676px pane, so more than
+  half the map stays visible.
+- **The build sheet's body is a grid and not a column** (ADR-107): a 2×2 of **96px** tiles,
+  `(596 − 20 − 8) / 2` = 284 wide, 8px between, 4px above the grid and 12px below, four slots and an
+  empty one not drawn. Header 44 + help 0 or 33 + grid + `CANCEL` 44 — **200px** for the two-tile
+  sheet the game produces today, **304** for a full four, 337 with a help line.
 
 ## Font
 
@@ -174,6 +184,14 @@ UI
   **There is one palette:** `SeatsPage`, `JoinPage` and `ConnectionDialog` bind local names to
   `Ink::` rather than carrying their own literals, which closes ADR-045's open item.
 - `rgba(214,220,228,0.59)` the filled grey a locked rail wears (`LOCKED_FILL`, SCREENS.md 06).
+- `rgba(94,196,255,0.06)` the wash under a build tile the player has committed to — queued, or
+  already rising (`TILE_COMMITTED_FILL`, ADR-107). **The only ground on the main page that carries
+  text**, so `ContrastTests` measures every ink a tile draws over it as well as over the ink.
+- `rgba(255,255,255,0.35)` a build tile that is inert because something else on its system is rising
+  (`TILE_BLOCKED_INK`, ADR-107). **The one token below the 4.5:1 floor and the only one**, at
+  3.21:1: the tile is not read — the sheet's help line says why nothing there can be ordered — and
+  an ink that cleared the floor would put three inert tiles in competition with the build that is
+  actually happening. Asserted to BE below it, so raising it is a decision.
 - Scrim under a dialog `rgba(7,9,13,0.80)` (the handoff: `rgba(6,8,12,0.74)`).
 - Map ground: vertical gradient `rgb(8,10,16) → rgb(16,22,36) @45% → rgb(11,14,20)`; grid
   `rgba(94,196,255,0.07)`; the horizon glow is declared and not drawn. Stars: a band and a
@@ -247,7 +265,29 @@ Semantic / owner (ADR-027: you are always blue)
   row dim, the filled grey `LOCKED` chip in the header clear of the `X`, and the rail's lock sentence
   in amber there; `X` and `CANCEL` still close it. Otherwise a build sheet whose queue has taken
   credits says what its rows are priced against (ADR-078), amber when that is why a row is dim and
-  `TEXT_DETAIL` when it is only a note. With neither, the rows start straight under the header.
+  `TEXT_DETAIL` when it is only a note. With none of them, the body starts straight under the header.
+- **Sheet, tile variant** — the build sheet's body only (ADR-107). A 2×2 grid of 284×96 tiles, one
+  per thing the system can build, in a fixed role order — mining station, shipyard, bastion, trade
+  lane — **packed, with an empty slot not drawn and no placeholder**. A tile is 12px in from the
+  sides and 10 from top and bottom, and carries three lines: a 22px icon row (icon · 10px · title in
+  mono Medium · the level ladder right-aligned), the yield and the ticks in sans `TEXT_DETAIL`, and a
+  bottom line with the state at one end and a note at the other, both mono. **The whole tile is the
+  hit.** Seven states: available (`OUTLINE`, `25 CR` / `1 CR LEFT AFTER`), queued (`BLUE` border and
+  wash, `QUEUED −40` / `TAP TO TAKE BACK`), beyond the purse (`CARD_BORDER`, `NEUTRAL_DIM`,
+  `45 CR` / `NEED 19 MORE`, not a target), rising (`BLUE` border and wash, `2 OF 3 TICKS` /
+  `DONE T14`, a 3px progress bar along the bottom inside edge, not a target), blocked by a rising
+  build (`DIVIDER`, `TILE_BLOCKED_INK`, `40 CR` / `AFTER T14`, not a target), top level
+  (`L3 · MAX`, not a target) and propose (`AMBER` icon, `PROPOSE 10 CR` / `OPEN 4 TICKS`). At the
+  lock and offline every tile keeps its border and its icon and every string on it goes
+  `NEUTRAL_DIM`, exactly as a row does.
+- **Level ladder** — three 6×6 squares 3px apart, right-aligned on a tile's icon row: filled for a
+  level already held, outlined in the tile's accent for the one it buys or is rising, a hairline
+  `OUTLINE` for the rest. It says `L2 → L3` as a picture, so the title names the step once. A lane
+  has no levels and shows the partner (`P2`, `TEXT_MUTED`) in the same slot.
+- **Build icons** — four glyphs, 22×22, drawn with `ShapeRenderer` primitives and never as a bitmap
+  (ADR-107), **tinted by state and never by owner**: the fleet dart for the shipyard, the
+  diamond-section column with its core for the mining station, a hexagon with a stem for the bastion,
+  a dashed lane between a filled square and an outlined one for a trade lane.
 - **Dialog** — the connection component (ADR-038): a 520px card, 1px border in the tone
   (blue welcome / amber lost / red refusal / hairline neutral), the title in the tone's colour —
   primary text for a neutral tone, because the hairline at 26 alpha is unreadable as text — a

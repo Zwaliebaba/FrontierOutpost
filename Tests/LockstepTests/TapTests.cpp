@@ -224,6 +224,105 @@ void DrawSeats(Lockstep::SeatsPage& _page, Headless& _renderers)
   _page.DrawInterface(_renderers.shapes, _renderers.text);
 }
 
+/// Where system `_id` sits in the view's own fogged list, which is the index every `OpenSystem`
+/// carries (ADR-057). `EventRefs::NONE` when the viewer cannot see it.
+[[nodiscard]] std::int32_t PositionOf(const Lockstep::MatchState& _state, std::int32_t _id)
+{
+  for (std::size_t index = 0; index < _state.graph.systems.size(); ++index)
+  {
+    if (_state.graph.systems[index].id == _id)
+    {
+      return static_cast<std::int32_t>(index);
+    }
+  }
+  return Lockstep::EventRefs::NONE;
+}
+
+/// Opens a build sheet by PRESSING what opens one, and leaves the page drawn so its hit list is the
+/// sheet's (ADR-058, ADR-107). `_system` is a position, or `NONE` for whichever opens first.
+///
+/// It presses rather than setting a field for the reason every test in this file does: what is
+/// under test is the sheet the screen builds, and a sheet reached by any other route is a different
+/// sheet. A tap that opens nothing focuses instead, which is why every candidate is tried.
+[[nodiscard]] bool OpenBuildSheet(Lockstep::MainPage& _page, Headless& _renderers, std::int32_t _system = Lockstep::EventRefs::NONE)
+{
+  _renderers.Begin();
+  DrawPage(_page, _renderers);
+
+  // A COPY, because the next draw rebuilds the list this is being walked.
+  const std::vector<Lockstep::MainPage::HitRegion> candidates = _page.Hits();
+  for (const Lockstep::MainPage::HitRegion& hit : candidates)
+  {
+    if (hit.action != Lockstep::MainPage::Action::OpenSystem || hit.index < 0)
+    {
+      continue;
+    }
+    if (_system != Lockstep::EventRefs::NONE && hit.index != _system)
+    {
+      continue;
+    }
+
+    (void)_page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+    _renderers.Begin();
+    DrawPage(_page, _renderers);
+    if (_page.OpenPanel() == Lockstep::MainPage::Panel::BuildList)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Every tile on the open sheet that is a target, as the rectangles `AddHit` recorded.
+///
+/// **`ToggleBuild` is not enough to identify one.** The digest's priced build button queues the same
+/// order from the other side of the screen (ADR-053), so it carries the same action -- which is
+/// correct and is why the guard behind them is one. What tells them apart is the column: the digest
+/// is the leftmost 400 pixels and a sheet is drawn over the map pane, never into a rail.
+[[nodiscard]] std::vector<Lockstep::MainPage::HitRegion> TilesOn(const Lockstep::MainPage& _page)
+{
+  std::vector<Lockstep::MainPage::HitRegion> tiles;
+  for (const Lockstep::MainPage::HitRegion& hit : _page.Hits())
+  {
+    if (hit.action == Lockstep::MainPage::Action::ToggleBuild && hit.x >= Lockstep::Frame::DIGEST_WIDTH)
+    {
+      tiles.push_back(hit);
+    }
+  }
+  return tiles;
+}
+
+/// A match in which seat zero's capital is already building something, and the tick log that says
+/// so. Driven through a real order for the reason `ASystemAlreadyBuildingOffersNothingToQueue` is:
+/// every index into `orders.builds` is composed by `ViewOf`, so a list edited afterwards is a list
+/// of stale indices rather than of a rule (ADR-057).
+struct BuildingCapital
+{
+  Lockstep::MatchState state;
+  std::int32_t system = Lockstep::EventRefs::NONE;
+};
+
+[[nodiscard]] BuildingCapital CapitalThatIsBuilding()
+{
+  Lockstep::MatchRules rules;
+  rules.playerCount = 6;
+  Lockstep::Match match = Lockstep::Match::Create(rules, 0x5349'474E'414C'5321ULL);
+
+  const Lockstep::SystemId capital = match.GalaxyGraph().Capitals()[0];
+  Lockstep::OrderSet orders;
+  orders.player = Lockstep::PlayerId{0};
+  orders.builds.push_back(Lockstep::BuildOrder{.system = capital, .kind = Lockstep::BuildKind::MiningStation});
+  const std::vector<Lockstep::OrderSet> sets = {orders};
+
+  Lockstep::TickLog log;
+  match = Lockstep::TickResolver::Resolve(match, {.orders = sets}, log);
+
+  const Lockstep::PlayerId seat{0};
+  BuildingCapital built{.state = Lockstep::ViewOf(Lockstep::Snapshot::For(match, seat), Lockstep::Snapshot::DigestFor(log, seat), 600)};
+  built.system = PositionOf(built.state, capital.Index());
+  return built;
+}
+
 } // namespace
 
 TEST_CLASS(ConnectionDialogTapTests)
@@ -1220,10 +1319,20 @@ public:
     const Lockstep::PlayerId seat{0};
     Lockstep::MatchState state = Lockstep::ViewOf(Lockstep::Snapshot::For(match, seat), Lockstep::Snapshot::DigestFor(log, seat), 600);
 
+    // **`available` and not `!rising`** since ADR-107: a system that is building composes the rows
+    // it cannot take yet as well as the one it is taking, so its sheet can show what will be
+    // orderable and what it will cost. What must stay true is that none of them is an OFFER, which
+    // is exactly what the field says -- and the sweep below is the claim that the screen agrees.
     const bool offersTheRisingSystem =
       std::any_of(state.orders.builds.begin(), state.orders.builds.end(),
-                  [capital](const Lockstep::BuildRow& _row) { return _row.system == capital.Index() && !_row.rising; });
+                  [capital](const Lockstep::BuildRow& _row) { return _row.system == capital.Index() && _row.available; });
     Assert::IsFalse(offersTheRisingSystem, L"a system already building was offered a second order to queue");
+
+    // And the rows it does compose are there: a sheet with one tile on it has nothing to plan
+    // against, which is what this change was for.
+    const auto blocked = std::count_if(state.orders.builds.begin(), state.orders.builds.end(), [capital](const Lockstep::BuildRow& _row)
+                                       { return _row.system == capital.Index() && !_row.rising; });
+    Assert::IsTrue(blocked > 0, L"a system already building composes nothing but the rising row");
 
     Lockstep::MainPage page;
     page.Create(std::move(state));
@@ -1325,6 +1434,198 @@ public:
     const bool exceeded = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
                                    [&page] { return page.State().orders.QueuedBuildCost() > page.State().player.credits; });
     Assert::IsFalse(exceeded, L"the screen queued more than the purse covers");
+  }
+};
+
+// The build sheet as a GRID OF TILES (ADR-107). The sheet stopped being a column of 44px rows and
+// became four 282x96 tiles, which changes every rectangle on it -- so what these press is the tile,
+// found in the hit list rather than at a coordinate, exactly as the sweeps above find a row.
+//
+// **Each one opens the sheet by pressing what opens it.** A sheet reached by setting `m_panel`
+// would be a sheet nobody could have got to, and the composition that decides a tile's state runs
+// in `DrawPanel` -- so a test that did not draw would be asserting about an empty vector.
+TEST_CLASS(BuildTileTapTests)
+{
+public:
+  TEST_METHOD(EveryTileQueuesTheBuildItDraws)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    Assert::IsTrue(OpenBuildSheet(page, renderers), L"nothing on the screen opened a build sheet");
+
+    // A system with nothing on it offers its two buildings at level one, which is the choice the
+    // opening board is about (ADR-069). The bastion and the lane are designed and unbuilt.
+    const std::vector<Lockstep::MainPage::HitRegion> tiles = TilesOn(page);
+    Assert::AreEqual(std::size_t{2}, tiles.size(), L"a system with nothing built does not offer two tiles");
+    Assert::IsTrue(page.State().orders.builds[static_cast<std::size_t>(tiles[0].index)].kind !=
+                     page.State().orders.builds[static_cast<std::size_t>(tiles[1].index)].kind,
+                   L"the two tiles are the same building");
+    for (const Lockstep::MainPage::HitRegion& tile : tiles)
+    {
+      Assert::AreEqual(1U, page.State().orders.builds[static_cast<std::size_t>(tile.index)].level,
+                       L"a tile on a system with nothing built does not buy level one");
+    }
+
+    // **Re-found between taps, not remembered.** The first tap puts the purse sentence above the
+    // grid, which makes the sheet a line taller and moves every tile up: a second tap at a
+    // remembered coordinate would land on the tile above the one it meant.
+    for (std::size_t pass = 0; pass < 2; ++pass)
+    {
+      const std::vector<Lockstep::MainPage::HitRegion> offered = TilesOn(page);
+      const auto next = std::find_if(offered.begin(), offered.end(),
+                                     [&page](const Lockstep::MainPage::HitRegion& _tile)
+                                     {
+                                       const auto& queued = page.State().orders.queuedBuilds;
+                                       return std::find(queued.begin(), queued.end(), _tile.index) == queued.end();
+                                     });
+      Assert::IsTrue(next != offered.end(), L"a tile that is not queued yet is no longer on the sheet");
+
+      (void)page.HandleTap(next->x + next->width * 0.5F, next->y + next->height * 0.5F);
+      renderers.Begin();
+      DrawPage(page, renderers);
+      Assert::AreEqual(pass + 1, page.State().orders.queuedBuilds.size(), L"tapping a tile did not queue its build");
+    }
+
+    Assert::AreEqual(std::size_t{2}, Lockstep::OrdersOf(page.State()).builds.size(), L"and both became orders");
+  }
+
+  TEST_METHOD(AQueuedTileTakesItselfBack)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    Assert::IsTrue(OpenBuildSheet(page, renderers), L"nothing on the screen opened a build sheet");
+
+    const std::vector<Lockstep::MainPage::HitRegion> tiles = TilesOn(page);
+    Assert::IsFalse(tiles.empty(), L"the sheet offers no tile to press");
+    const std::int32_t queuedRow = tiles.front().index;
+    (void)page.HandleTap(tiles.front().x + tiles.front().width * 0.5F, tiles.front().y + tiles.front().height * 0.5F);
+    renderers.Begin();
+    DrawPage(page, renderers);
+    Assert::AreEqual(std::size_t{1}, page.State().orders.queuedBuilds.size(), L"the tile did not queue anything");
+
+    // The same tile, found again where the taller sheet left it. A queued tile says `TAP TO TAKE
+    // BACK` on it and this is that tap (ADR-053).
+    const std::vector<Lockstep::MainPage::HitRegion> after = TilesOn(page);
+    const auto same = std::find_if(after.begin(), after.end(),
+                                   [queuedRow](const Lockstep::MainPage::HitRegion& _tile) { return _tile.index == queuedRow; });
+    Assert::IsTrue(same != after.end(), L"a queued tile stopped being a target, so it cannot be taken back");
+
+    (void)page.HandleTap(same->x + same->width * 0.5F, same->y + same->height * 0.5F);
+    renderers.Begin();
+    DrawPage(page, renderers);
+    Assert::IsTrue(page.State().orders.queuedBuilds.empty(), L"tapping a queued tile did not take it back");
+  }
+
+  TEST_METHOD(ATileBeyondThePurseRegistersNoHit)
+  {
+    // A purse that covers the cheaper building and not the dearer one, so the sheet has one tile
+    // that is a target and one that is not (ADR-053, ADR-078). Both are still DRAWN -- what is
+    // being asserted is that only one of them is a rectangle a finger can do anything with.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    Assert::IsTrue(state.orders.builds.size() >= 2, L"the opening board offers two buildings");
+
+    std::uint32_t cheapest = state.orders.builds.front().cost;
+    std::uint32_t dearest = cheapest;
+    for (const Lockstep::BuildRow& row : state.orders.builds)
+    {
+      cheapest = std::min(cheapest, row.cost);
+      dearest = std::max(dearest, row.cost);
+    }
+    Assert::IsTrue(cheapest < dearest, L"every building costs the same, so this test proves nothing");
+    state.player.credits = cheapest;
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+    Headless renderers;
+    Assert::IsTrue(OpenBuildSheet(page, renderers), L"nothing on the screen opened a build sheet");
+
+    const std::vector<Lockstep::MainPage::HitRegion> tiles = TilesOn(page);
+    Assert::AreEqual(std::size_t{1}, tiles.size(), L"a tile the purse cannot cover is still a target");
+    Assert::AreEqual(cheapest, page.State().orders.builds[static_cast<std::size_t>(tiles.front().index)].cost,
+                     L"the target is not the one the purse covers");
+  }
+
+  TEST_METHOD(ARisingSystemRegistersNoHitOnAnyTile)
+  {
+    // The system is building, so the lock refuses a second construction whatever its kind
+    // (ADR-069). The sheet keeps the whole ladder visible -- the rising tile and the inert one
+    // beside it, priced and marked with the tick it becomes orderable on -- and none of it is a
+    // target (ADR-070, ADR-107).
+    BuildingCapital built = CapitalThatIsBuilding();
+    Assert::IsTrue(built.system != Lockstep::EventRefs::NONE, L"the capital is not on the viewer's own map");
+
+    Lockstep::MainPage page;
+    page.Create(std::move(built.state));
+
+    Headless renderers;
+    Assert::IsTrue(OpenBuildSheet(page, renderers, built.system), L"the building capital opened no build sheet");
+    Assert::IsTrue(TilesOn(page).empty(), L"a system that is already building offered a tile to press");
+
+    // And it drew more than the one rising row, which is the whole point of keeping them.
+    std::size_t onThisSystem = 0;
+    for (const Lockstep::BuildRow& row : page.State().orders.builds)
+    {
+      if (row.system == page.State().graph.systems[static_cast<std::size_t>(built.system)].id)
+      {
+        ++onThisSystem;
+      }
+    }
+    Assert::IsTrue(onThisSystem > 1, L"a system that is building has nothing on its sheet to plan against");
+  }
+
+  TEST_METHOD(ALaneTileIsDrawnAndPressableWhenTheFlagIsSet)
+  {
+    // `BuildRow::isTradeLane` is set by nothing (ADR-039's open question), so the lane tile is
+    // styled here against the day it is -- and forced, so that day is not the first time anybody
+    // finds out whether it draws. The flag is the whole difference: an amber icon, `PROPOSE n CR`
+    // where a price goes, and the partner where the level ladder goes.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    Assert::IsFalse(state.orders.builds.empty());
+
+    const std::int32_t laneSystem = state.orders.builds.front().system;
+    std::uint32_t laneCost = 0;
+    for (Lockstep::BuildRow& row : state.orders.builds)
+    {
+      if (row.system != laneSystem)
+      {
+        continue;
+      }
+      row.isTradeLane = true;
+      row.building = "Trade lane";
+      row.title = "Trade lane → Pell";
+      row.detail = "+6 a tick each side · P2 must accept";
+      row.partner = "P2";
+      row.ticks = 4;
+      laneCost = row.cost;
+      break;
+    }
+    Assert::IsTrue(laneCost > 0, L"the forced lane row carries no price");
+
+    Lockstep::MainPage page;
+    page.Create(std::move(state));
+    Headless renderers;
+    Assert::IsTrue(OpenBuildSheet(page, renderers, PositionOf(page.State(), laneSystem)), L"the lane's system opened no build sheet");
+
+    const std::vector<Lockstep::MainPage::HitRegion> tiles = TilesOn(page);
+    const auto lane = std::find_if(tiles.begin(), tiles.end(), [&page](const Lockstep::MainPage::HitRegion& _tile)
+                                   { return page.State().orders.builds[static_cast<std::size_t>(_tile.index)].isTradeLane; });
+    Assert::IsTrue(lane != tiles.end(), L"the lane tile registered no hit");
+
+    const std::string proposed = std::format("PROPOSE {} CR", laneCost);
+    const bool drawn = std::any_of(renderers.text.DrawnStrings().begin(), renderers.text.DrawnStrings().end(),
+                                   [&proposed](const Neuron::FontRenderer::DrawnString& _drawn) { return _drawn.text == proposed; });
+    Assert::IsTrue(drawn, L"the lane tile does not say what proposing it costs");
+
+    // And it is the LAST slot: economy, war, defence, diplomacy, in that order on every sheet.
+    Assert::AreEqual(lane->index, tiles.back().index, L"the lane is not in the grid's last slot");
   }
 };
 
@@ -1562,6 +1863,28 @@ public:
 TEST_CLASS(PurseSentenceTests)
 {
 public:
+  // The other sentence that competes for a sheet's help slot: what a system that is already
+  // building says about itself (ADR-070, ADR-107). Pure, so the counting is assertable without a
+  // screen -- which is the whole reason it is not composed inline in `DrawPanel`.
+  TEST_METHOD(ARisingSentenceCountsItsTicksInWords)
+  {
+    Assert::AreEqual(std::string{"Xerev cannot take another order until this lands. Two of three ticks are in."},
+                     Lockstep::MainPage::RisingSentence("Xerev", 2, 3));
+
+    // One tick in is singular, and nothing to count is not a sentence.
+    Assert::AreEqual(std::string{"Pell cannot take another order until this lands. One of two ticks is in."},
+                     Lockstep::MainPage::RisingSentence("Pell", 1, 2));
+    Assert::AreEqual(std::string{"Pell cannot take another order until this lands. Zero of one ticks are in."},
+                     Lockstep::MainPage::RisingSentence("Pell", 0, 1));
+    Assert::IsTrue(Lockstep::MainPage::RisingSentence("Pell", 0, 0).empty(),
+                   L"a system with no ticks to count still claimed to be building");
+
+    // A build cannot be more ticks in than it is long, whatever arithmetic reaches it: a remembered
+    // system carries no construction, so a tick number from the wrong tick is the shape of the bug
+    // (ADR-022).
+    Assert::AreEqual(Lockstep::MainPage::RisingSentence("Pell", 3, 3), Lockstep::MainPage::RisingSentence("Pell", 9, 3));
+  }
+
   TEST_METHOD(NothingQueuedSaysNothing)
   {
     // The top bar already carries the purse. A sheet repeating it under every header would be a

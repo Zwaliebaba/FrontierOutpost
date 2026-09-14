@@ -14,6 +14,8 @@
 #include "MapView.h"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <queue>
 
 namespace Lockstep
@@ -130,6 +132,217 @@ constexpr float REGION_VOLUME_HEIGHT = 26.0F;
     digits.insert(at, ",");
   }
   return digits;
+}
+
+// ---- The build sheet's tiles (ADR-107) ---------------------------------------------------------
+
+/// What a build tile IS, which is the whole of how it is drawn.
+///
+/// **One enumerator per row of ADR-107's state table**, so that the seven treatments are chosen in
+/// one place and applied in another. The lock is not one of them: it dims whatever state a tile is
+/// already in and takes its target away, exactly as it dims a sheet row (ADR-065), and folding it
+/// in here would be seven more enumerators saying the same thing.
+enum class TileState : std::uint8_t
+{
+  /// Orderable, and the purse covers it.
+  Available,
+  /// Queued this tick. A tap takes it back (ADR-053).
+  Queued,
+  /// Orderable in principle and not against this purse, once the queue has had its share (ADR-078).
+  BeyondThePurse,
+  /// Paid for at an earlier lock and on its way (ADR-070).
+  Rising,
+  /// Something else on this system is rising, so the lock would refuse this one (ADR-069).
+  Blocked,
+  /// The building is at its top level, so there is no next one to buy. Also what a tile that is at
+  /// the top of its ladder and a tile that has simply gone inert have in common, which is why they
+  /// share an ink.
+  TopLevel,
+  /// A trade lane: a building with two owners, so it is proposed rather than built.
+  Propose,
+};
+
+/// The inks one state is drawn in, chosen once.
+struct TileInk
+{
+  Color border;
+  /// Fully transparent for every tile the player has not committed to.
+  Color fill;
+  /// The icon, and the ladder square for the level this tile buys.
+  Color accent;
+  Color title;
+  Color detail;
+  /// The bottom line's left end, which carries the price or the progress...
+  Color state;
+  /// ...and its right end, which carries the note.
+  Color note;
+};
+
+[[nodiscard]] TileInk InkFor(TileState _state) noexcept
+{
+  constexpr Color NO_FILL = {0, 0, 0, 0};
+  switch (_state)
+  {
+  case TileState::Queued:
+  case TileState::Rising:
+    // The one treatment two states share, and they share it because they are the same statement a
+    // lock apart: this is yours and it is paid for. What separates them is the bottom line and the
+    // progress bar, not the colour.
+    return TileInk{.border = Ink::BLUE,
+                   .fill = Ink::TILE_COMMITTED_FILL,
+                   .accent = Ink::BLUE,
+                   .title = Ink::TEXT_PRIMARY,
+                   .detail = Ink::TEXT_DETAIL,
+                   .state = Ink::BLUE,
+                   .note = Ink::BLUE};
+  case TileState::BeyondThePurse:
+    return TileInk{.border = Ink::CARD_BORDER,
+                   .fill = NO_FILL,
+                   .accent = Ink::NEUTRAL_DIM,
+                   .title = Ink::NEUTRAL_DIM,
+                   .detail = Ink::NEUTRAL_DIM,
+                   .state = Ink::NEUTRAL_DIM,
+                   .note = Ink::NEUTRAL_DIM};
+  case TileState::Blocked:
+    return TileInk{.border = Ink::DIVIDER,
+                   .fill = NO_FILL,
+                   .accent = Ink::TILE_BLOCKED_INK,
+                   .title = Ink::TILE_BLOCKED_INK,
+                   .detail = Ink::TILE_BLOCKED_INK,
+                   .state = Ink::TILE_BLOCKED_INK,
+                   .note = Ink::TILE_BLOCKED_INK};
+  case TileState::TopLevel:
+    return TileInk{.border = Ink::CARD_BORDER,
+                   .fill = NO_FILL,
+                   .accent = Ink::NEUTRAL_DIM,
+                   .title = Ink::NEUTRAL_DIM,
+                   .detail = Ink::NEUTRAL_DIM,
+                   .state = Ink::NEUTRAL_DIM,
+                   .note = Ink::NEUTRAL_DIM};
+  case TileState::Propose:
+    // Amber, which on this screen is what needs somebody else (DESIGN-GUIDELINES "Semantic"): a
+    // lane is the one building the player cannot finish alone.
+    return TileInk{.border = Ink::OUTLINE,
+                   .fill = NO_FILL,
+                   .accent = Ink::AMBER,
+                   .title = Ink::TEXT_PRIMARY,
+                   .detail = Ink::TEXT_DETAIL,
+                   .state = Ink::AMBER,
+                   .note = Ink::AMBER};
+  case TileState::Available:
+  default:
+    return TileInk{.border = Ink::OUTLINE,
+                   .fill = NO_FILL,
+                   .accent = Ink::TEXT_PRIMARY,
+                   .title = Ink::TEXT_PRIMARY,
+                   .detail = Ink::TEXT_DETAIL,
+                   .state = Ink::TEXT_PRIMARY,
+                   .note = Ink::TEXT_MUTED};
+  }
+}
+
+/// One tile of the build grid, composed before anything is drawn.
+///
+/// **Measured and then drawn, like a digest card** (`CardLayout`): a sheet's height is its header,
+/// its help line, its body and its `CANCEL` bar, and the body is only knowable once the tiles are.
+struct BuildTile
+{
+  /// `Shipyard L1 → L2`, and the SYSTEM IS NOT IN IT -- the sheet's header already said it.
+  std::string title;
+  /// What the level pays and how long it takes, from the snapshot's tables (ADR-070).
+  std::string detail;
+  /// The bottom line's two ends: the price or the progress, and the note beside it.
+  std::string state;
+  std::string note;
+
+  /// 0 shipyard, 1 mining station, 2 bastion (`BuildRow::kind`); a lane is not a kind of building.
+  std::uint8_t kind = 0;
+  bool lane = false;
+
+  /// How many levels this system already holds of this building, and the one this tile buys. The
+  /// ladder is drawn from the pair, so a tile never has to say `L2 → L3` twice.
+  std::uint32_t held = 0;
+  std::uint32_t buys = 0;
+  /// Whose agreement a lane is waiting on, drawn where every other tile draws its ladder.
+  std::string partner;
+
+  /// How much of a rising build is in, from 0 to 1, or a negative for a tile that is not rising.
+  /// **Zero is a real answer** -- a build ordered at the last lock -- so the absence cannot be it.
+  float progress = -1.0F;
+
+  TileInk ink;
+  /// Whether the bottom line's left end is set in the Medium cut. It is on every tile whose left
+  /// end is a number the player is deciding by, and not on one that is only reporting.
+  bool stateIsMedium = true;
+  /// The build row this tile queues or unqueues, or `EventRefs::NONE` for one that is only read.
+  std::int32_t target = EventRefs::NONE;
+};
+
+/// One of the four glyphs, 22x22 at `(_xPixels, _yPixels)`, in the tile's state colour.
+///
+/// **Built from the map's own shapes and never from a bitmap** (R13, ADR-014): the fleet dart for a
+/// shipyard, the diamond-section column for a mining station, a hexagon for a bastion, a dashed lane
+/// between two owner squares for a trade lane. Tinted by STATE and never by owner -- a build sheet
+/// is about one system and every building on it is the viewer's, so an owner colour here would be a
+/// third channel saying nothing (ADR-027).
+void DrawBuildIcon(ShapeRenderer& _shapes, std::uint8_t _kind, bool _lane, float _xPixels, float _yPixels, const Color& _color)
+{
+  /// The stroke every outlined glyph is drawn at. One and a half rather than one, because at 22
+  /// pixels a hairline hexagon beside a filled dart reads as two weights of the same family.
+  constexpr float STROKE = 1.5F;
+  const auto at = [_xPixels, _yPixels](float _x, float _y) noexcept { return ShapeRenderer::ShapePoint{_xPixels + _x, _yPixels + _y}; };
+
+  if (_lane)
+  {
+    _shapes.DashedLine(_xPixels + 5.0F, _yPixels + 11.0F, _xPixels + 17.0F, _yPixels + 11.0F, _color, STROKE, 3.0F, 2.0F);
+    // The proposer's end is filled and the partner's is an outline: the lane is half agreed.
+    _shapes.FillRect(_xPixels + 1.0F, _yPixels + 8.0F, 6.0F, 6.0F, _color);
+    _shapes.StrokeRect(_xPixels + 15.0F, _yPixels + 8.0F, 6.0F, 6.0F, _color, STROKE);
+    return;
+  }
+
+  switch (_kind)
+  {
+  case 1:
+  {
+    // The mining station: the map's diamond-section column seen end on, with its core.
+    const std::array<ShapeRenderer::ShapePoint, 4> diamond = {at(11.0F, 2.0F), at(20.0F, 11.0F), at(11.0F, 20.0F), at(2.0F, 11.0F)};
+    _shapes.StrokePolygon(diamond, _color, STROKE);
+    _shapes.FillEllipse(_xPixels + 11.0F, _yPixels + 11.0F, 2.5F, 2.5F, _color);
+    break;
+  }
+  case 2:
+  {
+    // The bastion: a hexagon, which is the one silhouette on this sheet that is neither a ship nor
+    // a mine. Nothing emits a bastion row yet (blueprint §3).
+    const std::array<ShapeRenderer::ShapePoint, 6> hexagon = {at(11.0F, 2.0F),  at(19.0F, 6.0F), at(19.0F, 12.0F),
+                                                              at(11.0F, 20.0F), at(3.0F, 12.0F), at(3.0F, 6.0F)};
+    _shapes.StrokePolygon(hexagon, _color, STROKE);
+    _shapes.Line(_xPixels + 11.0F, _yPixels + 7.0F, _xPixels + 11.0F, _yPixels + 14.0F, _color, STROKE);
+    break;
+  }
+  case 0:
+  default:
+    // The shipyard: the arrowhead the map draws a fleet as (ADR-090), so the thing that makes ships
+    // and the thing it makes are the same shape.
+    _shapes.FillTriangle(_xPixels + 3.0F, _yPixels + 4.0F, _xPixels + 19.0F, _yPixels + 11.0F, _xPixels + 7.0F, _yPixels + 11.0F, _color);
+    _shapes.FillTriangle(_xPixels + 7.0F, _yPixels + 11.0F, _xPixels + 19.0F, _yPixels + 11.0F, _xPixels + 3.0F, _yPixels + 18.0F, _color);
+    break;
+  }
+}
+
+/// Which slot of the 2x2 grid a tile belongs in: mining station, shipyard, bastion, trade lane.
+///
+/// **Fixed by ROLE and not by the order the snapshot composed the rows in** (ADR-107), so the tile a
+/// thumb reaches for is in the same corner of every system's sheet. Economy first, because it is
+/// what a player buys most of and the grid is read top-left first.
+[[nodiscard]] std::size_t TileSlotOf(const BuildTile& _tile) noexcept
+{
+  if (_tile.lane)
+  {
+    return 3;
+  }
+  return _tile.kind == 1 ? 0 : (_tile.kind == 0 ? 1 : 2);
 }
 
 } // namespace
@@ -275,6 +488,29 @@ std::string MainPage::PurseSentence() const
   const std::uint32_t left = spent <= m_state.player.credits ? m_state.player.credits - spent : 0;
   return std::format("Priced against the {} credits left after the {} already queued, not the {} in hand.", left, spent,
                      m_state.player.credits);
+}
+
+std::string MainPage::RisingSentence(std::string_view _systemName, std::uint32_t _ticksIn, std::uint32_t _ticks)
+{
+  if (_ticks == 0)
+  {
+    return {};
+  }
+
+  // Words below ten and digits from ten up, which is the ordinary rule for prose and the reason
+  // this is not `std::to_string` (DESIGN-GUIDELINES "Copy": a sentence is a sentence). A level takes
+  // one to four ticks today (ADR-069), so the table is the whole of the range and then some.
+  const auto spelled = [](std::uint32_t _count)
+  {
+    constexpr std::array<const char*, 10> WORDS = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"};
+    return _count < WORDS.size() ? std::string{WORDS[_count]} : std::to_string(_count);
+  };
+
+  const std::uint32_t in = _ticksIn > _ticks ? _ticks : _ticksIn;
+  std::string counted = spelled(in);
+  counted[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(counted[0])));
+  return std::format("{} cannot take another order until this lands. {} of {} ticks {} in.", _systemName, counted, spelled(_ticks),
+                     in == 1 ? "is" : "are");
 }
 
 std::string MainPage::LockSentence() const
@@ -769,13 +1005,16 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       const auto found = std::find(queued.begin(), queued.end(), region->index);
       if (found == queued.end())
       {
-        // Refused here, by the rules the lock would refuse it by (ADR-053, ADR-069). The rows and
+        // Refused here, by the rules the lock would refuse it by (ADR-053, ADR-069). The tiles and
         // buttons that lead here already say so and are not targets, so this is the guard behind
         // them rather than the message -- and it is the only place `queuedBuilds` grows, which is
         // what makes it the guard rather than one of several.
-        const bool rising = region->index >= 0 && region->index < static_cast<std::int32_t>(m_state.orders.builds.size()) &&
-                            m_state.orders.builds[static_cast<std::size_t>(region->index)].rising;
-        if (rising || !m_state.CanAffordBuild(region->index))
+        //
+        // `available` is the whole of "the lock would start this": the rising row and every row
+        // beside it on a system that is building are all rows a queue would be refused (ADR-107).
+        const bool startable = region->index >= 0 && region->index < static_cast<std::int32_t>(m_state.orders.builds.size()) &&
+                               m_state.orders.builds[static_cast<std::size_t>(region->index)].available;
+        if (!startable || !m_state.CanAffordBuild(region->index))
         {
           return true;
         }
@@ -2133,11 +2372,22 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   /// concede uses it (ADR-093): it is the one control on this screen that must always be reachable,
   /// and every other row on every sheet is equal, so the first six win.
   std::vector<SheetRow> pinned;
+
+  /// The build sheet's body, which is a grid rather than a list (ADR-107). Exactly one of this and
+  /// `rows` is filled: a sheet is one shape or the other, and the build sheet falls back to a row
+  /// when it has nothing to put in a tile.
+  std::vector<BuildTile> tiles;
   std::string title;
 
-  /// Whether a row on this sheet is dim for want of credits, which is what decides whether the
-  /// purse sentence above the rows is a warning or a note (ADR-078).
+  /// Whether something on this sheet is dim for want of credits, which is what decides whether the
+  /// purse sentence above it is a warning or a note (ADR-078).
   bool shortOfCredits = false;
+
+  /// What a build sheet's header and help line need about the system they are on: the tick a build
+  /// already rising there lands on -- zero when none is -- and the sentence that says so
+  /// (ADR-070, ADR-107). Composed with the tiles, because that is the pass that reads the rows.
+  std::uint32_t sheetRisingLandsAt = 0;
+  std::string risingHelp;
 
   // What tapping a row does. It differs per panel, and it used to not exist: every row went to
   // `ChooseDestination`, so the BUILD panel listed two things a player could not tap.
@@ -2161,6 +2411,25 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     //
     // `BuildRow::system` is a system id and `m_panelSubject` is a position in the view's own list,
     // which are different numbers for the same system (ADR-057). The node carries both.
+    //
+    // **Two passes, because a blocked tile has to know what is blocking it.** A system that is
+    // building draws the tiles for what it could build next beside the one that is rising -- inert,
+    // priced, and each saying the tick it becomes orderable on, which is the rising build's
+    // (ADR-107). The player is planning, not choosing, and a sheet with one tile on it had nothing
+    // to plan against.
+    for (const BuildRow& row : m_state.orders.builds)
+    {
+      if (row.system != node.id || !row.rising)
+      {
+        continue;
+      }
+      sheetRisingLandsAt = row.completesAt;
+
+      const std::uint32_t orderedAt = row.completesAt > row.ticks ? row.completesAt - row.ticks : 0;
+      const std::uint32_t done = m_state.match.tick > orderedAt ? m_state.match.tick - orderedAt : 0;
+      risingHelp = RisingSentence(node.name, done, row.ticks);
+    }
+
     for (std::size_t index = 0; index < m_state.orders.builds.size(); ++index)
     {
       const BuildRow& row = m_state.orders.builds[index];
@@ -2169,40 +2438,145 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
         continue;
       }
 
-      // A system already building offers nothing and says why, with the tick it lands on. It is
-      // not a target: the lock refuses a second order on it (ADR-069), and a row that looks live
-      // and does nothing is the defect this screen has been bitten by twice.
-      if (row.rising)
-      {
-        rows.push_back(SheetRow{row.title, "It cannot take another order until this lands", std::format("DONE T{}", row.completesAt),
-                                Ink::BLUE, EventRefs::NONE});
-        continue;
-      }
-
       const bool queued =
         std::ranges::find(m_state.orders.queuedBuilds, static_cast<std::int32_t>(index)) != m_state.orders.queuedBuilds.end();
-
-      // A queued row says so in the right-hand column rather than inside its own title: tapping it
-      // again is how you take it back, and the status is what the eye is scanning the column for.
-      // An unqueued row carries its price there instead, and one the purse cannot cover says what
-      // is missing and is not a target (ADR-053).
       const bool affordable = queued || m_state.CanAffordBuild(static_cast<std::int32_t>(index));
-      shortOfCredits = shortOfCredits || !affordable;
-      const std::string status = queued ? std::string{"QUEUED"}
-                                 : affordable
-                                   ? std::format("{} CR", row.cost)
-                                   : std::format("{} CR - NEED {} MORE", row.cost, BuildShortfall(static_cast<std::int32_t>(index)));
+      const bool atTopLevel = row.level > BUILDING_LEVELS;
 
-      // The second line is what the level BUYS and what it COSTS IN TICKS -- the two numbers a
-      // player weighs a shipyard level against a mining level with, and the reason both tables are
-      // on the wire (ADR-053, ADR-069). The server wrote the sentence; this only places it.
-      rows.push_back(SheetRow{row.title, row.detail, status, queued ? Ink::BLUE : NO_ACCENT,
-                              !OrdersEditable() || !affordable ? EventRefs::NONE : static_cast<std::int32_t>(index)});
+      // The order of these tests is the order the reasons outrank each other. A queued tile stays
+      // blue at the lock because it is a receipt of what this lock will take, exactly as its rail
+      // row does; everything below that is a reason the tile cannot be tapped.
+      TileState state = TileState::Available;
+      if (row.rising)
+      {
+        state = TileState::Rising;
+      }
+      else if (queued)
+      {
+        state = TileState::Queued;
+      }
+      else if (atTopLevel)
+      {
+        state = TileState::TopLevel;
+      }
+      else if (!row.available)
+      {
+        state = TileState::Blocked;
+      }
+      else if (!affordable)
+      {
+        state = TileState::BeyondThePurse;
+      }
+      else if (row.isTradeLane)
+      {
+        state = TileState::Propose;
+      }
+      shortOfCredits = shortOfCredits || state == TileState::BeyondThePurse;
+
+      BuildTile tile;
+      tile.kind = row.kind;
+      tile.lane = row.isTradeLane;
+      tile.buys = row.level;
+      tile.held = row.level > 0 ? row.level - 1 : 0;
+      tile.partner = row.partner;
+      tile.ink = InkFor(state);
+
+      // **The level ladder says `L2 → L3`, so the title only has to name the step.** A first build
+      // has no step to name and a rising one is not a step the player is choosing (ADR-107). A
+      // lane's title is the row's own, because the far end of a lane is a different system from the
+      // one this sheet is about and only the server knows which.
+      tile.title = row.isTradeLane  ? row.title
+                   : row.rising     ? std::format("{} L{} rising", row.building, row.level)
+                   : row.level <= 1 ? std::format("{} L{}", row.building, row.level)
+                                    : std::format("{} L{} → L{}", row.building, row.level - 1, row.level);
+
+      // What the level BUYS and what it COSTS IN TICKS -- the two numbers a player weighs a
+      // shipyard level against a mining level with, and the reason both tables are on the wire
+      // (ADR-053, ADR-069). The server wrote the sentence; this only places it.
+      tile.detail = row.detail;
+
+      switch (state)
+      {
+      case TileState::Rising:
+      {
+        // The ticks that are in, out of the level's own count. `orderedAt` is `completesAt - ticks`
+        // (ADR-069), so the fraction is derivable from what the snapshot already carries -- and is
+        // not derivable at all for a remembered system, which carries no construction (ADR-022).
+        const std::uint32_t orderedAt = row.completesAt > row.ticks ? row.completesAt - row.ticks : 0;
+        const std::uint32_t done = m_state.match.tick > orderedAt ? m_state.match.tick - orderedAt : 0;
+        const std::uint32_t in = done > row.ticks ? row.ticks : done;
+        tile.state = row.ticks == 0 ? std::string{"RISING"} : std::format("{} OF {} TICKS", in, row.ticks);
+        tile.note = std::format("DONE T{}", row.completesAt);
+        tile.progress = row.ticks == 0 ? -1.0F : static_cast<float>(in) / static_cast<float>(row.ticks);
+        break;
+      }
+      case TileState::Queued:
+        // The note is an INSTRUCTION, and it is the only one on the grid: at the lock or offline
+        // there is no tap to describe, so it is left off rather than dimmed into a lie (ADR-065).
+        // Every other note is a fact and stays true whether or not anything can be ordered.
+        tile.state = std::format("QUEUED −{}", row.cost);
+        tile.note = OrdersEditable() ? "TAP TO TAKE BACK" : std::string{};
+        break;
+      case TileState::BeyondThePurse:
+        tile.state = std::format("{} CR", row.cost);
+        tile.note = std::format("NEED {} MORE", BuildShortfall(static_cast<std::int32_t>(index)));
+        tile.stateIsMedium = false;
+        break;
+      case TileState::Blocked:
+        tile.state = std::format("{} CR", row.cost);
+        tile.note = std::format("AFTER T{}", sheetRisingLandsAt);
+        tile.stateIsMedium = false;
+        break;
+      case TileState::TopLevel:
+        tile.state = std::format("L{} · MAX", BUILDING_LEVELS);
+        tile.stateIsMedium = false;
+        break;
+      case TileState::Propose:
+        tile.state = std::format("PROPOSE {} CR", row.cost);
+        tile.note = std::format("OPEN {} TICKS", row.ticks);
+        break;
+      case TileState::Available:
+      default:
+      {
+        tile.state = std::format("{} CR", row.cost);
+
+        // **What the purse has left once this AND the queue are paid**, which is the number a
+        // player picking between two tiles is actually short of (ADR-078). Omitted once it is big
+        // enough not to be the question -- three digits of change on every tile is noise.
+        const std::uint32_t committed = m_state.orders.QueuedBuildCost() + row.cost;
+        const std::uint32_t left = m_state.player.credits > committed ? m_state.player.credits - committed : 0;
+        tile.note = left >= 100 ? std::string{} : std::format("{} CR LEFT AFTER", left);
+        break;
+      }
+      }
+
+      // Nothing on a sheet is a target while the orders are locked or the link is down (ADR-065,
+      // ADR-085), and a tile that reports rather than offers is never one.
+      const bool offers = state == TileState::Available || state == TileState::Queued || state == TileState::Propose;
+      tile.target = OrdersEditable() && offers ? static_cast<std::int32_t>(index) : EventRefs::NONE;
+
+      // **Dimmed in place rather than restated**, which is what the sheet has always done at the
+      // lock: the state keeps its border and its icon, and every string on it goes to the inert ink
+      // (ADR-065). `Blocked` is already fainter than that and is left alone.
+      if (!OrdersEditable() && state != TileState::Blocked)
+      {
+        tile.ink.title = Ink::NEUTRAL_DIM;
+        tile.ink.detail = Ink::NEUTRAL_DIM;
+        tile.ink.state = Ink::NEUTRAL_DIM;
+        tile.ink.note = Ink::NEUTRAL_DIM;
+      }
+
+      tiles.push_back(std::move(tile));
     }
 
-    // A system with both buildings on it says so, rather than opening an empty sheet. The same
-    // bargain the signal picker makes with an empire that has nobody to talk to.
-    if (rows.empty())
+    // **One tile per role, in the same corner on every sheet** (ADR-107). Stable, so two tiles of
+    // one role -- which nothing composes today -- keep the order the snapshot put them in.
+    std::ranges::stable_sort(tiles, [](const BuildTile& _a, const BuildTile& _b) { return TileSlotOf(_a) < TileSlotOf(_b); });
+
+    // A system with everything at its top level says so, rather than opening an empty sheet. The
+    // same bargain the signal picker makes with an empire that has nobody to talk to -- and the one
+    // case where this sheet is a row rather than a grid, because there is no building to draw.
+    if (tiles.empty())
     {
       rows.push_back(
         SheetRow{"NOTHING LEFT TO BUILD HERE", "Both buildings are at their top level.", std::string{}, NO_ACCENT, EventRefs::NONE});
@@ -2438,9 +2812,13 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   // only way out of a match -- and keeping it inside the cap made it cost a real signal every time
   // the board got busy enough to want both. It sits above `CANCEL`, under its own band, and neither
   // it nor the band counts against the six.
-  const std::size_t clippedBefore = rows.size();
+  // **The build sheet's body is a grid and every other sheet's is a column** (ADR-107), so the cap
+  // is four tiles or six rows depending on which one this is. Exactly one of the two lists is
+  // filled, which is why the count of what did not fit can simply add them.
   const std::size_t shown = std::min(rows.size(), SHEET_MAXIMUM_ROWS);
-  const bool clipped = clippedBefore > shown;
+  const std::size_t shownTiles = std::min(tiles.size(), SHEET_TILE_SLOTS);
+  const std::size_t notShown = (rows.size() - shown) + (tiles.size() - shownTiles);
+  const bool clipped = notShown > 0;
 
   const float paneX = Frame::DIGEST_WIDTH;
   const float paneWidth = Frame::SCREEN_WIDTH - Frame::DIGEST_WIDTH - Frame::ORDERS_WIDTH;
@@ -2459,14 +2837,30 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     listHeight += row.band ? SHEET_BAND_HEIGHT : SHEET_ROW_HEIGHT;
   }
 
-  // **One slot under the header for the thing the rows cannot say about themselves**, and two
-  // sentences compete for it.
+  // The grid: 4 above, 12 below, 8 between, and **an empty slot is not drawn** -- a two-tile system
+  // is one row of tiles and the sheet is `96 + 8` shorter than a four-tile one (ADR-107).
+  const std::size_t tileRows = (shownTiles + SHEET_TILE_COLUMNS - 1) / SHEET_TILE_COLUMNS;
+  const float tileWidth = (width - 2.0F * CARD_PADDING - SHEET_TILE_GAP) / static_cast<float>(SHEET_TILE_COLUMNS);
+  if (tileRows > 0)
+  {
+    listHeight += SHEET_TILE_TOP + static_cast<float>(tileRows) * SHEET_TILE_HEIGHT + static_cast<float>(tileRows - 1) * SHEET_TILE_GAP +
+                  SHEET_TILE_BOTTOM;
+  }
+
+  // **One slot under the header for the thing the body cannot say about itself**, and THREE
+  // sentences compete for it (ADR-107 adds the third).
   //
-  // At the lock the sheet stays and goes inert (ADR-065). Its rows are already not targets -- every
-  // panel above passes `EventRefs::NONE` while the orders are locked -- so what is left is to say
-  // why, in the rail's own words and in the rail's amber.
+  // At the lock the sheet stays and goes inert (ADR-065). Its controls are already not targets --
+  // every panel above passes `EventRefs::NONE` while the orders are locked -- so what is left is to
+  // say why, in the rail's own words and in the rail's amber. That outranks the other two: nothing
+  // here can be acted on for a reason that has nothing to do with this system or this purse.
   //
-  // Otherwise a build sheet says what the queue has already taken (ADR-078). A row is refused
+  // Then a system that is building says so (ADR-070): every tile but one on it is inert and the
+  // reason is the same for all of them, which is a statement about the sheet rather than about a
+  // tile. It outranks the purse because a purse that covers a build the lock would refuse anyway is
+  // not why the tile is dim.
+  //
+  // Otherwise a build sheet says what the queue has already taken (ADR-078). A tile is refused
   // against the purse MINUS what is queued, and every number that reaches the eye beside it -- the
   // top bar's, the rail header's -- is the purse before it, so the sheet arrived at `NEED 4 MORE`
   // under a bar reading `46 CR` and the arithmetic was nowhere. Amber only when it is the reason
@@ -2474,11 +2868,14 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   const bool atLock = m_state.orders.locked && !m_state.match.finished;
   const std::string help = m_offline ? std::string{"The link is down. Nothing you tap here is sent; the board is yours to read."}
                            : atLock  ? LockSentence()
-                                     : (m_panel == Panel::BuildList ? PurseSentence() : std::string{});
+                           : !risingHelp.empty() ? risingHelp
+                                                 : (m_panel == Panel::BuildList ? PurseSentence() : std::string{});
   const std::vector<std::string> sheetHelp =
     help.empty() ? std::vector<std::string>{} : FontRenderer::WrapToWidth(help, static_cast<std::uint32_t>(width - 2.0F * CARD_PADDING));
   const Color helpInk = atLock || m_offline || shortOfCredits ? Ink::AMBER : Ink::TEXT_DETAIL;
-  const float helpHeight = sheetHelp.empty() ? 0.0F : static_cast<float>(sheetHelp.size()) * static_cast<float>(LINE_HEIGHT) + 12.0F;
+  // 8 above and 8 below the line, which is what a wrapped sentence needs to sit clear of the rule
+  // over it and the first tile under it (ADR-107).
+  const float helpHeight = sheetHelp.empty() ? 0.0F : static_cast<float>(sheetHelp.size()) * static_cast<float>(LINE_HEIGHT) + 16.0F;
 
   const float height = SHEET_HEADER_HEIGHT + helpHeight + listHeight + SHEET_ACTION_HEIGHT;
   const float y = Frame::SCREEN_HEIGHT - SHEET_MARGIN - height;
@@ -2495,27 +2892,59 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
                  Ink::TEXT_PRIMARY, Face::MonoDisplay);
   DrawRight(_text, x + width - CARD_PADDING, CenterTextY(y, SHEET_HEADER_HEIGHT), "X", Ink::TEXT_MUTED);
 
-  // The same filled grey chip the locks rail wears, in the header's own status position -- clear of
-  // the `X`'s 36-pixel corner, which is a target and must not have a chip drawn into it.
+  // ---- The header's status slot ----------------------------------------------------------------
+  //
+  // One position, inboard of the `X`'s 44-pixel corner -- which is a target and must never have a
+  // chip drawn into it -- and three things that can occupy it, in this order.
+  const std::int32_t statusY = CenterTextY(y, SHEET_HEADER_HEIGHT);
   if (atLock || m_offline)
   {
-    // `OFFLINE` where `LOCKED` goes, because the two are the same shape of statement -- this sheet
-    // is showing you something it cannot take an order about -- and differ only in why (ADR-085).
+    // The same filled grey chip the locks rail wears. `OFFLINE` where `LOCKED` goes, because the
+    // two are the same shape of statement -- this sheet is showing you something it cannot take an
+    // order about -- and differ only in why (ADR-085).
     const std::string chip = m_offline ? "OFFLINE" : "LOCKED";
     const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels(chip)) + 12.0F;
     const float chipX = x + width - SHEET_HEADER_HEIGHT - chipWidth;
     _shapes.FillRect(chipX, y + 10.0F, chipWidth, 16.0F, Ink::LOCKED_FILL);
-    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, CenterTextY(y, SHEET_HEADER_HEIGHT), chip, Ink::APP_BACKGROUND);
+    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, statusY, chip, Ink::APP_BACKGROUND);
+  }
+  else if (sheetRisingLandsAt != 0)
+  {
+    // **A system that is building says so where its purse would go** (ADR-070, ADR-107). Outlined
+    // rather than filled, because it reports the board rather than taking the sheet away: the grey
+    // chip above means nothing here can be ordered at all, and this means one thing already was.
+    const std::string chip = std::format("RISING · DONE T{}", sheetRisingLandsAt);
+    const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels(chip)) + 14.0F;
+    const float chipX = x + width - SHEET_HEADER_HEIGHT - chipWidth;
+    constexpr float CHIP_HEIGHT = 22.0F;
+    _shapes.StrokeRect(chipX, BandTopForText(statusY, CHIP_HEIGHT), chipWidth, CHIP_HEIGHT, Ink::BLUE);
+    _text.DrawText(static_cast<std::int32_t>(chipX) + 7, statusY, chip, Ink::BLUE);
+  }
+  else if (m_panel == Panel::BuildList)
+  {
+    // **The purse, on the sheet that spends it** (ADR-087, ADR-107). The same pair of numbers the
+    // top bar carries and in the same order -- the purse, then in blue what this tick's queue has
+    // already taken of it -- because a tile priced `NEED 19 MORE` is priced against the difference
+    // and the difference was 400 pixels away. Drawn right to left, so the qualifier is outermost.
+    float cursor = x + width - SHEET_HEADER_HEIGHT - 6.0F;
+    const std::uint32_t committed = m_state.orders.QueuedBuildCost();
+    if (committed > 0)
+    {
+      const std::string spent = std::format("−{}", committed);
+      DrawRight(_text, cursor, statusY, spent, Ink::BLUE);
+      cursor -= static_cast<float>(FontRenderer::MeasurePixels(spent)) + 6.0F;
+    }
+    DrawRight(_text, cursor, statusY, std::format("{} CR", m_state.player.credits), Ink::TEXT_MUTED);
   }
 
   // A close target the height of the header, not the width of one glyph.
   AddHit(x + width - SHEET_HEADER_HEIGHT, y, SHEET_HEADER_HEIGHT, SHEET_HEADER_HEIGHT, Action::ClosePanel, 0);
   _shapes.FillRect(x, y + SHEET_HEADER_HEIGHT, width, 1.0F, Ink::DIVIDER);
 
-  // ---- What the rows cannot say about themselves -----------------------------------------------
+  // ---- What the body cannot say about itself ---------------------------------------------------
   if (!sheetHelp.empty())
   {
-    std::int32_t helpY = static_cast<std::int32_t>(y + SHEET_HEADER_HEIGHT) + 6;
+    std::int32_t helpY = static_cast<std::int32_t>(y + SHEET_HEADER_HEIGHT) + 8;
     for (const std::string& line : sheetHelp)
     {
       _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), helpY, line, helpInk, Face::SansMedium);
@@ -2524,12 +2953,109 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     _shapes.FillRect(x, y + SHEET_HEADER_HEIGHT + helpHeight, width, 1.0F, Ink::DIVIDER);
   }
 
+  float rowY = y + SHEET_HEADER_HEIGHT + helpHeight;
+
+  // ---- Tiles -----------------------------------------------------------------------------------
+  //
+  // **The whole tile is the target** (ADR-107): 284x96 against a 44-pixel floor, so there is nothing
+  // to grow and nothing a thumb can land between. The bottom line is where the eye goes -- a price
+  // on the left and what it leaves on the right -- and the top line is what it is.
+  if (shownTiles > 0)
+  {
+    rowY += SHEET_TILE_TOP;
+    for (std::size_t index = 0; index < shownTiles; ++index)
+    {
+      const BuildTile& tile = tiles[index];
+      // Divided as integers and converted afterwards, which is what the slot IS: the third tile is
+      // in row one whatever the arithmetic is done in, and a float division here would be a
+      // rounding question where there is none.
+      const std::size_t column = index % SHEET_TILE_COLUMNS;
+      const std::size_t row = index / SHEET_TILE_COLUMNS;
+      const float tileX = x + CARD_PADDING + static_cast<float>(column) * (tileWidth + SHEET_TILE_GAP);
+      const float tileY = rowY + static_cast<float>(row) * (SHEET_TILE_HEIGHT + SHEET_TILE_GAP);
+
+      if (tile.ink.fill.alpha != 0)
+      {
+        _shapes.FillRect(tileX, tileY, tileWidth, SHEET_TILE_HEIGHT, tile.ink.fill);
+      }
+      _shapes.StrokeRect(tileX, tileY, tileWidth, SHEET_TILE_HEIGHT, tile.ink.border);
+
+      // **The ticks that are in, along the inside of the bottom edge** (ADR-107). Three pixels, the
+      // whole width faint and the done fraction solid, so a rising tile reports progress without
+      // spending a line on it. Drawn before the text, because the text is what has to stay on top.
+      if (tile.progress >= 0.0F)
+      {
+        const float barY = tileY + SHEET_TILE_HEIGHT - TILE_PROGRESS_HEIGHT;
+        _shapes.FillRect(tileX, barY, tileWidth, TILE_PROGRESS_HEIGHT, WithAlpha(Ink::BLUE, 51));
+        _shapes.FillRect(tileX, barY, tileWidth * tile.progress, TILE_PROGRESS_HEIGHT, Ink::BLUE);
+      }
+
+      // Three lines spread down the tile's 76 pixels of content: a 22px icon row, then the detail,
+      // then the bottom line, ten pixels apart. 10 + 22 + 10 + 17 + 10 + 17 + 10 is exactly 96.
+      const float contentX = tileX + TILE_PADDING_X;
+      const float iconRowY = tileY + TILE_PADDING_Y;
+      const std::int32_t iconRowTextY = CenterTextY(iconRowY, TILE_ICON_SIZE, Face::MonoMedium);
+      DrawBuildIcon(_shapes, tile.kind, tile.lane, contentX, iconRowY, tile.ink.accent);
+
+      const float titleX = contentX + TILE_ICON_SIZE + TILE_ICON_GAP;
+      _text.DrawText(static_cast<std::int32_t>(titleX), iconRowTextY, tile.title, tile.ink.title, Face::MonoMedium);
+
+      // **The level ladder, right-aligned on the icon row**: filled for a level already held,
+      // outlined in the tile's accent for the one this tile buys, a hairline for the rest. It says
+      // `L2 → L3` as a picture, which is why the title only has to name the step once. A lane has no
+      // levels and shows the partner it is waiting on in the same slot instead.
+      const float ladderRight = tileX + tileWidth - TILE_PADDING_X;
+      if (tile.lane)
+      {
+        DrawRight(_text, ladderRight, iconRowTextY, tile.partner, Ink::TEXT_MUTED);
+      }
+      else
+      {
+        const float pipY = iconRowY + (TILE_ICON_SIZE - TILE_PIP_SIZE) * 0.5F;
+        const float ladderWidth =
+          static_cast<float>(BUILDING_LEVELS) * TILE_PIP_SIZE + static_cast<float>(BUILDING_LEVELS - 1) * TILE_PIP_GAP;
+        for (std::uint32_t level = 0; level < BUILDING_LEVELS; ++level)
+        {
+          const float pipX = ladderRight - ladderWidth + static_cast<float>(level) * (TILE_PIP_SIZE + TILE_PIP_GAP);
+          if (level < tile.held)
+          {
+            _shapes.FillRect(pipX, pipY, TILE_PIP_SIZE, TILE_PIP_SIZE, tile.ink.title);
+          }
+          else if (tile.buys > 0 && level == tile.buys - 1)
+          {
+            _shapes.StrokeRect(pipX, pipY, TILE_PIP_SIZE, TILE_PIP_SIZE, tile.ink.accent);
+          }
+          else
+          {
+            _shapes.StrokeRect(pipX, pipY, TILE_PIP_SIZE, TILE_PIP_SIZE, Ink::OUTLINE);
+          }
+        }
+      }
+
+      _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(iconRowY + TILE_ICON_SIZE + TILE_PADDING_Y),
+                     tile.detail, tile.ink.detail, Face::SansRegular);
+
+      const auto bottomY = static_cast<std::int32_t>(tileY + SHEET_TILE_HEIGHT - TILE_PADDING_Y) - LINE_HEIGHT;
+      _text.DrawText(static_cast<std::int32_t>(contentX), bottomY, tile.state, tile.ink.state,
+                     tile.stateIsMedium ? Face::MonoMedium : Face::MonoRegular);
+      if (!tile.note.empty())
+      {
+        DrawRight(_text, ladderRight, bottomY, tile.note, tile.ink.note);
+      }
+
+      if (tile.target != EventRefs::NONE)
+      {
+        AddHit(tileX, tileY, tileWidth, SHEET_TILE_HEIGHT, Action::ToggleBuild, tile.target);
+      }
+    }
+    rowY += static_cast<float>(tileRows) * SHEET_TILE_HEIGHT + static_cast<float>(tileRows - 1) * SHEET_TILE_GAP + SHEET_TILE_BOTTOM;
+  }
+
   // ---- Rows ------------------------------------------------------------------------------------
   //
   // The capped list, then whatever is pinned below it (ADR-093). One lambda, because a pinned row is
   // an ordinary row that is simply not counted -- a second copy of this would be a second place for
   // a band's rule or a row's hit rectangle to drift.
-  float rowY = y + SHEET_HEADER_HEIGHT + helpHeight;
   bool previousWasBand = true;
 
   const auto drawRow = [&](const SheetRow& _row)
@@ -2594,7 +3120,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     _shapes.FillRect(x + CARD_PADDING, rowY, width - 2.0F * CARD_PADDING, 1.0F, Ink::DIVIDER);
     _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(rowY, SHEET_CLIPPED_HEIGHT),
-                   std::format("+{} MORE THAN THIS SHEET CAN SHOW", clippedBefore - shown), Ink::NEUTRAL_DIM);
+                   std::format("+{} MORE THAN THIS SHEET CAN SHOW", notShown), Ink::NEUTRAL_DIM);
     rowY += SHEET_CLIPPED_HEIGHT;
     previousWasBand = false;
   }

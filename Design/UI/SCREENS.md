@@ -116,7 +116,9 @@ for that draws it in the middle. `01-orders-queued.png` is the ordered-but-unloc
 `FLT 1 · 10` under it (the id muted, the count primary) and no right-hand column unless the fleet is
 the incumbent, when it carries `+DEF` in blue; everything in transit under one `UNDER WAY` band as
 `FLT 8 · 4 → PELL` with `T9`. The band's total is the same number the map's garrison badge carries.
-`BUILDS 2 AVAIL - 26 CR` (queued rows `SHIPYARD L1 - PELL` / `QUEUED -20`, then a row per build already rising,
+`BUILDS 2 AVAIL - 26 CR` — the count is `BuildRow::available`, what a tap could actually start, so
+it excludes both a rising row and the rows a building system composes beside it (ADR-070, ADR-107) —
+(queued rows `SHIPYARD L1 - PELL` / `QUEUED -20`, then a row per build already rising,
 `SHIPYARD L1 - DOTHAN` / `T5` in muted ink — the form FLEETS uses for a fleet under way, ADR-070 —
 a `- 6 cr left at the lock -` line, `- nothing queued -` otherwise), `SIGNALS 9 TO SEND ›` (rows
 `SENDING`, a concede in red), `PROPOSALS 1 OPEN` (rows `P3 LANE` / `3 TICKS` amber). Footer
@@ -144,22 +146,43 @@ lock and in a finished match every row is focus-only.
 drawn from `BuildRow::isTradeLane`, which nothing sets.
 
 **Sheets (ADR-052).** The four panels — build, destination, signal, replay — are one component
-(`DrawPanel`), drawn as a sheet against the bottom of the map pane, 44px rows, six at most, a
-seventh reported. No mockup exists for any of them; the captures are `01-build-sheet.png`,
+(`DrawPanel`), drawn as a sheet against the bottom of the map pane: 44px header, one wrapped help
+line, a body, a 44px `CANCEL` bar. The body is 44px rows, six at most and a seventh reported —
+**except the build sheet's, which is a 2×2 grid of 96px tiles** (ADR-107). No mockup exists for any of them; the captures are `01-build-sheet.png`,
 `01-destination-sheet.png`, `01-signal-sheet.png`, `01-signal-sheet-armed.png`, `07-replay.png`
-and, for a sheet left open across the lock, `06-at-lock-sheet.png`.
-- **Build** (`BUILD - DOTHAN`): opened by tapping a system you hold, or by a queued BUILDS row on
-  the rail; when the queue has already taken credits, a wrapped line under the header says what the
-  sheet is priced against — *Priced against the 26 credits left after the 20 already queued, not the
-  46 in hand.* — amber when a row on the sheet is dim for want of them and `TEXT_DETAIL` when it is
-  only a note, and absent with an empty queue (ADR-078). It lists that system's buildings
-  and nothing else (ADR-058) — `Shipyard L1 - Dothan`, what that level pays and how long it takes
-  under it (`+2 ships a tick - 1 tick`), and `20 CR` on the right (ADR-070), or `QUEUED`, or
-  `20 CR - NEED 7 MORE` dim; a system already building shows that one row instead — `It cannot take
-  another order until this lands` / `DONE T5`, not a target (`01-build-rising.png`) — and a system
-  with both built says `NOTHING LEFT TO BUILD HERE`; a system you do not hold opens no sheet and
-  only focuses. Tapping a row queues or unqueues (ADR-053's guard refuses what the purse cannot
-  cover).
+and, for a sheet left open across the lock, `06-at-lock-sheet.png`. **The two build captures are
+stale** — they are of the row form ADR-107 replaced, and `Design/UI/README.md` says why they were
+not retaken with it.
+- **Build** (`BUILD - DOTHAN`): **the one sheet whose body is a grid rather than a column**
+  (ADR-107). Opened by tapping a system you hold, or by a queued BUILDS row on the rail; it is about
+  that system and nothing else (ADR-058), and a system you do not hold opens no sheet and only
+  focuses.
+  - **Header.** The title left; right of it, inboard of the 44px `X`, one of three things: the
+    filled grey `LOCKED` / `OFFLINE` chip (ADR-065, ADR-085), or — when something is rising there —
+    an outlined blue 22px chip reading `RISING · DONE T14`, or the purse, `66 CR` with ` −40` in
+    blue when this tick's queue has taken something (ADR-087), so the number a dim tile is priced
+    against is on the sheet rather than 400 pixels away.
+  - **Help line.** One wrapped sans line and three sentences compete for it, in this order: the
+    rail's lock sentence in amber (ADR-065); *Xerev cannot take another order until this lands. Two
+    of three ticks are in.* when something is rising there, the count in words below ten (ADR-070);
+    then *Priced against the 26 credits left after the 20 already queued, not the 46 in hand.* when
+    the queue has taken credits — amber when that is why a tile is dim and `TEXT_DETAIL` when it is
+    only a note, absent with an empty queue (ADR-078).
+  - **Tiles.** One 284×96 tile per thing the system can build, in the role order mining station,
+    shipyard, bastion, trade lane, packed — **an empty slot is not drawn**, so today's two-building
+    system is one row of two tiles and the sheet is 200px of the 676px pane. Each carries an icon, a
+    title that names the step once (`Shipyard L1 → L2`, `Bastion L1`, `Mining station L2 rising`), a
+    level ladder, what the level pays and how long it takes (`+3 ships a tick · 2 ticks`, ADR-070),
+    and a bottom line — `25 CR` / `1 CR LEFT AFTER`, `QUEUED −40` / `TAP TO TAKE BACK`, `45 CR` /
+    `NEED 19 MORE` dim, or `2 OF 3 TICKS` / `DONE T14` over a 3px progress bar. The whole tile is
+    the target and tapping one queues or unqueues (ADR-053's guard refuses what the purse cannot
+    cover).
+  - **A system that is building keeps its whole ladder** (ADR-107, amending ADR-070): the rising
+    tile, and the tiles for what it could build next drawn inert, priced, and marked `AFTER T14` —
+    so a player mid-build still has the prices and the yields to plan against (`01-build-rising.png`).
+    None of them is a target; the lock refuses a second construction whatever its kind (ADR-069).
+  - A system with everything at its top level says `NOTHING LEFT TO BUILD HERE` in a row, which is
+    the one case where this sheet is a column.
 - **Destination** (`MOVE FLT 1 - PICK LANE`): opened by the fleet's FLEETS row on the rail, by its
   system's garrison badge on the map (through the fleet list where a system holds several,
   ADR-079), by `MOVE` on a card, or by tapping a marker of your own that has not departed yet.
