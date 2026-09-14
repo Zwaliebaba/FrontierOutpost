@@ -916,9 +916,13 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text)
       Frame::DIGEST_WIDTH + 12.0F + static_cast<float>(FontRenderer::MeasurePixels(FocusLine(m_state, m_focusedSystem))) + 10.0F;
     const float chipY = Frame::TOP_BAR_HEIGHT + 8.0F;
     const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels("RESET")) + 12.0F;
-    _shapes.StrokeRect(chipX, chipY, chipWidth, BUTTON_HEIGHT, Ink::OUTLINE);
-    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, CenterTextY(chipY, BUTTON_HEIGHT), "RESET", Ink::TEXT_MUTED);
-    AddHit(chipX, chipY, chipWidth, BUTTON_HEIGHT, Action::ResetCamera, 0);
+    // Drawn at the chip height the map's other chrome uses, hit at the floor around it (ADR-100):
+    // it stands alone in the corner of a pane with nothing to overlap.
+    constexpr float CHIP_HEIGHT = 22.0F;
+    _shapes.StrokeRect(chipX, chipY, chipWidth, CHIP_HEIGHT, Ink::OUTLINE);
+    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, CenterTextY(chipY, CHIP_HEIGHT), "RESET", Ink::TEXT_MUTED);
+    AddHit(chipX - (TOUCH_FLOOR - chipWidth) * 0.5F, chipY - (TOUCH_FLOOR - CHIP_HEIGHT) * 0.5F, std::max(chipWidth, TOUCH_FLOOR),
+           TOUCH_FLOOR, Action::ResetCamera, 0);
   }
 
   for (const MapHit& hit : mapHits)
@@ -990,7 +994,9 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
     // it is in the reference (README "Assets").
     _shapes.FillTriangle(replayX + 10.0F, 19.0F, replayX + 17.0F, 24.0F, replayX + 10.0F, 29.0F, Ink::TEXT_PRIMARY);
     _text.DrawText(static_cast<std::int32_t>(replayX + 23.0F), centered, replayLabel, Ink::TEXT_PRIMARY);
-    AddHit(replayX, 13.0F, replayWidth, 22.0F, Action::OpenReplay, 0);
+    // An isolated chip with the bar's own margin around it, so the HIT is the bar and the chip stays
+    // 22 (ADR-100). The bar is exactly the floor tall, which is where the number came from.
+    AddHit(replayX, 0.0F, replayWidth, Frame::TOP_BAR_HEIGHT, Action::OpenReplay, 0);
     cursor = replayX - 14.0F;
 
     _shapes.FillRect(cursor, 13.0F, 1.0F, 22.0F, Ink::CARD_BORDER);
@@ -1176,9 +1182,14 @@ MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::uint32_t
   {
     layout.height += 4.0F + (1.0F + static_cast<float>(layout.verdictDetail.size())) * lines + 6.0F;
   }
+  // **The action row is a BUTTON tall, not a line tall** (ADR-100). It reserved one `LINE_HEIGHT`
+  // while a button was 18 and centred on that line's baseline, which was near enough to true to go
+  // unnoticed; at 44 the button reached a whole line above its row and painted over the detail line
+  // there. A row that reserves less than it draws is the defect `LINE_HEIGHT` was introduced for,
+  // one control further on.
   if (layout.hasActions)
   {
-    layout.height += 4.0F + lines + 4.0F;
+    layout.height += 4.0F + BUTTON_HEIGHT + 4.0F;
   }
   return layout;
 }
@@ -1333,7 +1344,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // everything added during the card in front of it in the reverse walk `HandleTap` makes.
     if (layout.collapsible)
     {
-      AddHit(0.0F, top, Frame::DIGEST_WIDTH - 1.0F, DIGEST_TITLE_HEIGHT, Action::ToggleActorCard, card.actor);
+      AddHit(0.0F, top, Frame::DIGEST_WIDTH - 1.0F, TOUCH_FLOOR, Action::ToggleActorCard, card.actor);
     }
     lineY += TITLE_LINE_HEIGHT + 2;
 
@@ -1370,7 +1381,13 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     {
       lineY += 4;
       float buttonX = TEXT_LEFT;
-      const float buttonY = BandTopForText(lineY, BUTTON_HEIGHT);
+
+      // The row's top IS the button's top now, and the label centres inside it. `BandTopForText`
+      // was right while a button was a line with a box around it and is wrong for a box that is
+      // taller than its line: it would centre the box on the baseline and hang it over the line
+      // above (ADR-100).
+      const auto buttonY = static_cast<float>(lineY);
+      const std::int32_t labelY = CenterTextY(buttonY, BUTTON_HEIGHT);
 
       for (const EventAction& action : card.actions)
       {
@@ -1416,7 +1433,10 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
           }
         }
 
-        const float width = static_cast<float>(FontRenderer::MeasurePixels(label)) + 12.0F;
+        // **Wide enough for a finger as well as for its label** (ADR-100). `MAP` was 33 pixels
+        // across; a named chip is wider, but the floor is what makes that true of every label
+        // rather than of the ones that happen to be long.
+        const float width = std::max(TOUCH_FLOOR, static_cast<float>(FontRenderer::MeasurePixels(label)) + 12.0F);
         if (buttonX + width > Frame::DIGEST_WIDTH - RAIL_PADDING)
         {
           break;
@@ -1426,13 +1446,13 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
         if (action.primary && OrdersEditable() && !committed && !unaffordable)
         {
           _shapes.FillRect(buttonX, buttonY, width, BUTTON_HEIGHT, Ink::BLUE);
-          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label, Ink::APP_BACKGROUND);
+          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, labelY, label, Ink::APP_BACKGROUND);
         }
         else
         {
           const bool dim = !OrdersEditable() || unaffordable;
           _shapes.StrokeRect(buttonX, buttonY, width, BUTTON_HEIGHT, committed && !dim ? Ink::BLUE : Ink::OUTLINE);
-          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label,
+          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, labelY, label,
                          dim ? Ink::NEUTRAL_DIM : (committed ? Ink::BLUE : Ink::TEXT_PRIMARY));
         }
 
@@ -1442,7 +1462,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
         }
         buttonX += width + 6.0F;
       }
-      lineY += LINE_HEIGHT + 4;
+      lineY += static_cast<std::int32_t>(BUTTON_HEIGHT) + 4;
     }
 
     y = static_cast<float>(lineY) + 4.0F;
@@ -1589,12 +1609,16 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   }
   y += 6.0F;
 
+  // A section header is a row in this column, and `SIGNALS` is a control (ADR-039), so it is held to
+  // the floor like every other row (ADR-100). The label is centred in it rather than sitting at its
+  // top, because the band is now tall enough for that to be visible.
   const auto section = [&](std::string_view _label, std::string_view _count)
   {
     _shapes.FillRect(railX + 1.0F, y, Frame::ORDERS_WIDTH - 1.0F, 1.0F, Ink::DIVIDER);
-    _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y) + 8, _label, Ink::TEXT_MUTED);
-    DrawRight(_text, contentRight, static_cast<std::int32_t>(y) + 8, _count, Ink::TEXT_MUTED);
-    y += 22.0F;
+    const std::int32_t labelY = CenterTextY(y, RAIL_SECTION_HEIGHT);
+    _text.DrawText(static_cast<std::int32_t>(contentX), labelY, _label, Ink::TEXT_MUTED);
+    DrawRight(_text, contentRight, labelY, _count, Ink::TEXT_MUTED);
+    y += RAIL_SECTION_HEIGHT;
   };
 
   /// A row: what it is on the left, where it stands on the right. The status carries the colour --
@@ -1610,11 +1634,15 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   const auto row = [&](std::string_view _label, std::string_view _status, const Color& _statusColor, Action _action, std::int32_t _index,
                        std::size_t _dimHead = 0)
   {
-    const std::int32_t lineY = static_cast<std::int32_t>(y);
     const auto room = static_cast<std::uint32_t>(contentRight - contentX - static_cast<float>(FontRenderer::MeasurePixels(_status)) - 8.0F);
 
     const std::vector<std::string> wrapped = FontRenderer::WrapToWidth(_label, room);
-    const float height = static_cast<float>(std::max<std::size_t>(1, wrapped.size())) * static_cast<float>(LINE_HEIGHT) + 4.0F;
+
+    // **A row in a column grows its BOX, not just its hit** (ADR-100). A row drawn at 21 and
+    // tappable at 44 has boundaries a finger cannot see, and two neighbours would overlap where
+    // neither shows a join.
+    const float height =
+      std::max(TOUCH_FLOOR, static_cast<float>(std::max<std::size_t>(1, wrapped.size())) * static_cast<float>(LINE_HEIGHT) + 4.0F);
     const bool target = _action != Action::None;
 
     if (target)
@@ -1627,6 +1655,10 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
       AddHit(railX, y, Frame::ORDERS_WIDTH, height, _action, _index);
       m_railRows.push_back(RailRow{railX, y, Frame::ORDERS_WIDTH, height});
     }
+
+    // Centred as a block: one line sits in the middle of the row, two sit either side of it, which is
+    // the rule a sheet row already follows at this height.
+    const std::int32_t lineY = static_cast<std::int32_t>(y + (height - static_cast<float>(wrapped.size() * LINE_HEIGHT)) * 0.5F);
 
     for (std::size_t index = 0; index < wrapped.size(); ++index)
     {
@@ -1642,7 +1674,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
       }
       _text.DrawText(static_cast<std::int32_t>(contentX), at, wrapped[index], Ink::TEXT_PRIMARY);
     }
-    DrawRight(_text, contentRight, lineY, _status, _statusColor);
+    DrawRight(_text, contentRight, CenterTextY(y, height), _status, _statusColor);
     y += height;
   };
 
@@ -1821,7 +1853,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
           !OrdersEditable() ? std::string{m_offline ? "OFFLINE" : "LOCKED"} : std::format("{} TO SEND ›", m_state.orders.availableSignals));
   if (OrdersEditable())
   {
-    AddHit(railX, static_cast<float>(signalsY), Frame::ORDERS_WIDTH, 22.0F, Action::OpenSignals, 0);
+    AddHit(railX, static_cast<float>(signalsY), Frame::ORDERS_WIDTH, RAIL_SECTION_HEIGHT, Action::OpenSignals, 0);
   }
 
   if (m_state.orders.queuedSignals.empty())

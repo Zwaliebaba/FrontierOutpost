@@ -59,6 +59,18 @@ public:
   static constexpr std::int32_t TITLE_LINE_HEIGHT =
     static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels(Neuron::Face::MonoDisplay));
 
+  /// **The touch floor** (ADR-098, ADR-100). Every tappable rectangle on every screen is at least
+  /// this in both dimensions, and `TouchTargetTests` walks the recorded hit list to say so -- reading
+  /// the constants is not evidence, because a control's box is composed from several of them and the
+  /// one that goes wrong is the one nobody added up.
+  ///
+  /// **How a control reaches it depends on what it sits beside.** A target in a COLUMN OF SIBLINGS
+  /// grows its box -- a rail row, a card button, a sheet row -- because a row drawn at 21 and
+  /// tappable at 44 has boundaries a finger cannot see and two neighbours would overlap. An ISOLATED
+  /// CHIP with space around it grows only its HIT: the map's garrison badge, the top bar's replay
+  /// chip. A 44px badge beside a system name would be a different map, not a bigger box.
+  static constexpr float TOUCH_FLOOR = 44.0F;
+
   /// A button inside an event card, and the padding inside the verdict box.
   ///
   /// 18 is unchanged from the 8x8 font and deliberately so: a line BOX grew from 8 to 17, but the
@@ -66,7 +78,7 @@ public:
   /// pixel of the height the old capitals had. Growing the chrome to match the box would inflate
   /// every control on the rail to fit ascender room that a shouted label never uses. What had to
   /// change is where the box is PUT, which `BandTopForText` now answers.
-  static constexpr float BUTTON_HEIGHT = 18.0F;
+  static constexpr float BUTTON_HEIGHT = TOUCH_FLOOR;
   static constexpr float VERDICT_BOX_PADDING = 5.0F;
 
   /// How many ticks of digest the server keeps per player (`NeuronServer::Session::DIGEST_HISTORY`).
@@ -84,8 +96,12 @@ public:
   /// on the locks rail, and the `SIGNALS` one has been a control since ADR-039. An actor card's
   /// title is the first of these and the page band at the foot of the column is the second, so the
   /// two things a player taps to see more of the digest are the same size as each other.
+  /// An actor card's title band. It stays 22 on screen and its HIT is the floor: the band is the top
+  /// of a card, so a taller box would push every card down by the height of a line nobody reads
+  /// (ADR-100). The overlap falls on the card's own body region, which is inserted behind it.
   static constexpr float DIGEST_TITLE_HEIGHT = 22.0F;
-  static constexpr float DIGEST_PAGE_HEIGHT = 22.0F;
+  /// The page band at the foot of the column is a row in its own right and grows to the floor.
+  static constexpr float DIGEST_PAGE_HEIGHT = TOUCH_FLOOR;
 
   /// The sheet a panel is drawn as, anchored to the bottom of the map pane (ADR-052).
   ///
@@ -95,11 +111,13 @@ public:
   /// which is the constraint the other direction: the map is what the choice is about.
   static constexpr float SHEET_MARGIN = 12.0F;
   static constexpr float SHEET_ROW_HEIGHT = 44.0F;
-  static constexpr float SHEET_HEADER_HEIGHT = 36.0F;
-  static constexpr float SHEET_ACTION_HEIGHT = 40.0F;
-  /// A section band inside a sheet: a label over the rows under it, and not a target. The same 22
-  /// the locks rail's section headers take, because it is the same thing (ADR-064).
+  static constexpr float SHEET_HEADER_HEIGHT = TOUCH_FLOOR;
+  static constexpr float SHEET_ACTION_HEIGHT = TOUCH_FLOOR;
+  /// A section band inside a sheet: a label over the rows under it, and **not a target**, which is
+  /// why it is the one band that does not grow (ADR-064, ADR-100).
   static constexpr float SHEET_BAND_HEIGHT = 22.0F;
+  /// The locks rail's section header, which IS a target on `SIGNALS` and so is a row like any other.
+  static constexpr float RAIL_SECTION_HEIGHT = TOUCH_FLOOR;
   /// The row that says how many did not fit, which is shorter because nothing taps it.
   static constexpr float SHEET_CLIPPED_HEIGHT = 24.0F;
   static constexpr std::size_t SHEET_MAXIMUM_ROWS = 6;
@@ -316,7 +334,13 @@ public:
   /// player is actually choosing between.
   [[nodiscard]] std::uint32_t TicksTo(std::int32_t _fromSystem, std::int32_t _toSystem) const;
 
-private:
+  /// One tappable rectangle, recorded beside the `FillRect` that drew the thing it is about.
+  ///
+  /// Public so it can be AUDITED (ADR-098). A target that cannot be measured cannot be held to the
+  /// 44-pixel floor, and the floor is the whole of what UI-02 is: reading the constants is not
+  /// evidence, because a control's box is composed from several of them and the one that went wrong
+  /// was the one nobody added up. Same reasoning as `OpenPanel` (ADR-041) -- a control that cannot
+  /// be observed cannot be pressed by a test.
   struct HitRegion
   {
     float x;
@@ -327,6 +351,13 @@ private:
     std::int32_t index;
   };
 
+  /// Every tappable rectangle the last `DrawWorld`/`DrawInterface` pair recorded.
+  [[nodiscard]] const std::vector<HitRegion>& Hits() const noexcept
+  {
+    return m_hits;
+  }
+
+private:
   /// One tappable row of the locks rail, kept so `SetPointer` can tell when the pointer crossed
   /// from one to another. Only the rail's rows are here: it is the only list that draws a hover.
   struct RailRow
