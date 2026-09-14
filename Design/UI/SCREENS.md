@@ -75,10 +75,10 @@ The scroll and the open card reset when a new digest arrives. The leading card c
 moves (ADR-056) and is at the top of the stack rather than pinned to the screen.
 
 *Differs / not built:* no tick stamp on the right of a plain event card; no highlighted card
-variant; buttons that do not fit the column are dropped rather than wrapped. **The sheets still do
-not scroll** (ADR-052 option C, which ADR-080 amends for the digest and ADR-101 for the locks rail).
-The handoff's four card-level
-signals (`REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE`) are the signal sheet's rows instead
+variant; buttons that do not fit the column are dropped rather than wrapped. **Nothing scrolls
+except the three columns of rows** (ADR-052 option C, which ADR-080 amends for the digest, ADR-101
+for the locks rail and ADR-111 for the place sheet's body). The handoff's four card-level signals
+(`REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE`) are the signal sheet's rows instead
 (ADR-039).
 
 **The top bar's purse says what is committed (ADR-087).** `46 CR −20` — the purse, then in blue
@@ -117,13 +117,15 @@ for that draws it in the middle. `01-orders-queued.png` is the ordered-but-unloc
 the clock hits zero. Tap a row to open the place it is about.*
 
 **`ORDERS` is one list and every row is one shape** (ADR-112): an 8px owner square, the title in
-mono Medium, the place or the count in muted, the number in blue, and a 44×44 `×` that takes the
-order back. `SHIPYARD L1 · DOTHAN · −20 ×` and `FLT 1 → FAROE · 10 SHIPS · T1 ×` are the same row.
+mono Medium, the place or the count in muted, the number in blue, and a 44×44 `X` that takes the
+order back. `SHIPYARD L1 · DOTHAN · −20 X` and `FLT 1 → FAROE · 10 SHIPS · T1 X` are the same row.
+**The cell says a capital `X` and not `×`** because `×` was never baked and would draw nothing at
+all (ADR-113, §Font below).
 The order within it is what this lock will take (queued builds, then queued moves), then what an
 earlier one already did (rising builds `T14`, then fleets under way `T9`, both muted and with **no**
-`×`), then **a dim row behind a dashed square per fleet with no move at all** — `FLT 1 · NO MOVE ·
+`X`), then **a dim row behind a dashed square per fleet with no move at all** — `FLT 1 · NO MOVE ·
 DOTHAN` — which is the one thing this column never used to say. Under them, when the queue has taken
-credits, `80 CR LEFT AT THE LOCK`. The row's body opens the place; the `×` cell does not.
+credits, `80 CR LEFT AT THE LOCK`. The row's body opens the place; the `X` cell does not.
 
 **`PLACES`** replaces `FLEETS` and `BUILDS`: one row per system you hold — a 10px disc in the
 owner's colour, `DOTHAN`, `+6 · 10 SHIPS` muted, and `1 ORDER` in blue or `—` in dim — and the row
@@ -145,10 +147,10 @@ lands, unlike the digest's: this column is a summary of the same empire tick aft
 **Rows are links, and one cell is not (ADR-060, ADR-112).** An `ORDERS` row and a `PLACES` row open
 the place they are about; a fleet the server already has on a lane takes no order, so its row
 focuses where it is going instead; a `PROPOSALS` row focuses the far end of the lane the offer is
-about. **The `×` on an `ORDERS` row is the one control on this rail that gives an order** — it takes
+about. **The `X` on an `ORDERS` row is the one control on this rail that gives an order** — it takes
 one back, which is the same tap the tile or the fleet row on the sheet would take. The row under the
 pointer is filled with `HOVER_FILL`, and only a row that is a target draws one. At the lock and in a
-finished match every row is focus-only and no `×` is drawn.
+finished match every row is focus-only and no `X` is drawn.
 
 *Differs:* the `SIGNALS` section's queued rows are not links.
 
@@ -224,7 +226,9 @@ digest's `MOVE FLT 1 | 10 SHIPS`, that fleet's unordered row in the rail's `ORDE
 your own that has not departed, or a garrison badge with **exactly one** of your fleets under it —
 which skips the sheet, because a badge totals ships and one fleet is one thing a tap could mean.
 
-The sheet collapses, the digest fades to 55% and records no hit, and the map changes meaning: a 44px
+The sheet collapses, the digest fades to 55% — **every ink on the column, its BUTTONS' borders and
+fills included**, which is a thing a test reads back off the vertices rather than a thing a capture
+would have shown — and records no hit, and the map changes meaning: a 44px
 banner replaces the `MAP - FOCUS` caption (`MOVE FLT 1` · `10 SHIPS FROM DOTHAN` · *Tap a lit
 system.* · `ESC · CANCEL`), the systems **one lane away** light with a pulsing ring and an outlined
 `1 TICK · T1` chip under the name, their lanes go blue with marching dashes, every other lane drops

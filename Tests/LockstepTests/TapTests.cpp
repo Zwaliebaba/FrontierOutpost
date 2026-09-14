@@ -38,6 +38,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -2050,7 +2051,8 @@ public:
         break;
       }
     }
-    Assert::IsTrue(page.MoveOrder()->selected != Lockstep::EventRefs::NONE, L"nothing on the map lit a destination");
+    Assert::IsTrue(page.MoveOrder().has_value() && page.MoveOrder()->selected != Lockstep::EventRefs::NONE,
+                   L"nothing on the map lit a destination");
     Assert::AreEqual(from, page.State().fleets[static_cast<std::size_t>(fleet)].to,
                      L"lighting a destination ordered the fleet, where it should take a SEND to do that");
 
@@ -2625,7 +2627,12 @@ public:
     renderers.Begin();
     DrawPage(page, renderers);
 
-    const std::int32_t origin = page.MoveOrder()->origin;
+    // Read through a guard rather than through the assertion above it: a `std::optional` dereference
+    // that is only safe because a test framework would have thrown is one the linter cannot see.
+    const std::optional<Lockstep::MainPage::MoveMode>& move = page.MoveOrder();
+    Assert::IsTrue(move.has_value(), L"the move went away between the sweep and the audit");
+    const std::int32_t origin = move.has_value() ? move->origin : Lockstep::EventRefs::NONE;
+
     std::vector<std::int32_t> adjacent;
     for (const Lockstep::Lane& lane : page.State().graph.lanes)
     {
@@ -2784,6 +2791,66 @@ public:
     renderers.Begin();
     DrawPage(page, renderers);
     Assert::AreNotEqual(moving, ShapeFingerprint(renderers.shapes), L"the ring does not actually move, so freezing it proves nothing");
+  }
+
+  TEST_METHOD(TheDigestIsDrawnFadedAndNotJustMadeDeaf)
+  {
+    // **The fade is half of the rule and the hit list is the other half** (ADR-113). A column that
+    // records nothing and still draws its controls at full strength is a player being shown things
+    // they cannot press, so this reads the VERTICES rather than the hits.
+    //
+    // It is asserted on ONE named ink rather than by differencing two frames, because the fade
+    // multiplies alpha by 0.55 and two different washes can land on one value -- "this colour is in
+    // both frames" is not evidence of anything. `Ink::OUTLINE` is the border of an `Outlined`
+    // control, which is what every digest button becomes while the mode is on, and nothing else on
+    // this column draws it: if it survives, a button drew it.
+    //
+    // This is the defect it was written for. Every band, rule and label on the column went through
+    // `Faded` and the BUTTONS did not, because a button's ink is a bundle that was passed on whole.
+    const auto inksIn = [](Neuron::ShapeRenderer& _shapes)
+    {
+      std::set<std::uint32_t> found;
+      for (std::int32_t drain = 0; drain < 4; ++drain)
+      {
+        const Neuron::ShapeRenderer::Batch batch = _shapes.TakeUnflushed();
+        for (const Neuron::ShapeRenderer::ShapeVertex& vertex : batch.vertices)
+        {
+          if (vertex.positionXPixels < Lockstep::Frame::DIGEST_WIDTH)
+          {
+            found.insert(vertex.color);
+          }
+        }
+      }
+      return found;
+    };
+
+    Lockstep::MainPage page;
+    page.Create(OneFleetStanding());
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+    Assert::IsTrue(inksIn(renderers.shapes).contains(Neuron::Pack(Lockstep::Ink::OUTLINE)),
+                   L"the resting digest draws no outlined control, so this test is measuring nothing");
+
+    const bool onTheMap =
+      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    Assert::IsTrue(onTheMap, L"no move to fade the column under");
+
+    renderers.Begin();
+    DrawPage(page, renderers);
+    const std::set<std::uint32_t> faded = inksIn(renderers.shapes);
+    Assert::IsFalse(faded.contains(Neuron::Pack(Lockstep::Ink::OUTLINE)),
+                    L"a digest button kept its full-strength border while the map was taking a move");
+
+    // And it is faded rather than simply gone: 51 x 0.55 rounds to 28, and a column that stopped
+    // drawing its buttons would pass the assertion above for the wrong reason.
+    Assert::IsTrue(faded.contains(Neuron::Pack(Neuron::Color{255, 255, 255, 28})), L"the buttons did not fade, they vanished");
+
+    // Nothing on the column is filled while the mode is on, which is the ADR-089 half of the same
+    // rule and is reached a second way: a digest button never takes the `Primary` state at all
+    // while `m_moveMode` holds one, so the strip's `SEND` is the only filled control on the screen.
+    Assert::IsFalse(faded.contains(Neuron::Pack(Lockstep::Ink::BLUE)), L"the digest still has a filled blue control on it");
   }
 };
 
@@ -3031,7 +3098,9 @@ public:
     DrawPage(page, renderers);
 
     std::vector<std::uint32_t> ticks;
-    const std::int32_t origin = page.MoveOrder()->origin;
+    const std::optional<Lockstep::MainPage::MoveMode>& move = page.MoveOrder();
+    Assert::IsTrue(move.has_value(), L"the move went away between the sweep and the audit");
+    const std::int32_t origin = move.has_value() ? move->origin : Lockstep::EventRefs::NONE;
     for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
     {
       if (hit.action != Lockstep::MainPage::Action::ChooseDestination || hit.y < Lockstep::Frame::SCREEN_HEIGHT * 0.5F)

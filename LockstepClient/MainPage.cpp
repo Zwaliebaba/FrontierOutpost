@@ -1957,6 +1957,21 @@ MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::uint32_t
 
 void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 {
+  // **Every ink on this column goes through `Faded`** (ADR-113): while the map is taking a move the
+  // digest stays readable at 55% and records no hit, so the one filled control on the screen is the
+  // confirm strip's `SEND` (ADR-089). A button's ink is a bundle rather than one colour, so it is
+  // faded a field at a time on its way to `DrawButton`.
+  const auto fadedInk = [this](ControlInk _ink)
+  {
+    _ink.border = Faded(_ink.border);
+    _ink.fill = Faded(_ink.fill);
+    _ink.label = Faded(_ink.label);
+    _ink.number = Faded(_ink.number);
+    _ink.segmentRule = Faded(_ink.segmentRule);
+    _ink.segmentFill = Faded(_ink.segmentFill);
+    return _ink;
+  };
+
   // **The digest is the order surface** (ADR-034, SCREENS.md 01). Every event carries what can be
   // done about it, because the thing a player wants to do is always about something that happened,
   // and a menu somewhere else is a second place to look.
@@ -2235,8 +2250,8 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
           break;
         }
 
-        const bool hovered = button.state != ControlState::Inert && button.state != ControlState::Locked && m_pointerXPixels >= buttonX &&
-                             m_pointerXPixels < buttonX + width && m_pointerYPixels >= buttonY &&
+        const bool hovered = button.state != ControlState::Inert && button.state != ControlState::Locked && !m_moveMode.has_value() &&
+                             m_pointerXPixels >= buttonX && m_pointerXPixels < buttonX + width && m_pointerYPixels >= buttonY &&
                              m_pointerYPixels < buttonY + BUTTON_HEIGHT;
 
         // **A committed control says what the next tap does while the finger is on it** (ADR-110),
@@ -2259,7 +2274,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
         }
 
         DrawButton(_shapes, _text, buttonX, buttonY, width, button,
-                   ControlInkFor(button.state, ControlKind::Button, hovered, button.moneyReason));
+                   fadedInk(ControlInkFor(button.state, ControlKind::Button, hovered, button.moneyReason)));
 
         if ((OrdersEditable() && !unaffordable) || focusOnly)
         {
