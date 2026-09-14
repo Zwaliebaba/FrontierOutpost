@@ -12,6 +12,7 @@
 #include <cmath>
 #include <format>
 #include <string>
+#include <utility>
 
 namespace Lockstep
 {
@@ -155,6 +156,110 @@ void DrawGroundCircle(ShapeRenderer& _shapes, const MapFrame& _frame, float _des
   }
 }
 
+/// Where the labels already drawn on this frame are, and where the lanes run, so the next one can
+/// be put somewhere the reader can actually read it (ADR-090).
+///
+/// **One greedy pass, upward, and it gives up rather than searching.** The map is redrawn from
+/// scratch every frame and must lay out identically twice for the same state -- a screenshot test
+/// and an idle redraw both depend on it (ADR-047) -- so this is deterministic by construction: the
+/// same depth-sorted order, the same fixed steps, no iteration to a fixed point. A label that
+/// cannot be cleared in three steps is drawn where it was, because a label 36 pixels from the thing
+/// it names has stopped being that thing's label.
+struct LabelField
+{
+  struct Box
+  {
+    float left;
+    float top;
+    float right;
+    float bottom;
+  };
+
+  struct Segment
+  {
+    float ax;
+    float ay;
+    float bx;
+    float by;
+  };
+
+  std::vector<Box> placed;
+  std::vector<Segment> lanes;
+
+  [[nodiscard]] static bool Overlaps(const Box& _a, const Box& _b) noexcept
+  {
+    return _a.left < _b.right && _b.left < _a.right && _a.top < _b.bottom && _b.top < _a.bottom;
+  }
+
+  /// Whether a segment crosses a box. The four edges, plus the case of a segment wholly inside it.
+  [[nodiscard]] static bool Crosses(const Segment& _segment, const Box& _box) noexcept
+  {
+    const bool insideA = _segment.ax >= _box.left && _segment.ax <= _box.right && _segment.ay >= _box.top && _segment.ay <= _box.bottom;
+    if (insideA)
+    {
+      return true;
+    }
+
+    // A slab clip: the parametric range the segment is inside the box on each axis, intersected.
+    float enter = 0.0F;
+    float leave = 1.0F;
+    const float runX = _segment.bx - _segment.ax;
+    const float runY = _segment.by - _segment.ay;
+
+    const auto slab = [&enter, &leave](float _run, float _from, float _low, float _high)
+    {
+      if (std::abs(_run) < 0.0001F)
+      {
+        return _from >= _low && _from <= _high;
+      }
+      // NOT `near` and `far`: both are empty macros in `minwindef.h`, which `NeuronCore.h` does not
+      // suppress, and a local called either one vanishes into a syntax error.
+      float entering = (_low - _from) / _run;
+      float leaving = (_high - _from) / _run;
+      if (entering > leaving)
+      {
+        std::swap(entering, leaving);
+      }
+      enter = std::max(enter, entering);
+      leave = std::min(leave, leaving);
+      return enter <= leave;
+    };
+
+    return slab(runX, _segment.ax, _box.left, _box.right) && slab(runY, _segment.ay, _box.top, _box.bottom) && enter <= leave;
+  }
+
+  /// The baseline this label should use: the one it asked for, or up to three steps above it.
+  [[nodiscard]] std::int32_t Place(float _centerX, std::int32_t _baselineY, std::uint32_t _widthPixels)
+  {
+    /// A line box, so a nudged label clears the thing it collided with by a whole line rather than
+    /// by a gap that still reads as touching.
+    constexpr float STEP = 12.0F;
+    constexpr std::int32_t MOST_STEPS = 3;
+
+    const auto boxAt = [&](std::int32_t _at)
+    {
+      const auto top = static_cast<float>(_at);
+      return Box{_centerX - static_cast<float>(_widthPixels) * 0.5F, top, _centerX + static_cast<float>(_widthPixels) * 0.5F,
+                 top + static_cast<float>(FontRenderer::GlyphHeightPixels())};
+    };
+
+    std::int32_t at = _baselineY;
+    for (std::int32_t step = 0; step <= MOST_STEPS; ++step)
+    {
+      const Box box = boxAt(at);
+      const bool clear = std::none_of(placed.begin(), placed.end(), [&box](const Box& _other) { return Overlaps(box, _other); }) &&
+                         std::none_of(lanes.begin(), lanes.end(), [&box](const Segment& _lane) { return Crosses(_lane, box); });
+      if (clear || step == MOST_STEPS)
+      {
+        placed.push_back(box);
+        return at;
+      }
+      at -= static_cast<std::int32_t>(STEP);
+    }
+    return at;
+  }
+};
+
 /// The fleets STANDING at one system, gathered per owner. What a garrison badge says (ADR-079).
 ///
 /// **Per owner rather than per fleet**, because a system holding three of your fleets is one
@@ -213,7 +318,8 @@ struct Garrison
   return garrisons;
 }
 
-void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame, std::vector<MapHit>& _hits, std::int32_t _index)
+void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame, std::vector<MapHit>& _hits, LabelField& _labels,
+                std::int32_t _index)
 {
   const Neuron::OrbitCamera& camera = _frame.view.Camera();
   const SystemNode& node = _frame.state.graph.systems[static_cast<std::size_t>(_index)];
@@ -267,7 +373,9 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
   {
     std::transform(label.begin(), label.end(), label.begin(), [](unsigned char _c) { return static_cast<char>(std::toupper(_c)); });
   }
-  DrawCentered(_text, top.xPixels, static_cast<std::int32_t>(std::lround(top.yPixels - radius)) - 13, label, Ink::TEXT_PRIMARY);
+  const std::int32_t labelY =
+    _labels.Place(top.xPixels, static_cast<std::int32_t>(std::lround(top.yPixels - radius)) - 13, FontRenderer::MeasurePixels(label));
+  DrawCentered(_text, top.xPixels, labelY, label, Ink::TEXT_PRIMARY);
 
   if (node.custodianSince != 0)
   {
@@ -305,7 +413,9 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
   // Pushed AFTER the system's own hit, because `MainPage` tests hits in reverse: the badge sits
   // inside the disc's generous rectangle and has to win it. The disc is the system and the badge is
   // the fleets, which is the whole reason they are two targets and not one.
-  const std::int32_t labelY = static_cast<std::int32_t>(std::lround(top.yPixels - radius)) - 13;
+  // **The badge rides on the label's baseline, including when the label was nudged** (ADR-090). The
+  // two are read as one thing -- a name and what is standing at it -- so a label that moved up and a
+  // badge that did not would come apart exactly on the crowded boards that made it move.
   float badgeX = std::max(top.xPixels + radius + 4.0F, top.xPixels + static_cast<float>(FontRenderer::MeasurePixels(label)) * 0.5F + 4.0F);
 
   for (const Garrison& garrison : GarrisonsAt(_frame.state, _index))
@@ -330,6 +440,9 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
                            .height = BADGE_HEIGHT,
                            .system = yours ? EventRefs::NONE : _index,
                            .fleetsAt = yours ? _index : EventRefs::NONE});
+    // The badge is drawn ink competing for the same strip as the next system's name, so it joins
+    // the field rather than only avoiding it.
+    _labels.placed.push_back(LabelField::Box{badgeX, badgeTop, badgeX + badgeWidth, badgeTop + BADGE_HEIGHT});
     badgeX += badgeWidth + 3.0F;
   }
 }
@@ -360,7 +473,8 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
   return std::clamp(_progress, margin, 1.0F - margin);
 }
 
-void DrawFleet(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame, std::vector<MapHit>& _hits, std::int32_t _index)
+void DrawFleet(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame, std::vector<MapHit>& _hits, LabelField& _labels,
+               std::int32_t _index)
 {
   const Neuron::OrbitCamera& camera = _frame.view.Camera();
   const Fleet& fleet = _frame.state.fleets[static_cast<std::size_t>(_index)];
@@ -418,17 +532,29 @@ void DrawFleet(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fra
   if (fleet.owner == _frame.state.viewer)
   {
     const float clamped = std::clamp(head.xPixels, paneX + labelWidth * 0.5F + 4.0F, paneX + paneWidth - labelWidth * 0.5F - 4.0F);
-    DrawCentered(_text, clamped, labelY, label, owner);
+    DrawCentered(_text, clamped, _labels.Place(clamped, labelY, FontRenderer::MeasurePixels(label)), label, owner);
     _hits.push_back(MapHit{.x = head.xPixels - 14.0F, .y = head.yPixels - 22.0F, .width = 28.0F, .height = 36.0F, .fleet = _index});
   }
   else
   {
     const float placed = std::min(head.xPixels + 10.0F, paneX + paneWidth - labelWidth - 4.0F);
-    _text.DrawText(static_cast<std::int32_t>(std::lround(placed)), labelY + LINE_HEIGHT, label, owner);
+    const std::int32_t at = _labels.Place(placed + labelWidth * 0.5F, labelY + LINE_HEIGHT, FontRenderer::MeasurePixels(label));
+    _text.DrawText(static_cast<std::int32_t>(std::lround(placed)), at, label, owner);
   }
 }
 
 } // namespace
+
+std::string FocusLine(const MatchState& _state, std::int32_t _focusedSystem)
+{
+  std::string line = "MAP";
+  if (_focusedSystem != EventRefs::NONE && _focusedSystem < static_cast<std::int32_t>(_state.graph.systems.size()))
+  {
+    const SystemNode& focused = _state.graph.systems[static_cast<std::size_t>(_focusedSystem)];
+    line += focused.name.empty() ? " - FOCUS: THE FALLOW" : " - FOCUS: " + Uppercased(focused.name);
+  }
+  return line;
+}
 
 bool CaptureIsNews(std::uint32_t _capturedAt, std::uint32_t _tick) noexcept
 {
@@ -442,6 +568,7 @@ bool CaptureIsNews(std::uint32_t _capturedAt, std::uint32_t _tick) noexcept
 std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _frame)
 {
   std::vector<MapHit> hits;
+  LabelField labels;
 
   const float paneX = Frame::DIGEST_WIDTH;
   const float paneWidth = Frame::SCREEN_WIDTH - Frame::DIGEST_WIDTH - Frame::ORDERS_WIDTH;
@@ -497,6 +624,7 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
     {
       continue;
     }
+    labels.lanes.push_back(LabelField::Segment{a.xPixels, a.yPixels, b.xPixels, b.yPixels});
 
     switch (lane.kind)
     {
@@ -647,24 +775,19 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
   {
     if (drawable.isFleet)
     {
-      DrawFleet(_shapes, _text, _frame, hits, drawable.index);
+      DrawFleet(_shapes, _text, _frame, hits, labels, drawable.index);
     }
     else
     {
-      DrawSystem(_shapes, _text, _frame, hits, drawable.index);
+      DrawSystem(_shapes, _text, _frame, hits, labels, drawable.index);
     }
   }
 
   // `MAP - FOCUS: HALVORSEN` in the top-left corner (DESIGN-GUIDELINES "Map"). The map is no
   // longer captioned with a census -- that is on the top bar now -- and says instead what it is
   // currently pointed at, because the digest can point it somewhere.
-  std::string focusLine = "MAP";
-  if (_frame.focusedSystem != EventRefs::NONE && _frame.focusedSystem < static_cast<std::int32_t>(_frame.state.graph.systems.size()))
-  {
-    const SystemNode& focused = _frame.state.graph.systems[static_cast<std::size_t>(_frame.focusedSystem)];
-    focusLine += focused.name.empty() ? " - FOCUS: THE FALLOW" : " - FOCUS: " + Uppercased(focused.name);
-  }
-  _text.DrawText(static_cast<std::int32_t>(paneX) + 12, static_cast<std::int32_t>(Frame::TOP_BAR_HEIGHT) + 12, focusLine, Ink::TEXT_DETAIL);
+  _text.DrawText(static_cast<std::int32_t>(paneX) + 12, static_cast<std::int32_t>(Frame::TOP_BAR_HEIGHT) + 12,
+                 FocusLine(_frame.state, _frame.focusedSystem), Ink::TEXT_DETAIL);
 
   // The legend earns its place: the owner colours are also the semantic colours, so a player who
   // learns this row can read every other coloured thing on the screen.
@@ -677,6 +800,9 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
     /// A garrison badge rather than a dot or a lane: the legend draws the shape it is naming, and a
     /// badge is a filled chip (ADR-079).
     bool isBadge = false;
+    /// A fleet under way, which is an arrowhead on the map and so an arrowhead here (ADR-090). It
+    /// wore the route's dashes, which is the thing the fleet travels along rather than the fleet.
+    bool isFleet = false;
   };
 
   // The empires this player can actually see, not all twelve. A twelve-swatch legend would fill
@@ -719,7 +845,7 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
     std::any_of(_frame.state.fleets.begin(), _frame.state.fleets.end(), [](const Fleet& _fleet) { return _fleet.OnALane(); });
   if (anyMoving)
   {
-    legend.push_back({"FLEET UNDER WAY", Ink::TEXT_MUTED, true, true});
+    legend.push_back({"FLEET UNDER WAY", Ink::BLUE, false, false, false, true});
   }
 
   // **`SHIPS`, not `FLEETS`, because the number on the badge is ships.** A system holding three
@@ -756,6 +882,13 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, const M
     {
       _shapes.FillRect(legendX, legendY - 1.0F, 10.0F, 10.0F, entry.color);
       legendX += 15.0F;
+    }
+    else if (entry.isFleet)
+    {
+      // The same arrowhead `DrawFleet` puts on a lane, pointing right: a fleet is a triangle and a
+      // system is a disc, which is the difference the legend exists to teach (ADR-090).
+      _shapes.FillTriangle(legendX + 9.0F, legendY + 4.0F, legendX, legendY - 1.0F, legendX, legendY + 9.0F, entry.color);
+      legendX += 14.0F;
     }
     else
     {

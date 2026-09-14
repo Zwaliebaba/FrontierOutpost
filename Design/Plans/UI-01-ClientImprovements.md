@@ -1,6 +1,6 @@
 # UI-01 — What the client's screens still cost a player
 
-**Status:** **Phase 1 done, plus 2.1, 2.2 and 2.6 (ADR-079 to ADR-085), 2026-09-13/14. 1.4 is partly done and its [ASK] is open. The rest not started.** Written 2026-09-13 as a UX review and revised the same day against
+**Status:** **Phases 1 and 2 done (ADR-079 to ADR-090), 2026-09-13/14, every [ASK] in them answered by the owner. Phase 3 not started. No capture has been retaken — that is one pass at the end.** Written 2026-09-13 as a UX review and revised the same day against
 ADR-077 and ADR-078, which landed between the review and the first item. Item 1.1 is rescoped and
 item 2.3 carried a sentence those ADRs made false; both are marked below. Nothing else has been
 built. Archive this when the final checklist passes.
@@ -204,6 +204,10 @@ read literally the rule would fill nothing on a tick that reports a loss and off
 **Done when.** `DigestViewTests`: a digest with three priced builds has exactly one `EventAction::primary` filled. `01-main-page.png` retaken.
 
 ### 2.5 Map zoom, reset, fleet marker, label collision
+**Done 2026-09-14 — ADR-090.** The fleet marker was already a triangle with no disc; what was wrong
+was the LEGEND, which wore the route's dashes, and that is what changed. The zoom is a factor on the
+authored framing rather than a camera distance, for the reason the ADR gives.
+
 **Problem.** Wheel and pinch are banked by `PointerInput` and read by nothing; `MainPage::ResetView` has no control. Fleet and system markers are the same blue and differ only by size. `FLT 1 · ETA T2` overprints the Xander lane.
 
 **Change.**

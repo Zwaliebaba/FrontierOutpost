@@ -68,6 +68,12 @@ struct MapFrame
   bool sheetOpen = false;
 };
 
+/// `MAP` or `MAP - FOCUS: PELL`: what the pane is currently pointed at, in the top-left corner.
+///
+/// Exposed because the `RESET` chip is placed immediately after it (ADR-090) and a second copy of
+/// the composition is a second place for the two to disagree about how wide it is.
+[[nodiscard]] std::string FocusLine(const MatchState& _state, std::int32_t _focusedSystem);
+
 /// Whether a capture is still news, and so still labelled on the map (ADR-082).
 ///
 /// **Three ticks, and then it is the map rather than the news.** A board a player is winning wore a

@@ -504,19 +504,25 @@ bool MainPage::HandleZoom(std::int32_t _steps, float _xPixels, float _yPixels)
     return false;
   }
 
-  // The pane under the pointer decides what a notch means. The digest column is the only one that
-  // reads it today (ADR-080); the map's own answer is ADR-052's open question and not this.
-  const bool onTheDigest = _xPixels >= 0.0F && _xPixels < Frame::DIGEST_WIDTH && _yPixels >= Frame::TOP_BAR_HEIGHT;
-  if (!onTheDigest)
+  // The pane under the pointer decides what a notch means: a list over the digest (ADR-080), a
+  // camera over the map (ADR-090). One banked count, two meanings, and the pointer is what picks.
+  const bool aboveTheBar = _yPixels >= Frame::TOP_BAR_HEIGHT;
+  if (aboveTheBar && _xPixels >= 0.0F && _xPixels < Frame::DIGEST_WIDTH)
   {
-    return false;
+    // A notch away from the player scrolls DOWN the column. `TakeZoomSteps` counts a notch away as
+    // negative -- it was named for a camera, where away is out -- so the sign is flipped here, at
+    // the one place that knows the gesture means a list rather than a distance.
+    m_digestDragPixels = 0.0F;
+    return ScrollDigest(-_steps);
   }
 
-  // A notch away from the player scrolls DOWN the column. `TakeZoomSteps` counts a notch away as
-  // negative -- it was named for a camera, where away is out -- so the sign is flipped here, at the
-  // one place that knows the gesture means a list rather than a distance.
-  m_digestDragPixels = 0.0F;
-  return ScrollDigest(-_steps);
+  // Over the map it means what it was banked for, sign and all: away from the player is out.
+  if (aboveTheBar && _xPixels >= Frame::DIGEST_WIDTH && _xPixels < Frame::SCREEN_WIDTH - Frame::ORDERS_WIDTH)
+  {
+    return m_mapView.Zoom(_steps);
+  }
+
+  return false;
 }
 
 bool MainPage::HandleKey(Neuron::KeyboardInput::Key _key)
@@ -855,6 +861,10 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       m_panelSubjectId = EventRefs::NONE;
       return true;
 
+    case Action::ResetCamera:
+      m_mapView.ResetView();
+      return true;
+
     case Action::ClosePanel:
       m_panel = Panel::None;
       return true;
@@ -890,7 +900,25 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text)
                        .animationSeconds = m_animationSeconds,
                        .sheetOpen = m_panel != Panel::None};
 
-  for (const MapHit& hit : Lockstep::DrawMap(_shapes, _text, frame))
+  const std::vector<MapHit> mapHits = Lockstep::DrawMap(_shapes, _text, frame);
+
+  // **`RESET` is drawn only when the camera is somewhere other than where the map opened**
+  // (ADR-090). There has been no way back to the authored framing since the map got a camera
+  // (ADR-017) -- `ResetView` existed and nothing called it -- and hunting for it by eye is not a
+  // thing to ask. A control that would do nothing is left off the screen rather than drawn dim,
+  // because the map pane has no chrome and one chip appearing is itself the signal.
+  if (!m_mapView.AtAuthoredFraming())
+  {
+    const float chipX =
+      Frame::DIGEST_WIDTH + 12.0F + static_cast<float>(FontRenderer::MeasurePixels(FocusLine(m_state, m_focusedSystem))) + 10.0F;
+    const float chipY = Frame::TOP_BAR_HEIGHT + 8.0F;
+    const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels("RESET")) + 12.0F;
+    _shapes.StrokeRect(chipX, chipY, chipWidth, BUTTON_HEIGHT, Ink::OUTLINE);
+    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, CenterTextY(chipY, BUTTON_HEIGHT), "RESET", Ink::TEXT_MUTED);
+    AddHit(chipX, chipY, chipWidth, BUTTON_HEIGHT, Action::ResetCamera, 0);
+  }
+
+  for (const MapHit& hit : mapHits)
   {
     // **A garrison badge is focus-only at the lock, exactly as a rail row is** (ADR-060, ADR-079).
     // It is the one control on the map that follows the rail rather than the disc beside it, and

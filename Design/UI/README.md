@@ -101,8 +101,10 @@ The complete list, so nobody goes looking. Each item is also under its screen in
    (built: blue dashed), focus by actor (built: by system), and the Fallow's whole distinct
    treatment — dithered ground, radial glow, three stepped rings, five pins, its name and the race
    distances. Built: a dashed purple ground circle, one lifted ring, three pins and
-   `SEALED - OPENS T<n>`. Zoom: `PointerInput` banks wheel notches and pinches, and nothing reads
-   them; `MainPage::ResetView` exists and no control reaches it.
+   `SEALED - OPENS T<n>`. **Zoom, reset and the fleet glyph are built** (ADR-090): a wheel notch or
+   pinch step over the map pane moves the camera between 0.6x and 2.5x of the authored framing, a
+   `RESET` chip appears beside `MAP - FOCUS` once it has moved, and the legend draws a fleet as the
+   arrowhead the map draws rather than as the route's dashes.
 7. **The destination sheet's verdict.** A row says what is standing on a candidate (`P3 - 11 +DEF`,
    ADR-063) and not how the fight would go. `YOU WIN` / `HOLD` / `YOU LOSE` per candidate needs a
    preview per candidate on `SnapshotFleet`; the combat parameters are not on the wire and the

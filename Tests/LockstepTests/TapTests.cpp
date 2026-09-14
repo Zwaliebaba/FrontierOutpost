@@ -930,8 +930,13 @@ public:
     Assert::IsTrue(page.HandleZoom(-1, 100.0F, 300.0F), L"a notch over the digest scrolled nothing");
     Assert::AreEqual(std::size_t{1}, page.DigestTop(), L"and it moved by something other than one card");
 
-    Assert::IsFalse(page.HandleZoom(-1, 700.0F, 300.0F), L"a notch over the map scrolled the digest");
-    Assert::AreEqual(std::size_t{1}, page.DigestTop());
+    // Over the map the same notch is a camera and not a list (ADR-090). It is consumed -- so this
+    // asserts what the DIGEST did, not what the call returned, which is the thing that changed when
+    // the map learned to zoom.
+    (void)page.HandleZoom(-1, 700.0F, 300.0F);
+    Assert::AreEqual(std::size_t{1}, page.DigestTop(), L"a notch over the map scrolled the digest");
+    Assert::IsFalse(page.Map().AtAuthoredFraming(), L"and the map did not take it either, so the notch went nowhere");
+    page.ResetView();
 
     Assert::IsTrue(page.HandleZoom(1, 100.0F, 300.0F), L"a notch the other way did not come back");
     Assert::AreEqual(std::size_t{0}, page.DigestTop());
@@ -1822,6 +1827,80 @@ public:
 
     Assert::AreEqual(20u, page.State().orders.QueuedBuildCost(), L"the bar would subtract the wrong number");
     Assert::IsTrue(page.PurseSentence().find("26") != std::string::npos, L"and the sheet would not agree with it");
+  }
+};
+
+// The map has a camera the player can move, and a way back to where it started (ADR-090).
+TEST_CLASS(MapCameraTapTests)
+{
+public:
+  TEST_METHOD(AWheelOverTheMapMovesTheCameraAndStopsAtTheEnds)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    Assert::IsTrue(page.Map().AtAuthoredFraming(), L"the map does not open at the authored framing");
+
+    Assert::IsTrue(page.HandleZoom(1, 700.0F, 300.0F), L"a notch over the map moved nothing");
+    Assert::IsFalse(page.Map().AtAuthoredFraming());
+
+    // Spun hard against the stop it reports no change, so an idle frame costs no redraw (ADR-047).
+    for (std::int32_t again = 0; again < 40; ++again)
+    {
+      (void)page.HandleZoom(1, 700.0F, 300.0F);
+    }
+    Assert::IsFalse(page.HandleZoom(1, 700.0F, 300.0F), L"the zoom has no near limit");
+
+    for (std::int32_t back = 0; back < 80; ++back)
+    {
+      (void)page.HandleZoom(-1, 700.0F, 300.0F);
+    }
+    Assert::IsFalse(page.HandleZoom(-1, 700.0F, 300.0F), L"the zoom has no far limit");
+  }
+
+  TEST_METHOD(ANotchOverTheRailIsNeitherAListNorACamera)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Assert::IsFalse(page.HandleZoom(1, 1150.0F, 300.0F), L"a notch over the locks rail did something");
+    Assert::IsTrue(page.Map().AtAuthoredFraming());
+    Assert::AreEqual(std::size_t{0}, page.DigestTop());
+  }
+
+  TEST_METHOD(ResetIsOnTheScreenOnlyWhenThereIsSomethingToReset)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    // At the authored framing there is no chip, so no tap anywhere on the map pane finds one -- a
+    // control that would do nothing is left off the screen rather than drawn dim.
+    Headless renderers;
+    Assert::IsTrue(page.Map().AtAuthoredFraming());
+
+    // Move the camera, then sweep the top of the map pane for the chip that takes it back.
+    (void)page.HandleZoom(2, 700.0F, 300.0F);
+    Assert::IsFalse(page.Map().AtAuthoredFraming());
+
+    const bool reset = SweepFor(page, renderers, DrawPage, 400, TOP_BAR, SCREEN_WIDTH - ORDERS_RAIL, TOP_BAR + 40,
+                                [&page] { return page.Map().AtAuthoredFraming(); });
+    Assert::IsTrue(reset, L"nothing on the map pane puts the camera back");
+  }
+
+  TEST_METHOD(ADragStillOrbitsAndResetUndoesThatToo)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    const Neuron::PointerInput::Drag turn{.deltaXPixels = 40.0F, .deltaYPixels = 0.0F, .originXPixels = 700.0F, .originYPixels = 300.0F};
+    Assert::IsTrue(page.HandleDrag(turn), L"a drag that began on the map was not consumed by it");
+    Assert::IsFalse(page.Map().AtAuthoredFraming(), L"the drag did not orbit anything");
+
+    page.ResetView();
+    Assert::IsTrue(page.Map().AtAuthoredFraming(), L"reset left the camera somewhere else");
   }
 };
 

@@ -2,6 +2,9 @@
 
 #include "OrbitCamera.h"
 
+#include <algorithm>
+#include <cstdint>
+
 namespace Lockstep
 {
 
@@ -46,6 +49,20 @@ public:
   static constexpr float YAW_RADIANS_PER_PIXEL = 0.006F;
   static constexpr float PITCH_RADIANS_PER_PIXEL = 0.004F;
 
+  /// How far a wheel notch or a pinch step moves the zoom, and how far it may go (ADR-090).
+  ///
+  /// **The bounds are of the AUTHORED framing, not of a distance.** `FrameContent` recomputes the
+  /// distance from the galaxy's extent on every frame -- a different pane, a different graph and a
+  /// different aspect all change it -- so a zoom kept as a distance would mean something different
+  /// every time the content did. Kept as a factor, `1.0` is always exactly what the map opens at.
+  ///
+  /// 2.5 in is enough to read a crowded cluster; 0.6 out is enough to see the sealed region's rim
+  /// with the whole galaxy inside it, and going further only adds emptiness. Twelve percent a notch
+  /// takes about eight of them to cross the range, which is a wheel gesture rather than a flick.
+  static constexpr float ZOOM_PER_STEP = 1.12F;
+  static constexpr float ZOOM_NEAREST = 2.5F;
+  static constexpr float ZOOM_FARTHEST = 0.6F;
+
   MapView() noexcept
   {
     m_camera.SetOrientation(DEFAULT_YAW_RADIANS, DEFAULT_PITCH_RADIANS);
@@ -85,7 +102,35 @@ public:
     const float tallest = _groundRadius * std::sin(Neuron::OrbitCamera::MAX_PITCH_RADIANS) + _height;
     const float forHeight = tallest / std::tan(halfVertical);
 
-    m_camera.SetDistance(std::max(forWidth, forHeight) * FRAMING_MARGIN);
+    // The authored distance, then the player's zoom. Dividing rather than multiplying because a
+    // bigger zoom means a closer eye, and the factor reads as a magnification everywhere else.
+    m_camera.SetDistance(std::max(forWidth, forHeight) * FRAMING_MARGIN / m_zoom);
+  }
+
+  /// Moves the zoom by whole steps. Positive is in. True when it actually moved, which is false at
+  /// either end of the range -- so a wheel spun against the stop costs no redraw (ADR-047).
+  bool Zoom(std::int32_t _steps) noexcept
+  {
+    const float was = m_zoom;
+    float wanted = m_zoom;
+    for (std::int32_t step = 0; step < _steps; ++step)
+    {
+      wanted *= ZOOM_PER_STEP;
+    }
+    for (std::int32_t step = 0; step > _steps; --step)
+    {
+      wanted /= ZOOM_PER_STEP;
+    }
+    m_zoom = std::clamp(wanted, ZOOM_FARTHEST, ZOOM_NEAREST);
+    return m_zoom != was;
+  }
+
+  /// Whether the camera is exactly where the map opened: the authored orientation and no zoom.
+  /// What decides whether `RESET` is drawn at all -- a control that does nothing is one to leave off
+  /// the screen rather than to draw dim (ADR-090).
+  [[nodiscard]] bool AtAuthoredFraming() const noexcept
+  {
+    return m_zoom == 1.0F && m_camera.YawRadians() == DEFAULT_YAW_RADIANS && m_camera.PitchRadians() == DEFAULT_PITCH_RADIANS;
   }
 
   /// Drag to orbit, as though the ground itself were under the finger: drag right and the galaxy
@@ -104,6 +149,7 @@ public:
   void ResetView() noexcept
   {
     m_camera.SetOrientation(DEFAULT_YAW_RADIANS, DEFAULT_PITCH_RADIANS);
+    m_zoom = 1.0F;
   }
 
   /// A point on the ground plane, from design coordinates.
@@ -126,6 +172,8 @@ public:
 private:
   Neuron::OrbitCamera m_camera;
   float m_viewportAspect = 1.0F;
+  /// A magnification of the authored framing, not a distance. 1.0 is what the map opens at.
+  float m_zoom = 1.0F;
 };
 
 } // namespace Lockstep

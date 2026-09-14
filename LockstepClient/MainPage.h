@@ -133,6 +133,8 @@ public:
     OpenReplay,
     /// Pick a destination in the open picker.
     ChooseDestination,
+    /// Put the camera back where the map opened (ADR-090). Drawn only when it is somewhere else.
+    ResetCamera,
     ClosePanel
   };
 

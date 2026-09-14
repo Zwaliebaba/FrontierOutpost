@@ -350,6 +350,12 @@ Drawn, in painter's order (`MapRender.cpp`):
   legend's row and a sheet's `CANCEL` bar are the same strip of the pane (ADR-082).
 - Tapping a system you hold opens its build sheet; a system you do not hold only focuses
   (ADR-058); tapping your own fleet's marker opens its destination picker.
+- **The camera** (ADR-090): drag orbits, a wheel notch or pinch step zooms between 0.6x and 2.5x of
+  the authored framing at 12% a step, and an outlined `RESET` chip sits immediately after
+  `MAP - FOCUS: PELL` — drawn only when the camera is not where the map opened. No pan.
+- **Labels keep out of the way** (ADR-090): one greedy pass nudges a name up in 12px steps, at most
+  three, until it clears every label already placed and every lane on the screen; past that it is
+  drawn where it was. A garrison badge rides on its label's baseline and joins the field.
 
 Not drawn (the handoff's list, kept as intent): owner tags beside non-own names (`NARTH · OKO`);
 the contact spotlight (an amber dashed ellipse at a contested system); a verdict label under a node
