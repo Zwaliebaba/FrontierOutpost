@@ -182,6 +182,11 @@ struct SystemNode
   float positionX = 0.0F;
   float positionY = 0.0F;
   SystemFlags flags = SystemFlags::None;
+  /// Credits a tick, as the server's PRODUCTION phase yields them for this system. **It is the
+  /// map's third axis** (ADR-103): a station's stem stands as tall, and its footprint reaches as
+  /// wide, as this number. Zero for a system nobody holds, and zero until the server has said,
+  /// which the map draws at the plain height rather than as a station lying on the ground.
+  std::uint32_t production = 0;
   /// The tick a custodian went absent, or 0. The one-pager flags custodians on every player's map
   /// with the tick, because the territory is a public race rather than a private farm.
   std::uint32_t custodianSince = 0;

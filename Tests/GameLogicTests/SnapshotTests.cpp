@@ -700,7 +700,38 @@ public:
       Assert::AreEqual(original.Systems()[index].capturedAt, returned.Systems()[index].capturedAt);
       Assert::IsTrue(original.Systems()[index].capturedFrom == returned.Systems()[index].capturedFrom,
                      L"the capture's loser did not survive the wire");
+      Assert::AreEqual(original.Systems()[index].production, returned.Systems()[index].production, L"the yield did not survive the wire");
     }
+  }
+
+  // The number the map draws a stem by is the number the purse grows by (ADR-103): a system
+  // reports the same yield `Produce` earns from it, and a system nobody holds reports nothing.
+  TEST_METHOD(ASystemReportsWhatItProduces)
+  {
+    const Lockstep::Match match = Settled();
+    const Lockstep::Snapshot view = Lockstep::Snapshot::For(match, Lockstep::PlayerId{0});
+
+    std::uint32_t capitals = 0;
+    for (const Lockstep::SnapshotSystem& system : view.Systems())
+    {
+      if (!system.owner.IsValid())
+      {
+        Assert::AreEqual(0U, system.production, L"nobody holds it, so nobody is paid for it");
+        continue;
+      }
+
+      const std::uint32_t expected = Lockstep::TickResolver::ProductionOf(match.Rules(), system.kind, system.miningStationLevel, false);
+      Assert::AreEqual(expected, system.production, L"a held system reports the sum the ledger grows by");
+      Assert::IsTrue(system.production >= match.Rules().creditsPerSystem, L"a held system pays at least the base");
+
+      if (system.kind == Lockstep::SystemKind::Capital)
+      {
+        ++capitals;
+        Assert::AreEqual(match.Rules().creditsPerSystem + match.Rules().capitalCreditsBonus, system.production,
+                         L"a capital pays the base and its bonus");
+      }
+    }
+    Assert::IsTrue(capitals >= 1, L"the viewer's own capital is in the snapshot");
   }
 
   TEST_METHOD(ATruncatedSnapshotFailsRatherThanLies)

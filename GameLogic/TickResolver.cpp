@@ -760,6 +760,27 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
 // Research is a counter with no effect in Stage A and is not here at all: a field nothing reads is
 // a number that looks tuned and is not (see the note on MatchRules in the plan's step 1).
 
+std::uint32_t TickResolver::ProductionOf(const MatchRules& _rules, SystemKind _kind, std::uint32_t _miningStationLevel,
+                                         bool _halfYield) noexcept
+{
+  std::uint32_t produced = _rules.creditsPerSystem;
+  if (_kind == SystemKind::Capital)
+  {
+    produced += _rules.capitalCreditsBonus;
+  }
+  produced += LevelValue(_rules.miningStationCredits, _miningStationLevel);
+
+  // "Systems conquered from a custodian yield at half for the rest of the match, whoever holds
+  // them -- the dropout's infrastructure decays under new ownership." It travels with the system,
+  // not with the conqueror, which is what stops a dropout's territory being worth more than a
+  // live neighbour's.
+  if (_halfYield)
+  {
+    produced = (produced * _rules.custodianSpoilsYieldPercent) / 100U;
+  }
+  return produced;
+}
+
 Match TickResolver::Produce(const Match& _in, TickLog& _log)
 {
   Match next = _in;
@@ -776,23 +797,8 @@ Match TickResolver::Produce(const Match& _in, TickLog& _log)
       continue;
     }
 
-    std::uint32_t produced = _in.Rules().creditsPerSystem;
-    if (_in.GalaxyGraph().SystemAt(system).kind == SystemKind::Capital)
-    {
-      produced += _in.Rules().capitalCreditsBonus;
-    }
-    produced += LevelValue(_in.Rules().miningStationCredits, state.miningStationLevel);
-
-    // "Systems conquered from a custodian yield at half for the rest of the match, whoever holds
-    // them -- the dropout's infrastructure decays under new ownership." It travels with the system,
-    // not with the conqueror, which is what stops a dropout's territory being worth more than a
-    // live neighbour's.
-    if (state.halfYield)
-    {
-      produced = (produced * _in.Rules().custodianSpoilsYieldPercent) / 100U;
-    }
-
-    earned[state.owner.AsSize()] += produced;
+    earned[state.owner.AsSize()] +=
+      ProductionOf(_in.Rules(), _in.GalaxyGraph().SystemAt(system).kind, state.miningStationLevel, state.halfYield);
   }
 
   // Lane income. An internal lane is one whose two ends are held by the same player; it pays that

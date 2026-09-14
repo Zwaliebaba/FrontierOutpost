@@ -126,6 +126,15 @@ Snapshot Snapshot::For(const Match& _match, PlayerId _player)
     entry.shipyardLevel = seen[index].live ? state.shipyardLevel : seen[index].shipyardLevel;
     entry.miningStationLevel = seen[index].live ? state.miningStationLevel : seen[index].miningStationLevel;
 
+    // The same sum the ledger grows by, from the same inputs the entry above reports: a live
+    // system's now, a remembered one's then. `halfYield` is not remembered, so a remembered
+    // system is reported at full yield -- the fog does not know it was a custodian's.
+    if (entry.owner.IsValid())
+    {
+      entry.production =
+        TickResolver::ProductionOf(_match.Rules(), system.kind, entry.miningStationLevel, seen[index].live && state.halfYield);
+    }
+
     // What is rising is reported only while the system is live, like the siege below it: a
     // remembered construction may have landed or fallen since it was seen (ADR-069).
     if (seen[index].live && state.construction.Rising())
@@ -317,6 +326,7 @@ void Visit(Neuron::Archive& _archive, SnapshotSystem& _system)
   _archive.Identity(_system.owner);
   _archive.U32(_system.shipyardLevel);
   _archive.U32(_system.miningStationLevel);
+  _archive.U32(_system.production);
   _archive.Enumerator(_system.risingKind, BuildKind::MiningStation);
   _archive.U32(_system.risingToLevel);
   _archive.U32(_system.risingCompletesAt);

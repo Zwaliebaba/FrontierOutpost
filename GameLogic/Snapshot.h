@@ -36,6 +36,12 @@ struct SnapshotSystem
   std::uint32_t shipyardLevel = 0;
   std::uint32_t miningStationLevel = 0;
 
+  /// Credits this system yields its holder each tick -- what the PRODUCTION phase earns from it
+  /// (`TickResolver::ProductionOf`), and what the map's stem stands as tall as (ADR-103). Zero for
+  /// a system nobody holds. A remembered system reports what its remembered levels were worth,
+  /// which is what the player knew and not what is true now.
+  std::uint32_t production = 0;
+
   /// What is rising here, reported ONLY FOR A LIVE SYSTEM -- the same rule as a siege below.
   ///
   /// A rival who can see the system sees the building rise, with its ETA, the way a departed fleet

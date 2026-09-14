@@ -60,6 +60,16 @@ public:
   /// of the arithmetic is a preview that will one day disagree with the battle.
   [[nodiscard]] static std::vector<MeleeSide> Preview(const Match& _match, SystemId _system, std::span<const MeleeSide> _extra);
 
+  /// What one held system pays its owner each tick: the base, a capital's bonus, its mining
+  /// station's level, and the custodian-spoils fraction when it was taken from a dropout.
+  ///
+  /// **The one statement of that arithmetic.** `Produce` earns with it and `Snapshot::For` reports
+  /// it, so the number the map draws a stem by is the number the purse grows by, for the same
+  /// reason `Preview` runs the real melee: a second copy of the sum would one day disagree with
+  /// the ledger. Lane income is not in it, because a lane pays a player and not a system.
+  [[nodiscard]] static std::uint32_t ProductionOf(const MatchRules& _rules, SystemKind _kind, std::uint32_t _miningStationLevel,
+                                                  bool _halfYield) noexcept;
+
 private:
   [[nodiscard]] static Match Lock(const Match& _in, const TickInput& _input, TickLog& _log);
   [[nodiscard]] static Match Produce(const Match& _in, TickLog& _log);

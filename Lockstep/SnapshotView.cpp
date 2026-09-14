@@ -359,6 +359,7 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     node.positionX = static_cast<float>(system.positionX);
     node.positionY = static_cast<float>(system.positionY);
     node.flags = FlagsOf(system, _snapshot.Tick());
+    node.production = system.production;
     node.capturedAt = system.capturedAt;
     node.capturedFrom = system.capturedFrom.IsValid() ? static_cast<OwnerId>(system.capturedFrom.Index()) : NOBODY;
 
