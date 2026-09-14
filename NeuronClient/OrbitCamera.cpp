@@ -1,6 +1,7 @@
 // OrbitCamera.cpp -- an eye on a sphere around a target, and the perspective divide.
 //
-// See OrbitCamera.h for why this works in view space rather than building a matrix.
+// See OrbitCamera.h for why `Project` works in view space one point at a time, and why
+// `ViewProjection` is the same camera stated again as a matrix rather than derived from it.
 
 #include "pch.h"
 #include "OrbitCamera.h"
@@ -111,6 +112,57 @@ OrbitCamera::ScreenPoint OrbitCamera::Project(const WorldPoint& _world) const no
     depth,
     true,
   };
+}
+
+std::array<float, 16> OrbitCamera::ViewProjection() const noexcept
+{
+  const WorldPoint eye = Position();
+  const Basis basis = ViewBasis();
+
+  // The same two numbers `Project` divides by, so the two cannot disagree about the lens.
+  const float halfHeightAtUnitDepth = std::tan(m_fieldOfViewRadians * 0.5F);
+  const float aspect = m_viewportWidthPixels / m_viewportHeightPixels;
+  const float focal = 1.0F / halfHeightAtUnitDepth;
+
+  // `nearPlane`/`farPlane`, not `near`/`far`: both of those are empty macros in `minwindef.h`.
+  const float nearPlane = NEAR_PLANE_WORLD_UNITS;
+  const float farPlane = m_distance * FAR_PLANE_IN_DISTANCES;
+
+  // View: the point relative to the eye, expressed in the basis. A row vector times this gives
+  // (across, upward, -depth, 1) -- view space looks down -z, which is what keeps it right-handed
+  // with x right and y up, and is why the third column is the NEGATED forward.
+  const std::array<float, 16> view = {
+    basis.right.x,          basis.up.x,          -basis.forward.x,        0.0F, //
+    basis.right.y,          basis.up.y,          -basis.forward.y,        0.0F, //
+    basis.right.z,          basis.up.z,          -basis.forward.z,        0.0F, //
+    -Dot(eye, basis.right), -Dot(eye, basis.up), Dot(eye, basis.forward), 1.0F,
+  };
+
+  // Projection: x and y scaled by the focal length exactly as `Project` scales them, w set to the
+  // depth so the divide is the same divide, and z mapped so that the near plane lands at 0 and the
+  // far plane at 1 after it.
+  const float depthScale = farPlane / (nearPlane - farPlane);
+  std::array<float, 16> projection = {};
+  projection[0] = focal / aspect;
+  projection[5] = focal;
+  projection[10] = depthScale;
+  projection[11] = -1.0F;
+  projection[14] = nearPlane * depthScale;
+
+  std::array<float, 16> product = {};
+  for (std::size_t row = 0; row < 4; ++row)
+  {
+    for (std::size_t column = 0; column < 4; ++column)
+    {
+      float sum = 0.0F;
+      for (std::size_t inner = 0; inner < 4; ++inner)
+      {
+        sum += view[row * 4 + inner] * projection[inner * 4 + column];
+      }
+      product[row * 4 + column] = sum;
+    }
+  }
+  return product;
 }
 
 OrbitCamera::ScreenPoint OrbitCamera::ProjectDirection(const WorldPoint& _direction) const noexcept

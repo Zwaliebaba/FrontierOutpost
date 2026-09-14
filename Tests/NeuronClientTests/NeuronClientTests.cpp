@@ -1175,6 +1175,96 @@ public:
     Assert::AreEqual(a.xPixels, b.xPixels, 0.05F);
     Assert::AreEqual(a.yPixels, b.yPixels, 0.05F);
   }
+
+  /// A world point through the matrix, as the GPU would take it: row vector times row-major
+  /// matrix, then the homogeneous divide, then the viewport transform onto the pane.
+  struct ThroughTheMatrix
+  {
+    float xPixels;
+    float yPixels;
+    float depthZeroToOne;
+    float w;
+  };
+
+  static ThroughTheMatrix PushThrough(const std::array<float, 16>& _matrix, const Neuron::OrbitCamera::WorldPoint& _point)
+  {
+    const std::array<float, 4> row = {_point.x, _point.y, _point.z, 1.0F};
+    std::array<float, 4> clip = {};
+    for (std::size_t column = 0; column < 4; ++column)
+    {
+      for (std::size_t inner = 0; inner < 4; ++inner)
+      {
+        clip[column] += row[inner] * _matrix[inner * 4 + column];
+      }
+    }
+    const float ndcX = clip[0] / clip[3];
+    const float ndcY = clip[1] / clip[3];
+    return ThroughTheMatrix{PANE_X + (ndcX * 0.5F + 0.5F) * PANE_WIDTH, PANE_Y + (0.5F - ndcY * 0.5F) * PANE_HEIGHT, clip[2] / clip[3],
+                            clip[3]};
+  }
+
+  // The matrix and `Project` are two statements of one camera, and this is what keeps them one
+  // (ADR-103). The mesh pass puts a ball where the matrix says and the label where `Project` says;
+  // the day they drift, every station's name floats away from its station. Three points off every
+  // axis, at several orientations, to a hundredth of a pixel.
+  TEST_METHOD(TheMatrixLandsOnTheSamePixelAsProject)
+  {
+    constexpr std::array<Neuron::OrbitCamera::WorldPoint, 3> POINTS = {
+      Neuron::OrbitCamera::WorldPoint{120.0F, 30.0F, -80.0F},
+      Neuron::OrbitCamera::WorldPoint{-300.0F, 0.0F, 200.0F},
+      Neuron::OrbitCamera::WorldPoint{45.0F, 60.0F, 310.0F},
+    };
+
+    for (const float yaw : {0.0F, 1.3F, -2.5F})
+    {
+      for (const float pitch : {0.2F, 0.62F, 1.3F})
+      {
+        const Neuron::OrbitCamera camera = MakeCamera(yaw, pitch);
+        const std::array<float, 16> matrix = camera.ViewProjection();
+
+        for (const Neuron::OrbitCamera::WorldPoint& point : POINTS)
+        {
+          const Neuron::OrbitCamera::ScreenPoint expected = camera.Project(point);
+          const ThroughTheMatrix actual = PushThrough(matrix, point);
+
+          Assert::IsTrue(expected.visible);
+          Assert::AreEqual(expected.xPixels, actual.xPixels, 0.01F, L"x drifted between the matrix and Project");
+          Assert::AreEqual(expected.yPixels, actual.yPixels, 0.01F, L"y drifted between the matrix and Project");
+          Assert::AreEqual(expected.depth, actual.w, 0.01F, L"the divide is the same divide");
+          Assert::IsTrue(actual.depthZeroToOne > 0.0F && actual.depthZeroToOne < 1.0F, L"a framed point is inside the depth range");
+        }
+      }
+    }
+  }
+
+  // The depth range is Direct3D's: nearer is smaller, the near plane is zero and the far plane is
+  // one, so `DepthState(true)`'s LESS puts the nearer ball in front.
+  TEST_METHOD(TheMatrixMapsDepthNearToZeroAndFarToOne)
+  {
+    const Neuron::OrbitCamera camera = MakeCamera(0.0F, 0.6F, 1000.0F);
+    const std::array<float, 16> matrix = camera.ViewProjection();
+    const Neuron::OrbitCamera::WorldPoint eye = camera.Position();
+
+    // Straight ahead of the eye, by the distance the planes sit at.
+    const auto ahead = [&](float _depth)
+    {
+      const float scale = _depth / 1000.0F;
+      return Neuron::OrbitCamera::WorldPoint{eye.x * (1.0F - scale), eye.y * (1.0F - scale), eye.z * (1.0F - scale)};
+    };
+
+    // A thousandth: the near point is one unit in front of an eye a thousand units out, which is
+    // about where float's precision on the subtraction sits.
+    Assert::AreEqual(0.0F, PushThrough(matrix, ahead(Neuron::OrbitCamera::NEAR_PLANE_WORLD_UNITS)).depthZeroToOne, 0.001F);
+    Assert::AreEqual(1.0F, PushThrough(matrix, ahead(1000.0F * Neuron::OrbitCamera::FAR_PLANE_IN_DISTANCES)).depthZeroToOne, 0.001F);
+
+    const float nearer = PushThrough(matrix, ahead(900.0F)).depthZeroToOne;
+    const float further = PushThrough(matrix, ahead(1100.0F)).depthZeroToOne;
+    Assert::IsTrue(nearer < further, L"nearer is smaller");
+
+    // Behind the eye has a negative w, which is the matrix's way of saying what `visible` says.
+    Assert::IsTrue(PushThrough(matrix, ahead(-10.0F)).w < 0.0F);
+    Assert::IsFalse(camera.Project(ahead(-10.0F)).visible);
+  }
 };
 
 // Tap and drag are the same gesture until they are not, and telling them apart is the whole of

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 namespace Neuron
 {
 
@@ -9,13 +11,16 @@ namespace Neuron
 /// larger, parallel lines converge, and moving the eye changes what is in front of what -- none of
 /// which the authored curve it replaced could do (ADR-017).
 ///
-/// THERE IS NO MATRIX HERE, and that is deliberate rather than an omission. Every point this
-/// projects is projected on the CPU, because the interface is drawn as screen-pixel triangles
-/// (ADR-014) -- so a 4x4 would be built, multiplied and then immediately used one point at a time.
-/// Working in view space directly is the same arithmetic with the row-vector-versus-column
-/// question, the depth-range convention and the handedness all removed, and every step of it can
-/// be read against the geometry it describes. If a vertex shader ever needs this camera, THAT is
-/// when it grows a matrix.
+/// THERE IS ONE MATRIX HERE, AND IT IS A SECOND STATEMENT OF THE SAME CAMERA. Every point the
+/// interface draws is projected on the CPU by `Project`, because the interface is drawn as
+/// canvas-pixel triangles (ADR-014) and a 4x4 would be built, multiplied and then used one point at
+/// a time; working in view space directly is the same arithmetic with the row-vector-versus-column
+/// question, the depth-range convention and the handedness all removed, and every step of it can be
+/// read against the geometry it describes. The mesh pass is different in kind: its vertices are
+/// transformed on the GPU, so it takes the camera as `ViewProjection()` -- built from the same
+/// basis, eye, field of view and viewport, and held to `Project` by a test that pushes points
+/// through both and asks for the same pixel (ADR-103). Neither is derived from the other; they are
+/// kept equal, which is the only way two statements of one thing stay one thing.
 ///
 /// Right-handed, y up. Depth is distance along the view direction, positive in front of the eye.
 class OrbitCamera
@@ -51,6 +56,17 @@ public:
   /// outwards and makes the far half tiny, and the authored view this replaces was not that
   /// extreme (ADR-017).
   static constexpr float DEFAULT_FIELD_OF_VIEW_RADIANS = 0.70F;
+
+  /// Where `ViewProjection`'s depth range starts and ends, in world units in front of the eye. The
+  /// near plane is one unit: the pitch clamp keeps the eye above the plane and the framing keeps it
+  /// outside the galaxy, so nothing drawn is ever that close. The far plane is a multiple of the
+  /// orbit distance rather than a constant, because the distance is solved from the content and a
+  /// galaxy the camera has framed lies within a couple of distances of the target at any zoom.
+  /// `Project` has no such range -- it divides by whatever depth it is given -- so a point beyond
+  /// the far plane is one the CPU draws and the GPU clips, and the margin here is what keeps that
+  /// from happening.
+  static constexpr float NEAR_PLANE_WORLD_UNITS = 1.0F;
+  static constexpr float FAR_PLANE_IN_DISTANCES = 8.0F;
 
   /// Where the picture is drawn, in screen pixels. The aspect comes from this, so a camera with
   /// no viewport set projects nothing useful.
@@ -95,6 +111,17 @@ public:
   [[nodiscard]] WorldPoint Position() const noexcept;
 
   [[nodiscard]] ScreenPoint Project(const WorldPoint& _world) const noexcept;
+
+  /// The same camera as a 4x4, for a vertex shader: world to clip, ROW-MAJOR with the point as a
+  /// row vector on the left (`mul(float4(p, 1), m)` in HLSL against a `row_major` matrix),
+  /// right-handed, y up, Direct3D's 0..1 depth with `NEAR_PLANE_WORLD_UNITS` at 0 and
+  /// `FAR_PLANE_IN_DISTANCES` times the orbit distance at 1.
+  ///
+  /// Clip space is the VIEWPORT's: x and y in -1..1 span the rectangle `SetViewport` gave, not the
+  /// canvas, so a pass that draws through this sets its viewport to the same rectangle. A point at
+  /// `(x, y)` after the homogeneous divide lands on the pixel `Project` would have given it, which
+  /// `NeuronClientTests` holds to a hundredth of a pixel.
+  [[nodiscard]] std::array<float, 16> ViewProjection() const noexcept;
 
   /// Projects a DIRECTION rather than a place: where something infinitely far away in `_direction`
   /// lands on the screen.
