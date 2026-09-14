@@ -238,13 +238,68 @@ void DrawSeats(Lockstep::SeatsPage& _page, Headless& _renderers)
   return Lockstep::EventRefs::NONE;
 }
 
-/// Opens a build sheet by PRESSING what opens one, and leaves the page drawn so its hit list is the
-/// sheet's (ADR-058, ADR-107). `_system` is a position, or `NONE` for whichever opens first.
+/// The open sheet's rectangle, read off the two rectangles that CLOSE it: the header's square
+/// corner and the full-width bar under it (ADR-052). Zero-sized when no sheet is open.
+///
+/// **A control has to be told from the map under it by geometry, not by its action.** The map draws
+/// a marker for a fleet with a move queued and that marker opens the same picker the sheet's row
+/// does (ADR-055, ADR-077), so both are `OpenFleet` in the same pane -- and a test looking for the
+/// sheet's control by action alone finds whichever of them the draw happened to record first.
+[[nodiscard]] Lockstep::Frame::Box SheetBoundsOf(const Lockstep::MainPage& _page)
+{
+  Lockstep::Frame::Box box{0.0F, 0.0F, 0.0F, 0.0F};
+  for (const Lockstep::MainPage::HitRegion& hit : _page.Hits())
+  {
+    if (hit.action != Lockstep::MainPage::Action::ClosePanel)
+    {
+      continue;
+    }
+    if (hit.width < hit.height * 2.0F)
+    {
+      box.y = hit.y;
+    }
+    else
+    {
+      box.x = hit.x;
+      box.width = hit.width;
+      box.height = hit.y + hit.height - box.y;
+    }
+  }
+  return box;
+}
+
+/// Every control ON THE OPEN SHEET that is about a fleet: the `MOVE` on one that is standing, and
+/// the `TAKE BACK` on one with a move queued (ADR-111).
+[[nodiscard]] std::vector<Lockstep::MainPage::HitRegion> FleetControlsOn(const Lockstep::MainPage& _page)
+{
+  const Lockstep::Frame::Box sheet = SheetBoundsOf(_page);
+  std::vector<Lockstep::MainPage::HitRegion> found;
+  // **Read backwards, which is the order `HandleTap` resolves in**: the thing drawn last wins, and
+  // the map's own fleet marker is drawn before the sheet that covers it.
+  const std::vector<Lockstep::MainPage::HitRegion>& hits = _page.Hits();
+  for (auto hit = hits.rbegin(); hit != hits.rend(); ++hit)
+  {
+    const bool aboutAFleet =
+      hit->action == Lockstep::MainPage::Action::OpenFleet || hit->action == Lockstep::MainPage::Action::CancelFleetOrder;
+    const bool onTheSheet = hit->x >= sheet.x && hit->x < sheet.x + sheet.width && hit->y >= sheet.y && hit->y < sheet.y + sheet.height;
+    const bool already =
+      std::any_of(found.begin(), found.end(), [&hit](const Lockstep::MainPage::HitRegion& _found) { return _found.index == hit->index; });
+    if (aboutAFleet && onTheSheet && !already)
+    {
+      found.push_back(*hit);
+    }
+  }
+  return found;
+}
+
+/// Opens a PLACE sheet by pressing what opens one, and leaves the page drawn so its hit list is the
+/// sheet's (ADR-058, ADR-107, ADR-111). `_system` is a position, or `NONE` for whichever opens
+/// first.
 ///
 /// It presses rather than setting a field for the reason every test in this file does: what is
 /// under test is the sheet the screen builds, and a sheet reached by any other route is a different
 /// sheet. A tap that opens nothing focuses instead, which is why every candidate is tried.
-[[nodiscard]] bool OpenBuildSheet(Lockstep::MainPage& _page, Headless& _renderers, std::int32_t _system = Lockstep::EventRefs::NONE)
+[[nodiscard]] bool OpenPlaceSheet(Lockstep::MainPage& _page, Headless& _renderers, std::int32_t _system = Lockstep::EventRefs::NONE)
 {
   _renderers.Begin();
   DrawPage(_page, _renderers);
@@ -265,7 +320,7 @@ void DrawSeats(Lockstep::SeatsPage& _page, Headless& _renderers)
     (void)_page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
     _renderers.Begin();
     DrawPage(_page, _renderers);
-    if (_page.OpenPanel() == Lockstep::MainPage::Panel::BuildList)
+    if (_page.OpenPanel() == Lockstep::MainPage::Panel::Place)
     {
       return true;
     }
@@ -1201,7 +1256,7 @@ public:
 
     Headless renderers;
     const bool opened = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
-                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::BuildList; });
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Place; });
     Assert::IsTrue(opened, L"nothing opens a build sheet on a played board");
 
     const std::int32_t about = page.FocusedSystem();
@@ -1209,7 +1264,7 @@ public:
     const std::int32_t identity = page.State().graph.systems[static_cast<std::size_t>(about)].id;
 
     page.Create(page.State());
-    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::BuildList, L"a new state closed a sheet that still had a subject");
+    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Place, L"a new state closed a sheet that still had a subject");
 
     // Taken by somebody: there is nothing left to build on it, so the sheet goes. That it closes on
     // exactly this condition is what says the subject is tracked rather than merely kept.
@@ -1253,7 +1308,7 @@ public:
 
     Headless renderers;
     const bool opened = SweepFor(page, renderers, DrawPage, SCREEN_WIDTH - ORDERS_RAIL, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
-                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::BuildList; });
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Place; });
     Assert::IsTrue(opened, L"no row on the locks rail opens the build sheet");
 
     const std::int32_t focused = page.FocusedSystem();
@@ -1296,11 +1351,68 @@ public:
     Assert::IsTrue(page.State().orders.builds.front().cost > 0, L"and every row carries its price");
     Assert::IsTrue(page.State().player.credits >= page.State().orders.builds.front().cost, L"the opening purse covers one building");
 
+    // **It takes two taps now and it used to take one** (ADR-111): no digest control places an
+    // order any more, so the first tap opens the place the order is about and the second gives it.
+    // The sweep is about the second, and `_ensure` is what keeps the sheet in front of it -- a
+    // stray tap on an unclaimed disc closes it, and a sweep hunting for a tile behind a closed
+    // sheet would be hunting for something that is not on the screen.
     Headless renderers;
-    const bool queued = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
-                                 [&page] { return !page.State().orders.queuedBuilds.empty(); });
+    const bool queued = SweepFor(
+      page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page] { return !page.State().orders.queuedBuilds.empty(); },
+      false,
+      [&page, &renderers]
+      {
+        if (page.OpenPanel() == Lockstep::MainPage::Panel::Place)
+        {
+          return false;
+        }
+        return OpenPlaceSheet(page, renderers);
+      });
     Assert::IsTrue(queued, L"no control on the screen queues a build");
     Assert::AreEqual(std::size_t{1}, Lockstep::OrdersOf(page.State()).builds.size(), L"and it became an order");
+  }
+
+  TEST_METHOD(NoDigestControlPlacesAnOrderDirectly)
+  {
+    // **The sheet is the only door an order goes through** (ADR-111). The digest still carries the
+    // controls -- a priced build, a move -- and each of them is a LINK to the place it is about, so
+    // a player who taps one lands somewhere they can see what they are spending against rather than
+    // committing from a column that shows them neither the purse nor the queue.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    std::size_t links = 0;
+    for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
+    {
+      if (hit.x >= Lockstep::Frame::DIGEST_WIDTH)
+      {
+        continue;
+      }
+      const bool order = hit.action == Lockstep::MainPage::Action::ToggleBuild ||
+                         hit.action == Lockstep::MainPage::Action::ChooseDestination ||
+                         hit.action == Lockstep::MainPage::Action::CancelFleetOrder;
+      Assert::IsFalse(order, L"a control in the digest column gives an order rather than opening the place it is about");
+      links += hit.action == Lockstep::MainPage::Action::OpenSystem ? 1U : 0U;
+    }
+    Assert::IsTrue(links > 0, L"the opening digest offers no link to a place, so it offers nothing at all");
+
+    // And the link lands on a sheet about a system the viewer holds, which is the only kind that
+    // can take an order (ADR-058).
+    for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
+    {
+      if (hit.action != Lockstep::MainPage::Action::OpenSystem || hit.x >= Lockstep::Frame::DIGEST_WIDTH)
+      {
+        continue;
+      }
+      (void)page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+      Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Place, L"a digest link opened no place sheet");
+      break;
+    }
   }
 
   // A build row offers the NEXT level, and a system already building offers nothing at all
@@ -1449,7 +1561,7 @@ public:
       page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page, theirs] { return page.FocusedSystem() == theirs; }, false,
       closeAnySheet);
     Assert::IsTrue(focused, L"a rival's system could not be focused by any tap");
-    Assert::IsTrue(page.OpenPanel() != Lockstep::MainPage::Panel::BuildList, L"a rival's system opened a build sheet");
+    Assert::IsTrue(page.OpenPanel() != Lockstep::MainPage::Panel::Place, L"a rival's system opened a build sheet");
   }
 
   TEST_METHOD(TheQueueNeverExceedsThePurse)
@@ -1487,7 +1599,7 @@ public:
     page.Create(ViewOfSeatZero(*simulation));
 
     Headless renderers;
-    Assert::IsTrue(OpenBuildSheet(page, renderers), L"nothing on the screen opened a build sheet");
+    Assert::IsTrue(OpenPlaceSheet(page, renderers), L"nothing on the screen opened a build sheet");
 
     // A system with nothing on it offers its two buildings at level one, which is the choice the
     // opening board is about (ADR-069). The bastion and the lane are designed and unbuilt.
@@ -1532,7 +1644,7 @@ public:
     page.Create(ViewOfSeatZero(*simulation));
 
     Headless renderers;
-    Assert::IsTrue(OpenBuildSheet(page, renderers), L"nothing on the screen opened a build sheet");
+    Assert::IsTrue(OpenPlaceSheet(page, renderers), L"nothing on the screen opened a build sheet");
 
     const std::vector<Lockstep::MainPage::HitRegion> tiles = TilesOn(page);
     Assert::IsFalse(tiles.empty(), L"the sheet offers no tile to press");
@@ -1577,7 +1689,7 @@ public:
     Lockstep::MainPage page;
     page.Create(std::move(state));
     Headless renderers;
-    Assert::IsTrue(OpenBuildSheet(page, renderers), L"nothing on the screen opened a build sheet");
+    Assert::IsTrue(OpenPlaceSheet(page, renderers), L"nothing on the screen opened a build sheet");
 
     const std::vector<Lockstep::MainPage::HitRegion> tiles = TilesOn(page);
     Assert::AreEqual(std::size_t{1}, tiles.size(), L"a tile the purse cannot cover is still a target");
@@ -1598,7 +1710,7 @@ public:
     page.Create(std::move(built.state));
 
     Headless renderers;
-    Assert::IsTrue(OpenBuildSheet(page, renderers, built.system), L"the building capital opened no build sheet");
+    Assert::IsTrue(OpenPlaceSheet(page, renderers, built.system), L"the building capital opened no build sheet");
     Assert::IsTrue(TilesOn(page).empty(), L"a system that is already building offered a tile to press");
 
     // And it drew more than the one rising row, which is the whole point of keeping them.
@@ -1645,7 +1757,7 @@ public:
     Lockstep::MainPage page;
     page.Create(std::move(state));
     Headless renderers;
-    Assert::IsTrue(OpenBuildSheet(page, renderers, PositionOf(page.State(), laneSystem)), L"the lane's system opened no build sheet");
+    Assert::IsTrue(OpenPlaceSheet(page, renderers, PositionOf(page.State(), laneSystem)), L"the lane's system opened no build sheet");
 
     const std::vector<Lockstep::MainPage::HitRegion> tiles = TilesOn(page);
     const auto lane = std::find_if(tiles.begin(), tiles.end(), [&page](const Lockstep::MainPage::HitRegion& _tile)
@@ -1665,6 +1777,161 @@ public:
 // Answering offers, which is the half of decision three the client could get wrong silently: the
 // buttons drew and the taps landed, and with two offers open they would have answered the wrong
 // one, or one of them would have had to wait a lock it could expire in (ADR-068).
+// The place sheet: one system, what it can build and what is standing on it, in one sheet reached
+// from every door (ADR-111). What is asserted here is the two rules that are new -- the sheet stays
+// inside half the map pane, and the section carrying the move stays reachable when the rest of the
+// body has to scroll to make that true.
+TEST_CLASS(PlaceSheetTapTests)
+{
+public:
+  /// The tallest body this sheet can produce: four buildings on one system, a fleet standing on it,
+  /// and a build already queued so the purse sentence takes the help line (ADR-078).
+  ///
+  /// **Forced rather than played to**, for the reason the lane tile is: nothing composes a bastion
+  /// or a trade lane yet (ADR-107's reserved slots), so the day one does must not be the first time
+  /// anybody finds out what a full grid does to the sheet's height.
+  [[nodiscard]] static Lockstep::MatchState AFullPlace(std::int32_t& _outSystem)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    Assert::IsFalse(state.orders.builds.empty(), L"a fresh match offers something to build");
+
+    const Lockstep::BuildRow seed = state.orders.builds.front();
+    _outSystem = PositionOf(state, seed.system);
+    Assert::IsTrue(_outSystem != Lockstep::EventRefs::NONE, L"the build row names a system this viewer cannot see");
+
+    // One row per role, so `TileSlotOf` spreads them over all four slots and the grid is two rows.
+    state.orders.builds.clear();
+    for (const std::uint8_t kind : {std::uint8_t{1}, std::uint8_t{0}, std::uint8_t{2}})
+    {
+      Lockstep::BuildRow row = seed;
+      row.kind = kind;
+      row.cost = 5;
+      row.isTradeLane = false;
+      state.orders.builds.push_back(row);
+    }
+    Lockstep::BuildRow lane = seed;
+    lane.isTradeLane = true;
+    lane.cost = 5;
+    lane.partner = "P2";
+    state.orders.builds.push_back(lane);
+
+    // A queued build, so the sheet carries the purse sentence rather than nothing.
+    state.player.credits = 100;
+    state.orders.queuedBuilds.push_back(0);
+
+    // And a fleet standing on it, which is the section that has to stay reachable.
+    Assert::IsFalse(state.fleets.empty(), L"the opening board has no fleet to stand anywhere");
+    for (Lockstep::Fleet& fleet : state.fleets)
+    {
+      if (fleet.owner == state.viewer)
+      {
+        fleet.from = _outSystem;
+        fleet.to = _outSystem;
+        fleet.order = Lockstep::FleetStance::Hold;
+        fleet.underWay = false;
+        break;
+      }
+    }
+    return state;
+  }
+
+  TEST_METHOD(AFullPlaceSheetStaysInsideHalfTheMapPane)
+  {
+    // **The rule ADR-052 stated and nothing measured against** until a sheet held a grid and a
+    // fleet list at once. The body is capped and scrolls rather than the sheet growing over the
+    // systems the choice is about.
+    std::int32_t system = Lockstep::EventRefs::NONE;
+    Lockstep::MainPage page;
+    page.Create(AFullPlace(system));
+
+    Headless renderers;
+    Assert::IsTrue(OpenPlaceSheet(page, renderers, system), L"the full place opened no sheet");
+    Assert::IsTrue(SheetBoundsOf(page).height <= Lockstep::MainPage::SHEET_MAP_SHARE + 0.01F,
+                   L"a full place sheet takes more than half the map pane");
+  }
+
+  TEST_METHOD(TheFleetsSectionStaysReachableWhileTheGridScrolls)
+  {
+    // **The move is what a pinned section is for** (ADR-093's shape, ADR-111's subject): the grid is
+    // what overflows and the fleets are what a player came for, so the fleets are pinned above the
+    // bar and the grid is what a notch moves.
+    std::int32_t system = Lockstep::EventRefs::NONE;
+    Lockstep::MainPage page;
+    page.Create(AFullPlace(system));
+
+    Headless renderers;
+    Assert::IsTrue(OpenPlaceSheet(page, renderers, system), L"the full place opened no sheet");
+
+    const std::vector<Lockstep::MainPage::HitRegion> tiles = TilesOn(page);
+    Assert::IsTrue(!tiles.empty() && tiles.size() < 4, L"the capped body drew every tile, so nothing scrolled and this proves nothing");
+    Assert::IsFalse(FleetControlsOn(page).empty(), L"the fleets section was scrolled away with the grid");
+
+    // Notches over the sheet move the grid, and the pinned section does not move with them. More
+    // than one, because a block is the unit and the first of them is the 26-pixel `BUILD` band: a
+    // notch that only takes the band off the top leaves the same row of tiles under it, which is
+    // correct and is why this counts rather than asserting on the first.
+    bool different = false;
+    for (std::int32_t notch = 0; notch < 4 && !different; ++notch)
+    {
+      (void)page.HandleZoom(-1, Lockstep::Frame::SCREEN_WIDTH * 0.5F, Lockstep::Frame::SCREEN_HEIGHT - 100.0F);
+      renderers.Begin();
+      DrawPage(page, renderers);
+      Assert::IsFalse(FleetControlsOn(page).empty(), L"scrolling the grid took the fleets section with it");
+
+      const std::vector<Lockstep::MainPage::HitRegion> after = TilesOn(page);
+      different = !after.empty() && after.front().index != tiles.front().index;
+    }
+    Assert::IsTrue(different, L"no number of notches brought the second row of tiles onto the sheet");
+  }
+
+  TEST_METHOD(AQueuedMoveIsTakenBackFromTheSheetItWasGivenOn)
+  {
+    // The third place an order can be taken back, and the one the player is already looking at
+    // (ADR-111). A fleet with a move queued wears the same committed state a queued build does.
+    std::int32_t system = Lockstep::EventRefs::NONE;
+    Lockstep::MainPage page;
+    page.Create(AFullPlace(system));
+
+    Headless renderers;
+    Assert::IsTrue(OpenPlaceSheet(page, renderers, system), L"the full place opened no sheet");
+
+    const std::vector<Lockstep::MainPage::HitRegion> controls = FleetControlsOn(page);
+    Assert::IsFalse(controls.empty(), L"the sheet carries no fleet to move");
+    const std::int32_t fleet = controls.front().index;
+    const std::int32_t from = page.State().fleets[static_cast<std::size_t>(fleet)].from;
+
+    // Open the picker from the sheet, and take the first destination it offers.
+    (void)page.HandleTap(controls.front().x + controls.front().width * 0.5F, controls.front().y + controls.front().height * 0.5F);
+    renderers.Begin();
+    DrawPage(page, renderers);
+    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Destination, L"the sheet's MOVE opened no picker");
+
+    for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
+    {
+      if (hit.action == Lockstep::MainPage::Action::ChooseDestination)
+      {
+        (void)page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+        break;
+      }
+    }
+    Assert::AreNotEqual(from, page.State().fleets[static_cast<std::size_t>(fleet)].to, L"no row of the picker ordered the fleet anywhere");
+
+    // Back to the place, where the fleet is still listed -- an ordered fleet has left the system it
+    // is standing at and not the place it belongs to, which is the whole of `FleetsAtPlace`.
+    Assert::IsTrue(OpenPlaceSheet(page, renderers, system), L"the place sheet did not reopen after the order");
+    const std::vector<Lockstep::MainPage::HitRegion> committed = FleetControlsOn(page);
+    const auto same =
+      std::find_if(committed.begin(), committed.end(), [fleet](const Lockstep::MainPage::HitRegion& _hit) { return _hit.index == fleet; });
+    Assert::IsTrue(same != committed.end(), L"a fleet with a move queued vanished from the place it was ordered off");
+    Assert::IsTrue(same->action == Lockstep::MainPage::Action::CancelFleetOrder, L"and its control does not take the move back");
+
+    (void)page.HandleTap(same->x + same->width * 0.5F, same->y + same->height * 0.5F);
+    Assert::AreEqual(from, page.State().fleets[static_cast<std::size_t>(fleet)].to, L"the take-back left the fleet ordered away");
+    Assert::IsTrue(Lockstep::OrdersOf(page.State()).fleetOrders.empty(), L"and the order is still in the set that goes to the server");
+  }
+};
+
 TEST_CLASS(ProposalAnswerTapTests)
 {
 public:
@@ -1989,10 +2256,11 @@ public:
     return Lockstep::EventRefs::NONE;
   }
 
-  TEST_METHOD(ABadgeOpensThePickerForTheFleetStandingUnderIt)
+  TEST_METHOD(ABadgeOpensThePlaceSheetAndTheSheetCarriesTheMove)
   {
-    // The map drew nothing at all for a parked fleet before this, so no tap in this pane could
-    // reach a picker on a board with nothing in transit -- which is every board at tick zero.
+    // The map drew nothing at all for a parked fleet before ADR-079, so no tap in this pane could
+    // reach a move on a board with nothing in transit -- which is every board at tick zero. Since
+    // ADR-111 the badge opens the PLACE, and the move is a control on it.
     const auto simulation = PlayedMatch(0);
     Lockstep::MainPage page;
     page.Create(ViewOfSeatZero(*simulation));
@@ -2003,15 +2271,21 @@ public:
       L"something is in transit, so a marker rather than a badge could be what answers this");
 
     Headless renderers;
-    const bool opened = SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
-                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
-    Assert::IsTrue(opened, L"nothing on the map opens a picker for a fleet standing at a system");
+    const bool opened = SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page]
+                                 { return page.OpenPanel() == Lockstep::MainPage::Panel::Place && !FleetControlsOn(page).empty(); });
+    Assert::IsTrue(opened, L"nothing on the map opens a place sheet carrying the fleet standing there");
+
+    // And the control on it leads on to the picker, which is the only thing it is for.
+    const std::vector<Lockstep::MainPage::HitRegion> controls = FleetControlsOn(page);
+    (void)page.HandleTap(controls.front().x + controls.front().width * 0.5F, controls.front().y + controls.front().height * 0.5F);
+    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Destination, L"the sheet's fleet control opened no picker");
   }
 
-  TEST_METHOD(ASystemHoldingSeveralAsksWhichOneFirst)
+  TEST_METHOD(ASystemHoldingSeveralListsEveryOneOfThem)
   {
-    // A badge totals SHIPS, so a system holding three fleets wears one badge and the tap that
-    // follows it has to be about one fleet. The sheet between them is that question.
+    // A badge totals SHIPS, so a system holding two fleets wears one badge and the sheet behind it
+    // has to carry both -- a list that picked one for you would be picking the wrong one half the
+    // time (ADR-079, ADR-111).
     const auto simulation = PlayedMatch(0);
     Lockstep::MatchState state = ViewOfSeatZero(*simulation);
 
@@ -2032,24 +2306,13 @@ public:
     page.Create(std::move(state));
 
     Headless renderers;
-    const bool listed = SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
-                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::FleetList; });
-    Assert::IsTrue(listed, L"a system holding two of your fleets went somewhere other than the list that picks between them");
+    const bool listed = SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page]
+                                 { return page.OpenPanel() == Lockstep::MainPage::Panel::Place && FleetControlsOn(page).size() >= 2; });
+    Assert::IsTrue(listed, L"a system holding two of your fleets opened a sheet carrying fewer than two of them");
 
-    // And the list leads on to a picker, which is the only thing it is for.
-    const bool picked = SweepFor(
-      page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
-      [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; }, true,
-      [&page, &renderers]
-      {
-        if (page.OpenPanel() != Lockstep::MainPage::Panel::None)
-        {
-          return false;
-        }
-        return SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
-                        [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::FleetList; });
-      });
-    Assert::IsTrue(picked, L"no row of the fleet list opens that fleet's picker");
+    // Two controls about two different fleets, rather than one fleet offered twice.
+    const std::vector<Lockstep::MainPage::HitRegion> controls = FleetControlsOn(page);
+    Assert::AreNotEqual(controls[0].index, controls[1].index, L"the sheet offered one fleet twice");
   }
 
   TEST_METHOD(ARivalsGarrisonIsReadAndNotOrdered)
@@ -2060,8 +2323,8 @@ public:
     Lockstep::MatchState state = ViewOfSeatZero(*simulation);
     Assert::IsFalse(state.fleets.empty());
 
-    // Every fleet on the board belongs to a rival, so any picker this sweep finds is one the map
-    // offered about ships that are not the viewer's.
+    // Every fleet on the board belongs to a rival, so any picker or take-back this sweep finds is
+    // one the screen offered about ships that are not the viewer's.
     for (Lockstep::Fleet& fleet : state.fleets)
     {
       fleet.owner = state.viewer == 0 ? 1 : 0;
@@ -2074,16 +2337,17 @@ public:
     page.Create(std::move(state));
 
     Headless renderers;
-    const bool opened = SweepFor(
-      page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page]
-      { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination || page.OpenPanel() == Lockstep::MainPage::Panel::FleetList; });
+    const bool opened = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page]
+                                 { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination || !FleetControlsOn(page).empty(); });
     Assert::IsFalse(opened, L"the screen offered an order about a rival's ships");
   }
 
-  TEST_METHOD(ABadgeIsFocusOnlyAtTheLock)
+  TEST_METHOD(ABadgeOpensAnInertSheetAtTheLock)
   {
-    // Screen 06, and the rule the locks rail's rows already follow (ADR-060): at the lock nothing
-    // opens a surface that takes an order for a tick that is already resolving.
+    // Screen 06, and the rule every sheet already follows (ADR-065): at the lock a sheet stays open
+    // and goes inert rather than being taken away. **The badge and the disc agree about this since
+    // ADR-111**, where the badge went focus-only and the disc opened a sheet -- they were two rules
+    // because they opened two different things, and they open one sheet now.
     const auto simulation = PlayedMatch(0);
     Lockstep::MatchState state = ViewOfSeatZero(*simulation);
     state.orders.locked = true;
@@ -2092,11 +2356,17 @@ public:
     page.Create(std::move(state));
 
     Headless renderers;
-    const bool opened = SweepFor(
-      page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page]
-      { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination || page.OpenPanel() == Lockstep::MainPage::Panel::FleetList; });
-    Assert::IsFalse(opened, L"a badge opened a picker at the lock");
+    const bool opened = SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Place; });
+    Assert::IsTrue(opened, L"nothing on the map opened a place sheet at the lock");
     Assert::IsTrue(page.FocusedSystem() != Lockstep::EventRefs::NONE, L"and it focused nothing either, so the tap did nothing at all");
+
+    // Open, and with nothing on it to press: every control a sheet draws passes `EventRefs::NONE`
+    // while the orders are locked, so there is no hit to find rather than a hit that refuses.
+    Assert::IsTrue(FleetControlsOn(page).empty(), L"a locked place sheet offered a move");
+    const bool queued = SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT,
+                                 [&page] { return !page.State().orders.queuedBuilds.empty(); });
+    Assert::IsFalse(queued, L"a locked place sheet took a build");
   }
 
   TEST_METHOD(AFleetOnALaneWearsNoBadge)

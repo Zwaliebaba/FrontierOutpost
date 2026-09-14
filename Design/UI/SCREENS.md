@@ -83,7 +83,7 @@ signals (`REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE`) are the signal s
 
 **The top bar's purse says what is committed (ADR-087).** `46 CR −20` — the purse, then in blue
 what this tick's queue has already taken of it, drawn only when something is queued. It is the same
-`QueuedBuildCost()` the build sheet's sentence explains and the affordability guard refuses by, so
+`QueuedBuildCost()` the place sheet's sentence explains and the affordability guard refuses by, so
 the bar, the rail's `- 26 cr left at the lock -` and the sheet cannot disagree.
 
 **A capture is news for three ticks (ADR-082).** `CAPTURED Tn` is drawn under a system for three
@@ -137,32 +137,37 @@ the band is not drawn and registers no hit** — `ShapeRenderer` has no clip rec
 half-scrolled row would paint its divider over the help line. The scroll is **not** reset when a tick
 lands, unlike the digest's: this column is a summary of the same empire tick after tick.
 
-**Rows are links (ADR-060).** A BUILDS row opens the build sheet for the system its build is on; a
-FLEETS row opens the fleet's destination picker, and is **the only way to move a parked fleet**
-(ADR-077) — a fleet the server already has on a lane takes no order, so its row focuses where it is
-going instead; a PROPOSALS row focuses the far end of the lane the offer is about. None of them gives an order. The
+**Rows are links (ADR-060).** A BUILDS row opens the place sheet for the system its build is on; a
+FLEETS row opens the fleet's destination picker — a fleet the server already has on a lane takes no
+order, so its row focuses where it is going instead; a PROPOSALS row focuses the far end of the lane
+the offer is about. None of them gives an order. The
 row under the pointer is filled with `HOVER_FILL`, and only a row that is a target draws one. At the
 lock and in a finished match every row is focus-only.
 
 *Differs:* the `SIGNALS` section's queued rows are not links, and the trade-lane `PROPOSE` row is
 drawn from `BuildRow::isTradeLane`, which nothing sets.
 
-**Sheets (ADR-052).** The four panels — build, destination, signal, replay — are one component
+**Sheets (ADR-052).** The four panels — place, destination, signal, replay — are one component
 (`DrawPanel`), drawn as a sheet against the bottom of the map pane: 44px header, one wrapped help
-line, a body, a 44px `CANCEL` bar. The body is 44px rows, six at most and a seventh reported —
-**except the build sheet's, which is a 2×2 grid of 96px tiles** (ADR-107). No mockup exists for any of them; the captures are `01-build-sheet.png`,
+line, a body, a 44px bar. The body is 44px rows, six at most and a seventh reported —
+**except the place sheet's, which is a 2×2 grid of 96px tiles over a short list of fleets**
+(ADR-107, ADR-111). **A sheet swallows every tap it is over** (ADR-111): it records its own
+rectangle before its controls, so a tap on the space between two of them no longer falls through to
+the map. No mockup exists for any of them; the captures listed here are `01-build-sheet.png`,
 `01-destination-sheet.png`, `01-signal-sheet.png`, `01-signal-sheet-armed.png`, `07-replay.png`
-and, for a sheet left open across the lock, `06-at-lock-sheet.png`. All six were retaken on
-2026-09-14; `Design/UI/README.md` says why eleven captures had fallen behind at once.
-- **Build** (`BUILD - DOTHAN`): **the one sheet whose body is a grid rather than a column**
-  (ADR-107). Opened by tapping a system you hold, or by a queued BUILDS row on the rail; it is about
-  that system and nothing else (ADR-058), and a system you do not hold opens no sheet and only
-  focuses.
-  - **Header.** The title left; right of it, inboard of the 44px `X`, one of three things: the
-    filled grey `LOCKED` / `OFFLINE` chip (ADR-065, ADR-085), or — when something is rising there —
-    an outlined blue 22px chip reading `RISING · DONE T14`, or the purse, `66 CR` with ` −40` in
-    blue when this tick's queue has taken something (ADR-087), so the number a dim tile is priced
-    against is on the sheet rather than 400 pixels away.
+and, for a sheet left open across the lock, `06-at-lock-sheet.png` — **the first and the last of
+those are of a sheet that no longer exists** and are owed a retake (`Design/UI/README.md`).
+- **Place** (`DOTHAN`): **the one sheet an order is given on** (ADR-111), and the one whose body is
+  a grid rather than a column (ADR-107). Opened by tapping a system you hold, by its garrison badge,
+  by a digest button that names it, or by a rail row about it; it is about that system and nothing
+  else (ADR-058), and a system you do not hold opens no sheet and only focuses.
+  - **Header.** A 10px disc in the owner's colour, the system's name in the display cut, then a muted
+    clause saying what the place IS — `YOURS · +6 A TICK · CAPITAL`, dropped whole rather than
+    clipped when the status slot leaves no room for it. Right of that, inboard of the 44px `X`, one
+    of three things: the filled grey `LOCKED` / `OFFLINE` chip (ADR-065, ADR-085), or — when
+    something is rising there — an outlined blue 22px chip reading `RISING · DONE T14`, or the
+    purse, `66 CR` with ` −40` in blue when this tick's queue has taken something (ADR-087), so the
+    number a dim tile is priced against is on the sheet rather than 400 pixels away.
   - **Help line.** One wrapped sans line and three sentences compete for it, in this order: the
     rail's lock sentence in amber (ADR-065); *Xerev cannot take another order until this lands. Two
     of three ticks are in.* when something is rising there, the count in words below ten (ADR-070);
@@ -182,11 +187,24 @@ and, for a sheet left open across the lock, `06-at-lock-sheet.png`. All six were
     tile, and the tiles for what it could build next drawn inert, priced, and marked `AFTER T14` —
     so a player mid-build still has the prices and the yields to plan against (`01-build-rising.png`).
     None of them is a target; the lock refuses a second construction whatever its kind (ADR-069).
-  - A system with everything at its top level says `NOTHING LEFT TO BUILD HERE` in a row, which is
-    the one case where this sheet is a column.
-- **Destination** (`MOVE FLT 1 - PICK LANE`): opened by the fleet's FLEETS row on the rail, by its
-  system's garrison badge on the map (through the fleet list where a system holds several,
-  ADR-079), by `MOVE` on a card, or by tapping a marker of your own that has not departed yet.
+  - A system with everything at its top level says *Both buildings are at their top level.* where
+    the grid would be.
+  - **Fleets here.** Under a divider and a `FLEETS HERE` band carrying the ships standing there, one
+    boxed 44px row per fleet of yours the place holds: an 8px owner square, `FLT 1` in mono Medium,
+    `10 SHIPS · HOLDING` muted, and a 28px button at the right — outlined `MOVE ›`, or committed
+    `TAKE BACK` once a move is queued, when the row reads `10 SHIPS → FAROE · T1` instead.
+    **A fleet belongs to the place it was ordered OFF**, so a move given this tick keeps its row
+    rather than vanishing from it (ADR-055, ADR-077). The section is omitted when the place holds
+    nothing of yours.
+  - **The body is capped at half the pane and scrolls** (ADR-052, ADR-111): past the cap a wheel
+    notch or a drag banked to 44 moves it **by blocks** — a band, a tile row, the divider, a fleet
+    row — and the whole `FLEETS HERE` section is pinned above the bar when it fits in half the body,
+    so the move stays one tap away. There is no page band: this body can be dragged, where the locks
+    rail cannot (ADR-101).
+  - **The bar says `DONE`, not `CANCEL`.** There is nothing to back out of — what was ordered on it
+    is already in, and closing it is finishing.
+- **Destination** (`MOVE FLT 1 - PICK LANE`): opened by `MOVE ›` on a fleet's row in the place
+  sheet, or by tapping a marker of your own that has not departed yet.
   **Nearest first, then by name** (ADR-092), and a held candidate's second line is drawn in the
   holder's colour rather than in body ink; never for a fleet
   the server has on a lane, because the lock refuses a second order on one (ADR-077). One row per
@@ -197,11 +215,6 @@ and, for a sheet left open across the lock, `06-at-lock-sheet.png`. All six were
   zero until the lock) and closes the sheet. *Not built:* the verdict under the right-hand column
   (`YOU WIN` / `HOLD` / `YOU LOSE`). It needs a preview per candidate destination on
   `SnapshotFleet`; the client must not compute one (ADR-063).
-- **Fleet list** (`FLEETS AT DOTHAN - PICK ONE`): opened by a garrison badge on a system holding
-  more than one of your fleets (ADR-079) — a badge totals ships, and a picker has to be about one
-  fleet. Rows are `FLT 3` with the engagement preview under it and `3 SHIPS` on the right, blue
-  square, and tapping one opens that fleet's destination sheet. A garrison that left at the lock
-  leaves `NOTHING STANDING HERE ANY MORE`.
 - **Signal** (`SIGNAL - PICK ONE`): opened from the rail's `SIGNALS` header; the six kinds of
   ADR-039 as rows with `SENDING` / `TAP AGAIN TO CONFIRM` on the right; `Concede` always last,
   needing two taps, under a 22px `CONCEDE` band of its own and said in red from the first tap
@@ -335,15 +348,18 @@ is no host-left state.
 
 Applies to 01 when the countdown reaches zero (ADR-039): top bar `T8 LOCKED 00:00:00` with the
 countdown in grey rather than amber; digest header right side `T8 PENDING` in amber; every action
-button outlined dim and inert (`MAP` still focuses), no standing moves; the rail's header a filled
+button in the Locked state — filled grey, a 6px square before the label, not a target — except a
+focus chip, which reaches no wire and goes on working (ADR-110); no standing moves; the rail's header a filled
 grey `LOCKED` chip, its help line amber — *Resolving T8. Controls return with the new digest.
 Anything you tap now is an order for T9.* — its `SIGNALS` header `LOCKED` and not a control, its
 footer `LOCKED TOGETHER` / `T8 RESOLVING`; its rows focus-only (ADR-060). **An open sheet stays
 open** (ADR-065): every row dim and not a target, the same filled grey `LOCKED` chip in its header
-clear of the `X`, and the rail's lock sentence repeated under the header in amber. **A build sheet
-dims its TILES in place** (ADR-107): each keeps the border and the icon of whatever state it is in
-and all four of its strings go `NEUTRAL_DIM`, and a queued tile drops its `TAP TO TAKE BACK` rather
-than dimming an instruction that is no longer true. `06-at-lock-sheet.png` is that sheet, which is
+clear of the `X`, and the rail's lock sentence repeated under the header in amber. **A place sheet
+dims its TILES and its rows in place** (ADR-107, ADR-110): each keeps the border and the icon of
+whatever state it is in and all four of its strings go `NEUTRAL_DIM`, and a queued tile drops its
+`TAP TO TAKE BACK` rather than dimming an instruction that is no longer true. **The filled grey is a
+BUTTON's lock and not a row's**: four light-grey tiles would be the screen inverted rather than gone
+quiet (ADR-110). `06-at-lock-sheet.png` is that sheet, which is
 what it shows since 2026-09-14; it was the signal sheet before. `X` and `CANCEL`
 still close it. Ends when the next state arrives and the page is rebuilt from it — including the
 sheet, which reopens when its system is still yours or its fleet still exists, and closes when it is

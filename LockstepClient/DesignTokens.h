@@ -105,17 +105,6 @@ inline constexpr Neuron::Color TILE_COMMITTED_FILL = {94, 196, 255, 15};
 /// fill is the only channel left. `ContrastTests` measures the inks a tile draws over this one too.
 inline constexpr Neuron::Color COMMITTED_HOVER_FILL = {94, 196, 255, 36};
 
-/// The ink of a build tile that is inert because something else on its system is already rising
-/// (ADR-070, ADR-107).
-///
-/// **Deliberately under the 4.5:1 floor, and this is the place that has to say so** (ADR-083).
-/// Every other token here clears it over both grounds. A blocked tile is not READ: the sheet's help
-/// line above it says the system cannot take another order until the build lands, and the tile is
-/// kept on the grid so a player can see what will be orderable and what it will cost -- not so they
-/// can weigh it now. At an ink that cleared the floor, three inert tiles would compete with the one
-/// thing actually happening on that system.
-inline constexpr Neuron::Color TILE_BLOCKED_INK = {255, 255, 255, 90};
-
 /// A star in the sky behind every screen. Not text and not held to the contrast floor: it is meant
 /// to be faint, and a legible star is a defect.
 inline constexpr Neuron::Color STAR = {214, 220, 228, 220};

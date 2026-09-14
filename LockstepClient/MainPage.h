@@ -181,6 +181,25 @@ public:
   /// two tiles and the sheet is `96 + 8` shorter.
   static constexpr std::size_t SHEET_TILE_SLOTS = 4;
 
+  /// **How much of the map pane a sheet may take** (ADR-052): half of the 676-pixel pane, so more
+  /// than half of it always stays map. It was a rule nothing measured against until the place sheet
+  /// put a build grid and a fleet list in one sheet and came to 403 bare (ADR-111).
+  static constexpr float SHEET_MAP_SHARE = 338.0F;
+
+  /// The least a place sheet's scrolling body is given, whatever the help line above it costs.
+  ///
+  /// A band and one row of tiles, which is the smallest body that says anything: a sheet whose
+  /// grid is scrolled out of sight is a sheet about a place with nothing on it. When the help line
+  /// is long enough to push the total past `SHEET_MAP_SHARE`, the sentence wins and the sheet is
+  /// taller than half the pane -- which is the one case ADR-052's rule is bent, and the sentence is
+  /// there to say why nothing on the sheet can be ordered (ADR-065).
+  static constexpr float SHEET_BODY_MINIMUM = SHEET_BAND_HEIGHT + SHEET_TILE_TOP + SHEET_TILE_HEIGHT;
+
+  /// How many of a place's fleet rows are PINNED above the bottom bar when the body scrolls
+  /// (ADR-111, following ADR-093's pinned concede). Two, because the pinned block must not become
+  /// the sheet: at 22 + 44 + 44 it is already 110 of a 122-pixel minimum body.
+  static constexpr std::size_t SHEET_PINNED_FLEETS = 2;
+
   /// Inside a tile. **12 across and 10 down**, which is not `CARD_PADDING`: a tile is a box with a
   /// border, where a digest card is a region of a rail, so its ink has to clear a line rather than
   /// an edge. 10 + 22 + 10 + 17 + 10 + 17 + 10 is exactly 96, which is what fixes the vertical one.
@@ -208,6 +227,12 @@ public:
   /// things a player can express on it (one-pager, "What it is not").
   enum class Action : std::uint8_t
   {
+    /// **A rectangle that is not a control and consumes the tap anyway** -- a sheet's own
+    /// background (ADR-111). A sheet is a modal and only its rows were ever targets, so a tap on
+    /// the band between two of them fell through to the map underneath and opened a different
+    /// sheet; a fleet marker drawn at progress zero sits under the very sheet the move was ordered
+    /// from (ADR-055), which is where that was found. No control is ever recorded with this: the
+    /// rails pass it to mean *not a target* and never add a hit for one.
     None,
     /// Focus the map on what this digest event is about. Its index is a DIGEST index.
     FocusEvent,
@@ -215,13 +240,13 @@ public:
     /// `FocusEvent` (ADR-057): one action carrying two kinds of index is an action that reads the
     /// wrong array, and the bounds check turned that into a button that did nothing at all.
     FocusSystem,
-    /// Open a system's build list.
+    /// Open one system's place sheet (ADR-111). Its index is a SYSTEM position.
     OpenSystem,
     /// Open a fleet's destination picker, lane-constrained.
     OpenFleet,
-    /// Open what is standing at one system, from its garrison badge (ADR-079). Its index is a
-    /// SYSTEM position: one fleet of the viewer's there goes straight to that fleet's picker, and
-    /// several open the sheet that picks between them first.
+    /// Open the place sheet from a garrison badge (ADR-079, ADR-111). Its index is a SYSTEM
+    /// position, and it is a separate action from `OpenSystem` because the badge is a separate
+    /// target from the disc it sits beside -- the disc is the system and the badge is the ships.
     OpenFleetsAt,
     /// Queue or unqueue a build. An order: local until the lock.
     ToggleBuild,
@@ -248,6 +273,11 @@ public:
     /// position: the rail scrolls in pixels and a tap that carried one would be a tap that had to
     /// know how tall the band came out (ADR-101).
     PageRail,
+    /// Take back a fleet's queued move, leaving it standing where it is. Its index is a FLEET
+    /// position (ADR-111). A build is taken back by `ToggleBuild`, which is the same tap on the
+    /// other order kind -- two actions rather than one, because a build row and a fleet are
+    /// different arrays and one index must mean one thing (ADR-057).
+    CancelFleetOrder,
     ClosePanel
   };
 
@@ -255,11 +285,11 @@ public:
   enum class Panel : std::uint8_t
   {
     None,
-    BuildList,
+    /// **One system, and everything it can do this tick** (ADR-111): what it can build, and the
+    /// fleets standing on it. It replaces the build sheet and the fleet list, which were two
+    /// sheets about one place reached through two different doors.
+    Place,
     Destination,
-    /// Which of the several fleets standing at one system (ADR-079). Its subject is a SYSTEM, and
-    /// it exists only because a badge totals ships and a picker has to be about one fleet.
-    FleetList,
     SignalList,
     Replay
   };
@@ -514,15 +544,32 @@ private:
   /// Puts back the sheet a new state arrived under, if what it was about is still there (ADR-065).
   void ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _subject);
 
+  /// Opens the place sheet on one system, or closes whatever is open when the position is `NONE`.
+  ///
+  /// One function because four controls lead here -- the map's disc, its garrison badge, a digest
+  /// button and a rail row (ADR-111) -- and each of them has to reset the same three things: the
+  /// subject, the id that survives a snapshot (ADR-057), and the scroll, which is about the sheet
+  /// in front of you rather than about the place.
+  void OpenPlace(std::int32_t _system);
+
+  /// Moves the place sheet's body by `_blocks`, clamped to what the last frame measured. True when
+  /// it moved.
+  bool ScrollSheet(std::int32_t _blocks);
+
   /// What the rail and an open sheet both say at the lock. One sentence, said once, because two
   /// copies of it is one wrong tick number waiting.
   [[nodiscard]] std::string LockSentence() const;
 
   void AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index);
 
-  /// The viewer's own fleets standing at one system and able to take an order, as indices into
-  /// `m_state.fleets`. What a garrison badge opens, and what the fleet-list sheet lists (ADR-079).
-  [[nodiscard]] std::vector<std::int32_t> StandingFleetsAt(std::int32_t _system) const;
+  /// The viewer's own fleets that BELONG to one place this tick, as indices into `m_state.fleets`.
+  ///
+  /// **Standing there, or ordered off it and not gone yet** (ADR-111). A move given this tick puts
+  /// a fleet on a lane at progress zero from the moment it is given (ADR-055) while leaving it
+  /// where it is until the lock (ADR-077), so a list of fleets STANDING at a system loses the one
+  /// the player just ordered -- and that is exactly the row they need in order to take it back.
+  /// `from` is the place a fleet belongs to for as long as the order is still an edit.
+  [[nodiscard]] std::vector<std::int32_t> FleetsAtPlace(std::int32_t _system) const;
 
   /// How many credits short the purse is of build row `_index` on top of what is already queued;
   /// zero when it is affordable or names no row. The number a dim build control shows (ADR-053).
@@ -606,6 +653,22 @@ private:
   float m_digestDragPixels = 0.0F;
 
   Panel m_panel = Panel::None;
+  /// Which BLOCK of the place sheet's body is at the top of its scrolling region (ADR-111).
+  ///
+  /// **Blocks and not pixels**, and the difference is what the two columns are. The locks rail is a
+  /// list of 44-pixel rows, so every pixel offset lands somewhere legible (ADR-101); this body's
+  /// tallest block is a 96-pixel tile row in a viewport that can be 134, and `ShapeRenderer` has no
+  /// clip rectangle -- a part-scrolled tile is either painted over the header above it or dropped
+  /// whole. The digest made the same trade for the same reason (ADR-080).
+  ///
+  /// Reset when a sheet opens, because a scroll position is about the sheet in front of you.
+  std::size_t m_sheetScroll = 0;
+  /// Drag distance banked toward the next whole block, the finger's half of scrolling it.
+  float m_sheetDragPixels = 0.0F;
+  /// How many blocks the last frame's body held and how many it could show, so a scroll can be
+  /// clamped against something measured rather than guessed.
+  std::size_t m_sheetBlocks = 0;
+  std::size_t m_sheetBlocksShown = 0;
   /// Which system's build list or which fleet's picker is open, as a POSITION in the view's lists.
   std::int32_t m_panelSubject = EventRefs::NONE;
   /// The same subject as the id the simulation knows it by, which is what survives a new state.

@@ -164,7 +164,7 @@ struct Screen
       continue;
     }
     (void)main.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
-    if (main.OpenPanel() == Lockstep::MainPage::Panel::BuildList)
+    if (main.OpenPanel() == Lockstep::MainPage::Panel::Place)
     {
       break;
     }

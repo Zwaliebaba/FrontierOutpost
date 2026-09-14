@@ -9,10 +9,11 @@
 // paints text on -- the app background, the dialog card, and a committed build tile's blue wash
 // (ADR-107) -- at 4.5:1, which is the AA threshold for body text.
 //
-// **One thing is deliberately below it and is asserted to BE below it**, so that raising it is a
-// decision rather than a drive-by: `TILE_BLOCKED_INK`, the ink of a build tile that is inert
-// because something else on its system is rising. Its declaration in `DesignTokens.h` carries the
-// reason, which is that the tile is not read.
+// **Nothing is below it any more.** `TILE_BLOCKED_INK` was, at 3.21:1, and was asserted to BE
+// below it so that raising it would be a decision (ADR-107): an inert tile had to be faint, because
+// faint was the only channel saying it could not be ordered. ADR-110 gave inert controls a DASHED
+// border, which says that on its own and says it in the chrome rather than in the words, so the ink
+// went back to `NEUTRAL_DIM` and the exemption went with it (ADR-111).
 
 #include "pch.h"
 #include "CppUnitTest.h"
@@ -136,19 +137,6 @@ public:
     }
   }
 
-  // **The one exemption, asserted as one.** A blocked tile is drawn at 90/255 white and is meant to
-  // be: the sheet's help line above it says why nothing there can be ordered, and an ink that
-  // cleared the floor would put three inert tiles in competition with the build that is actually
-  // happening (ADR-107). If somebody raises it, this fails and they read the declaration.
-  TEST_METHOD(TheBlockedTilesInkIsBelowTheFloorOnPurpose)
-  {
-    Assert::IsTrue(Contrast(Lockstep::Ink::TILE_BLOCKED_INK, Lockstep::Ink::APP_BACKGROUND) < FLOOR,
-                   L"the blocked tile's ink now clears the floor, so the exemption in DesignTokens.h is stale");
-    Assert::IsTrue(Contrast(Lockstep::Ink::TILE_BLOCKED_INK, Lockstep::Ink::APP_BACKGROUND) <
-                     Contrast(Lockstep::Ink::NEUTRAL_DIM, Lockstep::Ink::APP_BACKGROUND),
-                   L"the blocked tile's ink is no fainter than the dim one, so one of the two is pointless");
-  }
-
   // ---- The control vocabulary's four states (ADR-110) -------------------------------------------
   //
   // A control state is a ground as much as it is an ink: a filled button paints `BLUE` under
@@ -192,8 +180,6 @@ public:
 
   TEST_METHOD(ACommittedControlsInksClearTheFloorAtRestAndUnderThePointer)
   {
-    // The rest wash is already measured above; this is the hovered one, where the label changes to
-    // `TAKE BACK` and the fill is the only channel the state change has left (ADR-110).
     // **`NEUTRAL_DIM` is deliberately not on this list.** It is the inert and the locked ink, and
     // neither of those has a hover at all -- a control nobody can tap does not light under the
     // pointer -- so the pair never lands in a framebuffer. Measured anyway it is 4.34:1, which is

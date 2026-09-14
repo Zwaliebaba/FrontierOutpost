@@ -273,12 +273,12 @@ public:
       }
       (void)page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
       DrawPage(page, renderers);
-      if (page.OpenPanel() == Lockstep::MainPage::Panel::BuildList)
+      if (page.OpenPanel() == Lockstep::MainPage::Panel::Place)
       {
         break;
       }
     }
-    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::BuildList, L"no build sheet opened, so nothing was audited");
+    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Place, L"no build sheet opened, so nothing was audited");
 
     const std::vector<std::string> offenders = Undersized(page);
     Assert::IsTrue(offenders.empty(), Listed("a build sheet is open and these targets are under the floor", offenders).c_str());
@@ -326,12 +326,13 @@ public:
     page.Create(ViewOfSeatZero(*simulation));
     DrawPage(page, renderers);
 
-    // The standing `BUILD` the opening digest carries (ADR-056), in the digest column -- the sheet's
-    // tiles queue the same order from over the map pane and are measured by the test above.
+    // The standing `BUILD AT DOTHAN` the opening digest carries (ADR-056), in the digest column. It
+    // is an `OpenSystem` since ADR-111 -- no digest control places an order -- and the map's own
+    // discs carry the same action from over the pane, which is what the column test excludes.
     std::size_t buttons = 0;
     for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
     {
-      if (hit.action != Lockstep::MainPage::Action::ToggleBuild || hit.x >= Lockstep::Frame::DIGEST_WIDTH)
+      if (hit.action != Lockstep::MainPage::Action::OpenSystem || hit.x >= Lockstep::Frame::DIGEST_WIDTH)
       {
         continue;
       }
@@ -339,7 +340,7 @@ public:
       Assert::IsTrue(hit.width + 0.01F >= FLOOR_PIXELS, L"a digest button's target is narrower than the floor");
       ++buttons;
     }
-    Assert::IsTrue(buttons > 0, L"the opening digest drew no build button, so nothing was measured");
+    Assert::IsTrue(buttons > 0, L"the opening digest drew no link to a place, so nothing was measured");
   }
 
   TEST_METHOD(TheLockedBoardHasNoUndersizedTarget)

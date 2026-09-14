@@ -44,19 +44,22 @@ ships — this document cites it and does not restate what it does not have to.
   and 40 by ADR-100), a 24px row for the count that did not fit, six rows at most, and one wrapped
   help line with 8px above and below it. A full row sheet is 340px of the 676px pane, so more than
   half the map stays visible.
-- **The build sheet's body is a grid and not a column** (ADR-107): a 2×2 of **96px** tiles,
-  `(596 − 20 − 8) / 2` = 284 wide, 8px between, 4px above the grid and 12px below, four slots and an
-  empty one not drawn.
-- **Sheet heights, measured off the captures on 2026-09-14** rather than computed: header 44 + help
-  (0, 33 or 50) + body + `CANCEL` 44. The two-tile build sheet the game produces today is **200**
-  bare, **233** under the rising sentence (`01-build-rising.png`) and **250** under the purse or lock
-  sentence (`01-build-sheet.png`, `06-at-lock-sheet.png`); the destination picker's four rows are
-  **264**, the signal sheet's band and row **154**, the replay sheet's six rows **352**. A full
-  four-tile grid will be 304 bare and **354** under a two-line sentence, which is the first thing on
-  this sheet that would pass ADR-052's "more than half the pane stays map" (338) — the row form
-  already passes it at six rows, and the grid does not until the bastion and the lane exist.
-  **ADR-107 said 337 for that case until 2026-09-15**, which was arithmetic done before the sheet had
-  been photographed; it was corrected in place on the owner's instruction and says so.
+- **The place sheet's body is a grid and a short list, and it scrolls** (ADR-107, ADR-111): a 2×2 of
+  **96px** tiles, `(596 − 20 − 8) / 2` = 284 wide, 8px between, 4px above the grid and 12px below,
+  four slots and an empty one not drawn; then a divider, a 22px `FLEETS HERE` band and one boxed 44px
+  row per fleet. **A sheet may take half the pane and no more** — 338 of 676 (ADR-052) — so the body
+  is capped at what is left of that once the header, the help line and the bar have taken theirs,
+  floored at a band and one row of tiles. Past the cap it scrolls **by blocks** (a band, a tile row,
+  the divider, a fleet row) on a wheel notch or a drag banked to 44, and the whole `FLEETS HERE`
+  section is pinned above the bar when it fits in half the body — all of it or none of it.
+- **Sheet heights, measured on 2026-09-14 off the hit rectangles the real screens record** — the two
+  that close a sheet give its top and its bottom — rather than computed: header 44 + help (0, 33 or
+  50) + body + bar 44. The place sheet on an opening board is **299** with two tiles and two fleet
+  rows and no help line; **338** at the lock, which is the cap exactly, because the lock sentence
+  takes three wrapped lines and the body is capped at 183 and scrolls; **222** on a twelve-tick board
+  with two tiles and no fleets. A forced four-tile grid with a fleet and a queued build is capped at
+  338 and scrolls, which `PlaceSheetTapTests` asserts. The destination picker's four rows are
+  **264**, the signal sheet's band and row **154**, the replay sheet's six rows **352**.
 
 ## Font
 
@@ -214,11 +217,11 @@ UI
 - `rgba(94,196,255,0.06)` the wash under a build tile the player has committed to — queued, or
   already rising (`TILE_COMMITTED_FILL`, ADR-107). **The only ground on the main page that carries
   text**, so `ContrastTests` measures every ink a tile draws over it as well as over the ink.
-- `rgba(255,255,255,0.35)` a build tile that is inert because something else on its system is rising
-  (`TILE_BLOCKED_INK`, ADR-107). **The one token below the 4.5:1 floor and the only one**, at
-  3.21:1: the tile is not read — the sheet's help line says why nothing there can be ordered — and
-  an ink that cleared the floor would put three inert tiles in competition with the build that is
-  actually happening. Asserted to BE below it, so raising it is a decision.
+- **Nothing in this palette is below the 4.5:1 floor.** `TILE_BLOCKED_INK` was, at 3.21:1, and was
+  asserted to BE below it so that raising it would be a decision (ADR-107): an inert tile had to be
+  faint because faint was the only channel saying it could not be ordered. ADR-110 gave inert
+  controls a **dashed** border, which says that in the chrome, so the ink went back to `NEUTRAL_DIM`
+  and the token was retired (ADR-111).
 - Scrim under a dialog `rgba(7,9,13,0.80)` (the handoff: `rgba(6,8,12,0.74)`).
 - Map ground: vertical gradient `rgb(8,10,16) → rgb(16,22,36) @45% → rgb(11,14,20)`; grid
   `rgba(94,196,255,0.07)`; the horizon glow is declared and not drawn. Stars: a band and a
@@ -314,18 +317,30 @@ Semantic / owner (ADR-027: you are always blue)
   in amber there; `X` and `CANCEL` still close it. Otherwise a build sheet whose queue has taken
   credits says what its rows are priced against (ADR-078), amber when that is why a row is dim and
   `TEXT_DETAIL` when it is only a note. With none of them, the body starts straight under the header.
-- **Sheet, tile variant** — the build sheet's body only (ADR-107). A 2×2 grid of 284×96 tiles, one
+- **Sheet, place variant** — the one sheet an order is given on (ADR-111). Header 44: a 10px disc in
+  the owner's colour, the system's name in the display cut, a muted clause saying what the place IS
+  (`YOURS · +6 A TICK · CAPITAL`, dropped whole rather than clipped when the status slot leaves no
+  room), then the status slot and the 44×44 `X`. Body: a `BUILD` band with `2 AVAIL · 1 AT A TIME`,
+  the tile grid, a divider, a `FLEETS HERE` band with the ships standing there, and one boxed 44px
+  row per fleet — an 8px owner square, `FLT 1` in mono Medium, `10 SHIPS · HOLDING` muted, and a 28px
+  button at the right: outlined `MOVE ›`, or committed `TAKE BACK` once a move is queued, when the
+  row reads `10 SHIPS → FAROE · T1`. **A fleet belongs to the place it was ordered OFF**, so a move
+  given this tick keeps its row rather than vanishing from it. Bar 44: **`DONE`**, not `CANCEL` —
+  there is nothing to back out of, because what was ordered on it is already in. **The sheet swallows
+  every tap it is over**: it records its own rectangle before its controls, which is what makes it a
+  modal for taps as well as for pixels.
+- **Sheet, tile variant** — the place sheet's body only (ADR-107). A 2×2 grid of 284×96 tiles, one
   per thing the system can build, in a fixed role order — mining station, shipyard, bastion, trade
   lane — **packed, with an empty slot not drawn and no placeholder**. A tile is 12px in from the
   sides and 10 from top and bottom, and carries three lines: a 22px icon row (icon · 10px · title in
   mono Medium · the level ladder right-aligned), the yield and the ticks in sans `TEXT_DETAIL`, and a
   bottom line with the state at one end and a note at the other, both mono. **The whole tile is the
   hit.** Seven states: available (`OUTLINE`, `25 CR` / `1 CR LEFT AFTER`), queued (`BLUE` border and
-  wash, `QUEUED −40` / `TAP TO TAKE BACK`), beyond the purse (`CARD_BORDER`, `NEUTRAL_DIM`,
-  `45 CR` / `NEED 19 MORE`, not a target), rising (`BLUE` border and wash, `2 OF 3 TICKS` /
+  wash, `QUEUED −40` / `TAP TO TAKE BACK`), beyond the purse (**dashed** `INERT_BORDER`, `NEUTRAL_DIM`,
+  `45 CR` / `NEED 19 MORE` in amber, not a target), rising (`BLUE` border and wash, `2 OF 3 TICKS` /
   `DONE T14`, a 3px progress bar along the bottom inside edge, not a target), blocked by a rising
-  build (`DIVIDER`, `TILE_BLOCKED_INK`, `40 CR` / `AFTER T14`, not a target), top level
-  (`L3 · MAX`, not a target) and propose (`AMBER` icon, `PROPOSE 10 CR` / `OPEN 4 TICKS`). At the
+  build (dashed, `NEUTRAL_DIM`, `40 CR` / `AFTER T14`, not a target), top level
+  (dashed, `L3 · MAX`, not a target) and propose (`AMBER` icon, `PROPOSE 10 CR` / `OPEN 4 TICKS`). At the
   lock and offline every tile keeps its border and its icon and every string on it goes
   `NEUTRAL_DIM`, exactly as a row does.
 - **Level ladder** — three 6×6 squares 3px apart, right-aligned on a tile's icon row: filled for a
@@ -502,8 +517,10 @@ Drawn, in painter's order (`MapRender.cpp`):
   `TRADE LANE`, `FLEET UNDER WAY` while anything is in transit, and a blue chip with `SHIPS HOLDING`
   while any garrison badge is drawn (ADR-079). **It is not drawn at all while a sheet is open**: the
   legend's row and a sheet's `CANCEL` bar are the same strip of the pane (ADR-082).
-- Tapping a system you hold opens its build sheet; a system you do not hold only focuses
-  (ADR-058); tapping your own fleet's marker opens its destination picker.
+- Tapping a system you hold opens its **place sheet**, and so does its garrison badge — the disc is
+  the system and the badge is the ships standing on it, and since ADR-111 they open the same sheet
+  and behave alike at the lock. A system you do not hold only focuses (ADR-058). Tapping your own
+  fleet's marker opens its destination picker.
 - **The camera** (ADR-090): drag orbits, a wheel notch or pinch step zooms between 0.6x and 2.5x of
   the authored framing at 12% a step, and an outlined `RESET` chip sits immediately after
   `MAP - FOCUS: PELL` — drawn only when the camera is not where the map opened. No pan.
