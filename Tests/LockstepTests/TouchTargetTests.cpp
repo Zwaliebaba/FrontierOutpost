@@ -90,8 +90,14 @@ struct Headless
     return "FocusSystem";
   case Lockstep::MainPage::Action::OpenSystem:
     return "OpenSystem";
-  case Lockstep::MainPage::Action::OpenFleet:
-    return "OpenFleet";
+  case Lockstep::MainPage::Action::BeginMove:
+    return "BeginMove";
+  case Lockstep::MainPage::Action::SendMove:
+    return "SendMove";
+  case Lockstep::MainPage::Action::CancelMove:
+    return "CancelMove";
+  case Lockstep::MainPage::Action::CancelFleetOrder:
+    return "CancelFleetOrder";
   case Lockstep::MainPage::Action::OpenFleetsAt:
     return "OpenFleetsAt";
   case Lockstep::MainPage::Action::ToggleBuild:
@@ -232,7 +238,7 @@ public:
     const std::vector<Lockstep::MainPage::HitRegion> candidates = page.Hits();
     for (const Lockstep::MainPage::HitRegion& hit : candidates)
     {
-      const bool opener = hit.action == Lockstep::MainPage::Action::OpenFleet || hit.action == Lockstep::MainPage::Action::OpenFleetsAt ||
+      const bool opener = hit.action == Lockstep::MainPage::Action::BeginMove || hit.action == Lockstep::MainPage::Action::OpenFleetsAt ||
                           hit.action == Lockstep::MainPage::Action::OpenSystem || hit.action == Lockstep::MainPage::Action::OpenSignals;
       if (!opener)
       {
@@ -341,6 +347,70 @@ public:
       ++buttons;
     }
     Assert::IsTrue(buttons > 0, L"the opening digest drew no link to a place, so nothing was measured");
+  }
+
+  TEST_METHOD(TheMoveModeHasNoUndersizedTarget)
+  {
+    // The mode puts five new kinds of target on the screen (ADR-113) and three of them are composed
+    // from numbers nothing else uses: the banner's cancel, the ETA chip that grows from 16 the way
+    // a garrison badge does, and the strip's half-width `SEND`.
+    const auto simulation = PlayedMatch(0);
+    Headless renderers;
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    DrawPage(page, renderers);
+
+    // Whatever takes a move onto the map first. Every candidate, because a badge over several
+    // fleets opens the sheet instead and taking the first one found would be a coin flip.
+    for (const Lockstep::MainPage::HitRegion& hit : std::vector<Lockstep::MainPage::HitRegion>(page.Hits()))
+    {
+      const bool door = hit.action == Lockstep::MainPage::Action::BeginMove || hit.action == Lockstep::MainPage::Action::OpenFleetsAt ||
+                        hit.action == Lockstep::MainPage::Action::OpenSystem;
+      if (!door)
+      {
+        continue;
+      }
+      (void)page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+      DrawPage(page, renderers);
+      if (page.MoveOrder().has_value())
+      {
+        break;
+      }
+      for (const Lockstep::MainPage::HitRegion& inner : std::vector<Lockstep::MainPage::HitRegion>(page.Hits()))
+      {
+        if (inner.action == Lockstep::MainPage::Action::BeginMove)
+        {
+          (void)page.HandleTap(inner.x + inner.width * 0.5F, inner.y + inner.height * 0.5F);
+          DrawPage(page, renderers);
+          break;
+        }
+      }
+      if (page.MoveOrder().has_value())
+      {
+        break;
+      }
+    }
+    Assert::IsTrue(page.MoveOrder().has_value(), L"nothing took a move onto the map, so nothing was audited");
+
+    DrawPage(page, renderers);
+    std::vector<std::string> offenders = Undersized(page);
+    Assert::IsTrue(offenders.empty(), Listed("the move is on the map and these targets are under the floor", offenders).c_str());
+
+    // And with a destination lit, which is when the strip's filled `SEND` appears.
+    for (const Lockstep::MainPage::HitRegion& hit : std::vector<Lockstep::MainPage::HitRegion>(page.Hits()))
+    {
+      if (hit.action == Lockstep::MainPage::Action::ChooseDestination)
+      {
+        (void)page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+        break;
+      }
+    }
+    Assert::IsTrue(page.MoveOrder().has_value() && page.MoveOrder()->selected != Lockstep::EventRefs::NONE,
+                   L"nothing on the map lit a destination, so SEND was never drawn");
+
+    DrawPage(page, renderers);
+    offenders = Undersized(page);
+    Assert::IsTrue(offenders.empty(), Listed("a destination is lit and these targets are under the floor", offenders).c_str());
   }
 
   TEST_METHOD(TheLockedBoardHasNoUndersizedTarget)

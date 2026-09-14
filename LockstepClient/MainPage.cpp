@@ -730,6 +730,7 @@ void MainPage::Create(MatchState _state)
   const Panel wasOpen = m_panel;
   const std::int32_t wasSubject = m_panelSubject;
   const std::int32_t wasSubjectId = m_panelSubjectId;
+  const std::int32_t wasMoving = m_moveMode.has_value() ? m_moveMode->fleetId : EventRefs::NONE;
 
   // Where this player stood on the digest being replaced, so the chip can say a place was lost
   // (ADR-091). Zero on the first state, which is no placement and so never a slip.
@@ -741,6 +742,7 @@ void MainPage::Create(MatchState _state)
   m_panelSubjectId = EventRefs::NONE;
   m_sheetScroll = 0;
   m_sheetDragPixels = 0.0F;
+  m_moveMode.reset();
   m_focusedSystem = EventRefs::NONE;
 
   // The arming is an index into the signal list, and the list is recomposed with the state. Kept,
@@ -757,6 +759,27 @@ void MainPage::Create(MatchState _state)
 
   MeasureContent();
   ReopenPanel(wasOpen, wasSubjectId, wasSubject);
+  ReopenMove(wasMoving);
+}
+
+void MainPage::ReopenMove(std::int32_t _fleetId)
+{
+  // **A mode is a sheet for this purpose** (ADR-065): the tick landing under a player who is in the
+  // middle of choosing is the reason they opened it, not a reason to take it away. Put back only
+  // when the fleet is still on this board, still theirs and still able to take an order -- a fleet
+  // the lock sent away is one ADR-077 says has nothing left to offer.
+  if (_fleetId == EventRefs::NONE)
+  {
+    return;
+  }
+  for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
+  {
+    if (m_state.fleets[index].id == _fleetId)
+    {
+      EnterMove(static_cast<std::int32_t>(index));
+      return;
+    }
+  }
 }
 
 void MainPage::ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _subject)
@@ -775,25 +798,6 @@ void MainPage::ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _
     m_panel = Panel::Place;
     m_panelSubject = at;
     m_panelSubjectId = _subjectId;
-    return;
-  }
-
-  case Panel::Destination:
-  {
-    for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
-    {
-      // Still yours, and still standing. A picker left open across the lock that sent its fleet
-      // away is a picker over a fleet the lock would now refuse an order on, which is the sheet
-      // ADR-065 keeps open and ADR-077 says has nothing left to offer.
-      if (m_state.fleets[index].id != _subjectId || m_state.fleets[index].owner != m_state.viewer || m_state.fleets[index].underWay)
-      {
-        continue;
-      }
-      m_panel = Panel::Destination;
-      m_panelSubject = static_cast<std::int32_t>(index);
-      m_panelSubjectId = _subjectId;
-      return;
-    }
     return;
   }
 
@@ -817,6 +821,11 @@ void MainPage::ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _
 
 void MainPage::OpenPlace(std::int32_t _system)
 {
+  // **A sheet and the move mode are alternatives, not layers** (ADR-113). The mode is played on the
+  // map and a sheet covers it, so opening one is leaving the other -- the same trade `EnterMove`
+  // makes in the other direction when it collapses the sheet it was entered from.
+  ExitMove();
+
   const bool known = _system >= 0 && _system < static_cast<std::int32_t>(m_state.graph.systems.size());
   m_panel = known ? Panel::Place : Panel::None;
   m_panelSubject = known ? _system : EventRefs::NONE;
@@ -1016,7 +1025,14 @@ void MainPage::Update(double _elapsedSeconds)
   // Before the lock check, and deliberately: a fleet crossing a lane is crossing it while the tick
   // resolves, and a route that froze the moment the orders locked would say the opposite
   // (ADR-055).
-  m_animationSeconds += static_cast<float>(_elapsedSeconds);
+  //
+  // **`--still` holds it at zero** (ADR-113). Everything that moves on this screen is a pure
+  // function of this number, so a capture taken with it stopped is always the same picture -- which
+  // is what a ring that breathes and a lane whose dashes march would otherwise have taken away.
+  if (!m_still)
+  {
+    m_animationSeconds += static_cast<float>(_elapsedSeconds);
+  }
 
   if (m_state.orders.locked)
   {
@@ -1187,6 +1203,15 @@ bool MainPage::ScrollRail(float _pixels)
 
 bool MainPage::HandleKey(Neuron::KeyboardInput::Key _key)
 {
+  // **`ESC` is the way out of the move mode, and the banner says so** (ADR-113). It is the second
+  // thing a key does on this screen and the first that is not about scrolling: a mode is the one
+  // state here a player can be stuck in, and every platform's answer to that is this key.
+  if (_key == Neuron::KeyboardInput::Key::Escape && m_moveMode.has_value())
+  {
+    ExitMove();
+    return true;
+  }
+
   // A screenful, measured from what the last frame actually drew rather than from a number chosen
   // here: cards are different heights and a page is however many of them fit (ADR-080).
   const auto page = static_cast<std::int32_t>(std::max<std::size_t>(m_cardsOnScreen, 1));
@@ -1204,6 +1229,19 @@ bool MainPage::HandleKey(Neuron::KeyboardInput::Key _key)
 void MainPage::AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index)
 {
   m_hits.push_back(HitRegion{_xPixels, _yPixels, _widthPixels, _heightPixels, _action, _index});
+}
+
+void MainPage::AddHitUnlessMoving(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action,
+                                  std::int32_t _index)
+{
+  // **The digest is read and not touched while the map is taking a move** (ADR-113). It fades to
+  // just over half its ink and records nothing, so the one filled control on the screen is the
+  // strip's `SEND` (ADR-089) and a tap meant for the map cannot land on a card behind it.
+  if (m_moveMode.has_value())
+  {
+    return;
+  }
+  AddHit(_xPixels, _yPixels, _widthPixels, _heightPixels, _action, _index);
 }
 
 std::int32_t MainPage::RegionUnderPointer() const noexcept
@@ -1239,8 +1277,16 @@ bool MainPage::SetPointer(float _xPixels, float _yPixels)
 
 bool MainPage::Animating() const noexcept
 {
-  return std::ranges::any_of(m_state.fleets,
-                             [](const Fleet& _fleet) { return _fleet.order == FleetStance::Move && _fleet.from != _fleet.to; });
+  // **Nothing moves on its own while the clock is held** (ADR-113): `--still` is for a capture, and
+  // a capture of a page that asks for a frame every frame is a capture that never settles.
+  if (m_still)
+  {
+    return false;
+  }
+  // The move mode's ring breathes and its lanes march, which is the second thing on this screen
+  // that moves without anybody touching it (ADR-055 was the first).
+  return m_moveMode.has_value() || std::ranges::any_of(m_state.fleets, [](const Fleet& _fleet)
+                                                       { return _fleet.order == FleetStance::Move && _fleet.from != _fleet.to; });
 }
 
 std::vector<std::int32_t> MainPage::FleetsAtPlace(std::int32_t _system) const
@@ -1327,42 +1373,68 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       // that silently ignores you is the defect this screen has already been bitten by twice.
       //
       // **The disc and the badge beside it land here together** (ADR-079). They are two targets
-      // because they name two things -- the system, and the ships standing on it -- and since the
-      // sheet holds both they open the same sheet.
+      // because they name two things -- the system, and the ships standing on it -- and the sheet
+      // holds both, so the disc opens it.
       m_focusedSystem = region->index;
       m_armedConcede = EventRefs::NONE;
 
       const bool yours = region->index >= 0 && region->index < static_cast<std::int32_t>(m_state.graph.systems.size()) &&
                          m_state.graph.systems[static_cast<std::size_t>(region->index)].owner == m_state.viewer;
+
+      // **The badge skips the sheet when there is one fleet under it** (ADR-113). A badge totals
+      // SHIPS, so a place holding one of your fleets has exactly one thing a tap on it could mean,
+      // and a sheet between the finger and the map would be a tap spent on a question with one
+      // answer (ADR-079's own argument, one door further along). Several fleets is a real question
+      // and the sheet is where it is asked.
+      if (region->action == Action::OpenFleetsAt && yours && editable)
+      {
+        const std::vector<std::int32_t> here = FleetsAtPlace(region->index);
+        if (here.size() == 1)
+        {
+          EnterMove(here.front());
+          return true;
+        }
+      }
+
       OpenPlace(yours ? region->index : EventRefs::NONE);
       return true;
     }
 
-    case Action::OpenFleet:
+    case Action::BeginMove:
+      // The guard behind every control that leads here is `EnterMove`, by the rule the lock would
+      // refuse the order by (ADR-053, ADR-077): one place rather than four that agree.
+      EnterMove(region->index);
+      return true;
+
+    case Action::SendMove:
     {
-      if (region->index < 0 || region->index >= static_cast<std::int32_t>(m_state.fleets.size()))
+      if (!editable || !m_moveMode.has_value() || m_moveMode->selected == EventRefs::NONE)
       {
         return true;
       }
-      const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(region->index)];
+      // **`from` is where the fleet stands, whether or not a move has been ordered from here
+      // already.** The mode only opens on a fleet that is not under way (ADR-077), and ordering one
+      // sets `from` to where it is leaving -- so re-entering the mode offers the same lanes and
+      // sending again replaces the order rather than adding a second hop to it, which is what makes
+      // a move editable until the lock like every other order (ADR-031).
+      Fleet& fleet = m_state.fleets[static_cast<std::size_t>(m_moveMode->fleet)];
+      const std::int32_t origin = fleet.from;
+      fleet.to = m_moveMode->selected;
+      fleet.order = FleetStance::Move;
+      fleet.progress = 0.0F;
+      fleet.eta = m_state.OrdersTick() + TicksTo(origin, fleet.to) - 1;
+      fleet.status = std::format("ordered - ETA T{}", fleet.eta);
 
-      // The guard behind the controls, by the rule the lock would refuse the order by (ADR-053,
-      // ADR-077). Every control that leads here already declines to be one for a fleet in transit,
-      // and this is what makes that the rule rather than three places that agree.
-      if (fleet.underWay)
-      {
-        return true;
-      }
-
-      // The map rings where the picker is rooted, so the sheet and the map are about one place:
-      // the sheet lists the lanes out of where this fleet stands and the ring says which system
-      // that is (ADR-060).
-      m_focusedSystem = fleet.from;
-      m_panel = Panel::Destination;
-      m_panelSubject = region->index;
-      m_panelSubjectId = fleet.id;
+      // **The place sheet does not come back.** The player asked one question and it is answered;
+      // reopening the sheet they came from would be the screen insisting on the last thing they
+      // looked at rather than the board they just changed (ADR-113).
+      ExitMove();
       return true;
     }
+
+    case Action::CancelMove:
+      ExitMove();
+      return true;
 
     case Action::ToggleBuild:
     {
@@ -1458,23 +1530,13 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       return true;
 
     case Action::ChooseDestination:
-      if (editable && m_panelSubject >= 0)
+      // **A selection and not an order** (ADR-113). The map lights the system, the strip's header
+      // says what stands there, and the filled `SEND` is the one thing that commits -- so a slipped
+      // finger on the map costs a second tap rather than a tick.
+      if (editable && m_moveMode.has_value())
       {
-        Fleet& fleet = m_state.fleets[static_cast<std::size_t>(m_panelSubject)];
-
-        // **`from` is where the fleet stands, whether or not a move has been ordered from here
-        // already.** A picker only opens on a fleet that is not under way (ADR-077), and ordering
-        // one sets `from` to where it is leaving -- so re-opening it lists the same lanes and
-        // picking again replaces the order rather than adding a second hop to it, which is what
-        // makes a move editable until the lock like every other order (ADR-031).
-        const std::int32_t origin = fleet.from;
-        fleet.to = region->index;
-        fleet.order = FleetStance::Move;
-        fleet.progress = 0.0F;
-        fleet.eta = m_state.OrdersTick() + TicksTo(origin, region->index) - 1;
-        fleet.status = std::format("ordered - ETA T{}", fleet.eta);
+        m_moveMode->selected = region->index;
       }
-      m_panel = Panel::None;
       return true;
 
     case Action::CancelFleetOrder:
@@ -1539,6 +1601,15 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
     }
   }
 
+  // **A tap that hit nothing leaves the move mode** (ADR-113), which is what the empty map, an
+  // unreachable system and a rival's garrison all are while the mode is on: none of them is a
+  // target, so all three arrive here and mean the same thing.
+  if (m_moveMode.has_value())
+  {
+    ExitMove();
+    return true;
+  }
+
   return false;
 }
 
@@ -1558,6 +1629,17 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::Me
   // It lives in `MapRender` now (ADR-045) and hands back what it drew rather than reaching into
   // this page's hit list: the map knows a system from a fleet, and this knows what tapping one
   // does.
+  // Worked out before the frame is composed, because the map draws what it is handed and the rules
+  // the lock would refuse an order by are the page's to know (ADR-113).
+  std::vector<MoveTarget> moveTargets;
+  if (m_moveMode.has_value())
+  {
+    for (const MoveTargetSystem& target : ReachableFor(m_moveMode->fleet))
+    {
+      moveTargets.push_back(MoveTarget{.system = target.system, .ticks = target.ticks, .arrivesAt = target.arrivesAt});
+    }
+  }
+
   const MapFrame frame{.state = m_state,
                        .view = m_mapView,
                        .sky = m_sky,
@@ -1565,7 +1647,10 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::Me
                        .contentRadius = m_contentRadius,
                        .focusedSystem = m_focusedSystem,
                        .animationSeconds = m_animationSeconds,
-                       .sheetOpen = m_panel != Panel::None};
+                       .sheetOpen = m_panel != Panel::None || m_moveMode.has_value(),
+                       .moveOrigin = m_moveMode.has_value() ? m_moveMode->origin : EventRefs::NONE,
+                       .moveSelected = m_moveMode.has_value() ? m_moveMode->selected : EventRefs::NONE,
+                       .moveTargets = moveTargets};
 
   const std::vector<MapHit> mapHits = Lockstep::DrawMap(_shapes, _text, _meshes, frame);
 
@@ -1591,6 +1676,14 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::Me
 
   for (const MapHit& hit : mapHits)
   {
+    // **While a move is being chosen, the map offers destinations and nothing else** (ADR-113). The
+    // discs, the badges and the markers register no hit at all in that frame, so a tap on one falls
+    // through to `HandleTap`'s own end and leaves the mode.
+    if (hit.moveTarget != EventRefs::NONE)
+    {
+      AddHit(hit.x, hit.y, hit.width, hit.height, Action::ChooseDestination, hit.moveTarget);
+      continue;
+    }
     // **A garrison badge opens the same sheet the disc under it opens** (ADR-079, ADR-111), which
     // answers ADR-079's open question: the badge followed the rail's rule and went focus-only at
     // the lock while the disc beside it opened a sheet, and they were two rules because they
@@ -1616,7 +1709,7 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::Me
     const bool underWay = hit.fleet >= 0 && hit.fleet < static_cast<std::int32_t>(m_state.fleets.size()) &&
                           m_state.fleets[static_cast<std::size_t>(hit.fleet)].underWay;
     const std::int32_t destination = underWay ? m_state.fleets[static_cast<std::size_t>(hit.fleet)].to : hit.fleet;
-    AddHit(hit.x, hit.y, hit.width, hit.height, underWay ? Action::FocusSystem : Action::OpenFleet, destination);
+    AddHit(hit.x, hit.y, hit.width, hit.height, underWay ? Action::FocusSystem : Action::BeginMove, destination);
   }
 }
 
@@ -1626,6 +1719,7 @@ void MainPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   DrawDigestRail(_shapes, _text);
   DrawLocksRail(_shapes, _text);
   DrawPanel(_shapes, _text);
+  DrawMoveMode(_shapes, _text);
 }
 
 void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
@@ -1867,7 +1961,8 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
   // done about it, because the thing a player wants to do is always about something that happened,
   // and a menu somewhere else is a second place to look.
   _shapes.FillRect(0.0F, Frame::TOP_BAR_HEIGHT, Frame::DIGEST_WIDTH, Frame::SCREEN_HEIGHT - Frame::TOP_BAR_HEIGHT, Ink::APP_BACKGROUND);
-  _shapes.FillRect(Frame::DIGEST_WIDTH - 1.0F, Frame::TOP_BAR_HEIGHT, 1.0F, Frame::SCREEN_HEIGHT - Frame::TOP_BAR_HEIGHT, Ink::CARD_BORDER);
+  _shapes.FillRect(Frame::DIGEST_WIDTH - 1.0F, Frame::TOP_BAR_HEIGHT, 1.0F, Frame::SCREEN_HEIGHT - Frame::TOP_BAR_HEIGHT,
+                   Faded(Ink::CARD_BORDER));
 
   const std::int32_t headerY = static_cast<std::int32_t>(Frame::TOP_BAR_HEIGHT) + 12;
   const bool returning = m_state.unreadTicks >= 2;
@@ -1877,17 +1972,17 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // `SINCE YOU LOOKED - T43 > T46` and a chip. It is the first line a returning player reads and
     // it says how much of the match happened without them.
     _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), headerY,
-                   std::format("SINCE YOU LOOKED · T{} → T{}", m_state.lastSeenTick, m_state.match.tick), Ink::TEXT_MUTED);
+                   std::format("SINCE YOU LOOKED · T{} → T{}", m_state.lastSeenTick, m_state.match.tick), Faded(Ink::TEXT_MUTED));
 
     const std::string chip = std::format("{} TICKS", m_state.unreadTicks);
     const float chipWidth = static_cast<float>(FontRenderer::MeasurePixels(chip)) + 14.0F;
-    _shapes.StrokeRect(Frame::DIGEST_WIDTH - RAIL_PADDING - chipWidth, BandTopForText(headerY, 18.0F), chipWidth, 18.0F, Ink::AMBER);
-    _text.DrawText(static_cast<std::int32_t>(Frame::DIGEST_WIDTH - RAIL_PADDING - chipWidth + 7.0F), headerY, chip, Ink::AMBER);
+    _shapes.StrokeRect(Frame::DIGEST_WIDTH - RAIL_PADDING - chipWidth, BandTopForText(headerY, 18.0F), chipWidth, 18.0F, Faded(Ink::AMBER));
+    _text.DrawText(static_cast<std::int32_t>(Frame::DIGEST_WIDTH - RAIL_PADDING - chipWidth + 7.0F), headerY, chip, Faded(Ink::AMBER));
   }
   else
   {
-    _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), headerY, std::format("DIGEST - TICK {}", m_state.match.tick), Ink::TEXT_MUTED,
-                   Face::MonoDisplay);
+    _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), headerY, std::format("DIGEST - TICK {}", m_state.match.tick),
+                   Faded(Ink::TEXT_MUTED), Face::MonoDisplay);
 
     // At the lock the right-hand figure stops being a count of what is here and becomes the tick
     // that is being resolved. It is the only thing on this column that changes at zero, and it is
@@ -1895,7 +1990,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     const bool pending = m_state.orders.locked && !m_state.match.finished;
     DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, headerY,
               pending ? std::format("T{} PENDING", m_state.OrdersTick()) : std::format("{} EVENTS", m_state.digest.size()),
-              pending ? Ink::AMBER : Ink::TEXT_MUTED);
+              pending ? Faded(Ink::AMBER) : Faded(Ink::TEXT_MUTED));
   }
 
   constexpr float TEXT_LEFT = RAIL_PADDING + 8.0F + 10.0F;
@@ -1913,7 +2008,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // `static_cast<float>` reads like a float division somebody got wrong.
     const std::size_t rows = (delta.cells.size() + 1) / 2;
     const float boxHeight = static_cast<float>(rows) * static_cast<float>(LINE_HEIGHT) + 12.0F;
-    _shapes.StrokeRect(RAIL_PADDING, y, Frame::DIGEST_WIDTH - 2.0F * RAIL_PADDING, boxHeight, Ink::AMBER);
+    _shapes.StrokeRect(RAIL_PADDING, y, Frame::DIGEST_WIDTH - 2.0F * RAIL_PADDING, boxHeight, Faded(Ink::AMBER));
 
     // Two columns, because four short facts in one line wrap badly at 8px and four stacked lines
     // are a list rather than a summary.
@@ -1925,7 +2020,8 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
       // ASCII hyphen this compared against until 2026-09-13. `front() == '-'` went on compiling
       // when the character changed and silently stopped finding a single negative, which is the
       // failure mode a byte comparison against text has.
-      _text.DrawText(static_cast<std::int32_t>(cellX), cellY, delta.cells[index].text, delta.cells[index].loss ? Ink::RED : Ink::AMBER);
+      _text.DrawText(static_cast<std::int32_t>(cellX), cellY, delta.cells[index].text,
+                     delta.cells[index].loss ? Faded(Ink::RED) : Faded(Ink::AMBER));
     }
     y += boxHeight + 6.0F;
 
@@ -1935,8 +2031,8 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // counts are honest about the ticks it HAS, which is exactly what makes the gap invisible.
     if (m_state.unreadTicks > DIGEST_HISTORY_TICKS)
     {
-      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), static_cast<std::int32_t>(y), "Older ticks were not kept.", Ink::NEUTRAL_DIM,
-                     Face::SansRegular);
+      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), static_cast<std::int32_t>(y), "Older ticks were not kept.",
+                     Faded(Ink::NEUTRAL_DIM), Face::SansRegular);
       y += static_cast<float>(LINE_HEIGHT) + 6.0F;
     }
   }
@@ -1983,7 +2079,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     const DigestCard& card = cards[cardIndex];
     const CardLayout& layout = layouts[cardIndex];
-    const Color accent = EventColor(card.kind);
+    const Color accent = Faded(EventColor(card.kind));
     const float top = y;
 
     // Where this card's hits begin. The card as a whole is tappable -- reading and focusing are the
@@ -1994,7 +2090,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // order set. The card's region is inserted here instead, in front of its own buttons.
     const std::size_t cardHitsBegin = m_hits.size();
 
-    _shapes.FillRect(0.0F, y, Frame::DIGEST_WIDTH - 1.0F, 1.0F, Ink::DIVIDER);
+    _shapes.FillRect(0.0F, y, Frame::DIGEST_WIDTH - 1.0F, 1.0F, Faded(Ink::DIVIDER));
     std::int32_t lineY = static_cast<std::int32_t>(y) + 11;
 
     _shapes.FillEllipse(RAIL_PADDING + 4.0F, static_cast<float>(lineY) + 4.0F, 4.0F, 4.0F, accent);
@@ -2011,10 +2107,10 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // **The face is still MONO, and that is a constraint rather than a decision** (ADR-102): the
     // display cut is baked from Plex Mono only (`Font.h`, ADR-073), so a sentence-cased title at
     // this size has nowhere sans to go. ADR-074's rule is bent here and the ADR says where.
-    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, card.title, Ink::TEXT_PRIMARY, Face::MonoDisplay);
+    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, card.title, Faded(Ink::TEXT_PRIMARY), Face::MonoDisplay);
     if (!card.stamp.empty())
     {
-      DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, lineY, card.stamp, Ink::TEXT_MUTED);
+      DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, lineY, card.stamp, Faded(Ink::TEXT_MUTED));
     }
 
     // The title of an actor card opens and closes it. Registered here rather than after the card's
@@ -2022,13 +2118,13 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // everything added during the card in front of it in the reverse walk `HandleTap` makes.
     if (layout.collapsible)
     {
-      AddHit(0.0F, top, Frame::DIGEST_WIDTH - 1.0F, TOUCH_FLOOR, Action::ToggleActorCard, card.actor);
+      AddHitUnlessMoving(0.0F, top, Frame::DIGEST_WIDTH - 1.0F, TOUCH_FLOOR, Action::ToggleActorCard, card.actor);
     }
     lineY += TITLE_LINE_HEIGHT + 2;
 
     for (const std::string& line : layout.details)
     {
-      _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, line, Ink::TEXT_DETAIL, Face::SansRegular);
+      _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, line, Faded(Ink::TEXT_DETAIL), Face::SansRegular);
       lineY += LINE_HEIGHT;
     }
 
@@ -2042,13 +2138,13 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
       const std::vector<std::string>& detail = layout.verdictDetail;
       const float boxTop = static_cast<float>(lineY) - VERDICT_BOX_PADDING;
       const float boxHeight = static_cast<float>(1 + detail.size()) * static_cast<float>(LINE_HEIGHT) + 2.0F * VERDICT_BOX_PADDING;
-      _shapes.StrokeRect(TEXT_LEFT, boxTop, Frame::DIGEST_WIDTH - TEXT_LEFT - RAIL_PADDING, boxHeight, Ink::AMBER);
+      _shapes.StrokeRect(TEXT_LEFT, boxTop, Frame::DIGEST_WIDTH - TEXT_LEFT - RAIL_PADDING, boxHeight, Faded(Ink::AMBER));
 
-      _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT) + 6, lineY, card.verdict, Ink::AMBER);
+      _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT) + 6, lineY, card.verdict, Faded(Ink::AMBER));
       lineY += LINE_HEIGHT;
       for (const std::string& line : detail)
       {
-        _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT) + 6, lineY, line, Ink::TEXT_DETAIL, Face::SansRegular);
+        _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT) + 6, lineY, line, Faded(Ink::TEXT_DETAIL), Face::SansRegular);
         lineY += LINE_HEIGHT;
       }
       lineY += 6;
@@ -2125,7 +2221,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
         {
           button.state = ControlState::Locked;
         }
-        else if (action.primary && OrdersEditable())
+        else if (action.primary && OrdersEditable() && !m_moveMode.has_value())
         {
           button.state = ControlState::Primary;
         }
@@ -2169,7 +2265,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
         {
           const Frame::Box target = Frame::GrownToFloor(buttonX, buttonY, width, BUTTON_HEIGHT);
           const DigestTarget destination = TargetOf(action);
-          AddHit(target.x, target.y, target.width, target.height, destination.action, destination.index);
+          AddHitUnlessMoving(target.x, target.y, target.width, target.height, destination.action, destination.index);
           m_hoverRegions.push_back(HoverRegion{buttonX, buttonY, width, BUTTON_HEIGHT});
         }
         buttonX += width + BUTTON_GAP;
@@ -2182,7 +2278,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // Only when there is something to focus. The card a tick-zero digest shows is synthetic -- it
     // reports that nothing has happened and carries the opening moves -- so it leads no event, and
     // a `FocusEvent` for event number -1 is an out-of-bounds read that took the whole client down.
-    if (card.leadEvent != EventRefs::NONE)
+    if (card.leadEvent != EventRefs::NONE && !m_moveMode.has_value())
     {
       m_hits.insert(m_hits.begin() + static_cast<std::ptrdiff_t>(cardHitsBegin),
                     HitRegion{0.0F, top, Frame::DIGEST_WIDTH - 1.0F, y - top, Action::FocusEvent, card.leadEvent});
@@ -2199,22 +2295,22 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     const float bandY = Frame::SCREEN_HEIGHT - DIGEST_PAGE_HEIGHT;
     const std::int32_t bandText = CenterTextY(bandY, DIGEST_PAGE_HEIGHT);
-    _shapes.FillRect(0.0F, bandY, Frame::DIGEST_WIDTH - 1.0F, 1.0F, Ink::DIVIDER);
+    _shapes.FillRect(0.0F, bandY, Frame::DIGEST_WIDTH - 1.0F, 1.0F, Faded(Ink::DIVIDER));
 
     if (m_digestTop > 0)
     {
-      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), bandText, "‹ PREV", Ink::TEXT_MUTED);
-      AddHit(0.0F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
-             static_cast<std::int32_t>(PreviousDigestTop(layouts, room)));
+      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), bandText, "‹ PREV", Faded(Ink::TEXT_MUTED));
+      AddHitUnlessMoving(0.0F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
+                         static_cast<std::int32_t>(PreviousDigestTop(layouts, room)));
     }
 
     const std::string hidden = HiddenSummary(cards, lastCard);
     DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, bandText, hidden.empty() ? std::string{"END"} : hidden + " ›",
-              hidden.empty() ? Ink::NEUTRAL_DIM : Ink::TEXT_MUTED);
+              hidden.empty() ? Faded(Ink::NEUTRAL_DIM) : Faded(Ink::TEXT_MUTED));
     if (!hidden.empty())
     {
-      AddHit(Frame::DIGEST_WIDTH * 0.5F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
-             static_cast<std::int32_t>(lastCard));
+      AddHitUnlessMoving(Frame::DIGEST_WIDTH * 0.5F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
+                         static_cast<std::int32_t>(lastCard));
     }
   }
 }
@@ -2606,7 +2702,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
     }
     orders.push_back(OrderRow{.title = Uppercased(fleet.name),
                               .where = std::format("NO MOVE · {}", NameOfSystem(m_state, fleet.from)),
-                              .open = navigateOnly ? Action::FocusSystem : Action::OpenFleet,
+                              .open = navigateOnly ? Action::FocusSystem : Action::BeginMove,
                               .openIndex = navigateOnly ? fleet.from : static_cast<std::int32_t>(index),
                               .unordered = true});
   }
@@ -2678,7 +2774,11 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
     if (takeable)
     {
-      DrawCentered(_text, takeBackLeft + TOUCH_FLOOR * 0.5F, textY, "×", Ink::OUTLINE_HOVER);
+      // **`X` and not `×`.** The multiplication sign the handoff draws is not in the baked alphabet
+      // (ADR-014's list, ADR-073's bake), and `FontRenderer::GlyphOf` falls back to a BLANK for a
+      // codepoint it does not know -- so the cell would have drawn nothing at all. Adding a glyph
+      // is a re-bake and a font decision; the sheet's close corner already says `X`.
+      DrawCentered(_text, takeBackLeft + TOUCH_FLOOR * 0.5F, textY, "X", Ink::OUTLINE_HOVER);
       AddHit(takeBackLeft, y, TOUCH_FLOOR, TOUCH_FLOOR, _order.takeBack, _order.takeBackIndex);
     }
     y += TOUCH_FLOOR;
@@ -2754,7 +2854,9 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
       facts += ships == 1 ? std::string{"1 SHIP"} : std::format("{} SHIPS", ships);
     }
 
-    placeRow(Uppercased(node.name), facts, ordered == 0 ? std::string{"—"} : std::format("{} ORDER{}", ordered, ordered == 1 ? "" : "S"),
+    // **The en dash, which ADR-014 baked and nothing had a site for** until a place with no order on
+    // it needed a mark rather than a blank. The em dash the handoff draws is not in the alphabet.
+    placeRow(Uppercased(node.name), facts, ordered == 0 ? std::string{"–"} : std::format("{} ORDER{}", ordered, ordered == 1 ? "" : "S"),
              ordered == 0 ? Ink::NEUTRAL_DIM : Ink::BLUE, OwnerColor(node.owner, m_state.viewer),
              navigateOnly ? Action::FocusSystem : Action::OpenSystem, at);
   }
@@ -2890,6 +2992,297 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   }
 }
 
+void MainPage::EnterMove(std::int32_t _fleet)
+{
+  if (!OrdersEditable() || _fleet < 0 || _fleet >= static_cast<std::int32_t>(m_state.fleets.size()))
+  {
+    return;
+  }
+  const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(_fleet)];
+
+  // The guard behind every control that leads here, by the rule the lock would refuse the order by
+  // (ADR-077). A fleet the server already has on a lane takes no second order.
+  if (fleet.owner != m_state.viewer || fleet.underWay)
+  {
+    return;
+  }
+
+  // **The sheet collapses to the strip** (ADR-113): the question is now about the map, and a sheet
+  // over the map while the answer is on it would be the thing this mode exists to stop.
+  m_panel = Panel::None;
+  m_armedConcede = EventRefs::NONE;
+  m_focusedSystem = fleet.from;
+
+  // A fleet that already has a move opens with that move lit, so re-entering the mode is a way to
+  // change a destination rather than a way to start again (ADR-031).
+  m_moveMode =
+    MoveMode{.fleet = _fleet, .fleetId = fleet.id, .origin = fleet.from, .selected = fleet.OnALane() ? fleet.to : EventRefs::NONE};
+}
+
+void MainPage::ExitMove() noexcept
+{
+  m_moveMode.reset();
+}
+
+std::vector<MainPage::MoveTargetSystem> MainPage::ReachableFor(std::int32_t _fleet) const
+{
+  std::vector<MoveTargetSystem> reachable;
+  if (_fleet < 0 || _fleet >= static_cast<std::int32_t>(m_state.fleets.size()))
+  {
+    return reachable;
+  }
+  const std::int32_t origin = m_state.fleets[static_cast<std::size_t>(_fleet)].from;
+
+  // **One lane and no further.** `Match::Validate` refuses any destination that is not one lane from
+  // where the fleet stands (`NoLaneToDestination`), so the handoff's "multi-hop within the fleet's
+  // range if the rules allow" resolves to the adjacent systems: offering anything else would be
+  // lighting a system the lock is certain to refuse, which is what ADR-053 took off this screen.
+  for (const Lane& lane : m_state.graph.lanes)
+  {
+    std::int32_t other = EventRefs::NONE;
+    if (lane.a == origin)
+    {
+      other = lane.b;
+    }
+    else if (lane.b == origin)
+    {
+      other = lane.a;
+    }
+    if (other == EventRefs::NONE || HasFlag(m_state.graph.systems[static_cast<std::size_t>(other)].flags, SystemFlags::RegionAnchor))
+    {
+      continue;
+    }
+    reachable.push_back(MoveTargetSystem{.system = other, .ticks = lane.cost, .arrivesAt = m_state.OrdersTick() + lane.cost - 1});
+  }
+
+  // **Nearest first, then by name** (ADR-092). The rows on the strip are read in that order and the
+  // chips on the map are not read in any order at all, so the sort is about the list -- and doing it
+  // once here is what keeps the two lists from being two lists.
+  std::ranges::stable_sort(reachable,
+                           [this](const MoveTargetSystem& _a, const MoveTargetSystem& _b)
+                           {
+                             if (_a.ticks != _b.ticks)
+                             {
+                               return _a.ticks < _b.ticks;
+                             }
+                             return m_state.graph.systems[static_cast<std::size_t>(_a.system)].name <
+                                    m_state.graph.systems[static_cast<std::size_t>(_b.system)].name;
+                           });
+  return reachable;
+}
+
+Color MainPage::Faded(const Color& _color) const noexcept
+{
+  // **The digest fades while the map is taking a move** (ADR-113) and stops being a target: the one
+  // filled control on the screen has to be the strip's `SEND` (ADR-089), and a column of live
+  // controls beside it would be two answers to one question.
+  constexpr float SHARE = 0.55F;
+  return m_moveMode.has_value() ? WithAlpha(_color, static_cast<std::uint8_t>(std::lround(static_cast<float>(_color.alpha) * SHARE)))
+                                : _color;
+}
+
+void MainPage::DrawMoveMode(ShapeRenderer& _shapes, FontRenderer& _text)
+{
+  if (!m_moveMode.has_value())
+  {
+    return;
+  }
+  const MoveMode& move = *m_moveMode;
+  if (move.fleet < 0 || move.fleet >= static_cast<std::int32_t>(m_state.fleets.size()))
+  {
+    return;
+  }
+  const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(move.fleet)];
+  const std::vector<MoveTargetSystem> reachable = ReachableFor(move.fleet);
+
+  const float paneX = Frame::DIGEST_WIDTH;
+  const float paneWidth = Frame::SCREEN_WIDTH - Frame::DIGEST_WIDTH - Frame::ORDERS_WIDTH;
+  const std::string ships = fleet.ships == 1 ? std::string{"1 SHIP"} : std::format("{} SHIPS", fleet.ships);
+
+  // ---- The banner --------------------------------------------------------------------------------
+  //
+  // **It replaces the map's own corner caption rather than sitting beside it** (ADR-113). The mode
+  // is a statement about the whole pane -- every lane on it has changed meaning -- so it is said
+  // across the whole pane, in the blue everything the mode lit is drawn in.
+  const float bannerY = Frame::TOP_BAR_HEIGHT;
+  _shapes.FillRect(paneX, bannerY, paneWidth, TOUCH_FLOOR, Ink::MOVE_MODE_WASH);
+  _shapes.FillRect(paneX, bannerY + TOUCH_FLOOR - 1.0F, paneWidth, 1.0F, WithAlpha(Ink::BLUE, 90));
+
+  const std::int32_t bannerText = CenterTextY(bannerY, TOUCH_FLOOR);
+  float bannerX = paneX + RAIL_PADDING;
+  _shapes.FillRect(bannerX, bannerY + (TOUCH_FLOOR - 8.0F) * 0.5F, 8.0F, 8.0F, OwnerColor(m_state.viewer, m_state.viewer));
+  bannerX += 8.0F + CARD_PADDING;
+
+  const std::string moving = std::format("MOVE {}", Uppercased(fleet.name));
+  _text.DrawText(static_cast<std::int32_t>(bannerX), bannerText, moving, Ink::TEXT_PRIMARY, Face::MonoMedium);
+  bannerX += static_cast<float>(FontRenderer::MeasurePixels(moving, Face::MonoMedium)) + CARD_PADDING;
+
+  const std::string from = std::format("{} FROM {}", ships, NameOfSystem(m_state, move.origin));
+  _text.DrawText(static_cast<std::int32_t>(bannerX), bannerText, from, Ink::TEXT_MUTED);
+  bannerX += static_cast<float>(FontRenderer::MeasurePixels(from)) + CARD_PADDING + 6.0F;
+
+  // A sentence, so it is set in the sentence face (ADR-074). It says what to do, which is the one
+  // thing a mode has to say that a label cannot.
+  _text.DrawText(static_cast<std::int32_t>(bannerX), bannerText, reachable.empty() ? "Nothing is one lane from here." : "Tap a lit system.",
+                 Ink::TEXT_PRIMARY, Face::SansMedium);
+
+  // **The cancel is the whole right-hand end of the banner**, not the width of its label: it is the
+  // way out of a mode, and a way out that is eight glyphs wide is a way out a thumb misses.
+  constexpr float BANNER_CANCEL_WIDTH = 120.0F;
+  const float cancelX = paneX + paneWidth - BANNER_CANCEL_WIDTH;
+  DrawRight(_text, paneX + paneWidth - RAIL_PADDING, bannerText, "ESC · CANCEL", Ink::TEXT_MUTED);
+  AddHit(cancelX, bannerY, BANNER_CANCEL_WIDTH, TOUCH_FLOOR, Action::CancelMove, 0);
+
+  // ---- The confirm strip -------------------------------------------------------------------------
+  //
+  // A sheet in every dimension it shares with one (ADR-052) and a GRID in its body: the rows are a
+  // fallback for the map above them rather than the primary way to choose, so two columns keep the
+  // strip short and the map open.
+  const float width = paneWidth - 2.0F * SHEET_MARGIN;
+  const float x = paneX + SHEET_MARGIN;
+
+  const std::size_t shown = std::min(reachable.size(), SHEET_MAXIMUM_ROWS);
+  const std::size_t notShown = reachable.size() - shown;
+  const std::size_t gridRows = (shown + STRIP_COLUMNS - 1) / STRIP_COLUMNS;
+
+  float bodyHeight = 0.0F;
+  if (gridRows > 0)
+  {
+    bodyHeight = 2.0F * CARD_PADDING + static_cast<float>(gridRows) * SHEET_ROW_HEIGHT + static_cast<float>(gridRows - 1) * BUTTON_GAP;
+  }
+  if (notShown > 0)
+  {
+    bodyHeight += SHEET_CLIPPED_HEIGHT;
+  }
+
+  const float height = SHEET_HEADER_HEIGHT + bodyHeight + SHEET_ACTION_HEIGHT;
+  const float y = Frame::SCREEN_HEIGHT - SHEET_MARGIN - height;
+
+  _shapes.FillRect(x, y, width, height, Ink::APP_BACKGROUND);
+  _shapes.StrokeRect(x, y, width, height, Ink::CARD_BORDER);
+  // The strip is a modal like every other sheet: it swallows the taps it is over (ADR-111).
+  AddHit(x, y, width, height, Action::None, 0);
+
+  // ---- Its header ---------------------------------------------------------------------------------
+  //
+  // `FLT 1 → FAROE`, and before a pick `FLT 1 →` with nothing after it -- an arrow pointing at a
+  // question rather than a placeholder that reads like an answer.
+  const std::int32_t headerText = CenterTextY(y, SHEET_HEADER_HEIGHT);
+  const bool picked = move.selected != EventRefs::NONE;
+  const std::string title = picked ? std::format("{} → {}", Uppercased(fleet.name), NameOfSystem(m_state, move.selected))
+                                   : std::format("{} →", Uppercased(fleet.name));
+  _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(y, SHEET_HEADER_HEIGHT, Face::MonoDisplay), title,
+                 Ink::TEXT_PRIMARY, Face::MonoDisplay);
+
+  float headerX = x + CARD_PADDING + static_cast<float>(FontRenderer::MeasurePixels(title, Face::MonoDisplay)) + CARD_PADDING;
+  const std::string listHint = "OR PICK FROM THE LIST";
+  const float hintLeft = x + width - CARD_PADDING - static_cast<float>(FontRenderer::MeasurePixels(listHint));
+  DrawRight(_text, x + width - CARD_PADDING, headerText, listHint, Ink::TEXT_MUTED);
+
+  // **What stands there, and never a verdict** (ADR-063): the wire carries a preview only for where
+  // a fleet is already flying, so the header says what the destination IS and leaves the arithmetic
+  // to the server.
+  if (picked)
+  {
+    const auto target =
+      std::ranges::find_if(reachable, [&move](const MoveTargetSystem& _target) { return _target.system == move.selected; });
+    const std::string standing = StandingAt(m_state, move.selected);
+    const std::string facts = target != reachable.end() ? std::format("ARRIVES T{} · {}", target->arrivesAt, standing) : standing;
+    if (headerX + static_cast<float>(FontRenderer::MeasurePixels(facts)) <= hintLeft - CARD_PADDING)
+    {
+      _text.DrawText(static_cast<std::int32_t>(headerX), headerText, facts, Ink::TEXT_MUTED);
+    }
+  }
+  _shapes.FillRect(x, y + SHEET_HEADER_HEIGHT, width, 1.0F, Ink::DIVIDER);
+
+  // ---- Its rows -----------------------------------------------------------------------------------
+  const float cellWidth = (width - 2.0F * CARD_PADDING - BUTTON_GAP) / static_cast<float>(STRIP_COLUMNS);
+  float rowY = y + SHEET_HEADER_HEIGHT + CARD_PADDING;
+
+  for (std::size_t index = 0; index < shown; ++index)
+  {
+    const MoveTargetSystem& target = reachable[index];
+    const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(target.system)];
+    const bool chosen = target.system == move.selected;
+
+    const float cellX = x + CARD_PADDING + static_cast<float>(index % STRIP_COLUMNS) * (cellWidth + BUTTON_GAP);
+    const float cellY = rowY + static_cast<float>(index / STRIP_COLUMNS) * (SHEET_ROW_HEIGHT + BUTTON_GAP);
+
+    const bool hovered = m_pointerXPixels >= cellX && m_pointerXPixels < cellX + cellWidth && m_pointerYPixels >= cellY &&
+                         m_pointerYPixels < cellY + SHEET_ROW_HEIGHT;
+    DrawControlBox(_shapes, cellX, cellY, cellWidth, SHEET_ROW_HEIGHT,
+                   ControlInkFor(chosen ? ControlState::Committed : ControlState::Outlined, ControlKind::SheetRow, hovered));
+
+    const std::int32_t cellText = CenterTextY(cellY, SHEET_ROW_HEIGHT);
+    float cellTextX = cellX + CARD_PADDING;
+
+    // An unclaimed system has no owner colour, so its square is an outline: the same distinction the
+    // destination rows have made since ADR-092, in the one shape a grid has room for.
+    const float squareY = cellY + (SHEET_ROW_HEIGHT - 8.0F) * 0.5F;
+    if (node.owner == NOBODY)
+    {
+      _shapes.StrokeRect(cellTextX, squareY, 8.0F, 8.0F, WithAlpha(Ink::TEXT_PRIMARY, 128));
+    }
+    else
+    {
+      _shapes.FillRect(cellTextX, squareY, 8.0F, 8.0F, OwnerColor(node.owner, m_state.viewer));
+    }
+    cellTextX += 8.0F + CARD_PADDING;
+
+    const std::string name = Uppercased(node.name);
+    _text.DrawText(static_cast<std::int32_t>(cellTextX), cellText, name, Ink::TEXT_PRIMARY, Face::MonoMedium);
+    cellTextX += static_cast<float>(FontRenderer::MeasurePixels(name, Face::MonoMedium)) + CARD_PADDING;
+
+    const std::string eta =
+      std::format("{} · T{}", target.ticks == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", target.ticks), target.arrivesAt);
+    const float etaLeft = cellX + cellWidth - CARD_PADDING - static_cast<float>(FontRenderer::MeasurePixels(eta));
+    DrawRight(_text, cellX + cellWidth - CARD_PADDING, cellText, eta, chosen ? Ink::BLUE : Ink::TEXT_MUTED);
+
+    const std::string standing = StandingAt(m_state, target.system);
+    if (cellTextX + static_cast<float>(FontRenderer::MeasurePixels(standing)) <= etaLeft - 8.0F)
+    {
+      _text.DrawText(static_cast<std::int32_t>(cellTextX), cellText, standing, Ink::TEXT_MUTED);
+    }
+
+    AddHit(cellX, cellY, cellWidth, SHEET_ROW_HEIGHT, Action::ChooseDestination, target.system);
+    m_hoverRegions.push_back(HoverRegion{cellX, cellY, cellWidth, SHEET_ROW_HEIGHT});
+  }
+
+  if (notShown > 0)
+  {
+    const float clippedY = rowY + static_cast<float>(gridRows) * (SHEET_ROW_HEIGHT + BUTTON_GAP) - BUTTON_GAP;
+    _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(clippedY, SHEET_CLIPPED_HEIGHT),
+                   std::format("+{} MORE THAN THIS STRIP CAN SHOW", notShown), Ink::NEUTRAL_DIM);
+  }
+
+  // ---- Its bar ------------------------------------------------------------------------------------
+  //
+  // Split in half: the way out on the left, and **the one filled control on the screen** on the
+  // right (ADR-089). Before a pick it is inert and says what is missing, because a filled button
+  // that refuses a tap is worse than one that is plainly not ready.
+  const float barY = y + height - SHEET_ACTION_HEIGHT;
+  const float half = width * 0.5F;
+  _shapes.FillRect(x, barY, width, 1.0F, Ink::DIVIDER);
+  _shapes.FillRect(x + half, barY, 1.0F, SHEET_ACTION_HEIGHT, Ink::DIVIDER);
+
+  DrawCentered(_text, x + half * 0.5F, CenterTextY(barY, SHEET_ACTION_HEIGHT), "CANCEL", Ink::TEXT_MUTED);
+  AddHit(x, barY, half, SHEET_ACTION_HEIGHT, Action::CancelMove, 0);
+
+  const ControlState sendState = picked ? ControlState::Primary : ControlState::Inert;
+  const bool sendHovered = picked && m_pointerXPixels >= x + half && m_pointerXPixels < x + width && m_pointerYPixels >= barY &&
+                           m_pointerYPixels < barY + SHEET_ACTION_HEIGHT;
+  const ControlInk sendInk = ControlInkFor(sendState, ControlKind::Button, sendHovered);
+  DrawControlBox(_shapes, x + half, barY, half, SHEET_ACTION_HEIGHT, sendInk);
+  DrawCentered(_text, x + half * 1.5F, CenterTextY(barY, SHEET_ACTION_HEIGHT, Face::MonoMedium),
+               picked ? std::format("SEND {} TO {}", ships, NameOfSystem(m_state, move.selected)) : std::string{"PICK A DESTINATION"},
+               sendInk.label, Face::MonoMedium);
+  if (picked)
+  {
+    AddHit(x + half, barY, half, SHEET_ACTION_HEIGHT, Action::SendMove, 0);
+    m_hoverRegions.push_back(HoverRegion{x + half, barY, half, SHEET_ACTION_HEIGHT});
+  }
+}
+
 /// A panel is a SHEET at the bottom of the map pane, and every row is a 44-pixel target.
 ///
 /// **Redesigned touch-first on 2026-09-12** (ADR-052). It was a 300-pixel card floating in the
@@ -2999,9 +3392,9 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   std::uint32_t sheetRisingLandsAt = 0;
   std::string risingHelp;
 
-  // What tapping a row does. It differs per panel, and it used to not exist: every row went to
-  // `ChooseDestination`, so the BUILD panel listed two things a player could not tap.
-  Action rowAction = Action::ChooseDestination;
+  // What tapping a row does. It differs per panel, and it used to not exist: every row went to one
+  // action, so the build panel listed two things a player could not tap.
+  Action rowAction = Action::None;
 
   switch (m_panel)
   {
@@ -3232,68 +3625,11 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       // the same way (ADR-110). An unordered fleet is the outlined way on to the map.
       row.button.label = ordered ? "TAKE BACK" : "MOVE ›";
       row.button.state = !OrdersEditable() ? ControlState::Locked : (ordered ? ControlState::Committed : ControlState::Outlined);
-      row.action = !OrdersEditable() ? Action::None : (ordered ? Action::CancelFleetOrder : Action::OpenFleet);
+      row.action = !OrdersEditable() ? Action::None : (ordered ? Action::CancelFleetOrder : Action::BeginMove);
       row.target = index;
       fleets.push_back(std::move(row));
     }
     fleetCount = fleets.empty() ? std::string{} : (shipsHere == 1 ? std::string{"1 SHIP"} : std::format("{} SHIPS", shipsHere));
-    break;
-  }
-  case Panel::Destination:
-  {
-    const Fleet& fleet = m_state.fleets[static_cast<std::size_t>(m_panelSubject)];
-    title = std::format("MOVE {} - PICK LANE", Uppercased(fleet.name));
-    // Where it stands, which is what `Action::ChooseDestination` orders from (ADR-077).
-    const std::int32_t origin = fleet.from;
-
-    // Lane-constrained: only the systems this fleet can actually reach along an edge, and the tick
-    // it would arrive. A destination picker that offered anything else would be offering a move
-    // the graph cannot express (one-pager, "Shape of a game").
-    for (const Lane& lane : m_state.graph.lanes)
-    {
-      std::int32_t other = EventRefs::NONE;
-      if (lane.a == origin)
-      {
-        other = lane.b;
-      }
-      else if (lane.b == origin)
-      {
-        other = lane.a;
-      }
-      if (other == EventRefs::NONE || HasFlag(m_state.graph.systems[static_cast<std::size_t>(other)].flags, SystemFlags::RegionAnchor))
-      {
-        continue;
-      }
-
-      const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(other)];
-
-      // **A held candidate says whose it is in their own colour** (ADR-092). The row's owner square
-      // already carries it; the line that says `P3 · 11 +DEF` is the one being read while the
-      // decision is made, and in body ink it reads as a number rather than as a rival.
-      rows.push_back(
-        SheetRow{.title = Uppercased(node.name),
-                 .detail = StandingAt(m_state, other),
-                 .right = std::format("{} · ETA T{}", lane.cost == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", lane.cost),
-                                      m_state.OrdersTick() + lane.cost - 1),
-                 .accent = OwnerColor(node.owner, m_state.viewer),
-                 .target = !OrdersEditable() ? EventRefs::NONE : other,
-                 .sortBy = lane.cost,
-                 .detailInk = node.owner == NOBODY ? Ink::TEXT_MUTED : OwnerColor(node.owner, m_state.viewer)});
-    }
-
-    // **Nearest first, then by name** (ADR-092). The picker was in lane order, which is the order
-    // the graph happens to store them in and means nothing to a player; how soon a fleet lands is
-    // the first thing they weigh, and two lanes of the same length sort by name so the list does not
-    // reshuffle between two frames of one state.
-    std::ranges::stable_sort(rows,
-                             [](const SheetRow& _a, const SheetRow& _b)
-                             {
-                               if (_a.sortBy != _b.sortBy)
-                               {
-                                 return _a.sortBy < _b.sortBy;
-                               }
-                               return _a.title < _b.title;
-                             });
     break;
   }
   case Panel::SignalList:

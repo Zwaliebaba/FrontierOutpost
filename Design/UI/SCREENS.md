@@ -208,18 +208,6 @@ those are of a sheet that no longer exists** and are owed a retake (`Design/UI/R
     rail cannot (ADR-101).
   - **The bar says `DONE`, not `CANCEL`.** There is nothing to back out of — what was ordered on it
     is already in, and closing it is finishing.
-- **Destination** (`MOVE FLT 1 - PICK LANE`): opened by `MOVE ›` on a fleet's row in the place
-  sheet, or by tapping a marker of your own that has not departed yet.
-  **Nearest first, then by name** (ADR-092), and a held candidate's second line is drawn in the
-  holder's colour rather than in body ink; never for a fleet
-  the server has on a lane, because the lock refuses a second order on one (ADR-077). One row per
-  lane out of **where the fleet stands**: owner square,
-  `PELL`, `UNCLAIMED` / `YOURS` / `P3` with the hostile ships standing there and `+DEF` appended
-  (`P3 · 11 +DEF`, ADR-063), then `· CAPITAL` / `· CONTESTED`, and `2 TICKS · ETA T9` on the right —
-  the lane cost and the arrival tick as two facts. Picking a row orders the move (drawn at progress
-  zero until the lock) and closes the sheet. *Not built:* the verdict under the right-hand column
-  (`YOU WIN` / `HOLD` / `YOU LOSE`). It needs a preview per candidate destination on
-  `SnapshotFleet`; the client must not compute one (ADR-063).
 - **Signal** (`SIGNAL - PICK ONE`): opened from the rail's `SIGNALS` header; the six kinds of
   ADR-039 as rows with `SENDING` / `TAP AGAIN TO CONFIRM` on the right; `Concede` always last,
   needing two taps, under a 22px `CONCEDE` band of its own and said in red from the first tap
@@ -229,6 +217,31 @@ those are of a sheet that no longer exists** and are owed a retake (`Design/UI/R
   written for an empty list, and the list is never empty because `Concede` is always on it; fourteen
   rows offered and the rest counted.
 - **Replay** (`REPLAY TICK 7`): the stub of screen 07.
+
+**Move mode (ADR-113; `01-move-mode.png` and `01-move-selected.png` are owed).** A move is chosen
+ON the map, not in a list. It is entered by `MOVE ›` on a fleet's row in the place sheet, the
+digest's `MOVE FLT 1 | 10 SHIPS`, that fleet's unordered row in the rail's `ORDERS`, a marker of
+your own that has not departed, or a garrison badge with **exactly one** of your fleets under it —
+which skips the sheet, because a badge totals ships and one fleet is one thing a tap could mean.
+
+The sheet collapses, the digest fades to 55% and records no hit, and the map changes meaning: a 44px
+banner replaces the `MAP - FOCUS` caption (`MOVE FLT 1` · `10 SHIPS FROM DOTHAN` · *Tap a lit
+system.* · `ESC · CANCEL`), the systems **one lane away** light with a pulsing ring and an outlined
+`1 TICK · T1` chip under the name, their lanes go blue with marching dashes, every other lane drops
+to a hairline, and the origin's badge is outlined. **Nothing else on the map is a target** — an
+unreachable system and a rival's garrison are drawn as they always are and record no hit — so a tap
+on any of them leaves the mode, as do `ESC` and either `CANCEL`.
+
+**The confirm strip** under it is a sheet in every dimension it shares with one: header
+`FLT 1 → FAROE` with `ARRIVES T1 · UNCLAIMED` and `OR PICK FROM THE LIST`; a two-column grid of the
+same destinations, six at most, nearest first and then by name (ADR-092); and a bar split 50/50
+between `CANCEL` and the filled `SEND 10 SHIPS TO FAROE`, which is **the one filled control on the
+screen** while the mode is on and is inert reading `PICK A DESTINATION` until something is lit.
+**Lighting is a selection and `SEND` is the order.** On send the mode ends and the sheet does not
+come back; the `ORDERS` rail gains `FLT 1 → FAROE · 10 SHIPS · T1 X` and the map draws the dart.
+
+**`--still`** holds the ring's pulse and the lanes' dashes at phase zero, so a capture of this mode
+is reproducible; it makes `Animating()` false as well, so the page settles.
 
 **Behaviour.** The countdown is live and rounds up (`00:00:00` and `LOCKED` are the same event,
 ADR-039); at zero the page is screen 06. Every handled tap sends the whole order set at once and
@@ -241,7 +254,7 @@ dialog: top bar `MATCH ENDED --:--:--`, rail header `FINAL` / `MATCH ENDED` in r
 is over. This is what you finished with.*, footer `NOTHING MORE LOCKS` / `T30 FINAL`, every control
 inert, the digest carrying no standing moves.
 
-**Code.** `LockstepClient/MainPage.{h,cpp}` (bar, two rails, sheets, hits), `DigestView.{h,cpp}`
+**Code.** `LockstepClient/MainPage.{h,cpp}` (bar, two rails, sheets, the move mode, hits), `DigestView.{h,cpp}`
 (ranking, grouping, standing moves, the delta), `MapRender.{h,cpp}`, `MapView.h`, `MatchState.h`
 (the view model); `Lockstep/SnapshotView.cpp` turns the snapshot and the digests into it and
 composes each event's actions. Tap tests in `Tests/LockstepTests/TapTests.cpp`.

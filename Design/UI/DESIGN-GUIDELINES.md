@@ -151,6 +151,11 @@ the five characters ADR-014 substituted and re-measuring the six strings it shor
 - Detail text wraps by word to a PIXEL WIDTH (`FontRenderer::WrapToWidth`). It wrapped to a
   character count until 2026-09-13; there is no character count any more, because there is no one
   advance for a proportional face to have.
+- **The baked alphabet is printable ASCII plus `·`, `–`, `‹`, `›`, `→` and `−`, and nothing else**
+  (ADR-014's list, ADR-073's bake). `FontRenderer::GlyphOf` falls back to a BLANK for anything else,
+  so a `×` in a label is a control with nothing on it and the only symptom is a capture.
+  `FaceRuleTests::EveryStringTheScreensDrawIsInTheBakedAlphabet` asserts it over every string all
+  five screens draw (ADR-113); adding a character is a re-bake and a font decision.
 - **Every wrap in this client measures in the MONO face and then draws in a sans one**, which is a
   defect and is written down here rather than fixed (found 2026-09-14 while photographing the build
   sheet). `WrapToWidth` takes a face and not one of the nine call sites passes it, so each wraps at
@@ -174,8 +179,9 @@ the five characters ADR-014 substituted and re-measuring the six strings it shor
   - `›` is a trailing *go* affordance on a control: `JOIN ›`, `7 TO SEND ›`, `MORE ›`. `‹` is baked
     for its mirror — the pager's `‹ PREV` — and is the one character here ADR-014 did not list.
   - `−` is a true minus on a negative quantity: `QUEUED −40`, `−1 SYSTEM`.
-  - `–` is baked and **has no site**. ADR-014's `Orune–Kepler-Reach` came from a fixture that no
-    longer exists, and no generated system name carries a dash.
+  - `–` marks a place with no order on it, on the rail's `PLACES` row (ADR-112). It was baked and
+    had no site at all until then: ADR-014's `Orune–Kepler-Reach` came from a fixture that no longer
+    exists, and no generated system name carries a dash.
 - **The sources are compiled `/utf-8`.** They always held UTF-8 and every `std::string` here always
   was UTF-8, but until 2026-09-13 every literal happened to be ASCII, so nothing had noticed that
   MSVC was reading them through the system code page. The first `·` would have come out as two
@@ -317,6 +323,16 @@ Semantic / owner (ADR-027: you are always blue)
   in amber there; `X` and `CANCEL` still close it. Otherwise a build sheet whose queue has taken
   credits says what its rows are priced against (ADR-078), amber when that is why a row is dim and
   `TEXT_DETAIL` when it is only a note. With none of them, the body starts straight under the header.
+- **Confirm strip** — the sheet-shaped component the move mode puts under the map (ADR-113). Same
+  width, margin and anchoring as a sheet; 44px header (`FLT 1 → FAROE` in the display cut, then
+  `ARRIVES T1 · UNCLAIMED` muted, then `OR PICK FROM THE LIST` right-aligned — and before a
+  destination is lit, `FLT 1 →` with nothing after it); a body of **two columns** of 44px
+  destination rows, 8px apart, six at most and a seventh reported; and a 44px bar split 50/50,
+  `CANCEL` on the left and the filled `SEND 10 SHIPS TO FAROE` on the right — **the one filled
+  control on the screen while the mode is on** (ADR-089), inert and reading `PICK A DESTINATION`
+  until something is lit. A row is an 8px square in the holder's colour (outlined white@50 when
+  unclaimed), the name in mono Medium, what is standing there muted, and `1 TICK · T1` on the right,
+  blue on the chosen row. **Lighting a row is a selection and not an order**; `SEND` is what commits.
 - **Sheet, place variant** — the one sheet an order is given on (ADR-111). Header 44: a 10px disc in
   the owner's colour, the system's name in the display cut, a muted clause saying what the place IS
   (`YOURS · +6 A TICK · CAPITAL`, dropped whole rather than clipped when the status slot leaves no
@@ -531,8 +547,26 @@ Drawn, in painter's order (`MapRender.cpp`):
   legend's row and a sheet's `CANCEL` bar are the same strip of the pane (ADR-082).
 - Tapping a system you hold opens its **place sheet**, and so does its garrison badge — the disc is
   the system and the badge is the ships standing on it, and since ADR-111 they open the same sheet
-  and behave alike at the lock. A system you do not hold only focuses (ADR-058). Tapping your own
-  fleet's marker opens its destination picker.
+  and behave alike at the lock. **A badge with exactly one of your fleets under it skips the sheet
+  and takes that fleet's move onto the map** (ADR-113): a badge totals ships, so one fleet is one
+  thing a tap could mean. A system you do not hold only focuses (ADR-058). Tapping your own fleet's
+  marker, before it has departed, takes its move onto the map too.
+- **A move is chosen ON the map** (ADR-113), in a mode rather than a sheet. While it is on: a 44px
+  **banner** across the top of the pane replaces the `MAP - FOCUS` caption — `MOVE_MODE_WASH`
+  ground, a 1px `BLUE`@90 bottom rule, an 8px owner square, `MOVE FLT 1`, `10 SHIPS FROM DOTHAN`
+  muted, the sentence *Tap a lit system.* in sans, and `ESC · CANCEL` whose hit is the right 120px.
+  The systems **one lane away** get a 16px `BLUE`@128 ring pulsing 0.55→1→0.55 on a 1.6s period and
+  an outlined `BLUE` ETA chip (`1 TICK · T1`) under the name, placed by the same label nudger; their
+  lanes go `BLUE` 1.5px dashed `4 5` with the dashes marching at 10px/s; **every other lane on the
+  plane drops to `rgba(214,220,228,0.12)`**, tick cost included. The chosen one's ring is a solid
+  1px `TEXT_PRIMARY` at radius 22 over `BLUE`@30, its lane is solid `BLUE` 2.5px and its chip is
+  filled. The origin's garrison badge wears a 2px `TEXT_PRIMARY` outline at 1px offset. **Nothing
+  else on the map is a target**: an unreachable system, a rival's garrison and a fleet marker are
+  drawn as they always are and record no hit, so a tap on one leaves the mode — as do `ESC`, the
+  banner's cancel and the strip's.
+- **One lane and no further, because that is what the rules allow.** `Match::Validate` refuses any
+  destination that is not one lane from where the fleet stands, so the 2026-09-14 handoff's
+  "multi-hop within the fleet's range" describes a game that does not exist.
 - **The camera** (ADR-090): drag orbits, a wheel notch or pinch step zooms between 0.6x and 2.5x of
   the authored framing at 12% a step, and an outlined `RESET` chip sits immediately after
   `MAP - FOCUS: PELL` — drawn only when the camera is not where the map opened. No pan.

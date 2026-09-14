@@ -63,6 +63,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <format>
 #include <memory>
 #include <optional>
 #include <string>
@@ -85,6 +86,41 @@ using Neuron::Face;
 [[nodiscard]] bool IsMono(Face _face) noexcept
 {
   return _face == Face::MonoRegular || _face == Face::MonoMedium || _face == Face::MonoDisplay;
+}
+
+/// One UTF-8 string as codepoints. Written here rather than borrowed, because the renderer's own
+/// decoder is private and the point of this file is to check the strings from the outside.
+[[nodiscard]] std::vector<char32_t> Codepoints(std::string_view _text)
+{
+  std::vector<char32_t> points;
+  for (std::size_t at = 0; at < _text.size();)
+  {
+    const auto lead = static_cast<unsigned char>(_text[at]);
+    std::size_t length = 1;
+    char32_t point = lead;
+    if ((lead & 0xE0U) == 0xC0U)
+    {
+      length = 2;
+      point = lead & 0x1FU;
+    }
+    else if ((lead & 0xF0U) == 0xE0U)
+    {
+      length = 3;
+      point = lead & 0x0FU;
+    }
+    else if ((lead & 0xF8U) == 0xF0U)
+    {
+      length = 4;
+      point = lead & 0x07U;
+    }
+    for (std::size_t byte = 1; byte < length && at + byte < _text.size(); ++byte)
+    {
+      point = (point << 6) | (static_cast<unsigned char>(_text[at + byte]) & 0x3FU);
+    }
+    points.push_back(point);
+    at += length;
+  }
+  return points;
 }
 
 /// What one screen drew, kept under the screen's name.
@@ -176,6 +212,43 @@ struct Screen
   main.DrawInterface(shapes, text);
   collect("the main page");
 
+  // ---- And with a move on the map --------------------------------------------------------------
+  //
+  // **The banner and the confirm strip carry the only sentence on this screen that is not in a card
+  // or a help line** (ADR-113) -- *Tap a lit system.* -- beside a banner and a strip header full of
+  // labels. The mode is drawn twice: once before a destination is lit, because the header and the
+  // bar both change wording when one is, and once after.
+  for (const Lockstep::MainPage::HitRegion& hit : std::vector<Lockstep::MainPage::HitRegion>(main.Hits()))
+  {
+    if (hit.action != Lockstep::MainPage::Action::BeginMove)
+    {
+      continue;
+    }
+    (void)main.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+    break;
+  }
+  for (std::int32_t pass = 0; pass < 2 && main.MoveOrder().has_value(); ++pass)
+  {
+    shapes.BeginFrame();
+    text.BeginFrame();
+    meshes.BeginFrame();
+    main.DrawWorld(shapes, text, meshes);
+    main.DrawInterface(shapes, text);
+    collect("the main page");
+
+    if (pass == 0)
+    {
+      for (const Lockstep::MainPage::HitRegion& hit : std::vector<Lockstep::MainPage::HitRegion>(main.Hits()))
+      {
+        if (hit.action == Lockstep::MainPage::Action::ChooseDestination)
+        {
+          (void)main.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+          break;
+        }
+      }
+    }
+  }
+
   // ---- The lobby ---------------------------------------------------------------------------------
   Lockstep::SeatsPage seats{Lockstep::GenerateSeatTokens(Lockstep::SeatsPage::SEAT_COUNT)};
   shapes.BeginFrame();
@@ -244,6 +317,43 @@ struct Screen
 TEST_CLASS(FaceRuleTests)
 {
 public:
+  TEST_METHOD(EveryStringTheScreensDrawIsInTheBakedAlphabet)
+  {
+    // **A codepoint the bake does not know draws a BLANK and says nothing about it**
+    // (`FontRenderer::GlyphOf` falls back to the face's first glyph, which is a space). So a `×` in
+    // a control's label is a control with nothing on it, and the only way to find out is to look at
+    // a capture -- which is how ADR-112's take-back cell was caught, one commit before it shipped.
+    //
+    // The alphabet is ADR-014's list, baked by ADR-073: printable ASCII plus `·`, `–`, `‹`, `›`,
+    // `→` and `−`. Adding to it is a re-bake and a font decision, not a layout change, which is why
+    // this asserts rather than being remembered.
+    std::vector<std::string> missing;
+    for (const Screen& screen : EverythingDrawn())
+    {
+      for (const Neuron::FontRenderer::DrawnString& drawn : screen.drawn)
+      {
+        for (const char32_t point : Codepoints(drawn.text))
+        {
+          if (Neuron::FontRenderer::GlyphOf(point, drawn.face).codepoint == static_cast<std::uint32_t>(point))
+          {
+            continue;
+          }
+          missing.push_back(std::format("{}: U+{:04X} in \"{}\"", screen.name, static_cast<std::uint32_t>(point), drawn.text));
+        }
+      }
+    }
+
+    if (!missing.empty())
+    {
+      std::string message = std::format("{} character(s) drawn that the font was never baked with:", missing.size());
+      for (const std::string& one : missing)
+      {
+        message += "\n  " + one;
+      }
+      Assert::Fail(std::wstring{message.begin(), message.end()}.c_str());
+    }
+  }
+
   // A sentence drawn in the data face. The full stop is the tell, and it is the one piece of
   // punctuation on these screens that means nothing else.
   TEST_METHOD(NothingInMonoEndsASentence)

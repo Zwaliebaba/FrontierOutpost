@@ -213,6 +213,30 @@ void DrawDialog(Lockstep::ConnectionDialog& _dialog, Headless& _renderers)
   return Lockstep::ViewOf(Lockstep::Snapshot::For(match, seat), Lockstep::Snapshot::DigestFor(log, seat), 600);
 }
 
+/// One number for everything a frame recorded into the shape recorder: every vertex's position and
+/// colour, folded together.
+///
+/// **It is how a test says "the same picture" about something that has no strings in it.** The move
+/// mode's ring is an alpha that breathes and its lanes are dashes that march, so a frame that
+/// differs from the one before it differs in vertices and in nothing else. Drained a fixed number of
+/// times rather than until empty, because `EndLayer` puts a boundary in the middle of the map's own
+/// recording and a take that reaches one comes back empty with more behind it.
+[[nodiscard]] std::uint64_t ShapeFingerprint(Neuron::ShapeRenderer& _shapes)
+{
+  constexpr std::uint64_t PRIME = 1099511628211ULL;
+  std::uint64_t folded = 14695981039346656037ULL;
+  for (std::int32_t drain = 0; drain < 4; ++drain)
+  {
+    for (const Neuron::ShapeRenderer::ShapeVertex& vertex : _shapes.TakeUnflushed().vertices)
+    {
+      folded = (folded ^ vertex.color) * PRIME;
+      folded = (folded ^ static_cast<std::uint64_t>(std::lround(vertex.positionXPixels * 16.0F))) * PRIME;
+      folded = (folded ^ static_cast<std::uint64_t>(std::lround(vertex.positionYPixels * 16.0F))) * PRIME;
+    }
+  }
+  return folded;
+}
+
 void DrawPage(Lockstep::MainPage& _page, Headless& _renderers)
 {
   _page.DrawWorld(_renderers.shapes, _renderers.text, _renderers.meshes);
@@ -281,7 +305,7 @@ void DrawSeats(Lockstep::SeatsPage& _page, Headless& _renderers)
   for (auto hit = hits.rbegin(); hit != hits.rend(); ++hit)
   {
     const bool aboutAFleet =
-      hit->action == Lockstep::MainPage::Action::OpenFleet || hit->action == Lockstep::MainPage::Action::CancelFleetOrder;
+      hit->action == Lockstep::MainPage::Action::BeginMove || hit->action == Lockstep::MainPage::Action::CancelFleetOrder;
     const bool onTheSheet = hit->x >= sheet.x && hit->x < sheet.x + sheet.width && hit->y >= sheet.y && hit->y < sheet.y + sheet.height;
     const bool already =
       std::any_of(found.begin(), found.end(), [&hit](const Lockstep::MainPage::HitRegion& _found) { return _found.index == hit->index; });
@@ -1209,21 +1233,21 @@ TEST_CLASS(OpenSheetTapTests)
 public:
   TEST_METHOD(ASheetSurvivesTheLockAndStillTakesNoOrder)
   {
-    // An opening board carries `MOVE FLT n` on its one card (ADR-056), which is the only way to a
-    // destination picker when no fleet is under way.
+    // The place sheet, which since ADR-111 is the sheet an order is given on and so the one it
+    // matters most that the lock does not take away.
     const auto simulation = PlayedMatch(0);
     Lockstep::MainPage page;
     page.Create(ViewOfSeatZero(*simulation));
 
     Headless renderers;
     const bool opened = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
-                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
-    Assert::IsTrue(opened, L"no control opens a destination picker on an opening board");
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Place; });
+    Assert::IsTrue(opened, L"no control opens a place sheet on an opening board");
 
     // The lock arrives under it.
     page.Update(1.0e6);
     Assert::IsTrue(page.State().orders.locked);
-    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Destination, L"the lock closed the sheet");
+    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Place, L"the lock closed the sheet");
 
     std::vector<std::int32_t> before;
     for (const Lockstep::Fleet& fleet : page.State().fleets)
@@ -1388,7 +1412,7 @@ public:
     // player can still do something about.
     const std::vector<Lockstep::MainPage::HitRegion> rail = RailHits(page);
     const bool orderable = std::ranges::any_of(rail, [](const Lockstep::MainPage::HitRegion& _hit)
-                                               { return _hit.action == Lockstep::MainPage::Action::OpenFleet; });
+                                               { return _hit.action == Lockstep::MainPage::Action::BeginMove; });
     Assert::IsTrue(orderable, L"the unordered fleet's row leads nowhere");
   }
 
@@ -2012,13 +2036,13 @@ public:
     const std::int32_t fleet = controls.front().index;
     const std::int32_t from = page.State().fleets[static_cast<std::size_t>(fleet)].from;
 
-    // Open the picker from the sheet, and take the first destination it offers.
+    // Take the move onto the map from the sheet, light the first destination it offers, and send it.
     (void)page.HandleTap(controls.front().x + controls.front().width * 0.5F, controls.front().y + controls.front().height * 0.5F);
     renderers.Begin();
     DrawPage(page, renderers);
-    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Destination, L"the sheet's MOVE opened no picker");
+    Assert::IsTrue(page.MoveOrder().has_value(), L"the sheet's MOVE did not take the move onto the map");
 
-    for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
+    for (const Lockstep::MainPage::HitRegion& hit : std::vector<Lockstep::MainPage::HitRegion>(page.Hits()))
     {
       if (hit.action == Lockstep::MainPage::Action::ChooseDestination)
       {
@@ -2026,7 +2050,17 @@ public:
         break;
       }
     }
-    Assert::AreNotEqual(from, page.State().fleets[static_cast<std::size_t>(fleet)].to, L"no row of the picker ordered the fleet anywhere");
+    Assert::IsTrue(page.MoveOrder()->selected != Lockstep::EventRefs::NONE, L"nothing on the map lit a destination");
+    Assert::AreEqual(from, page.State().fleets[static_cast<std::size_t>(fleet)].to,
+                     L"lighting a destination ordered the fleet, where it should take a SEND to do that");
+
+    renderers.Begin();
+    DrawPage(page, renderers);
+    const auto send = std::ranges::find_if(page.Hits(), [](const Lockstep::MainPage::HitRegion& _hit)
+                                           { return _hit.action == Lockstep::MainPage::Action::SendMove; });
+    Assert::IsTrue(send != page.Hits().end(), L"a destination is lit and nothing on the screen sends it");
+    (void)page.HandleTap(send->x + send->width * 0.5F, send->y + send->height * 0.5F);
+    Assert::AreNotEqual(from, page.State().fleets[static_cast<std::size_t>(fleet)].to, L"SEND ordered the fleet nowhere");
 
     // Back to the place, where the fleet is still listed -- an ordered fleet has left the system it
     // is standing at and not the place it belongs to, which is the whole of `FleetsAtPlace`.
@@ -2164,29 +2198,42 @@ public:
                   });
     Assert::IsFalse(digestOffersAMove, L"the digest offered a MOVE, so this fixture is not the board the defect was reported on");
 
-    // Sweep the whole screen, exactly as a finger would hunt for the control. Two stages, because
-    // the order takes two taps: one to reach a picker, one to pick a lane.
+    // Sweep the whole screen, exactly as a finger would hunt for the control. **Three stages since
+    // ADR-113**, because the order takes three taps: one to take the move onto the map, one to light
+    // a destination, and the filled `SEND` that commits it. The third is what makes a slipped finger
+    // on the map cost a tap rather than a tick.
     Headless renderers;
-    const bool opened = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
-                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
-    Assert::IsTrue(opened, L"nothing on the screen opens a destination picker for a fleet that is standing still");
+    const bool onTheMap =
+      SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    Assert::IsTrue(onTheMap, L"nothing on the screen takes a standing fleet's move onto the map");
 
-    const std::int32_t where = page.State().fleets[static_cast<std::size_t>(standing)].from;
-    const bool ordered = SweepFor(
+    const bool lit = SweepFor(
       page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
-      [&page, standing, where] { return page.State().fleets[static_cast<std::size_t>(standing)].to != where; }, true,
+      [&page] { return page.MoveOrder().has_value() && page.MoveOrder()->selected != Lockstep::EventRefs::NONE; }, true,
       [&page, &renderers]
       {
-        // A stray tap on the map closes the picker over some other system's build sheet. Put it
-        // back, so the sweep is looking for a row rather than for the panel it already found.
-        if (page.OpenPanel() == Lockstep::MainPage::Panel::Destination)
+        // A stray tap on the map leaves the mode, which is what tapping the board means while a
+        // question is open. Put it back, so the sweep is looking for a destination rather than for
+        // the mode it already found.
+        if (page.MoveOrder().has_value())
         {
           return false;
         }
         return SweepFor(page, renderers, DrawPage, SCREEN_WIDTH - ORDERS_RAIL, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
-                        [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
+                        [&page] { return page.MoveOrder().has_value(); });
       });
-    Assert::IsTrue(ordered, L"the picker opened and no row in it ordered the fleet anywhere");
+    Assert::IsTrue(lit, L"the mode opened and nothing in it lit a destination");
+
+    const std::int32_t where = page.State().fleets[static_cast<std::size_t>(standing)].from;
+    renderers.Begin();
+    DrawPage(page, renderers);
+    const auto send = std::ranges::find_if(page.Hits(), [](const Lockstep::MainPage::HitRegion& _hit)
+                                           { return _hit.action == Lockstep::MainPage::Action::SendMove; });
+    Assert::IsTrue(send != page.Hits().end(), L"a destination is lit and there is nothing on the screen that sends it");
+    (void)page.HandleTap(send->x + send->width * 0.5F, send->y + send->height * 0.5F);
+
+    Assert::AreNotEqual(where, page.State().fleets[static_cast<std::size_t>(standing)].to, L"SEND ordered the fleet nowhere");
+    Assert::IsFalse(page.MoveOrder().has_value(), L"SEND left the mode open");
 
     const Lockstep::OrderSet orders = Lockstep::OrdersOf(page.State());
     Assert::AreEqual(std::size_t{1}, orders.fleetOrders.size(), L"the move did not become an order");
@@ -2389,7 +2436,7 @@ public:
     // And the control on it leads on to the picker, which is the only thing it is for.
     const std::vector<Lockstep::MainPage::HitRegion> controls = FleetControlsOn(page);
     (void)page.HandleTap(controls.front().x + controls.front().width * 0.5F, controls.front().y + controls.front().height * 0.5F);
-    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Destination, L"the sheet's fleet control opened no picker");
+    Assert::IsTrue(page.MoveOrder().has_value(), L"the sheet's fleet control took the move nowhere");
   }
 
   TEST_METHOD(ASystemHoldingSeveralListsEveryOneOfThem)
@@ -2448,8 +2495,8 @@ public:
     page.Create(std::move(state));
 
     Headless renderers;
-    const bool opened = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page]
-                                 { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination || !FleetControlsOn(page).empty(); });
+    const bool opened = SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return page.MoveOrder().has_value() || !FleetControlsOn(page).empty(); });
     Assert::IsFalse(opened, L"the screen offered an order about a rival's ships");
   }
 
@@ -2506,6 +2553,240 @@ public:
 };
 
 // The board is still readable while the link is down, and still gives no order (ADR-085).
+// The move is chosen ON the map (ADR-113). What is asserted here is the three things that makes
+// true and one screen full of consequences: the mode has doors, lighting a system is not an order,
+// and while it is on the map is the only thing on the screen that answers a tap.
+TEST_CLASS(MoveModeTapTests)
+{
+public:
+  static constexpr std::int32_t MAP_LEFT = 400;
+  static constexpr std::int32_t MAP_RIGHT = SCREEN_WIDTH - ORDERS_RAIL;
+
+  /// A board with exactly one of the viewer's fleets, standing, so the garrison badge under it has
+  /// one thing it could mean.
+  [[nodiscard]] static Lockstep::MatchState OneFleetStanding()
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MatchState state = ViewOfSeatZero(*simulation);
+    Assert::IsFalse(state.fleets.empty(), L"the opening board has no fleet at all");
+
+    bool kept = false;
+    std::vector<Lockstep::Fleet> fleets;
+    for (Lockstep::Fleet& fleet : state.fleets)
+    {
+      if (fleet.owner != state.viewer)
+      {
+        fleets.push_back(fleet);
+        continue;
+      }
+      if (kept)
+      {
+        continue;
+      }
+      fleet.order = Lockstep::FleetStance::Hold;
+      fleet.underWay = false;
+      fleet.to = fleet.from;
+      fleets.push_back(fleet);
+      kept = true;
+    }
+    Assert::IsTrue(kept, L"the viewer owns no fleet on the opening board");
+    state.fleets = std::move(fleets);
+    return state;
+  }
+
+  TEST_METHOD(AGarrisonBadgeWithOneFleetUnderItSkipsTheSheet)
+  {
+    // **A badge totals SHIPS** (ADR-079), so a place holding one of your fleets has exactly one
+    // thing a tap on it could mean, and a sheet between the finger and the map would be a tap spent
+    // on a question with one answer.
+    Lockstep::MainPage page;
+    page.Create(OneFleetStanding());
+
+    Headless renderers;
+    const bool onTheMap =
+      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    Assert::IsTrue(onTheMap, L"nothing on the map takes the one standing fleet's move onto it");
+    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::None, L"the mode left a sheet open over the map it is played on");
+  }
+
+  TEST_METHOD(TheMapOffersTheSystemsOneLaneAwayAndNothingElse)
+  {
+    // **One lane and no further, because that is what the rules allow.** `Match::Validate` refuses
+    // any destination that is not one lane from where the fleet stands, so a lit system further off
+    // would be a system the lock is certain to refuse -- the thing ADR-053 took off this screen.
+    Lockstep::MainPage page;
+    page.Create(OneFleetStanding());
+
+    Headless renderers;
+    const bool onTheMap =
+      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    Assert::IsTrue(onTheMap, L"no move to check the reach of");
+
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    const std::int32_t origin = page.MoveOrder()->origin;
+    std::vector<std::int32_t> adjacent;
+    for (const Lockstep::Lane& lane : page.State().graph.lanes)
+    {
+      const std::int32_t other = lane.a == origin ? lane.b : (lane.b == origin ? lane.a : Lockstep::EventRefs::NONE);
+      if (other != Lockstep::EventRefs::NONE &&
+          !Lockstep::HasFlag(page.State().graph.systems[static_cast<std::size_t>(other)].flags, Lockstep::SystemFlags::RegionAnchor) &&
+          std::ranges::find(adjacent, other) == adjacent.end())
+      {
+        adjacent.push_back(other);
+      }
+    }
+    Assert::IsFalse(adjacent.empty(), L"the fleet's system has no lanes, so this test proves nothing");
+
+    std::vector<std::int32_t> offered;
+    for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
+    {
+      if (hit.action == Lockstep::MainPage::Action::ChooseDestination && std::ranges::find(offered, hit.index) == offered.end())
+      {
+        offered.push_back(hit.index);
+      }
+    }
+    std::ranges::sort(adjacent);
+    std::ranges::sort(offered);
+    Assert::IsTrue(adjacent == offered, L"the map offered something other than exactly the systems one lane away");
+  }
+
+  TEST_METHOD(EverythingElseOnTheScreenStopsAnsweringATap)
+  {
+    // **The map is what the question is about, so the map is what answers** (ADR-113). The digest
+    // fades and records nothing, the map's own discs and badges record nothing, and the only hits
+    // left are the destinations, the strip and the two ways out.
+    Lockstep::MainPage page;
+    page.Create(OneFleetStanding());
+
+    Headless renderers;
+    const bool onTheMap =
+      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    Assert::IsTrue(onTheMap, L"no move to check the screen around");
+
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
+    {
+      Assert::IsTrue(hit.x >= Lockstep::Frame::DIGEST_WIDTH, L"the digest column is still a target while the map is taking a move");
+
+      // **The locks rail keeps its links**, and that is deliberate: it is a list of what goes in at
+      // the lock, changing your mind about which place you are looking at is a thing to be able to
+      // do, and following one of its rows leaves the mode rather than opening a sheet behind the
+      // strip. What must offer nothing but the move is the MAP PANE, which is where the question is.
+      if (hit.x >= SCREEN_WIDTH - ORDERS_RAIL)
+      {
+        continue;
+      }
+
+      const bool allowed = hit.action == Lockstep::MainPage::Action::ChooseDestination ||
+                           hit.action == Lockstep::MainPage::Action::SendMove || hit.action == Lockstep::MainPage::Action::CancelMove ||
+                           hit.action == Lockstep::MainPage::Action::None;
+      Assert::IsTrue(allowed, L"something other than the move answered a tap over the map while the mode was on");
+    }
+
+    // And a rail row does leave the mode rather than opening a sheet under the strip.
+    const auto link =
+      std::ranges::find_if(page.Hits(), [](const Lockstep::MainPage::HitRegion& _hit)
+                           { return _hit.action == Lockstep::MainPage::Action::OpenSystem && _hit.x >= SCREEN_WIDTH - ORDERS_RAIL; });
+    if (link != page.Hits().end())
+    {
+      (void)page.HandleTap(link->x + link->width * 0.5F, link->y + link->height * 0.5F);
+      Assert::IsFalse(page.MoveOrder().has_value(), L"a rail row opened a sheet behind the confirm strip");
+      Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Place, L"and it opened nothing at all");
+    }
+  }
+
+  TEST_METHOD(EscapeLeavesTheModeAndSoDoesTheBoard)
+  {
+    // Two of the four ways out the banner names. The other two are its own `CANCEL` and the strip's,
+    // which are ordinary hits and are swept for above.
+    Lockstep::MainPage page;
+    page.Create(OneFleetStanding());
+
+    Headless renderers;
+    Assert::IsTrue(
+      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); }),
+      L"no move to leave");
+
+    Assert::IsTrue(page.HandleKey(Neuron::KeyboardInput::Key::Escape), L"ESC did not leave the move mode");
+    Assert::IsFalse(page.MoveOrder().has_value(), L"and the mode is still on");
+
+    // Back on, and out again by tapping a part of the board that offers nothing. A tap that hits
+    // nothing is what the empty map, an unreachable system and a rival's garrison all are.
+    Assert::IsTrue(
+      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); }),
+      L"the mode would not come back");
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    // A point inside the map pane that no hit covers. Found rather than chosen, so the test does
+    // not carry a coordinate that the next layout change makes a lie.
+    bool left = false;
+    for (std::int32_t y = TOP_BAR + 8; y < SCREEN_HEIGHT && !left; y += STEP)
+    {
+      for (std::int32_t x = MAP_LEFT; x < MAP_RIGHT && !left; x += STEP)
+      {
+        const bool covered = std::ranges::any_of(page.Hits(),
+                                                 [x, y](const Lockstep::MainPage::HitRegion& _hit)
+                                                 {
+                                                   return static_cast<float>(x) >= _hit.x && static_cast<float>(x) < _hit.x + _hit.width &&
+                                                          static_cast<float>(y) >= _hit.y && static_cast<float>(y) < _hit.y + _hit.height;
+                                                 });
+        if (covered)
+        {
+          continue;
+        }
+        Assert::IsTrue(page.HandleTap(static_cast<float>(x), static_cast<float>(y)), L"a tap on the bare board was not even handled");
+        left = !page.MoveOrder().has_value();
+      }
+    }
+    Assert::IsTrue(left, L"a tap on the bare board did not leave the mode");
+  }
+
+  TEST_METHOD(NothingMovesOnItsOwnWhileTheClockIsHeld)
+  {
+    // **`--still` is what makes a capture of this mode reproducible** (ADR-113). The ring breathes
+    // and the lanes march, both as pure functions of one clock, so holding the clock is the whole
+    // of freezing them -- and a page that asks for a frame every frame is a page a capture never
+    // catches at rest.
+    Lockstep::MainPage page;
+    page.Create(OneFleetStanding());
+
+    Headless renderers;
+    Assert::IsTrue(
+      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); }),
+      L"no move to freeze");
+    Assert::IsTrue(page.Animating(), L"a mode with a pulsing ring in it does not ask to be redrawn");
+
+    page.SetStill(true);
+    Assert::IsFalse(page.Animating(), L"--still left the page asking for a frame every frame");
+
+    // And the clock does not move under it, so two frames a second apart are the same frame -- which
+    // is measured rather than argued, because the pulse is an alpha and nothing else about the
+    // screen would have changed either way.
+    renderers.Begin();
+    DrawPage(page, renderers);
+    const std::uint64_t before = ShapeFingerprint(renderers.shapes);
+    page.Update(1.0);
+    renderers.Begin();
+    DrawPage(page, renderers);
+    Assert::AreEqual(before, ShapeFingerprint(renderers.shapes), L"--still drew a different frame a second later");
+
+    // And without it, it does: the guard above is holding something that genuinely moves.
+    page.SetStill(false);
+    renderers.Begin();
+    DrawPage(page, renderers);
+    const std::uint64_t moving = ShapeFingerprint(renderers.shapes);
+    page.Update(0.4);
+    renderers.Begin();
+    DrawPage(page, renderers);
+    Assert::AreNotEqual(moving, ShapeFingerprint(renderers.shapes), L"the ring does not actually move, so freezing it proves nothing");
+  }
+};
+
 TEST_CLASS(OfflineBoardTapTests)
 {
 public:
@@ -2729,31 +3010,45 @@ public:
                      L"the client's backlog window moved; NeuronServer::Session::DIGEST_HISTORY must match it");
   }
 
-  TEST_METHOD(ADestinationSheetPutsTheNearestFirst)
+  TEST_METHOD(TheConfirmStripPutsTheNearestFirst)
   {
     // Lane order is the order the graph happens to store them in and means nothing to a player; how
-    // soon a fleet lands is the first thing they weigh.
+    // soon a fleet lands is the first thing they weigh (ADR-092). The sort moved onto the strip with
+    // the list (ADR-113), and it is asserted off `ReachableFor` rather than off the drawing --
+    // `MoveTargetSystem` carries the two numbers the rows are sorted by.
     const auto simulation = PlayedMatch(0);
     Lockstep::MainPage page;
     page.Create(ViewOfSeatZero(*simulation));
 
     Headless renderers;
-    const bool opened = SweepFor(page, renderers, DrawPage, SCREEN_WIDTH - ORDERS_RAIL, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
-                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
-    Assert::IsTrue(opened, L"no picker to check the order of");
+    const bool onTheMap =
+      SweepFor(page, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    Assert::IsTrue(onTheMap, L"no move to check the order of");
 
-    // The sheet is drawing; what it drew is a capture. What can be asserted here is the rule the
-    // sort is built on -- the lanes out of the fleet's system, in cost order, are what the rows are.
-    const std::int32_t standing = page.State().fleets.front().from;
-    std::vector<std::uint32_t> costs;
-    for (const Lockstep::Lane& lane : page.State().graph.lanes)
+    // The rows on the strip and the chips on the map are one list, drawn twice, and the hit list is
+    // where that can be read back: the destinations in the order the strip laid them out.
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    std::vector<std::uint32_t> ticks;
+    const std::int32_t origin = page.MoveOrder()->origin;
+    for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
     {
-      if (lane.a == standing || lane.b == standing)
+      if (hit.action != Lockstep::MainPage::Action::ChooseDestination || hit.y < Lockstep::Frame::SCREEN_HEIGHT * 0.5F)
       {
-        costs.push_back(lane.cost);
+        continue;
+      }
+      for (const Lockstep::Lane& lane : page.State().graph.lanes)
+      {
+        const bool joins = (lane.a == origin && lane.b == hit.index) || (lane.b == origin && lane.a == hit.index);
+        if (joins)
+        {
+          ticks.push_back(lane.cost);
+        }
       }
     }
-    Assert::IsFalse(costs.empty(), L"the fleet's system has no lanes, so there is nothing to sort");
+    Assert::IsFalse(ticks.empty(), L"the strip offered no destination, so there is nothing to sort");
+    Assert::IsTrue(std::ranges::is_sorted(ticks), L"the strip's rows are not in arrival order");
   }
 };
 

@@ -14,6 +14,8 @@
 #include "PointerInput.h"
 #include "ShapeRenderer.h"
 
+#include <optional>
+
 namespace Lockstep
 {
 
@@ -200,6 +202,11 @@ public:
   /// the sheet: at 22 + 44 + 44 it is already 110 of a 122-pixel minimum body.
   static constexpr std::size_t SHEET_PINNED_FLEETS = 2;
 
+  /// The confirm strip's destination rows are a GRID (ADR-113), where every other sheet's body is a
+  /// column. Two columns, because the rows are the FALLBACK for the map above them -- the primary
+  /// way to choose is to tap a lit system -- so the strip stays short and the map stays open.
+  static constexpr std::size_t STRIP_COLUMNS = 2;
+
   /// Inside a tile. **12 across and 10 down**, which is not `CARD_PADDING`: a tile is a box with a
   /// border, where a digest card is a region of a rail, so its ink has to clear a line rather than
   /// an edge. 10 + 22 + 10 + 17 + 10 + 17 + 10 is exactly 96, which is what fixes the vertical one.
@@ -242,8 +249,8 @@ public:
     FocusSystem,
     /// Open one system's place sheet (ADR-111). Its index is a SYSTEM position.
     OpenSystem,
-    /// Open a fleet's destination picker, lane-constrained.
-    OpenFleet,
+    /// Take this fleet's move onto the map (ADR-113). Its index is a FLEET position.
+    BeginMove,
     /// Open the place sheet from a garrison badge (ADR-079, ADR-111). Its index is a SYSTEM
     /// position, and it is a separate action from `OpenSystem` because the badge is a separate
     /// target from the disc it sits beside -- the disc is the system and the badge is the ships.
@@ -265,8 +272,13 @@ public:
     ShowDigestPage,
     /// Step through the last resolved tick.
     OpenReplay,
-    /// Pick a destination in the open picker.
+    /// Light one of the systems the map has offered, which is a SELECTION and not an order
+    /// (ADR-113). Its index is a SYSTEM position. The order is `SendMove`.
     ChooseDestination,
+    /// Queue the move the map is showing, and leave the mode.
+    SendMove,
+    /// Leave the mode with no order.
+    CancelMove,
     /// Put the camera back where the map opened (ADR-090). Drawn only when it is somewhere else.
     ResetCamera,
     /// Move the locks rail by one bandful. Its index is a DIRECTION, +1 down and -1 up, and not a
@@ -289,12 +301,48 @@ public:
     /// fleets standing on it. It replaces the build sheet and the fleet list, which were two
     /// sheets about one place reached through two different doors.
     Place,
-    Destination,
     SignalList,
     Replay
   };
 
+  /// Where a fleet may be sent this tick, and how long it takes to get there (ADR-113).
+  ///
+  /// **One lane and no further, because that is what the rules allow.** `Match::Validate` refuses
+  /// any destination that is not one lane from where the fleet stands (`NoLaneToDestination`), so
+  /// the handoff's "multi-hop within the fleet's range if the rules allow" resolves to the
+  /// adjacent systems and nothing else.
+  struct MoveTargetSystem
+  {
+    std::int32_t system = EventRefs::NONE;
+    std::uint32_t ticks = 0;
+    std::uint32_t arrivesAt = 0;
+  };
+
+  /// The move being chosen on the map, if one is (ADR-113).
+  struct MoveMode
+  {
+    /// The fleet, as a POSITION in `m_state.fleets` and as the id that survives a snapshot: a
+    /// position is not stable across one and an id is (ADR-057, ADR-065).
+    std::int32_t fleet = EventRefs::NONE;
+    std::int32_t fleetId = EventRefs::NONE;
+    /// Where it is standing, as a system position.
+    std::int32_t origin = EventRefs::NONE;
+    /// Where it would go, or `NONE` before a system has been lit.
+    std::int32_t selected = EventRefs::NONE;
+  };
+
   void Create(MatchState _state);
+
+  /// Whether the two things on this screen that move on their own are held at phase zero.
+  ///
+  /// **A capture of a pulsing ring is a capture of whichever phase the shutter caught** (ADR-113).
+  /// The move mode's ring and its marching lane dash are pure functions of `m_animationSeconds`, so
+  /// freezing them is refusing to advance it -- which is what `--still` does, and what every
+  /// headless test already does by never calling `Update`.
+  void SetStill(bool _still) noexcept
+  {
+    m_still = _still;
+  }
 
   /// Whether this build shows the controls that are not finished yet (ADR-091).
   ///
@@ -397,6 +445,12 @@ public:
   [[nodiscard]] Panel OpenPanel() const noexcept
   {
     return m_panel;
+  }
+  /// The move the map is taking, if any. Public for the reason `OpenPanel` is: a mode that cannot be
+  /// observed cannot be tested (ADR-041).
+  [[nodiscard]] const std::optional<MoveMode>& MoveOrder() const noexcept
+  {
+    return m_moveMode;
   }
 
   /// Which rival's card is open, and which card the digest column starts at (ADR-061, ADR-080).
@@ -556,11 +610,35 @@ private:
   /// it moved.
   bool ScrollSheet(std::int32_t _blocks);
 
+  /// Takes one fleet's move onto the map, or leaves the mode (ADR-113).
+  void EnterMove(std::int32_t _fleet);
+  void ExitMove() noexcept;
+
+  /// Puts back the move a new state arrived under, if the fleet it was about can still take one
+  /// (ADR-065, ADR-077). Its argument is a fleet ID, which is what survives a snapshot (ADR-057).
+  void ReopenMove(std::int32_t _fleetId);
+
+  /// Where fleet `_fleet` may be sent, nearest first and then by name (ADR-092). Empty for a fleet
+  /// the lock would refuse an order on.
+  [[nodiscard]] std::vector<MoveTargetSystem> ReachableFor(std::int32_t _fleet) const;
+
+  /// The banner across the map and the confirm strip under it (ADR-113). Interface rather than
+  /// world, because both have to cover the map's own labels and a shape cannot (ADR-014).
+  void DrawMoveMode(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
+
+  /// One ink at the share of itself the digest wears while the map is taking a move (ADR-113).
+  [[nodiscard]] Neuron::Color Faded(const Neuron::Color& _color) const noexcept;
+
   /// What the rail and an open sheet both say at the lock. One sentence, said once, because two
   /// copies of it is one wrong tick number waiting.
   [[nodiscard]] std::string LockSentence() const;
 
   void AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index);
+
+  /// The same, refused while the map is taking a move (ADR-113). The digest's every control goes
+  /// through it: the column fades and stops being a target for as long as the mode is on, and one
+  /// guard beside `AddHit` is what keeps that from being eleven conditions that have to agree.
+  void AddHitUnlessMoving(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index);
 
   /// The viewer's own fleets that BELONG to one place this tick, as indices into `m_state.fleets`.
   ///
@@ -653,6 +731,9 @@ private:
   float m_digestDragPixels = 0.0F;
 
   Panel m_panel = Panel::None;
+  /// The move being chosen on the map (ADR-113). A mode rather than a panel, because it changes
+  /// what the MAP means -- a sheet sits over the map and this one is played on it.
+  std::optional<MoveMode> m_moveMode;
   /// Which BLOCK of the place sheet's body is at the top of its scrolling region (ADR-111).
   ///
   /// **Blocks and not pixels**, and the difference is what the two columns are. The locks rail is a
@@ -682,6 +763,10 @@ private:
 
   /// Whether `--dev` was passed (ADR-091). Off in every shipped run.
   bool m_developerControls = false;
+
+  /// Whether `--still` was passed: the clock that drives the route's dashes and the move mode's
+  /// pulse does not advance, so a capture is always of phase zero (ADR-113).
+  bool m_still = false;
 
   /// The placement this page last drew, so the chip can say a place was LOST rather than only what
   /// it is (ADR-091). Session memory and nothing more: it starts at zero, which no placement is, and

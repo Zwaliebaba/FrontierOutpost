@@ -172,6 +172,55 @@ constexpr std::uint8_t ROUTE_ALPHA = 180;
 /// usually get.
 constexpr float FLEET_END_CLEARANCE = 68.0F;
 
+// ---- The move being chosen on the map (ADR-113) ------------------------------------------------
+
+/// A lit system's ring, in SCREEN pixels: it says *this is a target* rather than anything about how
+/// big the system is, so it does not grow with the camera the way a halo does.
+constexpr float MOVE_RING_RADIUS = 16.0F;
+/// The ring a lit system wears once it is the chosen one.
+constexpr float MOVE_SELECTED_RADIUS = 22.0F;
+/// The pulse: a ring at this alpha, breathing to full and back on this period.
+constexpr std::uint8_t MOVE_RING_ALPHA = 128;
+constexpr float MOVE_PULSE_SECONDS = 1.6F;
+/// How fast the dashes march toward the destination. Slower than a fleet's route (ADR-055), because
+/// this is a lane being OFFERED rather than one being travelled.
+constexpr float MOVE_DASH_PIXELS_PER_SECOND = 10.0F;
+constexpr float MOVE_DASH = 4.0F;
+constexpr float MOVE_GAP = 5.0F;
+/// What every lane the move is not about drops to, so the lit ones are the only blue on the plane.
+constexpr Color LANE_UNLIT = {214, 220, 228, 30};
+/// The chip under a lit system's name: `1 TICK - T1`.
+constexpr float MOVE_CHIP_HEIGHT = 16.0F;
+constexpr float MOVE_CHIP_PADDING = 5.0F;
+/// The outline the origin's garrison badge wears, at this offset, so the fleet being moved is
+/// findable on a board where several systems are lit.
+constexpr float MOVE_ORIGIN_OUTLINE = 2.0F;
+constexpr float MOVE_ORIGIN_OFFSET = 1.0F;
+/// The lowest the pulse falls, which is also where it sits at phase zero.
+constexpr float MOVE_PULSE_FLOOR = 0.55F;
+
+/// The move target for one system, or nothing when the map is not offering it (ADR-113).
+[[nodiscard]] const MoveTarget* TargetFor(const MapFrame& _frame, std::int32_t _system) noexcept
+{
+  for (const MoveTarget& target : _frame.moveTargets)
+  {
+    if (target.system == _system)
+    {
+      return &target;
+    }
+  }
+  return nullptr;
+}
+
+/// How strongly a lit system's ring is drawn this frame: 0.55 to 1 and back, and **0.55 at phase
+/// zero**, so a capture taken with the clock stopped is always the same picture (ADR-113).
+[[nodiscard]] float MovePulse(float _seconds) noexcept
+{
+  const float phase = std::fmod(_seconds, MOVE_PULSE_SECONDS) / MOVE_PULSE_SECONDS;
+  const float swell = 0.5F - 0.5F * std::cos(phase * 2.0F * 3.14159265F);
+  return MOVE_PULSE_FLOOR + (1.0F - MOVE_PULSE_FLOOR) * swell;
+}
+
 void DrawGroundCircle(ShapeRenderer& _shapes, const MapFrame& _frame, float _designX, float _designY, float _radius, const Color& _fill,
                       const Color& _outline, bool _dashed, float _height = 0.0F)
 {
@@ -583,6 +632,26 @@ void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFr
     _shapes.StrokeEllipse(top.xPixels, top.yPixels, radius * 3.0F, radius * 3.0F, Ink::TEXT_PRIMARY);
   }
 
+  // **A lit system, while a move is being chosen on this map** (ADR-113). The ring is in screen
+  // pixels rather than multiples of the ball, because it says *this is a target* and a target is
+  // the same size wherever the camera has put the system. The chosen one stops breathing and
+  // becomes a solid ring with a wash inside it -- the committed treatment every other surface uses
+  // for *this is yours, it is queued* (ADR-110).
+  const MoveTarget* offered = _frame.moveOrigin == EventRefs::NONE ? nullptr : TargetFor(_frame, _index);
+  if (offered != nullptr)
+  {
+    if (_index == _frame.moveSelected)
+    {
+      _shapes.FillEllipse(top.xPixels, top.yPixels, MOVE_SELECTED_RADIUS, MOVE_SELECTED_RADIUS, WithAlpha(Ink::BLUE, 30));
+      _shapes.StrokeEllipse(top.xPixels, top.yPixels, MOVE_SELECTED_RADIUS, MOVE_SELECTED_RADIUS, Ink::TEXT_PRIMARY);
+    }
+    else
+    {
+      const auto alpha = static_cast<std::uint8_t>(std::lround(static_cast<float>(MOVE_RING_ALPHA) * MovePulse(_frame.animationSeconds)));
+      _shapes.StrokeEllipse(top.xPixels, top.yPixels, MOVE_RING_RADIUS, MOVE_RING_RADIUS, WithAlpha(Ink::BLUE, alpha));
+    }
+  }
+
   // Labels are 8px at every distance. The reference draws every map label at one size and the
   // game has one font at one size (ADR-014), so a far system's name is exactly as legible as a
   // near one's -- which on a map you read rather than admire is the right trade.
@@ -594,6 +663,34 @@ void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFr
   const std::int32_t labelY =
     _labels.Place(top.xPixels, static_cast<std::int32_t>(std::lround(top.yPixels - radius)) - 13, FontRenderer::MeasurePixels(label));
   DrawCentered(_text, top.xPixels, labelY, label, Ink::TEXT_PRIMARY);
+
+  // The chip under the name, placed by the field the labels are placed by so it keeps out of the
+  // way of the next system's (ADR-090). It carries what the strip's row carries -- how long, and the
+  // tick it lands on -- because a player choosing on the map should not have to read the list to
+  // find out.
+  if (offered != nullptr)
+  {
+    const std::string chip =
+      std::format("{} · T{}", offered->ticks == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", offered->ticks), offered->arrivesAt);
+    const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels(chip)) + 2.0F * MOVE_CHIP_PADDING;
+    const std::int32_t chipTextY = labelY + LINE_HEIGHT;
+    const float chipX = top.xPixels - chipWidth * 0.5F;
+    const float chipY = BandTopForText(chipTextY, MOVE_CHIP_HEIGHT);
+    const bool chosen = _index == _frame.moveSelected;
+
+    _shapes.FillRect(chipX, chipY, chipWidth, MOVE_CHIP_HEIGHT, chosen ? Ink::BLUE : Ink::APP_BACKGROUND);
+    if (!chosen)
+    {
+      _shapes.StrokeRect(chipX, chipY, chipWidth, MOVE_CHIP_HEIGHT, Ink::BLUE);
+    }
+    DrawCentered(_text, top.xPixels, chipTextY, chip, chosen ? Ink::APP_BACKGROUND : Ink::BLUE);
+    _labels.placed.push_back(LabelField::Box{chipX, chipY, chipX + chipWidth, chipY + MOVE_CHIP_HEIGHT});
+
+    // **Drawn at 16 and hit at the floor**, which is ADR-100's isolated-chip rule: the chip stays
+    // the size the map has room for and the rectangle around it is what a finger aims at.
+    const Frame::Box target = Frame::GrownToFloor(chipX, chipY, chipWidth, MOVE_CHIP_HEIGHT);
+    _hits.push_back(MapHit{.x = target.x, .y = target.y, .width = target.width, .height = target.height, .moveTarget = _index});
+  }
 
   const std::int32_t underFoot = static_cast<std::int32_t>(std::lround(ground.yPixels)) + 8;
   bool footTaken = false;
@@ -633,11 +730,20 @@ void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFr
     }
   }
 
-  _hits.push_back(MapHit{.x = top.xPixels - radius * 3.0F,
-                         .y = top.yPixels - radius * 3.0F,
-                         .width = radius * 6.0F,
-                         .height = (ground.yPixels - top.yPixels) + radius * 6.0F,
-                         .system = _index});
+  // **While a move is being chosen, a system is a destination or it is nothing at all** (ADR-113).
+  // An unreachable one and a rival's are still drawn at their own ink -- the mode hides nothing --
+  // and neither of them is a target, so a tap on one falls through to the map and leaves the mode,
+  // which is what tapping the board means while a question is open.
+  const bool moving = _frame.moveOrigin != EventRefs::NONE;
+  if (!moving || offered != nullptr)
+  {
+    _hits.push_back(MapHit{.x = top.xPixels - radius * 3.0F,
+                           .y = top.yPixels - radius * 3.0F,
+                           .width = radius * 6.0F,
+                           .height = (ground.yPixels - top.yPixels) + radius * 6.0F,
+                           .system = moving ? EventRefs::NONE : _index,
+                           .moveTarget = moving ? _index : EventRefs::NONE});
+  }
 
   // ---- What is standing here (ADR-079) ----------------------------------------------------------
   //
@@ -675,13 +781,25 @@ void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFr
     // target grows and the drawing does not. A 44px badge beside a system name would be a different
     // map rather than a bigger box. The rectangle is centred on what is drawn, so where a finger
     // aims and where the eye aims are the same point.
+    // **The origin wears an outline while its fleet is being moved** (ADR-113), so the question
+    // *where is this going FROM* is answered on the map rather than only in the banner.
+    if (yours && _index == _frame.moveOrigin)
+    {
+      _shapes.StrokeRect(badgeX - MOVE_ORIGIN_OFFSET - MOVE_ORIGIN_OUTLINE, badgeTop - MOVE_ORIGIN_OFFSET - MOVE_ORIGIN_OUTLINE,
+                         badgeWidth + 2.0F * (MOVE_ORIGIN_OFFSET + MOVE_ORIGIN_OUTLINE),
+                         BADGE_HEIGHT + 2.0F * (MOVE_ORIGIN_OFFSET + MOVE_ORIGIN_OUTLINE), Ink::TEXT_PRIMARY, MOVE_ORIGIN_OUTLINE);
+    }
+
     const float hitWidth = std::max(badgeWidth, BADGE_TOUCH_FLOOR);
-    _hits.push_back(MapHit{.x = badgeX - (hitWidth - badgeWidth) * 0.5F,
-                           .y = badgeTop - (BADGE_TOUCH_FLOOR - BADGE_HEIGHT) * 0.5F,
-                           .width = hitWidth,
-                           .height = BADGE_TOUCH_FLOOR,
-                           .system = yours ? EventRefs::NONE : _index,
-                           .fleetsAt = yours ? _index : EventRefs::NONE});
+    if (!moving)
+    {
+      _hits.push_back(MapHit{.x = badgeX - (hitWidth - badgeWidth) * 0.5F,
+                             .y = badgeTop - (BADGE_TOUCH_FLOOR - BADGE_HEIGHT) * 0.5F,
+                             .width = hitWidth,
+                             .height = BADGE_TOUCH_FLOOR,
+                             .system = yours ? EventRefs::NONE : _index,
+                             .fleetsAt = yours ? _index : EventRefs::NONE});
+    }
     // The badge is drawn ink competing for the same strip as the next system's name, so it joins
     // the field rather than only avoiding it.
     _labels.placed.push_back(LabelField::Box{badgeX, badgeTop, badgeX + badgeWidth, badgeTop + BADGE_HEIGHT});
@@ -797,7 +915,14 @@ void DrawFleetOverlay(FontRenderer& _text, const MapFrame& _frame, std::vector<M
   {
     const float clamped = std::clamp(head.xPixels, paneX + labelWidth * 0.5F + 4.0F, paneX + paneWidth - labelWidth * 0.5F - 4.0F);
     DrawCentered(_text, clamped, _labels.Place(clamped, labelY, FontRenderer::MeasurePixels(label)), label, owner);
-    _hits.push_back(MapHit{.x = head.xPixels - 14.0F, .y = head.yPixels - 22.0F, .width = 28.0F, .height = 36.0F, .fleet = _index});
+
+    // **No marker is a target while a move is being chosen** (ADR-113): the only things the map
+    // offers then are the systems this fleet may be sent to, and a tap anywhere else leaves the
+    // mode.
+    if (_frame.moveOrigin == EventRefs::NONE)
+    {
+      _hits.push_back(MapHit{.x = head.xPixels - 14.0F, .y = head.yPixels - 22.0F, .width = 28.0F, .height = 36.0F, .fleet = _index});
+    }
   }
   else
   {
@@ -886,6 +1011,8 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   // first and depth-tests against nothing, so the galaxy covers it.
   _frame.sky.Draw(_shapes, camera, STAR);
 
+  const bool moving = _frame.moveOrigin != EventRefs::NONE;
+
   const auto project = [&camera](const Neuron::OrbitCamera::WorldPoint& _world) { return camera.Project(_world); };
   const auto groundOf = [&](std::int32_t _system)
   {
@@ -926,6 +1053,40 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
       continue;
     }
     labels.lanes.push_back(LabelField::Segment{a.xPixels, a.yPixels, b.xPixels, b.yPixels});
+
+    // **While a move is being chosen, a lane is either an offer or it is out of the way**
+    // (ADR-113). The ones out of the origin that lead somewhere the fleet may go are drawn in blue
+    // with the dashes marching toward the destination, and the one already chosen is solid; every
+    // other lane on the plane drops to a hairline, so the blue on the map is the choice and nothing
+    // else. The tick cost drops with its lane, because the chip under the lit system's name carries
+    // the same number and says the arrival tick too.
+    const MoveTarget* offered = nullptr;
+    if (moving)
+    {
+      const std::int32_t other = lane.a == _frame.moveOrigin ? lane.b : (lane.b == _frame.moveOrigin ? lane.a : EventRefs::NONE);
+      offered = other == EventRefs::NONE ? nullptr : TargetFor(_frame, other);
+    }
+
+    if (moving && offered == nullptr)
+    {
+      _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, LANE_UNLIT, 1.2F);
+      DrawCentered(_text, (a.xPixels + b.xPixels) * 0.5F, static_cast<std::int32_t>(std::lround((a.yPixels + b.yPixels) * 0.5F)) - 4,
+                   std::to_string(lane.cost), LANE_UNLIT);
+      continue;
+    }
+    if (offered != nullptr)
+    {
+      if (offered->system == _frame.moveSelected)
+      {
+        _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, Ink::BLUE, 2.5F);
+      }
+      else
+      {
+        _shapes.DashedLine(a.xPixels, a.yPixels, b.xPixels, b.yPixels, Ink::BLUE, 1.5F, MOVE_DASH, MOVE_GAP,
+                           _frame.animationSeconds * MOVE_DASH_PIXELS_PER_SECOND);
+      }
+      continue;
+    }
 
     switch (lane.kind)
     {
@@ -1107,8 +1268,15 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   // `MAP - FOCUS: HALVORSEN` in the top-left corner (DESIGN-GUIDELINES "Map"). The map is no
   // longer captioned with a census -- that is on the top bar now -- and says instead what it is
   // currently pointed at, because the digest can point it somewhere.
-  _text.DrawText(static_cast<std::int32_t>(paneX) + 12, static_cast<std::int32_t>(Frame::TOP_BAR_HEIGHT) + 12,
-                 FocusLine(_frame.state, _frame.focusedSystem), Ink::TEXT_DETAIL);
+  //
+  // **The move mode's banner takes this corner** (ADR-113), so it is not drawn under one: the
+  // banner is interface and this is world text, and interface is drawn second -- a caption left
+  // here would be a caption the banner cannot cover.
+  if (!moving)
+  {
+    _text.DrawText(static_cast<std::int32_t>(paneX) + 12, static_cast<std::int32_t>(Frame::TOP_BAR_HEIGHT) + 12,
+                   FocusLine(_frame.state, _frame.focusedSystem), Ink::TEXT_DETAIL);
+  }
 
   // The legend earns its place: the owner colours are also the semantic colours, so a player who
   // learns this row can read every other coloured thing on the screen.

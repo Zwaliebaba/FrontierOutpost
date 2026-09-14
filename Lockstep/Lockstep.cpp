@@ -110,6 +110,15 @@ struct Startup
   /// button that cannot do what it says.
   bool developerControls = false;
 
+  /// `--still` holds the two things on the main page that move on their own -- a fleet's rolling
+  /// route dashes (ADR-055) and the move mode's pulsing rings (ADR-113) -- at phase zero.
+  ///
+  /// **A capture of something that breathes is a capture of whichever phase the shutter caught.**
+  /// `Build/Screenshot.ps1` waits two seconds and photographs whatever is on the screen, so a
+  /// picture of the move mode taken twice is two different pictures. Both animations are pure
+  /// functions of one clock; this stops the clock rather than special-casing either of them.
+  bool still = false;
+
   /// `--bots <n>` puts bots in the LAST n seats of a `--serve` match.
   ///
   /// **Without it the headless runner runs a match nobody plays.** `--serve` listens and ticks on
@@ -317,6 +326,10 @@ void SplitHostAndPort(const std::string& _target, std::string& _outHost, std::ui
     else if (words[index] == "--dev")
     {
       startup.developerControls = true;
+    }
+    else if (words[index] == "--still")
+    {
+      startup.still = true;
     }
   }
 
@@ -1452,6 +1465,7 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
     // it says why. Nothing else on this screen changes.
     page.SetOffline(kind == Lockstep::ConnectionDialog::Kind::Lost);
     page.SetDeveloperControls(_startup.developerControls);
+    page.SetStill(_startup.still);
 
     switch (dialog.TakeAction())
     {
