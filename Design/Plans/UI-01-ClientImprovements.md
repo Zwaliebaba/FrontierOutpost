@@ -261,15 +261,21 @@ token.
 - **Done when:** `05-match-finished.png` retaken.
 
 ### 3.5 Destination sheet
+**Done 2026-09-14 — ADR-092.**
+
 - Sort rows by ETA ascending, then name.
 - A candidate held by a rival: draw the ship count and `+DEF` in the owner's colour rather than body colour. No verdict (ADR-063 unchanged).
 - **Done when:** `01-destination-sheet.png` retaken; SCREENS.md §01 Destination updated.
 
 ### 3.6 Signal sheet
+**Done 2026-09-14 — ADR-093**, which amends ADR-064.
+
 - Pin the `CONCEDE` band and `Concede` row above the `CANCEL` bar and exclude them from the six-row cap so real signals never lose a slot to it. Two-tap and red-from-first-tap behaviour unchanged (ADR-064).
 - **Done when:** `01-signal-sheet.png`, `01-signal-sheet-armed.png` retaken; ADR-064 amended.
 
 ### 3.7 Missed digests
+**Done 2026-09-14 — ADR-094**, which closes ADR-044's open question.
+
 - When the backlog window was clipped at eight ticks, add a muted 17px line under the delta box: `Older ticks were not kept.` (Detect: `unreadTicks > 8` in the match loop.)
 - **Done when:** unit test in `DigestViewTests`; ADR-044's open question closed.
 

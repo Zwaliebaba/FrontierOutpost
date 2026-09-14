@@ -69,6 +69,15 @@ public:
   static constexpr float BUTTON_HEIGHT = 18.0F;
   static constexpr float VERDICT_BOX_PADDING = 5.0F;
 
+  /// How many ticks of digest the server keeps per player (`NeuronServer::Session::DIGEST_HISTORY`).
+  ///
+  /// **Stated here because the client cannot ask.** It does not link `NeuronServer` any more than it
+  /// links `GameLogic`, and the number is not on the wire; what it is used for is one muted line
+  /// admitting that a longer absence lost something (ADR-094). If the server's window changes and
+  /// this does not, the line appears one tick early or late -- which is a cosmetic error about a
+  /// cosmetic line, and the alternative is a wire field for a sentence.
+  static constexpr std::uint32_t DIGEST_HISTORY_TICKS = 8;
+
   /// The digest's own two bands, both 22 pixels (ADR-061).
   ///
   /// **22 is what a label that is also a control costs on this screen** -- it is the section header

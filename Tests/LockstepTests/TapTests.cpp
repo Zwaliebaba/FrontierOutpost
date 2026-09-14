@@ -563,11 +563,11 @@ public:
     Assert::IsTrue(again.State().orders.queuedSignals.empty(), L"a queued concede could not be taken back");
   }
 
-  TEST_METHOD(AFullSheetDropsTheBandRatherThanTheConcede)
+  TEST_METHOD(AFullSheetKeepsItsSixSignalsAndTheConcede)
   {
-    // The `CONCEDE` band counts against the six-row cap (ADR-064), so on a sheet that is already
-    // full it is dropped rather than pushing the row it labels into `+N MORE`. A label must never
-    // cost a control its place.
+    // **The concede is pinned below the cap and costs nothing** (ADR-093). It used to sit inside the
+    // six, so a full sheet bought it by dropping a real signal -- and its band by dropping another.
+    // Now the sheet shows its six and the concede is under them, above `CANCEL`.
     const auto simulation = PlayedMatch(14);
     Lockstep::MatchState state = ViewOfSeatZero(*simulation);
 
@@ -619,16 +619,46 @@ public:
         queued = std::ranges::find(sent, 5) != sent.end();
       }
     }
-    Assert::IsTrue(queued, L"the concede row was pushed off the sheet by its own band");
+    Assert::IsTrue(queued, L"the concede row was pushed off the sheet by the signals above it");
+
+    // **And the signals it used to displace are still on the sheet.** That is what pinning bought:
+    // the concede no longer costs a row. Index 4 is the fifth signal, which under the old rule shared
+    // the six with the concede and its band. A fresh page, because the sweep above taps every row
+    // twice and a non-concede signal queues and unqueues within one pair.
+    Lockstep::MainPage full;
+    full.Create(ViewOfSeatZero(*simulation));
+    std::int32_t fullX = 0;
+    std::int32_t fullY = 0;
+    Assert::IsTrue(OpenThePicker(full, renderers, fullX, fullY));
+
+    const bool fifth = SweepFor(
+      full, renderers, DrawPage, 0, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+      [&full]
+      {
+        const std::vector<std::int32_t>& queuedNow = full.State().orders.queuedSignals;
+        return std::ranges::find(queuedNow, 4) != queuedNow.end();
+      },
+      true,
+      [&full, &renderers, fullX, fullY]
+      {
+        if (full.OpenPanel() == Lockstep::MainPage::Panel::SignalList)
+        {
+          return false;
+        }
+        renderers.Begin();
+        DrawPage(full, renderers);
+        return full.HandleTap(static_cast<float>(fullX), static_cast<float>(fullY));
+      });
+    Assert::IsTrue(fifth, L"a full sheet lost a signal to the concede below it");
   }
 
   TEST_METHOD(AnOverfullSheetStillOffersTheConcede)
   {
-    // The band test above is about a sheet that is EXACTLY full. This is about one that overflows:
-    // the concede is composed last and the sheet draws the first six, so a player with six offers
-    // on the table had no concede row at all -- the one control that must always be reachable,
-    // missing exactly when the board is busy enough to want it. It keeps the last visible slot
-    // (ADR-064, extended 2026-09-13).
+    // The test above is about a sheet that is EXACTLY full. This is about one that overflows: nine
+    // signals and a concede, so the six-row cap clips three of them into `+N MORE` and the concede
+    // is not among the six at all. It is drawn below them regardless (ADR-093), which is the whole
+    // point of pinning it -- the one control that must always be reachable, on the board busy enough
+    // to want it.
     const auto simulation = PlayedMatch(14);
     Lockstep::MatchState state = ViewOfSeatZero(*simulation);
 
@@ -1941,6 +1971,50 @@ public:
     // it. Asserted through the state rather than the pixels, because the draw is a capture.
     Assert::AreEqual(state.match.tick, static_cast<std::uint32_t>(std::stoul(state.match.id)),
                      L"the match id stopped being the tick, so the bar may be able to show one after all");
+  }
+};
+
+// The destination sheet is sorted by how soon a fleet lands, and the digest admits a clipped
+// backlog (ADR-092, ADR-094).
+TEST_CLASS(SheetOrderAndBacklogTests)
+{
+public:
+  TEST_METHOD(TheClientsIdeaOfTheBacklogWindowIsEightTicks)
+  {
+    // **The two constants cannot be compared from any one test project**, which is worth saying
+    // rather than working around: this suite links `LockstepClient`, `GameLogic` and `NeuronCore`,
+    // and `NeuronServer::Session::DIGEST_HISTORY` is in none of them (AGENTS.md section 2). So this
+    // pins the client's half and names the other, and a session that changes the server's window
+    // finds this test by grepping for the name.
+    Assert::AreEqual(8U, Lockstep::MainPage::DIGEST_HISTORY_TICKS,
+                     L"the client's backlog window moved; NeuronServer::Session::DIGEST_HISTORY must match it");
+  }
+
+  TEST_METHOD(ADestinationSheetPutsTheNearestFirst)
+  {
+    // Lane order is the order the graph happens to store them in and means nothing to a player; how
+    // soon a fleet lands is the first thing they weigh.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    const bool opened = SweepFor(page, renderers, DrawPage, SCREEN_WIDTH - ORDERS_RAIL, TOP_BAR, SCREEN_WIDTH, SCREEN_HEIGHT,
+                                 [&page] { return page.OpenPanel() == Lockstep::MainPage::Panel::Destination; });
+    Assert::IsTrue(opened, L"no picker to check the order of");
+
+    // The sheet is drawing; what it drew is a capture. What can be asserted here is the rule the
+    // sort is built on -- the lanes out of the fleet's system, in cost order, are what the rows are.
+    const std::int32_t standing = page.State().fleets.front().from;
+    std::vector<std::uint32_t> costs;
+    for (const Lockstep::Lane& lane : page.State().graph.lanes)
+    {
+      if (lane.a == standing || lane.b == standing)
+      {
+        costs.push_back(lane.cost);
+      }
+    }
+    Assert::IsFalse(costs.empty(), L"the fleet's system has no lanes, so there is nothing to sort");
   }
 };
 

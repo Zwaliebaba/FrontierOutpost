@@ -142,7 +142,9 @@ and, for a sheet left open across the lock, `06-at-lock-sheet.png`.
   cover).
 - **Destination** (`MOVE FLT 1 - PICK LANE`): opened by the fleet's FLEETS row on the rail, by its
   system's garrison badge on the map (through the fleet list where a system holds several,
-  ADR-079), by `MOVE` on a card, or by tapping a marker of your own that has not departed yet; never for a fleet
+  ADR-079), by `MOVE` on a card, or by tapping a marker of your own that has not departed yet.
+  **Nearest first, then by name** (ADR-092), and a held candidate's second line is drawn in the
+  holder's colour rather than in body ink; never for a fleet
   the server has on a lane, because the lock refuses a second order on one (ADR-077). One row per
   lane out of **where the fleet stands**: owner square,
   `PELL`, `UNCLAIMED` / `YOURS` / `P3` with the hostile ships standing there and `+DEF` appended
@@ -159,8 +161,9 @@ and, for a sheet left open across the lock, `06-at-lock-sheet.png`.
 - **Signal** (`SIGNAL - PICK ONE`): opened from the rail's `SIGNALS` header; the six kinds of
   ADR-039 as rows with `SENDING` / `TAP AGAIN TO CONFIRM` on the right; `Concede` always last,
   needing two taps, under a 22px `CONCEDE` band of its own and said in red from the first tap
-  (ADR-064) — the band counts against the six-row cap and is dropped, never the row, when the sheet
-  is full; `Concede` alone when the empire has met nobody — the `NOTHING TO SAY YET` row is
+  (ADR-064). **The band and the row are pinned below the six and outside the count** (ADR-093),
+  immediately above `CANCEL`, so the sheet's six are six real signals and `+N MORE` counts only
+  them; `Concede` alone when the empire has met nobody — the `NOTHING TO SAY YET` row is
   written for an empty list, and the list is never empty because `Concede` is always on it; fourteen
   rows offered and the rest counted.
 - **Replay** (`REPLAY TICK 7`): the stub of screen 07.

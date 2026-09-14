@@ -1251,6 +1251,17 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
       _text.DrawText(static_cast<std::int32_t>(cellX), cellY, delta.cells[index].text, delta.cells[index].loss ? Ink::RED : Ink::AMBER);
     }
     y += boxHeight + 6.0F;
+
+    // **What the backlog could not carry** (ADR-094). The server keeps the last `DIGEST_HISTORY`
+    // ticks per player and sends the whole of it on arrival (ADR-044); a player who was away longer
+    // gets that window and no warning that anything fell off the front of it. The delta box's
+    // counts are honest about the ticks it HAS, which is exactly what makes the gap invisible.
+    if (m_state.unreadTicks > DIGEST_HISTORY_TICKS)
+    {
+      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), static_cast<std::int32_t>(y), "Older ticks were not kept.", Ink::NEUTRAL_DIM,
+                     Face::SansRegular);
+      y += static_cast<float>(LINE_HEIGHT) + 6.0F;
+    }
   }
 
   // ---- The cards, and which of them are on the screen -------------------------------------------------
@@ -1922,15 +1933,28 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     /// Whether this row is said in the loss colour. The one row on any sheet that cannot be taken
     /// back once it resolves, and nothing else.
     bool alarm = false;
+    /// What this row sorts by, where its sheet sorts at all. The destination picker's is the lane
+    /// cost, so the nearest destination is first (ADR-092); every other sheet leaves it at zero and
+    /// keeps the order it composed rows in.
+    std::uint32_t sortBy = 0;
+    /// The second line's ink. Muted unless the line is ABOUT somebody -- a destination's garrison is
+    /// the rival who is standing there, and their colour is what says which rival (ADR-092).
+    ///
+    /// **Last in the aggregate, and that is load-bearing.** Most rows on most sheets are built with
+    /// positional braces, so a field inserted in the middle of this silently rebinds every one of
+    /// them -- which it did, and the compiler caught it only because a `std::int32_t` target will
+    /// not narrow into a `Color`.
+    Color detailInk = Ink::TEXT_MUTED;
   };
 
   constexpr Color NO_ACCENT = {0, 0, 0, 0};
 
   std::vector<SheetRow> rows;
 
-  /// Whether the LAST row composed must be drawn whatever else is dropped. Only the concede sets
-  /// it: every other row on every sheet is equal, and the first six win.
-  bool lastRowMustSurvive = false;
+  /// Rows drawn BELOW the capped list and outside the count, immediately above `CANCEL`. Only the
+  /// concede uses it (ADR-093): it is the one control on this screen that must always be reachable,
+  /// and every other row on every sheet is equal, so the first six win.
+  std::vector<SheetRow> pinned;
   std::string title;
 
   /// Whether a row on this sheet is dim for want of credits, which is what decides whether the
@@ -2111,11 +2135,33 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
         held += " · CONTESTED";
       }
 
-      rows.push_back(SheetRow{Uppercased(node.name), held,
-                              std::format("{} · ETA T{}", lane.cost == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", lane.cost),
-                                          m_state.OrdersTick() + lane.cost - 1),
-                              OwnerColor(node.owner, m_state.viewer), !OrdersEditable() ? EventRefs::NONE : other});
+      // **A held candidate says whose it is in their own colour** (ADR-092). The row's owner square
+      // already carries it; the line that says `P3 · 11 +DEF` is the one being read while the
+      // decision is made, and in body ink it reads as a number rather than as a rival.
+      rows.push_back(
+        SheetRow{.title = Uppercased(node.name),
+                 .detail = held,
+                 .right = std::format("{} · ETA T{}", lane.cost == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", lane.cost),
+                                      m_state.OrdersTick() + lane.cost - 1),
+                 .accent = OwnerColor(node.owner, m_state.viewer),
+                 .target = !OrdersEditable() ? EventRefs::NONE : other,
+                 .sortBy = lane.cost,
+                 .detailInk = node.owner == NOBODY ? Ink::TEXT_MUTED : OwnerColor(node.owner, m_state.viewer)});
     }
+
+    // **Nearest first, then by name** (ADR-092). The picker was in lane order, which is the order
+    // the graph happens to store them in and means nothing to a player; how soon a fleet lands is
+    // the first thing they weigh, and two lanes of the same length sort by name so the list does not
+    // reshuffle between two frames of one state.
+    std::ranges::stable_sort(rows,
+                             [](const SheetRow& _a, const SheetRow& _b)
+                             {
+                               if (_a.sortBy != _b.sortBy)
+                               {
+                                 return _a.sortBy < _b.sortBy;
+                               }
+                               return _a.title < _b.title;
+                             });
     break;
   }
   case Panel::SignalList:
@@ -2171,19 +2217,15 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
 
       // The band is a label and a label must not cost a row anything. Added only when it and the
       // row under it both fit inside the cap; beyond that the red text carries the warning alone.
-      if (rows.size() + 2 <= SHEET_MAXIMUM_ROWS)
-      {
-        rows.push_back(SheetRow{.title = "CONCEDE", .accent = NO_ACCENT, .target = EventRefs::NONE, .band = true});
-      }
+      pinned.push_back(SheetRow{.title = "CONCEDE", .accent = NO_ACCENT, .target = EventRefs::NONE, .band = true});
 
       // Red from the first tap, and the armed row says what the NEXT tap does rather than what this
       // row is -- the only warning a concede gets and the only one it needs.
-      lastRowMustSurvive = true;
-      rows.push_back(SheetRow{.title = signal.title,
-                              .right = queued ? "SENDING" : (armed ? "TAP AGAIN TO CONFIRM" : std::string{}),
-                              .accent = armed || queued ? Ink::RED : NO_ACCENT,
-                              .target = !OrdersEditable() ? EventRefs::NONE : concede,
-                              .alarm = armed || queued});
+      pinned.push_back(SheetRow{.title = signal.title,
+                                .right = queued ? "SENDING" : (armed ? "TAP AGAIN TO CONFIRM" : std::string{}),
+                                .accent = armed || queued ? Ink::RED : NO_ACCENT,
+                                .target = !OrdersEditable() ? EventRefs::NONE : concede,
+                                .alarm = armed || queued});
     }
     break;
   }
@@ -2213,20 +2255,12 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   // More rows than fit are REPORTED rather than dropped. A picker that quietly forgets a lane is a
   // picker that cannot be trusted about the ones it did show.
   //
-  // **THE CONCEDE KEEPS THE LAST VISIBLE SLOT** (ADR-064, extended 2026-09-13). It is composed last
-  // and the sheet draws the first six, so a player with six offers on the table had no concede row
-  // at all -- the one control on this screen that must always be reachable, gone precisely when the
-  // board is busy enough to want it. The offers it displaces are counted in the `+N` line like any
-  // other. Found by `ConcedingTakesTwoTapsOnTheSameRow` when ADR-069 changed how the bots expand
-  // and seat zero's sixth offer arrived.
+  // **THE CONCEDE IS PINNED BELOW THE SIX, NOT INSIDE THEM** (ADR-064, amended by ADR-093). It must
+  // always be reachable -- it is the only order on this screen that cannot be taken back and the
+  // only way out of a match -- and keeping it inside the cap made it cost a real signal every time
+  // the board got busy enough to want both. It sits above `CANCEL`, under its own band, and neither
+  // it nor the band counts against the six.
   const std::size_t clippedBefore = rows.size();
-  if (lastRowMustSurvive && rows.size() > SHEET_MAXIMUM_ROWS)
-  {
-    SheetRow survivor = std::move(rows.back());
-    rows.resize(SHEET_MAXIMUM_ROWS - 1);
-    rows.push_back(std::move(survivor));
-  }
-
   const std::size_t shown = std::min(rows.size(), SHEET_MAXIMUM_ROWS);
   const bool clipped = clippedBefore > shown;
 
@@ -2241,6 +2275,10 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   for (std::size_t index = 0; index < shown; ++index)
   {
     listHeight += rows[index].band ? SHEET_BAND_HEIGHT : SHEET_ROW_HEIGHT;
+  }
+  for (const SheetRow& row : pinned)
+  {
+    listHeight += row.band ? SHEET_BAND_HEIGHT : SHEET_ROW_HEIGHT;
   }
 
   // **One slot under the header for the thing the rows cannot say about themselves**, and two
@@ -2309,10 +2347,15 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   }
 
   // ---- Rows ------------------------------------------------------------------------------------
+  //
+  // The capped list, then whatever is pinned below it (ADR-093). One lambda, because a pinned row is
+  // an ordinary row that is simply not counted -- a second copy of this would be a second place for
+  // a band's rule or a row's hit rectangle to drift.
   float rowY = y + SHEET_HEADER_HEIGHT + helpHeight;
-  for (std::size_t index = 0; index < shown; ++index)
+  bool previousWasBand = true;
+
+  const auto drawRow = [&](const SheetRow& row)
   {
-    const SheetRow& row = rows[index];
     const bool tappable = row.target != EventRefs::NONE;
 
     // A band is a label over what follows it, drawn like the rails' section headers: a rule, then
@@ -2322,14 +2365,16 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       _shapes.FillRect(x + CARD_PADDING, rowY, width - 2.0F * CARD_PADDING, 1.0F, Ink::DIVIDER);
       _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(rowY, SHEET_BAND_HEIGHT), row.title, Ink::TEXT_MUTED);
       rowY += SHEET_BAND_HEIGHT;
-      continue;
+      previousWasBand = true;
+      return;
     }
 
     // No second rule directly under a band's: one line is a section header and two is a box.
-    if (index > 0 && !rows[index - 1].band)
+    if (!previousWasBand)
     {
       _shapes.FillRect(x + CARD_PADDING, rowY, width - 2.0F * CARD_PADDING, 1.0F, Ink::DIVIDER);
     }
+    previousWasBand = false;
 
     float textX = x + CARD_PADDING;
     if (row.accent.alpha != 0)
@@ -2346,8 +2391,8 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
 
     if (!row.detail.empty())
     {
-      _text.DrawText(static_cast<std::int32_t>(textX), static_cast<std::int32_t>(rowY) + 26, row.detail, Ink::TEXT_MUTED,
-                     Face::SansRegular);
+      _text.DrawText(static_cast<std::int32_t>(textX), static_cast<std::int32_t>(rowY) + 26, row.detail,
+                     tappable ? row.detailInk : Ink::NEUTRAL_DIM, Face::SansRegular);
     }
     if (!row.right.empty())
     {
@@ -2360,6 +2405,11 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
       AddHit(x, rowY, width, SHEET_ROW_HEIGHT, rowAction, row.target);
     }
     rowY += SHEET_ROW_HEIGHT;
+  };
+
+  for (std::size_t index = 0; index < shown; ++index)
+  {
+    drawRow(rows[index]);
   }
 
   if (clipped)
@@ -2368,6 +2418,13 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(rowY, SHEET_CLIPPED_HEIGHT),
                    std::format("+{} MORE THAN THIS SHEET CAN SHOW", clippedBefore - shown), Ink::NEUTRAL_DIM);
     rowY += SHEET_CLIPPED_HEIGHT;
+    previousWasBand = false;
+  }
+
+  // Below the count and above `CANCEL`: the concede, and nothing else today (ADR-093).
+  for (const SheetRow& row : pinned)
+  {
+    drawRow(row);
   }
 
   // ---- Cancel ----------------------------------------------------------------------------------
