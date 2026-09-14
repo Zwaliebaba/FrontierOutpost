@@ -94,6 +94,24 @@ constexpr float OWNER_DISC_SCALE = 0.9F;
 /// a picture with a highlight painted on (ADR-103).
 constexpr Neuron::OrbitCamera::WorldPoint LIGHT_DIRECTION = {-0.87905F, 0.46538F, 0.10342F};
 
+/// Where a station's shadow falls, and it is DELIBERATELY NOT THE KEY LIGHT (ADR-105).
+///
+/// normalize(-0.51, 0.86, 0.06): the same bearing across the plane as the key, and much steeper. An
+/// honest shadow from a light raked this far is 1.9 times the stem's height -- 38 world units for a
+/// base station and 118 for a rich capital, on a map whose systems sit 40 to 80 units apart -- so
+/// every tall station would throw its shadow across its neighbour's footprint. This one lands at
+/// 0.60 of the height: 12 units and 37, each beside its own foot.
+///
+/// **It is a lie and it is the lie every stylised renderer tells.** The mismatch between where the
+/// light visibly comes from and where the shadow falls is not readable at this scale, and what it
+/// buys is a shadow that says how tall a station is instead of which neighbour it is nearest.
+constexpr Neuron::OrbitCamera::WorldPoint SHADOW_DIRECTION = {-0.50916F, 0.85858F, 0.05990F};
+
+/// Half the width of a stem's column, in world units. About two canvas pixels at the opening
+/// framing and more as the player zooms in -- wide enough to read as a solid with two faces, which
+/// a 1px line never could (ADR-105).
+constexpr float STEM_HALF_WIDTH = 1.2F;
+
 /// The garrison badge beside a system's name (ADR-079). 16 is the `LOCKED` chip's height, which is
 /// what a chip is on this screen; there is no rounded-rectangle primitive and every other chip here
 /// is square, so this one is too.
@@ -468,28 +486,23 @@ void DrawStationGround(ShapeRenderer& _shapes, Neuron::MeshRenderer& _meshes, co
   const Color owner = OwnerColor(node.owner, _frame.state.viewer);
   constexpr Color NO_FILL = {0, 0, 0, 0};
 
+  // ---- The cast shadow (ADR-105) ---------------------------------------------------------------
+  //
+  // **Offset along the light rather than centred under the foot**, which is what says the ball is
+  // floating at a height rather than sitting at a point. It is the strongest grounding cue there
+  // is, and it only became worth drawing when ADR-104 raked the key light: under a light sitting
+  // behind the eye the offset was foreshortened to nothing.
+  const float shadowReach = station.stemHeight / SHADOW_DIRECTION.y;
+  DrawGroundCircle(_shapes, _frame, node.positionX - SHADOW_DIRECTION.x * shadowReach, node.positionY - SHADOW_DIRECTION.z * shadowReach,
+                   station.worldRadius * CONTACT_SHADOW_SCALE, WithAlpha(Neuron::BLACK, Ink::STATION_SHADOW_ALPHA), NO_FILL, false);
+
   // The ground circles deform with the camera like everything else on the plane -- round from
-  // overhead, a sliver from low down. Black under the ball, the owner on the plate, and the yield
-  // as a dashed reach around both.
-  DrawGroundCircle(_shapes, _frame, node.positionX, node.positionY, station.worldRadius * CONTACT_SHADOW_SCALE,
-                   WithAlpha(Neuron::BLACK, Ink::STATION_SHADOW_ALPHA), NO_FILL, false);
+  // overhead, a sliver from low down. The owner on the plate at the foot, and the yield as a
+  // dashed reach around it.
   DrawGroundCircle(_shapes, _frame, node.positionX, node.positionY, station.worldRadius * OWNER_DISC_SCALE,
                    WithAlpha(owner, Ink::STATION_DISC_ALPHA), NO_FILL, false);
   DrawGroundDashedRing(_shapes, _frame, node.positionX, node.positionY, FootprintRadiusFor(node.production),
                        WithAlpha(owner, Ink::STATION_FOOTPRINT_ALPHA), FOOTPRINT_DASH);
-
-  // The stem, with a rung every ten units so its height is a reading and not only a comparison.
-  const Color stemInk = WithAlpha(owner, Ink::STATION_STEM_ALPHA);
-  _shapes.Line(station.ground.xPixels, station.ground.yPixels, station.top.xPixels, station.top.yPixels, stemInk);
-  for (std::uint32_t step = 1; static_cast<float>(step) * STEM_RUNG_SPACING < station.stemHeight; ++step)
-  {
-    const float height = static_cast<float>(step) * STEM_RUNG_SPACING;
-    const Neuron::OrbitCamera::ScreenPoint rung = _frame.view.Camera().Project(MapView::Above(node.positionX, node.positionY, height));
-    if (rung.visible)
-    {
-      _shapes.FillRect(std::round(rung.xPixels) - STEM_RUNG_WIDTH * 0.5F, std::round(rung.yPixels), STEM_RUNG_WIDTH, 1.0F, stemInk);
-    }
-  }
 
   if (station.capital)
   {
@@ -497,12 +510,19 @@ void DrawStationGround(ShapeRenderer& _shapes, Neuron::MeshRenderer& _meshes, co
                         WithAlpha(owner, 46));
   }
 
-  // The ball: a lit solid in the world at the top of the stem, its two tones authored here and
-  // chosen between per pixel by the light (ADR-103). Ownership stays colour-only -- the shape is
-  // the same for everybody.
-  const Color lit = BallTone(owner);
-  _meshes.Sphere(MapView::Above(node.positionX, node.positionY, station.stemHeight), station.worldRadius, lit, Ink::Shaded(lit),
-                 Ink::Rimmed(lit), Neuron::MeshRenderer::SegmentsForRadius(station.radiusPixels));
+  // ---- The solid, into the mesh recorder -------------------------------------------------------
+  //
+  // **The stem is a column and not a line** (ADR-105). A 1px line is the same line at every depth
+  // and under every light; a column has a face toward the light and a face away from it, converges
+  // with distance, and is depth-tested against the balls like everything else standing up. Its
+  // tones are the ball's, so a station is one material.
+  //
+  // The ball sits at the top of it. Ownership stays colour-only -- the shape is the same for
+  // everybody.
+  const Color ballTone = BallTone(owner);
+  _meshes.Column(MapView::Ground(node.positionX, node.positionY), station.stemHeight, STEM_HALF_WIDTH, Ink::FlatRampFor(ballTone));
+  _meshes.Sphere(MapView::Above(node.positionX, node.positionY, station.stemHeight), station.worldRadius, Ink::RampFor(ballTone),
+                 Neuron::MeshRenderer::SegmentsForRadius(station.radiusPixels));
 }
 
 /// The half of a station that sits OVER its ball: the rings, the name, what is written under its
@@ -523,6 +543,24 @@ void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFr
   const float radius = station.radiusPixels;
   const bool capital = station.capital;
   const Color owner = OwnerColor(node.owner, _frame.state.viewer);
+
+  // The rungs, a mark every ten world units so a height is a READING and not only a comparison with
+  // the neighbour. They are over the column rather than under it: the stem is a solid now, and a
+  // rung recorded before the mesh pass would be painted over by the very column it measures.
+  // Stopping a ball's radius short of the top, because a rung drawn where the ball is is a rung
+  // drawn ON the ball -- measured as a four-pixel bite out of Torvald's silhouette on the first
+  // build of the column.
+  const float highestRung = station.stemHeight - station.worldRadius;
+  for (std::uint32_t step = 1; static_cast<float>(step) * STEM_RUNG_SPACING < highestRung; ++step)
+  {
+    const float height = static_cast<float>(step) * STEM_RUNG_SPACING;
+    const Neuron::OrbitCamera::ScreenPoint rung = _frame.view.Camera().Project(MapView::Above(node.positionX, node.positionY, height));
+    if (rung.visible)
+    {
+      _shapes.FillRect(std::round(rung.xPixels) - STEM_RUNG_WIDTH * 0.5F, std::round(rung.yPixels), STEM_RUNG_WIDTH, 1.0F,
+                       WithAlpha(owner, Ink::STATION_STEM_ALPHA));
+    }
+  }
 
   if (HasFlag(node.flags, SystemFlags::Contested))
   {

@@ -73,6 +73,12 @@ inline constexpr Neuron::Color STAR = {214, 220, 228, 220};
 /// turned away from the light.
 inline constexpr float STATION_SHADE = 0.58F;
 
+/// The band between the lit one and the shadow: the same colour a shorter way toward the
+/// background (ADR-105). 0.30 against 0.58 puts it halfway down the ramp in blue -- 255, 185, 119
+/// -- so two adjacent bands two pixels wide are still told apart, which is the whole difficulty at
+/// this ball size.
+inline constexpr float STATION_HALF_SHADE = 0.30F;
+
 /// How far the silhouette's tone is lifted toward white (ADR-104). The rim is a THIRD authored
 /// tone, not a computed one -- the shader selects it exactly as it selects the other two -- and
 /// white rather than the owner's own colour because it is the light getting past the ball rather
@@ -96,19 +102,48 @@ inline constexpr std::uint8_t STATION_YIELD_ALPHA = 190;
   return Neuron::Mix(_lit, APP_BACKGROUND, STATION_SHADE);
 }
 
+/// The band the light only grazes.
+[[nodiscard]] constexpr Neuron::Color HalfLit(const Neuron::Color& _lit) noexcept
+{
+  return Neuron::Mix(_lit, APP_BACKGROUND, STATION_HALF_SHADE);
+}
+
 /// The silhouette's tone for a lit one. Opaque, for the reason `Shaded` is.
 [[nodiscard]] constexpr Neuron::Color Rimmed(const Neuron::Color& _lit) noexcept
 {
   return Neuron::Mix(_lit, Neuron::WHITE, STATION_RIM);
 }
 
-// The ramp runs the right way round, as ADR-012 had every pair asserted: a station is never darker
-// where the light finds it, and never dimmer on the limb the light gets past than in the shadow
-// beside it.
-static_assert(Neuron::Luminance(Shaded(BLUE)) < Neuron::Luminance(BLUE));
-static_assert(Neuron::Luminance(Shaded(AMBER)) < Neuron::Luminance(AMBER));
-static_assert(Neuron::Luminance(Rimmed(BLUE)) > Neuron::Luminance(BLUE));
-static_assert(Neuron::Luminance(Rimmed(AMBER)) > Neuron::Luminance(AMBER));
+/// A surface's whole ramp from one lit colour: the four tones the mesh pass chooses between
+/// (ADR-105). **Derived rather than authored four times over**, so an owner colour is still the one
+/// thing a caller states -- which is what keeps twelve owners from becoming forty-eight literals.
+[[nodiscard]] constexpr Neuron::ColorRamp RampFor(const Neuron::Color& _lit) noexcept
+{
+  return Neuron::ColorRamp{Shaded(_lit), HalfLit(_lit), _lit, Rimmed(_lit)};
+}
+
+/// The same ramp for a FLAT-FACED solid, with the silhouette tone turned off by setting it to the
+/// shadow -- which is what ADR-104's strict-superset property is for.
+///
+/// **A rim is a curved-surface effect and a flat face cannot have one.** The shader reads a low
+/// dot(normal, toViewer) as "this is the limb", which is true on a sphere and false on a column: a
+/// column's far face is oblique across its whole area, so the whole face tripped the test and came
+/// out brighter than the face the light was actually finding. Measured on 2026-09-14 before this
+/// existed, as a stem with a white side (ADR-105).
+[[nodiscard]] constexpr Neuron::ColorRamp FlatRampFor(const Neuron::Color& _lit) noexcept
+{
+  return Neuron::ColorRamp{Shaded(_lit), HalfLit(_lit), _lit, Shaded(_lit)};
+}
+
+// The ramp runs the right way round at every step, as ADR-012 had every pair asserted: a station is
+// never darker where the light finds it than where it grazes it, never darker where it grazes than
+// in the shadow, and never dimmer on the limb the light gets past than on the face it finds.
+static_assert(Neuron::Luminance(Shaded(BLUE)) < Neuron::Luminance(HalfLit(BLUE)));
+static_assert(Neuron::Luminance(HalfLit(BLUE)) < Neuron::Luminance(BLUE));
+static_assert(Neuron::Luminance(BLUE) < Neuron::Luminance(Rimmed(BLUE)));
+static_assert(Neuron::Luminance(Shaded(AMBER)) < Neuron::Luminance(HalfLit(AMBER)));
+static_assert(Neuron::Luminance(HalfLit(AMBER)) < Neuron::Luminance(AMBER));
+static_assert(Neuron::Luminance(AMBER) < Neuron::Luminance(Rimmed(AMBER)));
 
 } // namespace Ink
 

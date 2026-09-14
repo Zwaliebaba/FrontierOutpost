@@ -355,15 +355,20 @@ Drawn, in painter's order (`MapRender.cpp`):
   a lit ball on a stem, and the stem's height is its yield** (ADR-103): under it a black contact
   shadow on the plane (1.4× the ball, @0.45) and the owner's disc (0.9×, @0.27); around it a
   dashed footprint (1px, dash 3 / gap 3, owner @0.45) whose radius is 8 + 1 per credit a tick; a
-  1px stem (owner @0.71) standing 14 + 3 per credit a tick — a capital never lower than 30, an
-  unpriced or unheld system at 20 — with a 4×1px rung every 10 units; a capital's halo at 2.4×;
-  then the ball (radius 4.5·1.15, capital 6·1.15), shaded by one world-fixed light
+  **diamond-section column** 2.4 units across standing 14 + 3 per credit a tick — a capital never
+  lower than 30, an unpriced or unheld system at 20 — with a 4×1px rung every 10 units drawn over
+  it and stopping a ball's radius short of the top (ADR-105); a capital's halo at 2.4×;
+  then the ball (radius 4.5·1.15, capital 6·1.15). Both are shaded by one world-fixed key light
   (normalize(−0.85, 0.45, 0.10), raked across the opening framing rather than sitting behind the
-  eye) into exactly three authored tones chosen per pixel (ADR-104): the owner's colour where the
-  light finds it, `Ink::Shaded` of it where the light misses it, and `Ink::Rimmed` of it on the
-  limb the light gets past — so the terminator is a hard curve and the silhouette a crescent, both
-  turning as the camera orbits. The rim only ever repaints what the light misses; on the lit side
-  it would be an outline. Under the
+  eye) into exactly four authored tones chosen per pixel (ADR-104, ADR-105), by two thresholds on
+  the light and one on the view: the owner's colour where the light finds it squarely,
+  `Ink::HalfLit` where it only grazes, `Ink::Shaded` where it misses, and `Ink::Rimmed` on the limb
+  the light gets past — so the bands are hard curves that turn as the camera orbits. The rim only
+  ever repaints what the light misses, and a FLAT-faced solid switches it off (`Ink::FlatRampFor`),
+  because a low dot(normal, toViewer) means "limb" on a sphere and "oblique" on a column.
+  **The shadow is cast along its own steeper direction** (normalize(−0.51, 0.86, 0.06)), landing at
+  0.60 of the stem's height rather than the key light's honest 1.9 — which would put a rich
+  capital's shadow 118 units away, across its neighbour. Under the
   foot, the yield as `+6` in the owner's colour @0.75, left out when it would collide with a label.
   Contested: a 1px ring. Custodian: a dashed ring and `CUSTODIAN T43` under the ground point.
   Captured: `CAPTURED T45` under the ground point **for three ticks and then not at all**

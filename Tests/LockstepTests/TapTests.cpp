@@ -2280,7 +2280,7 @@ public:
                          static_cast<std::uint8_t>((_packed >> 16U) & 0xFFU), static_cast<std::uint8_t>((_packed >> 24U) & 0xFFU)};
   }
 
-  TEST_METHOD(EveryStationIsABallWhoseThreeTonesRunInOrder)
+  TEST_METHOD(EveryStationIsASolidWhoseFourTonesRunInOrder)
   {
     Headless renderers;
     Lockstep::MainPage page;
@@ -2300,17 +2300,29 @@ public:
         ++stations;
       }
     }
-    Assert::IsTrue(vertices.size() >= stations * Neuron::MeshRenderer::SphereVertexCount(8), L"fewer balls than stations on the board");
+    Assert::IsTrue(vertices.size() >= stations * (Neuron::MeshRenderer::SphereVertexCount(8) + Neuron::MeshRenderer::COLUMN_VERTEX_COUNT),
+                   L"fewer solids than stations on the board");
 
     for (const Neuron::MeshRenderer::MeshVertex& vertex : vertices)
     {
-      // The ramp runs dark, lit, rim (ADR-104). A station is never darker where the light finds it,
-      // and never dimmer on the limb the light gets past than in the shadow beside it.
-      Assert::IsTrue(Neuron::Luminance(Unpack(vertex.litColor)) > Neuron::Luminance(Unpack(vertex.darkColor)),
-                     L"a ball is darker where the light finds it");
-      Assert::IsTrue(Neuron::Luminance(Unpack(vertex.rimColor)) > Neuron::Luminance(Unpack(vertex.litColor)),
-                     L"a ball's silhouette is no brighter than its lit face");
+      // The ramp runs shadow, grazed, lit, silhouette (ADR-105), and every step of it has to climb:
+      // two bands the wrong way round on a small ball read as a modelling error rather than as a
+      // palette one.
+      Assert::IsTrue(Neuron::Luminance(Unpack(vertex.halfLitColor)) > Neuron::Luminance(Unpack(vertex.darkColor)),
+                     L"a ball is darker where the light grazes it than in its shadow");
+      Assert::IsTrue(Neuron::Luminance(Unpack(vertex.litColor)) > Neuron::Luminance(Unpack(vertex.halfLitColor)),
+                     L"a ball is darker where the light finds it than where it grazes it");
+      // The silhouette tone is either brighter than the lit face -- a ball, where the limb catches
+      // the light the surface curves past -- or exactly the shadow, which is how a FLAT-faced solid
+      // switches the rim off (`Ink::FlatRampFor`). A stem is the second kind, and anything between
+      // the two would be a tone nobody chose for either.
+      const bool rimLifts = Neuron::Luminance(Unpack(vertex.rimColor)) > Neuron::Luminance(Unpack(vertex.litColor));
+      const bool rimOff = Unpack(vertex.rimColor).red == Unpack(vertex.darkColor).red &&
+                          Unpack(vertex.rimColor).green == Unpack(vertex.darkColor).green &&
+                          Unpack(vertex.rimColor).blue == Unpack(vertex.darkColor).blue;
+      Assert::IsTrue(rimLifts || rimOff, L"a silhouette tone that neither lifts nor is switched off");
       Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.litColor).alpha, L"the mesh pass does not blend, so a tone is opaque");
+      Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.halfLitColor).alpha);
       Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.darkColor).alpha);
       Assert::AreEqual(Neuron::OPAQUE_ALPHA, Unpack(vertex.rimColor).alpha);
     }

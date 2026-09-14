@@ -1,6 +1,6 @@
-// MeshRenderer.cpp -- spheres and octahedra, tessellated on the CPU into one world-space triangle
-// list. See MeshRenderer.h for why this is a second recorder and not a third field on the shape
-// vertex, and MeshBackend for how the list reaches a GPU.
+// MeshRenderer.cpp -- spheres, columns and octahedra, tessellated on the CPU into one world-space
+// triangle list. See MeshRenderer.h for why this is a second recorder and not a third field on the
+// shape vertex, and MeshBackend for how the list reaches a GPU.
 
 #include "pch.h"
 #include "MeshRenderer.h"
@@ -35,8 +35,22 @@ void MeshRenderer::AppendTriangle(const MeshVertex& _a, const MeshVertex& _b, co
   m_vertices.push_back(_c);
 }
 
-void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const Color& _lit, const Color& _dark, const Color& _rim,
-                          std::uint32_t _segments)
+void MeshRenderer::AppendFlatQuad(const WorldPoint& _a, const WorldPoint& _b, const WorldPoint& _c, const WorldPoint& _d,
+                                  const WorldPoint& _normal, const ColorRamp& _tones)
+{
+  const std::uint32_t lit = Pack(_tones.lit);
+  const std::uint32_t halfLit = Pack(_tones.halfLit);
+  const std::uint32_t dark = Pack(_tones.shaded);
+  const std::uint32_t rim = Pack(_tones.rim);
+
+  const auto corner = [&](const WorldPoint& _at)
+  { return MeshVertex{_at.x, _at.y, _at.z, _normal.x, _normal.y, _normal.z, lit, halfLit, dark, rim}; };
+
+  AppendTriangle(corner(_a), corner(_b), corner(_c));
+  AppendTriangle(corner(_a), corner(_c), corner(_d));
+}
+
+void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const ColorRamp& _tones, std::uint32_t _segments)
 {
   if (_radius <= 0.0F)
   {
@@ -45,9 +59,10 @@ void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const Color&
 
   const std::uint32_t segments = std::clamp(_segments, MIN_SPHERE_SEGMENTS, MAX_SPHERE_SEGMENTS);
   const std::uint32_t rings = RingsForSegments(segments);
-  const std::uint32_t lit = Pack(_lit);
-  const std::uint32_t dark = Pack(_dark);
-  const std::uint32_t rim = Pack(_rim);
+  const std::uint32_t lit = Pack(_tones.lit);
+  const std::uint32_t halfLit = Pack(_tones.halfLit);
+  const std::uint32_t dark = Pack(_tones.shaded);
+  const std::uint32_t rim = Pack(_tones.rim);
 
   // Latitude runs from the +y pole (ring 0) down to the -y pole; longitude runs from +x toward
   // +z. The normal at a point on a sphere is the direction from its centre, which is the one thing
@@ -59,7 +74,7 @@ void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const Color&
     const float nx = std::sin(latitude) * std::cos(longitude);
     const float ny = std::cos(latitude);
     const float nz = std::sin(latitude) * std::sin(longitude);
-    return MeshVertex{_center.x + nx * _radius, _center.y + ny * _radius, _center.z + nz * _radius, nx, ny, nz, lit, dark, rim};
+    return MeshVertex{_center.x + nx * _radius, _center.y + ny * _radius, _center.z + nz * _radius, nx, ny, nz, lit, halfLit, dark, rim};
   };
 
   for (std::uint32_t ring = 0; ring < rings; ++ring)
@@ -88,17 +103,64 @@ void MeshRenderer::Sphere(const WorldPoint& _center, float _radius, const Color&
   }
 }
 
-void MeshRenderer::Octahedron(const WorldPoint& _center, float _halfWidth, float _halfHeight, const Color& _lit, const Color& _dark,
-                              const Color& _rim)
+void MeshRenderer::Column(const WorldPoint& _foot, float _height, float _halfWidth, const ColorRamp& _tones)
+{
+  if (_height <= 0.0F || _halfWidth <= 0.0F)
+  {
+    return;
+  }
+
+  const float low = _foot.y;
+  const float high = _foot.y + _height;
+
+  // **THE CROSS-SECTION IS A DIAMOND, NOT A SQUARE, AND THAT IS THE WHOLE POINT** (ADR-105). A
+  // square column standing on an axis-aligned plane presents ONE face to a camera at the default
+  // yaw, so it lands in one band and reads as a flat bar -- measured that way on the first build,
+  // three pixels of a single tone. Turned forty-five degrees it presents TWO, at different angles
+  // to the light, so the near edge is lit and the far one is shadow and the stem reads as a solid
+  // from the moment the map opens.
+  //
+  // The corner order is `Octahedron`'s rim order, +x, -z, -x, +z, and for its reason.
+  const std::array<WorldPoint, 4> corners = {
+    WorldPoint{_foot.x + _halfWidth, 0.0F, _foot.z},
+    WorldPoint{_foot.x, 0.0F, _foot.z - _halfWidth},
+    WorldPoint{_foot.x - _halfWidth, 0.0F, _foot.z},
+    WorldPoint{_foot.x, 0.0F, _foot.z + _halfWidth},
+  };
+
+  for (std::size_t index = 0; index < corners.size(); ++index)
+  {
+    const WorldPoint& here = corners[index];
+    const WorldPoint& next = corners[(index + 1) % corners.size()];
+
+    // A side's outward normal is the direction from the axis to the middle of its two corners,
+    // which for a diamond is the same arithmetic for every face.
+    const float midX = (here.x + next.x) * 0.5F - _foot.x;
+    const float midZ = (here.z + next.z) * 0.5F - _foot.z;
+    const float reach = std::sqrt(midX * midX + midZ * midZ);
+    const WorldPoint outward = reach > 0.0F ? WorldPoint{midX / reach, 0.0F, midZ / reach} : WorldPoint{1.0F, 0.0F, 0.0F};
+
+    AppendFlatQuad(WorldPoint{here.x, low, here.z}, WorldPoint{next.x, low, next.z}, WorldPoint{next.x, high, next.z},
+                   WorldPoint{here.x, high, here.z}, outward, _tones);
+  }
+
+  // The cap, in the same corner order, which comes out facing +y.
+  AppendFlatQuad(WorldPoint{corners[0].x, high, corners[0].z}, WorldPoint{corners[1].x, high, corners[1].z},
+                 WorldPoint{corners[2].x, high, corners[2].z}, WorldPoint{corners[3].x, high, corners[3].z}, WorldPoint{0.0F, 1.0F, 0.0F},
+                 _tones);
+}
+
+void MeshRenderer::Octahedron(const WorldPoint& _center, float _halfWidth, float _halfHeight, const ColorRamp& _tones)
 {
   if (_halfWidth <= 0.0F || _halfHeight <= 0.0F)
   {
     return;
   }
 
-  const std::uint32_t lit = Pack(_lit);
-  const std::uint32_t dark = Pack(_dark);
-  const std::uint32_t rimTone = Pack(_rim);
+  const std::uint32_t lit = Pack(_tones.lit);
+  const std::uint32_t halfLit = Pack(_tones.halfLit);
+  const std::uint32_t dark = Pack(_tones.shaded);
+  const std::uint32_t rimTone = Pack(_tones.rim);
 
   const WorldPoint top = {_center.x, _center.y + _halfHeight, _center.z};
   const WorldPoint bottom = {_center.x, _center.y - _halfHeight, _center.z};
@@ -113,7 +175,7 @@ void MeshRenderer::Octahedron(const WorldPoint& _center, float _halfWidth, float
   };
 
   // A flat face: the normal is the face's own, put on all three corners, so the shader has nothing
-  // to interpolate and the whole face lands on one side of the terminator (ADR-012).
+  // to interpolate and the whole face lands in one band (ADR-012).
   const auto face = [&](const WorldPoint& _a, const WorldPoint& _b, const WorldPoint& _c)
   {
     const float ux = _b.x - _a.x;
@@ -132,9 +194,9 @@ void MeshRenderer::Octahedron(const WorldPoint& _center, float _halfWidth, float
       ny /= length;
       nz /= length;
     }
-    AppendTriangle(MeshVertex{_a.x, _a.y, _a.z, nx, ny, nz, lit, dark, rimTone},
-                   MeshVertex{_b.x, _b.y, _b.z, nx, ny, nz, lit, dark, rimTone},
-                   MeshVertex{_c.x, _c.y, _c.z, nx, ny, nz, lit, dark, rimTone});
+    AppendTriangle(MeshVertex{_a.x, _a.y, _a.z, nx, ny, nz, lit, halfLit, dark, rimTone},
+                   MeshVertex{_b.x, _b.y, _b.z, nx, ny, nz, lit, halfLit, dark, rimTone},
+                   MeshVertex{_c.x, _c.y, _c.z, nx, ny, nz, lit, halfLit, dark, rimTone});
   };
 
   for (std::size_t index = 0; index < rim.size(); ++index)

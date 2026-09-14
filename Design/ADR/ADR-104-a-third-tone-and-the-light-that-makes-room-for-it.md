@@ -1,6 +1,6 @@
 # ADR-104 — A third authored tone, and the light that makes room for it
 
-**Status:** Accepted
+**Status:** Accepted — **its tone count is amended by ADR-105 (2026-09-14)**: a lit surface is one of four authored tones, the fourth driven by a second threshold on the key light rather than by the fill light this ADR left open. Its argument, that the count is not the principle, is what ADR-105 applies again.
 
 **Date:** 2026-09-14
 **Decided by:** Owner decision, 2026-09-14. The owner asked for "two tones and nothing between them" to be challenged — *not to add textures, but make it more sophisticated. What would be ideal?* — and then approved building the answer after a prototype measured what it was worth.

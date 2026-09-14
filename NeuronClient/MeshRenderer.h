@@ -17,19 +17,20 @@ namespace Neuron
 /// **This is the sibling of `ShapeRenderer`, not an extension of it** (ADR-103). That recorder is
 /// two-dimensional interface geometry in canvas pixels, and every page and every test depends on
 /// its vertex being two floats and a colour. A mesh is a different thing in every field: it sits in
-/// the world, it carries a normal, it carries two tones for a light to choose between, and it is
-/// depth-tested against its own kind. Pressing those onto the shape vertex would have made every
+/// the world, it carries a normal, it carries a ramp of tones for a light to choose between, and it
+/// is depth-tested against its own kind. Pressing those onto the shape vertex would have made every
 /// rectangle on the screen pay for a normal it does not have.
 ///
 /// The split is the one `ShapeRenderer` already makes: this names no graphics API, a `MeshBackend`
 /// drains it and is the only half that knows about D3D12 (ADR-075). Every page and every test talks
 /// to this type; a headless test can tessellate a sphere and count its triangles without a device.
 ///
-/// **A vertex carries two authored tones and the GPU picks one per pixel** -- the lit tone where
-/// the surface faces the light, the dark tone where it does not, and never a third (ADR-012's rule,
-/// kept on a curved surface by moving the choice from the face to the pixel). The normal is what the
-/// choice is made from, so it is interpolated; the tones are not, because a tone that interpolated
-/// would be exactly the gradient the rule forbids.
+/// **A vertex carries four authored tones and the GPU picks one per pixel** -- two thresholds on
+/// the light choose between the shadow, the grazed band and the lit band, and a threshold on the
+/// view picks the silhouette. Never a fifth value (ADR-012's rule, kept while its count was
+/// dropped: ADR-104, ADR-105). The normal is what the choice is made from, so it is interpolated;
+/// the tones are not, because a tone that interpolated would be exactly the gradient the rule
+/// forbids.
 ///
 /// Nothing here is anti-aliased and nothing blends, like everything else in this renderer
 /// (ADR-011, ADR-014). A ball's edge is a staircase, and a tone is a tone.
@@ -38,7 +39,7 @@ class MeshRenderer
 public:
   using WorldPoint = OrbitCamera::WorldPoint;
 
-  /// A world position, a unit normal, and the three tones. R8: a public aggregate handed to the
+  /// A world position, a unit normal, and the four tones. R8: a public aggregate handed to the
   /// GPU, so plain fields -- and public, because a backend is what hands it over.
   struct MeshVertex
   {
@@ -49,10 +50,11 @@ public:
     float ny;
     float nz;
     std::uint32_t litColor;
+    std::uint32_t halfLitColor;
     std::uint32_t darkColor;
-    /// The silhouette, where the surface turns away from the EYE rather than from the light. A
-    /// third authored tone and not a computed one: the shader selects it exactly as it selects the
-    /// other two, so a pixel is still a colour somebody named (ADR-104).
+    /// The silhouette, where the surface turns away from the EYE rather than from the light. An
+    /// authored tone and not a computed one: the shader selects it exactly as it selects the
+    /// others, so a pixel is still a colour somebody named (ADR-104).
     std::uint32_t rimColor;
   };
 
@@ -90,9 +92,9 @@ public:
     float viewportHeightPixels = 1.0F;
   };
 
-  /// One frame's worth of geometry. Sized for a whole galaxy seen at once: a twelve-player match
-  /// is forty-nine systems, and a ball is at most 504 vertices at `MAX_SPHERE_SEGMENTS`, so this
-  /// holds sixty-five of them. Overrunning it is a broken invariant rather than a case to grow into
+  /// One frame's worth of geometry. Sized for a whole galaxy seen at once: a twelve-player match is
+  /// forty-nine systems, and a station is at most 504 vertices of ball plus 36 of column, so this
+  /// holds sixty of them. Overrunning it is a broken invariant rather than a case to grow into
   /// (Debug.h).
   static constexpr std::uint32_t MAX_VERTICES_PER_FRAME = 32768;
 
@@ -120,6 +122,9 @@ public:
     return _segments * (2 * RingsForSegments(_segments) - 2) * 3;
   }
 
+  /// What `Column` records: four sides of two triangles, and a cap.
+  static constexpr std::uint32_t COLUMN_VERTEX_COUNT = 5 * 2 * 3;
+
   /// Starts a frame's recording over. Not noexcept, for the reason `ShapeRenderer::BeginFrame` is
   /// not: the first call reserves the vector.
   void BeginFrame();
@@ -134,17 +139,23 @@ public:
   }
 
   /// A UV sphere: `_segments` around, `RingsForSegments(_segments)` from pole to pole, with a
-  /// smooth outward normal at every vertex so the terminator the shader draws is a curve rather
-  /// than a set of facets.
+  /// smooth outward normal at every vertex so the bands the shader draws are curves rather than
+  /// sets of facets.
+  void Sphere(const WorldPoint& _center, float _radius, const ColorRamp& _tones, std::uint32_t _segments);
+
+  /// A square column standing on the ground: from `_foot` up by `_height`, `_halfWidth` to a side,
+  /// with a cap on top. Every vertex of a face carries the face's own normal, so the light chooses
+  /// one tone for the whole face -- which is what makes a stem read as a solid with a lit side and
+  /// a shaded one rather than as a scratch (ADR-105).
   ///
-  /// `_rim` is the silhouette's tone. Passing the same colour as `_dark` turns the rim off, which
-  /// is what makes this a strict superset of the two-tone scheme it grew out of (ADR-104).
-  void Sphere(const WorldPoint& _center, float _radius, const Color& _lit, const Color& _dark, const Color& _rim, std::uint32_t _segments);
+  /// Four sides and a cap, and no floor: a column stands ON the plane, so its underside is never
+  /// visible and two triangles of it would be two triangles the culler throws away.
+  void Column(const WorldPoint& _foot, float _height, float _halfWidth, const ColorRamp& _tones);
 
   /// Eight faces, flat: every vertex of a face carries the face's own normal, so the light chooses
   /// one tone per face exactly as ADR-012 had it. `_halfWidth` is the reach along x and z,
   /// `_halfHeight` along y.
-  void Octahedron(const WorldPoint& _center, float _halfWidth, float _halfHeight, const Color& _lit, const Color& _dark, const Color& _rim);
+  void Octahedron(const WorldPoint& _center, float _halfWidth, float _halfHeight, const ColorRamp& _tones);
 
   /// Everything recorded since the last take, and marks it taken. Empty when nothing is new. The
   /// span points into this recorder and stays valid until the next `BeginFrame`.
@@ -165,6 +176,10 @@ private:
   /// from outside -- the right-handed convention, which is what `MeshBackend`'s rasterizer is told
   /// a front face is -- so a caller that gets the order wrong records a solid the culler removes.
   void AppendTriangle(const MeshVertex& _a, const MeshVertex& _b, const MeshVertex& _c);
+
+  /// A flat quad, corners counter-clockwise from outside, with one normal on all four corners.
+  void AppendFlatQuad(const WorldPoint& _a, const WorldPoint& _b, const WorldPoint& _c, const WorldPoint& _d, const WorldPoint& _normal,
+                      const ColorRamp& _tones);
 
   std::vector<MeshVertex> m_vertices;
   std::size_t m_takenThisFrame = 0;

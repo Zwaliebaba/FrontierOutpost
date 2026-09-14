@@ -103,4 +103,21 @@ struct ColorPair
   Color lit;
 };
 
+/// A surface's four tones, brightest last: the shadow, the band the light grazes, the band it
+/// finds, and the silhouette it gets past. The mesh pass chooses one per pixel by thresholding the
+/// light, and there is nothing between them (ADR-105).
+///
+/// **Four rather than two because two was EGA's, not this game's** (ADR-104's argument, taken one
+/// step further). The count is not a principle; every entry being a colour somebody named is.
+///
+/// R8: a public aggregate handed to the GPU. Authored as `{Shaded(c), HalfLit(c), c, Rimmed(c)}`,
+/// which is why the order runs dark to bright — it reads as a ramp at the call site.
+struct ColorRamp
+{
+  Color shaded;
+  Color halfLit;
+  Color lit;
+  Color rim;
+};
+
 } // namespace Neuron

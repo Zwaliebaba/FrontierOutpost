@@ -20,20 +20,20 @@ struct VertexIn
 {
   float3 position : POSITION;
   float3 normal : NORMAL;
-  // R8G8B8A8_UNORM, so the four bytes Pack() wrote arrive as 0-1 floats. Three of them: the tone
-  // where the light finds the surface, the tone where it misses it, and the tone on the silhouette
-  // (ADR-012, ADR-104).
+  // R8G8B8A8_UNORM, so the four bytes Pack() wrote arrive as 0-1 floats. Four of them: the band
+  // the light finds, the band it grazes, the shadow, and the silhouette it gets past (ADR-105).
   float4 litColor : COLOR0;
-  float4 darkColor : COLOR1;
-  float4 rimColor : COLOR2;
+  float4 halfLitColor : COLOR1;
+  float4 darkColor : COLOR2;
+  float4 rimColor : COLOR3;
 };
 
 struct VertexOut
 {
   float4 position : SV_Position;
   // INTERPOLATED, and the only two things here that are. The pixel shader decides which tone a
-  // pixel gets from the normal, so on a sphere the boundary between them is a curve through the
-  // triangles rather than a set of triangle edges; and it needs the world position to know which
+  // pixel gets from the normal, so on a sphere the boundaries between them are curves through the
+  // triangles rather than sets of triangle edges; and it needs the world position to know which
   // way the eye is from THIS pixel, which is what makes the rim a property of the silhouette
   // rather than of the pane.
   float3 normal : NORMAL;
@@ -41,8 +41,9 @@ struct VertexOut
   // NOT interpolated. A tone that interpolated would be a gradient between two authored colours,
   // which is exactly the value ADR-012 says nobody chose.
   nointerpolation float4 litColor : COLOR0;
-  nointerpolation float4 darkColor : COLOR1;
-  nointerpolation float4 rimColor : COLOR2;
+  nointerpolation float4 halfLitColor : COLOR1;
+  nointerpolation float4 darkColor : COLOR2;
+  nointerpolation float4 rimColor : COLOR3;
 };
 
 VertexOut main(VertexIn _input)
@@ -53,6 +54,7 @@ VertexOut main(VertexIn _input)
   output.normal = _input.normal;
   output.worldPosition = _input.position;
   output.litColor = _input.litColor;
+  output.halfLitColor = _input.halfLitColor;
   output.darkColor = _input.darkColor;
   output.rimColor = _input.rimColor;
 

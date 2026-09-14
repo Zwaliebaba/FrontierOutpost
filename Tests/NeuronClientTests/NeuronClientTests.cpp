@@ -672,6 +672,9 @@ TEST_CLASS(MeshRendererTests)
 public:
   using MeshVertex = Neuron::MeshRenderer::MeshVertex;
 
+  /// Four tones a test can tell apart by value, in ramp order: shadow, grazed, lit, silhouette.
+  static constexpr Neuron::ColorRamp TONES = {Neuron::DARK_GRAY, Neuron::LIGHT_GRAY, Neuron::WHITE, Neuron::BRIGHT_CYAN};
+
   /// (b - a) x (c - a), the direction a counter-clockwise triangle faces.
   static std::array<float, 3> FaceDirection(const MeshVertex& _a, const MeshVertex& _b, const MeshVertex& _c)
   {
@@ -697,7 +700,7 @@ public:
   {
     Neuron::MeshRenderer meshes;
     meshes.BeginFrame();
-    meshes.Sphere({10.0F, 20.0F, -30.0F}, 5.0F, Neuron::WHITE, Neuron::DARK_GRAY, Neuron::BRIGHT_CYAN, 12);
+    meshes.Sphere({10.0F, 20.0F, -30.0F}, 5.0F, TONES, 12);
 
     const std::span<const MeshVertex> vertices = meshes.Vertices();
     Assert::AreEqual(static_cast<std::size_t>(Neuron::MeshRenderer::SphereVertexCount(12)), vertices.size());
@@ -722,6 +725,7 @@ public:
         const float along = vertex.nx * (vertex.x - 10.0F) + vertex.ny * (vertex.y - 20.0F) + vertex.nz * (vertex.z + 30.0F);
         Assert::AreEqual(5.0F, along, 0.001F, L"and points from the centre through its vertex");
         Assert::AreEqual(Neuron::Pack(Neuron::WHITE), vertex.litColor);
+        Assert::AreEqual(Neuron::Pack(Neuron::LIGHT_GRAY), vertex.halfLitColor, L"the grazed band's tone did not reach the vertex");
         Assert::AreEqual(Neuron::Pack(Neuron::DARK_GRAY), vertex.darkColor);
         Assert::AreEqual(Neuron::Pack(Neuron::BRIGHT_CYAN), vertex.rimColor, L"the silhouette's tone did not reach the vertex");
       }
@@ -732,7 +736,7 @@ public:
   {
     Neuron::MeshRenderer meshes;
     meshes.BeginFrame();
-    meshes.Octahedron({0.0F, 0.0F, 0.0F}, 3.0F, 5.0F, Neuron::WHITE, Neuron::DARK_GRAY, Neuron::BRIGHT_CYAN);
+    meshes.Octahedron({0.0F, 0.0F, 0.0F}, 3.0F, 5.0F, TONES);
 
     const std::span<const MeshVertex> vertices = meshes.Vertices();
     Assert::AreEqual(static_cast<std::size_t>(24), vertices.size(), L"eight faces of three");
@@ -751,18 +755,54 @@ public:
     }
   }
 
+  // A stem is a column now (ADR-105). Its four sides have to face outward, or the culler removes
+  // the ones the camera can see and leaves the ones it cannot.
+  TEST_METHOD(AColumnStandsOnItsFootWithOutwardFaces)
+  {
+    Neuron::MeshRenderer meshes;
+    meshes.BeginFrame();
+    meshes.Column({40.0F, 0.0F, -15.0F}, 30.0F, 1.5F, TONES);
+
+    const std::span<const MeshVertex> vertices = meshes.Vertices();
+    Assert::AreEqual(static_cast<std::size_t>(Neuron::MeshRenderer::COLUMN_VERTEX_COUNT), vertices.size(), L"four sides and a cap");
+
+    float lowest = 1000.0F;
+    float highest = -1000.0F;
+    for (std::size_t index = 0; index < vertices.size(); index += 3)
+    {
+      const MeshVertex& a = vertices[index];
+      const std::array<float, 3> facing = FaceDirection(a, vertices[index + 1], vertices[index + 2]);
+      Assert::IsTrue(facing[0] * a.nx + facing[1] * a.ny + facing[2] * a.nz > 0.0F, L"a face's normal is the way it winds");
+
+      // Away from the column's own axis, or straight up for the cap. A side that faced inward
+      // would be culled exactly when it should be drawn.
+      const float outX = (a.x + vertices[index + 1].x + vertices[index + 2].x) / 3.0F - 40.0F;
+      const float outZ = (a.z + vertices[index + 1].z + vertices[index + 2].z) / 3.0F + 15.0F;
+      Assert::IsTrue(a.ny > 0.9F || a.nx * outX + a.nz * outZ > 0.0F, L"a side faces away from the axis");
+
+      for (const MeshVertex& vertex : {a, vertices[index + 1], vertices[index + 2]})
+      {
+        lowest = std::min(lowest, vertex.y);
+        highest = std::max(highest, vertex.y);
+      }
+    }
+
+    Assert::AreEqual(0.0F, lowest, 0.0001F, L"a column starts on the plane");
+    Assert::AreEqual(30.0F, highest, 0.0001F, L"and reaches exactly its height");
+  }
+
   TEST_METHOD(TakingHandsOverOnlyWhatIsNew)
   {
     Neuron::MeshRenderer meshes;
     meshes.BeginFrame();
-    meshes.Sphere({0.0F, 0.0F, 0.0F}, 1.0F, Neuron::WHITE, Neuron::DARK_GRAY, Neuron::BRIGHT_CYAN, 8);
+    meshes.Sphere({0.0F, 0.0F, 0.0F}, 1.0F, TONES, 8);
     const std::size_t first = meshes.Vertices().size();
 
     const Neuron::MeshRenderer::Batch one = meshes.TakeUnflushed();
     Assert::AreEqual(first, one.vertices.size());
     Assert::AreEqual(0u, one.firstVertex);
 
-    meshes.Sphere({0.0F, 0.0F, 0.0F}, 1.0F, Neuron::WHITE, Neuron::DARK_GRAY, Neuron::BRIGHT_CYAN, 8);
+    meshes.Sphere({0.0F, 0.0F, 0.0F}, 1.0F, TONES, 8);
     const Neuron::MeshRenderer::Batch two = meshes.TakeUnflushed();
     Assert::AreEqual(first, two.vertices.size(), L"the second take is only the second ball");
     Assert::AreEqual(static_cast<std::uint32_t>(first), two.firstVertex, L"and it sits after the first in the frame");
