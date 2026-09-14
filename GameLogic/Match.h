@@ -60,6 +60,11 @@ struct SystemState
   /// The tick it last changed hands, or 0. The map shows it.
   std::uint32_t capturedAt = 0;
 
+  /// Who it was taken FROM, or an invalid id when it was unowned. The map draws a capture in red
+  /// only for the player it was taken from (ADR-088); without this the client can see that a system
+  /// changed hands and not whose loss it was, so every capture on the board read as the viewer's.
+  PlayerId capturedFrom;
+
   /// Whether this system was taken from a custodian, and so yields at a fraction for the rest of
   /// the match whoever holds it afterwards.
   ///

@@ -73,10 +73,11 @@ what this tick's queue has already taken of it, drawn only when something is que
 the bar, the rail's `- 26 cr left at the lock -` and the sheet cannot disagree.
 
 **A capture is news for three ticks (ADR-082).** `CAPTURED Tn` is drawn under a system for three
-ticks after it changed hands and then not at all, in the new owner's colour when that is the viewer
-and in red otherwise. Red on this screen is what you lost; a rival taking a system from another
-rival still reads red, which is the half `SnapshotSystem` cannot yet answer. The legend is not drawn
-while a sheet is open, because the two share the bottom strip of the pane.
+ticks after it changed hands and then not at all, in one of three inks (ADR-088): your colour when
+you took it, red when it was taken from you, and the new owner's colour at 0.7 when two rivals
+traded it. Red on this screen is what you lost and nothing else — the snapshot carries
+`capturedFrom` so the map can tell the third case from the second. The legend is not drawn while a
+sheet is open, because the two share the bottom strip of the pane.
 
 **Map (centre, `MapRender.cpp`).** Per `DESIGN-GUIDELINES.md` "Map": camera, grid, stars, lanes
 with costs, routes, the sealed region, systems and fleets depth-sorted, `MAP - FOCUS: PELL`, and the

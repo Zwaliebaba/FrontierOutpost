@@ -187,6 +187,10 @@ struct SystemNode
   std::uint32_t custodianSince = 0;
   /// The tick this system was captured, or 0.
   std::uint32_t capturedAt = 0;
+  /// Who the last capture took this from, or `NOBODY` when it was unclaimed. **Red on the map is
+  /// what YOU lost** (ADR-082, ADR-088), and this is the only thing that can say so: a rival taking
+  /// a system from another rival is not the viewer's loss and must not be drawn as one.
+  OwnerId capturedFrom = NOBODY;
 };
 
 /// What a lane is to this player. A lane's KIND is a diplomatic fact, not a graph fact: the same

@@ -66,6 +66,10 @@ constexpr float BADGE_PADDING = 4.0F;
 /// viewer's own badge is a thing to tap.
 constexpr std::uint8_t BADGE_RIVAL_ALPHA = 89;
 
+/// A capture that is neither the viewer's gain nor their loss: the new owner's colour, softened,
+/// because it is news about somebody else's board (ADR-088). 0.7, which UI-01 1.4 asked for.
+constexpr std::uint8_t CAPTURE_GAIN_ALPHA = 179;
+
 // ---- A fleet's route (ADR-055) -----------------------------------------------------------------
 //
 // **Dots rather than dashes, and they travel.** A route has to be distinguishable at a glance from
@@ -274,15 +278,16 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
   // a board a player is winning is six things to read past on every tick, and none of them changed
   // this tick or the last two.
   //
-  // **Red is what YOU lost.** It was drawn under every captured system including the ones the viewer
-  // took, so a winning board read as a rout. Whether a rival took it FROM the viewer or from another
-  // rival is the one case this cannot tell apart -- the snapshot carries `capturedAt` and no
-  // previous owner -- and ADR-082 leaves that open rather than guessing.
+  // **Red is what YOU lost, and the snapshot now says whose loss it was** (ADR-082, ADR-088). It
+  // was drawn under every captured system including the ones the viewer took, so a winning board
+  // read as a rout; then it could tell a gain from a loss but not a loss from a rival's loss.
+  // `capturedFrom` is the answer to the second, so the three cases are three inks.
   if (CaptureIsNews(node.capturedAt, _frame.state.match.tick))
   {
-    const bool yours = node.owner == _frame.state.viewer;
+    const bool lostByYou = node.capturedFrom == _frame.state.viewer;
+    const Color ink = lostByYou ? Ink::RED : WithAlpha(owner, CAPTURE_GAIN_ALPHA);
     DrawCentered(_text, ground.xPixels, static_cast<std::int32_t>(std::lround(ground.yPixels)) + 8,
-                 std::format("CAPTURED T{}", node.capturedAt), yours ? owner : Ink::RED);
+                 std::format("CAPTURED T{}", node.capturedAt), node.owner == _frame.state.viewer ? owner : ink);
   }
 
   _hits.push_back(MapHit{.x = top.xPixels - radius * 3.0F,

@@ -614,6 +614,7 @@ std::uint64_t Match::Hash() const
     hash.AbsorbId(system.siegeBy.Index());
     hash.Absorb(system.siegeTicks);
     hash.Absorb(system.capturedAt);
+    hash.Absorb(static_cast<std::uint32_t>(system.capturedFrom.Index()));
     hash.Absorb(system.halfYield ? 1U : 0U);
   }
 

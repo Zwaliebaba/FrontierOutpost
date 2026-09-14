@@ -287,18 +287,25 @@ public:
   // binary, which cannot see a compiler, a standard library or a configuration disagreeing about
   // the same sum. This pins the number.
   //
-  // **The value is pinned under MSVC, Debug and Release, and both agree** (re-pinned 2026-09-13
-  // when ADR-069 gave buildings levels and build time, which changes what every bot spends and
-  // when every building pays; before that, 2026-09-12 when ADR-055 raised `startingCredits`; and
-  // before that a value computed with clang 18 and libstdc++ 13 on Linux that agreed with both
-  // MSVC configurations, which is the evidence that this simulation does not depend on a
-  // toolchain). If this fails and nothing in `GameLogic` was
-  // meant to change a rule, the failure IS the finding: two builds disagree about an integer
-  // simulation, which means undefined or unspecified behavior somewhere in it. If a rule was meant
-  // to change, re-pin -- and know that every stored match is now unloadable (ADR-024).
+  // **The value is pinned under MSVC, Debug and Release, and both agree** (re-pinned 2026-09-14
+  // when ADR-088 added `SystemState::capturedFrom` to the hashed state; 2026-09-13 when ADR-069
+  // gave buildings levels and build time, which changes what every bot spends and when every
+  // building pays; before that, 2026-09-12 when ADR-055 raised `startingCredits`; and before that a
+  // value computed with clang 18 and libstdc++ 13 on Linux that agreed with both MSVC
+  // configurations, which is the evidence that this simulation does not depend on a toolchain). If
+  // this fails and nothing in `GameLogic` was meant to change a rule, the failure IS the finding:
+  // two builds disagree about an integer simulation, which means undefined or unspecified behavior
+  // somewhere in it.
+  //
+  // **Two different reasons to re-pin, and only one of them costs anything.** A changed RULE makes
+  // every stored match unloadable, because the store holds orders and replays them (ADR-024) and
+  // the same orders now produce a different match. A change to what the hash ABSORBS does not: the
+  // match is identical and only its fingerprint moved. ADR-088 is the second kind -- `capturedFrom`
+  // is written from a value the hash already covered and no bot plays differently for it -- so say
+  // which kind a re-pin is when you make one.
   TEST_METHOD(TheWholeMatchHashIsPinnedAcrossToolchains)
   {
-    constexpr std::uint64_t PINNED_HASH = 0x22B59450A1D76F74ULL;
+    constexpr std::uint64_t PINNED_HASH = 0x1CA0F0C8780BFA98ULL;
     constexpr std::uint64_t PINNED_SEED = 0xC7920238303AD5D8ULL;
 
     const Played played = PlayAMatch(false);
@@ -306,6 +313,38 @@ public:
     Assert::AreEqual(PINNED_SEED, played.match.Seed(), L"the generator accepted a different seed: the galaxy itself has changed");
     Assert::AreEqual(84U, played.ticks, L"the match ran a different number of ticks");
     Assert::AreEqual(PINNED_HASH, played.match.Hash(), L"the same seed and the same bots must produce this match on every toolchain");
+  }
+
+  // **Open space is nobody's loss** (ADR-088). A claim out of the frontier records no loser, which
+  // is the case the map must never draw in red -- and it is most of what happens in a bot match:
+  // eighty-four ticks of `ExpandNear` take nothing off anybody, which is the same finding
+  // `BalanceProbeTests` records as 115 sieges and zero captures. The player-to-player half is
+  // pinned by `MatchTests::CaptureTakesTwoConsecutiveUncontestedTicks`, which drives a siege.
+  TEST_METHOD(AClaimOutOfOpenSpaceRecordsNoLoser)
+  {
+    const Played played = PlayAMatch();
+
+    std::size_t claimed = 0;
+    for (std::size_t index = 0; index < played.match.GalaxyGraph().Systems().size(); ++index)
+    {
+      const Lockstep::SystemState& state = played.match.SystemAt(Lockstep::SystemId{static_cast<std::int32_t>(index)});
+      if (state.capturedAt == 0)
+      {
+        continue;
+      }
+      ++claimed;
+
+      if (state.capturedFrom.IsValid())
+      {
+        Assert::IsTrue(state.capturedFrom != state.owner, L"a system was recorded as taken from the player who now holds it");
+      }
+      else
+      {
+        Assert::IsTrue(state.owner.IsValid(), L"a system was claimed and nobody holds it");
+      }
+    }
+
+    Assert::IsTrue(claimed > 0, L"an 84-tick match claimed nothing at all");
   }
 
   // The absentee never logs in, so custody should arrive on the tick the rule says and not later.

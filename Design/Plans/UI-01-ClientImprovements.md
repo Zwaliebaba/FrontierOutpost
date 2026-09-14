@@ -96,10 +96,9 @@ to agree.
 - DESIGN-GUIDELINES.md §Components "Actor card" and §Copy "Every event carries its own actions" updated.
 
 ### 1.4 Red means your loss only; captured labels age out
-**Done in part 2026-09-13 — ADR-082.** The age-out and "your own capture is not red" are built. The
-**[ASK]** is still open and is the rest of it: the snapshot carries `capturedAt` and no previous
-owner, so a rival taking a system from another rival still reads red. ADR-082's open question puts
-the two answers to the owner.
+**Done 2026-09-14 — ADR-082, completed by ADR-088.** The age-out and "your own capture is not red"
+landed first; the **[ASK]** was answered "put `capturedFrom` on the wire" and is built, so all three
+inks are now distinguishable.
 
 **Problem.** `CAPTURED Tn` is drawn red under every captured system, including the ones you captured. Six red labels on a winning board read as six losses.
 

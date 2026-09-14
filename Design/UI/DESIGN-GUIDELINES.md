@@ -323,9 +323,10 @@ Drawn, in painter's order (`MapRender.cpp`):
   model). A system: ground shadow ellipse (owner @0.22, 2.2× wide, 0.9× tall) → 1px stem (20 units,
   capital 30) → the dot (radius 4.5·1.15, capital 6·1.15 with a halo at 2.4×). Contested: a 1px ring.
   Custodian: a dashed ring and `CUSTODIAN T43` under the ground point. Captured: `CAPTURED T45`
-  under the ground point **for three ticks and then not at all**, in the new owner's colour when it
-  is the viewer's and in `RED` otherwise -- red means what YOU lost, and a rival taking a system from
-  another rival is the case the snapshot cannot yet distinguish (ADR-082). Focused: a white ring at 3× the radius. The name above every node, capitals uppercased, 8px at
+  under the ground point **for three ticks and then not at all** (ADR-082), in one of three inks
+  (ADR-088): the viewer's own colour when they gained it, `RED` when `capturedFrom` is the viewer,
+  and the new owner's colour at 0.7 when it was between two rivals. Red means what YOU lost and
+  nothing else. Focused: a white ring at 3× the radius. The name above every node, capitals uppercased, 8px at
   every distance.
 - **A garrison badge** (ADR-079), for every owner with fleets STANDING at a system: a 16px filled
   chip beside the system's name carrying the total ships, placed clear of both the disc and the
