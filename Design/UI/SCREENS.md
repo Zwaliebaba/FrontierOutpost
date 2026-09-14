@@ -29,17 +29,18 @@ is over, `MATCH ENDED --:--:--`.
 **Digest (400px, left) — the order surface (`DrawDigestRail`, `DigestView.cpp`).**
 Header `DIGEST - TICK 7` with `5 EVENTS` on the right, or `SINCE YOU LOOKED · T4 → T7` with an
 amber `3 TICKS` chip and the delta box when ticks resolved unseen (see 08). Then cards in consequence
-order, each with its actions on its own row: an event card (dot, uppercased title, wrapped detail,
+order, each with its actions on its own row: an event card (dot, **sentence-cased** title in the 16px
+display cut — `Battle at Ulme`, `Shipyard L1 rising at Dothan` — ADR-099, wrapped detail,
 verdict box when your fleet is flying into a contact, actions), or an actor card grouping a rival's
 ≥2 events (`P3 - LEADER 1,610`, `3 EVENTS`, one line per event, ranked by the worst). Actions are
 composed per event (ADR-057): `ACCEPT`/`DECLINE` on a proposal, `REDIRECT FLT 1` on a contact your
 fleet reaches, a priced build on a claimed system or a production line, `MAP` on anything about a
 system. When no card offers a real control the standing moves go on the leading card — a priced
 `BUILD` and up to two `MOVE FLT n` (ADR-056); before the first lock the digest is one card,
-`NOTHING HAS HAPPENED YET`, carrying them. Build buttons show `- QUEUED` (outlined blue) and
+`Nothing has happened yet`, carrying them. Build buttons show `- QUEUED` (outlined blue) and
 `- NEED 7 MORE` (dim, inert) per ADR-053, and name the LEVEL they would build —
 `MINING STATION L2 JANDAL 30 CR` (ADR-069); a build already in flight is a card that reports and
-offers nothing, `SHIPYARD L1 RISING AT DOTHAN` / *Done T5 - 20 credits spent*, `MAP` its only
+offers nothing, `Shipyard L1 rising at Dothan` / *Done T5 - 20 credits spent*, `MAP` its only
 action (ADR-070). An **answered proposal** reads `ACCEPTED` or `DECLINED` in
 the past tense on the button that was pressed, outlined blue like a queued build, with the other
 button still imperative and still tappable, so changing an answer before the lock is one tap
@@ -49,6 +50,13 @@ about that the card's own tap does not reach are named chips** — `HOLLIS`, `NY
 then `+n`, each focusing that system (ADR-081). A card carries no button labelled `MAP`: the one
 that pointed where the card body already points was one tap drawn twice, and the ones that pointed
 somewhere else said nothing about where.
+
+**A title is a sentence and the cut it is set in is mono** (ADR-099, ADR-102). Uppercase stays for
+chips, section headers and status words — `QUEUED`, `CAPTURED`, `3 EVENTS`, `FLEETS`. The face is the
+one bend in ADR-074's *sentences are sans* on any screen, and it is a fact about the bake rather than
+a preference: the 16px display cut exists in Plex Mono only (ADR-073), so a title at title size has
+nowhere sans to go. An actor card's title is capitals throughout without being a shout — `P3 - LEADER
+1,610` is a name and a status word.
 
 **Overflow (ADR-061, ADR-080).** An **actor card is collapsed** unless it is the open one: dot,
 title, `3 EVENTS`, the verdict box and the whole action row, with the per-event lines behind a tap on
@@ -65,8 +73,9 @@ The scroll and the open card reset when a new digest arrives. The leading card c
 moves (ADR-056) and is at the top of the stack rather than pinned to the screen.
 
 *Differs / not built:* no tick stamp on the right of a plain event card; no highlighted card
-variant; buttons that do not fit the column are dropped rather than wrapped. **The sheets and the
-locks rail still do not scroll** (ADR-052 option C, which ADR-080 amends for this column only). The handoff's four card-level
+variant; buttons that do not fit the column are dropped rather than wrapped. **The sheets still do
+not scroll** (ADR-052 option C, which ADR-080 amends for the digest and ADR-101 for the locks rail).
+The handoff's four card-level
 signals (`REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE`) are the signal sheet's rows instead
 (ADR-039).
 
@@ -112,6 +121,17 @@ the incumbent, when it carries `+DEF` in blue; everything in transit under one `
 a `- 6 cr left at the lock -` line, `- nothing queued -` otherwise), `SIGNALS 9 TO SEND ›` (rows
 `SENDING`, a concede in red), `PROPOSALS 1 OPEN` (rows `P3 LANE` / `3 TICKS` amber). Footer
 `ALL LOCK TOGETHER` + the countdown.
+
+**The sections scroll and the header and footer do not (ADR-101).** 44px rows (ADR-100) put a played
+empire's four sections past the bottom of a 260px column, so everything between the help line and the
+footer is a band that moves: a wheel notch over the rail moves it by a row, and **a 44px page band at
+the foot of that band is the control a finger uses** — the digest's, in the same place, saying the
+same kind of thing. `3 MORE · SIGNALS ›` on the right, naming the first section below the fold, or
+`3 MORE ›` when there is no section down there, or `END` in dim ink at the bottom; `‹ UP` on the left
+once there is anything above. Its halves move by a bandful less one row. **A row not wholly inside
+the band is not drawn and registers no hit** — `ShapeRenderer` has no clip rectangle, so a
+half-scrolled row would paint its divider over the help line. The scroll is **not** reset when a tick
+lands, unlike the digest's: this column is a summary of the same empire tick after tick.
 
 **Rows are links (ADR-060).** A BUILDS row opens the build sheet for the system its build is on; a
 FLEETS row opens the fleet's destination picker, and is **the only way to move a parked fleet**
@@ -197,10 +217,13 @@ match is ADR-034's third open question, still open.
 ## 03 · Join — **built** (`03-join.png`)
 
 `JoinPage`: the sky (a fixed camera on the same star field as the map) with a 480px column centred:
-`LOCKSTEP` in the 16px display cut and `JOIN A MATCH - ONE SEAT PER TOKEN`; a 234px card with a
+`LOCKSTEP` in the 16px display cut and `JOIN A MATCH - ONE SEAT PER TOKEN`; a **283px** card with a
 `SERVER` field, a `TOKEN` field **shown by default with `HIDE` beside it** (ADR-095 — a token names a
 seat, not a person, and is not authentication), two lines saying so, and `JOIN >` filled once both
-fields have text (outlined `CONNECTING` while a connection is in flight). **No `LAST USED` label, no
+fields have text (outlined `CONNECTING` while a connection is in flight). **The fields and the
+button are 44px** and the card's height is the sum of what it stacks rather than a number (ADR-100);
+`HIDE` stays a 16px word on the `TOKEN` label's line with a 44px hit around it, registered before
+the field's so the overlap resolves in its favour. **No `LAST USED` label, no
 `SEAT` box and no footer**: the first promised a memory the client cannot have (R13), the second was
 never populated, and the third taught a command line to somebody already on the screen that replaces
 it — `Design/GETTING-STARTED.md` has the flags. The caret starts in the token field; Tab switches, Enter is JOIN. A failure on this
@@ -255,6 +278,11 @@ never be true at once (`Lockstep.cpp`, the match loop; `RunJoinScreen` for the j
 - `CONNECTING` neutral — the server, *Reaching the server.* then *Sending token - waiting for
   Welcome.* (ADR-043: the connect no longer blocks, so the dialog covers the whole wait), *Waiting
   3s.*, `CANCEL`. No progress bar.
+Its buttons are **44px in the card and 24px in the banner** (ADR-100). The card's height is composed
+from its button row, so growing the buttons grew the card; the banner is already exactly 44 tall, so
+a button drawn at the floor inside it would touch both edges — it stays 24 and its HIT takes the
+whole band.
+
 - `REFUSED - UNKNOWN TOKEN` red — `BACK` · `EDIT TOKEN` (filled) on the join screen; `QUIT` alone
   in the match loop, where there is nothing behind the dialog to go back to. (`RefusalReason::UnknownToken`)
 - `REFUSED - SEAT IN USE` red — `BACK`/`QUIT` · `RETRY` (filled), which opens a new connection
@@ -341,14 +369,17 @@ The host's lobby, after they have joined their own server with the first token i
 `LOCKSTEP` at 2×, `SEATS - BEFORE THE MATCH STARTS`, and `6 SEATS - 1 OF 6 CONNECTED` on the right;
 a 960px console holding a 3×2 grid of seat cards (swatch, `SEAT 01`, `YOU` or the empire name,
 the token, a status line, and the three-way `HUMAN | BOT AT T1 | BOT` — one control for one
-question, ADR-066, its segments sized to their labels), the practice box under the grid (`FIRST
+question, ADR-066, its segments sized to their labels **and never under 44px wide**, which is what
+`BOT` at three glyphs was, in a **44px** row, ADR-100), the practice box under the grid (`FIRST
 MATCH?` and an amber `PRACTICE MATCH >` with the two numbers that differ — a tick every two minutes
 against six hours, five bots, thirty ticks), a detail panel for the selected seat on the right (what
-a token is; the token with `COPY` to the clipboard and `NEW TOKEN`; whose seat it is; for a bot seat
+a token is; the token with `COPY` to the clipboard and `NEW TOKEN` — both drawn as they were, with
+44px hits around them; whose seat it is; for a bot seat
 `HOW IT PLAYS` with three styles; for a human seat one line saying what the card's setting does),
 and a footer with the summary (`WAITING FOR SORNE, TAMSIN - 4 OF 6 HERE`
 in amber, `ALL 6 SEATS CONNECTED - YOU ARE SEAT 01` in blue) or the refusal to the last tap,
-`FILL WAITING WITH BOTS`, and `ENTER MATCH >` — filled only when every seat is connected, a bot, or
+`FILL WAITING WITH BOTS` and `ENTER MATCH >`, both drawn at 24px inside the footer's own 44px band
+and tappable across the whole of it (ADR-100) — `ENTER MATCH` filled only when every seat is connected, a bot, or
 marked to be taken over; Enter is the same. **Disabled it is `TEXT_MUTED` in an `OUTLINE` border**
 rather than nearly invisible, and the footer's own sentence is the reason (ADR-096). Under the
 summary, always drawn: *Sets every WAITING FOR PLAYER seat to BOT.* — the one control here whose

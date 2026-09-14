@@ -525,7 +525,29 @@ bool MainPage::HandleZoom(std::int32_t _steps, float _xPixels, float _yPixels)
     return m_mapView.Zoom(_steps);
   }
 
+  // The locks rail, which had to learn this the moment its rows became 44 pixels tall (ADR-101).
+  // A notch moves it by a row, so the gesture means the same thing it means on the column opposite.
+  if (aboveTheBar && _xPixels >= Frame::SCREEN_WIDTH - Frame::ORDERS_WIDTH)
+  {
+    return ScrollRail(static_cast<float>(-_steps) * TOUCH_FLOOR);
+  }
+
   return false;
+}
+
+bool MainPage::ScrollRail(float _pixels)
+{
+  if (_pixels == 0.0F)
+  {
+    return false;
+  }
+
+  // **Clamped against what the last frame measured**, which is a frame old exactly as the hit list
+  // is, and for the same reason: layout and what reads it are the same code run once.
+  const float furthest = std::max(0.0F, m_railContentPixels - m_railViewportPixels);
+  const float was = m_railScrollPixels;
+  m_railScrollPixels = std::clamp(m_railScrollPixels + _pixels, 0.0F, furthest);
+  return m_railScrollPixels != was;
 }
 
 bool MainPage::HandleKey(Neuron::KeyboardInput::Key _key)
@@ -864,6 +886,11 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       m_panelSubjectId = EventRefs::NONE;
       return true;
 
+    case Action::PageRail:
+      // A bandful less one row, so the row a player was reading is still on the screen after the
+      // tap. The digest pages the same way for the same reason (ADR-080).
+      return ScrollRail(static_cast<float>(region->index) * std::max(TOUCH_FLOOR, m_railViewportPixels - TOUCH_FLOOR));
+
     case Action::ResetCamera:
       m_mapView.ResetView();
       return true;
@@ -916,9 +943,13 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text)
       Frame::DIGEST_WIDTH + 12.0F + static_cast<float>(FontRenderer::MeasurePixels(FocusLine(m_state, m_focusedSystem))) + 10.0F;
     const float chipY = Frame::TOP_BAR_HEIGHT + 8.0F;
     const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels("RESET")) + 12.0F;
-    _shapes.StrokeRect(chipX, chipY, chipWidth, BUTTON_HEIGHT, Ink::OUTLINE);
-    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, CenterTextY(chipY, BUTTON_HEIGHT), "RESET", Ink::TEXT_MUTED);
-    AddHit(chipX, chipY, chipWidth, BUTTON_HEIGHT, Action::ResetCamera, 0);
+    // Drawn at the chip height the map's other chrome uses, hit at the floor around it (ADR-100):
+    // it stands alone in the corner of a pane with nothing to overlap.
+    constexpr float CHIP_HEIGHT = 22.0F;
+    _shapes.StrokeRect(chipX, chipY, chipWidth, CHIP_HEIGHT, Ink::OUTLINE);
+    _text.DrawText(static_cast<std::int32_t>(chipX) + 6, CenterTextY(chipY, CHIP_HEIGHT), "RESET", Ink::TEXT_MUTED);
+    AddHit(chipX - (TOUCH_FLOOR - chipWidth) * 0.5F, chipY - (TOUCH_FLOOR - CHIP_HEIGHT) * 0.5F, std::max(chipWidth, TOUCH_FLOOR),
+           TOUCH_FLOOR, Action::ResetCamera, 0);
   }
 
   for (const MapHit& hit : mapHits)
@@ -990,7 +1021,9 @@ void MainPage::DrawTopBar(ShapeRenderer& _shapes, FontRenderer& _text)
     // it is in the reference (README "Assets").
     _shapes.FillTriangle(replayX + 10.0F, 19.0F, replayX + 17.0F, 24.0F, replayX + 10.0F, 29.0F, Ink::TEXT_PRIMARY);
     _text.DrawText(static_cast<std::int32_t>(replayX + 23.0F), centered, replayLabel, Ink::TEXT_PRIMARY);
-    AddHit(replayX, 13.0F, replayWidth, 22.0F, Action::OpenReplay, 0);
+    // An isolated chip with the bar's own margin around it, so the HIT is the bar and the chip stays
+    // 22 (ADR-100). The bar is exactly the floor tall, which is where the number came from.
+    AddHit(replayX, 0.0F, replayWidth, Frame::TOP_BAR_HEIGHT, Action::OpenReplay, 0);
     cursor = replayX - 14.0F;
 
     _shapes.FillRect(cursor, 13.0F, 1.0F, 22.0F, Ink::CARD_BORDER);
@@ -1176,9 +1209,14 @@ MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::uint32_t
   {
     layout.height += 4.0F + (1.0F + static_cast<float>(layout.verdictDetail.size())) * lines + 6.0F;
   }
+  // **The action row is a BUTTON tall, not a line tall** (ADR-100). It reserved one `LINE_HEIGHT`
+  // while a button was 18 and centred on that line's baseline, which was near enough to true to go
+  // unnoticed; at 44 the button reached a whole line above its row and painted over the detail line
+  // there. A row that reserves less than it draws is the defect `LINE_HEIGHT` was introduced for,
+  // one control further on.
   if (layout.hasActions)
   {
-    layout.height += 4.0F + lines + 4.0F;
+    layout.height += 4.0F + BUTTON_HEIGHT + 4.0F;
   }
   return layout;
 }
@@ -1322,7 +1360,18 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     _shapes.FillEllipse(RAIL_PADDING + 4.0F, static_cast<float>(lineY) + 4.0F, 4.0F, 4.0F, accent);
     // The display cut (ADR-084): a card's title is what the card IS, and until there were two sizes
     // it was separated from the sentences under it by a weight step nobody could see at a glance.
-    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, Uppercased(card.title), Ink::TEXT_PRIMARY, Face::MonoDisplay);
+    //
+    // **And NOT shouted** (ADR-099). `Uppercased()` was here, over a detail line reading *7 of 10
+    // lost (defending)*: a shout and a sentence about the same event. The titles are the longest
+    // strings on the screen and uppercase is the least legible case for a long string, which the
+    // display cut's 16px made louder rather than clearer. They are authored in sentence case in
+    // `GameLogic` -- `Battle at Ulme`, `Shipyard L1 rising at Dothan` -- and this is the one place
+    // that was shouting them.
+    //
+    // **The face is still MONO, and that is a constraint rather than a decision** (ADR-102): the
+    // display cut is baked from Plex Mono only (`Font.h`, ADR-073), so a sentence-cased title at
+    // this size has nowhere sans to go. ADR-074's rule is bent here and the ADR says where.
+    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, card.title, Ink::TEXT_PRIMARY, Face::MonoDisplay);
     if (!card.stamp.empty())
     {
       DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, lineY, card.stamp, Ink::TEXT_MUTED);
@@ -1333,7 +1382,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     // everything added during the card in front of it in the reverse walk `HandleTap` makes.
     if (layout.collapsible)
     {
-      AddHit(0.0F, top, Frame::DIGEST_WIDTH - 1.0F, DIGEST_TITLE_HEIGHT, Action::ToggleActorCard, card.actor);
+      AddHit(0.0F, top, Frame::DIGEST_WIDTH - 1.0F, TOUCH_FLOOR, Action::ToggleActorCard, card.actor);
     }
     lineY += TITLE_LINE_HEIGHT + 2;
 
@@ -1370,7 +1419,13 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     {
       lineY += 4;
       float buttonX = TEXT_LEFT;
-      const float buttonY = BandTopForText(lineY, BUTTON_HEIGHT);
+
+      // The row's top IS the button's top now, and the label centres inside it. `BandTopForText`
+      // was right while a button was a line with a box around it and is wrong for a box that is
+      // taller than its line: it would centre the box on the baseline and hang it over the line
+      // above (ADR-100).
+      const auto buttonY = static_cast<float>(lineY);
+      const std::int32_t labelY = CenterTextY(buttonY, BUTTON_HEIGHT);
 
       for (const EventAction& action : card.actions)
       {
@@ -1416,7 +1471,10 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
           }
         }
 
-        const float width = static_cast<float>(FontRenderer::MeasurePixels(label)) + 12.0F;
+        // **Wide enough for a finger as well as for its label** (ADR-100). `MAP` was 33 pixels
+        // across; a named chip is wider, but the floor is what makes that true of every label
+        // rather than of the ones that happen to be long.
+        const float width = std::max(TOUCH_FLOOR, static_cast<float>(FontRenderer::MeasurePixels(label)) + 12.0F);
         if (buttonX + width > Frame::DIGEST_WIDTH - RAIL_PADDING)
         {
           break;
@@ -1426,13 +1484,13 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
         if (action.primary && OrdersEditable() && !committed && !unaffordable)
         {
           _shapes.FillRect(buttonX, buttonY, width, BUTTON_HEIGHT, Ink::BLUE);
-          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label, Ink::APP_BACKGROUND);
+          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, labelY, label, Ink::APP_BACKGROUND);
         }
         else
         {
           const bool dim = !OrdersEditable() || unaffordable;
           _shapes.StrokeRect(buttonX, buttonY, width, BUTTON_HEIGHT, committed && !dim ? Ink::BLUE : Ink::OUTLINE);
-          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, lineY, label,
+          _text.DrawText(static_cast<std::int32_t>(buttonX) + 6, labelY, label,
                          dim ? Ink::NEUTRAL_DIM : (committed ? Ink::BLUE : Ink::TEXT_PRIMARY));
         }
 
@@ -1442,7 +1500,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
         }
         buttonX += width + 6.0F;
       }
-      lineY += LINE_HEIGHT + 4;
+      lineY += static_cast<std::int32_t>(BUTTON_HEIGHT) + 4;
     }
 
     y = static_cast<float>(lineY) + 4.0F;
@@ -1589,12 +1647,63 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   }
   y += 6.0F;
 
+  // ---- The scrollable band ----------------------------------------------------------------------
+  //
+  // **The rail scrolls now** (ADR-101), because 44-pixel rows made a late-game empire's sections run
+  // off the bottom of a column that had never had an answer for it (ADR-086's open question).
+  //
+  // Everything between the help line and the footer moves; the header and the footer do not, because
+  // what they say -- which tick is locking, and that all three columns go in together -- is true
+  // however far down the list you are.
+  //
+  // **A row that is not ENTIRELY inside the band is not drawn at all**, which is coarser than a clip
+  // and is what the renderers can actually do: `FontRenderer` has a clip rectangle and
+  // `ShapeRenderer` has none, so a half-scrolled row would paint its divider and its hover fill over
+  // the help line above. The scroll step is one row, so in the ordinary case nothing is ever half
+  // anything; the cull is what keeps that true when a wrapped row is taller than the step.
+  const float bandTop = y;
+  const float bandBottom = Frame::SCREEN_HEIGHT - 30.0F - (m_railPaged ? RAIL_PAGE_HEIGHT : 0.0F);
+  m_railViewportPixels = bandBottom - bandTop;
+  m_railScrollPixels = std::clamp(m_railScrollPixels, 0.0F, std::max(0.0F, m_railContentPixels - m_railViewportPixels));
+  y -= m_railScrollPixels;
+
+  _text.SetClipRect(railX, bandTop, Frame::ORDERS_WIDTH, m_railViewportPixels);
+
+  /// Whether a box of `_height` starting at the current `y` is wholly inside the band.
+  const auto visible = [&](float _height) { return y >= bandTop && y + _height <= bandBottom; };
+
+  // What the page band will say. **Counted while drawing rather than predicted**, because the cull
+  // is the only thing that knows what did not fit: a row's height depends on how its title wrapped.
+  std::int32_t hiddenBelow = 0;
+  std::string sectionBelow;
+
+  /// Records one unit of `_height` at the current `y` as out of sight below, if that is where it is.
+  const auto counted = [&](float _height, std::string_view _section)
+  {
+    if (y + _height > bandBottom)
+    {
+      ++hiddenBelow;
+      if (!_section.empty() && sectionBelow.empty())
+      {
+        sectionBelow = std::string{_section};
+      }
+    }
+  };
+
+  // A section header is a row in this column, and `SIGNALS` is a control (ADR-039), so it is held to
+  // the floor like every other row (ADR-100). The label is centred in it rather than sitting at its
+  // top, because the band is now tall enough for that to be visible.
   const auto section = [&](std::string_view _label, std::string_view _count)
   {
-    _shapes.FillRect(railX + 1.0F, y, Frame::ORDERS_WIDTH - 1.0F, 1.0F, Ink::DIVIDER);
-    _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y) + 8, _label, Ink::TEXT_MUTED);
-    DrawRight(_text, contentRight, static_cast<std::int32_t>(y) + 8, _count, Ink::TEXT_MUTED);
-    y += 22.0F;
+    counted(RAIL_SECTION_HEIGHT, _label);
+    if (visible(RAIL_SECTION_HEIGHT))
+    {
+      _shapes.FillRect(railX + 1.0F, y, Frame::ORDERS_WIDTH - 1.0F, 1.0F, Ink::DIVIDER);
+      const std::int32_t labelY = CenterTextY(y, RAIL_SECTION_HEIGHT);
+      _text.DrawText(static_cast<std::int32_t>(contentX), labelY, _label, Ink::TEXT_MUTED);
+      DrawRight(_text, contentRight, labelY, _count, Ink::TEXT_MUTED);
+    }
+    y += RAIL_SECTION_HEIGHT;
   };
 
   /// A row: what it is on the left, where it stands on the right. The status carries the colour --
@@ -1610,11 +1719,24 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   const auto row = [&](std::string_view _label, std::string_view _status, const Color& _statusColor, Action _action, std::int32_t _index,
                        std::size_t _dimHead = 0)
   {
-    const std::int32_t lineY = static_cast<std::int32_t>(y);
     const auto room = static_cast<std::uint32_t>(contentRight - contentX - static_cast<float>(FontRenderer::MeasurePixels(_status)) - 8.0F);
 
     const std::vector<std::string> wrapped = FontRenderer::WrapToWidth(_label, room);
-    const float height = static_cast<float>(std::max<std::size_t>(1, wrapped.size())) * static_cast<float>(LINE_HEIGHT) + 4.0F;
+
+    // **A row in a column grows its BOX, not just its hit** (ADR-100). A row drawn at 21 and
+    // tappable at 44 has boundaries a finger cannot see, and two neighbours would overlap where
+    // neither shows a join.
+    const float height =
+      std::max(TOUCH_FLOOR, static_cast<float>(std::max<std::size_t>(1, wrapped.size())) * static_cast<float>(LINE_HEIGHT) + 4.0F);
+    // **A row nobody can see is a row nobody can tap.** Culling the drawing and leaving the hit
+    // would put an invisible control over the help line, which is worse than either.
+    counted(height, {});
+    if (!visible(height))
+    {
+      y += height;
+      return;
+    }
+
     const bool target = _action != Action::None;
 
     if (target)
@@ -1627,6 +1749,10 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
       AddHit(railX, y, Frame::ORDERS_WIDTH, height, _action, _index);
       m_railRows.push_back(RailRow{railX, y, Frame::ORDERS_WIDTH, height});
     }
+
+    // Centred as a block: one line sits in the middle of the row, two sit either side of it, which is
+    // the rule a sheet row already follows at this height.
+    const std::int32_t lineY = static_cast<std::int32_t>(y + (height - static_cast<float>(wrapped.size() * LINE_HEIGHT)) * 0.5F);
 
     for (std::size_t index = 0; index < wrapped.size(); ++index)
     {
@@ -1642,7 +1768,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
       }
       _text.DrawText(static_cast<std::int32_t>(contentX), at, wrapped[index], Ink::TEXT_PRIMARY);
     }
-    DrawRight(_text, contentRight, lineY, _status, _statusColor);
+    DrawRight(_text, contentRight, CenterTextY(y, height), _status, _statusColor);
     y += height;
   };
 
@@ -1651,13 +1777,19 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   /// starting one.
   const auto band = [&](std::string_view _label)
   {
-    _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), _label, Ink::TEXT_MUTED);
+    if (visible(static_cast<float>(LINE_HEIGHT) + 2.0F))
+    {
+      _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), _label, Ink::TEXT_MUTED);
+    }
     y += static_cast<float>(LINE_HEIGHT) + 2.0F;
   };
 
   const auto nothing = [&](std::string_view _text2)
   {
-    _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), _text2, Ink::NEUTRAL_DIM);
+    if (visible(static_cast<float>(LINE_HEIGHT) + 4.0F))
+    {
+      _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), _text2, Ink::NEUTRAL_DIM);
+    }
     y += static_cast<float>(LINE_HEIGHT) + 4.0F;
   };
 
@@ -1816,12 +1948,17 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   // What is going OUT this tick. This rail said "- none sent -" for as long as it existed, because
   // the client had no model of an offer leaving; ADR-039 gave it one, and the count on the right is
   // the way in -- it is the only section header on this rail that is a control.
+  // **Asked BEFORE the section advances `y`, and it is the reason this is not inside `section`:**
+  // the hit belongs to a header that is a control, and the header's own lambda knows nothing about
+  // actions. Culled with the row it is about, or a scrolled-away header leaves an invisible control
+  // sitting over the help line (ADR-101).
   const std::int32_t signalsY = static_cast<std::int32_t>(y);
+  const bool signalsVisible = visible(RAIL_SECTION_HEIGHT);
   section("SIGNALS",
           !OrdersEditable() ? std::string{m_offline ? "OFFLINE" : "LOCKED"} : std::format("{} TO SEND ›", m_state.orders.availableSignals));
-  if (OrdersEditable())
+  if (OrdersEditable() && signalsVisible)
   {
-    AddHit(railX, static_cast<float>(signalsY), Frame::ORDERS_WIDTH, 22.0F, Action::OpenSignals, 0);
+    AddHit(railX, static_cast<float>(signalsY), Frame::ORDERS_WIDTH, RAIL_SECTION_HEIGHT, Action::OpenSignals, 0);
   }
 
   if (m_state.orders.queuedSignals.empty())
@@ -1873,6 +2010,48 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
   // ---- The footer --------------------------------------------------------------------------------
   //
+  // ---- What the band came to ---------------------------------------------------------------------
+  //
+  // Measured rather than predicted, and read by the next frame's clamp: the content depends on how
+  // many fleets, builds, signals and offers this tick happens to carry, and only the draw knows.
+  m_railContentPixels = y + m_railScrollPixels - bandTop;
+  _text.ClearClipRect();
+
+  m_railPaged = m_railContentPixels > m_railViewportPixels + 1.0F;
+
+  // ---- The rail's page band ------------------------------------------------------------------------
+  //
+  // **The same band the digest column has, in the same place, saying the same kind of thing**
+  // (ADR-080, ADR-101). A wheel notch scrolls this column, but a wheel is not a finger and this
+  // game is for touch (ADR-098): a column whose only scroll affordance is a mouse gesture is a
+  // column half this game's players cannot reach the bottom of. So the band is two 44-pixel targets
+  // and the wheel is the shortcut, rather than the other way round.
+  //
+  // It says WHAT is below and not only that something is (ADR-080's whole point): `3 MORE ·
+  // SIGNALS ›` tells a player whether the thing they are looking for is down there. `‹ UP` appears
+  // only once there is something above, so the band never offers a direction that does nothing.
+  if (m_railPaged)
+  {
+    const float pageY = Frame::SCREEN_HEIGHT - 30.0F - RAIL_PAGE_HEIGHT;
+    const std::int32_t pageText = CenterTextY(pageY, RAIL_PAGE_HEIGHT);
+    _shapes.FillRect(railX + 1.0F, pageY, Frame::ORDERS_WIDTH - 1.0F, 1.0F, Ink::DIVIDER);
+
+    if (m_railScrollPixels > 0.0F)
+    {
+      _text.DrawText(static_cast<std::int32_t>(contentX), pageText, "‹ UP", Ink::TEXT_MUTED);
+      AddHit(railX, pageY, Frame::ORDERS_WIDTH * 0.5F, RAIL_PAGE_HEIGHT, Action::PageRail, -1);
+    }
+
+    const std::string below = hiddenBelow == 0       ? std::string{"END"}
+                              : sectionBelow.empty() ? std::format("{} MORE ›", hiddenBelow)
+                                                     : std::format("{} MORE · {} ›", hiddenBelow, sectionBelow);
+    DrawRight(_text, contentRight, pageText, below, hiddenBelow == 0 ? Ink::NEUTRAL_DIM : Ink::TEXT_MUTED);
+    if (hiddenBelow != 0)
+    {
+      AddHit(railX + Frame::ORDERS_WIDTH * 0.5F, pageY, Frame::ORDERS_WIDTH * 0.5F, RAIL_PAGE_HEIGHT, Action::PageRail, 1);
+    }
+  }
+
   // Pinned to the bottom rather than following the sections, because it is the one line that is
   // true whatever else the rail says: all three columns go in together (one-pager, decision 3).
   const float footerY = Frame::SCREEN_HEIGHT - 30.0F;

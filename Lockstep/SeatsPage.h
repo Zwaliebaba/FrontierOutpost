@@ -159,7 +159,6 @@ public:
   /// What the clipboard was last given, for the caller to put there. Taken and cleared.
   [[nodiscard]] std::string TakeCopyRequest();
 
-private:
   struct Hit
   {
     float x;
@@ -170,7 +169,23 @@ private:
     std::int32_t seat;
   };
 
+  /// Every tappable rectangle the last draw recorded.
+  ///
+  /// Public for the reason `MainPage::Hits` is: the touch-target audit (ADR-100) measures what
+  /// `AddHit` actually recorded rather than reading the constants a box is composed from, and this
+  /// is the same list `HandleTap` tests against.
+  [[nodiscard]] const std::vector<Hit>& Hits() const noexcept
+  {
+    return m_hits;
+  }
+
+private:
   void AddHit(float _x, float _y, float _width, float _height, std::int32_t _action, std::int32_t _seat);
+
+  /// The same, with the rectangle grown around its middle to the touch floor in whichever dimension
+  /// is short. For an ISOLATED CHIP, where the drawing stays the size the layout needs (ADR-100).
+  void AddHitAtLeastTheFloor(float _x, float _y, float _width, float _height, std::int32_t _action, std::int32_t _seat);
+
   void DrawSeatCard(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, std::int32_t _index, float _x, float _y, float _width,
                     float _height);
   void DrawDetail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);

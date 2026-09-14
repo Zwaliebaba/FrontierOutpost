@@ -152,6 +152,7 @@
     <ClCompile Include="JoinPageTests.cpp" />
     <ClCompile Include="FaceRuleTests.cpp" />
     <ClCompile Include="ContrastTests.cpp" />
+    <ClCompile Include="TouchTargetTests.cpp" />
   </ItemGroup>
   <!--
     THE EXECUTABLE'S OWN TRANSLATION UNITS, COMPILED A SECOND TIME.

@@ -337,7 +337,9 @@ std::vector<DigestCard> CardsOf(const MatchState& _state)
     const bool beforeTheFirstLock = _state.match.tick == 0;
     DigestCard card;
     card.kind = EventKind::Economy;
-    card.title = beforeTheFirstLock ? "NOTHING HAS HAPPENED YET" : "A QUIET TICK";
+    // Sentence case, like every other card title since ADR-099. These two are composed here rather
+    // than in `GameLogic`, so they were the only titles written in capitals at the source.
+    card.title = beforeTheFirstLock ? "Nothing has happened yet" : "A quiet tick";
     card.lines.push_back(beforeTheFirstLock
                            ? "The first tick resolves when the countdown ends. What you order before then is what it resolves."
                            : "Nothing you could see changed. Systems you have not scouted may have.");

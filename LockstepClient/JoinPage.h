@@ -97,14 +97,6 @@ public:
   /// Advances the caret's blink. The one thing on this screen that moves on its own.
   void Update(double _elapsedSeconds);
 
-private:
-  /// Which field the keyboard is talking to.
-  enum class Focus : std::uint8_t
-  {
-    Server,
-    Token
-  };
-
   struct Hit
   {
     float x;
@@ -112,6 +104,24 @@ private:
     float width;
     float height;
     std::int32_t action;
+  };
+
+  /// Every tappable rectangle the last draw recorded.
+  ///
+  /// Public for the reason `MainPage::Hits` is: the touch-target audit (ADR-100) measures what
+  /// `AddHit` actually recorded rather than reading the constants a box is composed from, and this
+  /// is the same list `HandleTap` tests against.
+  [[nodiscard]] const std::vector<Hit>& Hits() const noexcept
+  {
+    return m_hits;
+  }
+
+private:
+  /// Which field the keyboard is talking to.
+  enum class Focus : std::uint8_t
+  {
+    Server,
+    Token
   };
 
   void AddHit(float _x, float _y, float _width, float _height, std::int32_t _action);

@@ -14,14 +14,18 @@ ships — this document cites it and does not restate what it does not have to.
   `Frame::TOP_BAR_HEIGHT`, `DIGEST_WIDTH`, `ORDERS_WIDTH`. The map is what is left between the rails
   and is drawn first; the rails' opaque backgrounds are what confine it (ADR-017).
 - 1px separators `rgba(255,255,255,0.10)` (`Ink::CARD_BORDER`, 26/255).
-- **This game is for touch, and its targets do not meet the floor yet** (ADR-098). Every
-  player-facing string says *tap*, `PointerInput` is built on the Windows Pointer API for a finger,
-  and `SHEET_ROW_HEIGHT`'s own comment names **44** as the smallest a finger hits reliably. Measured
-  2026-09-14: sheet row 44 · sheet header 36 · sheet band, digest title and page band 22 · top bar
-  chips 20–22 · **locks rail row 21** · **digest card button 18** · `RESET` chip 18 · **map garrison
-  badge 16**. The three used most are the three smallest. **Measure a new control against 44, not
-  against the one beside it** — that is how 16 happened. The work is
-  `Design/Plans/UI-02-TouchTargets.md`.
+- **This game is for touch and the floor is 44** (ADR-098, ADR-100). Every player-facing string
+  says *tap* and `PointerInput` is built on the Windows Pointer API for a finger. **How a control
+  reaches 44 depends on what it sits beside:** a target in a COLUMN OF SIBLINGS grows its box — rail
+  rows and section headers, card buttons, sheet rows, both page bands — and an ISOLATED CHIP grows
+  only its hit, staying the size the layout around it needs with a 44px rectangle centred on it (the
+  map's 16px garrison badge, the `REPLAY` and `RESET` chips). **Measure a new control against 44, not
+  against the one beside it** — that is how 16 happened — and a control that cannot be 44 says why
+  where it is declared. **Reading the constants is not the audit**: a box is composed from several of
+  them and the one that goes wrong is the one nobody added up, so
+  `Tests/LockstepTests/TouchTargetTests.cpp` draws the real screens and measures what `AddHit`
+  recorded, in both dimensions, naming each offender by its `Action`. Still under the floor: the
+  sheet's 36px header and close corner, and the 22px sheet section band (never a target).
 - Rail padding 14px. Card padding **10px** (`MainPage::CARD_PADDING`; the handoff said 8). Line
   height **is not a number here** — it is `FontRenderer::LineHeightPixels`, 17px for the face as
   baked; see §Font. Everything on whole pixels.
@@ -105,14 +109,17 @@ the five characters ADR-014 substituted and re-measuring the six strings it shor
   for one.
 - Emphasis is colour, case, **weight** — one step, Regular against Medium — and now **size**, one
   step, 12px against 16px. Labels and
-  headers are uppercase (`Uppercased()`), sentences mixed case. **Card titles become mixed case** — `Battle at Ulme` — with uppercase kept for chips, section
-  headers and status words (ADR-099, decided and **not yet built**: it needs `FaceRuleTests` to tell
-  a label from a sentence by an explicit tag rather than by looking for a lowercase letter).
+  headers are uppercase (`Uppercased()`), sentences mixed case. **A card title is a sentence** —
+  `Battle at Ulme`, `Shipyard L1 rising at Dothan` — with uppercase kept for chips, section headers
+  and status words (ADR-099, **built**). Titles are authored in sentence case in `GameLogic`; the
+  one draw site that was shouting them no longer does. Sheet titles stay shouted: a sheet's title is
+  a section header on ADR-099's own list.
   **The shouting is no longer forced
   by the font**: the 8×8 face had no lowercase and Plex has both, so it is a choice the sheet is
-  making, and ADR-074 left open whether it should go on being made. One thing depends on the
-  current answer — `FaceRuleTests` tells a label from a sentence by whether it carries a lowercase
-  letter — so changing it means giving that test a different discriminator. No italics, no
+  making. **One exception, and it is a fact about the bake rather than a preference** (ADR-102): the
+  display cut exists in mono only, so a 16px title in sentence case is drawn in `MonoDisplay` and is
+  the one string on any screen that bends ADR-074's *sentences are sans*. `FaceRuleTests` says so in
+  its header and asserts the half it still can — that no card title is shouted. No italics, no
   letter-spacing.
 - **Chrome that sits around already-placed text goes through `BandTopForText`**, the inverse of
   `CenterTextY`. Three places had their own hand-tuned offset — a chip beside a section header, the
@@ -263,6 +270,13 @@ Semantic / owner (ADR-027: you are always blue)
   (ADR-060) — the build sheet, the fleet's destination picker, the far end of a proposed lane — and
   gives no order; a row with nothing to point at is not a target. `HOVER_FILL` under the pointer, on
   targets only. Focus-only at the lock.
+- **Locks rail page band** — 44px at the foot of the rail's scrolling band, drawn only when the
+  sections are taller than the column (ADR-101): `3 MORE · SIGNALS ›` right — the culled count and
+  the first section header below the fold, or `3 MORE ›` with no section down there — or `END` in
+  `NEUTRAL_DIM` at the bottom; `‹ UP` left once there is anything above, both muted. Its halves move
+  by a bandful less one row; a wheel notch over the rail moves it by one row. **The band is the
+  control and the wheel is the shortcut** — a column scrollable only by a mouse gesture is one half
+  this game's players cannot reach the bottom of.
 - **Locks list band** — a muted label grouping the rows under it, no rule and no count, never a
   target (ADR-086): `DOTHAN · 10 SHIPS` over that system's fleets, `UNDER WAY` over the ones in
   transit. Lighter than a section header, which starts a list rather than dividing one.

@@ -2018,4 +2018,250 @@ public:
   }
 };
 
+// The locks rail scrolls, because 44px rows made it have to (ADR-101).
+TEST_CLASS(RailScrollTests)
+{
+public:
+  /// A board whose rail cannot possibly fit: ten fleets across several systems, plus the other
+  /// three sections under them.
+  [[nodiscard]] static Lockstep::MatchState ACrowdedRail(const Lockstep::MatchSimulation& _simulation)
+  {
+    Lockstep::MatchState state = ViewOfSeatZero(_simulation);
+    Assert::IsFalse(state.fleets.empty());
+    Assert::IsTrue(state.graph.systems.size() >= 5U);
+
+    const Lockstep::Fleet original = state.fleets.front();
+    state.fleets.clear();
+    for (std::int32_t index = 0; index < 10; ++index)
+    {
+      Lockstep::Fleet fleet = original;
+      fleet.id = 100 + index;
+      fleet.name = std::format("FLT {}", index + 1);
+      fleet.owner = state.viewer;
+      fleet.ships = static_cast<std::uint32_t>(index + 1);
+      fleet.order = Lockstep::FleetStance::Hold;
+      fleet.underWay = false;
+      // Spread across five systems, so the section carries bands as well as rows.
+      fleet.from = index % 5;
+      fleet.to = index % 5;
+      state.fleets.push_back(std::move(fleet));
+    }
+    return state;
+  }
+
+  TEST_METHOD(AWheelOverTheRailScrollsItAndStopsAtBothEnds)
+  {
+    const auto simulation = PlayedMatch(4);
+    Lockstep::MainPage page;
+    page.Create(ACrowdedRail(*simulation));
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    // A notch away from the player moves down the column, as it does on the digest.
+    Assert::IsTrue(page.HandleZoom(-1, 1150.0F, 300.0F), L"a notch over the rail scrolled nothing");
+
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    // Spun hard against the bottom it reports no change, so an idle frame costs no redraw.
+    for (std::int32_t again = 0; again < 60; ++again)
+    {
+      (void)page.HandleZoom(-1, 1150.0F, 300.0F);
+      renderers.Begin();
+      DrawPage(page, renderers);
+    }
+    Assert::IsFalse(page.HandleZoom(-1, 1150.0F, 300.0F), L"the rail has no bottom");
+
+    for (std::int32_t back = 0; back < 80; ++back)
+    {
+      (void)page.HandleZoom(1, 1150.0F, 300.0F);
+      renderers.Begin();
+      DrawPage(page, renderers);
+    }
+    Assert::IsFalse(page.HandleZoom(1, 1150.0F, 300.0F), L"the rail has no top");
+  }
+
+  TEST_METHOD(ARailThatFitsDoesNotScrollAtAll)
+  {
+    // The opening board: one fleet, nothing queued. There is nothing below the fold, so the gesture
+    // must do nothing rather than move a column that is already whole.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    Assert::IsFalse(page.HandleZoom(-1, 1150.0F, 300.0F), L"a rail with room to spare scrolled");
+  }
+
+  TEST_METHOD(AScrolledRowIsNeitherDrawnNorTappable)
+  {
+    // `ShapeRenderer` has no clip, so a row scrolled past the top is culled rather than clipped --
+    // and a culled row must take its hit rectangle with it, or there is an invisible control sitting
+    // over the help line.
+    const auto simulation = PlayedMatch(4);
+    Lockstep::MainPage page;
+    page.Create(ACrowdedRail(*simulation));
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    const auto railHits = [&page]
+    {
+      std::size_t count = 0;
+      for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
+      {
+        // The rail's own column, below the header.
+        count += hit.x >= SCREEN_WIDTH - ORDERS_RAIL && hit.y > TOP_BAR ? 1U : 0U;
+      }
+      return count;
+    };
+    const std::size_t before = railHits();
+    Assert::IsTrue(before > 0, L"the crowded rail offered no targets at all");
+
+    // Every hit still inside the band, wherever it is scrolled to.
+    for (std::int32_t step = 0; step < 6; ++step)
+    {
+      (void)page.HandleZoom(-1, 1150.0F, 300.0F);
+      renderers.Begin();
+      DrawPage(page, renderers);
+
+      for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
+      {
+        const bool onTheRail = hit.x >= SCREEN_WIDTH - ORDERS_RAIL && hit.y > TOP_BAR;
+        if (onTheRail)
+        {
+          Assert::IsTrue(hit.y >= TOP_BAR, L"a rail hit escaped above the band");
+
+          // The footer, not the screen. `ALL LOCK TOGETHER` is pinned in the last 30 pixels and
+          // nothing that scrolls may reach it -- which is what the page band's own targets stop
+          // exactly at.
+          Assert::IsTrue(hit.y + hit.height <= SCREEN_HEIGHT - 30.0F, L"a rail hit escaped below the band");
+        }
+      }
+    }
+  }
+
+  /// The page band's two halves, by the action only they carry.
+  [[nodiscard]] static std::vector<Lockstep::MainPage::HitRegion> PageBand(const Lockstep::MainPage& _page)
+  {
+    std::vector<Lockstep::MainPage::HitRegion> band;
+    for (const Lockstep::MainPage::HitRegion& hit : _page.Hits())
+    {
+      if (hit.action == Lockstep::MainPage::Action::PageRail)
+      {
+        band.push_back(hit);
+      }
+    }
+    return band;
+  }
+
+  TEST_METHOD(TheBandIsWhatAFingerScrollsTheRailWith)
+  {
+    // **The wheel is the shortcut and the band is the control** (ADR-098, ADR-101). A rail that can
+    // only be scrolled by a mouse gesture is a rail whose bottom a touch player never reaches, so
+    // what this asserts is that the tap works, not that the wheel does.
+    const auto simulation = PlayedMatch(4);
+    Lockstep::MainPage page;
+    page.Create(ACrowdedRail(*simulation));
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    // At the top there is one half only: a control offering to go up from the top is a control that
+    // does nothing, and the digest band has never drawn one either (ADR-080).
+    std::vector<Lockstep::MainPage::HitRegion> band = PageBand(page);
+    Assert::AreEqual(std::size_t{1}, band.size(), L"the band at the top of a crowded rail is not one half");
+    Assert::AreEqual(1, band.front().index, L"the only half at the top is not the one that goes down");
+    Assert::IsTrue(band.front().height >= 44.0F, L"the band is under the touch floor");
+
+    Assert::IsTrue(page.HandleTap(band.front().x + 10.0F, band.front().y + 10.0F), L"the band's down half did nothing");
+
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    // And now both, because there is something in both directions.
+    band = PageBand(page);
+    Assert::AreEqual(std::size_t{2}, band.size(), L"a scrolled rail does not offer both directions");
+
+    const auto up = std::ranges::find_if(band, [](const Lockstep::MainPage::HitRegion& _hit) { return _hit.index == -1; });
+    Assert::IsTrue(up != band.end(), L"a scrolled rail offers no way back up");
+    Assert::IsTrue(page.HandleTap(up->x + 10.0F, up->y + 10.0F), L"the band's up half did nothing");
+
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    // Back where it started, which is the half of a pager that is easy to get wrong.
+    Assert::AreEqual(std::size_t{1}, PageBand(page).size(), L"the rail did not come back to its top");
+  }
+
+  /// Every string the last frame was asked to draw, which is where a band's copy still is a
+  /// sentence rather than glyph boxes.
+  [[nodiscard]] static bool WasDrawn(const Headless& _renderers, std::string_view _text)
+  {
+    return std::ranges::any_of(_renderers.text.DrawnStrings(),
+                               [_text](const Neuron::FontRenderer::DrawnString& _drawn) { return _drawn.text == _text; });
+  }
+
+  TEST_METHOD(TheBandSaysWhatIsBelowItAndThenSaysEnd)
+  {
+    // **The wording is the decision** (ADR-101), so it is read out of a real frame rather than
+    // eyeballed: `N MORE - SIGNALS >` tells a player whether the thing they are looking for is down
+    // there, which `>` on its own never did.
+    const auto simulation = PlayedMatch(4);
+    Lockstep::MainPage page;
+    page.Create(ACrowdedRail(*simulation));
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    // At the top: no way up, and what is below named by its section.
+    Assert::IsFalse(WasDrawn(renderers, "‹ UP"), L"the band offered a way up from the top");
+
+    const auto below = std::ranges::find_if(renderers.text.DrawnStrings(), [](const Neuron::FontRenderer::DrawnString& _drawn)
+                                            { return _drawn.text.find(" MORE") != std::string::npos && _drawn.text.ends_with("›"); });
+    Assert::IsTrue(below != renderers.text.DrawnStrings().end(), L"the band did not say what is below it");
+    Assert::IsTrue(below->text.find("BUILDS") != std::string::npos || below->text.find("SIGNALS") != std::string::npos,
+                   L"the band did not name the section below the fold");
+
+    // Spun to the bottom: a way up, and `END` rather than a count of nothing.
+    for (std::int32_t again = 0; again < 60; ++again)
+    {
+      (void)page.HandleZoom(-1, 1150.0F, 300.0F);
+      renderers.Begin();
+      DrawPage(page, renderers);
+    }
+
+    Assert::IsTrue(WasDrawn(renderers, "‹ UP"), L"a rail at its bottom offered no way back up");
+    Assert::IsTrue(WasDrawn(renderers, "END"), L"a rail at its bottom did not say END");
+  }
+
+  TEST_METHOD(ARailThatFitsHasNoBandAndKeepsTheRoom)
+  {
+    // The band costs 44 pixels of column, so a rail that fits must not be paying for it.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    for (std::int32_t frame = 0; frame < 3; ++frame)
+    {
+      renderers.Begin();
+      DrawPage(page, renderers);
+    }
+
+    Assert::AreEqual(std::size_t{0}, PageBand(page).size(), L"a rail with room to spare drew a page band");
+    Assert::IsFalse(WasDrawn(renderers, "END"), L"a rail with room to spare drew the band's copy");
+  }
+};
+
 } // namespace LockstepTests

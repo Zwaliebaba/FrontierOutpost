@@ -63,7 +63,11 @@ constexpr float CARD_WIDTH = (GRID_WIDTH - CARD_GAP * (GRID_COLUMNS - 1)) / GRID
 /// through the toggle row. Adding the pieces up is what stops that happening again the next time a
 /// face changes. The four gaps are the ones `DrawSeatCard` uses, in the order it uses them.
 constexpr float CARD_TOP_PADDING = 12.0F;
-constexpr float CARD_TOGGLE_HEIGHT = 18.0F;
+
+/// **The three-way is three targets, so it is the floor tall** (ADR-100). It was 18, which is the
+/// height of the line its label sits on rather than the height of a control. The card grows by the
+/// difference and the console grows with it, which is what a column of siblings costs.
+constexpr float CARD_TOGGLE_HEIGHT = Frame::TOUCH_FLOOR;
 constexpr float CARD_TOGGLE_MARGIN = 10.0F;
 constexpr float CARD_HEIGHT = CARD_TOP_PADDING + static_cast<float>(4 * LINE_HEIGHT + 12 + 2 + 8) + CARD_TOGGLE_HEIGHT + CARD_TOGGLE_MARGIN;
 constexpr float GRID_HEIGHT = 2.0F * CARD_HEIGHT + CARD_GAP;
@@ -301,6 +305,12 @@ std::int32_t SeatsPage::FillWaitingSeatsWithBots()
   return filled;
 }
 
+void SeatsPage::AddHitAtLeastTheFloor(float _x, float _y, float _width, float _height, std::int32_t _action, std::int32_t _seat)
+{
+  const Frame::Box box = Frame::GrownToFloor(_x, _y, _width, _height);
+  AddHit(box.x, box.y, box.width, box.height, _action, _seat);
+}
+
 void SeatsPage::AddHit(float _x, float _y, float _width, float _height, std::int32_t _action, std::int32_t _seat)
 {
   m_hits.push_back(Hit{_x, _y, _width, _height, _action, _seat});
@@ -513,16 +523,23 @@ void SeatsPage::DrawSeatCard(ShapeRenderer& _shapes, FontRenderer& _text, std::i
   // same question.
   //
   // The segments are sized to their labels rather than cut into equal thirds: `BOT AT T1` is nine
-  // glyphs and a third of a 212-pixel card is seven.
+  // glyphs and a third of a 212-pixel card is seven. **With a floor under each** (ADR-100): sized to
+  // their text alone they came out 47, 75 and 33 pixels wide, and the floor is a floor in BOTH
+  // dimensions, so the shortest word was the hardest control on this screen to hit. `BOT` is padded
+  // to 44 and the gap between segments absorbs it -- the alternative, equal thirds, is the one this
+  // comment already rules out.
   const float toggleY = _y + _height - CARD_TOGGLE_HEIGHT - CARD_TOGGLE_MARGIN;
   const float room = _width - 24.0F;
   const std::array<const char*, 3> labels = {"HUMAN", "BOT AT T1", "BOT"};
   const std::array<std::int32_t, 3> actions = {ACTION_HUMAN, ACTION_BOT_TAKES_OVER, ACTION_BOT};
 
+  const auto segmentFor = [](const char* _label)
+  { return std::max(static_cast<float>(FontRenderer::MeasurePixels(_label)) + 12.0F, Frame::TOUCH_FLOOR); };
+
   float measured = 0.0F;
   for (const char* label : labels)
   {
-    measured += static_cast<float>(FontRenderer::MeasurePixels(label)) + 12.0F;
+    measured += segmentFor(label);
   }
   const float gap = std::max(2.0F, (room - measured) / static_cast<float>(labels.size() - 1));
 
@@ -537,7 +554,7 @@ void SeatsPage::DrawSeatCard(ShapeRenderer& _shapes, FontRenderer& _text, std::i
   for (std::size_t slot = 0; slot < labels.size(); ++slot)
   {
     const auto labelWidth = static_cast<float>(FontRenderer::MeasurePixels(labels[slot]));
-    const float segmentWidth = labelWidth + 12.0F;
+    const float segmentWidth = segmentFor(labels[slot]);
 
     if (lit[slot])
     {
@@ -585,13 +602,15 @@ void SeatsPage::DrawDetail(ShapeRenderer& _shapes, FontRenderer& _text)
 
   const auto copyWidth = static_cast<float>(FontRenderer::MeasurePixels("COPY"));
   _text.DrawText(static_cast<std::int32_t>(contentRight - copyWidth) - 8, CenterTextY(static_cast<float>(y), 24.0F), "COPY", BLUE);
-  AddHit(contentRight - copyWidth - 16.0F, static_cast<float>(y), copyWidth + 16.0F, 24.0F, ACTION_COPY, m_selected);
+  // An ISOLATED CHIP at the end of the token's own box (ADR-100): a 44px box here would be a
+  // button taller than the token it copies. The hit is the floor in both dimensions, centred on it.
+  AddHitAtLeastTheFloor(contentRight - copyWidth - 16.0F, static_cast<float>(y), copyWidth + 16.0F, 24.0F, ACTION_COPY, m_selected);
   y += 32;
 
   const float halfWidth = (contentRight - contentX - 8.0F) * 0.5F;
   _shapes.StrokeRect(contentX, static_cast<float>(y), halfWidth, 22.0F, OUTLINE);
   _text.DrawText(static_cast<std::int32_t>(contentX) + 10, CenterTextY(static_cast<float>(y), 22.0F), "NEW TOKEN", TEXT_PRIMARY);
-  AddHit(contentX, static_cast<float>(y), halfWidth, 22.0F, ACTION_NEW_TOKEN, m_selected);
+  AddHitAtLeastTheFloor(contentX, static_cast<float>(y), halfWidth, 22.0F, ACTION_NEW_TOKEN, m_selected);
 
   // **`TAKE SEAT` was here and it lied.** It moved `m_hostSeat`, which is what decides whose seat
   // is protected from the BOT toggle and which seats FILL WAITING skips -- while the host's actual
@@ -681,7 +700,7 @@ void SeatsPage::DrawPractice(ShapeRenderer& _shapes, FontRenderer& _text)
 
   _shapes.StrokeRect(buttonX, buttonY, buttonWidth, 24.0F, AMBER);
   _text.DrawText(static_cast<std::int32_t>(buttonX) + 12, CenterTextY(buttonY, 24.0F), "PRACTICE MATCH ›", AMBER);
-  AddHit(buttonX, buttonY, buttonWidth, 24.0F, ACTION_PRACTICE, -1);
+  AddHitAtLeastTheFloor(buttonX, buttonY, buttonWidth, 24.0F, ACTION_PRACTICE, -1);
 
   // The comparison a beginner is actually making, in the two numbers that differ. Everything else
   // about the match is the same one, which is this sentence's whole job (`PracticeRules`).
@@ -771,7 +790,7 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     _shapes.FillRect(enterX, footerY + 10.0F, enterWidth, 24.0F, BLUE);
     _text.DrawText(static_cast<std::int32_t>(enterX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "ENTER MATCH ›", APP_BACKGROUND);
-    AddHit(enterX, footerY + 10.0F, enterWidth, 24.0F, ACTION_ENTER, -1);
+    AddHit(enterX, footerY, enterWidth, FOOTER_HEIGHT, ACTION_ENTER, -1);
   }
   else
   {
@@ -787,7 +806,9 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
   const float fillX = enterX - 12.0F - fillWidth;
   _shapes.StrokeRect(fillX, footerY + 10.0F, fillWidth, 24.0F, OUTLINE);
   _text.DrawText(static_cast<std::int32_t>(fillX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "FILL WAITING WITH BOTS", TEXT_PRIMARY);
-  AddHit(fillX, footerY + 10.0F, fillWidth, 24.0F, ACTION_FILL, -1);
+  // The footer is already the floor tall, so these two take the band rather than the button
+  // drawn inside it (ADR-100). Nothing else is in this row to collide with.
+  AddHit(fillX, footerY, fillWidth, FOOTER_HEIGHT, ACTION_FILL, -1);
 }
 
 void SeatsPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)

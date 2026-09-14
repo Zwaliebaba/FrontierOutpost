@@ -62,6 +62,10 @@ constexpr float FLEET_HOVER = 14.0F;
 /// what a chip is on this screen; there is no rounded-rectangle primitive and every other chip here
 /// is square, so this one is too.
 constexpr float BADGE_HEIGHT = 16.0F;
+/// What a finger gets, around what the eye gets (ADR-100). `MainPage::TOUCH_FLOOR` is the number;
+/// it is restated here because `MapRender` does not include `MainPage.h` -- the map knows nothing
+/// about the page that draws it (ADR-045) -- and `TouchTargetTests` is what holds the two together.
+constexpr float BADGE_TOUCH_FLOOR = 44.0F;
 constexpr float BADGE_PADDING = 4.0F;
 /// A rival's badge is a wash rather than a fill: their strength is a fact to read, and only the
 /// viewer's own badge is a thing to tap.
@@ -434,10 +438,17 @@ void DrawSystem(ShapeRenderer& _shapes, FontRenderer& _text, const MapFrame& _fr
 
     // A rival's badge names the system, so the tap focuses it exactly as the disc does. Yours names
     // the fleets standing there, which is a different thing to tap and a different index (ADR-057).
-    _hits.push_back(MapHit{.x = badgeX,
-                           .y = badgeTop,
-                           .width = badgeWidth,
-                           .height = BADGE_HEIGHT,
+    //
+    // **Drawn at 16, hit at the touch floor** (ADR-098, ADR-100). A badge is an isolated chip -- it
+    // has the pane around it and is already placed clear of the disc and of its neighbour -- so the
+    // target grows and the drawing does not. A 44px badge beside a system name would be a different
+    // map rather than a bigger box. The rectangle is centred on what is drawn, so where a finger
+    // aims and where the eye aims are the same point.
+    const float hitWidth = std::max(badgeWidth, BADGE_TOUCH_FLOOR);
+    _hits.push_back(MapHit{.x = badgeX - (hitWidth - badgeWidth) * 0.5F,
+                           .y = badgeTop - (BADGE_TOUCH_FLOOR - BADGE_HEIGHT) * 0.5F,
+                           .width = hitWidth,
+                           .height = BADGE_TOUCH_FLOOR,
                            .system = yours ? EventRefs::NONE : _index,
                            .fleetsAt = yours ? _index : EventRefs::NONE});
     // The badge is drawn ink competing for the same strip as the next system's name, so it joins

@@ -30,24 +30,35 @@ constexpr float TITLE_Y = 166.0F;
 constexpr float SUBTITLE_Y = 197.0F;
 
 constexpr float CARD_Y = 228.0F;
-constexpr float CARD_HEIGHT = 234.0F;
 constexpr float CARD_PADDING = 19.0F;
 constexpr float FIELD_X = COLUMN_X + CARD_PADDING;
 constexpr float FIELD_WIDTH = COLUMN_WIDTH - 2.0F * CARD_PADDING;
-constexpr float FIELD_HEIGHT = 30.0F;
+
+/// Baseline to baseline, from the font. See `MainPage::LINE_HEIGHT`.
+constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels());
+
+/// **The card adds itself up now** (ADR-100). A field box was 30 and the JOIN button 23, and making
+/// them the touch floor moved everything under them -- which was seven hand-placed Y constants, of
+/// which four would still be right and three would silently overlap. They are derived from each
+/// other instead, in the order the card stacks them, so the next control that changes height moves
+/// what is under it rather than being drawn through it. `SeatsPage::CARD_HEIGHT` learned this the
+/// hard way and says so.
+constexpr float FIELD_HEIGHT = Frame::TOUCH_FLOOR;
+/// A field's label baseline to the top of its box.
+constexpr float FIELD_LABEL_GAP = 14.0F;
 
 constexpr float SERVER_LABEL_Y = 250.0F;
-constexpr float TOKEN_LABEL_Y = 315.0F;
-constexpr float EXPLANATION_Y = 381.0F;
+constexpr float SERVER_BOX_BOTTOM = SERVER_LABEL_Y + FIELD_LABEL_GAP + FIELD_HEIGHT;
+constexpr float TOKEN_LABEL_Y = SERVER_BOX_BOTTOM + 21.0F;
+constexpr float TOKEN_BOX_BOTTOM = TOKEN_LABEL_Y + FIELD_LABEL_GAP + FIELD_HEIGHT;
+constexpr float EXPLANATION_Y = TOKEN_BOX_BOTTOM + 22.0F;
 /// **The dashed `SEAT - NOT YET CONFIRMED` box is gone** (ADR-095), and the card is 48 pixels
 /// shorter for it. It was never populated: `SetSeat` had no caller, because a `Welcome` carries a
 /// seat and by the time one arrives this screen has been replaced by the lobby. A box that only ever
 /// says `NOT YET CONFIRMED` is a box that only ever says nothing.
-constexpr float BUTTON_Y = 420.0F;
-constexpr float BUTTON_HEIGHT = 23.0F;
-
-/// Baseline to baseline, from the font. See `MainPage::LINE_HEIGHT`.
-constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels());
+constexpr float BUTTON_HEIGHT = Frame::TOUCH_FLOOR;
+constexpr float BUTTON_Y = EXPLANATION_Y + static_cast<float>(2 * LINE_HEIGHT) + 5.0F;
+constexpr float CARD_HEIGHT = BUTTON_Y + BUTTON_HEIGHT + CARD_PADDING - CARD_Y;
 
 /// **One palette, bound to local names** (ADR-083). These were thirteen literal colours copied from
 /// the same list, which is thirteen chances for one of them to be adjusted alone -- and the day the
@@ -263,9 +274,17 @@ void JoinPage::DrawField(ShapeRenderer& _shapes, FontRenderer& _text, float _y, 
 
     // SHOW is the only label on this screen that is also a control, so it gets a hit of its own
     // rather than being part of the field.
+    //
+    // An ISOLATED CHIP (ADR-100): it sits on the TOKEN label's own line, so a 44px box here would
+    // be a button above a field rather than a word beside a label. The drawing stays 16 and the
+    // target grows around it -- up into the gap above the label and down over the top of the box,
+    // where the field's own hit starts. The field's hit is added AFTER this one and hit testing
+    // takes the first match (`HandleTap`), so the overlap resolves in SHOW's favour, which is the
+    // way round it has to be: the field is 442 pixels wide and this is the small thing inside it.
     if (_action == HIT_TOKEN)
     {
-      AddHit(rightX - 4.0F, _y - 4.0F, width + 8.0F, 16.0F, HIT_SHOW);
+      const Frame::Box box = Frame::GrownToFloor(rightX - 4.0F, _y - 4.0F, width + 8.0F, 16.0F);
+      AddHit(box.x, box.y, box.width, box.height, HIT_SHOW);
     }
   }
 

@@ -28,7 +28,14 @@ constexpr float CARD_WIDTH = 520.0F;
 constexpr float CARD_X = (SCREEN_WIDTH - CARD_WIDTH) * 0.5F;
 constexpr float CARD_PADDING = 18.0F;
 
-constexpr float BUTTON_HEIGHT = 24.0F;
+/// **A row of siblings in a card, so the box grows** (ADR-100). The card's height is composed
+/// from this, so the card grows with it and nothing had to be re-placed.
+constexpr float BUTTON_HEIGHT = Frame::TOUCH_FLOOR;
+
+/// The banner's is different, and that is the isolated-chip rule (ADR-100). The banner is exactly
+/// the floor tall, so a button drawn at the floor inside it touches both edges; it stays 24 and its
+/// HIT takes the whole band instead. Nothing else is in that row to collide with.
+constexpr float BANNER_BUTTON_HEIGHT = 24.0F;
 constexpr float BUTTON_GAP = 8.0F;
 constexpr float BUTTON_PADDING = 12.0F;
 
@@ -328,7 +335,7 @@ void ConnectionDialog::DrawBanner(ShapeRenderer& _shapes, FontRenderer& _text, c
                                            Uppercased(Seconds(m_facts.secondsToNextAttempt)));
   _text.DrawText(static_cast<std::int32_t>(CARD_PADDING) + 4, CenterTextY(BANNER_TOP, BANNER_HEIGHT), next, _look.title);
 
-  const float buttonY = BANNER_TOP + (BANNER_HEIGHT - BUTTON_HEIGHT) * 0.5F;
+  const float buttonY = BANNER_TOP + (BANNER_HEIGHT - BANNER_BUTTON_HEIGHT) * 0.5F;
   float right = SCREEN_WIDTH - CARD_PADDING - 4.0F;
   for (auto button = _buttons.rbegin(); button != _buttons.rend(); ++button)
   {
@@ -337,15 +344,17 @@ void ConnectionDialog::DrawBanner(ShapeRenderer& _shapes, FontRenderer& _text, c
 
     if (button->filled)
     {
-      _shapes.FillRect(x, buttonY, width, BUTTON_HEIGHT, BLUE);
+      _shapes.FillRect(x, buttonY, width, BANNER_BUTTON_HEIGHT, BLUE);
     }
     else
     {
-      _shapes.StrokeRect(x, buttonY, width, BUTTON_HEIGHT, OUTLINE);
+      _shapes.StrokeRect(x, buttonY, width, BANNER_BUTTON_HEIGHT, OUTLINE);
     }
-    _text.DrawText(static_cast<std::int32_t>(x + BUTTON_PADDING), CenterTextY(buttonY, BUTTON_HEIGHT), button->label,
+    _text.DrawText(static_cast<std::int32_t>(x + BUTTON_PADDING), CenterTextY(buttonY, BANNER_BUTTON_HEIGHT), button->label,
                    button->filled ? APP_BACKGROUND : TEXT_PRIMARY);
-    m_hits.push_back(Hit{x, buttonY, width, BUTTON_HEIGHT, button->action});
+
+    // The band, not the button drawn in it (ADR-100).
+    m_hits.push_back(Hit{x, BANNER_TOP, width, BANNER_HEIGHT, button->action});
 
     right = x - BUTTON_GAP;
   }
