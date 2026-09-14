@@ -29,17 +29,18 @@ is over, `MATCH ENDED --:--:--`.
 **Digest (400px, left) — the order surface (`DrawDigestRail`, `DigestView.cpp`).**
 Header `DIGEST - TICK 7` with `5 EVENTS` on the right, or `SINCE YOU LOOKED · T4 → T7` with an
 amber `3 TICKS` chip and the delta box when ticks resolved unseen (see 08). Then cards in consequence
-order, each with its actions on its own row: an event card (dot, uppercased title, wrapped detail,
+order, each with its actions on its own row: an event card (dot, **sentence-cased** title in the 16px
+display cut — `Battle at Ulme`, `Shipyard L1 rising at Dothan` — ADR-099, wrapped detail,
 verdict box when your fleet is flying into a contact, actions), or an actor card grouping a rival's
 ≥2 events (`P3 - LEADER 1,610`, `3 EVENTS`, one line per event, ranked by the worst). Actions are
 composed per event (ADR-057): `ACCEPT`/`DECLINE` on a proposal, `REDIRECT FLT 1` on a contact your
 fleet reaches, a priced build on a claimed system or a production line, `MAP` on anything about a
 system. When no card offers a real control the standing moves go on the leading card — a priced
 `BUILD` and up to two `MOVE FLT n` (ADR-056); before the first lock the digest is one card,
-`NOTHING HAS HAPPENED YET`, carrying them. Build buttons show `- QUEUED` (outlined blue) and
+`Nothing has happened yet`, carrying them. Build buttons show `- QUEUED` (outlined blue) and
 `- NEED 7 MORE` (dim, inert) per ADR-053, and name the LEVEL they would build —
 `MINING STATION L2 JANDAL 30 CR` (ADR-069); a build already in flight is a card that reports and
-offers nothing, `SHIPYARD L1 RISING AT DOTHAN` / *Done T5 - 20 credits spent*, `MAP` its only
+offers nothing, `Shipyard L1 rising at Dothan` / *Done T5 - 20 credits spent*, `MAP` its only
 action (ADR-070). An **answered proposal** reads `ACCEPTED` or `DECLINED` in
 the past tense on the button that was pressed, outlined blue like a queued build, with the other
 button still imperative and still tappable, so changing an answer before the lock is one tap
@@ -49,6 +50,13 @@ about that the card's own tap does not reach are named chips** — `HOLLIS`, `NY
 then `+n`, each focusing that system (ADR-081). A card carries no button labelled `MAP`: the one
 that pointed where the card body already points was one tap drawn twice, and the ones that pointed
 somewhere else said nothing about where.
+
+**A title is a sentence and the cut it is set in is mono** (ADR-099, ADR-102). Uppercase stays for
+chips, section headers and status words — `QUEUED`, `CAPTURED`, `3 EVENTS`, `FLEETS`. The face is the
+one bend in ADR-074's *sentences are sans* on any screen, and it is a fact about the bake rather than
+a preference: the 16px display cut exists in Plex Mono only (ADR-073), so a title at title size has
+nowhere sans to go. An actor card's title is capitals throughout without being a shout — `P3 - LEADER
+1,610` is a name and a status word.
 
 **Overflow (ADR-061, ADR-080).** An **actor card is collapsed** unless it is the open one: dot,
 title, `3 EVENTS`, the verdict box and the whole action row, with the per-event lines behind a tap on

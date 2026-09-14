@@ -58,14 +58,27 @@ retaken; the table in `DESIGN-GUIDELINES.md` §Frame updated to say the floor is
 ADR-074 and is now a choice.
 
 **Change.**
-- `FontRenderer::DrawnString` carries what a string IS -- label or sentence -- set at the call site.
-- `FaceRuleTests` uses that tag instead of looking for a lowercase letter. It gets stronger: a system
-  named `McBride` defeats the current discriminator silently.
-- Stop applying `Uppercased()` to digest card titles and sheet titles; keep it for chips, section
-  headers and status words.
+- ~~`FontRenderer::DrawnString` carries what a string IS -- label or sentence -- set at the call
+  site.~~ **Not built, and ADR-102 says why.** Measured rather than assumed: the suite was green
+  before the case change and green after it, because `NothingInSansIsShouted` reads the signal in
+  one direction only (*shouted implies label*) and every label is still shouted. The tag was not
+  load-bearing. It would also not be an independent check -- typed at the same call site as the
+  face, by the same hand, in the same moment -- and that is the reason it stays unbuilt rather than
+  the schedule.
+- **Done.** `Uppercased()` off digest card titles, and the two titles the client composes itself
+  authored in sentence case. **Sheet titles stay shouted**: a sheet's title is a section header on
+  ADR-099's own list, and this plan's "and sheet titles" was the looser reading.
+- **Done.** `NoCardTitleIsShouted` asserts the half of ADR-099 the bytes can still answer, so one
+  `Uppercased()` put back turns the suite red. Its first run taught it something: `MonoDisplay` is
+  not only card titles -- the connection dialog sets `WAITING FOR THE HOST` in it -- so it names the
+  digest's column rather than trusting the cut.
+- **The face could not follow the case** (ADR-102). ADR-074 says sentences are sans; the 16px
+  display cut is baked from Plex Mono alone, so the title stays mono and is the one string on any
+  screen that bends that rule. Whether to bake a sans display cut is the open question.
 
-**Done when.** `FaceRuleTests` passes on the tag; no card title is uppercased; `01-main-page.png` and
-the sheet captures retaken; `DESIGN-GUIDELINES.md` §Copy says the rule in the present tense.
+**Done when.** ~~`FaceRuleTests` passes on the tag~~; no card title is uppercased; `01-main-page.png`
+and the sheet captures retaken; `DESIGN-GUIDELINES.md` §Copy says the rule in the present tense.
+**All but the captures.**
 
 ## Order
 
@@ -77,7 +90,9 @@ the sheet captures retaken; `DESIGN-GUIDELINES.md` §Copy says the rule in the p
 |---|---|
 | ADR-100 | A target is 44 pixels, and a sibling grows its box while an isolated chip grows only its hit. `TouchTargetTests` is the audit. |
 | ADR-101 | The locks rail scrolls, and its page band -- not the wheel -- is the control. |
+| ADR-102 | A sentence-cased title in the mono cut, and the tag that was not built. |
 
-Section 1 is done. What is left in this plan is section 2, and then the captures.
+Both sections are done. What is left in this plan is the capture pass -- all 23, which is now the
+only thing standing between this tree and a `Design/UI/screens/` that matches it.
 
 Commits: `Hold the main page's targets to the 44px floor`, and the rail's scroll.

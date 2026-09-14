@@ -1360,7 +1360,18 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     _shapes.FillEllipse(RAIL_PADDING + 4.0F, static_cast<float>(lineY) + 4.0F, 4.0F, 4.0F, accent);
     // The display cut (ADR-084): a card's title is what the card IS, and until there were two sizes
     // it was separated from the sentences under it by a weight step nobody could see at a glance.
-    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, Uppercased(card.title), Ink::TEXT_PRIMARY, Face::MonoDisplay);
+    //
+    // **And NOT shouted** (ADR-099). `Uppercased()` was here, over a detail line reading *7 of 10
+    // lost (defending)*: a shout and a sentence about the same event. The titles are the longest
+    // strings on the screen and uppercase is the least legible case for a long string, which the
+    // display cut's 16px made louder rather than clearer. They are authored in sentence case in
+    // `GameLogic` -- `Battle at Ulme`, `Shipyard L1 rising at Dothan` -- and this is the one place
+    // that was shouting them.
+    //
+    // **The face is still MONO, and that is a constraint rather than a decision** (ADR-102): the
+    // display cut is baked from Plex Mono only (`Font.h`, ADR-073), so a sentence-cased title at
+    // this size has nowhere sans to go. ADR-074's rule is bent here and the ADR says where.
+    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, card.title, Ink::TEXT_PRIMARY, Face::MonoDisplay);
     if (!card.stamp.empty())
     {
       DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, lineY, card.stamp, Ink::TEXT_MUTED);

@@ -24,11 +24,25 @@
 // capitals. A string drawn in sans with no lowercase letter in it is a label that got the sentence
 // face -- which is the mistake worth catching, and it is catchable.
 //
-// **That discriminator is borrowed, and it can be taken away.** The screen shouts its labels
-// because the 8x8 font had no lowercase; Plex has both, and ADR-074 left open whether the shouting
-// should continue now that nothing forces it. If the answer ever becomes no, this test needs a
-// different way to tell a label from a sentence -- the face each was ASKED for would still be
-// recorded, but the strings would no longer give the rule away.
+// **That discriminator is borrowed, and half of it has now been taken away** (ADR-099, 2026-09-14).
+// The screen shouted its labels because the 8x8 font had no lowercase; Plex has both, and the
+// owner's answer is that CARD TITLES stop shouting while chips, section headers and status words go
+// on. So the borrowed signal still holds in the direction this test reads it -- a sans string with
+// no lowercase in it is still a label that took the sentence face, because every label is still
+// shouted -- and it has stopped holding in the other: a mixed-case string is no longer necessarily
+// a sentence.
+//
+// **What that costs, exactly, and it is worth being precise about it.** The mono half of the rule
+// (data is mono) is now unenforced for one string: a card title is a sentence by ADR-099 and is
+// drawn in the MONO display cut, because the display cut is baked from Plex Mono alone and there is
+// nowhere sans for a 16px title to go (ADR-073, ADR-102). That is a known bent rule with an ADR
+// behind it rather than a gap. The test below asserts the half of ADR-099 that IS checkable from
+// the bytes -- that no card title is shouted -- so the case decision cannot be reverted silently.
+//
+// An explicit label/sentence tag on `DrawnString`, which ADR-099 proposed, would close the rest.
+// ADR-102 records why it was not built here: the tag would be typed at the same call site as the
+// face, by the same hand, in the same moment -- a second spelling of one decision rather than an
+// independent check -- and it buys nothing until there is a sans display cut to disagree with.
 //
 // The mono half keeps the full stop and drops the question mark, for a reason of the same kind:
 // `FIRST MATCH?` is a shouted two-word prompt sharing a row with the button it introduces, and it
@@ -244,6 +258,51 @@ public:
     }
 
     Assert::IsTrue(offenders.empty(), Listed("drawn in sans, but shouted (ADR-074: data is mono)", offenders).c_str());
+  }
+
+  // ADR-099, in the half of it the recorded strings can still answer: a card title is a sentence,
+  // so it is not shouted. The titles are authored in sentence case in `GameLogic` and were being
+  // uppercased at the one draw site, so reverting that is a one-word change and this is what would
+  // catch it.
+  //
+  // **The display cut plus the screen**, and the second half is not padding. `MonoDisplay` was
+  // written down here as "card titles and nothing else" and the first run of this test said
+  // otherwise: the connection dialog sets `WAITING FOR THE HOST` and `MATCH FINISHED` in it, and
+  // those are status headings, which ADR-099 keeps shouted. The join screen and the lobby set
+  // `LOCKSTEP` in it. So the digest's column is named rather than assumed.
+  TEST_METHOD(NoCardTitleIsShouted)
+  {
+    std::vector<std::string> offenders;
+    std::size_t titles = 0;
+    for (const Screen& screen : EverythingDrawn())
+    {
+      if (std::string_view{screen.name} != "the main page")
+      {
+        continue;
+      }
+      for (const Neuron::FontRenderer::DrawnString& drawn : screen.drawn)
+      {
+        if (drawn.face != Neuron::Face::MonoDisplay)
+        {
+          continue;
+        }
+        ++titles;
+
+        // An actor card's title is a name and a status word -- `P6 - LEADER 140` -- and is capitals
+        // all the way down without being a shout: nothing in it was uppercased, the pieces were
+        // already labels. What this catches is a title with WORDS in it that lost its case.
+        const bool hasWord = drawn.text.find(' ') != std::string::npos;
+        const bool hasLower = std::ranges::any_of(drawn.text, [](unsigned char _c) { return std::islower(_c) != 0; });
+        const bool madeOfLabels = drawn.text.find(" - ") != std::string::npos;
+        if (hasWord && !hasLower && !madeOfLabels)
+        {
+          offenders.push_back(std::string{screen.name} + ": " + drawn.text);
+        }
+      }
+    }
+
+    Assert::IsTrue(titles > 0, L"no card title was drawn at all, so this asserts nothing");
+    Assert::IsTrue(offenders.empty(), Listed("a card title, shouted (ADR-099: a card title is a sentence)", offenders).c_str());
   }
 
   // **Every screen has to reach both families**, or the two tests above pass on it by drawing

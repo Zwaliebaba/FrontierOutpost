@@ -109,14 +109,17 @@ the five characters ADR-014 substituted and re-measuring the six strings it shor
   for one.
 - Emphasis is colour, case, **weight** — one step, Regular against Medium — and now **size**, one
   step, 12px against 16px. Labels and
-  headers are uppercase (`Uppercased()`), sentences mixed case. **Card titles become mixed case** — `Battle at Ulme` — with uppercase kept for chips, section
-  headers and status words (ADR-099, decided and **not yet built**: it needs `FaceRuleTests` to tell
-  a label from a sentence by an explicit tag rather than by looking for a lowercase letter).
+  headers are uppercase (`Uppercased()`), sentences mixed case. **A card title is a sentence** —
+  `Battle at Ulme`, `Shipyard L1 rising at Dothan` — with uppercase kept for chips, section headers
+  and status words (ADR-099, **built**). Titles are authored in sentence case in `GameLogic`; the
+  one draw site that was shouting them no longer does. Sheet titles stay shouted: a sheet's title is
+  a section header on ADR-099's own list.
   **The shouting is no longer forced
   by the font**: the 8×8 face had no lowercase and Plex has both, so it is a choice the sheet is
-  making, and ADR-074 left open whether it should go on being made. One thing depends on the
-  current answer — `FaceRuleTests` tells a label from a sentence by whether it carries a lowercase
-  letter — so changing it means giving that test a different discriminator. No italics, no
+  making. **One exception, and it is a fact about the bake rather than a preference** (ADR-102): the
+  display cut exists in mono only, so a 16px title in sentence case is drawn in `MonoDisplay` and is
+  the one string on any screen that bends ADR-074's *sentences are sans*. `FaceRuleTests` says so in
+  its header and asserts the half it still can — that no card title is shouted. No italics, no
   letter-spacing.
 - **Chrome that sits around already-placed text goes through `BandTopForText`**, the inverse of
   `CenterTextY`. Three places had their own hand-tuned offset — a chip beside a section header, the
