@@ -101,6 +101,21 @@ void ShapeRenderer::Line(float _x0Pixels, float _y0Pixels, float _x1Pixels, floa
              _x0Pixels - halfX, _y0Pixels - halfY, Pack(_color));
 }
 
+void ShapeRenderer::StrokePolygon(std::span<const ShapePoint> _points, const Color& _color, float _thicknessPixels)
+{
+  if (_points.size() < 2)
+  {
+    return;
+  }
+
+  for (std::size_t corner = 0; corner < _points.size(); ++corner)
+  {
+    const ShapePoint& from = _points[corner];
+    const ShapePoint& to = _points[(corner + 1) % _points.size()];
+    Line(from.xPixels, from.yPixels, to.xPixels, to.yPixels, _color, _thicknessPixels);
+  }
+}
+
 void ShapeRenderer::DashedLine(float _x0Pixels, float _y0Pixels, float _x1Pixels, float _y1Pixels, const Color& _color,
                                float _thicknessPixels, float _dashPixels, float _gapPixels, float _offsetPixels)
 {

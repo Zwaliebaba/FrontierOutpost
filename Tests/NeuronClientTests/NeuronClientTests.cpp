@@ -650,6 +650,33 @@ public:
     Assert::AreEqual(static_cast<std::size_t>(6), shapes.TakeUnflushed().vertices.size(), L"so the overlay lands on the take after it");
   }
 
+  // A stroked polygon is CLOSED, and that is the whole of what it adds over a run of `Line` calls:
+  // the edge somebody forgets is the last one, and a hexagon with a gap in it reads as a rendering
+  // fault rather than as a missing statement (ADR-107).
+  TEST_METHOD(AStrokedPolygonJoinsItsLastCornerBackToItsFirst)
+  {
+    Neuron::ShapeRenderer shapes;
+    shapes.BeginFrame();
+
+    // A line is a quad, so four corners drawn open would be three of them.
+    const std::array<Neuron::ShapeRenderer::ShapePoint, 4> diamond = {
+      Neuron::ShapeRenderer::ShapePoint{11.0F, 2.0F}, Neuron::ShapeRenderer::ShapePoint{20.0F, 11.0F},
+      Neuron::ShapeRenderer::ShapePoint{11.0F, 20.0F}, Neuron::ShapeRenderer::ShapePoint{2.0F, 11.0F}};
+    shapes.StrokePolygon(diamond, Neuron::WHITE, 1.5F);
+    Assert::AreEqual(static_cast<std::size_t>(24), shapes.TakeUnflushed().vertices.size(), L"a four-corner polygon is not four edges");
+  }
+
+  TEST_METHOD(APolygonOfFewerThanTwoCornersDrawsNothing)
+  {
+    Neuron::ShapeRenderer shapes;
+    shapes.BeginFrame();
+
+    const std::array<Neuron::ShapeRenderer::ShapePoint, 1> alone = {Neuron::ShapeRenderer::ShapePoint{4.0F, 4.0F}};
+    shapes.StrokePolygon(alone, Neuron::WHITE);
+    shapes.StrokePolygon({}, Neuron::WHITE);
+    Assert::IsTrue(shapes.TakeUnflushed().vertices.empty(), L"a polygon with no edges recorded geometry");
+  }
+
   TEST_METHOD(BeginFrameForgetsTheBoundaries)
   {
     Neuron::ShapeRenderer shapes;

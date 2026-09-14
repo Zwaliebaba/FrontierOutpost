@@ -47,6 +47,14 @@ public:
     std::uint32_t color;
   };
 
+  /// A corner in canvas pixels, for the one primitive that takes a list of them rather than a box.
+  /// No colour: a polygon is stroked in one, and a vertex is what the GPU is handed.
+  struct ShapePoint
+  {
+    float xPixels;
+    float yPixels;
+  };
+
   /// One batch of recorded vertices, and where it sits in this frame's recording.
   ///
   /// **The index is not bookkeeping.** A frame is drained more than once -- world, interface,
@@ -90,6 +98,19 @@ public:
                   float _thicknessPixels = 1.0F);
 
   void Line(float _x0Pixels, float _y0Pixels, float _x1Pixels, float _y1Pixels, const Color& _color, float _thicknessPixels = 1.0F);
+
+  /// A CLOSED polyline: one stroked edge per pair of corners, with the last joined back to the
+  /// first. Fewer than two corners draws nothing.
+  ///
+  /// **A shape whose outline is not a box and is not an ellipse**, which until the build sheet's
+  /// icons the screen had none of (ADR-107): a diamond and a hexagon, each 22 pixels across. Drawn
+  /// as a hand-written run of `Line` calls, the edge that gets forgotten is the closing one, and
+  /// the symptom is a glyph with a gap in it that reads as a rendering fault.
+  ///
+  /// The corners are not joined -- each edge is its own quad, so a corner at a sharp angle leaves
+  /// the notch a mitre would fill. At 22 pixels and one-and-a-half of thickness there is nothing
+  /// there to see; a mitre is a decision to take when something wants a thick outline.
+  void StrokePolygon(std::span<const ShapePoint> _points, const Color& _color, float _thicknessPixels = 1.0F);
 
   /// _dashPixels on, _gapPixels off, starting with a dash at the first endpoint. The pattern is
   /// walked in pixels rather than in a fraction of the length, so two dashed lanes of different
