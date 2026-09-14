@@ -14,14 +14,18 @@ ships — this document cites it and does not restate what it does not have to.
   `Frame::TOP_BAR_HEIGHT`, `DIGEST_WIDTH`, `ORDERS_WIDTH`. The map is what is left between the rails
   and is drawn first; the rails' opaque backgrounds are what confine it (ADR-017).
 - 1px separators `rgba(255,255,255,0.10)` (`Ink::CARD_BORDER`, 26/255).
-- **This game is for touch, and its targets do not meet the floor yet** (ADR-098). Every
-  player-facing string says *tap*, `PointerInput` is built on the Windows Pointer API for a finger,
-  and `SHEET_ROW_HEIGHT`'s own comment names **44** as the smallest a finger hits reliably. Measured
-  2026-09-14: sheet row 44 · sheet header 36 · sheet band, digest title and page band 22 · top bar
-  chips 20–22 · **locks rail row 21** · **digest card button 18** · `RESET` chip 18 · **map garrison
-  badge 16**. The three used most are the three smallest. **Measure a new control against 44, not
-  against the one beside it** — that is how 16 happened. The work is
-  `Design/Plans/UI-02-TouchTargets.md`.
+- **This game is for touch and the floor is 44** (ADR-098, ADR-100). Every player-facing string
+  says *tap* and `PointerInput` is built on the Windows Pointer API for a finger. **How a control
+  reaches 44 depends on what it sits beside:** a target in a COLUMN OF SIBLINGS grows its box — rail
+  rows and section headers, card buttons, sheet rows, both page bands — and an ISOLATED CHIP grows
+  only its hit, staying the size the layout around it needs with a 44px rectangle centred on it (the
+  map's 16px garrison badge, the `REPLAY` and `RESET` chips). **Measure a new control against 44, not
+  against the one beside it** — that is how 16 happened — and a control that cannot be 44 says why
+  where it is declared. **Reading the constants is not the audit**: a box is composed from several of
+  them and the one that goes wrong is the one nobody added up, so
+  `Tests/LockstepTests/TouchTargetTests.cpp` draws the real screens and measures what `AddHit`
+  recorded, in both dimensions, naming each offender by its `Action`. Still under the floor: the
+  sheet's 36px header and close corner, and the 22px sheet section band (never a target).
 - Rail padding 14px. Card padding **10px** (`MainPage::CARD_PADDING`; the handoff said 8). Line
   height **is not a number here** — it is `FontRenderer::LineHeightPixels`, 17px for the face as
   baked; see §Font. Everything on whole pixels.
