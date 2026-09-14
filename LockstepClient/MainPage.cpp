@@ -29,6 +29,10 @@ using Neuron::Face;
 using Neuron::FontRenderer;
 using Neuron::ShapeRenderer;
 
+/// What a tap does, which the rows composed in here have to name (ADR-112). The page's own enum,
+/// aliased rather than qualified thirty times.
+using Action = MainPage::Action;
+
 /// The design tokens, once (Design/Screens/README.md "Design tokens"). Alphas are the spec's
 /// fractions turned into bytes: 0.04 -> 10, 0.07 -> 18, 0.10 -> 26, and so on.
 
@@ -650,6 +654,33 @@ struct Block
   }
   return held;
 }
+
+/// One row of the locks rail's `ORDERS` list (ADR-112).
+///
+/// **One shape for every kind of order**, composed before anything is drawn: the column had a
+/// section per order KIND, which is the shape of the code that fills it rather than of the question
+/// a player is asking. A build and a move are the same row here -- what it is, where, the number,
+/// and the `×` -- and the only thing that tells them apart is which array the two indices point
+/// into (ADR-057).
+struct OrderRow
+{
+  /// `SHIPYARD L1`, `FLT 1 → FAROE`.
+  std::string title;
+  /// `DOTHAN`, `10 SHIPS`. Dropped whole when the row is too narrow for it.
+  std::string where;
+  /// `−20`, `T1`. Empty on a row with nothing to count.
+  std::string number;
+  Color numberInk = Ink::BLUE;
+  /// What the row's body does, and what it names.
+  Action open = Action::None;
+  std::int32_t openIndex = EventRefs::NONE;
+  /// What the `×` does, and what it names. `Action::None` draws no `×` and the body fills the row.
+  Action takeBack = Action::None;
+  std::int32_t takeBackIndex = EventRefs::NONE;
+  /// A fleet with no move: drawn dim behind a dashed square, and still a target, because the point
+  /// of the row is that it is the one thing on this column a player can still do something about.
+  bool unordered = false;
+};
 
 /// Which slot of the 2x2 grid a tile belongs in: mining station, shipyard, bastion, trade lane.
 ///
@@ -2257,7 +2288,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
   const std::int32_t headerY = static_cast<std::int32_t>(Frame::TOP_BAR_HEIGHT) + 12;
   _text.DrawText(static_cast<std::int32_t>(contentX), headerY,
-                 m_state.match.finished ? std::string{"FINAL"} : std::format("LOCKS T{}", m_state.OrdersTick()), Ink::TEXT_MUTED);
+                 m_state.match.finished ? std::string{"FINAL"} : std::format("ORDERS · T{}", m_state.OrdersTick()), Ink::TEXT_MUTED);
 
   if (atLock)
   {
@@ -2281,7 +2312,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   // A branch rather than a chained ternary, and that is about the formatter rather than the code:
   // clang-format 18 and 22 align the second `?` of a chain differently, so an expression written
   // that way is one the tree cannot be clean under both at once, and CI's is 18 (`build.yml`).
-  std::string help{"What goes in when the clock hits zero. Tap a row to go to what it is about."};
+  std::string help{"What goes in when the clock hits zero. Tap a row to open the place it is about."};
   if (m_state.match.finished)
   {
     help = "The match is over. This is what you finished with.";
@@ -2423,16 +2454,43 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
     y += height;
   };
 
-  /// A sub-band inside a section: a muted label over the rows it groups, never a target (ADR-086).
-  /// Lighter than `section` -- no rule and no count -- because it divides a list rather than
-  /// starting one.
-  const auto band = [&](std::string_view _label)
+  /// One `PLACES` row: a disc in the owner's colour, the name, what it yields and what is standing
+  /// on it, and how much of this tick's queue is about it (ADR-112).
+  const auto placeRow = [&](std::string_view _name, std::string_view _facts, std::string_view _orders, const Color& _ordersInk,
+                            const Color& _disc, Action _action, std::int32_t _index)
   {
-    if (visible(static_cast<float>(LINE_HEIGHT) + 2.0F))
+    counted(TOUCH_FLOOR, "PLACES");
+    if (!visible(TOUCH_FLOOR))
     {
-      _text.DrawText(static_cast<std::int32_t>(contentX), static_cast<std::int32_t>(y), _label, Ink::TEXT_MUTED);
+      y += TOUCH_FLOOR;
+      return;
     }
-    y += static_cast<float>(LINE_HEIGHT) + 2.0F;
+
+    const bool hovered = m_pointerXPixels >= railX && m_pointerYPixels >= y && m_pointerYPixels < y + TOUCH_FLOOR;
+    if (hovered)
+    {
+      _shapes.FillRect(railX + 1.0F, y, Frame::ORDERS_WIDTH - 1.0F, TOUCH_FLOOR, Ink::HOVER_FILL);
+    }
+    AddHit(railX, y, Frame::ORDERS_WIDTH, TOUCH_FLOOR, _action, _index);
+    m_hoverRegions.push_back(HoverRegion{railX, y, Frame::ORDERS_WIDTH, TOUCH_FLOOR});
+    _shapes.FillRect(railX + 1.0F, y, Frame::ORDERS_WIDTH - 1.0F, 1.0F, Ink::DIVIDER);
+
+    // A DISC rather than the square an order row wears: on this screen a place is round and a fleet
+    // is not, which the map has drawn since ADR-079.
+    const std::int32_t textY = CenterTextY(y, TOUCH_FLOOR);
+    _shapes.FillEllipse(contentX + PLACE_DISC_SIZE * 0.5F, y + TOUCH_FLOOR * 0.5F, PLACE_DISC_SIZE * 0.5F, PLACE_DISC_SIZE * 0.5F, _disc);
+
+    float textX = contentX + PLACE_DISC_SIZE + 8.0F;
+    _text.DrawText(static_cast<std::int32_t>(textX), textY, _name, Ink::TEXT_PRIMARY, Face::MonoMedium);
+    textX += static_cast<float>(FontRenderer::MeasurePixels(_name, Face::MonoMedium)) + 8.0F;
+
+    const auto ordersWidth = static_cast<float>(FontRenderer::MeasurePixels(_orders));
+    if (!_facts.empty() && static_cast<float>(FontRenderer::MeasurePixels(_facts)) <= contentRight - ordersWidth - 8.0F - textX)
+    {
+      _text.DrawText(static_cast<std::int32_t>(textX), textY, _facts, Ink::TEXT_MUTED);
+    }
+    DrawRight(_text, contentRight, textY, _orders, _ordersInk);
+    y += TOUCH_FLOOR;
   };
 
   const auto nothing = [&](std::string_view _text2)
@@ -2449,142 +2507,256 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
   // could take an order for a tick that is already resolving (ADR-060, screen 06).
   const bool navigateOnly = m_state.orders.locked || m_state.match.finished;
 
-  // ---- FLEETS ------------------------------------------------------------------------------------
-  std::uint32_t yours = 0;
-  for (const Fleet& fleet : m_state.fleets)
-  {
-    yours += fleet.owner == m_state.viewer ? 1U : 0U;
-  }
-  section("FLEETS", std::to_string(yours));
-
-  if (yours == 0)
-  {
-    nothing("- none -");
-  }
-
-  // **Grouped by where they are** (ADR-086). Ten rows reading `FLT 13 10 HOLD HOLLIS` is the
-  // system name repeated ten times, the word `HOLD` repeated ten times, and two bare numbers at
-  // equal weight -- so the one thing a player is scanning for, which of their systems is strong, is
-  // the thing the column says least clearly. The system goes on a band and the rows under it carry
-  // what differs.
+  // ---- ORDERS ------------------------------------------------------------------------------------
   //
-  // **A FLEETS row opens the picker, and for a standing fleet it is the only thing that does**
-  // (ADR-077). The map draws no marker for a fleet that is not moving, and the digest's `MOVE` is a
-  // standing move offered only when nothing else can be acted on (ADR-056). A fleet already on a
-  // lane opens nothing, because the lock would refuse a second order on it, and focuses where it is
-  // going instead. At the lock every row focuses (ADR-060).
-  const auto fleetRow = [&](std::size_t _index, std::string_view _tail, std::string_view _status, const Color& _statusColor)
-  {
-    const Fleet& fleet = m_state.fleets[_index];
-    const std::string name = Uppercased(fleet.name);
-    const bool orderable = !navigateOnly && !fleet.underWay;
-    row(std::format("{} · {}{}", name, fleet.ships, _tail), _status, _statusColor, orderable ? Action::OpenFleet : Action::FocusSystem,
-        orderable ? static_cast<std::int32_t>(_index) : fleet.to, name.size());
-  };
-
-  // The systems holding something of yours, in the order the snapshot listed the fleets: stable
-  // between two frames of one state, which is what stops the column reordering under a finger.
-  std::vector<std::int32_t> standingAt;
-  for (const Fleet& fleet : m_state.fleets)
-  {
-    if (fleet.owner == m_state.viewer && !fleet.OnALane() && std::ranges::find(standingAt, fleet.to) == standingAt.end())
-    {
-      standingAt.push_back(fleet.to);
-    }
-  }
-
-  for (const std::int32_t at : standingAt)
-  {
-    std::uint32_t ships = 0;
-    for (const Fleet& fleet : m_state.fleets)
-    {
-      ships += fleet.owner == m_state.viewer && !fleet.OnALane() && fleet.to == at ? fleet.ships : 0U;
-    }
-    band(std::format("{} · {} {}", NameOfSystem(m_state, at), ships, ships == 1 ? "SHIP" : "SHIPS"));
-
-    for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
-    {
-      const Fleet& fleet = m_state.fleets[index];
-      if (fleet.owner != m_state.viewer || fleet.OnALane() || fleet.to != at)
-      {
-        continue;
-      }
-
-      // **No right-hand column on a holding row**, because the band above it already said where and
-      // `HOLD` said nothing else. The one exception is the fact that is not implied by standing
-      // still: that this fleet is the incumbent and fights with the defender's bonus.
-      const bool incumbent = fleet.status.find("incumbent") != std::string::npos;
-      fleetRow(index, std::string_view{}, incumbent ? "+DEF" : std::string_view{}, incumbent ? Ink::BLUE : Ink::TEXT_MUTED);
-    }
-  }
-
-  // Everything in transit under one band, because where they are is a lane rather than a place and
-  // the thing they have in common is that none of them can be ordered.
-  const bool anyUnderWay = std::any_of(m_state.fleets.begin(), m_state.fleets.end(),
-                                       [this](const Fleet& _fleet) { return _fleet.owner == m_state.viewer && _fleet.OnALane(); });
-  if (anyUnderWay)
-  {
-    band("UNDER WAY");
-    for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
-    {
-      const Fleet& fleet = m_state.fleets[index];
-      if (fleet.owner != m_state.viewer || !fleet.OnALane())
-      {
-        continue;
-      }
-      fleetRow(index, std::format(" → {}", NameOfSystem(m_state, fleet.to)), std::format("T{}", fleet.eta), Ink::TEXT_MUTED);
-    }
-  }
-
-  // ---- BUILDS ------------------------------------------------------------------------------------
+  // **One row shape for every kind of order** (ADR-112). This column had a section per ORDER KIND --
+  // `FLEETS` and `BUILDS` -- which is the shape of the code that composes it rather than the shape
+  // of the question a player is asking. The question is *what goes in when the clock hits zero*, and
+  // the answer is a list: an owner square, what it is, where it is, the number it costs or the tick
+  // it lands on, and the `×` that takes it back.
   //
-  // The purse on the header and the price on every queued row, so the column adds up in front of
-  // the player (ADR-053): what is queued, what it takes, and what is left when the clock hits zero.
-  section("BUILDS", std::format("{} AVAIL · {} CR", m_state.orders.availableBuilds, m_state.player.credits));
+  // Row order is what the lock will take, then what an earlier one already did, then what has not
+  // been ordered at all. The last of those is the row this section exists to make visible: a fleet
+  // with nothing to do is invisible on every other surface of this screen.
+  std::vector<OrderRow> orders;
 
-  if (m_state.orders.queuedBuilds.empty())
-  {
-    nothing("- nothing queued -");
-  }
+  // **Focus-only at the lock, exactly as every row on this rail has been** (ADR-060): a tap still
+  // moves the eye, and nothing opens a surface that could take an order for a tick that is already
+  // resolving.
+  const Action linkAction = navigateOnly ? Action::FocusSystem : Action::OpenSystem;
+
+  const auto placeOf = [&](std::int32_t _systemId) { return PositionOfSystem(m_state, _systemId); };
+
   for (const std::int32_t queued : m_state.orders.queuedBuilds)
   {
-    if (queued >= 0 && queued < static_cast<std::int32_t>(m_state.orders.builds.size()))
+    if (queued < 0 || queued >= static_cast<std::int32_t>(m_state.orders.builds.size()))
     {
-      const BuildRow& build = m_state.orders.builds[static_cast<std::size_t>(queued)];
-
-      // To the sheet that queued it, which is where it is taken back (ADR-060). `BuildRow::system`
-      // is an id and `OpenSystem` names a position, so the row has to look the system up.
-      const std::int32_t at = PositionOfSystem(m_state, build.system);
-      const Action buildAction = at == EventRefs::NONE ? Action::None : (navigateOnly ? Action::FocusSystem : Action::OpenSystem);
-      row(Uppercased(build.title), std::format("QUEUED −{}", build.cost), Ink::BLUE, buildAction, at);
+      continue;
     }
+    const BuildRow& build = m_state.orders.builds[static_cast<std::size_t>(queued)];
+    const std::int32_t at = placeOf(build.system);
+    orders.push_back(OrderRow{.title = Uppercased(std::format("{} L{}", build.building, build.level)),
+                              .where = NameOfSystem(m_state, at),
+                              .number = std::format("−{}", build.cost),
+                              .numberInk = Ink::BLUE,
+                              .open = at == EventRefs::NONE ? Action::None : linkAction,
+                              .openIndex = at,
+                              .takeBack = navigateOnly ? Action::None : Action::ToggleBuild,
+                              .takeBackIndex = queued});
   }
 
-  // **What is already rising, with the tick it lands on** (ADR-069), in the form FLEETS above uses
-  // for a fleet under way: the rail is the receipt of everything this player has committed to, and
-  // a build that is paid for and in flight is exactly that. It is listed after the queue because
-  // the queue is what THIS lock will take and this is what an earlier one already did.
+  for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
+  {
+    const Fleet& fleet = m_state.fleets[index];
+    if (fleet.owner != m_state.viewer || fleet.underWay || !fleet.OnALane())
+    {
+      continue;
+    }
+    orders.push_back(OrderRow{.title = std::format("{} → {}", Uppercased(fleet.name), NameOfSystem(m_state, fleet.to)),
+                              .where = fleet.ships == 1 ? std::string{"1 SHIP"} : std::format("{} SHIPS", fleet.ships),
+                              .number = std::format("T{}", fleet.eta),
+                              .numberInk = Ink::BLUE,
+                              .open = linkAction,
+                              .openIndex = fleet.from,
+                              .takeBack = navigateOnly ? Action::None : Action::CancelFleetOrder,
+                              .takeBackIndex = static_cast<std::int32_t>(index)});
+  }
+
+  // **What an earlier lock already took, and there is no `×` on it** (ADR-069, ADR-070). The rail is
+  // the receipt of everything this player has committed to, and a build in flight is exactly that --
+  // it is simply not a thing this lock will take, and not a thing any tap can take back.
   for (const BuildRow& build : m_state.orders.builds)
   {
     if (!build.rising)
     {
       continue;
     }
-    const std::int32_t at = PositionOfSystem(m_state, build.system);
-    const Action buildAction = at == EventRefs::NONE ? Action::None : (navigateOnly ? Action::FocusSystem : Action::OpenSystem);
-    row(Uppercased(build.title), std::format("T{}", build.completesAt), Ink::TEXT_MUTED, buildAction, at);
+    const std::int32_t at = placeOf(build.system);
+    orders.push_back(OrderRow{.title = Uppercased(std::format("{} L{}", build.building, build.level)),
+                              .where = NameOfSystem(m_state, at),
+                              .number = std::format("T{}", build.completesAt),
+                              .numberInk = Ink::TEXT_MUTED,
+                              .open = at == EventRefs::NONE ? Action::None : linkAction,
+                              .openIndex = at});
   }
+
+  for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
+  {
+    const Fleet& fleet = m_state.fleets[index];
+    if (fleet.owner != m_state.viewer || !fleet.underWay)
+    {
+      continue;
+    }
+    orders.push_back(OrderRow{.title = std::format("{} → {}", Uppercased(fleet.name), NameOfSystem(m_state, fleet.to)),
+                              .where = fleet.ships == 1 ? std::string{"1 SHIP"} : std::format("{} SHIPS", fleet.ships),
+                              .number = std::format("T{}", fleet.eta),
+                              .numberInk = Ink::TEXT_MUTED,
+                              .open = Action::FocusSystem,
+                              .openIndex = fleet.to});
+  }
+
+  // **A fleet with no move is a row, dim and unordered** (ADR-112). It is the one thing this column
+  // never said: a player reading a list of what goes in at the lock had no way to see what does not.
+  for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
+  {
+    const Fleet& fleet = m_state.fleets[index];
+    if (fleet.owner != m_state.viewer || fleet.underWay || fleet.OnALane())
+    {
+      continue;
+    }
+    orders.push_back(OrderRow{.title = Uppercased(fleet.name),
+                              .where = std::format("NO MOVE · {}", NameOfSystem(m_state, fleet.from)),
+                              .open = navigateOnly ? Action::FocusSystem : Action::OpenFleet,
+                              .openIndex = navigateOnly ? fleet.from : static_cast<std::int32_t>(index),
+                              .unordered = true});
+  }
+
+  /// One ORDERS row. The `×` is its own 44-pixel cell at the right end and the rest of the row is
+  /// the link; a row with nothing to take back has no cell and the link fills it (ADR-112).
+  const auto orderRow = [&](const OrderRow& _order)
+  {
+    counted(TOUCH_FLOOR, "ORDERS");
+    if (!visible(TOUCH_FLOOR))
+    {
+      y += TOUCH_FLOOR;
+      return;
+    }
+
+    const float takeBackLeft = railX + Frame::ORDERS_WIDTH - TOUCH_FLOOR;
+    const bool takeable = _order.takeBack != Action::None;
+    const float bodyWidth = takeable ? takeBackLeft - railX : Frame::ORDERS_WIDTH;
+
+    if (_order.open != Action::None)
+    {
+      const bool hovered =
+        m_pointerXPixels >= railX && m_pointerXPixels < railX + bodyWidth && m_pointerYPixels >= y && m_pointerYPixels < y + TOUCH_FLOOR;
+      if (hovered)
+      {
+        _shapes.FillRect(railX + 1.0F, y, bodyWidth - 1.0F, TOUCH_FLOOR, Ink::HOVER_FILL);
+      }
+      AddHit(railX, y, bodyWidth, TOUCH_FLOOR, _order.open, _order.openIndex);
+      m_hoverRegions.push_back(HoverRegion{railX, y, bodyWidth, TOUCH_FLOOR});
+    }
+    _shapes.FillRect(railX + 1.0F, y, Frame::ORDERS_WIDTH - 1.0F, 1.0F, Ink::DIVIDER);
+
+    // An 8px square in the viewer's colour, DASHED when there is no order on the row: the one
+    // marker on this screen that says *nothing has been given* (ADR-110's dashed rule, applied to a
+    // marker rather than to a control's border -- the row is still a target).
+    const std::int32_t textY = CenterTextY(y, TOUCH_FLOOR);
+    const float squareY = y + (TOUCH_FLOOR - 8.0F) * 0.5F;
+    if (_order.unordered)
+    {
+      _shapes.DashedLine(contentX, squareY + 0.5F, contentX + 8.0F, squareY + 0.5F, Ink::NEUTRAL_DIM, 1.0F, INERT_DASH, INERT_GAP);
+      _shapes.DashedLine(contentX, squareY + 7.5F, contentX + 8.0F, squareY + 7.5F, Ink::NEUTRAL_DIM, 1.0F, INERT_DASH, INERT_GAP);
+      _shapes.DashedLine(contentX + 0.5F, squareY, contentX + 0.5F, squareY + 8.0F, Ink::NEUTRAL_DIM, 1.0F, INERT_DASH, INERT_GAP);
+      _shapes.DashedLine(contentX + 7.5F, squareY, contentX + 7.5F, squareY + 8.0F, Ink::NEUTRAL_DIM, 1.0F, INERT_DASH, INERT_GAP);
+    }
+    else
+    {
+      _shapes.FillRect(contentX, squareY, 8.0F, 8.0F, OwnerColor(m_state.viewer, m_state.viewer));
+    }
+
+    const float right = takeBackLeft - 4.0F;
+    const auto numberWidth = static_cast<float>(FontRenderer::MeasurePixels(_order.number));
+    if (!_order.number.empty())
+    {
+      DrawRight(_text, right, textY, _order.number, _order.unordered ? Ink::NEUTRAL_DIM : _order.numberInk);
+    }
+
+    float textX = contentX + 16.0F;
+    _text.DrawText(static_cast<std::int32_t>(textX), textY, _order.title, _order.unordered ? Ink::NEUTRAL_DIM : Ink::TEXT_PRIMARY,
+                   Face::MonoMedium);
+    textX += static_cast<float>(FontRenderer::MeasurePixels(_order.title, Face::MonoMedium)) + 8.0F;
+
+    // **The place is dropped whole when it does not fit**, the way the top bar drops a clause: the
+    // title is what the row IS and half a system name beside a price is worse than none of it.
+    const float room = right - (numberWidth > 0.0F ? numberWidth + 8.0F : 0.0F) - textX;
+    if (!_order.where.empty() && static_cast<float>(FontRenderer::MeasurePixels(_order.where)) <= room)
+    {
+      _text.DrawText(static_cast<std::int32_t>(textX), textY, _order.where, _order.unordered ? Ink::NEUTRAL_DIM : Ink::TEXT_MUTED);
+    }
+
+    if (takeable)
+    {
+      DrawCentered(_text, takeBackLeft + TOUCH_FLOOR * 0.5F, textY, "×", Ink::OUTLINE_HOVER);
+      AddHit(takeBackLeft, y, TOUCH_FLOOR, TOUCH_FLOOR, _order.takeBack, _order.takeBackIndex);
+    }
+    y += TOUCH_FLOOR;
+  };
+
+  for (const OrderRow& order : orders)
+  {
+    orderRow(order);
+  }
+  if (orders.empty())
+  {
+    nothing("- nothing queued -");
+  }
+
+  // What the queue leaves, on the line under it (ADR-053).
   if (!m_state.orders.queuedBuilds.empty())
   {
     const std::uint32_t spent = m_state.orders.QueuedBuildCost();
-    nothing(std::format("- {} cr left at the lock -", spent <= m_state.player.credits ? m_state.player.credits - spent : 0));
+    nothing(std::format("{} CR LEFT AT THE LOCK", spent <= m_state.player.credits ? m_state.player.credits - spent : 0));
   }
-  for (const BuildRow& build : m_state.orders.builds)
+
+  // ---- PLACES -------------------------------------------------------------------------------------
+  //
+  // **One row per system you hold, and it replaces both of the sections above** (ADR-112). A place
+  // is the subject of every order on this screen now (ADR-111), so the rail's second list is the
+  // list of places rather than a second list of orders: what each one yields, what is standing on
+  // it, and how much of the tick's queue is about it.
+  std::vector<std::int32_t> held;
+  for (std::size_t index = 0; index < m_state.graph.systems.size(); ++index)
   {
-    if (build.isTradeLane)
+    const SystemNode& node = m_state.graph.systems[index];
+    if (node.owner == m_state.viewer && !HasFlag(node.flags, SystemFlags::RegionAnchor))
     {
-      row(Uppercased(build.title), "PROPOSE", Ink::AMBER, Action::None, EventRefs::NONE);
+      held.push_back(static_cast<std::int32_t>(index));
     }
+  }
+  section("PLACES", std::format("{} HELD", held.size()));
+
+  if (held.empty())
+  {
+    nothing("- none -");
+  }
+
+  for (const std::int32_t at : held)
+  {
+    const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(at)];
+
+    std::uint32_t ships = 0;
+    for (const Fleet& fleet : m_state.fleets)
+    {
+      ships += fleet.owner == m_state.viewer && !fleet.underWay && fleet.from == at ? fleet.ships : 0U;
+    }
+
+    std::uint32_t ordered = 0;
+    for (const std::int32_t queued : m_state.orders.queuedBuilds)
+    {
+      const bool known = queued >= 0 && queued < static_cast<std::int32_t>(m_state.orders.builds.size());
+      ordered += known && m_state.orders.builds[static_cast<std::size_t>(queued)].system == node.id ? 1U : 0U;
+    }
+    for (const Fleet& fleet : m_state.fleets)
+    {
+      ordered += fleet.owner == m_state.viewer && !fleet.underWay && fleet.OnALane() && fleet.from == at ? 1U : 0U;
+    }
+
+    std::string facts;
+    if (node.production != 0)
+    {
+      facts = std::format("+{}", node.production);
+    }
+    if (ships != 0)
+    {
+      facts += facts.empty() ? std::string{} : " · ";
+      facts += ships == 1 ? std::string{"1 SHIP"} : std::format("{} SHIPS", ships);
+    }
+
+    placeRow(Uppercased(node.name), facts, ordered == 0 ? std::string{"—"} : std::format("{} ORDER{}", ordered, ordered == 1 ? "" : "S"),
+             ordered == 0 ? Ink::NEUTRAL_DIM : Ink::BLUE, OwnerColor(node.owner, m_state.viewer),
+             navigateOnly ? Action::FocusSystem : Action::OpenSystem, at);
   }
 
   // ---- SIGNALS -----------------------------------------------------------------------------------

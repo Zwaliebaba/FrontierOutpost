@@ -366,13 +366,24 @@ Semantic / owner (ADR-027: you are always blue)
   segments sized to their labels because a third of a 212px card is seven glyphs and `BOT AT T1` is
   nine; blue border when selected.
 - **Tabs (unread ticks)** — not built.
-- **Locks list row** — label primary left, wrapped to leave room; status right, coloured:
-  `T7` muted, `+DEF`/`QUEUED -20`/`SENDING` blue, `PROPOSE`/`3 TICKS` amber, `CONCEDE` red. A row
-  may carry a **muted head** — the bytes at the front drawn in `TEXT_MUTED`, for the half that names
-  rather than measures: `FLT 3` in `FLT 3 · 3` (ADR-086). A row is a **link** to what it names
-  (ADR-060) — the build sheet, the fleet's destination picker, the far end of a proposed lane — and
-  gives no order; a row with nothing to point at is not a target. `HOVER_FILL` under the pointer, on
-  targets only. Focus-only at the lock.
+- **Orders row** — the rail's `ORDERS` list, **one shape for every kind of order** (ADR-112): an 8px
+  owner square, the title in mono Medium (`SHIPYARD L1`, `FLT 1 → FAROE`), the place or the count in
+  muted (`DOTHAN`, `10 SHIPS`), the number in blue (`−20`, `T1`), and a 44×44 `×` cell that takes
+  the order back. The row's body is a **link** to the place it is about (ADR-060) and its rectangle
+  stops where the cell's begins, so neither swallows the other. A receipt of an earlier lock — a
+  rising build, a fleet under way — carries a muted number and no cell. **A fleet with no move is a
+  dim row behind a DASHED square** and is still a target: the square is a marker rather than a
+  control's border, so ADR-110's *dashed is never a target* is untouched. `HOVER_FILL` under the
+  pointer, on targets only. Focus-only at the lock.
+- **Places row** — one per system you hold (ADR-112): a 10px disc in the owner's colour, the name in
+  mono Medium, `+6 · 10 SHIPS` muted, and `1 ORDER` in blue or `—` in dim. A disc rather than a
+  square, because on this screen a place is round and a fleet is not (ADR-079). It opens that
+  place's sheet.
+- **Locks list row** — the shape `SIGNALS` and `PROPOSALS` still use: label primary left, wrapped to
+  leave room; status right, coloured: `T7` muted, `SENDING` blue, `PROPOSE`/`3 TICKS` amber,
+  `CONCEDE` red. A row may carry a **muted head** — the bytes at the front drawn in `TEXT_MUTED`,
+  for the half that names rather than measures (ADR-086); nothing composes one since `FLEETS` became
+  `ORDERS`. A row with nothing to point at is not a target.
 - **Locks rail page band** — 44px at the foot of the rail's scrolling band, drawn only when the
   sections are taller than the column (ADR-101): `3 MORE · SIGNALS ›` right — the culled count and
   the first section header below the fold, or `3 MORE ›` with no section down there — or `END` in
@@ -381,8 +392,9 @@ Semantic / owner (ADR-027: you are always blue)
   control and the wheel is the shortcut** — a column scrollable only by a mouse gesture is one half
   this game's players cannot reach the bottom of.
 - **Locks list band** — a muted label grouping the rows under it, no rule and no count, never a
-  target (ADR-086): `DOTHAN · 10 SHIPS` over that system's fleets, `UNDER WAY` over the ones in
-  transit. Lighter than a section header, which starts a list rather than dividing one.
+  target (ADR-086). Lighter than a section header, which starts a list rather than dividing one.
+  **Nothing composes one since 2026-09-14**: it grouped the `FLEETS` section's rows by the system
+  they stood at, and `ORDERS` is one list of one row shape (ADR-112).
 
 ## Copy
 - Ops-console terse, numbers first, ` - ` between facts: `PRODUCTION +17`, `CLAIMED PELL`,

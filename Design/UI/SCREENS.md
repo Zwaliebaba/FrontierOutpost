@@ -112,19 +112,24 @@ an ordered-but-unlocked move (progress zero) is not drawn on the node it is leav
 for that draws it in the middle. `01-orders-queued.png` is the ordered-but-unlocked case and
 `01-fleet-under-way.png` the same fleet a tick out.
 
-**Locks rail (260px, right) — orders no order, links to all of them (`DrawLocksRail`).** `LOCKS T8`
-/ `UNLOCKED` (amber); one line of help; sections `FLEETS n` — **grouped by where they are**
-(ADR-086): a muted band per system holding something of yours, `DOTHAN · 10 SHIPS`, with rows
-`FLT 1 · 10` under it (the id muted, the count primary) and no right-hand column unless the fleet is
-the incumbent, when it carries `+DEF` in blue; everything in transit under one `UNDER WAY` band as
-`FLT 8 · 4 → PELL` with `T9`. The band's total is the same number the map's garrison badge carries.
-`BUILDS 2 AVAIL - 26 CR` — the count is `BuildRow::available`, what a tap could actually start, so
-it excludes both a rising row and the rows a building system composes beside it (ADR-070, ADR-107) —
-(queued rows `SHIPYARD L1 - PELL` / `QUEUED -20`, then a row per build already rising,
-`SHIPYARD L1 - DOTHAN` / `T5` in muted ink — the form FLEETS uses for a fleet under way, ADR-070 —
-a `- 6 cr left at the lock -` line, `- nothing queued -` otherwise), `SIGNALS 9 TO SEND ›` (rows
-`SENDING`, a concede in red), `PROPOSALS 1 OPEN` (rows `P3 LANE` / `3 TICKS` amber). Footer
-`ALL LOCK TOGETHER` + the countdown.
+**Locks rail (260px, right) — what goes in at the lock, and the places it is about
+(`DrawLocksRail`).** Header `ORDERS · T8` / `UNLOCKED` (amber); one line of help — *What goes in when
+the clock hits zero. Tap a row to open the place it is about.*
+
+**`ORDERS` is one list and every row is one shape** (ADR-112): an 8px owner square, the title in
+mono Medium, the place or the count in muted, the number in blue, and a 44×44 `×` that takes the
+order back. `SHIPYARD L1 · DOTHAN · −20 ×` and `FLT 1 → FAROE · 10 SHIPS · T1 ×` are the same row.
+The order within it is what this lock will take (queued builds, then queued moves), then what an
+earlier one already did (rising builds `T14`, then fleets under way `T9`, both muted and with **no**
+`×`), then **a dim row behind a dashed square per fleet with no move at all** — `FLT 1 · NO MOVE ·
+DOTHAN` — which is the one thing this column never used to say. Under them, when the queue has taken
+credits, `80 CR LEFT AT THE LOCK`. The row's body opens the place; the `×` cell does not.
+
+**`PLACES`** replaces `FLEETS` and `BUILDS`: one row per system you hold — a 10px disc in the
+owner's colour, `DOTHAN`, `+6 · 10 SHIPS` muted, and `1 ORDER` in blue or `—` in dim — and the row
+opens that place. Then `SIGNALS 9 TO SEND ›` (rows `SENDING`, a concede in red) and
+`PROPOSALS 1 OPEN` (rows `P3 LANE` / `3 TICKS` amber), both unchanged. Footer `ALL LOCK TOGETHER`
++ the countdown.
 
 **The sections scroll and the header and footer do not (ADR-101).** 44px rows (ADR-100) put a played
 empire's four sections past the bottom of a 260px column, so everything between the help line and the
@@ -137,15 +142,15 @@ the band is not drawn and registers no hit** — `ShapeRenderer` has no clip rec
 half-scrolled row would paint its divider over the help line. The scroll is **not** reset when a tick
 lands, unlike the digest's: this column is a summary of the same empire tick after tick.
 
-**Rows are links (ADR-060).** A BUILDS row opens the place sheet for the system its build is on; a
-FLEETS row opens the fleet's destination picker — a fleet the server already has on a lane takes no
-order, so its row focuses where it is going instead; a PROPOSALS row focuses the far end of the lane
-the offer is about. None of them gives an order. The
-row under the pointer is filled with `HOVER_FILL`, and only a row that is a target draws one. At the
-lock and in a finished match every row is focus-only.
+**Rows are links, and one cell is not (ADR-060, ADR-112).** An `ORDERS` row and a `PLACES` row open
+the place they are about; a fleet the server already has on a lane takes no order, so its row
+focuses where it is going instead; a `PROPOSALS` row focuses the far end of the lane the offer is
+about. **The `×` on an `ORDERS` row is the one control on this rail that gives an order** — it takes
+one back, which is the same tap the tile or the fleet row on the sheet would take. The row under the
+pointer is filled with `HOVER_FILL`, and only a row that is a target draws one. At the lock and in a
+finished match every row is focus-only and no `×` is drawn.
 
-*Differs:* the `SIGNALS` section's queued rows are not links, and the trade-lane `PROPOSE` row is
-drawn from `BuildRow::isTradeLane`, which nothing sets.
+*Differs:* the `SIGNALS` section's queued rows are not links.
 
 **Sheets (ADR-052).** The four panels — place, destination, signal, replay — are one component
 (`DrawPanel`), drawn as a sheet against the bottom of the map pane: 44px header, one wrapped help

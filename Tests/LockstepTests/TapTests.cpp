@@ -33,6 +33,7 @@
 #include "TickResolver.h"
 
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <functional>
 #include <memory>
@@ -330,16 +331,18 @@ void DrawSeats(Lockstep::SeatsPage& _page, Headless& _renderers)
 
 /// Every tile on the open sheet that is a target, as the rectangles `AddHit` recorded.
 ///
-/// **`ToggleBuild` is not enough to identify one.** The digest's priced build button queues the same
-/// order from the other side of the screen (ADR-053), so it carries the same action -- which is
-/// correct and is why the guard behind them is one. What tells them apart is the column: the digest
-/// is the leftmost 400 pixels and a sheet is drawn over the map pane, never into a rail.
+/// **`ToggleBuild` is not enough to identify one.** Two other controls take the same order back: the
+/// digest's priced build button used to place it from the other side of the screen (ADR-053), and
+/// the locks rail's `×` takes a queued one back from the right-hand column (ADR-112). That is
+/// correct and is why the guard behind all three is one. What tells them apart is the column: a
+/// sheet is drawn over the map pane and never into a rail.
 [[nodiscard]] std::vector<Lockstep::MainPage::HitRegion> TilesOn(const Lockstep::MainPage& _page)
 {
   std::vector<Lockstep::MainPage::HitRegion> tiles;
   for (const Lockstep::MainPage::HitRegion& hit : _page.Hits())
   {
-    if (hit.action == Lockstep::MainPage::Action::ToggleBuild && hit.x >= Lockstep::Frame::DIGEST_WIDTH)
+    const bool onTheMapPane = hit.x >= Lockstep::Frame::DIGEST_WIDTH && hit.x < SCREEN_WIDTH - ORDERS_RAIL;
+    if (hit.action == Lockstep::MainPage::Action::ToggleBuild && onTheMapPane)
     {
       tiles.push_back(hit);
     }
@@ -1315,6 +1318,114 @@ public:
     Assert::IsTrue(focused >= 0 && focused < static_cast<std::int32_t>(page.State().graph.systems.size()));
     Assert::AreEqual(system, page.State().graph.systems[static_cast<std::size_t>(focused)].id,
                      L"the row opened a sheet about somebody else's system");
+  }
+
+  /// Everything the rail recorded, as `action` at `x`, so a failure names what it found rather than
+  /// a coordinate.
+  [[nodiscard]] static std::vector<Lockstep::MainPage::HitRegion> RailHits(const Lockstep::MainPage& _page)
+  {
+    std::vector<Lockstep::MainPage::HitRegion> found;
+    for (const Lockstep::MainPage::HitRegion& hit : _page.Hits())
+    {
+      if (hit.x >= SCREEN_WIDTH - ORDERS_RAIL)
+      {
+        found.push_back(hit);
+      }
+    }
+    return found;
+  }
+
+  TEST_METHOD(TheTakeBackCellUnqueuesTheOrderItsRowIsAbout)
+  {
+    // **The `×` is its own 44-pixel cell and the rest of the row is the link** (ADR-112). One row
+    // shape for two kinds of order, so the cell has to name two different arrays -- a build row and
+    // a fleet -- and it does that with two actions rather than one index that means both (ADR-057).
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(WithAQueuedBuild(*simulation));
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    const std::vector<Lockstep::MainPage::HitRegion> rail = RailHits(page);
+    const auto cell = std::ranges::find_if(rail, [](const Lockstep::MainPage::HitRegion& _hit)
+                                           { return _hit.action == Lockstep::MainPage::Action::ToggleBuild; });
+    Assert::IsTrue(cell != rail.end(), L"a queued build has no take-back cell on the rail");
+    Assert::AreEqual(44.0F, cell->width, 0.01F, L"the take-back cell is not the touch floor wide");
+    Assert::AreEqual(44.0F, cell->height, 0.01F, L"nor the touch floor tall");
+
+    // The row it sits on still opens the place, which is the half that must not be swallowed by it.
+    const auto link =
+      std::ranges::find_if(rail, [cell](const Lockstep::MainPage::HitRegion& _hit)
+                           { return _hit.action == Lockstep::MainPage::Action::OpenSystem && std::abs(_hit.y - cell->y) < 0.01F; });
+    Assert::IsTrue(link != rail.end(), L"the row carrying the take-back cell is not a link to its place");
+    Assert::IsTrue(link->x + link->width <= cell->x + 0.01F, L"the link overlaps the take-back cell, so one of them cannot be hit");
+
+    (void)page.HandleTap(cell->x + cell->width * 0.5F, cell->y + cell->height * 0.5F);
+    Assert::IsTrue(page.State().orders.queuedBuilds.empty(), L"the take-back cell did not unqueue the build");
+  }
+
+  TEST_METHOD(AnUnorderedFleetIsARowOfItsOwn)
+  {
+    // **The one thing this column never said** (ADR-112): a fleet with nothing to do is invisible on
+    // every other surface of this screen, so a player reading a list of what goes in at the lock had
+    // no way to see what does not.
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    Assert::IsTrue(page.State().orders.queuedBuilds.empty(), L"the opening board has something queued, so this fixture is wrong");
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    const bool named = std::ranges::any_of(renderers.text.DrawnStrings(), [](const Neuron::FontRenderer::DrawnString& _drawn)
+                                           { return _drawn.text.find("NO MOVE") != std::string::npos; });
+    Assert::IsTrue(named, L"a standing fleet with no order drew no row saying so");
+
+    // And it is a target, because the point of the row is that it is the one thing on this column a
+    // player can still do something about.
+    const std::vector<Lockstep::MainPage::HitRegion> rail = RailHits(page);
+    const bool orderable = std::ranges::any_of(rail, [](const Lockstep::MainPage::HitRegion& _hit)
+                                               { return _hit.action == Lockstep::MainPage::Action::OpenFleet; });
+    Assert::IsTrue(orderable, L"the unordered fleet's row leads nowhere");
+  }
+
+  TEST_METHOD(APlacesRowOpensThePlaceItNames)
+  {
+    // `PLACES` replaces `FLEETS` and `BUILDS` (ADR-112): one row per system you hold, and the row is
+    // the shortest route to everything that system can do this tick.
+    const auto simulation = PlayedMatch(4);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    const bool banded = std::ranges::any_of(renderers.text.DrawnStrings(),
+                                            [](const Neuron::FontRenderer::DrawnString& _drawn) { return _drawn.text == "PLACES"; });
+    Assert::IsTrue(banded, L"the rail has no PLACES section");
+
+    // Every row in it names a system the viewer holds, and opens that system.
+    std::size_t opened = 0;
+    for (const Lockstep::MainPage::HitRegion& hit : RailHits(page))
+    {
+      if (hit.action != Lockstep::MainPage::Action::OpenSystem || hit.index < 0)
+      {
+        continue;
+      }
+      (void)page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+      Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Place, L"a rail row opened no place sheet");
+      Assert::AreEqual(page.State().viewer, page.State().graph.systems[static_cast<std::size_t>(hit.index)].owner,
+                       L"a rail row named a system the viewer does not hold");
+      ++opened;
+      renderers.Begin();
+      DrawPage(page, renderers);
+      break;
+    }
+    Assert::IsTrue(opened > 0, L"no row on the rail opened a place");
   }
 
   TEST_METHOD(ALockedRailRowFocusesAndOpensNothing)
@@ -2858,7 +2969,8 @@ public:
     const auto below = std::ranges::find_if(renderers.text.DrawnStrings(), [](const Neuron::FontRenderer::DrawnString& _drawn)
                                             { return _drawn.text.find(" MORE") != std::string::npos && _drawn.text.ends_with("›"); });
     Assert::IsTrue(below != renderers.text.DrawnStrings().end(), L"the band did not say what is below it");
-    Assert::IsTrue(below->text.find("BUILDS") != std::string::npos || below->text.find("SIGNALS") != std::string::npos,
+    Assert::IsTrue(below->text.find("PLACES") != std::string::npos || below->text.find("SIGNALS") != std::string::npos ||
+                     below->text.find("PROPOSALS") != std::string::npos,
                    L"the band did not name the section below the fold");
 
     // Spun to the bottom: a way up, and `END` rather than a count of nothing.
