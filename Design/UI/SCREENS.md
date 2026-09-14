@@ -65,8 +65,9 @@ The scroll and the open card reset when a new digest arrives. The leading card c
 moves (ADR-056) and is at the top of the stack rather than pinned to the screen.
 
 *Differs / not built:* no tick stamp on the right of a plain event card; no highlighted card
-variant; buttons that do not fit the column are dropped rather than wrapped. **The sheets and the
-locks rail still do not scroll** (ADR-052 option C, which ADR-080 amends for this column only). The handoff's four card-level
+variant; buttons that do not fit the column are dropped rather than wrapped. **The sheets still do
+not scroll** (ADR-052 option C, which ADR-080 amends for the digest and ADR-101 for the locks rail).
+The handoff's four card-level
 signals (`REBUILD LANE`, `PLAN ROUTE`, `WITHDRAW`, `HOLD FIRE`) are the signal sheet's rows instead
 (ADR-039).
 
@@ -112,6 +113,17 @@ the incumbent, when it carries `+DEF` in blue; everything in transit under one `
 a `- 6 cr left at the lock -` line, `- nothing queued -` otherwise), `SIGNALS 9 TO SEND ›` (rows
 `SENDING`, a concede in red), `PROPOSALS 1 OPEN` (rows `P3 LANE` / `3 TICKS` amber). Footer
 `ALL LOCK TOGETHER` + the countdown.
+
+**The sections scroll and the header and footer do not (ADR-101).** 44px rows (ADR-100) put a played
+empire's four sections past the bottom of a 260px column, so everything between the help line and the
+footer is a band that moves: a wheel notch over the rail moves it by a row, and **a 44px page band at
+the foot of that band is the control a finger uses** — the digest's, in the same place, saying the
+same kind of thing. `3 MORE · SIGNALS ›` on the right, naming the first section below the fold, or
+`3 MORE ›` when there is no section down there, or `END` in dim ink at the bottom; `‹ UP` on the left
+once there is anything above. Its halves move by a bandful less one row. **A row not wholly inside
+the band is not drawn and registers no hit** — `ShapeRenderer` has no clip rectangle, so a
+half-scrolled row would paint its divider over the help line. The scroll is **not** reset when a tick
+lands, unlike the digest's: this column is a summary of the same empire tick after tick.
 
 **Rows are links (ADR-060).** A BUILDS row opens the build sheet for the system its build is on; a
 FLEETS row opens the fleet's destination picker, and is **the only way to move a parked fleet**

@@ -23,22 +23,33 @@ own comment names 44 as "the smallest target a finger hits reliably" and it is a
 **Change.**
 - ~~Pick the floor~~ **44**, owner decision 2026-09-14. It is the number `SHEET_ROW_HEIGHT` already
   names and already uses; 32 satisfies neither a finger nor the constant in the tree.
-- `MainPage::BUTTON_HEIGHT` 18 -> the floor, and re-derive `LayoutCard`'s action row from it.
-- The locks rail's `row` height -> the floor, **and the rail scrolls**, owner decision 2026-09-14.
-  ADR-080's machinery is already there: whole-item scrolling, a wheel notch routed by the pane under
-  the pointer, a drag banked to a threshold. `MainPage::HandleZoom` already has the rail as a case
-  that does nothing. This closes ADR-086's open question.
-- Map garrison badge (`BADGE_HEIGHT`, ADR-079): **drawn at 16, hit at 44**, owner decision
-  2026-09-14. A touch target and a visual are allowed to differ and usually should; this keeps
+- **Done.** `MainPage::BUTTON_HEIGHT` 18 -> the floor, and `LayoutCard`'s action row re-derived
+  from it (ADR-100). The re-derivation was not bookkeeping: the row had reserved one `LINE_HEIGHT`
+  while `BandTopForText` centred the button on that line's baseline, which at 44 painted a whole
+  line above the row. Found in a screenshot, not in the audit.
+- **Done.** The locks rail's `row` and section heights -> the floor, **and the rail scrolls**
+  (ADR-101). The wheel notch is routed by `HandleZoom`'s rail case, which did nothing until now --
+  but the wheel is the shortcut, not the control: the band at the foot of the column is a pair of
+  44px targets, because this game is for touch and a finger has no wheel. A row not wholly inside
+  the band is culled rather than clipped (`ShapeRenderer` has no clip rectangle) and a culled row
+  registers no hit. This closes ADR-086's open question.
+- **Done.** Map garrison badge (`BADGE_HEIGHT`, ADR-079): **drawn at 16, hit at 44**, owner
+  decision 2026-09-14. A touch target and a visual are allowed to differ and usually should; this keeps
   ADR-079's design (the disc is the system, the badge is what stands on it) and costs nothing on
   screen. Watch the overlap with the disc's own hit and with a neighbouring badge -- hit order
   already resolves ties, and the badges are placed clear of both.
-- Top bar chips, the `RESET` chip, the sheet's bands and the digest's title/page bands.
+- **Done for the main page.** Top bar chips, the `RESET` chip and the digest's title/page bands.
+  The sheet's 36px header and its 22px section band are **not** raised: the header's close corner is
+  already a 36x36 hit and the section band is never a target. Recorded in the guidelines rather than
+  changed.
+- **Still to do: the other three screens.** `JoinPage`, `SeatsPage` and `ConnectionDialog` have no
+  audit over them yet -- `TouchTargetTests` walks the main page's five boards only, because those are
+  the boards `Headless` can draw. Each of the three is its own page class with its own hit list.
 - Re-derive every capture's tap coordinate in `Design/UI/README.md` §Photographing.
 
-**Done when.** Every `AddHit` rectangle on every screen is at least the floor tall, asserted by a
-test that walks the hit list rather than by reading the constants; all 23 captures retaken; the table
-in `DESIGN-GUIDELINES.md` §Frame updated to say the floor is met.
+**Done when.** Every `AddHit` rectangle on every screen is at least the floor in both dimensions,
+asserted by a test that walks the hit list rather than by reading the constants; all 23 captures
+retaken; the table in `DESIGN-GUIDELINES.md` §Frame updated to say the floor is met.
 
 ## 2. Card titles are mixed case (ADR-099)
 
@@ -58,3 +69,12 @@ the sheet captures retaken; `DESIGN-GUIDELINES.md` §Copy says the rule in the p
 ## Order
 
 1 then 2, because 1 moves the boxes the titles sit in.
+
+## What has landed
+
+| | |
+|---|---|
+| ADR-100 | A target is 44 pixels, and a sibling grows its box while an isolated chip grows only its hit. `TouchTargetTests` is the audit. |
+| ADR-101 | The locks rail scrolls, and its page band -- not the wheel -- is the control. |
+
+Commits: `Hold the main page's targets to the 44px floor`, and the rail's scroll.

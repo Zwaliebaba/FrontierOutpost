@@ -103,6 +103,10 @@ public:
   /// The page band at the foot of the column is a row in its own right and grows to the floor.
   static constexpr float DIGEST_PAGE_HEIGHT = TOUCH_FLOOR;
 
+  /// The locks rail's page band, the same height as the digest's and for the same reason: it is a
+  /// pair of controls, and a control is a touch target (ADR-100, ADR-101).
+  static constexpr float RAIL_PAGE_HEIGHT = TOUCH_FLOOR;
+
   /// The sheet a panel is drawn as, anchored to the bottom of the map pane (ADR-052).
   ///
   /// **44 is the number that matters and the rest follow it.** It is the smallest target a finger
@@ -162,6 +166,10 @@ public:
     ChooseDestination,
     /// Put the camera back where the map opened (ADR-090). Drawn only when it is somewhere else.
     ResetCamera,
+    /// Move the locks rail by one bandful. Its index is a DIRECTION, +1 down and -1 up, and not a
+    /// position: the rail scrolls in pixels and a tap that carried one would be a tap that had to
+    /// know how tall the band came out (ADR-101).
+    PageRail,
     ClosePanel
   };
 
@@ -403,6 +411,9 @@ private:
   /// Moves the digest by `_cards`, clamped. True when it moved.
   bool ScrollDigest(std::int32_t _cards);
 
+  /// Moves the locks rail by `_pixels`, clamped to what the last frame measured. True when it moved.
+  bool ScrollRail(float _pixels);
+
   /// Puts back the sheet a new state arrived under, if what it was about is still there (ADR-065).
   void ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _subject);
 
@@ -450,6 +461,32 @@ private:
   /// Which card the digest column starts at. Reset by `Create`, because a digest is replaced
   /// wholesale and card thirty of the last one is nowhere in this one (ADR-080).
   std::size_t m_digestTop = 0;
+
+  /// Whether the LAST frame found more rail than fits, which is what reserves the page band.
+  ///
+  /// **A frame late on purpose, and it cannot oscillate.** Whether the rail overflows depends on
+  /// how tall the band is, and how tall the band is depends on whether it overflows; the loop is
+  /// broken by reserving from the previous answer. Reserving the band only ever makes the column
+  /// shorter, so a rail that was paged stays paged and a rail that was not becomes paged at most
+  /// once -- there is no content height that flickers between the two.
+  bool m_railPaged = false;
+
+  /// How far the locks rail is scrolled, in PIXELS rather than in rows (ADR-101).
+  ///
+  /// **The digest scrolls by cards and this scrolls by pixels, and the difference is what each
+  /// column is.** A digest is a stack of cards of wildly different heights, and stopping part-way
+  /// through one puts a title off the top; the rail is a list of fixed 44px rows and 44px bands
+  /// under section headers, so every pixel offset lands somewhere legible and snapping would only
+  /// make the gesture feel stickier than the column looks.
+  ///
+  /// NOT reset by `Create`: the rail is a summary of the same empire tick after tick, so a player
+  /// who has scrolled to their signals expects to still be looking at them when the tick lands.
+  /// Clamped in the draw, which is the only place that knows how tall the content came out.
+  float m_railScrollPixels = 0.0F;
+  /// What the last frame measured the rail's content and viewport as, so a scroll can be clamped
+  /// against something real rather than against a guess.
+  float m_railContentPixels = 0.0F;
+  float m_railViewportPixels = 0.0F;
   /// How many cards the last frame drew, so a page key can move by what a page actually was. Layout
   /// is the only thing that knows, and it knows it a frame late -- which is the same frame-old hit
   /// list every tap on this screen is already tested against.

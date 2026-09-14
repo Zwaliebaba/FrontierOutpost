@@ -267,6 +267,13 @@ Semantic / owner (ADR-027: you are always blue)
   (ADR-060) — the build sheet, the fleet's destination picker, the far end of a proposed lane — and
   gives no order; a row with nothing to point at is not a target. `HOVER_FILL` under the pointer, on
   targets only. Focus-only at the lock.
+- **Locks rail page band** — 44px at the foot of the rail's scrolling band, drawn only when the
+  sections are taller than the column (ADR-101): `3 MORE · SIGNALS ›` right — the culled count and
+  the first section header below the fold, or `3 MORE ›` with no section down there — or `END` in
+  `NEUTRAL_DIM` at the bottom; `‹ UP` left once there is anything above, both muted. Its halves move
+  by a bandful less one row; a wheel notch over the rail moves it by one row. **The band is the
+  control and the wheel is the shortcut** — a column scrollable only by a mouse gesture is one half
+  this game's players cannot reach the bottom of.
 - **Locks list band** — a muted label grouping the rows under it, no rule and no count, never a
   target (ADR-086): `DOTHAN · 10 SHIPS` over that system's fleets, `UNDER WAY` over the ones in
   transit. Lighter than a section header, which starts a list rather than dividing one.
