@@ -150,9 +150,8 @@ drawn from `BuildRow::isTradeLane`, which nothing sets.
 line, a body, a 44px `CANCEL` bar. The body is 44px rows, six at most and a seventh reported —
 **except the build sheet's, which is a 2×2 grid of 96px tiles** (ADR-107). No mockup exists for any of them; the captures are `01-build-sheet.png`,
 `01-destination-sheet.png`, `01-signal-sheet.png`, `01-signal-sheet-armed.png`, `07-replay.png`
-and, for a sheet left open across the lock, `06-at-lock-sheet.png`. **The two build captures are
-stale** — they are of the row form ADR-107 replaced, and `Design/UI/README.md` says why they were
-not retaken with it.
+and, for a sheet left open across the lock, `06-at-lock-sheet.png`. All six were retaken on
+2026-09-14; `Design/UI/README.md` says why eleven captures had fallen behind at once.
 - **Build** (`BUILD - DOTHAN`): **the one sheet whose body is a grid rather than a column**
   (ADR-107). Opened by tapping a system you hold, or by a queued BUILDS row on the rail; it is about
   that system and nothing else (ADR-058), and a system you do not hold opens no sheet and only
@@ -330,7 +329,7 @@ is no host-left state.
 **Code.** `LockstepClient/ConnectionDialog.{h,cpp}`. Tests: `ConnectionDialogTapTests` in
 `TapTests.cpp` — every button pressed, the scrim swallowing, no `BACK` without a screen behind.
 
-## 06 · At lock — **built** (`06-at-lock.png`)
+## 06 · At lock — **built** (`06-at-lock.png`, `06-at-lock-sheet.png`)
 
 Applies to 01 when the countdown reaches zero (ADR-039): top bar `T8 LOCKED 00:00:00` with the
 countdown in grey rather than amber; digest header right side `T8 PENDING` in amber; every action
@@ -339,7 +338,11 @@ grey `LOCKED` chip, its help line amber — *Resolving T8. Controls return with 
 Anything you tap now is an order for T9.* — its `SIGNALS` header `LOCKED` and not a control, its
 footer `LOCKED TOGETHER` / `T8 RESOLVING`; its rows focus-only (ADR-060). **An open sheet stays
 open** (ADR-065): every row dim and not a target, the same filled grey `LOCKED` chip in its header
-clear of the `X`, and the rail's lock sentence repeated under the header in amber. `X` and `CANCEL`
+clear of the `X`, and the rail's lock sentence repeated under the header in amber. **A build sheet
+dims its TILES in place** (ADR-107): each keeps the border and the icon of whatever state it is in
+and all four of its strings go `NEUTRAL_DIM`, and a queued tile drops its `TAP TO TAKE BACK` rather
+than dimming an instruction that is no longer true. `06-at-lock-sheet.png` is that sheet, which is
+what it shows since 2026-09-14; it was the signal sheet before. `X` and `CANCEL`
 still close it. Ends when the next state arrives and the page is rebuilt from it — including the
 sheet, which reopens when its system is still yours or its fleet still exists, and closes when it is
 not. When the server is on time this screen lasts under a second; it is what a player sees when the
@@ -350,7 +353,7 @@ server is late, which is when it matters.
 
 ## 07 · Replay — **stub** (`07-replay.png` is the stub as built)
 
-Built: `▶ REPLAY T7` on the top bar opens a sheet titled `REPLAY TICK 7 - NOT YET WIRED` listing
+Built: `▶ REPLAY T7` on the top bar, under `--dev` only (ADR-091), opens a sheet titled `REPLAY TICK 7` listing
 `1. LOCK` … `6. DIGEST` as dim, untappable rows, and `CANCEL`. That is all, and the title is where
 it says so: the seventh note row that used to carry that sentence was clipped by the six-row cap and
 read as `+1 MORE THAN THIS SHEET CAN SHOW`, so it was removed.

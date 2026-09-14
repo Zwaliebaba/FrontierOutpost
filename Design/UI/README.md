@@ -4,30 +4,34 @@ What the client shows, screen by screen, and how far each screen is built. The d
 2026-09-11 as a UI handoff — eight mockups at 1280×720, guidelines, a per-screen spec and a work
 plan ("v2", superseding the v1 `Design/Screens/`). Most of it has since been built, some of it
 deliberately not, and this directory is now the **design record for the client**, kept against the
-code in `LockstepClient/` and `Lockstep/`. Every status below is as of **2026-09-13** and was read
+code in `LockstepClient/` and `Lockstep/`. Every status below is as of **2026-09-14** and was read
 from the tree, not from the plan.
 
-> **Twenty-one of the twenty-three captures are current as of 2026-09-13**, retaken from the Debug
-> build carrying every stage of FONT-01: IBM Plex in four cuts, the data/sentence rule applied, the
-> layout re-derived around a 17px line, coverage gamma-corrected, and the five characters ADR-014
-> had to substitute put back.
+> **All twenty-three captures are current as of 2026-09-14.** Twelve were taken on 2026-09-13 or
+> earlier and nothing since has reached them; **eleven were retaken on 2026-09-14** and the reason
+> they all went at once is worth reading, because it is the shape of a backlog rather than one
+> change.
 >
-> **`01-build-sheet.png` and `01-build-rising.png` are STALE as of 2026-09-14** and are kept only so
-> the list is not shorter than the screens. They show the build sheet as a column of 44px rows;
-> ADR-107 made its body a 2×2 grid of 96px tiles, so neither picture is of anything the client draws
-> any more. **They could not be retaken in the session that made the change**: opening a sheet needs
-> a tap, a tap needs `SendInput`, and `SendInput` needs an unlocked desktop — `Get-Process LogonUI`
-> answered yes throughout. The change was run against the real client as far as a locked desktop
-> reaches, which is the board itself (a `--serve --bots 5` process and a `--join --token alpha`
-> client on one posted Enter, per "Photographing the build" below): the rail's `BUILDS n AVAIL · n
-> CR` and the digest's priced build button both draw, and both are paths ADR-107 touched. **The
-> recipe for the two retakes is below under `01-build-rising.png`** and needs somebody at an
-> unlocked session.
+> **A capture that needs a FINGER is a capture that stops being retaken.** ADR-103 through ADR-106
+> rebuilt how the map draws a system — a lit ball on a stem with a cast shadow, four tones, a rim
+> and a glint — over four commits, and each of them retook the same five: `01-main-page`,
+> `04-connection-lost`, `06-at-lock`, `08-missed-digests`, `05-match-finished`. Those five are the
+> ones a posted `VK_RETURN` can reach. The other eleven need a tap to open a sheet, arm a concede or
+> hover a row, a tap needs `SendInput`, and `SendInput` needs an unlocked desktop, which those
+> sessions did not have. So eleven pictures went on showing flat discs, shouted card titles
+> (ADR-099), 21px rail rows (ADR-100, ADR-101) and, after ADR-107, a build sheet that had stopped
+> existing.
 >
-> The other three sheets moved by **4 pixels** and their captures are not being called stale for it:
-> the help slot's padding went from 12 to 16 (ADR-107), which lowers `01-destination-sheet.png`,
-> `01-signal-sheet.png`, `01-signal-sheet-armed.png`, `06-at-lock-sheet.png` and `07-replay.png` by
-> two pixels each at the top and bottom and changes nothing else on them.
+> Retaken 2026-09-14 from the Debug build at ADR-107, on an unlocked session: `01-build-sheet`,
+> `01-build-rising`, `01-destination-sheet`, `01-signal-sheet`, `01-signal-sheet-armed`,
+> `01-orders-queued`, `01-fleet-under-way`, `01-rail-hover`, `01-finished`, `06-at-lock-sheet` and
+> `07-replay`. **`06-at-lock-sheet.png` is now the BUILD sheet across the lock** rather than the
+> signal sheet, because the tile's inert form is the part of ADR-065 that ADR-107 changed and no
+> other capture carries it.
+>
+> **The lesson is a process one and it belongs here:** check `Get-Process LogonUI` at the START of a
+> change that touches drawing, not at the end. A locked desktop does not stop the work, it silently
+> halves what can be photographed — and the half it takes is the half with the controls in it.
 >
 > **The check is mechanical rather than visual.** The 8×8 font was one bit a pixel, so a capture
 > carrying it has a handful of distinct luminances in it; an anti-aliased one has two hundred. Run
@@ -51,13 +55,13 @@ ADR-034 (what the handoff left open) and ADR-036 through ADR-071, which are cite
 
 | # | Screen | Status | In `screens/` | Code |
 |---|---|---|---|---|
-| 01 | Main page — digest as order surface, map, locks rail | **Built** (ADR-034; then 045, 052, 053, 055–066) | `01-main-page.png` (tick 11 of a six-seat match: a battle, two grouped rivals, production with its priced build, a rising build, a claim — and a paged rail), `01-orders-queued.png` (tick 0: a move ordered and a build queued, before the lock), `01-fleet-under-way.png` (tick 1: the route and its marker), `01-rail-hover.png` (the locks rail with the pointer on a row, ADR-060), the sheets `01-build-sheet.png`, `01-destination-sheet.png`, `01-signal-sheet.png` and `01-signal-sheet-armed.png` (the concede armed under its band, ADR-064), `01-build-rising.png` (a build in flight, one frame carrying all three places it is said: the rail's row, the sheet that will not take another order, and the digest's card, ADR-070), and `01-finished.png`. The map's unbuilt details are item 6 below | `LockstepClient/MainPage.cpp`, `DigestView.cpp`, `MapRender.cpp` |
+| 01 | Main page — digest as order surface, map, locks rail | **Built** (ADR-034; then 045, 052, 053, 055–066) | `01-main-page.png` (tick 11 of a six-seat match: a battle, two grouped rivals, production with its priced build, a rising build, a claim — and a paged rail), `01-orders-queued.png` (tick 0: a move ordered and a build queued, before the lock), `01-fleet-under-way.png` (tick 1: the route and its marker), `01-rail-hover.png` (the locks rail with the pointer on a row, ADR-060), the sheets `01-build-sheet.png` (the tile grid, one tile queued, the purse and its sentence — ADR-107), `01-destination-sheet.png`, `01-signal-sheet.png` and `01-signal-sheet-armed.png` (the concede armed under its band, ADR-064), `01-build-rising.png` (a build in flight, one frame carrying all three places it is said: the rail's row, the tile that is rising with its progress bar beside the one it blocks, and the digest's card — ADR-070, ADR-107), and `01-finished.png`. The map's unbuilt details are item 6 below | `LockstepClient/MainPage.cpp`, `DigestView.cpp`, `MapRender.cpp` |
 | 02 | Share tick — 480×640 export | **Not built.** No button, no export; ADR-034 §2 says clipboard-only if it is ever built, and its open question asks whether it should be | none; the mockup that was the target, if it stays one, is in the design file and the history | — |
 | 03 | Join | **Built** (ADR-034 §3, ADR-041) | `03-join.png` | `LockstepClient/JoinPage.cpp`, `NeuronClient/TextField.h` |
 | 04 | Connection lost | **Built** (ADR-038, ADR-043) | `04-connection-lost.png` | `LockstepClient/ConnectionDialog.cpp` |
 | 05 | Connection states | **Built** as one component with seven states. The WELCOME dialog is not one of them | `05-connecting.png`, `05-refused-unknown-token.png`, `05-refused-seat-in-use.png`, `05-waiting-for-the-host.png`, `05-match-finished.png` | `LockstepClient/ConnectionDialog.cpp` |
-| 06 | At lock | **Built** (ADR-039, ADR-065) | `06-at-lock.png`, `06-at-lock-sheet.png` (a sheet left open across the lock: dim rows, the `LOCKED` chip in its header, the rail's sentence in amber) | `LockstepClient/MainPage.cpp` |
-| 07 | Replay — phase step-through | **Stub**, and its title says so (`REPLAY TICK 7 - NOT YET WIRED`). A sheet listing the six phases; nothing steps | `07-replay.png` is the stub as built; the step-through the mockup drew is item 2 below, its centred panel superseded by the sheet (ADR-052) | `MainPage::DrawPanel` |
+| 06 | At lock | **Built** (ADR-039, ADR-065) | `06-at-lock.png`, `06-at-lock-sheet.png` (the BUILD sheet left open across the lock: every tile keeping its border and its icon with all four of its strings gone `NEUTRAL_DIM`, the filled grey `LOCKED` chip in the header, the rail's sentence in amber — ADR-065, ADR-107) | `LockstepClient/MainPage.cpp` |
+| 07 | Replay — phase step-through | **Stub.** A sheet titled `REPLAY TICK <n>` listing the six phases; nothing steps. Its title said `- NOT YET WIRED` until ADR-091 made `--dev` the disclosure instead, and this line said so until 2026-09-14 | `07-replay.png` is the stub as built; the step-through the mockup drew is item 2 below, its centred panel superseded by the sheet (ADR-052) | `MainPage::DrawPanel` |
 | 08 | Missed digests | **Partial.** The backlog is kept and concatenated (ADR-044) and its repeats are folded (ADR-062); no tabs | `08-missed-digests.png` (`SINCE YOU LOOKED - T1 > T7`, the delta box, two actor cards and a folded `PRODUCTION +18 - T1 > T7`); the tabs the mockup drew are item 3 below | `Lockstep/Lockstep.cpp` (match loop), `DigestView.cpp` |
 | 09 | Seats — the host's lobby | **Built**, and not in the handoff (ADR-036, 037, 041, 051, 066) | `09-seats.png` (the host alone), `09-seats-joined.png` (a second seat connected and selected, and the three-way on every card) | `Lockstep/SeatsPage.cpp` |
 
@@ -96,7 +100,7 @@ match loop draws the main page and the dialog over it, and redraws only when som
 The complete list, so nobody goes looking. Each item is also under its screen in `SCREENS.md`.
 
 1. **Screen 02, entirely.** No `SHARE TICK` button on the top bar, no card, no clipboard.
-2. **Screen 07's step-through.** `REPLAY T<n> - NOT YET WIRED` opens a sheet naming six phases and
+2. **Screen 07's step-through.** `▶ REPLAY T<n>`, under `--dev` only, opens a sheet naming six phases and
    nothing else: no per-phase entries, no PREV/NEXT, no board snapshot per phase. The snapshot
    carries no `PhaseRecord`s, so this needs the wire before it needs a screen.
 3. **Screen 08's tabs**, per-tick event counts, the collapsed older ticks and read marks. What
@@ -147,9 +151,10 @@ it was corrected on 2026-09-12. (Rail rows became links later the same day — A
 claim is true again, of a different mechanism: a row links to the thing it names, not to an event.)
 
 **Every capture was retaken on 2026-09-13 for FONT-01**, from the Debug build carrying all seven
-stages. All twenty-three are different, because the face changed on every screen — which is also why
-the by-eye check that served the ADR-069 and ADR-070 retakes does not serve this one, and the
-luminance-count check above replaced it.
+stages. All twenty-three were different, because the face changed on every screen — which is also
+why the by-eye check that served the ADR-069 and ADR-070 retakes did not serve that one, and the
+luminance-count check above replaced it. **Eleven of them have since been retaken again**, on
+2026-09-14; the block at the top of this file says which and why they had fallen behind.
 
 `01-main-page.png` is **no longer a practice match**. The recipe asked for one and a practice match
 at these seeds now yields a digest of one or two events, which documents the screen's typography
@@ -185,8 +190,9 @@ ADR-066 touched was retaken the same day from the Debug build carrying them. Don
   screen 03 and ENTER MATCH on 09. `Get-Process LogonUI` says whether the desktop is locked; if it
   is, the window will report itself foreground and no tap will happen.
 - Client-pixel targets, **re-measured 2026-09-13 after FONT-01 stage 6 moved two of them**: JOIN
-  (826, 479); **PRACTICE MATCH (752, 502)**, which was (744, 482) until a seat card grew from 120px
-  to 130 and pushed the box below it down; `REPLAY T<n>` (1210, 24); a sheet's `CANCEL` bar
+  (826, 479); **PRACTICE MATCH (752, 554)**, which was (744, 482) and then (752, 502) as the seat
+  cards grew — re-measured 2026-09-14, and the lesson is that this number has moved three times and
+  should be read off a screenshot rather than typed; `REPLAY T<n>` (1210, 24); a sheet's `CANCEL` bar
   (700, 688); the `SIGNALS` header on a fresh rail (1150, 232), which was 201.
 - **Do not hardcode a rail position at all — scan for the section dividers.** Each section of the
   locks rail opens with a full-width 1px divider at 7% white, so the third of them down the rail is
@@ -208,15 +214,23 @@ ADR-066 touched was retaken the same day from the Debug build carrying them. Don
   the ink, which lands on `30,33,38` against a background of `11,14,20` — plain in place and easy to
   miss in a thumbnail, so a capture script should assert the pixel. Measured that way on 2026-09-12,
   and it is what found that a moving mouse produces no `WM_POINTERUPDATE` at all.
-- `01-build-rising.png` is a practice match one tick after queuing a level: PRACTICE MATCH, tap a
-  held system, queue the top tile, let one lock pass. The rail then carries the rising row and the
-  same system's sheet draws that build rising with its progress bar, with the tiles beside it inert
-  and marked `AFTER T<n>` (ADR-107, amending ADR-070). Tap the system again before photographing it,
-  so the sheet, the rail row and the digest's card are all in the one frame. `01-build-sheet.png` is
-  the same match before the lock: PRACTICE MATCH, tap a held system, and photograph the four-state
-  grid with one tile queued, so `QUEUED −20` / `TAP TO TAKE BACK` and the purse's ` −20` in the
-  header are both in the frame. **Both need an unlocked desktop**, which is the whole of why they
-  were not retaken with the change that made them stale.
+- `01-build-sheet.png` is a practice match at tick 0: PRACTICE MATCH, tap the capital, tap one
+  tile. That puts `QUEUED −20` / `TAP TO TAKE BACK` on one tile, `15 CR` / `85 CR LEFT AFTER` on
+  the other, the purse's ` −20` in the header and the ADR-078 sentence under it — four of the seven
+  tile states in one frame.
+- **`01-build-rising.png` needs a LEVEL TWO build, and that is the trap.** A level-one building
+  takes one tick (ADR-069), so it is ordered at one lock and done at the next and is never on the
+  screen rising; only L2 and L3 take two and three. The recipe is: `--tick 20`, queue the shipyard
+  at tick 0, let it land, queue `SHIPYARD L2` from the digest's filled button, let one more lock
+  pass, then tap the system. The sheet then draws `Shipyard L2 rising` with `1 OF 2 TICKS`, its
+  progress bar at half, the `RISING · DONE T9` chip in the header and the mining tile beside it dim
+  and marked `AFTER T9` — with the rail's row and the digest's card in the same frame (ADR-070,
+  ADR-107).
+- **Drive it by looking, not by predicting.** The digest re-lays out every tick, so a coordinate
+  read from one screenshot is stale by the next: at `--tick 20` a screenshot-then-tap round trip is
+  most of a tick. `Build/TapRehearsal.ps1` exists for exactly this — it grabs, scans column x=40 for
+  the filled blue button and taps, all in one process between two frames. Anything that has to be
+  aimed by eye wants a tick of 45 seconds or more.
 - States: 09 = JOIN as the host; 01 = PRACTICE MATCH (`--tick 4` overrides the preset's two
   minutes); the sheets = a held system on the map, `MOVE`/`REDIRECT`, the `SIGNALS` header, `REPLAY`;
   06 = a `--serve` process suspended past a lock (`NtSuspendProcess`); 04 = that process killed;

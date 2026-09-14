@@ -46,8 +46,17 @@ ships — this document cites it and does not restate what it does not have to.
   half the map stays visible.
 - **The build sheet's body is a grid and not a column** (ADR-107): a 2×2 of **96px** tiles,
   `(596 − 20 − 8) / 2` = 284 wide, 8px between, 4px above the grid and 12px below, four slots and an
-  empty one not drawn. Header 44 + help 0 or 33 + grid + `CANCEL` 44 — **200px** for the two-tile
-  sheet the game produces today, **304** for a full four, 337 with a help line.
+  empty one not drawn.
+- **Sheet heights, measured off the captures on 2026-09-14** rather than computed: header 44 + help
+  (0, 33 or 50) + body + `CANCEL` 44. The two-tile build sheet the game produces today is **200**
+  bare, **233** under the rising sentence (`01-build-rising.png`) and **250** under the purse or lock
+  sentence (`01-build-sheet.png`, `06-at-lock-sheet.png`); the destination picker's four rows are
+  **264**, the signal sheet's band and row **154**, the replay sheet's six rows **352**. A full
+  four-tile grid will be 304 bare and **354** under a two-line sentence, which is the first thing on
+  this sheet that would pass ADR-052's "more than half the pane stays map" (338) — the row form
+  already passes it at six rows, and the grid does not until the bastion and the lane exist.
+  **ADR-107 predicted 337 for that case**, which was arithmetic done before the help line's wrap was
+  measured; see §Font.
 
 ## Font
 
@@ -139,6 +148,16 @@ the five characters ADR-014 substituted and re-measuring the six strings it shor
 - Detail text wraps by word to a PIXEL WIDTH (`FontRenderer::WrapToWidth`). It wrapped to a
   character count until 2026-09-13; there is no character count any more, because there is no one
   advance for a proportional face to have.
+- **Every wrap in this client measures in the MONO face and then draws in a sans one**, which is a
+  defect and is written down here rather than fixed (found 2026-09-14 while photographing the build
+  sheet). `WrapToWidth` takes a face and not one of the nine call sites passes it, so each wraps at
+  `MonoRegular`'s flat 7px column and the line is then set in Plex Sans at about 5.3px a character.
+  It is **conservative** — nothing overruns its box, lines just break earlier than they need to — so
+  the symptom is only ever a paragraph a line taller than it has to be: the build sheet's purse
+  sentence measures 435px in the face it is drawn in and breaks at 576 because 84 mono columns is
+  588. **Fixing it is not a one-word change**: it would re-wrap the digest's detail lines, the
+  dialog's paragraphs, the join screen and the lobby, which moves `LayoutCard`, the card stack's
+  paging and every capture that has a card on it. It wants its own change and its own ADR.
 - **"31 characters a line" is retired.** The digest rail is 254px and always was; what fits in it is
   the font's to answer, and at the 7px mono column that is **36**. Every such number in this
   directory is a fact about the face and moves when the face does.
