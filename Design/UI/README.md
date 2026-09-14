@@ -117,7 +117,8 @@ The complete list, so nobody goes looking. Each item is also under its screen in
 Found while reading the code for this record, not design gaps: the top bar's
 `M<id>` is the tick number zero-padded (`SnapshotView.cpp`, the snapshot carries no match id) and
 `D<n>/21` assumes four ticks a day and twenty-one days (ADR-051 records it); and
-`JoinPage::SetMatchSummary` has no caller, so the join screen's footer line never appears.
+`JoinPage::SetMatchSummary` had no caller, so the join screen's footer line never appeared — it and
+the never-populated seat box are gone (ADR-095).
 `Design/GETTING-STARTED.md` said rail rows jump to their event, that the map zooms, that a player
 starts with twenty credits and that missed digests are one tick deep; none was true of the tree, and
 it was corrected on 2026-09-12. (Rail rows became links later the same day — ADR-060 — so that first

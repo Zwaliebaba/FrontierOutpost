@@ -751,8 +751,18 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
   // panel it answered beside the wrong question, and it was the one thing that could overrun the
   // panel's height.
   const bool refused = !m_refusal.empty();
-  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X + CONSOLE_PADDING), CenterTextY(footerY, FOOTER_HEIGHT), refused ? m_refusal : summary,
+  const std::int32_t summaryY = static_cast<std::int32_t>(footerY) + 8;
+  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X + CONSOLE_PADDING), summaryY, refused ? m_refusal : summary,
                  refused ? AMBER : (!enough ? RED : (everyone ? BLUE : AMBER)), refused ? Face::SansRegular : Face::MonoRegular);
+
+  // **What `FILL WAITING WITH BOTS` does, said before it is pressed** (ADR-096). It is the one
+  // control on this screen whose effect is not in its label -- "fill" does not say WHICH seats, and
+  // pressing it turns every person still expected into a bot.
+  //
+  // **Drawn always, not on hover.** The seats page tracks no pointer, and UI-01 3.8's answer is that
+  // this game is for touch -- where a hover hint is a hint nobody ever sees.
+  _text.DrawText(static_cast<std::int32_t>(CONSOLE_X + CONSOLE_PADDING), summaryY + LINE_HEIGHT,
+                 "Sets every WAITING FOR PLAYER seat to BOT.", TEXT_MUTED, Face::SansRegular);
 
   // ---- ENTER MATCH --------------------------------------------------------------------------------
   const auto enterWidth = static_cast<float>(FontRenderer::MeasurePixels("ENTER MATCH ›")) + 24.0F;
@@ -765,8 +775,12 @@ void SeatsPage::DrawFooter(ShapeRenderer& _shapes, FontRenderer& _text)
   }
   else
   {
-    _shapes.StrokeRect(enterX, footerY + 10.0F, enterWidth, 24.0F, DIVIDER);
-    _text.DrawText(static_cast<std::int32_t>(enterX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "ENTER MATCH ›", NEUTRAL_DIM);
+    // **Readable, and inert** (ADR-096). At `NEUTRAL_DIM` over a `DIVIDER` border the button was
+    // almost invisible, so a host who could not enter had to work out both THAT it was disabled and
+    // WHY from the same faint thing. The sentence on the left is the why; this only has to say that
+    // it is not pressable, which the outline does.
+    _shapes.StrokeRect(enterX, footerY + 10.0F, enterWidth, 24.0F, OUTLINE);
+    _text.DrawText(static_cast<std::int32_t>(enterX) + 12, CenterTextY(footerY, FOOTER_HEIGHT), "ENTER MATCH ›", TEXT_MUTED);
   }
 
   const auto fillWidth = static_cast<float>(FontRenderer::MeasurePixels("FILL WAITING WITH BOTS")) + 24.0F;

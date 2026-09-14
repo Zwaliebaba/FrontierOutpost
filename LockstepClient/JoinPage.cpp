@@ -30,7 +30,7 @@ constexpr float TITLE_Y = 166.0F;
 constexpr float SUBTITLE_Y = 197.0F;
 
 constexpr float CARD_Y = 228.0F;
-constexpr float CARD_HEIGHT = 282.0F;
+constexpr float CARD_HEIGHT = 234.0F;
 constexpr float CARD_PADDING = 19.0F;
 constexpr float FIELD_X = COLUMN_X + CARD_PADDING;
 constexpr float FIELD_WIDTH = COLUMN_WIDTH - 2.0F * CARD_PADDING;
@@ -39,11 +39,12 @@ constexpr float FIELD_HEIGHT = 30.0F;
 constexpr float SERVER_LABEL_Y = 250.0F;
 constexpr float TOKEN_LABEL_Y = 315.0F;
 constexpr float EXPLANATION_Y = 381.0F;
-constexpr float SEAT_Y = 422.0F;
-constexpr float SEAT_HEIGHT = 27.0F;
-constexpr float BUTTON_Y = 468.0F;
+/// **The dashed `SEAT - NOT YET CONFIRMED` box is gone** (ADR-095), and the card is 48 pixels
+/// shorter for it. It was never populated: `SetSeat` had no caller, because a `Welcome` carries a
+/// seat and by the time one arrives this screen has been replaced by the lobby. A box that only ever
+/// says `NOT YET CONFIRMED` is a box that only ever says nothing.
+constexpr float BUTTON_Y = 420.0F;
 constexpr float BUTTON_HEIGHT = 23.0F;
-constexpr float FOOTER_Y = 534.0F;
 
 /// Baseline to baseline, from the font. See `MainPage::LINE_HEIGHT`.
 constexpr std::int32_t LINE_HEIGHT = static_cast<std::int32_t>(Neuron::FontRenderer::LineHeightPixels());
@@ -122,18 +123,6 @@ void JoinPage::AskToJoin() noexcept
 void JoinPage::FocusToken() noexcept
 {
   m_focus = Focus::Token;
-}
-
-void JoinPage::SetSeat(std::int32_t _seat, std::int32_t _players, const Color& _color)
-{
-  m_seat = _seat;
-  m_players = _players;
-  m_seatColor = _color;
-}
-
-void JoinPage::SetMatchSummary(std::string_view _summary)
-{
-  m_matchSummary = _summary;
 }
 
 void JoinPage::Update(double _elapsedSeconds)
@@ -320,8 +309,17 @@ void JoinPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.FillRect(COLUMN_X, CARD_Y, COLUMN_WIDTH, CARD_HEIGHT, CARD_FILL);
   _shapes.StrokeRect(COLUMN_X, CARD_Y, COLUMN_WIDTH, CARD_HEIGHT, CARD_BORDER);
 
-  DrawField(_shapes, _text, SERVER_LABEL_Y, "SERVER", "LAST USED", m_server, m_focus == Focus::Server, false, HIT_SERVER);
-  DrawField(_shapes, _text, TOKEN_LABEL_Y, "TOKEN", "SHOW", m_token, m_focus == Focus::Token, !m_revealToken, HIT_TOKEN);
+  // **No `LAST USED`** (ADR-095). Nothing is remembered between runs -- the client writes no files
+  // (R13) -- so the label promised a convenience that does not exist; the field is prefilled from
+  // the command line or from this process's own host, which is not the same thing.
+  DrawField(_shapes, _text, SERVER_LABEL_Y, "SERVER", "", m_server, m_focus == Focus::Server, false, HIT_SERVER);
+
+  // **Shown by default, so the control reads `HIDE`** (ADR-095). A token names a SEAT and not a
+  // person -- it is read aloud between friends and pasted into a chat, and ADR-029 is explicit that
+  // it is not authentication. Masking it by default made the one string this screen exists to get
+  // right the one string a player could not check.
+  DrawField(_shapes, _text, TOKEN_LABEL_Y, "TOKEN", m_revealToken ? "HIDE" : "SHOW", m_token, m_focus == Focus::Token, !m_revealToken,
+            HIT_TOKEN);
 
   // ---- What a token is -----------------------------------------------------------------------
   //
@@ -334,35 +332,6 @@ void JoinPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
   {
     _text.DrawText(static_cast<std::int32_t>(FIELD_X), lineY, line, TEXT_DETAIL, Face::SansRegular);
     lineY += LINE_HEIGHT;
-  }
-
-  // ---- The seat --------------------------------------------------------------------------------
-  //
-  // Dashed until the server has welcomed somebody, because a seat nobody has confirmed is a guess,
-  // and this screen's whole job is to stop two people playing the same empire.
-  DashedRect(_shapes, FIELD_X, SEAT_Y, FIELD_WIDTH, SEAT_HEIGHT, CARD_BORDER);
-  const std::int32_t seatTextY = CenterTextY(SEAT_Y, SEAT_HEIGHT);
-  _text.DrawText(static_cast<std::int32_t>(FIELD_X) + 12, seatTextY, "SEAT", TEXT_MUTED);
-
-  if (m_seat >= 0)
-  {
-    // `SEAT 3` until the player count is known, and `3 OF 12` after. The Welcome message carries a
-    // seat and not a census (Protocol.h), so the total only arrives with the first snapshot -- and
-    // a made-up denominator on the one screen whose job is to tell you which seat you got would be
-    // the worst place in the game to guess.
-    const std::string seatLine = m_players > 0 ? std::format("{} OF {}", m_seat + 1, m_players) : std::format("SEAT {}", m_seat + 1);
-    const auto seatWidth = static_cast<float>(FontRenderer::MeasurePixels(seatLine));
-    _text.DrawText(static_cast<std::int32_t>(FIELD_X + FIELD_WIDTH - seatWidth) - 12, seatTextY, seatLine, TEXT_PRIMARY);
-
-    // The colour swatch says which empire, because ADR-027 makes colour the thing a player reads
-    // the map by and "you are always blue" is only true for you.
-    _shapes.FillRect(FIELD_X + FIELD_WIDTH - seatWidth - 26.0F, static_cast<float>(seatTextY), 8.0F, 8.0F, m_seatColor);
-  }
-  else
-  {
-    const char* waiting = "NOT YET CONFIRMED";
-    const auto width = static_cast<float>(FontRenderer::MeasurePixels(waiting));
-    _text.DrawText(static_cast<std::int32_t>(FIELD_X + FIELD_WIDTH - width) - 12, seatTextY, waiting, TEXT_MUTED);
   }
 
   // ---- JOIN ------------------------------------------------------------------------------------
@@ -394,15 +363,10 @@ void JoinPage::DrawInterface(ShapeRenderer& _shapes, FontRenderer& _text)
     _text.DrawText(static_cast<std::int32_t>(FIELD_X), CenterTextY(BUTTON_Y, BUTTON_HEIGHT), m_detail, RED, Face::SansRegular);
   }
 
-  // ---- The footer ------------------------------------------------------------------------------
-  if (!m_matchSummary.empty())
-  {
-    _text.DrawText(static_cast<std::int32_t>(COLUMN_X), static_cast<std::int32_t>(FOOTER_Y), m_matchSummary, TEXT_MUTED);
-  }
-
-  // The command line is still there and still works. Saying so costs one line and saves somebody
-  // discovering it in a source file.
-  _text.DrawText(static_cast<std::int32_t>(COLUMN_X) + 286, static_cast<std::int32_t>(FOOTER_Y), "ALSO: --join SERVER TOKEN", TEXT_MUTED);
+  // **No footer** (ADR-095). `ALSO: --join SERVER TOKEN` taught a flag to somebody who had already
+  // found the screen that replaces it, on the one screen a first-time player sees before anything
+  // else; the flag is documented in `Design/GETTING-STARTED.md`, where somebody looking for a
+  // command line is looking. `m_matchSummary` went with it -- `SetMatchSummary` had no caller.
 }
 
 } // namespace Lockstep

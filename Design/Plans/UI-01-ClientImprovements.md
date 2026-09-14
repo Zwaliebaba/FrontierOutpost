@@ -244,6 +244,8 @@ token.
 - **Done when:** `01-main-page.png` retaken; SCREENS.md §01 top bar updated.
 
 ### 3.2 Join screen (`JoinPage.cpp`)
+**Done 2026-09-14 — ADR-095.**
+
 - Token shown by default; `SHOW` becomes `HIDE`. Rationale in SCREENS.md: a token names a seat, not a person, and is read aloud between friends.
 - Remove the dashed `SEAT · NOT YET CONFIRMED` box (never populated) and the `JoinPage::SetMatchSummary` footer path (no caller). If a waiting Welcome screen is ever built, they return with it.
 - Footer `ALSO: --join SERVER TOKEN` → remove from the player screen; document the flag in `Design/GETTING-STARTED.md` instead.
@@ -252,11 +254,17 @@ token.
 - **Done when:** `03-join.png`, `05-connecting.png`, `05-refused-*.png` retaken; README tap targets for JOIN re-measured and updated.
 
 ### 3.3 Seats screen (`SeatsPage.cpp`)
+**Done 2026-09-14 — ADR-096.** The one-liner is drawn always rather than on hover: `SeatsPage`
+tracks no pointer, and 3.8's answer is touch, where a hover hint is never seen.
+
 - `FILL WAITING WITH BOTS`: add a muted one-liner under the footer left when hovered/selected: `Sets every WAITING FOR PLAYER seat to BOT.`
 - Disabled `ENTER MATCH ›`: keep it outlined at `TEXT_MUTED` (not 0.45 α) and rely on the footer sentence for the reason. No other change.
 - **Done when:** `09-seats.png` retaken.
 
 ### 3.4 MATCH FINISHED standings (`ConnectionDialog.cpp`, kind MatchFinished)
+**Done 2026-09-14 — ADR-097.** The **[ASK]** is answered by the code: `SnapshotStanding` already
+carries every player's score and placement, so nothing was added to the wire.
+
 - Replace the single line `6 OF 6 · SCORE 35 · LEADER P6 95` with a six-row list: place, `YOU` / `Pn`, score; your row in `Ink::YOU`. Dialog grows to fit (520px wide stays; height from rows). Data: the snapshot's per-player scores — verify they are on the wire (`SnapshotView.cpp`); if only leader + you are present, **[ASK]** to add the standings to `MatchHeader` on finish.
 - **Done when:** `05-match-finished.png` retaken.
 

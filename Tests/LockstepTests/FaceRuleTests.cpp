@@ -169,7 +169,8 @@ struct Screen
     facts.reconnects = 2;
     facts.secondsToNextAttempt = 3.0;
     facts.lockCountdown = "00:04:12";
-    facts.standings = "3RD OF 6";
+    facts.standings = {Lockstep::ConnectionDialog::Facts::Standing{.text = "1ST  P6         95", .isYou = false},
+                       Lockstep::ConnectionDialog::Facts::Standing{.text = "3RD  YOU        35", .isYou = true}};
 
     Lockstep::ConnectionDialog dialog;
     dialog.Update(kind, facts, 0.0);

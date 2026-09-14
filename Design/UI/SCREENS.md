@@ -197,19 +197,21 @@ match is ADR-034's third open question, still open.
 ## 03 · Join — **built** (`03-join.png`)
 
 `JoinPage`: the sky (a fixed camera on the same star field as the map) with a 480px column centred:
-`LOCKSTEP` at 2× and `JOIN A MATCH - ONE SEAT PER TOKEN`; a card with a `SERVER` field (`LAST USED`
-on its label line), a `TOKEN` field (masked; `SHOW` toggles), two lines saying a token names a seat
-and not a person, a dashed `SEAT` box reading `NOT YET CONFIRMED`, and `JOIN >` filled once both
-fields have text (outlined `CONNECTING` while a connection is in flight). Footer: `ALSO: --join
-SERVER TOKEN`. The caret starts in the token field; Tab switches, Enter is JOIN. A failure on this
+`LOCKSTEP` in the 16px display cut and `JOIN A MATCH - ONE SEAT PER TOKEN`; a 234px card with a
+`SERVER` field, a `TOKEN` field **shown by default with `HIDE` beside it** (ADR-095 — a token names a
+seat, not a person, and is not authentication), two lines saying so, and `JOIN >` filled once both
+fields have text (outlined `CONNECTING` while a connection is in flight). **No `LAST USED` label, no
+`SEAT` box and no footer**: the first promised a memory the client cannot have (R13), the second was
+never populated, and the third taught a command line to somebody already on the screen that replaces
+it — `Design/GETTING-STARTED.md` has the flags. The caret starts in the token field; Tab switches, Enter is JOIN. A failure on this
 machine (`No answer from that server.`) is one red line beside the button; anything the server
 answered with is a screen 05 dialog over the card, with `BACK` and `EDIT TOKEN` because there is a
 field to go back to.
 
 Pre-filled: the host's own client gets `127.0.0.1:7341` and the first token it generated (ADR-036);
 a `--join`/`--token` client that was refused or could not connect gets what the command line said.
-Nothing is remembered between runs — R13 leaves the client nothing to write — so `LAST USED` is a
-label, not a fact.
+Nothing is remembered between runs — R13 leaves the client nothing to write, which is why the
+`LAST USED` label went.
 
 *Differs / not built:* the seat preview (`4 OF 12 · YOU ARE BLUE`) is set only on the frame the
 Welcome arrives, and the screen hands off on that frame, so it is never read; the footer's match
@@ -261,7 +263,10 @@ never be true at once (`Lockstep.cpp`, the match loop; `RunJoinScreen` for the j
 - `WAITING FOR THE HOST` blue — *You are in. Seat 02 is yours.* and why there is nothing to show;
   `QUIT`. Not in the handoff: it is what a joiner sees between being welcomed by a lobby and the
   host's `ENTER MATCH` (ADR-038; it replaced a fake match).
-- `MATCH FINISHED` neutral — *This match has ended…* and `4 OF 6 - SCORE 1284 - LEADER P3 1610`;
+- `MATCH FINISHED` neutral — *This match has ended.* and **the whole table** (ADR-097): one
+  monospace row per player in placement order, `1ST  P6  95` down to `6TH  YOU  35`, the reader's own
+  row in their blue. Every player's score and placement is already on the wire in
+  `SnapshotStanding`;
   `QUIT` · `VIEW LAST DIGEST` (filled), which dismisses it once and shows 01 in its finished state.
   (`MatchHeader::finished`; `RefusalReason::MatchFinished` is on the wire and no server sends it.)
 - `CONNECTION LOST` — screen 04, the same component.
@@ -344,7 +349,11 @@ a token is; the token with `COPY` to the clipboard and `NEW TOKEN`; whose seat i
 and a footer with the summary (`WAITING FOR SORNE, TAMSIN - 4 OF 6 HERE`
 in amber, `ALL 6 SEATS CONNECTED - YOU ARE SEAT 01` in blue) or the refusal to the last tap,
 `FILL WAITING WITH BOTS`, and `ENTER MATCH >` — filled only when every seat is connected, a bot, or
-marked to be taken over; Enter is the same. `CONNECTED` is live from the server this process runs.
+marked to be taken over; Enter is the same. **Disabled it is `TEXT_MUTED` in an `OUTLINE` border**
+rather than nearly invisible, and the footer's own sentence is the reason (ADR-096). Under the
+summary, always drawn: *Sets every WAITING FOR PLAYER seat to BOT.* — the one control here whose
+effect is not in its label, said before it is pressed rather than on a hover a touch device never
+has. `CONNECTED` is live from the server this process runs.
 
 Decisions on this screen: six seats and no `EMPTY` (ADR-036 amendment 3); `TAKE SEAT` removed —
 the host's seat is the token their client presented (ADR-041); entering is what turns a seat nobody

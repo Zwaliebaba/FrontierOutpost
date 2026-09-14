@@ -98,8 +98,17 @@ public:
     /// which one went without them rather than counting down to zero forever (ADR-085).
     std::uint32_t lockedTick = 0;
 
-    /// Finished: the standings line, already formatted by whoever has the state.
-    std::string standings;
+    /// Finished: the final table, one row per player, in placement order (ADR-097).
+    ///
+    /// **Formatted by whoever has the state, which is the composition root.** `ConnectionDialog`
+    /// lives in `LockstepClient` and knows nothing about a match; the match loop has `MatchState`
+    /// and turns it into rows. The dialog's job is to draw a table, not to rank one.
+    struct Standing
+    {
+      std::string text;
+      bool isYou = false;
+    };
+    std::vector<Standing> standings;
 
     /// Whether there is a screen behind this one worth going back to. The join screen sets it; the
     /// match loop does not, and gets `QUIT` where `BACK` would be.
@@ -184,6 +193,9 @@ private:
   {
     std::string text;
     Neuron::Face face = Neuron::Face::SansRegular;
+    /// Fully transparent means "the body's ink". Only the standings use anything else, so that the
+    /// reader's own row is the one their eye lands on (ADR-097).
+    Neuron::Color ink = {0, 0, 0, 0};
   };
 
   /// The title, the look, the paragraph and the buttons, for whatever `m_kind` and `m_facts` say.

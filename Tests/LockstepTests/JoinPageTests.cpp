@@ -199,19 +199,25 @@ public:
     Assert::IsTrue(focused, L"nothing on the screen puts the caret in the server field");
   }
 
-  TEST_METHOD(ShowRevealsTheToken)
+  TEST_METHOD(TheTokenIsShownAndHideIsTheControl)
   {
-    // The token is masked because it is read off one screen and typed into another, usually in a
-    // room with other people in it. `SHOW` is how somebody checks what they typed.
+    // **Shown by default** (ADR-095). A token names a SEAT and not a person -- ADR-029 is explicit
+    // that it is not authentication -- and it is read aloud between friends and pasted into a chat.
+    // Masking it made the one string this screen exists to get right the one string a player could
+    // not check. `HIDE` is there for somebody sharing a screen.
     Lockstep::JoinPage page = Offered();
-    Assert::IsFalse(page.TokenIsRevealed(), L"the token starts revealed");
+    Assert::IsTrue(page.TokenIsRevealed(), L"the token starts masked");
 
     Headless renderers;
-    const bool revealed = SweepFor(page, renderers, [&page] { return page.TokenIsRevealed(); });
-    Assert::IsTrue(revealed, L"nothing on the screen reveals the token");
+    const bool hidden = SweepFor(page, renderers, [&page] { return !page.TokenIsRevealed(); });
+    Assert::IsTrue(hidden, L"nothing on the screen hides the token");
 
-    // And it does not alter what is in the field, which is the failure that would look like a fix.
-    Assert::AreEqual(std::string{"5H7K-K2MU"}, page.Token(), L"revealing the token changed it");
+    // And back again, because it is one control with two labels.
+    const bool shownAgain = SweepFor(page, renderers, [&page] { return page.TokenIsRevealed(); });
+    Assert::IsTrue(shownAgain, L"the token could be hidden and not shown again");
+
+    // And neither alters what is in the field, which is the failure that would look like a fix.
+    Assert::AreEqual(std::string{"5H7K-K2MU"}, page.Token(), L"toggling the token changed it");
   }
 
   TEST_METHOD(TheJoinButtonAsksToJoin)

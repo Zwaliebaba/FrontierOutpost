@@ -268,7 +268,7 @@ public:
   TEST_METHOD(AFinishedMatchOffersTheLastDigest)
   {
     Lockstep::ConnectionDialog::Facts facts;
-    facts.standings = "1 OF 6 - SCORE 85";
+    facts.standings = {Lockstep::ConnectionDialog::Facts::Standing{.text = "1ST  YOU        85", .isYou = true}};
 
     Assert::IsTrue(Lockstep::ConnectionDialog::Action::ViewLastDigest ==
                      PressSomething(Lockstep::ConnectionDialog::Kind::Finished, facts, Lockstep::ConnectionDialog::Action::ViewLastDigest),

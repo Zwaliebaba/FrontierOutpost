@@ -132,8 +132,9 @@ constexpr float REGION_VOLUME_HEIGHT = 26.0F;
   return digits;
 }
 
-/// 4 -> "4TH". Ordinals, because "4 / 12" reads as a fraction and placement is not one.
-[[nodiscard]] std::string FormatPlacement(std::uint32_t _placement)
+} // namespace
+
+std::string MainPage::FormatPlacement(std::uint32_t _placement)
 {
   const std::uint32_t lastTwo = _placement % 100;
   const char* suffix = "TH";
@@ -156,8 +157,6 @@ constexpr float REGION_VOLUME_HEIGHT = 26.0F;
   }
   return std::to_string(_placement) + suffix;
 }
-
-} // namespace
 
 void MainPage::Create(MatchState _state)
 {
@@ -2354,16 +2353,16 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   float rowY = y + SHEET_HEADER_HEIGHT + helpHeight;
   bool previousWasBand = true;
 
-  const auto drawRow = [&](const SheetRow& row)
+  const auto drawRow = [&](const SheetRow& _row)
   {
-    const bool tappable = row.target != EventRefs::NONE;
+    const bool tappable = _row.target != EventRefs::NONE;
 
     // A band is a label over what follows it, drawn like the rails' section headers: a rule, then
     // the label, and nothing to tap.
-    if (row.band)
+    if (_row.band)
     {
       _shapes.FillRect(x + CARD_PADDING, rowY, width - 2.0F * CARD_PADDING, 1.0F, Ink::DIVIDER);
-      _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(rowY, SHEET_BAND_HEIGHT), row.title, Ink::TEXT_MUTED);
+      _text.DrawText(static_cast<std::int32_t>(x + CARD_PADDING), CenterTextY(rowY, SHEET_BAND_HEIGHT), _row.title, Ink::TEXT_MUTED);
       rowY += SHEET_BAND_HEIGHT;
       previousWasBand = true;
       return;
@@ -2377,32 +2376,32 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
     previousWasBand = false;
 
     float textX = x + CARD_PADDING;
-    if (row.accent.alpha != 0)
+    if (_row.accent.alpha != 0)
     {
-      _shapes.FillRect(textX, rowY + 18.0F, 8.0F, 8.0F, row.accent);
+      _shapes.FillRect(textX, rowY + 18.0F, 8.0F, 8.0F, _row.accent);
       textX += 16.0F;
     }
 
     // One line centres in the row; two sit either side of its middle. THE ROW HEIGHT DOES NOT
     // CHANGE with the content -- a column of rows of one height is what a finger aims at.
-    const std::int32_t titleY = row.detail.empty() ? CenterTextY(rowY, SHEET_ROW_HEIGHT) : static_cast<std::int32_t>(rowY) + 12;
-    const Color titleColor = !tappable ? Ink::NEUTRAL_DIM : (row.alarm ? Ink::RED : Ink::TEXT_PRIMARY);
-    _text.DrawText(static_cast<std::int32_t>(textX), titleY, row.title, titleColor);
+    const std::int32_t titleY = _row.detail.empty() ? CenterTextY(rowY, SHEET_ROW_HEIGHT) : static_cast<std::int32_t>(rowY) + 12;
+    const Color titleColor = !tappable ? Ink::NEUTRAL_DIM : (_row.alarm ? Ink::RED : Ink::TEXT_PRIMARY);
+    _text.DrawText(static_cast<std::int32_t>(textX), titleY, _row.title, titleColor);
 
-    if (!row.detail.empty())
+    if (!_row.detail.empty())
     {
-      _text.DrawText(static_cast<std::int32_t>(textX), static_cast<std::int32_t>(rowY) + 26, row.detail,
-                     tappable ? row.detailInk : Ink::NEUTRAL_DIM, Face::SansRegular);
+      _text.DrawText(static_cast<std::int32_t>(textX), static_cast<std::int32_t>(rowY) + 26, _row.detail,
+                     tappable ? _row.detailInk : Ink::NEUTRAL_DIM, Face::SansRegular);
     }
-    if (!row.right.empty())
+    if (!_row.right.empty())
     {
-      DrawRight(_text, x + width - CARD_PADDING, CenterTextY(rowY, SHEET_ROW_HEIGHT), row.right,
-                !tappable ? Ink::NEUTRAL_DIM : (row.alarm ? Ink::RED : Ink::TEXT_DETAIL));
+      DrawRight(_text, x + width - CARD_PADDING, CenterTextY(rowY, SHEET_ROW_HEIGHT), _row.right,
+                !tappable ? Ink::NEUTRAL_DIM : (_row.alarm ? Ink::RED : Ink::TEXT_DETAIL));
     }
 
     if (tappable)
     {
-      AddHit(x, rowY, width, SHEET_ROW_HEIGHT, rowAction, row.target);
+      AddHit(x, rowY, width, SHEET_ROW_HEIGHT, rowAction, _row.target);
     }
     rowY += SHEET_ROW_HEIGHT;
   };

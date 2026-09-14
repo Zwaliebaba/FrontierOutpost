@@ -194,11 +194,15 @@ void ConnectionDialog::Compose(std::string& _outTitle, Look& _outLook, std::vect
 
   case Kind::Finished:
     _outTitle = "MATCH FINISHED";
-    _outBody.push_back(Paragraph{"This match has ended. The final standings are in the last digest."});
-    if (!m_facts.standings.empty())
+    _outBody.push_back(Paragraph{"This match has ended."});
+
+    // **The table, not a sentence about it** (ADR-097). `6 OF 6 · SCORE 35 · LEADER P6 95` tells a
+    // player where they came and who won and nothing about the four empires in between -- on the
+    // one screen whose entire job is to say how it went. Every row, in placement order, with the
+    // reader's own in their own blue.
+    for (const Facts::Standing& standing : m_facts.standings)
     {
-      // A placing, not a sentence: the one block in any of these dialogs that is data.
-      _outBody.push_back(Paragraph{m_facts.standings, Neuron::Face::MonoRegular});
+      _outBody.push_back(Paragraph{standing.text, Neuron::Face::MonoRegular, standing.isYou ? BLUE : Neuron::Color{0, 0, 0, 0}});
     }
     _outButtons.push_back(Button{"QUIT", Action::Quit, false});
     _outButtons.push_back(Button{"VIEW LAST DIGEST", Action::ViewLastDigest, true});
@@ -245,7 +249,7 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
     }
     for (std::string& line : FontRenderer::WrapToWidth(paragraph.text, bodyWidth))
     {
-      lines.push_back(Paragraph{std::move(line), paragraph.face});
+      lines.push_back(Paragraph{std::move(line), paragraph.face, paragraph.ink});
     }
   }
 
@@ -268,7 +272,7 @@ void ConnectionDialog::Draw(ShapeRenderer& _shapes, FontRenderer& _text)
 
   for (const Paragraph& line : lines)
   {
-    _text.DrawText(contentX, y, line.text, TEXT_DETAIL, line.face);
+    _text.DrawText(contentX, y, line.text, line.ink.alpha == 0 ? TEXT_DETAIL : line.ink, line.face);
     y += LINE_HEIGHT;
   }
 

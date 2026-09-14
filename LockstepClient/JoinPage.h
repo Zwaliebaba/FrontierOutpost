@@ -94,13 +94,6 @@ public:
     return m_status;
   }
 
-  /// What the server said in its `Welcome`, once it has. Until then the seat box is dashed and
-  /// says nothing, because a seat nobody has confirmed is a guess.
-  void SetSeat(std::int32_t _seat, std::int32_t _players, const Neuron::Color& _color);
-
-  /// The countdown line under the card, when the client knows one.
-  void SetMatchSummary(std::string_view _summary);
-
   /// Advances the caret's blink. The one thing on this screen that moves on its own.
   void Update(double _elapsedSeconds);
 
@@ -131,15 +124,12 @@ private:
   Neuron::TextField m_server{48};
   Neuron::TextField m_token{32};
   Focus m_focus = Focus::Token;
-  bool m_revealToken = false;
+  /// **On by default** (ADR-095). A token names a seat, not a person, and is read aloud between
+  /// friends; ADR-029 says it is not authentication. `HIDE` is there for somebody sharing a screen.
+  bool m_revealToken = true;
 
   Status m_status = Status::Ready;
   std::string m_detail;
-  std::string m_matchSummary;
-
-  std::int32_t m_seat = -1;
-  std::int32_t m_players = 0;
-  Neuron::Color m_seatColor = {94, 196, 255, 255};
 
   bool m_joinRequested = false;
   double m_blinkSeconds = 0.0;

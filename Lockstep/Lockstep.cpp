@@ -944,9 +944,9 @@ struct MatchPaths
     switch (_connection.State())
     {
     case Lockstep::MatchConnection::Status::Playing:
-      // Welcomed. The seat is shown for a moment before the match replaces this screen, because a
-      // player who typed a token wants to see which empire it bought.
-      page.SetSeat(_connection.Player(), 0, Lockstep::OwnerColor(_connection.Player(), _connection.Player()));
+      // Welcomed, and this screen is replaced by the board in the same breath. The seat box that
+      // used to be set here never had time to be read and is gone (ADR-095); which empire the token
+      // bought is on the top bar a frame later, in the colour the whole map is drawn in.
       page.SetStatus(Lockstep::JoinPage::Status::Joined);
       return true;
 
@@ -1408,8 +1408,28 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
     else if (page.State().match.finished && !finishedDismissed)
     {
       kind = Lockstep::ConnectionDialog::Kind::Finished;
-      facts.standings = std::format("{} OF {} · SCORE {} · LEADER {} {}", page.State().player.placement, page.State().player.playerCount,
-                                    page.State().player.score, page.State().player.leader.name, page.State().player.leader.score);
+
+      // **The whole table** (ADR-097). Every player's placement, name and score is already on the
+      // wire in `SnapshotStanding` and already in `MatchState::players`, so the final screen can
+      // say how the match went rather than only how the reader did.
+      //
+      // Composed here because this is where `MatchState` and `ConnectionDialog` meet: the dialog is
+      // in `LockstepClient` and has no idea what a match is (ADR-038).
+      facts.standings.clear();
+      std::vector<const Lockstep::PlayerBadge*> table;
+      for (const Lockstep::PlayerBadge& badge : page.State().players)
+      {
+        table.push_back(&badge);
+      }
+      std::ranges::stable_sort(table, [](const Lockstep::PlayerBadge* _a, const Lockstep::PlayerBadge* _b)
+                               { return _a->placement < _b->placement; });
+
+      for (const Lockstep::PlayerBadge* badge : table)
+      {
+        facts.standings.push_back(Lockstep::ConnectionDialog::Facts::Standing{
+          .text = std::format("{}  {:<10} {}", Lockstep::MainPage::FormatPlacement(badge->placement), badge->label, badge->score),
+          .isYou = badge->isYou});
+      }
     }
 
     dialog.Update(kind, facts, elapsedSeconds);

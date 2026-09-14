@@ -295,6 +295,13 @@ public:
   /// The countdown as HH:MM:SS. Static and pure, so the format is testable without a screen.
   [[nodiscard]] static std::string FormatCountdown(double _seconds);
 
+  /// 4 -> `4TH`. Ordinals, because `4 / 12` reads as a fraction and a placement is not one.
+  ///
+  /// Public because the final standings table spells placements the same way and is composed in the
+  /// composition root, where `MatchState` and `ConnectionDialog` meet (ADR-097). Two copies of an
+  /// ordinal rule is one place for `1TH` to appear.
+  [[nodiscard]] static std::string FormatPlacement(std::uint32_t _placement);
+
   /// What a build sheet is priced against when the queue has already taken part of the purse, or
   /// an empty string when it has not (ADR-078).
   ///
