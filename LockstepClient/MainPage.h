@@ -3,6 +3,7 @@
 // **Included by the HEADER, not only the .cpp**, since 2026-09-14: the page's layout constants are
 // derived from `Frame::TOUCH_FLOOR`, which is a rule about every screen rather than a number this
 // page owns (ADR-100). It costs a colour list and two helpers, which this page's .cpp already had.
+#include "Controls.h"
 #include "DesignTokens.h"
 #include "FontRenderer.h"
 #include "MapView.h"
@@ -657,6 +658,25 @@ private:
   [[nodiscard]] std::uint32_t BuildShortfall(std::int32_t _index) const noexcept;
 
   void DrawTopBar(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
+
+  /// The width a card's text wraps to: the column less the dot's gutter and the padding either side.
+  /// A class constant rather than a local, because the pass that measures a card and the pass that
+  /// draws one are two members now and a second copy of this is a second answer.
+  static constexpr float CARD_TEXT_LEFT = RAIL_PADDING + 8.0F + 10.0F;
+  static constexpr std::uint32_t CARD_TEXT_WIDTH = static_cast<std::uint32_t>(DIGEST_WIDTH - CARD_TEXT_LEFT - RAIL_PADDING);
+
+  /// The chrome and inks one control is drawn in, as `Controls.h` chose them. Named here so that a
+  /// member can fade one; the table itself is not this class's business.
+  using ControlInk = Lockstep::ControlInk;
+  [[nodiscard]] ControlInk FadedInk(ControlInk _ink) const;
+
+  /// The digest column: its header and delta, one card, one card's buttons, and the page band.
+  [[nodiscard]] float DrawDigestHeader(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
+  void DrawDigestCard(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const DigestCard& _card, const CardLayout& _layout,
+                      float& _yPixels);
+  void DrawDigestActions(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const DigestCard& _card, std::int32_t& _lineYPixels);
+  void DrawDigestPageBand(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const std::vector<DigestCard>& _cards,
+                          const std::vector<CardLayout>& _layouts, std::size_t _lastCard, float _roomPixels, bool _paged);
   void DrawDigestRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
   /// What a digest button does, and what it names.

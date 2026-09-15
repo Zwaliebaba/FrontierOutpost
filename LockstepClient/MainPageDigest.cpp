@@ -108,22 +108,32 @@ MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::uint32_t
   return layout;
 }
 
-void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
+/// One button's whole ink at the share the digest wears while the map is taking a move (ADR-113).
+///
+/// **A button's ink is a bundle rather than one colour**, so it is faded a field at a time on its
+/// way to `DrawButton`. Every band, rule and label on this column went through `Faded` and the
+/// buttons did not, which left the column deaf and looking live.
+MainPage::ControlInk MainPage::FadedInk(ControlInk _ink) const
+{
+  _ink.border = Faded(_ink.border);
+  _ink.fill = Faded(_ink.fill);
+  _ink.label = Faded(_ink.label);
+  _ink.number = Faded(_ink.number);
+  _ink.segmentRule = Faded(_ink.segmentRule);
+  _ink.segmentFill = Faded(_ink.segmentFill);
+  return _ink;
+}
+
+/// The column's ground, its header line and the delta under it; returns where the cards start.
+///
+/// A returning player reads `SINCE YOU LOOKED` and how much of the match happened without them;
+/// everyone else reads the tick and what is on the column (ADR-094).
+float MainPage::DrawDigestHeader(ShapeRenderer& _shapes, FontRenderer& _text)
 {
   // **Every ink on this column goes through `Faded`** (ADR-113): while the map is taking a move the
   // digest stays readable at 55% and records no hit, so the one filled control on the screen is the
   // confirm strip's `SEND` (ADR-089). A button's ink is a bundle rather than one colour, so it is
   // faded a field at a time on its way to `DrawButton`.
-  const auto fadedInk = [this](ControlInk _ink)
-  {
-    _ink.border = Faded(_ink.border);
-    _ink.fill = Faded(_ink.fill);
-    _ink.label = Faded(_ink.label);
-    _ink.number = Faded(_ink.number);
-    _ink.segmentRule = Faded(_ink.segmentRule);
-    _ink.segmentFill = Faded(_ink.segmentFill);
-    return _ink;
-  };
 
   // **The digest is the order surface** (ADR-034, SCREENS.md 01). Every event carries what can be
   // done about it, because the thing a player wants to do is always about something that happened,
@@ -160,10 +170,6 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
               pending ? std::format("T{} PENDING", m_state.OrdersTick()) : std::format("{} EVENTS", m_state.digest.size()),
               pending ? Faded(Ink::AMBER) : Faded(Ink::TEXT_MUTED));
   }
-
-  constexpr float TEXT_LEFT = RAIL_PADDING + 8.0F + 10.0F;
-  const float textWidth = Frame::DIGEST_WIDTH - TEXT_LEFT - RAIL_PADDING;
-  const auto cardWidth = static_cast<std::uint32_t>(textWidth);
 
   float y = Frame::TOP_BAR_HEIGHT + 28.0F;
 
@@ -205,6 +211,273 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     }
   }
 
+  return y;
+}
+
+/// One card: its rule, its dot, its title in the display cut, its detail, its verdict box and its
+/// actions. `_yPixels` ends where the next card begins.
+void MainPage::DrawDigestCard(ShapeRenderer& _shapes, FontRenderer& _text, const DigestCard& _card, const CardLayout& _layout,
+                              float& _yPixels)
+{
+  const Color accent = Faded(EventColor(_card.kind));
+  const float top = _yPixels;
+
+  // Where this card's hits begin. The card as a whole is tappable -- reading and focusing are the
+  // same gesture -- but its buttons sit inside it, and `HandleTap` reads the list BACKWARDS so
+  // that the thing drawn last wins. A card-wide region appended after the buttons therefore
+  // swallows every one of them, which is exactly what happened: tapping BUILD focused the event
+  // instead, and the only reason it looked like it worked is that any handled tap sends the
+  // order set. The card's region is inserted here instead, in front of its own buttons.
+  const std::size_t cardHitsBegin = m_hits.size();
+
+  _shapes.FillRect(0.0F, _yPixels, Frame::DIGEST_WIDTH - 1.0F, 1.0F, Faded(Ink::DIVIDER));
+  std::int32_t lineY = static_cast<std::int32_t>(_yPixels) + 11;
+
+  _shapes.FillEllipse(RAIL_PADDING + 4.0F, static_cast<float>(lineY) + 4.0F, 4.0F, 4.0F, accent);
+  // The display cut (ADR-084): a card's title is what the card IS, and until there were two sizes
+  // it was separated from the sentences under it by a weight step nobody could see at a glance.
+  //
+  // **And NOT shouted** (ADR-099). `Uppercased()` was here, over a detail line reading *7 of 10
+  // lost (defending)*: a shout and a sentence about the same event. The titles are the longest
+  // strings on the screen and uppercase is the least legible case for a long string, which the
+  // display cut's 16px made louder rather than clearer. They are authored in sentence case in
+  // `GameLogic` -- `Battle at Ulme`, `Shipyard L1 rising at Dothan` -- and this is the one place
+  // that was shouting them.
+  //
+  // **The face is still MONO, and that is a constraint rather than a decision** (ADR-102): the
+  // display cut is baked from Plex Mono only (`Font.h`, ADR-073), so a sentence-cased title at
+  // this size has nowhere sans to go. ADR-074's rule is bent here and the ADR says where.
+  _text.DrawText(static_cast<std::int32_t>(CARD_TEXT_LEFT), lineY, _card.title, Faded(Ink::TEXT_PRIMARY), Face::MonoDisplay);
+  if (!_card.stamp.empty())
+  {
+    DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, lineY, _card.stamp, Faded(Ink::TEXT_MUTED));
+  }
+
+  // The title of an actor card opens and closes it. Registered here rather than after the card's
+  // own region, so that it wins: the region is INSERTED at `cardHitsBegin` below, which puts
+  // everything added during the card in front of it in the reverse walk `HandleTap` makes.
+  if (_layout.collapsible)
+  {
+    AddHitUnlessMoving(0.0F, top, Frame::DIGEST_WIDTH - 1.0F, TOUCH_FLOOR, Action::ToggleActorCard, _card.actor);
+  }
+  lineY += TITLE_LINE_HEIGHT + 2;
+
+  for (const std::string& line : _layout.details)
+  {
+    _text.DrawText(static_cast<std::int32_t>(CARD_TEXT_LEFT), lineY, line, Faded(Ink::TEXT_DETAIL), Face::SansRegular);
+    lineY += LINE_HEIGHT;
+  }
+
+  // ---- The verdict box ---------------------------------------------------------------------------
+  //
+  // Always a verdict and never a bare `A v B` (DESIGN-GUIDELINES "Copy"), and the second line
+  // always says whose ships remain -- which is why the snapshot carries both sides now.
+  if (_layout.hasVerdict)
+  {
+    lineY += 4;
+    const std::vector<std::string>& detail = _layout.verdictDetail;
+    const float boxTop = static_cast<float>(lineY) - VERDICT_BOX_PADDING;
+    const float boxHeight = static_cast<float>(1 + detail.size()) * static_cast<float>(LINE_HEIGHT) + 2.0F * VERDICT_BOX_PADDING;
+    _shapes.StrokeRect(CARD_TEXT_LEFT, boxTop, Frame::DIGEST_WIDTH - CARD_TEXT_LEFT - RAIL_PADDING, boxHeight, Faded(Ink::AMBER));
+
+    _text.DrawText(static_cast<std::int32_t>(CARD_TEXT_LEFT) + 6, lineY, _card.verdict, Faded(Ink::AMBER));
+    lineY += LINE_HEIGHT;
+    for (const std::string& line : detail)
+    {
+      _text.DrawText(static_cast<std::int32_t>(CARD_TEXT_LEFT) + 6, lineY, line, Faded(Ink::TEXT_DETAIL), Face::SansRegular);
+      lineY += LINE_HEIGHT;
+    }
+    lineY += 6;
+  }
+
+  // ---- The actions -------------------------------------------------------------------------------
+  if (_layout.hasActions)
+  {
+    DrawDigestActions(_shapes, _text, _card, lineY);
+  }
+
+  _yPixels = static_cast<float>(lineY) + 4.0F;
+
+  // Only when there is something to focus. The card a tick-zero digest shows is synthetic -- it
+  // reports that nothing has happened and carries the opening moves -- so it leads no event, and
+  // a `FocusEvent` for event number -1 is an out-of-bounds read that took the whole client down.
+  if (_card.leadEvent != EventRefs::NONE && !m_moveMode.has_value())
+  {
+    m_hits.insert(m_hits.begin() + static_cast<std::ptrdiff_t>(cardHitsBegin),
+                  HitRegion{0.0F, top, Frame::DIGEST_WIDTH - 1.0F, _yPixels - top, Action::FocusEvent, _card.leadEvent});
+  }
+}
+
+/// One card's buttons, left to right, dropping the first that does not fit the column (ADR-053).
+///
+/// **A button that does not fit is DROPPED rather than wrapped**, which is why the number is its own
+/// cell: a state change that changed a label's width would change which buttons a card shows.
+void MainPage::DrawDigestActions(ShapeRenderer& _shapes, FontRenderer& _text, const DigestCard& _card, std::int32_t& _lineYPixels)
+{
+  // **A gap above and below, and the hit fills both** (ADR-110). A button is 28 and a target is
+  // 44, so the eight pixels either side are what the grown rectangle reaches into -- which is
+  // why they are reserved here rather than left as whatever the line before happened to leave.
+  _lineYPixels += static_cast<std::int32_t>(BUTTON_GAP);
+  float buttonX = CARD_TEXT_LEFT;
+
+  const auto buttonY = static_cast<float>(_lineYPixels);
+
+  for (const EventAction& action : _card.actions)
+  {
+    // `committed` is "this is already in the orders this tick goes in with", which two kinds of
+    // control can be and the rest cannot. It is the same state a queued tile and a queued rail
+    // row wear, and it is still a target, because every order is editable until the lock.
+    //
+    // A build has two more states and the NUMBER SEGMENT says which (ADR-053, ADR-110): queued,
+    // so the next tap is known to take it back; or beyond the purse, dashed and dim with what is
+    // missing, because the lock would refuse it and a refusal a tick later is the worst way to
+    // learn a price.
+    Button button{.label = action.label, .number = action.number};
+    bool committed = false;
+    bool unaffordable = false;
+    if (action.kind == EventActionKind::QueueBuild)
+    {
+      committed = std::ranges::find(m_state.orders.queuedBuilds, action.target) != m_state.orders.queuedBuilds.end();
+      unaffordable = !committed && !m_state.CanAffordBuild(action.target);
+      if (committed && action.target >= 0 && action.target < static_cast<std::int32_t>(m_state.orders.builds.size()))
+      {
+        button.number = std::format("−{}", m_state.orders.builds[static_cast<std::size_t>(action.target)].cost);
+      }
+      else if (unaffordable)
+      {
+        button.number = std::format("NEED {} MORE", BuildShortfall(action.target));
+        button.moneyReason = true;
+      }
+    }
+
+    // An answered offer says which way it was answered, in the past tense against the other
+    // button's imperative, and the pair stays tappable so that changing an answer is one tap
+    // (ADR-068).
+    if (action.kind == EventActionKind::AcceptProposal || action.kind == EventActionKind::DeclineProposal)
+    {
+      const auto answered = std::ranges::find_if(m_state.orders.answers,
+                                                 [&action](const ProposalAnswer& _answer) { return _answer.proposal == action.target; });
+      const bool thisWay =
+        answered != m_state.orders.answers.end() && answered->accepted == (action.kind == EventActionKind::AcceptProposal);
+      if (thisWay)
+      {
+        button.label = answered->accepted ? "ACCEPTED" : "DECLINED";
+        committed = true;
+      }
+    }
+
+    // **A focus chip is never inert and never locked** (ADR-081): it takes the eye somewhere and
+    // reaches no wire, so it goes on working while every order on the screen is frozen.
+    const bool focusOnly = action.kind == EventActionKind::Focus;
+    button.state = ControlState::Outlined;
+    if (unaffordable)
+    {
+      button.state = ControlState::Inert;
+    }
+    else if (committed)
+    {
+      button.state = ControlState::Committed;
+    }
+    else if (!OrdersEditable() && !focusOnly)
+    {
+      button.state = ControlState::Locked;
+    }
+    else if (action.primary && OrdersEditable() && !m_moveMode.has_value())
+    {
+      button.state = ControlState::Primary;
+    }
+
+    // **Wide enough for a finger as well as for its label** (ADR-100, ADR-110). The box is what
+    // the two cells need; the target is grown around it, because a row of buttons with gaps
+    // between them is the isolated-chip case rather than the column one.
+    float width = ButtonWidth(button);
+    if (buttonX + width > Frame::DIGEST_WIDTH - RAIL_PADDING)
+    {
+      break;
+    }
+
+    const bool hovered = button.state != ControlState::Inert && button.state != ControlState::Locked && !m_moveMode.has_value() &&
+                         m_pointerXPixels >= buttonX && m_pointerXPixels < buttonX + width && m_pointerYPixels >= buttonY &&
+                         m_pointerYPixels < buttonY + BUTTON_HEIGHT;
+
+    // **A committed control says what the next tap does while the finger is on it** (ADR-110),
+    // so taking an order back is never a surprise. The width is remeasured, because `TAKE BACK`
+    // is not the width of the label it replaces -- and it is clamped to the resting width, so a
+    // button under the pointer never pushes the one beside it along.
+    if (hovered && button.state == ControlState::Committed && !focusOnly)
+    {
+      Button flipped = button;
+      flipped.label = "TAKE BACK";
+      if (action.kind == EventActionKind::QueueBuild && action.target >= 0 &&
+          action.target < static_cast<std::int32_t>(m_state.orders.builds.size()))
+      {
+        flipped.number = std::format("+{}", m_state.orders.builds[static_cast<std::size_t>(action.target)].cost);
+      }
+      if (ButtonWidth(flipped) <= width)
+      {
+        button = flipped;
+      }
+    }
+
+    DrawButton(_shapes, _text, buttonX, buttonY, width, button,
+               FadedInk(ControlInkFor(button.state, ControlKind::Button, hovered, button.moneyReason)));
+
+    if ((OrdersEditable() && !unaffordable) || focusOnly)
+    {
+      const Frame::Box target = Frame::GrownToFloor(buttonX, buttonY, width, BUTTON_HEIGHT);
+      const DigestTarget destination = TargetOf(action);
+      AddHitUnlessMoving(target.x, target.y, target.width, target.height, destination.action, destination.index);
+      m_hoverRegions.push_back(HoverRegion{buttonX, buttonY, width, BUTTON_HEIGHT});
+    }
+    buttonX += width + BUTTON_GAP;
+  }
+  _lineYPixels += static_cast<std::int32_t>(BUTTON_HEIGHT + BUTTON_GAP);
+}
+
+/// The band at the foot of the column: what is above, and what the worst of what is below is.
+void MainPage::DrawDigestPageBand(ShapeRenderer& _shapes, FontRenderer& _text, const std::vector<DigestCard>& _cards,
+                                  const std::vector<CardLayout>& _layouts, std::size_t _lastCard, float _roomPixels, bool _paged)
+{
+  // ---- The page band -------------------------------------------------------------------------------
+  //
+  // At the foot of the column, where the stack it is about ends. **It says what is hidden and what
+  // the worst of it is** (ADR-080): `1 / 4 - MORE >` told a player how much column was left and
+  // nothing at all about whether the battle they had not seen was in it. `< PREV` appears only once
+  // there is something above, so the band never offers a direction that does nothing.
+  if (_paged)
+  {
+    const float bandY = Frame::SCREEN_HEIGHT - DIGEST_PAGE_HEIGHT;
+    const std::int32_t bandText = CenterTextY(bandY, DIGEST_PAGE_HEIGHT);
+    _shapes.FillRect(0.0F, bandY, Frame::DIGEST_WIDTH - 1.0F, 1.0F, Faded(Ink::DIVIDER));
+
+    if (m_digestTop > 0)
+    {
+      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), bandText, "‹ PREV", Faded(Ink::TEXT_MUTED));
+      AddHitUnlessMoving(0.0F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
+                         static_cast<std::int32_t>(PreviousDigestTop(_layouts, _roomPixels)));
+    }
+
+    const std::string hidden = HiddenSummary(_cards, _lastCard);
+    DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, bandText, hidden.empty() ? std::string{"END"} : hidden + " ›",
+              hidden.empty() ? Faded(Ink::NEUTRAL_DIM) : Faded(Ink::TEXT_MUTED));
+    if (!hidden.empty())
+    {
+      AddHitUnlessMoving(Frame::DIGEST_WIDTH * 0.5F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
+                         static_cast<std::int32_t>(_lastCard));
+    }
+  }
+}
+
+/// Every event, ranked and grouped, each carrying what can be done about it (ADR-034).
+///
+/// **This is the order surface**: the thing a player wants to do is always about something that
+/// happened, so the controls are on the card rather than in a menu somewhere else. The column pages
+/// by whole cards (ADR-080), and while the map is taking a move every ink on it goes through
+/// `FadedInk` and it records no hit at all (ADR-113).
+void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
+{
+  float y = DrawDigestHeader(_shapes, _text);
+
   // ---- The cards, and which of them are on the screen -------------------------------------------------
   //
   // **The column scrolls, by whole cards** (ADR-080, which took the digest out of ADR-052 option C).
@@ -217,7 +490,7 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
   float stackHeight = 0.0F;
   for (const DigestCard& card : cards)
   {
-    layouts.push_back(LayoutCard(card, cardWidth));
+    layouts.push_back(LayoutCard(card, CARD_TEXT_WIDTH));
     stackHeight += layouts.back().height;
   }
 
@@ -242,245 +515,12 @@ void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
     ++lastCard;
   }
   m_cardsOnScreen = lastCard - firstCard;
-
   for (std::size_t cardIndex = firstCard; cardIndex < lastCard; ++cardIndex)
   {
-    const DigestCard& card = cards[cardIndex];
-    const CardLayout& layout = layouts[cardIndex];
-    const Color accent = Faded(EventColor(card.kind));
-    const float top = y;
-
-    // Where this card's hits begin. The card as a whole is tappable -- reading and focusing are the
-    // same gesture -- but its buttons sit inside it, and `HandleTap` reads the list BACKWARDS so
-    // that the thing drawn last wins. A card-wide region appended after the buttons therefore
-    // swallows every one of them, which is exactly what happened: tapping BUILD focused the event
-    // instead, and the only reason it looked like it worked is that any handled tap sends the
-    // order set. The card's region is inserted here instead, in front of its own buttons.
-    const std::size_t cardHitsBegin = m_hits.size();
-
-    _shapes.FillRect(0.0F, y, Frame::DIGEST_WIDTH - 1.0F, 1.0F, Faded(Ink::DIVIDER));
-    std::int32_t lineY = static_cast<std::int32_t>(y) + 11;
-
-    _shapes.FillEllipse(RAIL_PADDING + 4.0F, static_cast<float>(lineY) + 4.0F, 4.0F, 4.0F, accent);
-    // The display cut (ADR-084): a card's title is what the card IS, and until there were two sizes
-    // it was separated from the sentences under it by a weight step nobody could see at a glance.
-    //
-    // **And NOT shouted** (ADR-099). `Uppercased()` was here, over a detail line reading *7 of 10
-    // lost (defending)*: a shout and a sentence about the same event. The titles are the longest
-    // strings on the screen and uppercase is the least legible case for a long string, which the
-    // display cut's 16px made louder rather than clearer. They are authored in sentence case in
-    // `GameLogic` -- `Battle at Ulme`, `Shipyard L1 rising at Dothan` -- and this is the one place
-    // that was shouting them.
-    //
-    // **The face is still MONO, and that is a constraint rather than a decision** (ADR-102): the
-    // display cut is baked from Plex Mono only (`Font.h`, ADR-073), so a sentence-cased title at
-    // this size has nowhere sans to go. ADR-074's rule is bent here and the ADR says where.
-    _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, card.title, Faded(Ink::TEXT_PRIMARY), Face::MonoDisplay);
-    if (!card.stamp.empty())
-    {
-      DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, lineY, card.stamp, Faded(Ink::TEXT_MUTED));
-    }
-
-    // The title of an actor card opens and closes it. Registered here rather than after the card's
-    // own region, so that it wins: the region is INSERTED at `cardHitsBegin` below, which puts
-    // everything added during the card in front of it in the reverse walk `HandleTap` makes.
-    if (layout.collapsible)
-    {
-      AddHitUnlessMoving(0.0F, top, Frame::DIGEST_WIDTH - 1.0F, TOUCH_FLOOR, Action::ToggleActorCard, card.actor);
-    }
-    lineY += TITLE_LINE_HEIGHT + 2;
-
-    for (const std::string& line : layout.details)
-    {
-      _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT), lineY, line, Faded(Ink::TEXT_DETAIL), Face::SansRegular);
-      lineY += LINE_HEIGHT;
-    }
-
-    // ---- The verdict box ---------------------------------------------------------------------------
-    //
-    // Always a verdict and never a bare `A v B` (DESIGN-GUIDELINES "Copy"), and the second line
-    // always says whose ships remain -- which is why the snapshot carries both sides now.
-    if (layout.hasVerdict)
-    {
-      lineY += 4;
-      const std::vector<std::string>& detail = layout.verdictDetail;
-      const float boxTop = static_cast<float>(lineY) - VERDICT_BOX_PADDING;
-      const float boxHeight = static_cast<float>(1 + detail.size()) * static_cast<float>(LINE_HEIGHT) + 2.0F * VERDICT_BOX_PADDING;
-      _shapes.StrokeRect(TEXT_LEFT, boxTop, Frame::DIGEST_WIDTH - TEXT_LEFT - RAIL_PADDING, boxHeight, Faded(Ink::AMBER));
-
-      _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT) + 6, lineY, card.verdict, Faded(Ink::AMBER));
-      lineY += LINE_HEIGHT;
-      for (const std::string& line : detail)
-      {
-        _text.DrawText(static_cast<std::int32_t>(TEXT_LEFT) + 6, lineY, line, Faded(Ink::TEXT_DETAIL), Face::SansRegular);
-        lineY += LINE_HEIGHT;
-      }
-      lineY += 6;
-    }
-
-    // ---- The actions -------------------------------------------------------------------------------
-    if (layout.hasActions)
-    {
-      // **A gap above and below, and the hit fills both** (ADR-110). A button is 28 and a target is
-      // 44, so the eight pixels either side are what the grown rectangle reaches into -- which is
-      // why they are reserved here rather than left as whatever the line before happened to leave.
-      lineY += static_cast<std::int32_t>(BUTTON_GAP);
-      float buttonX = TEXT_LEFT;
-
-      const auto buttonY = static_cast<float>(lineY);
-
-      for (const EventAction& action : card.actions)
-      {
-        // `committed` is "this is already in the orders this tick goes in with", which two kinds of
-        // control can be and the rest cannot. It is the same state a queued tile and a queued rail
-        // row wear, and it is still a target, because every order is editable until the lock.
-        //
-        // A build has two more states and the NUMBER SEGMENT says which (ADR-053, ADR-110): queued,
-        // so the next tap is known to take it back; or beyond the purse, dashed and dim with what is
-        // missing, because the lock would refuse it and a refusal a tick later is the worst way to
-        // learn a price.
-        Button button{.label = action.label, .number = action.number};
-        bool committed = false;
-        bool unaffordable = false;
-        if (action.kind == EventActionKind::QueueBuild)
-        {
-          committed = std::ranges::find(m_state.orders.queuedBuilds, action.target) != m_state.orders.queuedBuilds.end();
-          unaffordable = !committed && !m_state.CanAffordBuild(action.target);
-          if (committed && action.target >= 0 && action.target < static_cast<std::int32_t>(m_state.orders.builds.size()))
-          {
-            button.number = std::format("−{}", m_state.orders.builds[static_cast<std::size_t>(action.target)].cost);
-          }
-          else if (unaffordable)
-          {
-            button.number = std::format("NEED {} MORE", BuildShortfall(action.target));
-            button.moneyReason = true;
-          }
-        }
-
-        // An answered offer says which way it was answered, in the past tense against the other
-        // button's imperative, and the pair stays tappable so that changing an answer is one tap
-        // (ADR-068).
-        if (action.kind == EventActionKind::AcceptProposal || action.kind == EventActionKind::DeclineProposal)
-        {
-          const auto answered = std::ranges::find_if(m_state.orders.answers, [&action](const ProposalAnswer& _answer)
-                                                     { return _answer.proposal == action.target; });
-          const bool thisWay =
-            answered != m_state.orders.answers.end() && answered->accepted == (action.kind == EventActionKind::AcceptProposal);
-          if (thisWay)
-          {
-            button.label = answered->accepted ? "ACCEPTED" : "DECLINED";
-            committed = true;
-          }
-        }
-
-        // **A focus chip is never inert and never locked** (ADR-081): it takes the eye somewhere and
-        // reaches no wire, so it goes on working while every order on the screen is frozen.
-        const bool focusOnly = action.kind == EventActionKind::Focus;
-        button.state = ControlState::Outlined;
-        if (unaffordable)
-        {
-          button.state = ControlState::Inert;
-        }
-        else if (committed)
-        {
-          button.state = ControlState::Committed;
-        }
-        else if (!OrdersEditable() && !focusOnly)
-        {
-          button.state = ControlState::Locked;
-        }
-        else if (action.primary && OrdersEditable() && !m_moveMode.has_value())
-        {
-          button.state = ControlState::Primary;
-        }
-
-        // **Wide enough for a finger as well as for its label** (ADR-100, ADR-110). The box is what
-        // the two cells need; the target is grown around it, because a row of buttons with gaps
-        // between them is the isolated-chip case rather than the column one.
-        float width = ButtonWidth(button);
-        if (buttonX + width > Frame::DIGEST_WIDTH - RAIL_PADDING)
-        {
-          break;
-        }
-
-        const bool hovered = button.state != ControlState::Inert && button.state != ControlState::Locked && !m_moveMode.has_value() &&
-                             m_pointerXPixels >= buttonX && m_pointerXPixels < buttonX + width && m_pointerYPixels >= buttonY &&
-                             m_pointerYPixels < buttonY + BUTTON_HEIGHT;
-
-        // **A committed control says what the next tap does while the finger is on it** (ADR-110),
-        // so taking an order back is never a surprise. The width is remeasured, because `TAKE BACK`
-        // is not the width of the label it replaces -- and it is clamped to the resting width, so a
-        // button under the pointer never pushes the one beside it along.
-        if (hovered && button.state == ControlState::Committed && !focusOnly)
-        {
-          Button flipped = button;
-          flipped.label = "TAKE BACK";
-          if (action.kind == EventActionKind::QueueBuild && action.target >= 0 &&
-              action.target < static_cast<std::int32_t>(m_state.orders.builds.size()))
-          {
-            flipped.number = std::format("+{}", m_state.orders.builds[static_cast<std::size_t>(action.target)].cost);
-          }
-          if (ButtonWidth(flipped) <= width)
-          {
-            button = flipped;
-          }
-        }
-
-        DrawButton(_shapes, _text, buttonX, buttonY, width, button,
-                   fadedInk(ControlInkFor(button.state, ControlKind::Button, hovered, button.moneyReason)));
-
-        if ((OrdersEditable() && !unaffordable) || focusOnly)
-        {
-          const Frame::Box target = Frame::GrownToFloor(buttonX, buttonY, width, BUTTON_HEIGHT);
-          const DigestTarget destination = TargetOf(action);
-          AddHitUnlessMoving(target.x, target.y, target.width, target.height, destination.action, destination.index);
-          m_hoverRegions.push_back(HoverRegion{buttonX, buttonY, width, BUTTON_HEIGHT});
-        }
-        buttonX += width + BUTTON_GAP;
-      }
-      lineY += static_cast<std::int32_t>(BUTTON_HEIGHT + BUTTON_GAP);
-    }
-
-    y = static_cast<float>(lineY) + 4.0F;
-
-    // Only when there is something to focus. The card a tick-zero digest shows is synthetic -- it
-    // reports that nothing has happened and carries the opening moves -- so it leads no event, and
-    // a `FocusEvent` for event number -1 is an out-of-bounds read that took the whole client down.
-    if (card.leadEvent != EventRefs::NONE && !m_moveMode.has_value())
-    {
-      m_hits.insert(m_hits.begin() + static_cast<std::ptrdiff_t>(cardHitsBegin),
-                    HitRegion{0.0F, top, Frame::DIGEST_WIDTH - 1.0F, y - top, Action::FocusEvent, card.leadEvent});
-    }
+    DrawDigestCard(_shapes, _text, cards[cardIndex], layouts[cardIndex], y);
   }
 
-  // ---- The page band -------------------------------------------------------------------------------
-  //
-  // At the foot of the column, where the stack it is about ends. **It says what is hidden and what
-  // the worst of it is** (ADR-080): `1 / 4 - MORE >` told a player how much column was left and
-  // nothing at all about whether the battle they had not seen was in it. `< PREV` appears only once
-  // there is something above, so the band never offers a direction that does nothing.
-  if (paged)
-  {
-    const float bandY = Frame::SCREEN_HEIGHT - DIGEST_PAGE_HEIGHT;
-    const std::int32_t bandText = CenterTextY(bandY, DIGEST_PAGE_HEIGHT);
-    _shapes.FillRect(0.0F, bandY, Frame::DIGEST_WIDTH - 1.0F, 1.0F, Faded(Ink::DIVIDER));
-
-    if (m_digestTop > 0)
-    {
-      _text.DrawText(static_cast<std::int32_t>(RAIL_PADDING), bandText, "‹ PREV", Faded(Ink::TEXT_MUTED));
-      AddHitUnlessMoving(0.0F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
-                         static_cast<std::int32_t>(PreviousDigestTop(layouts, room)));
-    }
-
-    const std::string hidden = HiddenSummary(cards, lastCard);
-    DrawRight(_text, Frame::DIGEST_WIDTH - RAIL_PADDING, bandText, hidden.empty() ? std::string{"END"} : hidden + " ›",
-              hidden.empty() ? Faded(Ink::NEUTRAL_DIM) : Faded(Ink::TEXT_MUTED));
-    if (!hidden.empty())
-    {
-      AddHitUnlessMoving(Frame::DIGEST_WIDTH * 0.5F, bandY, Frame::DIGEST_WIDTH * 0.5F, DIGEST_PAGE_HEIGHT, Action::ShowDigestPage,
-                         static_cast<std::int32_t>(lastCard));
-    }
-  }
+  DrawDigestPageBand(_shapes, _text, cards, layouts, lastCard, room, paged);
 }
 
 std::size_t MainPage::PreviousDigestTop(const std::vector<CardLayout>& _layouts, float _room) const
