@@ -17,6 +17,10 @@
 #include "pch.h"
 #include "Lockstep.h"
 
+// The only consumer of the generated resource header besides Lockstep.rc itself. It exists for
+// IDI_ICON1, which is the window class's icon below.
+#include "Resource.h"
+
 #include "Color.h"
 #include "DescriptorHeap.h"
 #include "Device.h"
@@ -112,7 +116,7 @@ struct Startup
   bool developerControls = false;
 
   /// `--still` holds the two things on the main page that move on their own -- a fleet's rolling
-  /// route dashes (ADR-055) and the move mode's pulsing rings (ADR-113) -- at phase zero.
+  /// route dashes (ADR-055) and the move mode's pulsing rings (ADR-114) -- at phase zero.
   ///
   /// **A capture of something that breathes is a capture of whichever phase the shutter caught.**
   /// `Build/Screenshot.ps1` waits two seconds and photographs whatever is on the screen, so a
@@ -401,6 +405,22 @@ LRESULT CALLBACK WndProc(HWND _window, UINT _message, WPARAM _wParam, LPARAM _lP
   }
 }
 
+/// The application icon at one exact size, chosen from the seven in `Resources\LockStep.ico` rather
+/// than scaled from whichever one the loader felt like.
+///
+/// **`LoadIconW` is the wrong call here even though it is the obvious one**: it always returns
+/// `SM_CXICON` and silently ignores the size wanted, so a 16-pixel slot gets a 32-pixel image
+/// squeezed into it. `LoadImageW` asks for a size, and `LookupIconIdFromDirectoryEx` behind it picks
+/// the image closest to it without exceeding it -- which is the whole point of shipping seven.
+///
+/// `LR_SHARED` because every call here asks for a system metric size: the loader caches the handle
+/// and the process owns it for its lifetime, so there is no `DestroyIcon` to pair with. That is what
+/// a class icon wants, since it outlives every window it marks.
+HICON IconAt(HINSTANCE _instance, int _width, int _height)
+{
+  return static_cast<HICON>(LoadImageW(_instance, MAKEINTRESOURCEW(IDI_ICON1), IMAGE_ICON, _width, _height, LR_SHARED));
+}
+
 bool RegisterWindowClass(HINSTANCE _instance)
 {
   WNDCLASSEXW windowClass = {};
@@ -413,6 +433,12 @@ bool RegisterWindowClass(HINSTANCE _instance)
   // -- which is the right answer rather than an obstacle: the swap chain owns every pixel of the
   // client area, and a GDI brush painting under it only produces a flash on resize.
   windowClass.hbrBackground = nullptr;
+  // **Both icon slots, because they are asked for at different sizes.** `hIcon` is what Alt-Tab and
+  // the task switcher show; `hIconSm` is the title bar and the taskbar button. Fill only `hIcon` and
+  // Windows shrinks the large image into the small slot itself, which is the blurry title bar every
+  // app that forgets this one has.
+  windowClass.hIcon = IconAt(_instance, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
+  windowClass.hIconSm = IconAt(_instance, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
   windowClass.lpszClassName = WINDOW_CLASS_NAME;
 
   return RegisterClassExW(&windowClass) != 0;
