@@ -39,6 +39,7 @@
 #include "JoinPage.h"
 #include "SeatsPage.h"
 #include "MatchConnection.h"
+#include "LinkStatus.h"
 #include "SnapshotView.h"
 
 #include "Socket.h"
@@ -988,7 +989,7 @@ struct MatchPaths
       break;
     }
 
-    dialog.Update(kind, facts, elapsedSeconds);
+    dialog.Update(kind, status.facts, elapsedSeconds);
 
     // ---- The frame -----------------------------------------------------------------------------
     ApplyFullscreenToggle(_window, _device, _pointer, _presentation);
@@ -1319,139 +1320,38 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
 
     if (connection.TakeFreshState() && !connection.Snapshot().empty())
     {
-      Neuron::ByteReader reader{connection.Snapshot()};
-      const Lockstep::Snapshot snapshot = Lockstep::Snapshot::Read(reader);
-
-      // ---- Everything since this client last looked --------------------------------------------
-      //
-      // **The digests are concatenated, oldest first, and the ones already read are dropped**
-      // (ADR-044). SCREENS.md 01 asks for exactly this -- "digest from `TickLog` + previous unread
-      // ticks" -- and until the server kept more than one there was nothing to concatenate, so a
-      // player who closed a lid overnight was told how many ticks they had missed and shown the
-      // events of only the last of them.
-      //
-      // `drawnTick` is this process's memory, and R13 leaves the client nothing to write: a
-      // restarted client has read nothing and takes the lot. That is honest rather than wrong --
-      // it has not looked at any of this.
-      std::vector<Lockstep::DigestEntry> digest;
-      bool digestsDecoded = true;
-      for (const Neuron::Protocol::TickDigest& carried : connection.Digests())
-      {
-        if (carried.tick <= drawnTick)
-        {
-          continue;
-        }
-
-        Neuron::ByteReader digestReader{carried.bytes};
-        for (Lockstep::DigestEntry& entry : Lockstep::Snapshot::ReadDigest(digestReader))
-        {
-          digest.push_back(std::move(entry));
-        }
-        digestsDecoded = digestsDecoded && !digestReader.Failed() && digestReader.AtEnd();
-      }
-
-      // A state that did not decode is not a state. The reader fills a short record with zeros and
-      // refuses a byte that names no enumerator, and either way what came out is not what the
-      // server sent -- so the screen keeps the last state it could trust rather than drawing this.
-      if (reader.Failed() || !reader.AtEnd() || !digestsDecoded)
+      // **Everything since this client last looked, decoded or refused whole** (ADR-044). The
+      // concatenation, the decode guard and the unread-tick arithmetic are `StateFrom`
+      // (SnapshotView.h), where a test can reach them; `drawnTick` stays here because it is this
+      // process's memory and R13 leaves the client nothing to write.
+      const Lockstep::FreshState fresh =
+        Lockstep::StateFrom(connection.Snapshot(), connection.Digests(), drawnTick, connection.SecondsToLock());
+      if (!fresh.decoded)
       {
         Neuron::DebugTrace("A state message from the server did not decode; keeping the last one.\n");
       }
       else
       {
-        Lockstep::MatchState state = Lockstep::ViewOf(snapshot, digest, connection.SecondsToLock());
-        state.connected = true;
-
-        // ---- How much happened while nobody was looking --------------------------------------
-        //
-        // **The composition root is the only thing that can know this**, because it is the only
-        // thing that sees one state replaced by the next. A client that stayed connected gets
-        // every tick as it resolves and is never behind; one that closed its lid for a night comes
-        // back to a tick several later than the one it last drew, and the difference is what it
-        // missed.
-        //
-        // It cannot survive a restart. R13 leaves the client nothing to write, so a fresh process
-        // opens at zero however long the player was away -- which is honest rather than wrong:
-        // this process has not looked at anything yet.
-        if (drawnTick != 0 && state.match.tick > drawnTick + 1)
-        {
-          state.unreadTicks = state.match.tick - drawnTick;
-          state.lastSeenTick = drawnTick;
-        }
-        drawnTick = state.match.tick;
-
+        drawnTick = fresh.state.match.tick;
         everHadState = true;
         redraw = true;
-        page.Create(std::move(state));
+        page.Create(fresh.state);
       }
     }
 
     // ---- What is wrong, if anything (screens 04 and 05) ----------------------------------------
     //
-    // Chosen from the connection and the state together, in one place, so that two of these can
-    // never be true at once on the screen. The order is the order of severity: a refusal is final,
-    // a lost link is not, a match with no first state has not started yet, and a finished match is
-    // the only one of the four that is not a problem.
-    Lockstep::ConnectionDialog::Kind kind = Lockstep::ConnectionDialog::Kind::None;
-    Lockstep::ConnectionDialog::Facts facts;
-    facts.server = connection.Server();
-    facts.reason = connection.Refusal();
-    facts.seat = connection.Player();
-    facts.reconnects = connection.Reconnects();
-    facts.secondsToNextAttempt = connection.SecondsToNextAttempt(secondsSinceStart);
-
-    // No `BACK`: the join screen is behind the seats screen and a whole match, and for the host
-    // there is no join screen to return to at all. `QUIT` is the honest button here.
-    facts.canGoBack = false;
-
-    if (connection.State() == Lockstep::MatchConnection::Status::Refused)
-    {
-      kind = Lockstep::ConnectionDialog::Kind::Refused;
-    }
-    else if (connection.State() == Lockstep::MatchConnection::Status::Lost ||
-             connection.State() == Lockstep::MatchConnection::Status::Connecting ||
-             connection.State() == Lockstep::MatchConnection::Status::Resolving)
-    {
-      // A reconnect passes through `Connecting` on its way back, and from the player's side that
-      // is still the link being down. Letting the dialog blink out for the length of a handshake
-      // and back in would read as the connection returning and going again.
-      kind = Lockstep::ConnectionDialog::Kind::Lost;
-      facts.lockCountdown = !everHadState ? std::string{} : Lockstep::MainPage::FormatCountdown(page.State().match.secondsToLock);
-      facts.lockedTick = page.State().OrdersTick();
-    }
-    else if (!everHadState)
-    {
-      // Welcomed, and nothing has ever arrived. Either the host has not started the match or the
-      // first state is still in flight -- and from where the player is sitting those are the same
-      // thing, so one screen covers both and it resolves the moment a state arrives.
-      kind = Lockstep::ConnectionDialog::Kind::Waiting;
-    }
-    else if (page.State().match.finished && !finishedDismissed)
-    {
-      kind = Lockstep::ConnectionDialog::Kind::Finished;
-
-      // **The whole table** (ADR-097). Every player's placement, name and score is already on the
-      // wire in `SnapshotStanding` and already in `MatchState::players`, so the final screen can
-      // say how the match went rather than only how the reader did.
-      //
-      // Composed here because this is where `MatchState` and `ConnectionDialog` meet: the dialog is
-      // in `LockstepClient` and has no idea what a match is (ADR-038).
-      facts.standings.clear();
-      std::vector<const Lockstep::PlayerBadge*> table;
-      for (const Lockstep::PlayerBadge& badge : page.State().players)
-      {
-        table.push_back(&badge);
-      }
-      std::ranges::stable_sort(table, [](const Lockstep::PlayerBadge* _a, const Lockstep::PlayerBadge* _b)
-                               { return _a->placement < _b->placement; });
-
-      for (const Lockstep::PlayerBadge* badge : table)
-      {
-        facts.standings.push_back(Lockstep::ConnectionDialog::Facts::Standing{
-          .text = std::format("{}  {:<10} {}", Lockstep::MainPage::FormatPlacement(badge->placement), badge->label, badge->score),
-          .isYou = badge->isYou});
-      }
-    }
+    // Chosen from the link and the state together by `StatusFor` (LinkStatus.h), which is where the
+    // four conditions are reachable by a test rather than only by launching this.
+    const Lockstep::LinkStatus status =
+      Lockstep::StatusFor(Lockstep::LinkFacts{.status = connection.State(),
+                                              .server = connection.Server(),
+                                              .refusal = connection.Refusal(),
+                                              .seat = connection.Player(),
+                                              .reconnects = connection.Reconnects(),
+                                              .secondsToNextAttempt = connection.SecondsToNextAttempt(secondsSinceStart)},
+                          page.State(), everHadState, finishedDismissed);
+    const Lockstep::ConnectionDialog::Kind kind = status.kind;
 
     dialog.Update(kind, facts, elapsedSeconds);
     if (kind != drawnDialog)

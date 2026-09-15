@@ -16,6 +16,7 @@
     <ClCompile Include="FaceRuleTests.cpp" />
     <ClCompile Include="ContrastTests.cpp" />
     <ClCompile Include="TouchTargetTests.cpp" />
+    <ClCompile Include="LinkStatusTests.cpp" />
     <ClCompile Include="..\..\Lockstep\SnapshotView.cpp" />
     <ClCompile Include="..\..\Lockstep\SeatsPage.cpp" />
   </ItemGroup>

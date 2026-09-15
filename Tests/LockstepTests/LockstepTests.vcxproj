@@ -158,6 +158,7 @@
     <ClCompile Include="FaceRuleTests.cpp" />
     <ClCompile Include="ContrastTests.cpp" />
     <ClCompile Include="TouchTargetTests.cpp" />
+    <ClCompile Include="LinkStatusTests.cpp" />
   </ItemGroup>
   <!--
     THE EXECUTABLE'S OWN TRANSLATION UNITS, COMPILED A SECOND TIME.

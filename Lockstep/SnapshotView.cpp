@@ -802,6 +802,49 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
   return state;
 }
 
+FreshState StateFrom(const std::vector<std::uint8_t>& _snapshot, const std::vector<Neuron::Protocol::TickDigest>& _digests,
+                     std::uint32_t _drawnTick, std::int64_t _secondsToLock)
+{
+  Neuron::ByteReader reader{_snapshot};
+  const Snapshot snapshot = Snapshot::Read(reader);
+
+  std::vector<DigestEntry> digest;
+  bool digestsDecoded = true;
+  for (const Neuron::Protocol::TickDigest& carried : _digests)
+  {
+    if (carried.tick <= _drawnTick)
+    {
+      continue;
+    }
+
+    Neuron::ByteReader digestReader{carried.bytes};
+    for (DigestEntry& entry : Snapshot::ReadDigest(digestReader))
+    {
+      digest.push_back(std::move(entry));
+    }
+    digestsDecoded = digestsDecoded && !digestReader.Failed() && digestReader.AtEnd();
+  }
+
+  if (reader.Failed() || !reader.AtEnd() || !digestsDecoded)
+  {
+    return FreshState{};
+  }
+
+  FreshState fresh{.decoded = true, .state = ViewOf(snapshot, digest, _secondsToLock)};
+  fresh.state.connected = true;
+
+  // **Only the caller can know how much happened while nobody was looking**, because it is the only
+  // thing that sees one state replaced by the next. A client that stayed connected gets every tick
+  // as it resolves and is never behind; one that closed its lid for a night comes back to a tick
+  // several later than the one it last drew, and the difference is what it missed.
+  if (_drawnTick != 0 && fresh.state.match.tick > _drawnTick + 1)
+  {
+    fresh.state.unreadTicks = fresh.state.match.tick - _drawnTick;
+    fresh.state.lastSeenTick = _drawnTick;
+  }
+  return fresh;
+}
+
 OrderSet OrdersOf(const MatchState& _state)
 {
   OrderSet orders;

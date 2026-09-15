@@ -172,6 +172,7 @@
     <ClCompile Include="Controls.cpp" />
     <ClCompile Include="JoinPage.cpp" />
     <ClCompile Include="ConnectionDialog.cpp" />
+    <ClCompile Include="LinkStatus.cpp" />
     <ClCompile Include="MatchConnection.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -184,6 +185,7 @@
     <ClInclude Include="Controls.h" />
     <ClInclude Include="JoinPage.h" />
     <ClInclude Include="ConnectionDialog.h" />
+    <ClInclude Include="LinkStatus.h" />
     <ClInclude Include="MatchConnection.h" />
     <ClInclude Include="MapView.h" />
     <ClInclude Include="pch.h" />
