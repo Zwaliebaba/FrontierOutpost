@@ -210,7 +210,7 @@ only ones `LockstepTests` still compiles a second time, down from nine.
 
 **Debug and Release are aligned by rule, not by luck.** Every setting that is not *about* optimisation reads identically in both configurations: language standard, conformance, warning level, include directories, precompiled header, floating-point model. The two differ in exactly four things — `Optimization`, `_DEBUG` vs `NDEBUG`, `FunctionLevelLinking`/`IntrinsicFunctions`, and the linker's folding and LTCG switches. `Build/CheckProjectFiles.py` fails the build when anything else drifts apart.
 
-That check matters more than it looks, because **CI builds Debug only** (§6). Release is compiled by whoever ships, and a Release that quietly lost an include directory or sat on an older language standard would not be discovered until then. The static check is what stands in for the build nobody runs.
+That check matters more than it looks, because **no job builds the whole tree at Release** (§6). On `main` the determinism job takes `GameLogicTests` and the packaging job takes `Lockstep`, which between them reach every shipping project; the other four test projects are compiled at Debug only, and a pull request reaches none of it. A Release that quietly lost an include directory or sat on an older language standard would surface late or not at all. The static check is what stands in for the build nobody runs.
 
 ```powershell
 # Build everything: the executable, the five libraries it references, and the five test DLLs.
@@ -304,15 +304,17 @@ x64\Debug\Lockstep.exe
 
 **Keep the project files honest.** Adding, removing or moving a source file means editing the owning `.vcxproj` **and** its `.filters`. A file that compiles locally but is missing from the project fails only in CI — or worse, links a stale object nobody notices. `python Build\CheckProjectFiles.py` is the cheapest way to catch a half-done move.
 
-**What CI runs, and what it does not.** [`.github/workflows/build.yml`](.github/workflows/build.yml) has two jobs, and every step of both blocks:
+**What CI runs, and what it does not.** [`.github/workflows/build.yml`](.github/workflows/build.yml) has five jobs. Every step of the three that gate blocks; the two that publish the download gate nothing and are gated by everything:
 
 | Job | Steps |
 |---|---|
 | **Windows** | `CheckProjectFiles.py` → build **Debug\|x64** → build the five test DLLs → `vstest.console.exe` over all five → `RunClangTidy.py` over the whole tree |
-| **Windows, Release** | build `GameLogicTests` at **Release\|x64** → run it. The determinism gate, and the only thing built twice |
+| **Windows, Release** | build `GameLogicTests` at **Release\|x64** → run it. The determinism gate |
 | **Linux** | `CheckFormat.py` on clang-format 22.1.3 |
+| **Windows, package** | build `Lockstep` at **Release\|x64** → hand the executable to `publish`. Skipped on pull requests |
+| **Linux, publish** | attach `Lockstep.exe` to a GitHub Release — a `v*` tag makes a version, a push to `main` refreshes the `latest-build` prerelease. Runs only once the three gate jobs are green (ADR-110) |
 
-**CI builds Release for one suite** (amended 2026-09-12; the decision below stands for the rest). The Windows build is the slow half of the pipeline and a second configuration roughly doubles it for a tree where the two differ only in optimisation. What changed is that there is now something Release can *disagree* about: the scripted match's final hash is pinned to a value computed under a second toolchain, so a `Release\|x64` job builds `GameLogicTests` alone and runs it, in parallel with the Debug job. It needs two libraries, not nine projects, and the wall clock is unchanged. What stands in for it is the static alignment check in `CheckProjectFiles.py` (§3) — and, before a release, an actual `Configuration=Release` build by whoever is shipping. If you change something that could plausibly break only under optimisation, build Release yourself and say so.
+**CI builds Release for one suite** (amended 2026-09-12; the decision below stands for the rest). The Windows build is the slow half of the pipeline and a second configuration roughly doubles it for a tree where the two differ only in optimisation. What changed is that there is now something Release can *disagree* about: the scripted match's final hash is pinned to a value computed under a second toolchain, so a `Release\|x64` job builds `GameLogicTests` alone and runs it, in parallel with the Debug job. It needs two libraries, not nine projects, and the wall clock is unchanged. What stands in for it is the static alignment check in `CheckProjectFiles.py` (§3). **Since ADR-110 a push to `main` also builds `Lockstep` at Release**, because the executable it publishes has to be one — so between the two jobs every shipping project is now compiled both ways on `main`, and only the four remaining test projects are not. A pull request still builds none of it: if you change something that could plausibly break only under optimisation, build Release yourself before you push, and say so.
 
 **Commits and PRs.** Branch off `main`; small, focused commits with an imperative subject describing the change, not the process. CI must be green. Never commit build output, `.vs/` or `.user` files.
 
