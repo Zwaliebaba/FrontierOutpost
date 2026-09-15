@@ -12,11 +12,6 @@
     <ClCompile Include="PlaceSheetTapTests.cpp" />
     <ClCompile Include="RailTapTests.cpp" />
     <ClCompile Include="MapTapTests.cpp" />
-    <ClCompile Include="DigestTapTests.cpp" />
-    <ClCompile Include="SignalSheetTapTests.cpp" />
-    <ClCompile Include="PlaceSheetTapTests.cpp" />
-    <ClCompile Include="RailTapTests.cpp" />
-    <ClCompile Include="MapTapTests.cpp" />
     <ClCompile Include="JoinPageTests.cpp" />
     <ClCompile Include="FaceRuleTests.cpp" />
     <ClCompile Include="ContrastTests.cpp" />
@@ -26,7 +21,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
-    <ClInclude Include="Headless.h" />
     <ClInclude Include="Headless.h" />
   </ItemGroup>
 </Project>

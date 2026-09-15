@@ -11,7 +11,10 @@ still cannot see three kinds of defect, and this script is where those live (AGE
                       directory or a language standard is a Release nobody builds until a
                       release is wanted.
   2. REGISTRATION     Every hand-written source file is listed in its project's .vcxproj AND its
-                      .filters, with the exact on-disk spelling, and every listed file exists.
+                      .filters, with the exact on-disk spelling, EXACTLY ONCE, and every listed
+                      file exists. A file listed twice is compiled twice into one object path
+                      (MSB8027) and the link refuses the duplicate (LNK1218) -- and a set of
+                      names cannot see it, which is how it reached CI once.
                       MSVC resolves includes case-insensitively and MSBuild silently ignores a
                       file it was never told about, so a half-done move builds locally and fails
                       only in CI -- or worse, links a stale object nobody notices. This covers
@@ -210,7 +213,11 @@ def registered_files(path: str) -> set[str]:
         for element in tree.iter(f"{{{MSBUILD_NAMESPACE}}}{tag}"):
             include = element.get("Include")
             if include:
-                names.add(include.replace("/", "\\"))
+                normalized = include.replace("/", "\\")
+                if normalized in names:
+                    fail(f"{os.path.relpath(path, REPO_ROOT)}: lists {normalized} more than once. MSBuild compiles it twice "
+                         f"into one object path (MSB8027) and the link refuses the duplicate (LNK1218).")
+                names.add(normalized)
     return names
 
 

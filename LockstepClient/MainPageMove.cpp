@@ -320,8 +320,12 @@ void MainPage::DrawMoveMode(ShapeRenderer& _shapes, FontRenderer& _text)
     const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(target.system)];
     const bool chosen = target.system == move.selected;
 
-    const float cellX = x + CARD_PADDING + static_cast<float>(index % STRIP_COLUMNS) * (cellWidth + BUTTON_GAP);
-    const float cellY = rowY + static_cast<float>(index / STRIP_COLUMNS) * (SHEET_ROW_HEIGHT + BUTTON_GAP);
+    // The column and the row as INTEGERS first: a division inside the cast reads as a fraction lost
+    // to a reader and to clang-tidy alike (bugprone-integer-division), and it is neither.
+    const std::size_t column = index % STRIP_COLUMNS;
+    const std::size_t row = index / STRIP_COLUMNS;
+    const float cellX = x + CARD_PADDING + static_cast<float>(column) * (cellWidth + BUTTON_GAP);
+    const float cellY = rowY + static_cast<float>(row) * (SHEET_ROW_HEIGHT + BUTTON_GAP);
 
     const bool hovered = m_pointerXPixels >= cellX && m_pointerXPixels < cellX + cellWidth && m_pointerYPixels >= cellY &&
                          m_pointerYPixels < cellY + SHEET_ROW_HEIGHT;
