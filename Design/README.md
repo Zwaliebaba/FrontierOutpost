@@ -26,7 +26,7 @@ These are settled. They are not preferences to be re-litigated in a session; cha
 | **Language** | C++23 (`/std:c++latest` under MSVC v145), `/permissive-`, `/W4` with warnings as errors. |
 | **Platform** | x64 only. |
 | **Shape** | One executable. `Lockstep.exe` starts the client and the authoritative server in the same process. |
-| **Distribution** | **The executable ships alone.** No assets folder, no data directory. Art, colour tables, fonts, audio and compiled shaders are embedded in the binary (AGENTS.md R13). The font is baked from TTF offline and its header is committed, not built (ADR-073). |
+| **Distribution** | **The executable ships alone.** No assets folder, no data directory. Art, colour tables, fonts, audio and compiled shaders are embedded in the binary (AGENTS.md R13). The font is baked from TTF offline and its header is committed, not built (ADR-073). It reaches players as a **GitHub Release asset** built by CI at `Release|x64` — a `v*` tag for a version, the `latest-build` prerelease for whatever `main` last built (ADR-110). Unsigned, and it needs the Visual C++ Redistributable. |
 | **Authority** | The server is authoritative. `GameLogic` is server-side and the client never links it (AGENTS.md §2). |
 | **Dependencies** | The Windows SDK and the MSVC standard library. Nothing else *in the binary* (AGENTS.md R14). The offline font baker imports `freetype-py` and `fontTools` on the author's machine only; neither reaches the tree or CI (ADR-073). |
 

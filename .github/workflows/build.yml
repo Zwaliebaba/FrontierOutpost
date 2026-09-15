@@ -1,6 +1,7 @@
 name: Build
 
-# CI for LockStep: Universe (AGENTS.md §6). Every step of both jobs blocks.
+# CI for LockStep: Universe (AGENTS.md §6). Every step of the three gate jobs blocks; the two that
+# publish the download gate nothing and are gated by all three.
 #
 # ── What this builds, and what it deliberately does not ────────────────────────────────────
 #
@@ -15,6 +16,14 @@ name: Build
 #
 # X64 ONLY. There is no second platform to fall back on and nothing left to excuse a red x64.
 #
+# ── Where the executable ends up ───────────────────────────────────────────────────────────
+#
+# A green tick proves the tree compiles. It puts nothing in anybody's hands. Two jobs at the
+# bottom of this file -- `package` and `publish` -- build Lockstep.exe at RELEASE and attach it
+# to a GitHub Release, so that somebody who has never seen this repository can get the game from
+# its front page (ADR-110). They are the only jobs here that gate nothing, and the only ones
+# that need more than `contents: read`.
+#
 # ── Why the toolchain is not pinned to an image ────────────────────────────────────────────
 #
 # PlatformToolset (v145) is pinned in the .vcxproj files. The runner image is not: it is whatever
@@ -26,6 +35,7 @@ name: Build
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -260,3 +270,171 @@ jobs:
 
       - name: Check formatting
         run: python Build/CheckFormat.py --clang-format clang-format
+
+  # ── The download, and why it is a second Release build ───────────────────────────────────────
+  #
+  # RELEASE, and that is the whole reason this job exists instead of the Debug job uploading what
+  # it already built. A Debug binary links the debug CRT -- ucrtbased.dll, vcruntime140d.dll,
+  # msvcp140d.dll -- which Microsoft does not permit to be redistributed and which exists only on a
+  # machine with Visual Studio on it. Handed to anybody else it dies on a missing-DLL dialog before
+  # WinMain runs. What a stranger can run is a Release build or it is nothing.
+  #
+  # It is also the Release build of the APPLICATION that nothing here used to do. The determinism
+  # job above builds GameLogicTests at Release, which reaches two libraries; Lockstep, NeuronClient,
+  # NeuronServer and LockstepClient were compiled at Debug only, so a break that needed /O2 or LTCG
+  # to show up surfaced on the day somebody shipped. AGENTS.md §3 covered that with "before a
+  # release, somebody builds Release for real". Now every push to main does.
+  #
+  # Parallel with the two gate jobs and gated by neither, deliberately: it must not add its build to
+  # the wall clock, and nothing it produces is PUBLISHED until `publish` below has seen all three
+  # gates go green. Skipped on pull requests, which have nothing to ship.
+  package:
+    name: Release|x64 (Lockstep.exe)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    if: github.event_name != 'pull_request'
+
+    env:
+      CONFIGURATION: Release
+      PLATFORM: x64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      # /t:Lockstep, through the solution. AGENTS.md §3: a .vcxproj built directly resolves
+      # $(SolutionDir) against the project folder and puts its output somewhere else entirely.
+      - name: Build Lockstep
+        shell: pwsh
+        run: |
+          msbuild Lockstep.slnx /t:Lockstep `
+            /p:Configuration=$env:CONFIGURATION /p:Platform=$env:PLATFORM `
+            /m /nologo /v:minimal /warnaserror
+
+      # An executable that is not there is not an executable that built, and upload-artifact's
+      # default for a path that matches nothing is a warning nobody reads. The hash is printed so
+      # that what the release serves can be checked against what the build produced.
+      - name: Check that there is an executable
+        shell: pwsh
+        run: |
+          $exe = "x64\$env:CONFIGURATION\Lockstep.exe"
+          if (-not (Test-Path $exe)) { throw "$exe was not built." }
+          Write-Output "$exe  $([math]::Round((Get-Item $exe).Length / 1KB)) KB"
+          Write-Output "sha256: $((Get-FileHash $exe -Algorithm SHA256).Hash.ToLower())"
+
+      - name: Hand the executable to the publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: lockstep-exe
+          path: x64/${{ env.CONFIGURATION }}/Lockstep.exe
+          if-no-files-found: error
+
+  # ── Publishing it where a stranger can reach it ──────────────────────────────────────────────
+  #
+  # A WORKFLOW ARTIFACT IS NOT A DOWNLOAD. It hangs off a workflow run, never appears on the
+  # repository's front page, is re-zipped whatever it holds, expires after 90 days, and -- public
+  # repository or not -- cannot be fetched without a GitHub login. The build log and the test
+  # results above are artifacts because their reader is whoever is debugging the run. The
+  # executable is not, because its reader has never seen this repository.
+  #
+  # A Release asset is the opposite on every count: anonymous, permanent, served under a URL that
+  # can be linked, and listed in the sidebar of the front page. ADR-110 takes two channels of them:
+  #
+  #   a v* tag  ->  a versioned Release, one entry per version, never rewritten
+  #   a main push  ->  `latest-build`, a PRERELEASE deleted and recreated at the new commit
+  #
+  # Prerelease is what keeps the two apart. GitHub's "Latest" badge and the /releases/latest
+  # redirect both skip prereleases, so the day a real version exists the rolling build stops being
+  # what the front page offers without stopping being available.
+  #
+  # `needs` is the gate, and it is the only thing standing between a red tree and a public
+  # download: three green jobs or nothing is published. Linux, because all this job runs is `gh`.
+  publish:
+    name: Publish the download
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [windows, release, format, package]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+
+    # The one place this workflow needs more than the `contents: read` at the top of the file, and
+    # it is asked for per job rather than raised for all five.
+    permissions:
+      contents: write
+
+    env:
+      # gh is on the runner image. GH_REPO is what lets it work without a checkout, which is the
+      # only reason this job does not need one.
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Collect the executable
+        uses: actions/download-artifact@v4
+        with:
+          name: lockstep-exe
+
+      - name: Check what arrived
+        run: |
+          test -f Lockstep.exe || { echo "Lockstep.exe did not arrive from the package job."; exit 1; }
+          ls -l Lockstep.exe
+          sha256sum Lockstep.exe
+
+      # Everything somebody needs before double-clicking it, including the two things this pipeline
+      # cannot tell them. AGENTS.md §3: a green build says nothing about whether the game draws --
+      # and no runner here has a GPU, so what is being published has never drawn a frame.
+      - name: Write the notes
+        run: |
+          cat > notes.md <<'NOTES'
+          `Lockstep.exe` is the whole game. Art, fonts and compiled shaders are inside the binary, so
+          there is nothing to unpack and no folder to keep it in (`Design/README.md` §1).
+
+          ### Before you run it
+
+          - **Windows 11, x64**, and a GPU that does Direct3D 12.
+          - The **[Microsoft Visual C++ Redistributable, x64](https://aka.ms/vc14/vc_redist.x64.exe)**.
+            The build links the DLL runtime, so without it the executable will not start at all.
+          - The binary is **unsigned**, so SmartScreen interrupts the first run: *More info →
+            Run anyway*.
+
+          ### What was checked, and what was not
+
+          Five test suites pass, `clang-tidy` and `clang-format` are clean, and the scripted match
+          still hashes to its pinned value under `Release` optimisation. Nobody launched this
+          binary: GitHub's runners have no GPU, so it has been compiled and never drawn a frame.
+          NOTES
+
+      - name: Publish the versioned release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: gh release create "$GITHUB_REF_NAME" Lockstep.exe --title "$GITHUB_REF_NAME" --notes-file notes.md
+
+      # Deleted and recreated rather than edited in place, because the TAG has to move to the commit
+      # that was built and neither `gh` nor the API will move one under a release that already
+      # exists. What does not move is the download URL, which is the part that gets linked:
+      # .../releases/download/latest-build/Lockstep.exe
+      #
+      # The check afterwards is not ceremony. If --cleanup-tag leaves the tag behind, `create`
+      # silently reuses it and ignores --target, and the release then serves today's executable
+      # under a tag whose source zip is somebody else's commit.
+      - name: Refresh the rolling build
+        if: github.ref == 'refs/heads/main'
+        run: |
+          {
+            echo
+            echo "---"
+            echo
+            echo "Built from \`$GITHUB_SHA\` on $(date -u '+%Y-%m-%d %H:%M UTC'). This tag moves: it is"
+            echo "whatever \`main\` last built, not a version. The link is stable; the bytes are not."
+          } >> notes.md
+
+          gh release delete latest-build --yes --cleanup-tag || true
+          gh release create latest-build Lockstep.exe \
+            --prerelease --target "$GITHUB_SHA" \
+            --title "Latest main build" --notes-file notes.md
+
+          tagged="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/latest-build" --jq .object.sha)"
+          if [ "$tagged" != "$GITHUB_SHA" ]; then
+            echo "latest-build points at $tagged, not $GITHUB_SHA: the old tag survived --cleanup-tag."
+            exit 1
+          fi
