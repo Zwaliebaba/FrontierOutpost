@@ -121,6 +121,14 @@ of the galaxy by a tap is one the player has to be able to undo, and that predic
 the chip on the screen to do it. `ResetView` clears the aim and **leaves the focus alone**: the chip
 is about where the camera is, not about what the screen is pointed at.
 
+**The `RESET` chip is not drawn while a move is being chosen**, which is a consequence of the
+centring rather than a separate taste. Entering a move mode centres the fleet's origin, so the
+camera is no longer at the authored framing and the chip would appear for the first time inside a
+mode ADR-114 built on the map offering destinations and nothing else — a second thing to tap, whose
+effect is to un-centre the very system the move is being chosen from. It is also placed by measuring
+the `MAP - FOCUS` caption, and the mode's banner replaces that caption across the top of the pane,
+so it would be laid out against a string that is not on the screen.
+
 **A snapshot takes the centring with it**, because it already takes the focus (ADR-057).
 
 ## Consequences
@@ -230,6 +238,14 @@ pane**, each stopping at its own "no move to ..." guard. Every method that finds
 hit list passed, which is what identified the search rather than the control as the thing that
 broke. They press a recorded rectangle now, through `EnterMoveThrough`, and the badge test still
 names the door it goes through so that what it claims about the badge stays what it claims.
+
+**Run 104, on the pressed-rectangle fix, then found the chip.** It failed one method:
+`EverythingElseOnTheScreenStopsAnsweringATap`, on `Action::ResetCamera` recorded at x 578 in the map
+pane while the mode was on — the chip, appearing there for the first time because entering the mode
+now moves the camera. That test passed trivially before this change, since the camera never left
+the authored framing inside a move; it is a real guard now, and it is what the suppression above is
+held by. Nothing else in the pane can offend it: `MainPageMove.cpp` records only `CancelMove`,
+`None`, `ChooseDestination` and `SendMove`, and `MapRender` gates its own hits on `moving`.
 
 `Build/CheckFormat.py` (clang-format 18; CI pins 22) reports 181 files and 0 unformatted.
 `Build/CheckProjectFiles.py` output is byte-identical to the same script's output on the parent

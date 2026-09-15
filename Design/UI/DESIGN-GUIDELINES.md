@@ -570,7 +570,8 @@ Drawn, in painter's order (`MapRender.cpp`):
 - **The camera** (ADR-090): drag orbits, a wheel notch or pinch step zooms between 0.6x and 2.5x of
   the authored framing at 12% a step, and an outlined `RESET` chip sits immediately after
   `MAP - FOCUS: PELL` — drawn only when the camera is not where the map opened, a camera centred on
-  a place included.
+  a place included, and **never while a move is being chosen** (ADR-115): the banner has taken that
+  strip, and the map offers destinations and nothing else.
 - **Selecting a place centres the camera on it** (ADR-115), and every focus does it: a disc, the
   garrison badge beside it, a fleet already under way, a locks-rail row, a digest focus chip, and
   entering a move mode. **It pans and never zooms** — the distance is still solved from the whole

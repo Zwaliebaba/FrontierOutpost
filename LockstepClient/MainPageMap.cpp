@@ -220,7 +220,14 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::Me
   // (ADR-017) -- `ResetView` existed and nothing called it -- and hunting for it by eye is not a
   // thing to ask. A control that would do nothing is left off the screen rather than drawn dim,
   // because the map pane has no chrome and one chip appearing is itself the signal.
-  if (!m_mapView.AtAuthoredFraming())
+  //
+  // **Not while a move is being chosen** (ADR-114, ADR-115). Two reasons, and either is enough.
+  // The mode's banner replaces the `MAP - FOCUS` caption across the top of the pane, and this chip
+  // is placed by measuring that caption -- so it would be laid out against a string that is not on
+  // the screen, in the strip the banner has taken. And the rule the mode is built on is that the
+  // map offers destinations and nothing else: a chip here would be a second thing to tap, whose
+  // effect is to un-centre the very system the move is being chosen from.
+  if (!m_mapView.AtAuthoredFraming() && !m_moveMode.has_value())
   {
     const float chipX =
       Frame::DIGEST_WIDTH + 12.0F + static_cast<float>(FontRenderer::MeasurePixels(FocusLine(m_state, m_focusedSystem))) + 10.0F;
