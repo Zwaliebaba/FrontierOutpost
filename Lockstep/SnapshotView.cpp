@@ -297,13 +297,26 @@ void ComposeSignals(MatchState& _state, const Snapshot& _snapshot)
   }
 }
 
-} // namespace
-
-MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _digest, std::int64_t _secondsToLock)
+/// Where a system with this id sits in the view's own list, or NONE.
+///
+/// **A system id and a position in `graph.systems` are different numbers** (ADR-057): the graph is
+/// fogged, so the tenth system a player can see is not system ten. Every section below that names
+/// a system names a position, and this is the one place the two are related.
+[[nodiscard]] std::int32_t PositionOf(const MatchState& _state, SystemId _system)
 {
-  MatchState state;
-  state.viewer = _snapshot.Viewer().Index();
+  for (std::size_t index = 0; index < _state.graph.systems.size(); ++index)
+  {
+    if (_state.graph.systems[index].id == _system.Index())
+    {
+      return static_cast<std::int32_t>(index);
+    }
+  }
+  return EventRefs::NONE;
+}
 
+/// Who is in the match, in seat order: the badge every owner colour on the screen is read from.
+void ComposePlayers(MatchState& _state, const Snapshot& _snapshot)
+{
   // ---- Players -----------------------------------------------------------------------------------
   for (const SnapshotStanding& standing : _snapshot.Standings())
   {
@@ -314,41 +327,57 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     badge.placement = standing.placement;
     badge.custodian = standing.status == PlayerStatus::Custodian;
     badge.custodianSince = standing.custodianSince;
-    state.players.push_back(std::move(badge));
+    _state.players.push_back(std::move(badge));
   }
+}
 
+/// The header every screen carries: which tick, how long is left of it, and whether it is over.
+void ComposeMatch(MatchState& _state, const Snapshot& _snapshot, std::int64_t _secondsToLock)
+{
   // ---- The match ---------------------------------------------------------------------------------
-  state.match.id = std::format("{:04}", _snapshot.Tick());
-  state.match.tick = _snapshot.Tick();
-  state.match.secondsToLock = static_cast<double>(_secondsToLock);
-  state.match.day = 1 + _snapshot.Tick() / 4;
-  state.match.totalDays = 21;
-  state.match.endsAt = "";
-  state.match.finished = _snapshot.IsFinished();
+  _state.match.id = std::format("{:04}", _snapshot.Tick());
+  _state.match.tick = _snapshot.Tick();
+  _state.match.secondsToLock = static_cast<double>(_secondsToLock);
+  _state.match.day = 1 + _snapshot.Tick() / 4;
+  _state.match.totalDays = 21;
+  _state.match.endsAt = "";
+  _state.match.finished = _snapshot.IsFinished();
 
   // A finished match is locked and stays locked. `locked` is what every control on the screen
   // already reads, so this is one assignment rather than a second disabled state to maintain.
-  state.orders.locked = state.orders.locked || state.match.finished;
+  _state.orders.locked = _state.orders.locked || _state.match.finished;
+}
 
+/// Where this player stands, which is the top bar's half of the view model.
+void ComposeStanding(MatchState& _state, const Snapshot& _snapshot)
+{
   // ---- Standing ----------------------------------------------------------------------------------
-  const OwnerId viewer = state.viewer;
-  if (viewer >= 0 && viewer < static_cast<OwnerId>(state.players.size()))
+  const OwnerId viewer = _state.viewer;
+  if (viewer >= 0 && viewer < static_cast<OwnerId>(_state.players.size()))
   {
-    const PlayerBadge& mine = state.players[static_cast<std::size_t>(viewer)];
-    state.player.score = mine.score;
-    state.player.placement = mine.placement;
+    const PlayerBadge& mine = _state.players[static_cast<std::size_t>(viewer)];
+    _state.player.score = mine.score;
+    _state.player.placement = mine.placement;
   }
-  state.player.credits = _snapshot.Credits();
-  state.player.playerCount = static_cast<std::uint32_t>(state.players.size());
+  _state.player.credits = _snapshot.Credits();
+  _state.player.playerCount = static_cast<std::uint32_t>(_state.players.size());
 
-  for (const PlayerBadge& badge : state.players)
+  for (const PlayerBadge& badge : _state.players)
   {
     if (badge.placement == 1)
     {
-      state.player.leader = Leader{.name = badge.label, .score = badge.score};
+      _state.player.leader = Leader{.name = badge.label, .score = badge.score};
     }
   }
+}
 
+/// The systems and lanes this player can see, fog included (ADR-022).
+///
+/// **Composed first of the three that name a system**, because every one of them names a system by
+/// POSITION in this list rather than by id (ADR-057), and there is no list to take a position in
+/// until this has run.
+void ComposeGraph(MatchState& _state, const Snapshot& _snapshot)
+{
   // ---- The graph ---------------------------------------------------------------------------------
   //
   // The snapshot's positions are integers in the 800x560 design space and the view model's are
@@ -368,47 +397,39 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
 
     // A custodian's territory is flagged on every player's map, and the stamp is the tick they
     // went into custody rather than anything about the system.
-    if (node.owner != NOBODY && node.owner < static_cast<OwnerId>(state.players.size()) &&
-        state.players[static_cast<std::size_t>(node.owner)].custodian)
+    if (node.owner != NOBODY && node.owner < static_cast<OwnerId>(_state.players.size()) &&
+        _state.players[static_cast<std::size_t>(node.owner)].custodian)
     {
-      node.custodianSince = state.players[static_cast<std::size_t>(node.owner)].custodianSince;
+      node.custodianSince = _state.players[static_cast<std::size_t>(node.owner)].custodianSince;
     }
 
-    state.graph.systems.push_back(std::move(node));
+    _state.graph.systems.push_back(std::move(node));
   }
 
   // Lanes are re-indexed into the view's own system list, because a fogged snapshot is not the
   // whole galaxy and a lane naming absolute system ids would point past the end of it.
-  const auto positionOf = [&state](SystemId _system)
-  {
-    for (std::size_t index = 0; index < state.graph.systems.size(); ++index)
-    {
-      if (state.graph.systems[index].id == _system.Index())
-      {
-        return static_cast<std::int32_t>(index);
-      }
-    }
-    return EventRefs::NONE;
-  };
 
   for (const SnapshotLane& lane : _snapshot.Lanes())
   {
-    const std::int32_t a = positionOf(lane.a);
-    const std::int32_t b = positionOf(lane.b);
+    const std::int32_t a = PositionOf(_state, lane.a);
+    const std::int32_t b = PositionOf(_state, lane.b);
     if (a == EventRefs::NONE || b == EventRefs::NONE)
     {
       continue;
     }
-    state.graph.lanes.push_back(
+    _state.graph.lanes.push_back(
       Lane{.id = lane.id.Index(), .a = a, .b = b, .cost = lane.costTicks, .kind = lane.tradeLane ? LaneKind::Trade : LaneKind::None});
   }
+}
 
+void ComposeFleets(MatchState& _state, const Snapshot& _snapshot)
+{
   // ---- Fleets ------------------------------------------------------------------------------------
   for (const SnapshotFleet& fleet : _snapshot.Fleets())
   {
     const bool moving = fleet.ticksRemaining > 0;
-    const std::int32_t from = positionOf(moving ? fleet.movingFrom : fleet.at);
-    const std::int32_t to = positionOf(moving ? fleet.movingTo : fleet.at);
+    const std::int32_t from = PositionOf(_state, moving ? fleet.movingFrom : fleet.at);
+    const std::int32_t to = PositionOf(_state, moving ? fleet.movingTo : fleet.at);
     if (from == EventRefs::NONE || to == EventRefs::NONE)
     {
       // Under way between two systems this player cannot see. It is public that it exists, and
@@ -433,8 +454,8 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     std::uint32_t costTicks = 0;
     for (const SnapshotLane& lane : _snapshot.Lanes())
     {
-      const bool joins =
-        (positionOf(lane.a) == from && positionOf(lane.b) == to) || (positionOf(lane.a) == to && positionOf(lane.b) == from);
+      const bool joins = (PositionOf(_state, lane.a) == from && PositionOf(_state, lane.b) == to) ||
+                         (PositionOf(_state, lane.a) == to && PositionOf(_state, lane.b) == from);
       if (joins)
       {
         costTicks = lane.costTicks;
@@ -448,11 +469,14 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     entry.preview = fleet.preview;
     entry.name = std::format("FLT {}", fleet.id.Index() + 1);
     entry.status = moving ? std::format("in transit - ETA T{}", entry.eta)
-                          : std::format("holding {}", state.graph.systems[static_cast<std::size_t>(to)].name);
+                          : std::format("holding {}", _state.graph.systems[static_cast<std::size_t>(to)].name);
 
-    state.fleets.push_back(std::move(entry));
+    _state.fleets.push_back(std::move(entry));
   }
+}
 
+void ComposeProposals(MatchState& _state, const Snapshot& _snapshot)
+{
   // ---- Proposals ---------------------------------------------------------------------------------
   for (const SnapshotProposal& proposal : _snapshot.Proposals())
   {
@@ -466,7 +490,7 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
 
     Proposal entry;
     entry.id = proposal.id.Index();
-    entry.from = NameOfPlayer(state.players, proposal.from.Index());
+    entry.from = NameOfPlayer(_state.players, proposal.from.Index());
     entry.type = proposal.kind == ProposalKind::OpenLane        ? ProposalType::OpenLane
                  : proposal.kind == ProposalKind::ShareScouting ? ProposalType::ShareScouting
                                                                 : ProposalType::HoldForTicks;
@@ -475,16 +499,19 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     entry.terms = proposal.kind == ProposalKind::OpenLane        ? "Open a trade lane - pays both sides"
                   : proposal.kind == ProposalKind::ShareScouting ? "Share scouting - their map is your map"
                                                                  : std::format("Hold for {} ticks - nothing enforces it", proposal.ticks);
-    state.proposals.push_back(std::move(entry));
+    _state.proposals.push_back(std::move(entry));
   }
+}
 
+void ComposeBuilds(MatchState& _state, const Snapshot& _snapshot)
+{
   // ---- Builds ------------------------------------------------------------------------------------
   //
   // Composed here rather than sent, because a build row is a thing the client offers and the server
   // has no opinion about what it should be called.
-  for (const SystemNode& node : state.graph.systems)
+  for (const SystemNode& node : _state.graph.systems)
   {
-    if (node.owner != state.viewer)
+    if (node.owner != _state.viewer)
     {
       continue;
     }
@@ -530,7 +557,7 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
       // lock that started it (ADR-069), so `completesAt - ticks` is the tick the credits left the
       // purse on. It is also what the sheet's progress bar is a fraction of.
       const std::uint32_t orderedAt = source->risingCompletesAt > risingTicks ? source->risingCompletesAt - risingTicks : 0;
-      state.orders.builds.push_back(
+      _state.orders.builds.push_back(
         BuildRow{.title = std::format("{} L{} - {}", yard ? "Shipyard" : "Mining station", source->risingToLevel, node.name),
                  .detail = std::format("Ordered T{} · {} credits spent · +{} a tick", orderedAt, risingCost,
                                        _snapshot.LevelYield(source->risingKind, source->risingToLevel)),
@@ -549,7 +576,7 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     {
       const std::uint32_t level = source->shipyardLevel + 1;
       const std::uint32_t ticks = _snapshot.LevelTicks(BuildKind::Shipyard, level);
-      state.orders.builds.push_back(
+      _state.orders.builds.push_back(
         BuildRow{.title = std::format("Shipyard L{} - {}", level, node.name),
                  // `·` between two peer facts, `-` only where a thing is joined to its subject
                  // (DESIGN-GUIDELINES §Font). What the level pays and how long it takes are peers.
@@ -567,7 +594,7 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     {
       const std::uint32_t level = source->miningStationLevel + 1;
       const std::uint32_t ticks = _snapshot.LevelTicks(BuildKind::MiningStation, level);
-      state.orders.builds.push_back(
+      _state.orders.builds.push_back(
         BuildRow{.title = std::format("Mining station L{} - {}", level, node.name),
                  .detail = std::format("+{} credits a tick · {} tick{}", _snapshot.LevelYield(BuildKind::MiningStation, level), ticks,
                                        ticks == 1 ? "" : "s"),
@@ -584,11 +611,14 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
   // and the rows beside it on a system that is building are both on the list so the sheet can say
   // what is coming and what it will cost (ADR-069, ADR-107); `N AVAIL` counting either would offer
   // a player a number they cannot act on.
-  state.orders.availableBuilds = static_cast<std::uint32_t>(
-    std::count_if(state.orders.builds.begin(), state.orders.builds.end(), [](const BuildRow& _row) { return _row.available; }));
+  _state.orders.availableBuilds = static_cast<std::uint32_t>(
+    std::count_if(_state.orders.builds.begin(), _state.orders.builds.end(), [](const BuildRow& _row) { return _row.available; }));
 
-  ComposeSignals(state, _snapshot);
+  ComposeSignals(_state, _snapshot);
+}
 
+void ComposeDigest(MatchState& _state, const Snapshot& _snapshot, const std::vector<DigestEntry>& _digest)
+{
   // ---- Digest ------------------------------------------------------------------------------------
   //
   // The digest is the order surface (ADR-034), so an event arrives carrying what can be done about
@@ -604,7 +634,8 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     DigestEvent event{.kind = ColorOf(entry.kind),
                       .title = entry.title,
                       .detail = entry.detail,
-                      .refs = EventRefs{.system = positionOf(entry.system), .lane = entry.lane.Index(), .fleet = entry.fleet.Index()}};
+                      .refs =
+                        EventRefs{.system = PositionOf(_state, entry.system), .lane = entry.lane.Index(), .fleet = entry.fleet.Index()}};
     event.actor = entry.other.IsValid() ? entry.other.Index() : NOBODY;
 
     // A proposal is answered on the proposal, which is where the player is reading about it.
@@ -615,9 +646,9 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     // the right answer rather than a missing case.
     if (event.kind == EventKind::Proposal && entry.proposal.IsValid())
     {
-      for (std::size_t index = 0; index < state.proposals.size(); ++index)
+      for (std::size_t index = 0; index < _state.proposals.size(); ++index)
       {
-        if (state.proposals[index].id != entry.proposal.Index())
+        if (_state.proposals[index].id != entry.proposal.Index())
         {
           continue;
         }
@@ -633,10 +664,10 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     // A contact the player is flying into gets the verdict and the fleet that earns it.
     if (event.kind == EventKind::Contact)
     {
-      for (std::size_t index = 0; index < state.fleets.size(); ++index)
+      for (std::size_t index = 0; index < _state.fleets.size(); ++index)
       {
-        const Fleet& fleet = state.fleets[index];
-        if (fleet.owner != state.viewer || fleet.preview.empty() || fleet.to != event.refs.system)
+        const Fleet& fleet = _state.fleets[index];
+        if (fleet.owner != _state.viewer || fleet.preview.empty() || fleet.to != event.refs.system)
         {
           continue;
         }
@@ -661,10 +692,10 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
 
     if (entry.kind == DigestKind::SystemClaimed && event.refs.system != EventRefs::NONE)
     {
-      for (std::size_t row = 0; row < state.orders.builds.size(); ++row)
+      for (std::size_t row = 0; row < _state.orders.builds.size(); ++row)
       {
-        const std::int32_t at = positionOf(SystemId{state.orders.builds[row].system});
-        if (at == event.refs.system && Offerable(state, offeredBuilds, static_cast<std::int32_t>(row)))
+        const std::int32_t at = PositionOf(_state, SystemId{_state.orders.builds[row].system});
+        if (at == event.refs.system && Offerable(_state, offeredBuilds, static_cast<std::int32_t>(row)))
         {
           offeredRow = static_cast<std::int32_t>(row);
           break;
@@ -673,9 +704,9 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     }
     else if (entry.kind == DigestKind::Economy)
     {
-      for (std::size_t row = 0; row < state.orders.builds.size(); ++row)
+      for (std::size_t row = 0; row < _state.orders.builds.size(); ++row)
       {
-        if (Offerable(state, offeredBuilds, static_cast<std::int32_t>(row)))
+        if (Offerable(_state, offeredBuilds, static_cast<std::int32_t>(row)))
         {
           offeredRow = static_cast<std::int32_t>(row);
           break;
@@ -686,7 +717,7 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
     if (offeredRow != EventRefs::NONE)
     {
       // `SHIPYARD JANDAL | 20 CR`: the price is on the button, in its own cell (ADR-053, ADR-110).
-      const BuildRow& offered = state.orders.builds[static_cast<std::size_t>(offeredRow)];
+      const BuildRow& offered = _state.orders.builds[static_cast<std::size_t>(offeredRow)];
       event.actions.push_back(EventAction{.label = Shortened(offered.title),
                                           .number = std::format("{} CR", offered.cost),
                                           .kind = EventActionKind::QueueBuild,
@@ -700,7 +731,7 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
       event.actions.push_back(EventAction{.label = "MAP", .kind = EventActionKind::Focus, .target = event.refs.system});
     }
 
-    state.digest.push_back(std::move(event));
+    _state.digest.push_back(std::move(event));
   }
 
   // The verdict, from the numbers rather than from the phrase. `SnapshotFleet` carries both sides
@@ -708,13 +739,13 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
   for (std::size_t index = 0; index < _snapshot.Fleets().size(); ++index)
   {
     const SnapshotFleet& source = _snapshot.Fleets()[index];
-    if (source.owner.Index() != state.viewer || source.preview.empty() || source.previewTheirs == 0)
+    if (source.owner.Index() != _state.viewer || source.preview.empty() || source.previewTheirs == 0)
     {
       continue;
     }
 
-    const std::int32_t destination = positionOf(source.movingTo);
-    for (DigestEvent& event : state.digest)
+    const std::int32_t destination = PositionOf(_state, source.movingTo);
+    for (DigestEvent& event : _state.digest)
     {
       if (event.kind != EventKind::Contact || event.refs.system != destination)
       {
@@ -725,21 +756,49 @@ MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _di
       const bool hold = source.previewMineAfter > 0 && source.previewTheirsAfter > 0;
       const char* outcome = win ? "YOU WIN" : (hold ? "HOLD" : "YOU LOSE");
 
-      event.verdict = std::format("FLT{} ARRIVES T{} - {}", source.id.Index() + 1, state.match.tick + source.ticksRemaining, outcome);
+      event.verdict = std::format("FLT{} ARRIVES T{} - {}", source.id.Index() + 1, _state.match.tick + source.ticksRemaining, outcome);
       event.verdictDetail =
-        std::format("You arrive {}. {} holds {}{}. {} of theirs remain, {} of yours.", source.previewMine, NameFor(state, event.actor),
+        std::format("You arrive {}. {} holds {}{}. {} of theirs remain, {} of yours.", source.previewMine, NameFor(_state, event.actor),
                     source.previewTheirs, source.previewDefended ? " +def" : "", source.previewTheirsAfter, source.previewMineAfter);
       break;
     }
   }
+}
 
+void ComposeRegion(MatchState& _state, const Snapshot& _snapshot)
+{
   // ---- The region ---------------------------------------------------------------------------------
-  state.region.anchor = positionOf(_snapshot.RegionAnchor());
-  state.region.opensAt = _snapshot.RegionOpensAt();
-  state.region.siteOffsets = {{-18.0F, -6.0F}, {12.0F, -14.0F}, {6.0F, 12.0F}};
+  _state.region.anchor = PositionOf(_state, _snapshot.RegionAnchor());
+  _state.region.opensAt = _snapshot.RegionOpensAt();
+  _state.region.siteOffsets = {{-18.0F, -6.0F}, {12.0F, -14.0F}, {6.0F, 12.0F}};
 
-  state.totalSystems = _snapshot.TotalSystems();
-  state.unclaimedSystems = _snapshot.UnclaimedSystems();
+  _state.totalSystems = _snapshot.TotalSystems();
+  _state.unclaimedSystems = _snapshot.UnclaimedSystems();
+}
+
+} // namespace
+
+/// One snapshot and this tick's digest, turned into everything the screens read (ADR-025).
+///
+/// **The wire carries records and the screens carry a view model**, and this is the whole of the
+/// distance between them: the client never sees a `Snapshot` and `GameLogic` never sees a
+/// `MatchState`. Composed section by section, and the graph goes first because every section after
+/// it names a system by its position in that list rather than by its id (ADR-057).
+MatchState ViewOf(const Snapshot& _snapshot, const std::vector<DigestEntry>& _digest, std::int64_t _secondsToLock)
+{
+  MatchState state;
+  state.viewer = _snapshot.Viewer().Index();
+
+  ComposePlayers(state, _snapshot);
+  ComposeMatch(state, _snapshot, _secondsToLock);
+  ComposeStanding(state, _snapshot);
+  ComposeGraph(state, _snapshot);
+  ComposeFleets(state, _snapshot);
+  ComposeProposals(state, _snapshot);
+  ComposeBuilds(state, _snapshot);
+  ComposeDigest(state, _snapshot, _digest);
+  ComposeRegion(state, _snapshot);
+
   return state;
 }
 
