@@ -1015,7 +1015,7 @@ struct MatchPaths
       break;
     }
 
-    dialog.Update(kind, status.facts, elapsedSeconds);
+    dialog.Update(kind, facts, elapsedSeconds);
 
     // ---- The frame -----------------------------------------------------------------------------
     ApplyFullscreenToggle(_window, _device, _pointer, _presentation);
@@ -1379,7 +1379,7 @@ int RunGame(HWND _window, const Startup& _startup, std::uint32_t _scale)
                           page.State(), everHadState, finishedDismissed);
     const Lockstep::ConnectionDialog::Kind kind = status.kind;
 
-    dialog.Update(kind, facts, elapsedSeconds);
+    dialog.Update(kind, status.facts, elapsedSeconds);
     if (kind != drawnDialog)
     {
       redraw = true;
