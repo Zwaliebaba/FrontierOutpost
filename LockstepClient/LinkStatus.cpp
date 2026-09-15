@@ -57,8 +57,12 @@ LinkStatus StatusFor(const LinkFacts& _link, const MatchState& _state, bool _eve
     //
     // Composed here because this is where `MatchState` and `ConnectionDialog` meet: the dialog is
     // in `LockstepClient` and has no idea what a match is (ADR-038).
+    // `standings` is cleared rather than reserved: clearing keeps the capacity a previous frame
+    // already paid for, and this runs every frame the finished dialog is up. `table` is a fresh
+    // vector each time and does need the one allocation said up front.
     facts.standings.clear();
     std::vector<const PlayerBadge*> table;
+    table.reserve(_state.players.size());
     for (const PlayerBadge& badge : _state.players)
     {
       table.push_back(&badge);
