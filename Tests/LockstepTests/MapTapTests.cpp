@@ -402,6 +402,56 @@ public:
     return state;
   }
 
+  /// Enters the move mode from the map, by pressing the control that starts one in the middle of
+  /// the rectangle `AddHit` recorded for it.
+  ///
+  /// **A blind sweep cannot find it, because the board moves under one.** A tap on a system centres
+  /// the camera on that system (ADR-115), so a tap that lands on a disc or a badge lays the whole
+  /// map out again -- and a grid walk stepping eight pixels between taps is then searching a board
+  /// that is not the one it measured. Pressing a recorded rectangle is what `OpenPlaceSheet` does,
+  /// and it still finds a control by WHAT IT DOES rather than by where it is, which is the property
+  /// `Headless.h` exists to keep. The list is re-read every attempt for the same reason: it belongs
+  /// to the frame it was built in.
+  ///
+  /// `_through` names which door, because which one is used is part of what some of these claim.
+  [[nodiscard]] static bool EnterMoveThrough(Lockstep::MainPage& _page, Headless& _renderers, Lockstep::MainPage::Action _through)
+  {
+    std::vector<std::int32_t> tried;
+    while (tried.size() < 32)
+    {
+      _renderers.Begin();
+      DrawPage(_page, _renderers);
+
+      const auto candidate =
+        std::ranges::find_if(_page.Hits(),
+                             [&tried, _through](const Lockstep::MainPage::HitRegion& _hit)
+                             {
+                               return _hit.action == _through && _hit.index >= 0 && _hit.x >= static_cast<float>(MAP_LEFT) &&
+                                      _hit.x < static_cast<float>(MAP_RIGHT) && std::ranges::find(tried, _hit.index) == tried.end();
+                             });
+      if (candidate == _page.Hits().end())
+      {
+        return false;
+      }
+
+      tried.push_back(candidate->index);
+      (void)_page.HandleTap(candidate->x + candidate->width * 0.5F, candidate->y + candidate->height * 0.5F);
+      if (_page.MoveOrder().has_value())
+      {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// The mode, through whichever of the map's two doors offers it: the garrison badge over a single
+  /// standing fleet, or the fleet's own marker (ADR-079, ADR-114).
+  [[nodiscard]] static bool EnterAMoveFromTheMap(Lockstep::MainPage& _page, Headless& _renderers)
+  {
+    return EnterMoveThrough(_page, _renderers, Lockstep::MainPage::Action::OpenFleetsAt) ||
+           EnterMoveThrough(_page, _renderers, Lockstep::MainPage::Action::BeginMove);
+  }
+
   TEST_METHOD(AGarrisonBadgeWithOneFleetUnderItSkipsTheSheet)
   {
     // **A badge totals SHIPS** (ADR-079), so a place holding one of your fleets has exactly one
@@ -411,8 +461,7 @@ public:
     page.Create(OneFleetStanding());
 
     Headless renderers;
-    const bool onTheMap =
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    const bool onTheMap = EnterMoveThrough(page, renderers, Lockstep::MainPage::Action::OpenFleetsAt);
     Assert::IsTrue(onTheMap, L"nothing on the map takes the one standing fleet's move onto it");
     Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::None, L"the mode left a sheet open over the map it is played on");
   }
@@ -426,8 +475,7 @@ public:
     page.Create(OneFleetStanding());
 
     Headless renderers;
-    const bool onTheMap =
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    const bool onTheMap = EnterAMoveFromTheMap(page, renderers);
     Assert::IsTrue(onTheMap, L"no move to check the reach of");
 
     renderers.Begin();
@@ -474,8 +522,7 @@ public:
     page.Create(OneFleetStanding());
 
     Headless renderers;
-    const bool onTheMap =
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    const bool onTheMap = EnterAMoveFromTheMap(page, renderers);
     Assert::IsTrue(onTheMap, L"no move to check the screen around");
 
     renderers.Begin();
@@ -520,18 +567,14 @@ public:
     page.Create(OneFleetStanding());
 
     Headless renderers;
-    Assert::IsTrue(
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); }),
-      L"no move to leave");
+    Assert::IsTrue(EnterAMoveFromTheMap(page, renderers), L"no move to leave");
 
     Assert::IsTrue(page.HandleKey(Neuron::KeyboardInput::Key::Escape), L"ESC did not leave the move mode");
     Assert::IsFalse(page.MoveOrder().has_value(), L"and the mode is still on");
 
     // Back on, and out again by tapping a part of the board that offers nothing. A tap that hits
     // nothing is what the empty map, an unreachable system and a rival's garrison all are.
-    Assert::IsTrue(
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); }),
-      L"the mode would not come back");
+    Assert::IsTrue(EnterAMoveFromTheMap(page, renderers), L"the mode would not come back");
     renderers.Begin();
     DrawPage(page, renderers);
 
@@ -569,9 +612,7 @@ public:
     page.Create(OneFleetStanding());
 
     Headless renderers;
-    Assert::IsTrue(
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); }),
-      L"no move to freeze");
+    Assert::IsTrue(EnterAMoveFromTheMap(page, renderers), L"no move to freeze");
     Assert::IsTrue(page.Animating(), L"a mode with a pulsing ring in it does not ask to be redrawn");
 
     page.SetStill(true);
@@ -639,8 +680,7 @@ public:
     Assert::IsTrue(inksIn(renderers.shapes).contains(Neuron::Pack(Lockstep::Ink::OUTLINE)),
                    L"the resting digest draws no outlined control, so this test is measuring nothing");
 
-    const bool onTheMap =
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    const bool onTheMap = EnterAMoveFromTheMap(page, renderers);
     Assert::IsTrue(onTheMap, L"no move to fade the column under");
 
     renderers.Begin();
@@ -664,6 +704,43 @@ public:
 TEST_CLASS(MapCameraTapTests)
 {
 public:
+  /// The pane the map is drawn into, which is what "the middle of the map" means below.
+  static constexpr float PANE_X = Lockstep::Frame::DIGEST_WIDTH;
+  static constexpr float PANE_WIDTH = Lockstep::Frame::SCREEN_WIDTH - Lockstep::Frame::DIGEST_WIDTH - Lockstep::Frame::ORDERS_WIDTH;
+  static constexpr float PANE_HEIGHT = Lockstep::Frame::SCREEN_HEIGHT - Lockstep::Frame::TOP_BAR_HEIGHT;
+
+  /// Taps the first thing on the map that opens a system, and reports which one it focused.
+  ///
+  /// It presses rather than calling a focus method, for the reason every test in this file does:
+  /// what is under test is what a TAP does, and a focus reached any other way is not one.
+  [[nodiscard]] static std::int32_t TapASystem(Lockstep::MainPage& _page, Headless& _renderers)
+  {
+    _renderers.Begin();
+    DrawPage(_page, _renderers);
+
+    // A COPY, because the redraw after the tap rebuilds the list being walked.
+    const std::vector<Lockstep::MainPage::HitRegion> candidates = _page.Hits();
+    for (const Lockstep::MainPage::HitRegion& hit : candidates)
+    {
+      if (hit.action != Lockstep::MainPage::Action::OpenSystem || hit.index < 0)
+      {
+        continue;
+      }
+      (void)_page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+      return _page.FocusedSystem();
+    }
+    return Lockstep::EventRefs::NONE;
+  }
+
+  /// Where a system's ground point lands on the screen, through the camera as the last frame left
+  /// it. The page must have been drawn since the tap: `FrameContent` is what applies the aim, and
+  /// it runs when the map is drawn rather than when the tap is handled (ADR-115).
+  [[nodiscard]] static Neuron::OrbitCamera::ScreenPoint WhereOnScreen(const Lockstep::MainPage& _page, std::int32_t _system)
+  {
+    const Lockstep::SystemNode& node = _page.State().graph.systems[static_cast<std::size_t>(_system)];
+    return _page.Map().Camera().Project(Lockstep::MapView::Ground(node.positionX, node.positionY));
+  }
+
   TEST_METHOD(AWheelOverTheMapMovesTheCameraAndStopsAtTheEnds)
   {
     const auto simulation = PlayedMatch(0);
@@ -731,6 +808,94 @@ public:
 
     page.ResetView();
     Assert::IsTrue(page.Map().AtAuthoredFraming(), L"reset left the camera somewhere else");
+  }
+
+  // **A tap on a system puts that system in the middle of the map** (ADR-115), which is a claim
+  // about the camera rather than about the ring and the caption a focus also draws: it is asserted
+  // by projecting the system's own ground point and asking where on the pane it landed.
+  TEST_METHOD(ATapOnASystemCentersTheCameraOnIt)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    const std::int32_t system = TapASystem(page, renderers);
+    Assert::AreNotEqual(Lockstep::EventRefs::NONE, system, L"nothing on the map focused a system");
+
+    renderers.Begin();
+    DrawPage(page, renderers);
+
+    // Lifted when the same tap opened a sheet over the bottom of the pane, and dead centre when it
+    // did not: what is centred is the map that can still be seen.
+    const float lift = page.OpenPanel() == Lockstep::MainPage::Panel::None ? 0.0F : Lockstep::MainPage::FOCUS_LIFT_PIXELS;
+
+    const Neuron::OrbitCamera::ScreenPoint where = WhereOnScreen(page, system);
+    Assert::IsTrue(where.visible, L"the system the camera was aimed at does not project");
+    Assert::AreEqual(PANE_X + PANE_WIDTH * 0.5F, where.xPixels, 0.05F, L"the tapped system is not in the middle across");
+    Assert::AreEqual(Lockstep::Frame::TOP_BAR_HEIGHT + PANE_HEIGHT * 0.5F - lift, where.yPixels, 0.05F,
+                     L"the tapped system is not in the middle of the map that is showing");
+  }
+
+  // The tap that centres a system is also the tap that opens a sheet over the bottom of the pane
+  // (ADR-112), so the centring has to clear it -- a camera aimed at something behind a sheet has
+  // moved for nothing.
+  TEST_METHOD(ACenteredSystemIsNotLeftUnderTheSheet)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    Assert::IsTrue(OpenPlaceSheet(page, renderers), L"nothing on the map opened a place sheet");
+
+    const std::int32_t system = page.FocusedSystem();
+    Assert::AreNotEqual(Lockstep::EventRefs::NONE, system, L"the sheet opened about nothing");
+
+    const Lockstep::Frame::Box sheet = SheetBoundsOf(page);
+    Assert::IsTrue(sheet.height > 0.0F, L"the open sheet has no bounds to clear");
+
+    const Neuron::OrbitCamera::ScreenPoint where = WhereOnScreen(page, system);
+    Assert::IsTrue(where.visible);
+    Assert::IsTrue(where.yPixels < sheet.y, L"the sheet covers the system the camera was just aimed at");
+    Assert::IsTrue(where.yPixels > Lockstep::Frame::TOP_BAR_HEIGHT, L"the lift pushed the system off the top of the pane");
+  }
+
+  // **A snapshot takes the centring with it** (ADR-057): a position is only a system while the
+  // snapshot it came from is the current one, so a camera left aimed at the tenth system would be
+  // aimed at a different place a tick later.
+  TEST_METHOD(ATickFramesTheWholeGalaxyAgain)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    Assert::AreNotEqual(Lockstep::EventRefs::NONE, TapASystem(page, renderers), L"nothing on the map focused a system");
+    Assert::IsFalse(page.Map().AtAuthoredFraming(), L"a camera centred on a system reports itself where the map opened");
+
+    page.Create(ViewOfSeatZero(*simulation));
+    Assert::IsTrue(page.Map().AtAuthoredFraming(), L"the tick left the camera on a position from the last one");
+    Assert::AreEqual(Lockstep::EventRefs::NONE, page.FocusedSystem());
+  }
+
+  // And there is a way back, which is the same one the zoom and the orbit have: the chip is drawn
+  // because the camera is no longer where the map opened, and pressing it frames the galaxy again
+  // (ADR-090).
+  TEST_METHOD(ResetComesBackFromACenteringToo)
+  {
+    const auto simulation = PlayedMatch(0);
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+
+    Headless renderers;
+    Assert::AreNotEqual(Lockstep::EventRefs::NONE, TapASystem(page, renderers), L"nothing on the map focused a system");
+    Assert::IsFalse(page.Map().AtAuthoredFraming());
+
+    const bool reset = SweepFor(page, renderers, DrawPage, 400, TOP_BAR, SCREEN_WIDTH - ORDERS_RAIL, TOP_BAR + 40,
+                                [&page] { return page.Map().AtAuthoredFraming(); });
+    Assert::IsTrue(reset, L"nothing on the map pane takes a centring back");
+    Assert::AreNotEqual(Lockstep::EventRefs::NONE, page.FocusedSystem(), L"reset is about the camera and cleared the focus too");
   }
 };
 

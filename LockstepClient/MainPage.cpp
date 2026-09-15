@@ -76,7 +76,9 @@ void MainPage::Create(MatchState _state)
   m_sheetScroll = 0;
   m_sheetDragPixels = 0.0F;
   m_moveMode.reset();
-  m_focusedSystem = EventRefs::NONE;
+  // Which frames the whole galaxy again (ADR-115), because a position is not stable across a
+  // snapshot: a camera left centred on the tenth system would be centred on a different place.
+  FocusOn(EventRefs::NONE);
 
   // The arming is an index into the signal list, and the list is recomposed with the state. Kept,
   // it would be a row armed that nobody armed.

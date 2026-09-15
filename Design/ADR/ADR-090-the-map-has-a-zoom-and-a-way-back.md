@@ -1,6 +1,6 @@
 # ADR-090 - The map has a zoom, a way back, and labels that keep out of the way
 
-**Status:** Accepted
+**Status:** Accepted — its "pan is still absent and deliberately so" clause is revised by ADR-115 (2026-09-15): selecting a place centres the camera on it by panning the aim, and `AtAuthoredFraming` counts that as the camera having moved. Everything else here stands.
 
 **Date:** 2026-09-14
 **Decided by:** Build session, implementing `Design/Plans/UI-01-ClientImprovements.md` item 2.5 at the owner's instruction to work the plan.

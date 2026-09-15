@@ -241,22 +241,16 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
         return true;
       }
       const DigestEvent& event = m_state.digest[static_cast<std::size_t>(region->index)];
-      m_focusedSystem = event.refs.system;
+      FocusOn(event.refs.system);
       m_panel = Panel::None;
       return true;
     }
 
     case Action::FocusSystem:
-    {
-      // Bounds-checked against the SYSTEMS, which is the array this index names.
-      if (region->index < 0 || region->index >= static_cast<std::int32_t>(m_state.graph.systems.size()))
-      {
-        return true;
-      }
-      m_focusedSystem = region->index;
+      FocusOn(region->index);
       m_panel = Panel::None;
       return true;
-    }
+
     case Action::OpenSystem:
     case Action::OpenFleetsAt:
     {
@@ -271,7 +265,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       // **The disc and the badge beside it land here together** (ADR-079). They are two targets
       // because they name two things -- the system, and the ships standing on it -- and the sheet
       // holds both, so the disc opens it.
-      m_focusedSystem = region->index;
+      FocusOn(region->index);
       m_armedConcede = EventRefs::NONE;
 
       const bool yours = region->index >= 0 && region->index < static_cast<std::int32_t>(m_state.graph.systems.size()) &&

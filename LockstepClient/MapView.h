@@ -91,9 +91,12 @@ public:
   /// horizontally, and the vertical extent at the steepest pitch the camera is allowed to reach.
   /// So it never re-fits while the player orbits -- a camera that dollied in and out as you
   /// tilted it would be its own kind of wrong.
-  void FrameContent(const Neuron::OrbitCamera::WorldPoint& _center, float _groundRadius, float _height) noexcept
+  void FrameContent(const Neuron::OrbitCamera::WorldPoint& _center, float _groundRadius, float _height, float _liftPixels) noexcept
   {
-    m_camera.SetTarget(_center);
+    // **What is aimed at moves; what is FITTED does not** (ADR-115). The distance below is still
+    // solved from the whole galaxy, so centring a system slides the picture without changing its
+    // scale -- the zoom stays the one thing that does that, and it stays the player's (ADR-090).
+    m_camera.SetTarget(m_aimed ? m_aim : _center);
 
     const float halfVertical = Neuron::OrbitCamera::DEFAULT_FIELD_OF_VIEW_RADIANS * 0.5F;
     const float halfHorizontal = std::atan(std::tan(halfVertical) * m_viewportAspect);
@@ -105,6 +108,37 @@ public:
     // The authored distance, then the player's zoom. Dividing rather than multiplying because a
     // bigger zoom means a closer eye, and the factor reads as a magnification everywhere else.
     m_camera.SetDistance(std::max(forWidth, forHeight) * FRAMING_MARGIN / m_zoom);
+
+    // **After the distance, because a pan in pixels is measured at the target's depth** and the
+    // line above is what sets it. Only a camera that is aimed lifts: with nothing focused the
+    // framing has to be the authored one to the pixel, or `AtAuthoredFraming` is telling the
+    // player something false.
+    if (m_aimed && _liftPixels != 0.0F)
+    {
+      m_camera.PanPixels(0.0F, -_liftPixels);
+    }
+  }
+
+  /// Centres one place on the ground instead of the middle of the galaxy (ADR-115).
+  ///
+  /// **It is state rather than a call on the camera**, because `FrameContent` re-aims from scratch
+  /// on every frame -- the pane, the graph and the zoom all feed the distance it solves -- so a
+  /// `SetTarget` made when the tap landed would be gone by the next present.
+  void AimAt(const Neuron::OrbitCamera::WorldPoint& _ground) noexcept
+  {
+    m_aim = _ground;
+    m_aimed = true;
+  }
+
+  /// Back to framing the whole galaxy. What a new snapshot and `RESET` both do.
+  void AimAtContent() noexcept
+  {
+    m_aimed = false;
+  }
+
+  [[nodiscard]] bool Aimed() const noexcept
+  {
+    return m_aimed;
   }
 
   /// Moves the zoom by whole steps. Positive is in. True when it actually moved, which is false at
@@ -125,12 +159,16 @@ public:
     return m_zoom != was;
   }
 
-  /// Whether the camera is exactly where the map opened: the authored orientation and no zoom.
-  /// What decides whether `RESET` is drawn at all -- a control that does nothing is one to leave off
-  /// the screen rather than to draw dim (ADR-090).
+  /// Whether the camera is exactly where the map opened: the authored orientation, no zoom, and the
+  /// whole galaxy framed. What decides whether `RESET` is drawn at all -- a control that does
+  /// nothing is one to leave off the screen rather than to draw dim (ADR-090).
+  ///
+  /// **The aim counts, and it is the only way back from a centring** (ADR-115): a camera that has
+  /// been moved off the middle of the galaxy by a tap is one the player has to be able to undo, and
+  /// this predicate is what puts the chip on the screen to do it.
   [[nodiscard]] bool AtAuthoredFraming() const noexcept
   {
-    return m_zoom == 1.0F && m_camera.YawRadians() == DEFAULT_YAW_RADIANS && m_camera.PitchRadians() == DEFAULT_PITCH_RADIANS;
+    return !m_aimed && m_zoom == 1.0F && m_camera.YawRadians() == DEFAULT_YAW_RADIANS && m_camera.PitchRadians() == DEFAULT_PITCH_RADIANS;
   }
 
   /// Drag to orbit, as though the ground itself were under the finger: drag right and the galaxy
@@ -150,6 +188,7 @@ public:
   {
     m_camera.SetOrientation(DEFAULT_YAW_RADIANS, DEFAULT_PITCH_RADIANS);
     m_zoom = 1.0F;
+    m_aimed = false;
   }
 
   /// A point on the ground plane, from design coordinates.
@@ -174,6 +213,11 @@ private:
   float m_viewportAspect = 1.0F;
   /// A magnification of the authored framing, not a distance. 1.0 is what the map opens at.
   float m_zoom = 1.0F;
+
+  /// The ground point the camera is centred on, and whether it is centred on one at all. The
+  /// middle of the galaxy when it is not (ADR-115).
+  Neuron::OrbitCamera::WorldPoint m_aim = {0.0F, 0.0F, 0.0F};
+  bool m_aimed = false;
 };
 
 } // namespace Lockstep
