@@ -673,12 +673,53 @@ private:
   [[nodiscard]] DigestTarget TargetOf(const EventAction& _action) const noexcept;
   void DrawLocksRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
-  /// A circle lying ON the ground plane, projected. Shadows and the sealed region are both this:
-  /// what shape they make on screen is the camera's business, not theirs (ADR-017).
-  void DrawPanel(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
+  /// The sheet's own vocabulary, complete in `MainPageSheet.cpp` and nowhere else: what one row
+  /// says, one of the viewer's fleets on the place, one build tile, one block of the place sheet's
+  /// body, the whole of what a sheet has composed before any of it is drawn, and what its body came
+  /// to once laid out (ADR-052, ADR-107, ADR-111).
+  struct SheetRow;
+  struct PlaceFleet;
+  struct BuildTile;
+  struct SheetBlock;
+  struct Sheet;
+  struct SheetBody;
 
-  /// Text centred on a point, snapped to a whole pixel. Every centred label on the map goes
-  /// through this so that none of them lands on a half pixel.
+  /// One composition per panel kind, each writing only what it is about. The place sheet's is false
+  /// when the position it was opened on is not on the board, and then nothing is drawn at all.
+  [[nodiscard]] bool ComposePlaceSheet(Sheet& _sheet) const;
+  void ComposeSignalSheet(Sheet& _sheet) const;
+  void ComposeReplaySheet(Sheet& _sheet) const;
+
+  /// Lays the place sheet's body out as blocks against the room the frame has left it, pins the
+  /// FLEETS section when it fits, clamps the scroll, and records what the next notch can move
+  /// (ADR-111). Every sheet goes through it, so a notch over a sheet with no blocks moves nothing.
+  [[nodiscard]] SheetBody LayoutSheetBody(const Sheet& _sheet, float _widthPixels, float _bodyCapPixels);
+
+  /// The header: the disc, the name, the status slot, what the place is, and the `X` (ADR-111).
+  void DrawSheetHeader(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const Sheet& _sheet, bool _atLock, float _xPixels,
+                       float _yPixels, float _widthPixels);
+  /// The place sheet's body: the scrolled blocks, then the pinned ones, each drawn by its kind.
+  void DrawPlaceBody(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const Sheet& _sheet, const SheetBody& _body,
+                     float _xPixels, float _bodyTopPixels, float _widthPixels);
+  void DrawSheetBlock(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const Sheet& _sheet, const SheetBody& _body,
+                      const SheetBlock& _block, float _xPixels, float _yPixels, float _widthPixels);
+  /// One tile of the build grid, and the whole of it is the target (ADR-107).
+  void DrawBuildTile(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const BuildTile& _tile, float _xPixels, float _yPixels,
+                     float _widthPixels);
+  /// One fleet's row: a box, the name, what it is doing, and the one control on it (ADR-111).
+  void DrawFleetRow(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const PlaceFleet& _fleet, float _xPixels, float _yPixels,
+                    float _widthPixels);
+  /// The capped list, the line that counts what did not fit, then whatever is pinned below it
+  /// (ADR-093); `_rowYPixels` ends where the bottom bar begins.
+  void DrawSheetRows(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const Sheet& _sheet, std::size_t _shown, float _xPixels,
+                     float& _rowYPixels, float _widthPixels);
+  /// One row or one band, advancing `_rowYPixels` by what it took. A pinned row is an ordinary row
+  /// that is simply not counted, which is why there is one of these rather than two.
+  void DrawSheetRow(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const SheetRow& _row, Action _rowAction, float _xPixels,
+                    float& _rowYPixels, float _widthPixels, bool& _previousWasBand);
+
+  /// The sheet against the bottom of the map pane: composed, laid out, drawn (ADR-052, ADR-111).
+  void DrawPanel(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
   MatchState m_state;
 
