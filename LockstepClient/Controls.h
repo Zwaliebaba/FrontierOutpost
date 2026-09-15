@@ -1,6 +1,6 @@
 #pragma once
 
-// Controls.h -- one control vocabulary: four states and a lock, the ink table, and the button (ADR-110).
+// Controls.h -- one control vocabulary: four states and a lock, the ink table, and the button (ADR-111).
 //
 // The same five states are applied to a button, a tile, a sheet row and a rail row, and the hue never
 // changes between them -- only the fill, the border's style and the alpha -- so a player learns one
@@ -20,7 +20,7 @@ namespace Lockstep
 /// What a control IS, which is the whole of how it is drawn.
 ///
 /// **Four states and a lock, and the same five are applied to a button, a tile, a sheet row and a
-/// rail row** (ADR-110). The hue never changes between them -- only the fill, the border's style
+/// rail row** (ADR-111). The hue never changes between them -- only the fill, the border's style
 /// and the alpha -- so a player learns one vocabulary rather than one per surface, and a queued
 /// order looks the same wherever they meet it.
 enum class ControlState : std::uint8_t
@@ -53,7 +53,7 @@ struct ControlInk
 {
   /// Fully transparent for a state with no border.
   Neuron::Color border;
-  /// Dashed, which only `Inert` is (ADR-110).
+  /// Dashed, which only `Inert` is (ADR-111).
   bool dashed = false;
   /// Fully transparent for a state with no fill.
   Neuron::Color fill;
@@ -84,7 +84,7 @@ void DrawControlBox(Neuron::ShapeRenderer& _shapes, float _xPixels, float _yPixe
 
 /// One button, composed before it is measured and drawn.
 ///
-/// **A number never lives inside the label** (ADR-110). `BUILD 20 CR` was one string, so a queued
+/// **A number never lives inside the label** (ADR-111). `BUILD 20 CR` was one string, so a queued
 /// one became `BUILD 20 CR - QUEUED` and a dear one `BUILD 45 CR - NEED 19 MORE`: a label that
 /// grows a suffix every time the state changes, in a column that drops a button that does not fit.
 /// The number is its own cell, and the state is said by the chrome rather than spelled out.

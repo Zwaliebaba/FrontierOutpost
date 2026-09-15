@@ -716,7 +716,7 @@ void ComposeDigest(MatchState& _state, const Snapshot& _snapshot, const std::vec
 
     if (offeredRow != EventRefs::NONE)
     {
-      // `SHIPYARD JANDAL | 20 CR`: the price is on the button, in its own cell (ADR-053, ADR-110).
+      // `SHIPYARD JANDAL | 20 CR`: the price is on the button, in its own cell (ADR-053, ADR-111).
       const BuildRow& offered = _state.orders.builds[static_cast<std::size_t>(offeredRow)];
       event.actions.push_back(EventAction{.label = Shortened(offered.title),
                                           .number = std::format("{} CR", offered.cost),

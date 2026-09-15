@@ -172,7 +172,7 @@ constexpr std::uint8_t ROUTE_ALPHA = 180;
 /// usually get.
 constexpr float FLEET_END_CLEARANCE = 68.0F;
 
-// ---- The move being chosen on the map (ADR-113) ------------------------------------------------
+// ---- The move being chosen on the map (ADR-114) ------------------------------------------------
 
 /// A lit system's ring, in SCREEN pixels: it says *this is a target* rather than anything about how
 /// big the system is, so it does not grow with the camera the way a halo does.
@@ -199,7 +199,7 @@ constexpr float MOVE_ORIGIN_OFFSET = 1.0F;
 /// The lowest the pulse falls, which is also where it sits at phase zero.
 constexpr float MOVE_PULSE_FLOOR = 0.55F;
 
-/// The move target for one system, or nothing when the map is not offering it (ADR-113).
+/// The move target for one system, or nothing when the map is not offering it (ADR-114).
 [[nodiscard]] const MoveTarget* TargetFor(const MapFrame& _frame, std::int32_t _system) noexcept
 {
   for (const MoveTarget& target : _frame.moveTargets)
@@ -213,7 +213,7 @@ constexpr float MOVE_PULSE_FLOOR = 0.55F;
 }
 
 /// How strongly a lit system's ring is drawn this frame: 0.55 to 1 and back, and **0.55 at phase
-/// zero**, so a capture taken with the clock stopped is always the same picture (ADR-113).
+/// zero**, so a capture taken with the clock stopped is always the same picture (ADR-114).
 [[nodiscard]] float MovePulse(float _seconds) noexcept
 {
   const float phase = std::fmod(_seconds, MOVE_PULSE_SECONDS) / MOVE_PULSE_SECONDS;
@@ -632,11 +632,11 @@ void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFr
     _shapes.StrokeEllipse(top.xPixels, top.yPixels, radius * 3.0F, radius * 3.0F, Ink::TEXT_PRIMARY);
   }
 
-  // **A lit system, while a move is being chosen on this map** (ADR-113). The ring is in screen
+  // **A lit system, while a move is being chosen on this map** (ADR-114). The ring is in screen
   // pixels rather than multiples of the ball, because it says *this is a target* and a target is
   // the same size wherever the camera has put the system. The chosen one stops breathing and
   // becomes a solid ring with a wash inside it -- the committed treatment every other surface uses
-  // for *this is yours, it is queued* (ADR-110).
+  // for *this is yours, it is queued* (ADR-111).
   const MoveTarget* offered = _frame.moveOrigin == EventRefs::NONE ? nullptr : TargetFor(_frame, _index);
   if (offered != nullptr)
   {
@@ -730,7 +730,7 @@ void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFr
     }
   }
 
-  // **While a move is being chosen, a system is a destination or it is nothing at all** (ADR-113).
+  // **While a move is being chosen, a system is a destination or it is nothing at all** (ADR-114).
   // An unreachable one and a rival's are still drawn at their own ink -- the mode hides nothing --
   // and neither of them is a target, so a tap on one falls through to the map and leaves the mode,
   // which is what tapping the board means while a question is open.
@@ -781,7 +781,7 @@ void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFr
     // target grows and the drawing does not. A 44px badge beside a system name would be a different
     // map rather than a bigger box. The rectangle is centred on what is drawn, so where a finger
     // aims and where the eye aims are the same point.
-    // **The origin wears an outline while its fleet is being moved** (ADR-113), so the question
+    // **The origin wears an outline while its fleet is being moved** (ADR-114), so the question
     // *where is this going FROM* is answered on the map rather than only in the banner.
     if (yours && _index == _frame.moveOrigin)
     {
@@ -916,7 +916,7 @@ void DrawFleetOverlay(FontRenderer& _text, const MapFrame& _frame, std::vector<M
     const float clamped = std::clamp(head.xPixels, paneX + labelWidth * 0.5F + 4.0F, paneX + paneWidth - labelWidth * 0.5F - 4.0F);
     DrawCentered(_text, clamped, _labels.Place(clamped, labelY, FontRenderer::MeasurePixels(label)), label, owner);
 
-    // **No marker is a target while a move is being chosen** (ADR-113): the only things the map
+    // **No marker is a target while a move is being chosen** (ADR-114): the only things the map
     // offers then are the systems this fleet may be sent to, and a tap anywhere else leaves the
     // mode.
     if (_frame.moveOrigin == EventRefs::NONE)
@@ -950,7 +950,7 @@ struct MapPass
   /// The map pane's left edge, which the focus caption and the legend both start from. The width
   /// and the height are the viewport's, set once in `BeginMap` and never read again.
   float paneX = 0.0F;
-  /// Whether a move is being chosen on this map, which changes what every phase draws (ADR-113).
+  /// Whether a move is being chosen on this map, which changes what every phase draws (ADR-114).
   bool moving = false;
 
   [[nodiscard]] Neuron::OrbitCamera::ScreenPoint Project(const Neuron::OrbitCamera::WorldPoint& _world) const
@@ -1057,7 +1057,7 @@ void DrawLanes(ShapeRenderer& _shapes, FontRenderer& _text, const MapPass& _pass
     _pass.labels.lanes.push_back(LabelField::Segment{a.xPixels, a.yPixels, b.xPixels, b.yPixels});
 
     // **While a move is being chosen, a lane is either an offer or it is out of the way**
-    // (ADR-113). The ones out of the origin that lead somewhere the fleet may go are drawn in blue
+    // (ADR-114). The ones out of the origin that lead somewhere the fleet may go are drawn in blue
     // with the dashes marching toward the destination, and the one already chosen is solid; every
     // other lane on the plane drops to a hairline, so the blue on the map is the choice and nothing
     // else. The tick cost drops with its lane, because the chip under the lit system's name carries
@@ -1284,7 +1284,7 @@ void DrawFocusCaption(FontRenderer& _text, const MapPass& _pass)
   // longer captioned with a census -- that is on the top bar now -- and says instead what it is
   // currently pointed at, because the digest can point it somewhere.
   //
-  // **The move mode's banner takes this corner** (ADR-113), so it is not drawn under one: the
+  // **The move mode's banner takes this corner** (ADR-114), so it is not drawn under one: the
   // banner is interface and this is world text, and interface is drawn second -- a caption left
   // here would be a caption the banner cannot cover.
   if (!_pass.moving)

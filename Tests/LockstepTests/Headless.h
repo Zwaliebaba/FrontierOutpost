@@ -286,7 +286,7 @@ inline void DrawSeats(Lockstep::SeatsPage& _page, Headless& _renderers)
 }
 
 /// Every control ON THE OPEN SHEET that is about a fleet: the `MOVE` on one that is standing, and
-/// the `TAKE BACK` on one with a move queued (ADR-111).
+/// the `TAKE BACK` on one with a move queued (ADR-112).
 [[nodiscard]] inline std::vector<Lockstep::MainPage::HitRegion> FleetControlsOn(const Lockstep::MainPage& _page)
 {
   const Lockstep::Frame::Box sheet = SheetBoundsOf(_page);
@@ -310,7 +310,7 @@ inline void DrawSeats(Lockstep::SeatsPage& _page, Headless& _renderers)
 }
 
 /// Opens a PLACE sheet by pressing what opens one, and leaves the page drawn so its hit list is the
-/// sheet's (ADR-058, ADR-107, ADR-111). `_system` is a position, or `NONE` for whichever opens
+/// sheet's (ADR-058, ADR-107, ADR-112). `_system` is a position, or `NONE` for whichever opens
 /// first.
 ///
 /// It presses rather than setting a field for the reason every test in this file does: what is
@@ -349,7 +349,7 @@ inline void DrawSeats(Lockstep::SeatsPage& _page, Headless& _renderers)
 ///
 /// **`ToggleBuild` is not enough to identify one.** Two other controls take the same order back: the
 /// digest's priced build button used to place it from the other side of the screen (ADR-053), and
-/// the locks rail's `×` takes a queued one back from the right-hand column (ADR-112). That is
+/// the locks rail's `×` takes a queued one back from the right-hand column (ADR-113). That is
 /// correct and is why the guard behind all three is one. What tells them apart is the column: a
 /// sheet is drawn over the map pane and never into a rail.
 [[nodiscard]] inline std::vector<Lockstep::MainPage::HitRegion> TilesOn(const Lockstep::MainPage& _page)

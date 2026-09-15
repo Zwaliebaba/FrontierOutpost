@@ -1,4 +1,4 @@
-# ADR-113 — A move is chosen on the map
+# ADR-114 — A move is chosen on the map
 
 **Status:** Accepted
 
@@ -27,7 +27,7 @@ step between deciding and doing. It is editable until the lock (ADR-031), so the
 one more trip through the same sheet, but a slip is still the commonest thing that happens to a list
 of near-identical rows under a thumb.
 
-Since ADR-111 the fleets are on the place sheet and `MOVE ›` is the control that leads here, so the
+Since ADR-112 the fleets are on the place sheet and `MOVE ›` is the control that leads here, so the
 picker is now reached from exactly one place — which is the moment to ask whether it should exist.
 
 ## Options considered
@@ -122,7 +122,7 @@ clock at zero, where the pulse sits at its floor, and makes `Animating()` false 
 Every headless test already gets phase zero by never calling `Update`.
 
 **7. `X` and not `×`, because the font does not have one.** `FontRenderer::GlyphOf` falls back to a
-BLANK for a codepoint that was not baked, so the rail's take-back cell (ADR-112) drew nothing at all
+BLANK for a codepoint that was not baked, so the rail's take-back cell (ADR-113) drew nothing at all
 until this was found. The alphabet is ADR-014's list baked by ADR-073 — printable ASCII plus `·`,
 `–`, `‹`, `›`, `→` and `−` — and the handoff draws three characters outside it: `×`, `…` and `↓`.
 The cell says `X`, the strip's header before a selection is `FLT 1 →` with nothing after it, and its
@@ -147,7 +147,7 @@ is on, which is a frame a second for as long as somebody is deciding. `--still` 
 back.
 
 **`ADR-079`'s open question is answered twice over.** The badge and the disc behaved differently at
-the lock because they opened different things (ADR-111 made them open one sheet); and a badge over a
+the lock because they opened different things (ADR-112 made them open one sheet); and a badge over a
 single fleet now skips that sheet entirely, which is the behaviour the badge was introduced to make
 possible.
 

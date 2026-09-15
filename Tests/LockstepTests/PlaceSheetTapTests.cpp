@@ -1,5 +1,5 @@
 // PlaceSheetTapTests.cpp -- the place sheet, tapped: opening it, the build queue and its tiles
-// (ADR-107), the sheet itself (ADR-111), and the purse it prices against (ADR-078).
+// (ADR-107), the sheet itself (ADR-112), and the purse it prices against (ADR-078).
 
 #include "pch.h"
 #include "CppUnitTest.h"
@@ -28,7 +28,7 @@ TEST_CLASS(OpenSheetTapTests)
 public:
   TEST_METHOD(ASheetSurvivesTheLockAndStillTakesNoOrder)
   {
-    // The place sheet, which since ADR-111 is the sheet an order is given on and so the one it
+    // The place sheet, which since ADR-112 is the sheet an order is given on and so the one it
     // matters most that the lock does not take away.
     const auto simulation = PlayedMatch(0);
     Lockstep::MainPage page;
@@ -117,7 +117,7 @@ public:
     Assert::IsTrue(page.State().orders.builds.front().cost > 0, L"and every row carries its price");
     Assert::IsTrue(page.State().player.credits >= page.State().orders.builds.front().cost, L"the opening purse covers one building");
 
-    // **It takes two taps now and it used to take one** (ADR-111): no digest control places an
+    // **It takes two taps now and it used to take one** (ADR-112): no digest control places an
     // order any more, so the first tap opens the place the order is about and the second gives it.
     // The sweep is about the second, and `_ensure` is what keeps the sheet in front of it -- a
     // stray tap on an unclaimed disc closes it, and a sweep hunting for a tile behind a closed
@@ -140,7 +140,7 @@ public:
 
   TEST_METHOD(NoDigestControlPlacesAnOrderDirectly)
   {
-    // **The sheet is the only door an order goes through** (ADR-111). The digest still carries the
+    // **The sheet is the only door an order goes through** (ADR-112). The digest still carries the
     // controls -- a priced build, a move -- and each of them is a LINK to the place it is about, so
     // a player who taps one lands somewhere they can see what they are spending against rather than
     // committing from a column that shows them neither the purse nor the queue.
@@ -544,7 +544,7 @@ public:
 // buttons drew and the taps landed, and with two offers open they would have answered the wrong
 // one, or one of them would have had to wait a lock it could expire in (ADR-068).
 // The place sheet: one system, what it can build and what is standing on it, in one sheet reached
-// from every door (ADR-111). What is asserted here is the two rules that are new -- the sheet stays
+// from every door (ADR-112). What is asserted here is the two rules that are new -- the sheet stays
 // inside half the map pane, and the section carrying the move stays reachable when the rest of the
 // body has to scroll to make that true.
 TEST_CLASS(PlaceSheetTapTests)
@@ -619,7 +619,7 @@ public:
 
   TEST_METHOD(TheFleetsSectionStaysReachableWhileTheGridScrolls)
   {
-    // **The move is what a pinned section is for** (ADR-093's shape, ADR-111's subject): the grid is
+    // **The move is what a pinned section is for** (ADR-093's shape, ADR-112's subject): the grid is
     // what overflows and the fleets are what a player came for, so the fleets are pinned above the
     // bar and the grid is what a notch moves.
     std::int32_t system = Lockstep::EventRefs::NONE;
@@ -654,7 +654,7 @@ public:
   TEST_METHOD(AQueuedMoveIsTakenBackFromTheSheetItWasGivenOn)
   {
     // The third place an order can be taken back, and the one the player is already looking at
-    // (ADR-111). A fleet with a move queued wears the same committed state a queued build does.
+    // (ADR-112). A fleet with a move queued wears the same committed state a queued build does.
     std::int32_t system = Lockstep::EventRefs::NONE;
     Lockstep::MainPage page;
     page.Create(AFullPlace(system));

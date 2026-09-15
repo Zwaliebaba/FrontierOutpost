@@ -119,12 +119,12 @@ real perspective orbit camera that you drag to look around, with a procedural st
 Systems rise on stems above their shadows; a fleet under way is a line of travelling dots along its
 lane with a marker and a tick-ETA; trade lanes, proposed lanes, sieges, custodians and the sealed
 region are all drawn as what they are. **Tapping a system you hold opens the sheet of that PLACE**
-(ADR-111) — everything it can do this tick, and the only surface an order is given on. Its build
+(ADR-112) — everything it can do this tick, and the only surface an order is given on. Its build
 half is a 2×2 grid of tiles, one per role, each carrying its glyph, the level it would build as a
 ladder of three, what that level pays and how many ticks it takes, and its price; a system already
 building shows the tile that is rising with a progress bar and the tiles beside it inert and priced,
 so there is still something to plan against (ADR-070, ADR-107). Under it, the fleets standing there,
-each with a `MOVE ›`. **A move is then chosen on the MAP** (ADR-113): the sheet collapses to a strip,
+each with a `MOVE ›`. **A move is then chosen on the MAP** (ADR-114): the sheet collapses to a strip,
 the systems one lane away light with a pulsing ring and an arrival chip, and the strip's one filled
 button sends the fleet — lighting a system is a selection and the button is the order. Each
 candidate says who is standing there and with how many ships — *P3 - 11 +DEF* — though not yet how
@@ -134,7 +134,7 @@ your map at the state you last saw it. The tick it was last seen travels in the 
 drawn yet.
 
 **The locks rail, right — the receipt, and the way back to what it lists.** What goes in when the
-clock hits zero, as **one list of one row shape** (ADR-112): a build and a move are the same row —
+clock hits zero, as **one list of one row shape** (ADR-113): a build and a move are the same row —
 what it is, where, the number it costs or the tick it lands on, and an `X` that takes it back —
 followed by what an earlier lock already took, and then a dim row per fleet with no move at all.
 Under that, `PLACES`: one row per system you hold, what it yields, what is standing on it and how

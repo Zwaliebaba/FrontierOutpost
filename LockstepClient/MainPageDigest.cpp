@@ -1,9 +1,9 @@
 // MainPageDigest.cpp -- the digest rail: cards laid out and then drawn, each with its buttons.
 //
 // **The digest is the order surface** (ADR-034): every event carries what can be done about it, and
-// since ADR-111 each of those buttons is a link to the place the order is given at. The column pages
+// since ADR-112 each of those buttons is a link to the place the order is given at. The column pages
 // by cards rather than scrolling (ADR-080), and it fades to 55% while the map is taking a move
-// (ADR-113) -- every ink here goes through `Faded`.
+// (ADR-114) -- every ink here goes through `Faded`.
 
 #include "pch.h"
 #include "MainPage.h"
@@ -27,7 +27,7 @@ using Neuron::Face;
 using Neuron::FontRenderer;
 using Neuron::ShapeRenderer;
 
-/// What a tap does, which the rows composed in here have to name (ADR-112). The page's own enum,
+/// What a tap does, which the rows composed in here have to name (ADR-113). The page's own enum,
 /// aliased rather than qualified thirty times.
 using Action = MainPage::Action;
 
@@ -95,7 +95,7 @@ MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::uint32_t
   {
     layout.height += 4.0F + (1.0F + static_cast<float>(layout.verdictDetail.size())) * lines + 6.0F;
   }
-  // **The action row is a BUTTON tall plus its two gaps** (ADR-100, ADR-110). It reserved one
+  // **The action row is a BUTTON tall plus its two gaps** (ADR-100, ADR-111). It reserved one
   // `LINE_HEIGHT` while a button was 18 and centred on that line's baseline, which was near enough
   // to true to go unnoticed; at 44 the button reached a whole line above its row and painted over
   // the detail line there. A row that reserves less than it draws is the defect `LINE_HEIGHT` was
@@ -108,7 +108,7 @@ MainPage::CardLayout MainPage::LayoutCard(const DigestCard& _card, std::uint32_t
   return layout;
 }
 
-/// One button's whole ink at the share the digest wears while the map is taking a move (ADR-113).
+/// One button's whole ink at the share the digest wears while the map is taking a move (ADR-114).
 ///
 /// **A button's ink is a bundle rather than one colour**, so it is faded a field at a time on its
 /// way to `DrawButton`. Every band, rule and label on this column went through `Faded` and the
@@ -130,7 +130,7 @@ MainPage::ControlInk MainPage::FadedInk(ControlInk _ink) const
 /// everyone else reads the tick and what is on the column (ADR-094).
 float MainPage::DrawDigestHeader(ShapeRenderer& _shapes, FontRenderer& _text)
 {
-  // **Every ink on this column goes through `Faded`** (ADR-113): while the map is taking a move the
+  // **Every ink on this column goes through `Faded`** (ADR-114): while the map is taking a move the
   // digest stays readable at 55% and records no hit, so the one filled control on the screen is the
   // confirm strip's `SEND` (ADR-089). A button's ink is a bundle rather than one colour, so it is
   // faded a field at a time on its way to `DrawButton`.
@@ -314,7 +314,7 @@ void MainPage::DrawDigestCard(ShapeRenderer& _shapes, FontRenderer& _text, const
 /// cell: a state change that changed a label's width would change which buttons a card shows.
 void MainPage::DrawDigestActions(ShapeRenderer& _shapes, FontRenderer& _text, const DigestCard& _card, std::int32_t& _lineYPixels)
 {
-  // **A gap above and below, and the hit fills both** (ADR-110). A button is 28 and a target is
+  // **A gap above and below, and the hit fills both** (ADR-111). A button is 28 and a target is
   // 44, so the eight pixels either side are what the grown rectangle reaches into -- which is
   // why they are reserved here rather than left as whatever the line before happened to leave.
   _lineYPixels += static_cast<std::int32_t>(BUTTON_GAP);
@@ -328,7 +328,7 @@ void MainPage::DrawDigestActions(ShapeRenderer& _shapes, FontRenderer& _text, co
     // control can be and the rest cannot. It is the same state a queued tile and a queued rail
     // row wear, and it is still a target, because every order is editable until the lock.
     //
-    // A build has two more states and the NUMBER SEGMENT says which (ADR-053, ADR-110): queued,
+    // A build has two more states and the NUMBER SEGMENT says which (ADR-053, ADR-111): queued,
     // so the next tap is known to take it back; or beyond the purse, dashed and dim with what is
     // missing, because the lock would refuse it and a refusal a tick later is the worst way to
     // learn a price.
@@ -387,7 +387,7 @@ void MainPage::DrawDigestActions(ShapeRenderer& _shapes, FontRenderer& _text, co
       button.state = ControlState::Primary;
     }
 
-    // **Wide enough for a finger as well as for its label** (ADR-100, ADR-110). The box is what
+    // **Wide enough for a finger as well as for its label** (ADR-100, ADR-111). The box is what
     // the two cells need; the target is grown around it, because a row of buttons with gaps
     // between them is the isolated-chip case rather than the column one.
     float width = ButtonWidth(button);
@@ -400,7 +400,7 @@ void MainPage::DrawDigestActions(ShapeRenderer& _shapes, FontRenderer& _text, co
                          m_pointerXPixels >= buttonX && m_pointerXPixels < buttonX + width && m_pointerYPixels >= buttonY &&
                          m_pointerYPixels < buttonY + BUTTON_HEIGHT;
 
-    // **A committed control says what the next tap does while the finger is on it** (ADR-110),
+    // **A committed control says what the next tap does while the finger is on it** (ADR-111),
     // so taking an order back is never a surprise. The width is remeasured, because `TAKE BACK`
     // is not the width of the label it replaces -- and it is clamped to the resting width, so a
     // button under the pointer never pushes the one beside it along.
@@ -473,7 +473,7 @@ void MainPage::DrawDigestPageBand(ShapeRenderer& _shapes, FontRenderer& _text, c
 /// **This is the order surface**: the thing a player wants to do is always about something that
 /// happened, so the controls are on the card rather than in a menu somewhere else. The column pages
 /// by whole cards (ADR-080), and while the map is taking a move every ink on it goes through
-/// `FadedInk` and it records no hit at all (ADR-113).
+/// `FadedInk` and it records no hit at all (ADR-114).
 void MainPage::DrawDigestRail(ShapeRenderer& _shapes, FontRenderer& _text)
 {
   float y = DrawDigestHeader(_shapes, _text);
@@ -549,7 +549,7 @@ MainPage::DigestTarget MainPage::TargetOf(const EventAction& _action) const noex
   case EventActionKind::RedirectFleet:
   {
     // **No digest control places an order any more; each of them opens the place the order is
-    // about** (ADR-111). A move is given on the map from the sheet for the system the fleet is
+    // about** (ADR-112). A move is given on the map from the sheet for the system the fleet is
     // standing on, so the index this screen needs is that SYSTEM and not the fleet the digest
     // named -- which is the whole reason a digest button's action and its index are chosen
     // together (ADR-057).

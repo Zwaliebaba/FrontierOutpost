@@ -215,7 +215,7 @@ struct Screen
   // ---- And with a move on the map --------------------------------------------------------------
   //
   // **The banner and the confirm strip carry the only sentence on this screen that is not in a card
-  // or a help line** (ADR-113) -- *Tap a lit system.* -- beside a banner and a strip header full of
+  // or a help line** (ADR-114) -- *Tap a lit system.* -- beside a banner and a strip header full of
   // labels. The mode is drawn twice: once before a destination is lit, because the header and the
   // bar both change wording when one is, and once after.
   for (const Lockstep::MainPage::HitRegion& hit : std::vector<Lockstep::MainPage::HitRegion>(main.Hits()))
@@ -322,7 +322,7 @@ public:
     // **A codepoint the bake does not know draws a BLANK and says nothing about it**
     // (`FontRenderer::GlyphOf` falls back to the face's first glyph, which is a space). So a `×` in
     // a control's label is a control with nothing on it, and the only way to find out is to look at
-    // a capture -- which is how ADR-112's take-back cell was caught, one commit before it shipped.
+    // a capture -- which is how ADR-113's take-back cell was caught, one commit before it shipped.
     //
     // The alphabet is ADR-014's list, baked by ADR-073: printable ASCII plus `·`, `–`, `‹`, `›`,
     // `→` and `−`. Adding to it is a re-bake and a font decision, not a layout change, which is why

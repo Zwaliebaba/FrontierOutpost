@@ -4,7 +4,7 @@
 // and keeps almost no state, so its seams are the panes it draws: the top bar, the map, the digest,
 // the locks rail, the sheet and the move mode are each a `MainPage<Pane>.cpp`; the taps, drags,
 // notches and keys are `MainPageInput.cpp`; what every one of them shares is `MainPageParts.h`, and
-// the control vocabulary they draw with is `Controls.h` (ADR-110). This unit holds the rest: creation,
+// the control vocabulary they draw with is `Controls.h` (ADR-111). This unit holds the rest: creation,
 // the sentences the panes borrow, the clock, and the frame's dispatch.
 //
 // Design/UI/SCREENS.md 01 is the spec and every number here comes from it or from
@@ -157,7 +157,7 @@ void MainPage::Update(double _elapsedSeconds)
   // resolves, and a route that froze the moment the orders locked would say the opposite
   // (ADR-055).
   //
-  // **`--still` holds it at zero** (ADR-113). Everything that moves on this screen is a pure
+  // **`--still` holds it at zero** (ADR-114). Everything that moves on this screen is a pure
   // function of this number, so a capture taken with it stopped is always the same picture -- which
   // is what a ring that breathes and a lane whose dashes march would otherwise have taken away.
   if (!m_still)
@@ -188,7 +188,7 @@ void MainPage::Update(double _elapsedSeconds)
 
 bool MainPage::Animating() const noexcept
 {
-  // **Nothing moves on its own while the clock is held** (ADR-113): `--still` is for a capture, and
+  // **Nothing moves on its own while the clock is held** (ADR-114): `--still` is for a capture, and
   // a capture of a page that asks for a frame every frame is a capture that never settles.
   if (m_still)
   {

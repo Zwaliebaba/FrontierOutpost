@@ -1,4 +1,4 @@
-// RailTapTests.cpp -- the locks rail, tapped: its rows as links and its one take-back cell (ADR-112),
+// RailTapTests.cpp -- the locks rail, tapped: its rows as links and its one take-back cell (ADR-113),
 // and the band that scrolls (ADR-101).
 
 #include "pch.h"
@@ -75,7 +75,7 @@ public:
 
   TEST_METHOD(TheTakeBackCellUnqueuesTheOrderItsRowIsAbout)
   {
-    // **The `×` is its own 44-pixel cell and the rest of the row is the link** (ADR-112). One row
+    // **The `×` is its own 44-pixel cell and the rest of the row is the link** (ADR-113). One row
     // shape for two kinds of order, so the cell has to name two different arrays -- a build row and
     // a fleet -- and it does that with two actions rather than one index that means both (ADR-057).
     const auto simulation = PlayedMatch(0);
@@ -106,7 +106,7 @@ public:
 
   TEST_METHOD(AnUnorderedFleetIsARowOfItsOwn)
   {
-    // **The one thing this column never said** (ADR-112): a fleet with nothing to do is invisible on
+    // **The one thing this column never said** (ADR-113): a fleet with nothing to do is invisible on
     // every other surface of this screen, so a player reading a list of what goes in at the lock had
     // no way to see what does not.
     const auto simulation = PlayedMatch(0);
@@ -132,7 +132,7 @@ public:
 
   TEST_METHOD(APlacesRowOpensThePlaceItNames)
   {
-    // `PLACES` replaces `FLEETS` and `BUILDS` (ADR-112): one row per system you hold, and the row is
+    // `PLACES` replaces `FLEETS` and `BUILDS` (ADR-113): one row per system you hold, and the row is
     // the shortest route to everything that system can do this tick.
     const auto simulation = PlayedMatch(4);
     Lockstep::MainPage page;

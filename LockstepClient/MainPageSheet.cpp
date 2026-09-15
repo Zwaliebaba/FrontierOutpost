@@ -1,6 +1,6 @@
 // MainPageSheet.cpp -- the sheets: the place sheet's tiles and fleets, the signal picker, the replay.
 //
-// **A sheet is about a PLACE and it is the only door an order goes through** (ADR-111). It holds what
+// **A sheet is about a PLACE and it is the only door an order goes through** (ADR-112). It holds what
 // the system can build as a grid of tiles (ADR-107) and the fleets standing on it, its body scrolls
 // by blocks, and it may take half the map pane and no more (ADR-052). The other two sheets are
 // columns of rows in the same frame.
@@ -27,7 +27,7 @@ using Neuron::Face;
 using Neuron::FontRenderer;
 using Neuron::ShapeRenderer;
 
-/// What a tap does, which the rows composed in here have to name (ADR-112). The page's own enum,
+/// What a tap does, which the rows composed in here have to name (ADR-113). The page's own enum,
 /// aliased rather than qualified thirty times.
 using Action = MainPage::Action;
 
@@ -59,7 +59,7 @@ enum class TileState : std::uint8_t
   Propose,
 };
 
-/// Which of the four control states one of a tile's seven falls into (ADR-107, ADR-110).
+/// Which of the four control states one of a tile's seven falls into (ADR-107, ADR-111).
 ///
 /// **Seven states and four treatments, and that is the point of the table rather than a loss.** The
 /// seven say WHY -- rising is not queued and blocked is not dear -- and the tile says which in its
@@ -178,7 +178,7 @@ void DrawBuildIcon(ShapeRenderer& _shapes, std::uint8_t _kind, bool _lane, float
   }
 }
 
-/// One unit of the place sheet's body, which is what that body scrolls by (ADR-111).
+/// One unit of the place sheet's body, which is what that body scrolls by (ADR-112).
 enum class BlockKind : std::uint8_t
 {
   BuildBand,
@@ -253,7 +253,7 @@ struct MainPage::SheetRow
   Color detailInk = Ink::TEXT_MUTED;
 };
 
-/// One of the viewer's fleets on the place this sheet is about (ADR-111).
+/// One of the viewer's fleets on the place this sheet is about (ADR-112).
 ///
 /// **A boxed row rather than a divided one**, because it is the one row on this sheet that
 /// carries a control: the box is what says the button inside it belongs to this fleet and not to
@@ -301,7 +301,7 @@ struct MainPage::BuildTile
   /// Whether the bottom line's left end is set in the Medium cut. It is on every tile whose left
   /// end is a number the player is deciding by, and not on one that is only reporting.
   bool stateIsMedium = true;
-  /// Whether an inert tile's reason is money, which is the one an amber note is for (ADR-110).
+  /// Whether an inert tile's reason is money, which is the one an amber note is for (ADR-111).
   bool moneyReason = false;
   /// The build row this tile queues or unqueues, or `EventRefs::NONE` for one that is only read.
   std::int32_t target = EventRefs::NONE;
@@ -317,7 +317,7 @@ struct MainPage::SheetBlock
 };
 
 /// Everything one sheet says, composed in full before any of it is drawn -- the pass that measures
-/// and the pass that draws read one record, so they cannot disagree (ADR-052, ADR-111).
+/// and the pass that draws read one record, so they cannot disagree (ADR-052, ADR-112).
 struct MainPage::Sheet
 {
   std::vector<SheetRow> rows;
@@ -328,7 +328,7 @@ struct MainPage::Sheet
   std::vector<SheetRow> pinned;
 
   /// The place sheet's two bodies, which are a grid and a short list rather than a column of rows
-  /// (ADR-107, ADR-111). Exactly one of these and `rows` is filled.
+  /// (ADR-107, ADR-112). Exactly one of these and `rows` is filled.
   std::vector<BuildTile> tiles;
   std::vector<PlaceFleet> fleets;
 
@@ -359,7 +359,7 @@ struct MainPage::Sheet
   Action rowAction = Action::None;
 };
 
-/// What the place sheet's body came to once it was laid out (ADR-111): its blocks, where the pinned
+/// What the place sheet's body came to once it was laid out (ADR-112): its blocks, where the pinned
 /// FLEETS section starts, and how much of the rest this frame draws.
 struct MainPage::SheetBody
 {
@@ -412,7 +412,7 @@ void MainPage::ReopenPanel(Panel _panel, std::int32_t _subjectId, std::int32_t _
 
 void MainPage::OpenPlace(std::int32_t _system)
 {
-  // **A sheet and the move mode are alternatives, not layers** (ADR-113). The mode is played on the
+  // **A sheet and the move mode are alternatives, not layers** (ADR-114). The mode is played on the
   // map and a sheet covers it, so opening one is leaving the other -- the same trade `EnterMove`
   // makes in the other direction when it collapses the sheet it was entered from.
   ExitMove();
@@ -432,7 +432,7 @@ bool MainPage::ScrollSheet(std::int32_t _blocks)
     return false;
   }
   // Clamped against the last frame's measurement, which is the only thing that knows how many
-  // blocks the body came to and how many of them fit (ADR-111). A frame old, like every other hit
+  // blocks the body came to and how many of them fit (ADR-112). A frame old, like every other hit
   // test on this screen.
   const auto top = static_cast<std::int32_t>(m_sheetScroll) + _blocks;
   const auto most = static_cast<std::int32_t>(m_sheetBlocks > m_sheetBlocksShown ? m_sheetBlocks - m_sheetBlocksShown : 0);
@@ -457,7 +457,7 @@ bool MainPage::ComposePlaceSheet(Sheet& _sheet) const
   _sheet.barLabel = "DONE";
   _sheet.rowAction = Action::ToggleBuild;
 
-  // **What the place IS, in the words the rest of the screen uses** (ADR-111). It is the one
+  // **What the place IS, in the words the rest of the screen uses** (ADR-112). It is the one
   // thing a sheet titled with a name cannot say for itself, and it is what the digest's `MAP`
   // chip and the rail's `PLACES` row were the only places to read.
   _sheet.headerFacts = "YOURS";
@@ -622,7 +622,7 @@ bool MainPage::ComposePlaceSheet(Sheet& _sheet) const
     }
 
     // Chosen after the switch above, because whether an inert tile's reason is MONEY is what
-    // decides the colour of its note and only the switch knows (ADR-110).
+    // decides the colour of its note and only the switch knows (ADR-111).
     tile.ink = InkFor(state, tile.moneyReason);
 
     // Nothing on a sheet is a target while the orders are locked or the link is down (ADR-065,
@@ -650,7 +650,7 @@ bool MainPage::ComposePlaceSheet(Sheet& _sheet) const
                            { return TileSlotOf(_a.kind, _a.lane) < TileSlotOf(_b.kind, _b.lane); });
   _sheet.buildCount = std::format("{} AVAIL · 1 AT A TIME", startable);
 
-  // ---- The fleets standing here (ADR-111) -----------------------------------------------------
+  // ---- The fleets standing here (ADR-112) -----------------------------------------------------
   //
   // **The move order's door, and the only one that is about this place.** A fleet used to be
   // reached from a row on the locks rail, which meant the two orders a player can give entered
@@ -670,7 +670,7 @@ bool MainPage::ComposePlaceSheet(Sheet& _sheet) const
     row.detail = ordered ? std::format("{} → {} · T{}", ships, NameOfSystem(m_state, fleet.to), fleet.eta) : ships + " · HOLDING";
 
     // A queued move wears the same committed state a queued build does, and takes itself back
-    // the same way (ADR-110). An unordered fleet is the outlined way on to the map.
+    // the same way (ADR-111). An unordered fleet is the outlined way on to the map.
     row.button.label = ordered ? "TAKE BACK" : "MOVE ›";
     row.button.state = !OrdersEditable() ? ControlState::Locked : (ordered ? ControlState::Committed : ControlState::Outlined);
     row.action = !OrdersEditable() ? Action::None : (ordered ? Action::CancelFleetOrder : Action::BeginMove);
@@ -764,7 +764,7 @@ void MainPage::ComposeReplaySheet(Sheet& _sheet) const
 
 MainPage::SheetBody MainPage::LayoutSheetBody(const Sheet& _sheet, float _widthPixels, float _bodyCapPixels)
 {
-  // ---- The place sheet's body, as blocks (ADR-111) ---------------------------------------------
+  // ---- The place sheet's body, as blocks (ADR-112) ---------------------------------------------
   //
   // **A block is the unit this body scrolls by**, and the list is composed before anything is drawn
   // for the reason a digest card's height is: the scroll position is an index into it, and a pass
@@ -801,7 +801,7 @@ MainPage::SheetBody MainPage::LayoutSheetBody(const Sheet& _sheet, float _widthP
     }
   }
 
-  // ---- What the body gets, and what scrolls (ADR-111) ------------------------------------------
+  // ---- What the body gets, and what scrolls (ADR-112) ------------------------------------------
   //
   // **A sheet may take half the map pane and no more** (ADR-052), and the place sheet is the first
   // body in this client that can want more than that: a full grid, a divider, a band and two fleets
@@ -820,7 +820,7 @@ MainPage::SheetBody MainPage::LayoutSheetBody(const Sheet& _sheet, float _widthP
 
   const bool scrolls = bodyHeight > _bodyCapPixels;
 
-  // **The whole FLEETS section is pinned, or none of it is** (ADR-093's shape, ADR-111's subject).
+  // **The whole FLEETS section is pinned, or none of it is** (ADR-093's shape, ADR-112's subject).
   // Pinning the band alone would put the label above the bottom bar and leave `MOVE` behind the
   // scroll, which is the opposite of what pinning it is for; pinning a couple of rows and hiding
   // the rest would be a sheet that quietly forgets a fleet. So it is pinned when the whole section
@@ -893,7 +893,7 @@ void MainPage::DrawSheetHeader(ShapeRenderer& _shapes, FontRenderer& _text, cons
   if (_sheet.headerDisc.alpha != 0)
   {
     // The same 10px disc the rail's `PLACES` row wears, and a disc rather than a square because a
-    // place is round on this screen and a fleet is not (ADR-079, ADR-112).
+    // place is round on this screen and a fleet is not (ADR-079, ADR-113).
     _shapes.FillEllipse(headerX + PLACE_DISC_SIZE * 0.5F, _yPixels + SHEET_HEADER_HEIGHT * 0.5F, PLACE_DISC_SIZE * 0.5F,
                         PLACE_DISC_SIZE * 0.5F, _sheet.headerDisc);
     headerX += PLACE_DISC_SIZE + CARD_PADDING;
@@ -952,7 +952,7 @@ void MainPage::DrawSheetHeader(ShapeRenderer& _shapes, FontRenderer& _text, cons
     statusLeft = cursor - static_cast<float>(FontRenderer::MeasurePixels(purse));
   }
 
-  // **What the place IS, in the room the status slot leaves** (ADR-111). Dropped whole rather than
+  // **What the place IS, in the room the status slot leaves** (ADR-112). Dropped whole rather than
   // clipped or wrapped: it is a clause about a system whose name is already on the sheet, and half
   // of it read against a purse would be worse than none of it. The top bar's census drops its
   // clauses the same way (SCREENS.md 01).
@@ -1073,7 +1073,7 @@ void MainPage::DrawFleetRow(ShapeRenderer& _shapes, FontRenderer& _text, const P
   if (_fleet.action != Action::None)
   {
     // The button is 28 tall inside a 44 row, so the row's own height is the target: growing the
-    // rectangle around the button gives exactly the row it sits in (ADR-100, ADR-110).
+    // rectangle around the button gives exactly the row it sits in (ADR-100, ADR-111).
     AddHit(buttonX, _yPixels, std::max(buttonWidth, TOUCH_FLOOR), SHEET_ROW_HEIGHT, _fleet.action, _fleet.target);
     m_hoverRegions.push_back(HoverRegion{buttonX, buttonY, buttonWidth, BUTTON_HEIGHT});
   }
@@ -1123,7 +1123,7 @@ void MainPage::DrawPlaceBody(ShapeRenderer& _shapes, FontRenderer& _text, const 
                              float _bodyTopPixels, float _widthPixels)
 {
   // The scrolled part, then the pinned section under it at the height the scrolled part was given
-  // (ADR-111). Both are drawn from the one list the layout composed.
+  // (ADR-112). Both are drawn from the one list the layout composed.
   float blockY = _bodyTopPixels;
   for (std::size_t index = m_sheetScroll; index < _body.lastBlock; ++index)
   {
@@ -1231,7 +1231,7 @@ void MainPage::DrawSheetRows(ShapeRenderer& _shapes, FontRenderer& _text, const 
 /// anchored there, the map above it stays readable, the thumb reaches it, and a row has room for
 /// the three things a move is decided on -- where, how far, and whose.
 ///
-/// **There is one sheet about a PLACE, and it is the only door an order goes through** (ADR-111).
+/// **There is one sheet about a PLACE, and it is the only door an order goes through** (ADR-112).
 /// It holds what the system can build and the fleets standing on it; the signal picker and the
 /// replay stub are columns of rows, and the frame around all three is the same frame. A sheet is
 /// composed in full, then laid out, then drawn -- which is why this is a dispatcher over the
@@ -1334,7 +1334,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   _shapes.FillRect(x, y, width, height, Ink::APP_BACKGROUND);
   _shapes.StrokeRect(x, y, width, height, Ink::CARD_BORDER);
 
-  // **The sheet swallows every tap it is over** (ADR-111). Recorded first, so every control drawn
+  // **The sheet swallows every tap it is over** (ADR-112). Recorded first, so every control drawn
   // on top of it wins the ones it is under; what is left is the space between them, which used to
   // fall through to the map and open whatever was behind the sheet.
   AddHit(x, y, width, height, Action::None, 0);
@@ -1366,7 +1366,7 @@ void MainPage::DrawPanel(ShapeRenderer& _shapes, FontRenderer& _text)
   // A bar as well as the header's X. The X is where a mouse expects it and the bar is where a thumb
   // already is, and closing a sheet opened by mistake is the commonest thing done to one. The place
   // sheet says `DONE` rather than `CANCEL`, because there is nothing there to back out of: the
-  // orders it took are already in, and closing it is finishing (ADR-111).
+  // orders it took are already in, and closing it is finishing (ADR-112).
   _shapes.FillRect(x, rowY, width, 1.0F, Ink::DIVIDER);
   DrawCentered(_text, x + width * 0.5F, CenterTextY(rowY, SHEET_ACTION_HEIGHT), sheet.barLabel, Ink::TEXT_MUTED);
   AddHit(x, rowY, width, SHEET_ACTION_HEIGHT, Action::ClosePanel, 0);

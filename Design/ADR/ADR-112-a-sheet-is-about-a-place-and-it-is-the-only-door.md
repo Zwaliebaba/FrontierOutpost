@@ -1,4 +1,4 @@
-# ADR-111 — A sheet is about a place, and it is the only door an order goes through
+# ADR-112 — A sheet is about a place, and it is the only door an order goes through
 
 **Status:** Accepted
 
@@ -138,7 +138,7 @@ pick between several fleets is gone — the place sheet lists them all.
 **6. An inert tile's border is dashed and its ink goes back to `NEUTRAL_DIM`, so
 `Ink::TILE_BLOCKED_INK` is retired.** ADR-107 put a blocked tile's ink deliberately below the
 contrast floor at 3.21:1, because faint was the only channel it had for saying the tile could not be
-ordered. The control vocabulary gives it a dashed border, which says that in the chrome (ADR-110) —
+ordered. The control vocabulary gives it a dashed border, which says that in the chrome (ADR-111) —
 so the ink no longer has to, and the one exemption in this palette goes with it.
 `ContrastTests::TheBlockedTilesInkIsBelowTheFloorOnPurpose` is deleted rather than inverted: the
 claim it made is not true of anything any more.
@@ -162,7 +162,7 @@ forced four-tile grid with a fleet and a queued build is capped at 338 and scrol
 `PlaceSheetTapTests` asserts rather than describes.
 
 **Two sheets became one and a third disappeared.** `Panel::BuildList` and `Panel::FleetList` are
-`Panel::Place`; `Panel::Destination` is unchanged and is what `MOVE ›` still opens, until ADR-113
+`Panel::Place`; `Panel::Destination` is unchanged and is what `MOVE ›` still opens, until ADR-114
 replaces it with the map.
 
 **`TapTests` grew a fixture problem and it is worth naming.** Its sweeps step 8 pixels and stop at

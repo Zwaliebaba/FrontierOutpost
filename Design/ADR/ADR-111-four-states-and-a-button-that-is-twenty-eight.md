@@ -1,4 +1,4 @@
-# ADR-110 — Four states, and a button that is twenty-eight
+# ADR-111 — Four states, and a button that is twenty-eight
 
 **Status:** Accepted
 
@@ -189,12 +189,12 @@ channel a committed control has for saying `TAKE BACK` before the tap rather tha
 ## Open questions
 
 **Whether the tile, the sheet row and the rail row should draw their state through this routine's
-CHROME as well as its table.** They are migrated to the table by ADR-111 and ADR-112, which is where
+CHROME as well as its table.** They are migrated to the table by ADR-112 and ADR-113, which is where
 the shapes differ; what is deliberately not settled here is whether a tile's seven states
 (ADR-107) collapse to four or stay seven with four treatments.
 
 **Whether `MOVE_MODE_WASH` belongs in this ADR at all.** It is declared here because the token list
-is one list and the four new tokens arrived together; it is used by ADR-113 and by nothing else.
+is one list and the four new tokens arrived together; it is used by ADR-114 and by nothing else.
 
 **Whether a locked control needs the square at all.** The sheet's header already wears a `LOCKED`
 chip and the rail wears one, so the glyph on each button is the third time the same screen says the

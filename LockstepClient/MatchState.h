@@ -114,7 +114,7 @@ struct EventAction
   std::string label;
   /// The button's second cell: `20 CR`, `10 SHIPS`. Empty for a button that is one cell.
   ///
-  /// **A number never lives inside the label** (ADR-110). `BUILD 20 CR` was one string, so every
+  /// **A number never lives inside the label** (ADR-111). `BUILD 20 CR` was one string, so every
   /// state the button could be in had to be spelled as a suffix on it -- and the digest drops a
   /// button that does not fit its column, so a state change could take the control off the screen.
   /// What the number IS stays the composer's business; where it is drawn is the button's.

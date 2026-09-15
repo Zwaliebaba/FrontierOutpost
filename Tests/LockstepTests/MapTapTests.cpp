@@ -1,5 +1,5 @@
 // MapTapTests.cpp -- the map pane, tapped: a fleet's move (ADR-077), the garrison badge (ADR-079), the
-// move mode (ADR-113), the camera (ADR-017), and the stations it draws (ADR-103).
+// move mode (ADR-114), the camera (ADR-017), and the stations it draws (ADR-103).
 
 #include "pch.h"
 #include "CppUnitTest.h"
@@ -83,7 +83,7 @@ public:
     Assert::IsFalse(digestOffersAMove, L"the digest offered a MOVE, so this fixture is not the board the defect was reported on");
 
     // Sweep the whole screen, exactly as a finger would hunt for the control. **Three stages since
-    // ADR-113**, because the order takes three taps: one to take the move onto the map, one to light
+    // ADR-114**, because the order takes three taps: one to take the move onto the map, one to light
     // a destination, and the filled `SEND` that commits it. The third is what makes a slipped finger
     // on the map cost a tap rather than a tick.
     Headless renderers;
@@ -226,7 +226,7 @@ public:
   {
     // The map drew nothing at all for a parked fleet before ADR-079, so no tap in this pane could
     // reach a move on a board with nothing in transit -- which is every board at tick zero. Since
-    // ADR-111 the badge opens the PLACE, and the move is a control on it.
+    // ADR-112 the badge opens the PLACE, and the move is a control on it.
     const auto simulation = PlayedMatch(0);
     Lockstep::MainPage page;
     page.Create(ViewOfSeatZero(*simulation));
@@ -251,7 +251,7 @@ public:
   {
     // A badge totals SHIPS, so a system holding two fleets wears one badge and the sheet behind it
     // has to carry both -- a list that picked one for you would be picking the wrong one half the
-    // time (ADR-079, ADR-111).
+    // time (ADR-079, ADR-112).
     const auto simulation = PlayedMatch(0);
     Lockstep::MatchState state = ViewOfSeatZero(*simulation);
 
@@ -312,7 +312,7 @@ public:
   {
     // Screen 06, and the rule every sheet already follows (ADR-065): at the lock a sheet stays open
     // and goes inert rather than being taken away. **The badge and the disc agree about this since
-    // ADR-111**, where the badge went focus-only and the disc opened a sheet -- they were two rules
+    // ADR-112**, where the badge went focus-only and the disc opened a sheet -- they were two rules
     // because they opened two different things, and they open one sheet now.
     const auto simulation = PlayedMatch(0);
     Lockstep::MatchState state = ViewOfSeatZero(*simulation);
@@ -361,7 +361,7 @@ public:
 };
 
 // The board is still readable while the link is down, and still gives no order (ADR-085).
-// The move is chosen ON the map (ADR-113). What is asserted here is the three things that makes
+// The move is chosen ON the map (ADR-114). What is asserted here is the three things that makes
 // true and one screen full of consequences: the mode has doors, lighting a system is not an order,
 // and while it is on the map is the only thing on the screen that answers a tap.
 TEST_CLASS(MoveModeTapTests)
@@ -467,7 +467,7 @@ public:
 
   TEST_METHOD(EverythingElseOnTheScreenStopsAnsweringATap)
   {
-    // **The map is what the question is about, so the map is what answers** (ADR-113). The digest
+    // **The map is what the question is about, so the map is what answers** (ADR-114). The digest
     // fades and records nothing, the map's own discs and badges record nothing, and the only hits
     // left are the destinations, the strip and the two ways out.
     Lockstep::MainPage page;
@@ -561,7 +561,7 @@ public:
 
   TEST_METHOD(NothingMovesOnItsOwnWhileTheClockIsHeld)
   {
-    // **`--still` is what makes a capture of this mode reproducible** (ADR-113). The ring breathes
+    // **`--still` is what makes a capture of this mode reproducible** (ADR-114). The ring breathes
     // and the lanes march, both as pure functions of one clock, so holding the clock is the whole
     // of freezing them -- and a page that asks for a frame every frame is a page a capture never
     // catches at rest.
@@ -601,7 +601,7 @@ public:
 
   TEST_METHOD(TheDigestIsDrawnFadedAndNotJustMadeDeaf)
   {
-    // **The fade is half of the rule and the hit list is the other half** (ADR-113). A column that
+    // **The fade is half of the rule and the hit list is the other half** (ADR-114). A column that
     // records nothing and still draws its controls at full strength is a player being shown things
     // they cannot press, so this reads the VERTICES rather than the hits.
     //
@@ -754,7 +754,7 @@ public:
   {
     // Lane order is the order the graph happens to store them in and means nothing to a player; how
     // soon a fleet lands is the first thing they weigh (ADR-092). The sort moved onto the strip with
-    // the list (ADR-113), and it is asserted off `ReachableFor` rather than off the drawing --
+    // the list (ADR-114), and it is asserted off `ReachableFor` rather than off the drawing --
     // `MoveTargetSystem` carries the two numbers the rows are sorted by.
     const auto simulation = PlayedMatch(0);
     Lockstep::MainPage page;

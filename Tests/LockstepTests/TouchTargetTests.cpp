@@ -317,7 +317,7 @@ public:
 
   TEST_METHOD(ADigestButtonIsDrawnAtTwentyEightAndTappedAtFortyFour)
   {
-    // **The one control on this page that is deliberately SMALLER than the floor** (ADR-110). A
+    // **The one control on this page that is deliberately SMALLER than the floor** (ADR-111). A
     // button's box is 28 and its target is grown to 44 around it, which is ADR-100's isolated-chip
     // rule rather than its column one -- so the claim worth measuring is not "nothing is under the
     // floor", which the sweeps above already make, but that the grow is happening at all. A button
@@ -333,7 +333,7 @@ public:
     DrawPage(page, renderers);
 
     // The standing `BUILD AT DOTHAN` the opening digest carries (ADR-056), in the digest column. It
-    // is an `OpenSystem` since ADR-111 -- no digest control places an order -- and the map's own
+    // is an `OpenSystem` since ADR-112 -- no digest control places an order -- and the map's own
     // discs carry the same action from over the pane, which is what the column test excludes.
     std::size_t buttons = 0;
     for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
@@ -351,7 +351,7 @@ public:
 
   TEST_METHOD(TheMoveModeHasNoUndersizedTarget)
   {
-    // The mode puts five new kinds of target on the screen (ADR-113) and three of them are composed
+    // The mode puts five new kinds of target on the screen (ADR-114) and three of them are composed
     // from numbers nothing else uses: the banner's cancel, the ETA chip that grows from 16 the way
     // a garrison badge does, and the strip's half-width `SEND`.
     const auto simulation = PlayedMatch(0);

@@ -1,4 +1,4 @@
-# ADR-112 — The rail lists orders, and then places
+# ADR-113 — The rail lists orders, and then places
 
 **Status:** Accepted
 
@@ -17,7 +17,7 @@ system they stand at, with the ones in transit under an `UNDER WAY` band, ADR-08
 (what is queued this tick, then what is already rising, then a line saying what the purse has left).
 `SIGNALS` and `PROPOSALS` follow. Every row is a link to what it names and gives no order (ADR-060).
 
-Three things are wrong with that once a sheet is about a place (ADR-111).
+Three things are wrong with that once a sheet is about a place (ADR-112).
 
 **The sections are the shape of the composing code rather than of the question.** A player scanning
 for what this lock will take reads two lists and has to merge them; a player scanning for what it
@@ -30,7 +30,7 @@ and tapping that. A move is worse: the row opens a picker, and picking the syste
 already standing on is the only way to cancel.
 
 **And `FLEETS` is now a second door to a place.** The fleets standing at Dothan are on Dothan's
-sheet (ADR-111), so a `DOTHAN · 10 SHIPS` band on the rail with a row under it per fleet is the same
+sheet (ADR-112), so a `DOTHAN · 10 SHIPS` band on the rail with a row under it per fleet is the same
 list in two columns.
 
 ## Options considered
@@ -90,7 +90,7 @@ one thing this column never said. The handoff's own rail text calls the row "dim
 its trigger table lists *tapping the fleet's row in ORDERS while unordered* as a way into the move,
 which cannot both be true; the table wins, because a row that says *you have not ordered this* and
 cannot be acted on is a reproach rather than a control. **The dashed square is a MARKER and not a
-control's border**, so ADR-110's *dashed is never a target* is untouched: that rule is about the
+control's border**, so ADR-111's *dashed is never a target* is untouched: that rule is about the
 border of a control, and this is the 8-pixel owner square saying no order has been given.
 
 **5. `PLACES` is one row per system you hold**: a 10-pixel disc in the owner's colour, the name,
@@ -130,7 +130,7 @@ for a build tile by action found a rail cell. It filters by pane now.
   `UI/SCREENS.md` 01 (the rail). Done in this commit.
 - **Code:** `LockstepClient/MainPage.cpp` (`OrderRow`, the `orderRow` and `placeRow` lambdas, the
   header and the help sentence, the sections); `MainPage.h` (nothing new — `CancelFleetOrder` and
-  `OpenSystem` arrived with ADR-111).
+  `OpenSystem` arrived with ADR-112).
 - **Tests:** `LockstepTests/TapTests.cpp` (`LocksRailTapTests` gains the take-back cell, the
   unordered row and the `PLACES` row; `TilesOn` and the page band's wording).
 - **AGENTS.md:** nothing.

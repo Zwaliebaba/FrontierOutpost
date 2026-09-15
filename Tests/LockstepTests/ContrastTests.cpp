@@ -11,9 +11,9 @@
 //
 // **Nothing is below it any more.** `TILE_BLOCKED_INK` was, at 3.21:1, and was asserted to BE
 // below it so that raising it would be a decision (ADR-107): an inert tile had to be faint, because
-// faint was the only channel saying it could not be ordered. ADR-110 gave inert controls a DASHED
+// faint was the only channel saying it could not be ordered. ADR-111 gave inert controls a DASHED
 // border, which says that on its own and says it in the chrome rather than in the words, so the ink
-// went back to `NEUTRAL_DIM` and the exemption went with it (ADR-111).
+// went back to `NEUTRAL_DIM` and the exemption went with it (ADR-112).
 
 #include "pch.h"
 #include "CppUnitTest.h"
@@ -137,7 +137,7 @@ public:
     }
   }
 
-  // ---- The control vocabulary's four states (ADR-110) -------------------------------------------
+  // ---- The control vocabulary's four states (ADR-111) -------------------------------------------
   //
   // A control state is a ground as much as it is an ink: a filled button paints `BLUE` under
   // `APP_BACKGROUND` text and shades a second cell darker still, and a committed one paints a wash
@@ -152,7 +152,7 @@ public:
     AssertReadableOver(L"APP_BACKGROUND", Lockstep::Ink::APP_BACKGROUND, Lockstep::Ink::BUTTON_PRIMARY_HOVER,
                        L"a filled button under the pointer");
 
-    // And on the number segment, which is the same fill shaded (ADR-110). A shade that made the
+    // And on the number segment, which is the same fill shaded (ADR-111). A shade that made the
     // segment's ground dark enough to lose the dark ink on it would be a price nobody can read.
     const Neuron::Color rest = Over(Lockstep::Ink::BUTTON_SEGMENT_SHADE, Lockstep::Ink::BLUE);
     const Neuron::Color hovered = Over(Lockstep::Ink::BUTTON_SEGMENT_SHADE, Lockstep::Ink::BUTTON_PRIMARY_HOVER);
@@ -162,7 +162,7 @@ public:
 
   TEST_METHOD(ALockedButtonsInkClearsTheFloorOverItsFill)
   {
-    // A button at the lock is the filled grey the rail's chip wears (ADR-065, ADR-110), which is the
+    // A button at the lock is the filled grey the rail's chip wears (ADR-065, ADR-111), which is the
     // one other place on this screen where the ink is the background.
     AssertReadableOver(L"APP_BACKGROUND", Lockstep::Ink::APP_BACKGROUND, Over(Lockstep::Ink::LOCKED_FILL, Lockstep::Ink::APP_BACKGROUND),
                        L"a locked button");
@@ -171,7 +171,7 @@ public:
   TEST_METHOD(AnInertControlsReasonClearsTheFloorOverTheGroundItIsDrawnOn)
   {
     // **An inert control has no fill**: its border is dashed and its inside is the app background
-    // (ADR-110), so this is the ground both of its inks are measured over. The reason is amber when
+    // (ADR-111), so this is the ground both of its inks are measured over. The reason is amber when
     // it is money and dim when it is the board, and a player who cannot order the thing still has to
     // be able to read why.
     AssertReadableOver(L"NEUTRAL_DIM", Lockstep::Ink::NEUTRAL_DIM, Lockstep::Ink::APP_BACKGROUND, L"an inert control");
@@ -194,7 +194,7 @@ public:
 
   TEST_METHOD(TheMoveModeBannersInksClearTheFloorOverItsWash)
   {
-    // The banner is a blue wash across the map pane and carries three inks (ADR-113): the fleet's
+    // The banner is a blue wash across the map pane and carries three inks (ADR-114): the fleet's
     // name, what it is and where from, and the sentence that says what to tap.
     const Neuron::Color wash = Over(Lockstep::Ink::MOVE_MODE_WASH, Lockstep::Ink::APP_BACKGROUND);
     for (const auto& [ink, name] : {std::pair{Lockstep::Ink::BLUE, L"BLUE"}, std::pair{Lockstep::Ink::TEXT_PRIMARY, L"TEXT_PRIMARY"},
@@ -208,7 +208,7 @@ public:
   {
     // A guard of the same shape as the dim-token one below: a hover that is not brighter than the
     // rest state is a hover nobody can see, and the two pairs are the whole of what says "under the
-    // pointer" on this screen (ADR-110).
+    // pointer" on this screen (ADR-111).
     Assert::IsTrue(Lockstep::Ink::OUTLINE.alpha < Lockstep::Ink::OUTLINE_HOVER.alpha,
                    L"an outlined control's hover border is no brighter than its rest one");
     Assert::IsTrue(Lockstep::Ink::TILE_COMMITTED_FILL.alpha < Lockstep::Ink::COMMITTED_HOVER_FILL.alpha,

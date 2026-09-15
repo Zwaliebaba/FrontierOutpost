@@ -34,14 +34,14 @@ struct MapHit
   /// beside that one because the two mean different things to tap: the disc is the system and the
   /// badge beside it is the fleets standing there (ADR-079). One index, one meaning (ADR-057).
   /// `moveTarget` is a third system position and a third meaning: while the map is taking a move,
-  /// a lit system is a DESTINATION rather than a place to open (ADR-113).
+  /// a lit system is a DESTINATION rather than a place to open (ADR-114).
   std::int32_t system = EventRefs::NONE;
   std::int32_t fleet = EventRefs::NONE;
   std::int32_t fleetsAt = EventRefs::NONE;
   std::int32_t moveTarget = EventRefs::NONE;
 };
 
-/// One system a move may be sent to, and what it costs to get there (ADR-113).
+/// One system a move may be sent to, and what it costs to get there (ADR-114).
 ///
 /// The page works this out -- it is the page that knows the rules the lock would refuse the order
 /// by -- and the map draws what it is handed.
@@ -83,7 +83,7 @@ struct MapFrame
   /// told whether its own bottom edge is covered.
   bool sheetOpen = false;
 
-  /// **The move being chosen ON this map** (ADR-113), which is the one mode that changes what the
+  /// **The move being chosen ON this map** (ADR-114), which is the one mode that changes what the
   /// map itself means rather than covering it: the system a fleet is standing at, the systems it
   /// may be sent to with the ticks each takes, and whichever of them is lit.
   ///

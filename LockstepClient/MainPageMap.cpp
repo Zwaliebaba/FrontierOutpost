@@ -24,7 +24,7 @@ namespace
 using Neuron::FontRenderer;
 using Neuron::ShapeRenderer;
 
-/// What a tap does, which the rows composed in here have to name (ADR-112). The page's own enum,
+/// What a tap does, which the rows composed in here have to name (ADR-113). The page's own enum,
 /// aliased rather than qualified thirty times.
 using Action = MainPage::Action;
 
@@ -153,7 +153,7 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::Me
 {
   m_hits.clear();
   // Cleared with the hit list rather than inside the rail, because the digest's buttons fill under
-  // the pointer too and the rail is drawn after them (ADR-110).
+  // the pointer too and the rail is drawn after them (ADR-111).
   m_hoverRegions.clear();
 
   _shapes.FillRect(0.0F, 0.0F, Frame::SCREEN_WIDTH, Frame::SCREEN_HEIGHT, Ink::APP_BACKGROUND);
@@ -166,7 +166,7 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::Me
   // this page's hit list: the map knows a system from a fleet, and this knows what tapping one
   // does.
   // Worked out before the frame is composed, because the map draws what it is handed and the rules
-  // the lock would refuse an order by are the page's to know (ADR-113).
+  // the lock would refuse an order by are the page's to know (ADR-114).
   std::vector<MoveTarget> moveTargets;
   if (m_moveMode.has_value())
   {
@@ -212,7 +212,7 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::Me
 
   for (const MapHit& hit : mapHits)
   {
-    // **While a move is being chosen, the map offers destinations and nothing else** (ADR-113). The
+    // **While a move is being chosen, the map offers destinations and nothing else** (ADR-114). The
     // discs, the badges and the markers register no hit at all in that frame, so a tap on one falls
     // through to `HandleTap`'s own end and leaves the mode.
     if (hit.moveTarget != EventRefs::NONE)
@@ -220,7 +220,7 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::Me
       AddHit(hit.x, hit.y, hit.width, hit.height, Action::ChooseDestination, hit.moveTarget);
       continue;
     }
-    // **A garrison badge opens the same sheet the disc under it opens** (ADR-079, ADR-111), which
+    // **A garrison badge opens the same sheet the disc under it opens** (ADR-079, ADR-112), which
     // answers ADR-079's open question: the badge followed the rail's rule and went focus-only at
     // the lock while the disc beside it opened a sheet, and they were two rules because they
     // opened two different things. They open one sheet now, so they behave alike -- at the lock it

@@ -8,7 +8,7 @@ code in `LockstepClient/` and `Lockstep/`. Every status below is as of **2026-09
 from the tree, not from the plan.
 
 > **THIRTEEN OF THE TWENTY-THREE CAPTURES ARE STALE AS OF 2026-09-14, AND FIVE MORE ARE OWED.**
-> ADR-110 through ADR-113 rebuilt the main page's controls, its sheet, its rail and how a move is
+> ADR-111 through ADR-114 rebuilt the main page's controls, its sheet, its rail and how a move is
 > given, and **not one capture was retaken**: those sessions ran on Linux, and a capture needs a
 > Windows D3D12 run of `x64\Debug\Lockstep.exe` through `Build/Screenshot.ps1`. That is a
 > statement about where the work happened, not a claim that anything is fine.
@@ -16,12 +16,12 @@ from the tree, not from the plan.
 > Stale: `01-main-page`, `01-orders-queued`, `01-fleet-under-way`, `01-rail-hover`, `01-finished`,
 > `01-build-sheet`, `01-build-rising`, `01-destination-sheet`, `01-signal-sheet`,
 > `01-signal-sheet-armed`, `06-at-lock`, `06-at-lock-sheet` and `07-replay`. Three of those are of
-> a screen that no longer exists at all: the build sheet is a PLACE sheet (ADR-111) and the
-> destination picker is a mode on the map (ADR-113).
+> a screen that no longer exists at all: the build sheet is a PLACE sheet (ADR-112) and the
+> destination picker is a mode on the map (ADR-114).
 >
 > Owed, and never taken: `01-place-sheet`, `01-move-mode`, `01-move-selected`,
 > `06-at-lock-place-sheet`, and a retake of `01-orders-queued` showing the rail's new `ORDERS` and
-> `PLACES` sections. `--still` exists for two of them (ADR-113): the move mode's ring pulses and its
+> `PLACES` sections. `--still` exists for two of them (ADR-114): the move mode's ring pulses and its
 > lanes march, so a capture taken without it is of whichever phase the shutter caught.
 >
 > **The sheet heights in `DESIGN-GUIDELINES.md` §Frame were measured on 2026-09-14 anyway**, off the
@@ -149,9 +149,9 @@ The complete list, so nobody goes looking. Each item is also under its screen in
 5. **On the main page:** an event card has no highlighted variant and no tick stamp on the right
    (`T45`). **ADR-052's "nothing scrolls" is down to the three sheets that are columns of rows**:
    the digest pages by cards (ADR-080), the locks rail scrolls in pixels (ADR-101), and the place
-   sheet's body scrolls by blocks (ADR-111). The locks rail's rows became links on 2026-09-12
+   sheet's body scrolls by blocks (ADR-112). The locks rail's rows became links on 2026-09-12
    (ADR-060), except the `SIGNALS` section's — and its `ORDERS` rows gained one cell that is not a
-   link, the `X` that takes an order back (ADR-112).
+   link, the `X` that takes an order back (ADR-113).
 6. **On the map:** nothing marks a system that is building — a rising build is a row on the
    rail, the sheet and the digest and not a mark on the node (ADR-070, whose open question is
    whether that is enough of a tell); owner tags beside names (`NARTH · OKO`), the contact
@@ -173,7 +173,7 @@ The complete list, so nobody goes looking. Each item is also under its screen in
    is set by nothing either; a lane offer is made from the signal picker instead (ADR-039's open
    question). The tile is styled and tested behind a forced flag, so the day the flag is set the
    first thing anybody finds out is not whether it renders. **The rail's `PROPOSE` row went with the
-   `BUILDS` section** (ADR-112): `ORDERS` lists what goes in at the lock, and a lane nobody has
+   `BUILDS` section** (ADR-113): `ORDERS` lists what goes in at the lock, and a lane nobody has
    offered is not that. **The bastion is the same case one step
    further back** — the grid reserves its slot and nothing composes a row for it (blueprint §3,
    after Phase 0) — and so is a tile at its top level, for which `SnapshotView` composes no row at
@@ -240,27 +240,27 @@ ADR-066 touched was retaken the same day from the Debug build carrying them. Don
   second fleet, or the next change to the line height, all of which have broken a literal.
 - **A system marker and a fleet marker are the same blue and differ only in size.** Both are exactly
   `94,196,255`; scanning the map pane for runs of it gives system discs at 13–18px wide and a fleet
-  at about 9. **Since ADR-111 and ADR-113 a tap on a system opens its PLACE sheet, and a tap on a
+  at about 9. **Since ADR-112 and ADR-114 a tap on a system opens its PLACE sheet, and a tap on a
   garrison badge with one fleet under it takes that fleet's move onto the map rather than opening
   anything.** A parked fleet is that **badge** beside its system's name (ADR-079) — a 16px filled
   chip, `94,196,255` when it is yours. The digest's filled button moves with the digest — scan
-  column x=40 for solid blue, as `TapBuild` does — and since ADR-111 it is a LINK to a place rather
-  than an order. **The `SIGNALS` header moves too**: since ADR-112 it sits under `ORDERS` and
+  column x=40 for solid blue, as `TapBuild` does — and since ADR-112 it is a LINK to a place rather
+  than an order. **The `SIGNALS` header moves too**: since ADR-113 it sits under `ORDERS` and
   `PLACES`, so a queued build, a second fleet or another held system pushes it down; the rule below
   (scan for the section dividers) is what to use and the numbers above are history.
 - **The rail's hover is read back, not eyeballed** (ADR-060). `HOVER_FILL` is white at 20/255 over
   the ink, which lands on `30,33,38` against a background of `11,14,20` — plain in place and easy to
   miss in a thumbnail, so a capture script should assert the pixel. Measured that way on 2026-09-12,
   and it is what found that a moving mouse produces no `WM_POINTERUPDATE` at all.
-- **The four captures ADR-110 to ADR-113 owe, and how to take them.** `01-place-sheet.png`: a
+- **The four captures ADR-111 to ADR-114 owe, and how to take them.** `01-place-sheet.png`: a
   practice match at tick 0, tap the capital, tap one tile — the sheet then shows the BUILD band, a
   queued tile and an available one, the `FLEETS HERE` band and a fleet row with `MOVE ›` on it.
   `01-move-mode.png` and `01-move-selected.png`: the same board with `--still`, tap `MOVE ›`, and
   photograph before and after tapping a lit system — `--still` matters, because the ring pulses and
-  the lanes march and two captures without it are two different pictures (ADR-113).
+  the lanes march and two captures without it are two different pictures (ADR-114).
   `06-at-lock-place-sheet.png`: the place sheet open when the countdown reaches zero.
   `01-orders-queued.png` wants retaking for the rail's `ORDERS` and `PLACES` sections either way.
-- `01-build-sheet.png` **is of a sheet that no longer exists** (ADR-111); the recipe below is kept
+- `01-build-sheet.png` **is of a sheet that no longer exists** (ADR-112); the recipe below is kept
   because the place sheet's build half is the same grid. It is a practice match at tick 0: PRACTICE
   MATCH, tap the capital, tap one tile. That puts `QUEUED −20` / `TAP TO TAKE BACK` on one tile,
   `15 CR` / `85 CR LEFT AFTER` on the other, the purse's ` −20` in the header and the ADR-078

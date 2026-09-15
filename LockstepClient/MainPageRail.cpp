@@ -1,4 +1,4 @@
-// MainPageRail.cpp -- the locks rail: ORDERS, then PLACES, then SIGNALS and PROPOSALS (ADR-112).
+// MainPageRail.cpp -- the locks rail: ORDERS, then PLACES, then SIGNALS and PROPOSALS (ADR-113).
 //
 // What goes in when the clock hits zero, as one list of one row shape, and then the places it is
 // about. Every row is a link to what it names (ADR-060) and the one cell that is not a link is the
@@ -24,7 +24,7 @@ using Neuron::Face;
 using Neuron::FontRenderer;
 using Neuron::ShapeRenderer;
 
-/// What a tap does, which the rows composed in here have to name (ADR-112). The page's own enum,
+/// What a tap does, which the rows composed in here have to name (ADR-113). The page's own enum,
 /// aliased rather than qualified thirty times.
 using Action = MainPage::Action;
 
@@ -59,7 +59,7 @@ using Action = MainPage::Action;
 
 } // namespace
 
-/// One row of the locks rail's `ORDERS` list (ADR-112).
+/// One row of the locks rail's `ORDERS` list (ADR-113).
 ///
 /// **One shape for every kind of order**, composed before anything is drawn: the column had a
 /// section per order KIND, which is the shape of the code that fills it rather than of the question
@@ -86,7 +86,7 @@ struct MainPage::OrderRow
   bool unordered = false;
 };
 
-/// One `PLACES` row: a system the viewer holds, and what this screen says about it (ADR-112).
+/// One `PLACES` row: a system the viewer holds, and what this screen says about it (ADR-113).
 ///
 /// Composed rather than drawn straight out of the graph, for the reason every other list on this
 /// screen is: the yields, the ships standing there and the share of the queue that is about it are
@@ -236,7 +236,7 @@ MainPage::RailCursor MainPage::BeginRail(ShapeRenderer& _shapes, FontRenderer& _
   return cursor;
 }
 
-/// Every order this player has given, in the order the column reads them (ADR-112): what this lock
+/// Every order this player has given, in the order the column reads them (ADR-113): what this lock
 /// will take, then what an earlier one already did, then what has not been ordered at all.
 std::vector<MainPage::OrderRow> MainPage::ComposeOrders(bool _navigateOnly) const
 {
@@ -317,7 +317,7 @@ std::vector<MainPage::OrderRow> MainPage::ComposeOrders(bool _navigateOnly) cons
                               .openIndex = fleet.to});
   }
 
-  // **A fleet with no move is a row, dim and unordered** (ADR-112). It is the one thing this column
+  // **A fleet with no move is a row, dim and unordered** (ADR-113). It is the one thing this column
   // never said: a player reading a list of what goes in at the lock had no way to see what does not.
   for (std::size_t index = 0; index < m_state.fleets.size(); ++index)
   {
@@ -334,13 +334,13 @@ std::vector<MainPage::OrderRow> MainPage::ComposeOrders(bool _navigateOnly) cons
   }
 
   /// One ORDERS row. The `×` is its own 44-pixel cell at the right end and the rest of the row is
-  /// the link; a row with nothing to take back has no cell and the link fills it (ADR-112).
+  /// the link; a row with nothing to take back has no cell and the link fills it (ADR-113).
 
   return orders;
 }
 
 /// One row per system the viewer holds: what it yields, what is standing on it, and how much of
-/// this tick's queue is about it (ADR-112).
+/// this tick's queue is about it (ADR-113).
 std::vector<MainPage::PlaceRow> MainPage::ComposePlaces(bool _navigateOnly) const
 {
   std::vector<PlaceRow> places;
@@ -485,7 +485,7 @@ void MainPage::DrawRailRow(ShapeRenderer& _shapes, FontRenderer& _text, RailCurs
 }
 
 /// One ORDERS row. The `×` is its own 44-pixel cell at the right end and the rest of the row is
-/// the link; a row with nothing to take back has no cell and the link fills it (ADR-112).
+/// the link; a row with nothing to take back has no cell and the link fills it (ADR-113).
 void MainPage::DrawOrderRow(ShapeRenderer& _shapes, FontRenderer& _text, RailCursor& _cursor, const OrderRow& _order)
 {
   _cursor.Count(TOUCH_FLOOR, "ORDERS");
@@ -513,7 +513,7 @@ void MainPage::DrawOrderRow(ShapeRenderer& _shapes, FontRenderer& _text, RailCur
   _shapes.FillRect(_cursor.railX + 1.0F, _cursor.y, Frame::ORDERS_WIDTH - 1.0F, 1.0F, Ink::DIVIDER);
 
   // An 8px square in the viewer's colour, DASHED when there is no order on the row: the one
-  // marker on this screen that says *nothing has been given* (ADR-110's dashed rule, applied to a
+  // marker on this screen that says *nothing has been given* (ADR-111's dashed rule, applied to a
   // marker rather than to a control's border -- the row is still a target).
   const std::int32_t textY = CenterTextY(_cursor.y, TOUCH_FLOOR);
   const float squareY = _cursor.y + (TOUCH_FLOOR - 8.0F) * 0.5F;
@@ -566,7 +566,7 @@ void MainPage::DrawOrderRow(ShapeRenderer& _shapes, FontRenderer& _text, RailCur
 }
 
 /// One `PLACES` row: a disc in the owner's colour, the name, what it yields and what is standing
-/// on it, and how much of this tick's queue is about it (ADR-112).
+/// on it, and how much of this tick's queue is about it (ADR-113).
 void MainPage::DrawPlaceRow(ShapeRenderer& _shapes, FontRenderer& _text, RailCursor& _cursor, const PlaceRow& _place)
 {
   _cursor.Count(TOUCH_FLOOR, "PLACES");
@@ -744,9 +744,9 @@ void MainPage::DrawRailFooter(ShapeRenderer& _shapes, FontRenderer& _text, const
   }
 }
 
-/// What goes in when the clock hits zero, and then the places it is about (ADR-112).
+/// What goes in when the clock hits zero, and then the places it is about (ADR-113).
 ///
-/// **Nothing here gives an order but one cell** (ADR-060, ADR-112): every row is a link to the
+/// **Nothing here gives an order but one cell** (ADR-060, ADR-113): every row is a link to the
 /// place it names, and the `X` at the end of an order row is the take-back. The sections scroll
 /// between a fixed header and a fixed footer (ADR-101), so this composes each list, then draws it
 /// through one cursor that culls what falls outside the band and counts what it culled.
@@ -762,7 +762,7 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
   // ---- ORDERS ------------------------------------------------------------------------------------
   //
-  // **One row shape for every kind of order** (ADR-112). This column had a section per ORDER KIND --
+  // **One row shape for every kind of order** (ADR-113). This column had a section per ORDER KIND --
   // `FLEETS` and `BUILDS` -- which is the shape of the code that composes it rather than the shape
   // of the question a player is asking. The question is *what goes in when the clock hits zero*, and
   // the answer is a list: an owner square, what it is, where it is, the number it costs or the tick
@@ -791,8 +791,8 @@ void MainPage::DrawLocksRail(ShapeRenderer& _shapes, FontRenderer& _text)
 
   // ---- PLACES -------------------------------------------------------------------------------------
   //
-  // **One row per system you hold, and it replaces both of the sections above** (ADR-112). A place
-  // is the subject of every order on this screen now (ADR-111), so the rail's second list is the
+  // **One row per system you hold, and it replaces both of the sections above** (ADR-113). A place
+  // is the subject of every order on this screen now (ADR-112), so the rail's second list is the
   // list of places rather than a second list of orders: what each one yields, what is standing on
   // it, and how much of the tick's queue is about it.
   const std::vector<PlaceRow> places = ComposePlaces(navigateOnly);

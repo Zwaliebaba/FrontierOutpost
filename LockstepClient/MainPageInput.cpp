@@ -16,7 +16,7 @@ namespace Lockstep
 namespace
 {
 
-/// What a tap does, which the rows composed in here have to name (ADR-112). The page's own enum,
+/// What a tap does, which the rows composed in here have to name (ADR-113). The page's own enum,
 /// aliased rather than qualified thirty times.
 using Action = MainPage::Action;
 
@@ -64,7 +64,7 @@ bool MainPage::HandleDrag(const Neuron::PointerInput::Drag& _drag)
     return false;
   }
 
-  // **A drag that began on an open place sheet scrolls it rather than orbiting the map** (ADR-111).
+  // **A drag that began on an open place sheet scrolls it rather than orbiting the map** (ADR-112).
   // The body moves in whole blocks and a finger moves in pixels, so the remainder is banked exactly
   // as the digest's is -- and this is the half of the gesture that matters, because a wheel is not
   // a finger and this game is for touch (ADR-098, ADR-101).
@@ -115,7 +115,7 @@ bool MainPage::HandleZoom(std::int32_t _steps, float _xPixels, float _yPixels)
 
   // Over the map it means what it was banked for, sign and all: away from the player is out --
   // unless a place sheet is under the pointer, which is a list and takes the list's meaning
-  // (ADR-111). The sheet is drawn over the pane, so the pane's own gesture cannot also be the
+  // (ADR-112). The sheet is drawn over the pane, so the pane's own gesture cannot also be the
   // sheet's: a notch that zoomed the map out from under an open sheet is a notch spent on
   // something the player cannot see.
   if (aboveTheBar && _xPixels >= Frame::DIGEST_WIDTH && _xPixels < Frame::SCREEN_WIDTH - Frame::ORDERS_WIDTH)
@@ -140,7 +140,7 @@ bool MainPage::HandleZoom(std::int32_t _steps, float _xPixels, float _yPixels)
 
 bool MainPage::HandleKey(Neuron::KeyboardInput::Key _key)
 {
-  // **`ESC` is the way out of the move mode, and the banner says so** (ADR-113). It is the second
+  // **`ESC` is the way out of the move mode, and the banner says so** (ADR-114). It is the second
   // thing a key does on this screen and the first that is not about scrolling: a mode is the one
   // state here a player can be stuck in, and every platform's answer to that is this key.
   if (_key == Neuron::KeyboardInput::Key::Escape && m_moveMode.has_value())
@@ -171,7 +171,7 @@ void MainPage::AddHit(float _xPixels, float _yPixels, float _widthPixels, float 
 void MainPage::AddHitUnlessMoving(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action,
                                   std::int32_t _index)
 {
-  // **The digest is read and not touched while the map is taking a move** (ADR-113). It fades to
+  // **The digest is read and not touched while the map is taking a move** (ADR-114). It fades to
   // just over half its ink and records nothing, so the one filled control on the screen is the
   // strip's `SEND` (ADR-089) and a tap meant for the map cannot land on a card behind it.
   if (m_moveMode.has_value())
@@ -260,7 +260,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
     case Action::OpenSystem:
     case Action::OpenFleetsAt:
     {
-      // **A place sheet opens on a system you HOLD, and on nothing else** (ADR-058, ADR-111). You
+      // **A place sheet opens on a system you HOLD, and on nothing else** (ADR-058, ADR-112). You
       // cannot build on somebody else's ground -- `Match::Validate` refuses it as `NotYourSystem` --
       // and you have nothing standing on it, so a sheet over a rival's capital is a list of orders
       // that system cannot take.
@@ -277,7 +277,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       const bool yours = region->index >= 0 && region->index < static_cast<std::int32_t>(m_state.graph.systems.size()) &&
                          m_state.graph.systems[static_cast<std::size_t>(region->index)].owner == m_state.viewer;
 
-      // **The badge skips the sheet when there is one fleet under it** (ADR-113). A badge totals
+      // **The badge skips the sheet when there is one fleet under it** (ADR-114). A badge totals
       // SHIPS, so a place holding one of your fleets has exactly one thing a tap on it could mean,
       // and a sheet between the finger and the map would be a tap spent on a question with one
       // answer (ADR-079's own argument, one door further along). Several fleets is a real question
@@ -323,7 +323,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
 
       // **The place sheet does not come back.** The player asked one question and it is answered;
       // reopening the sheet they came from would be the screen insisting on the last thing they
-      // looked at rather than the board they just changed (ADR-113).
+      // looked at rather than the board they just changed (ADR-114).
       ExitMove();
       return true;
     }
@@ -426,7 +426,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
       return true;
 
     case Action::ChooseDestination:
-      // **A selection and not an order** (ADR-113). The map lights the system, the strip's header
+      // **A selection and not an order** (ADR-114). The map lights the system, the strip's header
       // says what stands there, and the filled `SEND` is the one thing that commits -- so a slipped
       // finger on the map costs a second tap rather than a tick.
       if (editable && m_moveMode.has_value())
@@ -438,7 +438,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
     case Action::CancelFleetOrder:
     {
       // **The other half of taking an order back, and it is a different array from a build's**
-      // (ADR-057, ADR-111). Putting `to` back to `from` is the whole of it: a fleet whose two ends
+      // (ADR-057, ADR-112). Putting `to` back to `from` is the whole of it: a fleet whose two ends
       // agree is standing, which is what `OnALane` reads and what every draw site tests.
       if (!editable || region->index < 0 || region->index >= static_cast<std::int32_t>(m_state.fleets.size()))
       {
@@ -489,7 +489,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
 
     case Action::None:
       // The sheet's own background. It does nothing and it is handled, which is the whole of what
-      // makes the sheet a modal (ADR-111).
+      // makes the sheet a modal (ADR-112).
       return true;
 
     default:
@@ -497,7 +497,7 @@ bool MainPage::HandleTap(float _xPixels, float _yPixels)
     }
   }
 
-  // **A tap that hit nothing leaves the move mode** (ADR-113), which is what the empty map, an
+  // **A tap that hit nothing leaves the move mode** (ADR-114), which is what the empty map, an
   // unreachable system and a rival's garrison all are while the mode is on: none of them is a
   // target, so all three arrive here and mean the same thing.
   if (m_moveMode.has_value())

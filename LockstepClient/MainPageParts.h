@@ -17,7 +17,7 @@
 namespace Lockstep
 {
 
-/// The disc in a place sheet's header and on a `PLACES` rail row (ADR-111, ADR-112). A disc rather
+/// The disc in a place sheet's header and on a `PLACES` rail row (ADR-112, ADR-113). A disc rather
 /// than the 8px square a fleet wears, because on this screen a place is round and a fleet is not
 /// -- the map has drawn them that way since ADR-079.
 inline constexpr float PLACE_DISC_SIZE = 10.0F;

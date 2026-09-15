@@ -67,9 +67,9 @@ namespace
     std::find_if(_state.orders.builds.begin(), _state.orders.builds.end(), [](const BuildRow& _row) { return !_row.rising; });
   if (startable != _state.orders.builds.end())
   {
-    // **The button names the PLACE it opens** (ADR-111): it is a link to that system's sheet now
+    // **The button names the PLACE it opens** (ADR-112): it is a link to that system's sheet now
     // rather than an order given from the column, and `BUILD` alone said nothing about where.
-    // Priced like every other build button, with the price in its own cell (ADR-053, ADR-110).
+    // Priced like every other build button, with the price in its own cell (ADR-053, ADR-111).
     std::string where;
     for (const SystemNode& node : _state.graph.systems)
     {
@@ -105,7 +105,7 @@ namespace
     }
 
     // The ships are the number a player weighs a move by, so they go in the button's second cell
-    // exactly as a build's price does (ADR-110).
+    // exactly as a build's price does (ADR-111).
     actions.push_back(EventAction{.label = "MOVE " + fleet.name,
                                   .number = fleet.ships == 1 ? std::string{"1 SHIP"} : std::format("{} SHIPS", fleet.ships),
                                   .kind = EventActionKind::RedirectFleet,

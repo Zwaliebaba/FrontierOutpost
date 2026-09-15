@@ -44,7 +44,7 @@ ships — this document cites it and does not restate what it does not have to.
   and 40 by ADR-100), a 24px row for the count that did not fit, six rows at most, and one wrapped
   help line with 8px above and below it. A full row sheet is 340px of the 676px pane, so more than
   half the map stays visible.
-- **The place sheet's body is a grid and a short list, and it scrolls** (ADR-107, ADR-111): a 2×2 of
+- **The place sheet's body is a grid and a short list, and it scrolls** (ADR-107, ADR-112): a 2×2 of
   **96px** tiles, `(596 − 20 − 8) / 2` = 284 wide, 8px between, 4px above the grid and 12px below,
   four slots and an empty one not drawn; then a divider, a 22px `FLEETS HERE` band and one boxed 44px
   row per fleet. **A sheet may take half the pane and no more** — 338 of 676 (ADR-052) — so the body
@@ -155,7 +155,7 @@ the five characters ADR-014 substituted and re-measuring the six strings it shor
   (ADR-014's list, ADR-073's bake). `FontRenderer::GlyphOf` falls back to a BLANK for anything else,
   so a `×` in a label is a control with nothing on it and the only symptom is a capture.
   `FaceRuleTests::EveryStringTheScreensDrawIsInTheBakedAlphabet` asserts it over every string all
-  five screens draw (ADR-113); adding a character is a re-bake and a font decision.
+  five screens draw (ADR-114); adding a character is a re-bake and a font decision.
 - **Every wrap in this client measures in the MONO face and then draws in a sans one**, which is a
   defect and is written down here rather than fixed (found 2026-09-14 while photographing the build
   sheet). `WrapToWidth` takes a face and not one of the nine call sites passes it, so each wraps at
@@ -179,7 +179,7 @@ the five characters ADR-014 substituted and re-measuring the six strings it shor
   - `›` is a trailing *go* affordance on a control: `JOIN ›`, `7 TO SEND ›`, `MORE ›`. `‹` is baked
     for its mirror — the pager's `‹ PREV` — and is the one character here ADR-014 did not list.
   - `−` is a true minus on a negative quantity: `QUEUED −40`, `−1 SYSTEM`.
-  - `–` marks a place with no order on it, on the rail's `PLACES` row (ADR-112). It was baked and
+  - `–` marks a place with no order on it, on the rail's `PLACES` row (ADR-113). It was baked and
     had no site at all until then: ADR-014's `Orune–Kepler-Reach` came from a fixture that no longer
     exists, and no generated system name carries a dash.
 - **The sources are compiled `/utf-8`.** They always held UTF-8 and every `std::string` here always
@@ -200,10 +200,10 @@ UI
 - `rgb(11,14,20)` background / ink (`APP_BACKGROUND`); a dialog's card is `rgb(17,21,29)`.
 - `rgba(255,255,255,0.10)` structural line (`CARD_BORDER`) · `0.07` row divider (`DIVIDER`) ·
   **`0.20`** outlined-button border (`OUTLINE`, 51/255; the handoff said 0.25) and `0.40` the same
-  border under the pointer (`OUTLINE_HOVER`, ADR-110) · `0.04` card fill
+  border under the pointer (`OUTLINE_HOVER`, ADR-111) · `0.04` card fill
   (`CARD_FILL`) · `0.08` hover (`HOVER_FILL`, drawn on a locks rail row and on an outlined control
-  under the pointer, ADR-060, ADR-110).
-- **The control states' own inks** (ADR-110): `rgb(141,214,255)` a filled button under the pointer
+  under the pointer, ADR-060, ADR-111).
+- **The control states' own inks** (ADR-111): `rgb(141,214,255)` a filled button under the pointer
   (`BUTTON_PRIMARY_HOVER`, `BLUE` lifted about a third toward white) · `rgba(0,0,0,0.14)` the number
   segment's ground on a filled button (`BUTTON_SEGMENT_SHADE`) · `rgba(255,255,255,0.14)` the
   **dashed** border of a control that cannot be ordered (`INERT_BORDER`, dash 3 / gap 3, and the
@@ -225,9 +225,9 @@ UI
   text**, so `ContrastTests` measures every ink a tile draws over it as well as over the ink.
 - **Nothing in this palette is below the 4.5:1 floor.** `TILE_BLOCKED_INK` was, at 3.21:1, and was
   asserted to BE below it so that raising it would be a decision (ADR-107): an inert tile had to be
-  faint because faint was the only channel saying it could not be ordered. ADR-110 gave inert
+  faint because faint was the only channel saying it could not be ordered. ADR-111 gave inert
   controls a **dashed** border, which says that in the chrome, so the ink went back to `NEUTRAL_DIM`
-  and the token was retired (ADR-111).
+  and the token was retired (ADR-112).
 - Scrim under a dialog `rgba(7,9,13,0.80)` (the handoff: `rgba(6,8,12,0.74)`).
 - Map ground: vertical gradient `rgb(8,10,16) → rgb(16,22,36) @45% → rgb(11,14,20)`; grid
   `rgba(94,196,255,0.07)`; the horizon glow is declared and not drawn. Stars: a band and a
@@ -248,7 +248,7 @@ Semantic / owner (ADR-027: you are always blue)
 (ADR-045's open item); the values are the same today and the header is the one to change.
 
 ## Components
-- **Control states — one vocabulary, four of them and a lock** (ADR-110). The same table is applied
+- **Control states — one vocabulary, four of them and a lock** (ADR-111). The same table is applied
   to a button, a build tile, a sheet row and a rail row, so *queued* looks the same wherever a
   player meets it. **The hue never changes between states** — only the fill, the border's style and
   the alpha do.
@@ -263,17 +263,17 @@ Semantic / owner (ADR-027: you are always blue)
 
   **A dashed border is the only one in this client and it means one thing: not a target.** The
   locked row is a BUTTON's; a tile, a sheet row and a rail row dim in place at the lock instead,
-  because four light-grey boxes is the screen inverted rather than gone quiet (ADR-065, ADR-110).
+  because four light-grey boxes is the screen inverted rather than gone quiet (ADR-065, ADR-111).
 - **Button** — a **28px** box with a **8px** gap to its sibling, 10px of side padding on the label
   and 8px on the number, in mono **Medium**; the target is grown to 44 around it, which is 28 + 8 +
-  8 exactly (ADR-100's isolated-chip rule, ADR-110). It was 18 with 6px padding until 2026-09-14,
+  8 exactly (ADR-100's isolated-chip rule, ADR-111). It was 18 with 6px padding until 2026-09-14,
   and 44 for four days before that. A dialog's is 24 and the seats and join screens' are 22–24;
   neither has been moved. **At most one filled per SCREEN** (ADR-089).
 - **Number segment** — a second cell inside a button, separated from the label by a 1px rule
   (`BUTTON_SEGMENT_SHADE` as a ground and no rule on a filled button; `DIVIDER` on an outlined one;
   `BLUE` at 90 on a committed one; the dashed border's own ink on an inert one). It carries
   `20 CR`, `−20`, `10 SHIPS`, `NEED 19 MORE`, `AFTER T14`. **A number never lives inside the
-  label** (ADR-110) — it did until 2026-09-14, as the ` - QUEUED` and ` - NEED 7 MORE` suffixes
+  label** (ADR-111) — it did until 2026-09-14, as the ` - QUEUED` and ` - NEED 7 MORE` suffixes
   ADR-053 asked for, which made a control's width a function of a state the player did not choose
   on a rail that drops a button rather than wrapping it. Buttons that do not fit the column's width
   are still dropped, and label and number are measured together. The amber warning variant
@@ -323,7 +323,7 @@ Semantic / owner (ADR-027: you are always blue)
   in amber there; `X` and `CANCEL` still close it. Otherwise a build sheet whose queue has taken
   credits says what its rows are priced against (ADR-078), amber when that is why a row is dim and
   `TEXT_DETAIL` when it is only a note. With none of them, the body starts straight under the header.
-- **Confirm strip** — the sheet-shaped component the move mode puts under the map (ADR-113). Same
+- **Confirm strip** — the sheet-shaped component the move mode puts under the map (ADR-114). Same
   width, margin and anchoring as a sheet; 44px header (`FLT 1 → FAROE` in the display cut, then
   `ARRIVES T1 · UNCLAIMED` muted, then `OR PICK FROM THE LIST` right-aligned — and before a
   destination is lit, `FLT 1 →` with nothing after it); a body of **two columns** of 44px
@@ -333,7 +333,7 @@ Semantic / owner (ADR-027: you are always blue)
   until something is lit. A row is an 8px square in the holder's colour (outlined white@50 when
   unclaimed), the name in mono Medium, what is standing there muted, and `1 TICK · T1` on the right,
   blue on the chosen row. **Lighting a row is a selection and not an order**; `SEND` is what commits.
-- **Sheet, place variant** — the one sheet an order is given on (ADR-111). Header 44: a 10px disc in
+- **Sheet, place variant** — the one sheet an order is given on (ADR-112). Header 44: a 10px disc in
   the owner's colour, the system's name in the display cut, a muted clause saying what the place IS
   (`YOURS · +6 A TICK · CAPITAL`, dropped whole rather than clipped when the status slot leaves no
   room), then the status slot and the 44×44 `X`. Body: a `BUILD` band with `2 AVAIL · 1 AT A TIME`,
@@ -382,16 +382,16 @@ Semantic / owner (ADR-027: you are always blue)
   segments sized to their labels because a third of a 212px card is seven glyphs and `BOT AT T1` is
   nine; blue border when selected.
 - **Tabs (unread ticks)** — not built.
-- **Orders row** — the rail's `ORDERS` list, **one shape for every kind of order** (ADR-112): an 8px
+- **Orders row** — the rail's `ORDERS` list, **one shape for every kind of order** (ADR-113): an 8px
   owner square, the title in mono Medium (`SHIPYARD L1`, `FLT 1 → FAROE`), the place or the count in
   muted (`DOTHAN`, `10 SHIPS`), the number in blue (`−20`, `T1`), and a 44×44 `×` cell that takes
   the order back. The row's body is a **link** to the place it is about (ADR-060) and its rectangle
   stops where the cell's begins, so neither swallows the other. A receipt of an earlier lock — a
   rising build, a fleet under way — carries a muted number and no cell. **A fleet with no move is a
   dim row behind a DASHED square** and is still a target: the square is a marker rather than a
-  control's border, so ADR-110's *dashed is never a target* is untouched. `HOVER_FILL` under the
+  control's border, so ADR-111's *dashed is never a target* is untouched. `HOVER_FILL` under the
   pointer, on targets only. Focus-only at the lock.
-- **Places row** — one per system you hold (ADR-112): a 10px disc in the owner's colour, the name in
+- **Places row** — one per system you hold (ADR-113): a 10px disc in the owner's colour, the name in
   mono Medium, `+6 · 10 SHIPS` muted, and `1 ORDER` in blue or `—` in dim. A disc rather than a
   square, because on this screen a place is round and a fleet is not (ADR-079). It opens that
   place's sheet.
@@ -410,7 +410,7 @@ Semantic / owner (ADR-027: you are always blue)
 - **Locks list band** — a muted label grouping the rows under it, no rule and no count, never a
   target (ADR-086). Lighter than a section header, which starts a list rather than dividing one.
   **Nothing composes one since 2026-09-14**: it grouped the `FLEETS` section's rows by the system
-  they stood at, and `ORDERS` is one list of one row shape (ADR-112).
+  they stood at, and `ORDERS` is one list of one row shape (ADR-113).
 
 ## Copy
 - Ops-console terse, numbers first, ` - ` between facts: `PRODUCTION +17`, `CLAIMED PELL`,
@@ -546,12 +546,12 @@ Drawn, in painter's order (`MapRender.cpp`):
   while any garrison badge is drawn (ADR-079). **It is not drawn at all while a sheet is open**: the
   legend's row and a sheet's `CANCEL` bar are the same strip of the pane (ADR-082).
 - Tapping a system you hold opens its **place sheet**, and so does its garrison badge — the disc is
-  the system and the badge is the ships standing on it, and since ADR-111 they open the same sheet
+  the system and the badge is the ships standing on it, and since ADR-112 they open the same sheet
   and behave alike at the lock. **A badge with exactly one of your fleets under it skips the sheet
-  and takes that fleet's move onto the map** (ADR-113): a badge totals ships, so one fleet is one
+  and takes that fleet's move onto the map** (ADR-114): a badge totals ships, so one fleet is one
   thing a tap could mean. A system you do not hold only focuses (ADR-058). Tapping your own fleet's
   marker, before it has departed, takes its move onto the map too.
-- **A move is chosen ON the map** (ADR-113), in a mode rather than a sheet. While it is on: a 44px
+- **A move is chosen ON the map** (ADR-114), in a mode rather than a sheet. While it is on: a 44px
   **banner** across the top of the pane replaces the `MAP - FOCUS` caption — `MOVE_MODE_WASH`
   ground, a 1px `BLUE`@90 bottom rule, an 8px owner square, `MOVE FLT 1`, `10 SHIPS FROM DOTHAN`
   muted, the sentence *Tap a lit system.* in sans, and `ESC · CANCEL` whose hit is the right 120px.

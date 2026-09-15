@@ -20,7 +20,7 @@ using Neuron::Face;
 using Neuron::FontRenderer;
 using Neuron::ShapeRenderer;
 
-/// What a tap does, which the rows composed in here have to name (ADR-112). The page's own enum,
+/// What a tap does, which the rows composed in here have to name (ADR-113). The page's own enum,
 /// aliased rather than qualified thirty times.
 using Action = MainPage::Action;
 

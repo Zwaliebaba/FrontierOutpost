@@ -1,4 +1,4 @@
-// Controls.cpp -- the state table and the button, as drawn (ADR-110).
+// Controls.cpp -- the state table and the button, as drawn (ADR-111).
 
 #include "pch.h"
 #include "Controls.h"
@@ -56,7 +56,7 @@ using Neuron::ShapeRenderer;
 
   case ControlState::Locked:
     // **A BUTTON at the lock is the filled grey the rail's chip wears; a tile, a sheet row and a
-    // rail row dim in place** (ADR-065, amended by ADR-110). The grey says "this is a receipt now"
+    // rail row dim in place** (ADR-065, amended by ADR-111). The grey says "this is a receipt now"
     // on a control the size of a chip, and it is the same statement the `LOCKED` chip above it
     // makes. At the size of a 284x96 tile or a 260-pixel row it is not that statement at all: a
     // locked sheet would become four light-grey boxes, which is the screen inverted rather than

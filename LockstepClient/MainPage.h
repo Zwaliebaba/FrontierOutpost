@@ -40,7 +40,7 @@ struct DigestCard;
 /// node the digest focused, which panel is open, and the orders they have edited but not locked.
 ///
 /// **Defined across one translation unit per pane** -- `MainPage.cpp` says which -- with the control
-/// vocabulary in `Controls.h` (ADR-110) and what the units share in `MainPageParts.h`.
+/// vocabulary in `Controls.h` (ADR-111) and what the units share in `MainPageParts.h`.
 class MainPage
 {
 public:
@@ -82,7 +82,7 @@ public:
   /// chip. A 44px badge beside a system name would be a different map, not a bigger box.
   static constexpr float TOUCH_FLOOR = Frame::TOUCH_FLOOR;
 
-  /// A button's BOX, and the gap that carries it to the touch floor (ADR-110).
+  /// A button's BOX, and the gap that carries it to the touch floor (ADR-111).
   ///
   /// **28 drawn and 44 tapped**, which is the isolated-chip half of ADR-100 rather than the column
   /// half: a row of buttons under a card's last line is not a column of siblings, so growing the
@@ -92,19 +92,19 @@ public:
   static constexpr float BUTTON_HEIGHT = 28.0F;
   static constexpr float BUTTON_GAP = 8.0F;
 
-  /// Inside a button: the label segment's side padding, and the number segment's (ADR-110). The
+  /// Inside a button: the label segment's side padding, and the number segment's (ADR-111). The
   /// number is narrower because it is a number -- it is scanned rather than read, and the hairline
   /// or the shade beside it is doing the separating a wider gutter would otherwise have to.
   static constexpr float BUTTON_LABEL_PADDING = 10.0F;
   static constexpr float BUTTON_NUMBER_PADDING = 8.0F;
 
   /// The dash of the one dashed border in this client, which is what says *not a target*
-  /// (ADR-110, `Ink::INERT_BORDER`). The same 3-on-3 the map's footprint ring is drawn with, so
+  /// (ADR-111, `Ink::INERT_BORDER`). The same 3-on-3 the map's footprint ring is drawn with, so
   /// the tree has one dash pattern rather than two that nearly agree.
   static constexpr float INERT_DASH = 3.0F;
   static constexpr float INERT_GAP = 3.0F;
 
-  /// The square that precedes a locked button's label (ADR-110). Six pixels, which is the level
+  /// The square that precedes a locked button's label (ADR-111). Six pixels, which is the level
   /// ladder's pip: a glyph this screen already draws at a size it already has.
   static constexpr float LOCK_GLYPH_SIZE = 6.0F;
 
@@ -189,7 +189,7 @@ public:
 
   /// **How much of the map pane a sheet may take** (ADR-052): half of the 676-pixel pane, so more
   /// than half of it always stays map. It was a rule nothing measured against until the place sheet
-  /// put a build grid and a fleet list in one sheet and came to 403 bare (ADR-111).
+  /// put a build grid and a fleet list in one sheet and came to 403 bare (ADR-112).
   static constexpr float SHEET_MAP_SHARE = 338.0F;
 
   /// The least a place sheet's scrolling body is given, whatever the help line above it costs.
@@ -202,11 +202,11 @@ public:
   static constexpr float SHEET_BODY_MINIMUM = SHEET_BAND_HEIGHT + SHEET_TILE_TOP + SHEET_TILE_HEIGHT;
 
   /// How many of a place's fleet rows are PINNED above the bottom bar when the body scrolls
-  /// (ADR-111, following ADR-093's pinned concede). Two, because the pinned block must not become
+  /// (ADR-112, following ADR-093's pinned concede). Two, because the pinned block must not become
   /// the sheet: at 22 + 44 + 44 it is already 110 of a 122-pixel minimum body.
   static constexpr std::size_t SHEET_PINNED_FLEETS = 2;
 
-  /// The confirm strip's destination rows are a GRID (ADR-113), where every other sheet's body is a
+  /// The confirm strip's destination rows are a GRID (ADR-114), where every other sheet's body is a
   /// column. Two columns, because the rows are the FALLBACK for the map above them -- the primary
   /// way to choose is to tap a lit system -- so the strip stays short and the map stays open.
   static constexpr std::size_t STRIP_COLUMNS = 2;
@@ -239,7 +239,7 @@ public:
   enum class Action : std::uint8_t
   {
     /// **A rectangle that is not a control and consumes the tap anyway** -- a sheet's own
-    /// background (ADR-111). A sheet is a modal and only its rows were ever targets, so a tap on
+    /// background (ADR-112). A sheet is a modal and only its rows were ever targets, so a tap on
     /// the band between two of them fell through to the map underneath and opened a different
     /// sheet; a fleet marker drawn at progress zero sits under the very sheet the move was ordered
     /// from (ADR-055), which is where that was found. No control is ever recorded with this: the
@@ -251,11 +251,11 @@ public:
     /// `FocusEvent` (ADR-057): one action carrying two kinds of index is an action that reads the
     /// wrong array, and the bounds check turned that into a button that did nothing at all.
     FocusSystem,
-    /// Open one system's place sheet (ADR-111). Its index is a SYSTEM position.
+    /// Open one system's place sheet (ADR-112). Its index is a SYSTEM position.
     OpenSystem,
-    /// Take this fleet's move onto the map (ADR-113). Its index is a FLEET position.
+    /// Take this fleet's move onto the map (ADR-114). Its index is a FLEET position.
     BeginMove,
-    /// Open the place sheet from a garrison badge (ADR-079, ADR-111). Its index is a SYSTEM
+    /// Open the place sheet from a garrison badge (ADR-079, ADR-112). Its index is a SYSTEM
     /// position, and it is a separate action from `OpenSystem` because the badge is a separate
     /// target from the disc it sits beside -- the disc is the system and the badge is the ships.
     OpenFleetsAt,
@@ -277,7 +277,7 @@ public:
     /// Step through the last resolved tick.
     OpenReplay,
     /// Light one of the systems the map has offered, which is a SELECTION and not an order
-    /// (ADR-113). Its index is a SYSTEM position. The order is `SendMove`.
+    /// (ADR-114). Its index is a SYSTEM position. The order is `SendMove`.
     ChooseDestination,
     /// Queue the move the map is showing, and leave the mode.
     SendMove,
@@ -290,7 +290,7 @@ public:
     /// know how tall the band came out (ADR-101).
     PageRail,
     /// Take back a fleet's queued move, leaving it standing where it is. Its index is a FLEET
-    /// position (ADR-111). A build is taken back by `ToggleBuild`, which is the same tap on the
+    /// position (ADR-112). A build is taken back by `ToggleBuild`, which is the same tap on the
     /// other order kind -- two actions rather than one, because a build row and a fleet are
     /// different arrays and one index must mean one thing (ADR-057).
     CancelFleetOrder,
@@ -301,7 +301,7 @@ public:
   enum class Panel : std::uint8_t
   {
     None,
-    /// **One system, and everything it can do this tick** (ADR-111): what it can build, and the
+    /// **One system, and everything it can do this tick** (ADR-112): what it can build, and the
     /// fleets standing on it. It replaces the build sheet and the fleet list, which were two
     /// sheets about one place reached through two different doors.
     Place,
@@ -309,7 +309,7 @@ public:
     Replay
   };
 
-  /// Where a fleet may be sent this tick, and how long it takes to get there (ADR-113).
+  /// Where a fleet may be sent this tick, and how long it takes to get there (ADR-114).
   ///
   /// **One lane and no further, because that is what the rules allow.** `Match::Validate` refuses
   /// any destination that is not one lane from where the fleet stands (`NoLaneToDestination`), so
@@ -322,7 +322,7 @@ public:
     std::uint32_t arrivesAt = 0;
   };
 
-  /// The move being chosen on the map, if one is (ADR-113).
+  /// The move being chosen on the map, if one is (ADR-114).
   struct MoveMode
   {
     /// The fleet, as a POSITION in `m_state.fleets` and as the id that survives a snapshot: a
@@ -339,7 +339,7 @@ public:
 
   /// Whether the two things on this screen that move on their own are held at phase zero.
   ///
-  /// **A capture of a pulsing ring is a capture of whichever phase the shutter caught** (ADR-113).
+  /// **A capture of a pulsing ring is a capture of whichever phase the shutter caught** (ADR-114).
   /// The move mode's ring and its marching lane dash are pure functions of `m_animationSeconds`, so
   /// freezing them is refusing to advance it -- which is what `--still` does, and what every
   /// headless test already does by never calling `Update`.
@@ -549,7 +549,7 @@ private:
   /// One rectangle that draws a HOVER, kept so `SetPointer` can tell when the pointer crossed from
   /// one to another and the page has to be redrawn (ADR-047).
   ///
-  /// **Every control that has a hover state is here, not only the rail's rows** (ADR-110). The rail
+  /// **Every control that has a hover state is here, not only the rail's rows** (ADR-111). The rail
   /// was the one list that filled under the pointer; the control vocabulary gives a hover to every
   /// outlined and committed button too, and a button whose hover the redraw never noticed would be
   /// a button that lit only when something else on the screen changed.
@@ -605,7 +605,7 @@ private:
   /// Opens the place sheet on one system, or closes whatever is open when the position is `NONE`.
   ///
   /// One function because four controls lead here -- the map's disc, its garrison badge, a digest
-  /// button and a rail row (ADR-111) -- and each of them has to reset the same three things: the
+  /// button and a rail row (ADR-112) -- and each of them has to reset the same three things: the
   /// subject, the id that survives a snapshot (ADR-057), and the scroll, which is about the sheet
   /// in front of you rather than about the place.
   void OpenPlace(std::int32_t _system);
@@ -614,7 +614,7 @@ private:
   /// it moved.
   bool ScrollSheet(std::int32_t _blocks);
 
-  /// Takes one fleet's move onto the map, or leaves the mode (ADR-113).
+  /// Takes one fleet's move onto the map, or leaves the mode (ADR-114).
   void EnterMove(std::int32_t _fleet);
   void ExitMove() noexcept;
 
@@ -626,11 +626,11 @@ private:
   /// the lock would refuse an order on.
   [[nodiscard]] std::vector<MoveTargetSystem> ReachableFor(std::int32_t _fleet) const;
 
-  /// The banner across the map and the confirm strip under it (ADR-113). Interface rather than
+  /// The banner across the map and the confirm strip under it (ADR-114). Interface rather than
   /// world, because both have to cover the map's own labels and a shape cannot (ADR-014).
   void DrawMoveMode(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
-  /// One ink at the share of itself the digest wears while the map is taking a move (ADR-113).
+  /// One ink at the share of itself the digest wears while the map is taking a move (ADR-114).
   [[nodiscard]] Neuron::Color Faded(const Neuron::Color& _color) const noexcept;
 
   /// What the rail and an open sheet both say at the lock. One sentence, said once, because two
@@ -639,14 +639,14 @@ private:
 
   void AddHit(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index);
 
-  /// The same, refused while the map is taking a move (ADR-113). The digest's every control goes
+  /// The same, refused while the map is taking a move (ADR-114). The digest's every control goes
   /// through it: the column fades and stops being a target for as long as the mode is on, and one
   /// guard beside `AddHit` is what keeps that from being eleven conditions that have to agree.
   void AddHitUnlessMoving(float _xPixels, float _yPixels, float _widthPixels, float _heightPixels, Action _action, std::int32_t _index);
 
   /// The viewer's own fleets that BELONG to one place this tick, as indices into `m_state.fleets`.
   ///
-  /// **Standing there, or ordered off it and not gone yet** (ADR-111). A move given this tick puts
+  /// **Standing there, or ordered off it and not gone yet** (ADR-112). A move given this tick puts
   /// a fleet on a lane at progress zero from the moment it is given (ADR-055) while leaving it
   /// where it is until the lock (ADR-077), so a list of fleets STANDING at a system loses the one
   /// the player just ordered -- and that is exactly the row they need in order to take it back.
@@ -693,7 +693,7 @@ private:
   [[nodiscard]] DigestTarget TargetOf(const EventAction& _action) const noexcept;
 
   /// The locks rail's own vocabulary, complete in `MainPageRail.cpp` and nowhere else: one order,
-  /// one place, and where the column is up to inside the band it scrolls in (ADR-101, ADR-112).
+  /// one place, and where the column is up to inside the band it scrolls in (ADR-101, ADR-113).
   struct OrderRow;
   struct PlaceRow;
   struct RailCursor;
@@ -720,7 +720,7 @@ private:
   /// The sheet's own vocabulary, complete in `MainPageSheet.cpp` and nowhere else: what one row
   /// says, one of the viewer's fleets on the place, one build tile, one block of the place sheet's
   /// body, the whole of what a sheet has composed before any of it is drawn, and what its body came
-  /// to once laid out (ADR-052, ADR-107, ADR-111).
+  /// to once laid out (ADR-052, ADR-107, ADR-112).
   struct SheetRow;
   struct PlaceFleet;
   struct BuildTile;
@@ -736,10 +736,10 @@ private:
 
   /// Lays the place sheet's body out as blocks against the room the frame has left it, pins the
   /// FLEETS section when it fits, clamps the scroll, and records what the next notch can move
-  /// (ADR-111). Every sheet goes through it, so a notch over a sheet with no blocks moves nothing.
+  /// (ADR-112). Every sheet goes through it, so a notch over a sheet with no blocks moves nothing.
   [[nodiscard]] SheetBody LayoutSheetBody(const Sheet& _sheet, float _widthPixels, float _bodyCapPixels);
 
-  /// The header: the disc, the name, the status slot, what the place is, and the `X` (ADR-111).
+  /// The header: the disc, the name, the status slot, what the place is, and the `X` (ADR-112).
   void DrawSheetHeader(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const Sheet& _sheet, bool _atLock, float _xPixels,
                        float _yPixels, float _widthPixels);
   /// The place sheet's body: the scrolled blocks, then the pinned ones, each drawn by its kind.
@@ -750,7 +750,7 @@ private:
   /// One tile of the build grid, and the whole of it is the target (ADR-107).
   void DrawBuildTile(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const BuildTile& _tile, float _xPixels, float _yPixels,
                      float _widthPixels);
-  /// One fleet's row: a box, the name, what it is doing, and the one control on it (ADR-111).
+  /// One fleet's row: a box, the name, what it is doing, and the one control on it (ADR-112).
   void DrawFleetRow(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const PlaceFleet& _fleet, float _xPixels, float _yPixels,
                     float _widthPixels);
   /// The capped list, the line that counts what did not fit, then whatever is pinned below it
@@ -762,7 +762,7 @@ private:
   void DrawSheetRow(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const SheetRow& _row, Action _rowAction, float _xPixels,
                     float& _rowYPixels, float _widthPixels, bool& _previousWasBand);
 
-  /// The sheet against the bottom of the map pane: composed, laid out, drawn (ADR-052, ADR-111).
+  /// The sheet against the bottom of the map pane: composed, laid out, drawn (ADR-052, ADR-112).
   void DrawPanel(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
   MatchState m_state;
@@ -819,10 +819,10 @@ private:
   float m_digestDragPixels = 0.0F;
 
   Panel m_panel = Panel::None;
-  /// The move being chosen on the map (ADR-113). A mode rather than a panel, because it changes
+  /// The move being chosen on the map (ADR-114). A mode rather than a panel, because it changes
   /// what the MAP means -- a sheet sits over the map and this one is played on it.
   std::optional<MoveMode> m_moveMode;
-  /// Which BLOCK of the place sheet's body is at the top of its scrolling region (ADR-111).
+  /// Which BLOCK of the place sheet's body is at the top of its scrolling region (ADR-112).
   ///
   /// **Blocks and not pixels**, and the difference is what the two columns are. The locks rail is a
   /// list of 44-pixel rows, so every pixel offset lands somewhere legible (ADR-101); this body's
@@ -853,7 +853,7 @@ private:
   bool m_developerControls = false;
 
   /// Whether `--still` was passed: the clock that drives the route's dashes and the move mode's
-  /// pulse does not advance, so a capture is always of phase zero (ADR-113).
+  /// pulse does not advance, so a capture is always of phase zero (ADR-114).
   bool m_still = false;
 
   /// The placement this page last drew, so the chip can say a place was LOST rather than only what

@@ -1,4 +1,4 @@
-// MainPageMove.cpp -- the move mode: the banner, the reachable systems, the confirm strip (ADR-113).
+// MainPageMove.cpp -- the move mode: the banner, the reachable systems, the confirm strip (ADR-114).
 //
 // A move is chosen ON the map. The sheet collapses to a strip, the systems one lane away light with a
 // ring and an ETA chip, lighting one is a SELECTION and the strip's filled `SEND` is the order. The
@@ -26,7 +26,7 @@ using Neuron::Face;
 using Neuron::FontRenderer;
 using Neuron::ShapeRenderer;
 
-/// What a tap does, which the rows composed in here have to name (ADR-112). The page's own enum,
+/// What a tap does, which the rows composed in here have to name (ADR-113). The page's own enum,
 /// aliased rather than qualified thirty times.
 using Action = MainPage::Action;
 
@@ -122,7 +122,7 @@ void MainPage::EnterMove(std::int32_t _fleet)
     return;
   }
 
-  // **The sheet collapses to the strip** (ADR-113): the question is now about the map, and a sheet
+  // **The sheet collapses to the strip** (ADR-114): the question is now about the map, and a sheet
   // over the map while the answer is on it would be the thing this mode exists to stop.
   m_panel = Panel::None;
   m_armedConcede = EventRefs::NONE;
@@ -188,7 +188,7 @@ std::vector<MainPage::MoveTargetSystem> MainPage::ReachableFor(std::int32_t _fle
 
 Color MainPage::Faded(const Color& _color) const noexcept
 {
-  // **The digest fades while the map is taking a move** (ADR-113) and stops being a target: the one
+  // **The digest fades while the map is taking a move** (ADR-114) and stops being a target: the one
   // filled control on the screen has to be the strip's `SEND` (ADR-089), and a column of live
   // controls beside it would be two answers to one question.
   constexpr float SHARE = 0.55F;
@@ -216,7 +216,7 @@ void MainPage::DrawMoveMode(ShapeRenderer& _shapes, FontRenderer& _text)
 
   // ---- The banner --------------------------------------------------------------------------------
   //
-  // **It replaces the map's own corner caption rather than sitting beside it** (ADR-113). The mode
+  // **It replaces the map's own corner caption rather than sitting beside it** (ADR-114). The mode
   // is a statement about the whole pane -- every lane on it has changed meaning -- so it is said
   // across the whole pane, in the blue everything the mode lit is drawn in.
   const float bannerY = Frame::TOP_BAR_HEIGHT;
@@ -275,7 +275,7 @@ void MainPage::DrawMoveMode(ShapeRenderer& _shapes, FontRenderer& _text)
 
   _shapes.FillRect(x, y, width, height, Ink::APP_BACKGROUND);
   _shapes.StrokeRect(x, y, width, height, Ink::CARD_BORDER);
-  // The strip is a modal like every other sheet: it swallows the taps it is over (ADR-111).
+  // The strip is a modal like every other sheet: it swallows the taps it is over (ADR-112).
   AddHit(x, y, width, height, Action::None, 0);
 
   // ---- Its header ---------------------------------------------------------------------------------
