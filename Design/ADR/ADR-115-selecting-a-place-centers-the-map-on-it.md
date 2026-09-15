@@ -156,6 +156,18 @@ what every other focus does and is the position this screen already takes -- a c
 silently ignores you is the defect it has been bitten by twice (ADR-058). `Action::OpenSystem` is
 unchanged: it already stored the bad index and opened a sheet about nothing.
 
+**A tap-driven test can no longer find a control on the map by sweeping for it**, and six had to
+stop. `Headless.h`'s sweeps walk an 8-pixel grid and rely on the board being the same board at
+every step; a tap that centres the camera lays the map out again, so a sweep looking for one
+particular control — the garrison badge over a single standing fleet — is searching a board that
+moves between its steps. It is not the claim that broke but the search: every test that finds its
+control in the recorded hit list passed unchanged, and the six now press a recorded rectangle the
+way `OpenPlaceSheet` already did. **That is a real loss of coverage**, because a blind sweep also
+proved the control was reachable at a pixel a finger could land on, and pressing the middle of its
+rectangle takes that on trust. The sweeps that look for *any* owned system, and the one that sweeps
+to prove a locked sheet takes nothing, are left alone: the first is satisfied by the first tap that
+lands, and the second can only get weaker rather than wrong.
+
 **`MapView` grew two members**, so a `MapView` copied while centred carries the aim. Nothing copies
 one, which is what ADR-090 said of the zoom and is still true.
 
@@ -178,9 +190,11 @@ what a panel is.
 
 ## Verification
 
-**The arithmetic is measured; the screen is not, and that is the gap in this record.** This session
-had no Windows toolchain and no GPU, so `Lockstep.exe` was neither built nor photographed and the
-four MSVC suites were not run. What follows is what was actually checked and how.
+**The arithmetic and the suites are measured; the screen is not, and that is the gap in this
+record.** The session that wrote this had no Windows toolchain and no GPU, so nothing here was
+photographed and nothing was run locally beyond what compiles without `<windows.h>`; the four MSVC
+suites ran on CI afterwards and are reported below. What follows is what was actually checked and
+how.
 
 `NeuronClient/OrbitCamera.cpp` and `LockstepClient/MapView.h` compile and run standalone — neither
 reaches `<windows.h>` — so both were built with g++ 14 at `-Wall -Wextra -Werror` against a harness
@@ -202,18 +216,29 @@ that drives the shipping code rather than a copy of its arithmetic. Measured on 
 - **The way back works.** A fresh `MapView` reports `AtAuthoredFraming`; one that has been aimed does
   not; `ResetView` and `AimAtContent` each restore it.
 
-**Two suites were written and not run.** `NeuronClientTests::OrbitCameraTests` gains
-`APanSlidesThePictureByTheseExactPixels` and `APanTurnsNothingAndKeepsTheDistance`;
-`LockstepTests::MapCameraTapTests` gains `ATapOnASystemCentersTheCameraOnIt`,
+**The suites then ran on CI, and they are what found the cost above.** Run 103 on this branch built
+`Debug|x64` clean and reported 663 of 669 passing. All six new methods passed —
+`NeuronClientTests::OrbitCameraTests::APanSlidesThePictureByTheseExactPixels` and
+`APanTurnsNothingAndKeepsTheDistance`, and `MapCameraTapTests::ATapOnASystemCentersTheCameraOnIt`,
 `ACenteredSystemIsNotLeftUnderTheSheet`, `ATickFramesTheWholeGalaxyAgain` and
-`ResetComesBackFromACenteringToo` — the last three pressing the screen through `Headless.h` rather
-than setting a field, because what is under test is what a tap does. They are the claims the
-harness above cannot make: that the tap reaches the camera at all, and that the sheet the page
-actually draws is the one the lift clears.
+`ResetComesBackFromACenteringToo` — which is the pair of claims the standalone harness cannot make:
+that a tap reaches the camera at all, and that the sheet the page actually draws is the one the lift
+clears.
+
+**The six failures were every `MoveModeTapTests` method that entered the mode by sweeping the map
+pane**, each stopping at its own "no move to ..." guard. Every method that finds its control in the
+hit list passed, which is what identified the search rather than the control as the thing that
+broke. They press a recorded rectangle now, through `EnterMoveThrough`, and the badge test still
+names the door it goes through so that what it claims about the badge stays what it claims.
 
 `Build/CheckFormat.py` (clang-format 18; CI pins 22) reports 181 files and 0 unformatted.
 `Build/CheckProjectFiles.py` output is byte-identical to the same script's output on the parent
 commit. `clang-tidy` 18 with this tree's configuration reports nothing on either changed file.
+
+**What is still unphotographed is the screen**, and that is what a build session should do next:
+every figure above is either arithmetic or a test result, and none of them says the centring reads
+well to a player — how far the map jumps, whether the lift looks deliberate or looks like a
+mistake, and whether `RESET` appearing after every system tap is chrome this pane can carry.
 
 ## Open questions
 

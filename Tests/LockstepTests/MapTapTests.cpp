@@ -402,6 +402,56 @@ public:
     return state;
   }
 
+  /// Enters the move mode from the map, by pressing the control that starts one in the middle of
+  /// the rectangle `AddHit` recorded for it.
+  ///
+  /// **A blind sweep cannot find it, because the board moves under one.** A tap on a system centres
+  /// the camera on that system (ADR-115), so a tap that lands on a disc or a badge lays the whole
+  /// map out again -- and a grid walk stepping eight pixels between taps is then searching a board
+  /// that is not the one it measured. Pressing a recorded rectangle is what `OpenPlaceSheet` does,
+  /// and it still finds a control by WHAT IT DOES rather than by where it is, which is the property
+  /// `Headless.h` exists to keep. The list is re-read every attempt for the same reason: it belongs
+  /// to the frame it was built in.
+  ///
+  /// `_through` names which door, because which one is used is part of what some of these claim.
+  [[nodiscard]] static bool EnterMoveThrough(Lockstep::MainPage& _page, Headless& _renderers, Lockstep::MainPage::Action _through)
+  {
+    std::vector<std::int32_t> tried;
+    while (tried.size() < 32)
+    {
+      _renderers.Begin();
+      DrawPage(_page, _renderers);
+
+      const auto candidate =
+        std::ranges::find_if(_page.Hits(),
+                             [&tried, _through](const Lockstep::MainPage::HitRegion& _hit)
+                             {
+                               return _hit.action == _through && _hit.index >= 0 && _hit.x >= static_cast<float>(MAP_LEFT) &&
+                                      _hit.x < static_cast<float>(MAP_RIGHT) && std::ranges::find(tried, _hit.index) == tried.end();
+                             });
+      if (candidate == _page.Hits().end())
+      {
+        return false;
+      }
+
+      tried.push_back(candidate->index);
+      (void)_page.HandleTap(candidate->x + candidate->width * 0.5F, candidate->y + candidate->height * 0.5F);
+      if (_page.MoveOrder().has_value())
+      {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// The mode, through whichever of the map's two doors offers it: the garrison badge over a single
+  /// standing fleet, or the fleet's own marker (ADR-079, ADR-114).
+  [[nodiscard]] static bool EnterAMoveFromTheMap(Lockstep::MainPage& _page, Headless& _renderers)
+  {
+    return EnterMoveThrough(_page, _renderers, Lockstep::MainPage::Action::OpenFleetsAt) ||
+           EnterMoveThrough(_page, _renderers, Lockstep::MainPage::Action::BeginMove);
+  }
+
   TEST_METHOD(AGarrisonBadgeWithOneFleetUnderItSkipsTheSheet)
   {
     // **A badge totals SHIPS** (ADR-079), so a place holding one of your fleets has exactly one
@@ -411,8 +461,7 @@ public:
     page.Create(OneFleetStanding());
 
     Headless renderers;
-    const bool onTheMap =
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    const bool onTheMap = EnterMoveThrough(page, renderers, Lockstep::MainPage::Action::OpenFleetsAt);
     Assert::IsTrue(onTheMap, L"nothing on the map takes the one standing fleet's move onto it");
     Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::None, L"the mode left a sheet open over the map it is played on");
   }
@@ -426,8 +475,7 @@ public:
     page.Create(OneFleetStanding());
 
     Headless renderers;
-    const bool onTheMap =
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    const bool onTheMap = EnterAMoveFromTheMap(page, renderers);
     Assert::IsTrue(onTheMap, L"no move to check the reach of");
 
     renderers.Begin();
@@ -474,8 +522,7 @@ public:
     page.Create(OneFleetStanding());
 
     Headless renderers;
-    const bool onTheMap =
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    const bool onTheMap = EnterAMoveFromTheMap(page, renderers);
     Assert::IsTrue(onTheMap, L"no move to check the screen around");
 
     renderers.Begin();
@@ -520,18 +567,14 @@ public:
     page.Create(OneFleetStanding());
 
     Headless renderers;
-    Assert::IsTrue(
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); }),
-      L"no move to leave");
+    Assert::IsTrue(EnterAMoveFromTheMap(page, renderers), L"no move to leave");
 
     Assert::IsTrue(page.HandleKey(Neuron::KeyboardInput::Key::Escape), L"ESC did not leave the move mode");
     Assert::IsFalse(page.MoveOrder().has_value(), L"and the mode is still on");
 
     // Back on, and out again by tapping a part of the board that offers nothing. A tap that hits
     // nothing is what the empty map, an unreachable system and a rival's garrison all are.
-    Assert::IsTrue(
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); }),
-      L"the mode would not come back");
+    Assert::IsTrue(EnterAMoveFromTheMap(page, renderers), L"the mode would not come back");
     renderers.Begin();
     DrawPage(page, renderers);
 
@@ -569,9 +612,7 @@ public:
     page.Create(OneFleetStanding());
 
     Headless renderers;
-    Assert::IsTrue(
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); }),
-      L"no move to freeze");
+    Assert::IsTrue(EnterAMoveFromTheMap(page, renderers), L"no move to freeze");
     Assert::IsTrue(page.Animating(), L"a mode with a pulsing ring in it does not ask to be redrawn");
 
     page.SetStill(true);
@@ -639,8 +680,7 @@ public:
     Assert::IsTrue(inksIn(renderers.shapes).contains(Neuron::Pack(Lockstep::Ink::OUTLINE)),
                    L"the resting digest draws no outlined control, so this test is measuring nothing");
 
-    const bool onTheMap =
-      SweepFor(page, renderers, DrawPage, MAP_LEFT, TOP_BAR, MAP_RIGHT, SCREEN_HEIGHT, [&page] { return page.MoveOrder().has_value(); });
+    const bool onTheMap = EnterAMoveFromTheMap(page, renderers);
     Assert::IsTrue(onTheMap, L"no move to fade the column under");
 
     renderers.Begin();
