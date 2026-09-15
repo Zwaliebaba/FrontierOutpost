@@ -145,6 +145,13 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="NeuronClientTests.cpp" />
+    <ClCompile Include="FontTests.cpp" />
+    <ClCompile Include="RendererTests.cpp" />
+    <ClCompile Include="PointerInputTests.cpp" />
+    <ClCompile Include="GestureTests.cpp" />
+    <ClCompile Include="OrbitCameraTests.cpp" />
+    <ClCompile Include="TextFieldTests.cpp" />
+    <ClCompile Include="StarfieldTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />

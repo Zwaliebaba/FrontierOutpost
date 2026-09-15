@@ -258,10 +258,16 @@ dialog: top bar `MATCH ENDED --:--:--`, rail header `FINAL` / `MATCH ENDED` in r
 is over. This is what you finished with.*, footer `NOTHING MORE LOCKS` / `T30 FINAL`, every control
 inert, the digest carrying no standing moves.
 
-**Code.** `LockstepClient/MainPage.{h,cpp}` (bar, two rails, sheets, the move mode, hits), `DigestView.{h,cpp}`
-(ranking, grouping, standing moves, the delta), `MapRender.{h,cpp}`, `MapView.h`, `MatchState.h`
-(the view model); `Lockstep/SnapshotView.cpp` turns the snapshot and the digests into it and
-composes each event's actions. Tap tests in `Tests/LockstepTests/TapTests.cpp`.
+**Code.** `LockstepClient/MainPage.h`, defined across one unit per pane -- `MainPage.cpp` (creation,
+the sentences, the clock), `MainPageTopBar.cpp`, `MainPageMap.cpp`, `MainPageDigest.cpp`,
+`MainPageRail.cpp`, `MainPageSheet.cpp`, `MainPageMove.cpp` and `MainPageInput.cpp` (the taps, drags,
+notches and keys) -- with the control vocabulary in `Controls.{h,cpp}` (ADR-110) and what the units
+share in `MainPageParts.h`; `DigestView.{h,cpp}` (ranking, grouping, standing moves, the delta),
+`MapRender.{h,cpp}`, `MapView.h`, `MatchState.h` (the view model); `Lockstep/SnapshotView.cpp` turns
+the snapshot and the digests into it and composes each event's actions. Tap tests in
+`Tests/LockstepTests/`, one suite per surface over the harness in `Headless.h`: `TapTests.cpp` (the
+dialog, the seats, the top bar, the board offline), `DigestTapTests.cpp`, `SignalSheetTapTests.cpp`,
+`PlaceSheetTapTests.cpp`, `RailTapTests.cpp`, `MapTapTests.cpp`.
 
 ## 02 · Share tick — **not built** (no capture; the mockup that was its target is in the design file and the history)
 

@@ -37,6 +37,9 @@ struct DigestCard;
 ///
 /// The only state it does keep is what the PLAYER has done and the server has not seen yet: which
 /// node the digest focused, which panel is open, and the orders they have edited but not locked.
+///
+/// **Defined across one translation unit per pane** -- `MainPage.cpp` says which -- with the control
+/// vocabulary in `Controls.h` (ADR-110) and what the units share in `MainPageParts.h`.
 class MainPage
 {
 public:

@@ -61,6 +61,8 @@ clang-tidy can require an *absent* prefix but cannot see a *present* suffix, so 
 
 Adding, removing or moving a file means editing the owning `.vcxproj` **and** its `.filters`. `Build/CheckProjectFiles.py` checks both halves and the on-disk spelling.
 
+**A class too large for one translation unit is split by aspect, and the units are named for the type and the aspect.** `MainPage` is the precedent (owner decision, 2026-09-15): the header stays one file, the members go into `<Type><Aspect>.cpp` units each named for the pane or concern it draws or answers (`MainPageDigest.cpp`, `MainPageInput.cpp`), and what the units share lives in `<Type>Parts.h` rather than being copied into each. A component with a vocabulary of its own becomes its own type and file instead (`Controls.h`). A test suite splits the same way -- one file per subject (`MapTapTests.cpp`, `FontTests.cpp`) over one harness header (`Headless.h`) -- and a suite file is named for its subject, as every suite file already is.
+
 **R8 — `m_` marks encapsulated state, not every field.** A `class` with invariants prefixes private members `m_`. A public aggregate — a `Desc` config struct, a wire record, a POD handed to the renderer — uses plain `camelCase` fields so brace initialization reads naturally.
 
 **R9 — One namespace per layer.** Engine code (`NeuronCore`, `NeuronClient`, `NeuronServer`) is `namespace Neuron`. Game code (`GameLogic`, and the game half of the executable) is `namespace Lockstep`. The engine knows nothing about this game; if a type needs to know what a mining laser is, it is in the wrong library. Test suites use `namespace <Project>Tests`.
