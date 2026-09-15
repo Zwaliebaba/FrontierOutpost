@@ -30,6 +30,27 @@
 *.ttf binary
 
 ###############################################################################
+# The resource files, for the reason the TTFs are named above.
+#
+# `LockStep.ico` is byte-exact in a way nothing checks: its 118-byte directory
+# declares the size and depth of each of the seven images behind it, and Windows
+# picks which image to draw by reading THAT and not the images (ADR-111's
+# activation commit; `LoadImage` defers to `LookupIconIdFromDirectoryEx`). A
+# directory that has been edited is a blurry taskbar icon and nothing louder --
+# no error, no failed build.
+#
+# `Lockstep.rc` is UTF-16LE, which is what the Visual Studio resource editor
+# writes. A line-ending normalisation inside UTF-16 does not correct a file, it
+# destroys one: the bytes CR and LF are half of a code unit there.
+#
+# Both are left alone today only because git finds a NUL byte in the first 8 KiB
+# and calls them binary. That is a heuristic, and neither of these should rest on
+# one, so it is stated -- the same argument, and the same remedy, as the TTFs.
+###############################################################################
+*.ico binary
+*.rc  binary
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by
