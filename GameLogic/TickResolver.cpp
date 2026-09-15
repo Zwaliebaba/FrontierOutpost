@@ -363,7 +363,7 @@ void ReportRefusals(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& 
 ///
 /// "Conceding never denies an attacker their prize" -- the territory stays on the board and stays
 /// takeable.
-bool ApplyConcede(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& _record, PlayerId _player, const OrderSet& _set)
+bool ApplyConcede(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& _record, PlayerId _player)
 {
   // Concession is custodianship that cannot be undone. "Conceding never denies an attacker
   // their prize" -- the territory stays on the board and stays takeable.
@@ -576,7 +576,7 @@ void ApplyAnswersTo(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& 
 }
 
 /// One player's withdrawals of offers they made.
-void ApplyWithdrawals(Match& _next, TickLog& _log, PhaseRecord& _record, PlayerId _player, const OrderSet& _set)
+void ApplyWithdrawals(Match& _next, TickLog& _log, PlayerId _player, const OrderSet& _set)
 {
   for (const WithdrawOrder& withdraw : _set.withdrawals)
   {
@@ -734,7 +734,7 @@ void ApplyAnswers(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& _r
     const PlayerId player{static_cast<std::int32_t>(index)};
 
     ApplyAnswersTo(_in, _next, _log, _record, player, *set);
-    ApplyWithdrawals(_next, _log, _record, player, *set);
+    ApplyWithdrawals(_next, _log, player, *set);
     ApplyCancellations(_next, _log, _record, player, *set);
   }
 
@@ -820,7 +820,7 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
       continue;
     }
 
-    if (set->concede && ApplyConcede(_in, next, _log, record, player, *set))
+    if (set->concede && ApplyConcede(_in, next, _log, record, player))
     {
       continue;
     }
