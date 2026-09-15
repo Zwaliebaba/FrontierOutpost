@@ -671,6 +671,30 @@ private:
     std::int32_t index = EventRefs::NONE;
   };
   [[nodiscard]] DigestTarget TargetOf(const EventAction& _action) const noexcept;
+
+  /// The locks rail's own vocabulary, complete in `MainPageRail.cpp` and nowhere else: one order,
+  /// one place, and where the column is up to inside the band it scrolls in (ADR-101, ADR-112).
+  struct OrderRow;
+  struct PlaceRow;
+  struct RailCursor;
+
+  /// The rail's ground, header, help line and band; the cursor it returns is where the sections
+  /// start and what they are culled against.
+  [[nodiscard]] RailCursor BeginRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, bool _atLock);
+  [[nodiscard]] std::vector<OrderRow> ComposeOrders(bool _navigateOnly) const;
+  [[nodiscard]] std::vector<PlaceRow> ComposePlaces(bool _navigateOnly) const;
+  void DrawRailSection(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, RailCursor& _cursor, std::string_view _label,
+                       std::string_view _count);
+  void DrawRailRow(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, RailCursor& _cursor, std::string_view _label,
+                   std::string_view _status, const Neuron::Color& _statusColor, Action _action, std::int32_t _index,
+                   std::size_t _dimHead = 0);
+  void DrawOrderRow(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, RailCursor& _cursor, const OrderRow& _order);
+  void DrawPlaceRow(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, RailCursor& _cursor, const PlaceRow& _place);
+  void DrawRailNothing(Neuron::FontRenderer& _text, RailCursor& _cursor, std::string_view _text2);
+  void DrawRailSignals(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, RailCursor& _cursor);
+  void DrawRailProposals(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, RailCursor& _cursor);
+  /// The page band and the pinned footer, read from what the sections came to.
+  void DrawRailFooter(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text, const RailCursor& _cursor, bool _atLock);
   void DrawLocksRail(Neuron::ShapeRenderer& _shapes, Neuron::FontRenderer& _text);
 
   /// The sheet's own vocabulary, complete in `MainPageSheet.cpp` and nowhere else: what one row
