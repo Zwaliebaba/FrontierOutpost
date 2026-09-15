@@ -932,48 +932,61 @@ void DrawFleetOverlay(FontRenderer& _text, const MapFrame& _frame, std::vector<M
   }
 }
 
-} // namespace
-
-std::string FocusLine(const MatchState& _state, std::int32_t _focusedSystem)
+/// One frame of the map, and everything its phases share (ADR-014, ADR-017).
+///
+/// **The camera is what makes this a record rather than seven free functions over a `MapFrame`.**
+/// Projecting a world point, finding a system's spot on the plane and drawing a segment between two
+/// projected points are the three things every phase does, all three need the camera the frame was
+/// just framed with, and passing that camera plus a hit list plus a label field to eight functions
+/// is the argument list a record exists to replace.
+struct MapPass
 {
-  std::string line = "MAP";
-  if (_focusedSystem != EventRefs::NONE && _focusedSystem < static_cast<std::int32_t>(_state.graph.systems.size()))
+  const MapFrame& frame;
+  const Neuron::OrbitCamera& camera;
+  /// Where the taps this frame records go, and the field that keeps the names out of each other's
+  /// way (ADR-090). Both are written by the phases and read by the caller.
+  std::vector<MapHit>& hits;
+  LabelField& labels;
+  /// The map pane's left edge, which the focus caption and the legend both start from. The width
+  /// and the height are the viewport's, set once in `BeginMap` and never read again.
+  float paneX = 0.0F;
+  /// Whether a move is being chosen on this map, which changes what every phase draws (ADR-113).
+  bool moving = false;
+
+  [[nodiscard]] Neuron::OrbitCamera::ScreenPoint Project(const Neuron::OrbitCamera::WorldPoint& _world) const
   {
-    const SystemNode& focused = _state.graph.systems[static_cast<std::size_t>(_focusedSystem)];
-    line += focused.name.empty() ? " - FOCUS: THE FALLOW" : " - FOCUS: " + Uppercased(focused.name);
+    return camera.Project(_world);
   }
-  return line;
-}
 
-bool CaptureIsNews(std::uint32_t _capturedAt, std::uint32_t _tick) noexcept
-{
-  /// Three ticks is the window a returning player is shown anyway (ADR-044's backlog is counted in
-  /// ticks, and a digest reports the tick it is about), so a label that outlives it is saying
-  /// something no card is still saying.
-  constexpr std::uint32_t CAPTURE_NEWS_TICKS = 3;
-  return _capturedAt != 0 && _tick <= _capturedAt + CAPTURE_NEWS_TICKS;
-}
-
-float StemHeightFor(std::uint32_t _production, bool _capital) noexcept
-{
-  if (_production == 0)
+  /// Where a system stands on the plane, projected.
+  [[nodiscard]] Neuron::OrbitCamera::ScreenPoint GroundOf(std::int32_t _system) const
   {
-    return _capital ? CAPITAL_STEM_HEIGHT : STEM_HEIGHT;
+    const SystemNode& node = frame.state.graph.systems[static_cast<std::size_t>(_system)];
+    return Project(MapView::Ground(node.positionX, node.positionY));
   }
-  const float stands = STEM_BASE + static_cast<float>(_production) * STEM_PER_UNIT;
-  return _capital ? std::max(stands, CAPITAL_STEM_HEIGHT) : stands;
-}
 
-float FootprintRadiusFor(std::uint32_t _production) noexcept
+  /// A segment between two projected points, drawn only when both ends are in front of the eye.
+  ///
+  /// Clipping the one-end case properly would be the right answer for a camera that can be put
+  /// inside the galaxy; this one orbits outside it, so a lane with one end behind the eye is a
+  /// lane at the very edge of a steep view, and dropping it is not visible.
+  void Segment(ShapeRenderer& _shapes, const Neuron::OrbitCamera::ScreenPoint& _a, const Neuron::OrbitCamera::ScreenPoint& _b,
+               const Color& _color, float _thickness) const
+  {
+    if (_a.visible && _b.visible)
+    {
+      _shapes.Line(_a.xPixels, _a.yPixels, _b.xPixels, _b.yPixels, _color, _thickness);
+    }
+  }
+};
+
+/// The pane, the camera framed to the board, the sky, and the record the phases share.
+///
+/// Framed to the tallest stem rather than to a constant (ADR-103), and the mesh pass is given the
+/// same camera here so that the balls and their labels are placed by one.
+[[nodiscard]] MapPass BeginMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::MeshRenderer& _meshes, const MapFrame& _frame,
+                               std::vector<MapHit>& _hits, LabelField& _labels)
 {
-  return FOOTPRINT_BASE + static_cast<float>(_production) * FOOTPRINT_PER_UNIT;
-}
-
-std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::MeshRenderer& _meshes, const MapFrame& _frame)
-{
-  std::vector<MapHit> hits;
-  LabelField labels;
-
   const float paneX = Frame::DIGEST_WIDTH;
   const float paneWidth = Frame::SCREEN_WIDTH - Frame::DIGEST_WIDTH - Frame::ORDERS_WIDTH;
   const float paneHeight = Frame::SCREEN_HEIGHT - Frame::TOP_BAR_HEIGHT;
@@ -1011,48 +1024,37 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   // first and depth-tests against nothing, so the galaxy covers it.
   _frame.sky.Draw(_shapes, camera, STAR);
 
-  const bool moving = _frame.moveOrigin != EventRefs::NONE;
+  return MapPass{
+    .frame = _frame, .camera = camera, .hits = _hits, .labels = _labels, .paneX = paneX, .moving = _frame.moveOrigin != EventRefs::NONE};
+}
 
-  const auto project = [&camera](const Neuron::OrbitCamera::WorldPoint& _world) { return camera.Project(_world); };
-  const auto groundOf = [&](std::int32_t _system)
-  {
-    const SystemNode& node = _frame.state.graph.systems[static_cast<std::size_t>(_system)];
-    return project(MapView::Ground(node.positionX, node.positionY));
-  };
-
-  // A segment between two projected points, drawn only when both ends are in front of the eye.
-  // Clipping the one-end case properly would be the right answer for a camera that can be put
-  // inside the galaxy; this one orbits outside it, so a lane with one end behind the eye is a
-  // lane at the very edge of a steep view, and dropping it is not visible.
-  const auto segment = [&_shapes](const Neuron::OrbitCamera::ScreenPoint& _a, const Neuron::OrbitCamera::ScreenPoint& _b,
-                                  const Color& _color, float _thickness)
-  {
-    if (_a.visible && _b.visible)
-    {
-      _shapes.Line(_a.xPixels, _a.yPixels, _b.xPixels, _b.yPixels, _color, _thickness);
-    }
-  };
-
+void DrawGroundGrid(ShapeRenderer& _shapes, const MapPass& _pass)
+{
   // The ground grid, now genuinely on the ground: lines of constant x and constant z, projected.
   // It turns with the camera because it is part of the world, and that single change is most of
   // what makes the rotation read as a viewpoint moving rather than a picture being spun (ADR-017).
   for (std::uint32_t step = 0; step <= GRID_LINES_ACROSS; ++step)
   {
     const float at = GRID_MIN_DESIGN + static_cast<float>(step) * GRID_STEP;
-    segment(project(MapView::Ground(at, GRID_MIN_DESIGN)), project(MapView::Ground(at, GRID_MAX_DESIGN)), GRID_LINE, 1.0F);
-    segment(project(MapView::Ground(GRID_MIN_DESIGN, at)), project(MapView::Ground(GRID_MAX_DESIGN, at)), GRID_LINE, 1.0F);
+    _pass.Segment(_shapes, _pass.Project(MapView::Ground(at, GRID_MIN_DESIGN)), _pass.Project(MapView::Ground(at, GRID_MAX_DESIGN)),
+                  GRID_LINE, 1.0F);
+    _pass.Segment(_shapes, _pass.Project(MapView::Ground(GRID_MIN_DESIGN, at)), _pass.Project(MapView::Ground(GRID_MAX_DESIGN, at)),
+                  GRID_LINE, 1.0F);
   }
+}
 
+void DrawLanes(ShapeRenderer& _shapes, FontRenderer& _text, const MapPass& _pass)
+{
   // Lanes lie on the plane, under everything that stands on it.
-  for (const Lane& lane : _frame.state.graph.lanes)
+  for (const Lane& lane : _pass.frame.state.graph.lanes)
   {
-    const Neuron::OrbitCamera::ScreenPoint a = groundOf(lane.a);
-    const Neuron::OrbitCamera::ScreenPoint b = groundOf(lane.b);
+    const Neuron::OrbitCamera::ScreenPoint a = _pass.GroundOf(lane.a);
+    const Neuron::OrbitCamera::ScreenPoint b = _pass.GroundOf(lane.b);
     if (!a.visible || !b.visible)
     {
       continue;
     }
-    labels.lanes.push_back(LabelField::Segment{a.xPixels, a.yPixels, b.xPixels, b.yPixels});
+    _pass.labels.lanes.push_back(LabelField::Segment{a.xPixels, a.yPixels, b.xPixels, b.yPixels});
 
     // **While a move is being chosen, a lane is either an offer or it is out of the way**
     // (ADR-113). The ones out of the origin that lead somewhere the fleet may go are drawn in blue
@@ -1061,13 +1063,13 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
     // else. The tick cost drops with its lane, because the chip under the lit system's name carries
     // the same number and says the arrival tick too.
     const MoveTarget* offered = nullptr;
-    if (moving)
+    if (_pass.moving)
     {
-      const std::int32_t other = lane.a == _frame.moveOrigin ? lane.b : (lane.b == _frame.moveOrigin ? lane.a : EventRefs::NONE);
-      offered = other == EventRefs::NONE ? nullptr : TargetFor(_frame, other);
+      const std::int32_t other = lane.a == _pass.frame.moveOrigin ? lane.b : (lane.b == _pass.frame.moveOrigin ? lane.a : EventRefs::NONE);
+      offered = other == EventRefs::NONE ? nullptr : TargetFor(_pass.frame, other);
     }
 
-    if (moving && offered == nullptr)
+    if (_pass.moving && offered == nullptr)
     {
       _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, LANE_UNLIT, 1.2F);
       DrawCentered(_text, (a.xPixels + b.xPixels) * 0.5F, static_cast<std::int32_t>(std::lround((a.yPixels + b.yPixels) * 0.5F)) - 4,
@@ -1076,14 +1078,14 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
     }
     if (offered != nullptr)
     {
-      if (offered->system == _frame.moveSelected)
+      if (offered->system == _pass.frame.moveSelected)
       {
         _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, Ink::BLUE, 2.5F);
       }
       else
       {
         _shapes.DashedLine(a.xPixels, a.yPixels, b.xPixels, b.yPixels, Ink::BLUE, 1.5F, MOVE_DASH, MOVE_GAP,
-                           _frame.animationSeconds * MOVE_DASH_PIXELS_PER_SECOND);
+                           _pass.frame.animationSeconds * MOVE_DASH_PIXELS_PER_SECOND);
       }
       continue;
     }
@@ -1107,7 +1109,10 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
     DrawCentered(_text, (a.xPixels + b.xPixels) * 0.5F, static_cast<std::int32_t>(std::lround((a.yPixels + b.yPixels) * 0.5F)) - 4,
                  std::to_string(lane.cost), Ink::TEXT_DETAIL);
   }
+}
 
+void DrawRoutes(ShapeRenderer& _shapes, const MapPass& _pass)
+{
   // ---- Routes ----------------------------------------------------------------------------------
   //
   // **Where every fleet under way is GOING, drawn from origin to destination** (ADR-055). On the
@@ -1121,25 +1126,28 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   // The line is drawn origin first, and a growing offset walks the pattern toward the SECOND
   // endpoint -- so the dots travel the way the fleet is going, which is the only direction that
   // means anything.
-  for (const Fleet& fleet : _frame.state.fleets)
+  for (const Fleet& fleet : _pass.frame.state.fleets)
   {
     if (!fleet.OnALane())
     {
       continue;
     }
 
-    const Neuron::OrbitCamera::ScreenPoint origin = groundOf(fleet.from);
-    const Neuron::OrbitCamera::ScreenPoint destination = groundOf(fleet.to);
+    const Neuron::OrbitCamera::ScreenPoint origin = _pass.GroundOf(fleet.from);
+    const Neuron::OrbitCamera::ScreenPoint destination = _pass.GroundOf(fleet.to);
     if (!origin.visible || !destination.visible)
     {
       continue;
     }
 
     _shapes.DashedLine(origin.xPixels, origin.yPixels, destination.xPixels, destination.yPixels,
-                       WithAlpha(OwnerColor(fleet.owner, _frame.state.viewer), ROUTE_ALPHA), ROUTE_THICKNESS, ROUTE_DOT, ROUTE_GAP,
-                       _frame.animationSeconds * ROUTE_SPEED_PIXELS_PER_SECOND);
+                       WithAlpha(OwnerColor(fleet.owner, _pass.frame.state.viewer), ROUTE_ALPHA), ROUTE_THICKNESS, ROUTE_DOT, ROUTE_GAP,
+                       _pass.frame.animationSeconds * ROUTE_SPEED_PIXELS_PER_SECOND);
   }
+}
 
+void DrawSealedRegion(ShapeRenderer& _shapes, FontRenderer& _text, const MapPass& _pass)
+{
   // The sealed region: everyone can see it and count down to it, which is what makes it a race
   // rather than a reward (one-pager, "Pacing devices").
   //
@@ -1147,22 +1155,23 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   // ellipse. An ellipse was right when the viewing angle could not change; now the shape a ground
   // circle makes depends on where the camera is, and projecting it is how it comes out right at
   // every angle for free.
-  if (_frame.state.region.anchor != EventRefs::NONE)
+  if (_pass.frame.state.region.anchor != EventRefs::NONE)
   {
-    const SystemNode& anchor = _frame.state.graph.systems[static_cast<std::size_t>(_frame.state.region.anchor)];
-    DrawGroundCircle(_shapes, _frame, anchor.positionX, anchor.positionY, REGION_RADIUS, WithAlpha(Ink::PURPLE, 20), Ink::PURPLE, true);
+    const SystemNode& anchor = _pass.frame.state.graph.systems[static_cast<std::size_t>(_pass.frame.state.region.anchor)];
+    DrawGroundCircle(_shapes, _pass.frame, anchor.positionX, anchor.positionY, REGION_RADIUS, WithAlpha(Ink::PURPLE, 20), Ink::PURPLE,
+                     true);
     // A second ring, lifted. The reference drew one to suggest a volume rather than a puddle, and
     // with a real camera it does the job properly: it is a circle at altitude, so the gap between
     // the two rings opens and closes as the camera tilts.
-    DrawGroundCircle(_shapes, _frame, anchor.positionX, anchor.positionY, REGION_RADIUS, {0, 0, 0, 0}, WithAlpha(Ink::PURPLE, 89), true,
-                     REGION_VOLUME_HEIGHT);
+    DrawGroundCircle(_shapes, _pass.frame, anchor.positionX, anchor.positionY, REGION_RADIUS, {0, 0, 0, 0}, WithAlpha(Ink::PURPLE, 89),
+                     true, REGION_VOLUME_HEIGHT);
 
-    for (const auto& [offsetX, offsetY] : _frame.state.region.siteOffsets)
+    for (const auto& [offsetX, offsetY] : _pass.frame.state.region.siteOffsets)
     {
-      const Neuron::OrbitCamera::ScreenPoint foot = project(MapView::Ground(anchor.positionX + offsetX, anchor.positionY + offsetY));
+      const Neuron::OrbitCamera::ScreenPoint foot = _pass.Project(MapView::Ground(anchor.positionX + offsetX, anchor.positionY + offsetY));
       const Neuron::OrbitCamera::ScreenPoint head =
-        project(MapView::Above(anchor.positionX + offsetX, anchor.positionY + offsetY, SITE_PIN_HEIGHT));
-      segment(foot, head, WithAlpha(Ink::PURPLE, 153), 1.0F);
+        _pass.Project(MapView::Above(anchor.positionX + offsetX, anchor.positionY + offsetY, SITE_PIN_HEIGHT));
+      _pass.Segment(_shapes, foot, head, WithAlpha(Ink::PURPLE, 153), 1.0F);
       if (head.visible)
       {
         _shapes.FillEllipse(head.xPixels, head.yPixels, 2.5F, 2.5F, Ink::PURPLE);
@@ -1171,14 +1180,17 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
 
     // Below the nearest point of the rim, not beside the centre: at a low camera angle the two
     // are almost the same place and the label lands inside the region.
-    const Neuron::OrbitCamera::ScreenPoint label = project(MapView::Ground(anchor.positionX, anchor.positionY + REGION_RADIUS));
+    const Neuron::OrbitCamera::ScreenPoint label = _pass.Project(MapView::Ground(anchor.positionX, anchor.positionY + REGION_RADIUS));
     if (label.visible)
     {
       DrawCentered(_text, label.xPixels, static_cast<std::int32_t>(std::lround(label.yPixels)) + 14,
-                   std::format("SEALED - OPENS T{}", _frame.state.region.opensAt), Ink::PURPLE);
+                   std::format("SEALED - OPENS T{}", _pass.frame.state.region.opensAt), Ink::PURPLE);
     }
   }
+}
 
+void DrawSolids(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::MeshRenderer& _meshes, MapPass& _pass)
+{
   // ---- SYSTEMS AND FLEETS, BACK TO FRONT ------------------------------------------------------
   //
   // THE SORT IS THE CAMERA'S DOING. With a fixed viewpoint the authored order was correct for
@@ -1194,37 +1206,37 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   };
 
   std::vector<Drawable> drawables;
-  drawables.reserve(_frame.state.graph.systems.size() + _frame.state.fleets.size());
+  drawables.reserve(_pass.frame.state.graph.systems.size() + _pass.frame.state.fleets.size());
 
-  for (std::size_t index = 0; index < _frame.state.graph.systems.size(); ++index)
+  for (std::size_t index = 0; index < _pass.frame.state.graph.systems.size(); ++index)
   {
-    const SystemNode& node = _frame.state.graph.systems[index];
+    const SystemNode& node = _pass.frame.state.graph.systems[index];
     if (HasFlag(node.flags, SystemFlags::RegionAnchor))
     {
       continue;
     }
-    const Neuron::OrbitCamera::ScreenPoint ground = groundOf(static_cast<std::int32_t>(index));
+    const Neuron::OrbitCamera::ScreenPoint ground = _pass.GroundOf(static_cast<std::int32_t>(index));
     if (ground.visible)
     {
       drawables.push_back(Drawable{ground.depth, static_cast<std::int32_t>(index), false});
     }
   }
 
-  for (std::size_t index = 0; index < _frame.state.fleets.size(); ++index)
+  for (std::size_t index = 0; index < _pass.frame.state.fleets.size(); ++index)
   {
-    const Fleet& fleet = _frame.state.fleets[index];
+    const Fleet& fleet = _pass.frame.state.fleets[index];
     if (!fleet.OnALane())
     {
       continue;
     }
     // The same position `DrawFleet` will use, clamp included: a depth sorted from one point and
     // drawn at another puts a fleet in front of a system it is behind.
-    const SystemNode& from = _frame.state.graph.systems[static_cast<std::size_t>(fleet.from)];
-    const SystemNode& to = _frame.state.graph.systems[static_cast<std::size_t>(fleet.to)];
-    const float drawnAt = DrawnProgress(camera, from, to, fleet.progress);
+    const SystemNode& from = _pass.frame.state.graph.systems[static_cast<std::size_t>(fleet.from)];
+    const SystemNode& to = _pass.frame.state.graph.systems[static_cast<std::size_t>(fleet.to)];
+    const float drawnAt = DrawnProgress(_pass.camera, from, to, fleet.progress);
     const float designX = from.positionX + (to.positionX - from.positionX) * drawnAt;
     const float designY = from.positionY + (to.positionY - from.positionY) * drawnAt;
-    const Neuron::OrbitCamera::ScreenPoint at = project(MapView::Ground(designX, designY));
+    const Neuron::OrbitCamera::ScreenPoint at = _pass.Project(MapView::Ground(designX, designY));
     if (at.visible)
     {
       drawables.push_back(Drawable{at.depth, static_cast<std::int32_t>(index), true});
@@ -1243,11 +1255,11 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   {
     if (drawable.isFleet)
     {
-      DrawFleetGround(_shapes, _meshes, _frame, drawable.index);
+      DrawFleetGround(_shapes, _meshes, _pass.frame, drawable.index);
     }
     else
     {
-      DrawStationGround(_shapes, _meshes, _frame, drawable.index);
+      DrawStationGround(_shapes, _meshes, _pass.frame, drawable.index);
     }
   }
 
@@ -1257,14 +1269,17 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   {
     if (drawable.isFleet)
     {
-      DrawFleetOverlay(_text, _frame, hits, labels, drawable.index);
+      DrawFleetOverlay(_text, _pass.frame, _pass.hits, _pass.labels, drawable.index);
     }
     else
     {
-      DrawStationOverlay(_shapes, _text, _frame, hits, labels, drawable.index);
+      DrawStationOverlay(_shapes, _text, _pass.frame, _pass.hits, _pass.labels, drawable.index);
     }
   }
+}
 
+void DrawFocusCaption(FontRenderer& _text, const MapPass& _pass)
+{
   // `MAP - FOCUS: HALVORSEN` in the top-left corner (DESIGN-GUIDELINES "Map"). The map is no
   // longer captioned with a census -- that is on the top bar now -- and says instead what it is
   // currently pointed at, because the digest can point it somewhere.
@@ -1272,12 +1287,15 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   // **The move mode's banner takes this corner** (ADR-113), so it is not drawn under one: the
   // banner is interface and this is world text, and interface is drawn second -- a caption left
   // here would be a caption the banner cannot cover.
-  if (!moving)
+  if (!_pass.moving)
   {
-    _text.DrawText(static_cast<std::int32_t>(paneX) + 12, static_cast<std::int32_t>(Frame::TOP_BAR_HEIGHT) + 12,
-                   FocusLine(_frame.state, _frame.focusedSystem), Ink::TEXT_DETAIL);
+    _text.DrawText(static_cast<std::int32_t>(_pass.paneX) + 12, static_cast<std::int32_t>(Frame::TOP_BAR_HEIGHT) + 12,
+                   FocusLine(_pass.frame.state, _pass.frame.focusedSystem), Ink::TEXT_DETAIL);
   }
+}
 
+void DrawLegend(ShapeRenderer& _shapes, FontRenderer& _text, const MapPass& _pass)
+{
   // The legend earns its place: the owner colours are also the semantic colours, so a player who
   // learns this row can read every other coloured thing on the screen.
   struct LegendEntry
@@ -1297,20 +1315,21 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   // The empires this player can actually see, not all twelve. A twelve-swatch legend would fill
   // the bar with colours for empires nobody has met, and the
   // entries that earn their place are the ones already on the map (ADR-027).
-  const auto labelOf = [&_frame](OwnerId _player)
+  const auto labelOf = [&_pass](OwnerId _player)
   {
-    return _player >= 0 && _player < static_cast<OwnerId>(_frame.state.players.size())
-             ? _frame.state.players[static_cast<std::size_t>(_player)].label
+    return _player >= 0 && _player < static_cast<OwnerId>(_pass.frame.state.players.size())
+             ? _pass.frame.state.players[static_cast<std::size_t>(_player)].label
              : std::string("RIVAL");
   };
 
   std::vector<LegendEntry> legend;
-  legend.push_back({labelOf(_frame.state.viewer), OwnerColor(_frame.state.viewer, _frame.state.viewer), false, false});
+  legend.push_back({labelOf(_pass.frame.state.viewer), OwnerColor(_pass.frame.state.viewer, _pass.frame.state.viewer), false, false});
 
   std::vector<OwnerId> rivals;
-  for (const SystemNode& node : _frame.state.graph.systems)
+  for (const SystemNode& node : _pass.frame.state.graph.systems)
   {
-    if (node.owner != NOBODY && node.owner != _frame.state.viewer && std::find(rivals.begin(), rivals.end(), node.owner) == rivals.end())
+    if (node.owner != NOBODY && node.owner != _pass.frame.state.viewer &&
+        std::find(rivals.begin(), rivals.end(), node.owner) == rivals.end())
     {
       rivals.push_back(node.owner);
     }
@@ -1322,7 +1341,7 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   constexpr std::size_t MOST_RIVALS_SHOWN = 4;
   for (std::size_t index = 0; index < rivals.size() && index < MOST_RIVALS_SHOWN; ++index)
   {
-    legend.push_back({labelOf(rivals[index]), OwnerColor(rivals[index], _frame.state.viewer), false, false});
+    legend.push_back({labelOf(rivals[index]), OwnerColor(rivals[index], _pass.frame.state.viewer), false, false});
   }
 
   legend.push_back({"PROPOSED LANE", Ink::BLUE, true, true});
@@ -1331,7 +1350,7 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   // Only when there is one on the map. A legend entry for a thing nobody can see is a colour to
   // learn for nothing, which is the rule the rival swatches above already follow (ADR-027).
   const bool anyMoving =
-    std::any_of(_frame.state.fleets.begin(), _frame.state.fleets.end(), [](const Fleet& _fleet) { return _fleet.OnALane(); });
+    std::any_of(_pass.frame.state.fleets.begin(), _pass.frame.state.fleets.end(), [](const Fleet& _fleet) { return _fleet.OnALane(); });
   if (anyMoving)
   {
     legend.push_back({"FLEET UNDER WAY", Ink::BLUE, false, false, false, true});
@@ -1340,7 +1359,7 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   // **`SHIPS`, not `FLEETS`, because the number on the badge is ships.** A system holding three
   // fleets of three wears one badge reading 9, and a legend calling that "fleets" would be teaching
   // the wrong reading of the only number the map now carries.
-  const bool anyHolding = std::any_of(_frame.state.fleets.begin(), _frame.state.fleets.end(),
+  const bool anyHolding = std::any_of(_pass.frame.state.fleets.begin(), _pass.frame.state.fleets.end(),
                                       [](const Fleet& _fleet) { return !_fleet.OnALane() && _fleet.owner != NOBODY; });
   if (anyHolding)
   {
@@ -1351,9 +1370,9 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   // sheet's `CANCEL` bar is the bottom fifty-two, so every sheet capture this project has taken
   // shows `YOU  PROPOSED LANE  TRADE LANE` sliced off under it. A legend nobody can read is worse
   // than no legend: it is a row of half-glyphs that looks like a rendering fault.
-  float legendX = paneX + 12.0F;
+  float legendX = _pass.paneX + 12.0F;
   const float legendY = Frame::SCREEN_HEIGHT - 20.0F;
-  for (const LegendEntry& entry : _frame.sheetOpen ? std::vector<LegendEntry>{} : legend)
+  for (const LegendEntry& entry : _pass.frame.sheetOpen ? std::vector<LegendEntry>{} : legend)
   {
     if (entry.isLane)
     {
@@ -1390,6 +1409,63 @@ std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron:
   }
 
   _text.ClearClipRect();
+}
+
+} // namespace
+
+std::string FocusLine(const MatchState& _state, std::int32_t _focusedSystem)
+{
+  std::string line = "MAP";
+  if (_focusedSystem != EventRefs::NONE && _focusedSystem < static_cast<std::int32_t>(_state.graph.systems.size()))
+  {
+    const SystemNode& focused = _state.graph.systems[static_cast<std::size_t>(_focusedSystem)];
+    line += focused.name.empty() ? " - FOCUS: THE FALLOW" : " - FOCUS: " + Uppercased(focused.name);
+  }
+  return line;
+}
+
+bool CaptureIsNews(std::uint32_t _capturedAt, std::uint32_t _tick) noexcept
+{
+  /// Three ticks is the window a returning player is shown anyway (ADR-044's backlog is counted in
+  /// ticks, and a digest reports the tick it is about), so a label that outlives it is saying
+  /// something no card is still saying.
+  constexpr std::uint32_t CAPTURE_NEWS_TICKS = 3;
+  return _capturedAt != 0 && _tick <= _capturedAt + CAPTURE_NEWS_TICKS;
+}
+
+float StemHeightFor(std::uint32_t _production, bool _capital) noexcept
+{
+  if (_production == 0)
+  {
+    return _capital ? CAPITAL_STEM_HEIGHT : STEM_HEIGHT;
+  }
+  const float stands = STEM_BASE + static_cast<float>(_production) * STEM_PER_UNIT;
+  return _capital ? std::max(stands, CAPITAL_STEM_HEIGHT) : stands;
+}
+
+float FootprintRadiusFor(std::uint32_t _production) noexcept
+{
+  return FOOTPRINT_BASE + static_cast<float>(_production) * FOOTPRINT_PER_UNIT;
+}
+
+/// One frame of the map: the ground, the lanes, the routes, the sealed region, the systems and
+/// fleets back to front, the focus caption and the legend (ADR-017, ADR-103).
+std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::MeshRenderer& _meshes, const MapFrame& _frame)
+{
+  std::vector<MapHit> hits;
+  LabelField labels;
+  MapPass pass = BeginMap(_shapes, _text, _meshes, _frame, hits, labels);
+
+  // Ground first, then what lies on it, then what stands on it, then what is written over it. The
+  // order IS the occlusion model: this renderer has no depth buffer for interface geometry, so a
+  // phase drawn later is a phase drawn on top (ADR-014).
+  DrawGroundGrid(_shapes, pass);
+  DrawLanes(_shapes, _text, pass);
+  DrawRoutes(_shapes, pass);
+  DrawSealedRegion(_shapes, _text, pass);
+  DrawSolids(_shapes, _text, _meshes, pass);
+  DrawFocusCaption(_text, pass);
+  DrawLegend(_shapes, _text, pass);
 
   return hits;
 }
