@@ -172,6 +172,55 @@ constexpr std::uint8_t ROUTE_ALPHA = 180;
 /// usually get.
 constexpr float FLEET_END_CLEARANCE = 68.0F;
 
+// ---- The move being chosen on the map (ADR-114) ------------------------------------------------
+
+/// A lit system's ring, in SCREEN pixels: it says *this is a target* rather than anything about how
+/// big the system is, so it does not grow with the camera the way a halo does.
+constexpr float MOVE_RING_RADIUS = 16.0F;
+/// The ring a lit system wears once it is the chosen one.
+constexpr float MOVE_SELECTED_RADIUS = 22.0F;
+/// The pulse: a ring at this alpha, breathing to full and back on this period.
+constexpr std::uint8_t MOVE_RING_ALPHA = 128;
+constexpr float MOVE_PULSE_SECONDS = 1.6F;
+/// How fast the dashes march toward the destination. Slower than a fleet's route (ADR-055), because
+/// this is a lane being OFFERED rather than one being travelled.
+constexpr float MOVE_DASH_PIXELS_PER_SECOND = 10.0F;
+constexpr float MOVE_DASH = 4.0F;
+constexpr float MOVE_GAP = 5.0F;
+/// What every lane the move is not about drops to, so the lit ones are the only blue on the plane.
+constexpr Color LANE_UNLIT = {214, 220, 228, 30};
+/// The chip under a lit system's name: `1 TICK - T1`.
+constexpr float MOVE_CHIP_HEIGHT = 16.0F;
+constexpr float MOVE_CHIP_PADDING = 5.0F;
+/// The outline the origin's garrison badge wears, at this offset, so the fleet being moved is
+/// findable on a board where several systems are lit.
+constexpr float MOVE_ORIGIN_OUTLINE = 2.0F;
+constexpr float MOVE_ORIGIN_OFFSET = 1.0F;
+/// The lowest the pulse falls, which is also where it sits at phase zero.
+constexpr float MOVE_PULSE_FLOOR = 0.55F;
+
+/// The move target for one system, or nothing when the map is not offering it (ADR-114).
+[[nodiscard]] const MoveTarget* TargetFor(const MapFrame& _frame, std::int32_t _system) noexcept
+{
+  for (const MoveTarget& target : _frame.moveTargets)
+  {
+    if (target.system == _system)
+    {
+      return &target;
+    }
+  }
+  return nullptr;
+}
+
+/// How strongly a lit system's ring is drawn this frame: 0.55 to 1 and back, and **0.55 at phase
+/// zero**, so a capture taken with the clock stopped is always the same picture (ADR-114).
+[[nodiscard]] float MovePulse(float _seconds) noexcept
+{
+  const float phase = std::fmod(_seconds, MOVE_PULSE_SECONDS) / MOVE_PULSE_SECONDS;
+  const float swell = 0.5F - 0.5F * std::cos(phase * 2.0F * 3.14159265F);
+  return MOVE_PULSE_FLOOR + (1.0F - MOVE_PULSE_FLOOR) * swell;
+}
+
 void DrawGroundCircle(ShapeRenderer& _shapes, const MapFrame& _frame, float _designX, float _designY, float _radius, const Color& _fill,
                       const Color& _outline, bool _dashed, float _height = 0.0F)
 {
@@ -583,6 +632,26 @@ void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFr
     _shapes.StrokeEllipse(top.xPixels, top.yPixels, radius * 3.0F, radius * 3.0F, Ink::TEXT_PRIMARY);
   }
 
+  // **A lit system, while a move is being chosen on this map** (ADR-114). The ring is in screen
+  // pixels rather than multiples of the ball, because it says *this is a target* and a target is
+  // the same size wherever the camera has put the system. The chosen one stops breathing and
+  // becomes a solid ring with a wash inside it -- the committed treatment every other surface uses
+  // for *this is yours, it is queued* (ADR-111).
+  const MoveTarget* offered = _frame.moveOrigin == EventRefs::NONE ? nullptr : TargetFor(_frame, _index);
+  if (offered != nullptr)
+  {
+    if (_index == _frame.moveSelected)
+    {
+      _shapes.FillEllipse(top.xPixels, top.yPixels, MOVE_SELECTED_RADIUS, MOVE_SELECTED_RADIUS, WithAlpha(Ink::BLUE, 30));
+      _shapes.StrokeEllipse(top.xPixels, top.yPixels, MOVE_SELECTED_RADIUS, MOVE_SELECTED_RADIUS, Ink::TEXT_PRIMARY);
+    }
+    else
+    {
+      const auto alpha = static_cast<std::uint8_t>(std::lround(static_cast<float>(MOVE_RING_ALPHA) * MovePulse(_frame.animationSeconds)));
+      _shapes.StrokeEllipse(top.xPixels, top.yPixels, MOVE_RING_RADIUS, MOVE_RING_RADIUS, WithAlpha(Ink::BLUE, alpha));
+    }
+  }
+
   // Labels are 8px at every distance. The reference draws every map label at one size and the
   // game has one font at one size (ADR-014), so a far system's name is exactly as legible as a
   // near one's -- which on a map you read rather than admire is the right trade.
@@ -594,6 +663,34 @@ void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFr
   const std::int32_t labelY =
     _labels.Place(top.xPixels, static_cast<std::int32_t>(std::lround(top.yPixels - radius)) - 13, FontRenderer::MeasurePixels(label));
   DrawCentered(_text, top.xPixels, labelY, label, Ink::TEXT_PRIMARY);
+
+  // The chip under the name, placed by the field the labels are placed by so it keeps out of the
+  // way of the next system's (ADR-090). It carries what the strip's row carries -- how long, and the
+  // tick it lands on -- because a player choosing on the map should not have to read the list to
+  // find out.
+  if (offered != nullptr)
+  {
+    const std::string chip =
+      std::format("{} · T{}", offered->ticks == 1 ? std::string{"1 TICK"} : std::format("{} TICKS", offered->ticks), offered->arrivesAt);
+    const auto chipWidth = static_cast<float>(FontRenderer::MeasurePixels(chip)) + 2.0F * MOVE_CHIP_PADDING;
+    const std::int32_t chipTextY = labelY + LINE_HEIGHT;
+    const float chipX = top.xPixels - chipWidth * 0.5F;
+    const float chipY = BandTopForText(chipTextY, MOVE_CHIP_HEIGHT);
+    const bool chosen = _index == _frame.moveSelected;
+
+    _shapes.FillRect(chipX, chipY, chipWidth, MOVE_CHIP_HEIGHT, chosen ? Ink::BLUE : Ink::APP_BACKGROUND);
+    if (!chosen)
+    {
+      _shapes.StrokeRect(chipX, chipY, chipWidth, MOVE_CHIP_HEIGHT, Ink::BLUE);
+    }
+    DrawCentered(_text, top.xPixels, chipTextY, chip, chosen ? Ink::APP_BACKGROUND : Ink::BLUE);
+    _labels.placed.push_back(LabelField::Box{chipX, chipY, chipX + chipWidth, chipY + MOVE_CHIP_HEIGHT});
+
+    // **Drawn at 16 and hit at the floor**, which is ADR-100's isolated-chip rule: the chip stays
+    // the size the map has room for and the rectangle around it is what a finger aims at.
+    const Frame::Box target = Frame::GrownToFloor(chipX, chipY, chipWidth, MOVE_CHIP_HEIGHT);
+    _hits.push_back(MapHit{.x = target.x, .y = target.y, .width = target.width, .height = target.height, .moveTarget = _index});
+  }
 
   const std::int32_t underFoot = static_cast<std::int32_t>(std::lround(ground.yPixels)) + 8;
   bool footTaken = false;
@@ -633,11 +730,20 @@ void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFr
     }
   }
 
-  _hits.push_back(MapHit{.x = top.xPixels - radius * 3.0F,
-                         .y = top.yPixels - radius * 3.0F,
-                         .width = radius * 6.0F,
-                         .height = (ground.yPixels - top.yPixels) + radius * 6.0F,
-                         .system = _index});
+  // **While a move is being chosen, a system is a destination or it is nothing at all** (ADR-114).
+  // An unreachable one and a rival's are still drawn at their own ink -- the mode hides nothing --
+  // and neither of them is a target, so a tap on one falls through to the map and leaves the mode,
+  // which is what tapping the board means while a question is open.
+  const bool moving = _frame.moveOrigin != EventRefs::NONE;
+  if (!moving || offered != nullptr)
+  {
+    _hits.push_back(MapHit{.x = top.xPixels - radius * 3.0F,
+                           .y = top.yPixels - radius * 3.0F,
+                           .width = radius * 6.0F,
+                           .height = (ground.yPixels - top.yPixels) + radius * 6.0F,
+                           .system = moving ? EventRefs::NONE : _index,
+                           .moveTarget = moving ? _index : EventRefs::NONE});
+  }
 
   // ---- What is standing here (ADR-079) ----------------------------------------------------------
   //
@@ -675,13 +781,25 @@ void DrawStationOverlay(ShapeRenderer& _shapes, FontRenderer& _text, const MapFr
     // target grows and the drawing does not. A 44px badge beside a system name would be a different
     // map rather than a bigger box. The rectangle is centred on what is drawn, so where a finger
     // aims and where the eye aims are the same point.
+    // **The origin wears an outline while its fleet is being moved** (ADR-114), so the question
+    // *where is this going FROM* is answered on the map rather than only in the banner.
+    if (yours && _index == _frame.moveOrigin)
+    {
+      _shapes.StrokeRect(badgeX - MOVE_ORIGIN_OFFSET - MOVE_ORIGIN_OUTLINE, badgeTop - MOVE_ORIGIN_OFFSET - MOVE_ORIGIN_OUTLINE,
+                         badgeWidth + 2.0F * (MOVE_ORIGIN_OFFSET + MOVE_ORIGIN_OUTLINE),
+                         BADGE_HEIGHT + 2.0F * (MOVE_ORIGIN_OFFSET + MOVE_ORIGIN_OUTLINE), Ink::TEXT_PRIMARY, MOVE_ORIGIN_OUTLINE);
+    }
+
     const float hitWidth = std::max(badgeWidth, BADGE_TOUCH_FLOOR);
-    _hits.push_back(MapHit{.x = badgeX - (hitWidth - badgeWidth) * 0.5F,
-                           .y = badgeTop - (BADGE_TOUCH_FLOOR - BADGE_HEIGHT) * 0.5F,
-                           .width = hitWidth,
-                           .height = BADGE_TOUCH_FLOOR,
-                           .system = yours ? EventRefs::NONE : _index,
-                           .fleetsAt = yours ? _index : EventRefs::NONE});
+    if (!moving)
+    {
+      _hits.push_back(MapHit{.x = badgeX - (hitWidth - badgeWidth) * 0.5F,
+                             .y = badgeTop - (BADGE_TOUCH_FLOOR - BADGE_HEIGHT) * 0.5F,
+                             .width = hitWidth,
+                             .height = BADGE_TOUCH_FLOOR,
+                             .system = yours ? EventRefs::NONE : _index,
+                             .fleetsAt = yours ? _index : EventRefs::NONE});
+    }
     // The badge is drawn ink competing for the same strip as the next system's name, so it joins
     // the field rather than only avoiding it.
     _labels.placed.push_back(LabelField::Box{badgeX, badgeTop, badgeX + badgeWidth, badgeTop + BADGE_HEIGHT});
@@ -797,7 +915,14 @@ void DrawFleetOverlay(FontRenderer& _text, const MapFrame& _frame, std::vector<M
   {
     const float clamped = std::clamp(head.xPixels, paneX + labelWidth * 0.5F + 4.0F, paneX + paneWidth - labelWidth * 0.5F - 4.0F);
     DrawCentered(_text, clamped, _labels.Place(clamped, labelY, FontRenderer::MeasurePixels(label)), label, owner);
-    _hits.push_back(MapHit{.x = head.xPixels - 14.0F, .y = head.yPixels - 22.0F, .width = 28.0F, .height = 36.0F, .fleet = _index});
+
+    // **No marker is a target while a move is being chosen** (ADR-114): the only things the map
+    // offers then are the systems this fleet may be sent to, and a tap anywhere else leaves the
+    // mode.
+    if (_frame.moveOrigin == EventRefs::NONE)
+    {
+      _hits.push_back(MapHit{.x = head.xPixels - 14.0F, .y = head.yPixels - 22.0F, .width = 28.0F, .height = 36.0F, .fleet = _index});
+    }
   }
   else
   {
@@ -805,6 +930,485 @@ void DrawFleetOverlay(FontRenderer& _text, const MapFrame& _frame, std::vector<M
     const std::int32_t at = _labels.Place(placed + labelWidth * 0.5F, labelY + LINE_HEIGHT, FontRenderer::MeasurePixels(label));
     _text.DrawText(static_cast<std::int32_t>(std::lround(placed)), at, label, owner);
   }
+}
+
+/// One frame of the map, and everything its phases share (ADR-014, ADR-017).
+///
+/// **The camera is what makes this a record rather than seven free functions over a `MapFrame`.**
+/// Projecting a world point, finding a system's spot on the plane and drawing a segment between two
+/// projected points are the three things every phase does, all three need the camera the frame was
+/// just framed with, and passing that camera plus a hit list plus a label field to eight functions
+/// is the argument list a record exists to replace.
+struct MapPass
+{
+  const MapFrame& frame;
+  const Neuron::OrbitCamera& camera;
+  /// Where the taps this frame records go, and the field that keeps the names out of each other's
+  /// way (ADR-090). Both are written by the phases and read by the caller.
+  std::vector<MapHit>& hits;
+  LabelField& labels;
+  /// The map pane's left edge, which the focus caption and the legend both start from. The width
+  /// and the height are the viewport's, set once in `BeginMap` and never read again.
+  float paneX = 0.0F;
+  /// Whether a move is being chosen on this map, which changes what every phase draws (ADR-114).
+  bool moving = false;
+
+  [[nodiscard]] Neuron::OrbitCamera::ScreenPoint Project(const Neuron::OrbitCamera::WorldPoint& _world) const
+  {
+    return camera.Project(_world);
+  }
+
+  /// Where a system stands on the plane, projected.
+  [[nodiscard]] Neuron::OrbitCamera::ScreenPoint GroundOf(std::int32_t _system) const
+  {
+    const SystemNode& node = frame.state.graph.systems[static_cast<std::size_t>(_system)];
+    return Project(MapView::Ground(node.positionX, node.positionY));
+  }
+
+  /// A segment between two projected points, drawn only when both ends are in front of the eye.
+  ///
+  /// Clipping the one-end case properly would be the right answer for a camera that can be put
+  /// inside the galaxy; this one orbits outside it, so a lane with one end behind the eye is a
+  /// lane at the very edge of a steep view, and dropping it is not visible.
+  void Segment(ShapeRenderer& _shapes, const Neuron::OrbitCamera::ScreenPoint& _a, const Neuron::OrbitCamera::ScreenPoint& _b,
+               const Color& _color, float _thickness) const
+  {
+    if (_a.visible && _b.visible)
+    {
+      _shapes.Line(_a.xPixels, _a.yPixels, _b.xPixels, _b.yPixels, _color, _thickness);
+    }
+  }
+};
+
+/// The pane, the camera framed to the board, the sky, and the record the phases share.
+///
+/// Framed to the tallest stem rather than to a constant (ADR-103), and the mesh pass is given the
+/// same camera here so that the balls and their labels are placed by one.
+[[nodiscard]] MapPass BeginMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::MeshRenderer& _meshes, const MapFrame& _frame,
+                               std::vector<MapHit>& _hits, LabelField& _labels)
+{
+  const float paneX = Frame::DIGEST_WIDTH;
+  const float paneWidth = Frame::SCREEN_WIDTH - Frame::DIGEST_WIDTH - Frame::ORDERS_WIDTH;
+  const float paneHeight = Frame::SCREEN_HEIGHT - Frame::TOP_BAR_HEIGHT;
+  _frame.view.SetViewport(paneX, Frame::TOP_BAR_HEIGHT, paneWidth, paneHeight);
+
+  // Framed to the tallest stem on the board, not to a constant: height is the yield now (ADR-103),
+  // and a camera framed to the old capital height would put the richest system's ball above the
+  // pane. Never less than a capital's floor, so an unpriced board frames as it always did.
+  float tallest = CAPITAL_STEM_HEIGHT;
+  for (const SystemNode& node : _frame.state.graph.systems)
+  {
+    if (!HasFlag(node.flags, SystemFlags::RegionAnchor))
+    {
+      tallest = std::max(tallest, StemHeightFor(node.production, HasFlag(node.flags, SystemFlags::Capital)));
+    }
+  }
+  _frame.view.FrameContent(_frame.contentCenter, _frame.contentRadius, tallest + CAPITAL_RADIUS);
+  const Neuron::OrbitCamera& camera = _frame.view.Camera();
+
+  // The same camera, handed to the mesh pass as a matrix, with the light and the pane it projects
+  // into. Set here, after the framing, so the balls and their labels are placed by one camera.
+  _meshes.SetView(Neuron::MeshRenderer::View{.viewProjection = camera.ViewProjection(),
+                                             .lightDirection = LIGHT_DIRECTION,
+                                             .eyePosition = camera.Position(),
+                                             .viewportXPixels = paneX,
+                                             .viewportYPixels = Frame::TOP_BAR_HEIGHT,
+                                             .viewportWidthPixels = paneWidth,
+                                             .viewportHeightPixels = paneHeight});
+
+  _shapes.FillVerticalGradient(paneX, Frame::TOP_BAR_HEIGHT, paneWidth, paneHeight, MAP_TOP, MAP_MIDDLE, 0.45F, MAP_BOTTOM);
+  _text.SetClipRect(paneX, Frame::TOP_BAR_HEIGHT, paneWidth, paneHeight);
+
+  // The sky goes through the same camera as everything else, because it is in the same world --
+  // infinitely far away in it, which is a direction rather than a place (ADR-032). It is drawn
+  // first and depth-tests against nothing, so the galaxy covers it.
+  _frame.sky.Draw(_shapes, camera, STAR);
+
+  return MapPass{
+    .frame = _frame, .camera = camera, .hits = _hits, .labels = _labels, .paneX = paneX, .moving = _frame.moveOrigin != EventRefs::NONE};
+}
+
+void DrawGroundGrid(ShapeRenderer& _shapes, const MapPass& _pass)
+{
+  // The ground grid, now genuinely on the ground: lines of constant x and constant z, projected.
+  // It turns with the camera because it is part of the world, and that single change is most of
+  // what makes the rotation read as a viewpoint moving rather than a picture being spun (ADR-017).
+  for (std::uint32_t step = 0; step <= GRID_LINES_ACROSS; ++step)
+  {
+    const float at = GRID_MIN_DESIGN + static_cast<float>(step) * GRID_STEP;
+    _pass.Segment(_shapes, _pass.Project(MapView::Ground(at, GRID_MIN_DESIGN)), _pass.Project(MapView::Ground(at, GRID_MAX_DESIGN)),
+                  GRID_LINE, 1.0F);
+    _pass.Segment(_shapes, _pass.Project(MapView::Ground(GRID_MIN_DESIGN, at)), _pass.Project(MapView::Ground(GRID_MAX_DESIGN, at)),
+                  GRID_LINE, 1.0F);
+  }
+}
+
+void DrawLanes(ShapeRenderer& _shapes, FontRenderer& _text, const MapPass& _pass)
+{
+  // Lanes lie on the plane, under everything that stands on it.
+  for (const Lane& lane : _pass.frame.state.graph.lanes)
+  {
+    const Neuron::OrbitCamera::ScreenPoint a = _pass.GroundOf(lane.a);
+    const Neuron::OrbitCamera::ScreenPoint b = _pass.GroundOf(lane.b);
+    if (!a.visible || !b.visible)
+    {
+      continue;
+    }
+    _pass.labels.lanes.push_back(LabelField::Segment{a.xPixels, a.yPixels, b.xPixels, b.yPixels});
+
+    // **While a move is being chosen, a lane is either an offer or it is out of the way**
+    // (ADR-114). The ones out of the origin that lead somewhere the fleet may go are drawn in blue
+    // with the dashes marching toward the destination, and the one already chosen is solid; every
+    // other lane on the plane drops to a hairline, so the blue on the map is the choice and nothing
+    // else. The tick cost drops with its lane, because the chip under the lit system's name carries
+    // the same number and says the arrival tick too.
+    const MoveTarget* offered = nullptr;
+    if (_pass.moving)
+    {
+      const std::int32_t other = lane.a == _pass.frame.moveOrigin ? lane.b : (lane.b == _pass.frame.moveOrigin ? lane.a : EventRefs::NONE);
+      offered = other == EventRefs::NONE ? nullptr : TargetFor(_pass.frame, other);
+    }
+
+    if (_pass.moving && offered == nullptr)
+    {
+      _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, LANE_UNLIT, 1.2F);
+      DrawCentered(_text, (a.xPixels + b.xPixels) * 0.5F, static_cast<std::int32_t>(std::lround((a.yPixels + b.yPixels) * 0.5F)) - 4,
+                   std::to_string(lane.cost), LANE_UNLIT);
+      continue;
+    }
+    if (offered != nullptr)
+    {
+      if (offered->system == _pass.frame.moveSelected)
+      {
+        _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, Ink::BLUE, 2.5F);
+      }
+      else
+      {
+        _shapes.DashedLine(a.xPixels, a.yPixels, b.xPixels, b.yPixels, Ink::BLUE, 1.5F, MOVE_DASH, MOVE_GAP,
+                           _pass.frame.animationSeconds * MOVE_DASH_PIXELS_PER_SECOND);
+      }
+      continue;
+    }
+
+    switch (lane.kind)
+    {
+    case LaneKind::Trade:
+      // A trade lane is public and meant to be read at a glance: it is the one consensual
+      // mechanic in the game, and cancelling one is a tell (one-pager, decision 3).
+      _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, Ink::BLUE, 2.5F);
+      break;
+    case LaneKind::Proposed:
+      _shapes.DashedLine(a.xPixels, a.yPixels, b.xPixels, b.yPixels, Ink::BLUE, 2.0F, 4.0F, 5.0F);
+      break;
+    case LaneKind::None:
+    default:
+      _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, LANE_PLAIN, 1.2F);
+      break;
+    }
+
+    DrawCentered(_text, (a.xPixels + b.xPixels) * 0.5F, static_cast<std::int32_t>(std::lround((a.yPixels + b.yPixels) * 0.5F)) - 4,
+                 std::to_string(lane.cost), Ink::TEXT_DETAIL);
+  }
+}
+
+void DrawRoutes(ShapeRenderer& _shapes, const MapPass& _pass)
+{
+  // ---- Routes ----------------------------------------------------------------------------------
+  //
+  // **Where every fleet under way is GOING, drawn from origin to destination** (ADR-055). On the
+  // plane with the lanes and under everything that stands on it: a route is a fact about the
+  // ground, and one drawn over the systems would hide the two it is about.
+  //
+  // Every route, not only the viewer's. A fleet in transit is public once departed -- commitment
+  // is blind at the moment of choice and visible afterwards -- and the whole point of the rule is
+  // that a rival's committed move can be read and answered.
+  //
+  // The line is drawn origin first, and a growing offset walks the pattern toward the SECOND
+  // endpoint -- so the dots travel the way the fleet is going, which is the only direction that
+  // means anything.
+  for (const Fleet& fleet : _pass.frame.state.fleets)
+  {
+    if (!fleet.OnALane())
+    {
+      continue;
+    }
+
+    const Neuron::OrbitCamera::ScreenPoint origin = _pass.GroundOf(fleet.from);
+    const Neuron::OrbitCamera::ScreenPoint destination = _pass.GroundOf(fleet.to);
+    if (!origin.visible || !destination.visible)
+    {
+      continue;
+    }
+
+    _shapes.DashedLine(origin.xPixels, origin.yPixels, destination.xPixels, destination.yPixels,
+                       WithAlpha(OwnerColor(fleet.owner, _pass.frame.state.viewer), ROUTE_ALPHA), ROUTE_THICKNESS, ROUTE_DOT, ROUTE_GAP,
+                       _pass.frame.animationSeconds * ROUTE_SPEED_PIXELS_PER_SECOND);
+  }
+}
+
+void DrawSealedRegion(ShapeRenderer& _shapes, FontRenderer& _text, const MapPass& _pass)
+{
+  // The sealed region: everyone can see it and count down to it, which is what makes it a race
+  // rather than a reward (one-pager, "Pacing devices").
+  //
+  // It is a CIRCLE on the ground, emitted as a projected polygon rather than as a screen-space
+  // ellipse. An ellipse was right when the viewing angle could not change; now the shape a ground
+  // circle makes depends on where the camera is, and projecting it is how it comes out right at
+  // every angle for free.
+  if (_pass.frame.state.region.anchor != EventRefs::NONE)
+  {
+    const SystemNode& anchor = _pass.frame.state.graph.systems[static_cast<std::size_t>(_pass.frame.state.region.anchor)];
+    DrawGroundCircle(_shapes, _pass.frame, anchor.positionX, anchor.positionY, REGION_RADIUS, WithAlpha(Ink::PURPLE, 20), Ink::PURPLE,
+                     true);
+    // A second ring, lifted. The reference drew one to suggest a volume rather than a puddle, and
+    // with a real camera it does the job properly: it is a circle at altitude, so the gap between
+    // the two rings opens and closes as the camera tilts.
+    DrawGroundCircle(_shapes, _pass.frame, anchor.positionX, anchor.positionY, REGION_RADIUS, {0, 0, 0, 0}, WithAlpha(Ink::PURPLE, 89),
+                     true, REGION_VOLUME_HEIGHT);
+
+    for (const auto& [offsetX, offsetY] : _pass.frame.state.region.siteOffsets)
+    {
+      const Neuron::OrbitCamera::ScreenPoint foot = _pass.Project(MapView::Ground(anchor.positionX + offsetX, anchor.positionY + offsetY));
+      const Neuron::OrbitCamera::ScreenPoint head =
+        _pass.Project(MapView::Above(anchor.positionX + offsetX, anchor.positionY + offsetY, SITE_PIN_HEIGHT));
+      _pass.Segment(_shapes, foot, head, WithAlpha(Ink::PURPLE, 153), 1.0F);
+      if (head.visible)
+      {
+        _shapes.FillEllipse(head.xPixels, head.yPixels, 2.5F, 2.5F, Ink::PURPLE);
+      }
+    }
+
+    // Below the nearest point of the rim, not beside the centre: at a low camera angle the two
+    // are almost the same place and the label lands inside the region.
+    const Neuron::OrbitCamera::ScreenPoint label = _pass.Project(MapView::Ground(anchor.positionX, anchor.positionY + REGION_RADIUS));
+    if (label.visible)
+    {
+      DrawCentered(_text, label.xPixels, static_cast<std::int32_t>(std::lround(label.yPixels)) + 14,
+                   std::format("SEALED - OPENS T{}", _pass.frame.state.region.opensAt), Ink::PURPLE);
+    }
+  }
+}
+
+void DrawSolids(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::MeshRenderer& _meshes, MapPass& _pass)
+{
+  // ---- SYSTEMS AND FLEETS, BACK TO FRONT ------------------------------------------------------
+  //
+  // THE SORT IS THE CAMERA'S DOING. With a fixed viewpoint the authored order was correct for
+  // every frame and nothing had to decide it. An orbiting camera changes what is in front of what
+  // as it moves, so the order has to be computed -- far first, because this renderer has no depth
+  // buffer for interface geometry and painter's order is the whole of its occlusion model
+  // (ADR-014, ADR-017).
+  struct Drawable
+  {
+    float depth;
+    std::int32_t index;
+    bool isFleet;
+  };
+
+  std::vector<Drawable> drawables;
+  drawables.reserve(_pass.frame.state.graph.systems.size() + _pass.frame.state.fleets.size());
+
+  for (std::size_t index = 0; index < _pass.frame.state.graph.systems.size(); ++index)
+  {
+    const SystemNode& node = _pass.frame.state.graph.systems[index];
+    if (HasFlag(node.flags, SystemFlags::RegionAnchor))
+    {
+      continue;
+    }
+    const Neuron::OrbitCamera::ScreenPoint ground = _pass.GroundOf(static_cast<std::int32_t>(index));
+    if (ground.visible)
+    {
+      drawables.push_back(Drawable{ground.depth, static_cast<std::int32_t>(index), false});
+    }
+  }
+
+  for (std::size_t index = 0; index < _pass.frame.state.fleets.size(); ++index)
+  {
+    const Fleet& fleet = _pass.frame.state.fleets[index];
+    if (!fleet.OnALane())
+    {
+      continue;
+    }
+    // The same position `DrawFleet` will use, clamp included: a depth sorted from one point and
+    // drawn at another puts a fleet in front of a system it is behind.
+    const SystemNode& from = _pass.frame.state.graph.systems[static_cast<std::size_t>(fleet.from)];
+    const SystemNode& to = _pass.frame.state.graph.systems[static_cast<std::size_t>(fleet.to)];
+    const float drawnAt = DrawnProgress(_pass.camera, from, to, fleet.progress);
+    const float designX = from.positionX + (to.positionX - from.positionX) * drawnAt;
+    const float designY = from.positionY + (to.positionY - from.positionY) * drawnAt;
+    const Neuron::OrbitCamera::ScreenPoint at = _pass.Project(MapView::Ground(designX, designY));
+    if (at.visible)
+    {
+      drawables.push_back(Drawable{at.depth, static_cast<std::int32_t>(index), true});
+    }
+  }
+
+  std::sort(drawables.begin(), drawables.end(), [](const Drawable& _a, const Drawable& _b) { return _a.depth > _b.depth; });
+
+  // Two passes over the same order, with the layer boundary between them (ADR-103). Everything
+  // UNDER a ball first -- shadows, discs, footprints, stems -- and the balls themselves into the
+  // mesh recorder; then the boundary; then everything OVER a ball -- rings, arrowheads, names,
+  // badges -- so that the mesh pass drawn between the two shape layers lands exactly where the
+  // mockup puts it. The balls are depth-tested against nothing but other balls; every flat thing
+  // still layers by this order.
+  for (const Drawable& drawable : drawables)
+  {
+    if (drawable.isFleet)
+    {
+      DrawFleetGround(_shapes, _meshes, _pass.frame, drawable.index);
+    }
+    else
+    {
+      DrawStationGround(_shapes, _meshes, _pass.frame, drawable.index);
+    }
+  }
+
+  _shapes.EndLayer();
+
+  for (const Drawable& drawable : drawables)
+  {
+    if (drawable.isFleet)
+    {
+      DrawFleetOverlay(_text, _pass.frame, _pass.hits, _pass.labels, drawable.index);
+    }
+    else
+    {
+      DrawStationOverlay(_shapes, _text, _pass.frame, _pass.hits, _pass.labels, drawable.index);
+    }
+  }
+}
+
+void DrawFocusCaption(FontRenderer& _text, const MapPass& _pass)
+{
+  // `MAP - FOCUS: HALVORSEN` in the top-left corner (DESIGN-GUIDELINES "Map"). The map is no
+  // longer captioned with a census -- that is on the top bar now -- and says instead what it is
+  // currently pointed at, because the digest can point it somewhere.
+  //
+  // **The move mode's banner takes this corner** (ADR-114), so it is not drawn under one: the
+  // banner is interface and this is world text, and interface is drawn second -- a caption left
+  // here would be a caption the banner cannot cover.
+  if (!_pass.moving)
+  {
+    _text.DrawText(static_cast<std::int32_t>(_pass.paneX) + 12, static_cast<std::int32_t>(Frame::TOP_BAR_HEIGHT) + 12,
+                   FocusLine(_pass.frame.state, _pass.frame.focusedSystem), Ink::TEXT_DETAIL);
+  }
+}
+
+void DrawLegend(ShapeRenderer& _shapes, FontRenderer& _text, const MapPass& _pass)
+{
+  // The legend earns its place: the owner colours are also the semantic colours, so a player who
+  // learns this row can read every other coloured thing on the screen.
+  struct LegendEntry
+  {
+    std::string label;
+    Color color;
+    bool isLane;
+    bool dashed;
+    /// A garrison badge rather than a dot or a lane: the legend draws the shape it is naming, and a
+    /// badge is a filled chip (ADR-079).
+    bool isBadge = false;
+    /// A fleet under way, which is an arrowhead on the map and so an arrowhead here (ADR-090). It
+    /// wore the route's dashes, which is the thing the fleet travels along rather than the fleet.
+    bool isFleet = false;
+  };
+
+  // The empires this player can actually see, not all twelve. A twelve-swatch legend would fill
+  // the bar with colours for empires nobody has met, and the
+  // entries that earn their place are the ones already on the map (ADR-027).
+  const auto labelOf = [&_pass](OwnerId _player)
+  {
+    return _player >= 0 && _player < static_cast<OwnerId>(_pass.frame.state.players.size())
+             ? _pass.frame.state.players[static_cast<std::size_t>(_player)].label
+             : std::string("RIVAL");
+  };
+
+  std::vector<LegendEntry> legend;
+  legend.push_back({labelOf(_pass.frame.state.viewer), OwnerColor(_pass.frame.state.viewer, _pass.frame.state.viewer), false, false});
+
+  std::vector<OwnerId> rivals;
+  for (const SystemNode& node : _pass.frame.state.graph.systems)
+  {
+    if (node.owner != NOBODY && node.owner != _pass.frame.state.viewer &&
+        std::find(rivals.begin(), rivals.end(), node.owner) == rivals.end())
+    {
+      rivals.push_back(node.owner);
+    }
+  }
+  std::sort(rivals.begin(), rivals.end());
+
+  // Four rivals is what fits beside the two lane entries at 8px. Past that the map is its own
+  // legend: every system carries a name, and tapping one says who holds it.
+  constexpr std::size_t MOST_RIVALS_SHOWN = 4;
+  for (std::size_t index = 0; index < rivals.size() && index < MOST_RIVALS_SHOWN; ++index)
+  {
+    legend.push_back({labelOf(rivals[index]), OwnerColor(rivals[index], _pass.frame.state.viewer), false, false});
+  }
+
+  legend.push_back({"PROPOSED LANE", Ink::BLUE, true, true});
+  legend.push_back({"TRADE LANE", Ink::BLUE, true, false});
+
+  // Only when there is one on the map. A legend entry for a thing nobody can see is a colour to
+  // learn for nothing, which is the rule the rival swatches above already follow (ADR-027).
+  const bool anyMoving =
+    std::any_of(_pass.frame.state.fleets.begin(), _pass.frame.state.fleets.end(), [](const Fleet& _fleet) { return _fleet.OnALane(); });
+  if (anyMoving)
+  {
+    legend.push_back({"FLEET UNDER WAY", Ink::BLUE, false, false, false, true});
+  }
+
+  // **`SHIPS`, not `FLEETS`, because the number on the badge is ships.** A system holding three
+  // fleets of three wears one badge reading 9, and a legend calling that "fleets" would be teaching
+  // the wrong reading of the only number the map now carries.
+  const bool anyHolding = std::any_of(_pass.frame.state.fleets.begin(), _pass.frame.state.fleets.end(),
+                                      [](const Fleet& _fleet) { return !_fleet.OnALane() && _fleet.owner != NOBODY; });
+  if (anyHolding)
+  {
+    legend.push_back({"SHIPS HOLDING", Ink::BLUE, false, false, true});
+  }
+
+  // **Not under a sheet** (ADR-082). The legend's row is the bottom twenty pixels of the pane and a
+  // sheet's `CANCEL` bar is the bottom fifty-two, so every sheet capture this project has taken
+  // shows `YOU  PROPOSED LANE  TRADE LANE` sliced off under it. A legend nobody can read is worse
+  // than no legend: it is a row of half-glyphs that looks like a rendering fault.
+  float legendX = _pass.paneX + 12.0F;
+  const float legendY = Frame::SCREEN_HEIGHT - 20.0F;
+  for (const LegendEntry& entry : _pass.frame.sheetOpen ? std::vector<LegendEntry>{} : legend)
+  {
+    if (entry.isLane)
+    {
+      if (entry.dashed)
+      {
+        _shapes.DashedLine(legendX, legendY + 4.0F, legendX + 14.0F, legendY + 4.0F, entry.color, 2.0F, 4.0F, 3.0F);
+      }
+      else
+      {
+        _shapes.Line(legendX, legendY + 4.0F, legendX + 14.0F, legendY + 4.0F, entry.color, 2.0F);
+      }
+      legendX += 19.0F;
+    }
+    else if (entry.isBadge)
+    {
+      _shapes.FillRect(legendX, legendY - 1.0F, 10.0F, 10.0F, entry.color);
+      legendX += 15.0F;
+    }
+    else if (entry.isFleet)
+    {
+      // The same arrowhead `DrawFleet` puts on a lane, pointing right: a fleet is a triangle and a
+      // system is a disc, which is the difference the legend exists to teach (ADR-090).
+      _shapes.FillTriangle(legendX + 9.0F, legendY + 4.0F, legendX, legendY - 1.0F, legendX, legendY + 9.0F, entry.color);
+      legendX += 14.0F;
+    }
+    else
+    {
+      _shapes.FillEllipse(legendX + 4.0F, legendY + 4.0F, 4.0F, 4.0F, entry.color);
+      legendX += 13.0F;
+    }
+
+    _text.DrawText(static_cast<std::int32_t>(legendX), static_cast<std::int32_t>(legendY), entry.label, Ink::TEXT_DETAIL);
+    legendX += static_cast<float>(FontRenderer::MeasurePixels(entry.label)) + 14.0F;
+  }
+
+  _text.ClearClipRect();
 }
 
 } // namespace
@@ -844,384 +1448,24 @@ float FootprintRadiusFor(std::uint32_t _production) noexcept
   return FOOTPRINT_BASE + static_cast<float>(_production) * FOOTPRINT_PER_UNIT;
 }
 
+/// One frame of the map: the ground, the lanes, the routes, the sealed region, the systems and
+/// fleets back to front, the focus caption and the legend (ADR-017, ADR-103).
 std::vector<MapHit> DrawMap(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::MeshRenderer& _meshes, const MapFrame& _frame)
 {
   std::vector<MapHit> hits;
   LabelField labels;
+  MapPass pass = BeginMap(_shapes, _text, _meshes, _frame, hits, labels);
 
-  const float paneX = Frame::DIGEST_WIDTH;
-  const float paneWidth = Frame::SCREEN_WIDTH - Frame::DIGEST_WIDTH - Frame::ORDERS_WIDTH;
-  const float paneHeight = Frame::SCREEN_HEIGHT - Frame::TOP_BAR_HEIGHT;
-  _frame.view.SetViewport(paneX, Frame::TOP_BAR_HEIGHT, paneWidth, paneHeight);
-
-  // Framed to the tallest stem on the board, not to a constant: height is the yield now (ADR-103),
-  // and a camera framed to the old capital height would put the richest system's ball above the
-  // pane. Never less than a capital's floor, so an unpriced board frames as it always did.
-  float tallest = CAPITAL_STEM_HEIGHT;
-  for (const SystemNode& node : _frame.state.graph.systems)
-  {
-    if (!HasFlag(node.flags, SystemFlags::RegionAnchor))
-    {
-      tallest = std::max(tallest, StemHeightFor(node.production, HasFlag(node.flags, SystemFlags::Capital)));
-    }
-  }
-  _frame.view.FrameContent(_frame.contentCenter, _frame.contentRadius, tallest + CAPITAL_RADIUS);
-  const Neuron::OrbitCamera& camera = _frame.view.Camera();
-
-  // The same camera, handed to the mesh pass as a matrix, with the light and the pane it projects
-  // into. Set here, after the framing, so the balls and their labels are placed by one camera.
-  _meshes.SetView(Neuron::MeshRenderer::View{.viewProjection = camera.ViewProjection(),
-                                             .lightDirection = LIGHT_DIRECTION,
-                                             .eyePosition = camera.Position(),
-                                             .viewportXPixels = paneX,
-                                             .viewportYPixels = Frame::TOP_BAR_HEIGHT,
-                                             .viewportWidthPixels = paneWidth,
-                                             .viewportHeightPixels = paneHeight});
-
-  _shapes.FillVerticalGradient(paneX, Frame::TOP_BAR_HEIGHT, paneWidth, paneHeight, MAP_TOP, MAP_MIDDLE, 0.45F, MAP_BOTTOM);
-  _text.SetClipRect(paneX, Frame::TOP_BAR_HEIGHT, paneWidth, paneHeight);
-
-  // The sky goes through the same camera as everything else, because it is in the same world --
-  // infinitely far away in it, which is a direction rather than a place (ADR-032). It is drawn
-  // first and depth-tests against nothing, so the galaxy covers it.
-  _frame.sky.Draw(_shapes, camera, STAR);
-
-  const auto project = [&camera](const Neuron::OrbitCamera::WorldPoint& _world) { return camera.Project(_world); };
-  const auto groundOf = [&](std::int32_t _system)
-  {
-    const SystemNode& node = _frame.state.graph.systems[static_cast<std::size_t>(_system)];
-    return project(MapView::Ground(node.positionX, node.positionY));
-  };
-
-  // A segment between two projected points, drawn only when both ends are in front of the eye.
-  // Clipping the one-end case properly would be the right answer for a camera that can be put
-  // inside the galaxy; this one orbits outside it, so a lane with one end behind the eye is a
-  // lane at the very edge of a steep view, and dropping it is not visible.
-  const auto segment = [&_shapes](const Neuron::OrbitCamera::ScreenPoint& _a, const Neuron::OrbitCamera::ScreenPoint& _b,
-                                  const Color& _color, float _thickness)
-  {
-    if (_a.visible && _b.visible)
-    {
-      _shapes.Line(_a.xPixels, _a.yPixels, _b.xPixels, _b.yPixels, _color, _thickness);
-    }
-  };
-
-  // The ground grid, now genuinely on the ground: lines of constant x and constant z, projected.
-  // It turns with the camera because it is part of the world, and that single change is most of
-  // what makes the rotation read as a viewpoint moving rather than a picture being spun (ADR-017).
-  for (std::uint32_t step = 0; step <= GRID_LINES_ACROSS; ++step)
-  {
-    const float at = GRID_MIN_DESIGN + static_cast<float>(step) * GRID_STEP;
-    segment(project(MapView::Ground(at, GRID_MIN_DESIGN)), project(MapView::Ground(at, GRID_MAX_DESIGN)), GRID_LINE, 1.0F);
-    segment(project(MapView::Ground(GRID_MIN_DESIGN, at)), project(MapView::Ground(GRID_MAX_DESIGN, at)), GRID_LINE, 1.0F);
-  }
-
-  // Lanes lie on the plane, under everything that stands on it.
-  for (const Lane& lane : _frame.state.graph.lanes)
-  {
-    const Neuron::OrbitCamera::ScreenPoint a = groundOf(lane.a);
-    const Neuron::OrbitCamera::ScreenPoint b = groundOf(lane.b);
-    if (!a.visible || !b.visible)
-    {
-      continue;
-    }
-    labels.lanes.push_back(LabelField::Segment{a.xPixels, a.yPixels, b.xPixels, b.yPixels});
-
-    switch (lane.kind)
-    {
-    case LaneKind::Trade:
-      // A trade lane is public and meant to be read at a glance: it is the one consensual
-      // mechanic in the game, and cancelling one is a tell (one-pager, decision 3).
-      _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, Ink::BLUE, 2.5F);
-      break;
-    case LaneKind::Proposed:
-      _shapes.DashedLine(a.xPixels, a.yPixels, b.xPixels, b.yPixels, Ink::BLUE, 2.0F, 4.0F, 5.0F);
-      break;
-    case LaneKind::None:
-    default:
-      _shapes.Line(a.xPixels, a.yPixels, b.xPixels, b.yPixels, LANE_PLAIN, 1.2F);
-      break;
-    }
-
-    DrawCentered(_text, (a.xPixels + b.xPixels) * 0.5F, static_cast<std::int32_t>(std::lround((a.yPixels + b.yPixels) * 0.5F)) - 4,
-                 std::to_string(lane.cost), Ink::TEXT_DETAIL);
-  }
-
-  // ---- Routes ----------------------------------------------------------------------------------
-  //
-  // **Where every fleet under way is GOING, drawn from origin to destination** (ADR-055). On the
-  // plane with the lanes and under everything that stands on it: a route is a fact about the
-  // ground, and one drawn over the systems would hide the two it is about.
-  //
-  // Every route, not only the viewer's. A fleet in transit is public once departed -- commitment
-  // is blind at the moment of choice and visible afterwards -- and the whole point of the rule is
-  // that a rival's committed move can be read and answered.
-  //
-  // The line is drawn origin first, and a growing offset walks the pattern toward the SECOND
-  // endpoint -- so the dots travel the way the fleet is going, which is the only direction that
-  // means anything.
-  for (const Fleet& fleet : _frame.state.fleets)
-  {
-    if (!fleet.OnALane())
-    {
-      continue;
-    }
-
-    const Neuron::OrbitCamera::ScreenPoint origin = groundOf(fleet.from);
-    const Neuron::OrbitCamera::ScreenPoint destination = groundOf(fleet.to);
-    if (!origin.visible || !destination.visible)
-    {
-      continue;
-    }
-
-    _shapes.DashedLine(origin.xPixels, origin.yPixels, destination.xPixels, destination.yPixels,
-                       WithAlpha(OwnerColor(fleet.owner, _frame.state.viewer), ROUTE_ALPHA), ROUTE_THICKNESS, ROUTE_DOT, ROUTE_GAP,
-                       _frame.animationSeconds * ROUTE_SPEED_PIXELS_PER_SECOND);
-  }
-
-  // The sealed region: everyone can see it and count down to it, which is what makes it a race
-  // rather than a reward (one-pager, "Pacing devices").
-  //
-  // It is a CIRCLE on the ground, emitted as a projected polygon rather than as a screen-space
-  // ellipse. An ellipse was right when the viewing angle could not change; now the shape a ground
-  // circle makes depends on where the camera is, and projecting it is how it comes out right at
-  // every angle for free.
-  if (_frame.state.region.anchor != EventRefs::NONE)
-  {
-    const SystemNode& anchor = _frame.state.graph.systems[static_cast<std::size_t>(_frame.state.region.anchor)];
-    DrawGroundCircle(_shapes, _frame, anchor.positionX, anchor.positionY, REGION_RADIUS, WithAlpha(Ink::PURPLE, 20), Ink::PURPLE, true);
-    // A second ring, lifted. The reference drew one to suggest a volume rather than a puddle, and
-    // with a real camera it does the job properly: it is a circle at altitude, so the gap between
-    // the two rings opens and closes as the camera tilts.
-    DrawGroundCircle(_shapes, _frame, anchor.positionX, anchor.positionY, REGION_RADIUS, {0, 0, 0, 0}, WithAlpha(Ink::PURPLE, 89), true,
-                     REGION_VOLUME_HEIGHT);
-
-    for (const auto& [offsetX, offsetY] : _frame.state.region.siteOffsets)
-    {
-      const Neuron::OrbitCamera::ScreenPoint foot = project(MapView::Ground(anchor.positionX + offsetX, anchor.positionY + offsetY));
-      const Neuron::OrbitCamera::ScreenPoint head =
-        project(MapView::Above(anchor.positionX + offsetX, anchor.positionY + offsetY, SITE_PIN_HEIGHT));
-      segment(foot, head, WithAlpha(Ink::PURPLE, 153), 1.0F);
-      if (head.visible)
-      {
-        _shapes.FillEllipse(head.xPixels, head.yPixels, 2.5F, 2.5F, Ink::PURPLE);
-      }
-    }
-
-    // Below the nearest point of the rim, not beside the centre: at a low camera angle the two
-    // are almost the same place and the label lands inside the region.
-    const Neuron::OrbitCamera::ScreenPoint label = project(MapView::Ground(anchor.positionX, anchor.positionY + REGION_RADIUS));
-    if (label.visible)
-    {
-      DrawCentered(_text, label.xPixels, static_cast<std::int32_t>(std::lround(label.yPixels)) + 14,
-                   std::format("SEALED - OPENS T{}", _frame.state.region.opensAt), Ink::PURPLE);
-    }
-  }
-
-  // ---- SYSTEMS AND FLEETS, BACK TO FRONT ------------------------------------------------------
-  //
-  // THE SORT IS THE CAMERA'S DOING. With a fixed viewpoint the authored order was correct for
-  // every frame and nothing had to decide it. An orbiting camera changes what is in front of what
-  // as it moves, so the order has to be computed -- far first, because this renderer has no depth
-  // buffer for interface geometry and painter's order is the whole of its occlusion model
-  // (ADR-014, ADR-017).
-  struct Drawable
-  {
-    float depth;
-    std::int32_t index;
-    bool isFleet;
-  };
-
-  std::vector<Drawable> drawables;
-  drawables.reserve(_frame.state.graph.systems.size() + _frame.state.fleets.size());
-
-  for (std::size_t index = 0; index < _frame.state.graph.systems.size(); ++index)
-  {
-    const SystemNode& node = _frame.state.graph.systems[index];
-    if (HasFlag(node.flags, SystemFlags::RegionAnchor))
-    {
-      continue;
-    }
-    const Neuron::OrbitCamera::ScreenPoint ground = groundOf(static_cast<std::int32_t>(index));
-    if (ground.visible)
-    {
-      drawables.push_back(Drawable{ground.depth, static_cast<std::int32_t>(index), false});
-    }
-  }
-
-  for (std::size_t index = 0; index < _frame.state.fleets.size(); ++index)
-  {
-    const Fleet& fleet = _frame.state.fleets[index];
-    if (!fleet.OnALane())
-    {
-      continue;
-    }
-    // The same position `DrawFleet` will use, clamp included: a depth sorted from one point and
-    // drawn at another puts a fleet in front of a system it is behind.
-    const SystemNode& from = _frame.state.graph.systems[static_cast<std::size_t>(fleet.from)];
-    const SystemNode& to = _frame.state.graph.systems[static_cast<std::size_t>(fleet.to)];
-    const float drawnAt = DrawnProgress(camera, from, to, fleet.progress);
-    const float designX = from.positionX + (to.positionX - from.positionX) * drawnAt;
-    const float designY = from.positionY + (to.positionY - from.positionY) * drawnAt;
-    const Neuron::OrbitCamera::ScreenPoint at = project(MapView::Ground(designX, designY));
-    if (at.visible)
-    {
-      drawables.push_back(Drawable{at.depth, static_cast<std::int32_t>(index), true});
-    }
-  }
-
-  std::sort(drawables.begin(), drawables.end(), [](const Drawable& _a, const Drawable& _b) { return _a.depth > _b.depth; });
-
-  // Two passes over the same order, with the layer boundary between them (ADR-103). Everything
-  // UNDER a ball first -- shadows, discs, footprints, stems -- and the balls themselves into the
-  // mesh recorder; then the boundary; then everything OVER a ball -- rings, arrowheads, names,
-  // badges -- so that the mesh pass drawn between the two shape layers lands exactly where the
-  // mockup puts it. The balls are depth-tested against nothing but other balls; every flat thing
-  // still layers by this order.
-  for (const Drawable& drawable : drawables)
-  {
-    if (drawable.isFleet)
-    {
-      DrawFleetGround(_shapes, _meshes, _frame, drawable.index);
-    }
-    else
-    {
-      DrawStationGround(_shapes, _meshes, _frame, drawable.index);
-    }
-  }
-
-  _shapes.EndLayer();
-
-  for (const Drawable& drawable : drawables)
-  {
-    if (drawable.isFleet)
-    {
-      DrawFleetOverlay(_text, _frame, hits, labels, drawable.index);
-    }
-    else
-    {
-      DrawStationOverlay(_shapes, _text, _frame, hits, labels, drawable.index);
-    }
-  }
-
-  // `MAP - FOCUS: HALVORSEN` in the top-left corner (DESIGN-GUIDELINES "Map"). The map is no
-  // longer captioned with a census -- that is on the top bar now -- and says instead what it is
-  // currently pointed at, because the digest can point it somewhere.
-  _text.DrawText(static_cast<std::int32_t>(paneX) + 12, static_cast<std::int32_t>(Frame::TOP_BAR_HEIGHT) + 12,
-                 FocusLine(_frame.state, _frame.focusedSystem), Ink::TEXT_DETAIL);
-
-  // The legend earns its place: the owner colours are also the semantic colours, so a player who
-  // learns this row can read every other coloured thing on the screen.
-  struct LegendEntry
-  {
-    std::string label;
-    Color color;
-    bool isLane;
-    bool dashed;
-    /// A garrison badge rather than a dot or a lane: the legend draws the shape it is naming, and a
-    /// badge is a filled chip (ADR-079).
-    bool isBadge = false;
-    /// A fleet under way, which is an arrowhead on the map and so an arrowhead here (ADR-090). It
-    /// wore the route's dashes, which is the thing the fleet travels along rather than the fleet.
-    bool isFleet = false;
-  };
-
-  // The empires this player can actually see, not all twelve. A twelve-swatch legend would fill
-  // the bar with colours for empires nobody has met, and the
-  // entries that earn their place are the ones already on the map (ADR-027).
-  const auto labelOf = [&_frame](OwnerId _player)
-  {
-    return _player >= 0 && _player < static_cast<OwnerId>(_frame.state.players.size())
-             ? _frame.state.players[static_cast<std::size_t>(_player)].label
-             : std::string("RIVAL");
-  };
-
-  std::vector<LegendEntry> legend;
-  legend.push_back({labelOf(_frame.state.viewer), OwnerColor(_frame.state.viewer, _frame.state.viewer), false, false});
-
-  std::vector<OwnerId> rivals;
-  for (const SystemNode& node : _frame.state.graph.systems)
-  {
-    if (node.owner != NOBODY && node.owner != _frame.state.viewer && std::find(rivals.begin(), rivals.end(), node.owner) == rivals.end())
-    {
-      rivals.push_back(node.owner);
-    }
-  }
-  std::sort(rivals.begin(), rivals.end());
-
-  // Four rivals is what fits beside the two lane entries at 8px. Past that the map is its own
-  // legend: every system carries a name, and tapping one says who holds it.
-  constexpr std::size_t MOST_RIVALS_SHOWN = 4;
-  for (std::size_t index = 0; index < rivals.size() && index < MOST_RIVALS_SHOWN; ++index)
-  {
-    legend.push_back({labelOf(rivals[index]), OwnerColor(rivals[index], _frame.state.viewer), false, false});
-  }
-
-  legend.push_back({"PROPOSED LANE", Ink::BLUE, true, true});
-  legend.push_back({"TRADE LANE", Ink::BLUE, true, false});
-
-  // Only when there is one on the map. A legend entry for a thing nobody can see is a colour to
-  // learn for nothing, which is the rule the rival swatches above already follow (ADR-027).
-  const bool anyMoving =
-    std::any_of(_frame.state.fleets.begin(), _frame.state.fleets.end(), [](const Fleet& _fleet) { return _fleet.OnALane(); });
-  if (anyMoving)
-  {
-    legend.push_back({"FLEET UNDER WAY", Ink::BLUE, false, false, false, true});
-  }
-
-  // **`SHIPS`, not `FLEETS`, because the number on the badge is ships.** A system holding three
-  // fleets of three wears one badge reading 9, and a legend calling that "fleets" would be teaching
-  // the wrong reading of the only number the map now carries.
-  const bool anyHolding = std::any_of(_frame.state.fleets.begin(), _frame.state.fleets.end(),
-                                      [](const Fleet& _fleet) { return !_fleet.OnALane() && _fleet.owner != NOBODY; });
-  if (anyHolding)
-  {
-    legend.push_back({"SHIPS HOLDING", Ink::BLUE, false, false, true});
-  }
-
-  // **Not under a sheet** (ADR-082). The legend's row is the bottom twenty pixels of the pane and a
-  // sheet's `CANCEL` bar is the bottom fifty-two, so every sheet capture this project has taken
-  // shows `YOU  PROPOSED LANE  TRADE LANE` sliced off under it. A legend nobody can read is worse
-  // than no legend: it is a row of half-glyphs that looks like a rendering fault.
-  float legendX = paneX + 12.0F;
-  const float legendY = Frame::SCREEN_HEIGHT - 20.0F;
-  for (const LegendEntry& entry : _frame.sheetOpen ? std::vector<LegendEntry>{} : legend)
-  {
-    if (entry.isLane)
-    {
-      if (entry.dashed)
-      {
-        _shapes.DashedLine(legendX, legendY + 4.0F, legendX + 14.0F, legendY + 4.0F, entry.color, 2.0F, 4.0F, 3.0F);
-      }
-      else
-      {
-        _shapes.Line(legendX, legendY + 4.0F, legendX + 14.0F, legendY + 4.0F, entry.color, 2.0F);
-      }
-      legendX += 19.0F;
-    }
-    else if (entry.isBadge)
-    {
-      _shapes.FillRect(legendX, legendY - 1.0F, 10.0F, 10.0F, entry.color);
-      legendX += 15.0F;
-    }
-    else if (entry.isFleet)
-    {
-      // The same arrowhead `DrawFleet` puts on a lane, pointing right: a fleet is a triangle and a
-      // system is a disc, which is the difference the legend exists to teach (ADR-090).
-      _shapes.FillTriangle(legendX + 9.0F, legendY + 4.0F, legendX, legendY - 1.0F, legendX, legendY + 9.0F, entry.color);
-      legendX += 14.0F;
-    }
-    else
-    {
-      _shapes.FillEllipse(legendX + 4.0F, legendY + 4.0F, 4.0F, 4.0F, entry.color);
-      legendX += 13.0F;
-    }
-
-    _text.DrawText(static_cast<std::int32_t>(legendX), static_cast<std::int32_t>(legendY), entry.label, Ink::TEXT_DETAIL);
-    legendX += static_cast<float>(FontRenderer::MeasurePixels(entry.label)) + 14.0F;
-  }
-
-  _text.ClearClipRect();
+  // Ground first, then what lies on it, then what stands on it, then what is written over it. The
+  // order IS the occlusion model: this renderer has no depth buffer for interface geometry, so a
+  // phase drawn later is a phase drawn on top (ADR-014).
+  DrawGroundGrid(_shapes, pass);
+  DrawLanes(_shapes, _text, pass);
+  DrawRoutes(_shapes, pass);
+  DrawSealedRegion(_shapes, _text, pass);
+  DrawSolids(_shapes, _text, _meshes, pass);
+  DrawFocusCaption(_text, pass);
+  DrawLegend(_shapes, _text, pass);
 
   return hits;
 }

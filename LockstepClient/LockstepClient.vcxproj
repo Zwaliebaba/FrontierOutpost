@@ -162,8 +162,17 @@
     <ClCompile Include="DesignTokens.cpp" />
     <ClCompile Include="MapRender.cpp" />
     <ClCompile Include="MainPage.cpp" />
+    <ClCompile Include="MainPageInput.cpp" />
+    <ClCompile Include="MainPageMap.cpp" />
+    <ClCompile Include="MainPageTopBar.cpp" />
+    <ClCompile Include="MainPageDigest.cpp" />
+    <ClCompile Include="MainPageRail.cpp" />
+    <ClCompile Include="MainPageMove.cpp" />
+    <ClCompile Include="MainPageSheet.cpp" />
+    <ClCompile Include="Controls.cpp" />
     <ClCompile Include="JoinPage.cpp" />
     <ClCompile Include="ConnectionDialog.cpp" />
+    <ClCompile Include="LinkStatus.cpp" />
     <ClCompile Include="MatchConnection.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -172,8 +181,11 @@
     <ClInclude Include="DesignTokens.h" />
     <ClInclude Include="MapRender.h" />
     <ClInclude Include="MainPage.h" />
+    <ClInclude Include="MainPageParts.h" />
+    <ClInclude Include="Controls.h" />
     <ClInclude Include="JoinPage.h" />
     <ClInclude Include="ConnectionDialog.h" />
+    <ClInclude Include="LinkStatus.h" />
     <ClInclude Include="MatchConnection.h" />
     <ClInclude Include="MapView.h" />
     <ClInclude Include="pch.h" />

@@ -87,6 +87,22 @@ this differs from the `Design/Screens/` citations left standing above, is in ADR
 renaming something again, read it before you assume this is precedent: it turns on a citation to a
 symbol that no longer exists being a defect under §3.1, not on renames being exempt.
 
+**Four ADRs were renumbered on 2026-09-15, and that is the second exception worth naming.** Two
+branches took the number 110 at the same time. The interaction handoff of 2026-09-14 produced four
+ADRs numbered 110 to 113; the release-asset decision was written the next day, also as 110, and
+reached `main` first. **The one already on `main` kept the number and the four that had not landed
+moved up by one**, so 110 is the executable's release channels and 111 to 114 are the control
+vocabulary, the place sheet, the rail and move mode. The rule in §4 is *numbered next in sequence*,
+and the sequence a number is next in is the one on `main` — a branch cannot reserve a number, and
+once a number is on `main` it is cited by commits, by CI and by whatever was released under it.
+**What changed in the four was the number** — the title line, and the cross-references between them
+and from the code and `Design/UI/` — and nothing else: no decision, no rationale, no rejected option,
+no status line, and no date, so all four still read *2026-09-14*. There is nothing behind the
+collision to decide; it is bookkeeping, and the citation `ADR-110` meaning two different things is
+the defect under §3.1 that forces it. **This is not precedent for renumbering anything on `main`.**
+If it happens again, the branch yields, and if two branches collide with each other the one that
+merges second yields.
+
 **Which one is it?** The test is what happens when the document turns out to be wrong.
 
 - An **ADR** records a decision with alternatives that were genuinely available. If it turns out wrong, you write a *new* ADR that supersedes it — you do not edit the old one. Transport choice, tick rate, the framebuffer format, how ships are spatially indexed.

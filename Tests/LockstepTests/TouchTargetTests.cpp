@@ -90,8 +90,14 @@ struct Headless
     return "FocusSystem";
   case Lockstep::MainPage::Action::OpenSystem:
     return "OpenSystem";
-  case Lockstep::MainPage::Action::OpenFleet:
-    return "OpenFleet";
+  case Lockstep::MainPage::Action::BeginMove:
+    return "BeginMove";
+  case Lockstep::MainPage::Action::SendMove:
+    return "SendMove";
+  case Lockstep::MainPage::Action::CancelMove:
+    return "CancelMove";
+  case Lockstep::MainPage::Action::CancelFleetOrder:
+    return "CancelFleetOrder";
   case Lockstep::MainPage::Action::OpenFleetsAt:
     return "OpenFleetsAt";
   case Lockstep::MainPage::Action::ToggleBuild:
@@ -232,7 +238,7 @@ public:
     const std::vector<Lockstep::MainPage::HitRegion> candidates = page.Hits();
     for (const Lockstep::MainPage::HitRegion& hit : candidates)
     {
-      const bool opener = hit.action == Lockstep::MainPage::Action::OpenFleet || hit.action == Lockstep::MainPage::Action::OpenFleetsAt ||
+      const bool opener = hit.action == Lockstep::MainPage::Action::BeginMove || hit.action == Lockstep::MainPage::Action::OpenFleetsAt ||
                           hit.action == Lockstep::MainPage::Action::OpenSystem || hit.action == Lockstep::MainPage::Action::OpenSignals;
       if (!opener)
       {
@@ -273,12 +279,12 @@ public:
       }
       (void)page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
       DrawPage(page, renderers);
-      if (page.OpenPanel() == Lockstep::MainPage::Panel::BuildList)
+      if (page.OpenPanel() == Lockstep::MainPage::Panel::Place)
       {
         break;
       }
     }
-    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::BuildList, L"no build sheet opened, so nothing was audited");
+    Assert::IsTrue(page.OpenPanel() == Lockstep::MainPage::Panel::Place, L"no build sheet opened, so nothing was audited");
 
     const std::vector<std::string> offenders = Undersized(page);
     Assert::IsTrue(offenders.empty(), Listed("a build sheet is open and these targets are under the floor", offenders).c_str());
@@ -307,6 +313,104 @@ public:
     }
     Assert::AreEqual(std::size_t{1}, corners, L"the sheet has no close corner, or more than one");
     Assert::IsTrue(tiles > 0, L"the sheet drew no tile, so the tile measurement asserted nothing");
+  }
+
+  TEST_METHOD(ADigestButtonIsDrawnAtTwentyEightAndTappedAtFortyFour)
+  {
+    // **The one control on this page that is deliberately SMALLER than the floor** (ADR-111). A
+    // button's box is 28 and its target is grown to 44 around it, which is ADR-100's isolated-chip
+    // rule rather than its column one -- so the claim worth measuring is not "nothing is under the
+    // floor", which the sweeps above already make, but that the grow is happening at all. A button
+    // box that quietly became 44 again would pass every other test in this file.
+    Assert::IsTrue(Lockstep::MainPage::BUTTON_HEIGHT < FLOOR_PIXELS, L"the button box is no longer under the floor, so nothing is grown");
+    Assert::AreEqual(FLOOR_PIXELS, Lockstep::MainPage::BUTTON_HEIGHT + 2.0F * Lockstep::MainPage::BUTTON_GAP, 0.01F,
+                     L"a button and its two gaps no longer come to the floor, so two grown targets can overlap");
+
+    const auto simulation = PlayedMatch(0);
+    Headless renderers;
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    DrawPage(page, renderers);
+
+    // The standing `BUILD AT DOTHAN` the opening digest carries (ADR-056), in the digest column. It
+    // is an `OpenSystem` since ADR-112 -- no digest control places an order -- and the map's own
+    // discs carry the same action from over the pane, which is what the column test excludes.
+    std::size_t buttons = 0;
+    for (const Lockstep::MainPage::HitRegion& hit : page.Hits())
+    {
+      if (hit.action != Lockstep::MainPage::Action::OpenSystem || hit.x >= Lockstep::Frame::DIGEST_WIDTH)
+      {
+        continue;
+      }
+      Assert::AreEqual(FLOOR_PIXELS, hit.height, 0.01F, L"a digest button's target is not the floor exactly");
+      Assert::IsTrue(hit.width + 0.01F >= FLOOR_PIXELS, L"a digest button's target is narrower than the floor");
+      ++buttons;
+    }
+    Assert::IsTrue(buttons > 0, L"the opening digest drew no link to a place, so nothing was measured");
+  }
+
+  TEST_METHOD(TheMoveModeHasNoUndersizedTarget)
+  {
+    // The mode puts five new kinds of target on the screen (ADR-114) and three of them are composed
+    // from numbers nothing else uses: the banner's cancel, the ETA chip that grows from 16 the way
+    // a garrison badge does, and the strip's half-width `SEND`.
+    const auto simulation = PlayedMatch(0);
+    Headless renderers;
+    Lockstep::MainPage page;
+    page.Create(ViewOfSeatZero(*simulation));
+    DrawPage(page, renderers);
+
+    // Whatever takes a move onto the map first. Every candidate, because a badge over several
+    // fleets opens the sheet instead and taking the first one found would be a coin flip.
+    for (const Lockstep::MainPage::HitRegion& hit : std::vector<Lockstep::MainPage::HitRegion>(page.Hits()))
+    {
+      const bool door = hit.action == Lockstep::MainPage::Action::BeginMove || hit.action == Lockstep::MainPage::Action::OpenFleetsAt ||
+                        hit.action == Lockstep::MainPage::Action::OpenSystem;
+      if (!door)
+      {
+        continue;
+      }
+      (void)page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+      DrawPage(page, renderers);
+      if (page.MoveOrder().has_value())
+      {
+        break;
+      }
+      for (const Lockstep::MainPage::HitRegion& inner : std::vector<Lockstep::MainPage::HitRegion>(page.Hits()))
+      {
+        if (inner.action == Lockstep::MainPage::Action::BeginMove)
+        {
+          (void)page.HandleTap(inner.x + inner.width * 0.5F, inner.y + inner.height * 0.5F);
+          DrawPage(page, renderers);
+          break;
+        }
+      }
+      if (page.MoveOrder().has_value())
+      {
+        break;
+      }
+    }
+    Assert::IsTrue(page.MoveOrder().has_value(), L"nothing took a move onto the map, so nothing was audited");
+
+    DrawPage(page, renderers);
+    std::vector<std::string> offenders = Undersized(page);
+    Assert::IsTrue(offenders.empty(), Listed("the move is on the map and these targets are under the floor", offenders).c_str());
+
+    // And with a destination lit, which is when the strip's filled `SEND` appears.
+    for (const Lockstep::MainPage::HitRegion& hit : std::vector<Lockstep::MainPage::HitRegion>(page.Hits()))
+    {
+      if (hit.action == Lockstep::MainPage::Action::ChooseDestination)
+      {
+        (void)page.HandleTap(hit.x + hit.width * 0.5F, hit.y + hit.height * 0.5F);
+        break;
+      }
+    }
+    Assert::IsTrue(page.MoveOrder().has_value() && page.MoveOrder()->selected != Lockstep::EventRefs::NONE,
+                   L"nothing on the map lit a destination, so SEND was never drawn");
+
+    DrawPage(page, renderers);
+    offenders = Undersized(page);
+    Assert::IsTrue(offenders.empty(), Listed("a destination is lit and these targets are under the floor", offenders).c_str());
   }
 
   TEST_METHOD(TheLockedBoardHasNoUndersizedTarget)

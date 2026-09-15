@@ -37,6 +37,10 @@ inline constexpr Neuron::Color DIALOG_FILL = {17, 21, 29, 255};
 inline constexpr Neuron::Color CARD_BORDER = {255, 255, 255, 26};
 inline constexpr Neuron::Color DIVIDER = {255, 255, 255, 18};
 inline constexpr Neuron::Color OUTLINE = {255, 255, 255, 51};
+/// The same border under the pointer (ADR-111). Twice the alpha, which is the smallest step that
+/// reads as a state change on a hairline; the fill beside it is `HOVER_FILL`, and the two are drawn
+/// together or not at all.
+inline constexpr Neuron::Color OUTLINE_HOVER = {255, 255, 255, 102};
 inline constexpr Neuron::Color HOVER_FILL = {255, 255, 255, 20};
 
 /// **The alphas are a measured floor, not a taste** (ADR-083). Every one of these is an alpha over a
@@ -61,6 +65,32 @@ inline constexpr Neuron::Color PURPLE = {170, 140, 255, 255};
 /// the lock the rail stops being a list of things you could change and becomes a receipt.
 inline constexpr Neuron::Color LOCKED_FILL = {214, 220, 228, 150};
 
+/// The filled button under the pointer: `BLUE` lifted about a third of the way toward white
+/// (ADR-111). **A press has to be visible on the one control whose rest state is already the
+/// brightest thing on the screen** -- every other state says "under the pointer" with a fill, and
+/// a filled button has no room for one. A 1px `BLUE` ring goes round it, so the lift reads as a
+/// press rather than as a different button.
+inline constexpr Neuron::Color BUTTON_PRIMARY_HOVER = {141, 214, 255, 255};
+
+/// The number segment's ground on a FILLED button (ADR-111). Black at a wash rather than a second
+/// blue, because the segment has to read as the same control shaded and a hue there would be a
+/// third colour on a two-colour button. Every other state separates the two segments with a line
+/// instead, which is what a transparent ground leaves room for.
+inline constexpr Neuron::Color BUTTON_SEGMENT_SHADE = {0, 0, 0, 36};
+
+/// The ground the map's banner wears while a move is being chosen on it (ADR-114). `BLUE` at a
+/// wash, so the banner reads as the same blue the lit systems, their lanes and their ETA chips are
+/// drawn in -- the mode is one statement and it is made in one colour.
+inline constexpr Neuron::Color MOVE_MODE_WASH = {94, 196, 255, 20};
+
+/// The border of a control that cannot be ordered, drawn DASHED (ADR-111).
+///
+/// **It is the only dashed border in this client, and that is what it means**: dashed is not a
+/// target. The dash is 3 on 3 (`MainPage::INERT_DASH`), the same pattern the map's footprint ring
+/// uses, and the ink beside it says why -- `NEED 19 MORE` in `AMBER` when the reason is money,
+/// `AFTER T14` in `NEUTRAL_DIM` when it is the board.
+inline constexpr Neuron::Color INERT_BORDER = {255, 255, 255, 36};
+
 /// The wash under a build tile the player has committed to -- queued this tick, or already rising
 /// (ADR-107). `BLUE` at a card fill's alpha, so a committed tile reads as filled at a glance and
 /// the four lines of text on it keep a ground they clear the contrast floor over.
@@ -70,16 +100,11 @@ inline constexpr Neuron::Color LOCKED_FILL = {214, 220, 228, 150};
 /// other fill on this screen sits under chrome rather than under words.
 inline constexpr Neuron::Color TILE_COMMITTED_FILL = {94, 196, 255, 15};
 
-/// The ink of a build tile that is inert because something else on its system is already rising
-/// (ADR-070, ADR-107).
-///
-/// **Deliberately under the 4.5:1 floor, and this is the place that has to say so** (ADR-083).
-/// Every other token here clears it over both grounds. A blocked tile is not READ: the sheet's help
-/// line above it says the system cannot take another order until the build lands, and the tile is
-/// kept on the grid so a player can see what will be orderable and what it will cost -- not so they
-/// can weigh it now. At an ink that cleared the floor, three inert tiles would compete with the one
-/// thing actually happening on that system.
-inline constexpr Neuron::Color TILE_BLOCKED_INK = {255, 255, 255, 90};
+/// The same wash under the pointer (ADR-111). A committed control's hover has to be visible while
+/// its label is changing to `TAKE BACK`, and the border is already `BLUE` at full strength, so the
+/// fill is the only channel left. `ContrastTests` measures the inks a tile draws over this one too.
+inline constexpr Neuron::Color COMMITTED_HOVER_FILL = {94, 196, 255, 36};
+
 /// A star in the sky behind every screen. Not text and not held to the contrast floor: it is meant
 /// to be faint, and a legible star is a defect.
 inline constexpr Neuron::Color STAR = {214, 220, 228, 220};

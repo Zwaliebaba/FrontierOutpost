@@ -118,22 +118,28 @@ edges, and every lane carries an integer tick cost. It is drawn on a tilted grou
 real perspective orbit camera that you drag to look around, with a procedural starry sky behind it.
 Systems rise on stems above their shadows; a fleet under way is a line of travelling dots along its
 lane with a marker and a tick-ETA; trade lanes, proposed lanes, sieges, custodians and the sealed
-region are all drawn as what they are. Tapping a system you hold opens the sheet of what it can
-build next, **as tiles** — a 2×2 grid, one tile per role, each carrying its glyph, the level it would
-build as a ladder of three, what that level pays and how many ticks it takes, and its price; a system
-already building shows the tile that is rising with a progress bar and the tiles beside it inert and
-priced, so there is still something to plan against (ADR-070, ADR-107); tapping your fleet opens
-the sheet of where it can go, and each candidate row says who is standing there and with how many
-ships — *P3 - 11 +DEF* — though not yet how the fight would go (ADR-063). A sheet still open when
-the clock hits zero stays open, dimmed, with a LOCKED chip in its header (ADR-065). Fog is
-remembered (ADR-022): a system you once saw stays on your map at the state you last saw it. The tick
-it was last seen travels in the snapshot and is not drawn yet.
+region are all drawn as what they are. **Tapping a system you hold opens the sheet of that PLACE**
+(ADR-112) — everything it can do this tick, and the only surface an order is given on. Its build
+half is a 2×2 grid of tiles, one per role, each carrying its glyph, the level it would build as a
+ladder of three, what that level pays and how many ticks it takes, and its price; a system already
+building shows the tile that is rising with a progress bar and the tiles beside it inert and priced,
+so there is still something to plan against (ADR-070, ADR-107). Under it, the fleets standing there,
+each with a `MOVE ›`. **A move is then chosen on the MAP** (ADR-114): the sheet collapses to a strip,
+the systems one lane away light with a pulsing ring and an arrival chip, and the strip's one filled
+button sends the fleet — lighting a system is a selection and the button is the order. Each
+candidate says who is standing there and with how many ships — *P3 - 11 +DEF* — though not yet how
+the fight would go (ADR-063). A sheet still open when the clock hits zero stays open, dimmed, with a
+LOCKED chip in its header (ADR-065). Fog is remembered (ADR-022): a system you once saw stays on
+your map at the state you last saw it. The tick it was last seen travels in the snapshot and is not
+drawn yet.
 
 **The locks rail, right — the receipt, and the way back to what it lists.** What goes in when the
-clock hits zero: fleets, builds, signals, proposals, each with its status. A fleet row, a build row
-and a proposal row about a lane are links to the thing they name (ADR-060): a queued build opens the
-sheet that queued it, which is where it is taken back; a fleet focuses where it stands, or opens its
-destination picker if it is under way; a lane offer focuses the far end of its lane. The SIGNALS
+clock hits zero, as **one list of one row shape** (ADR-113): a build and a move are the same row —
+what it is, where, the number it costs or the tick it lands on, and an `X` that takes it back —
+followed by what an earlier lock already took, and then a dim row per fleet with no move at all.
+Under that, `PLACES`: one row per system you hold, what it yields, what is standing on it and how
+much of the queue is about it. Every row is a link to the place it names (ADR-060), which is where
+the order is taken back from as well; a lane offer focuses the far end of its lane. The SIGNALS
 header opens the picker for the things you can say — open a lane, share scouting, hold fire,
 withdraw — and *Concede* sits apart from those under a band of its own, red from the first tap and
 confirmed by a second (ADR-064). A **trade lane** is still a building with two owners; today it is

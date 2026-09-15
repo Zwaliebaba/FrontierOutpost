@@ -112,6 +112,13 @@ enum class EventActionKind : std::uint8_t
 struct EventAction
 {
   std::string label;
+  /// The button's second cell: `20 CR`, `10 SHIPS`. Empty for a button that is one cell.
+  ///
+  /// **A number never lives inside the label** (ADR-111). `BUILD 20 CR` was one string, so every
+  /// state the button could be in had to be spelled as a suffix on it -- and the digest drops a
+  /// button that does not fit its column, so a state change could take the control off the screen.
+  /// What the number IS stays the composer's business; where it is drawn is the button's.
+  std::string number;
   EventActionKind kind = EventActionKind::Focus;
   /// An index into whatever the kind names: a fleet, a build row, a proposal.
   std::int32_t target = EventRefs::NONE;

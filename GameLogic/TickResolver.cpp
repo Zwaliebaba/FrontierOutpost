@@ -164,6 +164,583 @@ void Tell(TickLog& _log, PlayerId _player, DigestEntry _entry)
   return (first == _lane.a && second == _lane.b) || (first == _lane.b && second == _lane.a);
 }
 
+/// Whether order `_at` of list `_list` was refused, BY LIST AND INDEX.
+///
+/// Fleet order zero and build zero are different orders, and a refusal of one must not take the
+/// other with it.
+[[nodiscard]] bool WasRejected(const std::vector<RejectedOrder>& _rejected, OrderList _list, std::size_t _at)
+{
+  return std::any_of(_rejected.begin(), _rejected.end(), [_list, _at](const RejectedOrder& _refusal)
+                     { return _refusal.list == _list && _refusal.index == static_cast<std::int32_t>(_at); });
+}
+
+/// Who is here for this tick, counted before anything reads a player's state.
+void CountPresence(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& _record, const TickInput& _input)
+{
+  // ---- Presence, before anything reads a player's state ------------------------------------------
+  //
+  // "A player is present for tick N if the server saw them between lock N-1 and lock N (the server
+  // tells the simulation; the simulation never asks a clock)." Absence is counted here, at the top
+  // of the lock, so that the rest of this phase sees the status a player actually has this tick.
+  for (std::size_t index = 0; index < _next.Players().size(); ++index)
+  {
+    const PlayerId player{static_cast<std::int32_t>(index)};
+    PlayerState& state = _next.MutablePlayers()[index];
+
+    if (state.conceded)
+    {
+      continue;
+    }
+
+    const bool present = _input.presenceUnknown || std::find(_input.present.begin(), _input.present.end(), player) != _input.present.end();
+
+    if (present)
+    {
+      state.lastActiveTick = _in.Tick();
+      state.absentTicks = 0;
+
+      // Reversible: "log in and resume". A first-week forfeit is not reversed, because it is not a
+      // status -- it is a cost already incurred.
+      if (state.status == PlayerStatus::Custodian)
+      {
+        state.status = PlayerStatus::Active;
+        state.custodianSince = 0;
+        _record.lines.push_back(std::format("{} returned and resumed", NameOf(player)));
+        Tell(_log, player,
+             DigestEntry{.kind = DigestKind::Custodian,
+                         .severity = Severity::CUSTODIAN,
+                         .title = "You are back",
+                         .detail = "Your territory is yours again"});
+      }
+      continue;
+    }
+
+    ++state.absentTicks;
+    if (state.status == PlayerStatus::Active && state.absentTicks >= _in.Rules().custodianAbsenceTicks)
+    {
+      state.status = PlayerStatus::Custodian;
+      state.custodianSince = _in.Tick();
+
+      // "A player who goes custodian in the first week scores nothing for the match; it is the only
+      // cost that reaches someone who has already stopped playing." It never clears.
+      //
+      // **MEASURED FROM WHEN THEY STOPPED, NOT FROM WHEN THE GAME NOTICED** (ADR-072). Custody is
+      // confirmed `custodianAbsenceTicks` after the last time the server saw them, so testing the
+      // current tick asks "did we find out inside the first week" rather than "did they leave
+      // inside it" -- and under `PhaseZeroRules`, where confirmation takes 18 ticks and the first
+      // week is 16, the answer was never yes and the rule could not fire at all.
+      if (state.lastActiveTick < _in.Rules().firstWeekTicks)
+      {
+        state.forfeitedScore = true;
+      }
+
+      _record.lines.push_back(std::format("{} became a custodian", NameOf(player)));
+
+      // Every player is told, not just the absentee: the one-pager flags custodians "on every
+      // player's map", because the territory is a public race among every neighbour who can reach
+      // it rather than a private farm.
+      for (std::size_t other = 0; other < _next.Players().size(); ++other)
+      {
+        Tell(_log, PlayerId{static_cast<std::int32_t>(other)},
+             DigestEntry{.kind = DigestKind::Custodian,
+                         .severity = Severity::CUSTODIAN,
+                         .title = other == index ? std::string("Your territory is in custody")
+                                                 : std::format("{} custodian since T{}", NameOf(player), _in.Tick()),
+                         .detail = other == index ? "Log in to resume" : "Their garrisons weaken each tick",
+                         .other = player});
+      }
+    }
+  }
+}
+
+/// The buildings whose tick has come, applied before any of this lock's orders are.
+void LandConstructions(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& _record)
+{
+  // ---- Constructions that land this tick, before any order is applied --------------------------
+  //
+  // A building ordered at tick N with a one-tick level lands at the lock of tick N+1 and PRODUCES
+  // IN PHASE 2 OF THAT SAME TICK (ADR-069), which is why this sits at the top of phase 1 rather
+  // than in a phase of its own: production is the next phase and reads what this leaves.
+  //
+  // Completing before orders are applied is also what makes a system free to take a new order the
+  // moment the old one lands, rather than a tick later.
+  for (std::size_t index = 0; index < _next.Systems().size(); ++index)
+  {
+    SystemState& system = _next.MutableSystems()[index];
+    if (!system.construction.Rising() || system.construction.completesAt > _in.Tick())
+    {
+      continue;
+    }
+
+    const SystemId id{static_cast<std::int32_t>(index)};
+    const bool yard = system.construction.kind == BuildKind::Shipyard;
+    const std::uint32_t level = system.construction.toLevel;
+    (yard ? system.shipyardLevel : system.miningStationLevel) = level;
+    system.construction = Construction{};
+
+    _record.lines.push_back(std::format("{} L{} completed at {}", yard ? "shipyard" : "mining station", level, NameOf(_in, id)));
+    Tell(_log, system.owner,
+         DigestEntry{.kind = DigestKind::BuildCompleted,
+                     .severity = Severity::ECONOMY,
+                     .title = std::format("{} L{} at {}", yard ? "Shipyard" : "Mining station", level, NameOf(_in, id)),
+                     .detail = yard ? "It reinforces the fleet standing there from this tick" : "It pays from this tick",
+                     .system = id});
+  }
+}
+
+/// Every refused order, named and with its numbers (ADR-053).
+///
+/// A bare "not enough credits" a tick after the tap is the worst way to learn a price, so each
+/// refusal says which order and what the rule was.
+void ReportRefusals(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& _record, PlayerId _player, const OrderSet& _set,
+                    const std::vector<RejectedOrder>& _rejected)
+{
+  for (const RejectedOrder& refusal : _rejected)
+  {
+    const std::string reason = Describe(refusal.reason);
+    _record.lines.push_back(std::format("{}: order {} refused -- {}", NameOf(_player), refusal.index, reason));
+
+    // Named, and with the numbers (ADR-053). A bare "not enough credits" a tick after the tap
+    // is nothing a player can act on; "Shipyard at Jandal - costs 20, you had 13" is. The entry
+    // carries the system or fleet it is about, so the card can put it under the player's eye.
+    DigestEntry entry{.kind = DigestKind::OrderRejected, .severity = Severity::ORDER_REFUSED, .title = "Order refused", .detail = reason};
+    const auto at = static_cast<std::size_t>(std::max(refusal.index, 0));
+    if (refusal.list == OrderList::Builds && at < _set.builds.size())
+    {
+      const BuildOrder& build = _set.builds[at];
+      const char* what = build.kind == BuildKind::Shipyard ? "Shipyard" : "Mining station";
+      entry.system = build.system;
+      entry.detail = std::format("{} at {} - {}", what, NameOf(_in, build.system), reason);
+
+      if (refusal.reason == OrderRejection::CannotAfford)
+      {
+        // The same running total `Match::Validate` refused it by: whatever the accepted builds
+        // before this one already took comes off the purse it is quoted against.
+        std::uint32_t spent = 0;
+        for (std::size_t earlier = 0; earlier < at; ++earlier)
+        {
+          const bool accepted =
+            std::none_of(_rejected.begin(), _rejected.end(), [earlier](const RejectedOrder& _other)
+                         { return _other.list == OrderList::Builds && _other.index == static_cast<std::int32_t>(earlier); });
+          if (accepted)
+          {
+            // Priced at the level that order would have reached, which is the level the system is
+            // at now plus one -- the same arithmetic `Match::Validate` refused it by (ADR-069).
+            const BuildOrder& other = _set.builds[earlier];
+            const SystemState& system = _in.SystemAt(other.system);
+            const bool otherYard = other.kind == BuildKind::Shipyard;
+            const std::uint32_t level = (otherYard ? system.shipyardLevel : system.miningStationLevel) + 1;
+            spent += LevelValue(otherYard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost, level);
+          }
+        }
+        const bool yard = build.kind == BuildKind::Shipyard;
+        const SystemState& target = _in.SystemAt(build.system);
+        const std::uint32_t level = (yard ? target.shipyardLevel : target.miningStationLevel) + 1;
+        const std::uint32_t cost = LevelValue(yard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost, level);
+        const std::uint32_t purse = _next.PlayerAt(_player).credits;
+        entry.detail = spent == 0 ? std::format("{} at {} - costs {}, you had {}", what, NameOf(_in, build.system), cost, purse)
+                                  : std::format("{} at {} - costs {}, {} left after the builds before it", what, NameOf(_in, build.system),
+                                                cost, purse > spent ? purse - spent : 0);
+      }
+    }
+    else if (refusal.list == OrderList::FleetOrders && at < _set.fleetOrders.size())
+    {
+      const FleetOrder& order = _set.fleetOrders[at];
+      entry.fleet = order.fleet;
+      entry.system = order.destination;
+      entry.detail = std::format("Fleet {} to {} - {}", order.fleet.Index() + 1, NameOf(_in, order.destination), reason);
+    }
+    else if (refusal.list == OrderList::Proposals && at < _set.proposals.size())
+    {
+      entry.detail = std::format("Offer to {} - {}", NameOf(_set.proposals[at].to), reason);
+    }
+    Tell(_log, _player, std::move(entry));
+  }
+}
+
+/// Concession, which is custodianship that cannot be undone. True when the player conceded, and
+/// then none of their other orders are applied.
+///
+/// "Conceding never denies an attacker their prize" -- the territory stays on the board and stays
+/// takeable.
+bool ApplyConcede(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& _record, PlayerId _player)
+{
+  // Concession is custodianship that cannot be undone. "Conceding never denies an attacker
+  // their prize" -- the territory stays on the board and stays takeable.
+  PlayerState& state = _next.MutablePlayers()[_player.AsSize()];
+  state.conceded = true;
+  state.status = PlayerStatus::Custodian;
+  state.custodianSince = _in.Tick();
+
+  // Conceding forfeits the score outright, IN ANY WEEK (ADR-067), which is what separates it
+  // from absence: absence is a life happening and keeps the first-week window above, and a
+  // concession is a decision to give up the match rather than only the empire. A season is
+  // scored on placement, so an empire that scored for territory it had stopped defending would
+  // outrank players still playing theirs.
+  state.forfeitedScore = true;
+
+  _record.lines.push_back(std::format("{} conceded", NameOf(_player)));
+  for (std::size_t other = 0; other < _next.Players().size(); ++other)
+  {
+    Tell(_log, PlayerId{static_cast<std::int32_t>(other)},
+         DigestEntry{.kind = DigestKind::Custodian,
+                     .severity = Severity::CUSTODIAN,
+                     .title = other == _player.AsSize() ? std::string("You conceded") : std::format("{} conceded", NameOf(_player)),
+                     .detail = "Permanent; the territory stays on the board",
+                     .other = _player});
+  }
+  return true;
+}
+
+/// Fleet orders become the intent the movement phase consumes.
+void ApplyFleetOrders(Match& _next, const OrderSet& _set, const std::vector<RejectedOrder>& _rejected)
+{
+  // Fleet orders become an intent the movement phase consumes.
+  for (std::size_t order = 0; order < _set.fleetOrders.size(); ++order)
+  {
+    if (WasRejected(_rejected, OrderList::FleetOrders, order))
+    {
+      continue;
+    }
+    const FleetOrder& fleetOrder = _set.fleetOrders[order];
+    _next.MutableFleets()[fleetOrder.fleet.AsSize()].orderedTo = fleetOrder.destination;
+  }
+}
+
+/// Builds, PAID FOR at this lock and landing at a later one (ADR-069).
+void ApplyBuilds(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& _record, PlayerId _player, const OrderSet& _set,
+                 const std::vector<RejectedOrder>& _rejected)
+{
+  // Builds are PAID FOR at the lock and LAND at a later one (ADR-069). The credits go now, so
+  // that a purse a player has already spent cannot be spent twice while the building rises, and
+  // the ETA is the commitment the design wanted: something in flight that is not a fleet.
+  for (std::size_t order = 0; order < _set.builds.size(); ++order)
+  {
+    if (WasRejected(_rejected, OrderList::Builds, order))
+    {
+      continue;
+    }
+    const BuildOrder& build = _set.builds[order];
+    SystemState& system = _next.MutableSystems()[build.system.AsSize()];
+    const bool yard = build.kind == BuildKind::Shipyard;
+    const std::uint32_t toLevel = (yard ? system.shipyardLevel : system.miningStationLevel) + 1;
+    const std::uint32_t cost = LevelValue(yard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost, toLevel);
+    const std::uint32_t ticks = LevelValue(yard ? _in.Rules().shipyardBuildTicks : _in.Rules().miningStationBuildTicks, toLevel);
+
+    system.construction = Construction{.kind = build.kind, .toLevel = toLevel, .completesAt = _in.Tick() + ticks};
+    _next.MutablePlayers()[_player.AsSize()].credits -= cost;
+
+    _record.lines.push_back(
+      std::format("{} started {} L{} at {}", NameOf(_player), yard ? "shipyard" : "mining station", toLevel, NameOf(_in, build.system)));
+    Tell(_log, _player,
+         DigestEntry{.kind = DigestKind::BuildStarted,
+                     .severity = Severity::ECONOMY,
+                     .title = std::format("{} L{} rising at {}", yard ? "Shipyard" : "Mining station", toLevel, NameOf(_in, build.system)),
+                     .detail = std::format("Done T{} - {} credits spent", _in.Tick() + ticks, cost),
+                     .system = build.system});
+
+    // **AND EVERY RIVAL WHO CAN SEE THE SYSTEM IS TOLD** (ADR-069). A build is a commitment with
+    // an ETA, so it is a tell of the same kind as a departed fleet: blind at the choice, public
+    // once locked. Told ONCE, at the start, because a player gets one digest per tick and not one
+    // notification per event -- the ETA is on the card, and the system carries it after that.
+    //
+    // Visibility is read from the TICK-START state, which is who could see the system when the
+    // order was given. `Reckon` recomputes it in phase 6, and somebody who scouts the system
+    // later this tick did not watch the order being placed.
+    for (std::size_t other = 0; other < _next.Players().size(); ++other)
+    {
+      const PlayerId rival{static_cast<std::int32_t>(other)};
+      if (rival == _player || !_in.SeenBy(rival)[build.system.AsSize()].live)
+      {
+        continue;
+      }
+      Tell(_log, rival,
+           DigestEntry{.kind = DigestKind::BuildSeen,
+                       .severity = Severity::RIVAL_BUILDING,
+                       .title = std::format("{} is building at {}", NameOf(_player), NameOf(_in, build.system)),
+                       .detail = std::format("{} L{} - done T{}", yard ? "Shipyard" : "Mining station", toLevel, _in.Tick() + ticks),
+                       .system = build.system,
+                       .other = _player});
+    }
+  }
+}
+
+/// Proposals onto the table. Nothing is charged until the partner accepts.
+void ApplyProposals(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& _record, PlayerId _player, const OrderSet& _set,
+                    const std::vector<RejectedOrder>& _rejected)
+{
+  // Proposals go on the table. Nothing is charged yet -- the lane is paid for at the lock the
+  // partner accepts it, which is also the lock it starts paying.
+  for (std::size_t order = 0; order < _set.proposals.size(); ++order)
+  {
+    if (WasRejected(_rejected, OrderList::Proposals, order))
+    {
+      continue;
+    }
+    const ProposalOrder& proposed = _set.proposals[order];
+
+    OpenProposal open;
+    open.id = _next.TakeNextProposalId();
+    open.from = _player;
+    open.to = proposed.to;
+    open.kind = proposed.kind;
+    open.lane = proposed.lane;
+    open.conditionalLane = proposed.conditionalLane;
+    open.ticks = proposed.ticks;
+    open.openedAt = _in.Tick();
+    _next.MutableProposals().push_back(open);
+
+    _record.lines.push_back(std::format("{} proposed to {}", NameOf(_player), NameOf(proposed.to)));
+    Tell(_log, proposed.to,
+         DigestEntry{.kind = DigestKind::ProposalReceived,
+                     .severity = Severity::PROPOSAL_ARRIVED,
+                     .title = std::format("Proposal from {}", NameOf(_player)),
+                     .detail = "Answer at the next lock, or it is reported as ignored",
+                     .lane = proposed.lane,
+                     .other = _player,
+                     .proposal = open.id});
+  }
+}
+
+/// Answers and withdrawals, after every proposal in this tick exists.
+/// One player's answers to the offers on the table.
+void ApplyAnswersTo(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& _record, PlayerId _player, const OrderSet& _set)
+{
+  for (const AnswerOrder& answer : _set.answers)
+  {
+    const OpenProposal* open = _next.FindProposal(answer.proposal);
+    if (open == nullptr || open->to != _player)
+    {
+      continue;
+    }
+    const OpenProposal decided = *open;
+
+    if (answer.answer == Answer::Accept)
+    {
+      // "A lane accepted at a lock opens in that same phase 1 and pays from that tick's
+      // production" -- which is why this happens here, in phase 1, and not in a later phase that
+      // would miss phase 2 by one tick.
+      if (decided.kind == ProposalKind::OpenLane)
+      {
+        (void)OpenTradeLane(_next, _log, _record, decided.lane, decided.from, decided.to, _in.Tick(), _player, decided.id);
+      }
+      else
+      {
+        // The other two kinds are recorded and NOT enforced. That is the design, not an omission:
+        // "no enforced treaties", and the trade lane is called the one consensual mechanic
+        // because it is the only one with teeth.
+        const AgreementKind kind = decided.kind == ProposalKind::ShareScouting ? AgreementKind::ShareScouting : AgreementKind::HoldFire;
+
+        _next.MutableAgreements().push_back(Agreement{.kind = kind,
+                                                      .a = decided.from,
+                                                      .b = decided.to,
+                                                      .openedAt = _in.Tick(),
+                                                      .expiresAt = kind == AgreementKind::HoldFire ? _in.Tick() + decided.ticks : 0});
+
+        _record.lines.push_back(std::format("{} and {} agreed", NameOf(decided.from), NameOf(decided.to)));
+        for (const PlayerId side : {decided.from, decided.to})
+        {
+          Tell(_log, side,
+               DigestEntry{.kind = DigestKind::AgreementOpened,
+                           .severity = Severity::AGREEMENT_MADE,
+                           .title = kind == AgreementKind::ShareScouting ? "Scouting shared" : "Hold agreed",
+                           .detail = kind == AgreementKind::ShareScouting
+                                       ? "Their map is your map"
+                                       : std::format("For {} ticks, and nothing enforces it", decided.ticks),
+                           .other = side == decided.from ? decided.to : decided.from});
+        }
+      }
+
+      // "It can carry a conditional order -- if accepted, open lane -- so the effect lands
+      // without a second round trip."
+      if (decided.conditionalLane.IsValid() && decided.conditionalLane != decided.lane)
+      {
+        (void)OpenTradeLane(_next, _log, _record, decided.conditionalLane, decided.from, decided.to, _in.Tick(), _player, decided.id);
+      }
+    }
+
+    Tell(_log, decided.from,
+         DigestEntry{.kind = DigestKind::ProposalAnswered,
+                     .severity = Severity::PROPOSAL_RESOLVED,
+                     .title = answer.answer == Answer::Accept ? "Proposal accepted" : "Proposal declined",
+                     .detail = std::format("{} answered", NameOf(_player)),
+                     .lane = decided.lane,
+                     .other = _player,
+                     .proposal = decided.id});
+
+    std::vector<OpenProposal>& answered = _next.MutableProposals();
+    answered.erase(
+      std::remove_if(answered.begin(), answered.end(), [&decided](const OpenProposal& _candidate) { return _candidate.id == decided.id; }),
+      answered.end());
+  }
+}
+
+/// One player's withdrawals of offers they made.
+void ApplyWithdrawals(Match& _next, TickLog& _log, PlayerId _player, const OrderSet& _set)
+{
+  for (const WithdrawOrder& withdraw : _set.withdrawals)
+  {
+    const OpenProposal* open = _next.FindProposal(withdraw.proposal);
+    if (open == nullptr || open->from != _player)
+    {
+      continue;
+    }
+    const OpenProposal pulled = *open;
+
+    Tell(_log, pulled.to,
+         DigestEntry{.kind = DigestKind::ProposalWithdrawn,
+                     .severity = Severity::PROPOSAL_RESOLVED,
+                     .title = std::format("{} withdrew a proposal", NameOf(_player)),
+                     .detail = "It is no longer on the table",
+                     .lane = pulled.lane,
+                     .other = _player,
+                     .proposal = pulled.id});
+
+    std::vector<OpenProposal>& list = _next.MutableProposals();
+    list.erase(std::remove_if(list.begin(), list.end(), [&pulled](const OpenProposal& _candidate) { return _candidate.id == pulled.id; }),
+               list.end());
+  }
+}
+
+/// One player's cancellations of lanes already open.
+void ApplyCancellations(Match& _next, TickLog& _log, PhaseRecord& _record, PlayerId _player, const OrderSet& _set)
+{
+  // "Either can cancel it at any tick. Lanes are public; cancelling one is a tell." The digest
+  // has to say CANCELED BY PARTNER, distinct from a lane that fell with a system in phase 5 --
+  // the one-pager is explicit that "the tell only works if the reader knows which".
+  for (const CancelLaneOrder& cancel : _set.cancellations)
+  {
+    const ActiveTradeLane* found = _next.FindTradeLane(cancel.lane);
+    if (found == nullptr || (found->a != _player && found->b != _player))
+    {
+      continue;
+    }
+    const ActiveTradeLane closed = *found;
+    const PlayerId partner = closed.a == _player ? closed.b : closed.a;
+
+    _record.lines.push_back(std::format("{} canceled a trade lane with {}", NameOf(_player), NameOf(partner)));
+    Tell(_log, partner,
+         DigestEntry{.kind = DigestKind::LaneCanceled,
+                     .severity = Severity::LANE_CHANGED,
+                     .title = "Trade lane canceled",
+                     .detail = std::format("Canceled by partner -- {} closed it", NameOf(_player)),
+                     .lane = closed.lane,
+                     .other = _player});
+    Tell(_log, _player,
+         DigestEntry{.kind = DigestKind::LaneCanceled,
+                     .severity = Severity::LANE_CHANGED,
+                     .title = "Trade lane canceled",
+                     .detail = std::format("You closed it with {}", NameOf(partner)),
+                     .lane = closed.lane,
+                     .other = partner});
+
+    std::vector<ActiveTradeLane>& lanes = _next.MutableTradeLanes();
+    lanes.erase(
+      std::remove_if(lanes.begin(), lanes.end(), [&closed](const ActiveTradeLane& _candidate) { return _candidate.lane == closed.lane; }),
+      lanes.end());
+  }
+}
+
+/// What the tick does to offers nobody acted on: agreements that have run out, and proposals that
+/// were never answered.
+void SweepAgreementsAndLapses(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& _record)
+{
+  // Agreements that have run their term. A hold-fire that lapses is not news -- nothing was
+  // enforcing it -- so it leaves quietly rather than as an event in eleven digests.
+  {
+    std::vector<Agreement> standing;
+    for (const Agreement& agreement : _next.Agreements())
+    {
+      if (agreement.expiresAt == 0 || _in.Tick() < agreement.expiresAt)
+      {
+        standing.push_back(agreement);
+      }
+    }
+    _next.MutableAgreements() = standing;
+  }
+
+  // Re-validation. The one-pager: every open proposal is re-checked at every lock, and one that no
+  // longer makes sense is voided with a reason that reaches BOTH digests. An offer that quietly
+  // stopped working is exactly the dead offer the design forbids.
+  {
+    std::vector<OpenProposal> surviving;
+    for (const OpenProposal& proposal : _next.Proposals())
+    {
+      const bool expired = _in.Tick() >= proposal.openedAt + _in.Rules().proposalWindowTicks;
+
+      bool stillMakesSense = true;
+      if (proposal.kind == ProposalKind::OpenLane && proposal.lane.IsValid())
+      {
+        const GalaxyLane& edge = _next.GalaxyGraph().LaneAt(proposal.lane);
+        const PlayerId first = _next.SystemAt(edge.a).owner;
+        const PlayerId second = _next.SystemAt(edge.b).owner;
+        stillMakesSense = (first == proposal.from && second == proposal.to) || (second == proposal.from && first == proposal.to);
+      }
+      if (_next.PlayerAt(proposal.from).conceded || _next.PlayerAt(proposal.to).conceded)
+      {
+        stillMakesSense = false;
+      }
+
+      if (!stillMakesSense)
+      {
+        _record.lines.push_back("a proposal was voided");
+        for (const PlayerId side : {proposal.from, proposal.to})
+        {
+          Tell(_log, side,
+               DigestEntry{.kind = DigestKind::ProposalVoided,
+                           .severity = Severity::PROPOSAL_RESOLVED,
+                           .title = "Proposal voided",
+                           .detail = "The lane no longer joins your two empires",
+                           .lane = proposal.lane,
+                           .other = side == proposal.from ? proposal.to : proposal.from,
+                           .proposal = proposal.id});
+        }
+        continue;
+      }
+
+      if (expired)
+      {
+        _record.lines.push_back("a proposal went unanswered");
+        Tell(_log, proposal.from,
+             DigestEntry{.kind = DigestKind::ProposalIgnored,
+                         .severity = Severity::PROPOSAL_RESOLVED,
+                         .title = std::format("{} ignored your proposal", NameOf(proposal.to)),
+                         .detail = std::format("No answer in {} ticks", _in.Rules().proposalWindowTicks),
+                         .lane = proposal.lane,
+                         .other = proposal.to,
+                         .proposal = proposal.id});
+        continue;
+      }
+
+      surviving.push_back(proposal);
+    }
+    _next.MutableProposals() = surviving;
+  }
+}
+
+/// Answers, withdrawals and cancellations, after every proposal in this tick exists.
+///
+/// **In player order**, so that two answers to the same offer resolve the same way everywhere --
+/// which is the whole of why this is a second pass rather than part of the first.
+void ApplyAnswers(const Match& _in, Match& _next, TickLog& _log, PhaseRecord& _record, const std::vector<const OrderSet*>& _byPlayer)
+{
+  for (std::size_t index = 0; index < _byPlayer.size(); ++index)
+  {
+    const OrderSet* set = _byPlayer[index];
+    if (set == nullptr)
+    {
+      continue;
+    }
+    const PlayerId player{static_cast<std::int32_t>(index)};
+
+    ApplyAnswersTo(_in, _next, _log, _record, player, *set);
+    ApplyWithdrawals(_next, _log, player, *set);
+    ApplyCancellations(_next, _log, _record, player, *set);
+  }
+
+  SweepAgreementsAndLapses(_in, _next, _log, _record);
+}
+
 } // namespace
 
 Match TickResolver::Resolve(const Match& _before, const TickInput& _input, TickLog& _outLog)
@@ -197,111 +774,8 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
   Match next = _in;
   PhaseRecord& record = OpenPhase(_log, Phase::Lock);
 
-  // ---- Presence, before anything reads a player's state ------------------------------------------
-  //
-  // "A player is present for tick N if the server saw them between lock N-1 and lock N (the server
-  // tells the simulation; the simulation never asks a clock)." Absence is counted here, at the top
-  // of the lock, so that the rest of this phase sees the status a player actually has this tick.
-  for (std::size_t index = 0; index < next.Players().size(); ++index)
-  {
-    const PlayerId player{static_cast<std::int32_t>(index)};
-    PlayerState& state = next.MutablePlayers()[index];
-
-    if (state.conceded)
-    {
-      continue;
-    }
-
-    const bool present = _input.presenceUnknown || std::find(_input.present.begin(), _input.present.end(), player) != _input.present.end();
-
-    if (present)
-    {
-      state.lastActiveTick = _in.Tick();
-      state.absentTicks = 0;
-
-      // Reversible: "log in and resume". A first-week forfeit is not reversed, because it is not a
-      // status -- it is a cost already incurred.
-      if (state.status == PlayerStatus::Custodian)
-      {
-        state.status = PlayerStatus::Active;
-        state.custodianSince = 0;
-        record.lines.push_back(std::format("{} returned and resumed", NameOf(player)));
-        Tell(_log, player,
-             DigestEntry{.kind = DigestKind::Custodian,
-                         .severity = Severity::CUSTODIAN,
-                         .title = "You are back",
-                         .detail = "Your territory is yours again"});
-      }
-      continue;
-    }
-
-    ++state.absentTicks;
-    if (state.status == PlayerStatus::Active && state.absentTicks >= _in.Rules().custodianAbsenceTicks)
-    {
-      state.status = PlayerStatus::Custodian;
-      state.custodianSince = _in.Tick();
-
-      // "A player who goes custodian in the first week scores nothing for the match; it is the only
-      // cost that reaches someone who has already stopped playing." It never clears.
-      //
-      // **MEASURED FROM WHEN THEY STOPPED, NOT FROM WHEN THE GAME NOTICED** (ADR-072). Custody is
-      // confirmed `custodianAbsenceTicks` after the last time the server saw them, so testing the
-      // current tick asks "did we find out inside the first week" rather than "did they leave
-      // inside it" -- and under `PhaseZeroRules`, where confirmation takes 18 ticks and the first
-      // week is 16, the answer was never yes and the rule could not fire at all.
-      if (state.lastActiveTick < _in.Rules().firstWeekTicks)
-      {
-        state.forfeitedScore = true;
-      }
-
-      record.lines.push_back(std::format("{} became a custodian", NameOf(player)));
-
-      // Every player is told, not just the absentee: the one-pager flags custodians "on every
-      // player's map", because the territory is a public race among every neighbour who can reach
-      // it rather than a private farm.
-      for (std::size_t other = 0; other < next.Players().size(); ++other)
-      {
-        Tell(_log, PlayerId{static_cast<std::int32_t>(other)},
-             DigestEntry{.kind = DigestKind::Custodian,
-                         .severity = Severity::CUSTODIAN,
-                         .title = other == index ? std::string("Your territory is in custody")
-                                                 : std::format("{} custodian since T{}", NameOf(player), _in.Tick()),
-                         .detail = other == index ? "Log in to resume" : "Their garrisons weaken each tick",
-                         .other = player});
-      }
-    }
-  }
-
-  // ---- Constructions that land this tick, before any order is applied --------------------------
-  //
-  // A building ordered at tick N with a one-tick level lands at the lock of tick N+1 and PRODUCES
-  // IN PHASE 2 OF THAT SAME TICK (ADR-069), which is why this sits at the top of phase 1 rather
-  // than in a phase of its own: production is the next phase and reads what this leaves.
-  //
-  // Completing before orders are applied is also what makes a system free to take a new order the
-  // moment the old one lands, rather than a tick later.
-  for (std::size_t index = 0; index < next.Systems().size(); ++index)
-  {
-    SystemState& system = next.MutableSystems()[index];
-    if (!system.construction.Rising() || system.construction.completesAt > _in.Tick())
-    {
-      continue;
-    }
-
-    const SystemId id{static_cast<std::int32_t>(index)};
-    const bool yard = system.construction.kind == BuildKind::Shipyard;
-    const std::uint32_t level = system.construction.toLevel;
-    (yard ? system.shipyardLevel : system.miningStationLevel) = level;
-    system.construction = Construction{};
-
-    record.lines.push_back(std::format("{} L{} completed at {}", yard ? "shipyard" : "mining station", level, NameOf(_in, id)));
-    Tell(_log, system.owner,
-         DigestEntry{.kind = DigestKind::BuildCompleted,
-                     .severity = Severity::ECONOMY,
-                     .title = std::format("{} L{} at {}", yard ? "Shipyard" : "Mining station", level, NameOf(_in, id)),
-                     .detail = yard ? "It reinforces the fleet standing there from this tick" : "It pays from this tick",
-                     .system = id});
-  }
+  CountPresence(_in, next, _log, record, _input);
+  LandConstructions(_in, next, _log, record);
 
   // One set per player, first submission wins. A retried submission is a network event, not a
   // second turn, and doubling a build because a packet arrived twice would be the worst kind of
@@ -337,75 +811,7 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
     // decided. Validating against a state other players have already changed would refuse an
     // order that was legal when it was given.
     const std::vector<RejectedOrder> rejected = next.Validate(*set);
-    for (const RejectedOrder& refusal : rejected)
-    {
-      const std::string reason = Describe(refusal.reason);
-      record.lines.push_back(std::format("{}: order {} refused -- {}", NameOf(player), refusal.index, reason));
-
-      // Named, and with the numbers (ADR-053). A bare "not enough credits" a tick after the tap
-      // is nothing a player can act on; "Shipyard at Jandal - costs 20, you had 13" is. The entry
-      // carries the system or fleet it is about, so the card can put it under the player's eye.
-      DigestEntry entry{.kind = DigestKind::OrderRejected, .severity = Severity::ORDER_REFUSED, .title = "Order refused", .detail = reason};
-      const auto at = static_cast<std::size_t>(std::max(refusal.index, 0));
-      if (refusal.list == OrderList::Builds && at < set->builds.size())
-      {
-        const BuildOrder& build = set->builds[at];
-        const char* what = build.kind == BuildKind::Shipyard ? "Shipyard" : "Mining station";
-        entry.system = build.system;
-        entry.detail = std::format("{} at {} - {}", what, NameOf(_in, build.system), reason);
-
-        if (refusal.reason == OrderRejection::CannotAfford)
-        {
-          // The same running total `Match::Validate` refused it by: whatever the accepted builds
-          // before this one already took comes off the purse it is quoted against.
-          std::uint32_t spent = 0;
-          for (std::size_t earlier = 0; earlier < at; ++earlier)
-          {
-            const bool accepted =
-              std::none_of(rejected.begin(), rejected.end(), [earlier](const RejectedOrder& _other)
-                           { return _other.list == OrderList::Builds && _other.index == static_cast<std::int32_t>(earlier); });
-            if (accepted)
-            {
-              // Priced at the level that order would have reached, which is the level the system is
-              // at now plus one -- the same arithmetic `Match::Validate` refused it by (ADR-069).
-              const BuildOrder& other = set->builds[earlier];
-              const SystemState& system = _in.SystemAt(other.system);
-              const bool otherYard = other.kind == BuildKind::Shipyard;
-              const std::uint32_t level = (otherYard ? system.shipyardLevel : system.miningStationLevel) + 1;
-              spent += LevelValue(otherYard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost, level);
-            }
-          }
-          const bool yard = build.kind == BuildKind::Shipyard;
-          const SystemState& target = _in.SystemAt(build.system);
-          const std::uint32_t level = (yard ? target.shipyardLevel : target.miningStationLevel) + 1;
-          const std::uint32_t cost = LevelValue(yard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost, level);
-          const std::uint32_t purse = next.PlayerAt(player).credits;
-          entry.detail = spent == 0 ? std::format("{} at {} - costs {}, you had {}", what, NameOf(_in, build.system), cost, purse)
-                                    : std::format("{} at {} - costs {}, {} left after the builds before it", what,
-                                                  NameOf(_in, build.system), cost, purse > spent ? purse - spent : 0);
-        }
-      }
-      else if (refusal.list == OrderList::FleetOrders && at < set->fleetOrders.size())
-      {
-        const FleetOrder& order = set->fleetOrders[at];
-        entry.fleet = order.fleet;
-        entry.system = order.destination;
-        entry.detail = std::format("Fleet {} to {} - {}", order.fleet.Index() + 1, NameOf(_in, order.destination), reason);
-      }
-      else if (refusal.list == OrderList::Proposals && at < set->proposals.size())
-      {
-        entry.detail = std::format("Offer to {} - {}", NameOf(set->proposals[at].to), reason);
-      }
-      Tell(_log, player, std::move(entry));
-    }
-
-    // By list AND index. Fleet order zero and build zero are different orders, and a refusal of
-    // one must not take the other with it.
-    const auto wasRejected = [&rejected](OrderList _list, std::size_t _at)
-    {
-      return std::any_of(rejected.begin(), rejected.end(), [_list, _at](const RejectedOrder& _refusal)
-                         { return _refusal.list == _list && _refusal.index == static_cast<std::int32_t>(_at); });
-    };
+    ReportRefusals(_in, next, _log, record, player, *set, rejected);
 
     // A custodian's whole set is discarded -- its territory defends and never expands or attacks.
     if (!rejected.empty() &&
@@ -414,343 +820,17 @@ Match TickResolver::Lock(const Match& _in, const TickInput& _input, TickLog& _lo
       continue;
     }
 
-    if (set->concede)
-    {
-      // Concession is custodianship that cannot be undone. "Conceding never denies an attacker
-      // their prize" -- the territory stays on the board and stays takeable.
-      PlayerState& state = next.MutablePlayers()[index];
-      state.conceded = true;
-      state.status = PlayerStatus::Custodian;
-      state.custodianSince = _in.Tick();
-
-      // Conceding forfeits the score outright, IN ANY WEEK (ADR-067), which is what separates it
-      // from absence: absence is a life happening and keeps the first-week window above, and a
-      // concession is a decision to give up the match rather than only the empire. A season is
-      // scored on placement, so an empire that scored for territory it had stopped defending would
-      // outrank players still playing theirs.
-      state.forfeitedScore = true;
-
-      record.lines.push_back(std::format("{} conceded", NameOf(player)));
-      for (std::size_t other = 0; other < next.Players().size(); ++other)
-      {
-        Tell(_log, PlayerId{static_cast<std::int32_t>(other)},
-             DigestEntry{.kind = DigestKind::Custodian,
-                         .severity = Severity::CUSTODIAN,
-                         .title = other == index ? std::string("You conceded") : std::format("{} conceded", NameOf(player)),
-                         .detail = "Permanent; the territory stays on the board",
-                         .other = player});
-      }
-      continue;
-    }
-
-    // Fleet orders become an intent the movement phase consumes.
-    for (std::size_t order = 0; order < set->fleetOrders.size(); ++order)
-    {
-      if (wasRejected(OrderList::FleetOrders, order))
-      {
-        continue;
-      }
-      const FleetOrder& fleetOrder = set->fleetOrders[order];
-      next.MutableFleets()[fleetOrder.fleet.AsSize()].orderedTo = fleetOrder.destination;
-    }
-
-    // Builds are PAID FOR at the lock and LAND at a later one (ADR-069). The credits go now, so
-    // that a purse a player has already spent cannot be spent twice while the building rises, and
-    // the ETA is the commitment the design wanted: something in flight that is not a fleet.
-    for (std::size_t order = 0; order < set->builds.size(); ++order)
-    {
-      if (wasRejected(OrderList::Builds, order))
-      {
-        continue;
-      }
-      const BuildOrder& build = set->builds[order];
-      SystemState& system = next.MutableSystems()[build.system.AsSize()];
-      const bool yard = build.kind == BuildKind::Shipyard;
-      const std::uint32_t toLevel = (yard ? system.shipyardLevel : system.miningStationLevel) + 1;
-      const std::uint32_t cost = LevelValue(yard ? _in.Rules().shipyardCost : _in.Rules().miningStationCost, toLevel);
-      const std::uint32_t ticks = LevelValue(yard ? _in.Rules().shipyardBuildTicks : _in.Rules().miningStationBuildTicks, toLevel);
-
-      system.construction = Construction{.kind = build.kind, .toLevel = toLevel, .completesAt = _in.Tick() + ticks};
-      next.MutablePlayers()[index].credits -= cost;
-
-      record.lines.push_back(
-        std::format("{} started {} L{} at {}", NameOf(player), yard ? "shipyard" : "mining station", toLevel, NameOf(_in, build.system)));
-      Tell(
-        _log, player,
-        DigestEntry{.kind = DigestKind::BuildStarted,
-                    .severity = Severity::ECONOMY,
-                    .title = std::format("{} L{} rising at {}", yard ? "Shipyard" : "Mining station", toLevel, NameOf(_in, build.system)),
-                    .detail = std::format("Done T{} - {} credits spent", _in.Tick() + ticks, cost),
-                    .system = build.system});
-
-      // **AND EVERY RIVAL WHO CAN SEE THE SYSTEM IS TOLD** (ADR-069). A build is a commitment with
-      // an ETA, so it is a tell of the same kind as a departed fleet: blind at the choice, public
-      // once locked. Told ONCE, at the start, because a player gets one digest per tick and not one
-      // notification per event -- the ETA is on the card, and the system carries it after that.
-      //
-      // Visibility is read from the TICK-START state, which is who could see the system when the
-      // order was given. `Reckon` recomputes it in phase 6, and somebody who scouts the system
-      // later this tick did not watch the order being placed.
-      for (std::size_t other = 0; other < next.Players().size(); ++other)
-      {
-        const PlayerId rival{static_cast<std::int32_t>(other)};
-        if (rival == player || !_in.SeenBy(rival)[build.system.AsSize()].live)
-        {
-          continue;
-        }
-        Tell(_log, rival,
-             DigestEntry{.kind = DigestKind::BuildSeen,
-                         .severity = Severity::RIVAL_BUILDING,
-                         .title = std::format("{} is building at {}", NameOf(player), NameOf(_in, build.system)),
-                         .detail = std::format("{} L{} - done T{}", yard ? "Shipyard" : "Mining station", toLevel, _in.Tick() + ticks),
-                         .system = build.system,
-                         .other = player});
-      }
-    }
-
-    // Proposals go on the table. Nothing is charged yet -- the lane is paid for at the lock the
-    // partner accepts it, which is also the lock it starts paying.
-    for (std::size_t order = 0; order < set->proposals.size(); ++order)
-    {
-      if (wasRejected(OrderList::Proposals, order))
-      {
-        continue;
-      }
-      const ProposalOrder& proposed = set->proposals[order];
-
-      OpenProposal open;
-      open.id = next.TakeNextProposalId();
-      open.from = player;
-      open.to = proposed.to;
-      open.kind = proposed.kind;
-      open.lane = proposed.lane;
-      open.conditionalLane = proposed.conditionalLane;
-      open.ticks = proposed.ticks;
-      open.openedAt = _in.Tick();
-      next.MutableProposals().push_back(open);
-
-      record.lines.push_back(std::format("{} proposed to {}", NameOf(player), NameOf(proposed.to)));
-      Tell(_log, proposed.to,
-           DigestEntry{.kind = DigestKind::ProposalReceived,
-                       .severity = Severity::PROPOSAL_ARRIVED,
-                       .title = std::format("Proposal from {}", NameOf(player)),
-                       .detail = "Answer at the next lock, or it is reported as ignored",
-                       .lane = proposed.lane,
-                       .other = player,
-                       .proposal = open.id});
-    }
-  }
-
-  // Answers and withdrawals are applied after every proposal in this tick exists, so that an offer
-  // made and answered in the same tick behaves like any other -- and in player order, so two
-  // answers to the same offer resolve the same way everywhere.
-  for (std::size_t index = 0; index < byPlayer.size(); ++index)
-  {
-    const OrderSet* set = byPlayer[index];
-    if (set == nullptr)
+    if (set->concede && ApplyConcede(_in, next, _log, record, player))
     {
       continue;
     }
-    const PlayerId player{static_cast<std::int32_t>(index)};
 
-    for (const AnswerOrder& answer : set->answers)
-    {
-      const OpenProposal* open = next.FindProposal(answer.proposal);
-      if (open == nullptr || open->to != player)
-      {
-        continue;
-      }
-      const OpenProposal decided = *open;
-
-      if (answer.answer == Answer::Accept)
-      {
-        // "A lane accepted at a lock opens in that same phase 1 and pays from that tick's
-        // production" -- which is why this happens here, in phase 1, and not in a later phase that
-        // would miss phase 2 by one tick.
-        if (decided.kind == ProposalKind::OpenLane)
-        {
-          (void)OpenTradeLane(next, _log, record, decided.lane, decided.from, decided.to, _in.Tick(), player, decided.id);
-        }
-        else
-        {
-          // The other two kinds are recorded and NOT enforced. That is the design, not an omission:
-          // "no enforced treaties", and the trade lane is called the one consensual mechanic
-          // because it is the only one with teeth.
-          const AgreementKind kind = decided.kind == ProposalKind::ShareScouting ? AgreementKind::ShareScouting : AgreementKind::HoldFire;
-
-          next.MutableAgreements().push_back(Agreement{.kind = kind,
-                                                       .a = decided.from,
-                                                       .b = decided.to,
-                                                       .openedAt = _in.Tick(),
-                                                       .expiresAt = kind == AgreementKind::HoldFire ? _in.Tick() + decided.ticks : 0});
-
-          record.lines.push_back(std::format("{} and {} agreed", NameOf(decided.from), NameOf(decided.to)));
-          for (const PlayerId side : {decided.from, decided.to})
-          {
-            Tell(_log, side,
-                 DigestEntry{.kind = DigestKind::AgreementOpened,
-                             .severity = Severity::AGREEMENT_MADE,
-                             .title = kind == AgreementKind::ShareScouting ? "Scouting shared" : "Hold agreed",
-                             .detail = kind == AgreementKind::ShareScouting
-                                         ? "Their map is your map"
-                                         : std::format("For {} ticks, and nothing enforces it", decided.ticks),
-                             .other = side == decided.from ? decided.to : decided.from});
-          }
-        }
-
-        // "It can carry a conditional order -- if accepted, open lane -- so the effect lands
-        // without a second round trip."
-        if (decided.conditionalLane.IsValid() && decided.conditionalLane != decided.lane)
-        {
-          (void)OpenTradeLane(next, _log, record, decided.conditionalLane, decided.from, decided.to, _in.Tick(), player, decided.id);
-        }
-      }
-
-      Tell(_log, decided.from,
-           DigestEntry{.kind = DigestKind::ProposalAnswered,
-                       .severity = Severity::PROPOSAL_RESOLVED,
-                       .title = answer.answer == Answer::Accept ? "Proposal accepted" : "Proposal declined",
-                       .detail = std::format("{} answered", NameOf(player)),
-                       .lane = decided.lane,
-                       .other = player,
-                       .proposal = decided.id});
-
-      std::vector<OpenProposal>& answered = next.MutableProposals();
-      answered.erase(std::remove_if(answered.begin(), answered.end(),
-                                    [&decided](const OpenProposal& _candidate) { return _candidate.id == decided.id; }),
-                     answered.end());
-    }
-
-    for (const WithdrawOrder& withdraw : set->withdrawals)
-    {
-      const OpenProposal* open = next.FindProposal(withdraw.proposal);
-      if (open == nullptr || open->from != player)
-      {
-        continue;
-      }
-      const OpenProposal pulled = *open;
-
-      Tell(_log, pulled.to,
-           DigestEntry{.kind = DigestKind::ProposalWithdrawn,
-                       .severity = Severity::PROPOSAL_RESOLVED,
-                       .title = std::format("{} withdrew a proposal", NameOf(player)),
-                       .detail = "It is no longer on the table",
-                       .lane = pulled.lane,
-                       .other = player,
-                       .proposal = pulled.id});
-
-      std::vector<OpenProposal>& list = next.MutableProposals();
-      list.erase(std::remove_if(list.begin(), list.end(), [&pulled](const OpenProposal& _candidate) { return _candidate.id == pulled.id; }),
-                 list.end());
-    }
-
-    // "Either can cancel it at any tick. Lanes are public; cancelling one is a tell." The digest
-    // has to say CANCELED BY PARTNER, distinct from a lane that fell with a system in phase 5 --
-    // the one-pager is explicit that "the tell only works if the reader knows which".
-    for (const CancelLaneOrder& cancel : set->cancellations)
-    {
-      const ActiveTradeLane* found = next.FindTradeLane(cancel.lane);
-      if (found == nullptr || (found->a != player && found->b != player))
-      {
-        continue;
-      }
-      const ActiveTradeLane closed = *found;
-      const PlayerId partner = closed.a == player ? closed.b : closed.a;
-
-      record.lines.push_back(std::format("{} canceled a trade lane with {}", NameOf(player), NameOf(partner)));
-      Tell(_log, partner,
-           DigestEntry{.kind = DigestKind::LaneCanceled,
-                       .severity = Severity::LANE_CHANGED,
-                       .title = "Trade lane canceled",
-                       .detail = std::format("Canceled by partner -- {} closed it", NameOf(player)),
-                       .lane = closed.lane,
-                       .other = player});
-      Tell(_log, player,
-           DigestEntry{.kind = DigestKind::LaneCanceled,
-                       .severity = Severity::LANE_CHANGED,
-                       .title = "Trade lane canceled",
-                       .detail = std::format("You closed it with {}", NameOf(partner)),
-                       .lane = closed.lane,
-                       .other = partner});
-
-      std::vector<ActiveTradeLane>& lanes = next.MutableTradeLanes();
-      lanes.erase(
-        std::remove_if(lanes.begin(), lanes.end(), [&closed](const ActiveTradeLane& _candidate) { return _candidate.lane == closed.lane; }),
-        lanes.end());
-    }
+    ApplyFleetOrders(next, *set, rejected);
+    ApplyBuilds(_in, next, _log, record, player, *set, rejected);
+    ApplyProposals(_in, next, _log, record, player, *set, rejected);
   }
 
-  // Agreements that have run their term. A hold-fire that lapses is not news -- nothing was
-  // enforcing it -- so it leaves quietly rather than as an event in eleven digests.
-  {
-    std::vector<Agreement> standing;
-    for (const Agreement& agreement : next.Agreements())
-    {
-      if (agreement.expiresAt == 0 || _in.Tick() < agreement.expiresAt)
-      {
-        standing.push_back(agreement);
-      }
-    }
-    next.MutableAgreements() = standing;
-  }
-
-  // Re-validation. The one-pager: every open proposal is re-checked at every lock, and one that no
-  // longer makes sense is voided with a reason that reaches BOTH digests. An offer that quietly
-  // stopped working is exactly the dead offer the design forbids.
-  {
-    std::vector<OpenProposal> surviving;
-    for (const OpenProposal& proposal : next.Proposals())
-    {
-      const bool expired = _in.Tick() >= proposal.openedAt + _in.Rules().proposalWindowTicks;
-
-      bool stillMakesSense = true;
-      if (proposal.kind == ProposalKind::OpenLane && proposal.lane.IsValid())
-      {
-        const GalaxyLane& edge = next.GalaxyGraph().LaneAt(proposal.lane);
-        const PlayerId first = next.SystemAt(edge.a).owner;
-        const PlayerId second = next.SystemAt(edge.b).owner;
-        stillMakesSense = (first == proposal.from && second == proposal.to) || (second == proposal.from && first == proposal.to);
-      }
-      if (next.PlayerAt(proposal.from).conceded || next.PlayerAt(proposal.to).conceded)
-      {
-        stillMakesSense = false;
-      }
-
-      if (!stillMakesSense)
-      {
-        record.lines.push_back("a proposal was voided");
-        for (const PlayerId side : {proposal.from, proposal.to})
-        {
-          Tell(_log, side,
-               DigestEntry{.kind = DigestKind::ProposalVoided,
-                           .severity = Severity::PROPOSAL_RESOLVED,
-                           .title = "Proposal voided",
-                           .detail = "The lane no longer joins your two empires",
-                           .lane = proposal.lane,
-                           .other = side == proposal.from ? proposal.to : proposal.from,
-                           .proposal = proposal.id});
-        }
-        continue;
-      }
-
-      if (expired)
-      {
-        record.lines.push_back("a proposal went unanswered");
-        Tell(_log, proposal.from,
-             DigestEntry{.kind = DigestKind::ProposalIgnored,
-                         .severity = Severity::PROPOSAL_RESOLVED,
-                         .title = std::format("{} ignored your proposal", NameOf(proposal.to)),
-                         .detail = std::format("No answer in {} ticks", _in.Rules().proposalWindowTicks),
-                         .lane = proposal.lane,
-                         .other = proposal.to,
-                         .proposal = proposal.id});
-        continue;
-      }
-
-      surviving.push_back(proposal);
-    }
-    next.MutableProposals() = surviving;
-  }
+  ApplyAnswers(_in, next, _log, record, byPlayer);
 
   return next;
 }

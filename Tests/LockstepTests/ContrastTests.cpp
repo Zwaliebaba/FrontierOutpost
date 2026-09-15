@@ -9,10 +9,11 @@
 // paints text on -- the app background, the dialog card, and a committed build tile's blue wash
 // (ADR-107) -- at 4.5:1, which is the AA threshold for body text.
 //
-// **One thing is deliberately below it and is asserted to BE below it**, so that raising it is a
-// decision rather than a drive-by: `TILE_BLOCKED_INK`, the ink of a build tile that is inert
-// because something else on its system is rising. Its declaration in `DesignTokens.h` carries the
-// reason, which is that the tile is not read.
+// **Nothing is below it any more.** `TILE_BLOCKED_INK` was, at 3.21:1, and was asserted to BE
+// below it so that raising it would be a decision (ADR-107): an inert tile had to be faint, because
+// faint was the only channel saying it could not be ordered. ADR-111 gave inert controls a DASHED
+// border, which says that on its own and says it in the chrome rather than in the words, so the ink
+// went back to `NEUTRAL_DIM` and the exemption went with it (ADR-112).
 
 #include "pch.h"
 #include "CppUnitTest.h"
@@ -66,6 +67,16 @@ namespace
 /// The AA floor for body text. Every one of these strings is body text: there is no large-text
 /// exemption to claim while the whole screen is one size (ADR-014, and UI-01 2.1 is the second).
 constexpr double FLOOR = 4.5;
+
+/// One ink over one ground, named so a failure says which pair it was.
+void AssertReadableOver(const wchar_t* _name, const Neuron::Color& _ink, const Neuron::Color& _ground, const wchar_t* _where)
+{
+  const double ratio = Contrast(_ink, _ground);
+  if (ratio < FLOOR)
+  {
+    Assert::Fail((std::wstring{_name} + L" is " + std::to_wstring(ratio) + L":1 over " + _where + L", under the 4.5:1 floor").c_str());
+  }
+}
 
 void AssertReadable(const wchar_t* _name, const Neuron::Color& _ink)
 {
@@ -126,17 +137,84 @@ public:
     }
   }
 
-  // **The one exemption, asserted as one.** A blocked tile is drawn at 90/255 white and is meant to
-  // be: the sheet's help line above it says why nothing there can be ordered, and an ink that
-  // cleared the floor would put three inert tiles in competition with the build that is actually
-  // happening (ADR-107). If somebody raises it, this fails and they read the declaration.
-  TEST_METHOD(TheBlockedTilesInkIsBelowTheFloorOnPurpose)
+  // ---- The control vocabulary's four states (ADR-111) -------------------------------------------
+  //
+  // A control state is a ground as much as it is an ink: a filled button paints `BLUE` under
+  // `APP_BACKGROUND` text and shades a second cell darker still, and a committed one paints a wash
+  // that lifts under the pointer. Each of those is a ground this palette did not have before, and a
+  // ground nobody measured is exactly where the four states would go quietly illegible.
+
+  TEST_METHOD(AFilledButtonsInkClearsTheFloorAtRestAndUnderThePointer)
   {
-    Assert::IsTrue(Contrast(Lockstep::Ink::TILE_BLOCKED_INK, Lockstep::Ink::APP_BACKGROUND) < FLOOR,
-                   L"the blocked tile's ink now clears the floor, so the exemption in DesignTokens.h is stale");
-    Assert::IsTrue(Contrast(Lockstep::Ink::TILE_BLOCKED_INK, Lockstep::Ink::APP_BACKGROUND) <
-                     Contrast(Lockstep::Ink::NEUTRAL_DIM, Lockstep::Ink::APP_BACKGROUND),
-                   L"the blocked tile's ink is no fainter than the dim one, so one of the two is pointless");
+    // The label is the app background on blue -- dark on light, the one inversion on this screen --
+    // so it is measured the way round the renderer draws it.
+    AssertReadableOver(L"APP_BACKGROUND", Lockstep::Ink::APP_BACKGROUND, Lockstep::Ink::BLUE, L"a filled button");
+    AssertReadableOver(L"APP_BACKGROUND", Lockstep::Ink::APP_BACKGROUND, Lockstep::Ink::BUTTON_PRIMARY_HOVER,
+                       L"a filled button under the pointer");
+
+    // And on the number segment, which is the same fill shaded (ADR-111). A shade that made the
+    // segment's ground dark enough to lose the dark ink on it would be a price nobody can read.
+    const Neuron::Color rest = Over(Lockstep::Ink::BUTTON_SEGMENT_SHADE, Lockstep::Ink::BLUE);
+    const Neuron::Color hovered = Over(Lockstep::Ink::BUTTON_SEGMENT_SHADE, Lockstep::Ink::BUTTON_PRIMARY_HOVER);
+    AssertReadableOver(L"APP_BACKGROUND", Lockstep::Ink::APP_BACKGROUND, rest, L"a filled button's number segment");
+    AssertReadableOver(L"APP_BACKGROUND", Lockstep::Ink::APP_BACKGROUND, hovered, L"a hovered button's number segment");
+  }
+
+  TEST_METHOD(ALockedButtonsInkClearsTheFloorOverItsFill)
+  {
+    // A button at the lock is the filled grey the rail's chip wears (ADR-065, ADR-111), which is the
+    // one other place on this screen where the ink is the background.
+    AssertReadableOver(L"APP_BACKGROUND", Lockstep::Ink::APP_BACKGROUND, Over(Lockstep::Ink::LOCKED_FILL, Lockstep::Ink::APP_BACKGROUND),
+                       L"a locked button");
+  }
+
+  TEST_METHOD(AnInertControlsReasonClearsTheFloorOverTheGroundItIsDrawnOn)
+  {
+    // **An inert control has no fill**: its border is dashed and its inside is the app background
+    // (ADR-111), so this is the ground both of its inks are measured over. The reason is amber when
+    // it is money and dim when it is the board, and a player who cannot order the thing still has to
+    // be able to read why.
+    AssertReadableOver(L"NEUTRAL_DIM", Lockstep::Ink::NEUTRAL_DIM, Lockstep::Ink::APP_BACKGROUND, L"an inert control");
+    AssertReadableOver(L"AMBER", Lockstep::Ink::AMBER, Lockstep::Ink::APP_BACKGROUND, L"an inert control's money reason");
+  }
+
+  TEST_METHOD(ACommittedControlsInksClearTheFloorAtRestAndUnderThePointer)
+  {
+    // **`NEUTRAL_DIM` is deliberately not on this list.** It is the inert and the locked ink, and
+    // neither of those has a hover at all -- a control nobody can tap does not light under the
+    // pointer -- so the pair never lands in a framebuffer. Measured anyway it is 4.34:1, which is
+    // the right answer to a question this screen does not ask.
+    const Neuron::Color hovered = Over(Lockstep::Ink::COMMITTED_HOVER_FILL, Lockstep::Ink::APP_BACKGROUND);
+    for (const auto& [ink, name] : {std::pair{Lockstep::Ink::TEXT_PRIMARY, L"TEXT_PRIMARY"},
+                                    std::pair{Lockstep::Ink::TEXT_MUTED, L"TEXT_MUTED"}, std::pair{Lockstep::Ink::BLUE, L"BLUE"}})
+    {
+      AssertReadableOver(name, ink, hovered, L"a committed control under the pointer");
+    }
+  }
+
+  TEST_METHOD(TheMoveModeBannersInksClearTheFloorOverItsWash)
+  {
+    // The banner is a blue wash across the map pane and carries three inks (ADR-114): the fleet's
+    // name, what it is and where from, and the sentence that says what to tap.
+    const Neuron::Color wash = Over(Lockstep::Ink::MOVE_MODE_WASH, Lockstep::Ink::APP_BACKGROUND);
+    for (const auto& [ink, name] : {std::pair{Lockstep::Ink::BLUE, L"BLUE"}, std::pair{Lockstep::Ink::TEXT_PRIMARY, L"TEXT_PRIMARY"},
+                                    std::pair{Lockstep::Ink::TEXT_MUTED, L"TEXT_MUTED"}})
+    {
+      AssertReadableOver(name, ink, wash, L"the move-mode banner");
+    }
+  }
+
+  TEST_METHOD(AHoverIsBrighterThanTheStateItLifts)
+  {
+    // A guard of the same shape as the dim-token one below: a hover that is not brighter than the
+    // rest state is a hover nobody can see, and the two pairs are the whole of what says "under the
+    // pointer" on this screen (ADR-111).
+    Assert::IsTrue(Lockstep::Ink::OUTLINE.alpha < Lockstep::Ink::OUTLINE_HOVER.alpha,
+                   L"an outlined control's hover border is no brighter than its rest one");
+    Assert::IsTrue(Lockstep::Ink::TILE_COMMITTED_FILL.alpha < Lockstep::Ink::COMMITTED_HOVER_FILL.alpha,
+                   L"a committed control's hover wash is no stronger than its rest one");
+    Assert::IsTrue(Neuron::Luminance(Lockstep::Ink::BLUE) < Neuron::Luminance(Lockstep::Ink::BUTTON_PRIMARY_HOVER),
+                   L"a filled button's hover is no lighter than its rest fill");
   }
 
   TEST_METHOD(TheDimmestTokenIsTheOneThatDefinesTheFloor)
