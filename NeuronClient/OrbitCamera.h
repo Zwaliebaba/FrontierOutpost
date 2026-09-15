@@ -94,6 +94,20 @@ public:
     SetOrientation(m_yawRadians + _yawDeltaRadians, m_pitchRadians + _pitchDeltaRadians);
   }
 
+  /// Slides the picture across the viewport by a number of screen pixels, keeping the orientation
+  /// and the distance. Positive x moves it right, positive y moves it down.
+  ///
+  /// **The eye and the target move together**, perpendicular to the view direction, which is what
+  /// makes this a pan rather than an orbit: nothing rotates, nothing gets nearer, and what was in
+  /// front of what stays so.
+  ///
+  /// **It is exact for a point at the target's depth and approximate for every other.** The offset
+  /// is perpendicular to the view direction, so it cancels out of the depth a point is divided by
+  /// and the target's own depth is unchanged -- a point there moves by exactly the pixels asked
+  /// for. A nearer point moves further and a farther one less, because that is what perspective
+  /// does, and a caller that wants an exact offset asks for it about the thing it aimed at.
+  void PanPixels(float _xPixels, float _yPixels) noexcept;
+
   [[nodiscard]] float YawRadians() const noexcept
   {
     return m_yawRadians;

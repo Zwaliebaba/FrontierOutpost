@@ -135,6 +135,53 @@ public:
     }
   }
 
+  // A pan slides the picture without turning it or changing its scale, which is what lets the map
+  // centre a system without also zooming it (ADR-115). The signs are the part that draws a
+  // plausible picture while being wrong, so both are asserted at every angle rather than eyeballed.
+  TEST_METHOD(APanSlidesThePictureByTheseExactPixels)
+  {
+    for (const float yaw : {0.0F, 0.9F, -2.2F, 4.4F})
+    {
+      for (const float pitch : {0.2F, 0.62F, 1.3F})
+      {
+        Neuron::OrbitCamera camera = MakeCamera(yaw, pitch);
+        const Neuron::OrbitCamera::WorldPoint aimed = {0.0F, 0.0F, 0.0F};
+        const Neuron::OrbitCamera::ScreenPoint before = camera.Project(aimed);
+
+        // Up the pane, which is what an open sheet asks for: a negative y.
+        camera.PanPixels(0.0F, -175.0F);
+        const Neuron::OrbitCamera::ScreenPoint lifted = camera.Project(aimed);
+
+        Assert::AreEqual(175.0F, before.yPixels - lifted.yPixels, 0.01F, L"a lift did not move the picture up by its pixels");
+        Assert::AreEqual(before.xPixels, lifted.xPixels, 0.01F, L"a vertical pan moved the picture sideways");
+        Assert::AreEqual(before.depth, lifted.depth, 0.01F, L"a pan changed how far away the aimed point is");
+
+        camera.PanPixels(60.0F, 0.0F);
+        const Neuron::OrbitCamera::ScreenPoint across = camera.Project(aimed);
+        Assert::AreEqual(60.0F, across.xPixels - lifted.xPixels, 0.01F, L"a positive x did not move the picture right");
+      }
+    }
+  }
+
+  // A pan is not an orbit and not a dolly: the eye keeps its angles and its distance from whatever
+  // it is now looking at, so nothing rotates and nothing changes size. And it does move the eye,
+  // which is the half a test of the angles alone would pass without.
+  TEST_METHOD(APanTurnsNothingAndKeepsTheDistance)
+  {
+    Neuron::OrbitCamera camera = MakeCamera(0.9F, 0.62F);
+    const Neuron::OrbitCamera::WorldPoint was = camera.Position();
+    camera.PanPixels(-120.0F, 250.0F);
+    const Neuron::OrbitCamera::WorldPoint now = camera.Position();
+
+    Assert::AreEqual(0.9F, camera.YawRadians(), 0.0001F);
+    Assert::AreEqual(0.62F, camera.PitchRadians(), 0.0001F);
+    Assert::AreEqual(1000.0F, camera.Distance(), 0.0001F, L"a pan dollied the eye in or out");
+
+    const float moved =
+      std::sqrt((now.x - was.x) * (now.x - was.x) + (now.y - was.y) * (now.y - was.y) + (now.z - was.z) * (now.z - was.z));
+    Assert::IsTrue(moved > 1.0F, L"a pan of 120 by 250 pixels left the eye where it was");
+  }
+
   // A point level with or behind the eye has no projection. Drawing one anyway mirrors it through
   // the camera, which puts a lane straight across the pane.
   TEST_METHOD(PointsBehindTheEyeAreNotVisible)

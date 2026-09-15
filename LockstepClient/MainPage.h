@@ -192,6 +192,18 @@ public:
   /// put a build grid and a fleet list in one sheet and came to 403 bare (ADR-112).
   static constexpr float SHEET_MAP_SHARE = 338.0F;
 
+  /// **How far up the pane a centred system is lifted while a sheet is open** (ADR-115), so that
+  /// the sheet does not cover the thing a tap just aimed the camera at.
+  ///
+  /// Every sheet on this pane is anchored to its BOTTOM and none is taller than `SHEET_MAP_SHARE`
+  /// plus the margin below it, so what stays map is the band from the top bar down to that. Half of
+  /// what the sheet takes is the offset that moves the pane's middle to the middle of that band.
+  ///
+  /// **Measured against the SHARE rather than against the sheet drawn this frame**, which is a
+  /// rule and not an approximation: a place sheet is as tall as what is on the place, so a lift
+  /// read off the sheet itself would re-aim the camera when a fleet arrived and gave it a row.
+  static constexpr float FOCUS_LIFT_PIXELS = (SHEET_MAP_SHARE + SHEET_MARGIN) * 0.5F;
+
   /// The least a place sheet's scrolling body is given, whatever the help line above it costs.
   ///
   /// A band and one row of tiles, which is the smallest body that says anything: a sheet whose
@@ -586,6 +598,17 @@ private:
   /// Create: the graph does not move between ticks.
   void MeasureContent();
 
+  /// **Focuses a system and centres the camera on it** (ADR-115). The one door every focus goes
+  /// through -- a map tap, a rail row, a digest event, entering a move mode -- because "the camera
+  /// is centred on what is focused" is one rule and a screen with it written at five call sites is
+  /// a screen where four of them are eventually wrong.
+  ///
+  /// `EventRefs::NONE`, or any index the graph does not have, focuses nothing and frames the whole
+  /// galaxy again. **An index is normalised here rather than trusted**: the graph is fogged and the
+  /// positions in it are this snapshot's (ADR-057), so an index that arrived from a card, a row or
+  /// a stale frame is a question this has to answer rather than pass on.
+  void FocusOn(std::int32_t _system) noexcept;
+
   /// Which of `m_hoverRegions` the pointer is over, or `EventRefs::NONE`.
   [[nodiscard]] std::int32_t RegionUnderPointer() const noexcept;
 
@@ -846,7 +869,9 @@ private:
   /// the tenth system a player can see this tick may be the eleventh next tick. A sheet that stayed
   /// open on a position would be a sheet about a different system (ADR-065).
   std::int32_t m_panelSubjectId = EventRefs::NONE;
-  /// The node the digest last pointed at. Drawn with a focus ring; -1 when nothing is focused.
+  /// The node the screen is pointed at: drawn with a focus ring, named in the `MAP - FOCUS` line,
+  /// and **what the camera is centred on** (ADR-115). `EventRefs::NONE` when nothing is focused,
+  /// which is when the map frames the whole galaxy. Only `FocusOn` writes it.
   std::int32_t m_focusedSystem = EventRefs::NONE;
 
   /// Whether `--dev` was passed (ADR-091). Off in every shipped run.

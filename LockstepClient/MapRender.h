@@ -68,6 +68,14 @@ struct MapFrame
   Neuron::OrbitCamera::WorldPoint contentCenter;
   float contentRadius = 1.0F;
 
+  /// How far up the pane the camera's aim is lifted, so that a sheet covering the bottom of the
+  /// map does not cover the system a tap just centred (ADR-115). Zero when nothing is covered.
+  ///
+  /// It arrives as a NUMBER OF PIXELS rather than as the sheet's own rectangle, for the reason
+  /// `sheetOpen` below is a bool: the map does not know what a panel is, and which of the page's
+  /// sheets is open is not a fact it should have to read.
+  float aimLiftPixels = 0.0F;
+
   /// The system the digest last pointed at, drawn with a spotlight. `EventRefs::NONE` for none.
   std::int32_t focusedSystem = EventRefs::NONE;
 

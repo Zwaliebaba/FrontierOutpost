@@ -82,6 +82,30 @@ OrbitCamera::Basis OrbitCamera::ViewBasis() const noexcept
   return Basis{right, up, forward};
 }
 
+void OrbitCamera::PanPixels(float _xPixels, float _yPixels) noexcept
+{
+  // Pixels at the TARGET's depth, which is the depth the offset leaves alone: it is perpendicular
+  // to the view direction, so it drops out of the dot product `Project` divides by. That is what
+  // makes the slide exact for a point at the target rather than close to it.
+  const float pixelsPerUnit = PixelsPerWorldUnitAt(m_distance);
+  if (pixelsPerUnit <= 0.0F)
+  {
+    return;
+  }
+
+  // **Both signs are opposite the picture**, because moving the eye is how the picture moves and
+  // the two go the other way: sliding the target left is what brings the picture right. `Project`
+  // reads `across` along `right` and `upward` along `up`, and screen y runs down where `up` runs
+  // up, which is why the vertical one comes out positive.
+  const Basis basis = ViewBasis();
+  const float across = -_xPixels / pixelsPerUnit;
+  const float upward = _yPixels / pixelsPerUnit;
+
+  m_target.x += basis.right.x * across + basis.up.x * upward;
+  m_target.y += basis.right.y * across + basis.up.y * upward;
+  m_target.z += basis.right.z * across + basis.up.z * upward;
+}
+
 OrbitCamera::ScreenPoint OrbitCamera::Project(const WorldPoint& _world) const noexcept
 {
   const WorldPoint eye = Position();

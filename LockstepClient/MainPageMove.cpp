@@ -126,7 +126,7 @@ void MainPage::EnterMove(std::int32_t _fleet)
   // over the map while the answer is on it would be the thing this mode exists to stop.
   m_panel = Panel::None;
   m_armedConcede = EventRefs::NONE;
-  m_focusedSystem = fleet.from;
+  FocusOn(fleet.from);
 
   // A fleet that already has a move opens with that move lit, so re-entering the mode is a way to
   // change a destination rather than a way to start again (ADR-031).

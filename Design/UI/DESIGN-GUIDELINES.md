@@ -569,7 +569,16 @@ Drawn, in painter's order (`MapRender.cpp`):
   "multi-hop within the fleet's range" describes a game that does not exist.
 - **The camera** (ADR-090): drag orbits, a wheel notch or pinch step zooms between 0.6x and 2.5x of
   the authored framing at 12% a step, and an outlined `RESET` chip sits immediately after
-  `MAP - FOCUS: PELL` — drawn only when the camera is not where the map opened. No pan.
+  `MAP - FOCUS: PELL` — drawn only when the camera is not where the map opened, a camera centred on
+  a place included.
+- **Selecting a place centres the camera on it** (ADR-115), and every focus does it: a disc, the
+  garrison badge beside it, a fleet already under way, a locks-rail row, a digest focus chip, and
+  entering a move mode. **It pans and never zooms** — the distance is still solved from the whole
+  galaxy, so the scale the map is drawn at does not change and the wheel stays the only thing that
+  changes it. While a sheet is open the system is lifted 175px up the pane
+  (`(SHEET_MAP_SHARE + SHEET_MARGIN) / 2`) so the sheet does not cover what was just centred; a
+  snapshot clears the focus and frames the whole galaxy again. There is no free pan: the camera is
+  moved by orbiting, by zooming, and by choosing a place.
 - **Labels keep out of the way** (ADR-090): one greedy pass nudges a name up in 12px steps, at most
   three, until it clears every label already placed and every lane on the screen; past that it is
   drawn where it was. A garrison badge rides on its label's baseline and joins the field.
@@ -579,5 +588,4 @@ the contact spotlight (an amber dashed ellipse at a contested system); a verdict
 (`T47 · YOU LOSE`); the rival's approach lane in amber when a contact is pending; the Fallow as
 "the most distinct object" — dithered ground, radial glow at 1.6× radius, three stepped rings, five
 pins, `THE FALLOW · OPENS T60` and the race distances `YOU 9 · HAL 7 · SOR 5`; focus by actor
-(`FOCUS: HALVORSEN`); zoom (wheel and pinch are banked by `PointerInput` and read by nothing) and a
-way back to the authored framing (`ResetView` exists; no control calls it).
+(`FOCUS: HALVORSEN`).

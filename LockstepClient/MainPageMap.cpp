@@ -91,6 +91,26 @@ void MainPage::MeasureContent()
   m_contentRadius = std::sqrt(halfWidth * halfWidth + halfDepth * halfDepth);
 }
 
+void MainPage::FocusOn(std::int32_t _system) noexcept
+{
+  // **A position is only a system while this snapshot is the one it came from** (ADR-057), so an
+  // index the graph does not have focuses nothing rather than being stored and drawn against.
+  const bool known = _system >= 0 && _system < static_cast<std::int32_t>(m_state.graph.systems.size());
+  m_focusedSystem = known ? _system : EventRefs::NONE;
+
+  if (!known)
+  {
+    m_mapView.AimAtContent();
+    return;
+  }
+
+  // The GROUND under it, not the top of its stem: a station's height is its production (ADR-103),
+  // so aiming at the ball would put a rich system's neighbours lower in the pane than a poor one's
+  // and the centring would read as a wobble rather than as a rule.
+  const SystemNode& node = m_state.graph.systems[static_cast<std::size_t>(_system)];
+  m_mapView.AimAt(MapView::Ground(node.positionX, node.positionY));
+}
+
 std::uint32_t MainPage::TicksTo(std::int32_t _fromSystem, std::int32_t _toSystem) const
 {
   // Dijkstra over lane costs. Lane cost is authored per edge and is not a distance (one-pager),
@@ -176,14 +196,19 @@ void MainPage::DrawWorld(ShapeRenderer& _shapes, FontRenderer& _text, Neuron::Me
     }
   }
 
+  // Asked once and used twice: it decides whether the legend is drawn at all, and whether a
+  // centred system has to be lifted clear of what is covering the bottom of the pane (ADR-115).
+  const bool sheetOpen = m_panel != Panel::None || m_moveMode.has_value();
+
   const MapFrame frame{.state = m_state,
                        .view = m_mapView,
                        .sky = m_sky,
                        .contentCenter = m_contentCenter,
                        .contentRadius = m_contentRadius,
+                       .aimLiftPixels = sheetOpen ? FOCUS_LIFT_PIXELS : 0.0F,
                        .focusedSystem = m_focusedSystem,
                        .animationSeconds = m_animationSeconds,
-                       .sheetOpen = m_panel != Panel::None || m_moveMode.has_value(),
+                       .sheetOpen = sheetOpen,
                        .moveOrigin = m_moveMode.has_value() ? m_moveMode->origin : EventRefs::NONE,
                        .moveSelected = m_moveMode.has_value() ? m_moveMode->selected : EventRefs::NONE,
                        .moveTargets = moveTargets};

@@ -1003,7 +1003,7 @@ struct MapPass
       tallest = std::max(tallest, StemHeightFor(node.production, HasFlag(node.flags, SystemFlags::Capital)));
     }
   }
-  _frame.view.FrameContent(_frame.contentCenter, _frame.contentRadius, tallest + CAPITAL_RADIUS);
+  _frame.view.FrameContent(_frame.contentCenter, _frame.contentRadius, tallest + CAPITAL_RADIUS, _frame.aimLiftPixels);
   const Neuron::OrbitCamera& camera = _frame.view.Camera();
 
   // The same camera, handed to the mesh pass as a matrix, with the light and the pane it projects
