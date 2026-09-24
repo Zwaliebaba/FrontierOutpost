@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Print the effective settings of CMake-generated .vcxproj files (FrontierOutpost/MIGRATION_NOTES.md).
 
-Usage: DescribeVcxproj.py WORKSPACE BUILD_DIR [CONFIG ...]
+Usage: DescribeVcxproj.py [--sources|--no-sources] WORKSPACE BUILD_DIR [CONFIG ...]
 
 The projects CMake's Visual Studio generator writes are the ground truth for what the original
 build passes to cl.exe, link.exe and lib.exe: every CMake default, CMAKE_CXX_FLAGS edit and
@@ -9,6 +9,8 @@ target property ends up there as MSBuild metadata. For each project under BUILD_
 ALL_BUILD, ZERO_CHECK, INSTALL and PACKAGE excluded) this prints the configuration properties and
 every ClCompile, ResourceCompile, Link, Lib and build-event setting, once when the configurations
 agree and per configuration when they differ. Absolute paths under WORKSPACE print as <ws>.
+With --sources it also lists every ClCompile and ResourceCompile item. CMake's compiler-probe
+projects under CMakeFiles/ are skipped.
 """
 
 import collections
@@ -43,7 +45,7 @@ def ConfigurationOf(_element):
     return match.group(1) if match else None
 
 
-def Describe(_path, _workspace, _configs):
+def Describe(_path, _workspace, _configs, _listSources):
     root = ElementTree.parse(_path).getroot()
     settings = collections.defaultdict(dict)  # key -> {config: value}
 
@@ -67,6 +69,7 @@ def Describe(_path, _workspace, _configs):
                 settings[f"{toolName}.{setting.tag[len(NS):]}"][config] = Relative(setting.text, _workspace)
 
     sources = collections.Counter()
+    compiled = []
     customBuilds = []
     references = []
     for group in root.iter(NS + "ItemGroup"):
@@ -75,6 +78,8 @@ def Describe(_path, _workspace, _configs):
             include = Relative(item.get("Include"), _workspace)
             if kind in ("ClCompile", "ClInclude", "ResourceCompile", "None", "Object"):
                 sources[kind] += 1
+                if kind in ("ClCompile", "ResourceCompile"):
+                    compiled.append(f"{kind} {include}")
             elif kind == "CustomBuild":
                 customBuilds.append(include)
             elif kind == "ProjectReference":
@@ -87,6 +92,8 @@ def Describe(_path, _workspace, _configs):
         lines.append("    CustomBuild: " + "; ".join(customBuilds))
     if references:
         lines.append("    ProjectReference: " + ", ".join(sorted(set(references))))
+    if _listSources:
+        lines += [f"    source: {entry}" for entry in compiled]
     for key in sorted(settings):
         values = settings[key]
         present = [c for c in _configs if c in values]
@@ -99,18 +106,23 @@ def Describe(_path, _workspace, _configs):
 
 
 def main(_args):
+    listSources = False
+    while _args and _args[0].startswith("--"):
+        listSources = _args[0] == "--sources"
+        _args = _args[1:]
     if len(_args) < 2:
         print(__doc__)
         return 2
     workspace, buildDir = _args[0].rstrip("\\/"), _args[1]
     configs = _args[2:] or ["Debug", "Release"]
     projects = sorted(glob.glob(os.path.join(buildDir, "**", "*.vcxproj"), recursive=True))
-    projects = [p for p in projects if Stem(p) not in CMAKE_UTILITY_PROJECTS]
+    projects = [p for p in projects
+                if Stem(p) not in CMAKE_UTILITY_PROJECTS and "CMakeFiles" not in re.split(r"[\\/]", p)]
     if not projects:
         print(f"No .vcxproj under {buildDir}: configure did not get that far.")
         return 0
     for project in projects:
-        print("\n".join(Describe(project, workspace, configs)))
+        print("\n".join(Describe(project, workspace, configs, listSources)))
     return 0
 
 
