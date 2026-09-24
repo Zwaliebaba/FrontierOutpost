@@ -4,53 +4,6 @@
 * text=auto
 
 ###############################################################################
-# The files something takes a SHA-256 of, and what keeps that hash honest.
-#
-# `* text=auto` above stores every text file as LF and then hands the working
-# tree whatever the platform asks for -- CRLF on Windows. That is right for
-# source a compiler reads and wrong for a file something HASHES, because the
-# hash then describes a checkout rather than the content.
-#
-# Build/BakeFont.py is such a file: it records its own sha256 in the header it
-# bakes (ADR-073), and Build/CheckProjectFiles.py re-derives that from disk. On
-# 2026-09-13 main went red on exactly this -- the header carried the LF hash
-# ec81843f, the Windows runner checked the baker out as CRLF, and the identical
-# file hashed 75fae9ab. Re-baking cannot settle it: the two machines disagree
-# about the line endings, not about the font.
-#
-# `eol=lf` invents no convention. .editorconfig has declared LF for *.py all
-# along, and the bake was taken on a machine that honoured it; this is what
-# makes git hand over the file .editorconfig already says is there.
-#
-# The TTFs are left alone today because git reads a NUL byte in their first
-# 8 KiB and calls them binary. That is a heuristic, and a hashed source should
-# not rest on one, so it is stated. Content is unchanged either way.
-###############################################################################
-*.py  text eol=lf
-*.ttf binary
-
-###############################################################################
-# The resource files, for the reason the TTFs are named above.
-#
-# `LockStep.ico` is byte-exact in a way nothing checks: its 118-byte directory
-# declares the size and depth of each of the seven images behind it, and Windows
-# picks which image to draw by reading THAT and not the images (ADR-111's
-# activation commit; `LoadImage` defers to `LookupIconIdFromDirectoryEx`). A
-# directory that has been edited is a blurry taskbar icon and nothing louder --
-# no error, no failed build.
-#
-# `Lockstep.rc` is UTF-16LE, which is what the Visual Studio resource editor
-# writes. A line-ending normalisation inside UTF-16 does not correct a file, it
-# destroys one: the bytes CR and LF are half of a code unit there.
-#
-# Both are left alone today only because git finds a NUL byte in the first 8 KiB
-# and calls them binary. That is a heuristic, and neither of these should rest on
-# one, so it is stated -- the same argument, and the same remedy, as the TTFs.
-###############################################################################
-*.ico binary
-*.rc  binary
-
-###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by
@@ -108,3 +61,44 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+###############################################################################
+# Line endings, kept in step with /.editorconfig (AGENTS.md §4)
+#
+# `* text=auto` above normalizes every text file to LF in the REPOSITORY. What it does not
+# do is decide what the WORKING TREE gets -- that is core.autocrlf's business, and therefore
+# different on every machine -- while /.editorconfig states a definite answer per format and
+# every editor that honours it obeys. Two files disagreeing about one file is how a whole-file
+# diff turns up inside a one-line change, so the formats .editorconfig is explicit about are
+# explicit here too. Change one, change the other in the same commit.
+###############################################################################
+
+# CRLF in the working tree: Windows sources, and the files Visual Studio rewrites wholesale.
+*.cpp           text eol=crlf
+*.h             text eol=crlf
+*.hlsl          text eol=crlf
+*.vcxproj       text eol=crlf
+*.filters       text eol=crlf
+*.slnx          text eol=crlf
+*.sln           text eol=crlf
+*.props         text eol=crlf
+*.targets       text eol=crlf
+*.json          text eol=crlf
+.clang-format   text eol=crlf
+.clang-tidy     text eol=crlf
+.editorconfig   text eol=crlf
+.gitattributes  text eol=crlf
+.gitignore      text eol=crlf
+
+# LF in the working tree: what the Linux CI job reads, and what reads the same either way.
+*.py            text eol=lf
+*.sh            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.md            text eol=lf
+
+# The Visual Studio resource editor writes these as UTF-16 and rewrites them wholesale. Git's
+# own heuristic usually calls them binary on the NUL bytes; saying so outright means a
+# normalization pass can never corrupt one.
+*.rc            -text
+*.rc2           -text

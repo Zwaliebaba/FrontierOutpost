@@ -1,8 +1,8 @@
 # AGENTS.md §1 — naming and semantics, machine-readable. This file is the single source of truth
 # for the option values; AGENTS.md states the rules in prose and does not repeat the settings.
 #
-# The values below are adopted from the sibling repository Outpost.Warzone so that engine code
-# moves between the two trees without a rename pass.
+# The values below are carried over from the sibling repositories Outpost.Warzone and
+# Nomad-Commander, so that engine code moves between the trees without a rename pass.
 #
 # This file owns IDENTIFIERS and semantics. /.clang-format owns whitespace, and the two never
 # overlap: clang-tidy has no check that reports a wrong brace position or an over-long line, and
@@ -11,34 +11,38 @@
 # ── Status: CI gates this over the whole tree ──────────────────────────────────────────────
 #
 # `.github/workflows/build.yml` runs clang-tidy on the Windows job, after the build, over every
-# hand-written translation unit in the tree (AGENTS.md §6). It runs through clang's MSVC driver
-# (`--driver-mode=cl`) against the same switches the .vcxproj files set, because the alternative —
-# GNU driver mode against the Windows SDK — disagrees with MSVC in both directions and reports
-# defects that are not there.
+# hand-written translation unit in the tree (AGENTS.md §6) -- from the moment Build/RunClangTidy.py
+# exists, which it does not yet, so the step is guarded until it does. It runs through clang's MSVC
+# driver (`--driver-mode=cl`) against the same switches the .vcxproj files set, because the
+# alternative — GNU driver mode against the Windows SDK — disagrees with MSVC in both directions
+# and reports defects that are not there.
 #
-# This repository is GREENFIELD. Nothing is grandfathered, a whole-tree pass comes back clean
-# today, and a finding is therefore a defect rather than archaeology. That is a claim CI keeps
-# true; it is not a claim about how careful anyone was. When it breaks, fix the code — do not
-# narrow the filter.
+# This repository is GREENFIELD, and at the time of writing it holds no C++ at all. Nothing is
+# grandfathered, a whole-tree pass comes back clean, and a finding is therefore a defect rather
+# than archaeology. That is a claim CI keeps true from the first translation unit onwards; it is
+# not a claim about how careful anyone was. When it breaks, fix the code — do not narrow the
+# filter.
 #
 # Run it yourself, on the files you wrote, before you push. From a Developer PowerShell (the
 # INCLUDE variable is what makes the Windows SDK visible to clang):
 #
-#   clang-tidy --quiet NeuronCore/YourNewFile.cpp -- --driver-mode=cl /std:c++latest /EHsc `
-#     /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_DEBUG /I NeuronCore
+#   clang-tidy --quiet <Project>/YourNewFile.cpp -- --driver-mode=cl /std:c++latest /EHsc `
+#     /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /DNOMINMAX /D_DEBUG /I <Project>
 #
 # UNICODE and _UNICODE are not optional in that command. Every project sets CharacterSet=Unicode,
 # so `IDC_ARROW` is `MAKEINTRESOURCEW`; without the defines clang-tidy reports a type error at
 # every `LoadCursorW` call that MSVC compiles without complaint.
 #
-# THE VERSION MATTERS, and since 2026-09-11 the workflow PINS it -- `CLANG_TIDY_VERSION` in
+# THE VERSION MATTERS, and the workflow PINS it -- `CLANG_TIDY_VERSION` in
 # .github/workflows/build.yml, installed from pip so that the same binary is available on any
 # machine. "Clean" is always clean *under something*, and that something now has a number.
 #
-# It is pinned because it flapped: the runner image moved to LLVM 20, which reports two things 22
-# does not -- a bit-flag enum whose OR-ed value names no enumerator, and a std::unique_ptr inside
-# an aggregate returned by value. Both are correct code. The same run also found a real defect, a
-# decoder casting zero into an enum with no zero, and that one was fixed rather than pinned away.
+# It is pinned because in the sibling tree it flapped: the runner image moved to LLVM 20, which
+# reports two things 22 does not -- a bit-flag enum whose OR-ed value names no enumerator, and a
+# std::unique_ptr inside an aggregate returned by value. Both are correct code. The same run also
+# found a real defect, a decoder casting zero into an enum with no zero, and that one was fixed
+# rather than pinned away. The lesson travels even though the incident does not: a version change
+# must not be able to turn main red on its own.
 #
 # To run exactly what CI runs:
 #
@@ -46,9 +50,10 @@
 #   python Build/RunClangTidy.py
 
 # Four rules of AGENTS.md §1 this file cannot express — R2's banned type affixes, R7's file naming
-# and .vcxproj/.filters registration, R11's standing spelling families, and §3's flat project
+# and .vcxproj/.filters registration, R11's standing spelling families, and §2's flat project
 # directories — are checked by Build/CheckProjectFiles.py, which runs in the same CI job that
-# builds. A check that exists somewhere is worth more than a rule everyone is asked to remember.
+# builds, once somebody writes it (AGENTS.md §6). A check that exists somewhere is worth more
+# than a rule everyone is asked to remember.
 #
 # readability-identifier-length is deliberately NOT enabled. Its defaults reject the domain
 # vocabulary this codebase is built on — x, y, _a, _b — and short names here are precise, not lazy.
@@ -71,9 +76,9 @@ Checks: >
 # padding is exactly the change this repository must not make casually.
 #
 # `-bugprone-narrowing-conversions` is off because quantisation is pervasive and deliberate:
-# world units to lattice steps, radians to turns16, i64 sectors to the wire's i32, float to the
-# integer wire types. It would fire on most of the serialization layer, where the narrowing IS the
-# design.
+# world units to lattice steps, angles to fixed-point turns, 64-bit quantities to a 32-bit wire
+# field, float to the integer wire types. It would fire on most of the serialization layer, where
+# the narrowing IS the design.
 #
 # `-performance-enum-size` is off for the same reason as the padding check: it asks a closed
 # taxonomy to shrink to the smallest type its current enumerators happen to fit in. Every such
@@ -88,14 +93,23 @@ Checks: >
 # than two settings disagreeing about which findings matter.
 WarningsAsErrors: '*'
 
+# THIS ALTERNATION IS A PROJECT REGISTRY. It names the projects whose headers are linted, so
+# ADDING A PROJECT MEANS ADDING IT HERE -- a project missing from this list is a project whose
+# headers are checked by nothing at all, with no finding and no warning to say so. It is the
+# quietest way to lose a gate, which is why Build/CheckProjectFiles.py should be written to
+# compare this list against the solution rather than trusting anyone to remember.
+#
+# Only the product executable and the `<Something>Tests` convention are seeded, because that is
+# all this repository has agreed on so far.
+#
 # [/\\], not '/'. On a Windows Clang build the paths arrive with backslashes, so a filter anchored
 # on a forward slash matches no header at all and silently suppresses every in-build diagnostic.
-# Headers sitting DIRECTLY in a project folder, which is every hand-written one (AGENTS.md §3's
-# flat-directory rule). A bare `.*` would also match build output and the Windows SDK, and most of
-# what it reported would be from headers nobody in this repository wrote.
-HeaderFilterRegex: '(NeuronCore|NeuronClient|NeuronServer|GameLogic|Lockstep|[A-Za-z0-9]+Tests)[/\\][A-Za-z0-9]+\.h$'
+# The pattern matches headers sitting DIRECTLY in a project folder, which is every hand-written
+# one (AGENTS.md §2's flat-directory rule). A bare `.*` would also match build output and the
+# Windows SDK, and most of what it reported would be from headers nobody here wrote.
+HeaderFilterRegex: '(FrontierCommander|[A-Za-z0-9]+Tests)[/\\][A-Za-z0-9]+\.h$'
 
-# Lockstep/Resource.h is written by the Visual Studio resource editor, not by hand. Its
+# A `Resource.h` is written by the Visual Studio resource editor, not by hand. Its
 # `#define IDC_STATIC -1` trips bugprone-macro-parentheses, and the fix would be undone the next
 # time someone opens the dialog editor. Excluded here rather than by weakening the check for
 # everything else. (`ExcludeHeaderFilterRegex` needs clang-tidy 19 or newer; on an older one pass
