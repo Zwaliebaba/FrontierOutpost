@@ -8,9 +8,8 @@ for first-party code, x64 and ARM64, and Debug and Release.
 This is a build-system and language-standard migration only. Namespaces, identifiers, files and
 user-facing strings keep their original names. `ltheory-old-main/` is read-only.
 
-**Status:** Phase 0 is in progress. Everything below is measured except §9.4, which is waiting on
-run 3 ([`36063278543`](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36063278543)).
-Checkpoint 0 follows. No FrontierOutpost project exists yet.
+**Status:** Phase 0 is complete and waiting at **Checkpoint 0** (§8). No FrontierOutpost project
+exists yet.
 
 ---
 
@@ -205,8 +204,9 @@ tree**. That is why the baseline builds a clone and never `ltheory-old-main/`.
 - `freetype.lib`, the import library of `freetype6.dll`;
 - `freetype28s.lib`, a static 2.8 by its name.
 
-`liblt` compiles against a fourth version's headers (2.5.3, `include/FreeType`). Which library
-supplies which symbol depends on link order, recorded in §9.
+`liblt` compiles against a fourth version's headers (2.5.3, `include/FreeType`). Link order
+decides, and §9.4 shows the outcome: on Win32 every FreeType call binds to `freetype6.dll`,
+**FreeType 2.3.5**.
 
 ### 5.4 Compile and link settings
 
@@ -329,8 +329,9 @@ results; they are listed per directory in that order:
   - `screenshot/N.png` (F1);
   - script caches `<name>_<hash>.bin`.
 - It reads the `resource/` tree, including `resource/texture/SMAA_*.bin`, which are LFS objects.
-- Required runtime DLLs next to the executable: the FMOD Ex pair, `freetype6.dll` and
-  `zlib1.dll`.
+- Runtime DLLs, copied next to the executable: `fmodex.dll` and `fmod_event.dll` (both imported
+  by `lt.dll`), `freetype6.dll` (imported, FreeType 2.3.5) and `zlib1.dll` (which `freetype6.dll`
+  needs).
 
 ## 6. Phase 0b: dependencies
 
@@ -339,9 +340,9 @@ results; they are listed per directory in that order:
 | **SFML** | `ext/SFML` (submodule) | vendored source, built by `add_subdirectory` | source; bundled extlibs **x86 and x64 only** | 2.5.0 (`192eb968`) | C++03-era, compiled at MSVC's default (C++14) | none in `src/`; `stb_image.h` v2.16 has an SSE2 path guarded by `_M_IX86`/`_M_X64` with a scalar fallback | `ext/SFML/license.md` (zlib/png; lists the extlibs' licences) | `lt`, `launch` (graphics, network, system, window) |
 | SFML's bundled **FreeType** | `ext/SFML/extlibs/libs-msvc-universal/{x86,x64}/freetype.lib` and `headers/freetype2` | prebuilt static | x86, x64 | 2.5.5 | C | — | FTL/GPLv2 per SFML `license.md`; no text | `sfml-graphics`, and so `lt` |
 | SFML's bundled **OpenAL-Soft, FLAC, Ogg, Vorbis** | same folder; `extlibs/bin/<arch>/openal32.dll` | prebuilt (OpenAL is an import library) | x86, x64 | — | C | — | LGPL (OpenAL), BSD, per `license.md` | `sfml-audio` only, **which nothing links** |
-| **FMOD Ex** | `include/FMOD` (headers); `extlib/win32/FMOD/{fmodex_vc,fmod_event}.lib`; `extbin/win32/{fmodex,fmod_event}.dll` | prebuilt, **proprietary**, discontinued | **x86 only** (dumpbin); no ARM64 build of FMOD Ex has ever existed | 4.44.14 (`FMOD_VERSION 0x00044414`) | C/C++ API | binaries only | **none** in the tree | `src/liblt/Module/SoundEngine/Fmod.cpp` |
-| **FreeType** (liblt's own) | `include/FreeType` (2.5.3 headers); `extlib/win32/freetype/{freetype.lib, freetype28s.lib}`; `extbin/win32/freetype6.dll` | prebuilt: an import library and a static library | **x86 only** | headers 2.5.3; `freetype28s` suggests 2.8 | C | `ftconfig.h` has inline asm for `_M_IX86` and GCC x86/ARM, with a C fallback | none | `src/liblt/LTE/Font.cpp` |
-| **zlib** | `extbin/win32/zlib1.dll` | prebuilt DLL | **x86 only** | — | C | — | none | runtime dependency of `freetype6.dll` |
+| **FMOD Ex** | `include/FMOD` (headers); `extlib/win32/FMOD/{fmodex_vc,fmod_event}.lib`; `extbin/win32/{fmodex,fmod_event}.dll` | prebuilt, **proprietary**, discontinued | **x86 only** (dumpbin); no ARM64 build of FMOD Ex has ever existed | headers and `fmodex.dll` 4.44.14 (`FMOD_VERSION 0x00044414`); `fmod_event.dll` 4.44.20 | C/C++ API | binaries only | **none** in the tree | `src/liblt/Module/SoundEngine/Fmod.cpp` |
+| **FreeType** (liblt's own) | `include/FreeType` (2.5.3 headers); `extlib/win32/freetype/{freetype.lib, freetype28s.lib}`; `extbin/win32/freetype6.dll` | prebuilt: an import library and a static library | **x86 only** | headers 2.5.3; **the DLL, which is what runs, 2.3.5**; `freetype28s` suggests 2.8 and contributes nothing (§9.4) | C | `ftconfig.h` has inline asm for `_M_IX86` and GCC x86/ARM, with a C fallback | none | `src/liblt/LTE/Font.cpp` |
+| **zlib** | `extbin/win32/zlib1.dll` | prebuilt DLL | **x86 only** | 1.2.11 | C | — | none | runtime dependency of `freetype6.dll` |
 | **GLEW** | `include/Glew/GL/{glew,wglew,glxew}.h`; `extlib/win32/Glew/glew32s.lib` | prebuilt static (`GLEW_STATIC` is defined in `LTE/GL.h:28`) | **x86 only** | 1.7–1.8, judging by the header (up to GL 4.2) | C | `glew.h` calling-convention blocks for `_M_IX86`, with an `else` for other targets | none (the header comment names BSD/MIT/Khronos) | `LTE/GL.h`, `GLEnum.h`, `Renderer.cpp` |
 | **OpenGL / GLU** | Windows SDK (`opengl32`, `glu32`) | system | all | — | — | — | — | `lt`, SFML |
 | Windows SDK import libraries | CMake's default set (`kernel32 user32 gdi32 winspool shell32 ole32 oleaut32 uuid comdlg32 advapi32`) | system | all | 10.0.26100.0 | — | — | — | `lt` (`SHGetFolderPath`, `CreateProcess`, `MessageBoxA`, ...) |
@@ -377,7 +378,7 @@ Interlocked calls, alignment pragmas or explicit calling conventions.** Every hi
 | H1 | `src/liblt/Common.h:87-97` | `#if _WIN32 \|\| _WIN64` / `#if _WIN32` → `ARCH_32`. `_WIN32` is defined on every Windows target, so x64 and ARM64 also get `ARCH_32`. | The only consumer is `LTE/Hash.h:7`, which uses the 32-bit FNV constants unless `ARCH_64` **and** `ALLOW_64_HASH` are both defined (the latter is commented out). The misdetection is behaviour-neutral: every Windows target hashes identically. **No change planned.** |
 | H2 | `src/liblt/Common.h:101` | `#if __x86_64__` (GCC branch) | Not compiled by MSVC. |
 | H3 | `include/windirent.h:95` | Defines `_X86_` only for `_M_IX86`, then includes `<windef.h>`/`<winbase.h>` directly. For x64 and ARM64 `winnt.h` would raise "No Target Architecture". | It works only because `OS.cpp:16` includes `Shlobj.h` (and with it `<windows.h>`, which defines `_AMD64_`/`_ARM64_`) first. **Order-sensitive: must keep the include order.** |
-| H4 | `src/liblt/Common.h:13` | `typedef unsigned long ulong;` | 32-bit on every Windows target (LLP64), so there is no x86/x64/ARM64 difference. A hazard only for a `ulong` that holds a pointer (none found by scan; §9 records the compiler's C4311/C4302/C4312 on x64). |
+| H4 | `src/liblt/Common.h:13` | `typedef unsigned long ulong;` | 32-bit on every Windows target (LLP64), so there is no x86/x64/ARM64 difference. A hazard only for a `ulong` that holds a pointer. The scan found none, and the x64 compile reports no C4311, C4302 or C4312 (§9.4). |
 | H5 | `src/liblt/LTE/Hash.h:26-28` | `Hash(T const&)` is FNV over the raw bytes of `sizeof(T)`. | For a `T` holding pointers, 64-bit targets hash 8 bytes a pointer and Win32 hashed 4. Deterministic within one build. Only matters if hashes cross architectures; they key the script caches `cache/<name>_<hash>.bin` (`ScriptFunction.cpp:16`), which are rebuilt locally. |
 | H6 | `LTE/Type.h:466`, `LTE/Type/Pointer.cpp:29`, `LTE/DataStack.h:6` | The script type system sizes pointer types and stack alignment as `sizeof(void*)`. | Correct on every target. Data laid out by LTSL is pointer-size dependent, so script caches written by Win32 builds are not interchangeable with 64-bit ones. |
 | H7 | `LTE/Model.h:16` | `return (size_t)this;` | Lossless on 64-bit. |
@@ -397,15 +398,20 @@ Together these make ARM64 results **not bit-identical** to x64. That doesn't mat
 but it does matter for any gameplay determinism. It will be recorded as BEHAVIOUR-RISK when Phase 4
 enables ARM64.
 
-**Pointer-size assumptions the scan cannot see** (casts through `uint`, `int` or `long` of pointer
-values) come from the compiler instead. The x64 baseline compiles all of `lt` and records every
-C4311, C4302, C4312 and C4267 (§9).
+**Pointer-size assumptions the scan cannot see** come from the compiler instead. The x64 baseline
+compiles every translation unit and reports **zero C4311, C4302 or C4312**, so no pointer is
+truncated to a smaller integer or widened from one. What 64-bit does add is **360 C4267s**
+(`size_t` narrowed to `int`/`uint`, H8's kind), 358 of them in `lt` (§9.4). Those are
+length-truncation hazards only for containers or files beyond 4 GiB. They are recorded as a
+warning category, not fixed (Phase 3 fixes only errors).
 
 ## 8. Checkpoint 0: recommended handling per dependency
 
-**The central fact:** the original's Windows dependencies are prebuilt, x86-only binaries. The
-original has never been built for x64. So x64, not only ARM64, needs a new source for FMOD Ex,
-FreeType and GLEW.
+**The central fact:** the original's Windows dependencies are prebuilt, x86-only binaries, and the
+original has never been built for anything but x86.
+- **x64** needs a new source for **FMOD Ex and GLEW**: they are the whole of its link failure
+  (§9.1). FreeType already resolves on x64, to SFML's bundled 2.5.5.
+- **ARM64** needs a source for those two **and FreeType**. For FMOD Ex none exists (§8.2).
 
 ### 8.1 Plan per dependency
 
@@ -415,8 +421,9 @@ or vcpkg manifest mode.
 | Dependency | Recommended | Why | x64 | ARM64 |
 |---|---|---|---|---|
 | **SFML 2.5.0**, six modules | **Own `.vcxproj` per module, from the vendored source** (the `ext/SFML` tree at `192eb968`) | It is what the original does (it builds the submodule), so version, sources and flags carry over exactly. The Win32 platform code is portable C++. vcpkg only offers 2.6/3.x. | yes | **yes** for the libraries themselves. `sfml-graphics` needs FreeType at `lt`'s link (below). `sfml-audio` is linked by nothing, so building it needs only headers, and OpenAL, FLAC, Vorbis and Ogg are never linked. |
-| **FreeType** | **Own `.vcxproj` from vendored FreeType source**: one static library that `lt` links for both `liblt` and `sfml-graphics`. The version is the one the original actually runs (§9 identifies it) or 2.5.3 to match `liblt`'s headers. This adds FreeType's source and its FTL licence text: **R14 approval** | The original's FreeType binaries are x86-only. The only other FreeType in the tree (SFML's 2.5.5) is x86/x64 only. One source gives x64 and ARM64 from the same version and removes the three-libraries-in-one-link ambiguity (§5.3). | yes | **yes** |
-| FreeType, alternative A | Prebuilt: SFML's bundled static 2.5.5 for x64 | No new source, but no ARM64 | yes | **no** |
+| **FreeType** | **Own `.vcxproj` building FreeType 2.5.5 from vendored source**: one static library, linked by `lt`. This adds FreeType's source and its FTL licence text: **R14 approval**. **BEHAVIOUR-RISK** (§12): the Win32 original draws its text with 2.3.5 (§9.4). FreeType 2.4 made the TrueType bytecode interpreter the default hinter, so glyphs may render visibly differently. | 2.5.5 is exactly what the original's own CMake build links **on x64**, the brief's baseline architecture (§9.4). It is SFML's bundled version, so `sfml-graphics`' headers match, and it is ABI-compatible with the 2.5.3 headers `liblt` compiles against. One source gives x64 and ARM64. | yes | **yes** |
+| FreeType, alternative 0 | Build 2.3.5 from source instead: the version the Win32 original runs | Rendering parity with Win32, but a 2007 release with known font-parsing CVEs, and still mismatched with `liblt`'s 2.5.3 headers, as the original was | yes | yes |
+| FreeType, alternative A | Prebuilt: SFML's bundled static 2.5.5 for x64, which is exactly what the original's x64 link resolved to | No new source, and Phase 2 needs nothing more. But ARM64 would then need a source build anyway, of the same version. | yes | **no** |
 | FreeType, alternative B | vcpkg `freetype` (2.13.x) | Has ARM64, but `liblt` includes its own 2.5.3 headers by path, so the headers and the library disagree unless the include paths change. Also adds a package manager (R14). | yes | yes |
 | **GLEW** | **Own `.vcxproj` from GLEW source matching the vendored headers** (1.7.0 or 1.8.0, to be pinned by diffing `glew.h`). It is one `glew.c`, built static with `GLEW_STATIC` as `glew32s.lib` was. Adds `glew.c` and its licence text: **R14 approval** | Header and library from the same release. Portable C. | yes | **yes** |
 | GLEW, alternatives | Prebuilt: official 1.x binaries are Win32/x64 only. vcpkg: 2.2.0, a version skew against the vendored 1.x header. | — | yes | prebuilt **no**, vcpkg yes |
@@ -456,7 +463,8 @@ FreeType, GLEW and zlib reach ARM64 only through source builds or vcpkg (§8.1).
 ### 8.3 Other decisions needed before Phase 1
 
 1. **FMOD Ex x64 binaries.** Phase 2 cannot link x64 without them.
-2. **R14 approval** to add FreeType and GLEW source, with their licence texts.
+2. **R14 approval** to add GLEW source (Phase 2 cannot link x64 without an x64 GLEW either) and
+   FreeType source (needed for ARM64), with their licence texts.
 3. **D6**, the C++23 switch (§3.3).
 4. **Copy scope and binaries in Git:**
    - **SFML.** Copy `src/`, `include/`, `extlibs/headers`, the Windows `extlibs/libs-msvc-universal`
@@ -595,9 +603,52 @@ libraries again**. A plain-signature `target_link_libraries` makes them transiti
 
 ### 9.4 Warnings and runtime imports (run 3)
 
-**Pending.** Run 3 was still building when this was committed. It will give the warning and error
-counts per configuration, every C4311, C4302 and C4312 on x64, the version resources of the four
-prebuilt DLLs, and the import tables of the built `lt.dll` and `launch.exe`.
+Run 3 ([`36063278543`](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36063278543))
+repeats run 2's result exactly. Wall clocks: Win32 Debug 4 min 56 s and Release 8 min 27 s; x64
+5 min 21 s and 9 min 35 s, with the same 84 unresolved externals.
+
+**Warnings and errors.** "Unique" collapses MSBuild's closing repeat of every diagnostic and a
+header warning's repeat per translation unit; §14 O6 has the caveat on these numbers.
+
+| Arch / config | MSBuild totals | Unique warnings by code | By project | Errors |
+|---|---|---|---|---|
+| Win32 Debug | 86 warnings, 0 errors | **229**: C4244 226, C4996 3 | `lt` 226, `sfml-network` 2, `sfml-system` 1 | 0 |
+| Win32 Release | 86 warnings, 0 errors | 229, the same set | same | 0 |
+| x64 Debug | 620 warnings, 113 errors | **594**: C4267 360, C4244 226, LNK4272 5, C4996 3 | `lt` 589, `sfml-network` 3, `sfml-graphics` 1, `sfml-system` 1 | 113 (LNK2001/LNK2019 on 84 symbols, and LNK1120) |
+| x64 Release | 620 warnings, 113 errors | 594, the same set | same | 113 |
+
+- **C4244** (conversion, possible loss of data) is the original's own warning load. It is
+  identical on both architectures, and all of it is in `lt`.
+- **C4267** (`size_t` narrowed to a smaller type) is what 64-bit adds: 360 sites, 358 of them
+  in `lt` (2 in SFML).
+- **LNK4272** is the linker refusing the five x86 libraries: `fmod_event`, `fmodex_vc`,
+  `glew32s`, `freetype`, `freetype28s`.
+- **Not one C4311, C4302 or C4312**, in any configuration. The compiler finds no pointer
+  truncated to a smaller integer or widened from one (§7).
+
+**The prebuilt DLLs' version resources:**
+
+| DLL | Version | What |
+|---|---|---|
+| `fmodex.dll` | 4.44.14 | FMOD Ex Sound System |
+| `fmod_event.dll` | **4.44.20** | FMOD Event System: a later point release than the core's headers and DLL |
+| `freetype6.dll` | **2.3.5** (build 2742) | FreeType |
+| `zlib1.dll` | 1.2.11 | zlib (its FileVersion field says 2.2.11) |
+
+**What the built binaries load (Win32, `dumpbin /imports`).** The counts are functions per DLL:
+
+| Binary | Imports |
+|---|---|
+| `lt.dll` | `OPENGL32` 56 (Release 39), `fmodex` 16, `fmod_event` 12, **`freetype6` 9**, `GDI32` 9/6, `WINMM` 5, `WS2_32` 2, `KERNEL32` 53/43, `USER32` 51/47, `SHELL32` 1, `ADVAPI32` 3, the VC++ runtime (`MSVCP140[D]`, `VCRUNTIME140[D]`, the UCRT) |
+| `launch.exe` | `lt.dll` 24, `KERNEL32`, the VC++ runtime |
+
+**So the original renders all its text with FreeType 2.3.5.** `liblt` calls eleven FreeType
+functions, all in `LTE/Font.cpp`. `lt.dll` imports nine of them from `freetype6.dll`, the first
+FreeType on its link line; the other two are not referenced by compiled code, since 2.3.5 exports
+all eleven. SFML's font code is not linked into `lt.dll` at all: its `Font.cpp` alone calls 23
+FreeType functions and none appear. So on Win32, `freetype28s.lib` and SFML's bundled 2.5.5
+contribute nothing at run time. On x64 the same eleven references bind to SFML's static 2.5.5,
+because the linker skips the x86 libraries.
 
 ## 10. Deviations from the original build
 
@@ -637,8 +688,14 @@ None.
 
 ## 12. BEHAVIOUR-RISK register
 
-None yet. The candidates known now are in §7 (floating point on ARM64) and §8 (every substitution
-of a dependency binary).
+None yet: no FrontierOutpost code or binary exists. Candidates known now, to be logged with
+file:line when they happen:
+
+- Every substitution of a dependency binary (§8), foremost FreeType: the Win32 original renders
+  text with 2.3.5, and any 2.4+ build hints differently.
+- `fmod_event.dll` 4.44.20 against `fmodex.dll` 4.44.14 is the original's own pairing; any x64
+  pair supplied must be checked for the same.
+- Floating point on ARM64 (§7): `fmadd` contraction under `/fp:fast`, and float→int saturation.
 
 ## 13. Modernisation backlog
 
@@ -666,3 +723,12 @@ Recorded, not to be done in this migration:
   an ARM64 host (§8).
 - **O5** The runtime assets are LFS objects. The build host can fetch them from upstream; this
   container cannot (the proxy serves no LFS).
+- **O6** For Win32, MSBuild's own total (86 warnings) is *lower* than the de-duplicated count
+  (229), which should be impossible if both count the same thing. This is unexplained.
+  - The raw logs are in the run's `baseline-Win32` and `baseline-x64` artifacts, which this
+    container cannot download: the proxy refuses the artifact host.
+  - Phase 2 will compare **unique warnings by code, from the same script over both builds**,
+    which is like for like whatever MSBuild's total means. It will also print raw counts to
+    settle O6.
+- **O7** This container can read job logs but not artifacts. The owner can download them from the
+  run page.
