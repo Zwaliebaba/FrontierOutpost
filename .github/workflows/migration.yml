@@ -1,0 +1,302 @@
+name: Migration
+
+# Build host for the ltheory-old -> FrontierOutpost migration (FrontierOutpost/MIGRATION_NOTES.md).
+# The session doing the migration has no Windows toolchain, so every measurement and build gate the
+# migration needs runs here, on pushes to the migration branch and nowhere else. It is a harness for
+# the migration notes, not the repository's CI: build.yml stays what gates main.
+#
+# Phase 0 (reconnaissance) has two jobs:
+#
+#   toolchain  What the runner offers: Visual Studio, the MSVC toolsets and the platforms MSBuild
+#              registers them for, the Windows SDKs, the language-standard switches cl.exe documents,
+#              the ARM64 build tools, and which CMake knows the Visual Studio 2026 generator.
+#
+#   baseline   The ORIGINAL built as its author built it: upstream JoshParnell/ltheory-old at the
+#              commit the committed ltheory-old-main/ was verified against, with its SFML submodule
+#              and its LFS-tracked Windows libraries, configured by CMake with the Visual Studio 2026
+#              generator and built Debug and Release. x64 is what the migration targets; Win32 is
+#              what the original's own configure.py asks for, and so the only configuration it was
+#              ever known to build in.
+#
+# A failed baseline build is a RESULT, not a harness failure: the build step reports it and the job
+# stays green, so that red here always means the measurement itself did not happen.
+
+on:
+  push:
+    branches: [claude/exciting-bohr-bd5ear]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  UPSTREAM_URL: https://github.com/JoshParnell/ltheory-old
+  # Blob-identical to the committed ltheory-old-main/ apart from the ten entries MIGRATION_NOTES.md lists.
+  UPSTREAM_SHA: 0535d46d04db78ecb2bcf532f79a8b366757bb3d
+  VS_GENERATOR: Visual Studio 18 2026
+
+jobs:
+  toolchain:
+    name: Toolchain
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Record Visual Studio, toolsets, SDKs, cl switches, ARM64 tools and CMake
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          function Section([string] $_title) { Write-Output ''; Write-Output "=== $_title ===" }
+
+          Section 'Runner'
+          Write-Output "image: $env:ImageOS $env:ImageVersion"
+          Write-Output "processor: $env:PROCESSOR_ARCHITECTURE, logical cores: $env:NUMBER_OF_PROCESSORS"
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          Section 'Visual Studio instances (vswhere -all -prerelease)'
+          & $vswhere -all -prerelease -products * -format json | ConvertFrom-Json | ForEach-Object {
+            '{0} | {1} | {2} | {3}' -f $_.displayName, $_.installationVersion, $_.catalog.productDisplayVersion, $_.installationPath
+          }
+          $vs = & $vswhere -latest -prerelease -products * -property installationPath
+          Write-Output "latest: $vs"
+
+          Section 'MSVC toolsets on disk'
+          $msvc = Join-Path $vs 'VC\Tools\MSVC'
+          $toolVersions = @(Get-ChildItem $msvc -Directory | ForEach-Object Name)
+          $toolVersions
+          Get-ChildItem (Join-Path $vs 'VC\Auxiliary\Build') -Filter 'Microsoft.VCToolsVersion*.txt' | ForEach-Object {
+            '{0}: {1}' -f $_.Name, (Get-Content $_.FullName -Raw).Trim()
+          }
+
+          Section 'MSBuild platform toolset registrations'
+          Get-ChildItem (Join-Path $vs 'MSBuild\Microsoft\VC') -Directory | ForEach-Object {
+            $root = $_
+            foreach ($platform in 'Win32', 'x64', 'ARM64', 'ARM64EC') {
+              $dir = Join-Path $root.FullName "Platforms\$platform\PlatformToolsets"
+              if (Test-Path $dir) { '{0}\{1}: {2}' -f $root.Name, $platform, ((Get-ChildItem $dir -Directory | ForEach-Object Name) -join ', ') }
+            }
+          }
+
+          Section 'Compilers and libraries per target'
+          foreach ($version in $toolVersions) {
+            foreach ($pair in 'Hostx64\x64', 'Hostx64\x86', 'Hostx64\arm64', 'Hostx86\x86') {
+              '{0}  {1,-14} cl.exe {2}' -f $version, $pair, (Test-Path (Join-Path $msvc "$version\bin\$pair\cl.exe"))
+            }
+            foreach ($lib in 'x64', 'x86', 'arm64', 'arm64ec') {
+              '{0}  lib\{1,-8} {2}' -f $version, $lib, (Test-Path (Join-Path $msvc "$version\lib\$lib"))
+            }
+          }
+
+          Section 'Visual Studio components'
+          foreach ($component in 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+                                 'Microsoft.VisualStudio.Component.VC.Tools.ARM64',
+                                 'Microsoft.VisualStudio.Component.VC.Tools.ARM64EC',
+                                 'Microsoft.VisualStudio.Component.VC.CMake.Project') {
+            $hit = & $vswhere -latest -prerelease -products * -requires $component -property installationPath
+            '{0,-56} {1}' -f $component, $(if ($hit) { 'installed' } else { 'not installed' })
+          }
+
+          Section 'Windows SDKs'
+          $kits = "${env:ProgramFiles(x86)}\Windows Kits\10"
+          Get-ChildItem (Join-Path $kits 'Include') -Directory | Sort-Object Name | ForEach-Object {
+            $v = $_.Name
+            '{0}  um\x64 {1}  um\x86 {2}  um\arm64 {3}  ucrt\arm64 {4}' -f $v,
+              (Test-Path "$kits\Lib\$v\um\x64\kernel32.lib"), (Test-Path "$kits\Lib\$v\um\x86\kernel32.lib"),
+              (Test-Path "$kits\Lib\$v\um\arm64\kernel32.lib"), (Test-Path "$kits\Lib\$v\ucrt\arm64\ucrt.lib")
+          }
+
+          Section 'cl /? (x64 host, x64 target): standard, conformance and /arch switches'
+          $devcmd = Join-Path $vs 'Common7\Tools\VsDevCmd.bat'
+          cmd /c "`"$devcmd`" -arch=amd64 -host_arch=amd64 -no_logo >nul && cl /? 2>&1" | Set-Content -Path cl-help-x64.txt
+          Select-String -Path cl-help-x64.txt -Pattern 'Version|/std:|c\+\+2|/permissive|/Zc:__cplusplus|/arch:' | ForEach-Object { $_.Line.Trim() }
+
+          Section 'cl banner per target (x64 host)'
+          foreach ($target in 'amd64', 'x86', 'arm64') {
+            $banner = cmd /c "`"$devcmd`" -arch=$target -host_arch=amd64 -no_logo >nul && cl 2>&1"
+            '{0,-6} {1}' -f $target, ($banner | Select-Object -First 1)
+          }
+
+          Section 'CMake'
+          $bundled = Join-Path $vs 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
+          foreach ($cmake in @((Get-Command cmake -ErrorAction SilentlyContinue).Source, $bundled)) {
+            if ($cmake -and (Test-Path $cmake)) {
+              '{0}: {1}' -f $cmake, (& $cmake --version | Select-Object -First 1)
+              & $cmake --help | Select-String 'Visual Studio 1[78]' | ForEach-Object { '    ' + $_.Line.Trim() }
+            }
+          }
+
+          Section 'git'
+          git --version
+          git lfs version
+
+      - name: Upload cl /? output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain
+          path: cl-help-x64.txt
+          if-no-files-found: ignore
+
+  baseline:
+    name: Baseline ${{ matrix.arch }}
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, Win32]
+
+    env:
+      ARCH: ${{ matrix.arch }}
+
+    steps:
+      # Only for the helper scripts: the original comes from upstream, not from this repository.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+
+      - name: Clone the original with its SFML submodule and Windows libraries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          function Invoke-Checked([string] $_what, [scriptblock] $_command) {
+            & $_command
+            if ($LASTEXITCODE -ne 0) { throw "$_what failed with exit code $LASTEXITCODE" }
+          }
+
+          # LFS objects are fetched below for the paths the build needs, and only those: fonts,
+          # sounds and textures are runtime content the baseline build does not read.
+          $env:GIT_LFS_SKIP_SMUDGE = '1'
+          $src = '_baseline_build/src'
+          Invoke-Checked 'clone' { git clone --quiet --no-checkout $env:UPSTREAM_URL $src }
+          Invoke-Checked 'checkout' { git -C $src -c advice.detachedHead=false checkout --quiet $env:UPSTREAM_SHA }
+          git -C $src log -1 --format='original at %H (%ad) %s' --date=short
+
+          $gitlink = (git -C $src ls-tree HEAD ext/SFML) -split '\s+'
+          New-Item -ItemType Directory -Force "$src/ext/SFML" | Out-Null
+          Invoke-Checked 'SFML init' { git -C "$src/ext/SFML" init --quiet }
+          Invoke-Checked 'SFML fetch' { git -C "$src/ext/SFML" fetch --quiet --depth 1 https://github.com/SFML/SFML $gitlink[2] }
+          Invoke-Checked 'SFML checkout' { git -C "$src/ext/SFML" -c advice.detachedHead=false checkout --quiet FETCH_HEAD }
+          git -C "$src/ext/SFML" log -1 --format='SFML at %H (%ad) %s' --date=short
+
+          git -C $src lfs pull --include 'extlib/win32/**,extbin/win32/**'
+          Write-Output "git lfs pull exit code: $LASTEXITCODE"
+
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -property installationPath
+          $tools = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt" -Raw).Trim()
+          $dumpbin = "$vs\VC\Tools\MSVC\$tools\bin\Hostx64\x64\dumpbin.exe"
+          $root = (Resolve-Path $src).Path
+          Write-Output '--- Windows prebuilt binaries: size and machine type ---'
+          Get-ChildItem "$src/extlib/win32", "$src/extbin/win32" -Recurse -File | ForEach-Object {
+            $bytes = [IO.File]::ReadAllBytes($_.FullName)
+            $head = [Text.Encoding]::ASCII.GetString($bytes, 0, [Math]::Min(40, $bytes.Length))
+            $machines = if ($head.StartsWith('version https://git-lfs')) { 'LFS POINTER, not fetched' } else {
+              (& $dumpbin /headers $_.FullName | Select-String '(?i)machine\s*(?::\s*[0-9a-f]+\s*)?\((\w+)\)' |
+                ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique) -join ','
+            }
+            '{0,-40} {1,12:N0} bytes  {2}' -f $_.FullName.Substring($root.Length + 1), $_.Length, $machines
+          }
+          # A library that did not arrive shows up above and again as a link error; neither is a harness failure.
+          exit 0
+
+      - name: Configure (CMake, Visual Studio 2026 generator)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -property installationPath
+          $bundled = Join-Path $vs 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
+          $cmake = $null
+          foreach ($candidate in @((Get-Command cmake -ErrorAction SilentlyContinue).Source, $bundled)) {
+            if (-not $candidate -or -not (Test-Path $candidate)) { continue }
+            '{0}: {1}' -f $candidate, (& $candidate --version | Select-Object -First 1)
+            if (-not $cmake -and (& $candidate --help | Out-String).Contains($env:VS_GENERATOR)) { $cmake = $candidate }
+          }
+          if (-not $cmake) {
+            # A development tool, not a dependency of anything built (AGENTS.md R14).
+            Write-Output "Neither CMake offers '$env:VS_GENERATOR'; installing the current one from PyPI."
+            python -m pip install --disable-pip-version-check --quiet cmake
+            $cmake = (Get-Command cmake).Source
+            '{0}: {1}' -f $cmake, (& $cmake --version | Select-Object -First 1)
+            if (-not (& $cmake --help | Out-String).Contains($env:VS_GENERATOR)) { throw "No CMake offers '$env:VS_GENERATOR'." }
+          }
+          Write-Output "using: $cmake"
+          "CMAKE_EXE=$cmake" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          # CMAKE_POLICY_VERSION_MINIMUM: CMake 4 refuses cmake_minimum_required below 3.5, and the
+          # original says 3.0. The command line lifts the floor without touching the original.
+          & $cmake -S _baseline_build/src -B _baseline_build/build -G $env:VS_GENERATOR -A $env:ARCH `
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 *>&1 | Tee-Object -FilePath configure.log
+          $code = $LASTEXITCODE
+          Write-Output "configure exit code: $code"
+          "CONFIGURE_EXIT=$code" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          if ($code -ne 0) { Write-Output "::warning::Baseline $env:ARCH did not configure (exit code $code)." }
+          exit 0
+
+      - name: Build Debug and Release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $summary = @("### Baseline $env:ARCH", '', '| Configuration | Exit code | Wall clock |', '|---|---|---|')
+          if ($env:CONFIGURE_EXIT -ne '0') {
+            Write-Output "Not built: configure exited with $env:CONFIGURE_EXIT."
+            $summary + "| (all) | configure failed ($env:CONFIGURE_EXIT) | - |" + '' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            exit 0
+          }
+          foreach ($cfg in 'Debug', 'Release') {
+            $log = "build-$env:ARCH-$cfg.log"
+            $timer = [Diagnostics.Stopwatch]::StartNew()
+            & $env:CMAKE_EXE --build _baseline_build/build --config $cfg -- /m /nologo /v:quiet /clp:ErrorsOnly "/flp:LogFile=$log;Verbosity=normal"
+            $code = $LASTEXITCODE
+            $elapsed = '{0:hh\:mm\:ss}' -f $timer.Elapsed
+            Write-Output "== $env:ARCH ${cfg}: exit code $code, wall clock $elapsed"
+            if ($code -ne 0) { Write-Output "::warning::Baseline $env:ARCH $cfg did not build (exit code $code)." }
+            $summary += "| $cfg | $code | $elapsed |"
+
+            # bin/ is shared by every configuration (the original's configure_output_dir), so each
+            # configuration's outputs are listed before the next one overwrites them.
+            Write-Output "-- outputs after $cfg --"
+            Get-ChildItem _baseline_build/src/bin -File -ErrorAction SilentlyContinue | Sort-Object Name |
+              ForEach-Object { '   bin/{0,-34} {1,14:N0}' -f $_.Name, $_.Length }
+            Get-ChildItem _baseline_build/build/lib -Recurse -File -ErrorAction SilentlyContinue | Sort-Object FullName |
+              ForEach-Object { '   build/lib/{0}/{1,-30} {2,14:N0}' -f $_.Directory.Name, $_.Name, $_.Length }
+          }
+          $summary + '' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          exit 0
+
+      - name: Summarize diagnostics and effective settings
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          python .github/migration/SummarizeBuildLog.py "$env:ARCH Debug=build-$env:ARCH-Debug.log" "$env:ARCH Release=build-$env:ARCH-Release.log"
+          Write-Output ''
+          Write-Output '=== Projects in the generated solution ==='
+          Get-ChildItem _baseline_build/build -Filter 'LTheory.sln*' -ErrorAction SilentlyContinue | ForEach-Object {
+            Select-String -Path $_.FullName -Pattern '^Project\(|<Project ' | ForEach-Object { $_.Line.Trim() }
+          }
+          Write-Output ''
+          Write-Output '=== Effective settings of the CMake-generated projects ==='
+          python .github/migration/DescribeVcxproj.py $env:GITHUB_WORKSPACE _baseline_build/build Debug Release
+          Write-Output ''
+          Write-Output '=== CMakeCache.txt, selected entries ==='
+          Select-String -Path _baseline_build/build/CMakeCache.txt -ErrorAction SilentlyContinue `
+            -Pattern '^(CMAKE_(C|CXX|RC)_FLAGS|CMAKE_(EXE|SHARED|STATIC|MODULE)_LINKER_FLAGS|CMAKE_GENERATOR|CMAKE_VS_|CMAKE_MSVC|CMAKE_SYSTEM_VERSION|CMAKE_CONFIGURATION_TYPES|CMAKE_POLICY|BUILD_SHARED_LIBS|SFML_|OPENGL_|GLEW_|EXECUTABLE_OUTPUT_PATH|LIBRARY_OUTPUT_PATH)' |
+            ForEach-Object { $_.Line }
+
+      - name: Upload logs and generated projects
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-${{ matrix.arch }}
+          path: |
+            configure.log
+            build-*.log
+            _baseline_build/build/CMakeCache.txt
+            _baseline_build/build/*.vcxproj
+            _baseline_build/build/LTheory.sln*
+          if-no-files-found: ignore
