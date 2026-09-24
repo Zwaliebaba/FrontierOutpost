@@ -20,6 +20,10 @@ name: Migration
 #
 # A failed baseline build is a RESULT, not a harness failure: the build step reports it and the job
 # stays green, so that red here always means the measurement itself did not happen.
+#
+# The baseline measures something that does not change (a pinned upstream commit) and costs about
+# forty runner-minutes, so it runs only for a commit whose message contains [baseline]. The
+# toolchain record is half a minute and runs on every push, because the runner image moves.
 
 on:
   push:
@@ -107,6 +111,10 @@ jobs:
             '{0}  um\x64 {1}  um\x86 {2}  um\arm64 {3}  ucrt\arm64 {4}' -f $v,
               (Test-Path "$kits\Lib\$v\um\x64\kernel32.lib"), (Test-Path "$kits\Lib\$v\um\x86\kernel32.lib"),
               (Test-Path "$kits\Lib\$v\um\arm64\kernel32.lib"), (Test-Path "$kits\Lib\$v\ucrt\arm64\ucrt.lib")
+            foreach ($arch in 'x64', 'arm64') {
+              '{0}  {1,-5} opengl32.lib {2}  glu32.lib {3}' -f $v, $arch,
+                (Test-Path "$kits\Lib\$v\um\$arch\OpenGL32.lib"), (Test-Path "$kits\Lib\$v\um\$arch\GlU32.lib")
+            }
           }
 
           Section 'cl /? (x64 host, x64 target): standard, conformance and /arch switches'
@@ -122,11 +130,17 @@ jobs:
             $out = cmd /c "`"$devcmd`" -arch=amd64 -host_arch=amd64 -no_logo >nul && cl /nologo $std /Zc:__cplusplus /EHsc probe.cpp /Fe:probe.exe 2>&1 && probe.exe"
             '{0,-18} {1}' -f $std, (($out | Where-Object { $_ -and $_ -ne 'probe.cpp' }) -join ' | ')
           }
+          # The property page rules spread an EnumValue's attributes over several lines, so they are
+          # read as XML rather than grepped.
           $rule = Get-ChildItem (Join-Path $vs 'MSBuild\Microsoft\VC\v180') -Recurse -Filter 'cl.xml' -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($rule) {
             "LanguageStandard values MSBuild offers ($($rule.FullName.Substring($vs.Length + 1))):"
-            Select-String -Path $rule.FullName -Pattern 'Name="(stdcpp[^"]*)"[^>]*Switch="([^"]*)"' -AllMatches |
-              ForEach-Object { $_.Matches } | ForEach-Object { '    {0,-16} /{1}' -f $_.Groups[1].Value, $_.Groups[2].Value } | Sort-Object -Unique
+            [xml] $xml = Get-Content -Path $rule.FullName -Raw
+            $xml.SelectNodes("//*[local-name()='EnumProperty' and @Name='LanguageStandard']/*[local-name()='EnumValue']") |
+              ForEach-Object {
+                $switch = $_.GetAttribute('Switch')
+                '    {0,-18} {1}' -f $_.GetAttribute('Name'), $(if ($switch) { '/' + $switch } else { '(compiler default)' })
+              }
           }
 
           Section 'cl banner per target (x64 host)'
@@ -158,6 +172,7 @@ jobs:
 
   baseline:
     name: Baseline ${{ matrix.arch }}
+    if: contains(github.event.head_commit.message, '[baseline]')
     runs-on: windows-latest
     timeout-minutes: 90
 
@@ -205,6 +220,7 @@ jobs:
           $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -property installationPath
           $tools = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt" -Raw).Trim()
           $dumpbin = "$vs\VC\Tools\MSVC\$tools\bin\Hostx64\x64\dumpbin.exe"
+          "DUMPBIN=$dumpbin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           $root = (Resolve-Path $src).Path
           Write-Output '--- Windows prebuilt binaries: size and machine type ---'
           Get-ChildItem "$src/extlib/win32", "$src/extbin/win32" -Recurse -File | ForEach-Object {
@@ -215,6 +231,11 @@ jobs:
                 ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique) -join ','
             }
             '{0,-40} {1,12:N0} bytes  {2}' -f $_.FullName.Substring($root.Length + 1), $_.Length, $machines
+          }
+          Write-Output '--- Windows prebuilt DLLs: version resources ---'
+          Get-ChildItem "$src/extbin/win32" -File | ForEach-Object {
+            $info = $_.VersionInfo
+            '{0,-16} FileVersion {1} | ProductVersion {2} | {3} | {4}' -f $_.Name, $info.FileVersion, $info.ProductVersion, $info.ProductName, $info.FileDescription
           }
           # A library that did not arrive shows up above and again as a link error; neither is a harness failure.
           exit 0
@@ -264,7 +285,9 @@ jobs:
             exit 0
           }
           foreach ($cfg in 'Debug', 'Release') {
-            $log = "build-$env:ARCH-$cfg.log"
+            # Absolute: cmake --build runs MSBuild from inside the build directory, so a relative
+            # /flp path would put the log there instead of where the summary looks for it.
+            $log = Join-Path $PWD "build-$env:ARCH-$cfg.log"
             $timer = [Diagnostics.Stopwatch]::StartNew()
             & $env:CMAKE_EXE --build _baseline_build/build --config $cfg -- /m /nologo /v:quiet /clp:ErrorsOnly "/flp:LogFile=$log;Verbosity=normal"
             $code = $LASTEXITCODE
@@ -280,6 +303,20 @@ jobs:
               ForEach-Object { '   bin/{0,-34} {1,14:N0}' -f $_.Name, $_.Length }
             Get-ChildItem _baseline_build/build/ext/SFML/lib -Recurse -File -ErrorAction SilentlyContinue | Sort-Object FullName |
               ForEach-Object { '   build/ext/SFML/lib/{0}/{1,-26} {2,14:N0}' -f $_.Directory.Name, $_.Name, $_.Length }
+
+            # What each built binary loads at run time, and how many functions it takes from each DLL:
+            # this is what says which FreeType the original actually runs, not the link line.
+            foreach ($binary in 'lt.dll', 'launch.exe') {
+              $path = "_baseline_build/src/bin/$binary"
+              if (-not (Test-Path $path)) { continue }
+              $current = $null
+              $counts = [ordered]@{}
+              foreach ($line in (& $env:DUMPBIN /imports $path)) {
+                if ($line -match '^\s{4}(\S+\.dll)\s*$') { $current = $Matches[1]; $counts[$current] = 0 }
+                elseif ($current -and $line -match '^\s+[0-9A-Fa-f]+\s+\S+\s*$') { $counts[$current]++ }
+              }
+              "   $binary imports: " + (($counts.GetEnumerator() | ForEach-Object { "$($_.Key) ($($_.Value))" }) -join ', ')
+            }
           }
           $summary + '' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           exit 0
@@ -289,7 +326,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
-          python .github/migration/SummarizeBuildLog.py "$env:ARCH Debug=build-$env:ARCH-Debug.log" "$env:ARCH Release=build-$env:ARCH-Release.log"
+          # Pointer truncation is the 64-bit hazard a grep cannot find; the compiler lists it.
+          python .github/migration/SummarizeBuildLog.py --list C4311,C4302,C4312 `
+            "$env:ARCH Debug=build-$env:ARCH-Debug.log" "$env:ARCH Release=build-$env:ARCH-Release.log"
           Write-Output ''
           Write-Output '=== Projects in the generated solution ==='
           Get-ChildItem _baseline_build/build -Filter 'LTheory.sln*' -ErrorAction SilentlyContinue | ForEach-Object {

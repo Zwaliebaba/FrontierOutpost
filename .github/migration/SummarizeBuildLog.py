@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Summarize MSBuild file logs for the migration workflow (FrontierOutpost/MIGRATION_NOTES.md).
 
-Usage: SummarizeBuildLog.py LABEL=LOG [LABEL=LOG ...]
+Usage: SummarizeBuildLog.py [--list CODE[,CODE...]] LABEL=LOG [LABEL=LOG ...]
 
 For each log it reports MSBuild's own totals, then the UNIQUE diagnostics: MSBuild repeats every
 diagnostic in its closing summary, and a warning raised in a header repeats once per translation
 unit that includes it, so the raw totals overstate what there is to fix. Unique diagnostics are
 broken down by code and by project, and the first errors are listed in the order they occurred.
+--list prints every unique occurrence of the given diagnostic codes with its location.
 
 Markdown goes to stdout and, when GITHUB_STEP_SUMMARY is set, is appended there as well.
 """
@@ -30,7 +31,7 @@ ELAPSED = re.compile(r"^\s*Time Elapsed ([0-9:.]+)", re.M)
 FIRST_ERRORS = 40
 
 
-def Summarize(_label, _path):
+def Summarize(_label, _path, _listCodes):
     lines = [f"### {_label}", ""]
     if not os.path.exists(_path):
         lines += [f"No log at `{_path}`: the step that writes it did not run.", ""]
@@ -71,6 +72,16 @@ def Summarize(_label, _path):
         lines.append(f"Unique {severity}s by project: " + ", ".join(f"{p} {n}" for p, n in byProject.most_common()))
         lines.append("")
 
+    for code in _listCodes:
+        hits = [entry for severity in ("warning", "error") for entry in unique[severity] if entry[0] == code]
+        lines.append(f"Every {code} ({len(hits)}):")
+        lines.append("")
+        if hits:
+            lines.append("```")
+            lines += [f"[{project}] {origin}: {message}" for _, project, origin, message in hits]
+            lines.append("```")
+            lines.append("")
+
     if unique["error"]:
         lines.append(f"First {min(FIRST_ERRORS, len(unique['error']))} unique errors, in order:")
         lines.append("")
@@ -86,10 +97,14 @@ def main(_args):
     if not _args:
         print(__doc__)
         return 2
+    listCodes = []
+    if _args[:1] == ["--list"] and len(_args) > 1:
+        listCodes = [code for code in _args[1].split(",") if code]
+        _args = _args[2:]
     out = []
     for arg in _args:
         label, _, path = arg.partition("=")
-        out += Summarize(label, path)
+        out += Summarize(label, path, listCodes)
     report = "\n".join(out) + "\n"
     sys.stdout.write(report)
     summaryPath = os.environ.get("GITHUB_STEP_SUMMARY")
