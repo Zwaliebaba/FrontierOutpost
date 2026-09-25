@@ -1,6 +1,7 @@
 // NeuronClient/DrawContext.cpp
 #include "pch.h"
 
+#include "CompiledShaders/GenerateMipsCS.h"
 #include "DrawContext.h"
 #include "GraphicsCore.h"
 
@@ -107,6 +108,11 @@ constexpr UINT VERTEX_CONSTANTS_PARAMETER = 0;
 constexpr UINT PIXEL_CONSTANTS_PARAMETER = 1;
 constexpr UINT SHADER_RESOURCES_PARAMETER = 2;
 constexpr UINT SAMPLERS_PARAMETER = 3;
+
+/// The compute root signature's.
+constexpr UINT COMPUTE_CONSTANTS_PARAMETER = 0;
+constexpr UINT COMPUTE_READS_PARAMETER = 1;
+constexpr UINT COMPUTE_WRITES_PARAMETER = 2;
 
 /// Everything a pipeline state is made from, which the context caches them under (ADR-007).
 struct PipelineKey
@@ -331,7 +337,10 @@ struct DrawContext::Native
   std::vector<D3D12_RESOURCE_BARRIER> barriers; // waiting to be recorded
   std::uint64_t listSerial = 1;                 // counts command lists: a buffer's state is from one of them
   bool open = false;
-  bool listReady = false; // the open list has the root signature and the heaps
+  // What the open list has been given.
+  bool heapsReady = false;
+  bool graphicsReady = false; // the graphics root signature
+  bool computeReady = false;  // the compute root signature
 
   // The draw path's objects, which Initialize makes.
   ComPtr<ID3D12RootSignature> graphicsSignature;
@@ -387,6 +396,31 @@ struct DrawContext::Native
   UINT nextSamplerTable = 1; // table 0 is the point samplers'
   UINT samplerTable = 0;
 
+  // What dispatches use.
+  struct Unordered
+  {
+    Texture::Native* texture = nullptr; // null once it has gone
+    std::uint32_t mip = 0;
+  };
+  ComPtr<ID3D12RootSignature> computeSignature;
+  ComPtr<ID3D12PipelineState> mipPipeline;                               // GenerateMipsCS.hlsl's
+  std::map<std::uint64_t, ComPtr<ID3D12PipelineState>> computePipelines; // by program
+  std::array<Unordered, Program::MAX_UNORDERED_RESOURCES> unordered{};
+  D3D12_CPU_DESCRIPTOR_HANDLE nullUnorderedView{}; // CPU-only, copied into the u slots nothing is bound to
+
+  // Reads that do not wait for the GPU, oldest first.
+  struct PendingRead
+  {
+    std::uint64_t ticket = 0;
+    std::uint64_t fenceValue = 0; // the copy's submission's, once it is submitted
+    ComPtr<ID3D12Resource> buffer;
+    Footprint footprint;
+    std::uint32_t heightPixels = 0;
+    std::uint32_t depthPixels = 0;
+  };
+  std::vector<PendingRead> reads;
+  std::uint64_t nextReadTicket = 1;
+
   explicit Native(GraphicsCore& _core)
     : core(_core)
   {
@@ -429,7 +463,9 @@ struct DrawContext::Native
     }
     allocator = std::move(next);
     open = true;
-    listReady = false;
+    heapsReady = false;
+    graphicsReady = false;
+    computeReady = false;
     return true;
   }
 
@@ -459,6 +495,13 @@ struct DrawContext::Native
     {
       ringMarks.push_back({ringPending, value});
       ringPending = 0;
+    }
+    for (PendingRead& read : reads)
+    {
+      if (read.fenceValue == 0)
+      {
+        read.fenceValue = value;
+      }
     }
     if (allocator)
     {
@@ -679,11 +722,13 @@ struct DrawContext::Native
     core.Fail(std::format("Direct3D 12: a draw {}; nothing was recorded", _why));
   }
 
-  /// Takes a table of views from the ring for the open list, and returns its first descriptor in
-  /// the heap. When the ring is full it waits for the GPU, first submitting the open list when that
-  /// is what fills it, so it can close the list.
-  UINT AllocateTable()
+  /// Takes _tables tables of views, one after the other, from the ring for the open list, and
+  /// returns the first one's first descriptor in the heap. They are taken together, so that making
+  /// room for one cannot free another. When the ring is full it waits for the GPU, first submitting
+  /// the open list when that is what fills it, so it can close the list.
+  UINT AllocateTables(UINT _tables = 1)
   {
+    const UINT count = _tables * TABLE_DESCRIPTORS;
     for (;;)
     {
       const std::uint64_t completed = core.Completed();
@@ -696,19 +741,19 @@ struct DrawContext::Native
       {
         ringHead = 0;
       }
-      // A table does not wrap: the ring's end is skipped, and freed with the table.
-      const bool wrap = ringHead + TABLE_DESCRIPTORS > ringCapacity;
+      // Tables do not wrap: the ring's end is skipped, and freed with them.
+      const bool wrap = ringHead + count > ringCapacity;
       const UINT skipped = wrap ? ringCapacity - ringHead : 0;
-      if (ringCapacity - ringUsed >= skipped + TABLE_DESCRIPTORS)
+      if (ringCapacity - ringUsed >= skipped + count)
       {
         if (wrap)
         {
           ringHead = 0;
         }
         const UINT first = TABLE_DESCRIPTORS + ringHead;
-        ringHead += TABLE_DESCRIPTORS;
-        ringUsed += skipped + TABLE_DESCRIPTORS;
-        ringPending += skipped + TABLE_DESCRIPTORS;
+        ringHead += count;
+        ringUsed += skipped + count;
+        ringPending += skipped + count;
         return first;
       }
       if (ringMarks.empty())
@@ -768,7 +813,7 @@ struct DrawContext::Native
     {
       return true;
     }
-    const UINT first = AllocateTable();
+    const UINT first = AllocateTables();
     const D3D12_CPU_DESCRIPTOR_HANDLE start = shaderHeap->GetCPUDescriptorHandleForHeapStart();
     for (UINT slot = 0; slot < TABLE_DESCRIPTORS; ++slot)
     {
@@ -878,14 +923,122 @@ struct DrawContext::Native
     {
       return false;
     }
-    if (!listReady)
+    ReadyHeaps();
+    if (!graphicsReady)
     {
       list->SetGraphicsRootSignature(graphicsSignature.Get());
-      const std::array<ID3D12DescriptorHeap*, 2> heaps = {shaderHeap.Get(), samplerHeap.Get()};
-      list->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
-      listReady = true;
+      graphicsReady = true;
     }
     return true;
+  }
+
+  /// Gives the open list the shader-visible heaps, which draws and dispatches share.
+  void ReadyHeaps()
+  {
+    if (!heapsReady)
+    {
+      const std::array<ID3D12DescriptorHeap*, 2> heaps = {shaderHeap.Get(), samplerHeap.Get()};
+      list->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
+      heapsReady = true;
+    }
+  }
+
+  /// A compute program's pipeline state, made the first time it is asked for.
+  ID3D12PipelineState* ComputePipelineFor(const Program::Native& _program)
+  {
+    if (const auto found = computePipelines.find(_program.id); found != computePipelines.end())
+    {
+      return found->second.Get();
+    }
+    const D3D12_COMPUTE_PIPELINE_STATE_DESC desc{computeSignature.Get(),
+                                                 {_program.computeShader.data(), _program.computeShader.size()},
+                                                 0,
+                                                 {nullptr, 0},
+                                                 D3D12_PIPELINE_STATE_FLAG_NONE};
+    ComPtr<ID3D12PipelineState> pipeline;
+    if (!core.Check(core.device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&pipeline)),
+                    std::format("ID3D12Device::CreateComputePipelineState for program {}", _program.name)))
+    {
+      return nullptr;
+    }
+    return computePipelines.emplace(_program.id, std::move(pipeline)).first->second.Get();
+  }
+
+  /// Copies a table's views into the ring: _views[slot], or _null where that is empty.
+  void WriteTable(UINT _first, std::span<const D3D12_CPU_DESCRIPTOR_HANDLE> _views, D3D12_CPU_DESCRIPTOR_HANDLE _null)
+  {
+    const D3D12_CPU_DESCRIPTOR_HANDLE start = shaderHeap->GetCPUDescriptorHandleForHeapStart();
+    for (UINT slot = 0; slot < TABLE_DESCRIPTORS; ++slot)
+    {
+      const D3D12_CPU_DESCRIPTOR_HANDLE view = slot < _views.size() && _views[slot].ptr != 0 ? _views[slot] : _null;
+      const SIZE_T offset = static_cast<SIZE_T>(_first) + slot;
+      core.device->CopyDescriptorsSimple(1, {start.ptr + (offset * shaderIncrement)}, view, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    }
+  }
+
+  /// Makes mip _mip of face _face of _texture from the mip above it. _sizes are the mip above's
+  /// width and height in pixels, then this one's. False when the list cannot open or there is no
+  /// upload memory, which the core has reported.
+  bool MakeMip(Texture::Native& _texture, std::uint32_t _mip, std::uint32_t _face, std::array<std::uint32_t, 4> _sizes)
+  {
+    // One slice of the mip above to read, and one of this to write, in tables before the list
+    // opens: making room for them may submit it.
+    const UINT sourceTable = AllocateTables(2);
+    const UINT destinationTable = sourceTable + TABLE_DESCRIPTORS;
+    WriteTable(sourceTable, {}, nullShaderView);
+    WriteTable(destinationTable, {}, nullUnorderedView);
+    const D3D12_CPU_DESCRIPTOR_HANDLE start = shaderHeap->GetCPUDescriptorHandleForHeapStart();
+    D3D12_SHADER_RESOURCE_VIEW_DESC sourceDesc{};
+    sourceDesc.Format = _texture.resourceDesc.Format;
+    sourceDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+    sourceDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    sourceDesc.Texture2DArray.MostDetailedMip = _mip - 1;
+    sourceDesc.Texture2DArray.MipLevels = 1;
+    sourceDesc.Texture2DArray.FirstArraySlice = _face;
+    sourceDesc.Texture2DArray.ArraySize = 1;
+    core.device->CreateShaderResourceView(_texture.resource.Get(), &sourceDesc,
+                                          {start.ptr + (std::uint64_t{sourceTable} * shaderIncrement)});
+    D3D12_UNORDERED_ACCESS_VIEW_DESC destinationDesc{};
+    destinationDesc.Format = _texture.resourceDesc.Format;
+    destinationDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+    destinationDesc.Texture2DArray.MipSlice = _mip;
+    destinationDesc.Texture2DArray.FirstArraySlice = _face;
+    destinationDesc.Texture2DArray.ArraySize = 1;
+    core.device->CreateUnorderedAccessView(_texture.resource.Get(), nullptr, &destinationDesc,
+                                           {start.ptr + (std::uint64_t{destinationTable} * shaderIncrement)});
+    if (!Open())
+    {
+      return false;
+    }
+    ReadyHeaps();
+    if (!computeReady)
+    {
+      list->SetComputeRootSignature(computeSignature.Get());
+      computeReady = true;
+    }
+    // The shader's $Globals: the mip above's size, then this one's.
+    Upload constants;
+    if (!AllocateUpload(sizeof(_sizes), D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, constants))
+    {
+      return false;
+    }
+    std::memcpy(constants.cpu, _sizes.data(), sizeof(_sizes));
+    Require(_texture, _texture.Subresource(_mip - 1, _face),
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    Require(_texture, _texture.Subresource(_mip, _face), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    FlushBarriers();
+    list->SetPipelineState(mipPipeline.Get());
+    list->SetComputeRootConstantBufferView(COMPUTE_CONSTANTS_PARAMETER, constants.buffer->GetGPUVirtualAddress() + constants.offsetBytes);
+    list->SetComputeRootDescriptorTable(COMPUTE_READS_PARAMETER, ShaderTableHandle(sourceTable));
+    list->SetComputeRootDescriptorTable(COMPUTE_WRITES_PARAMETER, ShaderTableHandle(destinationTable));
+    // Eight by eight threads a group.
+    list->Dispatch((_sizes[2] + 7) / 8, (_sizes[3] + 7) / 8, 1);
+    return true;
+  }
+
+  D3D12_GPU_DESCRIPTOR_HANDLE ShaderTableHandle(UINT _first) const
+  {
+    return {shaderHeap->GetGPUDescriptorHandleForHeapStart().ptr + (std::uint64_t{_first} * shaderIncrement)};
   }
 
   /// The pipeline state for _key, made the first time it is asked for.
@@ -1238,6 +1391,41 @@ bool DrawContext::Initialize(std::string& _error)
   }
   context.graphicsSignature->SetName(L"NeuronClient graphics root signature");
 
+  // The one every compute program runs with: its $Globals at b0, and tables of t0 to t15 and u0 to
+  // u7 (ADR-007).
+  const D3D12_DESCRIPTOR_RANGE computeReads{D3D12_DESCRIPTOR_RANGE_TYPE_SRV, Program::MAX_SHADER_RESOURCES, 0, 0, 0};
+  const D3D12_DESCRIPTOR_RANGE computeWrites{D3D12_DESCRIPTOR_RANGE_TYPE_UAV, Program::MAX_UNORDERED_RESOURCES, 0, 0, 0};
+  std::array<D3D12_ROOT_PARAMETER, 3> computeParameters{};
+  computeParameters[COMPUTE_CONSTANTS_PARAMETER].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+  computeParameters[COMPUTE_READS_PARAMETER].DescriptorTable = {1, &computeReads};
+  computeParameters[COMPUTE_WRITES_PARAMETER].DescriptorTable = {1, &computeWrites};
+  const D3D12_ROOT_SIGNATURE_DESC computeDesc{static_cast<UINT>(computeParameters.size()), computeParameters.data(), 0, nullptr,
+                                              D3D12_ROOT_SIGNATURE_FLAG_NONE};
+  signature.Reset();
+  errors.Reset();
+  result = D3D12SerializeRootSignature(&computeDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &errors);
+  if (SUCCEEDED(result))
+  {
+    result =
+      device.CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&context.computeSignature));
+  }
+  if (FAILED(result))
+  {
+    const std::string_view why = errors ? std::string_view(static_cast<const char*>(errors->GetBufferPointer()), errors->GetBufferSize())
+                                        : std::string_view("no message");
+    _error = std::format("Direct3D 12: the compute root signature was not made (0x{:08x}): {}", static_cast<unsigned long>(result), why);
+    return false;
+  }
+  context.computeSignature->SetName(L"NeuronClient compute root signature");
+  const D3D12_COMPUTE_PIPELINE_STATE_DESC mipDesc{
+    context.computeSignature.Get(), {GENERATE_MIPS_CS, sizeof(GENERATE_MIPS_CS)}, 0, {nullptr, 0}, D3D12_PIPELINE_STATE_FLAG_NONE};
+  result = device.CreateComputePipelineState(&mipDesc, IID_PPV_ARGS(&context.mipPipeline));
+  if (FAILED(result))
+  {
+    _error = std::format("Direct3D 12: the mip generator's pipeline state was not made (0x{:08x})", static_cast<unsigned long>(result));
+    return false;
+  }
+
   // The null table, and room for at least two tables in the ring.
   const UINT shaderDescriptors = context.core.desc.shaderDescriptors;
   if (shaderDescriptors < 3 * TABLE_DESCRIPTORS)
@@ -1290,6 +1478,15 @@ bool DrawContext::Initialize(std::string& _error)
     return false;
   }
   device.CreateShaderResourceView(nullptr, &nullView, context.nullShaderView);
+  if (!context.core.shaderViewPool.Allocate(context.core, context.nullUnorderedView))
+  {
+    _error = "Direct3D 12: the null unordered view's descriptor was not made";
+    return false;
+  }
+  D3D12_UNORDERED_ACCESS_VIEW_DESC nullUnordered{};
+  nullUnordered.Format = DXGI_FORMAT_R32_FLOAT;
+  nullUnordered.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+  device.CreateUnorderedAccessView(nullptr, nullptr, &nullUnordered, context.nullUnorderedView);
   context.shaderIncrement = shaderIncrement;
   context.samplerIncrement = samplerIncrement;
   context.ringCapacity = shaderDescriptors - TABLE_DESCRIPTORS;
@@ -1317,6 +1514,13 @@ void DrawContext::Forget(const Texture::Native& _texture) noexcept
       texture = nullptr;
     }
   }
+  for (Native::Unordered& write : context.unordered)
+  {
+    if (write.texture == &_texture)
+    {
+      write.texture = nullptr;
+    }
+  }
   // Another texture may be made where this one was, so the last table is not taken again.
   context.tableList = 0;
 }
@@ -1328,7 +1532,12 @@ void DrawContext::Forget(const Program::Native& _program)
   {
     context.program = nullptr;
   }
-  // Recorded draws may still use them.
+  // Recorded draws and dispatches may still use them.
+  if (const auto compute = context.computePipelines.find(_program.id); compute != context.computePipelines.end())
+  {
+    context.core.DeferRelease([held = std::move(compute->second)] {});
+    context.computePipelines.erase(compute);
+  }
   for (auto pipeline = context.pipelines.begin(); pipeline != context.pipelines.end();)
   {
     if (pipeline->first.program == _program.id)
@@ -1345,7 +1554,33 @@ void DrawContext::Forget(const Program::Native& _program)
 
 std::size_t DrawContext::PipelineStates() const noexcept
 {
-  return m_native->pipelines.size();
+  return m_native->pipelines.size() + m_native->computePipelines.size();
+}
+
+void DrawContext::GenerateMips(Texture& _texture)
+{
+  Native& context = *m_native;
+  Texture::Native* const texture = _texture.m_native.get();
+  if (texture == nullptr || texture->desc.dimension == TextureDimension::Texture3D || texture->desc.format == TextureFormat::Depth32F)
+  {
+    context.core.Fail(std::format("Direct3D 12: GenerateMips cannot make the mips of {}; only a 2D or cube colour texture's are made",
+                                  Native::NameOf(texture)));
+    return;
+  }
+  // Each mip is made from the one above once that is done: the transition from unordered access
+  // to reading orders them.
+  for (std::uint32_t mip = 1; mip < texture->desc.mipLevels; ++mip)
+  {
+    const std::array<std::uint32_t, 4> sizes = {_texture.WidthPixels(mip - 1), _texture.HeightPixels(mip - 1), _texture.WidthPixels(mip),
+                                                _texture.HeightPixels(mip)};
+    for (std::uint32_t face = 0; face < texture->faces; ++face)
+    {
+      if (!context.MakeMip(*texture, mip, face, sizes))
+      {
+        return;
+      }
+    }
+  }
 }
 
 void DrawContext::SetTargets(std::span<const ColorTarget> _colors, Texture* _depth)
@@ -1475,6 +1710,216 @@ void DrawContext::SetSampler(std::uint32_t _slot, const SamplerDesc& _sampler)
     return;
   }
   context.samplers[_slot] = SamplerDescription(_sampler);
+}
+
+void DrawContext::SetUnorderedTexture(std::uint32_t _slot, Texture* _texture, std::uint32_t _mip)
+{
+  Native& context = *m_native;
+  Texture::Native* const texture = _texture != nullptr ? _texture->m_native.get() : nullptr;
+  if (_slot >= Program::MAX_UNORDERED_RESOURCES || (texture != nullptr && (!texture->IsUnordered() || _mip >= texture->desc.mipLevels)))
+  {
+    context.core.Fail(std::format("Direct3D 12: SetUnorderedTexture cannot set mip {} of {} at u{}; only 3D textures and those with "
+                                  "mips are written so, at u0 to u{}",
+                                  _mip, Native::NameOf(texture), _slot, Program::MAX_UNORDERED_RESOURCES - 1));
+    return;
+  }
+  context.unordered[_slot] = {texture, _mip};
+}
+
+void DrawContext::Dispatch(Program& _program, std::uint32_t _groupsX, std::uint32_t _groupsY, std::uint32_t _groupsZ)
+{
+  Native& context = *m_native;
+  const Program::Native* const program = _program.m_native.get();
+  const auto fail = [&context, program](std::string_view _why)
+  {
+    context.core.Fail(std::format("Direct3D 12: a dispatch of {} {}; nothing was recorded",
+                                  program != nullptr ? program->name : std::string("an empty program"), _why));
+  };
+  // D3D12_CS_DISPATCH_MAX_THREAD_GROUPS_PER_DIMENSION, which not every SDK's headers have.
+  constexpr std::uint32_t MAX_GROUPS = 65535;
+  if (program == nullptr || !program->compute)
+  {
+    fail("which is no compute program");
+    return;
+  }
+  if (_groupsX == 0 || _groupsY == 0 || _groupsZ == 0 || _groupsX > MAX_GROUPS || _groupsY > MAX_GROUPS || _groupsZ > MAX_GROUPS)
+  {
+    fail(std::format("in {} by {} by {} groups, where each is from 1 to {}", _groupsX, _groupsY, _groupsZ, MAX_GROUPS));
+    return;
+  }
+
+  // What it reads and writes, which may not be the same texture.
+  std::array<Texture::Native*, TABLE_DESCRIPTORS> read{};
+  for (const auto& [name, slot] : program->shaderResources)
+  {
+    read[static_cast<std::size_t>(slot)] = context.textures[static_cast<std::size_t>(slot)];
+  }
+  std::array<Native::Unordered, Program::MAX_UNORDERED_RESOURCES> written{};
+  for (const auto& [name, slot] : program->unorderedResources)
+  {
+    const Native::Unordered& write = context.unordered[static_cast<std::size_t>(slot)];
+    if (write.texture == nullptr)
+    {
+      fail(std::format("writes {} at u{}, where no texture is set", name, slot));
+      return;
+    }
+    if (std::ranges::find(read, write.texture) != read.end())
+    {
+      fail(std::format("reads and writes {}", write.texture->name));
+      return;
+    }
+    written[static_cast<std::size_t>(slot)] = write;
+  }
+  ID3D12PipelineState* const pipeline = context.ComputePipelineFor(*program);
+  if (pipeline == nullptr)
+  {
+    return;
+  }
+
+  // The views, in tables from the ring before the list opens: making room may submit it.
+  std::array<D3D12_CPU_DESCRIPTOR_HANDLE, TABLE_DESCRIPTORS> readViews{};
+  for (std::size_t slot = 0; slot < read.size(); ++slot)
+  {
+    if (read[slot] != nullptr && !read[slot]->ShaderView(readViews[slot]))
+    {
+      return;
+    }
+  }
+  std::array<D3D12_CPU_DESCRIPTOR_HANDLE, Program::MAX_UNORDERED_RESOURCES> writeViews{};
+  for (std::size_t slot = 0; slot < written.size(); ++slot)
+  {
+    if (written[slot].texture != nullptr && !written[slot].texture->UnorderedView(written[slot].mip, writeViews[slot]))
+    {
+      return;
+    }
+  }
+  const UINT readTable = context.AllocateTables(2);
+  const UINT writeTable = readTable + TABLE_DESCRIPTORS;
+  context.WriteTable(readTable, readViews, context.nullShaderView);
+  context.WriteTable(writeTable, writeViews, context.nullUnorderedView);
+  if (!context.Open())
+  {
+    return;
+  }
+  context.ReadyHeaps();
+  if (!context.computeReady)
+  {
+    context.list->SetComputeRootSignature(context.computeSignature.Get());
+    context.computeReady = true;
+  }
+  const std::vector<std::byte>& values = program->constantValues[static_cast<std::size_t>(ShaderStage::Compute)];
+  const std::uint64_t sizeBytes = std::max<std::uint64_t>(values.size(), 16);
+  Upload constants;
+  if (!context.AllocateUpload(sizeBytes, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, constants))
+  {
+    return;
+  }
+  std::memset(constants.cpu, 0, static_cast<std::size_t>(sizeBytes));
+  if (!values.empty())
+  {
+    std::memcpy(constants.cpu, values.data(), values.size());
+  }
+
+  for (Texture::Native* const texture : read)
+  {
+    if (texture != nullptr)
+    {
+      context.Require(*texture, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+                      D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+  }
+  for (const Native::Unordered& write : written)
+  {
+    if (write.texture == nullptr)
+    {
+      continue;
+    }
+    // A mip that is already unordered was written by an earlier dispatch, which this one waits for.
+    Texture::Native& texture = *write.texture;
+    const std::uint32_t layers = texture.desc.dimension == TextureDimension::TextureCube ? texture.faces : 1;
+    bool waits = false;
+    for (std::uint32_t layer = 0; layer < layers; ++layer)
+    {
+      const std::uint32_t subresource = texture.Subresource(write.mip, layer);
+      waits = waits || texture.states[subresource] == D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+      context.Require(texture, subresource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    }
+    if (waits)
+    {
+      D3D12_RESOURCE_BARRIER barrier{};
+      barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+      barrier.UAV.pResource = texture.resource.Get();
+      context.barriers.push_back(barrier);
+    }
+  }
+  context.FlushBarriers();
+
+  ID3D12GraphicsCommandList& list = *context.list.Get();
+  list.SetPipelineState(pipeline);
+  list.SetComputeRootConstantBufferView(COMPUTE_CONSTANTS_PARAMETER, constants.buffer->GetGPUVirtualAddress() + constants.offsetBytes);
+  list.SetComputeRootDescriptorTable(COMPUTE_READS_PARAMETER, context.ShaderTableHandle(readTable));
+  list.SetComputeRootDescriptorTable(COMPUTE_WRITES_PARAMETER, context.ShaderTableHandle(writeTable));
+  list.Dispatch(_groupsX, _groupsY, _groupsZ);
+}
+
+std::uint64_t DrawContext::RequestRead(const Texture& _texture, std::uint32_t _mip, std::uint32_t _face)
+{
+  Native& context = *m_native;
+  Texture::Native* const texture = _texture.m_native.get();
+  if (texture == nullptr || _mip >= texture->desc.mipLevels || _face >= texture->faces)
+  {
+    context.core.Fail(std::format("Direct3D 12: RequestRead cannot read mip {} of face {} of {}", _mip, _face, Native::NameOf(texture)));
+    return 0;
+  }
+  const std::uint32_t subresource = texture->Subresource(_mip, _face);
+  Native::PendingRead read;
+  read.footprint = context.FootprintOf(*texture, subresource);
+  read.heightPixels = _texture.HeightPixels(_mip);
+  read.depthPixels = _texture.DepthPixels(_mip);
+  if (!context.Open() || !context.CreateBuffer(D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST, read.footprint.totalBytes,
+                                               read.buffer, "a readback buffer"))
+  {
+    return 0;
+  }
+  context.Require(*texture, subresource, D3D12_RESOURCE_STATE_COPY_SOURCE);
+  context.FlushBarriers();
+  const D3D12_TEXTURE_COPY_LOCATION destination = FootprintLocation(read.buffer.Get(), read.footprint.placed);
+  const D3D12_TEXTURE_COPY_LOCATION source = SubresourceLocation(texture->resource.Get(), subresource);
+  context.list->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
+  read.ticket = context.nextReadTicket++;
+  context.reads.push_back(std::move(read));
+  return context.reads.back().ticket;
+}
+
+bool DrawContext::TakeRead(std::uint64_t _ticket, std::vector<std::byte>& _outTexels)
+{
+  Native& context = *m_native;
+  const auto read = std::ranges::find(context.reads, _ticket, &Native::PendingRead::ticket);
+  if (read == context.reads.end())
+  {
+    context.core.Fail(std::format("Direct3D 12: TakeRead was given ticket {}, which is spent or was never given", _ticket));
+    return false;
+  }
+  if (read->fenceValue == 0 || context.core.Completed() < read->fenceValue)
+  {
+    return false;
+  }
+  const Footprint& footprint = read->footprint;
+  const D3D12_RANGE everything{0, static_cast<SIZE_T>(footprint.totalBytes)};
+  void* mapped = nullptr;
+  if (!context.core.Check(read->buffer->Map(0, &everything, &mapped), "ID3D12Resource::Map for a readback buffer"))
+  {
+    context.reads.erase(read);
+    return false;
+  }
+  std::vector<std::byte> texels(static_cast<std::size_t>(footprint.rowBytes * read->heightPixels * read->depthPixels));
+  CopyRows(texels.data(), footprint.rowBytes, read->heightPixels, static_cast<const std::byte*>(mapped),
+           footprint.placed.Footprint.RowPitch, footprint.rows, footprint.rowBytes, read->heightPixels, read->depthPixels);
+  const D3D12_RANGE nothingWritten{0, 0};
+  read->buffer->Unmap(0, &nothingWritten);
+  context.reads.erase(read);
+  _outTexels = std::move(texels);
+  return true;
 }
 
 void DrawContext::DrawIndexed(const Buffer& _vertices, const VertexLayout& _layout, const Buffer& _indices, IndexFormat _format,

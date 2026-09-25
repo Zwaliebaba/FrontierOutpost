@@ -130,11 +130,14 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="AudioOutput.cpp" />
+    <ClCompile Include="ComputeDispatches.cpp" />
+    <ClCompile Include="CubeTargets.cpp" />
     <ClCompile Include="DrawCalls.cpp" />
     <ClCompile Include="GlyphRendering.cpp" />
     <ClCompile Include="GraphicsDeviceFrames.cpp" />
     <ClCompile Include="ImageCoding.cpp" />
     <ClCompile Include="KeyMapping.cpp" />
+    <ClCompile Include="MipGeneration.cpp" />
     <ClCompile Include="ProgramReflection.cpp" />
     <ClCompile Include="ShaderReflection.cpp" />
     <ClCompile Include="SoundParsing.cpp" />
@@ -146,9 +149,17 @@
     <ClCompile Include="WindowEvents.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="Shaders\AccumulateCS.hlsl">
+      <ShaderType>Compute</ShaderType>
+      <VariableName>ACCUMULATE_CS</VariableName>
+    </FxCompile>
     <FxCompile Include="Shaders\CubePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>CUBE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\FieldCS.hlsl">
+      <ShaderType>Compute</ShaderType>
+      <VariableName>FIELD_CS</VariableName>
     </FxCompile>
     <FxCompile Include="Shaders\NamedBufferPS.hlsl">
       <ShaderType>Pixel</ShaderType>

@@ -256,6 +256,52 @@ public:
     ExpectClean(test);
   }
 
+  TEST_METHOD(ReadsBackWithoutWaiting)
+  {
+    TestDevice test;
+    Open(test);
+    Texture texture = Make(test, TextureDimension::Texture2D, TextureFormat::Rgba8, 4, 4, 1, 1);
+    Neuron::DrawContext& context = test.device.Context();
+    context.UpdateTexture(texture, 0, 0, Pattern(TextureFormat::Rgba8, 16, 11));
+    const std::uint64_t ticket = context.RequestRead(texture, 0, 0);
+    Assert::AreNotEqual(std::uint64_t{0}, ticket, L"the read did not start");
+    std::vector<std::byte> texels;
+    Assert::IsFalse(context.TakeRead(ticket, texels), L"the read was taken before the GPU could have done it");
+    test.device.WaitIdle();
+    Assert::IsTrue(context.TakeRead(ticket, texels), L"the read was not there once the GPU was idle");
+    Assert::IsTrue(texels == Pattern(TextureFormat::Rgba8, 16, 11), L"the read did not give the texels");
+    // A ticket is spent once taken.
+    Assert::IsFalse(context.TakeRead(ticket, texels));
+    Assert::AreEqual(std::size_t{1}, test.failures.size(), L"a spent ticket was not reported");
+    test.failures.clear();
+    ExpectClean(test);
+  }
+
+  TEST_METHOD(ReadsBackFramesLater)
+  {
+    TestDevice test;
+    Open(test);
+    Texture texture = Make(test, TextureDimension::Texture2D, TextureFormat::R32F, 3, 2, 1, 1);
+    Neuron::DrawContext& context = test.device.Context();
+    // As the lens flares read their visibility: asked for in one frame, taken in a later one.
+    test.device.BeginFrame();
+    context.UpdateTexture(texture, 0, 0, Pattern(TextureFormat::R32F, 6, 12));
+    const std::uint64_t ticket = context.RequestRead(texture, 0, 0);
+    test.device.EndFrame();
+    for (std::uint64_t frame = 1; frame < Neuron::GraphicsDevice::FRAMES_IN_FLIGHT; ++frame)
+    {
+      test.device.BeginFrame();
+      test.device.EndFrame();
+    }
+    // Beginning this frame waits for the one FRAMES_IN_FLIGHT before it, which asked for the read.
+    test.device.BeginFrame();
+    std::vector<std::byte> texels;
+    Assert::IsTrue(context.TakeRead(ticket, texels), L"the read was not there frames later");
+    Assert::IsTrue(texels == Pattern(TextureFormat::R32F, 6, 12), L"the read did not give the texels");
+    test.device.EndFrame();
+    ExpectClean(test);
+  }
+
   TEST_METHOD(RefusesAnUpdateOfTheWrongSize)
   {
     TestDevice test;

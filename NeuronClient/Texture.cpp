@@ -166,6 +166,10 @@ Texture::Native::~Native()
     {
       core->shaderViewPool.Free(shaderView);
     }
+    for (const auto& [mip, view] : unorderedViews)
+    {
+      core->shaderViewPool.Free(view);
+    }
   }
   catch (...)
   {
@@ -259,6 +263,43 @@ bool Texture::Native::ShaderView(D3D12_CPU_DESCRIPTOR_HANDLE& _outView)
     core->device->CreateShaderResourceView(resource.Get(), &viewDesc, shaderView);
   }
   _outView = shaderView;
+  return true;
+}
+
+bool Texture::Native::UnorderedView(std::uint32_t _mip, D3D12_CPU_DESCRIPTOR_HANDLE& _outView)
+{
+  if (const auto found = unorderedViews.find(_mip); found != unorderedViews.end())
+  {
+    _outView = found->second;
+    return true;
+  }
+  D3D12_CPU_DESCRIPTOR_HANDLE view{};
+  if (!core->shaderViewPool.Allocate(*core, view))
+  {
+    return false;
+  }
+  D3D12_UNORDERED_ACCESS_VIEW_DESC viewDesc{};
+  viewDesc.Format = resourceDesc.Format;
+  switch (desc.dimension)
+  {
+  case TextureDimension::Texture2D:
+    viewDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+    viewDesc.Texture2D.MipSlice = _mip;
+    break;
+  case TextureDimension::TextureCube:
+    viewDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+    viewDesc.Texture2DArray.MipSlice = _mip;
+    viewDesc.Texture2DArray.ArraySize = faces;
+    break;
+  case TextureDimension::Texture3D:
+    viewDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE3D;
+    viewDesc.Texture3D.MipSlice = _mip;
+    viewDesc.Texture3D.WSize = MipSize(desc.depthPixels, _mip);
+    break;
+  }
+  core->device->CreateUnorderedAccessView(resource.Get(), nullptr, &viewDesc, view);
+  unorderedViews.emplace(_mip, view);
+  _outView = view;
   return true;
 }
 

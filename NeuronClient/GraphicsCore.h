@@ -166,6 +166,8 @@ struct Texture::Native
   std::map<std::uint64_t, D3D12_CPU_DESCRIPTOR_HANDLE> targetViews;
   D3D12_CPU_DESCRIPTOR_HANDLE depthView{};  // made when first asked for
   D3D12_CPU_DESCRIPTOR_HANDLE shaderView{}; // made when first asked for
+  /// The unordered-access views made so far, by mip.
+  std::map<std::uint32_t, D3D12_CPU_DESCRIPTOR_HANDLE> unorderedViews;
 
   Native() = default;
   Native(const Native&) = delete;
@@ -189,6 +191,16 @@ struct Texture::Native
   /// The view the shaders sample through: every mip, of the whole cube or 3D texture, and depth
   /// as R32_FLOAT. Made the first time it is asked for.
   bool ShaderView(D3D12_CPU_DESCRIPTOR_HANDLE& _outView);
+
+  /// Whether compute shaders may write it: 3D textures and those with mips (ADR-007).
+  [[nodiscard]] bool IsUnordered() const noexcept
+  {
+    return (resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0;
+  }
+
+  /// The unordered-access view of mip _mip: of the 2D texture, of all six faces of a cube, or of
+  /// all the slices of a 3D texture. Made the first time it is asked for.
+  bool UnorderedView(std::uint32_t _mip, D3D12_CPU_DESCRIPTOR_HANDLE& _outView);
 };
 
 /// A buffer's resource, and its state within one command list: a buffer decays to COMMON when a

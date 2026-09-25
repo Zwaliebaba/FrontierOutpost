@@ -175,6 +175,13 @@ public:
   /// recorded.
   void ClearDepth(Texture& _texture, float _depth);
 
+  /// Makes mips 1 and up of a 2D or cube colour texture, each face alone, from mip 0: each texel
+  /// the average of the 2 by 2 texels above it, and of 3 in a direction where the mip above is odd
+  /// and this is its last column or row (plan §5.3). liblt asks for this where it samples a texture
+  /// with mips, not whenever it makes one (N3). A texture with one mip has none to make; a 3D or
+  /// depth texture is reported, and nothing is recorded.
+  void GenerateMips(Texture& _texture);
+
   /// Draws into _colors, SV_Target0 first, and tests against _depth, which may be null. The colour
   /// targets are all one size, and the viewport and scissor become the whole of it. A target that
   /// is not there, is of the wrong kind or is another size is reported, and no target is set. A
@@ -203,6 +210,29 @@ public:
 
   /// How the next draws sample through register s_slot.
   void SetSampler(std::uint32_t _slot, const SamplerDesc& _sampler);
+
+  /// Mip _mip of the texture the next dispatches write at register u_slot, or none: a 2D mip as a
+  /// RWTexture2D, all six faces of a cube's as a RWTexture2DArray, and all the slices of a 3D
+  /// texture's as a RWTexture3D. Only 3D textures and textures with mips can be written so
+  /// (ADR-007). A texture that goes is no longer set.
+  void SetUnorderedTexture(std::uint32_t _slot, Texture* _texture, std::uint32_t _mip = 0);
+
+  /// Runs _program, a compute program, in _groupsX by _groupsY by _groupsZ thread groups, with its
+  /// constants as they are now, the textures set for the t registers it reads and the unordered
+  /// textures set for the u registers it writes. A dispatch waits for the one before when that
+  /// wrote what it uses. What cannot be dispatched is reported, and nothing is recorded.
+  void Dispatch(Program& _program, std::uint32_t _groupsX, std::uint32_t _groupsY, std::uint32_t _groupsZ);
+
+  /// Starts reading mip _mip of face _face back without waiting for the GPU: the copy goes to the
+  /// GPU with what else was recorded, and TakeRead gives the texels once the GPU has done it, one or
+  /// two frames later (plan §5.3). Returns the read's ticket, or 0 when it cannot start, which is
+  /// reported.
+  [[nodiscard]] std::uint64_t RequestRead(const Texture& _texture, std::uint32_t _mip, std::uint32_t _face);
+
+  /// The texels read for _ticket, packed as ReadTexture gives them, once the GPU has copied them;
+  /// the ticket is then spent. False, leaving _outTexels alone, while the GPU has not, and for a
+  /// ticket that was never given or is spent, which is reported.
+  [[nodiscard]] bool TakeRead(std::uint64_t _ticket, std::vector<std::byte>& _outTexels);
 
   /// Draws the triangles _indexCount indices of _indices give, from _firstIndex, into the vertices
   /// of _vertices, which are laid out as _layout says. What cannot be drawn is reported, and
