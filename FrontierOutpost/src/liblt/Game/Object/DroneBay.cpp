@@ -57,7 +57,7 @@ AutoClassDerived(DroneBay, DroneBayBaseT,
 
     if (m.type == Type_Get<MessageLaunch>()) {
       if (cooldown <= 0) {
-        Sound_Play3D("dronebay/launch.ogg", this, 0, 0.1f)
+        Sound_Play3D("dronebay/launch.wav", this, 0, 0.1f)
           ->SetPitch(Rand(0.75f, 1.25f));
         cooldown = kDroneBayCooldown;
         GetContainer()->AddInterior(Object_Payload(

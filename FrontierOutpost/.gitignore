@@ -10,13 +10,8 @@
 *.rsuser
 
 # The root .gitignore ignores every directory named Win32, x64, x86, bin or ARM64. That is right
-# for build output and wrong for these vendored binaries: it is how ltheory-old-main/ silently lost
-# extlib/win32 and extbin/win32 (MIGRATION_NOTES.md §4). extlib/x64 and extbin/x64 receive the
-# owner's FMOD Ex x64 files (MIGRATION_NOTES.md D8).
-!/extlib/win32/
-!/extbin/win32/
-!/extlib/x64/
-!/extbin/x64/
+# for build output and wrong for these vendored folders: it is how ltheory-old-main/ silently lost
+# extlib/win32 and extbin/win32 (MIGRATION_NOTES.md §4).
 !/ext/SFML/extlibs/bin/
 !/ext/SFML/extlibs/bin/x64/
 !/ext/SFML/extlibs/bin/x86/

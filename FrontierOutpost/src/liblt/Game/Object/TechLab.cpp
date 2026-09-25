@@ -31,7 +31,7 @@ AutoClassDerivedEmpty(TechLab, TechLabBaseT)
     BaseType::OnUpdate(state);
 
     if (!sound)
-      sound = Sound_Play3D("techlab/loop.ogg",
+      sound = Sound_Play3D("techlab/loop.wav",
         GetRoot().t, 0, 0,
         0.1f * GetRoot()->GetScale().GetMax(), true);
     sound->SetVolume(GetCurrentTask() == nullptr ? 0.0f : 0.1f);

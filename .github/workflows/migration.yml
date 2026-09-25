@@ -446,24 +446,6 @@ jobs:
           }
           exit $code
 
-      # A measurement, not part of the product build. Until the owner's FMOD Ex x64 libraries are in
-      # FrontierOutpost/extlib/x64/FMOD (MIGRATION_NOTES.md D8), lt's link stops at the first missing
-      # library file. Linking once more with the FMOD libraries left off lists every symbol that is
-      # still unresolved, which shows whether FMOD is all the link lacks.
-      - name: Probe lt's link without the FMOD libraries
-        if: failure() && hashFiles('FrontierOutpost/extlib/x64/FMOD/*.lib') == ''
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Continue'
-          $msbuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * `
-            -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\amd64\MSBuild.exe' | Select-Object -First 1
-          $log = Join-Path $PWD "probe-$env:FO_PLATFORM-$env:FO_CONFIGURATION.log"
-          & $msbuild FrontierOutpost.slnx /m /p:Configuration=$env:FO_CONFIGURATION /p:Platform=$env:FO_PLATFORM `
-            /p:FmodLibraries= /nologo /v:quiet /clp:ErrorsOnly "/flp:LogFile=$log;Verbosity=normal"
-          Write-Output "probe exit code: $LASTEXITCODE"
-          python .github/migration/SummarizeBuildLog.py "Probe: $env:FO_PLATFORM $env:FO_CONFIGURATION without FMOD=$log"
-          exit 0
-
       - name: Summarize diagnostics and command lines
         if: always()
         shell: pwsh
@@ -483,5 +465,4 @@ jobs:
           name: frontieroutpost-${{ matrix.platform }}-${{ matrix.configuration }}
           path: |
             build-*.log
-            probe-*.log
           if-no-files-found: ignore

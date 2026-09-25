@@ -94,7 +94,7 @@ Object WeaponType::Fire(
     V3 offset = target ? target->GetDrawable()->renderable()->Sample() : 0;
     object = Object_Missile(heading * speed, myVelocity, target, offset);
     object->SetPos(origin);
-    Sound_Play3D("weapon/missile1_fire.ogg", w, wtype->offset, 0.25f)
+    Sound_Play3D("weapon/missile1_fire.wav", w, wtype->offset, 0.25f)
       ->SetPitch(Rand(0.75f, 1.25f));
   }
 
@@ -114,7 +114,7 @@ Object WeaponType::Fire(
 
   else if (type == WeaponClass_Rail) {
     object = Object_Rail(origin, Normalize(heading + wtype->spread * SampleSphere()), myVelocity);
-    Sound_Play3D("weapon/rail1_fire.ogg", w, wtype->offset, 0.25f)
+    Sound_Play3D("weapon/rail1_fire.wav", w, wtype->offset, 0.25f)
       ->SetPitch(Rand(0.7f, 1.3f));
   }
 
@@ -189,12 +189,12 @@ DefineFunction(Item_WeaponType) {
 
   else if (self->type == WeaponClass_Pulse) {
     const String table[] = {
-      "weapon/pulse/1/Pulse1.1.ogg",
-      "weapon/pulse/2/Pulse2.1short.ogg",
-      "weapon/pulse/3/Pulse3.2.ogg",
-      "weapon/pulse/4/Pulse4.1short.ogg",
-      "weapon/pulse/5/Pulse5.1.ogg",
-      "weapon/pulse/5/Pulse5.1.ogg"
+      "weapon/pulse/1/Pulse1.1.wav",
+      "weapon/pulse/2/Pulse2.1short.wav",
+      "weapon/pulse/3/Pulse3.2.wav",
+      "weapon/pulse/4/Pulse4.1short.wav",
+      "weapon/pulse/5/Pulse5.1.wav",
+      "weapon/pulse/5/Pulse5.1.wav"
     };
 
     self->sound = table[rng->GetInt(0, sizeof(table) / sizeof(*table) - 1)];

@@ -28,7 +28,7 @@ AutoClassDerivedEmpty(ProductionLab, ProductionLabBaseT)
     BaseType::OnUpdate(state);
 
     if (!sound)
-      sound = Sound_Play3D("productionlab/loop.ogg", GetRoot().t, 0, 0, 1, true);
+      sound = Sound_Play3D("productionlab/loop.wav", GetRoot().t, 0, 0, 1, true);
     sound->SetVolume(GetCurrentTask() == nullptr ? 0.0f : 0.1f);
   }
 };

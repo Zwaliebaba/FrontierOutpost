@@ -154,7 +154,7 @@ struct SoundStudio : public Program {
     Mouse_SetVisible(false);
 
     modules.push(UIManager_Create());
-    modules.push(SoundEngine_Fmod());
+    modules.push(SoundEngine_XAudio2());
 
     Widget* studio = CreateUIGroupY()
       ->Add(CreateUILabel("SOUNDSTUDIO", 1, true))

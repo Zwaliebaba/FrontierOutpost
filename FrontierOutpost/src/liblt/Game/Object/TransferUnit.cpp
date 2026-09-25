@@ -154,8 +154,8 @@ AutoClassDerived(TransferUnit, TransferUnitBaseT,
     }
 
     if (!loop1) {
-      loop1 = Sound_Play3D("transferunit/loop.ogg", this, 0, 0, Length(GetScale()), true);
-      loop2 = Sound_Play3D("transferunit/loop.ogg", this, 0, 0, Length(GetScale()), true);
+      loop1 = Sound_Play3D("transferunit/loop.wav", this, 0, 0, Length(GetScale()), true);
+      loop2 = Sound_Play3D("transferunit/loop.wav", this, 0, 0, Length(GetScale()), true);
       loop1->SetCursor(Rand() * loop1->GetDuration());
       loop2->SetCursor(Rand() * loop2->GetDuration());
     }

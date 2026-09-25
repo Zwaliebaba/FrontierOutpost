@@ -64,7 +64,7 @@ type Browser
 
   function Void Receive (Widget self Data data)
     if (data.IsType "MessageLink")
-      Sound_Play "ui/objectmenuopen.ogg" 0.1
+      Sound_Play "ui/objectmenuopen_ogg.wav" 0.1
       ref msg (cast Messages:MessageLink data)
       while index + 1 < stack.Size
         stack.Remove (stack.Size - 1)

@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
-    lt: liblt, the engine, as a DLL (MIGRATION_NOTES.md §5.2). The 382 sources are what the original's
-    file(GLOB_RECURSE src/liblt/*.cpp) found, in the same order. A new .cpp now has to be added here
-    and in the .filters; nothing globs it in any more. The headers are listed for the IDE only.
+    lt: liblt, the engine, as a DLL (MIGRATION_NOTES.md §5.2). The sources are what the original's
+    file(GLOB_RECURSE src/liblt/*.cpp) found, in the same order, except that XAudio2.cpp replaces
+    Fmod.cpp and MusicEngine.cpp (ADR-003). A new .cpp now has to be added here and in the .filters;
+    nothing globs it in any more. The headers are listed for the IDE only.
 
     92 of the sources share their file name with another one (six Custom.cpp, three Camera.cpp, ...).
     Each of those compiles into an object folder named after its source folder (ObjectFileName), as
@@ -20,15 +21,14 @@
 
     The link line keeps the original's order, with ADR-002's substitutions:
     - glew32s and freetype are built in this solution;
-    - FMOD Ex x64 is the owner's (extlib\x64\FMOD, D8);
+    - xaudio2.lib, from the Windows SDK, stands where FMOD Ex's two libraries stood (ADR-003);
     - the Windows import libraries are the original's default set, without odbc32/odbccp32, which
       MSBuild would otherwise add.
     The references build the libraries first. They do not link them (LinkLibraryDependencies=false),
     which keeps the order explicit, as the original did.
 
-    After a build, every DLL in extbin\<Platform>\ is copied next to lt.dll. That is the original's
-    POST_BUILD copy of extbin/win32/*.dll: at x64 it is the FMOD Ex pair. freetype6.dll and zlib1.dll
-    are gone, because FreeType is now linked statically.
+    The original's POST_BUILD step copied the FMOD Ex, FreeType and zlib DLLs next to lt.dll. None of
+    them is left to copy: FreeType is linked statically, and XAudio2 is part of Windows.
   -->
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -71,10 +71,6 @@
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <SfmlSuffix>-s</SfmlSuffix>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Platform)'=='x64'">
-    <FmodLibraries>fmod_event64.lib;fmodex64_vc.lib</FmodLibraries>
-    <FmodLibraryDir>$(FrontierOutpostDir)extlib\x64\FMOD\</FmodLibraryDir>
-  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;$(FrontierOutpostDir)include\FreeType;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -86,8 +82,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <IgnoreSpecificDefaultLibraries>libcmt;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
-      <AdditionalLibraryDirectories>$(OutDir);$(FmodLibraryDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-graphics$(SfmlSuffix).lib;sfml-network$(SfmlSuffix).lib;sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;$(FmodLibraries);glew32s.lib;freetype.lib;gdi32.lib;winmm.lib;ws2_32.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sfml-graphics$(SfmlSuffix).lib;sfml-network$(SfmlSuffix).lib;sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;freetype.lib;gdi32.lib;winmm.lib;ws2_32.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
@@ -583,7 +579,6 @@
     </ClCompile>
     <ClCompile Include="LTE\Window.cpp" />
     <ClCompile Include="Module\FrameTimer.cpp" />
-    <ClCompile Include="Module\MusicEngine.cpp" />
     <ClCompile Include="Module\PhysicsEngine.cpp" />
     <ClCompile Include="Module\Scheduler.cpp" />
     <ClCompile Include="Module\ScriptAPI\SoundEngine.cpp">
@@ -594,8 +589,8 @@
     <ClCompile Include="Module\SoundEngine.cpp">
       <ObjectFileName>$(IntDir)Module\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="Module\SoundEngine\Fmod.cpp" />
     <ClCompile Include="Module\SoundEngine\Null.cpp" />
+    <ClCompile Include="Module\SoundEngine\XAudio2.cpp" />
     <ClCompile Include="Strukt\CodeObject\Custom.cpp">
       <ObjectFileName>$(IntDir)Strukt\CodeObject\</ObjectFileName>
     </ClCompile>
@@ -970,15 +965,12 @@
     <ClInclude Include="LTE\XVector.h" />
     <ClInclude Include="Module\Common.h" />
     <ClInclude Include="Module\FrameTimer.h" />
-    <ClInclude Include="Module\MusicEngine.h" />
-    <ClInclude Include="Module\MusicEngine\LtheoryTest01.h" />
     <ClInclude Include="Module\PhysicsEngine.h" />
     <ClInclude Include="Module\Scheduler.h" />
     <ClInclude Include="Module\Settings.h" />
     <ClInclude Include="Module\SettingsEntry.h" />
     <ClInclude Include="Module\Sound.h" />
     <ClInclude Include="Module\SoundEngine.h" />
-    <ClInclude Include="Module\SoundEngine\Fmod.h" />
     <ClInclude Include="Network\Client.h" />
     <ClInclude Include="Network\Common.h" />
     <ClInclude Include="Strukt\CodeObject.h" />
@@ -1033,10 +1025,4 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
-  <ItemGroup>
-    <RuntimeBinary Include="$(FrontierOutpostDir)extbin\$(Platform)\*.dll" />
-  </ItemGroup>
-  <Target Name="CopyRuntimeBinaries" AfterTargets="Build" Condition="'@(RuntimeBinary)' != ''">
-    <Copy SourceFiles="@(RuntimeBinary)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
-  </Target>
 </Project>

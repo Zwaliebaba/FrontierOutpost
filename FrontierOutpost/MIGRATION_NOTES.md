@@ -8,9 +8,10 @@ for first-party code, x64 and ARM64, and Debug and Release.
 This is a build-system and language-standard migration only. Namespaces, identifiers, files and
 user-facing strings keep their original names. `ltheory-old-main/` is read-only.
 
-**Status:** Phase 1 (structure) is done (§15). Phase 2's x64 build (§16) compiles at parity with
-the original, with identical warnings and matching command lines. Its link waits on the owner's
-FMOD Ex x64 files (D8, O8), which are all it lacks.
+**Status:** Phase 1 (structure) is done (§15). Phase 2's x64 build (§16) compiled at parity with
+the original, with identical warnings and matching command lines, and its link lacked only FMOD Ex.
+The owner then replaced FMOD Ex with XAudio2 on both platforms (D15, ADR-003, §17), and asked the
+repository's CI to build Debug|x64 (D19). The first build with XAudio2 is in progress.
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -29,13 +30,18 @@ phase.
 | D5 | The brief's "use plan mode" for Phase 0 cannot coexist with 0d (a build) and 0f (writing this file). It was read as: Phase 0 writes only this file, ADR-001, the migration workflow and its two helper scripts, and one `.gitignore` entry. | stated to owner, not objected to | Phase 0 |
 | D6 | First-party C++23 is **`LanguageStandard=stdcpplatest`** (`/std:c++latest`, `_MSVC_LANG=202400`: C++23 plus the C++26 draft), which is what the brief's rule gives. The recommendation was `stdcpp23` (§3.3); the owner chose the literal rule. It also matches AGENTS.md §3. | owner | Checkpoint 0 |
 | D7 | The dependency plan in §8.1 is approved as recommended. Its specifics are D8–D11, and ADR-002 records it. | owner | Checkpoint 0 |
-| D8 | **FMOD Ex x64:** the owner supplies FMOD Ex 4.44.x's x64 import libraries and DLLs, ideally core 4.44.14 and event 4.44.20 to match the x86 pair. They go in `FrontierOutpost/extlib/x64/FMOD/` and `FrontierOutpost/extbin/x64/`, mirroring `extlib/win32` and `extbin/win32`. Until then, x64's link stops at the 28 FMOD symbols. | owner | Checkpoint 0 |
-| D9 | **FMOD Ex on ARM64 is a documented blocker, acknowledged in advance.** ARM64 builds every project, but `lt` and `launch` cannot link. This satisfies the brief's Phase 4 gate ("or a documented blocker I have acknowledged"). | owner | Checkpoint 0 |
+| D8 | **FMOD Ex x64:** the owner supplies FMOD Ex 4.44.x's x64 import libraries and DLLs, ideally core 4.44.14 and event 4.44.20 to match the x86 pair. They go in `FrontierOutpost/extlib/x64/FMOD/` and `FrontierOutpost/extbin/x64/`, mirroring `extlib/win32` and `extbin/win32`. Until then, x64's link stops at the 28 FMOD symbols. **Superseded by D15.** | owner | Checkpoint 0 |
+| D9 | **FMOD Ex on ARM64 is a documented blocker, acknowledged in advance.** ARM64 builds every project, but `lt` and `launch` cannot link. This satisfies the brief's Phase 4 gate ("or a documented blocker I have acknowledged"). **Superseded by D15.** | owner | Checkpoint 0 |
 | D10 | **FreeType 2.5.5 and GLEW 1.7.0 are added as source, each with its licence (R14).** Our own `.vcxproj` builds each as a static library for both platforms. FreeType is logged as BEHAVIOUR-RISK against the Win32 original's 2.3.5. | owner | Checkpoint 0 |
 | D11 | **Copy scope is the Windows-relevant subset (§8.3 item 4):** no other-OS binaries, no SFML examples, docs, tools or CMake files. | owner | Checkpoint 0 |
 | D12 | **Runtime assets are committed as the LFS pointer files** they are in `ltheory-old-main/`. Nothing fetches the real objects, because D13 removes the smoke test. | owner | Checkpoint 0 |
 | D13 | **The Phase 5 smoke test is dropped**, as the brief allows. Done means all four configuration/platform combinations compile and link, with D9's blocker as the one acknowledged exception. | owner | Checkpoint 0 |
 | D14 | **`extlib/win32` and `extbin/win32` are left out of the copy**, amending D11. They hold the original's 9 x86 prebuilt binaries (FMOD Ex, GLEW, FreeType, zlib; 4.7 MB). Upstream keeps them in LFS, and their pointer files cannot be pushed here (GitHub GH008, §15.1). No FrontierOutpost platform can link or load x86 files. | owner | Phase 1 |
+| D15 | **XAudio2 replaces FMOD Ex, on x64 and ARM64** (ADR-003, §17). An amendment of the brief's "migration only": the sound engine is ported, not migrated. It supersedes D8 (no FMOD files are needed) and D9 (ARM64 has no blocker left). | owner | after Phase 2's first build |
+| D16 | **The 79 Ogg Vorbis sounds become WAV files**, which the owner converts; no decoder is added. Code and scripts name the `.wav` files. The two whose WAV name is already taken, `ui/objectmenuopen` and `warpnode/exit`, become `<name>_ogg.wav`. | owner | after Phase 2 |
+| D17 | **All FMOD material is deleted**: the FMOD engine, the never-created music engine and its FMOD Designer header, `include/FMOD`, and the `.fev`/`.fsb` banks in `resource/music`. | owner | after Phase 2 |
+| D18 | **The port is its own step, between Phases 2 and 3**, so that x64 links before the C++23 bump. | owner | after Phase 2 |
+| D19 | **The repository's CI builds `FrontierOutpost.slnx` at Debug\|x64.** `.github/workflows/build.yml` was a copy of another project's (it built `Lockstep.slnx`, which does not exist here, O3). It is rewritten, and its gates without an input yet (checkers, tests, clang-tidy, format) are skipped until the input lands, as AGENTS.md §6 prescribes. | owner | after Phase 2 |
 
 ## 2. Environment
 
@@ -721,11 +727,11 @@ only. §15.4 gives the reasoning for each entry.
 - **Dependency substitutions** (ADR-002):
   - `glew32s.lib` and `freetype.lib` come from this solution's `glew` and `freetype` projects;
   - `freetype28s.lib` and SFML's bundled `freetype.lib` are no longer linked;
-  - FMOD Ex x64 is `fmod_event64.lib` and `fmodex64_vc.lib` from `extlib\x64\FMOD\` (D8);
-  - ARM64 links no FMOD library (D9).
-- **Post-build copy.** Every DLL in `extbin\<Platform>\` is copied next to `lt.dll` by MSBuild's
-  `Copy` task with `SkipUnchangedFiles`, which is what `cmake -E copy_if_different` did. At x64
-  that will be the FMOD Ex pair. `freetype6.dll` and `zlib1.dll` are no longer needed.
+  - FMOD Ex x64 was to be `fmod_event64.lib` and `fmodex64_vc.lib` from `extlib\x64\FMOD\` (D8),
+    and ARM64 linked no FMOD library (D9). Both are superseded by XAudio2 (§10.3).
+- **Post-build copy.** Phase 1 copied every DLL in `extbin\<Platform>\` next to `lt.dll`, with
+  MSBuild's `Copy` task and `SkipUnchangedFiles`, as `cmake -E copy_if_different` did. It was
+  meant for the FMOD Ex pair. With XAudio2 no DLL is left to copy, and the step is gone (§10.3).
 - **Two new projects**, `freetype` and `glew`, replace prebuilt x86 binaries (ADR-002). Their
   settings follow their upstream builds, not §9.3: FreeType's `vc2010` project compiles at `/W4`
   without C4001 and with `/Za`, except `ftdebug.c`; GLEW uses the shared defaults.
@@ -734,9 +740,34 @@ only. §15.4 gives the reasoning for each entry.
 - **Platforms:** x64 and ARM64 only, as the brief says. Neither the original's Win32 nor the
   deleted Visual Studio template's x86 (§15.2) is carried over. ARM64 gets no `/arch`.
 
+### 10.3 The XAudio2 port (§17)
+
+- **The sound engine is XAudio2 and X3DAudio instead of FMOD Ex**, on both platforms (D15,
+  ADR-003). It reproduces FMOD's configuration, not its mixer; BR3 lists what may differ.
+- **Sounds are WAV files.** The references to the 79 Ogg sounds name `.wav` files (D16, §11); the
+  owner converts the files (O10).
+- **No music engine, and no FMOD file** (D17).
+- **`lt` compiles 381 sources**: `XAudio2.cpp` replaces `Fmod.cpp` and `MusicEngine.cpp`.
+- **`lt` and `launch` link `xaudio2.lib`** where FMOD Ex's two libraries stood, and nothing is
+  copied after the build.
+
 ## 11. Code changes
 
-None. Phase 1 changes no source file.
+Phases 1 and 2 changed no source file. The XAudio2 port (D15–D17, §17) changes these, all in
+`FrontierOutpost/`:
+
+| File | Change | Why |
+|---|---|---|
+| `src/liblt/Module/SoundEngine/XAudio2.cpp` | **New**: the XAudio2 sound engine | D15 |
+| `src/liblt/Module/SoundEngine.h:32` | `SoundEngine_Fmod()` declared as `SoundEngine_XAudio2()` | D15 |
+| `src/launch/launch.cpp:44` | starts `SoundEngine_XAudio2()` | D15 |
+| `src/liblt/Module/Common.h:8` | forward declaration of `MusicEngine` removed | D17 |
+| `src/liblt/Module/SoundEngine/Fmod.cpp`, `Fmod.h`, `Module/MusicEngine.cpp`, `MusicEngine.h`, `Module/MusicEngine/LtheoryTest01.h` | deleted | D17 |
+| `include/FMOD/` (11 headers), `resource/music/` (2 `.fev`, 2 `.fsb`) | deleted | D17 |
+| `src/liblt/Game/Graphics/Effects.cpp`, `Game/Object/{DroneBay,Missile,ProductionLab,Shield,TechLab,TransferUnit}.cpp`, `Game/Task/Research.cpp`, `Game/Widget/HUD.cpp`, `Game/Item/WeaponType.cpp` | 19 sound names from `.ogg` to `.wav` | D16 |
+| `resource/script/Object/{Firework,Ship,WarpNode}.lts`, `Widget/HUD/WorldObject.lts`, `Widget/Market/Transaction.lts` | 10 sound names from `.ogg` to `.wav` | D16 |
+| `resource/script/Widget/Browser.lts:67` | `ui/objectmenuopen.ogg` to `ui/objectmenuopen_ogg.wav` | D16: `ui/objectmenuopen.wav` is a different sound |
+| `src/old/ltheory/ltheory.cpp`, `src/old/soundstudio/soundstudio.cpp` (not built) | `SoundEngine_XAudio2()`; the include of `MusicEngine.h` and a commented-out `CreateMusicEngine` call removed | D17: no code may name what was deleted |
 
 ## 12. BEHAVIOUR-RISK register
 
@@ -751,10 +782,26 @@ None. Phase 1 changes no source file.
   `ext/glew/glew.vcxproj`. The vendored headers are 1.7.0's, so any difference lies in how the
   unknown prebuilt was built.
 
+- **BR3: XAudio2 replaces FMOD Ex** (D15), `src/liblt/Module/SoundEngine/XAudio2.cpp`. It
+  reproduces what the FMOD engine configured, but not FMOD's mixer:
+  - **Attenuation: the same formula.** X3DAudio's default curve is FMOD's inverse rolloff, gain =
+    minimum distance / distance beyond the minimum distance, and positions are clamped at FMOD's
+    maximum distance. **3D panning** is X3DAudio's own law.
+  - **2D panning:** FMOD Ex's documented law, reimplemented: mono at constant power (71% in each
+    speaker when centred), stereo as a balance.
+  - **Voices:** FMOD mixed the 128 most audible of up to 1024 channels. XAudio2 has no virtual
+    voices, so every one of up to 1024 is mixed. A big battle may sound denser, and costs more CPU.
+  - **Modes:** FMOD fixed a file's 2D or 3D mode, and its looping, when the file was first loaded;
+    XAudio2 decides both per sound. A file played both ways now does what each call asks.
+  - **Latency:** FMOD mixed ahead in four buffers of 2048 samples, up to about 185 ms at 44.1 kHz;
+    XAudio2's quantum is 10 ms. Sounds start sooner.
+  - **No audio device, or a lost one:** the engine logs a warning and plays nothing, where a
+    failed FMOD call would have ended the program.
+  - **The Ogg sounds** are decoded by the owner's converter instead of FMOD's decoder.
+  - **Music:** none, as before: the FMOD music engine was never created.
+
 Candidates, to be logged with file:line when they happen:
 
-- `fmod_event.dll` 4.44.20 against `fmodex.dll` 4.44.14 is the original's own pairing; the x64
-  pair the owner supplies must be checked for the same (D8).
 - Floating point on ARM64 (§7): `fmadd` contraction under `/fp:fast`, and float→int saturation.
 
 ## 13. Modernisation backlog
@@ -779,7 +826,8 @@ Recorded, not to be done in this migration:
   (Phase 1): `FrontierOutpost/.gitattributes` stores and checks out `src/resource.h` byte for
   byte. `ltheory-old-main/` is still affected, and is read-only.
 - **O3** The repository's `build.yml` has been red on `main` since `24db2b9` "New Setup". It still
-  builds `Lockstep.slnx` and calls the deleted `Build/*.py`. Out of scope; flagged.
+  builds `Lockstep.slnx` and calls the deleted `Build/*.py`. **Resolved by D19:** it is rewritten
+  to build `FrontierOutpost.slnx` at Debug|x64.
 - **O4** ARM64 binaries can be built on `windows-latest` but not run. An ARM64 smoke test needs
   an ARM64 host (§8).
 - **O5** The runtime assets are LFS objects. The build host can fetch them from upstream; this
@@ -793,13 +841,21 @@ Recorded, not to be done in this migration:
     settle O6.
 - **O7** This container can read job logs but not artifacts. The owner can download them from the
   run page.
-- **O8** (D8) The owner's FMOD Ex x64 files are not in the tree yet. Until they are, x64's `lt`
-  cannot link, so neither can `launch`, and Phase 2's gate cannot pass. Meanwhile the
-  `frontieroutpost` job probes `lt`'s link without the FMOD libraries, to show whether anything
-  else is missing (§15.6).
+- **O8** (D8) The owner's FMOD Ex x64 files are not in the tree yet. **Superseded by D15:** no
+  FMOD file is needed any more, and the link probe is gone from the workflow.
 - **O9** (§15.1) `extlib/win32` and `extbin/win32` could not be copied as the approved scope
   said (§8.3 item 4, D11), because GitHub refuses their LFS pointer files. **Resolved by D14:**
   they are left out.
+- **O10** (D16) **The WAV conversion is the owner's, and pending.** Until the 79 converted files
+  are in the runtime assets, each of those sounds stops the program, through the assertion
+  handler, the first time it plays. The rule: `resource/sound/<name>.ogg` becomes
+  `resource/sound/<name>.wav`, except `ui/objectmenuopen.ogg` and `warpnode/exit.ogg`, which become
+  `<name>_ogg.wav`. The formats XAudio2 plays are PCM (16-bit, at the file's own rate and channel
+  count, is lossless against the decoded Vorbis), IEEE float and MS-ADPCM. It does not play
+  IMA ADPCM.
+- **O11** The XAudio2 engine is verified by compiling it, not by listening to it. No runner has an
+  audio device, and the assets here are LFS pointers (D12, D13). AGENTS.md §3: audio has to be run
+  to be checked, and that is the owner's to do.
 
 ## 15. Phase 1: structure
 
@@ -1052,3 +1108,42 @@ Phase 2 therefore needed no change of its own, and run 6 (§15.6) is its build.
   (§15.6). `lt.dll`, `lt.lib`, `lt.exp`, `lt.pdb`, `launch.exe` and `launch.pdb` wait on O8.
 
 No project-file problem showed up, and no source file was touched.
+
+## 17. The XAudio2 port (between Phases 2 and 3)
+
+The owner's decisions D15–D18 and ADR-003. The engine is `src/liblt/Module/SoundEngine/XAudio2.cpp`,
+behind the same `SoundEngine` interface as the FMOD engine it replaces. Nothing that calls it
+changed, apart from the file names of the sounds (§11).
+
+### 17.1 What FMOD did, and what does it now
+
+| FMOD Ex, as the FMOD engine used it | XAudio2 and X3DAudio |
+|---|---|
+| `EventSystem_Create`, `getSystemObject`, `init` with 1024 channels, `setSoftwareChannels(128)` | `XAudio2Create`, a mastering voice on the default device, `X3DAudioInitialize` with its channel mask and FMOD's speed of sound (340); up to 1024 source voices, all mixed (BR3) |
+| `createSound` from memory, decoding `.ogg` and `.wav`, cached per file | a RIFF WAVE reader (PCM, IEEE float, MS-ADPCM), cached per file |
+| `playSound` paused, `setLoopCount`, `setPaused` | a source voice per sound with its buffer queued, `Start` and `Stop` |
+| `set3DListenerAttributes` from the camera | X3DAudio's listener: the camera's look and up vectors, orthonormalised, and its target's velocity |
+| `set3DAttributes`, `set3DMinMaxDistance(50 × distanceDiv, 100000)` | `X3DAudioCalculate` every frame, for the output matrix and the Doppler factor; `CurveDistanceScaler = 50 × distanceDiv`, and distances clamped at 100,000 |
+| `setPan` | an output matrix following FMOD Ex's pan law |
+| `setFrequency(44100 × pitch)` | `SetFrequencyRatio(44100 × pitch / the file's rate)`, times the Doppler factor |
+| `setVolume`, `setPosition`, `isPlaying`, `getLength` | `SetVolume`; queueing again from the position; `GetState`; frames over rate |
+| `createSound` of raw floats, `Play(Array<float>)` | a 32-bit float voice at 44.1 kHz |
+| Event System, `LoadProject` and `GetEvent`, for the music engine | none (D17) |
+| every call through `CheckError`, which asserts | every call through `CheckResult`, which asserts, naming the call and the sound; a missing or lost audio device only silences the engine (BR3) |
+
+### 17.2 What was checked in the container
+
+- **The engine compiles** with clang (C++14 and C++2b) and GCC (C++14 and C++23), at `-Wall -Wextra`,
+  without an error or a warning from the file itself. The four SDK headers it includes
+  (`windows.h`, `xaudio2.h`, `x3daudio.h`, `wrl/client.h`) are stand-ins written from the SDK's
+  documented declarations, so what this checks is the engine's use of liblt and of C++. The SDK
+  itself is checked on the host.
+- **liblt's `error()` macro stays out of the SDK headers.** One stand-in declares a function named
+  `error`, which would not compile if the macro were active.
+- **No `.ogg` reference is left** in code or scripts, and every sound they name exists in
+  `resource/sound` (as an `.ogg` until O10).
+- **The projects validate** as in §15.5: `lt` has 381 sources and 337 headers.
+
+### 17.3 The build on the host
+
+Pending.

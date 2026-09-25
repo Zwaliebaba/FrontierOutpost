@@ -94,9 +94,6 @@
     <Filter Include="Module">
       <UniqueIdentifier>{04B8B74E-2F16-5C4C-B13B-7FFDB9F4DE81}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module\MusicEngine">
-      <UniqueIdentifier>{32F470B9-EEF3-5B92-8E32-B5A7A60CD82B}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Module\ScriptAPI">
       <UniqueIdentifier>{D48EA046-5D73-5AD0-B99D-9AD8CFD5A459}</UniqueIdentifier>
     </Filter>
@@ -1147,9 +1144,6 @@
     <ClCompile Include="Module\FrameTimer.cpp">
       <Filter>Module</Filter>
     </ClCompile>
-    <ClCompile Include="Module\MusicEngine.cpp">
-      <Filter>Module</Filter>
-    </ClCompile>
     <ClCompile Include="Module\PhysicsEngine.cpp">
       <Filter>Module</Filter>
     </ClCompile>
@@ -1168,10 +1162,10 @@
     <ClCompile Include="Module\SoundEngine.cpp">
       <Filter>Module</Filter>
     </ClCompile>
-    <ClCompile Include="Module\SoundEngine\Fmod.cpp">
+    <ClCompile Include="Module\SoundEngine\Null.cpp">
       <Filter>Module\SoundEngine</Filter>
     </ClCompile>
-    <ClCompile Include="Module\SoundEngine\Null.cpp">
+    <ClCompile Include="Module\SoundEngine\XAudio2.cpp">
       <Filter>Module\SoundEngine</Filter>
     </ClCompile>
     <ClCompile Include="Strukt\CodeObject\Custom.cpp">
@@ -2198,12 +2192,6 @@
     <ClInclude Include="Module\FrameTimer.h">
       <Filter>Module</Filter>
     </ClInclude>
-    <ClInclude Include="Module\MusicEngine.h">
-      <Filter>Module</Filter>
-    </ClInclude>
-    <ClInclude Include="Module\MusicEngine\LtheoryTest01.h">
-      <Filter>Module\MusicEngine</Filter>
-    </ClInclude>
     <ClInclude Include="Module\PhysicsEngine.h">
       <Filter>Module</Filter>
     </ClInclude>
@@ -2221,9 +2209,6 @@
     </ClInclude>
     <ClInclude Include="Module\SoundEngine.h">
       <Filter>Module</Filter>
-    </ClInclude>
-    <ClInclude Include="Module\SoundEngine\Fmod.h">
-      <Filter>Module\SoundEngine</Filter>
     </ClInclude>
     <ClInclude Include="Network\Client.h">
       <Filter>Network</Filter>

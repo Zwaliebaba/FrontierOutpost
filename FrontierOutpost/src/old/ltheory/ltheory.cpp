@@ -16,7 +16,6 @@
 #include "Game/Widgets.h"
 
 #include "Module/FrameTimer.h"
-#include "Module/MusicEngine.h"
 #include "Module/PhysicsEngine.h"
 #include "Module/Settings.h"
 #include "Module/SoundEngine.h"
@@ -89,9 +88,8 @@ struct LTheory : public Program {
 
     AddModule(CreatePhysicsEngine());
     AddModule(Config_Bool("enableaudio", "General", true)
-      ? SoundEngine_Fmod()
+      ? SoundEngine_XAudio2()
       : SoundEngine_Null());
-    // AddModule(CreateMusicEngine());
 
     Setup();
     Reload();

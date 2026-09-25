@@ -16,7 +16,7 @@ type ShipUpdate
     if engine.IsNull
       engine =
         Sound_PlayLooped
-          "thruster/loop1.ogg"
+          "thruster/loop1.wav"
           self
           0
           0.0

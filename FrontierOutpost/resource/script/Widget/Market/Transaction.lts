@@ -177,7 +177,7 @@ type TransactionWindow
               var q (Min remaining order.volume)
               remaining -= q
               market.AddMarketSellOrder player item q order.price
-        Sound_Play "ui/confirm.ogg" 0.2
+        Sound_Play "ui/confirm.wav" 0.2
         self.SendUp Messages:MessageRefresh
         self.Delete
 

@@ -273,7 +273,7 @@ namespace {
           controller->thrust += right;
 
         if (Keyboard_Pressed(Key_BackSpace)) {
-          Sound_Play2D("ui/targetlost.ogg", 0.1f);
+          Sound_Play2D("ui/targetlost.wav", 0.1f);
           self->piloting->GetTargets()->elements.clear();
         }
 

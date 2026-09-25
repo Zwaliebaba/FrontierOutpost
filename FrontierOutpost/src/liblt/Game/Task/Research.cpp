@@ -45,7 +45,7 @@ namespace {
       if (10.0 * RandExp() < dt) {
         Item item = Item_Blueprint_Derived(args.blueprint.t);
         self->GetRoot()->AddItem(item, 1);
-        Sound_Play3D("techlab/complete.ogg", self, 0, 1, 0.05f);
+        Sound_Play3D("techlab/complete.wav", self, 0, 1, 0.05f);
 
         Player const& owner = self->GetOwner();
         if (owner)

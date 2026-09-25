@@ -67,7 +67,7 @@ AutoClassDerived(Missile, MissileBaseT,
     }
 
     if (!sound)
-      sound = Sound_Play3D("weapon/missile1_loop.ogg", this, V3(0), 0.5f, 0.05f, true);
+      sound = Sound_Play3D("weapon/missile1_loop.wav", this, V3(0), 0.5f, 0.05f, true);
 
     age += state.dt;
     Motion.force += thrust;

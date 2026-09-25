@@ -92,9 +92,9 @@ type WarpNodeScript
     t += FrameTimer_Get
 
     if sound.IsNull
-      sound = (Sound_PlayLooped "warpnode/drone3.ogg" self 0 0.9 5.0)
-      sound2 = (Sound_PlayLooped "warpnode/drone1.ogg" self 0 0.5 2.0)
-      sound3 = (Sound_PlayLooped "warpnode/drone2.ogg" self 0 0.5 5.0)
+      sound = (Sound_PlayLooped "warpnode/drone3.wav" self 0 0.9 5.0)
+      sound2 = (Sound_PlayLooped "warpnode/drone1.wav" self 0 0.5 2.0)
+      sound3 = (Sound_PlayLooped "warpnode/drone2.wav" self 0 0.5 5.0)
       sound.RandomizePosition
       sound2.RandomizePosition
       sound3.RandomizePosition

@@ -68,11 +68,11 @@ void Effect_MultiExplosionRadial(
 
   if (type == ExplosionType_Plasma)
     object->GetContainer()->AddInterior(
-      Object_SoundEmitter("shield/explosion.ogg",
+      Object_SoundEmitter("shield/explosion.wav",
                           object->GetPos(), 1, scale / 15));
   else if (type == ExplosionType_Fire)
     object->GetContainer()->AddInterior(
-      Object_SoundEmitter("explosion/altsmall3.ogg",
+      Object_SoundEmitter("explosion/altsmall3.wav",
                           object->GetPos(), 0.5f, scale / 15));
 
 }

@@ -206,7 +206,7 @@ AutoClassDerived(Shield, ShieldBaseT,
 
     hitAge.push_back(0);
     hitPosition.push_back(pSelf);
-    Sound_Play3D("shield/hit.ogg", self,
+    Sound_Play3D("shield/hit.wav", self,
       self->GetTransform().InversePoint(pSelf), 0.25f);
   }
 };

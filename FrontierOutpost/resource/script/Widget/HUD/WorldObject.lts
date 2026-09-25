@@ -78,10 +78,10 @@ type WorldObjectMenu
         switch
           (player.GetPiloting.HasTarget object)
             player.GetPiloting.RemoveTarget object
-            Sound_Play "ui/targetlost.ogg" 0.2
+            Sound_Play "ui/targetlost.wav" 0.2
           otherwise
             player.GetPiloting.AddTarget object
-            Sound_Play "ui/targetacquired.ogg" 0.2
+            Sound_Play "ui/targetacquired.wav" 0.2
 
       (data.IsType "MessageTrade")
         self.SendUp
@@ -126,10 +126,10 @@ type WidgetObject
       if Key_T.Pressed
         if isTargetted
           player.GetPiloting.RemoveTarget object
-          Sound_Play "ui/targetlost.ogg" 0.2
+          Sound_Play "ui/targetlost.wav" 0.2
         if (! isTargetted)
           player.GetPiloting.AddTarget object
-          Sound_Play "ui/targetacquired.ogg" 0.2
+          Sound_Play "ui/targetacquired.wav" 0.2
 
   function Void Receive (Widget self Data data)
     if (data.IsType "MessageGetObject")

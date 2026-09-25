@@ -53,7 +53,7 @@ type Firework
           if i == 0
             var sound
               Sound_Play
-                "explosion/altsmall3.ogg"
+                "explosion/altsmall3.wav"
                 child
                 0
                 1.0
