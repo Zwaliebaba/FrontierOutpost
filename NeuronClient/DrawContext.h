@@ -18,6 +18,7 @@ namespace Neuron
 
 class Buffer;
 struct GraphicsCore;
+struct PresentTarget;
 
 /// How a draw's colour meets what its target holds: liblt's modes, one state for all targets
 /// (plan §5.5).
@@ -259,6 +260,7 @@ public:
 
 private:
   friend class GraphicsDevice;
+  friend class SwapChain;
   friend struct GraphicsCore;
   struct Native;
 
@@ -276,6 +278,11 @@ private:
 
   /// Pipeline states made so far: one for each program and state a draw has used.
   [[nodiscard]] std::size_t PipelineStates() const noexcept;
+
+  /// Records the present pass: _image, a 2D colour texture, into _target, a swap chain's back
+  /// buffer, flipped once (plan §5.5), and a copy of what it drew when _target asks for one. False
+  /// when it cannot, which is reported.
+  [[nodiscard]] bool RecordPresent(const Texture& _image, PresentTarget& _target);
 
   std::unique_ptr<Native> m_native;
 };

@@ -176,6 +176,11 @@ Program GraphicsDevice::CreateProgram(const Program::Desc& _desc)
   return m_core ? Program::Make(m_core, _desc) : Program();
 }
 
+SwapChain GraphicsDevice::CreateSwapChain(const SwapChain::Desc& _desc)
+{
+  return m_core ? SwapChain::Make(m_core, _desc) : SwapChain();
+}
+
 DrawContext& GraphicsDevice::Context() noexcept
 {
   return *m_core->context;

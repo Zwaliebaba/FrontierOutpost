@@ -139,6 +139,7 @@
     <ClCompile Include="ImageCoding.cpp" />
     <ClCompile Include="KeyMapping.cpp" />
     <ClCompile Include="MipGeneration.cpp" />
+    <ClCompile Include="Presentation.cpp" />
     <ClCompile Include="ProgramReflection.cpp" />
     <ClCompile Include="RemovalReports.cpp" />
     <ClCompile Include="ShaderReflection.cpp" />

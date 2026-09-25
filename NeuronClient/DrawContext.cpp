@@ -2,6 +2,8 @@
 #include "pch.h"
 
 #include "CompiledShaders/GenerateMipsCS.h"
+#include "CompiledShaders/PresentPS.h"
+#include "CompiledShaders/PresentVS.h"
 #include "DrawContext.h"
 #include "GraphicsCore.h"
 #include "Unicode.h"
@@ -352,6 +354,7 @@ struct DrawContext::Native
   ComPtr<ID3D12DescriptorHeap> shaderHeap;  // shader-visible: the null table, then the ring
   ComPtr<ID3D12DescriptorHeap> samplerHeap; // shader-visible: the default table, then the tables in use
   std::map<PipelineKey, ComPtr<ID3D12PipelineState>> pipelines;
+  ComPtr<ID3D12PipelineState> presentPipeline; // PresentVS.hlsl's and PresentPS.hlsl's, into BACK_BUFFER_FORMAT
 
   // What the next draw uses, which stays set from one draw to the next.
   struct Target
@@ -1059,6 +1062,84 @@ struct DrawContext::Native
     return true;
   }
 
+  /// Records the present pass DrawContext::RecordPresent readied. False when a view, the capture
+  /// buffer or upload memory could not be made, or the list could not open, which the core has
+  /// reported.
+  bool RecordPresent(Texture::Native& _image, PresentTarget& _target)
+  {
+    D3D12_CPU_DESCRIPTOR_HANDLE imageView{};
+    if (!_image.ShaderView(imageView))
+    {
+      return false;
+    }
+    if (_target.capture)
+    {
+      const D3D12_RESOURCE_DESC bufferDesc = _target.buffer->GetDesc();
+      UINT64 totalBytes = 0;
+      core.device->GetCopyableFootprints(&bufferDesc, 0, 1, 0, &_target.captureFootprint, nullptr, nullptr, &totalBytes);
+      if (!CreateBuffer(D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST, totalBytes, _target.captureBuffer,
+                        "a capture of the back buffer"))
+      {
+        return false;
+      }
+    }
+    // The table before the list opens: making room for it may submit it.
+    const UINT table = AllocateTables();
+    WriteTable(table, std::span(&imageView, 1), nullShaderView);
+    if (!Open())
+    {
+      return false;
+    }
+    ReadyHeaps();
+    if (!graphicsReady)
+    {
+      list->SetGraphicsRootSignature(graphicsSignature.Get());
+      graphicsReady = true;
+    }
+    // Neither shader has constants, but every root parameter is set.
+    Upload constants;
+    if (!AllocateUpload(16, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, constants))
+    {
+      return false;
+    }
+    std::memset(constants.cpu, 0, 16);
+    const D3D12_GPU_VIRTUAL_ADDRESS constantsAddress = constants.buffer->GetGPUVirtualAddress() + constants.offsetBytes;
+    Require(_image, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    barriers.push_back(Transition(_target.buffer, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_PRESENT,
+                                  D3D12_RESOURCE_STATE_RENDER_TARGET));
+    FlushBarriers();
+
+    list->SetPipelineState(presentPipeline.Get());
+    list->SetGraphicsRootConstantBufferView(VERTEX_CONSTANTS_PARAMETER, constantsAddress);
+    list->SetGraphicsRootConstantBufferView(PIXEL_CONSTANTS_PARAMETER, constantsAddress);
+    list->SetGraphicsRootDescriptorTable(SHADER_RESOURCES_PARAMETER, ShaderTableHandle(table));
+    list->SetGraphicsRootDescriptorTable(SAMPLERS_PARAMETER, samplerHeap->GetGPUDescriptorHandleForHeapStart());
+    list->OMSetRenderTargets(1, &_target.view, FALSE, nullptr);
+    const D3D12_VIEWPORT whole{0.0f, 0.0f, static_cast<float>(_target.widthPixels), static_cast<float>(_target.heightPixels), 0.0f, 1.0f};
+    const D3D12_RECT all{0, 0, static_cast<LONG>(_target.widthPixels), static_cast<LONG>(_target.heightPixels)};
+    list->RSSetViewports(1, &whole);
+    list->RSSetScissorRects(1, &all);
+    list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    list->DrawInstanced(3, 1, 0, 0);
+
+    // Back to PRESENT, by way of the copy when one is asked for.
+    D3D12_RESOURCE_STATES last = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    if (_target.capture)
+    {
+      barriers.push_back(Transition(_target.buffer, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_RENDER_TARGET,
+                                    D3D12_RESOURCE_STATE_COPY_SOURCE));
+      FlushBarriers();
+      const D3D12_TEXTURE_COPY_LOCATION destination = FootprintLocation(_target.captureBuffer.Get(), _target.captureFootprint);
+      const D3D12_TEXTURE_COPY_LOCATION source = SubresourceLocation(_target.buffer, 0);
+      list->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
+      last = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    }
+    barriers.push_back(Transition(_target.buffer, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, last, D3D12_RESOURCE_STATE_PRESENT));
+    FlushBarriers();
+    return true;
+  }
+
   D3D12_GPU_DESCRIPTOR_HANDLE ShaderTableHandle(UINT _first) const
   {
     return {shaderHeap->GetGPUDescriptorHandleForHeapStart().ptr + (std::uint64_t{_first} * shaderIncrement)};
@@ -1448,6 +1529,36 @@ bool DrawContext::Initialize(std::string& _error)
     _error = std::format("Direct3D 12: the mip generator's pipeline state was not made (0x{:08x})", static_cast<unsigned long>(result));
     return false;
   }
+  // The present pass's: a triangle over the back buffer, which reads the image through t0.
+  const D3D12_GRAPHICS_PIPELINE_STATE_DESC presentDesc{
+    .pRootSignature = context.graphicsSignature.Get(),
+    .VS = {PRESENT_VS, sizeof(PRESENT_VS)},
+    .PS = {PRESENT_PS, sizeof(PRESENT_PS)},
+    .DS = {nullptr, 0},
+    .HS = {nullptr, 0},
+    .GS = {nullptr, 0},
+    .StreamOutput = {nullptr, 0, nullptr, 0, 0},
+    .BlendState = BlendDescription(BlendMode::Opaque),
+    .SampleMask = std::numeric_limits<UINT>::max(),
+    .RasterizerState = RasterizerDescription(CullMode::None, false),
+    .DepthStencilState = DepthStencilDescription(false, false),
+    .InputLayout = {nullptr, 0},
+    .IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED,
+    .PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
+    .NumRenderTargets = 1,
+    .RTVFormats = {BACK_BUFFER_FORMAT},
+    .DSVFormat = DXGI_FORMAT_UNKNOWN,
+    .SampleDesc = {1, 0},
+    .NodeMask = 0,
+    .CachedPSO = {nullptr, 0},
+    .Flags = D3D12_PIPELINE_STATE_FLAG_NONE,
+  };
+  result = device.CreateGraphicsPipelineState(&presentDesc, IID_PPV_ARGS(&context.presentPipeline));
+  if (FAILED(result))
+  {
+    _error = std::format("Direct3D 12: the present pass's pipeline state was not made (0x{:08x})", static_cast<unsigned long>(result));
+    return false;
+  }
 
   // The null table, and room for at least two tables in the ring.
   const UINT shaderDescriptors = context.core.desc.shaderDescriptors;
@@ -1578,6 +1689,18 @@ void DrawContext::Forget(const Program::Native& _program)
 std::size_t DrawContext::PipelineStates() const noexcept
 {
   return m_native->pipelines.size() + m_native->computePipelines.size();
+}
+
+bool DrawContext::RecordPresent(const Texture& _image, PresentTarget& _target)
+{
+  Native& context = *m_native;
+  Texture::Native* const image = _image.m_native.get();
+  if (image == nullptr || image->desc.dimension != TextureDimension::Texture2D || image->desc.format == TextureFormat::Depth32F)
+  {
+    context.core.Fail(std::format("Direct3D 12: Present cannot show {}; only a 2D colour texture is shown", Native::NameOf(image)));
+    return false;
+  }
+  return context.RecordPresent(*image, _target);
 }
 
 void DrawContext::GenerateMips(Texture& _texture)

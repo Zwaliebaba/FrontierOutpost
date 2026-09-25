@@ -45,6 +45,21 @@ inline constexpr std::uint64_t REMOVED_FENCE_VALUE = std::numeric_limits<std::ui
 /// The format a texture's resource is made in: depth is typeless, so that it can be sampled too.
 [[nodiscard]] DXGI_FORMAT ResourceFormat(TextureFormat _format) noexcept;
 
+/// The back buffers': the game does its own gamma, so they are not sRGB (plan §5.5).
+inline constexpr DXGI_FORMAT BACK_BUFFER_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+/// A swap chain's back buffer, as the context's present pass draws into it (SwapChain.cpp).
+struct PresentTarget
+{
+  ID3D12Resource* buffer; // in the PRESENT state, before the pass and after it
+  D3D12_CPU_DESCRIPTOR_HANDLE view;
+  std::uint32_t widthPixels;
+  std::uint32_t heightPixels;
+  bool capture; // whether the pass also copies what it drew, which it then gives in the two below
+  Microsoft::WRL::ComPtr<ID3D12Resource> captureBuffer;
+  D3D12_PLACED_SUBRESOURCE_FOOTPRINT captureFootprint;
+};
+
 struct GraphicsCore;
 
 /// CPU-only descriptors of one type, handed out one at a time from blocks the pool keeps, and taken

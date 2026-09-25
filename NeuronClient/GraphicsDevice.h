@@ -3,6 +3,7 @@
 
 #include "Buffer.h"
 #include "Program.h"
+#include "SwapChain.h"
 #include "Texture.h"
 
 #include <cstddef>
@@ -81,6 +82,10 @@ public:
   /// A program, or an empty one when its stages cannot be bound as they are, which onFailure is
   /// told about.
   [[nodiscard]] Program CreateProgram(const Program::Desc& _desc);
+
+  /// A swap chain on a window, or an empty one when it cannot be made, which onFailure is told
+  /// about.
+  [[nodiscard]] SwapChain CreateSwapChain(const SwapChain::Desc& _desc);
 
   /// The context that records the device's work. Only a created device has one.
   [[nodiscard]] DrawContext& Context() noexcept;

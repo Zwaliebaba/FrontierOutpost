@@ -65,6 +65,9 @@
     <ClCompile Include="MipGeneration.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Presentation.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="ProgramReflection.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

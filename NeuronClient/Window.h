@@ -116,7 +116,8 @@ public:
   /// Where the cursor is now.
   [[nodiscard]] ClientPoint CursorPosition() const noexcept;
 
-  /// The window's HWND, for the OpenGL bridge that draws on it until Direct3D 12 does (ADR-012).
+  /// The window's HWND, which a SwapChain presents to, as the OpenGL bridge draws on it until
+  /// Direct3D 12 does (ADR-012).
   [[nodiscard]] void* NativeHandle() const noexcept;
 
 private:
