@@ -13,8 +13,8 @@ the original, with identical warnings and matching command lines, and its link l
 The owner then replaced FMOD Ex with XAudio2 on both platforms (D15, ADR-003, §17), and asked the
 repository's CI to build Debug|x64 (D19). **With that, Phase 2 is done: x64 Debug and Release
 build and link from a clean checkout (§16, run 7), and the repository's CI is green.** **Phase 3
-is done: x64 Debug and Release link at C++23** (§18), after one round of conformance fixes. Next is
-Phase 4, ARM64.
+is done: x64 Debug and Release link at C++23** (§18), after one round of conformance fixes.
+**Phase 4, ARM64, is in progress** (§19), with one question for the owner (O12).
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -428,6 +428,11 @@ truncated to a smaller integer or widened from one. What 64-bit does add is **36
 (`size_t` narrowed to `int`/`uint`, H8's kind), 358 of them in `lt` (§9.4). Those are
 length-truncation hazards only for containers or files beyond 4 GiB. They are recorded as a
 warning category, not fixed (Phase 3 fixes only errors).
+
+**Correction (Phase 4).** This scan looks for syntax, and so it missed a hazard that has none: a
+thread handing results to another through a plain variable. x64 keeps each thread's stores in
+order, which hides the missing synchronisation; ARM64 does not. `LTE/Thread.cpp` does this with its
+`finished` flag, which O12 describes.
 
 ## 8. Checkpoint 0: recommended handling per dependency
 
@@ -847,9 +852,17 @@ these, all in `FrontierOutpost/`:
   chosen `char const*` instead, a type name or path with an embedded NUL would now print in full
   rather than to the NUL; neither holds one.
 
-Candidates, to be logged with file:line when they happen:
-
-- Floating point on ARM64 (§7): `fmadd` contraction under `/fp:fast`, and float→int saturation.
+- **BR6: ARM64's floating point is not x64's** (Phase 4, §19). No line to point at: it is the
+  platform, for every floating-point computation in `lt` and `launch`.
+  - Both compile with the original's `/fp:fast`, which lets the compiler fuse a multiply and an add
+    into one instruction that rounds once instead of twice. ARM64 has such an instruction (`fmadd`)
+    and x64 at `/arch:SSE2` does not, so only ARM64 fuses. Results can differ in the last bit, and
+    differences can grow through iteration.
+  - A float converted to an integer it does not fit (or a NaN) gives the saturated value on ARM64
+    and `0x80000000` on x64.
+  - So ARM64 and x64 builds are not bit-identical. That matters only where results must match across
+    machines, as in a replay or a lockstep simulation. No first-party source mentions a replay,
+    lockstep, determinism or desync, so nothing is known to depend on it.
 
 ## 13. Modernisation backlog
 
@@ -907,6 +920,20 @@ Recorded, not to be done in this migration:
 - **O11** The XAudio2 engine is verified by compiling it, not by listening to it. No runner has an
   audio device, and the assets here are LFS pointers (D12, D13). AGENTS.md §3: audio has to be run
   to be checked, and that is the owner's to do.
+- **O12** (Phase 4, **the owner's decision**) **A threaded job's results reach the main thread
+  through a plain `bool`.** In `src/liblt/LTE/Thread.cpp`, the worker sets `finished = true` (line
+  47) after `job->OnRun()`. The Scheduler polls `IsFinished()` (`Module/Scheduler.cpp:90`) and, once
+  it reads true, drops the thread, whose destructor calls `job->OnEnd()` (line 34) before the
+  `sf::Thread` member is destroyed and joins. Nothing orders the job's writes before the flag's: x64
+  keeps them in order, ARM64 need not, so on ARM64 `OnEnd()` can read results not yet written. The
+  one threaded job is SDF mesh polygonisation (`LTE/SDFMesh.cpp:409`).
+  - **A (recommended):** `finished` becomes a `std::atomic<bool>`, stored with release and loaded
+    with acquire. One file, correct on both platforms, and x64's code stays as it is, because x64
+    already orders these accesses.
+  - **B:** no change; the race is logged as BEHAVIOUR-RISK and the fix goes to the backlog.
+  - Neither can be tested here: no runner runs ARM64 (O4). The Profiler's sampling thread
+    (`LTE/Profiler.cpp:162-176`) also reads `active` and `currentFrame` unlocked, but only to count
+    samples, and it uses the pointer as a map key without following it. It is left as it is.
 
 ## 15. Phase 1: structure
 
@@ -1332,10 +1359,43 @@ warnings can be compared only once it compiles without error.
 - **Warnings: Phase 2's, less two.** 585 unique (C4267 358, C4244 224, C4996 3): `lt` 580,
   `sfml-network` 3, `sfml-system` 1, `sfml-graphics` 1, in Debug and Release alike. Phase 2 had 587,
   with two more C4244s in `lt`. No warning code is new: C++20's deprecation warnings (C5054, C5055)
-  and `/permissive-` raise nothing. A vanished conversion warning can mean a call now reaches another
-  overload (BR4), so the two are being named: the next commit's Debug job also builds the Phase 2
-  head beside it and lists the warnings the two builds do not share
-  (`.github/migration/DiffWarnings.py`).
+  and `/permissive-` raise nothing.
+- **No warning went away.** A vanished conversion warning can mean a call now reaches another
+  overload (BR4), so
+  [Migration run 11](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36108180595) built
+  the Phase 2 head beside commit `b694838`, once, and `.github/migration/DiffWarnings.py` listed the
+  warnings the two do not share. It is one warning, worded two ways: the C4244 in the template `Mix`
+  at `LTE/StdMath.h:132`, where a `double` weight meets a `float` operand. At C++14, MSVC names the
+  template's parameters and spells their arguments out on continuation lines (`T2=double`, `and`),
+  which the summary counts as warnings of their own; at C++23 it writes `double` into the message.
+  The unique counts therefore include such lines, in both builds alike, and the two builds raise
+  the same warnings. The one-off steps are gone from the workflow; the script stays.
 - **Binaries and imports: Phase 2's.** The same files, all x64, and per DLL the same imports as §16's
   table: `lt.dll` imports `XAudio2_9.dll` and nothing of FMOD's, and `launch.exe` imports its 24
   functions from `lt.dll`.
+
+## 19. Phase 4: ARM64
+
+### 19.1 What ARM64 needs
+
+- **Projects:** every project has had `Debug|ARM64` and `Release|ARM64` since Phase 1 (§15.3), and
+  `FrontierOutpost.slnx` maps them. `/arch:SSE2` is set for x64 only; ARM64 gets no `/arch`.
+- **Dependencies:** all are built from source (ADR-002, ADR-003), so none is an x86-only binary.
+  FreeType's inline assembly (`include/internal/ftcalc.h`, `src/truetype/ttinterp.c`) compiles only
+  for `_M_IX86` under MSVC, or for 32-bit ARM (`__arm__`) under other compilers, so ARM64 takes its
+  C code. SFML and GLEW have no architecture-specific code. XAudio2 comes with the Windows SDK.
+- **First-party code:** no intrinsics, SIMD, inline assembly or architecture-specific code (§7), so
+  nothing needs an `_M_ARM64` path.
+- **So Phase 4 changes no project and no source.** It adds ARM64 to the migration workflow's matrix,
+  which builds all four combinations from now on. The repository's CI stays at Debug|x64 (D19).
+
+### 19.2 What ARM64 changes at run time
+
+- **Floating point:** BR6.
+- **Memory ordering:** the threaded jobs' hand-off, O12, which waits on the owner.
+- **`volatile`:** ARM64 defaults to `/volatile:iso`, which gives `volatile` no ordering. The only
+  `volatile` objects (H10) are self-registration objects with no synchronising role.
+
+### 19.3 The build on the host
+
+Pending: the first ARM64 run.
