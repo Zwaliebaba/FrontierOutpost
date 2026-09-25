@@ -2,7 +2,7 @@
 
 - **Status:** Accepted (owner, 2026-09-25, after the migration's Phase 5)
 - **Scope:** `GameData/`, and how `launch.exe` finds it
-- **Detail:** `FrontierOutpost/MIGRATION_NOTES.md` D26–D28, §22, O13 and O14. This amends
+- **Detail:** `FrontierOutpost/MIGRATION_NOTES.md` D26–D29, §22, O13 and O14. This amends
   ADR-001's scope and supersedes ADR-002's row for the runtime assets.
 
 ## Context
@@ -50,8 +50,8 @@ and lifetime, and for written paths to resolve against a known location.
    - Every font lands with its licence text beside it (AGENTS.md R14). The original ships the
      three Noto fonts without theirs, and their own metadata names the Apache License 2.0, so its
      text was added.
-   - **The 79 Ogg sounds stay pointer files** until the owner decides how they land. D16 has the
-     owner converting them to WAV (O13).
+   - **The 79 Ogg sounds land as they are** (MIGRATION_NOTES.md D29). D16 stands: the owner
+     converts them to WAV offline, and the code names the WAV files.
 5. **`GameData/` is part of the legacy import.** ADR-001's exemption covers it as it covers
    `FrontierOutpost/`:
    - its names, layout and formatting stay the original's;
@@ -62,8 +62,8 @@ and lifetime, and for written paths to resolve against a known location.
 
 ## What this forecloses
 
-- **Git LFS for these assets.** Every clone carries them in its history for good: 151 files and
-  214.1 MB now, and more once the Ogg sounds land.
+- **Git LFS for these assets.** Every clone carries them in its history for good: 230 files and
+  269.9 MB now, and more once the WAV files converted from the Ogg sounds land.
 - **Paths that depend on where `launch.exe` was started**, whenever a `GameData/` exists above it.
 - **A packaged layout that puts `GameData/` anywhere other than beside `launch.exe` or above it.**
   The original's archive mode (`resources.bin` beside the executable, under `BUILD_RELEASE`) is
