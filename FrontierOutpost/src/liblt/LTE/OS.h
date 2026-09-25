@@ -18,6 +18,8 @@ LT_API String OS_GetAppDir();
 
 LT_API String OS_GetDocumentsDir();
 
+LT_API String OS_GetExecutableDir();
+
 LT_API String OS_GetUserDataPath();
 
 LT_API String OS_GetWorkingDir();

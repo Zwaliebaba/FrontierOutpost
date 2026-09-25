@@ -1,7 +1,7 @@
 type AppsWidget
   function List CreateChildren (Widget self)
     var l List
-    var appDir "../lt/resource/script/App/"
+    var appDir "GameData/script/App/"
     var apps appDir.ListDir
     for i 0 i < apps.Size i.++
       var thisApp (apps.Get i)

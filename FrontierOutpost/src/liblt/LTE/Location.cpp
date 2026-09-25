@@ -22,7 +22,7 @@
   const String kResourcePath = "./";
 #else
   const bool kUseArchive = false;
-  const String kResourcePath = "resource/";
+  const String kResourcePath = "GameData/";
 #endif
 
 const String kArchivePath = kResourcePath + "resources.bin";

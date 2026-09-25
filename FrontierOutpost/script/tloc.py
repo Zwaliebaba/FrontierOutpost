@@ -27,7 +27,7 @@ def walk(path):
         lineCount += c
 
 walk("src/")
-walk("resource/")
+walk("../GameData/")
 
 print 'File count : %d' % fileCount
 print 'Line count : %d' % lineCount

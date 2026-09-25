@@ -29,20 +29,19 @@ Use `Configuration=Debug` for a debug build, and `Platform=ARM64` to build for A
 
 ## Getting the Assets
 
-Most of the art, fonts and sounds under `FrontierOutpost/resource/` are Git LFS objects upstream, and this repository holds only their pointer files. To run LT, replace them with the real files from a clone of the original, made with Git LFS installed (`git lfs install`, then `git clone https://github.com/JoshParnell/ltheory-old.git`), and convert its Ogg sounds to WAV. `FrontierOutpost/MIGRATION_NOTES.md` says which files, and which to leave alone (O5 and O10).
+Everything LT loads at run time (fonts, sounds, textures, game data, LTSL scripts and shaders) is in `GameData/`, at the root of this repository, as ordinary files. Two groups are still the Git LFS pointer files the original has in their place: its 79 Ogg sounds, which become WAV files, and three Noto fonts, which the original ships without their licence texts. Until they are replaced, those sounds stop the game the first time they play, and those fonts do not load. `FrontierOutpost/MIGRATION_NOTES.md` says what each needs (O13 and O14).
 
 ## Running an LTSL App
 
 If the compilation is successful, you now have `launch.exe`, which is the main executable. This program launches an LTSL script. The intention was for Limit Theory (and all mods) to be broken into many LTSL scripts, which would then implement the gameplay, using script functions exposed by the underlying engine.
 
-Start it from the `FrontierOutpost` directory, which holds `resource/`, with the script's name:
+It finds `GameData/` by itself, in its own folder or the nearest folder above it, so it can be started from anywhere. From the root of the repository, give it the script's name:
 
-- `cd FrontierOutpost`
-- `bin\x64\Release\launch.exe <script_name_without_extension>`
+- `FrontierOutpost\bin\x64\Release\launch.exe <script_name_without_extension>`
 
-All top-level scripts are in the `resource/script/App` directory. So you can do, for example:
+All top-level scripts are in the `GameData/script/App` directory. So you can do, for example:
 
-- `bin\x64\Release\launch.exe war`
+- `FrontierOutpost\bin\x64\Release\launch.exe war`
 
 To run the app 'war.lts', which is an AI skirmish test. Many of the apps are broken or incomplete, but some work enough to allow you to fly around in a system.
 
@@ -52,6 +51,5 @@ An example of the entire sequence of commands to build and run an LTSL app, in a
 
 ```
 msbuild FrontierOutpost.slnx /m /p:Configuration=Release /p:Platform=x64
-cd FrontierOutpost
-bin\x64\Release\launch.exe war
+FrontierOutpost\bin\x64\Release\launch.exe war
 ```

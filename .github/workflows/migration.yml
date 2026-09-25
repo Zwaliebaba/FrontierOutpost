@@ -33,6 +33,13 @@ name: Migration
 # The baseline measures something that does not change (a pinned upstream commit) and costs about
 # forty runner-minutes, so it runs only for a commit whose message contains [baseline]. The
 # toolchain record is half a minute and runs on every push, because the runner image moves.
+#
+# One more job is a one-off, and the only one here that writes to the repository:
+#
+#   assets           Replaces GameData's Git LFS pointer files with the original's real files, which
+#                    this runner can fetch and the migration's session cannot, and pushes them to
+#                    this branch as one commit (FrontierOutpost/MIGRATION_NOTES.md §22). Once nothing
+#                    is left to replace it does nothing.
 
 on:
   push:
@@ -467,3 +474,45 @@ jobs:
           path: |
             build-*.log
           if-no-files-found: ignore
+
+  assets:
+    name: Real asset files
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # To push the commit it makes, to this branch only; every other job reads.
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Replace GameData's pointer files with the original's real files, and push them
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The clone's LFS files stay pointers until RealAssets.py fetches the ones it needs.
+          export GIT_LFS_SKIP_SMUDGE=1
+          upstream="$RUNNER_TEMP/upstream"
+          git clone --quiet --no-checkout "$UPSTREAM_URL" "$upstream"
+          git -C "$upstream" -c advice.detachedHead=false checkout --quiet "$UPSTREAM_SHA"
+
+          # Left as pointers for the owner to decide (MIGRATION_NOTES.md §22): the 79 Ogg sounds
+          # (D16, O13), and the three Noto fonts, which the original ships without their licence
+          # texts (AGENTS.md R14, O14).
+          message="$RUNNER_TEMP/message.txt"
+          python3 .github/migration/RealAssets.py --upstream "$upstream" --sha "$UPSTREAM_SHA" --fetch \
+            --skip-suffix .ogg \
+            --hold font/NotoSans/Bold.ttf --hold font/NotoSans/Regular.ttf \
+            --hold font/NotoSansCJKsc/Regular.otf \
+            --message "$message"
+          if [ ! -f "$message" ]; then exit 0; fi
+
+          # Authored, and signed off, as the commit this run builds.
+          git log -1 --format='%(trailers:key=Co-Authored-By,key=Claude-Session)' "$GITHUB_SHA" >> "$message"
+          git -c user.name="$(git log -1 --format=%an "$GITHUB_SHA")" \
+            -c user.email="$(git log -1 --format=%ae "$GITHUB_SHA")" commit --quiet --file "$message"
+          git log -1 --format='%H%n%B'
+          git show --stat --format= HEAD | tail -n 1
+          # A fast-forward from the commit this run builds, never a force: if the branch has moved
+          # on meanwhile, the push is refused and the job fails.
+          git push origin "HEAD:refs/heads/$GITHUB_REF_NAME"

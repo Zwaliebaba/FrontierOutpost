@@ -1,4 +1,4 @@
-function String FontPath () "../lt/resource/font/"
+function String FontPath () "GameData/font/"
 
 type FontPreview
   function List CreateChildren (Widget self)

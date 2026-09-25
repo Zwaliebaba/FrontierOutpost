@@ -17,7 +17,9 @@ is done: x64 Debug and Release link at C++23** (§18), after one round of confor
 **Phase 4 is done: ARM64 Debug and Release link** (§19). **Phase 5 verified all four
 combinations from a clean state** (§20), and §21 is the final report. The owner's decisions after
 it (D20–D25) fix O12, switch ARM64 to the 64-bit-hosted tools, correct the README and settle what
-CI builds after the merge; §20.5 verifies them.
+CI builds after the merge; §20.5 verifies them. Last, the owner moved the runtime data to
+`GameData/` at the repository root, with the real files in place of most LFS pointers
+(D26–D28, ADR-004, §22).
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -54,6 +56,9 @@ phase.
 | D23 | **`FrontierOutpost/README.md`'s build and run steps describe FrontierOutpost's build** instead of the original's CMake and `configure.py`; the rest of it stays verbatim. | owner | after Phase 5 |
 | D24 | **O6 is closed, not pursued**: it concerns how the original's Win32 build was measured, not FrontierOutpost. | owner | after Phase 5 |
 | D25 | **The pull request is merged with a merge commit**, which keeps the commits this file cites. | owner | after Phase 5 |
+| D26 | **The runtime data move to `GameData/`, at the repository root**: all of `FrontierOutpost/resource/`, the fonts, sounds, textures, game data, LTSL scripts and shaders, under one root as before. ADR-004 records it. | owner | after Phase 5 |
+| D27 | **`GameData/` holds the real files as ordinary Git objects**, not LFS pointer files, amending D12. Every clone carries them. | owner | after Phase 5 |
+| D28 | **`launch.exe` finds `GameData/` itself**: it looks in its own folder and then in each parent, and works from the first that holds `GameData/`. `cache/` and `mod/` land beside it and are git-ignored. | owner | after Phase 5 |
 
 ## 2. Environment
 
@@ -390,7 +395,10 @@ results; they are listed per directory in that order:
 | RAD Telemetry | `telemetry/telemetry.h`, **absent** | — | — | — | — | — | — | `Profiler.cpp`, only under `LIBLT_LINUX` and a commented-out `USE_TELEMETRY` |
 
 The licence of ltheory-old itself is the Unlicense (`LICENSE`, upstream commit `940a207`). Of the
-fonts, only `resource/font/DroidSans` ships a licence file.
+38 font folders in `resource/font/`, 36 ship a licence file: 34 the SIL Open Font License,
+`DroidSans` the Apache License and `Ubuntu` the Ubuntu Font Licence. `NotoSans` and
+`NotoSansCJKsc` ship none (O14). *(Corrected after Phase 5. This said that only `DroidSans`
+ships one.)*
 
 ## 7. Phase 0c: ARM64 hazards in first-party code
 
@@ -731,8 +739,8 @@ only. §15.4 gives the reasoning for each entry.
   `launch` to one `bin/` in the source tree that every configuration overwrites, and the SFML
   libraries to `build/ext/SFML/lib/<Config>/`. One consequence: `launch.exe` looks for `resource/`
   in its working directory and then one level up (`src/launch/launch.cpp:29-30`), which found it
-  from the original's `bin/` but not from `bin\<Platform>\<Configuration>\`. It has to be started
-  from `FrontierOutpost/`, as the README says (D23).
+  from the original's `bin/` but not from `bin\<Platform>\<Configuration>\`. It had to be started
+  from `FrontierOutpost/`, as the README said (D23). **Superseded by D28** (§10.5).
 - **No glob.** `lt`'s 382 sources are listed in `lt.vcxproj`, in the glob's order. A new source
   file is not built until it is added there and to the `.filters`.
 - **Two definitions dropped:** `CMAKE_INTDIR="<cfg>"` and `lt_EXPORTS`. Nothing reads either.
@@ -778,16 +786,30 @@ only. §15.4 gives the reasoning for each entry.
 - **Five of SFML's six projects compile with `/std:c++latest`** and keep their own `/permissive`.
   `sfml-audio` stays at C++14, and FreeType and GLEW are C (§18.1).
 
+### 10.5 The runtime data (D26–D28, §22)
+
+- **The runtime data are `GameData/` at the repository root**, not `resource/` beside the sources.
+  The engine's two paths to them say `GameData/` (`src/liblt/LTE/Location.cpp:25`,
+  `LTE/Font.cpp:167`).
+- **`launch.exe` changes to the folder that holds `GameData/`**, which it finds by looking in its
+  own folder and then upward. The original looked in its working directory and one level up.
+  `cache/` and `mod/` follow the working directory (BR8).
+- **The assets are real files in the repository**, apart from the 79 Ogg sounds and three Noto
+  fonts (O13, O14). The original keeps them in Git LFS.
+- **Four developer widgets name `GameData/`** where the original named its author's own checkout,
+  `../lt/resource/` (§11).
+
 ## 11. Code changes
 
-Phases 1 and 2 changed no source file. The XAudio2 port (D15–D17, §17) and Phase 3 (§18) change
-these, all in `FrontierOutpost/`:
+Phases 1 and 2 changed no source file. The XAudio2 port (D15–D17, §17), Phase 3 (§18) and the
+owner's later decisions (D20, D23, D26–D28) change these. Paths are in `FrontierOutpost/`, except
+those in `GameData/`, which is `resource/` since D26:
 
 | File | Change | Why |
 |---|---|---|
 | `src/liblt/Module/SoundEngine/XAudio2.cpp` | **New**: the XAudio2 sound engine | D15 |
 | `src/liblt/Module/SoundEngine.h:32` | `SoundEngine_Fmod()` declared as `SoundEngine_XAudio2()` | D15 |
-| `src/launch/launch.cpp:44` | starts `SoundEngine_XAudio2()` | D15 |
+| `src/launch/launch.cpp:53` | starts `SoundEngine_XAudio2()` | D15 |
 | `src/liblt/Module/Common.h:8` | forward declaration of `MusicEngine` removed | D17 |
 | `src/liblt/Module/SoundEngine/Fmod.cpp`, `Fmod.h`, `Module/MusicEngine.cpp`, `MusicEngine.h`, `Module/MusicEngine/LtheoryTest01.h` | deleted | D17 |
 | `include/FMOD/` (11 headers), `resource/music/` (2 `.fev`, 2 `.fsb`) | deleted | D17 |
@@ -798,7 +820,14 @@ these, all in `FrontierOutpost/`:
 | `src/liblt/LTE/Data.h:67`, `:248`; `src/liblt/LTE/ResourceMap.cpp:38` | the string literal in a conditional expression whose other operand is a `String` is written `String("null")`, `String("")` | Phase 3: error C2445 under `/Zc:ternary` (part of `/permissive-`). `String` converts to `char const*` and a literal converts to `String`, so the standard calls the expression ambiguous. `Data.h:67` is the same expression, in a template nothing instantiates, so MSVC did not report it yet. BR5 |
 | `src/liblt/LTE/Thread.cpp:21`, `:34`, `:44`, `:49` | `finished` is a `std::atomic<bool>`: stored with release once the job has run, loaded with acquire by `IsFinished()` and the destructor; `<atomic>` included | D20: on ARM64, the main thread could see `finished` before the job's results (O12). BR7 |
 | `README.md` | the prerequisites, build, run and example sections describe the MSBuild build | D23 |
-| `src/liblt/LTE/OS.cpp:181-183` | `OS_Spawn` hands `CreateProcess` a writable, empty `char commandLine[]` in place of the literal `""` | Phase 3: `/permissive-` includes `/Zc:strictStrings`, which refuses a string literal as `LPSTR` (C2664). The API documents the parameter as writable. The command line is empty either way, so nothing changes at run time |
+| `src/liblt/LTE/Location.cpp:25`, `src/liblt/LTE/Font.cpp:167` | the resource root and the font folder are `GameData/` and `GameData/font/` | D26 |
+| `src/liblt/LTE/OS.h:21`, `src/liblt/LTE/OS.cpp:123-142` | **New**: `OS_GetExecutableDir()`, the folder of the running executable (`GetModuleFileNameA`; `/proc/self/exe` elsewhere) | D28 |
+| `src/launch/launch.cpp:29-39` | looks for `GameData/` from the executable's folder upward and changes to the first folder that has it, in place of "`resource/` here, or else `../`" | D28, BR8 |
+| `src/resources.rc:54`, `src/launch/launch.vcxproj:8` | the icon is `..\..\GameData\texture\multi.ico` | D26 |
+| `GameData/script/App/launcher.lts:4`, `App/ui.lts:133`, `Widget/DevPanel/Apps.lts:4`, `Widget/FontPreview.lts:1` | `"../lt/resource/..."` becomes `"GameData/..."` | D26: the original's paths assume its author's checkout, a folder named `lt` beside the working directory. BR8 |
+| `script/tloc.py:30` | counts `../GameData/` in place of `resource/` | D26 |
+| `README.md` (again) | where the assets are, and `launch.exe` started from anywhere | D26–D28 |
+| `src/liblt/LTE/OS.cpp:202-204` | `OS_Spawn` hands `CreateProcess` a writable, empty `char commandLine[]` in place of the literal `""` | Phase 3: `/permissive-` includes `/Zc:strictStrings`, which refuses a string literal as `LPSTR` (C2664). The API documents the parameter as writable. The command line is empty either way, so nothing changes at run time |
 
 ## 12. BEHAVIOUR-RISK register
 
@@ -883,6 +912,19 @@ these, all in `FrontierOutpost/`:
   order, a release store and an acquire load compile to the plain moves they replace, so nothing
   should change; that is reasoned from the memory model, not measured. Not tested on either
   platform: nothing has been run (§20.4).
+- **BR8: `launch.exe` works from the folder that holds `GameData/`** (D28),
+  `src/launch/launch.cpp:29-39`. The original stayed in its working directory, or went one level
+  up when `resource/` was not there. Now the working directory is the first folder with
+  `GameData/` in it, from the executable's own folder upward, wherever `launch.exe` was started.
+  - `cache/` (config, settings, logs, crash dumps, screenshots, cached results) and `mod/` are read
+    and written beside `GameData/`. A `cache/` left where `launch.exe` used to be started is not
+    read.
+  - With no `GameData/` above the executable, `launch.exe` stays where it was started, which then
+    has to hold `GameData/` itself.
+  - Four developer widgets now find what they list and open (`GameData/script/App/launcher.lts:4`,
+    `App/ui.lts:133`, `Widget/DevPanel/Apps.lts:4`, `Widget/FontPreview.lts:1`). The original's
+    `../lt/resource/` found it only in a checkout folder named `lt`.
+  - The Windows branch of `OS_GetExecutableDir` has been compiled, not run (§22.2).
 
 ## 13. Modernisation backlog
 
@@ -890,7 +932,8 @@ Recorded, not to be done in this migration:
 
 - `src/liblt/Common.h:87-97` architecture detection (H1). Test `_WIN64` first, or drop it.
 - `OS_GetUserDataPath()` returns `./cache/` relative to the working directory. AGENTS.md R13 wants
-  a known location.
+  a known location. **Largely addressed by D28:** `launch.exe` makes the working directory the
+  folder that holds `GameData/`. The path in the code is still relative.
 - `cmake/FindGLEW.cmake` is dead. So are the unused vendored headers (enet, OVR, GLUT, GLUI,
   GLAux) and the Linux and macOS binaries in `extbin/`.
 - Three FreeType libraries and a fourth set of headers in one link (§5.3).
@@ -898,7 +941,7 @@ Recorded, not to be done in this migration:
 - `offsetof` through null pointers (H9).
 - FMOD Ex was discontinued in 2014. FMOD Core/Studio 2.x is the maintained line and has ARM64.
   Moot since D15: XAudio2 replaced it.
-- `OS_Spawn` (`src/liblt/LTE/OS.cpp:176-190`) leaks the `strdup` of its path on Windows, where
+- `OS_Spawn` (`src/liblt/LTE/OS.cpp:197-210`) leaks the `strdup` of its path on Windows, where
   `argv` is unused, and never closes the process and thread handles `CreateProcess` returns.
 - `sfml-audio` needs `std::auto_ptr` (`AudioDevice.cpp:110`, `:128`), and so C++14 (§18.1). SFML
   2.5.1 still has it; 2.6.0 replaced it (checked against both tags).
@@ -928,6 +971,9 @@ Recorded, not to be done in this migration:
   `resource/texture/`. They come from a clone of `JoshParnell/ltheory-old` made with Git LFS
   installed. Copy only those: FrontierOutpost changed six scripts in `resource/script/` (§11) and
   removed `resource/music/` (D17). Then the Ogg sounds become WAV files (O10).
+  - **Resolved by D27 for 148 of the 230**, now in `GameData/`. The migration workflow's one-off
+    job fetched and committed them (§22.3). The 79 Ogg sounds (O13) and the three Noto fonts (O14)
+    are still pointers.
 - **O6** For Win32, MSBuild's own total (86 warnings) is *lower* than the de-duplicated count
   (229), which should be impossible if both count the same thing. This is unexplained.
   - The raw logs are in the run's `baseline-Win32` and `baseline-x64` artifacts, which this
@@ -949,14 +995,15 @@ Recorded, not to be done in this migration:
   they are left out.
 - **O10** (D16) **The WAV conversion is the owner's, and pending.** Until the 79 converted files
   are in the runtime assets, each of those sounds stops the program, through the assertion
-  handler, the first time it plays. The rule: `resource/sound/<name>.ogg` becomes
-  `resource/sound/<name>.wav`, except `ui/objectmenuopen.ogg` and `warpnode/exit.ogg`, which become
+  handler, the first time it plays. The rule: `GameData/sound/<name>.ogg` becomes
+  `GameData/sound/<name>.wav`, except `ui/objectmenuopen.ogg` and `warpnode/exit.ogg`, which become
   `<name>_ogg.wav`. The formats XAudio2 plays are PCM (16-bit, at the file's own rate and channel
   count, is lossless against the decoded Vorbis), IEEE float and MS-ADPCM. It does not play
   IMA ADPCM.
 - **O11** The XAudio2 engine is verified by compiling it, not by listening to it. No runner has an
-  audio device, and the assets here are LFS pointers (D12, D13). AGENTS.md §3: audio has to be run
-  to be checked, and that is the owner's to do.
+  audio device, and the sounds here were LFS pointers (D12, D13). Since D27 the 51 WAV sounds are
+  real files; the 79 Ogg sounds are not (O13). AGENTS.md §3: audio has to be run to be checked,
+  and that is the owner's to do.
 - **O12** (Phase 4) **A threaded job's results reached the main thread through a plain `bool`.**
   **Resolved by D20: option A.** In `src/liblt/LTE/Thread.cpp`, the worker sets `finished = true` (line
   47) after `job->OnRun()`. The Scheduler polls `IsFinished()` (`Module/Scheduler.cpp:90`) and, once
@@ -971,6 +1018,34 @@ Recorded, not to be done in this migration:
   - Neither can be tested here: no runner runs ARM64 (O4). The Profiler's sampling thread
     (`LTE/Profiler.cpp:162-176`) also reads `active` and `currentFrame` unlocked, but only to count
     samples, and it uses the pointer as a map key without following it. It is left as it is.
+- **O13** (D27) **The 79 Ogg sounds are still LFS pointer files** in `GameData/sound/` (55.8 MB as
+  Ogg). The owner was asked how they should land and has not answered yet. The options:
+  - **Keep Ogg and add a decoder (recommended):** the Ogg files land as they are, and the XAudio2
+    engine decodes them at load with stb_vorbis. stb_vorbis is public domain and one vendored
+    file, but it is a new dependency (R14), and it reverses D16. It gives the smallest
+    repository, and nothing to convert.
+  - **Convert on the runner:** the one-off job converts them to 16-bit PCM WAV by O10's rule
+    before committing. That is an estimated 560 MB, at the tenfold ratio typical of Vorbis
+    against 16-bit PCM; the largest file would be about 58 MB. Not measured.
+  - **Leave them as pointers** until the owner's own WAV files replace them. This is the state
+    now.
+  - **Commit the Ogg files and convert later:** both forms stay in every clone's history.
+
+  Until one is chosen, D16 stands, and each of those sounds stops the game the first time it plays
+  (O10).
+- **O14** (D27, AGENTS.md R14) **Licence texts that the original does not carry:**
+  - **The three Noto fonts** have no licence file beside them, unlike the other 36 font folders
+    (§6): `GameData/font/NotoSans/Regular.ttf` and `Bold.ttf`, and
+    `GameData/font/NotoSansCJKsc/Regular.otf`, 16.2 MB together. So they stay pointers. The job
+    prints the licence each font's own name table declares (§22.3). To land them, that licence's
+    text goes beside them. Only `GameData/script/Item/ShipType/Generate.lts:97` uses one of them
+    (`Fonts:ChineseSimp`), and nothing uses `Fonts:Unicode`.
+  - **SMAA's shader source**, `GameData/shader/common/smaa.jsl`, lacks SMAA's copyright and
+    permission notice, which its MIT licence requires in copies of the source. It has lacked it
+    since the original; D26 only moves it. SMAA's two lookup textures did land: the same licence
+    says that binary distributions need not carry the notice. Adding SMAA's `LICENSE.txt` beside
+    the shader fixes it.
+  - Both are the owner's call.
 
 ## 15. Phase 1: structure
 
@@ -1503,9 +1578,25 @@ Dropped by the owner (D13). Nothing has been run: not the game, not its sound (O
 ### 20.5 After the owner's decisions (D20–D25)
 
 D20 changes `LTE/Thread.cpp` and D22 changes which compiler builds ARM64, so all four combinations
-are built once more, by the migration workflow's last run, before D21 removes it.
+were built once more from a clean state, on commit `b49e882`, by
+[Migration run 14](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36112889919):
 
-Pending: that run.
+| Combination | Result | MSBuild's time | Warnings: MSBuild's total / unique |
+|---|---|---|---|
+| x64 Debug | links | 6 min 8 s | 613 / 585 |
+| x64 Release | links | 11 min 7 s | 613 / 585 |
+| ARM64 Debug | links | 5 min 47 s | 613 / 585 |
+| ARM64 Release | links | 12 min 26 s | 613 / 585 |
+
+- **The warnings are §20.1's**, code for code and project for project: C4267 358, C4244 224 and
+  C4996 3; `lt` 580, `sfml-network` 3, `sfml-system` 1 and `sfml-graphics` 1.
+- **ARM64 is compiled and linked by the 64-bit-hosted tools** (D22). The logs name
+  `bin\HostX64\arm64\CL.exe` and `link.exe`, where §19.3's named `HostX86\arm64`. x64 uses
+  `HostX64\x64`, as before.
+- **Every output is for its platform**, x64 or ARM64, by dumpbin `/headers`.
+- **Toolchain:** MSVC 14.51.36231 in all four. MSBuild 18.9.1 on runner image 20260907.229.1,
+  except x64 Release, which ran MSBuild 18.10.1 on image 20260922.246.2. The times vary with the
+  runner and are not compared.
 
 ## 21. Final report
 
@@ -1536,6 +1627,8 @@ GLEW as C (§18.1).
 - **Language:** C++23 (`/std:c++latest`) and conformance mode for first-party code; C++23 for five
   SFML projects (§10.4).
 - **Platforms:** x64 and ARM64, not Win32 (§10.2).
+- **Runtime data:** `GameData/` at the repository root. It holds real files in place of 148 of
+  the 230 LFS pointers, and `launch.exe` finds it from its own folder upward (§10.5, ADR-004).
 
 ### 21.3 BEHAVIOUR-RISK
 
@@ -1543,7 +1636,8 @@ GLEW as C (§18.1).
 BR3: XAudio2's mixer in place of FMOD's. BR4: what C++23 and `/permissive-` can change silently.
 BR5: three conditional expressions that now name their type (`LTE/Data.h:67`, `:248`,
 `LTE/ResourceMap.cpp:38`). BR6: ARM64's floating point. BR7: the threaded jobs' hand-off, now
-ordered (`LTE/Thread.cpp`).
+ordered (`LTE/Thread.cpp`). BR8: `launch.exe` works from the folder that holds `GameData/`
+(`launch.cpp:29-39`).
 
 ### 21.4 Remaining warnings, by category
 
@@ -1569,8 +1663,97 @@ at `/W4`, and GLEW raise none.
 
 ### 21.6 Open issues
 
-- **O10 and O11: the owner's to do.** Put the real assets in place (O5), convert the 79 Ogg sounds
-  to WAV, then listen to them.
+- **O13 and O14: the owner's to decide.** How the 79 Ogg sounds land (O13; until then D16 stands,
+  and O10 is the owner's to do). And the licence texts for the three Noto fonts and for SMAA's
+  shader source (O14).
+- **O11:** then listen to the sounds.
 - **O4:** ARM64 builds have not been run, for want of an ARM64 machine.
-- O1, O5 and O7 describe the environment and the source material. O2, O3, O8, O9 and O12 are
-  resolved, and O6 is closed (D24).
+- O1 and O7 describe the environment and the source material. O5 is resolved for 148 of its 230
+  files (§22.3). O2, O3, O8, O9 and O12 are resolved, and O6 is closed (D24).
+
+## 22. GameData (D26–D28)
+
+After Phase 5, the owner moved the runtime data out of the code tree (D26), as real files (D27),
+and had `launch.exe` find them itself (D28). ADR-004 records the decision.
+
+### 22.1 The move
+
+- **`FrontierOutpost/resource/` is now `GameData/`**, all 630 files, moved with `git mv`. Every
+  blob is unchanged, so `git log --follow` finds each file's history. The folders inside keep
+  their names.
+- **Every reference to the folder now names `GameData/`** (§11):
+  - the engine's root and the font loader;
+  - `launch.exe`'s icon;
+  - four developer widgets;
+  - the author's line counter.
+
+  A search of first-party code, scripts, build files, workflows and documentation for
+  `resource/`, `resource\`, `"resource"` and `lt/resource` finds no other path to it. The words
+  are left only in §1–§21's records of earlier phases, in ADR-003's account of what was deleted,
+  and in `resource.h` and `resources.rc`, which are Visual Studio's resource script.
+- **`GameData/.gitattributes` marks its media as binary**, so Git stores each file byte for byte
+  instead of relying on what `text=auto` would guess. A test showed why. Without the file, a JPEG
+  with a CRLF and no NUL byte in it is normalized when it is staged; with it, the JPEG is stored
+  intact (§22.3).
+- **`cache/` and `mod/` at the repository root are git-ignored.**
+
+### 22.2 How `launch.exe` finds it
+
+`launch.cpp:29-39` asks `OS_GetExecutableDir()`, new in `LTE/OS.cpp`, for its own folder. It walks
+up from there until a folder holds `GameData/`, and changes to that folder. If no folder holds it,
+`launch.exe` stays where it was started.
+
+- **Checked in the container:**
+  - The loop, copied verbatim into a test with stand-ins for the OS functions, gives the right
+    folder in 11 cases: `bin\x64\Debug` three levels below; `GameData/` beside the executable; the
+    nearer of two; a drive's root; a UNC path, found and not; POSIX paths and `/`; and none found
+    at all.
+  - The POSIX branch of `OS_GetExecutableDir` returns its executable's folder, run from two
+    places.
+  - The four changed C++ files pass clang's syntax check for a Windows target, as in §18.2.
+- **Not checked:** the Windows branch calls `GetModuleFileNameA` and has only been compiled
+  (§22.4). Nothing has run `launch.exe` (§20.4).
+
+### 22.3 The real files
+
+- **How they arrive.** This container cannot reach the original's LFS storage (O5). The owner was
+  asked two things: whether a runner should commit the files or the owner should add them, and
+  what to do with the Ogg sounds. Neither has been answered yet.
+  - A runner job was used. It commits the same bytes either way, and only a runner can fetch
+    them.
+  - The Ogg sounds stay pointers, which keeps every answer to the second question open (O13).
+- **The job**, the migration workflow's `assets` job, runs `.github/migration/RealAssets.py`. In
+  order, it:
+  1. clones the original at `0535d46`, without LFS content;
+  2. checks that each of GameData's pointer files is, byte for byte, the pointer at the same path
+     under the original's `resource/`;
+  3. fetches those objects with git-lfs;
+  4. checks each file's size and SHA-256 against its pointer, and replaces the pointer;
+  5. stages the files, and checks each staged blob's SHA-256 once more;
+  6. commits, and pushes to this branch as a fast-forward.
+
+  It is the only job with write permission, and D21 removes it with the rest of the workflow.
+- **Tested in the container** against a stand-in for the original:
+  - which files it replaces, holds and skips;
+  - a rerun, which finds nothing to do;
+  - a pointer that differs from the original's;
+  - a file whose bytes do not match its pointer;
+  - a held path that is not a pointer;
+  - staging without GameData's `.gitattributes`.
+
+  Each failure stops the job with a message that names the file.
+- **To land:** 148 files, 197.9 MB: 88 fonts, 51 WAV sounds, and 9 textures (four JPEG, three PNG
+  and SMAA's two lookup tables). Pending: the job's run.
+- **Still pointers:** the 79 Ogg sounds, 55.8 MB (O13), and the three Noto fonts, 16.2 MB (O14).
+- **Licences** (AGENTS.md R14):
+  - 36 of the 38 font folders carry their licence (§6). The two Noto folders do not, so those
+    fonts wait for the owner (O14).
+  - SMAA's two lookup textures land: SMAA's MIT licence says that binary distributions need not
+    carry its notice. Its shader source does need the notice, and has lacked it since the
+    original (O14).
+  - The other assets carry no licence of their own, and are taken to be the original's own work,
+    under its Unlicense.
+
+### 22.4 The build
+
+Pending: the migration workflow's four-way run on this change.

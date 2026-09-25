@@ -130,7 +130,7 @@ type App
         Widget/Components:Margin 256 256
           Widget/Window:Create
             "Text Editor"
-            Widget/TextEditor:Create "../lt/resource/script/Widget/Map.lts"
+            Widget/TextEditor:Create "GameData/script/Widget/Map.lts"
 
     # l +=
       CreatePrompt

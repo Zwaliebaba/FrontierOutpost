@@ -1,7 +1,8 @@
 # ADR-001: FrontierOutpost is a legacy import, exempt from the conformance rules
 
 - **Status:** Accepted (owner, 2026-09-24, at the start of the ltheory-old migration)
-- **Scope:** `FrontierOutpost.slnx` and everything under `FrontierOutpost/`. Nothing else.
+- **Scope:** `FrontierOutpost.slnx` and everything under `FrontierOutpost/`, and, since ADR-004,
+  `GameData/`: the original's runtime data, moved out of `FrontierOutpost/`. Nothing else.
 - **Detail:** `FrontierOutpost/MIGRATION_NOTES.md`
 
 ## Context

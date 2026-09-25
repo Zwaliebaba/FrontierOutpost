@@ -26,8 +26,17 @@ struct Launcher : public Program {
   Module soundEngine;
 
   Launcher(String const& appName) : appName(appName) {
-    if (!OS_IsDir("resource"))
-      OS_ChangeDir("../");
+    /* Work from the folder that holds GameData/: the executable's own folder or
+       the nearest parent of it that has one (ADR-004). Without one, stay in the
+       working directory launch was started in. */
+    String dir = OS_GetExecutableDir();
+    while (dir.size() && !OS_IsDir(dir + "GameData")) {
+      dir.pop();
+      while (dir.size() && dir.back() != '\\' && dir.back() != '/')
+        dir.pop();
+    }
+    if (dir.size())
+      OS_ChangeDir(dir);
     window = Window_Create("App Launcher", V2U(1920, 1080), true, false);
     window->SetSync(false);
     Renderer_Initialize();

@@ -1,7 +1,7 @@
 type Selector
   function List CreateChildren (Widget self)
     var l List
-    var files (Directory_List "../lt/resource/script/App/")
+    var files (Directory_List "GameData/script/App/")
     for i 0 i < files.Size i.++
       l +=
         Widgets:Text Fonts:Default (files.Get i) 16.0 1

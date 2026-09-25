@@ -120,6 +120,27 @@ String OS_GetDocumentsDir() {
 #endif
 }
 
+/* The folder of the running executable, with a trailing separator, or "" if it
+   cannot be told (on Windows, also when the path does not fit in MAX_PATH). */
+String OS_GetExecutableDir() {
+#ifdef LIBLT_WINDOWS
+  char path[MAX_PATH];
+  DWORD length = GetModuleFileNameA(NULL, path, MAX_PATH);
+  if (length == 0 || length == MAX_PATH)
+    return "";
+  String result = path;
+  return result.substr(0, result.find_last_of("\\/") + 1);
+#else
+  char path[1024];
+  ssize_t length = readlink("/proc/self/exe", path, sizeof(path) - 1);
+  if (length <= 0)
+    return "";
+  path[length] = 0;
+  String result = path;
+  return result.substr(0, result.rfind('/') + 1);
+#endif
+}
+
 String OS_GetUserDataPath() {
   static bool created = false;
   if (!created) {

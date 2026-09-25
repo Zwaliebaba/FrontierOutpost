@@ -5,7 +5,8 @@
     name (MIGRATION_NOTES.md §5.8). It has lt's compile settings, which the original sets for both
     (§9.3), but not /NODEFAULTLIB:libcmt. resources.rc is compiled with the same definitions and
     include directories, plus _DEBUG in Debug and NDEBUG in Release, as the original passed them to
-    rc.exe. Its icon, ..\resource\texture\multi.ico, resolves from the .rc file's folder.
+    rc.exe. Its icon, ..\..\GameData\texture\multi.ico, resolves from the .rc file's folder to the
+    repository root's GameData\ (ADR-004).
 
     The link line keeps the original's order: SFML, OpenGL, lt.lib, then lt's own link libraries,
     which the original passes on to launch transitively. The substitutions are ADR-002's and

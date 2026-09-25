@@ -14,7 +14,8 @@ name: Build
 #   Build/RunClangTidy.py        clang-tidy                      not written yet: skipped
 #   Build/CheckFormat.py         clang-format (its own job)      not written yet: skipped
 #
-# When the checkers are written, they must leave FrontierOutpost/ alone (ADR-001).
+# When the checkers are written, they must leave FrontierOutpost/ and GameData/ alone (ADR-001,
+# ADR-004).
 #
 # ── Why the build does not treat warnings as errors ───────────────────────────────────────────
 #
