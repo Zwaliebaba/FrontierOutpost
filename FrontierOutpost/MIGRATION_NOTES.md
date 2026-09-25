@@ -20,7 +20,8 @@ it (D20–D25) fix O12, switch ARM64 to the 64-bit-hosted tools, correct the REA
 CI builds after the merge; §20.5 verifies them. Last, the owner moved the runtime data to
 `GameData/` at the repository root, with the real files in place of most LFS pointers
 (D26–D28, ADR-004, §22). With that verified on all four combinations, the migration workflow
-and its scripts are gone (D21, §22.4).
+and its scripts are gone (D21, §22.4). After the merge, the owner had the 79 Ogg sounds land as
+they are, to convert them to WAV offline (D29, §22.5).
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -60,6 +61,7 @@ phase.
 | D26 | **The runtime data move to `GameData/`, at the repository root**: all of `FrontierOutpost/resource/`, the fonts, sounds, textures, game data, LTSL scripts and shaders, under one root as before. ADR-004 records it. | owner | after Phase 5 |
 | D27 | **`GameData/` holds the real files as ordinary Git objects**, not LFS pointer files, amending D12. Every clone carries them. | owner | after Phase 5 |
 | D28 | **`launch.exe` finds `GameData/` itself**: it looks in its own folder and then in each parent, and works from the first that holds `GameData/`. `cache/` and `mod/` land beside it and are git-ignored. | owner | after Phase 5 |
+| D29 | **The 79 Ogg sounds land in `GameData/` as they are**, answering O13, and the owner converts them to WAV offline, as D16 has it. The code keeps naming the `.wav` files. Both forms stay in the repository's history. | owner | after the merge |
 
 ## 2. Environment
 
@@ -795,8 +797,8 @@ only. §15.4 gives the reasoning for each entry.
 - **`launch.exe` changes to the folder that holds `GameData/`**, which it finds by looking in its
   own folder and then upward. The original looked in its working directory and one level up.
   `cache/` and `mod/` follow the working directory (BR8).
-- **The assets are real files in the repository**, apart from the 79 Ogg sounds (O13). The
-  original keeps them in Git LFS.
+- **The assets are real files in the repository**, all 230 of the original's LFS files (D27,
+  D29). The original keeps them in Git LFS.
 - **Four developer widgets name `GameData/`** where the original named its author's own checkout,
   `../lt/resource/` (§11).
 
@@ -972,8 +974,8 @@ Recorded, not to be done in this migration:
   `resource/texture/`. They come from a clone of `JoshParnell/ltheory-old` made with Git LFS
   installed. Copy only those: FrontierOutpost changed six scripts in `resource/script/` (§11) and
   removed `resource/music/` (D17). Then the Ogg sounds become WAV files (O10).
-  - **Resolved by D27 for 151 of the 230**, now in `GameData/`. The migration workflow's one-off
-    job fetched and committed them (§22.3). The 79 Ogg sounds are still pointers (O13).
+  - **Resolved by D27 and D29:** all 230 are real files in `GameData/`. A one-off job fetched and
+    committed them (§22.3, §22.5).
 - **O6** For Win32, MSBuild's own total (86 warnings) is *lower* than the de-duplicated count
   (229), which should be impossible if both count the same thing. This is unexplained.
   - The raw logs are in the run's `baseline-Win32` and `baseline-x64` artifacts, which this
@@ -1000,10 +1002,13 @@ Recorded, not to be done in this migration:
   `<name>_ogg.wav`. The formats XAudio2 plays are PCM (16-bit, at the file's own rate and channel
   count, is lossless against the decoded Vorbis), IEEE float and MS-ADPCM. It does not play
   IMA ADPCM.
+  - Since D29, the Ogg sources are real files in `GameData/sound/`, beside where their WAV files
+    go. Whether the Ogg files then leave the tree is the owner's call: they stay in the history
+    either way.
 - **O11** The XAudio2 engine is verified by compiling it, not by listening to it. No runner has an
   audio device, and the sounds here were LFS pointers (D12, D13). Since D27 the 51 WAV sounds are
-  real files; the 79 Ogg sounds are not (O13). AGENTS.md §3: audio has to be run to be checked,
-  and that is the owner's to do.
+  real files, and since D29 so are the 79 Ogg sounds, which still have to become WAV (O10).
+  AGENTS.md §3: audio has to be run to be checked, and that is the owner's to do.
 - **O12** (Phase 4) **A threaded job's results reached the main thread through a plain `bool`.**
   **Resolved by D20: option A.** In `src/liblt/LTE/Thread.cpp`, the worker sets `finished = true` (line
   47) after `job->OnRun()`. The Scheduler polls `IsFinished()` (`Module/Scheduler.cpp:90`) and, once
@@ -1033,6 +1038,8 @@ Recorded, not to be done in this migration:
 
   Until one is chosen, D16 stands, and each of those sounds stops the game the first time it plays
   (O10).
+  - **Resolved by D29: commit the Ogg files and convert later.** The Ogg files landed (§22.5), and
+    the owner converts them.
 - **O14** (D27, AGENTS.md R14) **Licence texts that the original does not carry:**
   - **The three Noto fonts** had no licence file beside them, unlike the other 36 font folders
     (§6): `GameData/font/NotoSans/Regular.ttf` and `Bold.ttf`, and
@@ -1624,8 +1631,8 @@ GLEW as C (§18.1).
 - **Language:** C++23 (`/std:c++latest`) and conformance mode for first-party code; C++23 for five
   SFML projects (§10.4).
 - **Platforms:** x64 and ARM64, not Win32 (§10.2).
-- **Runtime data:** `GameData/` at the repository root. It holds real files in place of 151 of
-  the 230 LFS pointers, and `launch.exe` finds it from its own folder upward (§10.5, ADR-004).
+- **Runtime data:** `GameData/` at the repository root. It holds the real files in place of all
+  230 LFS pointers, and `launch.exe` finds it from its own folder upward (§10.5, ADR-004).
 
 ### 21.3 BEHAVIOUR-RISK
 
@@ -1660,14 +1667,14 @@ at `/W4`, and GLEW raise none.
 
 ### 21.6 Open issues
 
-- **O13 and O14: the owner's to decide.** How the 79 Ogg sounds land (O13; until then D16 stands,
-  and O10 is the owner's to do). And the licence notice for SMAA's shader source (O14).
+- **O10: the owner's to do.** Convert the 79 Ogg sounds, in `GameData/sound/` since D29, to WAV.
 - **O11:** then listen to the sounds.
+- **O14: the owner's to decide.** The licence notice for SMAA's shader source.
 - **O4:** ARM64 builds have not been run, for want of an ARM64 machine.
-- O1 and O7 describe the environment and the source material. O5 is resolved for 151 of its 230
-  files (§22.3). O2, O3, O8, O9 and O12 are resolved, and O6 is closed (D24).
+- O1 and O7 describe the environment and the source material. O2, O3, O5, O8, O9, O12 and O13
+  are resolved, and O6 is closed (D24).
 
-## 22. GameData (D26–D28)
+## 22. GameData (D26–D29)
 
 After Phase 5, the owner moved the runtime data out of the code tree (D26), as real files (D27),
 and had `launch.exe` find them itself (D28). ADR-004 records the decision.
@@ -1757,7 +1764,7 @@ up from there until a folder holds `GameData/`, and changes to that folder. If n
   committed the three fonts, 16.2 MB, as `3b19c0b`. They were checked again in the container, as
   above.
 - **In all, 151 of the 230 are real files, 214.1 MB.** Still pointers: the 79 Ogg sounds, 55.8 MB
-  (O13).
+  (O13), until D29 (§22.5).
 - **Licences** (AGENTS.md R14):
   - Every font folder carries its licence: 34 the SIL Open Font License, three the Apache License
     (Droid Sans and the two Noto folders), and Ubuntu's the Ubuntu Font Licence (§6).
@@ -1799,3 +1806,22 @@ they would have repeated run 15 on the same code.
 `3b19c0b`. What they measured stays in this file. From here on:
 - the repository's `build.yml` builds Debug|x64 for every pull request;
 - Release and ARM64 are built by hand before a release (AGENTS.md §6).
+
+### 22.5 The Ogg sounds (D29)
+
+After the merge, the owner answered O13: the 79 Ogg sounds land as they are, and the owner
+converts them to WAV offline (D29). D16 stands, so the code and the scripts keep naming the
+`.wav` files.
+
+- **How.** The asset job and its script came back from `3b19c0b` for one run, as a temporary
+  `assets.yml` workflow on the branch restarted from `main` (`3e647ac`). With nothing skipped or
+  held, the job of
+  [Assets run 1](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36121700439) replaced
+  the 79 remaining pointer files and pushed `8ff228c`: 79 files, 55.8 MB. They were checked again
+  in the container, as in §22.3. The commit after it removed the workflow and the script.
+- **Now.** All 230 of the original's LFS files are real files in `GameData/`, 269.9 MB. No pointer
+  file is left.
+- **Still to do (O10).** The engine plays WAV files only. The code names `<name>.wav`, or
+  `<name>_ogg.wav` for `ui/objectmenuopen` and `warpnode/exit`, whose `.wav` names are taken.
+  Until the converted files are in `GameData/sound/`, each of those sounds stops the game the
+  first time it plays.
