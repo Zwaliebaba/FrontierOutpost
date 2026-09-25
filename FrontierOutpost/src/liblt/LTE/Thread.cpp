@@ -1,12 +1,13 @@
 #include "Thread.h"
 
-#include "AutoPtr.h"
 #include "Job.h"
 #include "Lock.h"
 
-#include "SFML/System.hpp"
-
 #include <atomic>
+#include <chrono>
+#include <climits>
+#include <memory>
+#include <thread>
 
 namespace {
   Lock GetThreadLock() {
@@ -17,22 +18,33 @@ namespace {
 
   struct ThreadImpl : public ThreadT {
     Job job;
-    AutoPtr<sf::Thread> thread;
-    std::atomic<bool> finished;
+    /* Shared with the thread, which outlives this object once it is detached. */
+    std::shared_ptr<std::atomic<bool>> finished;
+    std::jthread thread;
 
     ThreadImpl(Job const& job) :
       job(job),
-      finished(false)
+      finished(std::make_shared<std::atomic<bool> >(false))
     {
       ScopedLock lock(GetThreadLock());
       job->OnBegin();
-      thread = new sf::Thread(&ThreadImpl::Run, this);
-      thread->launch();
+      /* The thread gets the job as a raw pointer: reference counts are not atomic, so only this
+         thread touches them. */
+      JobT* run = job.t;
+      thread = std::jthread([run, done = finished] {
+        run->OnRun(UINT_MAX);
+        done->store(true, std::memory_order_release);
+      });
     }
 
     ~ThreadImpl() {
-      if (!finished.load(std::memory_order_acquire))
+      if (!IsFinished()) {
+        /* Still running: no OnEnd, which would race with it. */
         Terminate();
+        return;
+      }
+      if (thread.joinable())
+        thread.join();
       job->OnEnd();
     }
 
@@ -41,21 +53,23 @@ namespace {
     }
 
     bool IsFinished() const {
-      return finished.load(std::memory_order_acquire);
+      return finished->load(std::memory_order_acquire);
     }
 
-    void Run() {
-      job->OnRun(UINT_MAX);
-      finished.store(true, std::memory_order_release);
-    }
-
+    /* SFML ended the thread with TerminateThread, which has no safe equivalent. The thread is
+       detached instead, and runs until its job returns or the process exits. The extra reference
+       is never released, so the job outlives it. */
     void Terminate() {
       ScopedLock lock(GetThreadLock());
-      thread->terminate();
+      if (thread.joinable()) {
+        job->RefCountIncrement();
+        thread.detach();
+      }
     }
 
     void Wait() {
-      thread->wait();
+      if (thread.joinable())
+        thread.join();
     }
   };
 }
@@ -65,9 +79,9 @@ Thread Thread_Create(Job const& job) {
 }
 
 DefineFunction(Thread_SleepMS) {
-  sf::sleep(sf::milliseconds(args.ms));
+  std::this_thread::sleep_for(std::chrono::milliseconds(args.ms));
 }
 
 DefineFunction(Thread_SleepUS) {
-  sf::sleep(sf::microseconds(args.us));
+  std::this_thread::sleep_for(std::chrono::microseconds(args.us));
 }

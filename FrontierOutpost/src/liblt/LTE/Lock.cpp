@@ -1,10 +1,11 @@
 #include "Lock.h"
 
-#include "SFML/System/Mutex.hpp"
+#include <mutex>
 
 namespace {
+  /* Recursive, as SFML's mutex was: a critical section. */
   struct LockImpl : public LockT {
-    sf::Mutex mutex;
+    std::recursive_mutex mutex;
 
     void Acquire() {
       mutex.lock();
