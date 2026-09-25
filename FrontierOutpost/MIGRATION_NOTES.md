@@ -34,6 +34,7 @@ phase.
 | D11 | **Copy scope is the Windows-relevant subset (§8.3 item 4):** no other-OS binaries, no SFML examples, docs, tools or CMake files. | owner | Checkpoint 0 |
 | D12 | **Runtime assets are committed as the LFS pointer files** they are in `ltheory-old-main/`. Nothing fetches the real objects, because D13 removes the smoke test. | owner | Checkpoint 0 |
 | D13 | **The Phase 5 smoke test is dropped**, as the brief allows. Done means all four configuration/platform combinations compile and link, with D9's blocker as the one acknowledged exception. | owner | Checkpoint 0 |
+| D14 | **`extlib/win32` and `extbin/win32` are left out of the copy**, amending D11. They hold the original's 9 x86 prebuilt binaries (FMOD Ex, GLEW, FreeType, zlib; 4.7 MB). Upstream keeps them in LFS, and their pointer files cannot be pushed here (GitHub GH008, §15.1). No FrontierOutpost platform can link or load x86 files. | owner | Phase 1 |
 
 ## 2. Environment
 
@@ -728,6 +729,7 @@ only. §15.4 gives the reasoning for each entry.
   settings follow their upstream builds, not §9.3: FreeType's `vc2010` project compiles at `/W4`
   without C4001 and with `/Za`, except `ftdebug.c`; GLEW uses the shared defaults.
 - **`launch` also references `freetype` and `glew`**, so that both are built before it links them.
+- **No x86 binaries** in the copy (D14): the original's `extlib/win32` and `extbin/win32`.
 - **Platforms:** x64 and ARM64 only, as the brief says. Neither the original's Win32 nor the
   deleted Visual Studio template's x86 (§15.2) is carried over. ARM64 gets no `/arch`.
 
@@ -794,11 +796,9 @@ Recorded, not to be done in this migration:
   cannot link, so neither can `launch`, and Phase 2's gate cannot pass. Meanwhile the
   `frontieroutpost` job probes `lt`'s link without the FMOD libraries, to show whether anything
   else is missing (§15.6).
-- **O9** (§15.1) `extlib/win32` and `extbin/win32` are not in the copy, contrary to the approved
-  scope (§8.3 item 4, D11). Upstream keeps the 9 files (4.7 MB of x86 FMOD Ex, GLEW, FreeType and
-  zlib binaries) in LFS; their pointer files cannot be pushed here (GitHub GH008), and the
-  container cannot fetch the real files. No FrontierOutpost platform uses them. Owner's decision
-  pending: leave them out, or have the real files committed.
+- **O9** (§15.1) `extlib/win32` and `extbin/win32` could not be copied as the approved scope
+  said (§8.3 item 4, D11), because GitHub refuses their LFS pointer files. **Resolved by D14:**
+  they are left out.
 
 ## 15. Phase 1: structure
 
@@ -814,7 +814,7 @@ copied file is byte-identical to its source.
 | `include/` | 122 | upstream | every vendored header, used or not (§6) |
 | `resource/` | 634 | upstream | runtime assets, 284 of them LFS pointer files (D12) |
 | `script/` | 6 | upstream | the author's manual generators and tools (§5.1) |
-| `extlib/win32/`, `extbin/win32/` | **0** | — | **Not copied (O9).** Upstream stores these 9 x86 files in LFS and the container cannot fetch LFS objects (O5), so the copy would be LFS pointer files. GitHub refuses a push that adds pointers for LFS objects this repository does not hold (GH008). No FrontierOutpost platform can link or load x86 files. |
+| `extlib/win32/`, `extbin/win32/` | **0** | — | **Not copied (D14).** Upstream stores these 9 x86 files in LFS and the container cannot fetch LFS objects (O5), so the copy would be LFS pointer files. GitHub refuses a push that adds pointers for LFS objects this repository does not hold (GH008). No FrontierOutpost platform can link or load x86 files. |
 | `LICENSE`, `README.md` | 2 | upstream | |
 | `ext/SFML/` | 483 | SFML `192eb968` | `src/` (every platform's sources, as upstream has them), `include/`, `extlibs/headers`, `extlibs/libs-msvc-universal/{x86,x64}`, `extlibs/bin/{x86,x64}`, `license.md`, `readme.md`, `changelog.md`, `CONTRIBUTING.md` |
 | `ext/freetype/` | 461 | FreeType `VER-2-5-5` (`232bd948`) | `include/`; `src/` without the other build systems' files (`tools/`, `Jamfile`, `rules.mk`, `module.mk`); `builds/windows/ftdebug.c`; the licences `docs/FTL.TXT`, `docs/GPLv2.TXT` and `docs/LICENSE.TXT`; `README` |
@@ -826,7 +826,7 @@ Left out, per D11 and the brief:
 - `configure.py`, the author's CMake driver;
 - ltheory's `.gitattributes`, `.gitignore` and `.gitmodules`;
 - `extbin/linux32`, `linux64` and `osx`;
-- for now, `extlib/win32` and `extbin/win32` (O9);
+- `extlib/win32` and `extbin/win32` (D14);
 - SFML's `examples/`, `doc/`, `tools/`, and its prebuilt libraries for other platforms and for
   MSVC before 2015.
 
