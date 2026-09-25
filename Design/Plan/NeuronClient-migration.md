@@ -5,7 +5,8 @@ DirectWrite, WIC, XAudio2 and Win32.
 
 - **Status:** Proposed, 2026-09-25. The owner took decisions N1–N13 the same day (§2). Phase 0 is
   done (§6): ADR-005 to ADR-013 are Proposed, the checkers run in CI, and the startup fixes are in
-  (`ea07b9c`). Phase 1 is under way. Nothing of NeuronClient exists yet.
+  (`ea07b9c`). Phase 1's removals are in (`04d440b` to `f20c684`); ADR-013 records what went. Its
+  done-when still needs the owner to see the 16 kept apps start. Nothing of NeuronClient exists yet.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and

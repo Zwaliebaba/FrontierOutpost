@@ -67,6 +67,49 @@ Removal comes first, while OpenGL still renders, so a fault it causes cannot be 
      stay, with their licences (ADR-010).
    - **Textures:** `icon.png` and `splash.png`.
 
+## What went (Phase 1, 2026-09-25)
+
+Every candidate above was re-verified against the tree before it went, by reachability from
+`launch.exe`, the 16 kept apps and every script C++ loads by name. `Build/CheckSounds.py` decided
+the sounds. A clang syntax pass over `lt` and `launch` checked each code commit before it was
+pushed, and CI's four-way build after.
+
+- **Apps** (`04d440b`): the 12 listed, with `App/Life/`. 16 stay, and they reach all 121 remaining
+  scripts.
+- **Code** (`788983a`): the list, with these differences.
+  - More went than listed:
+    - the whole Button and Axis binding system, which only the C++ HUD used;
+    - `Config.cpp`, which nothing called, and so `cache/config.txt`, which nothing wrote
+      (ADR-004);
+    - all of `Strukt/` and `CodeGen/`, not only `CodeObject_Custom` and `CodeBlock.h`;
+    - SFML's Audio, Main and Network modules, and the `extlibs` libraries and headers nothing
+      used (ADR-002);
+    - the scripts `Common/Grammar`, `Task/Test` and `Widget/RadialButton`;
+    - the Thread and StringList script APIs, which only the removed apps used.
+  - Less went than listed: `GLU::CreateTexture2D`, which `Texture2D` uses, and GLEW's `wglew.h`
+    and `glxew.h`, which `glew.c` includes. They go with OpenGL and GLEW in Phase 4.
+    `KeyWithModifiers` is not in the tree.
+- **Passes, shaders and SDF nodes** (`e75f064`):
+  - the eight passes and the imposter renderable;
+  - the rect glyph, the flat-colour shading model and two materials nothing called;
+  - 38 shader files, 1,011 lines, leaving 131 of 169;
+  - 15 SDF node types, leaving 9: Cylinder, FractalWorley, Radial, RoundBox, Scale, Shell,
+    Sphere, Subtract and Torus.
+
+  `ShadingModel_Debug` stays: `Materials.cpp`'s `kDebug` switch uses it.
+- **Assets** (`f20c684`):
+  - 34 font families;
+  - the `FontPreview` and `SplashScreen` widgets;
+  - `icon.png` and `splash.png`;
+  - 31 WAV and 55 Ogg sounds that nothing names, leaving 20 WAV files and the 24 Ogg files that
+    are to be converted (FrontierOutpost/MIGRATION_NOTES.md O10);
+  - 52 of the 53 files in `gamedata/`, which the survey did not list. Only
+    `grammar/default.txt` is read.
+
+  `GameData/` holds 324 files, 39 MB, where it held 630.
+- **Not removed:** 300 of the 759 script bindings are called by no remaining script. Some of them
+  C++ calls. Whether the script API is swept too is the owner's decision.
+
 ## What this forecloses
 
 - **Porting any confirmed item** to Direct3D 12, HLSL or NeuronClient.
