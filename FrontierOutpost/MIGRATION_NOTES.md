@@ -14,7 +14,8 @@ The owner then replaced FMOD Ex with XAudio2 on both platforms (D15, ADR-003, §
 repository's CI to build Debug|x64 (D19). **With that, Phase 2 is done: x64 Debug and Release
 build and link from a clean checkout (§16, run 7), and the repository's CI is green.** **Phase 3
 is done: x64 Debug and Release link at C++23** (§18), after one round of conformance fixes.
-**Phase 4, ARM64, is in progress** (§19), with one question for the owner (O12).
+**Phase 4 is done: ARM64 Debug and Release link** (§19). Next is Phase 5, verification. One
+question waits on the owner (O12).
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -877,10 +878,18 @@ Recorded, not to be done in this migration:
 - `include/GL/GL.H`/`GLU.H` shadow the SDK headers.
 - `offsetof` through null pointers (H9).
 - FMOD Ex was discontinued in 2014. FMOD Core/Studio 2.x is the maintained line and has ARM64.
+  Moot since D15: XAudio2 replaced it.
 - `OS_Spawn` (`src/liblt/LTE/OS.cpp:176-190`) leaks the `strdup` of its path on Windows, where
   `argv` is unused, and never closes the process and thread handles `CreateProcess` returns.
 - `sfml-audio` needs `std::auto_ptr` (`AudioDevice.cpp:110`, `:128`), and so C++14 (§18.1). SFML
   2.5.1 still has it; 2.6.0 replaced it (checked against both tags).
+- The original's 580 conversion warnings in `lt` (C4267, C4244; §19.3).
+- ARM64 builds use MSBuild's default cross compiler, the x86-hosted one (`HostX86\arm64`, §19.3).
+  `PreferredToolArchitecture=x64` would select the 64-bit-hosted one, which has no 4 GB address
+  space limit. Nothing has needed it.
+- `README.md` and `script/install_dependencies.sh` are the original's, copied unchanged: they
+  describe its CMake build and `configure.py`, which the copy leaves out. FrontierOutpost builds
+  from `FrontierOutpost.slnx`.
 
 ## 14. Open issues
 
@@ -903,6 +912,10 @@ Recorded, not to be done in this migration:
   - Phase 2 will compare **unique warnings by code, from the same script over both builds**,
     which is like for like whatever MSBuild's total means. It will also print raw counts to
     settle O6.
+  - Phase 3 found one mechanism (§18.3): the summary counts the continuation lines MSVC writes for
+    a template's arguments as warnings of their own, and MSBuild does not. Whether that accounts
+    for all of Win32's difference is not established; FrontierOutpost's own builds do not show it
+    (MSBuild's total is above the unique count in all four).
 - **O7** This container can read job logs but not artifacts. The owner can download them from the
   run page.
 - **O8** (D8) The owner's FMOD Ex x64 files are not in the tree yet. **Superseded by D15:** no
@@ -1398,4 +1411,20 @@ warnings can be compared only once it compiles without error.
 
 ### 19.3 The build on the host
 
-Pending: the first ARM64 run.
+**Gate passed** at the first attempt, in
+[Migration run 12](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36109436424)
+(commit `a5444f1`):
+
+- **ARM64 Debug and Release link** from a clean checkout, in 6 min 19 s and 9 min 40 s.
+- **Every output is ARM64**, according to `dumpbin /headers`: `lt.dll`, `lt.lib`, `launch.exe`,
+  and the eight static libraries (SFML's six, FreeType and GLEW).
+- **Warnings: x64's, exactly.** 585 unique (C4267 358, C4244 224, C4996 3), in the same projects.
+- **Command lines: x64's**, apart from what MSBuild sets for ARM64 of its own accord: the
+  x86-hosted cross compiler (`HostX86\arm64`, where x64 uses `HostX64\x64`), `/Oy-`, `/analyze-`,
+  the SDK's `_ARM64_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE=1`, no `/arch`, `/MACHINE:ARM64`, and
+  the SDK's x86 `rc.exe`.
+- **Imports: x64's.** `lt.dll` imports per DLL what the x64 one does, `XAudio2_9.dll` included,
+  and one KERNEL32 function more; `launch.exe` imports its 24 functions from `lt.dll`. The other
+  differences are the C runtime's: ARM64 has no `VCRUNTIME140_1.dll`, which exists for x64 only,
+  and its startup code imports a few more KERNEL32 functions.
+- **Not run:** no runner executes ARM64 (O4). Whether ARM64 also behaves like x64 depends on O12.
