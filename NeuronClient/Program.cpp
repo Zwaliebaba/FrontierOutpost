@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <exception>
 #include <format>
 #include <utility>
 
@@ -207,19 +208,20 @@ std::string_view Program::HlslName(std::string_view _glslName) noexcept
   return _glslName;
 }
 
-Program Program::Make(GraphicsCore& _core, const Desc& _desc)
+Program Program::Make(const std::shared_ptr<GraphicsCore>& _core, const Desc& _desc)
 {
   Program program;
+  GraphicsCore& core = *_core;
   const bool compute = !_desc.computeShader.empty();
   const bool graphics = !_desc.vertexShader.empty() && !_desc.pixelShader.empty();
   if (compute == graphics || (compute && (!_desc.vertexShader.empty() || !_desc.pixelShader.empty())))
   {
-    _core.Fail(std::format("Direct3D 12: program {} needs a vertex and a pixel shader, or a compute shader alone", _desc.name));
+    core.Fail(std::format("Direct3D 12: program {} needs a vertex and a pixel shader, or a compute shader alone", _desc.name));
     return program;
   }
   auto native = std::make_unique<Native>();
   native->name = std::string(_desc.name);
-  native->id = _core.nextProgramId++;
+  native->id = core.nextProgramId++;
   native->compute = compute;
   native->vertexShader.assign(_desc.vertexShader.begin(), _desc.vertexShader.end());
   native->pixelShader.assign(_desc.pixelShader.begin(), _desc.pixelShader.end());
@@ -230,17 +232,58 @@ Program Program::Make(GraphicsCore& _core, const Desc& _desc)
                                      native->Reflect(native->pixelShader, ShaderStage::Pixel, error);
   if (!reflected)
   {
-    _core.Fail(std::format("Direct3D 12: program {}: {}", native->name, error));
+    core.Fail(std::format("Direct3D 12: program {}: {}", native->name, error));
     return program;
   }
+  // The values start at zero, as GL's uniforms did.
+  for (std::size_t stage = 0; stage < native->constants.size(); ++stage)
+  {
+    native->constantValues[stage].assign(native->constants[stage].sizeBytes, std::byte{0});
+  }
+  program.m_core = _core;
   program.m_native = std::move(native);
   return program;
 }
 
 Program::Program() noexcept = default;
-Program::~Program() = default;
+
+Program::~Program()
+{
+  Release();
+}
+
 Program::Program(Program&& _other) noexcept = default;
-Program& Program::operator=(Program&& _other) noexcept = default;
+
+Program& Program::operator=(Program&& _other) noexcept
+{
+  if (this != &_other)
+  {
+    Release();
+    m_core = std::move(_other.m_core);
+    m_native = std::move(_other.m_native);
+  }
+  return *this;
+}
+
+/// An exception cannot be reported from here, so one, which can only be memory running out, ends
+/// the program.
+void Program::Release() noexcept
+{
+  if (!m_native)
+  {
+    return;
+  }
+  try
+  {
+    m_core->ForgetProgram(*m_native);
+  }
+  catch (...)
+  {
+    std::terminate();
+  }
+  m_native.reset();
+  m_core.reset();
+}
 
 Program::operator bool() const noexcept
 {
@@ -273,6 +316,37 @@ std::vector<ProgramConstant> Program::FindConstant(std::string_view _name) const
     }
   }
   return found;
+}
+
+void Program::SetConstant(std::span<const ProgramConstant> _where, std::span<const std::byte> _bytes)
+{
+  if (!m_native)
+  {
+    return;
+  }
+  for (const ProgramConstant& constant : _where)
+  {
+    // One from another program's FindConstant could lie outside this one's $Globals.
+    const std::size_t stageBytes = m_native->constantValues[static_cast<std::size_t>(constant.stage)].size();
+    if (_bytes.size() > constant.sizeBytes || std::size_t{constant.offsetBytes} + constant.sizeBytes > stageBytes)
+    {
+      m_core->Fail(std::format("Direct3D 12: program {} was given {} bytes for a constant of {} at {}", m_native->name, _bytes.size(),
+                               constant.sizeBytes, constant.offsetBytes));
+      return;
+    }
+  }
+  for (const ProgramConstant& constant : _where)
+  {
+    std::vector<std::byte>& values = m_native->constantValues[static_cast<std::size_t>(constant.stage)];
+    std::ranges::copy(_bytes, values.begin() + constant.offsetBytes);
+  }
+}
+
+bool Program::SetConstant(std::string_view _name, std::span<const std::byte> _bytes)
+{
+  const std::vector<ProgramConstant> where = FindConstant(_name);
+  SetConstant(where, _bytes);
+  return !where.empty();
 }
 
 int Program::ShaderResourceSlot(std::string_view _name) const noexcept

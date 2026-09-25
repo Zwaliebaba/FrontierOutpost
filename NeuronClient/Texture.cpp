@@ -246,15 +246,17 @@ Texture& Texture::operator=(Texture&& _other) noexcept
   return *this;
 }
 
-/// The resource goes once the GPU has finished with what was recorded so far. The release holds
-/// the texture's objects and not the core, which runs it. An exception cannot be reported from
-/// here, so one, which can only be memory running out, ends the program.
+/// The resource goes once the GPU has finished with what was recorded so far, and stops being a
+/// target now. The release holds the texture's objects and not the core, which runs it. An
+/// exception cannot be reported from here, so one, which can only be memory running out, ends the
+/// program.
 void Texture::Release() noexcept
 {
   if (!m_native)
   {
     return;
   }
+  m_core->ForgetTexture(*m_native);
   try
   {
     m_core->DeferRelease([native = std::shared_ptr<Native>(std::move(m_native))] {});

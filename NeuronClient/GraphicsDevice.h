@@ -107,6 +107,10 @@ public:
   /// Releases waiting for the GPU.
   [[nodiscard]] std::size_t PendingReleases() const noexcept;
 
+  /// Pipeline states the context holds: one for each program and state a draw has used, made at
+  /// the first such draw.
+  [[nodiscard]] std::size_t PipelineStates() const noexcept;
+
   /// The messages the debug layer stored since the last call, oldest first: corruption, errors
   /// and warnings, each with its severity and ID. Empty without the debug layer.
   [[nodiscard]] std::vector<std::string> TakeDebugMessages();

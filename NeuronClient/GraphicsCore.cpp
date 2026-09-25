@@ -183,4 +183,20 @@ void GraphicsCore::Retire()
   RunReleases(completed);
 }
 
+void GraphicsCore::ForgetTexture(const Texture::Native& _texture) noexcept
+{
+  if (context)
+  {
+    context->Forget(_texture);
+  }
+}
+
+void GraphicsCore::ForgetProgram(const Program::Native& _program)
+{
+  if (context)
+  {
+    context->Forget(_program);
+  }
+}
+
 } // namespace Neuron

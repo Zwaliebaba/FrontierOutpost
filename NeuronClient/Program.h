@@ -41,7 +41,8 @@ struct ProgramInput
 /// stage's $Globals at b0, its textures and structured buffers from t0 to t15, its samplers from s0
 /// to s15, and, for compute, what it writes from u0 to u7. Names are liblt's GLSL names: HLSL
 /// reserves texture and sample and has saturate and noise as intrinsics, so the HLSL spells those
-/// four with a trailing underscore, and the lookups here map them.
+/// four with a trailing underscore, and the lookups here map them. It keeps its constants' values
+/// on the CPU, as GL kept a program's uniforms, and each draw takes them as they are then.
 class Program
 {
 public:
@@ -62,6 +63,8 @@ public:
   [[nodiscard]] static std::string_view HlslName(std::string_view _glslName) noexcept;
 
   Program() noexcept;
+  /// Hands the program's pipeline states to its device, which releases them once the GPU has
+  /// finished with them, and unsets it where the context has it set.
   ~Program();
   Program(Program&& _other) noexcept;
   Program& operator=(Program&& _other) noexcept;
@@ -79,6 +82,15 @@ public:
   /// Where the constant _name sits in each stage that reads it: none, one or both of vertex and
   /// pixel.
   [[nodiscard]] std::vector<ProgramConstant> FindConstant(std::string_view _name) const;
+
+  /// Sets the constant at each of _where, as FindConstant gave them, to _bytes. _bytes may be
+  /// shorter than the constant, and its values stay until they are set again. One longer than the
+  /// constant is reported, and nothing is set.
+  void SetConstant(std::span<const ProgramConstant> _where, std::span<const std::byte> _bytes);
+
+  /// Sets the constant _name, in each stage that reads it, as the other SetConstant does. A name no
+  /// stage reads is not an error, as it was not in GL: nothing is set, and it returns false.
+  bool SetConstant(std::string_view _name, std::span<const std::byte> _bytes);
 
   /// The t register of the texture or structured buffer _name, or -1 when no stage reads it.
   [[nodiscard]] int ShaderResourceSlot(std::string_view _name) const noexcept;
@@ -98,12 +110,16 @@ public:
 private:
   friend class DrawContext;
   friend class GraphicsDevice;
+  friend struct GraphicsCore;
   struct Native;
 
-  /// Reflects the stages, or reports why the program cannot be used and returns an empty one. A
-  /// program holds nothing of the GPU's, so it needs nothing of the device's once made.
-  [[nodiscard]] static Program Make(GraphicsCore& _core, const Desc& _desc);
+  /// Reflects the stages, or reports why the program cannot be used and returns an empty one.
+  [[nodiscard]] static Program Make(const std::shared_ptr<GraphicsCore>& _core, const Desc& _desc);
 
+  /// Hands the program to its device, as the destructor does.
+  void Release() noexcept;
+
+  std::shared_ptr<GraphicsCore> m_core; // the device's, which the program keeps alive
   std::unique_ptr<Native> m_native;
 };
 

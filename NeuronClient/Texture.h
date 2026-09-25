@@ -82,6 +82,7 @@ public:
 private:
   friend class DrawContext;
   friend class GraphicsDevice;
+  friend struct GraphicsCore;
   struct Native;
 
   /// Makes the resource, or reports why not and returns an empty texture.

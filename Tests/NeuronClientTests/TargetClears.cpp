@@ -8,6 +8,7 @@
 
 #include "Check.h"
 #include "DrawContext.h"
+#include "ExactColors.h"
 #include "GraphicsDevice.h"
 #include "TestDevice.h"
 #include "Texture.h"
@@ -32,61 +33,10 @@ using Neuron::Texture;
 using Neuron::TextureDimension;
 using Neuron::TextureFormat;
 
-constexpr std::array<TextureFormat, 7> COLOR_FORMATS = {TextureFormat::R8,     TextureFormat::Rg8,     TextureFormat::Rgba8,
-                                                        TextureFormat::R16F,   TextureFormat::Rgba16F, TextureFormat::R32F,
-                                                        TextureFormat::Rgba32F};
-
-/// 51, 102, 153 and 204 in a UNORM format: each k / 255, which rounds back to k exactly.
-constexpr std::array<float, 4> UNORM_COLOR = {0.2f, 0.4f, 0.6f, 0.8f};
-constexpr std::array<std::uint8_t, 4> UNORM_BYTES = {51, 102, 153, 204};
-
-/// Exact in every float format, halves included, and outside [0, 1], which a float target keeps.
-constexpr std::array<float, 4> FLOAT_COLOR = {0.25f, -0.5f, 2.0f, 1024.0f};
-constexpr std::array<std::uint16_t, 4> FLOAT_HALVES = {0x3400, 0xB800, 0x4000, 0x6400};
-
 constexpr std::array<float, 4> TRANSPARENT_BLACK = {0.0f, 0.0f, 0.0f, 0.0f};
 
 /// More textures than a block of views holds.
 constexpr std::size_t MANY_TEXTURES = 300;
-
-bool IsFloat(TextureFormat _format) noexcept
-{
-  return _format == TextureFormat::R16F || _format == TextureFormat::Rgba16F || _format == TextureFormat::R32F ||
-         _format == TextureFormat::Rgba32F;
-}
-
-/// A colour every channel of _format stores exactly.
-const std::array<float, 4>& ExactColor(TextureFormat _format) noexcept
-{
-  return IsFloat(_format) ? FLOAT_COLOR : UNORM_COLOR;
-}
-
-/// _texels texels of _format as a clear to ExactColor leaves them, packed as ReadTexture gives them.
-std::vector<std::byte> Cleared(TextureFormat _format, std::size_t _texels)
-{
-  const std::uint32_t texelBytes = Neuron::TexelBytes(_format);
-  std::array<std::byte, 16> texel{};
-  switch (_format)
-  {
-  case TextureFormat::R16F:
-  case TextureFormat::Rgba16F:
-    std::memcpy(texel.data(), FLOAT_HALVES.data(), texelBytes);
-    break;
-  case TextureFormat::R32F:
-  case TextureFormat::Rgba32F:
-    std::memcpy(texel.data(), FLOAT_COLOR.data(), texelBytes);
-    break;
-  default:
-    std::memcpy(texel.data(), UNORM_BYTES.data(), texelBytes);
-    break;
-  }
-  std::vector<std::byte> texels(_texels * texelBytes);
-  for (std::size_t index = 0; index < _texels; ++index)
-  {
-    std::memcpy(&texels[index * texelBytes], texel.data(), texelBytes);
-  }
-  return texels;
-}
 
 /// _count copies of _value.
 std::vector<std::byte> Repeated(float _value, std::size_t _count)
@@ -165,7 +115,7 @@ public:
       Texture texture = Make(test, TextureDimension::Texture2D, format, 5, 3, 1, 1);
       test.device.Context().ClearColor(texture, 0, 0, ExactColor(format));
       const std::wstring where = std::format(L"format {}", static_cast<int>(format));
-      Assert::IsTrue(Read(test, texture, 0, 0) == Cleared(format, 15), where.c_str());
+      Assert::IsTrue(Read(test, texture, 0, 0) == ExactTexels(format, 15), where.c_str());
     }
     ExpectClean(test);
   }
@@ -190,7 +140,7 @@ public:
       {
         const std::size_t texels = LevelTexels(texture, mip);
         const std::vector<std::byte> expected =
-          face == 3 && mip == 1 ? Cleared(TextureFormat::Rgba8, texels) : std::vector<std::byte>(texels * 4);
+          face == 3 && mip == 1 ? ExactTexels(TextureFormat::Rgba8, texels) : std::vector<std::byte>(texels * 4);
         const std::wstring where = std::format(L"face {}, mip {}", face, mip);
         Assert::IsTrue(Read(test, texture, mip, face) == expected, where.c_str());
       }

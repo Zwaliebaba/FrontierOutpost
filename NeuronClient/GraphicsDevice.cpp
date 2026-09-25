@@ -132,6 +132,10 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
   core->queue->SetName(L"NeuronClient direct queue");
   core->fence->SetName(L"NeuronClient fence");
   core->context = std::unique_ptr<DrawContext>(new DrawContext(*core));
+  if (!core->context->Initialize(_error))
+  {
+    return false;
+  }
 
   _outDevice.m_core = std::move(core);
   return true;
@@ -169,7 +173,7 @@ Buffer GraphicsDevice::CreateBuffer(const Buffer::Desc& _desc)
 
 Program GraphicsDevice::CreateProgram(const Program::Desc& _desc)
 {
-  return m_core ? Program::Make(*m_core, _desc) : Program();
+  return m_core ? Program::Make(m_core, _desc) : Program();
 }
 
 DrawContext& GraphicsDevice::Context() noexcept
@@ -266,6 +270,11 @@ void GraphicsDevice::DeferRelease(std::function<void()> _release)
 std::size_t GraphicsDevice::PendingReleases() const noexcept
 {
   return m_core ? m_core->releases.size() : 0;
+}
+
+std::size_t GraphicsDevice::PipelineStates() const noexcept
+{
+  return m_core ? m_core->context->PipelineStates() : 0;
 }
 
 std::vector<std::string> GraphicsDevice::TakeDebugMessages()

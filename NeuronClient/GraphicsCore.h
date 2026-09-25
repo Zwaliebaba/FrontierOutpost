@@ -138,6 +138,13 @@ struct GraphicsCore
 
   /// Counts the frames the GPU has finished, and runs the releases it has finished with.
   void Retire();
+
+  /// A texture that goes stops being one of the context's targets.
+  void ForgetTexture(const Texture::Native& _texture) noexcept;
+
+  /// A program that goes stops being the context's, and its pipeline states are released once
+  /// the GPU has finished with them.
+  void ForgetProgram(const Program::Native& _program);
 };
 
 /// A texture's resource, and the state of each of its subresources as the context last left it.
@@ -207,6 +214,8 @@ struct Program::Native
   std::vector<std::byte> pixelShader;
   std::vector<std::byte> computeShader;
   std::array<Constants, 3> constants; // by ShaderStage
+  /// Each stage's $Globals as the CPU last set it, which each draw uploads.
+  std::array<std::vector<std::byte>, 3> constantValues;
   std::map<std::string, int, std::less<>> shaderResources;
   std::map<std::string, int, std::less<>> samplers;
   std::map<std::string, int, std::less<>> unorderedResources;
