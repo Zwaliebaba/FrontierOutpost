@@ -4,6 +4,7 @@
 #include "CompiledShaders/GenerateMipsCS.h"
 #include "DrawContext.h"
 #include "GraphicsCore.h"
+#include "Unicode.h"
 
 #include <algorithm>
 #include <array>
@@ -108,6 +109,10 @@ constexpr UINT VERTEX_CONSTANTS_PARAMETER = 0;
 constexpr UINT PIXEL_CONSTANTS_PARAMETER = 1;
 constexpr UINT SHADER_RESOURCES_PARAMETER = 2;
 constexpr UINT SAMPLERS_PARAMETER = 3;
+
+/// How BeginEvent's data is read without PIX's runtime: WINPIX_EVENT_UNICODE_VERSION, a UTF-16
+/// name and its terminator.
+constexpr UINT PIX_UNICODE_EVENT = 0;
 
 /// The compute root signature's.
 constexpr UINT COMPUTE_CONSTANTS_PARAMETER = 0;
@@ -421,6 +426,9 @@ struct DrawContext::Native
   std::vector<PendingRead> reads;
   std::uint64_t nextReadTicket = 1;
 
+  // The regions BeginEvent started that are still open, outermost first.
+  std::vector<std::wstring> events;
+
   explicit Native(GraphicsCore& _core)
     : core(_core)
   {
@@ -466,7 +474,18 @@ struct DrawContext::Native
     heapsReady = false;
     graphicsReady = false;
     computeReady = false;
+    // Each list begins the regions still open, and ends them before it goes, so that each is whole.
+    for (const std::wstring& event : events)
+    {
+      BeginEventOnList(event);
+    }
     return true;
+  }
+
+  /// Begins a region named _name in the open list.
+  void BeginEventOnList(const std::wstring& _name) const
+  {
+    list->BeginEvent(PIX_UNICODE_EVENT, _name.c_str(), static_cast<UINT>((_name.size() + 1) * sizeof(wchar_t)));
   }
 
   /// Submits the open list, if there is one, and marks the queue after it. What the list used is
@@ -476,6 +495,10 @@ struct DrawContext::Native
     if (open)
     {
       FlushBarriers();
+      for (std::size_t event = 0; event < events.size(); ++event)
+      {
+        list->EndEvent();
+      }
       if (core.Check(list->Close(), "ID3D12GraphicsCommandList::Close"))
       {
         const std::array<ID3D12CommandList*, 1> lists = {list.Get()};
@@ -1993,6 +2016,31 @@ void DrawContext::DrawTransient(std::span<const std::byte> _vertices, const Vert
 void DrawContext::Flush()
 {
   m_native->Submit();
+}
+
+void DrawContext::BeginEvent(std::string_view _name)
+{
+  Native& context = *m_native;
+  context.events.push_back(Utf8ToUtf16(_name));
+  if (context.open)
+  {
+    context.BeginEventOnList(context.events.back());
+  }
+}
+
+void DrawContext::EndEvent()
+{
+  Native& context = *m_native;
+  if (context.events.empty())
+  {
+    context.core.Fail("Direct3D 12: EndEvent was called with no event begun");
+    return;
+  }
+  context.events.pop_back();
+  if (context.open)
+  {
+    context.list->EndEvent();
+  }
 }
 
 } // namespace Neuron

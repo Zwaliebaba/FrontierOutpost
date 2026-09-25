@@ -1,6 +1,7 @@
 // NeuronClient/GraphicsCore.cpp
 #include "pch.h"
 
+#include "DeviceRemoval.h"
 #include "GraphicsCore.h"
 
 #include <exception>
@@ -123,8 +124,14 @@ void GraphicsCore::ReportRemoval()
     return;
   }
   removed = true;
-  const HRESULT reason = device->GetDeviceRemovedReason();
-  Fail(std::format("Direct3D 12: the device was removed (0x{:08x})", static_cast<unsigned long>(reason)));
+  // What DRED recorded, which GraphicsDevice::Create turned on (ADR-007).
+  Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedData> dred;
+  D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT breadcrumbs{};
+  D3D12_DRED_PAGE_FAULT_OUTPUT pageFault{};
+  const bool recorded = SUCCEEDED(device.As(&dred));
+  const bool haveBreadcrumbs = recorded && SUCCEEDED(dred->GetAutoBreadcrumbsOutput(&breadcrumbs));
+  const bool havePageFault = recorded && SUCCEEDED(dred->GetPageFaultAllocationOutput(&pageFault));
+  Fail(DescribeRemoval(device->GetDeviceRemovedReason(), haveBreadcrumbs ? &breadcrumbs : nullptr, havePageFault ? &pageFault : nullptr));
 }
 
 std::uint64_t GraphicsCore::Signal()

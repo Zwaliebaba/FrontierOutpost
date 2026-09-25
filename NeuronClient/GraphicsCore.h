@@ -121,6 +121,7 @@ struct GraphicsCore
   /// Reports a failed call, and a removed device once. Returns whether the call succeeded.
   bool Check(HRESULT _result, std::string_view _call);
 
+  /// Reports, once, that the device was removed, with what DRED recorded of the GPU's last work.
   void ReportRemoval();
 
   /// Marks the queue after everything submitted so far. Returns the value that marks it.

@@ -132,6 +132,7 @@
     <ClCompile Include="AudioOutput.cpp" />
     <ClCompile Include="ComputeDispatches.cpp" />
     <ClCompile Include="CubeTargets.cpp" />
+    <ClCompile Include="DebugEvents.cpp" />
     <ClCompile Include="DrawCalls.cpp" />
     <ClCompile Include="GlyphRendering.cpp" />
     <ClCompile Include="GraphicsDeviceFrames.cpp" />
@@ -139,6 +140,7 @@
     <ClCompile Include="KeyMapping.cpp" />
     <ClCompile Include="MipGeneration.cpp" />
     <ClCompile Include="ProgramReflection.cpp" />
+    <ClCompile Include="RemovalReports.cpp" />
     <ClCompile Include="ShaderReflection.cpp" />
     <ClCompile Include="SoundParsing.cpp" />
     <ClCompile Include="TargetClears.cpp" />

@@ -248,6 +248,15 @@ public:
   /// Submits what was recorded, without waiting for the GPU.
   void Flush();
 
+  /// Starts a region of the GPU's work named _name, which PIX and other capture tools show, until
+  /// the EndEvent that matches it. Regions nest, and stay open across Flush and frames: a command
+  /// list ends those still open before it goes to the GPU, and the next begins them again. They
+  /// are written as PIX reads them without its runtime (plan §5.3; R14).
+  void BeginEvent(std::string_view _name);
+
+  /// Ends the region BeginEvent started last. With none open, it is reported.
+  void EndEvent();
+
 private:
   friend class GraphicsDevice;
   friend struct GraphicsCore;
