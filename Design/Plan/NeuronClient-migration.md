@@ -3,7 +3,7 @@
 How FrontierOutpost moves off OpenGL, GLEW, SFML and FreeType onto NeuronClient: Direct3D 12,
 DirectWrite, WIC, XAudio2 and Win32.
 
-- **Status:** Proposed, 2026-09-25. The owner took decisions N1–N7 the same day (§2). Nothing in
+- **Status:** Proposed, 2026-09-25. The owner took decisions N1–N9 the same day (§2). Nothing in
   this plan has been built or run.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
@@ -51,6 +51,8 @@ has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
 | N5 | **AVX2 on x64.** NeuronClient compiles with `/arch:AVX2`, which puts the game's CPU floor at Intel Haswell or AMD Excavator. ARM64 keeps the compiler's default. | owner |
 | N6 | **A missing sound is a logged warning,** not the end of the program. The owner's WAV conversion (O10) can land whenever it is ready. | owner |
 | N7 | **Vsync stays off,** as it is today. | owner |
+| N8 | **RandomScreenshot shows a plain colour,** in place of a screenshot from the original author's folder. | owner |
+| N9 | **A sound file that exists but that XAudio2 cannot play stays fatal.** N6 covers missing files only: an unplayable one is a broken asset. | owner |
 
 What N2 and N3 mean in practice. The first two points correct what the question offered:
 
@@ -109,11 +111,16 @@ What N2 and N3 mean in practice. The first two points correct what the question 
 6. **Most of the apps to keep cannot start today.**
    - `GameData/script/Texture/RandomScreenshot.lts:2` loads `/home/josh/Dropbox/lt/screenshot`, the
      original author's folder. Seven kept apps and the DevPanel use it, and a failed load exits the
-     program.
+     program. N8 replaces it with a plain colour.
+   - The kept `image` app loads two files that exist nowhere, and so exits before RandomScreenshot is
+     reached:
+     - `data/screenshot/29.png`, the branch its `?` always takes (`GameData/script/App/image.lts:11`);
+     - `data/screenshot/10.png`, loaded into a variable that nothing reads
+       (`GameData/script/Widget/ImageEditor.lts:23`).
    - 9 of the 26 sounds the scripts play have no WAV yet (O10). Each stops the game the first time
      it plays; N6 turns that into a logged warning.
 
-   Nothing can be checked at run time until both are fixed (Phase 0).
+   Nothing can be checked at run time until all three are fixed (Phase 0).
 
 ## 4. Starting point
 
@@ -412,21 +419,35 @@ Phase 3 touches nothing in liblt; it can start once step 1 of Phase 2 has landed
    - The clang-format pin: `.clang-format` says 18.1.3, but `build.yml` installs 22.1.3.
 3. **Tag.** Tag the last OpenGL commit `gl-final`.
 4. **Make the apps to keep start.**
-   - Replace RandomScreenshot's hard-coded folder.
+   - **RandomScreenshot returns a plain colour (N8).** `Get` builds a 1×1 texture with calls
+     scripts already have (`Texture2D_Create`, `BeginDrawTo`, `DrawClear`, `EndDrawTo`) and reads no
+     file.
+     - The colour is one constant in `RandomScreenshot.lts`. It starts as a dark grey, and the owner
+       can change it.
+     - The name stays, so its nine callers do not change: seven kept apps, `launcher` and the
+       DevPanel.
+     - The branch through `Texture/Filters:Artistic` goes with the folder. Its `switch` never took
+       it, and Phase 1's reachability decides whether that filter is still used.
+   - **The `image` app's two missing files go** (§3). Its `?` keeps only the RandomScreenshot
+     branch, so it opens N8's colour, and the editor's unread load of `10.png` is deleted.
    - A missing sound becomes a logged warning, naming each file once, and the sound plays silence
      (N6). Today a missing file ends the program through `Log_Critical`
      (`Module/SoundEngine/XAudio2.cpp:548-561`). A file that is present but that XAudio2 cannot play
-     still stops at the assertion handler, as ADR-003 has it: that is a broken asset, not a missing
-     one.
+     still stops at the assertion handler, as ADR-003 has it and N9 confirms: that is a broken
+     asset, not a missing one.
 
 **Done when:** the checkers run green in CI, and the 16 apps to keep start on the owner's GPU.
 
 ### Phase 1: Remove what is unused
 
 1. **Apps first.** Then re-run the reachability analysis, over C++ callers and script callers,
-   because removing the apps shrinks what everything else reaches. The analysis also lists every
-   sound that code or scripts name and `GameData/sound` has no WAV for. That list, not the log, is
-   how N6's warnings stay visible.
+   because removing the apps shrinks what everything else reaches. The analysis also covers every
+   sound that code or scripts name:
+   - it lists each one that `GameData/sound` has no WAV for. That list, not the log, is how N6's
+     warnings stay visible;
+   - it parses each WAV that is there by the engine's own rules (PCM, IEEE float or MS-ADPCM), so a
+     file that would stop the game (N9) is found before the game plays it. A converted file in a
+     format XAudio2 refuses, such as IMA ADPCM, is the likely case (O10).
 2. **Then the other tiers,** one commit each: code, then passes and shaders, then assets. The lists
    are in §9.
 3. **ADR-013** records what went.
@@ -556,7 +577,8 @@ mode renders offscreen and never creates one.
 - **ADR-001:** a scope note. NeuronClient and its tests are outside the exemption.
 - **ADR-002:** superseded. No vendored dependency is left.
 - **ADR-003:** amended. The engine's mechanism lives in NeuronClient; the adapter stays in liblt. A
-  missing sound file becomes a logged warning (N6); a file XAudio2 cannot play still ends the program.
+  missing sound file becomes a logged warning (N6); a file XAudio2 cannot play still ends the program
+  (N9).
 - **ADR-004:** amended. `GameData/` holds no shaders, and the fonts are pruned.
 
 **Runtime files (R13).** None is added. Screenshots stay under `cache/screenshot/`. A PSO disk
@@ -622,6 +644,7 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 | Mixed build settings in one DLL | Always | NeuronClient at `/W4 /WX /fp:precise`, inside `lt` at `/W3 /fp:fast`, is fine for a static library. The CRT must match (`/MD`). |
 | The AVX2 floor (N5) shuts out older and low-power CPUs | Players' machines | Besides pre-Haswell and pre-Excavator CPUs, many low-power Pentium and Celeron chips lack AVX2. `launch.exe` checks at start and says so (Phase 2). |
 | Missing-sound warnings hide broken content (N6) | Every app with sound | Phase 1's list of named sounds without a WAV file, re-run whenever sounds or scripts change. |
+| A converted WAV that XAudio2 cannot play stops the game (N9) | The first time that sound plays | Phase 1's check parses every named WAV by the engine's rules, before anything runs. |
 | No automatic acceptance (N3) | Every phase | The owner signs off each phase. `gl-final` is kept for a side-by-side look. |
 
 ## 11. Not in this plan
@@ -634,7 +657,5 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 
 ## 12. Still open for the owner
 
-**RandomScreenshot.** What the background should be once the Dropbox folder is gone: the F1
-screenshots in `cache/screenshot/`, or a plain colour.
-
-N5–N7 settled the other open items: `/arch`, missing sounds and vsync.
+Nothing. N5–N9 settled the open items: `/arch`, missing sounds, vsync, RandomScreenshot's background
+and unplayable sound files.
