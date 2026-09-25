@@ -1,0 +1,136 @@
+name: NeuronClient migration
+
+# Temporary, for the length of the NeuronClient migration (Design/Plan/NeuronClient-migration.md §6).
+# The plan's rule is that all four builds pass after every step. build.yml builds Debug|x64, and
+# only for pull requests, so on every push to the migration branch this workflow does the rest:
+#
+#   build     FrontierOutpost.slnx at x64 and ARM64, Debug and Release, from a clean checkout, with
+#             each build's warnings counted by .github/migration/SummarizeBuildLog.py. The baseline
+#             is 613 warnings, 585 unique, in all four (FrontierOutpost/MIGRATION_NOTES.md §22.4).
+#   checks    Build/CheckProjectFiles.py and Build/RunClangTidy.py, as build.yml runs them.
+#   format    Build/CheckFormat.py on the pinned clang-format, and the checkers' own fixture tests.
+#
+# Each checker step is guarded on its script, as build.yml's are, so the workflow runs before the
+# checkers land. Phase 5 removes this file, as D21 removed the last migration's workflow.
+
+on:
+  push:
+    branches: [claude/exciting-bohr-bd5ear]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform }} ${{ matrix.configuration }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x64, ARM64]
+        configuration: [Debug, Release]
+
+    env:
+      # Not PLATFORM or CONFIGURATION: MSBuild reads every environment variable as a property.
+      FO_PLATFORM: ${{ matrix.platform }}
+      FO_CONFIGURATION: ${{ matrix.configuration }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build FrontierOutpost.slnx
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -prerelease -products * -property installationPath
+          $msbuild = & $vswhere -latest -prerelease -products * -requires Microsoft.Component.MSBuild `
+            -find 'MSBuild\**\Bin\amd64\MSBuild.exe' | Select-Object -First 1
+          $tools = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt" -Raw).Trim()
+          $dumpbin = "$vs\VC\Tools\MSVC\$tools\bin\Hostx64\x64\dumpbin.exe"
+          Write-Output "msbuild: $msbuild, version $(& $msbuild -version -nologo | Select-Object -Last 1)"
+          Write-Output "MSVC: $tools; runner image $env:ImageOS $env:ImageVersion"
+
+          $log = Join-Path $PWD "build-$env:FO_PLATFORM-$env:FO_CONFIGURATION.log"
+          & $msbuild FrontierOutpost.slnx /m /p:Configuration=$env:FO_CONFIGURATION /p:Platform=$env:FO_PLATFORM `
+            /nologo /v:quiet /clp:ErrorsOnly "/flp:LogFile=$log;Verbosity=normal"
+          $code = $LASTEXITCODE
+          Write-Output "== $env:FO_PLATFORM ${env:FO_CONFIGURATION}: exit code $code"
+          python .github/migration/SummarizeBuildLog.py "FrontierOutpost $env:FO_PLATFORM $env:FO_CONFIGURATION=$log"
+
+          # Every binary must be for the platform it was built for.
+          $out = "FrontierOutpost/bin/$env:FO_PLATFORM/$env:FO_CONFIGURATION"
+          Get-ChildItem $out -File -Include *.dll, *.exe, *.lib -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object Name | ForEach-Object {
+              $machine = & $dumpbin /headers $_.FullName | Select-String '(?i)machine\s*\((\w+)\)' |
+                ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique | Join-String -Separator ','
+              '   {0,-34} {1,14:N0}  {2}' -f $_.Name, $_.Length, $machine
+            }
+          exit $code
+
+      - name: Upload the build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform }}-${{ matrix.configuration }}
+          path: build-*.log
+          if-no-files-found: ignore
+
+  checks:
+    name: Project and clang-tidy checks
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check the build shape and the project registries
+        if: hashFiles('Build/CheckProjectFiles.py') != ''
+        shell: pwsh
+        run: python Build\CheckProjectFiles.py
+
+      - name: Run clang-tidy
+        if: hashFiles('Build/RunClangTidy.py') != ''
+        shell: pwsh
+        run: python Build\RunClangTidy.py
+
+      # The checkers against fixture trees that break each rule. On Windows this also takes
+      # RunClangTidy.py through Visual Studio's clang-tidy and the Windows SDK headers.
+      - name: Test the checkers
+        if: hashFiles('Build/TestCheckers.py') != ''
+        shell: pwsh
+        run: python Build\TestCheckers.py
+
+  format:
+    name: clang-format and the checkers' tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The clang-format that build.yml pins, and a clang-tidy for the checkers' own tests.
+      - name: Install the pinned tools
+        run: pip install --disable-pip-version-check --quiet clang-format==22.1.3 clang-tidy==22.1.0
+
+      - name: Check formatting
+        if: hashFiles('Build/CheckFormat.py') != ''
+        run: python Build/CheckFormat.py --clang-format clang-format
+
+      - name: Test the checkers
+        if: hashFiles('Build/TestCheckers.py') != ''
+        run: python Build/TestCheckers.py --clang-format clang-format --clang-tidy clang-tidy
