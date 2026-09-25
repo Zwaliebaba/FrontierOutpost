@@ -32,26 +32,8 @@ namespace {
       }
     }
   };
-
-  struct ClearDepth : public RenderPassT {
-    DERIVED_TYPE_EX(ClearDepth)
-
-    char const* GetName() const {
-      return "Clear Depth";
-    }
-
-    void OnRender(DrawState* state) {
-      state->primary->Bind(0);
-      Renderer_ClearDepth();
-      state->primary->Unbind();
-    }
-  };
 }
 
 DefineFunction(RenderPass_Clear) {
   return new Clear(args.value);
-}
-
-DefineFunction(RenderPass_ClearDepth) {
-  return new ClearDepth;
 }

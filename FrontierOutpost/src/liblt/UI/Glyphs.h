@@ -55,14 +55,6 @@ DeclareFunctionArgBind(Glyph_Grid, Glyph,
   V2, offset,
   V2, scale)
 
-DeclareFunctionArgBind(Glyph_Rect, Glyph,
-  V2, position,
-  V2, size,
-  Color, color,
-  float, alpha,
-  float, bevel,
-  float, variance)
-
 DeclareFunctionArgBind(Glyph_Ring, Glyph,
   V2, position,
   float, radius,

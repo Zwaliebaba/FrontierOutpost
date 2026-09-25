@@ -245,7 +245,6 @@
     </ClCompile>
     <ClCompile Include="Game\RenderPass\Clear.cpp" />
     <ClCompile Include="Game\RenderPass\DepthPrepass.cpp" />
-    <ClCompile Include="Game\RenderPass\DustClouds.cpp" />
     <ClCompile Include="Game\RenderPass\GBuffer.cpp" />
     <ClCompile Include="Game\RenderPass\GlobalLighting.cpp" />
     <ClCompile Include="Game\RenderPass\LensFlares.cpp" />
@@ -254,13 +253,11 @@
       <ObjectFileName>$(IntDir)Game\RenderPass\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="Game\RenderPass\SMAA.cpp" />
-    <ClCompile Include="Game\RenderPass\SSAO.cpp" />
     <ClCompile Include="Game\RenderPass\Visibility.cpp" />
     <ClCompile Include="Game\Renderable\Asteroid.cpp">
       <ObjectFileName>$(IntDir)Game\Renderable\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="Game\Renderable\Ice.cpp" />
-    <ClCompile Include="Game\Renderable\Imposter.cpp" />
     <ClCompile Include="Game\Renderable\Starfield.cpp" />
     <ClCompile Include="Game\ScriptAPI\Camera.cpp">
       <ObjectFileName>$(IntDir)Game\ScriptAPI\</ObjectFileName>
@@ -392,11 +389,7 @@
     </ClCompile>
     <ClCompile Include="LTE\RenderPass.cpp" />
     <ClCompile Include="LTE\RenderPass\Bloom.cpp" />
-    <ClCompile Include="LTE\RenderPass\BloomLight.cpp" />
-    <ClCompile Include="LTE\RenderPass\Composite.cpp" />
     <ClCompile Include="LTE\RenderPass\CustomFilter.cpp" />
-    <ClCompile Include="LTE\RenderPass\MotionBlur.cpp" />
-    <ClCompile Include="LTE\RenderPass\RadialBlur.cpp" />
     <ClCompile Include="LTE\RenderPasses.cpp" />
     <ClCompile Include="LTE\RenderStyle.cpp" />
     <ClCompile Include="LTE\Renderable.cpp">
@@ -407,31 +400,16 @@
     </ClCompile>
     <ClCompile Include="LTE\ResourceMap.cpp" />
     <ClCompile Include="LTE\SDF.cpp" />
-    <ClCompile Include="LTE\SDF\Add.cpp" />
     <ClCompile Include="LTE\SDF\Box.cpp">
       <ObjectFileName>$(IntDir)LTE\SDF\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="LTE\SDF\Capsule.cpp" />
     <ClCompile Include="LTE\SDF\Cylinder.cpp" />
-    <ClCompile Include="LTE\SDF\Expand.cpp" />
-    <ClCompile Include="LTE\SDF\Intersection.cpp" />
-    <ClCompile Include="LTE\SDF\Mirror.cpp" />
-    <ClCompile Include="LTE\SDF\Multiply.cpp" />
-    <ClCompile Include="LTE\SDF\Pinch.cpp" />
-    <ClCompile Include="LTE\SDF\Polyhedron.cpp" />
     <ClCompile Include="LTE\SDF\Radial.cpp" />
-    <ClCompile Include="LTE\SDF\Repeat.cpp" />
-    <ClCompile Include="LTE\SDF\Ring.cpp">
-      <ObjectFileName>$(IntDir)LTE\SDF\</ObjectFileName>
-    </ClCompile>
     <ClCompile Include="LTE\SDF\Scale.cpp" />
     <ClCompile Include="LTE\SDF\Shell.cpp" />
     <ClCompile Include="LTE\SDF\Sphere.cpp" />
     <ClCompile Include="LTE\SDF\Subtract.cpp" />
     <ClCompile Include="LTE\SDF\Torus.cpp" />
-    <ClCompile Include="LTE\SDF\Translate.cpp" />
-    <ClCompile Include="LTE\SDF\Union.cpp" />
-    <ClCompile Include="LTE\SDF\Wedge.cpp" />
     <ClCompile Include="LTE\SDFMesh.cpp" />
     <ClCompile Include="LTE\Script.cpp" />
     <ClCompile Include="LTE\ScriptAPI\Bool.cpp" />
@@ -584,7 +562,6 @@
     <ClCompile Include="UI\Glyph\Gradient.cpp" />
     <ClCompile Include="UI\Glyph\Grid.cpp" />
     <ClCompile Include="UI\Glyph\Line.cpp" />
-    <ClCompile Include="UI\Glyph\Rect.cpp" />
     <ClCompile Include="UI\Glyph\Ring.cpp">
       <ObjectFileName>$(IntDir)UI\Glyph\</ObjectFileName>
     </ClCompile>

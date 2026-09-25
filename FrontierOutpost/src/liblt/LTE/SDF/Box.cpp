@@ -5,33 +5,6 @@
 #include "LTE/TypeTraits.h"
 
 namespace {
-  AutoClassDerived(SDFBox, SDFT,
-    V3, center,
-    V3, sides)
-
-    DERIVED_TYPE_EX(SDFBox)
-
-    SDFBox() :
-      center(0),
-      sides(1)
-      {}
-
-    float Evaluate(V3 const& p) const {
-      return Length(Max(Abs(p - center) - sides, V3(0)));
-    }
-
-    Bound3 GetBound() const {
-      return Bound3(center - sides, center + sides);
-    }
-
-    String GetCode(String const& p) const {
-      return Stringize()
-        | "box(" | p | ", " | center | ", " | sides | ")";
-    }
-  };
-
-  DERIVED_IMPLEMENT(SDFBox)
-
   AutoClassDerived(SDFRoundBox, SDFT,
     V3, center,
     V3, sides,
@@ -61,10 +34,6 @@ namespace {
   };
 
   DERIVED_IMPLEMENT(SDFRoundBox)
-}
-
-DefineFunction(SDF_Box) {
-  return new SDFBox(args.center, args.sides);
 }
 
 DefineFunction(SDF_RoundBox) {

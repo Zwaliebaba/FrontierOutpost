@@ -487,9 +487,6 @@
     <ClCompile Include="Game\RenderPass\DepthPrepass.cpp">
       <Filter>Game\RenderPass</Filter>
     </ClCompile>
-    <ClCompile Include="Game\RenderPass\DustClouds.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
     <ClCompile Include="Game\RenderPass\GBuffer.cpp">
       <Filter>Game\RenderPass</Filter>
     </ClCompile>
@@ -508,9 +505,6 @@
     <ClCompile Include="Game\RenderPass\SMAA.cpp">
       <Filter>Game\RenderPass</Filter>
     </ClCompile>
-    <ClCompile Include="Game\RenderPass\SSAO.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
     <ClCompile Include="Game\RenderPass\Visibility.cpp">
       <Filter>Game\RenderPass</Filter>
     </ClCompile>
@@ -518,9 +512,6 @@
       <Filter>Game\Renderable</Filter>
     </ClCompile>
     <ClCompile Include="Game\Renderable\Ice.cpp">
-      <Filter>Game\Renderable</Filter>
-    </ClCompile>
-    <ClCompile Include="Game\Renderable\Imposter.cpp">
       <Filter>Game\Renderable</Filter>
     </ClCompile>
     <ClCompile Include="Game\Renderable\Starfield.cpp">
@@ -784,19 +775,7 @@
     <ClCompile Include="LTE\RenderPass\Bloom.cpp">
       <Filter>LTE\RenderPass</Filter>
     </ClCompile>
-    <ClCompile Include="LTE\RenderPass\BloomLight.cpp">
-      <Filter>LTE\RenderPass</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\RenderPass\Composite.cpp">
-      <Filter>LTE\RenderPass</Filter>
-    </ClCompile>
     <ClCompile Include="LTE\RenderPass\CustomFilter.cpp">
-      <Filter>LTE\RenderPass</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\RenderPass\MotionBlur.cpp">
-      <Filter>LTE\RenderPass</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\RenderPass\RadialBlur.cpp">
       <Filter>LTE\RenderPass</Filter>
     </ClCompile>
     <ClCompile Include="LTE\RenderPasses.cpp">
@@ -817,43 +796,13 @@
     <ClCompile Include="LTE\SDF.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
-    <ClCompile Include="LTE\SDF\Add.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
     <ClCompile Include="LTE\SDF\Box.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\SDF\Capsule.cpp">
       <Filter>LTE\SDF</Filter>
     </ClCompile>
     <ClCompile Include="LTE\SDF\Cylinder.cpp">
       <Filter>LTE\SDF</Filter>
     </ClCompile>
-    <ClCompile Include="LTE\SDF\Expand.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\SDF\Intersection.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\SDF\Mirror.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\SDF\Multiply.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\SDF\Pinch.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\SDF\Polyhedron.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
     <ClCompile Include="LTE\SDF\Radial.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\SDF\Repeat.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\SDF\Ring.cpp">
       <Filter>LTE\SDF</Filter>
     </ClCompile>
     <ClCompile Include="LTE\SDF\Scale.cpp">
@@ -869,15 +818,6 @@
       <Filter>LTE\SDF</Filter>
     </ClCompile>
     <ClCompile Include="LTE\SDF\Torus.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\SDF\Translate.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\SDF\Union.cpp">
-      <Filter>LTE\SDF</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\SDF\Wedge.cpp">
       <Filter>LTE\SDF</Filter>
     </ClCompile>
     <ClCompile Include="LTE\SDFMesh.cpp">
@@ -1118,9 +1058,6 @@
       <Filter>UI\Glyph</Filter>
     </ClCompile>
     <ClCompile Include="UI\Glyph\Line.cpp">
-      <Filter>UI\Glyph</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\Glyph\Rect.cpp">
       <Filter>UI\Glyph</Filter>
     </ClCompile>
     <ClCompile Include="UI\Glyph\Ring.cpp">

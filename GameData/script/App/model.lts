@@ -126,8 +126,6 @@ type App
     passes.Append (RenderPass_Clear (Vec4 0.0))
     passes.Append (RenderPass_Camera camera)
     passes.Append (RenderPass_SMAA)
-    # passes.Append (RenderPass_RadialBlur 0.5 0.0 0.5 2)
-    # passes.Append (RenderPass_Aberration 0.01)
     passes.Append (RenderPass_PostFilter "post/dither.jsl")
     view = (Widget_Rendered passes)
 
