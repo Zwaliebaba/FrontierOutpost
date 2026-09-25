@@ -1,3 +1,0 @@
-~vowel|~consonant
-~vowel|~consonant|~random
-~vowel|~consonant|~random

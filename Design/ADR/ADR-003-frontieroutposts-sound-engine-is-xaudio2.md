@@ -38,7 +38,8 @@ corresponds to FMOD's Event System or Designer projects.
    - FMOD's speed of sound for the Doppler shift;
    - FMOD Ex's pan law for 2D sounds, and `SetPitch` as 44,100 Hz times the pitch;
    - every failed call ends the program through liblt's assertion handler.
-2. **Sounds are WAV files.** The owner converts the 79 Ogg files to WAV. Code and scripts name
+2. **Sounds are WAV files.** The owner converts the Ogg files to WAV: 24 of them, since the
+   NeuronClient plan's Phase 1 removed the 55 that nothing names (ADR-013). Code and scripts name
    the WAV files. The two Ogg files whose WAV name is already taken convert to `<name>_ogg.wav`.
    - **A missing file plays silence** (amendment, N6). The log names it once, as a warning, and
      every sound played from it is created finished. So the conversion can land whenever it is

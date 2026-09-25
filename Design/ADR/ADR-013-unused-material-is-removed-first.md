@@ -11,7 +11,7 @@
 
 N0 removes unused features, and N4 extends that to all four tiers of unused material: toy and test
 apps, unreachable code, dead passes and shaders, and unused assets. What goes is not ported: after
-Phase 1, 133 of the 169 shader files remain to port (plan §4.2, §5.6).
+Phase 1, 131 of the 169 shader files remain to port (plan §4.2, §5.6).
 
 Removal comes first, while OpenGL still renders, so a fault it causes cannot be the new renderer's
 (plan §1, §6). No tag marks the OpenGL build it starts from (N13).

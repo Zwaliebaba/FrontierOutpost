@@ -78,7 +78,7 @@ route wherever emulating OpenGL would cost more, and nothing beyond that (plan �
 - **Parity with the OpenGL build.** SMAA's output changes, for one: GL uploaded its search texture
   sheared, and the port uploads it correctly (plan §4.2).
 - **Converting to Direct3D's top-left origin during the port.** A wrong flip is the likeliest
-  porting bug and the hardest to see across 133 shader files, so each convention lives in one
+  porting bug and the hardest to see across 131 shader files, so each convention lives in one
   macro and one pass. Converting later, pass by pass, stays possible (plan §5.5).
 - **Recovery from device removal:** liblt generates too much GPU content at run time to rebuild it.
 - **Exclusive fullscreen,** which nothing uses. Borderless fullscreen, a vsync setting, sRGB, HDR,

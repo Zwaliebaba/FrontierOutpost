@@ -90,16 +90,5 @@ function Renderable Main (Float scale Int seed)
   var model Model_Create
   var material Material_Metal
 
-  #
-    var decal (Texture2D_CreateHDR 512 512)
-    decal.BeginDrawTo
-    DrawClear 0 0
-    DrawTextGlow Fonts:ChineseSimp "紅玻璃 燒" (Vec2 256 256) 128 Colors:Primary 1 true
-    decal.EndDrawTo
-    decal.SaveTo "decal.png"
-    decal.GenerateMipmap
-    material = material.Clone
-    material.Set "decal" decal
-
   model.Add mesh material
   Renderable model

@@ -1016,9 +1016,11 @@ Recorded, not to be done in this migration:
 - **O9** (§15.1) `extlib/win32` and `extbin/win32` could not be copied as the approved scope
   said (§8.3 item 4, D11), because GitHub refuses their LFS pointer files. **Resolved by D14:**
   they are left out.
-- **O10** (D16) **The WAV conversion is the owner's, and pending.** Until the 79 converted files
-  are in the runtime assets, each of those sounds plays silence, and the log names its file once,
-  as a warning (BR9). Until N6, each stopped the program the first time it played. The rule: `GameData/sound/<name>.ogg` becomes
+- **O10** (D16) **The WAV conversion is the owner's, and pending.** 24 Ogg sounds are left to
+  convert: Phase 1 of the NeuronClient plan removed the 55 that nothing names (ADR-013), and
+  `Build/CheckSounds.py` lists the 24. Until the converted files are in the runtime assets, each
+  of those sounds plays silence, and the log names its file once, as a warning (BR9). Until N6,
+  each stopped the program the first time it played. The rule: `GameData/sound/<name>.ogg` becomes
   `GameData/sound/<name>.wav`, except `ui/objectmenuopen.ogg` and `warpnode/exit.ogg`, which become
   `<name>_ogg.wav`. The formats XAudio2 plays are PCM (16-bit, at the file's own rate and channel
   count, is lossless against the decoded Vorbis), IEEE float and MS-ADPCM. It does not play
@@ -1688,7 +1690,7 @@ at `/W4`, and GLEW raise none.
 
 ### 21.6 Open issues
 
-- **O10: the owner's to do.** Convert the 79 Ogg sounds, in `GameData/sound/` since D29, to WAV.
+- **O10: the owner's to do.** Convert the 24 Ogg sounds left in `GameData/sound/` to WAV.
 - **O11:** then listen to the sounds.
 - **O14: the owner's to decide.** The licence notice for SMAA's shader source.
 - **O4:** ARM64 builds have not been run, for want of an ARM64 machine.

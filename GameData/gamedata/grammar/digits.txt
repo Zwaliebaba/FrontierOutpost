@@ -1,3 +1,0 @@
-1|~digit
-1|~digit|~digit
-1|~digit|~digits

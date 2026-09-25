@@ -36,7 +36,7 @@ Under that API, the OpenGL layer is rewritten onto NeuronClient, and the GLSL in
 becomes HLSL compiled into `lt.dll` at build time.
 
 **Removal comes first, while OpenGL still renders:** 12 toy apps, unreachable engine code, eight dead
-render passes, 36 shader files and 34 font families.
+render passes, 38 shader files, 34 font families, and the sounds and data files nothing names.
 
 **At the end** the solution holds `lt`, `launch`, `NeuronClient` and `NeuronClientTests`. The tree
 has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
@@ -328,7 +328,7 @@ Not in NeuronClient:
 ### 5.5 Keeping OpenGL's conventions without OpenGL
 
 The port keeps OpenGL's memory layout, with row 0 at the bottom of an image. The alternative is to
-convert 133 shader files, and the C++ that places viewports and scissors and flips images, to
+convert 131 shader files, and the C++ that places viewports and scissors and flips images, to
 Direct3D's top-left origin. Instead:
 
 - **Clip space.** Every vertex shader ends in one macro. It negates clip-space y, and maps z from
@@ -343,7 +343,7 @@ Direct3D's top-left origin. Instead:
   flips.
 
 N3 would allow converting to Direct3D's own layout instead. It is not done here because a wrong flip
-is the likeliest porting bug, and the hardest to see across 133 files. This way every convention
+is the likeliest porting bug, and the hardest to see across 131 files. This way every convention
 lives in one macro and one pass. Converting later, pass by pass, stays possible.
 
 Other rules the context applies:
@@ -383,8 +383,8 @@ Other rules the context applies:
   dialect.
   - The port puts back SMAA's own HLSL 4.1 porting block, so no third-party code is added.
   - SMAA's licence notice goes beside the file, which closes O14.
-- **How much.** After Phase 1, 133 files remain. Setting SMAA aside, about 4,330 lines of GLSL are
-  ported by hand.
+- **How much.** After Phase 1, 131 files remain, 5,346 lines. Setting SMAA.h aside, about 4,300
+  lines of GLSL are ported by hand.
 - **What goes:** `JSLPreprocess`, the `#version` injection, hot reload, and `GameData/shader`.
 
 ### 5.7 SDF fields without generated code
