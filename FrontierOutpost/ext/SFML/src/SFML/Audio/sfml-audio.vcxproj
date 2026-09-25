@@ -60,6 +60,8 @@
       <AdditionalIncludeDirectories>$(SfmlDir)include;$(SfmlDir)src;$(SfmlDir)extlibs\headers\AL;$(SfmlDir)extlibs\headers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;_CRT_SECURE_NO_DEPRECATE;_SCL_SECURE_NO_WARNINGS;OV_EXCLUDE_STATIC_CALLBACKS;FLAC__NO_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ProgramDataBaseFileName>$(OutDir)sfml-audio-s.pdb</ProgramDataBaseFileName>
+      <!-- Phase 3: stays at the original's C++14. AudioDevice.cpp uses std::auto_ptr, which C++17 removed,
+           and vendored code is not edited (MIGRATION_NOTES.md §18). -->
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>

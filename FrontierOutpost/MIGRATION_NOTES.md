@@ -12,8 +12,8 @@ user-facing strings keep their original names. `ltheory-old-main/` is read-only.
 the original, with identical warnings and matching command lines, and its link lacked only FMOD Ex.
 The owner then replaced FMOD Ex with XAudio2 on both platforms (D15, ADR-003, §17), and asked the
 repository's CI to build Debug|x64 (D19). **With that, Phase 2 is done: x64 Debug and Release
-build and link from a clean checkout (§16, run 7), and the repository's CI is green.** Next is
-Phase 3, the C++23 bump.
+build and link from a clean checkout (§16, run 7), and the repository's CI is green.** Phase 3,
+the C++23 bump, is in progress (§18).
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -753,10 +753,17 @@ only. §15.4 gives the reasoning for each entry.
 - **`lt` and `launch` link `xaudio2.lib`** where FMOD Ex's two libraries stood, and nothing is
   copied after the build.
 
+### 10.4 The C++23 bump (Phase 3, §18)
+
+- **`lt` and `launch` compile with `/std:c++latest` (D6), `/permissive-` and `/Zc:__cplusplus`.**
+  The original passed none of the three and compiled as C++14 (§3.1).
+- **Five of SFML's six projects compile with `/std:c++latest`** and keep their own `/permissive`.
+  `sfml-audio` stays at C++14, and FreeType and GLEW are C (§18.1).
+
 ## 11. Code changes
 
-Phases 1 and 2 changed no source file. The XAudio2 port (D15–D17, §17) changes these, all in
-`FrontierOutpost/`:
+Phases 1 and 2 changed no source file. The XAudio2 port (D15–D17, §17) and Phase 3 (§18) change
+these, all in `FrontierOutpost/`:
 
 | File | Change | Why |
 |---|---|---|
@@ -770,6 +777,7 @@ Phases 1 and 2 changed no source file. The XAudio2 port (D15–D17, §17) change
 | `resource/script/Object/{Firework,Ship,WarpNode}.lts`, `Widget/HUD/WorldObject.lts`, `Widget/Market/Transaction.lts` | 10 sound names from `.ogg` to `.wav` | D16 |
 | `resource/script/Widget/Browser.lts:67` | `ui/objectmenuopen.ogg` to `ui/objectmenuopen_ogg.wav` | D16: `ui/objectmenuopen.wav` is a different sound |
 | `src/old/ltheory/ltheory.cpp`, `src/old/soundstudio/soundstudio.cpp` (not built) | `SoundEngine_XAudio2()`; the include of `MusicEngine.h` and a commented-out `CreateMusicEngine` call removed | D17: no code may name what was deleted |
+| `src/liblt/LTE/OS.cpp:181-183` | `OS_Spawn` hands `CreateProcess` a writable, empty `char commandLine[]` in place of the literal `""` | Phase 3: `/permissive-` includes `/Zc:strictStrings`, which refuses a string literal as `LPSTR` (C2664). The API documents the parameter as writable. The command line is empty either way, so nothing changes at run time |
 
 ## 12. BEHAVIOUR-RISK register
 
@@ -802,6 +810,31 @@ Phases 1 and 2 changed no source file. The XAudio2 port (D15–D17, §17) change
   - **The Ogg sounds** are decoded by the owner's converter instead of FMOD's decoder.
   - **Music:** none, as before: the FMOD music engine was never created.
 
+- **BR4: C++23 and `/permissive-` change some meanings without a diagnostic** (Phase 3). There is
+  no line to point at: this is the switch itself, in `src/liblt/lt.vcxproj`,
+  `src/launch/launch.vcxproj` and five SFML projects (§18.1). What can differ at run time, and what
+  was checked (§18.2):
+  - **Copy elision.** C++17 guarantees it for temporaries, and Microsoft documents that
+    `/permissive-` and `/std:c++20` turn on `/Zc:nrvo`, so Debug now also elides named return
+    values. A copy constructor with side effects runs fewer times. liblt's either count references
+    (`Reference`, `Type`), copy deeply (`Array`, `BaseVector`, `VectorNP`, `Sparse`, `Data`) or
+    hand ownership over (`AutoPtr`), and each of those ends in the same state with or without the
+    copy.
+  - **Evaluation order.** C++17 fixes the order of `a = b`, `a << b`, `a[b]` and `a.f(b)`, among
+    others, where C++14 left it open. clang's `-Wunsequenced`, which knows both rule sets, finds no
+    expression in `lt`, `launch` or SFML at either standard. It cannot see two calls whose order
+    changed, as in `m[k] = m.size()`, and those are not enumerated.
+  - **Two-phase name lookup** (`/Zc:twoPhase`). A template now binds a name that does not depend on
+    its parameters where it is defined, not where it is used, so an overload declared later is no
+    longer chosen. clang, which always looks names up in two phases, compiles every source without
+    such an error. A silent change of the chosen overload would not show, and is not enumerated.
+  - **MSVC's other conformance rules** under `/permissive-` (`/Zc:ternary`, `/Zc:rvalueCast` and
+    others) change the type of a few expressions. The host's build shows those that become errors;
+    silent ones are not enumerated.
+  - **Not affected:** `__cplusplus` (nothing in reach compares it to a value), aligned `new` (no
+    over-aligned type and no global `operator new`), and the library facilities C++17 to C++23
+    removed (first-party code uses none).
+
 Candidates, to be logged with file:line when they happen:
 
 - Floating point on ARM64 (§7): `fmadd` contraction under `/fp:fast`, and float→int saturation.
@@ -819,6 +852,10 @@ Recorded, not to be done in this migration:
 - `include/GL/GL.H`/`GLU.H` shadow the SDK headers.
 - `offsetof` through null pointers (H9).
 - FMOD Ex was discontinued in 2014. FMOD Core/Studio 2.x is the maintained line and has ARM64.
+- `OS_Spawn` (`src/liblt/LTE/OS.cpp:176-190`) leaks the `strdup` of its path on Windows, where
+  `argv` is unused, and never closes the process and thread handles `CreateProcess` returns.
+- `sfml-audio` needs `std::auto_ptr` (`AudioDevice.cpp:110`, `:128`), and so C++14 (§18.1). SFML
+  2.5.1 still has it; 2.6.0 replaced it (checked against both tags).
 
 ## 14. Open issues
 
@@ -1177,3 +1214,72 @@ gates skipped for want of input (D19). O3 is closed.
 
 Whether it sounds right remains to be heard (O11), and the Ogg sounds wait on their WAV
 conversion (O10).
+
+## 18. Phase 3: C++23 (x64)
+
+### 18.1 The switch
+
+| Projects | Standard | Conformance | `__cplusplus` |
+|---|---|---|---|
+| `lt`, `launch` | `/std:c++latest` (D6) | `/permissive-` | `/Zc:__cplusplus` |
+| `sfml-system`, `sfml-window`, `sfml-graphics`, `sfml-network`, `sfml-main` | `/std:c++latest` | their own `/permissive` | the compiler's default |
+| `sfml-audio` | C++14, the original's | `/permissive` | the compiler's default |
+| `freetype`, `glew` | C: no C++ standard applies | as in Phase 1 | — |
+
+The brief puts first-party code at C++23 with `/permissive-` and `/Zc:__cplusplus`, and leaves the
+dependencies at their own standard "unless they compile cleanly at C++23". **Cleanly** is taken to
+mean: no error, and no warning the project did not already have at C++14.
+
+- **Five of SFML's six projects** compile cleanly in the container (§18.2) and move to first-party
+  code's standard. They keep their own `/permissive`, which is what MSBuild passes for their
+  `ConformanceMode=false`: the brief asks `/permissive-` of first-party code only. The host's
+  warnings decide it (§18.3), and a project that gains any goes back to C++14.
+- **`sfml-audio` does not.** `src/SFML/Audio/AudioDevice.cpp:110` and `:128` declare
+  `std::auto_ptr`, which C++17 removed and MSVC's library no longer declares from C++17 on. Vendored
+  code is not edited (brief rule 3), and MSVC's `_HAS_AUTO_PTR_ETC` would bring `auto_ptr` back only
+  by putting the library in a mode that is not C++23, so it is not used. Nothing links `sfml-audio`
+  (§5.2); it is built because the original built it.
+- **FreeType and GLEW** are C, and C++'s standard does not apply to them.
+
+The switch lives in each project's `ClCompile` defaults. `Directory.Build.props` still sets C++14
+for everything else.
+
+### 18.2 What was checked in the container
+
+The container has no MSVC, so the bump was screened before it was pushed:
+
+- **The compiler:** clang 18 targeting `x86_64-w64-mingw32`, with mingw-w64's Windows headers and
+  GCC 13's standard library, so that liblt's Windows branches (`LIBLT_WINDOWS`) are the ones
+  compiled, and `-fms-extensions` for `__declspec`. Every source of `lt` and `launch` (382) and of
+  SFML's six projects (102), each with its project's definitions and include directories.
+- **Three standards:** each source at `-std=c++14`, `-std=c++2b` (C++23) and `-std=c++2c` (the
+  C++26 draft, which `/std:c++latest` includes), with clang's deprecation and conformance warnings
+  on: string literals as `char*`, arithmetic between enumerations or with floating point, array
+  comparison, `volatile`, reversed `operator==` candidates, comma subscripts, `[=]` capturing
+  `this`, and `-Wunsequenced`.
+- **Results:**
+  - **380 of the 382 first-party sources and all 102 of SFML's compile at all three standards.** The
+    other two fail identically at all three, for reasons of the stand-in environment rather than
+    the language. `Component/Interior.cpp` exports functions from an anonymous namespace, which
+    clang refuses and MSVC accepted in every build so far. `XAudio2.cpp` needs the real SDK's `xaudio2.h`, not
+    mingw-w64's; against the stand-ins of §17.2 it is clean at C++14 and C++23.
+  - **One conformance error, which clang reports only as a warning:** `LTE/OS.cpp:182` passes `""`
+    as `CreateProcessA`'s `LPSTR lpCommandLine`. `/permissive-` includes `/Zc:strictStrings`, which
+    makes that error C2664. It is fixed (§11).
+  - **Nothing new at C++23 or the C++26 draft:** no arithmetic between enumerations (an error in
+    C++26), no array comparison, no reversed-operator ambiguity, and no `-Wunsequenced` site at any
+    standard.
+- **What clang's library still declares and MSVC's does not:** first-party code uses none of
+  `auto_ptr`, `random_shuffle`, `unary_function` or `binary_function`, `bind1st` or `bind2nd`,
+  `ptr_fun` or `mem_fun`, `result_of`, `not1` or `not2`, `uncaught_exception`, the removed
+  allocator members, `<codecvt>` or `<strstream>`, nor `register` or a dynamic exception
+  specification. SFML has the two `auto_ptr`s of §18.1.
+- **`__cplusplus`:** nothing in `lt`, `launch`, `include/` or SFML compares it to a value, so
+  `/Zc:__cplusplus` changes no code path.
+
+What this cannot see is MSVC's own reading of the language and its library. The host's build is the
+gate.
+
+### 18.3 The build on the host
+
+Pending: the first Phase 3 run.

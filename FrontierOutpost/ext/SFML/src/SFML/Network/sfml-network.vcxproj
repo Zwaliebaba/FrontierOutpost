@@ -60,6 +60,9 @@
       <AdditionalIncludeDirectories>$(SfmlDir)include;$(SfmlDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;_CRT_SECURE_NO_DEPRECATE;_SCL_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ProgramDataBaseFileName>$(OutDir)sfml-network-s.pdb</ProgramDataBaseFileName>
+      <!-- Phase 3: SFML compiles cleanly at C++23, so it follows first-party code's standard (D6), keeping
+           its own /permissive (MIGRATION_NOTES.md §18). -->
+      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
