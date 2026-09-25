@@ -129,6 +129,7 @@
     </ClCompile>
     <ClCompile Include="AudioOutput.cpp" />
     <ClCompile Include="GlyphRendering.cpp" />
+    <ClCompile Include="GraphicsDeviceFrames.cpp" />
     <ClCompile Include="ImageCoding.cpp" />
     <ClCompile Include="KeyMapping.cpp" />
     <ClCompile Include="ShaderReflection.cpp" />

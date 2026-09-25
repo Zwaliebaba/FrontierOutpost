@@ -1,6 +1,6 @@
 # ADR-008: Shaders are HLSL compiled by FXC into headers, and reflected at load
 
-- **Status:** Proposed (2026-09-25, NeuronClient migration Phase 0), for the owner to accept
+- **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 3)
 - **Scope:** the shaders of `lt.dll` (`FrontierOutpost/src/liblt/Shaders/`) and of NeuronClient
   (`NeuronClient/Shaders/`): their language, names and compilation, and how liblt finds them
 - **Detail:** `Design/Plan/NeuronClient-migration.md` §2 (on N2), §3 (point 2), §4.2, §5.2, §5.4,

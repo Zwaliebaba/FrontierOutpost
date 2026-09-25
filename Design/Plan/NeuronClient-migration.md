@@ -11,7 +11,8 @@ DirectWrite, WIC, XAudio2 and Win32.
   images, glyphs, sound, window and input, and no SFML or FreeType is left. SFML's include
   directories, definition, libraries and `.gitignore` negation went with it, ahead of Phase 5.
   Phase 2's done-when needs the owner to check text, images, sound and input in the kept apps.
-  ADR-007 to ADR-009 stay Proposed until Phase 3.
+  Phase 3 has begun: ADR-007 and ADR-008 are Accepted, and its step 1 adds `GraphicsDevice`.
+  ADR-009 stays Proposed until Phase 4, which implements it.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and

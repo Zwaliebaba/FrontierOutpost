@@ -35,6 +35,9 @@
     <ClCompile Include="GlyphRendering.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="GraphicsDeviceFrames.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="ImageCoding.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

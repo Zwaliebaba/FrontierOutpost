@@ -1,6 +1,6 @@
 # ADR-007: Graphics is Direct3D 12, as the shared base of the NeuronClient projects
 
-- **Status:** Proposed (2026-09-25, NeuronClient migration Phase 0), for the owner to accept
+- **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 3)
 - **Scope:** NeuronClient's graphics core (`GraphicsDevice`, `SwapChain`, `Texture`, `Buffer`,
   `Program`, `DrawContext`), and `lt.dll`'s renderer on top of it
 - **Detail:** `Design/Plan/NeuronClient-migration.md` §2, §3 (point 1), §4.2, §5.3, §5.5, §11, N0,
