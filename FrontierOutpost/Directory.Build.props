@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What every FrontierOutpost project shares (MIGRATION_NOTES.md, Phase 1).
+
+  MSBuild imports this file from Microsoft.Cpp.Default.props: after a project's configuration list
+  and before Microsoft.Cpp.props supplies Visual C++'s defaults. Those defaults only fill in what is
+  still empty, so the values here win over them, and a project's own values win over these.
+
+  Only what is identical across all of the original's targets lives here (MIGRATION_NOTES.md §9.3).
+  Everything that differs between them (exception model, floating point, /MP, definitions, include
+  directories, link lines) is written in the project that has it. FreeType and GLEW follow their
+  own upstream builds instead, and say so where they differ.
+-->
+<Project>
+  <PropertyGroup>
+    <FrontierOutpostDir>$(MSBuildThisFileDirectory)</FrontierOutpostDir>
+    <PlatformToolset>v145</PlatformToolset>
+    <!-- The newest installed Windows SDK: 10.0.26100.0 on the build host (MIGRATION_NOTES.md §2). -->
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <OutDir>$(FrontierOutpostDir)bin\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(FrontierOutpostDir)obj\$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <!-- The original's /W3 and its compiler-default language standard (C++14), until Phase 3. -->
+      <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp14</LanguageStandard>
+      <ConformanceMode>false</ConformanceMode>
+      <SDLCheck>false</SDLCheck>
+      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel>Precise</FloatingPointModel>
+      <!--
+        The original's projects set the first two to empty, which leaves the compiler's own default,
+        and the third to false. MSBuild's default would turn /Zc:inline on, so all three are pinned to
+        what the original compiled with: no /Zc:inline, no /JMC, no module dependency scan.
+      -->
+      <RemoveUnreferencedCodeData>false</RemoveUnreferencedCodeData>
+      <SupportJustMyCode>false</SupportJustMyCode>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <!-- Debug and Release differ as the original's configurations do, and in nothing else (ADR-001). -->
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <DebugInformationFormat>None</DebugInformationFormat>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+</Project>

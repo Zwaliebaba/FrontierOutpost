@@ -1,0 +1,2304 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="AI">
+      <UniqueIdentifier>{8335D952-F2D9-5012-B0CE-D5EAEDB1C84D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Audio">
+      <UniqueIdentifier>{0E77B520-E77B-53BD-B150-F235A17A902B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Audio\Signal">
+      <UniqueIdentifier>{4B655464-F416-559D-9B1D-E75DFFD40FB8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CodeGen">
+      <UniqueIdentifier>{95761F42-3127-5476-ABD2-43442938D147}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Component">
+      <UniqueIdentifier>{25BA0F75-EA92-54C4-B24A-EBC4530E7D58}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game">
+      <UniqueIdentifier>{2463D332-63D1-5788-AD07-579B4096B346}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Action">
+      <UniqueIdentifier>{E73EF914-8715-57CB-A3B3-5E9FCFA0187F}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Attribute">
+      <UniqueIdentifier>{A9E1EE61-4B2C-5D1D-BABF-B23CF8AFF28B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Condition">
+      <UniqueIdentifier>{269ED93A-D749-596E-B275-97A61C6928D6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Event">
+      <UniqueIdentifier>{8455CAFE-A71B-5232-A28A-23BC722EB372}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Graphics">
+      <UniqueIdentifier>{E9F5530C-F1D3-55C4-934C-21508E6FD5D8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Graphics\Generator">
+      <UniqueIdentifier>{75F876D7-629B-5B8C-8C77-A0AC694DE8F4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Item">
+      <UniqueIdentifier>{BA40997D-C38D-5B7B-A96F-1A665D4B6A05}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\ItemProperty">
+      <UniqueIdentifier>{79FC94E5-678F-5BF7-BFB2-2FB38040EED9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Object">
+      <UniqueIdentifier>{A9D1579C-27CD-538F-92D4-6A02DA840599}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Object\Drone">
+      <UniqueIdentifier>{2A5F3ACF-9E56-5CD8-B51F-6B71F64256E2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\RenderPass">
+      <UniqueIdentifier>{4BD40304-4E4B-5F8D-8F1E-1FA8E0AC55D3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Renderable">
+      <UniqueIdentifier>{8E1CCB46-8979-526E-B0ED-3FC883DBC4AF}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\ScriptAPI">
+      <UniqueIdentifier>{CF2AF750-70A5-5C2F-831C-9311A23CD803}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Task">
+      <UniqueIdentifier>{DCDBB493-9548-53A1-A265-709620BC3EC2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Widget">
+      <UniqueIdentifier>{AB2F7505-29D4-543D-9BA4-051BF7EACA28}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE">
+      <UniqueIdentifier>{81CBDA40-ED64-57A3-806D-633C1FB100C7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\Button">
+      <UniqueIdentifier>{8F7BC0AD-5E59-57D5-BFCE-D9766048B9BB}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\Expression">
+      <UniqueIdentifier>{C5725FF2-66C5-5477-8C28-A60D03443604}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\Function">
+      <UniqueIdentifier>{70953430-BBDB-5636-9D5A-678CF7A63826}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\RenderPass">
+      <UniqueIdentifier>{F6195F65-8B64-55E0-A330-C3FA99A9C3E3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\SDF">
+      <UniqueIdentifier>{14410664-FC14-516F-BB4F-7313BA504B65}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\ScriptAPI">
+      <UniqueIdentifier>{A0647C63-1006-59D9-BF46-0072FD7B74E5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\Type">
+      <UniqueIdentifier>{704AD022-1E95-5249-A936-1299470F8E76}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\Warp">
+      <UniqueIdentifier>{1F1E1204-B590-502C-A112-6C1E0D5D5654}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Module">
+      <UniqueIdentifier>{04B8B74E-2F16-5C4C-B13B-7FFDB9F4DE81}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Module\MusicEngine">
+      <UniqueIdentifier>{32F470B9-EEF3-5B92-8E32-B5A7A60CD82B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Module\ScriptAPI">
+      <UniqueIdentifier>{D48EA046-5D73-5AD0-B99D-9AD8CFD5A459}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Module\SoundEngine">
+      <UniqueIdentifier>{9DEBD71C-969E-579A-B2F7-166F01EB30DD}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Network">
+      <UniqueIdentifier>{0F35B6B4-4AAD-5637-975D-751B03691F6A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Strukt">
+      <UniqueIdentifier>{9C2F70DE-783E-58CF-AB81-0D4615BC37BE}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Strukt\CodeObject">
+      <UniqueIdentifier>{AAB1F194-3054-59CD-943F-64D02EDBE6EB}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ThirdParty">
+      <UniqueIdentifier>{C1BA3B51-1AF6-5538-A822-D664CF1A3CB3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI">
+      <UniqueIdentifier>{E9F43634-21B2-5FD4-946D-C234DE5B31BF}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\Compositor">
+      <UniqueIdentifier>{B22FADE9-2F9C-5C98-979A-531277A23F6D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\Glyph">
+      <UniqueIdentifier>{8765956B-20C7-5EAC-8AB6-5850312D2E6B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\ScriptAPI">
+      <UniqueIdentifier>{BAFCB387-2816-5F92-A4B7-F8085406A695}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\Widget">
+      <UniqueIdentifier>{C39EA87D-2C3C-5C2B-8E3F-734E45C683D6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI\WidgetRenderer">
+      <UniqueIdentifier>{B08FB4DF-B46C-59CB-BB11-B535B4DD7696}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Volume">
+      <UniqueIdentifier>{CBB69CAC-032E-5724-BE21-4CD26F611A46}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="AI\NLPPhrase.cpp">
+      <Filter>AI</Filter>
+    </ClCompile>
+    <ClCompile Include="Audio\Envelopes.cpp">
+      <Filter>Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="Audio\Filters.cpp">
+      <Filter>Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="Audio\IO.cpp">
+      <Filter>Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="Audio\Signal.cpp">
+      <Filter>Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="Audio\Signal\Compress.cpp">
+      <Filter>Audio\Signal</Filter>
+    </ClCompile>
+    <ClCompile Include="Audio\Signal\Delay.cpp">
+      <Filter>Audio\Signal</Filter>
+    </ClCompile>
+    <ClCompile Include="Audio\Signal\Instrument.cpp">
+      <Filter>Audio\Signal</Filter>
+    </ClCompile>
+    <ClCompile Include="Audio\Signal\Lowpass.cpp">
+      <Filter>Audio\Signal</Filter>
+    </ClCompile>
+    <ClCompile Include="Common.cpp" />
+    <ClCompile Include="Component\Account.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Asset.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Assets.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Attachable.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\BoundingBox.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Cargo.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Collidable.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Damager.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Dockable.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Drawable.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Economy.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Explodable.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\History.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Info.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Integrity.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Interior.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Log.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Market.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Motion.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\MotionControl.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Nameable.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Orientation.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Pilotable.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Pluggable.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Projects.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\ProximityTracker.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Queryable.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Resources.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Scriptable.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Sockets.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Storage.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Targets.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Tasks.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Component\Zoned.cpp">
+      <Filter>Component</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Action\Mine.cpp">
+      <Filter>Game\Action</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Beam.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Camera.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Condition\Nearby.cpp">
+      <Filter>Game\Condition</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Event\Damage.cpp">
+      <Filter>Game\Event</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Event\Deposit.cpp">
+      <Filter>Game\Event</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Event\Mined.cpp">
+      <Filter>Game\Event</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Graphics\Effects.cpp">
+      <Filter>Game\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Graphics\Generator\Blur.cpp">
+      <Filter>Game\Graphics\Generator</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Graphics\Generator\IRMap.cpp">
+      <Filter>Game\Graphics\Generator</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Graphics\Generator\Nebula.cpp">
+      <Filter>Game\Graphics\Generator</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Graphics\Generator\NormalMap.cpp">
+      <Filter>Game\Graphics\Generator</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Graphics\Generator\PlanetSkybox.cpp">
+      <Filter>Game\Graphics\Generator</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Graphics\Generator\PlanetSurface.cpp">
+      <Filter>Game\Graphics\Generator</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Graphics\Generators.cpp">
+      <Filter>Game\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Graphics\RenderStyles.cpp">
+      <Filter>Game\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Icons.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\AssemblyChip.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\Blueprint.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\ColonyType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\Commodity.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\DataDamaged.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\DataDestroyed.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\OreType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\PlanetType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\PowerGeneratorType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\ProductionLabType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\ScannerType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\ShieldType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\ShipType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\StationType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\TechLabType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\ThrusterType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\TransferUnitType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\TurretType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\WeaponType.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Item\Worker.cpp">
+      <Filter>Game\Item</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\ItemProperty.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\ItemProperty\Owner.cpp">
+      <Filter>Game\ItemProperty</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Light.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Materials.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Messages.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Mission.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\NLP.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Asteroid.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Colony.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Custom.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Drone\Construction.cpp">
+      <Filter>Game\Object\Drone</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Drone\Prospecting.cpp">
+      <Filter>Game\Object\Drone</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\DroneBay.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\DustFlecks.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Dynamic.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Explosion.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Missile.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Payload.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Planet.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Pod.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\PowerGenerator.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\ProductionLab.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Pulse.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Rail.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Region.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Scanner.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Shield.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Ship.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\SoundEmitter.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Star.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Static.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Station.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\System.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\TechLab.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Thruster.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Trail.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\TransferUnit.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Turret.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\WarpNode.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\WarpRail.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Weapon.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Wormhole.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Object\Zone.cpp">
+      <Filter>Game\Object</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Order.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Particles.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Player.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Project.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\Blended.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\Camera.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\Clear.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\DepthPrepass.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\DustClouds.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\GBuffer.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\GlobalLighting.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\LensFlares.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\LocalLighting.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\Particles.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\SMAA.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\SSAO.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\RenderPass\Visibility.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Renderable\Asteroid.cpp">
+      <Filter>Game\Renderable</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Renderable\Ice.cpp">
+      <Filter>Game\Renderable</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Renderable\Imposter.cpp">
+      <Filter>Game\Renderable</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Renderable\Starfield.cpp">
+      <Filter>Game\Renderable</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\ScriptAPI\Camera.cpp">
+      <Filter>Game\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\ScriptAPI\Item.cpp">
+      <Filter>Game\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\ScriptAPI\Object.cpp">
+      <Filter>Game\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\ScriptAPI\ObjectComponents.cpp">
+      <Filter>Game\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\ScriptAPI\Player.cpp">
+      <Filter>Game\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\ScriptAPI\Task.cpp">
+      <Filter>Game\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\ShadingModels.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Buy.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Custom.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Destroy.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Dock.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Drill.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Goto.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\LOD.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Manage.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Mine.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Mint.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Patrol.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Pirate.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Play.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Produce.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Research.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Sell.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Spawn.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Transport.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Task\Wait.cpp">
+      <Filter>Game\Task</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Universe.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Widget\HUD.cpp">
+      <Filter>Game\Widget</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Archive.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Axis.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Button\And.cpp">
+      <Filter>LTE\Button</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Button\Joystick.cpp">
+      <Filter>LTE\Button</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Button\Key.cpp">
+      <Filter>LTE\Button</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Button\Mouse.cpp">
+      <Filter>LTE\Button</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Button\Or.cpp">
+      <Filter>LTE\Button</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Buttons.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\CollisionMesh.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Color.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Config.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\CubeMap.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Debug.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Diff.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\DrawState.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Access.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Address.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Array.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Assign.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Block.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Cast.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Constant.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Constructor.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Conversion.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Declare.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Dereference.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\DynamicDispatch.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\ExpressionCall.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\For.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Function.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\FunctionCall.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\If.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\List.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Noop.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Print.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Reference.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Switch.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Type.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\Variable.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Expression\While.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Font.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Function.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Geom.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Grammar.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Joystick.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Keyboard.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\LTSL.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Loader.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Location.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Lock.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Math.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Mesh.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Meshes.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Model.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Module.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Mouse.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\OS.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Package.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ParticleSystem.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Patch.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\PlateMesh.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Profiler.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Program.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ProgramLog.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\RNG.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\RenderPass.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\RenderPass\Bloom.cpp">
+      <Filter>LTE\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\RenderPass\BloomLight.cpp">
+      <Filter>LTE\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\RenderPass\Composite.cpp">
+      <Filter>LTE\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\RenderPass\CustomFilter.cpp">
+      <Filter>LTE\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\RenderPass\MotionBlur.cpp">
+      <Filter>LTE\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\RenderPass\RadialBlur.cpp">
+      <Filter>LTE\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\RenderPasses.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\RenderStyle.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Renderable.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Renderer.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ResourceMap.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Add.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Box.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Capsule.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Cylinder.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Expand.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Intersection.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Mirror.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Multiply.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Pinch.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Polyhedron.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Radial.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Repeat.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Ring.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Scale.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Shell.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Sphere.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Subtract.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Torus.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Translate.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Union.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDF\Wedge.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SDFMesh.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Script.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Bool.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Data.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Double.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Expression.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Float.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Grammar.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Int.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Keyboard.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\List.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Mesh.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Model.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\OS.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\PlateMesh.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\RNG.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Ray.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Renderable.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Renderer.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\ShaderInstance.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\String.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\StringList.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\StringTree.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Texture2D.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Thread.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\Timer.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\V2.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\V3.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptAPI\V4.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ScriptFunction.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Serializer.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Shader.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ShaderInstance.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SpatialPartition.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SpatialPartition_HashGrid.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SpatialPartition_UniformGrid.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SpatialSignature_UniformGrid.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\SphereTree.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\StackFrame.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Static.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\String.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\StringList.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\StringTree.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Texture2D.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Texture3D.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Thread.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Time.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Timer.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Transform.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Type.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Type\Array.cpp">
+      <Filter>LTE\Type</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Type\Pointer.cpp">
+      <Filter>LTE\Type</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\UniString.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\V2.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\V3.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Viewport.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Warp.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Warp\Attractor.cpp">
+      <Filter>LTE\Warp</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Warp\Custom.cpp">
+      <Filter>LTE\Warp</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\Window.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="Module\FrameTimer.cpp">
+      <Filter>Module</Filter>
+    </ClCompile>
+    <ClCompile Include="Module\MusicEngine.cpp">
+      <Filter>Module</Filter>
+    </ClCompile>
+    <ClCompile Include="Module\PhysicsEngine.cpp">
+      <Filter>Module</Filter>
+    </ClCompile>
+    <ClCompile Include="Module\Scheduler.cpp">
+      <Filter>Module</Filter>
+    </ClCompile>
+    <ClCompile Include="Module\ScriptAPI\SoundEngine.cpp">
+      <Filter>Module\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="Module\Settings.cpp">
+      <Filter>Module</Filter>
+    </ClCompile>
+    <ClCompile Include="Module\SettingsEntry.cpp">
+      <Filter>Module</Filter>
+    </ClCompile>
+    <ClCompile Include="Module\SoundEngine.cpp">
+      <Filter>Module</Filter>
+    </ClCompile>
+    <ClCompile Include="Module\SoundEngine\Fmod.cpp">
+      <Filter>Module\SoundEngine</Filter>
+    </ClCompile>
+    <ClCompile Include="Module\SoundEngine\Null.cpp">
+      <Filter>Module\SoundEngine</Filter>
+    </ClCompile>
+    <ClCompile Include="Strukt\CodeObject\Custom.cpp">
+      <Filter>Strukt\CodeObject</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\KDTree.cpp">
+      <Filter>ThirdParty</Filter>
+    </ClCompile>
+    <ClCompile Include="ThirdParty\TriTriOverlap.cpp">
+      <Filter>ThirdParty</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ClipRegion.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Compositor\Basic.cpp">
+      <Filter>UI\Compositor</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Compositor\Custom.cpp">
+      <Filter>UI\Compositor</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Compositor\None.cpp">
+      <Filter>UI\Compositor</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Cursor.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Glyph.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Glyph\Arc.cpp">
+      <Filter>UI\Glyph</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Glyph\Box.cpp">
+      <Filter>UI\Glyph</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Glyph\Circle.cpp">
+      <Filter>UI\Glyph</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Glyph\Gradient.cpp">
+      <Filter>UI\Glyph</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Glyph\Grid.cpp">
+      <Filter>UI\Glyph</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Glyph\Line.cpp">
+      <Filter>UI\Glyph</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Glyph\Rect.cpp">
+      <Filter>UI\Glyph</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Glyph\Ring.cpp">
+      <Filter>UI\Glyph</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Glyph\Triangle.cpp">
+      <Filter>UI\Glyph</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Icon.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Interface.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ScriptAPI\Glyph.cpp">
+      <Filter>UI\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ScriptAPI\Icon.cpp">
+      <Filter>UI\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ScriptAPI\Interface.cpp">
+      <Filter>UI\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\ScriptAPI\Widget.cpp">
+      <Filter>UI\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Widget.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Widget\Custom.cpp">
+      <Filter>UI\Widget</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Widget\Dynamic.cpp">
+      <Filter>UI\Widget</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Widget\Layer.cpp">
+      <Filter>UI\Widget</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Widget\List.cpp">
+      <Filter>UI\Widget</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Widget\Rendered.cpp">
+      <Filter>UI\Widget</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\Widget\Stack.cpp">
+      <Filter>UI\Widget</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\WidgetRenderer.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\WidgetRenderer\DrawRenderable.cpp">
+      <Filter>UI\WidgetRenderer</Filter>
+    </ClCompile>
+    <ClCompile Include="Volume\Array3D.cpp">
+      <Filter>Volume</Filter>
+    </ClCompile>
+    <ClCompile Include="Volume\Contour.cpp">
+      <Filter>Volume</Filter>
+    </ClCompile>
+    <ClCompile Include="Volume\MarchingCubes.cpp">
+      <Filter>Volume</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="AI\NLPContext.h">
+      <Filter>AI</Filter>
+    </ClInclude>
+    <ClInclude Include="AI\NLPPhrase.h">
+      <Filter>AI</Filter>
+    </ClInclude>
+    <ClInclude Include="AI\Traits.h">
+      <Filter>AI</Filter>
+    </ClInclude>
+    <ClInclude Include="AI\Types.h">
+      <Filter>AI</Filter>
+    </ClInclude>
+    <ClInclude Include="Audio\Audio.h">
+      <Filter>Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="Audio\Common.h">
+      <Filter>Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="Audio\Generator.h">
+      <Filter>Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="Audio\IO.h">
+      <Filter>Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="Audio\Note.h">
+      <Filter>Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="Audio\Signal.h">
+      <Filter>Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="Audio\Signals.h">
+      <Filter>Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="BuildMode.h" />
+    <ClInclude Include="CodeGen\CodeBlock.h">
+      <Filter>CodeGen</Filter>
+    </ClInclude>
+    <ClInclude Include="CodeGen\Common.h">
+      <Filter>CodeGen</Filter>
+    </ClInclude>
+    <ClInclude Include="Common.h" />
+    <ClInclude Include="Component\Account.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Affectable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Asset.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Assets.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Attachable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\BoundingBox.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Cargo.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Collidable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Common.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Crew.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Cullable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Damager.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Database.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Detectable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Dockable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Drawable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Economy.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Explodable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\History.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Info.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Integrity.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Interior.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Log.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Market.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Mineable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\MissionBoard.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Missions.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Motion.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\MotionControl.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Nameable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Navigable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Opinion.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Orders.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Orientation.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Pilotable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Pluggable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Projects.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\ProximityTracker.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Queryable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Resources.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Scriptable.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Seeded.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Sockets.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Storage.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Supertyped.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Targets.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Tasks.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Component\Zoned.h">
+      <Filter>Component</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Action.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Actions.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Capability.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Color.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Common.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Damage.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Density.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Docks.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Hash.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Icon.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Integrity.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Level.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Mass.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Metatype.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Name.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Object.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Offset.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\PowerDrain.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Properties.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Range.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Rate.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Renderable.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Scale.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Seed.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Sockets.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Sound.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Speed.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Task.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Traits.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Uses.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Attribute\Value.h">
+      <Filter>Game\Attribute</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Beam.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Camera.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Capability.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Common.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Conditions.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Constants.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Event.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Events.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Graphics\Effects.h">
+      <Filter>Game\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Graphics\Generators.h">
+      <Filter>Game\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Graphics\RenderStyles.h">
+      <Filter>Game\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Icons.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Item.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Item\AssemblyChip.h">
+      <Filter>Game\Item</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Item\Blueprint.h">
+      <Filter>Game\Item</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Item\StationType.h">
+      <Filter>Game\Item</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Item\WeaponType.h">
+      <Filter>Game\Item</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\ItemProperty.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\ItemPropertys.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\ItemWrapper.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Items.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Light.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Materials.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Messages.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Mission.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\NLP.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Object.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Object\Planet.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\ObjectWrapper.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Objects.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Order.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Particles.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Player.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Project.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\RenderPasses.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Renderables.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Settings.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\ShadingModels.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Signature.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Socket.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Stats.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Task.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Tasks.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Template.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Universe.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\UpdateState.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Widgets.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Archive.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Array.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\AutoClass.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\AutoClass_Generated.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\AutoPtr.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Axis.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\BaseType.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\BaseVector.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Bound.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Button.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Buttons.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Call.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Capsule.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\CollisionMesh.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Color.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Common.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Compare_AutoPtr_Pointer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Compare_AutoPtr_Reference.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Compare_Pointer_Reference.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Config.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\CubeMap.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Cylinder.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Data.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\DataStack.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Debug.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\DeclareFunction.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Diff.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Distribution.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\DrawState.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Enum.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Environment.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Expression.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Expressions.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Field.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Finite.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Font.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Function.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Function\Bind.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Function\Cached.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Function\Call.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Function\Cast.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Function\FreeFn.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Function\Lookup.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Function\MemberFn.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Function\Pointer.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Function\Value.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Function\Wrapper.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Function_Generated.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\GL.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\GLEnum.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\GLType.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Generic.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Geom.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Geometry.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Grammar.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Graph.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Hash.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\HashMap.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\HashSet.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\IDMap.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\InternalList.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Interpolated.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\IntrusiveList.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Iterator.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Job.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Joystick.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Keyboard.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\LTE.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\LTSL.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\LazyHash.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\List.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\ListElement.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Loader.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Location.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Lock.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Map.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Math.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Matrix.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Mesh.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Meshes.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Model.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Module.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Mouse.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Mutable.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\OS.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Package.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Parameter.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\ParticleSystem.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Patch.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Plane.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\PlateMesh.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Pointer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Pool.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\PriorityQueue.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Profiler.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Program.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\ProgramLog.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Pushable.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Quaternion.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\RNG.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Ray.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Reference.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\RenderPass.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\RenderPasses.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\RenderStyle.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Renderable.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Renderer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\ResourceMap.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\RingBuffer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\SDF.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\SDFMesh.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\SDFs.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Script.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\ScriptFunction.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\ScriptType.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Segment.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Serializer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Shader.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\ShaderInstance.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Singleton.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Smooth.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Sparse.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\SpatialPartition.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\SpatialSignature.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Sphere.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\SphereTree.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Stack.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\StackAlloc.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\StackArray.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\StackFrame.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Static.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\StdMath.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\String.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\StringList.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\StringPool.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\StringTree.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Texture2D.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Texture3D.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Thread.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Time.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Timer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Tokenizer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Transform.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Tuple.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Type.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\TypeTraits.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Types.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\UniString.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\V2.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\V3.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\V4.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Vec.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Vector.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\VectorMap.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\VectorNP.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Vertex.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\View.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Viewport.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Warp.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Warps.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\Window.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\XEnum.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\XVector.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Module\Common.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClInclude Include="Module\FrameTimer.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClInclude Include="Module\MusicEngine.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClInclude Include="Module\MusicEngine\LtheoryTest01.h">
+      <Filter>Module\MusicEngine</Filter>
+    </ClInclude>
+    <ClInclude Include="Module\PhysicsEngine.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClInclude Include="Module\Scheduler.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClInclude Include="Module\Settings.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClInclude Include="Module\SettingsEntry.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClInclude Include="Module\Sound.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClInclude Include="Module\SoundEngine.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClInclude Include="Module\SoundEngine\Fmod.h">
+      <Filter>Module\SoundEngine</Filter>
+    </ClInclude>
+    <ClInclude Include="Network\Client.h">
+      <Filter>Network</Filter>
+    </ClInclude>
+    <ClInclude Include="Network\Common.h">
+      <Filter>Network</Filter>
+    </ClInclude>
+    <ClInclude Include="Strukt\CodeObject.h">
+      <Filter>Strukt</Filter>
+    </ClInclude>
+    <ClInclude Include="Strukt\CodeObjects.h">
+      <Filter>Strukt</Filter>
+    </ClInclude>
+    <ClInclude Include="Strukt\Common.h">
+      <Filter>Strukt</Filter>
+    </ClInclude>
+    <ClInclude Include="ThirdParty\KDTree.h">
+      <Filter>ThirdParty</Filter>
+    </ClInclude>
+    <ClInclude Include="ThirdParty\SMAA_AreaTex.h">
+      <Filter>ThirdParty</Filter>
+    </ClInclude>
+    <ClInclude Include="ThirdParty\SMAA_SearchTex.h">
+      <Filter>ThirdParty</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\ClipRegion.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Common.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Compositor.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Compositors.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Cursor.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Glyph.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Glyphs.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Icon.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Interface.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Widget.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\WidgetComponent.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\WidgetRenderer.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\Widgets.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="Volume\Array3D.h">
+      <Filter>Volume</Filter>
+    </ClInclude>
+    <ClInclude Include="Volume\Common.h">
+      <Filter>Volume</Filter>
+    </ClInclude>
+    <ClInclude Include="Volume\LookUpTable.h">
+      <Filter>Volume</Filter>
+    </ClInclude>
+    <ClInclude Include="Volume\MarchingCubes.h">
+      <Filter>Volume</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

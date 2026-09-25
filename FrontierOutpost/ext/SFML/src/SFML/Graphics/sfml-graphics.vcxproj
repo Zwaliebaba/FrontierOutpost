@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    sfml-graphics: SFML 2.5.0's Graphics module (commit 192eb968), a static library, as the original
+    build made it with BUILD_SHARED_LIBS forced off (MIGRATION_NOTES.md §5.2, ADR-002).
+
+    The sources are the ones the original's generated project compiled, in its order. The settings are
+    that project's (MIGRATION_NOTES.md §9.3): /W3, /EHsc, default floating point, no /MP, and SFML's own
+    definitions.
+
+    Output: sfml-graphics-s-d.lib / sfml-graphics-s.lib. Its compile PDB, sfml-graphics-s.pdb, goes
+    beside it (SFML_GENERATE_PDB). Its consumers link opengl32 and FreeType for it.
+  -->
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|ARM64">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64">
+      <Configuration>Release</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{E4D737A8-5A31-52DF-8381-124888276A50}</ProjectGuid>
+    <RootNamespace>sfml-graphics</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <SfmlDir>$(FrontierOutpostDir)ext\SFML\</SfmlDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <TargetName>sfml-graphics-s-d</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <TargetName>sfml-graphics-s</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(SfmlDir)include;$(SfmlDir)src;$(SfmlDir)extlibs\headers\stb_image;$(SfmlDir)extlibs\headers\freetype2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;_CRT_SECURE_NO_DEPRECATE;_SCL_SECURE_NO_WARNINGS;STBI_FAILURE_USERMSG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ProgramDataBaseFileName>$(OutDir)sfml-graphics-s.pdb</ProgramDataBaseFileName>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="BlendMode.cpp" />
+    <ClCompile Include="Color.cpp" />
+    <ClCompile Include="Font.cpp" />
+    <ClCompile Include="Glsl.cpp" />
+    <ClCompile Include="GLCheck.cpp" />
+    <ClCompile Include="GLExtensions.cpp" />
+    <ClCompile Include="Image.cpp" />
+    <ClCompile Include="ImageLoader.cpp" />
+    <ClCompile Include="RenderStates.cpp" />
+    <ClCompile Include="RenderTexture.cpp" />
+    <ClCompile Include="RenderTarget.cpp" />
+    <ClCompile Include="RenderWindow.cpp" />
+    <ClCompile Include="Shader.cpp" />
+    <ClCompile Include="Texture.cpp" />
+    <ClCompile Include="TextureSaver.cpp" />
+    <ClCompile Include="Transform.cpp" />
+    <ClCompile Include="Transformable.cpp" />
+    <ClCompile Include="View.cpp" />
+    <ClCompile Include="Vertex.cpp" />
+    <ClCompile Include="GLLoader.cpp" />
+    <ClCompile Include="Shape.cpp" />
+    <ClCompile Include="CircleShape.cpp" />
+    <ClCompile Include="RectangleShape.cpp" />
+    <ClCompile Include="ConvexShape.cpp" />
+    <ClCompile Include="Sprite.cpp" />
+    <ClCompile Include="Text.cpp" />
+    <ClCompile Include="VertexArray.cpp" />
+    <ClCompile Include="VertexBuffer.cpp" />
+    <ClCompile Include="RenderTextureImpl.cpp" />
+    <ClCompile Include="RenderTextureImplFBO.cpp" />
+    <ClCompile Include="RenderTextureImplDefault.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\include\SFML\Graphics\BlendMode.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\CircleShape.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Color.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\ConvexShape.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Drawable.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Export.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Font.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Glsl.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Glsl.inl" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Glyph.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Image.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\PrimitiveType.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Rect.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Rect.inl" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\RectangleShape.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\RenderStates.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\RenderTarget.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\RenderTexture.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\RenderWindow.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Shader.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Shape.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Sprite.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Text.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Texture.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Transform.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Transformable.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\Vertex.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\VertexArray.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\VertexBuffer.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Graphics\View.hpp" />
+    <ClInclude Include="GLCheck.hpp" />
+    <ClInclude Include="GLExtensions.hpp" />
+    <ClInclude Include="GLLoader.hpp" />
+    <ClInclude Include="ImageLoader.hpp" />
+    <ClInclude Include="RenderTextureImpl.hpp" />
+    <ClInclude Include="RenderTextureImplDefault.hpp" />
+    <ClInclude Include="RenderTextureImplFBO.hpp" />
+    <ClInclude Include="TextureSaver.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\System\sfml-system.vcxproj">
+      <Project>{2D3DEE67-9FD5-50A7-BA72-2818BF619516}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <ProjectReference Include="..\Window\sfml-window.vcxproj">
+      <Project>{9485D241-96B7-504D-93A1-627D479EB4E3}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

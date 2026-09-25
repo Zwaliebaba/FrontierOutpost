@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="include">
+      <UniqueIdentifier>{DE0E1414-95D9-568A-A89A-56FC297DE91D}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include\SFML">
+      <UniqueIdentifier>{CBC6E56C-5E99-55FD-937A-C164A66D07C9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include\SFML\Audio">
+      <UniqueIdentifier>{B356E4D1-A002-5931-8C92-7F6D8F4E18D8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src">
+      <UniqueIdentifier>{C746B795-2562-5A0A-9B69-A87A46472D16}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\SFML">
+      <UniqueIdentifier>{AC8468BD-F44B-5C47-9462-9CEEB3DBA1E6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\SFML\Audio">
+      <UniqueIdentifier>{BE46EBBF-49BD-5B66-8F90-B377966F4C25}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ALCheck.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="AlResource.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="AudioDevice.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="Listener.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="Music.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="Sound.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundBuffer.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundBufferRecorder.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="InputSoundFile.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="OutputSoundFile.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundRecorder.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundSource.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundStream.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundFileFactory.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundFileReaderFlac.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundFileReaderOgg.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundFileReaderWav.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundFileWriterFlac.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundFileWriterOgg.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundFileWriterWav.cpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\include\SFML\Audio\AlResource.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\Export.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\InputSoundFile.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\Listener.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\Music.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\OutputSoundFile.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\Sound.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\SoundBuffer.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\SoundBufferRecorder.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\SoundFileFactory.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\SoundFileFactory.inl">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\SoundFileReader.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\SoundFileWriter.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\SoundRecorder.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\SoundSource.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Audio\SoundStream.hpp">
+      <Filter>include\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="ALCheck.hpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="AudioDevice.hpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="SoundFileReaderFlac.hpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="SoundFileReaderOgg.hpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="SoundFileReaderWav.hpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="SoundFileWriterFlac.hpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="SoundFileWriterOgg.hpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClInclude>
+    <ClInclude Include="SoundFileWriterWav.hpp">
+      <Filter>src\SFML\Audio</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

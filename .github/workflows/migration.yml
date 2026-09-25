@@ -21,6 +21,15 @@ name: Migration
 # A failed baseline build is a RESULT, not a harness failure: the build step reports it and the job
 # stays green, so that red here always means the measurement itself did not happen.
 #
+# From Phase 1 on, a third job builds the migration's own product:
+#
+#   frontieroutpost  FrontierOutpost.slnx, hand-authored MSBuild, built from a clean checkout with
+#                    command-line MSBuild found through vswhere, one job per platform and
+#                    configuration. This one is a gate: a failed build fails the job. It also prints
+#                    every project's compiler, librarian, linker and resource-compiler command line,
+#                    which the baseline job prints for the original too, so the two builds can be
+#                    compared switch by switch.
+#
 # The baseline measures something that does not change (a pinned upstream commit) and costs about
 # forty runner-minutes, so it runs only for a commit whose message contains [baseline]. The
 # toolchain record is half a minute and runs on every push, because the runner image moves.
@@ -330,6 +339,16 @@ jobs:
           python .github/migration/SummarizeBuildLog.py --list C4311,C4302,C4312 `
             "$env:ARCH Debug=build-$env:ARCH-Debug.log" "$env:ARCH Release=build-$env:ARCH-Release.log"
           Write-Output ''
+          Write-Output '=== Command lines per project (compare with the frontieroutpost job) ==='
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -property installationPath
+          $tools = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt" -Raw).Trim()
+          foreach ($cfg in 'Debug', 'Release') {
+            Write-Output "--- $env:ARCH $cfg ---"
+            python .github/migration/CommandLines.py --root "$env:GITHUB_WORKSPACE\_baseline_build\src=<src>" `
+              --root "$env:GITHUB_WORKSPACE\_baseline_build\build=<build>" --root "$vs\VC\Tools\MSVC\$tools=<MSVC>" `
+              --root "${env:ProgramFiles(x86)}\Windows Kits\10=<WindowsKits>" "build-$env:ARCH-$cfg.log"
+          }
+          Write-Output ''
           Write-Output '=== Projects in the generated solution ==='
           Get-ChildItem _baseline_build/build -Filter 'LTheory.sln*' -ErrorAction SilentlyContinue | ForEach-Object {
             Select-String -Path $_.FullName -Pattern '^Project\(|<Project ' | ForEach-Object { $_.Line.Trim() }
@@ -356,4 +375,113 @@ jobs:
             _baseline_build/build/CMakeCache.txt
             _baseline_build/build/*.vcxproj
             _baseline_build/build/LTheory.sln*
+          if-no-files-found: ignore
+
+  frontieroutpost:
+    name: FrontierOutpost ${{ matrix.platform }} ${{ matrix.configuration }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # ARM64 joins in Phase 4 (FrontierOutpost/MIGRATION_NOTES.md).
+        platform: [x64]
+        configuration: [Debug, Release]
+
+    env:
+      # Not PLATFORM or CONFIGURATION: MSBuild reads every environment variable as a property.
+      FO_PLATFORM: ${{ matrix.platform }}
+      FO_CONFIGURATION: ${{ matrix.configuration }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build FrontierOutpost.slnx
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -prerelease -products * -property installationPath
+          $msbuild = & $vswhere -latest -prerelease -products * -requires Microsoft.Component.MSBuild `
+            -find 'MSBuild\**\Bin\amd64\MSBuild.exe' | Select-Object -First 1
+          $tools = (Get-Content "$vs\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt" -Raw).Trim()
+          "MSVC_DIR=$vs\VC\Tools\MSVC\$tools" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $dumpbin = "$vs\VC\Tools\MSVC\$tools\bin\Hostx64\x64\dumpbin.exe"
+          Write-Output "msbuild: $msbuild, version $(& $msbuild -version -nologo | Select-Object -Last 1)"
+          Write-Output "MSVC: $tools"
+
+          # The command the migration brief names, plus logging.
+          $log = Join-Path $PWD "build-$env:FO_PLATFORM-$env:FO_CONFIGURATION.log"
+          $timer = [Diagnostics.Stopwatch]::StartNew()
+          & $msbuild FrontierOutpost.slnx /m /p:Configuration=$env:FO_CONFIGURATION /p:Platform=$env:FO_PLATFORM `
+            /nologo /v:quiet /clp:ErrorsOnly "/flp:LogFile=$log;Verbosity=normal"
+          $code = $LASTEXITCODE
+          $elapsed = '{0:hh\:mm\:ss}' -f $timer.Elapsed
+          Write-Output "== $env:FO_PLATFORM ${env:FO_CONFIGURATION}: exit code $code, wall clock $elapsed"
+          @("### FrontierOutpost $env:FO_PLATFORM $env:FO_CONFIGURATION", '',
+            "MSBuild exit code **$code**, wall clock **$elapsed** (clean checkout, ``/m`` on $env:NUMBER_OF_PROCESSORS logical cores).", '') |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+          $out = "FrontierOutpost/bin/$env:FO_PLATFORM/$env:FO_CONFIGURATION"
+          Write-Output "-- outputs in $out --"
+          Get-ChildItem $out -File -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object {
+            $machine = ''
+            if ($_.Extension -in '.dll', '.exe', '.lib') {
+              $machine = & $dumpbin /headers $_.FullName | Select-String '(?i)machine\s*\((\w+)\)' |
+                ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique | Join-String -Separator ','
+            }
+            '   {0,-34} {1,14:N0}  {2}' -f $_.Name, $_.Length, $machine
+          }
+          foreach ($binary in 'lt.dll', 'launch.exe') {
+            $path = "$out/$binary"
+            if (-not (Test-Path $path)) { continue }
+            $current = $null
+            $counts = [ordered]@{}
+            foreach ($line in (& $dumpbin /imports $path)) {
+              if ($line -match '^\s{4}(\S+\.dll)\s*$') { $current = $Matches[1]; $counts[$current] = 0 }
+              elseif ($current -and $line -match '^\s+[0-9A-Fa-f]+\s+\S+\s*$') { $counts[$current]++ }
+            }
+            "   $binary imports: " + (($counts.GetEnumerator() | ForEach-Object { "$($_.Key) ($($_.Value))" }) -join ', ')
+          }
+          exit $code
+
+      # A measurement, not part of the product build. Until the owner's FMOD Ex x64 libraries are in
+      # FrontierOutpost/extlib/x64/FMOD (MIGRATION_NOTES.md D8), lt's link stops at the first missing
+      # library file. Linking once more with the FMOD libraries left off lists every symbol that is
+      # still unresolved, which shows whether FMOD is all the link lacks.
+      - name: Probe lt's link without the FMOD libraries
+        if: failure() && hashFiles('FrontierOutpost/extlib/x64/FMOD/*.lib') == ''
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $msbuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * `
+            -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\amd64\MSBuild.exe' | Select-Object -First 1
+          $log = Join-Path $PWD "probe-$env:FO_PLATFORM-$env:FO_CONFIGURATION.log"
+          & $msbuild FrontierOutpost.slnx /m /p:Configuration=$env:FO_CONFIGURATION /p:Platform=$env:FO_PLATFORM `
+            /p:FmodLibraries= /nologo /v:quiet /clp:ErrorsOnly "/flp:LogFile=$log;Verbosity=normal"
+          Write-Output "probe exit code: $LASTEXITCODE"
+          python .github/migration/SummarizeBuildLog.py "Probe: $env:FO_PLATFORM $env:FO_CONFIGURATION without FMOD=$log"
+          exit 0
+
+      - name: Summarize diagnostics and command lines
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $log = "build-$env:FO_PLATFORM-$env:FO_CONFIGURATION.log"
+          python .github/migration/SummarizeBuildLog.py --list C4311,C4302,C4312 "FrontierOutpost $env:FO_PLATFORM $env:FO_CONFIGURATION=$log"
+          Write-Output ''
+          Write-Output '=== Command lines per project (compare with the baseline job) ==='
+          python .github/migration/CommandLines.py --root "$env:GITHUB_WORKSPACE\FrontierOutpost=<src>" `
+            --root "$env:MSVC_DIR=<MSVC>" --root "${env:ProgramFiles(x86)}\Windows Kits\10=<WindowsKits>" $log
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontieroutpost-${{ matrix.platform }}-${{ matrix.configuration }}
+          path: |
+            build-*.log
+            probe-*.log
           if-no-files-found: ignore

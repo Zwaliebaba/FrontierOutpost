@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    launch: the LTSL app launcher, a console executable that takes exactly one argument, the app
+    name (MIGRATION_NOTES.md §5.8). It has lt's compile settings, which the original sets for both
+    (§9.3), but not /NODEFAULTLIB:libcmt. resources.rc is compiled with the same definitions and
+    include directories, plus _DEBUG in Debug and NDEBUG in Release, as the original passed them to
+    rc.exe. Its icon, ..\resource\texture\multi.ico, resolves from the .rc file's folder.
+
+    The link line keeps the original's order: SFML, OpenGL, lt.lib, then lt's own link libraries,
+    which the original passes on to launch transitively. The substitutions are ADR-002's, as in lt.
+    The original's launch.exe imports only lt.dll, KERNEL32 and the CRT (§9.4).
+  -->
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|ARM64">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64">
+      <Configuration>Release</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{B758F4E2-6C6F-5BE3-B848-F9D633726E5B}</ProjectGuid>
+    <RootNamespace>launch</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <SfmlSuffix>-s-d</SfmlSuffix>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <SfmlSuffix>-s</SfmlSuffix>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)'=='x64'">
+    <FmodLibraries>fmod_event64.lib;fmodex64_vc.lib</FmodLibraries>
+    <FmodLibraryDir>$(FrontierOutpostDir)extlib\x64\FMOD\</FmodLibraryDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;$(FrontierOutpostDir)include\FreeType;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ExceptionHandling>SyncCThrow</ExceptionHandling>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <ResourceCompile>
+      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;$(FrontierOutpostDir)include\FreeType;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <AdditionalLibraryDirectories>$(OutDir);$(FmodLibraryDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sfml-graphics$(SfmlSuffix).lib;sfml-network$(SfmlSuffix).lib;sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;lt.lib;ws2_32.lib;winmm.lib;gdi32.lib;$(FmodLibraries);glew32s.lib;freetype.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
+    <ClCompile>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ResourceCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ResourceCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="launch.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="..\resources.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\liblt\lt.vcxproj">
+      <Project>{1CB67BEE-DA37-5D52-A875-FABECCCD5014}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <ProjectReference Include="..\..\ext\SFML\src\SFML\Graphics\sfml-graphics.vcxproj">
+      <Project>{E4D737A8-5A31-52DF-8381-124888276A50}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <ProjectReference Include="..\..\ext\SFML\src\SFML\Network\sfml-network.vcxproj">
+      <Project>{139004DE-98AF-57EC-808B-D5626C27E6AB}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <ProjectReference Include="..\..\ext\SFML\src\SFML\System\sfml-system.vcxproj">
+      <Project>{2D3DEE67-9FD5-50A7-BA72-2818BF619516}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <ProjectReference Include="..\..\ext\SFML\src\SFML\Window\sfml-window.vcxproj">
+      <Project>{9485D241-96B7-504D-93A1-627D479EB4E3}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <ProjectReference Include="..\..\ext\freetype\freetype.vcxproj">
+      <Project>{8A9EE6C8-6DFE-532D-9C6B-51BC37EE4E19}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <ProjectReference Include="..\..\ext\glew\glew.vcxproj">
+      <Project>{336FF534-8B32-5BE0-AC58-41790BAC62D3}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

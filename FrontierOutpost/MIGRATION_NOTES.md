@@ -8,7 +8,12 @@ for first-party code, x64 and ARM64, and Debug and Release.
 This is a build-system and language-standard migration only. Namespaces, identifiers, files and
 user-facing strings keep their original names. `ltheory-old-main/` is read-only.
 
-**Status:** Checkpoint 0 is passed (§1, D6–D13). Phase 1 (structure) is in progress.
+**Status:** Phase 1 (structure) is written and checked in the container (§15). Its first build on
+the host is in progress. Phase 2 (x64 parity) waits on the owner's FMOD Ex x64 files (D8, O8).
+
+§1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
+changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
+phase.
 
 ---
 
@@ -566,7 +571,7 @@ Win32 and x64 are **identical apart from architecture names**, 404 settings comp
 | Setting | `lt` | `launch` | SFML (six libraries) |
 |---|---|---|---|
 | Configuration type | DynamicLibrary | Application | StaticLibrary |
-| Character set | MultiByte (so `_MBCS`; `UNICODE` undefined, and Win32 calls bind to the `A` functions) | MultiByte | MultiByte, **plus explicit `UNICODE;_UNICODE` in `sfml-window`** |
+| Character set | MultiByte (so `_MBCS`; `UNICODE` undefined, and Win32 calls bind to the `A` functions) | MultiByte | MultiByte, except **`sfml-window`: Unicode**. It defines `UNICODE;_UNICODE`, and CMake's generator sets the character set to match. (Phase 0 read this as MultiByte plus the definitions; corrected in Phase 1.) |
 | Warning level | `/W3` | `/W3` | `/W3` |
 | Exception handling | **`SyncCThrow` = `/EHs`**. The appended `/EHs` replaces CMake's `/EHsc`. | `/EHs` | `Sync` = `/EHsc` |
 | Floating point | **`Fast`** | `Fast` | default (precise) |
@@ -583,6 +588,13 @@ Win32 and x64 are **identical apart from architecture names**, 404 settings comp
 
 `CMAKE_INTDIR` and `lt_EXPORTS` are **read by nothing** in ltheory or SFML. They are CMake
 artefacts, and the MSBuild projects will not carry them (§10).
+
+The generated projects also write some settings as **empty elements**, which leaves the tool's own
+default in force rather than MSBuild's: `RemoveUnreferencedCodeData` (so no `/Zc:inline`),
+`SupportJustMyCode`, `BufferSecurityCheck`, `CallingConvention`, `TreatWChar_tAsBuiltInType`,
+`ForceConformanceInForLoopScope` and `MinimalRebuild`, and for the linker
+`DataExecutionPrevention`, `RandomizedBaseAddress` and `ImageHasSafeExceptionHandlers`. They set
+`UseFullPaths` and `ScanSourceForModuleDependencies` to `false`. §15.4 says how each carries over.
 
 **`lt`'s link order**, identical in both configurations:
 
@@ -660,8 +672,10 @@ because the linker skips the x86 libraries.
 
 ## 10. Deviations from the original build
 
-Phase 0 builds no FrontierOutpost project. The baseline itself deviates from the author's recipe
-in four ways, none of which touches the original's files:
+### 10.1 The baseline (Phase 0)
+
+The baseline deviates from the author's recipe in four ways, none of which touches the original's
+files:
 
 - CMake 4.4.3 is given `-DCMAKE_POLICY_VERSION_MINIMUM=3.5`. CMake 4 refuses
   `cmake_minimum_required(VERSION 3.0)` and 3.0.2 (SFML) otherwise.
@@ -681,29 +695,63 @@ original:
   put the logs where the summary never looked. Build results were unaffected; the warning counts
   come from run 3.
 
-Already decided for Phase 1, because they have no effect: the MSBuild projects **omit the two
-CMake-only definitions** `CMAKE_INTDIR="<cfg>"` and `lt_EXPORTS`. Nothing in ltheory or SFML reads
-either. Everything else in §9.3 carries over as it is, including the quirks: `/EHs` rather than
-`/EHsc`, `/arch:SSE2` on x64 (not expressible for ARM64), and `/NODEFAULTLIB:libcmt` on `lt`
-only.
+### 10.2 The MSBuild projects (Phase 1)
 
-The brief itself replaces one behaviour. Outputs go to `bin\$(Platform)\$(Configuration)\` and
-intermediates to `obj\...`, not to the one `bin/` in the source tree that every configuration
-overwrites. Where an x64 or ARM64 project cannot express a setting, Phase 1 logs it here.
+Every setting in §9.3 carries over unless it is listed here, including the original's quirks:
+`/EHs` rather than `/EHsc`, `/fp:fast`, `/arch:SSE2` on x64, and `/NODEFAULTLIB:libcmt` on `lt`
+only. §15.4 gives the reasoning for each entry.
+
+- **Output layout** (the brief's). Every output goes to `bin\<Platform>\<Configuration>\` and
+  every intermediate to `obj\<Platform>\<Configuration>\<Project>\`. The original writes `lt` and
+  `launch` to one `bin/` in the source tree that every configuration overwrites, and the SFML
+  libraries to `build/ext/SFML/lib/<Config>/`.
+- **No glob.** `lt`'s 382 sources are listed in `lt.vcxproj`, in the glob's order. A new source
+  file is not built until it is added there and to the `.filters`.
+- **Two definitions dropped:** `CMAKE_INTDIR="<cfg>"` and `lt_EXPORTS`. Nothing reads either.
+- **`/FC` is passed**, which the original did not pass. CMake hands `cl` absolute source paths,
+  and MSBuild hands it project-relative ones. With `/FC`, `__FILE__` (used by `src/liblt/Common.h`
+  and `LTE/StackFrame.h`) stays an absolute path, as in the original.
+- **Link lines keep the original's order but not its repetitions.** CMake repeats the libraries it
+  collects transitively (`gdi32`, `opengl32` and `sfml-system` for `lt`; the SFML set for
+  `launch`). MSVC's linker searches every library until nothing more resolves, so a repetition
+  changes nothing. The Windows import libraries are CMake's default set; MSBuild's own default
+  would add `odbc32` and `odbccp32`.
+- **Dependency substitutions** (ADR-002):
+  - `glew32s.lib` and `freetype.lib` come from this solution's `glew` and `freetype` projects;
+  - `freetype28s.lib` and SFML's bundled `freetype.lib` are no longer linked;
+  - FMOD Ex x64 is `fmod_event64.lib` and `fmodex64_vc.lib` from `extlib\x64\FMOD\` (D8);
+  - ARM64 links no FMOD library (D9).
+- **Post-build copy.** Every DLL in `extbin\<Platform>\` is copied next to `lt.dll` by MSBuild's
+  `Copy` task with `SkipUnchangedFiles`, which is what `cmake -E copy_if_different` did. At x64
+  that will be the FMOD Ex pair. `freetype6.dll` and `zlib1.dll` are no longer needed.
+- **Two new projects**, `freetype` and `glew`, replace prebuilt x86 binaries (ADR-002). Their
+  settings follow their upstream builds, not §9.3: FreeType's `vc2010` project compiles at `/W4`
+  without C4001 and with `/Za`, except `ftdebug.c`; GLEW uses the shared defaults.
+- **`launch` also references `freetype` and `glew`**, so that both are built before it links them.
+- **Platforms:** x64 and ARM64 only, as the brief says. Neither the original's Win32 nor the
+  deleted Visual Studio template's x86 (§15.2) is carried over. ARM64 gets no `/arch`.
 
 ## 11. Code changes
 
-None.
+None. Phase 1 changes no source file.
 
 ## 12. BEHAVIOUR-RISK register
 
-None yet: no FrontierOutpost code or binary exists. Candidates known now, to be logged with
-file:line when they happen:
+- **BR1: FreeType 2.5.5 replaces 2.3.5** (Phase 1). `lt` links `freetype.lib` from
+  `ext/freetype/freetype.vcxproj` (`src/liblt/lt.vcxproj`, `AdditionalDependencies`). The Win32
+  original draws its text with `freetype6.dll`, which is 2.3.5 (§9.4). FreeType 2.4 made the
+  TrueType bytecode interpreter the default hinter, so glyph shapes and metrics may differ. In the
+  original's x64 link, which fails only on GLEW and FMOD, the same references resolve to SFML's
+  bundled 2.5.5 (§9.1). So x64 now matches the original's x64 in version, though not
+  necessarily in build options.
+- **BR2: GLEW built from 1.7.0 source replaces the prebuilt `glew32s.lib`** (Phase 1),
+  `ext/glew/glew.vcxproj`. The vendored headers are 1.7.0's, so any difference lies in how the
+  unknown prebuilt was built.
 
-- Every substitution of a dependency binary (§8), foremost FreeType: the Win32 original renders
-  text with 2.3.5, and any 2.4+ build hints differently.
-- `fmod_event.dll` 4.44.20 against `fmodex.dll` 4.44.14 is the original's own pairing; any x64
-  pair supplied must be checked for the same.
+Candidates, to be logged with file:line when they happen:
+
+- `fmod_event.dll` 4.44.20 against `fmodex.dll` 4.44.14 is the original's own pairing; the x64
+  pair the owner supplies must be checked for the same (D8).
 - Floating point on ARM64 (§7): `fmadd` contraction under `/fp:fast`, and float→int saturation.
 
 ## 13. Modernisation backlog
@@ -724,8 +772,9 @@ Recorded, not to be done in this migration:
 
 - **O1** (§4) The copy in `ltheory-old-main/` is not the original. Its gaps are filled from
   upstream per D1. `ltheory-old-main/` itself stays as committed, incomplete.
-- **O2** (§4) `.gitattributes:78` corrupts `resource.h` on checkout, and will corrupt the
-  FrontierOutpost copy too without an attribute for it.
+- **O2** (§4) `.gitattributes:78` corrupts `resource.h` on checkout. **Resolved for the copy**
+  (Phase 1): `FrontierOutpost/.gitattributes` stores and checks out `src/resource.h` byte for
+  byte. `ltheory-old-main/` is still affected, and is read-only.
 - **O3** The repository's `build.yml` has been red on `main` since `24db2b9` "New Setup". It still
   builds `Lockstep.slnx` and calls the deleted `Build/*.py`. Out of scope; flagged.
 - **O4** ARM64 binaries can be built on `windows-latest` but not run. An ARM64 smoke test needs
@@ -741,3 +790,173 @@ Recorded, not to be done in this migration:
     settle O6.
 - **O7** This container can read job logs but not artifacts. The owner can download them from the
   run page.
+- **O8** (D8) The owner's FMOD Ex x64 files are not in the tree yet. Until they are, x64's `lt`
+  cannot link, so neither can `launch`, and Phase 2's gate cannot pass. Meanwhile the
+  `frontieroutpost` job probes `lt`'s link without the FMOD libraries, to show whether anything
+  else is missing (§15.6).
+- **O9** (§15.1) `extlib/win32` and `extbin/win32` are not in the copy, contrary to the approved
+  scope (§8.3 item 4, D11). Upstream keeps the 9 files (4.7 MB of x86 FMOD Ex, GLEW, FreeType and
+  zlib binaries) in LFS; their pointer files cannot be pushed here (GitHub GH008), and the
+  container cannot fetch the real files. No FrontierOutpost platform uses them. Owner's decision
+  pending: leave them out, or have the real files committed.
+
+## 15. Phase 1: structure
+
+### 15.1 The copy (1a)
+
+`FrontierOutpost/` holds a copy of the complete original (D1), not of `ltheory-old-main/`. It was
+taken from Git blobs and release files rather than from checked-out working trees, and every
+copied file is byte-identical to its source.
+
+| Where | Files | From | What |
+|---|---|---|---|
+| `src/` | 742 | upstream `0535d46` | `liblt`, `launch`, `resources.rc`, `resource.h`, and the unbuilt `src/old` |
+| `include/` | 122 | upstream | every vendored header, used or not (§6) |
+| `resource/` | 634 | upstream | runtime assets, 284 of them LFS pointer files (D12) |
+| `script/` | 6 | upstream | the author's manual generators and tools (§5.1) |
+| `extlib/win32/`, `extbin/win32/` | **0** | — | **Not copied (O9).** Upstream stores these 9 x86 files in LFS and the container cannot fetch LFS objects (O5), so the copy would be LFS pointer files. GitHub refuses a push that adds pointers for LFS objects this repository does not hold (GH008). No FrontierOutpost platform can link or load x86 files. |
+| `LICENSE`, `README.md` | 2 | upstream | |
+| `ext/SFML/` | 483 | SFML `192eb968` | `src/` (every platform's sources, as upstream has them), `include/`, `extlibs/headers`, `extlibs/libs-msvc-universal/{x86,x64}`, `extlibs/bin/{x86,x64}`, `license.md`, `readme.md`, `changelog.md`, `CONTRIBUTING.md` |
+| `ext/freetype/` | 461 | FreeType `VER-2-5-5` (`232bd948`) | `include/`; `src/` without the other build systems' files (`tools/`, `Jamfile`, `rules.mk`, `module.mk`); `builds/windows/ftdebug.c`; the licences `docs/FTL.TXT`, `docs/GPLv2.TXT` and `docs/LICENSE.TXT`; `README` |
+| `ext/glew/` | 3 | the GLEW 1.7.0 release (ADR-002) | `src/glew.c`, `LICENSE.txt`, `README.txt` |
+
+Left out, per D11 and the brief:
+
+- every CMake file: ltheory's `CMakeLists.txt` and `cmake/`, SFML's, and FreeType's;
+- `configure.py`, the author's CMake driver;
+- ltheory's `.gitattributes`, `.gitignore` and `.gitmodules`;
+- `extbin/linux32`, `linux64` and `osx`;
+- for now, `extlib/win32` and `extbin/win32` (O9);
+- SFML's `examples/`, `doc/`, `tools/`, and its prebuilt libraries for other platforms and for
+  MSVC before 2015.
+
+Two new files keep the copy intact in this repository:
+
+- **`FrontierOutpost/.gitattributes`** stores `src/resource.h` byte for byte (O2). The copy holds
+  the original 906-byte UTF-16LE blob.
+- **`FrontierOutpost/.gitignore`** ignores `bin/`, `obj/`, `.vs/` and per-user files. It also
+  overrides the root `.gitignore`'s `Win32`, `x64`, `x86`, `bin` and `ARM64` rules for the vendored
+  folders that have those names. Without that, the 30 files of SFML's Windows implementation in
+  `src/SFML/*/Win32/` would have been silently left out, as `extlib/win32` was left out of
+  `ltheory-old-main/`. `extlib/x64` and `extbin/x64` are covered in advance for the owner's FMOD
+  files (D8).
+
+### 15.2 The Visual Studio template (a correction to Phase 0)
+
+Phase 0 missed a Visual Studio desktop-application template that commit `6d8b20e` ("Sync") had
+already put in place:
+
+- `FrontierOutpost/FrontierOutpost.{cpp,h,rc,ico,vcxproj,vcxproj.filters}`;
+- `Resource.h`, `framework.h`, `small.ico` and `targetver.h`;
+- a root `FrontierOutpost.slnx` that listed it for ARM64, x64 and x86.
+
+§12's Phase 0 statement that no FrontierOutpost code existed was therefore wrong. The owner decided
+to delete the template (Phase 1), and `FrontierOutpost.slnx` was rewritten.
+
+### 15.3 The solution and the projects (1b, 1c)
+
+`FrontierOutpost.slnx`, at the repository root, has the build types Debug and Release, the
+platforms x64 and ARM64, and ten projects in three solution folders:
+
+| Folder | Project | File (under `FrontierOutpost/`) | Type | Output, Debug / Release | Replaces |
+|---|---|---|---|---|---|
+| `ltheory` | `lt` | `src/liblt/lt.vcxproj` | DLL | `lt.dll` and its import library `lt.lib` | the original's `lt` |
+| `ltheory` | `launch` | `src/launch/launch.vcxproj` | console EXE | `launch.exe` | the original's `launch` |
+| `SFML` | `sfml-system`, `sfml-window`, `sfml-network`, `sfml-graphics`, `sfml-audio` | `ext/SFML/src/SFML/<Module>/sfml-<module>.vcxproj` | static | `sfml-<module>-s-d.lib` / `sfml-<module>-s.lib` | SFML's own targets |
+| `SFML` | `sfml-main` | `ext/SFML/src/SFML/Main/sfml-main.vcxproj` | static | `sfml-main-d.lib` / `sfml-main.lib` | SFML's own target |
+| `dependencies` | `freetype` | `ext/freetype/freetype.vcxproj` | static | `freetype.lib` | the prebuilt `freetype.lib` with `freetype6.dll`, and `freetype28s.lib` |
+| `dependencies` | `glew` | `ext/glew/glew.vcxproj` | static | `glew32s.lib` | the prebuilt `glew32s.lib` |
+
+Each project sits in the folder of its sources. It has a `.filters` file that mirrors that
+folder's structure, and it opens with a comment saying where its sources and settings come from.
+
+**`FrontierOutpost/Directory.Build.props`** holds what every project shares:
+
+- toolset `v145`, and the newest installed Windows SDK (`10.0`, which is 10.0.26100.0 on the host);
+- MultiByte, and no whole-program optimisation;
+- the output and intermediate directories;
+- the compiler settings that are identical across all of the original's targets (§9.3): `/W3`,
+  the language standard, `/GR`, no precompiled headers, `/EHsc` and `/fp:precise`;
+- Debug's `/Od /Ob0 /RTC1 /Zi /MDd` and linker `/DEBUG /INCREMENTAL`, against Release's
+  `/O2 /Ob2 /MD`, `NDEBUG` and `/INCREMENTAL:NO`.
+
+Each project states only what differs from that. Every path is relative, through
+`$(MSBuildThisFileDirectory)` (as `$(FrontierOutpostDir)`), `$(OutDir)` and `$(IntDir)`.
+
+**The language standard during Phases 1 and 2** is `stdcpp14`, that is `/std:c++14`: MSVC's
+default, and so what the original compiled as (§3.1). Phase 3 changes it for `lt` and `launch`.
+
+**How the files were written.** The long lists (`lt`'s 382 sources and 340 headers, and the
+`.filters` files) were typed by a throwaway script from the file lists in §5.6 and §9.3, and then
+checked (§15.5). The script is neither in the repository nor part of the build. What it wrote is
+plain MSBuild with relative paths and no generator artefacts, and it is maintained by hand from
+here on, like everything else.
+
+### 15.4 How the original's settings carry over
+
+Most settings map one to one from §9.3. These did not:
+
+- **Same-named sources.** 92 of `lt`'s sources share their file name with at least one other:
+  43 names across 22 folders (six `Custom.cpp`, three `Camera.cpp`, and so on). With MSBuild's
+  default `ObjectFileName=$(IntDir)`, their objects would overwrite one another (MSB8027). Each of
+  them therefore compiles into an object folder named after its source folder. CMake's generator
+  gives such sources explicit object names too, and the baseline raises no MSB8027. The other 290
+  sources compile in one `/MP` batch.
+- **`sfml-window`'s character set is Unicode** (§9.3). The other nine projects are MultiByte.
+- **The empty elements** in the generated projects (§9.3) leave the tools' defaults in force.
+  - MSBuild's default differs for `RemoveUnreferencedCodeData`: it would pass `/Zc:inline`.
+    `Directory.Build.props` turns it off.
+  - It also turns `SupportJustMyCode` off, which keeps `/JMC` out whatever MSBuild's default is,
+    and sets `ScanSourceForModuleDependencies` to the original's `false`.
+  - For the others (`/GS`, `/Gd`, `/Zc:wchar_t`, `/Zc:forScope`, `/Gm-`, `/NXCOMPAT` and
+    `/DYNAMICBASE`), MSBuild's default and the tool's are the same.
+- **`UseFullPaths` is not carried over:** `/FC` stays on (§10.2).
+- **SFML's compile PDBs** are named as `SFML_GENERATE_PDB` names them: `sfml-<module>-s.pdb`,
+  beside the library.
+- **`launch`'s resource script** is compiled with `launch`'s include directories and definitions,
+  plus `_DEBUG` in Debug and `NDEBUG` in Release, as CMake passed them to `rc.exe`. Its icon,
+  `..\resource\texture\multi.ico`, is a real file rather than an LFS pointer, and it resolves
+  from the `.rc` file's folder as before.
+- **Project references do not link** (`LinkLibraryDependencies=false`). They order the build, and
+  each link line is written out in the original's order, as CMake's generated projects do it.
+- **FMOD Ex** is linked through two properties, `FmodLibraries` and `FmodLibraryDir`, which are
+  set for x64 only. ARM64 therefore links no FMOD library, and fails on the FMOD symbols. That is
+  D9's blocker, showing as exactly what it is.
+
+### 15.5 What was checked in the container
+
+The container has no MSVC (§2), so these checks are static:
+
+- every project, `.filters` file, `Directory.Build.props` and the solution are well-formed XML;
+- every source, header and resource item exists at its relative path;
+- every project reference points at a project whose GUID matches;
+- each `.filters` file lists exactly its project's items, and defines every filter it uses;
+- `lt`'s 382 object paths are unique, ignoring case;
+- the item counts equal the original's:
+  - `lt`: 382 sources, and 340 headers;
+  - `launch`: 1 source and 1 resource script;
+  - SFML: 102 sources;
+  - SFML headers, against the generated projects' own counts: System 30, Window 34, Network 13,
+    Graphics 38, Audio 24, Main 0;
+- no build file contains a drive letter, `CMake`, `ZERO_CHECK` or `ALL_BUILD`, and there is no
+  CMake file anywhere under `FrontierOutpost/`.
+
+Whether it builds is for the host to say (§15.6).
+
+### 15.6 The build on the host
+
+The workflow's new `frontieroutpost` job builds `FrontierOutpost.slnx` from a clean checkout. It
+finds MSBuild through `vswhere` and runs
+`msbuild FrontierOutpost.slnx /m /p:Configuration=<cfg> /p:Platform=x64`, one job per
+configuration; ARM64 joins in Phase 4. The job:
+
+- fails when the build fails;
+- lists the outputs with their machine types, and what `lt.dll` and `launch.exe` import;
+- summarises the diagnostics with the same script as the baseline;
+- prints every project's compiler, librarian, linker and resource-compiler command line
+  (`.github/migration/CommandLines.py`). The baseline job now prints the original's as well, so
+  that Phase 2 compares the two builds switch by switch rather than only by their project files;
+- while the FMOD x64 files are missing (O8), links `lt` once more without the FMOD libraries and
+  reports what is still unresolved.
+
+Results: pending.

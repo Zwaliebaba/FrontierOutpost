@@ -1,0 +1,4 @@
+# src/resource.h is UTF-16LE, as Visual Studio's resource editor wrote it. The root rule
+# `*.h text eol=crlf` inserts a CR before every LF byte on checkout and corrupts it
+# (MIGRATION_NOTES.md §4, O2), so this copy is stored and checked out byte for byte.
+src/resource.h -text
