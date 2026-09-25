@@ -6,7 +6,8 @@ name: NeuronClient migration
 #
 #   build     FrontierOutpost.slnx at x64 and ARM64, Debug and Release, from a clean checkout, with
 #             each build's warnings counted by .github/migration/SummarizeBuildLog.py. The baseline
-#             is 613 warnings, 585 unique, in all four (FrontierOutpost/MIGRATION_NOTES.md §22.4).
+#             is 549 warnings, 523 unique, in all four since Phase 1 (run 8, on 204eadf). It was
+#             613, 585 unique (FrontierOutpost/MIGRATION_NOTES.md §22.4).
 #   checks    Build/CheckProjectFiles.py, Build/CheckSounds.py and Build/RunClangTidy.py, as build.yml
 #             runs them.
 #   format    Build/CheckFormat.py on the pinned clang-format, and the checkers' own fixture tests.
