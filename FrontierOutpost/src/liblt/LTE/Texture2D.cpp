@@ -14,7 +14,13 @@
 #include "Timer.h"
 #include "Window.h"
 
-#include "SFML/Graphics.hpp"
+#include "ImageFile.h"
+
+#include <cctype>
+#include <cstring>
+#include <span>
+#include <string>
+#include <vector>
 
 TypeAlias(Reference<Texture2DT>, Texture);
 
@@ -185,9 +191,28 @@ namespace {
         }
       }
 
-      sf::Image image;
-      image.create(width, height, (sf::Uint8*)imageData.data());
-      image.saveToFile(path);
+      /* Always a PNG (ADR-011), so a name that says otherwise is refused. */
+      String extension = path.size() >= 4 ? path.substr(path.size() - 4) : String();
+      for (char& c : extension)
+        c = (char)std::tolower((unsigned char)c);
+      if (extension != ".png") {
+        Log_Error("Texture2D: " + path + " is not a .png path, and only PNG is written");
+        return;
+      }
+
+      std::vector<std::byte> file;
+      std::string error;
+      if (!Neuron::ImageFile::EncodePng(width, height,
+            std::as_bytes(std::span<uchar const>(imageData.data(), imageData.size())),
+            file, error))
+      {
+        Log_Error("Texture2D: " + path + ": " + error);
+        return;
+      }
+      Array<uchar> bytes(file.size());
+      memcpy(bytes.data(), file.data(), file.size());
+      if (!Location_File(path)->Write(bytes))
+        Log_Error("Texture2D: failed to write " + path);
     }
 
     void SetData(
@@ -292,53 +317,6 @@ Texture2D Texture2D_Filter(Texture2D const& texture, Shader const& shader) {
   return self;
 }
 
-Texture2D Texture_Atlas(Vector<Texture2D> const& textures) {
-  LTE_ASSERT(textures.size() > 0);
-  uint width  = textures[0]->GetWidth();
-  uint height = textures[0]->GetHeight();
-
-  for (uint i = 1; i < textures.size(); ++i) {
-    Texture2D const& t = textures[i];
-    if (t->GetWidth() != width)
-      Log_Critical("Atlas texture widths do not match.");
-    if (t->GetHeight() != height)
-      Log_Critical("Atlas texture heights do not match.");
-  }
-
-  Texture2D self = Texture_Create(textures.size() * width, height);
-
-  Array<uchar> pixelBuffer(4 * width * height);
-  uint mipLevel = 0;
-  while (width > 0) {
-    for (uint i = 0; i < textures.size(); ++i) {
-      textures[i]->BindInput(0);
-      GL_GetTexImage(
-        GL_TextureTarget::T2D,
-        mipLevel,
-        GL_PixelFormat::RGBA,
-        GL_DataFormat::UnsignedByte,
-        pixelBuffer.data());
-
-      self->BindInput(0);
-      GL_TexSubImage2D(
-        GL_TextureTarget::T2D,
-        mipLevel,
-        width * i,
-        0,
-        width,
-        height,
-        GL_PixelFormat::RGBA,
-        GL_DataFormat::UnsignedByte,
-        pixelBuffer.data());
-    }
-
-    width /= 2;
-    height /= 2;
-    mipLevel++;
-  }
-  return self;
-}
-
 Texture2D Texture_Create(
   uint width,
   uint height,
@@ -400,17 +378,21 @@ void Texture_Generate(
 }
 
 DefineFunction(Texture_LoadFrom) {
-  sf::Image image;
   AutoPtr< Array<uchar> > arr = args.source->Read();
   if (!arr)
     Log_Critical("Failed to load texture from " + args.source->ToString());
-  image.loadFromMemory(arr->data(), arr->size());
+
+  Neuron::ImageFile image;
+  std::string error;
+  if (!Neuron::ImageFile::Decode(
+        std::as_bytes(std::span<uchar const>(arr->data(), arr->size())), image, error))
+    Log_Critical("Failed to decode texture " + args.source->ToString() + ": " + error);
 
   return Texture_Create(
-    image.getSize().x,
-    image.getSize().y,
+    image.WidthPixels(),
+    image.HeightPixels(),
     GL_TextureFormat::RGBA8,
-    image.getPixelsPtr());
+    image.Pixels().data());
 }
 
 DefineFunction(Texture_ScreenCapture) {

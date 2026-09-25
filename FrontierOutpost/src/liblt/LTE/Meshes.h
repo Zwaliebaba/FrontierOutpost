@@ -26,8 +26,6 @@ DeclareFunction(Mesh_BoxSphere, Mesh,
 
 LT_API Mesh Mesh_Cone(uint slices);
 
-LT_API Mesh Mesh_Cylinder(uint slices);
-
 DeclareFunction(Mesh_Plane, Mesh,
   V3, origin,
   V3, x,

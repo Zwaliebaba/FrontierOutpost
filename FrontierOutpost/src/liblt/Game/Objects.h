@@ -137,10 +137,6 @@ DeclareFunction(Object_Universe, Object,
 
 DeclareFunctionNoParams(Object_WarpNode, Object)
 
-DeclareFunction(Object_WarpRail, Object,
-  Object, node1,
-  Object, node2)
-
 DeclareFunction(Object_Weapon, Object,
   Item, type)
 

@@ -15,20 +15,21 @@
     - /EHs rather than /EHsc: the original appends /EHs, which replaces the default /EHsc.
     - /fp:fast, /MP, and /arch:SSE2 on x64. There is no ARM64 counterpart: the original never
       targeted it, and an ARM64 /arch has no meaning here.
-    - SFML_STATIC, SFML's public definition, which the original gave lt through linking.
     - /NODEFAULTLIB:libcmt, as the original gives lt (and, through the EXECUTABLES bug, not launch).
     - Two definitions that the original's generator added are gone: nothing reads them (§10).
 
     The link line keeps the original's order, with ADR-002's substitutions:
-    - glew32s and freetype are built in this solution;
+    - glew32s is built in this solution, and NeuronClient replaces FreeType and SFML (ADR-010,
+      ADR-012);
     - xaudio2.lib, from the Windows SDK, stands where FMOD Ex's two libraries stood (ADR-003);
     - the Windows import libraries are the original's default set, without odbc32/odbccp32, which
       MSBuild would otherwise add.
     The references build the libraries first. They do not link them (LinkLibraryDependencies=false),
-    which keeps the order explicit, as the original did.
+    which keeps the order explicit, as the original did. NeuronClient's is the exception: its
+    library is linked through its reference (ADR-005).
 
     The original's POST_BUILD step copied the FMOD Ex, FreeType and zlib DLLs next to lt.dll. None of
-    them is left to copy: FreeType is linked statically, and XAudio2 is part of Windows.
+    them is left to copy: DirectWrite and XAudio2, which replace them, are part of Windows.
   -->
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -65,16 +66,10 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
-    <SfmlSuffix>-s-d</SfmlSuffix>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='Release'">
-    <SfmlSuffix>-s</SfmlSuffix>
-  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;$(FrontierOutpostDir)include\FreeType;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(SolutionDir)NeuronClient;$(FrontierOutpostDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ExceptionHandling>SyncCThrow</ExceptionHandling>
       <FloatingPointModel>Fast</FloatingPointModel>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -88,7 +83,7 @@
       <SubSystem>Console</SubSystem>
       <IgnoreSpecificDefaultLibraries>libcmt;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-graphics$(SfmlSuffix).lib;sfml-network$(SfmlSuffix).lib;sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;freetype.lib;gdi32.lib;winmm.lib;ws2_32.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;gdi32.lib;winmm.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
@@ -98,14 +93,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AI\NLPPhrase.cpp" />
-    <ClCompile Include="Audio\Envelopes.cpp" />
-    <ClCompile Include="Audio\Filters.cpp" />
-    <ClCompile Include="Audio\IO.cpp" />
-    <ClCompile Include="Audio\Signal.cpp" />
-    <ClCompile Include="Audio\Signal\Compress.cpp" />
-    <ClCompile Include="Audio\Signal\Delay.cpp" />
-    <ClCompile Include="Audio\Signal\Instrument.cpp" />
-    <ClCompile Include="Audio\Signal\Lowpass.cpp" />
     <ClCompile Include="Common.cpp" />
     <ClCompile Include="Component\Account.cpp" />
     <ClCompile Include="Component\Asset.cpp" />
@@ -150,7 +137,6 @@
     </ClCompile>
     <ClCompile Include="Game\Condition\Nearby.cpp" />
     <ClCompile Include="Game\Event\Damage.cpp" />
-    <ClCompile Include="Game\Event\Deposit.cpp" />
     <ClCompile Include="Game\Event\Mined.cpp" />
     <ClCompile Include="Game\Graphics\Effects.cpp" />
     <ClCompile Include="Game\Graphics\Generator\Blur.cpp" />
@@ -184,7 +170,6 @@
     <ClCompile Include="Game\Item\TransferUnitType.cpp" />
     <ClCompile Include="Game\Item\TurretType.cpp" />
     <ClCompile Include="Game\Item\WeaponType.cpp" />
-    <ClCompile Include="Game\Item\Worker.cpp" />
     <ClCompile Include="Game\ItemProperty.cpp" />
     <ClCompile Include="Game\ItemProperty\Owner.cpp" />
     <ClCompile Include="Game\Light.cpp" />
@@ -202,7 +187,6 @@
     <ClCompile Include="Game\Object\Custom.cpp">
       <ObjectFileName>$(IntDir)Game\Object\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="Game\Object\Drone\Construction.cpp" />
     <ClCompile Include="Game\Object\Drone\Prospecting.cpp" />
     <ClCompile Include="Game\Object\DroneBay.cpp" />
     <ClCompile Include="Game\Object\DustFlecks.cpp" />
@@ -235,7 +219,6 @@
     <ClCompile Include="Game\Object\TransferUnit.cpp" />
     <ClCompile Include="Game\Object\Turret.cpp" />
     <ClCompile Include="Game\Object\WarpNode.cpp" />
-    <ClCompile Include="Game\Object\WarpRail.cpp" />
     <ClCompile Include="Game\Object\Weapon.cpp" />
     <ClCompile Include="Game\Object\Wormhole.cpp" />
     <ClCompile Include="Game\Object\Zone.cpp" />
@@ -253,7 +236,6 @@
     </ClCompile>
     <ClCompile Include="Game\RenderPass\Clear.cpp" />
     <ClCompile Include="Game\RenderPass\DepthPrepass.cpp" />
-    <ClCompile Include="Game\RenderPass\DustClouds.cpp" />
     <ClCompile Include="Game\RenderPass\GBuffer.cpp" />
     <ClCompile Include="Game\RenderPass\GlobalLighting.cpp" />
     <ClCompile Include="Game\RenderPass\LensFlares.cpp" />
@@ -262,13 +244,10 @@
       <ObjectFileName>$(IntDir)Game\RenderPass\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="Game\RenderPass\SMAA.cpp" />
-    <ClCompile Include="Game\RenderPass\SSAO.cpp" />
     <ClCompile Include="Game\RenderPass\Visibility.cpp" />
     <ClCompile Include="Game\Renderable\Asteroid.cpp">
       <ObjectFileName>$(IntDir)Game\Renderable\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="Game\Renderable\Ice.cpp" />
-    <ClCompile Include="Game\Renderable\Imposter.cpp" />
     <ClCompile Include="Game\Renderable\Starfield.cpp" />
     <ClCompile Include="Game\ScriptAPI\Camera.cpp">
       <ObjectFileName>$(IntDir)Game\ScriptAPI\</ObjectFileName>
@@ -291,20 +270,14 @@
       <ObjectFileName>$(IntDir)Game\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="Game\Task\Buy.cpp" />
-    <ClCompile Include="Game\Task\Custom.cpp">
-      <ObjectFileName>$(IntDir)Game\Task\</ObjectFileName>
-    </ClCompile>
     <ClCompile Include="Game\Task\Destroy.cpp" />
     <ClCompile Include="Game\Task\Dock.cpp" />
-    <ClCompile Include="Game\Task\Drill.cpp" />
     <ClCompile Include="Game\Task\Goto.cpp" />
-    <ClCompile Include="Game\Task\LOD.cpp" />
     <ClCompile Include="Game\Task\Manage.cpp" />
     <ClCompile Include="Game\Task\Mine.cpp">
       <ObjectFileName>$(IntDir)Game\Task\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="Game\Task\Mint.cpp" />
-    <ClCompile Include="Game\Task\Patrol.cpp" />
     <ClCompile Include="Game\Task\Pirate.cpp" />
     <ClCompile Include="Game\Task\Play.cpp" />
     <ClCompile Include="Game\Task\Produce.cpp" />
@@ -314,22 +287,8 @@
     <ClCompile Include="Game\Task\Transport.cpp" />
     <ClCompile Include="Game\Task\Wait.cpp" />
     <ClCompile Include="Game\Universe.cpp" />
-    <ClCompile Include="Game\Widget\HUD.cpp" />
-    <ClCompile Include="LTE\Archive.cpp" />
-    <ClCompile Include="LTE\Axis.cpp" />
-    <ClCompile Include="LTE\Button\And.cpp" />
-    <ClCompile Include="LTE\Button\Joystick.cpp">
-      <ObjectFileName>$(IntDir)LTE\Button\</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="LTE\Button\Key.cpp" />
-    <ClCompile Include="LTE\Button\Mouse.cpp">
-      <ObjectFileName>$(IntDir)LTE\Button\</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="LTE\Button\Or.cpp" />
-    <ClCompile Include="LTE\Buttons.cpp" />
     <ClCompile Include="LTE\CollisionMesh.cpp" />
     <ClCompile Include="LTE\Color.cpp" />
-    <ClCompile Include="LTE\Config.cpp" />
     <ClCompile Include="LTE\CubeMap.cpp" />
     <ClCompile Include="LTE\Debug.cpp" />
     <ClCompile Include="LTE\Diff.cpp" />
@@ -378,9 +337,6 @@
     <ClCompile Include="LTE\Grammar.cpp">
       <ObjectFileName>$(IntDir)LTE\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="LTE\Joystick.cpp">
-      <ObjectFileName>$(IntDir)LTE\</ObjectFileName>
-    </ClCompile>
     <ClCompile Include="LTE\Keyboard.cpp">
       <ObjectFileName>$(IntDir)LTE\</ObjectFileName>
     </ClCompile>
@@ -417,11 +373,7 @@
     </ClCompile>
     <ClCompile Include="LTE\RenderPass.cpp" />
     <ClCompile Include="LTE\RenderPass\Bloom.cpp" />
-    <ClCompile Include="LTE\RenderPass\BloomLight.cpp" />
-    <ClCompile Include="LTE\RenderPass\Composite.cpp" />
     <ClCompile Include="LTE\RenderPass\CustomFilter.cpp" />
-    <ClCompile Include="LTE\RenderPass\MotionBlur.cpp" />
-    <ClCompile Include="LTE\RenderPass\RadialBlur.cpp" />
     <ClCompile Include="LTE\RenderPasses.cpp" />
     <ClCompile Include="LTE\RenderStyle.cpp" />
     <ClCompile Include="LTE\Renderable.cpp">
@@ -432,31 +384,16 @@
     </ClCompile>
     <ClCompile Include="LTE\ResourceMap.cpp" />
     <ClCompile Include="LTE\SDF.cpp" />
-    <ClCompile Include="LTE\SDF\Add.cpp" />
     <ClCompile Include="LTE\SDF\Box.cpp">
       <ObjectFileName>$(IntDir)LTE\SDF\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="LTE\SDF\Capsule.cpp" />
     <ClCompile Include="LTE\SDF\Cylinder.cpp" />
-    <ClCompile Include="LTE\SDF\Expand.cpp" />
-    <ClCompile Include="LTE\SDF\Intersection.cpp" />
-    <ClCompile Include="LTE\SDF\Mirror.cpp" />
-    <ClCompile Include="LTE\SDF\Multiply.cpp" />
-    <ClCompile Include="LTE\SDF\Pinch.cpp" />
-    <ClCompile Include="LTE\SDF\Polyhedron.cpp" />
     <ClCompile Include="LTE\SDF\Radial.cpp" />
-    <ClCompile Include="LTE\SDF\Repeat.cpp" />
-    <ClCompile Include="LTE\SDF\Ring.cpp">
-      <ObjectFileName>$(IntDir)LTE\SDF\</ObjectFileName>
-    </ClCompile>
     <ClCompile Include="LTE\SDF\Scale.cpp" />
     <ClCompile Include="LTE\SDF\Shell.cpp" />
     <ClCompile Include="LTE\SDF\Sphere.cpp" />
     <ClCompile Include="LTE\SDF\Subtract.cpp" />
     <ClCompile Include="LTE\SDF\Torus.cpp" />
-    <ClCompile Include="LTE\SDF\Translate.cpp" />
-    <ClCompile Include="LTE\SDF\Union.cpp" />
-    <ClCompile Include="LTE\SDF\Wedge.cpp" />
     <ClCompile Include="LTE\SDFMesh.cpp" />
     <ClCompile Include="LTE\Script.cpp" />
     <ClCompile Include="LTE\ScriptAPI\Bool.cpp" />
@@ -504,16 +441,10 @@
     <ClCompile Include="LTE\ScriptAPI\String.cpp">
       <ObjectFileName>$(IntDir)LTE\ScriptAPI\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="LTE\ScriptAPI\StringList.cpp">
-      <ObjectFileName>$(IntDir)LTE\ScriptAPI\</ObjectFileName>
-    </ClCompile>
     <ClCompile Include="LTE\ScriptAPI\StringTree.cpp">
       <ObjectFileName>$(IntDir)LTE\ScriptAPI\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="LTE\ScriptAPI\Texture2D.cpp">
-      <ObjectFileName>$(IntDir)LTE\ScriptAPI\</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="LTE\ScriptAPI\Thread.cpp">
       <ObjectFileName>$(IntDir)LTE\ScriptAPI\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="LTE\ScriptAPI\Timer.cpp">
@@ -582,6 +513,7 @@
     <ClCompile Include="LTE\Warp\Custom.cpp">
       <ObjectFileName>$(IntDir)LTE\Warp\</ObjectFileName>
     </ClCompile>
+    <ClCompile Include="LTE\WglBridge.cpp" />
     <ClCompile Include="LTE\Window.cpp" />
     <ClCompile Include="Module\FrameTimer.cpp" />
     <ClCompile Include="Module\PhysicsEngine.cpp" />
@@ -594,18 +526,11 @@
     <ClCompile Include="Module\SoundEngine.cpp">
       <ObjectFileName>$(IntDir)Module\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="Module\SoundEngine\Null.cpp" />
     <ClCompile Include="Module\SoundEngine\XAudio2.cpp" />
-    <ClCompile Include="Strukt\CodeObject\Custom.cpp">
-      <ObjectFileName>$(IntDir)Strukt\CodeObject\</ObjectFileName>
-    </ClCompile>
     <ClCompile Include="ThirdParty\KDTree.cpp" />
     <ClCompile Include="ThirdParty\TriTriOverlap.cpp" />
     <ClCompile Include="UI\ClipRegion.cpp" />
     <ClCompile Include="UI\Compositor\Basic.cpp" />
-    <ClCompile Include="UI\Compositor\Custom.cpp">
-      <ObjectFileName>$(IntDir)UI\Compositor\</ObjectFileName>
-    </ClCompile>
     <ClCompile Include="UI\Compositor\None.cpp" />
     <ClCompile Include="UI\Cursor.cpp" />
     <ClCompile Include="UI\Glyph.cpp">
@@ -619,7 +544,6 @@
     <ClCompile Include="UI\Glyph\Gradient.cpp" />
     <ClCompile Include="UI\Glyph\Grid.cpp" />
     <ClCompile Include="UI\Glyph\Line.cpp" />
-    <ClCompile Include="UI\Glyph\Rect.cpp" />
     <ClCompile Include="UI\Glyph\Ring.cpp">
       <ObjectFileName>$(IntDir)UI\Glyph\</ObjectFileName>
     </ClCompile>
@@ -668,16 +592,7 @@
     <ClInclude Include="AI\NLPPhrase.h" />
     <ClInclude Include="AI\Traits.h" />
     <ClInclude Include="AI\Types.h" />
-    <ClInclude Include="Audio\Audio.h" />
-    <ClInclude Include="Audio\Common.h" />
-    <ClInclude Include="Audio\Generator.h" />
-    <ClInclude Include="Audio\IO.h" />
-    <ClInclude Include="Audio\Note.h" />
-    <ClInclude Include="Audio\Signal.h" />
-    <ClInclude Include="Audio\Signals.h" />
     <ClInclude Include="BuildMode.h" />
-    <ClInclude Include="CodeGen\CodeBlock.h" />
-    <ClInclude Include="CodeGen\Common.h" />
     <ClInclude Include="Common.h" />
     <ClInclude Include="Component\Account.h" />
     <ClInclude Include="Component\Affectable.h" />
@@ -804,18 +719,13 @@
     <ClInclude Include="Game\Template.h" />
     <ClInclude Include="Game\Universe.h" />
     <ClInclude Include="Game\UpdateState.h" />
-    <ClInclude Include="Game\Widgets.h" />
-    <ClInclude Include="LTE\Archive.h" />
     <ClInclude Include="LTE\Array.h" />
     <ClInclude Include="LTE\AutoClass.h" />
     <ClInclude Include="LTE\AutoClass_Generated.h" />
     <ClInclude Include="LTE\AutoPtr.h" />
-    <ClInclude Include="LTE\Axis.h" />
     <ClInclude Include="LTE\BaseType.h" />
     <ClInclude Include="LTE\BaseVector.h" />
     <ClInclude Include="LTE\Bound.h" />
-    <ClInclude Include="LTE\Button.h" />
-    <ClInclude Include="LTE\Buttons.h" />
     <ClInclude Include="LTE\Call.h" />
     <ClInclude Include="LTE\Capsule.h" />
     <ClInclude Include="LTE\CollisionMesh.h" />
@@ -824,7 +734,6 @@
     <ClInclude Include="LTE\Compare_AutoPtr_Pointer.h" />
     <ClInclude Include="LTE\Compare_AutoPtr_Reference.h" />
     <ClInclude Include="LTE\Compare_Pointer_Reference.h" />
-    <ClInclude Include="LTE\Config.h" />
     <ClInclude Include="LTE\CubeMap.h" />
     <ClInclude Include="LTE\Cylinder.h" />
     <ClInclude Include="LTE\Data.h" />
@@ -870,7 +779,6 @@
     <ClInclude Include="LTE\IntrusiveList.h" />
     <ClInclude Include="LTE\Iterator.h" />
     <ClInclude Include="LTE\Job.h" />
-    <ClInclude Include="LTE\Joystick.h" />
     <ClInclude Include="LTE\Keyboard.h" />
     <ClInclude Include="LTE\LTE.h" />
     <ClInclude Include="LTE\LTSL.h" />
@@ -965,6 +873,7 @@
     <ClInclude Include="LTE\Viewport.h" />
     <ClInclude Include="LTE\Warp.h" />
     <ClInclude Include="LTE\Warps.h" />
+    <ClInclude Include="LTE\WglBridge.h" />
     <ClInclude Include="LTE\Window.h" />
     <ClInclude Include="LTE\XEnum.h" />
     <ClInclude Include="LTE\XVector.h" />
@@ -976,11 +885,6 @@
     <ClInclude Include="Module\SettingsEntry.h" />
     <ClInclude Include="Module\Sound.h" />
     <ClInclude Include="Module\SoundEngine.h" />
-    <ClInclude Include="Network\Client.h" />
-    <ClInclude Include="Network\Common.h" />
-    <ClInclude Include="Strukt\CodeObject.h" />
-    <ClInclude Include="Strukt\CodeObjects.h" />
-    <ClInclude Include="Strukt\Common.h" />
     <ClInclude Include="ThirdParty\KDTree.h" />
     <ClInclude Include="ThirdParty\SMAA_AreaTex.h" />
     <ClInclude Include="ThirdParty\SMAA_SearchTex.h" />
@@ -1003,25 +907,9 @@
     <ClInclude Include="Volume\MarchingCubes.h" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\ext\SFML\src\SFML\Graphics\sfml-graphics.vcxproj">
-      <Project>{E4D737A8-5A31-52DF-8381-124888276A50}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-    <ProjectReference Include="..\..\ext\SFML\src\SFML\Network\sfml-network.vcxproj">
-      <Project>{139004DE-98AF-57EC-808B-D5626C27E6AB}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-    <ProjectReference Include="..\..\ext\SFML\src\SFML\System\sfml-system.vcxproj">
-      <Project>{2D3DEE67-9FD5-50A7-BA72-2818BF619516}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-    <ProjectReference Include="..\..\ext\SFML\src\SFML\Window\sfml-window.vcxproj">
-      <Project>{9485D241-96B7-504D-93A1-627D479EB4E3}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-    <ProjectReference Include="..\..\ext\freetype\freetype.vcxproj">
-      <Project>{8A9EE6C8-6DFE-532D-9C6B-51BC37EE4E19}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    <!-- NeuronClient.lib is linked through this reference (Design/ADR/ADR-005). -->
+    <ProjectReference Include="..\..\..\NeuronClient\NeuronClient.vcxproj">
+      <Project>{05010071-B8CA-465B-9FEC-BCF2D87DAD7A}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\ext\glew\glew.vcxproj">
       <Project>{336FF534-8B32-5BE0-AC58-41790BAC62D3}</Project>

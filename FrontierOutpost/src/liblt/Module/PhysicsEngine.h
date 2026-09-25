@@ -26,7 +26,6 @@ struct PhysicsEngine : public ModuleT {
 };
 
 LT_API PhysicsEngine* CreatePhysicsEngine();
-LT_API PhysicsEngine* CreatePhysicsEngineNull();
 LT_API PhysicsEngine* GetPhysicsEngine();
 
 #endif

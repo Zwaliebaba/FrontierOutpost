@@ -25,16 +25,13 @@ namespace {
       passes.push(RenderPass_Visibility());
       passes.push(RenderPass_DepthPrepass());
       passes.push(RenderPass_GBuffer());
-      // passes.push(RenderPass_SSAO());
       passes.push(RenderPass_GlobalLighting());
       passes.push(RenderPass_LocalLighting());
       passes.push(RenderPass_Blended());
-      // passes.push(RenderPass_DustClouds());
       passes.push(RenderPass_Particles());
       passes.push(RenderPass_LensFlares());
       passes.push(RenderPass_Bloom(128, 64));
       passes.push(RenderPass_Tonemap());
-      // passes.push(RenderPass_MotionBlur());
       passes.push(RenderPass_PostFilter("post/colorgrade1D.jsl"));
     }
 

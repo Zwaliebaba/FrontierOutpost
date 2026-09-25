@@ -91,16 +91,6 @@ Mesh Mesh_Cone(uint slices) {
   return Mesh_PolarClosed(displacer, slices, 3, true);
 }
 
-Mesh Mesh_Cylinder(uint slices) {
-  struct {
-    float operator()(float height, float angle) const {
-      return 1;
-    }
-  } displacer;
-  return Mesh_PolarClosed(displacer, slices, 2, true)->Transform(
-    Matrix::Scale(V3(1, 2, 1)) * Matrix::Translation(V3(0, -0.5f, 0)));
-}
-
 /* CRITICAL. */
 DeclareFunction(Mesh_CylinderHUD, Mesh,
   float, curvature,

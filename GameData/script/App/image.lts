@@ -5,11 +5,7 @@ type App
       Widget/Components:Expand
         Widget/Components:Margin 16 16
           Widget/ImageEditor:Create
-            ?
-              false (Texture_LoadFrom (Location_File "1.png"))
-              true
-                Texture_LoadFrom (Location_File "data/screenshot/29.png")
-              otherwise (Texture/RandomScreenshot:Get)
+            Texture/RandomScreenshot:Get
             "image.png"
     l
 

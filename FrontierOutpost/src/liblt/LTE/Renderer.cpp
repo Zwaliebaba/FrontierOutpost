@@ -504,16 +504,6 @@ namespace LTE {
     renderer.callCount++;
   }
 
-  void Renderer_DrawQuadOutline(V2 const& p1, V2 const& p2) {
-    GL_Begin(GL_DrawMode::LineLoop);
-    GL_Vertex(p1.x, p1.y, 0);
-    GL_Vertex(p1.x, p2.y, 0);
-    GL_Vertex(p2.x, p2.y, 0);
-    GL_Vertex(p2.x, p1.y, 0);
-    GL_End();
-    renderer.callCount++;
-  }
-
   void StaticDrawVertices(
     Vertex const* vertexData,
     void const* indexData,

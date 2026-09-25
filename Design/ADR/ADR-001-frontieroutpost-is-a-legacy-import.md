@@ -2,7 +2,9 @@
 
 - **Status:** Accepted (owner, 2026-09-24, at the start of the ltheory-old migration)
 - **Scope:** `FrontierOutpost.slnx` and everything under `FrontierOutpost/`, and, since ADR-004,
-  `GameData/`: the original's runtime data, moved out of `FrontierOutpost/`. Nothing else.
+  `GameData/`: the original's runtime data, moved out of `FrontierOutpost/`. Nothing else. The
+  solution builds `NeuronClient/` and `Tests/NeuronClientTests/` from the NeuronClient plan's
+  Phase 2; they are outside the exemption, and AGENTS.md governs them in full (ADR-005).
 - **Detail:** `FrontierOutpost/MIGRATION_NOTES.md`
 
 ## Context

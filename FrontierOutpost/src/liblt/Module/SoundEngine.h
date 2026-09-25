@@ -30,7 +30,6 @@ struct SoundEngine : public ModuleT {
 
 LT_API SoundEngine* GetSoundEngine();
 LT_API SoundEngine* SoundEngine_XAudio2();
-LT_API SoundEngine* SoundEngine_Null();
 
 inline Sound Sound_Play2D(
   String const& name,

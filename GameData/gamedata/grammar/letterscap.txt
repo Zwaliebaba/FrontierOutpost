@@ -1,2 +1,0 @@
-1|~lettercap
-1|~lettercap|~letterscap

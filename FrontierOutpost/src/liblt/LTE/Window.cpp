@@ -5,12 +5,75 @@
 #include "Matrix.h"
 #include "Mouse.h"
 #include "Pointer.h"
+#include "ProgramLog.h"
 #include "Renderer.h"
 #include "String.h"
 #include "Texture2D.h"
 #include "Viewport.h"
+#include "WglBridge.h"
 
-#include "SFML/Graphics.hpp"
+/* NeuronClient's Window.h, which the quoted form cannot reach from here: it finds this folder's
+   own Window.h first. */
+#include <Window.h>
+
+#include <string>
+#include <variant>
+
+/* NeuronClient's keys as the engine's (ADR-012). Each of the 101 has a name in both. */
+#define KEY_MAP_XY                                                             \
+  XY(A, A) XY(B, B) XY(C, C) XY(D, D) XY(E, E) XY(F, F) XY(G, G) XY(H, H)      \
+  XY(I, I) XY(J, J) XY(K, K) XY(L, L) XY(M, M) XY(N, N) XY(O, O) XY(P, P)      \
+  XY(Q, Q) XY(R, R) XY(S, S) XY(T, T) XY(U, U) XY(V, V) XY(W, W) XY(X, X)      \
+  XY(Y, Y) XY(Z, Z)                                                            \
+  XY(N0, Digit0) XY(N1, Digit1) XY(N2, Digit2) XY(N3, Digit3)                  \
+  XY(N4, Digit4) XY(N5, Digit5) XY(N6, Digit6) XY(N7, Digit7)                  \
+  XY(N8, Digit8) XY(N9, Digit9)                                                \
+  XY(NP0, Numpad0) XY(NP1, Numpad1) XY(NP2, Numpad2) XY(NP3, Numpad3)          \
+  XY(NP4, Numpad4) XY(NP5, Numpad5) XY(NP6, Numpad6) XY(NP7, Numpad7)          \
+  XY(NP8, Numpad8) XY(NP9, Numpad9)                                            \
+  XY(F1, F1) XY(F2, F2) XY(F3, F3) XY(F4, F4) XY(F5, F5) XY(F6, F6)            \
+  XY(F7, F7) XY(F8, F8) XY(F9, F9) XY(F10, F10) XY(F11, F11) XY(F12, F12)      \
+  XY(F13, F13) XY(F14, F14) XY(F15, F15)                                       \
+  XY(Add, NumpadAdd)                                                           \
+  XY(BackSpace, Backspace)                                                     \
+  XY(BackSlash, Backslash)                                                     \
+  XY(Comma, Comma)                                                             \
+  XY(Dash, Minus)                                                              \
+  XY(Delete, Delete)                                                           \
+  XY(Divide, NumpadDivide)                                                     \
+  XY(Down, Down)                                                               \
+  XY(End, End)                                                                 \
+  XY(Equal, Equal)                                                             \
+  XY(Escape, Escape)                                                           \
+  XY(Home, Home)                                                               \
+  XY(Insert, Insert)                                                           \
+  XY(LBracket, LeftBracket)                                                    \
+  XY(Left, Left)                                                               \
+  XY(Menu, Menu)                                                               \
+  XY(Multiply, NumpadMultiply)                                                 \
+  XY(PageDown, PageDown)                                                       \
+  XY(PageUp, PageUp)                                                           \
+  XY(Pause, Pause)                                                             \
+  XY(Period, Period)                                                           \
+  XY(Quote, Apostrophe)                                                        \
+  XY(RBracket, RightBracket)                                                   \
+  XY(Return, Enter)                                                            \
+  XY(Right, Right)                                                             \
+  XY(SemiColon, Semicolon)                                                     \
+  XY(Slash, Slash)                                                             \
+  XY(Space, Space)                                                             \
+  XY(Subtract, NumpadSubtract)                                                 \
+  XY(Tab, Tab)                                                                 \
+  XY(Tilde, Grave)                                                             \
+  XY(Up, Up)                                                                   \
+  XY(LAlt, LeftAlt)                                                            \
+  XY(RAlt, RightAlt)                                                           \
+  XY(LControl, LeftControl)                                                    \
+  XY(RControl, RightControl)                                                   \
+  XY(LShift, LeftShift)                                                        \
+  XY(RShift, RightShift)                                                       \
+  XY(LSystem, LeftSystem)                                                      \
+  XY(RSystem, RightSystem)
 
 namespace {
   Vector<Window>& GetStack() {
@@ -18,29 +81,32 @@ namespace {
     return stack;
   }
 
-  void ProcessMouseEvent(sf::Mouse::Button button, bool pressed) {
+  /* Key_SIZE for Neuron::Key::Unknown. */
+  Key Key_FromNeuron(Neuron::Key key) {
+    switch (key) {
+      #define XY(x, y) case Neuron::Key::y: return Key_##x;
+      KEY_MAP_XY
+      #undef XY
+      default: return Key_SIZE;
+    }
+  }
+
+  MouseButton MouseButton_FromNeuron(Neuron::MouseButton button) {
     switch (button) {
-      case sf::Mouse::Left:
-        Mouse_SetPressed(MouseButton_Left, pressed); break;
-      case sf::Mouse::Right:
-        Mouse_SetPressed(MouseButton_Right, pressed); break;
-      case sf::Mouse::Middle:
-        Mouse_SetPressed(MouseButton_Middle, pressed); break;
-      case sf::Mouse::XButton1:
-        Mouse_SetPressed(MouseButton_X1, pressed); break;
-      case sf::Mouse::XButton2:
-        Mouse_SetPressed(MouseButton_X2, pressed); break;
-      default: break;
+      case Neuron::MouseButton::Left: return MouseButton_Left;
+      case Neuron::MouseButton::Right: return MouseButton_Right;
+      case Neuron::MouseButton::Middle: return MouseButton_Middle;
+      case Neuron::MouseButton::X1: return MouseButton_X1;
+      default: return MouseButton_X2;
     }
   }
 
   struct WindowImpl : public WindowT {
-    sf::RenderWindow impl;
+    Neuron::Window impl;
+    WglBridge gl;
     String title;
     Viewport viewport;
     V2U size;
-    uint bpp;
-    bool captureMouse;
     bool hasFocus;
 
     WindowImpl(
@@ -50,37 +116,45 @@ namespace {
         bool fullscreen) :
       title(title),
       size(size),
-      bpp(32),
-      captureMouse(false),
       hasFocus(true)
     {
-      viewport = Viewport_Create(0, size, 1, true);
-      impl.create(
-        sf::VideoMode(size.x, size.y, bpp),
-        title,
-        fullscreen
-          ? sf::Style::Fullscreen 
-          : border
-            ? sf::Style::Default
-            : sf::Style::None);
-      impl.setMouseCursorVisible(false);
-      impl.setView(sf::View(sf::FloatRect(0, 0, size.x, size.y)));
-      viewport->size = size;
+      if (fullscreen)
+        Log_Critical("Window: exclusive fullscreen is not supported (ADR-012)");
 
-      // sf::Vector2i p = sf::Mouse::getPosition(impl);
-      // sf::Mouse::setPosition(p, impl);
+      viewport = Viewport_Create(0, size, 1, true);
+
+      Neuron::Window::Desc desc;
+      desc.titleUtf8 = title;
+      desc.widthPixels = size.x;
+      desc.heightPixels = size.y;
+      desc.border = border;
+      desc.cursorVisible = false;
+
+      std::string error;
+      if (!Neuron::Window::Open(desc, impl, error))
+        Log_Critical(error);
+
+      String glError;
+      if (!gl.Create(impl.NativeHandle(), glError))
+        Log_Critical(glError);
+
+      /* SFML turned vertical sync off for every new window. */
+      gl.SetSwapInterval(0);
+      viewport->size = size;
     }
 
     void Close() {
-      impl.close();
+      gl.Destroy();
+      impl.Close();
     }
 
     void Display() {
-      impl.display();
+      gl.Swap();
     }
 
-    void* GetImplData() {
-      return &impl;
+    V2I GetCursorPos() const {
+      Neuron::ClientPoint p = impl.CursorPosition();
+      return V2I(p.xPixels, p.yPixels);
     }
 
     V2U GetSize() const {
@@ -92,96 +166,50 @@ namespace {
     }
 
     bool IsOpen() const {
-      return impl.isOpen();
-    }
-
-    void SetCaptureMouse(bool captureMouse) {
-      this->captureMouse = captureMouse;
-    }
-
-    void SetCursorVisible(bool visible) {
-      impl.setMouseCursorVisible(visible);
-    }
-
-    void SetFullscreen() {
-      impl.create(sf::VideoMode(size.x, size.y, bpp), title, sf::Style::Fullscreen);
-      viewport->size.x = (float)impl.getSize().x;
-      viewport->size.y = (float)impl.getSize().y;
-      impl.setMouseCursorVisible(false);
-    }
-
-    void SetIcon(Texture2D const& icon) {
-      Array<uchar> buf(icon->GetMemory());
-      icon->GetData(buf.data());
-      impl.setIcon(
-        icon->GetWidth(),
-        icon->GetHeight(),
-        (sf::Uint8 const*)buf.data());
-    }
-
-    void SetPosition(V2I const& p) {
-      impl.setPosition(sf::Vector2i(p.x, p.y));
+      return impl.IsOpen();
     }
 
     void SetSync(bool sync) {
-      impl.setVerticalSyncEnabled(sync);
+      gl.SetSwapInterval(sync ? 1 : 0);
     }
 
     void Update() {
-      sf::Event e;
-      while (impl.pollEvent(e)) {
-        if (e.type == sf::Event::Resized) {
-          float w = (float)e.size.width;
-          float h = (float)e.size.height;
-          impl.setView(sf::View(sf::FloatRect(0, 0, w, h)));
-          size.x = e.size.width;
-          size.y = e.size.height;
-          viewport->size = V2(w, h);
+      Neuron::WindowEvent e;
+      while (impl.PollEvent(e)) {
+        if (Neuron::ResizeEvent const* resize = std::get_if<Neuron::ResizeEvent>(&e)) {
+          size.x = resize->widthPixels;
+          size.y = resize->heightPixels;
+          viewport->size = V2((float)resize->widthPixels, (float)resize->heightPixels);
         }
 
-        else if (e.type == sf::Event::KeyPressed) {
-          if (e.key.code != sf::Keyboard::Unknown)
-            Keyboard_AddDown((int)e.key.code);
-        }
-
-        else if (e.type == sf::Event::MouseButtonPressed)
-          ProcessMouseEvent(e.mouseButton.button, true);
-
-        else if (e.type == sf::Event::MouseButtonReleased)
-          ProcessMouseEvent(e.mouseButton.button, false);
-
-        else if (e.type == sf::Event::MouseMoved) {
-          V2I p(e.mouseMove.x, e.mouseMove.y);
-
-          if (captureMouse) {
-            const V2I borderSize = 1;
-            V2I s = (V2I)size - borderSize;
-            if (p.x < borderSize.x ||
-                p.y < borderSize.y ||
-                p.x > s.x ||
-                p.y > s.y)
-            {
-              p = Clamp(p, borderSize, s);
-              Mouse_SetPos(p);
-            }
+        else if (Neuron::KeyEvent const* key = std::get_if<Neuron::KeyEvent>(&e)) {
+          Key engineKey = Key_FromNeuron(key->key);
+          if (engineKey != Key_SIZE) {
+            if (key->down)
+              Keyboard_AddDown(engineKey);
+            else
+              Keyboard_AddUp(engineKey);
           }
-          Mouse_UpdatePos(p);  
         }
 
-        else if (e.type == sf::Event::MouseWheelMoved && hasFocus) {
-          /* TODO : Improve precision on Windows. */
-          Mouse_SetScrollDelta((float)e.mouseWheel.delta);
+        else if (Neuron::MouseButtonEvent const* button = std::get_if<Neuron::MouseButtonEvent>(&e))
+          Mouse_SetPressed(MouseButton_FromNeuron(button->button), button->down);
+
+        else if (Neuron::MouseMoveEvent const* move = std::get_if<Neuron::MouseMoveEvent>(&e))
+          Mouse_UpdatePos(V2I(move->position.xPixels, move->position.yPixels));
+
+        else if (Neuron::MouseWheelEvent const* wheel = std::get_if<Neuron::MouseWheelEvent>(&e)) {
+          /* Whole notches, as SFML counted them. TODO : Improve precision on Windows. */
+          if (hasFocus)
+            Mouse_SetScrollDelta((float)(int)wheel->notches);
         }
 
-        else if (e.type == sf::Event::GainedFocus)
-          hasFocus = true;
+        else if (Neuron::FocusEvent const* focus = std::get_if<Neuron::FocusEvent>(&e))
+          hasFocus = focus->gained;
 
-        else if (e.type == sf::Event::LostFocus)
-          hasFocus = false;
-
-        else if (e.type == sf::Event::TextEntered) {
-          if (e.text.unicode >= 32 && e.text.unicode <= 126)
-            Keyboard_AddText((char)e.text.unicode);
+        else if (Neuron::CharacterEvent const* text = std::get_if<Neuron::CharacterEvent>(&e)) {
+          if (text->codePoint >= 32 && text->codePoint <= 126)
+            Keyboard_AddText((char)text->codePoint);
         }
       }
     }

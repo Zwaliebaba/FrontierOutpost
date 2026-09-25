@@ -57,8 +57,6 @@ struct Texture2DT : public RefCounted {
   FIELDS {}
 };
 
-LT_API Texture2D Texture_Atlas(Vector<Texture2D*> const& souces);
-
 LT_API Texture2D Texture_Create(
   uint width,
   uint height,

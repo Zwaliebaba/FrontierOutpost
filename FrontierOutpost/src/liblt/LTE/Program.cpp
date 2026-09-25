@@ -1,6 +1,5 @@
 #include "Program.h"
 
-#include "Joystick.h"
 #include "GL.h"
 #include "Keyboard.h"
 #include "Module.h"
@@ -44,11 +43,6 @@ void Program::Execute() {
     FRAME("InputUpdate") {
       Mouse_Update();
       Keyboard_Update(window->HasFocus());
-
-      if (window->HasFocus())
-        for (uint i = 0; i < Joystick::GetCount(); ++i)
-          if (Joystick::Get(i))
-            Joystick::Get(i)->Update();
     }
 
     FRAME("WindowUpdate") {

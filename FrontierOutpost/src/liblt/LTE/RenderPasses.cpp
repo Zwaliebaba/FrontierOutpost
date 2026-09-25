@@ -59,24 +59,6 @@ namespace {
       shaderInstance->End();
     }
   };
-
-  struct Aberration : public RenderPassPost {
-    float strength;
-
-    Aberration(float strength) :
-      RenderPassPost("post/aberration.jsl"),
-      strength(strength)
-      {}
-
-    void OnRender(DrawState* state) {
-      (*shader)("strength", strength);
-      RenderPassPost::OnRender(state);
-    }
-  };
-}
-
-DefineFunction(RenderPass_Aberration) {
-  return new Aberration(args.strength);
 }
 
 DefineFunction(RenderPass_PostFilter) {

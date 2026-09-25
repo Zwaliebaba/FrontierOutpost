@@ -1,3 +1,0 @@
-2|~substance| |~noun
-2|~element|~noun
-1|~element| |~grade

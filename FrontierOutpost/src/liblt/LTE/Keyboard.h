@@ -8,15 +8,15 @@ namespace LTE {
 
   LT_API void Keyboard_AddDown(Key key);
 
-  LT_API void Keyboard_AddText(uchar c);
+  /* The key goes up at the next Keyboard_Update, so that a press and release within one frame
+     still reads as a press. */
+  LT_API void Keyboard_AddUp(Key key);
 
-  LT_API void Keyboard_Block();
+  LT_API void Keyboard_AddText(uchar c);
 
   LT_API bool Keyboard_Down(Key key);
 
   LT_API Vector<Key> const& Keyboard_GetKeysPressed();
-
-  LT_API bool Keyboard_IsBlocked();
 
   LT_API void Keyboard_ModifyString(String& str, int& cursor);
 
@@ -36,10 +36,6 @@ namespace LTE {
 
   inline bool Keyboard_Shift() {
     return Keyboard_Down(Key_LShift) || Keyboard_Down(Key_RShift);
-  }
-
-  inline bool Keyboard_System() {
-    return Keyboard_Down(Key_LSystem) || Keyboard_Down(Key_RSystem);
   }
 }
 

@@ -1,6 +1,5 @@
 #include "Scheduler.h"
 
-#include "LTE/Config.h"
 #include "LTE/GL.h"
 #include "LTE/Job.h"
 #include "LTE/Module.h"

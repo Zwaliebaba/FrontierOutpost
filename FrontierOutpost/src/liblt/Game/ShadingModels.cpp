@@ -16,18 +16,6 @@ ShaderInstance ShadingModel_Debug() {
   return instance;
 }
 
-ShaderInstance ShadingModel_FlatColor(Color const& color) {
-  static Shader shader;
-  if (!shader)
-    shader = Shader_Create("skybox.jsl", "solidcolor.jsl");
-
-  ShaderInstance instance = ShaderInstance_Create(shader);
-  (*instance)
-    ("color", color);
-  DrawState_Link(instance);
-  return instance;
-}
-
 ShaderInstance ShadingModel_Fresnel(
   Generic<Texture2D> const& albedoMap,
   Generic<Texture2D> const& normalMap)

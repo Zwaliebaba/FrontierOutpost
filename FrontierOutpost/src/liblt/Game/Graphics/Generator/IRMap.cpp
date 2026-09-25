@@ -67,7 +67,6 @@ namespace {
         }
       }
 
-      // self->SaveTo(Stringize() | "irmap_" | i, i);
     }
 
     return self;

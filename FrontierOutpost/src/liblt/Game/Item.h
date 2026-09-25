@@ -50,18 +50,6 @@ struct ItemT : public RefCounted {
     return 0;
   }
 
-  virtual uint GetSkillEngineering() const {
-    return 0;
-  }
-
-  virtual uint GetSkillMining() const {
-    return 0;
-  }
-
-  virtual uint GetSkillPiloting() const {
-    return 0;
-  }
-
   virtual Array<Socket> const* GetSockets() const {
     return 0;
   }

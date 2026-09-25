@@ -1,2 +1,0 @@
-2|~stationpre|~stationpost
-1|~stationpre|~stationpost| |~number

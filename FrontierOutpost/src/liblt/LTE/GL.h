@@ -987,15 +987,6 @@ inline void GL_Viewport(int x, int y, int width, int height) {
 }
 
 namespace GLU {
-  /* Loads the identity matrix into both the ModelView and Projection
-     matrix stacks. */
-  inline void ClearMatrices() {
-    GL_MatrixMode(GL_Matrix::ModelView);
-    GL_LoadIdentity();
-    GL_MatrixMode(GL_Matrix::Projection);
-    GL_LoadIdentity();
-  }
-
   /* Create and initialize a 2D texture of the given specifications.
      NOTE : The min and mag filters are automatically set to linear.
      NOTE : The texture unit 0's binding is stomped on.*/
@@ -1013,51 +1004,6 @@ namespace GLU {
     GL_TexMagFilter(GL_TextureTarget::T2D, GL_TextureFilter::Linear);
     GL_TexMinFilter(GL_TextureTarget::T2D, GL_TextureFilterMip::LinearMipLinear);
     return texture;
-  }
-
-  /* Draws a quad spanning [minX, minY] to [maxX, maxY].
-     NOTE : Does NOT modify the matrix stacks, so matrices must be set to
-            identity first if the quad is to be drawn untransformed. */
-  inline void DrawQuad(
-    float minX, float minY,
-    float maxX, float maxY,
-    float z = 0.0f)
-  {
-    GL_Begin(GL_DrawMode::Quads);
-    GL_TexCoord(0.0f, 1.0f);
-    GL_Vertex(minX, minY, z);
-    GL_TexCoord(1.0f, 1.0f);
-    GL_Vertex(maxX, minY, z);
-    GL_TexCoord(1.0f, 0.0f);
-    GL_Vertex(maxX, maxY, z);
-    GL_TexCoord(0.0f, 0.0f);
-    GL_Vertex(minX, maxY, z);
-    GL_End();
-  }
-
-  /* Pushes both the ModelView and Projection matrix stacks. */
-  inline void PushMatrices() {
-    GL_MatrixMode(GL_Matrix::ModelView);
-    GL_PushMatrix();
-    GL_MatrixMode(GL_Matrix::Projection);
-    GL_PushMatrix();
-  }
-
-  /* Pops both the ModelView and Projection matrix stacks. */
-  inline void PopMatrices() {
-    GL_MatrixMode(GL_Matrix::ModelView);
-    GL_PopMatrix();
-    GL_MatrixMode(GL_Matrix::Projection);
-    GL_PopMatrix();
-  }
-
-  /* Loads the given matrices into the ModelView and Projection stacks,
-     respectively. */
-  inline void SetMatrices(float const* modelView, float const* projection) {
-    GL_MatrixMode(GL_Matrix::ModelView);
-    GL_LoadMatrix(modelView);
-    GL_MatrixMode(GL_Matrix::Projection);
-    GL_LoadMatrix(projection);
   }
 }
 

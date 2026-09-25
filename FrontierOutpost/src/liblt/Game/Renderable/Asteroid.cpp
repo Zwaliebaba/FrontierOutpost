@@ -18,7 +18,6 @@ namespace {
           SDF_FractalWorley(Rand(1, 1000), 6, 2.6f), 0.0f, 2.0f);
         models[i] = (Renderable)Model_Create()
           ->Add(SDFMesh_Create(d), Material_Rock());
-        // models[i] = Renderable_Imposter(models[i])();
       }
     }
 

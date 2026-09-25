@@ -37,9 +37,10 @@ and lifetime, and for written paths to resolve against a known location.
    it runs from anywhere, including Visual Studio's debugger, and the engine's paths stay relative
    as the original wrote them.
 3. **What the program keeps beside `GameData/` is the original's, and is not versioned:**
-   - `cache/` is created at first use. It holds `config.txt`, `settings.bin`, the logs
-     `logErrors.txt` and `logAsserts.txt`, `crashdumps/`, `screenshot/`, and cached script and
-     function results under `cache/cache/`.
+   - `cache/` is created at first use. It holds `settings.bin`, the logs `logErrors.txt` and
+     `logAsserts.txt`, `crashdumps/`, `screenshot/`, and cached script and function results under
+     `cache/cache/`. (It also listed `config.txt`, which `LTE/Config.cpp` would have written, but
+     nothing called it, and the NeuronClient plan's Phase 1 removed it: ADR-013.)
    - `mod/` is read if it is there, and never created.
 
    Both live until someone deletes them, and both are git-ignored. Because of decision 2, they

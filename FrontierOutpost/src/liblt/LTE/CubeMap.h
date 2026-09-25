@@ -30,7 +30,6 @@ struct CubeMapT : public RefCounted {
 
   virtual uint GetResolution() const = 0;
 
-  virtual void SaveTo(String const& path, uint level = 0) const = 0;
 
   virtual void SetData(
     CubeFace::Enum face,

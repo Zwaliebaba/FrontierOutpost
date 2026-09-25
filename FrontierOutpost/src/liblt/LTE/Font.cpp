@@ -15,10 +15,10 @@
 
 #include "Debug.h"
 
-#include "FreeType/ft2build.h"
-#include FT_FREETYPE_H
-#include FT_GLYPH_H
-#include FT_BITMAP_H
+#include "FontFace.h"
+
+#include <cmath>
+#include <string>
 
 const V2U kTextureSize = 1024;
 const V2U kSDFSize = 1024;
@@ -38,6 +38,7 @@ namespace {
 
   struct TextGlyph {
     uint32 codepoint;
+    ushort index;
     V2 uvMin;
     V2 uvMax;
     V2 origin;
@@ -59,23 +60,15 @@ namespace {
     mutable V2U cursor;
     Texture2D texture;
     Texture2D glyphBitmap;
-    FT_Face face;
-    FT_Library ft;
+    Neuron::FontFace face;
 
     FontImpl() :
       cursor(0) {}
 
-    ~FontImpl() {
-      /* Clean up FT. */ {
-        FT_Done_Face(face);
-        FT_Done_FreeType(ft);
-      }
-    }
-
     void AddGlyph(uint32 codepoint) const {
       static Shader compute = Shader_Create("identity.jsl", "compute/sdffont.jsl");
 
-      uint32 glyphIndex = FT_Get_Char_Index(face, codepoint);
+      ushort glyphIndex = face.GlyphIndex(codepoint);
       if (glyphIndex == 0) {
         TextGlyph& glyph = glyphs[codepoint];
         glyph.codepoint = codepoint;
@@ -83,26 +76,20 @@ namespace {
         return;
       }
 
-      if (FT_Load_Glyph(face, glyphIndex, FT_LOAD_DEFAULT) != 0)
-        error("FreeType -- Failed to load glyph");
+      Neuron::GlyphBitmap bitmap;
+      std::string failure;
+      if (!face.RenderGlyph(glyphIndex, bitmap, failure)) {
+        Log_Error("DirectWrite -- " + String(failure));
+        error("DirectWrite -- Failed to render glyph");
+      }
 
-      if (FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL))
-        error("FreeType -- Failed to render glyph");
-
-      /* Copy FT bitmap to our buffer. */
-      FT_Bitmap const& bitmap = face->glyph->bitmap;
-      uint sx = bitmap.width;
-      uint sy = bitmap.rows;
+      /* Copy the coverage to our buffer. */
+      uint sx = bitmap.widthPixels;
+      uint sy = bitmap.heightPixels;
 
       Array<float> buffer(sx * sy);
-      uchar const* pixels = bitmap.buffer;
-      for (uint y = 0; y < sy; ++y) {
-        for (uint x = 0; x < sx; ++x) {
-          // buffer[x + y * sx] = (pixels[x / 8] & (1 << (7 - x % 8))) ? 1 : 0;
-          buffer[x + y * sx] = (float)pixels[x] / 255.0f;
-        }
-        pixels += bitmap.pitch;
-      }
+      for (uint i = 0; i < sx * sy; ++i)
+        buffer[i] = (float)bitmap.coverage[i] / 255.0f;
 
       uint px = cursor.x + kPadding + (kFontSize - sx) / 2;
       uint py = cursor.y + kPadding + (kFontSize - sy) / 2;
@@ -123,11 +110,13 @@ namespace {
 
       TextGlyph& glyph = glyphs[codepoint];
       glyph.codepoint = codepoint;
+      glyph.index = glyphIndex;
       glyph.uvMin = (V2)cursor / (V2)kTextureSize;
       glyph.uvMax = ((V2)cursor + V2(2 * kPadding + kFontSize)) / (V2)kTextureSize;
       glyph.origin = V2(px, py) - V2(cursor)
-        + V2(-face->glyph->bitmap_left, face->glyph->bitmap_top);
-      glyph.advance = (float)(face->glyph->advance.x >> 6);
+        + V2((float)-bitmap.leftPixels, (float)bitmap.topPixels);
+      /* Whole pixels, as the original's hinted advances were. */
+      glyph.advance = std::floor(bitmap.advancePixels + 0.5f);
       glyph.size = V2(2 * kPadding + kFontSize);
       glyph.exists = true;
       
@@ -156,22 +145,14 @@ namespace {
     }
 
     void Create(String const& path) {
-      /* Create the FT library. */ {
-        if (FT_Init_FreeType(&ft)) {
-          Log_Error("FreeType -- Failed to initialize");
-          return;
-        }
-      }
-
-      /* Create the FT face. */ {
+      /* The face, at kFontSize pixels to the em. */ {
         String realPath = "GameData/font/" + path;
-        if (FT_New_Face(ft, realPath.c_str(), 0, &face)) {
-          Log_Error("FreeType -- Failed to load font " + realPath);
+        std::string failure;
+        if (!Neuron::FontFace::Open(realPath, (float)kFontSize, face, failure)) {
+          Log_Error("DirectWrite -- Failed to load font " + realPath + ": " + failure);
           return;
         }
       }
-
-      FT_Set_Pixel_Sizes(face, kFontSize, kFontSize);
 
       /* Create and clear the maps. */ {
         glyphBitmap = Texture_Create(
@@ -189,19 +170,6 @@ namespace {
           kSDFSize.y,
           GL_TextureFormat::R32F);
       }
-
-#if 0
-      /* Render all chars to the bitmap. */ {
-        uint32 glyphIndex;
-        uint32 c = FT_Get_First_Char(face, &glyphIndex);
-
-        while (glyphIndex != 0) {
-          AddGlyph(c);
-          c = FT_Get_Next_Char(face, c, &glyphIndex);
-        }
-      }
-#endif
-
     }
 
     void Draw(
@@ -294,15 +262,8 @@ namespace {
       if (k)
         return *k;
 
-      FT_Vector kern;
-      FT_Get_Kerning(
-        face,
-        FT_Get_Char_Index(face, prev->codepoint),
-        FT_Get_Char_Index(face, curr->codepoint),
-        FT_KERNING_DEFAULT,
-        &kern);
-
-      float kerning = kern.x >> 6;
+      /* Whole pixels, as the original's grid-fitted kerning was. */
+      float kerning = std::floor(face.KerningPixels(prev->index, curr->index) + 0.5f);
       prev->kerning[curr->codepoint] = kerning;
       return kerning;
     }

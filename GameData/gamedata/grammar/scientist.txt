@@ -1,8 +1,0 @@
-Cauchy
-Dirichlet
-Einstein
-Euler
-Lagrange
-Laplace
-Newton
-Poisson

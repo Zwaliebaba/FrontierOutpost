@@ -47,13 +47,6 @@ namespace {
   }
 }
 
-DefineFunction(Material_Debug) {
-  static ShaderInstance shader;
-  if (!shader)
-    shader = ShadingModel_Debug();
-  return shader;
-}
-
 DefineFunction(Material_Grass) {
   static ShaderInstance shader;
 
@@ -113,18 +106,6 @@ DefineFunction(Material_Rock) {
       shader = ShadingModel_Lambert(texture, Generator_NormalMap(texture));
   }
   return shader;
-}
-
-DefineFunction(Material_RockShiny) {
-  static Texture2D diffuse;
-  static Texture2D normalMap;
-
-  if (!diffuse) {
-    diffuse = Texture_LoadFrom(Location_Texture("rock.jpg"));
-    normalMap = Generator_NormalMap(diffuse)();
-  }
-
-  return ShadingModel_Lambert(diffuse, normalMap);
 }
 
 DefineFunction(Material_Water) {

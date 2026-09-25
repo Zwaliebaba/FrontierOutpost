@@ -5,8 +5,6 @@
 
 LT_API ShaderInstance ShadingModel_Debug();
 
-LT_API ShaderInstance ShadingModel_FlatColor(Color const& color);
-
 LT_API ShaderInstance ShadingModel_Fresnel(
   Generic<Texture2D> const& albedoMap,
   Generic<Texture2D> const& normalMap);

@@ -1,13 +1,14 @@
 #include "Timer.h"
 
-#include "SFML/System.hpp"
+#include <chrono>
 
 struct TimerData {
-  sf::Clock clock;
+  std::chrono::steady_clock::time_point start;
 };
 
 Timer::Timer() {
   d = new TimerData;
+  d->start = std::chrono::steady_clock::now();
 }
 
 Timer::~Timer() {
@@ -15,9 +16,9 @@ Timer::~Timer() {
 }
 
 float Timer::GetElapsed() const {
-  return d->clock.getElapsedTime().asSeconds();
+  return std::chrono::duration<float>(std::chrono::steady_clock::now() - d->start).count();
 }
 
 void Timer::Reset() {
-  d->clock.restart();
+  d->start = std::chrono::steady_clock::now();
 }

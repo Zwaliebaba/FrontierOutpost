@@ -132,11 +132,6 @@ struct DrawState;
 typedef Reference<struct ResourceMapT> ResourceMap;
 
 namespace LTE {
-  /* Control. */
-  typedef Reference<struct AxisT> Axis;
-  typedef Reference<struct ButtonT> Button;
-  struct Joystick;
-
   /* Engine. */
   struct Data;
   struct DataRef;
@@ -164,8 +159,6 @@ namespace LTE {
   typedef Generic<int, void> GenericInt;
   typedef Generic<float, void> GenericFloat;
   typedef Generic<void, void> GenericVoid;
-  typedef Generic<Axis, void> GenericAxis;
-  typedef Generic<Button, void> GenericButton;
   typedef Generic<V2, void> GenericV2;
   typedef Generic<V3, void> GenericV3;
   typedef Generic<V4, void> GenericV4;
@@ -254,22 +247,6 @@ namespace LTE {
 
   #define XLIST MOUSE_BUTTON_X
   #define XTYPE MouseButton
-  #include "LTE/XEnum.h"
-  #undef XTYPE
-  #undef XLIST
-
-  #define JOYSTICK_AXIS_X                                                      \
-    X(X)                                                                       \
-    X(Y)                                                                       \
-    X(Z)                                                                       \
-    X(R)                                                                       \
-    X(U)                                                                       \
-    X(V)                                                                       \
-    X(PovX)                                                                    \
-    X(PovY)
-
-  #define XLIST JOYSTICK_AXIS_X
-  #define XTYPE JoystickAxis
   #include "LTE/XEnum.h"
   #undef XTYPE
   #undef XLIST
