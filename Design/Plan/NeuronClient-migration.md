@@ -3,8 +3,10 @@
 How FrontierOutpost moves off OpenGL, GLEW, SFML and FreeType onto NeuronClient: Direct3D 12,
 DirectWrite, WIC, XAudio2 and Win32.
 
-- **Status:** Proposed, 2026-09-25. The owner took decisions N1–N9 the same day (§2). Nothing in
-  this plan has been built or run.
+- **Status:** Proposed, 2026-09-25. The owner took decisions N1–N12 the same day (§2). Phase 0 is
+  under way (§6): ADR-005 to ADR-013 are Proposed, the checkers run in CI, and the startup fixes are
+  in (`ea07b9c`). The `gl-final` tag waits for the owner to see the 16 kept apps start. Nothing of
+  NeuronClient exists yet.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
@@ -18,15 +20,16 @@ DirectWrite, WIC, XAudio2 and Win32.
 threads, clocks, image codecs and one HTTP client from SFML 2.5. It rasterises glyphs with FreeType
 2.5.5, and already plays sound through XAudio2 (ADR-003).
 
-**The change** puts every call into Windows behind **NeuronClient**, a new static library linked
-into `lt.dll`:
+**The change** puts graphics, glyphs, images, sound, the window and input behind **NeuronClient**,
+a new static library linked into `lt.dll`:
 - Direct3D 12 for graphics;
 - DirectWrite for glyphs;
 - WIC for images;
 - XAudio2 and X3DAudio for sound;
 - plain Win32 for the window and input.
 
-Threads and clocks move to the C++ standard library.
+Threads and clocks move to the C++ standard library. liblt keeps its own calls for OS services:
+paths and folders, message boxes, crash dumps and the entry point (N12).
 
 **liblt keeps its API** (`Renderer_*`, `Texture2D`, `Shader`, `ShaderInstance`, `Mesh`, `Font`,
 `Window`, `Keyboard`, `Mouse`, `SoundEngine`), so scripts change only where a feature is removed.
@@ -48,11 +51,14 @@ has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
 | N2 | **Shaders are compiled at build time into headers.** | owner |
 | N3 | **Free to modernise.** Parity with the OpenGL build is not the acceptance bar, and there are no reference captures. | owner |
 | N4 | **Remove all four tiers of unused material:** toy and test apps, unreachable code, dead passes and shaders, unused assets (§9). | owner |
-| N5 | **AVX2 on x64.** NeuronClient compiles with `/arch:AVX2`, which puts the game's CPU floor at Intel Haswell or AMD Excavator. ARM64 keeps the compiler's default. | owner |
+| N5 | ~~**AVX2 on x64.** NeuronClient compiles with `/arch:AVX2`, which puts the game's CPU floor at Intel Haswell or AMD Excavator.~~ **Replaced on x64 by N10.** ARM64 keeps the compiler's default. | owner |
 | N6 | **A missing sound is a logged warning,** not the end of the program. The owner's WAV conversion (O10) can land whenever it is ready. | owner |
 | N7 | **Vsync stays off,** as it is today. | owner |
 | N8 | **RandomScreenshot shows a plain colour,** in place of a screenshot from the original author's folder. | owner |
 | N9 | **A sound file that exists but that XAudio2 cannot play stays fatal.** N6 covers missing files only: an unplayable one is a broken asset. | owner |
+| N10 | **No AVX2.** NeuronClient states the instruction sets `lt` states: SSE2 on x64, and the compiler's default on ARM64. Inside `lt.dll`, a template or inline function that both libraries use keeps one copy, which the linker picks, so an AVX2 NeuronClient could run AVX2 code in liblt, even before a CPU check. There is no CPU floor beyond x64's and no check. | owner |
+| N11 | **liblt's shader folder is new code.** `FrontierOutpost/src/liblt/Shaders/` is carved out of ADR-001's exemption, so AGENTS.md's shader rules and the checkers, the registry check among them, apply to it. The rest of `lt` stays exempt. | owner |
+| N12 | **liblt keeps its own calls for OS services:** `SHGetFolderPath`, `GetModuleFileNameA`, `CreateDirectoryA`, `MessageBoxA` and DbgHelp in `LTE/OS.cpp`, `MessageBoxA` in `Common.cpp`'s assertion handler, and `WinMain` in `LTE/LTE.h`. NeuronClient takes what OpenGL, GLEW, SFML and FreeType did, and XAudio2. | owner |
 
 What N2 and N3 mean in practice. The first two points correct what the question offered:
 
@@ -108,19 +114,19 @@ What N2 and N3 mean in practice. The first two points correct what the question 
 5. **This is a sixth NeuronClient.** Five repositories already carry copies that have drifted
    apart, from 45 to 139 files. This one is written game-agnostic (R9), so it could become the
    shared one. This plan does not extract it.
-6. **Most of the apps to keep cannot start today.**
-   - `GameData/script/Texture/RandomScreenshot.lts:2` loads `/home/josh/Dropbox/lt/screenshot`, the
-     original author's folder. Seven kept apps and the DevPanel use it, and a failed load exits the
-     program. N8 replaces it with a plain colour.
-   - The kept `image` app loads two files that exist nowhere, and so exits before RandomScreenshot is
-     reached:
-     - `data/screenshot/29.png`, the branch its `?` always takes (`GameData/script/App/image.lts:11`);
-     - `data/screenshot/10.png`, loaded into a variable that nothing reads
+6. **Most of the apps to keep could not start.** Phase 0 fixed all three causes (`ea07b9c`):
+   - `GameData/script/Texture/RandomScreenshot.lts:2` loaded `/home/josh/Dropbox/lt/screenshot`,
+     the original author's folder. Seven kept apps and the DevPanel use it, and a failed load exits
+     the program. N8 replaced it with a plain colour.
+   - The kept `image` app loaded two files that exist nowhere, and so exited before RandomScreenshot
+     was reached:
+     - `data/screenshot/29.png`, the branch its `?` always took (`GameData/script/App/image.lts:11`);
+     - `data/screenshot/10.png`, loaded into a variable that nothing read
        (`GameData/script/Widget/ImageEditor.lts:23`).
-   - 9 of the 26 sounds the scripts play have no WAV yet (O10). Each stops the game the first time
-     it plays; N6 turns that into a logged warning.
+   - 9 of the 26 sounds the scripts play have no WAV yet (O10). Each stopped the game the first time
+     it played; N6 turned that into a logged warning.
 
-   Nothing can be checked at run time until all three are fixed (Phase 0).
+   Nothing could be checked at run time until all three were fixed.
 
 ## 4. Starting point
 
@@ -130,7 +136,7 @@ What N2 and N3 mean in practice. The first two points correct what the question 
 |---|---|---|---|
 | SFML 2.5.0: 6 projects, 4 linked | Window, GL context and events; keyboard and mouse polling; joystick; threads, mutex, sleep and clock; image load and save; one HTTP client | 10 `.cpp` files, no header | NeuronClient for window, input and images; the standard library for threads and clocks; joystick and HTTP removed |
 | GLEW 1.7.0 and OpenGL 2.1 (compatibility profile) | All rendering | `LTE/GL.h`; gl calls in 9 files; GL types in 6 public headers; about 30 call sites pass `GL_TextureFormat` | NeuronClient (Direct3D 12) |
-| FreeType 2.5.5 | 64 px glyph coverage for the text atlas; kerning from the `kern` table | `LTE/Font.cpp` only, 8 functions | NeuronClient (DirectWrite) |
+| FreeType 2.5.5 | 64 px glyph coverage for the text atlas; kerning from the `kern` table | `LTE/Font.cpp` only, 11 functions | NeuronClient (DirectWrite) |
 | XAudio2 and X3DAudio | All sound (ADR-003) | `Module/SoundEngine/XAudio2.cpp`, 743 lines | NeuronClient; liblt keeps an adapter |
 
 ### 4.2 The renderer
@@ -211,7 +217,7 @@ launch.exe         console program; main()                            legacy (AD
     │
 lt.dll  (liblt)    engine and LTSL; owns every game concept           legacy (ADR-001)
     │  links statically
-NeuronClient.lib   every call into Windows                            AGENTS.md in full, plus ARM64 (N1)
+NeuronClient.lib   graphics, glyphs, images, sound, window, input     AGENTS.md in full, plus ARM64 (N1)
     │
 Windows SDK        d3d12 dxgi d3dcompiler dwrite windowscodecs xaudio2 user32 ...
 ```
@@ -222,8 +228,11 @@ Windows SDK        d3d12 dxgi d3dcompiler dwrite windowscodecs xaudio2 user32 ..
   objects in a private implementation, as Outpost.Commander's NeuronClient does. The reason here is
   concrete: liblt defines `near`, `far`, `DrawState`, `interface` and `GetObject`, which are all
   Windows macros, and its include order is load-bearing (MIGRATION_NOTES.md H3).
-- **It is a static library linked into `lt.dll` only.** `launch.exe` never sees it. It uses `/MD`
-  and `/MDd` to match `lt`.
+- **It is a static library.** Of the game's binaries, only `lt.dll` links it, and `launch.exe`
+  never sees it; NeuronClientTests links it too. It uses `/MD` and `/MDd`, and `lt`'s `/arch`, to
+  match `lt` (N10).
+- **liblt keeps its own calls for OS services** (N12): paths and folders, message boxes, crash dumps
+  and `WinMain`.
 - **Conventions.**
   - Namespace `Neuron`. Unicode internally, UTF-8 at the API.
   - COM objects in `Microsoft::WRL::ComPtr` (R12).
@@ -284,6 +293,9 @@ Not in NeuronClient:
 - **Presentation.**
   - Everything renders offscreen, and a present pass copies to the back buffer. It does the one
     vertical flip of §5.5.
+  - Content renders at the client area's size, one pixel to one pixel, as it does today: the
+    passes size their targets from the frame and recreate them when it changes size. Nothing is
+    authored at a fixed resolution and scaled.
   - Two flip-discard buffers.
   - Vsync off, with tearing where supported, as the original asks
     (`FrontierOutpost/src/launch/launch.cpp:41`; N7).
@@ -346,7 +358,8 @@ Other rules the context applies:
 
 ### 5.6 Shaders
 
-- **Where they live.** `FrontierOutpost/src/liblt/Shaders/`, flat, as `*.hlsl` and `*.hlsli`.
+- **Where they live.** `FrontierOutpost/src/liblt/Shaders/`, flat, as `*.hlsl` and `*.hlsli`. The
+  folder is outside ADR-001's exemption (N11), so AGENTS.md's shader rules and the checkers apply.
   - Files are named from the legacy path: `post/blur.jsl` becomes `PostBlurPS.hlsl` (AGENTS.md §2;
     ADR-008 fixes the rule).
   - Output goes to `FrontierOutpost/src/liblt/CompiledShaders/`, which is build output and
@@ -387,8 +400,9 @@ So the field moves to a precompiled compute shader:
   the R32F 3D texture directly through a UAV. The slice-by-slice copy through the CPU goes.
 - **Gradient and occlusion** become compute passes.
 - **The LOD grids** are read back for the CPU polygoniser, asynchronously.
-- **The opcodes** are the SDF node types Phase 1 leaves, plus Worley and Perlin noise. The noise is
-  ported to HLSL once.
+- **The opcodes** are the SDF node types Phase 1 leaves. Of the two noise nodes, only
+  `FractalWorley` is constructed (`Game/Renderable/Ice.cpp:16`, `Asteroid.cpp:18`), so Worley noise
+  is ported to HLSL once. `FractalPerlin`, which nothing constructs, goes in Phase 1 (§9 C).
 
 The interpreter is slower than code specialised per mesh. It runs at generation time, and Phase 4
 measures it.
@@ -417,7 +431,9 @@ Phase 3 touches nothing in liblt; it can start once step 1 of Phase 2 has landed
    - `.clang-tidy`'s `HeaderFilterRegex` names `FrontierCommander`, a leftover from another tree. As
      it stands, it would check no NeuronClient header.
    - The clang-format pin: `.clang-format` says 18.1.3, but `build.yml` installs 22.1.3.
-3. **Tag.** Tag the last OpenGL commit `gl-final`.
+3. **Tag.** Last, once the owner has seen the 16 kept apps start (step 4): tag that commit
+   `gl-final`, the last OpenGL build known to run. A tag before the startup fixes would mark a build
+   in which most of those apps stop as they start.
 4. **Make the apps to keep start.**
    - **RandomScreenshot returns a plain colour (N8).** `Get` builds a 1×1 texture with calls
      scripts already have (`Texture2D_Create`, `BeginDrawTo`, `DrawClear`, `EndDrawTo`) and reads no
@@ -466,9 +482,8 @@ OpenGL still renders throughout. Each step is its own commit.
      runner can run Direct3D 12.
    - A second test loads `d3dcompiler_47.dll` and reflects a compiled blob. The owner runs it on the
      ARM64 device as well.
-   - `launch.exe` checks the CPU for AVX2 before any NeuronClient code runs, and says so if it is
-     missing (N5). The alternative is an illegal-instruction crash (AGENTS.md R16). NeuronClient keeps
-     no dynamic initialisers, so nothing of it runs before that check.
+   - Both state `lt`'s instruction sets, `/arch:SSE2` on x64 and the compiler's default on ARM64
+     (N5, N10). The project checker enforces it.
 2. **Threads and clocks.** liblt moves to the standard library. No NeuronClient code is involved.
 3. **Images.**
    - `ImageFile` (WIC) replaces `sf::Image`.
@@ -564,7 +579,7 @@ mode renders offscreen and never creates one.
 | ADR | Decision |
 |---|---|
 | ADR-005 | NeuronClient is FrontierOutpost's platform layer (§5.1, §5.2). |
-| ADR-006 | NeuronClient builds for x64 and ARM64, amending AGENTS.md §3 (N1). `/arch` is AVX2 on x64 and the default on ARM64 (N5). |
+| ADR-006 | NeuronClient builds for x64 and ARM64, amending AGENTS.md §3 (N1). `/arch` is `lt`'s: SSE2 on x64 and the default on ARM64 (N5, N10). |
 | ADR-007 | Graphics is Direct3D 12, as the shared base of the NeuronClient projects: the policies of §5.3 and the conventions of §5.5. |
 | ADR-008 | Shaders are HLSL, compiled into headers by FXC at SM 5.1, with reflection by `D3DReflect` (§5.6). |
 | ADR-009 | SDF fields are interpreted by a compute shader (§5.7). |
@@ -574,15 +589,18 @@ mode renders offscreen and never creates one.
 | ADR-013 | What was removed as unused, and by what rule (§9). |
 
 **Changed.**
-- **ADR-001:** a scope note. NeuronClient and its tests are outside the exemption.
+- **ADR-001:** a scope note. NeuronClient and its tests are outside the exemption, and so is
+  `FrontierOutpost/src/liblt/Shaders/` (N11), from the commit that adds its first file.
 - **ADR-002:** superseded. No vendored dependency is left.
 - **ADR-003:** amended. The engine's mechanism lives in NeuronClient; the adapter stays in liblt. A
   missing sound file becomes a logged warning (N6); a file XAudio2 cannot play still ends the program
   (N9).
 - **ADR-004:** amended. `GameData/` holds no shaders, and the fonts are pruned.
 
-**Runtime files (R13).** None is added. Screenshots stay under `cache/screenshot/`. A PSO disk
-cache would need its own ADR.
+**Runtime files (R13).** None is added for players. Screenshots stay under `cache/screenshot/`. The
+CI smoke mode writes its PNG captures only where `--capture` says, and a relative path resolves
+against the folder `launch.exe` works from, the one that holds `GameData/` (ADR-004). ADR-011
+records it. A PSO disk cache would need its own ADR.
 
 ## 9. What goes (N4)
 
@@ -641,8 +659,7 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 | The SDF interpreter is slow, or shapes change | `model`, `war` | Generation time measured on WARP and a GPU. Different shapes are acceptable under N3. |
 | Hitches the first time a PSO is used | The first seconds of each app | Known programs warmed at load. `ID3D12PipelineLibrary` later. |
 | Modernisation runs away | Phase 4 | Only the changes named in §5 go in; everything else is backlog. |
-| Mixed build settings in one DLL | Always | NeuronClient at `/W4 /WX /fp:precise`, inside `lt` at `/W3 /fp:fast`, is fine for a static library. The CRT must match (`/MD`). |
-| The AVX2 floor (N5) shuts out older and low-power CPUs | Players' machines | Besides pre-Haswell and pre-Excavator CPUs, many low-power Pentium and Celeron chips lack AVX2. `launch.exe` checks at start and says so (Phase 2). |
+| Mixed build settings in one DLL | Always | Warning levels are harmless. `/arch` is not: a template or inline function both libraries use keeps one copy, which the linker picks, so NeuronClient states `lt`'s `/arch` (N10). Under `/fp:precise` and `lt`'s `/fp:fast`, such a copy rounds as either library would; nothing relies on bit-exact results (MIGRATION_NOTES.md BR6). The CRT must match (`/MD`). |
 | Missing-sound warnings hide broken content (N6) | Every app with sound | Phase 1's list of named sounds without a WAV file, re-run whenever sounds or scripts change. |
 | A converted WAV that XAudio2 cannot play stops the game (N9) | The first time that sound plays | Phase 1's check parses every named WAV by the engine's rules, before anything runs. |
 | No automatic acceptance (N3) | Every phase | The owner signs off each phase. `gl-final` is kept for a side-by-side look. |
@@ -657,5 +674,5 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 
 ## 12. Still open for the owner
 
-Nothing. N5–N9 settled the open items: `/arch`, missing sounds, vsync, RandomScreenshot's background
-and unplayable sound files.
+Nothing. N5–N12 settled the open items: `/arch`, missing sounds, vsync, RandomScreenshot's
+background, unplayable sound files, liblt's shader folder and its calls for OS services.

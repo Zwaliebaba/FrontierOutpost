@@ -67,7 +67,7 @@ PROJECT = """<?xml version="1.0" encoding="utf-8"?>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
-    <ClCompile><EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet></ClCompile>
+    <ClCompile><EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet></ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='ARM64'">
     <ClCompile><EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet></ClCompile>
@@ -199,6 +199,11 @@ PROJECT_CASES = [
      lambda r: Replace(r, "NeuronClient/NeuronClient.vcxproj",
                        "<EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>", ""),
      1, "does not state EnableEnhancedInstructionSet"),
+    ("x64 at /arch:AVX2, which N10 dropped",
+     lambda r: Replace(r, "NeuronClient/NeuronClient.vcxproj",
+                       "<EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>",
+                       "<EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>"),
+     1, "expected 'StreamingSIMDExtensions2'"),
     ("Debug and Release disagreeing on a setting",
      lambda r: Replace(r, "NeuronClient/NeuronClient.vcxproj", "<Optimization>Disabled</Optimization>",
                        "<Optimization>Disabled</Optimization><SDLCheck>true</SDLCheck>"),

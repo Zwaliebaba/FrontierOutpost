@@ -40,8 +40,9 @@ CONFIGURATIONS = ("Debug", "Release")
 # ADR-006 (the owner's N1): NeuronClient, and the tests that exercise it on an ARM64 device, build
 # for ARM64 as well as x64. Every other first-party project is x64 only (AGENTS.md §3).
 ARM64_PROJECTS = {"NeuronClient", "NeuronClientTests"}
-# ADR-006 (N5): AVX2 on x64, the compiler's default on ARM64, stated rather than inherited (R16).
-ARCH = {"x64": "AdvancedVectorExtensions2", "ARM64": "NotSet"}
+# ADR-006 (N5, N10): lt's instruction sets, SSE2 on x64 and the compiler's default on ARM64, stated
+# rather than inherited (R16), so no binary mixes /arch.
+ARCH = {"x64": "StreamingSIMDExtensions2", "ARM64": "NotSet"}
 
 INVARIANT = {"ClCompile.LanguageStandard": "stdcpplatest", "ClCompile.ConformanceMode": "true",
              "ClCompile.WarningLevel": "Level4", "ClCompile.TreatWarningAsError": "true",
