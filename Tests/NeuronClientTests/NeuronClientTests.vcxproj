@@ -133,14 +133,32 @@
     <ClCompile Include="GraphicsDeviceFrames.cpp" />
     <ClCompile Include="ImageCoding.cpp" />
     <ClCompile Include="KeyMapping.cpp" />
+    <ClCompile Include="ProgramReflection.cpp" />
     <ClCompile Include="ShaderReflection.cpp" />
     <ClCompile Include="SoundParsing.cpp" />
+    <ClCompile Include="TargetClears.cpp" />
     <ClCompile Include="TextureTransfers.cpp" />
     <ClCompile Include="UnicodeText.cpp" />
     <ClCompile Include="WarpDevice.cpp" />
     <ClCompile Include="WindowEvents.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="Shaders\NamedBufferPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>NAMED_BUFFER_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\NamesCS.hlsl">
+      <ShaderType>Compute</ShaderType>
+      <VariableName>NAMES_CS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\NamesPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>NAMES_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\NamesVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>NAMES_VS</VariableName>
+    </FxCompile>
     <FxCompile Include="Shaders\ProbePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>PROBE_PS</VariableName>

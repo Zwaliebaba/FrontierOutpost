@@ -47,10 +47,16 @@
     <ClCompile Include="KeyMapping.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ProgramReflection.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="ShaderReflection.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="SoundParsing.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TargetClears.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="TextureTransfers.cpp">
@@ -67,6 +73,18 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="Shaders\NamedBufferPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\NamesCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\NamesPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\NamesVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\ProbePS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>

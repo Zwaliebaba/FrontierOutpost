@@ -546,6 +546,50 @@ bool DrawContext::ReadBuffer(const Buffer& _buffer, std::vector<std::byte>& _out
   return true;
 }
 
+void DrawContext::ClearColor(Texture& _texture, std::uint32_t _mip, std::uint32_t _layer, const std::array<float, 4>& _color)
+{
+  Native& context = *m_native;
+  Texture::Native* const texture = _texture.m_native.get();
+  const bool volume = texture != nullptr && texture->desc.dimension == TextureDimension::Texture3D;
+  const std::uint32_t layers = volume ? _texture.DepthPixels(_mip) : _texture.Faces();
+  if (texture == nullptr || texture->desc.format == TextureFormat::Depth32F || _mip >= texture->desc.mipLevels || _layer >= layers)
+  {
+    context.core.Fail(std::format("Direct3D 12: ClearColor cannot clear mip {} of layer {} of {}", _mip, _layer,
+                                  texture != nullptr ? texture->name : std::string("an empty texture")));
+    return;
+  }
+  D3D12_CPU_DESCRIPTOR_HANDLE view{};
+  if (!context.Open() || !texture->TargetView(_mip, _layer, view))
+  {
+    return;
+  }
+  // The slices of a 3D texture's mip are one subresource.
+  context.Require(*texture, texture->Subresource(_mip, volume ? 0 : _layer), D3D12_RESOURCE_STATE_RENDER_TARGET);
+  context.FlushBarriers();
+  context.list->ClearRenderTargetView(view, _color.data(), 0, nullptr);
+}
+
+void DrawContext::ClearDepth(Texture& _texture, float _depth)
+{
+  Native& context = *m_native;
+  Texture::Native* const texture = _texture.m_native.get();
+  // Put so that NaN fails it too.
+  if (texture == nullptr || texture->desc.format != TextureFormat::Depth32F || !(_depth >= 0.0f && _depth <= 1.0f))
+  {
+    context.core.Fail(std::format("Direct3D 12: ClearDepth cannot clear {} to {}",
+                                  texture != nullptr ? texture->name : std::string("an empty texture"), _depth));
+    return;
+  }
+  D3D12_CPU_DESCRIPTOR_HANDLE view{};
+  if (!context.Open() || !texture->DepthView(view))
+  {
+    return;
+  }
+  context.Require(*texture, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+  context.FlushBarriers();
+  context.list->ClearDepthStencilView(view, D3D12_CLEAR_FLAG_DEPTH, _depth, 0, 0, nullptr);
+}
+
 void DrawContext::Flush()
 {
   m_native->Submit();

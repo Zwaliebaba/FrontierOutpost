@@ -44,7 +44,7 @@ public:
   struct Desc
   {
     TextureDimension dimension;
-    TextureFormat format; // a depth texture is 2D
+    TextureFormat format; // a depth texture is 2D, with one mip level
     std::uint32_t widthPixels;
     std::uint32_t heightPixels; // a cube's faces are square, so its height is its width
     std::uint32_t depthPixels;  // a 3D texture's slices; 1 for the others

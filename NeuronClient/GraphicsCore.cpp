@@ -34,6 +34,40 @@ D3D12_RESOURCE_DESC BufferDescription(std::uint64_t _sizeBytes) noexcept
   return desc;
 }
 
+bool DescriptorPool::Allocate(GraphicsCore& _core, D3D12_CPU_DESCRIPTOR_HANDLE& _outHandle)
+{
+  if (available.empty())
+  {
+    D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
+    heapDesc.Type = type;
+    heapDesc.NumDescriptors = BLOCK_DESCRIPTORS;
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> block;
+    if (!_core.Check(_core.device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&block)), "ID3D12Device::CreateDescriptorHeap"))
+    {
+      return false;
+    }
+    if (incrementBytes == 0)
+    {
+      incrementBytes = _core.device->GetDescriptorHandleIncrementSize(type);
+    }
+    // Handed out from the block's start, since they are taken from the back.
+    const D3D12_CPU_DESCRIPTOR_HANDLE start = block->GetCPUDescriptorHandleForHeapStart();
+    for (UINT index = BLOCK_DESCRIPTORS; index > 0; --index)
+    {
+      available.push_back({start.ptr + (static_cast<SIZE_T>(index - 1) * incrementBytes)});
+    }
+    blocks.push_back(std::move(block));
+  }
+  _outHandle = available.back();
+  available.pop_back();
+  return true;
+}
+
+void DescriptorPool::Free(D3D12_CPU_DESCRIPTOR_HANDLE _handle)
+{
+  available.push_back(_handle);
+}
+
 /// Nothing may still be running on the GPU when the objects go. An exception cannot be reported
 /// from here, so one, which can only be memory running out for a message, ends the program.
 GraphicsCore::~GraphicsCore()

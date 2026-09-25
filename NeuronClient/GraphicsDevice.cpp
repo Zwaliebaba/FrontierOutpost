@@ -103,11 +103,17 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
   }
   if (_desc.debugLayer && SUCCEEDED(core->device.As(&core->infoQueue)))
   {
-    // Only what is worth failing a test over, or logging: corruption, errors and warnings.
+    // Only what is worth failing a test over, or logging: corruption, errors and warnings, less the
+    // two warnings that a clear to a value other than the one given when the resource was made is
+    // slower. liblt clears to whatever a pass asks for, so no value given in advance would match.
     std::array<D3D12_MESSAGE_SEVERITY, 2> quiet = {D3D12_MESSAGE_SEVERITY_INFO, D3D12_MESSAGE_SEVERITY_MESSAGE};
+    std::array<D3D12_MESSAGE_ID, 2> slowClears = {D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
+                                                  D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE};
     D3D12_INFO_QUEUE_FILTER filter{};
     filter.DenyList.NumSeverities = static_cast<UINT>(quiet.size());
     filter.DenyList.pSeverityList = quiet.data();
+    filter.DenyList.NumIDs = static_cast<UINT>(slowClears.size());
+    filter.DenyList.pIDList = slowClears.data();
     core->storageFilterPushed = SUCCEEDED(core->infoQueue->PushStorageFilter(&filter));
   }
 
@@ -159,6 +165,11 @@ Texture GraphicsDevice::CreateTexture(const Texture::Desc& _desc)
 Buffer GraphicsDevice::CreateBuffer(const Buffer::Desc& _desc)
 {
   return m_core ? Buffer::Make(m_core, _desc) : Buffer();
+}
+
+Program GraphicsDevice::CreateProgram(const Program::Desc& _desc)
+{
+  return m_core ? Program::Make(*m_core, _desc) : Program();
 }
 
 DrawContext& GraphicsDevice::Context() noexcept

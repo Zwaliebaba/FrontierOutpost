@@ -89,7 +89,7 @@ Texture Texture::Make(const std::shared_ptr<GraphicsCore>& _core, const Desc& _d
   const std::uint32_t faces = cube ? 6 : 1;
   if (_desc.widthPixels == 0 || _desc.heightPixels == 0 || slices == 0 || _desc.mipLevels == 0 ||
       _desc.mipLevels > FullMipLevels(_desc.widthPixels, _desc.heightPixels, slices) || (cube && _desc.widthPixels != _desc.heightPixels) ||
-      (depth && _desc.dimension != TextureDimension::Texture2D))
+      (depth && (_desc.dimension != TextureDimension::Texture2D || _desc.mipLevels != 1)))
   {
     core.Fail(std::format("Direct3D 12: texture {} cannot be {} by {} by {} with {} mip levels", _desc.name, _desc.widthPixels,
                           _desc.heightPixels, slices, _desc.mipLevels));
@@ -97,6 +97,7 @@ Texture Texture::Make(const std::shared_ptr<GraphicsCore>& _core, const Desc& _d
   }
 
   auto native = std::make_unique<Native>();
+  native->core = _core.get();
   native->desc = _desc;
   native->desc.depthPixels = slices;
   native->desc.name = {};
@@ -141,6 +142,88 @@ Texture Texture::Make(const std::shared_ptr<GraphicsCore>& _core, const Desc& _d
   texture.m_core = _core;
   texture.m_native = std::move(native);
   return texture;
+}
+
+/// An exception cannot be reported from here, so one, which can only be memory running out while
+/// a view is handed back, ends the program.
+Texture::Native::~Native()
+{
+  if (core == nullptr)
+  {
+    return;
+  }
+  try
+  {
+    for (const auto& [key, view] : targetViews)
+    {
+      core->targetViewPool.Free(view);
+    }
+    if (depthView.ptr != 0)
+    {
+      core->depthViewPool.Free(depthView);
+    }
+  }
+  catch (...)
+  {
+    std::terminate();
+  }
+}
+
+bool Texture::Native::TargetView(std::uint32_t _mip, std::uint32_t _layer, D3D12_CPU_DESCRIPTOR_HANDLE& _outView)
+{
+  const std::uint64_t key = (std::uint64_t{_mip} << 32) | _layer;
+  if (const auto found = targetViews.find(key); found != targetViews.end())
+  {
+    _outView = found->second;
+    return true;
+  }
+  D3D12_CPU_DESCRIPTOR_HANDLE view{};
+  if (!core->targetViewPool.Allocate(*core, view))
+  {
+    return false;
+  }
+  D3D12_RENDER_TARGET_VIEW_DESC viewDesc{};
+  viewDesc.Format = resourceDesc.Format;
+  switch (desc.dimension)
+  {
+  case TextureDimension::Texture2D:
+    viewDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+    viewDesc.Texture2D.MipSlice = _mip;
+    break;
+  case TextureDimension::TextureCube:
+    viewDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+    viewDesc.Texture2DArray.MipSlice = _mip;
+    viewDesc.Texture2DArray.FirstArraySlice = _layer;
+    viewDesc.Texture2DArray.ArraySize = 1;
+    break;
+  case TextureDimension::Texture3D:
+    viewDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE3D;
+    viewDesc.Texture3D.MipSlice = _mip;
+    viewDesc.Texture3D.FirstWSlice = _layer;
+    viewDesc.Texture3D.WSize = 1;
+    break;
+  }
+  core->device->CreateRenderTargetView(resource.Get(), &viewDesc, view);
+  targetViews.emplace(key, view);
+  _outView = view;
+  return true;
+}
+
+bool Texture::Native::DepthView(D3D12_CPU_DESCRIPTOR_HANDLE& _outView)
+{
+  if (depthView.ptr == 0)
+  {
+    if (!core->depthViewPool.Allocate(*core, depthView))
+    {
+      return false;
+    }
+    D3D12_DEPTH_STENCIL_VIEW_DESC viewDesc{};
+    viewDesc.Format = DXGI_FORMAT_D32_FLOAT;
+    viewDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+    core->device->CreateDepthStencilView(resource.Get(), &viewDesc, depthView);
+  }
+  _outView = depthView;
+  return true;
 }
 
 Texture::Texture() noexcept = default;

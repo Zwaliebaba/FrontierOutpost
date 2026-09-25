@@ -1,6 +1,7 @@
 // NeuronClient/DrawContext.h
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -45,6 +46,15 @@ public:
 
   /// Reads the whole of _buffer back. Submits what was recorded and waits for the GPU.
   [[nodiscard]] bool ReadBuffer(const Buffer& _buffer, std::vector<std::byte>& _outBytes);
+
+  /// Clears mip _mip of a colour texture to _color, red first, as its format stores it. _layer is
+  /// the face of a cube, the slice of that mip of a 3D texture, and 0 otherwise. A texture or level
+  /// that is not there is reported, and nothing is recorded.
+  void ClearColor(Texture& _texture, std::uint32_t _mip, std::uint32_t _layer, const std::array<float, 4>& _color);
+
+  /// Clears a depth texture to _depth, from 0 to 1. Anything else is reported, and nothing is
+  /// recorded.
+  void ClearDepth(Texture& _texture, float _depth);
 
   /// Submits what was recorded, without waiting for the GPU.
   void Flush();
