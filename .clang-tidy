@@ -96,24 +96,24 @@ WarningsAsErrors: '*'
 # THIS ALTERNATION IS A PROJECT REGISTRY. It names the projects whose headers are linted, so
 # ADDING A PROJECT MEANS ADDING IT HERE -- a project missing from this list is a project whose
 # headers are checked by nothing at all, with no finding and no warning to say so. It is the
-# quietest way to lose a gate, which is why Build/CheckProjectFiles.py should be written to
-# compare this list against the solution rather than trusting anyone to remember.
+# quietest way to lose a gate, which is why Build/CheckProjectFiles.py compares this list against
+# the solution and fails on a first-party project it does not match.
 #
-# Only the product executable and the `<Something>Tests` convention are seeded, because that is
-# all this repository has agreed on so far.
+# NeuronClient (ADR-005) and the `<Something>Tests` convention are what this repository has so far.
+# The legacy import, FrontierOutpost/, is not linted (ADR-001).
 #
 # [/\\], not '/'. On a Windows Clang build the paths arrive with backslashes, so a filter anchored
 # on a forward slash matches no header at all and silently suppresses every in-build diagnostic.
 # The pattern matches headers sitting DIRECTLY in a project folder, which is every hand-written
 # one (AGENTS.md §2's flat-directory rule). A bare `.*` would also match build output and the
 # Windows SDK, and most of what it reported would be from headers nobody here wrote.
-HeaderFilterRegex: '(FrontierCommander|[A-Za-z0-9]+Tests)[/\\][A-Za-z0-9]+\.h$'
+HeaderFilterRegex: '(NeuronClient|[A-Za-z0-9]+Tests)[/\\][A-Za-z0-9]+\.h$'
 
 # A `Resource.h` is written by the Visual Studio resource editor, not by hand. Its
 # `#define IDC_STATIC -1` trips bugprone-macro-parentheses, and the fix would be undone the next
 # time someone opens the dialog editor. Excluded here rather than by weakening the check for
-# everything else. (`ExcludeHeaderFilterRegex` needs clang-tidy 19 or newer; on an older one pass
-# `--exclude-header-filter='Resource\.h$'` instead.)
+# everything else. (`ExcludeHeaderFilterRegex` needs clang-tidy 19 or newer. An older one rejects
+# the key, checks nothing and still exits 0, so Build/RunClangTidy.py refuses to run it.)
 ExcludeHeaderFilterRegex: 'Resource\.h$'
 
 CheckOptions:

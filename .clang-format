@@ -13,17 +13,14 @@
 # ── Status: CI gates on this, over the whole tree ──────────────────────────────────────────
 #
 # `Build/CheckFormat.py` runs in its own Linux job and fails the build on an unformatted file
-# (AGENTS.md §6), on clang-format 18.1.3 exactly -- the output changes between releases, so if a
-# local run disagrees with CI, compare the version line first. Run it yourself before you push.
+# (AGENTS.md §6), on clang-format 22.1.3 exactly, the version build.yml installs -- the output
+# changes between releases, so if a local run disagrees with CI, compare the version line first.
+# Run it yourself before you push: `pip install clang-format==22.1.3` gets the same binary.
 #
-# THAT SCRIPT IS NOT WRITTEN YET, and the CI step is guarded until it is. Nothing about the
-# settings below is provisional, though: they are what the tree is formatted to from its first
-# line, and the guard comes off the moment Build/CheckFormat.py lands.
-#
-# On Windows the clang-format you have is almost certainly NOT 18: Visual Studio 2026 bundles 22
-# at VC\Tools\Llvm\x64\bin, and 22 breaks a long call argument list in a different place than 18
-# does. CheckFormat.py prints the version it used and says so when it is not the pinned one; the
-# Linux job is the answer that counts.
+# Visual Studio 2026 bundles a clang-format 22 at VC\Tools\Llvm\x64\bin, whose minor version may
+# differ. CheckFormat.py prints the version it used and says so when it is not the pinned one; the
+# Linux job is the answer that counts. FrontierOutpost/ and GameData/ are not formatted (ADR-001,
+# ADR-004).
 # Keep ColumnLimit and IndentWidth in step with /.editorconfig; if you change one, change the other
 # in the same commit or they start lying to each other.
 #
