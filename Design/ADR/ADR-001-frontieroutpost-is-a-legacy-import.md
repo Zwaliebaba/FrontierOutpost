@@ -50,8 +50,11 @@ AGENTS.md cannot be met by such a tree without rewriting it:
      brief's Phase 3;
    - dependencies may keep their own standard.
 
-   Toolset v145, building through the solution, relative paths, and Debug and Release differing
-   only in optimisation-related settings **do** apply.
+   Toolset v145, building through the solution, and relative paths **do** apply.
+   Debug and Release differ exactly as the original's configurations do, and in nothing else.
+   That covers optimisation, inlining, runtime checks, the CRT variant, and debug information,
+   which the original emits only in Debug. It is wider than §3 allows, because parity requires
+   it.
 3. **R13:** the original's runtime files are inherited as they are and listed in
    MIGRATION_NOTES.md §5.8, not redesigned.
 4. **R14:** the original's dependencies are inherited. How each is supplied (vendored source,

@@ -8,8 +8,7 @@ for first-party code, x64 and ARM64, and Debug and Release.
 This is a build-system and language-standard migration only. Namespaces, identifiers, files and
 user-facing strings keep their original names. `ltheory-old-main/` is read-only.
 
-**Status:** Phase 0 is complete and waiting at **Checkpoint 0** (§8). No FrontierOutpost project
-exists yet.
+**Status:** Checkpoint 0 is passed (§1, D6–D13). Phase 1 (structure) is in progress.
 
 ---
 
@@ -22,8 +21,14 @@ exists yet.
 | D3 | For `FrontierOutpost/`, this migration task overrides AGENTS.md §1 (naming), §2 (flat directories), §4 (formatting) and §3's platform and compiler rules. `Design/ADR/ADR-001-frontieroutpost-is-a-legacy-import.md` records the exemption and its scope. | owner | Phase 0 |
 | D4 | One solution file, `FrontierOutpost.slnx`, at the repository root. No `.sln` is produced. Every "`msbuild FrontierOutpost.sln`" in the task brief means `msbuild FrontierOutpost.slnx`. | owner | Phase 0 |
 | D5 | The brief's "use plan mode" for Phase 0 cannot coexist with 0d (a build) and 0f (writing this file). It was read as: Phase 0 writes only this file, ADR-001, the migration workflow and its two helper scripts, and one `.gitignore` entry. | stated to owner, not objected to | Phase 0 |
-| D6 | **Open, Checkpoint 0:** which switch "C++23" means (§3.3). | — | — |
-| D7 | **Open, Checkpoint 0:** the dependency plan (§8). | — | — |
+| D6 | First-party C++23 is **`LanguageStandard=stdcpplatest`** (`/std:c++latest`, `_MSVC_LANG=202400`: C++23 plus the C++26 draft), which is what the brief's rule gives. The recommendation was `stdcpp23` (§3.3); the owner chose the literal rule. It also matches AGENTS.md §3. | owner | Checkpoint 0 |
+| D7 | The dependency plan in §8.1 is approved as recommended. Its specifics are D8–D11, and ADR-002 records it. | owner | Checkpoint 0 |
+| D8 | **FMOD Ex x64:** the owner supplies FMOD Ex 4.44.x's x64 import libraries and DLLs, ideally core 4.44.14 and event 4.44.20 to match the x86 pair. They go in `FrontierOutpost/extlib/x64/FMOD/` and `FrontierOutpost/extbin/x64/`, mirroring `extlib/win32` and `extbin/win32`. Until then, x64's link stops at the 28 FMOD symbols. | owner | Checkpoint 0 |
+| D9 | **FMOD Ex on ARM64 is a documented blocker, acknowledged in advance.** ARM64 builds every project, but `lt` and `launch` cannot link. This satisfies the brief's Phase 4 gate ("or a documented blocker I have acknowledged"). | owner | Checkpoint 0 |
+| D10 | **FreeType 2.5.5 and GLEW 1.7.0 are added as source, each with its licence (R14).** Our own `.vcxproj` builds each as a static library for both platforms. FreeType is logged as BEHAVIOUR-RISK against the Win32 original's 2.3.5. | owner | Checkpoint 0 |
+| D11 | **Copy scope is the Windows-relevant subset (§8.3 item 4):** no other-OS binaries, no SFML examples, docs, tools or CMake files. | owner | Checkpoint 0 |
+| D12 | **Runtime assets are committed as the LFS pointer files** they are in `ltheory-old-main/`. Nothing fetches the real objects, because D13 removes the smoke test. | owner | Checkpoint 0 |
+| D13 | **The Phase 5 smoke test is dropped**, as the brief allows. Done means all four configuration/platform combinations compile and link, with D9's blocker as the one acknowledged exception. | owner | Checkpoint 0 |
 
 ## 2. Environment
 
@@ -105,10 +110,12 @@ values:
 | `stdcpplatest` | `/std:c++latest` |
 
 So the toolset has an explicit, first-class C++23 setting. It is exactly the switch `cl /?`
-leaves out. **Recommendation for D6:** `LanguageStandard=stdcpp23` (`/std:c++23preview`). It is
-C++23, it is the value the project system itself offers, and unlike `stdcpplatest` it will not
-silently take on C++26 draft behaviour when the toolset is updated. The literal rule gives
-`/std:c++latest`. The owner decides.
+leaves out. The recommendation was `LanguageStandard=stdcpp23` (`/std:c++23preview`), because it
+is C++23 and will not take on C++26 draft behaviour when the toolset is updated.
+
+**Owner's decision (D6): `stdcpplatest`**, the literal rule. Phase 3 therefore compiles
+first-party code as C++23 plus the C++26 draft (`_MSVC_LANG=202400` on 19.51). A later toolset
+may move that set.
 
 ## 4. Provenance: the committed copy against upstream
 
@@ -220,7 +227,8 @@ decides, and §9.4 shows the outcome: on Win32 every FreeType call binds to `fre
 - **Flags:** CMake's defaults (`/W3 /GR /EHsc`; Debug `/MDd /Zi /Ob0 /Od /RTC1`; Release
   `/MD /O2 /Ob2 /DNDEBUG`), and then the CMakeLists appends **`/EHs /MP /fp:fast /arch:SSE2`**.
   - The comment above `/EHs` says "No exception handling". It enables exception handling.
-  - `/arch:SSE2` is x86-only. On x64 it is ignored with D9002.
+  - `/arch:SSE2` is valid on x64 too (`cl /?` lists it, the baseline raises no D9002) and equals
+    the x64 default. It is not valid for ARM64.
 - **Runtime library:** `/MD` and `/MDd`. SFML matches, because `SFML_USE_STATIC_STD_LIBS` is
   FALSE.
 - **`lt` link flag:** `/NODEFAULTLIB:libcmt`. The loop meant to give `launch` the same flag
@@ -460,7 +468,7 @@ which stubs or excludes it:
 
 FreeType, GLEW and zlib reach ARM64 only through source builds or vcpkg (§8.1).
 
-### 8.3 Other decisions needed before Phase 1
+### 8.3 Other decisions needed before Phase 1 (all answered: §1, D6–D13)
 
 1. **FMOD Ex x64 binaries.** Phase 2 cannot link x64 without them.
 2. **R14 approval** to add GLEW source (Phase 2 cannot link x64 without an x64 GLEW either) and
@@ -562,7 +570,7 @@ Win32 and x64 are **identical apart from architecture names**, 404 settings comp
 | Warning level | `/W3` | `/W3` | `/W3` |
 | Exception handling | **`SyncCThrow` = `/EHs`**. The appended `/EHs` replaces CMake's `/EHsc`. | `/EHs` | `Sync` = `/EHsc` |
 | Floating point | **`Fast`** | `Fast` | default (precise) |
-| Instruction set | `StreamingSIMDExtensions2`, **passed on x64 too**, where `cl` ignores it with D9002 | same | not set |
+| Instruction set | `StreamingSIMDExtensions2`, **passed on x64 too**, where it is valid and equals the default (no D9002 in any log) | same | not set |
 | `/MP` | yes | yes | no |
 | RTTI | on | on | on |
 | Runtime library | `/MDd` / `/MD` | same | same |
@@ -676,7 +684,8 @@ original:
 Already decided for Phase 1, because they have no effect: the MSBuild projects **omit the two
 CMake-only definitions** `CMAKE_INTDIR="<cfg>"` and `lt_EXPORTS`. Nothing in ltheory or SFML reads
 either. Everything else in §9.3 carries over as it is, including the quirks: `/EHs` rather than
-`/EHsc`, `/arch:SSE2` passed on x64, and `/NODEFAULTLIB:libcmt` on `lt` only.
+`/EHsc`, `/arch:SSE2` on x64 (not expressible for ARM64), and `/NODEFAULTLIB:libcmt` on `lt`
+only.
 
 The brief itself replaces one behaviour. Outputs go to `bin\$(Platform)\$(Configuration)\` and
 intermediates to `obj\...`, not to the one `bin/` in the source tree that every configuration
