@@ -1,6 +1,6 @@
 # ADR-011: Images are decoded and encoded by WIC
 
-- **Status:** Proposed (2026-09-25, NeuronClient migration Phase 0), for the owner to accept
+- **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2)
 - **Scope:** NeuronClient's `ImageFile`, and how `lt.dll` loads and saves images
 - **Detail:** `Design/Plan/NeuronClient-migration.md` §4.1, §5.2 (`ImageFile`), §5.4, §5.5, §7,
   §8 (runtime files), §9, Phase 2 step 3 and Phase 4 step 7

@@ -1,6 +1,6 @@
 # ADR-006: NeuronClient builds for x64 and ARM64, with lt's instruction sets
 
-- **Status:** Proposed (2026-09-25, NeuronClient migration Phase 0), for the owner to accept
+- **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2)
 - **Scope:** the platforms, `/arch` and `/fp` of `NeuronClient/` and `Tests/NeuronClientTests/`
 - **Detail:** `Design/Plan/NeuronClient-migration.md` §3 (point 4), §5.1, §6 (the rule, Phase 0
   step 2, Phase 2 step 1), §7, §10, N1, N5 and N10. This amends AGENTS.md §3 for these two

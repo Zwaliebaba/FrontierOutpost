@@ -1,6 +1,6 @@
 # ADR-012: The window and input are plain Win32
 
-- **Status:** Proposed (2026-09-25, NeuronClient migration Phase 0), for the owner to accept
+- **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2)
 - **Scope:** NeuronClient's `Window` and `Key`, and `lt.dll`'s window, keyboard and mouse
   (`LTE/Window.cpp`, `Keyboard.cpp` and `Mouse.cpp` in `FrontierOutpost/src/liblt/`)
 - **Detail:** `Design/Plan/NeuronClient-migration.md` §4.1, §4.3, §5.2, §5.3, §5.4, §8, §9 B,

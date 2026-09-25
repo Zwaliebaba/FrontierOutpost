@@ -1,6 +1,6 @@
 # ADR-005: NeuronClient is FrontierOutpost's platform layer
 
-- **Status:** Proposed (2026-09-25, NeuronClient migration Phase 0), for the owner to accept
+- **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2)
 - **Scope:** `NeuronClient/` and `Tests/NeuronClientTests/`, two new projects at the repository
   root, and the boundary between them and `lt.dll`
 - **Detail:** `Design/Plan/NeuronClient-migration.md` §1, §3 (point 5), §4.1, §5.1, §5.2, §5.4,

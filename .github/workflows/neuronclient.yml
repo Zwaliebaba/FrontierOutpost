@@ -8,8 +8,9 @@ name: NeuronClient migration
 #             each build's warnings counted by .github/migration/SummarizeBuildLog.py. The baseline
 #             is 549 warnings, 523 unique, in all four since Phase 1 (run 8, on 204eadf). It was
 #             613, 585 unique (FrontierOutpost/MIGRATION_NOTES.md §22.4).
-#   checks    Build/CheckProjectFiles.py, Build/CheckSounds.py and Build/RunClangTidy.py, as build.yml
-#             runs them.
+#             The x64 Debug build then runs Build/RunClangTidy.py, as build.yml does, after the build,
+#             because a test includes a header the shader compiler writes during it.
+#   checks    Build/CheckProjectFiles.py and Build/CheckSounds.py, as build.yml runs them.
 #   format    Build/CheckFormat.py on the pinned clang-format, and the checkers' own fixture tests.
 #
 # Each checker step is guarded on its script, as build.yml's are, so the workflow runs before the
@@ -66,8 +67,9 @@ jobs:
           Write-Output "== $env:FO_PLATFORM ${env:FO_CONFIGURATION}: exit code $code"
           python .github/migration/SummarizeBuildLog.py "FrontierOutpost $env:FO_PLATFORM $env:FO_CONFIGURATION=$log"
 
-          # Every binary must be for the platform it was built for.
-          $out = "FrontierOutpost/bin/$env:FO_PLATFORM/$env:FO_CONFIGURATION"
+          # Every binary must be for the platform it was built for: FrontierOutpost's, and
+          # NeuronClient's and its tests', which build to the repository root.
+          $out = @("FrontierOutpost/bin/$env:FO_PLATFORM/$env:FO_CONFIGURATION", "$env:FO_PLATFORM/$env:FO_CONFIGURATION")
           Get-ChildItem $out -File -Include *.dll, *.exe, *.lib -Recurse -ErrorAction SilentlyContinue |
             Sort-Object Name | ForEach-Object {
               $machine = & $dumpbin /headers $_.FullName | Select-String '(?i)machine\s*\((\w+)\)' |
@@ -75,6 +77,11 @@ jobs:
               '   {0,-34} {1,14:N0}  {2}' -f $_.Name, $_.Length, $machine
             }
           exit $code
+
+      - name: Run clang-tidy
+        if: matrix.platform == 'x64' && matrix.configuration == 'Debug' && hashFiles('Build/RunClangTidy.py') != ''
+        shell: pwsh
+        run: python Build\RunClangTidy.py
 
       - name: Upload the build log
         if: always()
@@ -85,7 +92,7 @@ jobs:
           if-no-files-found: ignore
 
   checks:
-    name: Project and clang-tidy checks
+    name: Project checks
     runs-on: windows-latest
     timeout-minutes: 30
 
@@ -105,11 +112,6 @@ jobs:
         if: hashFiles('Build/CheckSounds.py') != ''
         shell: pwsh
         run: python Build\CheckSounds.py
-
-      - name: Run clang-tidy
-        if: hashFiles('Build/RunClangTidy.py') != ''
-        shell: pwsh
-        run: python Build\RunClangTidy.py
 
       # The checkers against fixture trees that break each rule. On Windows this also takes
       # RunClangTidy.py through Visual Studio's clang-tidy and the Windows SDK headers.

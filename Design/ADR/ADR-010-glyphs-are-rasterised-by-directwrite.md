@@ -1,6 +1,6 @@
 # ADR-010: Glyphs are rasterised by DirectWrite, from the font files in GameData
 
-- **Status:** Proposed (2026-09-25, NeuronClient migration Phase 0), for the owner to accept
+- **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2)
 - **Scope:** NeuronClient's `FontFace`, text in `lt.dll`
   (`FrontierOutpost/src/liblt/LTE/Font.cpp`), and `GameData/font`
 - **Detail:** `Design/Plan/NeuronClient-migration.md` §4.1, §4.3, §5.2 (`FontFace`), §5.4

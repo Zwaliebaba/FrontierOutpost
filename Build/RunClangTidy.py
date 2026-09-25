@@ -84,7 +84,10 @@ def Environment():
   return environment
 
 
-def Expand(_value, _root, _project, _configuration, _platform):
+def Expand(_value, _root, _project, _configuration, _platform, _studio=None):
+  # $(VCInstallDir) is where a test project finds CppUnitTest.h (VC\Auxiliary\VS\UnitTest\include).
+  if _studio is not None:
+    _value = _value.replace("$(VCInstallDir)", str(_studio / "VC") + os.sep)
   return (_value.replace("$(SolutionDir)", str(_root) + os.sep)
                 .replace("$(ProjectDir)", str(_project.folder) + os.sep)
                 .replace("$(MSBuildProjectDirectory)", str(_project.folder))
@@ -99,6 +102,7 @@ def Units(_root, _configuration, _platform):
   solutions = SolutionFiles(_root)
   if len(solutions) != 1:
     return units
+  studio = VisualStudio()
   for relative in SolutionProjects(solutions[0]):
     if relative.startswith(EXEMPT_PREFIXES) or not (_root / relative).is_file():
       continue
@@ -113,7 +117,7 @@ def Units(_root, _configuration, _platform):
     if settings.get("ClCompile.EnableEnhancedInstructionSet") in ARCH and _platform == "x64":
       flags.append(ARCH[settings["ClCompile.EnableEnhancedInstructionSet"]])
     for directory in settings.get("ClCompile.AdditionalIncludeDirectories", "").split(";"):
-      directory = Expand(directory.strip(), _root, project, _configuration, _platform)
+      directory = Expand(directory.strip(), _root, project, _configuration, _platform, studio)
       if directory and "$(" not in directory and "%(" not in directory:
         path = pathlib.Path(directory)
         flags.append(f"/I{path if path.is_absolute() else project.folder / path}")

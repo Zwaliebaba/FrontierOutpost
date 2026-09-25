@@ -14,6 +14,10 @@
     <Project Path="FrontierOutpost/ext/SFML/src/SFML/System/sfml-system.vcxproj" />
     <Project Path="FrontierOutpost/ext/SFML/src/SFML/Window/sfml-window.vcxproj" />
   </Folder>
+  <Folder Name="/NeuronClient/">
+    <Project Path="NeuronClient/NeuronClient.vcxproj" />
+    <Project Path="Tests/NeuronClientTests/NeuronClientTests.vcxproj" />
+  </Folder>
   <Folder Name="/dependencies/">
     <Project Path="FrontierOutpost/ext/freetype/freetype.vcxproj" />
     <Project Path="FrontierOutpost/ext/glew/glew.vcxproj" />
