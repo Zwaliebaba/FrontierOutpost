@@ -19,7 +19,8 @@ combinations from a clean state** (§20), and §21 is the final report. The owne
 it (D20–D25) fix O12, switch ARM64 to the 64-bit-hosted tools, correct the README and settle what
 CI builds after the merge; §20.5 verifies them. Last, the owner moved the runtime data to
 `GameData/` at the repository root, with the real files in place of most LFS pointers
-(D26–D28, ADR-004, §22).
+(D26–D28, ADR-004, §22). With that verified on all four combinations, the migration workflow
+and its scripts are gone (D21, §22.4).
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -794,8 +795,8 @@ only. §15.4 gives the reasoning for each entry.
 - **`launch.exe` changes to the folder that holds `GameData/`**, which it finds by looking in its
   own folder and then upward. The original looked in its working directory and one level up.
   `cache/` and `mod/` follow the working directory (BR8).
-- **The assets are real files in the repository**, apart from the 79 Ogg sounds and three Noto
-  fonts (O13, O14). The original keeps them in Git LFS.
+- **The assets are real files in the repository**, apart from the 79 Ogg sounds (O13). The
+  original keeps them in Git LFS.
 - **Four developer widgets name `GameData/`** where the original named its author's own checkout,
   `../lt/resource/` (§11).
 
@@ -971,9 +972,8 @@ Recorded, not to be done in this migration:
   `resource/texture/`. They come from a clone of `JoshParnell/ltheory-old` made with Git LFS
   installed. Copy only those: FrontierOutpost changed six scripts in `resource/script/` (§11) and
   removed `resource/music/` (D17). Then the Ogg sounds become WAV files (O10).
-  - **Resolved by D27 for 148 of the 230**, now in `GameData/`. The migration workflow's one-off
-    job fetched and committed them (§22.3). The 79 Ogg sounds (O13) and the three Noto fonts (O14)
-    are still pointers.
+  - **Resolved by D27 for 151 of the 230**, now in `GameData/`. The migration workflow's one-off
+    job fetched and committed them (§22.3). The 79 Ogg sounds are still pointers (O13).
 - **O6** For Win32, MSBuild's own total (86 warnings) is *lower* than the de-duplicated count
   (229), which should be impossible if both count the same thing. This is unexplained.
   - The raw logs are in the run's `baseline-Win32` and `baseline-x64` artifacts, which this
@@ -1034,18 +1034,15 @@ Recorded, not to be done in this migration:
   Until one is chosen, D16 stands, and each of those sounds stops the game the first time it plays
   (O10).
 - **O14** (D27, AGENTS.md R14) **Licence texts that the original does not carry:**
-  - **The three Noto fonts** have no licence file beside them, unlike the other 36 font folders
+  - **The three Noto fonts** had no licence file beside them, unlike the other 36 font folders
     (§6): `GameData/font/NotoSans/Regular.ttf` and `Bold.ttf`, and
-    `GameData/font/NotoSansCJKsc/Regular.otf`, 16.2 MB together. So they stay pointers. The job
-    prints the licence each font's own name table declares (§22.3). To land them, that licence's
-    text goes beside them. Only `GameData/script/Item/ShipType/Generate.lts:97` uses one of them
-    (`Fonts:ChineseSimp`), and nothing uses `Fonts:Unicode`.
+    `GameData/font/NotoSansCJKsc/Regular.otf`. **Resolved:** their own name tables declare the
+    Apache License 2.0, whose text now sits in both folders, and they landed (§22.3).
   - **SMAA's shader source**, `GameData/shader/common/smaa.jsl`, lacks SMAA's copyright and
     permission notice, which its MIT licence requires in copies of the source. It has lacked it
     since the original; D26 only moves it. SMAA's two lookup textures did land: the same licence
     says that binary distributions need not carry the notice. Adding SMAA's `LICENSE.txt` beside
-    the shader fixes it.
-  - Both are the owner's call.
+    the shader fixes it. **Open, the owner's call.**
 
 ## 15. Phase 1: structure
 
@@ -1627,7 +1624,7 @@ GLEW as C (§18.1).
 - **Language:** C++23 (`/std:c++latest`) and conformance mode for first-party code; C++23 for five
   SFML projects (§10.4).
 - **Platforms:** x64 and ARM64, not Win32 (§10.2).
-- **Runtime data:** `GameData/` at the repository root. It holds real files in place of 148 of
+- **Runtime data:** `GameData/` at the repository root. It holds real files in place of 151 of
   the 230 LFS pointers, and `launch.exe` finds it from its own folder upward (§10.5, ADR-004).
 
 ### 21.3 BEHAVIOUR-RISK
@@ -1664,11 +1661,10 @@ at `/W4`, and GLEW raise none.
 ### 21.6 Open issues
 
 - **O13 and O14: the owner's to decide.** How the 79 Ogg sounds land (O13; until then D16 stands,
-  and O10 is the owner's to do). And the licence texts for the three Noto fonts and for SMAA's
-  shader source (O14).
+  and O10 is the owner's to do). And the licence notice for SMAA's shader source (O14).
 - **O11:** then listen to the sounds.
 - **O4:** ARM64 builds have not been run, for want of an ARM64 machine.
-- O1 and O7 describe the environment and the source material. O5 is resolved for 148 of its 230
+- O1 and O7 describe the environment and the source material. O5 is resolved for 151 of its 230
   files (§22.3). O2, O3, O8, O9 and O12 are resolved, and O6 is closed (D24).
 
 ## 22. GameData (D26–D28)
@@ -1732,7 +1728,8 @@ up from there until a folder holds `GameData/`, and changes to that folder. If n
   5. stages the files, and checks each staged blob's SHA-256 once more;
   6. commits, and pushes to this branch as a fast-forward.
 
-  It is the only job with write permission, and D21 removes it with the rest of the workflow.
+  It was the only job with write permission. It went with the rest of the workflow (D21, §22.4),
+  and the script's last version is at `3b19c0b`.
 - **Tested in the container** against a stand-in for the original:
   - which files it replaces, holds and skips;
   - a rerun, which finds nothing to do;
@@ -1754,10 +1751,13 @@ up from there until a folder holds `GameData/`, and changes to that folder. If n
 - **The three Noto fonts were held back at first**, for want of their licence text. The job read
   their name tables, which declare the Apache License 2.0: Noto Sans 1.04 (Google, 2012) and Noto
   Sans CJK SC 1.001 (Adobe, 2014). That licence asks for its text to go with every copy. The
-  repository already has the text beside Droid Sans, byte for byte the canonical one, so a copy of
-  it now sits in both Noto folders. The job lands the three fonts, 16.2 MB, on its next run
-  (§22.4).
-- **Still pointers:** the 79 Ogg sounds, 55.8 MB (O13).
+  repository already has the text beside Droid Sans, byte for byte apache.org's `LICENSE-2.0.txt`
+  (compared in the container), so a copy of it now sits in both Noto folders (`cf937bc`). Then
+  the job of [Migration run 16](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36118596114)
+  committed the three fonts, 16.2 MB, as `3b19c0b`. They were checked again in the container, as
+  above.
+- **In all, 151 of the 230 are real files, 214.1 MB.** Still pointers: the 79 Ogg sounds, 55.8 MB
+  (O13).
 - **Licences** (AGENTS.md R14):
   - Every font folder carries its licence: 34 the SIL Open Font License, three the Apache License
     (Droid Sans and the two Noto folders), and Ubuntu's the Ubuntu Font Licence (§6).
@@ -1767,6 +1767,35 @@ up from there until a folder holds `GameData/`, and changes to that folder. If n
   - The other assets carry no licence of their own, and are taken to be the original's own work,
     under its Unlicense.
 
-### 22.4 The build
+### 22.4 The build, and the end of the migration workflow
 
-Pending: the migration workflow's four-way run on this change.
+[Migration run 15](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36117430392) built all
+four combinations from a clean state on `78f624e`, the last commit that changes code:
+
+| Combination | Result | MSBuild's time | Warnings: MSBuild's total / unique |
+|---|---|---|---|
+| x64 Debug | links | 5 min 52 s | 613 / 585 |
+| x64 Release | links | 11 min 2 s | 613 / 585 |
+| ARM64 Debug | links | 6 min 9 s | 613 / 585 |
+| ARM64 Release | links | 9 min 32 s | 613 / 585 |
+
+- **The warnings are §20.5's**, code for code and project for project. D26–D28 raise none.
+- **`launch.exe` imports one more function from `lt.dll`** in all four, 25 in place of run 14's
+  24: that is `OS_GetExecutableDir`.
+- **The resource compiler finds the icon at its new path.** `rc.exe`, x64-hosted from SDK
+  10.0.26100.0 in all four, compiles `launch`'s `resources.res`, and no build reports an error.
+- **Tools:** ARM64 compiles and links with `HostX64\arm64`, and x64 with `HostX64\x64` (D22).
+  MSVC 14.51.36231 in all four; MSBuild 18.9.1 on runner image 20260907.229.1, except x64
+  Release, which ran MSBuild 18.10.1 on image 20260922.246.2.
+- **The repository's CI** (`build.yml`, Debug|x64) passed on `78f624e` as well.
+
+The commits after `78f624e` change no code. `5b63420` and `3b19c0b` are the real files, `cf937bc`
+adds the two licence files, and the last one removes the workflow. Run 16 built `cf937bc` only
+long enough for its asset job to push `3b19c0b`; its four builds were then cancelled, because
+they would have repeated run 15 on the same code.
+
+**The migration workflow is gone (D21).** Its five scripts went with it: `CommandLines.py`,
+`DescribeVcxproj.py`, `DiffWarnings.py`, `SummarizeBuildLog.py` and `RealAssets.py`, all last at
+`3b19c0b`. What they measured stays in this file. From here on:
+- the repository's `build.yml` builds Debug|x64 for every pull request;
+- Release and ARM64 are built by hand before a release (AGENTS.md §6).

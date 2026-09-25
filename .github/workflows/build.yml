@@ -20,14 +20,16 @@ name: Build
 # ── Why the build does not treat warnings as errors ───────────────────────────────────────────
 #
 # FrontierOutpost/ is a legacy import. It builds at the original's /W3, with the original's own
-# warnings (589 at x64, the same as the original's own build: MIGRATION_NOTES.md §15.6), and
+# warnings (585 unique at C++23, every one of them the original's: MIGRATION_NOTES.md §21.4), and
 # ADR-001 exempts it from /W4 /WX. MSBuild's /warnaserror would turn every one of them into an
 # error, so it is not passed.
 #
 # ── What it does not build ─────────────────────────────────────────────────────────────────────
 #
-# Debug and x64 only (AGENTS.md §3, §6). Release and ARM64 are built by the migration workflow
-# (migration.yml) while the migration lasts, and before a release by whoever ships.
+# Debug and x64 only (AGENTS.md §3, §6, MIGRATION_NOTES.md D21). Release and ARM64 are built
+# before a release by whoever ships. The migration's own workflow built all four combinations
+# while the migration lasted; it is gone, and MIGRATION_NOTES.md §20 and §22 keep what it
+# measured.
 
 on:
   push:

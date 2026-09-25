@@ -46,12 +46,12 @@ and lifetime, and for written paths to resolve against a known location.
    land in the one known folder, beside `GameData/`.
 4. **The real files are ordinary Git objects, not Git LFS.** A one-off job of the migration
    workflow fetched them from the original at `0535d46`. It checked each file against its
-   pointer's size and SHA-256, and committed them (§22). Two groups stay pointer files until the
-   owner decides:
-   - **the 79 Ogg sounds.** D16 has the owner converting them to WAV, and how they land is open
-     (O13);
-   - **the three Noto fonts** (Noto Sans Regular and Bold, Noto Sans CJK SC), which the original
-     ships without their licence texts (O14, AGENTS.md R14).
+   pointer's size and SHA-256, and committed them (§22).
+   - Every font lands with its licence text beside it (AGENTS.md R14). The original ships the
+     three Noto fonts without theirs, and their own metadata names the Apache License 2.0, so its
+     text was added.
+   - **The 79 Ogg sounds stay pointer files** until the owner decides how they land. D16 has the
+     owner converting them to WAV (O13).
 5. **`GameData/` is part of the legacy import.** ADR-001's exemption covers it as it covers
    `FrontierOutpost/`:
    - its names, layout and formatting stay the original's;
@@ -62,8 +62,8 @@ and lifetime, and for written paths to resolve against a known location.
 
 ## What this forecloses
 
-- **Git LFS for these assets.** Every clone carries them in its history for good: 148 files and
-  197.9 MB now, and more once the Ogg sounds and the Noto fonts land.
+- **Git LFS for these assets.** Every clone carries them in its history for good: 151 files and
+  214.1 MB now, and more once the Ogg sounds land.
 - **Paths that depend on where `launch.exe` was started**, whenever a `GameData/` exists above it.
 - **A packaged layout that puts `GameData/` anywhere other than beside `launch.exe` or above it.**
   The original's archive mode (`resources.bin` beside the executable, under `BUILD_RELEASE`) is

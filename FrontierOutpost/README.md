@@ -29,7 +29,7 @@ Use `Configuration=Debug` for a debug build, and `Platform=ARM64` to build for A
 
 ## Getting the Assets
 
-Everything LT loads at run time (fonts, sounds, textures, game data, LTSL scripts and shaders) is in `GameData/`, at the root of this repository, as ordinary files. Two groups are still the Git LFS pointer files the original has in their place: its 79 Ogg sounds, which become WAV files, and three Noto fonts, which the original ships without their licence texts. Until they are replaced, those sounds stop the game the first time they play, and those fonts do not load. `FrontierOutpost/MIGRATION_NOTES.md` says what each needs (O13 and O14).
+Everything LT loads at run time (fonts, sounds, textures, game data, LTSL scripts and shaders) is in `GameData/`, at the root of this repository, as ordinary files. Only the 79 Ogg sounds are still Git LFS pointer files, which are due to become WAV files. Until they do, each of those sounds stops the game the first time it plays. `FrontierOutpost/MIGRATION_NOTES.md` says what they need (O13).
 
 ## Running an LTSL App
 
