@@ -127,10 +127,12 @@
     <ClCompile Include="AudioOutput.cpp" />
     <ClCompile Include="GlyphRendering.cpp" />
     <ClCompile Include="ImageCoding.cpp" />
+    <ClCompile Include="KeyMapping.cpp" />
     <ClCompile Include="ShaderReflection.cpp" />
     <ClCompile Include="SoundParsing.cpp" />
     <ClCompile Include="UnicodeText.cpp" />
     <ClCompile Include="WarpDevice.cpp" />
+    <ClCompile Include="WindowEvents.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\ProbePS.hlsl">

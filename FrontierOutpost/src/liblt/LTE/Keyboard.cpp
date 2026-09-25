@@ -4,8 +4,6 @@
 #include "Thread.h"
 #include "Vector.h"
 
-#include "SFML/Window.hpp"
-
 #define KEY_X2                                                                 \
   X(A)                                                                         \
   X(B)                                                                         \
@@ -49,81 +47,17 @@
   X(F14)                                                                       \
   X(F15)
 
-#define KEY_MAP_XY                                                             \
-  XY(N0, Num0)                                                                 \
-  XY(N1, Num1)                                                                 \
-  XY(N2, Num2)                                                                 \
-  XY(N3, Num3)                                                                 \
-  XY(N4, Num4)                                                                 \
-  XY(N5, Num5)                                                                 \
-  XY(N6, Num6)                                                                 \
-  XY(N7, Num7)                                                                 \
-  XY(N8, Num8)                                                                 \
-  XY(N9, Num9)                                                                 \
-  XY(NP0, Numpad0)                                                             \
-  XY(NP1, Numpad1)                                                             \
-  XY(NP2, Numpad2)                                                             \
-  XY(NP3, Numpad3)                                                             \
-  XY(NP4, Numpad4)                                                             \
-  XY(NP5, Numpad5)                                                             \
-  XY(NP6, Numpad6)                                                             \
-  XY(NP7, Numpad7)                                                             \
-  XY(NP8, Numpad8)                                                             \
-  XY(NP9, Numpad9)                                                             \
-  XY(Add, Add)                                                                 \
-  XY(BackSpace, BackSpace)                                                     \
-  XY(BackSlash, BackSlash)                                                     \
-  XY(Comma, Comma)                                                             \
-  XY(Dash, Dash)                                                               \
-  XY(Delete, Delete)                                                           \
-  XY(Divide, Divide)                                                           \
-  XY(Down, Down)                                                               \
-  XY(End, End)                                                                 \
-  XY(Equal, Equal)                                                             \
-  XY(Escape, Escape)                                                           \
-  XY(Home, Home)                                                               \
-  XY(Insert, Insert)                                                           \
-  XY(LBracket, LBracket)                                                       \
-  XY(Left, Left)                                                               \
-  XY(Menu, Menu)                                                               \
-  XY(Multiply, Multiply)                                                       \
-  XY(PageDown, PageDown)                                                       \
-  XY(PageUp, PageUp)                                                           \
-  XY(Pause, Pause)                                                             \
-  XY(Period, Period)                                                           \
-  XY(Quote, Quote)                                                             \
-  XY(RBracket, RBracket)                                                       \
-  XY(Return, Return)                                                           \
-  XY(Right, Right)                                                             \
-  XY(SemiColon, SemiColon)                                                     \
-  XY(Slash, Slash)                                                             \
-  XY(Space, Space)                                                             \
-  XY(Subtract, Subtract)                                                       \
-  XY(Tab, Tab)                                                                 \
-  XY(Tilde, Tilde)                                                             \
-  XY(Up, Up)                                                                   \
-  XY(LAlt, LAlt)                                                               \
-  XY(RAlt, RAlt)                                                               \
-  XY(LControl, LControl)                                                       \
-  XY(RControl, RControl)                                                       \
-  XY(LShift, LShift)                                                           \
-  XY(RShift, RShift)                                                           \
-  XY(LSystem, LSystem)                                                         \
-  XY(RSystem, RSystem)
-
 namespace {
-  sf::Keyboard::Key Key_LTE_to_SFML(Key key);
-  Key Key_SFML_to_LTE(sf::Keyboard::Key key);
-
   struct Keyboard {
     bool down[Key_SIZE];
     bool downLast[Key_SIZE];
+    bool released[Key_SIZE];
     Vector<uchar> chars;
     Vector<Key> pressed;
 
     Keyboard() {
       for (Key key = 0; key < Key_SIZE; ++key) {
-        down[key] = downLast[key] = false;
+        down[key] = downLast[key] = released[key] = false;
       }
     }
 
@@ -131,10 +65,14 @@ namespace {
 }
 
 namespace LTE {
-  void Keyboard_AddDown(int key) {
-    Key thisKey = Key_SFML_to_LTE((sf::Keyboard::Key)key);
-    gKeyboard.down[thisKey] = true;
-    gKeyboard.pressed.push(thisKey);
+  void Keyboard_AddDown(Key key) {
+    gKeyboard.down[key] = true;
+    gKeyboard.released[key] = false;
+    gKeyboard.pressed.push(key);
+  }
+
+  void Keyboard_AddUp(Key key) {
+    gKeyboard.released[key] = true;
   }
 
   void Keyboard_AddText(uchar c) {
@@ -174,10 +112,11 @@ namespace LTE {
   void Keyboard_Update(bool hasFocus) {
     for (Key key = 0; key < Key_SIZE; ++key) {
       gKeyboard.downLast[key] = gKeyboard.down[key];
-      
+
+      /* A key that was down stays down until its release arrives or the window loses focus. */
       if (gKeyboard.downLast[key])
-        gKeyboard.down[key] = hasFocus &&
-          sf::Keyboard::isKeyPressed(Key_LTE_to_SFML(key));
+        gKeyboard.down[key] = hasFocus && !gKeyboard.released[key];
+      gKeyboard.released[key] = false;
     }
 
     gKeyboard.chars.clear();
@@ -253,33 +192,5 @@ namespace LTE {
 
       default:              return "Unknown";
     }
-  }
-}
-
-namespace {
-  sf::Keyboard::Key Key_LTE_to_SFML(Key key) {
-    switch (key) {
-      #define X(x) case Key_##x: return sf::Keyboard::x;
-      KEY_X2
-      #undef X
-
-      #define XY(x, y) case Key_##x: return sf::Keyboard::y;
-      KEY_MAP_XY
-      #undef XY
-      default: return sf::Keyboard::Unknown;
-    };
-  }
-
-  Key Key_SFML_to_LTE(sf::Keyboard::Key key) {
-    switch (key) {
-      #define X(x) case sf::Keyboard::x: return Key_##x;
-      KEY_X2
-      #undef X
-
-      #define XY(x, y) case sf::Keyboard::y: return Key_##x;
-      KEY_MAP_XY
-      #undef XY
-      default: return Key_SIZE;
-    };
   }
 }

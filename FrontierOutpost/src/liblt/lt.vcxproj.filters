@@ -964,6 +964,9 @@
     <ClCompile Include="LTE\Warp\Custom.cpp">
       <Filter>LTE\Warp</Filter>
     </ClCompile>
+    <ClCompile Include="LTE\WglBridge.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
     <ClCompile Include="LTE\Window.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
@@ -1941,6 +1944,9 @@
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="LTE\Warps.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\WglBridge.h">
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="LTE\Window.h">

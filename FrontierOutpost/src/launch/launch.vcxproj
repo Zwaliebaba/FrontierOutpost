@@ -8,9 +8,9 @@
     rc.exe. Its icon, ..\..\GameData\texture\multi.ico, resolves from the .rc file's folder to the
     repository root's GameData\ (ADR-004).
 
-    The link line keeps the original's order: SFML, OpenGL, lt.lib, then lt's own link libraries,
-    which the original passes on to launch transitively. The substitutions are ADR-002's and
-    ADR-003's, as in lt.
+    The link line keeps the original's order: OpenGL, lt.lib, then lt's own link libraries, which
+    the original passes on to launch transitively. The substitutions are ADR-002's and ADR-003's,
+    as in lt, and SFML, which came first, is gone (ADR-012).
     The original's launch.exe imports only lt.dll, KERNEL32 and the CRT (§9.4).
   -->
   <ItemGroup Label="ProjectConfigurations">
@@ -48,16 +48,10 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
-    <SfmlSuffix>-s-d</SfmlSuffix>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='Release'">
-    <SfmlSuffix>-s</SfmlSuffix>
-  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ExceptionHandling>SyncCThrow</ExceptionHandling>
       <FloatingPointModel>Fast</FloatingPointModel>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -68,13 +62,13 @@
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ResourceCompile>
-      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;lt.lib;winmm.lib;gdi32.lib;xaudio2.lib;glew32s.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>opengl32.lib;glu32.lib;lt.lib;winmm.lib;gdi32.lib;xaudio2.lib;glew32s.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
@@ -104,14 +98,6 @@
   <ItemGroup>
     <ProjectReference Include="..\liblt\lt.vcxproj">
       <Project>{1CB67BEE-DA37-5D52-A875-FABECCCD5014}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-    <ProjectReference Include="..\..\ext\SFML\src\SFML\System\sfml-system.vcxproj">
-      <Project>{2D3DEE67-9FD5-50A7-BA72-2818BF619516}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-    <ProjectReference Include="..\..\ext\SFML\src\SFML\Window\sfml-window.vcxproj">
-      <Project>{9485D241-96B7-504D-93A1-627D479EB4E3}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
     <ProjectReference Include="..\..\ext\glew\glew.vcxproj">

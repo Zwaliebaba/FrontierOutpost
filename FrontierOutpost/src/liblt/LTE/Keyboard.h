@@ -8,6 +8,10 @@ namespace LTE {
 
   LT_API void Keyboard_AddDown(Key key);
 
+  /* The key goes up at the next Keyboard_Update, so that a press and release within one frame
+     still reads as a press. */
+  LT_API void Keyboard_AddUp(Key key);
+
   LT_API void Keyboard_AddText(uchar c);
 
   LT_API bool Keyboard_Down(Key key);
