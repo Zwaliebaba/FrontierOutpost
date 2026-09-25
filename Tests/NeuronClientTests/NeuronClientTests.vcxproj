@@ -123,6 +123,7 @@
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="ImageCoding.cpp" />
     <ClCompile Include="ShaderReflection.cpp" />
     <ClCompile Include="WarpDevice.cpp" />
   </ItemGroup>

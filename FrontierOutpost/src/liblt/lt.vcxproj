@@ -73,7 +73,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;$(FrontierOutpostDir)include\FreeType;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(SolutionDir)NeuronClient;$(FrontierOutpostDir)include;$(FrontierOutpostDir)include\FreeType;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ExceptionHandling>SyncCThrow</ExceptionHandling>
       <FloatingPointModel>Fast</FloatingPointModel>
@@ -88,7 +88,7 @@
       <SubSystem>Console</SubSystem>
       <IgnoreSpecificDefaultLibraries>libcmt;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-graphics$(SfmlSuffix).lib;sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;freetype.lib;gdi32.lib;winmm.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;freetype.lib;gdi32.lib;winmm.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
@@ -910,9 +910,9 @@
     <ClInclude Include="Volume\MarchingCubes.h" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\ext\SFML\src\SFML\Graphics\sfml-graphics.vcxproj">
-      <Project>{E4D737A8-5A31-52DF-8381-124888276A50}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    <!-- NeuronClient.lib is linked through this reference (Design/ADR/ADR-005). -->
+    <ProjectReference Include="..\..\..\NeuronClient\NeuronClient.vcxproj">
+      <Project>{05010071-B8CA-465B-9FEC-BCF2D87DAD7A}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\ext\SFML\src\SFML\System\sfml-system.vcxproj">
       <Project>{2D3DEE67-9FD5-50A7-BA72-2818BF619516}</Project>

@@ -10,7 +10,7 @@
 #include "Texture2D.h"
 #include "Viewport.h"
 
-#include "SFML/Graphics.hpp"
+#include "SFML/Window.hpp"
 
 namespace {
   Vector<Window>& GetStack() {
@@ -35,7 +35,7 @@ namespace {
   }
 
   struct WindowImpl : public WindowT {
-    sf::RenderWindow impl;
+    sf::Window impl;
     String title;
     Viewport viewport;
     V2U size;
@@ -62,7 +62,6 @@ namespace {
             ? sf::Style::Default
             : sf::Style::None);
       impl.setMouseCursorVisible(false);
-      impl.setView(sf::View(sf::FloatRect(0, 0, size.x, size.y)));
       viewport->size = size;
 
       // sf::Vector2i p = sf::Mouse::getPosition(impl);
@@ -103,7 +102,6 @@ namespace {
         if (e.type == sf::Event::Resized) {
           float w = (float)e.size.width;
           float h = (float)e.size.height;
-          impl.setView(sf::View(sf::FloatRect(0, 0, w, h)));
           size.x = e.size.width;
           size.y = e.size.height;
           viewport->size = V2(w, h);

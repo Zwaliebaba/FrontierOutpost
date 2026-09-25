@@ -14,7 +14,6 @@
 #include "Transform.h"
 #include "V3.h"
 
-#include "SFML/Graphics.hpp"
 
 TypeAlias(Reference<CubeMapT>, CubeMap);
 

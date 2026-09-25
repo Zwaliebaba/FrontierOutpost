@@ -2,7 +2,7 @@
 #include "Timer.h"
 #include "Window.h"
 
-#include "SFML/Graphics.hpp"
+#include "SFML/Window.hpp"
 
 const float kDoubleClickThresh = 0.1f;
 
@@ -68,7 +68,7 @@ namespace LTE {
 
   DefineFunction(Mouse_GetPosImmediate) {
     sf::Vector2i p = sf::Mouse::getPosition(
-      *(sf::RenderWindow*)Window_Get()->GetImplData());
+      *(sf::Window*)Window_Get()->GetImplData());
     return V2((float)p.x, (float)p.y);
   }
 

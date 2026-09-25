@@ -96,7 +96,7 @@ FreeFunction(int, Texture2D_GetWidth,
 } FunctionAlias(Texture2D_GetWidth, GetWidth);
 
 VoidFreeFunction(Texture2D_SaveTo,
-  "Save 'texture' to a standard image format (bmp, jpg, or png) at 'path'",
+  "Save 'texture' as a PNG image at 'path', which ends in .png",
   Texture2D, texture,
   String, path)
 {

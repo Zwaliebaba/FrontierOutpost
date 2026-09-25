@@ -6,6 +6,7 @@
 
 #include <format>
 #include <string>
+#include <string_view>
 
 namespace NeuronClientTests
 {
@@ -18,6 +19,12 @@ inline void Check(HRESULT _result, const wchar_t* _call)
     const std::wstring message = std::format(L"{} failed with 0x{:08X}", _call, static_cast<unsigned long>(_result));
     Microsoft::VisualStudio::CppUnitTestFramework::Assert::Fail(message.c_str());
   }
+}
+
+/// An ASCII message, such as NeuronClient's errors, as the test framework's wide text.
+inline std::wstring Widen(std::string_view _ascii)
+{
+  return std::wstring(_ascii.begin(), _ascii.end());
 }
 
 } // namespace NeuronClientTests
