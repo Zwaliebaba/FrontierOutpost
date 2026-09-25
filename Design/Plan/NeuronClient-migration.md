@@ -6,9 +6,12 @@ DirectWrite, WIC, XAudio2 and Win32.
 - **Status:** Proposed, 2026-09-25. The owner took decisions N1–N14 the same day (§2). Phase 0 is
   done (§6): the checkers run in CI, and the startup fixes are in (`ea07b9c`). Phase 1's removals
   are in (`04d440b` to `f20c684`, and `b78a33f` for N14); ADR-013, now Accepted, records what went.
-  Its done-when still needs the owner to see the 16 kept apps start. Phase 2 has begun: ADR-005,
-  ADR-006 and ADR-010 to ADR-012 are Accepted, and step 1 adds `NeuronClient/` and
-  `Tests/NeuronClientTests/`. ADR-007 to ADR-009 stay Proposed until Phase 3.
+  Its done-when still needs the owner to see the 16 kept apps start. Phase 2's six steps are in
+  (from `037add3`): ADR-005, ADR-006 and ADR-010 to ADR-012 are Accepted, NeuronClient has the
+  images, glyphs, sound, window and input, and no SFML or FreeType is left. SFML's include
+  directories, definition, libraries and `.gitignore` negation went with it, ahead of Phase 5.
+  Phase 2's done-when needs the owner to check text, images, sound and input in the kept apps.
+  ADR-007 to ADR-009 stay Proposed until Phase 3.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and

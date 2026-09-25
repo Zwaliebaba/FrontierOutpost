@@ -37,7 +37,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <!-- The original's /W3 and its compiler-default language standard (C++14). The projects that compile
-           as C++23 from Phase 3 (lt, launch and five of SFML's six) say so in their own files. -->
+           as C++23 from Phase 3 (lt and launch) say so in their own files. -->
       <WarningLevel>Level3</WarningLevel>
       <LanguageStandard>stdcpp14</LanguageStandard>
       <ConformanceMode>false</ConformanceMode>

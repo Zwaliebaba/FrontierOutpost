@@ -11,6 +11,5 @@
 
 # The root .gitignore ignores every directory named Win32, x64, x86, bin or ARM64. That is right
 # for build output and wrong for vendored folders: it is how ltheory-old-main/ silently lost
-# extlib/win32 and extbin/win32 (MIGRATION_NOTES.md §4). SFML's own Windows implementation lives in
-# src/SFML/<Module>/Win32/, which that rule would drop.
-!/ext/SFML/src/SFML/*/Win32/
+# extlib/win32 and extbin/win32 (MIGRATION_NOTES.md §4). A vendored folder by one of those names
+# needs a negation here. SFML's src/SFML/<Module>/Win32/ had one, until SFML went (ADR-012).
