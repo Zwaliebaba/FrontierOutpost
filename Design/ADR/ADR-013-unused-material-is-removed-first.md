@@ -107,8 +107,23 @@ pushed, and CI's four-way build after.
     `grammar/default.txt` is read.
 
   `GameData/` holds 324 files, 39 MB, where it held 630.
-- **Not removed:** 300 of the 759 script bindings are called by no remaining script. Some of them
-  C++ calls. Whether the script API is swept too is the owner's decision.
+- **Not removed: the script API.** The engine registers 1,045 natives, counting each member of a
+  macro-built family. 609 of them are reached from a remaining script: 526 by name, and 83 only
+  through an operator such as `+` or `==`, counted as reached when any script uses the operator,
+  since the overload it resolves to depends on types. 171 more are named in C++ and by no script.
+  The other 265 are reached by neither:
+  - 194 are members of macro-built families, one per object type, item field, component or key;
+  - 59 are short, none over 11 lines: `String_ToInt`, `Sound_IsFinished` and `Camera_SetFov`
+    among them;
+  - 12 are the only way into code of their own: the C++ warp rail, whose `warprail.jsl` nothing
+    else uses (the kept scripts build rails with `Object/WarpRail.lts`); the Custom, Drill, LOD
+    and Patrol tasks; the deposit event; the three workers; the construction drone type; the
+    custom compositor; and the settings widget.
+
+  Measured by preprocessing every `lt` and `launch` source, reading each `Function_Create` and
+  `Function_AddAlias` the registration macros expand to, and matching both against the scripts'
+  tokens as `StringList_ParseLine` splits them. Whether any of the 265 go is the owner's decision.
+  Until it is taken, `warprail.jsl` stays among the 131 files Phase 4 converts.
 
 ## What this forecloses
 
