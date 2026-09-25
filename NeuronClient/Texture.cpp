@@ -162,6 +162,10 @@ Texture::Native::~Native()
     {
       core->depthViewPool.Free(depthView);
     }
+    if (shaderView.ptr != 0)
+    {
+      core->shaderViewPool.Free(shaderView);
+    }
   }
   catch (...)
   {
@@ -223,6 +227,38 @@ bool Texture::Native::DepthView(D3D12_CPU_DESCRIPTOR_HANDLE& _outView)
     core->device->CreateDepthStencilView(resource.Get(), &viewDesc, depthView);
   }
   _outView = depthView;
+  return true;
+}
+
+bool Texture::Native::ShaderView(D3D12_CPU_DESCRIPTOR_HANDLE& _outView)
+{
+  if (shaderView.ptr == 0)
+  {
+    if (!core->shaderViewPool.Allocate(*core, shaderView))
+    {
+      return false;
+    }
+    D3D12_SHADER_RESOURCE_VIEW_DESC viewDesc{};
+    viewDesc.Format = desc.format == TextureFormat::Depth32F ? DXGI_FORMAT_R32_FLOAT : resourceDesc.Format;
+    viewDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    switch (desc.dimension)
+    {
+    case TextureDimension::Texture2D:
+      viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+      viewDesc.Texture2D.MipLevels = desc.mipLevels;
+      break;
+    case TextureDimension::TextureCube:
+      viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+      viewDesc.TextureCube.MipLevels = desc.mipLevels;
+      break;
+    case TextureDimension::Texture3D:
+      viewDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+      viewDesc.Texture3D.MipLevels = desc.mipLevels;
+      break;
+    }
+    core->device->CreateShaderResourceView(resource.Get(), &viewDesc, shaderView);
+  }
+  _outView = shaderView;
   return true;
 }
 

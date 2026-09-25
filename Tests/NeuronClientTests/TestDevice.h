@@ -21,14 +21,16 @@ struct TestDevice
   Neuron::GraphicsDevice device; // after failures, which its onFailure writes to
 };
 
-inline void Open(TestDevice& _test, std::uint32_t _uploadPageBytes = Neuron::GraphicsDevice::DEFAULT_UPLOAD_PAGE_BYTES)
+inline void Open(TestDevice& _test, std::uint32_t _uploadPageBytes = Neuron::GraphicsDevice::DEFAULT_UPLOAD_PAGE_BYTES,
+                 std::uint32_t _shaderDescriptors = Neuron::GraphicsDevice::DEFAULT_SHADER_DESCRIPTORS)
 {
   std::string error;
   const Neuron::GraphicsDevice::Desc desc{.warp = true,
                                           .debugLayer = true,
                                           .gpuValidation = false,
                                           .onFailure = [&_test](const std::string& _message) { _test.failures.push_back(_message); },
-                                          .uploadPageBytes = _uploadPageBytes};
+                                          .uploadPageBytes = _uploadPageBytes,
+                                          .shaderDescriptors = _shaderDescriptors};
   Microsoft::VisualStudio::CppUnitTestFramework::Assert::IsTrue(Neuron::GraphicsDevice::Create(desc, _test.device, error),
                                                                 Widen(error).c_str());
   // Direct3D 12 devices are singletons per adapter, so what the device logged before this test

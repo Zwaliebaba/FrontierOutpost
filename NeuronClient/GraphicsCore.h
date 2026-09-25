@@ -103,6 +103,7 @@ struct GraphicsCore
 
   DescriptorPool targetViewPool{D3D12_DESCRIPTOR_HEAP_TYPE_RTV};
   DescriptorPool depthViewPool{D3D12_DESCRIPTOR_HEAP_TYPE_DSV};
+  DescriptorPool shaderViewPool{D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV};
   std::uint64_t nextProgramId = 1; // a program's id keys the pipeline states made for it
 
   /// The one context, which records all of the device's work.
@@ -163,7 +164,8 @@ struct Texture::Native
   std::vector<std::uint64_t> copiedLists;    // per subresource, the command list that last copied into it
   /// The render-target views made so far, by mip << 32 | face or slice.
   std::map<std::uint64_t, D3D12_CPU_DESCRIPTOR_HANDLE> targetViews;
-  D3D12_CPU_DESCRIPTOR_HANDLE depthView{}; // made when first asked for
+  D3D12_CPU_DESCRIPTOR_HANDLE depthView{};  // made when first asked for
+  D3D12_CPU_DESCRIPTOR_HANDLE shaderView{}; // made when first asked for
 
   Native() = default;
   Native(const Native&) = delete;
@@ -183,6 +185,10 @@ struct Texture::Native
 
   /// A depth texture's depth-stencil view, made the first time it is asked for.
   bool DepthView(D3D12_CPU_DESCRIPTOR_HANDLE& _outView);
+
+  /// The view the shaders sample through: every mip, of the whole cube or 3D texture, and depth
+  /// as R32_FLOAT. Made the first time it is asked for.
+  bool ShaderView(D3D12_CPU_DESCRIPTOR_HANDLE& _outView);
 };
 
 /// A buffer's resource, and its state within one command list: a buffer decays to COMMON when a

@@ -79,6 +79,45 @@ enum class IndexFormat : std::uint8_t
   UInt32
 };
 
+enum class TextureFilter : std::uint8_t
+{
+  Nearest,
+  Linear
+};
+
+/// How a sample picks between mips. None is GL's minification without mips: the first mip only.
+enum class MipFilter : std::uint8_t
+{
+  None,
+  Nearest,
+  Linear
+};
+
+enum class TextureWrap : std::uint8_t
+{
+  Repeat,
+  MirroredRepeat,
+  ClampToEdge,
+  ClampToBorder
+};
+
+/// How a texture is sampled: the settings liblt keeps with each texture, as GL did, which it gives
+/// the context when it binds the texture (plan §5.5).
+struct SamplerDesc
+{
+  TextureFilter magFilter;
+  TextureFilter minFilter;
+  MipFilter mipFilter;
+  TextureWrap wrapU;
+  TextureWrap wrapV;
+  TextureWrap wrapW;
+  float lodBias; // from -16 to 15.99
+  float minLod;  // GL's defaults are -1000 and 1000
+  float maxLod;
+  std::uint32_t maxAnisotropy;      // 1 for none; more only with linear minification between mips (plan §5.5)
+  std::array<float, 4> borderColor; // for ClampToBorder: the SDF field's is red, (1, 0, 0, 0)
+};
+
 /// Where a draw's colour goes: mip `mip` of a texture, and the face of a cube or the slice of a 3D
 /// texture.
 struct ColorTarget
@@ -156,6 +195,14 @@ public:
   /// The program the next draws run, with its constants as they are at each draw. It stays set
   /// until another is, or until it goes.
   void SetProgram(Program& _program);
+
+  /// The texture the next draws read at register t_slot, or none. Only the slots the program reads
+  /// are bound, so a texture may stay in another while the draws write it, as in a GL texture unit.
+  /// A texture that goes is no longer set.
+  void SetTexture(std::uint32_t _slot, const Texture* _texture);
+
+  /// How the next draws sample through register s_slot.
+  void SetSampler(std::uint32_t _slot, const SamplerDesc& _sampler);
 
   /// Draws the triangles _indexCount indices of _indices give, from _firstIndex, into the vertices
   /// of _vertices, which are laid out as _layout says. What cannot be drawn is reported, and

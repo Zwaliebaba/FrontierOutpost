@@ -15,6 +15,7 @@
 #include <map>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace Neuron
@@ -94,8 +95,9 @@ void CopyRows(std::byte* _to, std::uint64_t _toPitch, std::uint64_t _toRows, con
   }
 }
 
-/// The shader-visible CBV, SRV and UAV descriptors: the null table first, then the ring.
-constexpr UINT SHADER_DESCRIPTORS = 1u << 16;
+/// A table of views or of samplers: both registers' ranges are sixteen long (ADR-007).
+constexpr UINT TABLE_DESCRIPTORS = Program::MAX_SHADER_RESOURCES;
+static_assert(Program::MAX_SAMPLERS == TABLE_DESCRIPTORS);
 
 /// The shader-visible samplers: the default table first, then the tables draws use (ADR-007).
 constexpr UINT SAMPLER_DESCRIPTORS = 2048;
@@ -212,6 +214,86 @@ DXGI_FORMAT ElementFormat(VertexFormat _format) noexcept
   return DXGI_FORMAT_UNKNOWN;
 }
 
+/// What slots no sampler is set in sample with, and the table the heap starts with.
+constexpr D3D12_SAMPLER_DESC POINT_SAMPLER{D3D12_FILTER_MIN_MAG_MIP_POINT,
+                                           D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                                           D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                                           D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+                                           0.0f,
+                                           1,
+                                           D3D12_COMPARISON_FUNC_NEVER,
+                                           {0.0f, 0.0f, 0.0f, 0.0f},
+                                           0.0f,
+                                           D3D12_FLOAT32_MAX};
+
+/// A sampler's fields, in an order to sort by.
+auto Fields(const D3D12_SAMPLER_DESC& _sampler) noexcept
+{
+  return std::tuple(_sampler.Filter, _sampler.AddressU, _sampler.AddressV, _sampler.AddressW, _sampler.MipLODBias, _sampler.MaxAnisotropy,
+                    _sampler.ComparisonFunc, _sampler.BorderColor[0], _sampler.BorderColor[1], _sampler.BorderColor[2],
+                    _sampler.BorderColor[3], _sampler.MinLOD, _sampler.MaxLOD);
+}
+
+/// A table of samplers, which the heap holds once however many draws use it.
+struct SamplerTable
+{
+  std::array<D3D12_SAMPLER_DESC, TABLE_DESCRIPTORS> samplers;
+
+  SamplerTable() noexcept
+  {
+    samplers.fill(POINT_SAMPLER);
+  }
+
+  bool operator<(const SamplerTable& _other) const noexcept
+  {
+    return std::ranges::lexicographical_compare(samplers, _other.samplers, [](const D3D12_SAMPLER_DESC& _a, const D3D12_SAMPLER_DESC& _b)
+                                                { return Fields(_a) < Fields(_b); });
+  }
+};
+
+D3D12_TEXTURE_ADDRESS_MODE AddressMode(TextureWrap _wrap) noexcept
+{
+  switch (_wrap)
+  {
+  case TextureWrap::Repeat:
+    return D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+  case TextureWrap::MirroredRepeat:
+    return D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
+  case TextureWrap::ClampToEdge:
+    return D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+  case TextureWrap::ClampToBorder:
+    return D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+  }
+  return D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+}
+
+/// GL's sampling as Direct3D's. Without mips only the first is sampled, as in GL; anisotropy needs
+/// linear minification between mips (plan §5.5).
+D3D12_SAMPLER_DESC SamplerDescription(const SamplerDesc& _sampler) noexcept
+{
+  // D3D12_FILTER holds minification from bit 4, magnification from bit 2 and mips from bit 0, with
+  // 1 for linear.
+  const bool mipmapped = _sampler.mipFilter != MipFilter::None;
+  const int minification = _sampler.minFilter == TextureFilter::Linear ? 1 : 0;
+  const int magnification = _sampler.magFilter == TextureFilter::Linear ? 1 : 0;
+  const int mip = _sampler.mipFilter == MipFilter::Linear ? 1 : 0;
+  const bool anisotropic = _sampler.maxAnisotropy > 1 && minification == 1 && mip == 1;
+  const D3D12_FILTER filter =
+    anisotropic ? D3D12_FILTER_ANISOTROPIC : static_cast<D3D12_FILTER>((minification << 4) | (magnification << 2) | mip);
+  const float minLod = mipmapped ? _sampler.minLod : 0.0f;
+  const float maxLod = mipmapped ? std::max(_sampler.maxLod, _sampler.minLod) : 0.0f;
+  return D3D12_SAMPLER_DESC{filter,
+                            AddressMode(_sampler.wrapU),
+                            AddressMode(_sampler.wrapV),
+                            AddressMode(_sampler.wrapW),
+                            std::clamp(_sampler.lodBias, -16.0f, 15.99f),
+                            anisotropic ? std::min(_sampler.maxAnisotropy, 16u) : 1u,
+                            D3D12_COMPARISON_FUNC_NEVER,
+                            {_sampler.borderColor[0], _sampler.borderColor[1], _sampler.borderColor[2], _sampler.borderColor[3]},
+                            minLod,
+                            maxLod};
+}
+
 /// Semantics are matched as HLSL matches them, whatever their case.
 bool SameSemantic(std::string_view _a, std::string_view _b) noexcept
 {
@@ -275,6 +357,35 @@ struct DrawContext::Native
   D3D12_RECT scissor{};
   RenderState state{.blend = BlendMode::Opaque, .cull = CullMode::None, .depthTest = false, .depthWrite = true, .wireframe = false};
   Program::Native* program = nullptr;
+  std::array<Texture::Native*, TABLE_DESCRIPTORS> textures{};
+  std::array<D3D12_SAMPLER_DESC, TABLE_DESCRIPTORS> samplers = SamplerTable().samplers;
+
+  // The ring of shader-visible views each draw's table is taken from, after the null table. A
+  // table is free again once the GPU has finished the list that took it.
+  struct RingMark
+  {
+    UINT count;               // descriptors the list took, ends skipped at a wrap included
+    std::uint64_t fenceValue; // they are free once the fence reaches this
+  };
+  UINT shaderIncrement = 0;
+  UINT samplerIncrement = 0;
+  D3D12_CPU_DESCRIPTOR_HANDLE nullShaderView{}; // CPU-only, copied into the slots nothing is bound to
+  UINT ringCapacity = 0;
+  UINT ringHead = 0;
+  UINT ringUsed = 0;    // from the oldest table still in use up to ringHead
+  UINT ringPending = 0; // what the open list has taken so far
+  std::deque<RingMark> ringMarks;
+
+  // The last table of views, which the next draw reuses when it reads the same textures in the
+  // same list.
+  std::array<Texture::Native*, TABLE_DESCRIPTORS> tableTextures{};
+  UINT shaderTable = 0;        // its first descriptor in the heap; 0 is the null table
+  std::uint64_t tableList = 0; // the list it was taken for; 0 for none
+
+  // The sampler tables in the heap, by their contents, and the next draw's.
+  std::map<SamplerTable, UINT> samplerTables;
+  UINT nextSamplerTable = 1; // table 0 is the point samplers'
+  UINT samplerTable = 0;
 
   explicit Native(GraphicsCore& _core)
     : core(_core)
@@ -344,6 +455,11 @@ struct DrawContext::Native
     }
     staging.clear();
     const std::uint64_t value = core.Signal();
+    if (ringPending > 0)
+    {
+      ringMarks.push_back({ringPending, value});
+      ringPending = 0;
+    }
     if (allocator)
     {
       allocators.push_back({std::move(allocator), value});
@@ -563,6 +679,113 @@ struct DrawContext::Native
     core.Fail(std::format("Direct3D 12: a draw {}; nothing was recorded", _why));
   }
 
+  /// Takes a table of views from the ring for the open list, and returns its first descriptor in
+  /// the heap. When the ring is full it waits for the GPU, first submitting the open list when that
+  /// is what fills it, so it can close the list.
+  UINT AllocateTable()
+  {
+    for (;;)
+    {
+      const std::uint64_t completed = core.Completed();
+      while (!ringMarks.empty() && ringMarks.front().fenceValue <= completed)
+      {
+        ringUsed -= ringMarks.front().count;
+        ringMarks.pop_front();
+      }
+      if (ringUsed == 0)
+      {
+        ringHead = 0;
+      }
+      // A table does not wrap: the ring's end is skipped, and freed with the table.
+      const bool wrap = ringHead + TABLE_DESCRIPTORS > ringCapacity;
+      const UINT skipped = wrap ? ringCapacity - ringHead : 0;
+      if (ringCapacity - ringUsed >= skipped + TABLE_DESCRIPTORS)
+      {
+        if (wrap)
+        {
+          ringHead = 0;
+        }
+        const UINT first = TABLE_DESCRIPTORS + ringHead;
+        ringHead += TABLE_DESCRIPTORS;
+        ringUsed += skipped + TABLE_DESCRIPTORS;
+        ringPending += skipped + TABLE_DESCRIPTORS;
+        return first;
+      }
+      if (ringMarks.empty())
+      {
+        Submit();
+      }
+      core.WaitFor(ringMarks.front().fenceValue);
+    }
+  }
+
+  /// The table in the sampler heap that holds _table, written the first time it is asked for. When
+  /// the heap is full it starts again, once the GPU has finished with every table in it, so it can
+  /// close the list.
+  UINT SamplerTableFor(const SamplerTable& _table)
+  {
+    if (const auto found = samplerTables.find(_table); found != samplerTables.end())
+    {
+      return found->second;
+    }
+    if (nextSamplerTable == SAMPLER_DESCRIPTORS / TABLE_DESCRIPTORS)
+    {
+      static_cast<void>(SubmitAndWait());
+      samplerTables.clear();
+      samplerTables.emplace(SamplerTable(), 0);
+      nextSamplerTable = 1;
+    }
+    const UINT index = nextSamplerTable++;
+    const D3D12_CPU_DESCRIPTOR_HANDLE start = samplerHeap->GetCPUDescriptorHandleForHeapStart();
+    for (UINT slot = 0; slot < TABLE_DESCRIPTORS; ++slot)
+    {
+      const SIZE_T offset = (static_cast<SIZE_T>(index) * TABLE_DESCRIPTORS) + slot;
+      core.device->CreateSampler(&_table.samplers[slot], {start.ptr + (offset * samplerIncrement)});
+    }
+    samplerTables.emplace(_table, index);
+    return index;
+  }
+
+  /// Picks the tables of views and samplers the next draw reads through: fixed ones for a program
+  /// that reads none, and otherwise the last ones or new ones. False when a view could not be
+  /// made, which the core has reported.
+  bool PrepareTables(const std::array<Texture::Native*, TABLE_DESCRIPTORS>& _read)
+  {
+    // The samplers first: starting their heap again waits for the GPU, which frees the ring too.
+    SamplerTable wanted;
+    for (const auto& [name, slot] : program->samplers)
+    {
+      wanted.samplers[static_cast<std::size_t>(slot)] = samplers[static_cast<std::size_t>(slot)];
+    }
+    samplerTable = program->samplers.empty() ? 0 : SamplerTableFor(wanted);
+
+    if (std::ranges::all_of(_read, [](const Texture::Native* _texture) { return _texture == nullptr; }))
+    {
+      shaderTable = 0;
+      return true;
+    }
+    if (tableList == listSerial && _read == tableTextures)
+    {
+      return true;
+    }
+    const UINT first = AllocateTable();
+    const D3D12_CPU_DESCRIPTOR_HANDLE start = shaderHeap->GetCPUDescriptorHandleForHeapStart();
+    for (UINT slot = 0; slot < TABLE_DESCRIPTORS; ++slot)
+    {
+      D3D12_CPU_DESCRIPTOR_HANDLE view = nullShaderView;
+      if (_read[slot] != nullptr && !_read[slot]->ShaderView(view))
+      {
+        return false;
+      }
+      const SIZE_T offset = static_cast<SIZE_T>(first) + slot;
+      core.device->CopyDescriptorsSimple(1, {start.ptr + (offset * shaderIncrement)}, view, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    }
+    tableTextures = _read;
+    shaderTable = first;
+    tableList = listSerial;
+    return true;
+  }
+
   /// Checks that the set targets, program and _layout can be drawn with, and finds or makes the
   /// pipeline state for them. Opens the list, and gives it the root signature and the heaps.
   bool PrepareDraw(const VertexLayout& _layout, ID3D12PipelineState*& _outPipeline)
@@ -632,8 +855,26 @@ struct DrawContext::Native
       key.inputLayout += std::format("{}{}:{}@{};", input.semantic, input.index, static_cast<int>(format), attribute->offsetBytes);
     }
 
+    // The textures the program reads; slots it does not read are left unbound, and a texture may
+    // wait in one while it is drawn into.
+    std::array<Texture::Native*, TABLE_DESCRIPTORS> read{};
+    for (const auto& [name, slot] : program->shaderResources)
+    {
+      Texture::Native* const texture = textures[static_cast<std::size_t>(slot)];
+      const bool drawnInto = std::ranges::any_of(std::span(colorTargets).first(program->targetCount),
+                                                 [texture](const Target& _target) { return _target.texture == texture; }) ||
+                             (depthBound && depthTarget == texture);
+      if (texture != nullptr && drawnInto)
+      {
+        FailDraw(std::format("of {} reads {} at t{} while it draws into it", program->name, texture->name, slot));
+        return false;
+      }
+      read[static_cast<std::size_t>(slot)] = texture;
+    }
+
     _outPipeline = PipelineFor(key, elements);
-    if (_outPipeline == nullptr || !Open())
+    // The tables before the list opens: making room for them may submit it.
+    if (_outPipeline == nullptr || !PrepareTables(read) || !Open())
     {
       return false;
     }
@@ -729,6 +970,17 @@ struct DrawContext::Native
       const bool volume = target.texture->desc.dimension == TextureDimension::Texture3D;
       Require(*target.texture, target.texture->Subresource(target.mip, volume ? 0 : target.layer), D3D12_RESOURCE_STATE_RENDER_TARGET);
     }
+    if (shaderTable != 0)
+    {
+      for (Texture::Native* const texture : tableTextures)
+      {
+        if (texture != nullptr)
+        {
+          Require(*texture, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES,
+                  D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        }
+      }
+    }
     D3D12_CPU_DESCRIPTOR_HANDLE depthView{};
     const bool depthBound = state.depthTest && depthTarget != nullptr;
     if (depthBound)
@@ -744,8 +996,11 @@ struct DrawContext::Native
     list->SetPipelineState(_pipeline);
     list->SetGraphicsRootConstantBufferView(VERTEX_CONSTANTS_PARAMETER, vertexConstants);
     list->SetGraphicsRootConstantBufferView(PIXEL_CONSTANTS_PARAMETER, pixelConstants);
-    list->SetGraphicsRootDescriptorTable(SHADER_RESOURCES_PARAMETER, shaderHeap->GetGPUDescriptorHandleForHeapStart());
-    list->SetGraphicsRootDescriptorTable(SAMPLERS_PARAMETER, samplerHeap->GetGPUDescriptorHandleForHeapStart());
+    const D3D12_GPU_DESCRIPTOR_HANDLE shaderStart = shaderHeap->GetGPUDescriptorHandleForHeapStart();
+    const D3D12_GPU_DESCRIPTOR_HANDLE samplerStart = samplerHeap->GetGPUDescriptorHandleForHeapStart();
+    list->SetGraphicsRootDescriptorTable(SHADER_RESOURCES_PARAMETER, {shaderStart.ptr + (std::uint64_t{shaderTable} * shaderIncrement)});
+    list->SetGraphicsRootDescriptorTable(SAMPLERS_PARAMETER,
+                                         {samplerStart.ptr + (std::uint64_t{samplerTable} * TABLE_DESCRIPTORS * samplerIncrement)});
     list->OMSetRenderTargets(program->targetCount, targetViews.data(), FALSE, depthBound ? &depthView : nullptr);
     list->RSSetViewports(1, &viewport);
     list->RSSetScissorRects(1, &scissor);
@@ -983,7 +1238,15 @@ bool DrawContext::Initialize(std::string& _error)
   }
   context.graphicsSignature->SetName(L"NeuronClient graphics root signature");
 
-  const D3D12_DESCRIPTOR_HEAP_DESC shaderHeapDesc{D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, SHADER_DESCRIPTORS,
+  // The null table, and room for at least two tables in the ring.
+  const UINT shaderDescriptors = context.core.desc.shaderDescriptors;
+  if (shaderDescriptors < 3 * TABLE_DESCRIPTORS)
+  {
+    _error =
+      std::format("Direct3D 12: {} shader descriptors are too few; a device takes at least {}", shaderDescriptors, 3 * TABLE_DESCRIPTORS);
+    return false;
+  }
+  const D3D12_DESCRIPTOR_HEAP_DESC shaderHeapDesc{D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, shaderDescriptors,
                                                   D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0};
   const D3D12_DESCRIPTOR_HEAP_DESC samplerHeapDesc{D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, SAMPLER_DESCRIPTORS,
                                                    D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 0};
@@ -1006,28 +1269,30 @@ bool DrawContext::Initialize(std::string& _error)
   nullView.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
   nullView.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
   nullView.Texture2D.MipLevels = 1;
-  const D3D12_SAMPLER_DESC pointSampler{D3D12_FILTER_MIN_MAG_MIP_POINT,
-                                        D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                                        D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                                        D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-                                        0.0f,
-                                        1,
-                                        D3D12_COMPARISON_FUNC_NEVER,
-                                        {0.0f, 0.0f, 0.0f, 0.0f},
-                                        0.0f,
-                                        D3D12_FLOAT32_MAX};
   const UINT shaderIncrement = device.GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
   const UINT samplerIncrement = device.GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
   const D3D12_CPU_DESCRIPTOR_HANDLE shaderStart = context.shaderHeap->GetCPUDescriptorHandleForHeapStart();
   const D3D12_CPU_DESCRIPTOR_HANDLE samplerStart = context.samplerHeap->GetCPUDescriptorHandleForHeapStart();
-  for (UINT slot = 0; slot < Program::MAX_SHADER_RESOURCES; ++slot)
+  for (UINT slot = 0; slot < TABLE_DESCRIPTORS; ++slot)
   {
     device.CreateShaderResourceView(nullptr, &nullView, {shaderStart.ptr + (static_cast<SIZE_T>(slot) * shaderIncrement)});
   }
-  for (UINT slot = 0; slot < Program::MAX_SAMPLERS; ++slot)
+  for (UINT slot = 0; slot < TABLE_DESCRIPTORS; ++slot)
   {
-    device.CreateSampler(&pointSampler, {samplerStart.ptr + (static_cast<SIZE_T>(slot) * samplerIncrement)});
+    device.CreateSampler(&POINT_SAMPLER, {samplerStart.ptr + (static_cast<SIZE_T>(slot) * samplerIncrement)});
   }
+  context.samplerTables.emplace(SamplerTable(), 0);
+
+  // The null view the ring's tables copy into the slots nothing is bound to, which must be CPU-only.
+  if (!context.core.shaderViewPool.Allocate(context.core, context.nullShaderView))
+  {
+    _error = "Direct3D 12: the null view's descriptor was not made";
+    return false;
+  }
+  device.CreateShaderResourceView(nullptr, &nullView, context.nullShaderView);
+  context.shaderIncrement = shaderIncrement;
+  context.samplerIncrement = samplerIncrement;
+  context.ringCapacity = shaderDescriptors - TABLE_DESCRIPTORS;
   return true;
 }
 
@@ -1045,6 +1310,15 @@ void DrawContext::Forget(const Texture::Native& _texture) noexcept
   {
     context.depthTarget = nullptr;
   }
+  for (Texture::Native*& texture : context.textures)
+  {
+    if (texture == &_texture)
+    {
+      texture = nullptr;
+    }
+  }
+  // Another texture may be made where this one was, so the last table is not taken again.
+  context.tableList = 0;
 }
 
 void DrawContext::Forget(const Program::Native& _program)
@@ -1179,6 +1453,28 @@ void DrawContext::SetProgram(Program& _program)
     return;
   }
   context.program = program;
+}
+
+void DrawContext::SetTexture(std::uint32_t _slot, const Texture* _texture)
+{
+  Native& context = *m_native;
+  if (_slot >= Program::MAX_SHADER_RESOURCES)
+  {
+    context.core.Fail(std::format("Direct3D 12: SetTexture was given t{}, past t{}", _slot, Program::MAX_SHADER_RESOURCES - 1));
+    return;
+  }
+  context.textures[_slot] = _texture != nullptr ? _texture->m_native.get() : nullptr;
+}
+
+void DrawContext::SetSampler(std::uint32_t _slot, const SamplerDesc& _sampler)
+{
+  Native& context = *m_native;
+  if (_slot >= Program::MAX_SAMPLERS)
+  {
+    context.core.Fail(std::format("Direct3D 12: SetSampler was given s{}, past s{}", _slot, Program::MAX_SAMPLERS - 1));
+    return;
+  }
+  context.samplers[_slot] = SamplerDescription(_sampler);
 }
 
 void DrawContext::DrawIndexed(const Buffer& _vertices, const VertexLayout& _layout, const Buffer& _indices, IndexFormat _format,

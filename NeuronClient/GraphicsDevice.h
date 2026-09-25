@@ -32,6 +32,8 @@ public:
 
   static constexpr std::uint32_t DEFAULT_UPLOAD_PAGE_BYTES = 4u << 20;
 
+  static constexpr std::uint32_t DEFAULT_SHADER_DESCRIPTORS = 1u << 16;
+
   struct Desc
   {
     bool warp;          // WARP, Windows' software adapter, instead of the default adapter
@@ -43,6 +45,9 @@ public:
     /// The size of each page of the upload ring, which constants, geometry and texture updates
     /// share. An upload larger than a page gets a staging buffer of its own.
     std::uint32_t uploadPageBytes = DEFAULT_UPLOAD_PAGE_BYTES;
+    /// The shader-visible views: a table of null views, then the ring each draw's table of
+    /// textures is taken from, sixteen at a time. At least three tables' worth.
+    std::uint32_t shaderDescriptors = DEFAULT_SHADER_DESCRIPTORS;
   };
 
   /// Creates the device, its queue and its context. The debug layer, when asked for, is required:
