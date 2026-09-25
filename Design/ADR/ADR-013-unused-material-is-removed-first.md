@@ -111,7 +111,9 @@ pushed, and CI's four-way build after.
   - 52 of the 53 files in `gamedata/`, which the survey did not list. Only
     `grammar/default.txt` is read.
 
-  `GameData/` holds 324 files, 39 MB, where it held 630.
+  `GameData/` holds 324 files, 54.9 MB, where it held 633 files, 283.7 MB. Both are sums of
+  `git ls-tree -r -l` over `GameData/`, so they count `.gitattributes` and the two Noto licences
+  that came after ADR-004's 630.
 - **Script natives** (`b78a33f`, N14). The engine registered 1,045 natives, counting each member of
   a macro-built family. 609 were reached from a remaining script: 526 by name, and 83 only through
   an operator such as `+` or `==`, counted as reached when any script uses the operator, since the
