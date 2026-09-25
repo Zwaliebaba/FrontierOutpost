@@ -9,6 +9,7 @@ name: Build
 # lands, and a gate whose input does not exist yet is skipped, not faked:
 #
 #   Build/CheckProjectFiles.py   the build-shape check           runs
+#   Build/CheckSounds.py         the sounds the game names       runs; only an unplayable WAV fails
 #   FrontierOutpost.slnx         the build                       runs
 #   *Tests.dll in the output     the test suites                 none yet: skipped
 #   Build/RunClangTidy.py        clang-tidy                      runs
@@ -79,6 +80,11 @@ jobs:
         if: hashFiles('Build/CheckProjectFiles.py') != ''
         shell: pwsh
         run: python Build\CheckProjectFiles.py
+
+      - name: Check the sounds the game names
+        if: hashFiles('Build/CheckSounds.py') != ''
+        shell: pwsh
+        run: python Build\CheckSounds.py
 
       - name: Build
         if: hashFiles('FrontierOutpost.slnx') != ''

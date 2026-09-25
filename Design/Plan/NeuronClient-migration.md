@@ -462,6 +462,9 @@ Phase 3 touches nothing in liblt; it can start once step 1 of Phase 2 has landed
    - it parses each WAV that is there by the engine's own rules (PCM, IEEE float or MS-ADPCM), so a
      file that would stop the game (N9) is found before the game plays it. A converted file in a
      format XAudio2 refuses, such as IMA ADPCM, is the likely case (O10).
+
+   `Build/CheckSounds.py` does both for sounds, and CI runs it on every change. It fails only on a
+   WAV file that cannot be played.
 2. **Then the other tiers,** one commit each: code, then passes and shaders, then assets. The lists
    are in §9.
 3. **ADR-013** records what went.
@@ -657,8 +660,8 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 | Hitches the first time a PSO is used | The first seconds of each app | Known programs warmed at load. `ID3D12PipelineLibrary` later. |
 | Modernisation runs away | Phase 4 | Only the changes named in §5 go in; everything else is backlog. |
 | Mixed build settings in one DLL | Always | Warning levels are harmless. `/arch` is not: a template or inline function both libraries use keeps one copy, which the linker picks, so NeuronClient states `lt`'s `/arch` (N10). Under `/fp:precise` and `lt`'s `/fp:fast`, such a copy rounds as either library would; nothing relies on bit-exact results (MIGRATION_NOTES.md BR6). The CRT must match (`/MD`). |
-| Missing-sound warnings hide broken content (N6) | Every app with sound | Phase 1's list of named sounds without a WAV file, re-run whenever sounds or scripts change. |
-| A converted WAV that XAudio2 cannot play stops the game (N9) | The first time that sound plays | Phase 1's check parses every named WAV by the engine's rules, before anything runs. |
+| Missing-sound warnings hide broken content (N6) | Every app with sound | `Build/CheckSounds.py` lists every named sound without a WAV file, and CI runs it on every change. |
+| A converted WAV that XAudio2 cannot play stops the game (N9) | The first time that sound plays | `Build/CheckSounds.py` parses every WAV file by the engine's rules and XAudio2's formats, and CI fails on one that cannot be played. |
 | No automatic acceptance (N3) | Every phase | The owner signs off each phase, by the port itself (N13). |
 
 ## 11. Not in this plan

@@ -8,7 +8,9 @@ first first-party project, NeuronClient, lands only in Phase 2 of the NeuronClie
 each checker runs here against a small tree that keeps every rule and must pass, and against
 copies of it that each break one rule, which must fail and say which.
 
-The clang-format and clang-tidy cases need those tools, and are reported as skipped without them.
+CheckSounds.py runs against a small GameData of its own, with WAV files that keep and break
+XAudio2's formats. The clang-format and clang-tidy cases need those tools, and are reported as
+skipped without them.
 On Windows, one more case includes <windows.h>, which takes RunClangTidy.py through Visual
 Studio's vcvarsall.bat and the Windows SDK headers. Exit 0 when every case behaves, 1 otherwise.
 """
@@ -17,6 +19,7 @@ import argparse
 import os
 import pathlib
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -176,6 +179,36 @@ def Conforming(_root):
   Write(_root, "NeuronClient/Window.cpp", SOURCE)
 
 
+def WriteBytes(_root, _relative, _bytes):
+  path = _root / _relative
+  path.parent.mkdir(parents=True, exist_ok=True)
+  path.write_bytes(_bytes)
+
+
+def Wav(_tag=1, _channels=2, _rate=44100, _bits=16, _align=None, _extra=b"", _dataBytes=16):
+  """A small RIFF WAVE file. The defaults make 16-bit stereo PCM; _extra follows the 16-byte format."""
+  align = _channels * _bits // 8 if _align is None else _align
+  fmt = struct.pack("<HHIIHH", _tag, _channels, _rate, _rate * align, align, _bits) + _extra
+  chunks = b"fmt " + struct.pack("<I", len(fmt)) + fmt
+  if _dataBytes is not None:
+    chunks += b"data" + struct.pack("<I", _dataBytes) + bytes(_dataBytes)
+  return b"RIFF" + struct.pack("<I", 4 + len(chunks)) + b"WAVE" + chunks
+
+
+SCRIPT = """type App
+  function Void Initialize ()
+    Sound_Play "ui/click.wav" 1
+"""
+ADPCM_TABLE = struct.pack("<14h", 256, 0, 512, -256, 0, 0, 192, 64, 240, 0, 460, -208, 392, -232)
+FLOAT_EXTENSIBLE = struct.pack("<HHII", 22, 32, 3, 3) + bytes.fromhex("00001000800000aa00389b71")
+
+
+def SoundTree(_root):
+  Conforming(_root)
+  Write(_root, "GameData/script/App/test.lts", SCRIPT)
+  WriteBytes(_root, "GameData/sound/ui/click.wav", Wav())
+
+
 def Add(_root):
   subprocess.run(["git", "init", "-q", str(_root)], check=True)
   subprocess.run(["git", "-C", str(_root), "add", "-A"], check=True)
@@ -294,6 +327,51 @@ TIDY_CASES = [
                         "int m_widthPixels = 0;\n  int count = 0;")),
      1, "invalid case style for private member 'count'"),
 ]
+SOUND_CASES = [
+    ("sounds that are all there and playable", None, 0, "All 1 WAV file(s) can be played"),
+    ("a named sound with no WAV file, which only warns",
+     lambda r: Write(r, "GameData/script/App/test.lts", SCRIPT + '    Sound_Play "ui/missing.wav" 1\n'),
+     0, "  ui/missing.wav  (GameData/script/App/test.lts:4)"),
+    ("a missing sound whose Ogg source waits for conversion",
+     lambda r: (Write(r, "GameData/script/App/test.lts", SCRIPT + '    Sound_Play "ui/missing.wav" 1\n'),
+                WriteBytes(r, "GameData/sound/ui/missing.ogg", b"OggS")),
+     0, "converts from ui/missing.ogg, O10"),
+    ("a sound named in C++",
+     lambda r: Replace(r, "NeuronClient/Window.cpp", "namespace Neuron\n{\n",
+                       'namespace Neuron\n{\n\nchar const* const FIRE = "weapon/fire.wav";\n'),
+     0, "  weapon/fire.wav  (NeuronClient/Window.cpp:"),
+    ("sounds named only in comments, which do not count",
+     lambda r: (Write(r, "GameData/script/App/test.lts", SCRIPT + '    #\n      Sound_Play "ui/gone.wav" 1\n'),
+                Replace(r, "NeuronClient/Window.cpp", "namespace Neuron\n{\n",
+                        'namespace Neuron\n{\n\n// Sound_Play2D("ui/old.wav");\n')),
+     0, "name 1 sound(s). 0 have no WAV file"),
+    ("24-bit PCM at 96 kHz, as most of the game's sounds are",
+     lambda r: WriteBytes(r, "GameData/sound/ui/click.wav", Wav(_bits=24, _rate=96000, _dataBytes=12)),
+     0, "All 1 WAV file(s) can be played"),
+    ("32-bit float through WAVE_FORMAT_EXTENSIBLE",
+     lambda r: WriteBytes(r, "GameData/sound/ui/click.wav", Wav(_tag=0xFFFE, _bits=32, _extra=FLOAT_EXTENSIBLE)),
+     0, "All 1 WAV file(s) can be played"),
+    ("Microsoft ADPCM with its standard coefficients",
+     lambda r: WriteBytes(r, "GameData/sound/ui/click.wav",
+                          Wav(_tag=2, _channels=1, _bits=4, _align=256, _dataBytes=256,
+                              _extra=struct.pack("<HHH", 32, 500, 7) + ADPCM_TABLE)),
+     0, "All 1 WAV file(s) can be played"),
+    ("an IMA ADPCM file, which XAudio2 refuses",
+     lambda r: WriteBytes(r, "GameData/sound/ui/click.wav", Wav(_tag=0x11, _bits=4, _align=512, _dataBytes=512)),
+     1, "format 0x0011 (IMA ADPCM)"),
+    ("Microsoft ADPCM with another coefficient table",
+     lambda r: WriteBytes(r, "GameData/sound/ui/click.wav",
+                          Wav(_tag=2, _channels=1, _bits=4, _align=256, _dataBytes=256,
+                              _extra=struct.pack("<HHH", 32, 500, 7) + bytes(28))),
+     1, "non-standard coefficients"),
+    ("a WAV file without a data chunk",
+     lambda r: WriteBytes(r, "GameData/sound/ui/click.wav", Wav(_dataBytes=None)),
+     1, "no data chunk"),
+    ("12-bit PCM",
+     lambda r: WriteBytes(r, "GameData/sound/ui/click.wav", Wav(_bits=12, _align=4)),
+     1, "12-bit PCM"),
+]
+
 WINDOWS_CASE = ("a source that includes <windows.h>, through vcvarsall.bat",
                 lambda r: Replace(r, "NeuronClient/Window.cpp", '#include "Window.h"\n',
                                   '#include "Window.h"\n\n#include <windows.h>\n'),
@@ -306,14 +384,14 @@ def Run(_script, _root, _extra):
   return result.returncode, result.stdout + result.stderr
 
 
-def Check(_script, _cases, _extra, _failures, _withArgs=False):
+def Check(_script, _cases, _extra, _failures, _withArgs=False, _base=Conforming):
   for case in _cases:
     name, change = case[0], case[1]
     extra = list(_extra) + (list(case[2]) if _withArgs else [])
     code, text = case[-2], case[-1]
     with tempfile.TemporaryDirectory() as directory:
       root = pathlib.Path(directory)
-      Conforming(root)
+      _base(root)
       if change:
         change(root)
       Add(root)
@@ -334,6 +412,7 @@ def main():
   failures = []
 
   Check("CheckProjectFiles.py", PROJECT_CASES, [], failures)
+  Check("CheckSounds.py", SOUND_CASES, [], failures, _base=SoundTree)
 
   clangFormat = args.clangFormat or shutil.which("clang-format")
   if clangFormat:

@@ -7,7 +7,8 @@ name: NeuronClient migration
 #   build     FrontierOutpost.slnx at x64 and ARM64, Debug and Release, from a clean checkout, with
 #             each build's warnings counted by .github/migration/SummarizeBuildLog.py. The baseline
 #             is 613 warnings, 585 unique, in all four (FrontierOutpost/MIGRATION_NOTES.md §22.4).
-#   checks    Build/CheckProjectFiles.py and Build/RunClangTidy.py, as build.yml runs them.
+#   checks    Build/CheckProjectFiles.py, Build/CheckSounds.py and Build/RunClangTidy.py, as build.yml
+#             runs them.
 #   format    Build/CheckFormat.py on the pinned clang-format, and the checkers' own fixture tests.
 #
 # Each checker step is guarded on its script, as build.yml's are, so the workflow runs before the
@@ -98,6 +99,11 @@ jobs:
         if: hashFiles('Build/CheckProjectFiles.py') != ''
         shell: pwsh
         run: python Build\CheckProjectFiles.py
+
+      - name: Check the sounds the game names
+        if: hashFiles('Build/CheckSounds.py') != ''
+        shell: pwsh
+        run: python Build\CheckSounds.py
 
       - name: Run clang-tidy
         if: hashFiles('Build/RunClangTidy.py') != ''

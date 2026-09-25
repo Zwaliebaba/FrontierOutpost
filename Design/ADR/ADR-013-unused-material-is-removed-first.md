@@ -31,6 +31,8 @@ Removal comes first, while OpenGL still renders, so a fault it causes cannot be 
    sound that code or scripts name and `GameData/sound` has no WAV for; that list, not the log, is
    how N6's warnings stay visible. It also parses every WAV that is there by the engine's rules
    (PCM, IEEE float or MS-ADPCM), so a file that would stop the game (N9) is found first.
+   `Build/CheckSounds.py` does both, and CI runs it; it fails only on a file that cannot be
+   played.
 6. **Phase 1 is done** when all four builds pass, the kept apps start, and nothing refers to a
    removed name (plan Phase 1).
 7. **The candidates** (plan §9):
