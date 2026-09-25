@@ -1,0 +1,12 @@
+# The media in GameData are binary files (Design/ADR/ADR-004). The root rule `* text=auto` would
+# usually tell them apart by their NUL bytes; saying so outright means no normalization can ever
+# rewrite a byte of one. Git LFS pointer files that have not been replaced yet are small text
+# files, and are stored byte for byte all the same.
+*.bin  binary
+*.ico  binary
+*.jpg  binary
+*.ogg  binary
+*.otf  binary
+*.png  binary
+*.ttf  binary
+*.wav  binary

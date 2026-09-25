@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="include">
+      <UniqueIdentifier>{9BE10C3C-1600-51A4-BCB5-DFB2B74A060E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include\SFML">
+      <UniqueIdentifier>{D5397960-88EC-59DB-B687-2680CBD3C3B9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="include\SFML\Window">
+      <UniqueIdentifier>{E76406DC-AFD0-5B55-B442-CC24DAB34157}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src">
+      <UniqueIdentifier>{9EE1195B-8867-5963-BC58-F61F78896158}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\SFML">
+      <UniqueIdentifier>{6FB22526-C8BD-56C1-802E-D79EF0D5E20C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\SFML\Window">
+      <UniqueIdentifier>{211394E6-CE17-5920-BE13-D34DE38DDAE3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="src\SFML\Window\Win32">
+      <UniqueIdentifier>{5D970C86-806C-520B-9CB4-C3CE38E9A1B4}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Clipboard.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="Context.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="Cursor.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="GlContext.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="GlResource.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="Joystick.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="JoystickManager.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="Keyboard.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="Mouse.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="Touch.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="Sensor.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="SensorManager.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="VideoMode.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="Window.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="WindowImpl.cpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="Win32\CursorImpl.cpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="Win32\ClipboardImpl.cpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="Win32\WglContext.cpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="Win32\WglExtensions.cpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="Win32\InputImpl.cpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="Win32\JoystickImpl.cpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="Win32\SensorImpl.cpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="Win32\VideoModeImpl.cpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClCompile>
+    <ClCompile Include="Win32\WindowImplWin32.cpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\include\SFML\Window\Clipboard.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\Context.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\ContextSettings.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\Cursor.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\Event.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\Export.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\GlResource.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\Joystick.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\Keyboard.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\Mouse.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\Sensor.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\Touch.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\VideoMode.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\Window.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\WindowHandle.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\SFML\Window\WindowStyle.hpp">
+      <Filter>include\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="ClipboardImpl.hpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="CursorImpl.hpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="GlContext.hpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="InputImpl.hpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="JoystickImpl.hpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="JoystickManager.hpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="SensorImpl.hpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="SensorManager.hpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="VideoModeImpl.hpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="WindowImpl.hpp">
+      <Filter>src\SFML\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="Win32\ClipboardImpl.hpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClInclude>
+    <ClInclude Include="Win32\CursorImpl.hpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClInclude>
+    <ClInclude Include="Win32\InputImpl.hpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClInclude>
+    <ClInclude Include="Win32\JoystickImpl.hpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClInclude>
+    <ClInclude Include="Win32\SensorImpl.hpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClInclude>
+    <ClInclude Include="Win32\WglContext.hpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClInclude>
+    <ClInclude Include="Win32\WglExtensions.hpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClInclude>
+    <ClInclude Include="Win32\WindowImplWin32.hpp">
+      <Filter>src\SFML\Window\Win32</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

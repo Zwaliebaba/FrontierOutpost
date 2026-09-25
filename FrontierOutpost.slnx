@@ -1,8 +1,24 @@
 <Solution>
   <Configurations>
-    <Platform Name="ARM64" />
+    <BuildType Name="Debug" />
+    <BuildType Name="Release" />
     <Platform Name="x64" />
-    <Platform Name="x86" />
+    <Platform Name="ARM64" />
   </Configurations>
-  <Project Path="FrontierOutpost/FrontierOutpost.vcxproj" />
+  <Folder Name="/ltheory/">
+    <Project Path="FrontierOutpost/src/launch/launch.vcxproj" />
+    <Project Path="FrontierOutpost/src/liblt/lt.vcxproj" />
+  </Folder>
+  <Folder Name="/SFML/">
+    <Project Path="FrontierOutpost/ext/SFML/src/SFML/Audio/sfml-audio.vcxproj" />
+    <Project Path="FrontierOutpost/ext/SFML/src/SFML/Graphics/sfml-graphics.vcxproj" />
+    <Project Path="FrontierOutpost/ext/SFML/src/SFML/Main/sfml-main.vcxproj" />
+    <Project Path="FrontierOutpost/ext/SFML/src/SFML/Network/sfml-network.vcxproj" />
+    <Project Path="FrontierOutpost/ext/SFML/src/SFML/System/sfml-system.vcxproj" />
+    <Project Path="FrontierOutpost/ext/SFML/src/SFML/Window/sfml-window.vcxproj" />
+  </Folder>
+  <Folder Name="/dependencies/">
+    <Project Path="FrontierOutpost/ext/freetype/freetype.vcxproj" />
+    <Project Path="FrontierOutpost/ext/glew/glew.vcxproj" />
+  </Folder>
 </Solution>

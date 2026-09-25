@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    sfml-window: SFML 2.5.0's Window module (commit 192eb968), a static library, as the original build
+    made it with BUILD_SHARED_LIBS forced off (MIGRATION_NOTES.md §5.2, ADR-002).
+
+    The sources are the ones the original's generated project compiled, in its order. The settings are
+    that project's (MIGRATION_NOTES.md §9.3): /W3, /EHsc, default floating point, no /MP, and SFML's own
+    definitions. The character set is Unicode, as in the original: this module defines _UNICODE so that
+    it calls the W functions of the Win32 API, and the original's generator set the character set to
+    match.
+
+    Output: sfml-window-s-d.lib / sfml-window-s.lib. Its compile PDB, sfml-window-s.pdb, goes beside it
+    (SFML_GENERATE_PDB). Its consumers link opengl32, winmm and gdi32 for it.
+  -->
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|ARM64">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64">
+      <Configuration>Release</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{9485D241-96B7-504D-93A1-627D479EB4E3}</ProjectGuid>
+    <RootNamespace>sfml-window</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <SfmlDir>$(FrontierOutpostDir)ext\SFML\</SfmlDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <TargetName>sfml-window-s-d</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <TargetName>sfml-window-s</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(SfmlDir)include;$(SfmlDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;_CRT_SECURE_NO_DEPRECATE;_SCL_SECURE_NO_WARNINGS;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ProgramDataBaseFileName>$(OutDir)sfml-window-s.pdb</ProgramDataBaseFileName>
+      <!-- Phase 3: SFML compiles cleanly at C++23, so it follows first-party code's standard (D6), keeping
+           its own /permissive (MIGRATION_NOTES.md §18). -->
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="Clipboard.cpp" />
+    <ClCompile Include="Context.cpp" />
+    <ClCompile Include="Cursor.cpp" />
+    <ClCompile Include="GlContext.cpp" />
+    <ClCompile Include="GlResource.cpp" />
+    <ClCompile Include="Joystick.cpp" />
+    <ClCompile Include="JoystickManager.cpp" />
+    <ClCompile Include="Keyboard.cpp" />
+    <ClCompile Include="Mouse.cpp" />
+    <ClCompile Include="Touch.cpp" />
+    <ClCompile Include="Sensor.cpp" />
+    <ClCompile Include="SensorManager.cpp" />
+    <ClCompile Include="VideoMode.cpp" />
+    <ClCompile Include="Window.cpp" />
+    <ClCompile Include="WindowImpl.cpp" />
+    <ClCompile Include="Win32\CursorImpl.cpp" />
+    <ClCompile Include="Win32\ClipboardImpl.cpp" />
+    <ClCompile Include="Win32\WglContext.cpp" />
+    <ClCompile Include="Win32\WglExtensions.cpp" />
+    <ClCompile Include="Win32\InputImpl.cpp" />
+    <ClCompile Include="Win32\JoystickImpl.cpp" />
+    <ClCompile Include="Win32\SensorImpl.cpp" />
+    <ClCompile Include="Win32\VideoModeImpl.cpp" />
+    <ClCompile Include="Win32\WindowImplWin32.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\include\SFML\Window\Clipboard.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\Context.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\ContextSettings.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\Cursor.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\Event.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\Export.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\GlResource.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\Joystick.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\Keyboard.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\Mouse.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\Sensor.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\Touch.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\VideoMode.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\Window.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\WindowHandle.hpp" />
+    <ClInclude Include="..\..\..\include\SFML\Window\WindowStyle.hpp" />
+    <ClInclude Include="ClipboardImpl.hpp" />
+    <ClInclude Include="CursorImpl.hpp" />
+    <ClInclude Include="GlContext.hpp" />
+    <ClInclude Include="InputImpl.hpp" />
+    <ClInclude Include="JoystickImpl.hpp" />
+    <ClInclude Include="JoystickManager.hpp" />
+    <ClInclude Include="SensorImpl.hpp" />
+    <ClInclude Include="SensorManager.hpp" />
+    <ClInclude Include="VideoModeImpl.hpp" />
+    <ClInclude Include="WindowImpl.hpp" />
+    <ClInclude Include="Win32\ClipboardImpl.hpp" />
+    <ClInclude Include="Win32\CursorImpl.hpp" />
+    <ClInclude Include="Win32\InputImpl.hpp" />
+    <ClInclude Include="Win32\JoystickImpl.hpp" />
+    <ClInclude Include="Win32\SensorImpl.hpp" />
+    <ClInclude Include="Win32\WglContext.hpp" />
+    <ClInclude Include="Win32\WglExtensions.hpp" />
+    <ClInclude Include="Win32\WindowImplWin32.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\System\sfml-system.vcxproj">
+      <Project>{2D3DEE67-9FD5-50A7-BA72-2818BF619516}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>
