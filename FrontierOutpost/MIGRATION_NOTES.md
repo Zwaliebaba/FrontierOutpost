@@ -11,7 +11,9 @@ user-facing strings keep their original names. `ltheory-old-main/` is read-only.
 **Status:** Phase 1 (structure) is done (§15). Phase 2's x64 build (§16) compiled at parity with
 the original, with identical warnings and matching command lines, and its link lacked only FMOD Ex.
 The owner then replaced FMOD Ex with XAudio2 on both platforms (D15, ADR-003, §17), and asked the
-repository's CI to build Debug|x64 (D19). The first build with XAudio2 is in progress.
+repository's CI to build Debug|x64 (D19). **With that, Phase 2 is done: x64 Debug and Release
+build and link from a clean checkout (§16, run 7), and the repository's CI is green.** Next is
+Phase 3, the C++23 bump.
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -1097,17 +1099,35 @@ The projects were written at the original's standard from the start (§15.3):
 `LanguageStandard=stdcpp14`, MSVC's default, and no `/permissive-`, since the original has none.
 Phase 2 therefore needed no change of its own, and run 6 (§15.6) is its build.
 
-**Gate:**
+**Gate: passed** in run 7 ([`36102761243`](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36102761243),
+commit `e30463c`), with XAudio2 in place of FMOD Ex (D15). Run 6, before the port, is §15.6.
 
-- **Both x64 configurations link: not yet.** Every project compiles. `lt`, and with it `launch`,
-  waits on the FMOD Ex x64 libraries (D8, O8), and the probe shows that nothing else is missing.
-- **Warnings comparable to the baseline: yes, identical** (§15.6). There are 589 unique warnings,
-  with the same codes and counts in the same projects. The baseline's five more are its LNK4272s
-  on the x86 libraries.
-- **Binaries against the baseline:** the static libraries and their PDBs match name for name
-  (§15.6). `lt.dll`, `lt.lib`, `lt.exp`, `lt.pdb`, `launch.exe` and `launch.pdb` wait on O8.
+- **Both x64 configurations link.** Debug builds in 4 min 3 s, Release in 6 min 56 s, from a clean
+  checkout, with `msbuild FrontierOutpost.slnx /m /p:Configuration=<cfg> /p:Platform=x64`.
+- **Warnings: the original's, less two.** 587 unique (C4267 358, C4244 226, C4996 3), in the same
+  projects (`lt` 582, `sfml-network` 3, `sfml-system` 1, `sfml-graphics` 1), in Debug and Release
+  alike. The two C4267s that are gone were in the deleted `Fmod.cpp` (lines 442 and 473, a
+  `size_t` stored in FMOD's 32-bit `length`); `XAudio2.cpp` raises none. The baseline's 594 also
+  count its five LNK4272s on the x86 libraries.
+- **Binaries: the original's set**, all x64 according to `dumpbin`: `lt.dll`, `lt.lib`, `lt.exp`,
+  `launch.exe`, and in Debug `lt.pdb` and `launch.pdb`, as the original's `bin/` had them. The
+  original's four copied DLLs (`fmodex`, `fmod_event`, `freetype6`, `zlib1`) are gone by design
+  (ADR-002, ADR-003). SFML, FreeType and GLEW as in §15.6.
+- **What the binaries load** (`dumpbin /imports`, functions per DLL, against the original's
+  Win32 build, §9.4):
 
-No project-file problem showed up, and no source file was touched.
+  | Binary | FrontierOutpost x64, Debug / Release | Original Win32, Debug / Release |
+  |---|---|---|
+  | `lt.dll` | `OPENGL32` 56 / 39, `GDI32` 9 / 6, `WINMM` 5, `WS2_32` 2, `KERNEL32` 54 / 43, `USER32` 53 / 49, `SHELL32` 1, `ADVAPI32` 3, **`ole32` 2**, **`XAudio2_9`**, the CRT | `OPENGL32` 56 / 39, `GDI32` 9 / 6, `WINMM` 5, `WS2_32` 2, `KERNEL32` 53 / 43, `USER32` 51 / 47, `SHELL32` 1, `ADVAPI32` 3, **`fmodex` 16, `fmod_event` 12, `freetype6` 9**, the CRT |
+  | `launch.exe` | `lt.dll` 24, `KERNEL32`, the CRT | `lt.dll` 24, `KERNEL32`, the CRT |
+
+  `ole32` is COM's initialisation for XAudio2. The import count script sees none of
+  `XAudio2_9.dll`'s functions by name.
+- **`launch`'s command lines** match §9.3: `lt`'s compiler settings without `_WINDLL`;
+  `resources.rc` compiled with `WIN32 _WINDOWS SFML_STATIC` plus `_DEBUG` or `NDEBUG`; the
+  original's link order, without `/NODEFAULTLIB:libcmt`.
+
+No project-file problem showed up in Phase 2 itself. The source changes since are the port's (§11).
 
 ## 17. The XAudio2 port (between Phases 2 and 3)
 
@@ -1146,4 +1166,14 @@ changed, apart from the file names of the sounds (§11).
 
 ### 17.3 The build on the host
 
-Pending.
+Run 7 (§16) compiled `XAudio2.cpp` against the real Windows SDK on the first attempt, with no error
+and no warning, and linked `lt.dll` and `launch.exe` for x64 Debug and Release. `lt.dll` imports
+`XAudio2_9.dll` and nothing of FMOD's.
+
+The repository's own CI ran the same commit: `build.yml`'s Debug|x64 job
+([run 113](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36102765022)) built
+`FrontierOutpost.slnx` in 4 min 46 s and is green, with its checker, test, clang-tidy and format
+gates skipped for want of input (D19). O3 is closed.
+
+Whether it sounds right remains to be heard (O11), and the Ogg sounds wait on their WAV
+conversion (O10).
