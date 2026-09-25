@@ -267,12 +267,15 @@ struct DrawContext::Native
   }
 
   /// Readies a subresource to be copied into. Copies are not ordered among themselves, so a second
-  /// copy into it in the same list first waits for the one before, through a transition.
+  /// copy into it in the same list first waits for the one before, through a transition out of
+  /// COPY_DEST and back. The two go in ResourceBarrier calls of their own: two transitions of one
+  /// subresource in one call are the debug layer's warning 1008.
   void RequireCopyDestination(Texture::Native& _texture, std::uint32_t _subresource)
   {
     if (_texture.copiedLists[_subresource] == listSerial && _texture.states[_subresource] == D3D12_RESOURCE_STATE_COPY_DEST)
     {
       Require(_texture, _subresource, D3D12_RESOURCE_STATE_COMMON);
+      FlushBarriers();
     }
     Require(_texture, _subresource, D3D12_RESOURCE_STATE_COPY_DEST);
     _texture.copiedLists[_subresource] = listSerial;
@@ -283,6 +286,7 @@ struct DrawContext::Native
     if (_buffer.copiedList == listSerial && _buffer.stateList == listSerial && _buffer.state == D3D12_RESOURCE_STATE_COPY_DEST)
     {
       Require(_buffer, D3D12_RESOURCE_STATE_COMMON);
+      FlushBarriers();
     }
     Require(_buffer, D3D12_RESOURCE_STATE_COPY_DEST);
     _buffer.copiedList = listSerial;
