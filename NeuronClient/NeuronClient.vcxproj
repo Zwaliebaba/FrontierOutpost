@@ -57,6 +57,9 @@
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <FloatingPointModel>Precise</FloatingPointModel>
+      <!-- /Zi in both configurations. Debug would otherwise get /ZI, whose Edit and Continue a
+           link that is not incremental ignores, with warning LNK4075. -->
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
