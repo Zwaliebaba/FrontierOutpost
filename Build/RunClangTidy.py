@@ -34,6 +34,7 @@ RUNTIME = {"MultiThreadedDLL": "/MD", "MultiThreadedDebugDLL": "/MDd", "MultiThr
 ARCH = {"AdvancedVectorExtensions": "/arch:AVX", "AdvancedVectorExtensions2": "/arch:AVX2",
         "AdvancedVectorExtensions512": "/arch:AVX512"}
 TARGET = {"x64": "x86_64-pc-windows-msvc", "ARM64": "aarch64-pc-windows-msvc"}
+CHARACTER_SET = {"Unicode": ["/DUNICODE", "/D_UNICODE"], "MultiByte": ["/D_MBCS"]}
 
 
 def VisualStudio():
@@ -112,6 +113,10 @@ def Units(_root, _configuration, _platform):
              "/W4", "/DWIN32", "/D_WINDOWS"]
     flags += [f"/D{d.strip()}" for d in settings.get("ClCompile.PreprocessorDefinitions", "").split(";")
               if d.strip() and not d.strip().startswith("%(")]
+    # MSBuild defines these from the character set, and no project spells them out: without them
+    # IDC_ARROW and the other TCHAR macros are narrow, and LoadCursorW(nullptr, IDC_ARROW) will not
+    # compile here although cl compiles it.
+    flags += CHARACTER_SET.get(settings.get("CharacterSet", ""), [])
     if settings.get("ClCompile.RuntimeLibrary") in RUNTIME:
       flags.append(RUNTIME[settings["ClCompile.RuntimeLibrary"]])
     if settings.get("ClCompile.EnableEnhancedInstructionSet") in ARCH and _platform == "x64":

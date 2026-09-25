@@ -372,9 +372,11 @@ SOUND_CASES = [
      1, "12-bit PCM"),
 ]
 
-WINDOWS_CASE = ("a source that includes <windows.h>, through vcvarsall.bat",
-                lambda r: Replace(r, "NeuronClient/Window.cpp", '#include "Window.h"\n',
-                                  '#include "Window.h"\n\n#include <windows.h>\n'),
+WINDOWS_CASE = ("a source that includes <windows.h> and takes a wide IDC_ARROW, through vcvarsall.bat",
+                lambda r: (Replace(r, "NeuronClient/Window.cpp", '#include "Window.h"\n',
+                                   '#include "Window.h"\n\n#include <windows.h>\n'),
+                           Replace(r, "NeuronClient/Window.cpp", "m_widthPixels = _widthPixels;\n",
+                                   "m_widthPixels = _widthPixels;\n  SetCursor(LoadCursorW(nullptr, IDC_ARROW));\n")),
                 0, "0 with diagnostics")
 
 

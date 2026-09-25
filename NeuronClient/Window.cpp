@@ -5,6 +5,7 @@
 #include "Window.h"
 
 #include <deque>
+#include <exception>
 #include <format>
 #include <utility>
 
@@ -66,17 +67,25 @@ struct Window::Native
     Destroy();
   }
 
-  /// An exception cannot unwind through Windows, so one here ends the program. The property is set
-  /// once the window is made: what arrives before is Windows' alone, as it was SFML's.
-  static LRESULT CALLBACK Procedure(HWND _handle, UINT _message, WPARAM _wParam, LPARAM _lParam) noexcept
+  /// The property is set once the window is made: what arrives before is Windows' alone, as it was
+  /// SFML's. An exception cannot unwind through Windows, so one here, which can only be memory
+  /// running out for an event, ends the program.
+  static LRESULT CALLBACK Procedure(HWND _handle, UINT _message, WPARAM _wParam, LPARAM _lParam)
   {
-    auto* native = static_cast<Native*>(GetPropW(_handle, NATIVE_PROPERTY));
-    LRESULT result = 0;
-    if (native != nullptr && native->Handle(_message, _wParam, _lParam, result))
+    try
     {
-      return result;
+      auto* native = static_cast<Native*>(GetPropW(_handle, NATIVE_PROPERTY));
+      LRESULT result = 0;
+      if (native != nullptr && native->Handle(_message, _wParam, _lParam, result))
+      {
+        return result;
+      }
+      return DefWindowProcW(_handle, _message, _wParam, _lParam);
     }
-    return DefWindowProcW(_handle, _message, _wParam, _lParam);
+    catch (...)
+    {
+      std::terminate();
+    }
   }
 
   /// Queues what a message says. Returns true when it has answered the message with _outResult,
