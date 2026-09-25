@@ -3,12 +3,10 @@
 
 #include "LTE/AutoClass.h"
 #include "LTE/Color.h"
-#include "LTE/Hash.h"
 #include "LTE/Iterator.h"
 #include "LTE/Keyboard.h"
 #include "LTE/Location.h"
 #include "LTE/Map.h"
-#include "LTE/Pool.h"
 #include "LTE/Pointer.h"
 #include "LTE/OS.h"
 #include "LTE/V3.h"
@@ -80,35 +78,6 @@ namespace {
     static Settings s;
     return s;
   }
-
-  AutoClassDerived(WidgetSettings, WidgetComponentT,
-    SettingsNode*, node)
-
-    DERIVED_TYPE_EX(WidgetSettings)
-    POOLED_TYPE
-
-    WidgetSettings() {}
-
-    void CreateChildren(Widget const&, Vector<Widget>& widgets) {
-      for (SettingsNode* i = node->head; i; i = i->next) {
-        if (i->head)
-          widgets.push(Widget_Create1(new WidgetSettings(i)));
-        else if (i->value) {
-          Widget w = i->value->GetWidget();
-          if (w)
-            widgets.push(w);
-        }
-      }
-    }
-
-    void GetHash(Widget const&, HashT& out) {
-      out = Hash(node);
-    }
-
-    void GetName(Widget const&, String& out) {
-      out = node->name;
-    }
-  };
 }
 
 GenericBool Settings_Bool(String const& name, bool defValue) {
@@ -144,10 +113,6 @@ GenericFloat Settings_Float(
   GenericFloat g;
   node.value->GetValue((void*)&g);
   return g;
-}
-
-DefineFunction(Widget_Settings) {
-  return Widget_Create1(new WidgetSettings(GetSettings().root));
 }
 
 GenericColor Settings_PrimaryColor() {

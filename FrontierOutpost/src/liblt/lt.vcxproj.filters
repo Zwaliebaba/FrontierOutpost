@@ -232,9 +232,6 @@
     <ClCompile Include="Game\Event\Damage.cpp">
       <Filter>Game\Event</Filter>
     </ClCompile>
-    <ClCompile Include="Game\Event\Deposit.cpp">
-      <Filter>Game\Event</Filter>
-    </ClCompile>
     <ClCompile Include="Game\Event\Mined.cpp">
       <Filter>Game\Event</Filter>
     </ClCompile>
@@ -328,9 +325,6 @@
     <ClCompile Include="Game\Item\WeaponType.cpp">
       <Filter>Game\Item</Filter>
     </ClCompile>
-    <ClCompile Include="Game\Item\Worker.cpp">
-      <Filter>Game\Item</Filter>
-    </ClCompile>
     <ClCompile Include="Game\ItemProperty.cpp">
       <Filter>Game</Filter>
     </ClCompile>
@@ -363,9 +357,6 @@
     </ClCompile>
     <ClCompile Include="Game\Object\Custom.cpp">
       <Filter>Game\Object</Filter>
-    </ClCompile>
-    <ClCompile Include="Game\Object\Drone\Construction.cpp">
-      <Filter>Game\Object\Drone</Filter>
     </ClCompile>
     <ClCompile Include="Game\Object\Drone\Prospecting.cpp">
       <Filter>Game\Object\Drone</Filter>
@@ -451,9 +442,6 @@
     <ClCompile Include="Game\Object\WarpNode.cpp">
       <Filter>Game\Object</Filter>
     </ClCompile>
-    <ClCompile Include="Game\Object\WarpRail.cpp">
-      <Filter>Game\Object</Filter>
-    </ClCompile>
     <ClCompile Include="Game\Object\Weapon.cpp">
       <Filter>Game\Object</Filter>
     </ClCompile>
@@ -511,9 +499,6 @@
     <ClCompile Include="Game\Renderable\Asteroid.cpp">
       <Filter>Game\Renderable</Filter>
     </ClCompile>
-    <ClCompile Include="Game\Renderable\Ice.cpp">
-      <Filter>Game\Renderable</Filter>
-    </ClCompile>
     <ClCompile Include="Game\Renderable\Starfield.cpp">
       <Filter>Game\Renderable</Filter>
     </ClCompile>
@@ -544,22 +529,13 @@
     <ClCompile Include="Game\Task\Buy.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>
-    <ClCompile Include="Game\Task\Custom.cpp">
-      <Filter>Game\Task</Filter>
-    </ClCompile>
     <ClCompile Include="Game\Task\Destroy.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>
     <ClCompile Include="Game\Task\Dock.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>
-    <ClCompile Include="Game\Task\Drill.cpp">
-      <Filter>Game\Task</Filter>
-    </ClCompile>
     <ClCompile Include="Game\Task\Goto.cpp">
-      <Filter>Game\Task</Filter>
-    </ClCompile>
-    <ClCompile Include="Game\Task\LOD.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>
     <ClCompile Include="Game\Task\Manage.cpp">
@@ -569,9 +545,6 @@
       <Filter>Game\Task</Filter>
     </ClCompile>
     <ClCompile Include="Game\Task\Mint.cpp">
-      <Filter>Game\Task</Filter>
-    </ClCompile>
-    <ClCompile Include="Game\Task\Patrol.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>
     <ClCompile Include="Game\Task\Pirate.cpp">
@@ -1028,9 +1001,6 @@
       <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="UI\Compositor\Basic.cpp">
-      <Filter>UI\Compositor</Filter>
-    </ClCompile>
-    <ClCompile Include="UI\Compositor\Custom.cpp">
       <Filter>UI\Compositor</Filter>
     </ClCompile>
     <ClCompile Include="UI\Compositor\None.cpp">

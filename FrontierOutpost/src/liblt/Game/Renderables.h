@@ -7,9 +7,6 @@
 DeclareFunctionArgBind(Renderable_Asteroid, Renderable,
   uint, seed)
 
-DeclareFunctionArgBind(Renderable_Ice, Renderable,
-  uint, seed)
-
 DeclareFunctionArgBind(Renderable_Starfield, Renderable,
   uint, seed,
   uint, starCount)

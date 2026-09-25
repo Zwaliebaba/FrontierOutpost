@@ -33,7 +33,6 @@ AutoClassDerivedEmpty(Asteroid, AsteroidBaseT)
 
   void Initialize() {
     Drawable.renderable =
-      // Renderable_Ice(Seeded.seed);
       Renderable_Asteroid(Seeded.seed);
   }
 };
@@ -59,7 +58,6 @@ AutoClassDerivedEmpty(AsteroidRich, AsteroidRichBaseT)
 
   void Initialize() {
     Drawable.renderable =
-      //Renderable_Ice(Seeded.seed);
       Renderable_Asteroid(Seeded.seed);
   }
 

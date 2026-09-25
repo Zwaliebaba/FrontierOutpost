@@ -142,7 +142,6 @@
     </ClCompile>
     <ClCompile Include="Game\Condition\Nearby.cpp" />
     <ClCompile Include="Game\Event\Damage.cpp" />
-    <ClCompile Include="Game\Event\Deposit.cpp" />
     <ClCompile Include="Game\Event\Mined.cpp" />
     <ClCompile Include="Game\Graphics\Effects.cpp" />
     <ClCompile Include="Game\Graphics\Generator\Blur.cpp" />
@@ -176,7 +175,6 @@
     <ClCompile Include="Game\Item\TransferUnitType.cpp" />
     <ClCompile Include="Game\Item\TurretType.cpp" />
     <ClCompile Include="Game\Item\WeaponType.cpp" />
-    <ClCompile Include="Game\Item\Worker.cpp" />
     <ClCompile Include="Game\ItemProperty.cpp" />
     <ClCompile Include="Game\ItemProperty\Owner.cpp" />
     <ClCompile Include="Game\Light.cpp" />
@@ -194,7 +192,6 @@
     <ClCompile Include="Game\Object\Custom.cpp">
       <ObjectFileName>$(IntDir)Game\Object\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="Game\Object\Drone\Construction.cpp" />
     <ClCompile Include="Game\Object\Drone\Prospecting.cpp" />
     <ClCompile Include="Game\Object\DroneBay.cpp" />
     <ClCompile Include="Game\Object\DustFlecks.cpp" />
@@ -227,7 +224,6 @@
     <ClCompile Include="Game\Object\TransferUnit.cpp" />
     <ClCompile Include="Game\Object\Turret.cpp" />
     <ClCompile Include="Game\Object\WarpNode.cpp" />
-    <ClCompile Include="Game\Object\WarpRail.cpp" />
     <ClCompile Include="Game\Object\Weapon.cpp" />
     <ClCompile Include="Game\Object\Wormhole.cpp" />
     <ClCompile Include="Game\Object\Zone.cpp" />
@@ -257,7 +253,6 @@
     <ClCompile Include="Game\Renderable\Asteroid.cpp">
       <ObjectFileName>$(IntDir)Game\Renderable\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="Game\Renderable\Ice.cpp" />
     <ClCompile Include="Game\Renderable\Starfield.cpp" />
     <ClCompile Include="Game\ScriptAPI\Camera.cpp">
       <ObjectFileName>$(IntDir)Game\ScriptAPI\</ObjectFileName>
@@ -280,20 +275,14 @@
       <ObjectFileName>$(IntDir)Game\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="Game\Task\Buy.cpp" />
-    <ClCompile Include="Game\Task\Custom.cpp">
-      <ObjectFileName>$(IntDir)Game\Task\</ObjectFileName>
-    </ClCompile>
     <ClCompile Include="Game\Task\Destroy.cpp" />
     <ClCompile Include="Game\Task\Dock.cpp" />
-    <ClCompile Include="Game\Task\Drill.cpp" />
     <ClCompile Include="Game\Task\Goto.cpp" />
-    <ClCompile Include="Game\Task\LOD.cpp" />
     <ClCompile Include="Game\Task\Manage.cpp" />
     <ClCompile Include="Game\Task\Mine.cpp">
       <ObjectFileName>$(IntDir)Game\Task\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="Game\Task\Mint.cpp" />
-    <ClCompile Include="Game\Task\Patrol.cpp" />
     <ClCompile Include="Game\Task\Pirate.cpp" />
     <ClCompile Include="Game\Task\Play.cpp" />
     <ClCompile Include="Game\Task\Produce.cpp" />
@@ -546,9 +535,6 @@
     <ClCompile Include="ThirdParty\TriTriOverlap.cpp" />
     <ClCompile Include="UI\ClipRegion.cpp" />
     <ClCompile Include="UI\Compositor\Basic.cpp" />
-    <ClCompile Include="UI\Compositor\Custom.cpp">
-      <ObjectFileName>$(IntDir)UI\Compositor\</ObjectFileName>
-    </ClCompile>
     <ClCompile Include="UI\Compositor\None.cpp" />
     <ClCompile Include="UI\Cursor.cpp" />
     <ClCompile Include="UI\Glyph.cpp">

@@ -54,10 +54,6 @@ inline Item Item_DroneBayType(double value, uint seed) {
 
 typedef Item_DroneBayType_Args Meta_DroneBayType;
 
-DeclareFunctionArgBind(Item_DroneConstructionType, Item,
-  double, value,
-  uint, seed)
-
 DeclareFunctionArgBind(Item_DroneProspectingType, Item,
   double, value,
   uint, seed)
@@ -211,17 +207,5 @@ DeclareFunctionArgBind(Item_TurretType, Item,
 typedef Item_TurretType_Args Meta_TurretType;
 
 DeclareFunction(Item_WeaponType, Item, int, id)
-
-DeclareFunctionArgBind(Item_Worker_Engineer, Item,
-  uint, level,
-  Item, nextLevel)
-
-DeclareFunctionArgBind(Item_Worker_Miner, Item,
-  uint, level,
-  Item, nextLevel)
-
-DeclareFunctionArgBind(Item_Worker_Pilot, Item,
-  uint, level,
-  Item, nextLevel)
 
 #endif

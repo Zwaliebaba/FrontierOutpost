@@ -12,12 +12,6 @@ DeclareFunctionArgBind(Event_Damage, Event,
   Object, dest,
   Damage, damage)
 
-DeclareFunctionArgBind(Event_Deposit, Event,
-  Object, object,
-  Object, target,
-  Item, item,
-  Quantity, quantity)
-
 DeclareFunctionArgBind(Event_Destroyed, Event,
   Object, source,
   Object, dest)

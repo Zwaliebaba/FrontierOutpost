@@ -22,8 +22,6 @@ LT_API GenericFloat Settings_Float(
   float maximum,
   float defValue);
 
-DeclareFunctionNoParams(Widget_Settings, Widget)
-
 LT_API GenericColor Settings_PrimaryColor();
 
 LT_API GenericColor Settings_SecondaryColor();

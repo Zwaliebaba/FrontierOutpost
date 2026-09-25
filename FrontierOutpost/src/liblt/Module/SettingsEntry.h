@@ -9,10 +9,6 @@
 struct SettingsEntry {
   BASE_TYPE(SettingsEntry)
 
-  virtual Widget GetWidget() {
-    return nullptr;
-  }
-
   virtual void GetValue(void* buffer) = 0;
 
   FIELDS {}

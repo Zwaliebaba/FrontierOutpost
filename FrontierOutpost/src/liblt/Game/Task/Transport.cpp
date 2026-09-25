@@ -50,7 +50,6 @@ namespace {
       }
 
       else if (self->GetContainer() == args.dest) {
-        // Event_Deposit(self, args.dest, args.item, self->GetItemCount(args.item));
         self->PushTask(Task_Dock(args.source));
       }
 
