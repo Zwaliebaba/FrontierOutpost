@@ -284,7 +284,8 @@ bool SwapChain::Show(const Texture& _image, std::vector<std::byte>* _outCapture)
   }
   const UINT rowPitch = target.captureFootprint.Footprint.RowPitch;
   const std::size_t rowBytes = std::size_t{native.widthPixels} * 4;
-  const D3D12_RANGE everything{0, static_cast<SIZE_T>(rowPitch) * native.heightPixels};
+  // The buffer's own size, not the pitch times the rows: the last row stops at its texels.
+  const D3D12_RANGE everything{0, static_cast<SIZE_T>(target.captureBuffer->GetDesc().Width)};
   void* mapped = nullptr;
   if (!core.Check(target.captureBuffer->Map(0, &everything, &mapped), "ID3D12Resource::Map for a capture of the back buffer"))
   {

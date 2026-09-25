@@ -194,10 +194,12 @@ public:
     context.DrawTransient(Bytes(whole), TEXTURED, Bytes(QUAD_INDICES), IndexFormat::UInt16);
 
     std::vector<std::byte> shown;
-    Assert::IsTrue(swapChain.PresentAndCapture(image, shown), L"nothing was shown");
+    const bool captured = swapChain.PresentAndCapture(image, shown);
     test.device.EndFrame();
-    Assert::IsTrue(shown == WindowTexels(WHITE, BLACK), L"the window does not show the image the right way up");
+    // First what the core reported, which says why when nothing was shown.
     ExpectClean(test);
+    Assert::IsTrue(captured, L"nothing was shown");
+    Assert::IsTrue(shown == WindowTexels(WHITE, BLACK), L"the window does not show the image the right way up");
   }
 
   TEST_METHOD(ShowsFrameAfterFrameAndResizes)
@@ -227,8 +229,10 @@ public:
     test.device.BeginFrame();
     context.ClearColor(smaller, 0, 0, UNORM_COLOR);
     std::vector<std::byte> shown;
-    Assert::IsTrue(swapChain.PresentAndCapture(smaller, shown), L"nothing was shown after the resize");
+    const bool captured = swapChain.PresentAndCapture(smaller, shown);
     test.device.EndFrame();
+    ExpectClean(test);
+    Assert::IsTrue(captured, L"nothing was shown after the resize");
     Assert::IsTrue(shown == ExactTexels(TextureFormat::Rgba8, std::size_t{HALF_WIDTH} * HALF_HEIGHT), L"the resized frame was not shown");
 
     // A minimized window's size is not taken.
