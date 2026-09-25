@@ -38,7 +38,7 @@ enum class CullMode : std::uint8_t
 };
 
 /// A draw's fixed-function state: liblt's pushable state, with GL's meaning.
-struct DrawState
+struct RenderState
 {
   BlendMode blend;
   CullMode cull;
@@ -151,7 +151,7 @@ public:
 
   void DisableScissor();
 
-  void SetState(const DrawState& _state);
+  void SetState(const RenderState& _state);
 
   /// The program the next draws run, with its constants as they are at each draw. It stays set
   /// until another is, or until it goes.

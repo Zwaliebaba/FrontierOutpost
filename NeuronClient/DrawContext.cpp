@@ -273,7 +273,7 @@ struct DrawContext::Native
   std::uint32_t depthHeight = 0;
   D3D12_VIEWPORT viewport{};
   D3D12_RECT scissor{};
-  DrawState state{.blend = BlendMode::Opaque, .cull = CullMode::None, .depthTest = false, .depthWrite = true, .wireframe = false};
+  RenderState state{.blend = BlendMode::Opaque, .cull = CullMode::None, .depthTest = false, .depthWrite = true, .wireframe = false};
   Program::Native* program = nullptr;
 
   explicit Native(GraphicsCore& _core)
@@ -1162,7 +1162,7 @@ void DrawContext::DisableScissor()
   context.scissor = {0, 0, static_cast<LONG>(context.targetWidth), static_cast<LONG>(context.targetHeight)};
 }
 
-void DrawContext::SetState(const DrawState& _state)
+void DrawContext::SetState(const RenderState& _state)
 {
   m_native->state = _state;
 }

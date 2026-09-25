@@ -40,9 +40,9 @@ namespace
 using Neuron::BlendMode;
 using Neuron::ColorTarget;
 using Neuron::CullMode;
-using Neuron::DrawState;
 using Neuron::IndexFormat;
 using Neuron::Program;
+using Neuron::RenderState;
 using Neuron::Texture;
 using Neuron::TextureDimension;
 using Neuron::TextureFormat;
@@ -53,7 +53,8 @@ using Neuron::VertexLayout;
 constexpr std::array<VertexAttribute, 1> POSITION_ATTRIBUTES = {{{"POSITION", 0, VertexFormat::Float3, 0}}};
 constexpr VertexLayout POSITIONS{POSITION_ATTRIBUTES, 3 * sizeof(float)};
 
-constexpr DrawState PLAIN{.blend = BlendMode::Opaque, .cull = CullMode::None, .depthTest = false, .depthWrite = false, .wireframe = false};
+constexpr RenderState PLAIN{
+  .blend = BlendMode::Opaque, .cull = CullMode::None, .depthTest = false, .depthWrite = false, .wireframe = false};
 
 /// A triangle over the whole of clip space, which the first indices wind counter-clockwise, as
 /// GL's front faces are, and the second clockwise.
@@ -438,27 +439,27 @@ public:
     Program twoTargets = MakeProgram(test, Bytecode(TWO_TARGETS_PS), "TwoTargets");
     Program compute =
       test.device.CreateProgram({.vertexShader = {}, .pixelShader = {}, .computeShader = Bytecode(NAMES_CS), .name = "Compute"});
-    Texture large = MakeTexture(test, TextureFormat::R8, 4, 4);
-    Texture small = MakeTexture(test, TextureFormat::R8, 2, 2);
+    Texture fourByFour = MakeTexture(test, TextureFormat::R8, 4, 4);
+    Texture twoByTwo = MakeTexture(test, TextureFormat::R8, 2, 2);
     Texture depth = MakeTexture(test, TextureFormat::Depth32F, 2, 2);
     Neuron::Buffer vertices = test.device.CreateBuffer({.sizeBytes = sizeof(WHOLE), .strideBytes = 12, .name = "DrawCalls vertices"});
     Neuron::Buffer indices = test.device.CreateBuffer({.sizeBytes = 6, .strideBytes = 2, .name = "DrawCalls indices"});
     Neuron::DrawContext& context = test.device.Context();
     context.SetState(PLAIN);
 
-    const std::array<ColorTarget, 2> mixedSizes = {{{&large, 0, 0}, {&small, 0, 0}}};
+    const std::array<ColorTarget, 2> mixedSizes = {{{&fourByFour, 0, 0}, {&twoByTwo, 0, 0}}};
     context.SetTargets(mixedSizes, nullptr); // targets of two sizes
     SetTarget(test, depth);                  // depth as colour
     context.SetProgram(compute);             // a program that draws nothing
 
-    SetTarget(test, large);
+    SetTarget(test, fourByFour);
     DrawWhole(test, twoTargets, WHITE); // two targets written, one set
     const std::array<VertexAttribute, 1> noPosition = {{{"TEXCOORD", 0, VertexFormat::Float3, 0}}};
     context.SetProgram(solid);
     context.DrawTransient(Bytes(WHOLE), {noPosition, 12}, Bytes(FRONT_FACING), IndexFormat::UInt16); // an input not in the layout
     context.DrawIndexed(vertices, POSITIONS, indices, IndexFormat::UInt16, 1, 3);                    // indices past the buffer
 
-    SetTarget(test, large, &depth);
+    SetTarget(test, fourByFour, &depth);
     context.SetState({.blend = BlendMode::Opaque, .cull = CullMode::None, .depthTest = true, .depthWrite = true, .wireframe = false});
     DrawWhole(test, solid, WHITE); // a depth target of another size
 
