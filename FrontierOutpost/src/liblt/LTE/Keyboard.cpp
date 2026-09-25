@@ -114,20 +114,14 @@
 namespace {
   sf::Keyboard::Key Key_LTE_to_SFML(Key key);
   Key Key_SFML_to_LTE(sf::Keyboard::Key key);
-  uchar GetKeyChar(Key key, bool shift);
 
   struct Keyboard {
     bool down[Key_SIZE];
     bool downLast[Key_SIZE];
     Vector<uchar> chars;
     Vector<Key> pressed;
-    bool blocked;
-    bool blockedLast;
 
-    Keyboard() :
-      blocked(false),
-      blockedLast(false)
-    {
+    Keyboard() {
       for (Key key = 0; key < Key_SIZE; ++key) {
         down[key] = downLast[key] = false;
       }
@@ -147,20 +141,12 @@ namespace LTE {
     gKeyboard.chars.push(c);
   }
 
-  void Keyboard_Block() {
-    gKeyboard.blockedLast = gKeyboard.blocked = true;
-  }
-
   bool Keyboard_Down(Key key) {
     return gKeyboard.down[key];
   }
 
   Vector<Key> const& Keyboard_GetKeysPressed() {
     return gKeyboard.pressed;
-  }
-
-  bool Keyboard_IsBlocked() {
-    return gKeyboard.blockedLast;
   }
 
   void Keyboard_ModifyString(String& str, int& cursor) {
@@ -178,21 +164,14 @@ namespace LTE {
   }
 
   bool Keyboard_Pressed(Key key) {
-    if (gKeyboard.blockedLast)
-      return false;
     return gKeyboard.down[key] && !gKeyboard.downLast[key];
   }
 
   bool Keyboard_Released(Key key) {
-    if (gKeyboard.blockedLast)
-      return false;
     return !gKeyboard.down[key] && gKeyboard.downLast[key];
   }
 
   void Keyboard_Update(bool hasFocus) {
-    gKeyboard.blockedLast = gKeyboard.blocked;
-    gKeyboard.blocked = false;
-
     for (Key key = 0; key < Key_SIZE; ++key) {
       gKeyboard.downLast[key] = gKeyboard.down[key];
       
@@ -302,138 +281,5 @@ namespace {
       #undef XY
       default: return Key_SIZE;
     };
-  }
-
-  uchar GetKeyChar(Key key, bool shift) {
-    if (shift) {
-      switch (key) {
-        case Key_A: return 'A';
-        case Key_B: return 'B';
-        case Key_C: return 'C';
-        case Key_D: return 'D';
-        case Key_E: return 'E';
-        case Key_F: return 'F';
-        case Key_G: return 'G';
-        case Key_H: return 'H';
-        case Key_I: return 'I';
-        case Key_J: return 'J';
-        case Key_K: return 'K';
-        case Key_L: return 'L';
-        case Key_M: return 'M';
-        case Key_N: return 'N';
-        case Key_O: return 'O';
-        case Key_P: return 'P';
-        case Key_Q: return 'Q';
-        case Key_R: return 'R';
-        case Key_S: return 'S';
-        case Key_T: return 'T';
-        case Key_U: return 'U';
-        case Key_V: return 'V';
-        case Key_W: return 'W';
-        case Key_X: return 'X';
-        case Key_Y: return 'Y';
-        case Key_Z: return 'Z';
-        case Key_N1: return '!';
-        case Key_N2: return '@';
-        case Key_N3: return '#';
-        case Key_N4: return '$';
-        case Key_N5: return '%';
-        case Key_N6: return '^';
-        case Key_N7: return '&';
-        case Key_N8: return '*';
-        case Key_N9: return '(';
-        case Key_N0: return ')';
-        case Key_NP1: return '1';
-        case Key_NP2: return '2';
-        case Key_NP3: return '3';
-        case Key_NP4: return '4';
-        case Key_NP5: return '5';
-        case Key_NP6: return '6';
-        case Key_NP7: return '7';
-        case Key_NP8: return '8';
-        case Key_NP9: return '9';
-        case Key_NP0: return '0';
-        case Key_BackSlash: return '|';
-        case Key_Comma: return '<';
-        case Key_Dash: return '_';
-        case Key_Equal: return '+';
-        case Key_LBracket: return '{';
-        case Key_Period: return '>';
-        case Key_Quote: return '"';
-        case Key_RBracket: return '}';
-        case Key_SemiColon: return ':';
-        case Key_Slash: return '?';
-        case Key_Space: return ' ';
-        case Key_Tilde: return '~';
-        default: return '\0';
-      }
-    } else {
-      switch (key) {
-        case Key_A: return 'a';
-        case Key_B: return 'b';
-        case Key_C: return 'c';
-        case Key_D: return 'd';
-        case Key_E: return 'e';
-        case Key_F: return 'f';
-        case Key_G: return 'g';
-        case Key_H: return 'h';
-        case Key_I: return 'i';
-        case Key_J: return 'j';
-        case Key_K: return 'k';
-        case Key_L: return 'l';
-        case Key_M: return 'm';
-        case Key_N: return 'n';
-        case Key_O: return 'o';
-        case Key_P: return 'p';
-        case Key_Q: return 'q';
-        case Key_R: return 'r';
-        case Key_S: return 's';
-        case Key_T: return 't';
-        case Key_U: return 'u';
-        case Key_V: return 'v';
-        case Key_W: return 'w';
-        case Key_X: return 'x';
-        case Key_Y: return 'y';
-        case Key_Z: return 'z';
-        case Key_N1: return '1';
-        case Key_N2: return '2';
-        case Key_N3: return '3';
-        case Key_N4: return '4';
-        case Key_N5: return '5';
-        case Key_N6: return '6';
-        case Key_N7: return '7';
-        case Key_N8: return '8';
-        case Key_N9: return '9';
-        case Key_N0: return '0';
-        case Key_NP1: return '1';
-        case Key_NP2: return '2';
-        case Key_NP3: return '3';
-        case Key_NP4: return '4';
-        case Key_NP5: return '5';
-        case Key_NP6: return '6';
-        case Key_NP7: return '7';
-        case Key_NP8: return '8';
-        case Key_NP9: return '9';
-        case Key_NP0: return '0';
-        case Key_Add: return '+';
-        case Key_BackSlash: return '\\';
-        case Key_Comma: return ',';
-        case Key_Dash:  return '-';
-        case Key_Divide: return '/';
-        case Key_Equal: return '=';
-        case Key_LBracket: return '[';
-        case Key_Multiply: return '*';
-        case Key_Period: return '.';
-        case Key_Quote: return '\'';
-        case Key_RBracket: return ']';
-        case Key_SemiColon: return ';';
-        case Key_Slash: return '/';
-        case Key_Space: return ' ';
-        case Key_Subtract: return '-';
-        case Key_Tab: return '\t';
-        case Key_Tilde: return '`';
-        default: return '\0';
-      }
-    }
   }
 }

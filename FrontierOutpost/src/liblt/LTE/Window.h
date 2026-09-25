@@ -20,11 +20,6 @@ struct WindowT : public RefCounted {
   virtual bool HasFocus() const = 0;
   virtual bool IsOpen() const = 0;
 
-  virtual void SetCaptureMouse(bool captureMouse) = 0;
-  virtual void SetCursorVisible(bool visible) = 0;
-  virtual void SetFullscreen() = 0;
-  virtual void SetIcon(Texture2D const& icon) = 0;
-  virtual void SetPosition(V2I const& p) = 0;
   virtual void SetSync(bool sync) = 0;
 
   virtual void Update() = 0;

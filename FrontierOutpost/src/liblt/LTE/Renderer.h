@@ -52,10 +52,6 @@ namespace LTE {
     V2 const& t2 = V2(1),
     float depth = 0);
 
-  LT_API void Renderer_DrawQuadOutline(
-    V2 const& p1,
-    V2 const& p2);
-
   LT_API void Renderer_DrawVertices(
     Vector<Vertex> const& vertices,
     Vector<uint> const& indices);

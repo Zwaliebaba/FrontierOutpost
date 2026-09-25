@@ -1,5 +1,4 @@
 #include "Location.h"
-#include "Archive.h"
 #include "Array.h"
 #include "AutoClass.h"
 #include "AutoPtr.h"
@@ -11,36 +10,16 @@
 
 #include "BuildMode.h"
 
-#include "SFML/Network.hpp"
-
 #include <fstream>
 
 #include "LTE/Debug.h"
 
-#ifdef BUILD_RELEASE
-  const bool kUseArchive = true;
-  const String kResourcePath = "./";
-#else
-  const bool kUseArchive = false;
-  const String kResourcePath = "GameData/";
-#endif
-
-const String kArchivePath = kResourcePath + "resources.bin";
+const String kResourcePath = "GameData/";
 const String kModPath = "./mod/";
 
 TypeAlias(Reference<LocationT>, Location);
 
 namespace {
-  AutoPtr<Archive> gArchive;
-
-  void InitializeArchive() {
-    if (!gArchive) {
-      gArchive = Archive::Open(kArchivePath);
-      if (!gArchive->GetFileCount())
-        Log_Critical("Failed to load resource archive " + kArchivePath);
-    }
-  }
-
   ResourceMap const& GetResourceMap() {
     static ResourceMap resourceMap;
     if (!resourceMap) {
@@ -187,22 +166,10 @@ namespace {
     }
 
     bool Exists() const {
-      if (kUseArchive) {
-        InitializeArchive();
-        if (gArchive->Contains(name))
-          return true;
-      }
-
       return GetResourceMap()->Exists(name);
     }
 
     AutoPtr< Array<uchar> > Read() const {
-      if (kUseArchive) {
-        InitializeArchive();
-        if (gArchive->Contains(name))
-          return gArchive->Read(name);
-      }
-
       return LocationFile(GetResourceMap()->Get(name)).Read();
     }
 
@@ -211,57 +178,11 @@ namespace {
     }
 
     bool Write(Array<uchar> const& data) const {
-      if (kUseArchive) {
-        InitializeArchive();
-        if (gArchive->Contains(name))
-          return gArchive->Write(name, data);
-      }
-
       return LocationFile(GetResourceMap()->Get(name)).Write(data);
     }
   };
 
   DERIVED_IMPLEMENT(LocationResource)
-
-  AutoClassDerived(LocationWeb, LocationT,
-    String, host,
-    String, item)
-    DERIVED_TYPE_EX(LocationWeb)
-    POOLED_TYPE
-
-    LocationWeb() {}
-
-    Location Clone() const {
-      return new LocationWeb(*this);
-    }
-
-    bool Exists() const {
-      return true;
-    }
-
-    bool Write(Array<uchar> const& data) const {
-      LTE_ASSERT(!data.size());
-      return false;
-    }
-
-    AutoPtr< Array<uchar> > Read() const {
-      sf::Http http(host);
-      sf::Http::Response response = http.sendRequest(sf::Http::Request(item));
-      if (response.getStatus() != sf::Http::Response::Ok)
-        return nullptr;
-
-      String message = response.getBody();
-      Array<uchar>* arr = new Array<uchar>(message.size());
-      memcpy(arr->data(), &message.front(), message.size());
-      return arr;
-    }
-
-    String ToString() const {
-      return host + "/" + item;
-    }
-  };
-
-  DERIVED_IMPLEMENT(LocationWeb)
 }
 
 namespace LTE {
@@ -302,9 +223,5 @@ namespace LTE {
 
   DefineFunction(Location_Resource) {
     return new LocationResource(args.name);
-  }
-
-  DefineFunction(Location_Web) {
-    return new LocationWeb(args.host, args.file);
   }
 }

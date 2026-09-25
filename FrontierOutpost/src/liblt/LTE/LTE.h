@@ -25,16 +25,12 @@
 
 #endif
 
-#include "Archive.h"
 #include "Array.h"
-#include "Axis.h"
 #include "AutoClass.h"
 #include "AutoPtr.h"
 #include "BaseType.h"
-#include "Button.h"
 #include "Call.h"
 #include "CollisionMesh.h"
-#include "Config.h"
 #include "Debug.h"
 #include "DeclareFunction.h"
 #include "Diff.h"
@@ -50,7 +46,6 @@
 #include "HashSet.h"
 #include "InternalList.h"
 #include "Job.h"
-#include "Joystick.h"
 #include "Keyboard.h"
 #include "List.h"
 #include "ListElement.h"

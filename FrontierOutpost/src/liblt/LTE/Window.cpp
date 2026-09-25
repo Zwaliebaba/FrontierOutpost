@@ -40,7 +40,6 @@ namespace {
     Viewport viewport;
     V2U size;
     uint bpp;
-    bool captureMouse;
     bool hasFocus;
 
     WindowImpl(
@@ -51,7 +50,6 @@ namespace {
       title(title),
       size(size),
       bpp(32),
-      captureMouse(false),
       hasFocus(true)
     {
       viewport = Viewport_Create(0, size, 1, true);
@@ -95,34 +93,6 @@ namespace {
       return impl.isOpen();
     }
 
-    void SetCaptureMouse(bool captureMouse) {
-      this->captureMouse = captureMouse;
-    }
-
-    void SetCursorVisible(bool visible) {
-      impl.setMouseCursorVisible(visible);
-    }
-
-    void SetFullscreen() {
-      impl.create(sf::VideoMode(size.x, size.y, bpp), title, sf::Style::Fullscreen);
-      viewport->size.x = (float)impl.getSize().x;
-      viewport->size.y = (float)impl.getSize().y;
-      impl.setMouseCursorVisible(false);
-    }
-
-    void SetIcon(Texture2D const& icon) {
-      Array<uchar> buf(icon->GetMemory());
-      icon->GetData(buf.data());
-      impl.setIcon(
-        icon->GetWidth(),
-        icon->GetHeight(),
-        (sf::Uint8 const*)buf.data());
-    }
-
-    void SetPosition(V2I const& p) {
-      impl.setPosition(sf::Vector2i(p.x, p.y));
-    }
-
     void SetSync(bool sync) {
       impl.setVerticalSyncEnabled(sync);
     }
@@ -152,19 +122,6 @@ namespace {
 
         else if (e.type == sf::Event::MouseMoved) {
           V2I p(e.mouseMove.x, e.mouseMove.y);
-
-          if (captureMouse) {
-            const V2I borderSize = 1;
-            V2I s = (V2I)size - borderSize;
-            if (p.x < borderSize.x ||
-                p.y < borderSize.y ||
-                p.x > s.x ||
-                p.y > s.y)
-            {
-              p = Clamp(p, borderSize, s);
-              Mouse_SetPos(p);
-            }
-          }
           Mouse_UpdatePos(p);  
         }
 

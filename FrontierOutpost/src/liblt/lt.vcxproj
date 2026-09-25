@@ -88,7 +88,7 @@
       <SubSystem>Console</SubSystem>
       <IgnoreSpecificDefaultLibraries>libcmt;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-graphics$(SfmlSuffix).lib;sfml-network$(SfmlSuffix).lib;sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;freetype.lib;gdi32.lib;winmm.lib;ws2_32.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>sfml-graphics$(SfmlSuffix).lib;sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;freetype.lib;gdi32.lib;winmm.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
@@ -98,14 +98,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AI\NLPPhrase.cpp" />
-    <ClCompile Include="Audio\Envelopes.cpp" />
-    <ClCompile Include="Audio\Filters.cpp" />
-    <ClCompile Include="Audio\IO.cpp" />
-    <ClCompile Include="Audio\Signal.cpp" />
-    <ClCompile Include="Audio\Signal\Compress.cpp" />
-    <ClCompile Include="Audio\Signal\Delay.cpp" />
-    <ClCompile Include="Audio\Signal\Instrument.cpp" />
-    <ClCompile Include="Audio\Signal\Lowpass.cpp" />
     <ClCompile Include="Common.cpp" />
     <ClCompile Include="Component\Account.cpp" />
     <ClCompile Include="Component\Asset.cpp" />
@@ -314,22 +306,8 @@
     <ClCompile Include="Game\Task\Transport.cpp" />
     <ClCompile Include="Game\Task\Wait.cpp" />
     <ClCompile Include="Game\Universe.cpp" />
-    <ClCompile Include="Game\Widget\HUD.cpp" />
-    <ClCompile Include="LTE\Archive.cpp" />
-    <ClCompile Include="LTE\Axis.cpp" />
-    <ClCompile Include="LTE\Button\And.cpp" />
-    <ClCompile Include="LTE\Button\Joystick.cpp">
-      <ObjectFileName>$(IntDir)LTE\Button\</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="LTE\Button\Key.cpp" />
-    <ClCompile Include="LTE\Button\Mouse.cpp">
-      <ObjectFileName>$(IntDir)LTE\Button\</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="LTE\Button\Or.cpp" />
-    <ClCompile Include="LTE\Buttons.cpp" />
     <ClCompile Include="LTE\CollisionMesh.cpp" />
     <ClCompile Include="LTE\Color.cpp" />
-    <ClCompile Include="LTE\Config.cpp" />
     <ClCompile Include="LTE\CubeMap.cpp" />
     <ClCompile Include="LTE\Debug.cpp" />
     <ClCompile Include="LTE\Diff.cpp" />
@@ -376,9 +354,6 @@
     </ClCompile>
     <ClCompile Include="LTE\Geom.cpp" />
     <ClCompile Include="LTE\Grammar.cpp">
-      <ObjectFileName>$(IntDir)LTE\</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="LTE\Joystick.cpp">
       <ObjectFileName>$(IntDir)LTE\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="LTE\Keyboard.cpp">
@@ -504,16 +479,10 @@
     <ClCompile Include="LTE\ScriptAPI\String.cpp">
       <ObjectFileName>$(IntDir)LTE\ScriptAPI\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="LTE\ScriptAPI\StringList.cpp">
-      <ObjectFileName>$(IntDir)LTE\ScriptAPI\</ObjectFileName>
-    </ClCompile>
     <ClCompile Include="LTE\ScriptAPI\StringTree.cpp">
       <ObjectFileName>$(IntDir)LTE\ScriptAPI\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="LTE\ScriptAPI\Texture2D.cpp">
-      <ObjectFileName>$(IntDir)LTE\ScriptAPI\</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="LTE\ScriptAPI\Thread.cpp">
       <ObjectFileName>$(IntDir)LTE\ScriptAPI\</ObjectFileName>
     </ClCompile>
     <ClCompile Include="LTE\ScriptAPI\Timer.cpp">
@@ -594,11 +563,7 @@
     <ClCompile Include="Module\SoundEngine.cpp">
       <ObjectFileName>$(IntDir)Module\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="Module\SoundEngine\Null.cpp" />
     <ClCompile Include="Module\SoundEngine\XAudio2.cpp" />
-    <ClCompile Include="Strukt\CodeObject\Custom.cpp">
-      <ObjectFileName>$(IntDir)Strukt\CodeObject\</ObjectFileName>
-    </ClCompile>
     <ClCompile Include="ThirdParty\KDTree.cpp" />
     <ClCompile Include="ThirdParty\TriTriOverlap.cpp" />
     <ClCompile Include="UI\ClipRegion.cpp" />
@@ -668,16 +633,7 @@
     <ClInclude Include="AI\NLPPhrase.h" />
     <ClInclude Include="AI\Traits.h" />
     <ClInclude Include="AI\Types.h" />
-    <ClInclude Include="Audio\Audio.h" />
-    <ClInclude Include="Audio\Common.h" />
-    <ClInclude Include="Audio\Generator.h" />
-    <ClInclude Include="Audio\IO.h" />
-    <ClInclude Include="Audio\Note.h" />
-    <ClInclude Include="Audio\Signal.h" />
-    <ClInclude Include="Audio\Signals.h" />
     <ClInclude Include="BuildMode.h" />
-    <ClInclude Include="CodeGen\CodeBlock.h" />
-    <ClInclude Include="CodeGen\Common.h" />
     <ClInclude Include="Common.h" />
     <ClInclude Include="Component\Account.h" />
     <ClInclude Include="Component\Affectable.h" />
@@ -804,18 +760,13 @@
     <ClInclude Include="Game\Template.h" />
     <ClInclude Include="Game\Universe.h" />
     <ClInclude Include="Game\UpdateState.h" />
-    <ClInclude Include="Game\Widgets.h" />
-    <ClInclude Include="LTE\Archive.h" />
     <ClInclude Include="LTE\Array.h" />
     <ClInclude Include="LTE\AutoClass.h" />
     <ClInclude Include="LTE\AutoClass_Generated.h" />
     <ClInclude Include="LTE\AutoPtr.h" />
-    <ClInclude Include="LTE\Axis.h" />
     <ClInclude Include="LTE\BaseType.h" />
     <ClInclude Include="LTE\BaseVector.h" />
     <ClInclude Include="LTE\Bound.h" />
-    <ClInclude Include="LTE\Button.h" />
-    <ClInclude Include="LTE\Buttons.h" />
     <ClInclude Include="LTE\Call.h" />
     <ClInclude Include="LTE\Capsule.h" />
     <ClInclude Include="LTE\CollisionMesh.h" />
@@ -824,7 +775,6 @@
     <ClInclude Include="LTE\Compare_AutoPtr_Pointer.h" />
     <ClInclude Include="LTE\Compare_AutoPtr_Reference.h" />
     <ClInclude Include="LTE\Compare_Pointer_Reference.h" />
-    <ClInclude Include="LTE\Config.h" />
     <ClInclude Include="LTE\CubeMap.h" />
     <ClInclude Include="LTE\Cylinder.h" />
     <ClInclude Include="LTE\Data.h" />
@@ -870,7 +820,6 @@
     <ClInclude Include="LTE\IntrusiveList.h" />
     <ClInclude Include="LTE\Iterator.h" />
     <ClInclude Include="LTE\Job.h" />
-    <ClInclude Include="LTE\Joystick.h" />
     <ClInclude Include="LTE\Keyboard.h" />
     <ClInclude Include="LTE\LTE.h" />
     <ClInclude Include="LTE\LTSL.h" />
@@ -976,11 +925,6 @@
     <ClInclude Include="Module\SettingsEntry.h" />
     <ClInclude Include="Module\Sound.h" />
     <ClInclude Include="Module\SoundEngine.h" />
-    <ClInclude Include="Network\Client.h" />
-    <ClInclude Include="Network\Common.h" />
-    <ClInclude Include="Strukt\CodeObject.h" />
-    <ClInclude Include="Strukt\CodeObjects.h" />
-    <ClInclude Include="Strukt\Common.h" />
     <ClInclude Include="ThirdParty\KDTree.h" />
     <ClInclude Include="ThirdParty\SMAA_AreaTex.h" />
     <ClInclude Include="ThirdParty\SMAA_SearchTex.h" />
@@ -1005,10 +949,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\ext\SFML\src\SFML\Graphics\sfml-graphics.vcxproj">
       <Project>{E4D737A8-5A31-52DF-8381-124888276A50}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-    <ProjectReference Include="..\..\ext\SFML\src\SFML\Network\sfml-network.vcxproj">
-      <Project>{139004DE-98AF-57EC-808B-D5626C27E6AB}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
     <ProjectReference Include="..\..\ext\SFML\src\SFML\System\sfml-system.vcxproj">

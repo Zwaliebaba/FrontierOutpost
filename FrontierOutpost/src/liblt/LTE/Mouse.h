@@ -12,20 +12,13 @@ namespace LTE {
   LT_API bool Mouse_Pressed(MouseButton button);
   LT_API bool Mouse_Released(MouseButton button);
 
-  DeclareFunctionNoParams(Mouse_GetDP, V2)
-  DeclareFunctionNoParams(Mouse_GetDX, int)
-  DeclareFunctionNoParams(Mouse_GetDY, int)
-  DeclareFunctionNoParams(Mouse_GetIdleTime, float)
   DeclareFunctionNoParams(Mouse_GetPos, V2)
   DeclareFunctionNoParams(Mouse_GetPosImmediate, V2)
   DeclareFunctionNoParams(Mouse_GetPosLast, V2)
-  DeclareFunctionNoParams(Mouse_GetX, int)
-  DeclareFunctionNoParams(Mouse_GetY, int)
 
   LT_API float Mouse_GetDownTime(MouseButton button);
   DeclareFunctionNoParams(Mouse_GetScrollDelta, float)
 
-  LT_API void Mouse_SetPos(V2 const& v);
   LT_API void Mouse_SetPressed(MouseButton button, bool pressed);
   LT_API void Mouse_SetScrollDelta(float ds);
 

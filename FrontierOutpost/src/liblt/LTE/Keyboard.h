@@ -10,13 +10,9 @@ namespace LTE {
 
   LT_API void Keyboard_AddText(uchar c);
 
-  LT_API void Keyboard_Block();
-
   LT_API bool Keyboard_Down(Key key);
 
   LT_API Vector<Key> const& Keyboard_GetKeysPressed();
-
-  LT_API bool Keyboard_IsBlocked();
 
   LT_API void Keyboard_ModifyString(String& str, int& cursor);
 
@@ -36,10 +32,6 @@ namespace LTE {
 
   inline bool Keyboard_Shift() {
     return Keyboard_Down(Key_LShift) || Keyboard_Down(Key_RShift);
-  }
-
-  inline bool Keyboard_System() {
-    return Keyboard_Down(Key_LSystem) || Keyboard_Down(Key_RSystem);
   }
 }
 

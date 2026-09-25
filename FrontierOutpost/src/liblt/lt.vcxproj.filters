@@ -4,15 +4,6 @@
     <Filter Include="AI">
       <UniqueIdentifier>{8335D952-F2D9-5012-B0CE-D5EAEDB1C84D}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Audio">
-      <UniqueIdentifier>{0E77B520-E77B-53BD-B150-F235A17A902B}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Audio\Signal">
-      <UniqueIdentifier>{4B655464-F416-559D-9B1D-E75DFFD40FB8}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="CodeGen">
-      <UniqueIdentifier>{95761F42-3127-5476-ABD2-43442938D147}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Component">
       <UniqueIdentifier>{25BA0F75-EA92-54C4-B24A-EBC4530E7D58}</UniqueIdentifier>
     </Filter>
@@ -61,14 +52,8 @@
     <Filter Include="Game\Task">
       <UniqueIdentifier>{DCDBB493-9548-53A1-A265-709620BC3EC2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Game\Widget">
-      <UniqueIdentifier>{AB2F7505-29D4-543D-9BA4-051BF7EACA28}</UniqueIdentifier>
-    </Filter>
     <Filter Include="LTE">
       <UniqueIdentifier>{81CBDA40-ED64-57A3-806D-633C1FB100C7}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="LTE\Button">
-      <UniqueIdentifier>{8F7BC0AD-5E59-57D5-BFCE-D9766048B9BB}</UniqueIdentifier>
     </Filter>
     <Filter Include="LTE\Expression">
       <UniqueIdentifier>{C5725FF2-66C5-5477-8C28-A60D03443604}</UniqueIdentifier>
@@ -100,15 +85,6 @@
     <Filter Include="Module\SoundEngine">
       <UniqueIdentifier>{9DEBD71C-969E-579A-B2F7-166F01EB30DD}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Network">
-      <UniqueIdentifier>{0F35B6B4-4AAD-5637-975D-751B03691F6A}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Strukt">
-      <UniqueIdentifier>{9C2F70DE-783E-58CF-AB81-0D4615BC37BE}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Strukt\CodeObject">
-      <UniqueIdentifier>{AAB1F194-3054-59CD-943F-64D02EDBE6EB}</UniqueIdentifier>
-    </Filter>
     <Filter Include="ThirdParty">
       <UniqueIdentifier>{C1BA3B51-1AF6-5538-A822-D664CF1A3CB3}</UniqueIdentifier>
     </Filter>
@@ -137,30 +113,6 @@
   <ItemGroup>
     <ClCompile Include="AI\NLPPhrase.cpp">
       <Filter>AI</Filter>
-    </ClCompile>
-    <ClCompile Include="Audio\Envelopes.cpp">
-      <Filter>Audio</Filter>
-    </ClCompile>
-    <ClCompile Include="Audio\Filters.cpp">
-      <Filter>Audio</Filter>
-    </ClCompile>
-    <ClCompile Include="Audio\IO.cpp">
-      <Filter>Audio</Filter>
-    </ClCompile>
-    <ClCompile Include="Audio\Signal.cpp">
-      <Filter>Audio</Filter>
-    </ClCompile>
-    <ClCompile Include="Audio\Signal\Compress.cpp">
-      <Filter>Audio\Signal</Filter>
-    </ClCompile>
-    <ClCompile Include="Audio\Signal\Delay.cpp">
-      <Filter>Audio\Signal</Filter>
-    </ClCompile>
-    <ClCompile Include="Audio\Signal\Instrument.cpp">
-      <Filter>Audio\Signal</Filter>
-    </ClCompile>
-    <ClCompile Include="Audio\Signal\Lowpass.cpp">
-      <Filter>Audio\Signal</Filter>
     </ClCompile>
     <ClCompile Include="Common.cpp" />
     <ClCompile Include="Component\Account.cpp">
@@ -658,40 +610,10 @@
     <ClCompile Include="Game\Universe.cpp">
       <Filter>Game</Filter>
     </ClCompile>
-    <ClCompile Include="Game\Widget\HUD.cpp">
-      <Filter>Game\Widget</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\Archive.cpp">
-      <Filter>LTE</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\Axis.cpp">
-      <Filter>LTE</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\Button\And.cpp">
-      <Filter>LTE\Button</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\Button\Joystick.cpp">
-      <Filter>LTE\Button</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\Button\Key.cpp">
-      <Filter>LTE\Button</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\Button\Mouse.cpp">
-      <Filter>LTE\Button</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\Button\Or.cpp">
-      <Filter>LTE\Button</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\Buttons.cpp">
-      <Filter>LTE</Filter>
-    </ClCompile>
     <ClCompile Include="LTE\CollisionMesh.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
     <ClCompile Include="LTE\Color.cpp">
-      <Filter>LTE</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\Config.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
     <ClCompile Include="LTE\CubeMap.cpp">
@@ -794,9 +716,6 @@
       <Filter>LTE</Filter>
     </ClCompile>
     <ClCompile Include="LTE\Grammar.cpp">
-      <Filter>LTE</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\Joystick.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
     <ClCompile Include="LTE\Keyboard.cpp">
@@ -1024,16 +943,10 @@
     <ClCompile Include="LTE\ScriptAPI\String.cpp">
       <Filter>LTE\ScriptAPI</Filter>
     </ClCompile>
-    <ClCompile Include="LTE\ScriptAPI\StringList.cpp">
-      <Filter>LTE\ScriptAPI</Filter>
-    </ClCompile>
     <ClCompile Include="LTE\ScriptAPI\StringTree.cpp">
       <Filter>LTE\ScriptAPI</Filter>
     </ClCompile>
     <ClCompile Include="LTE\ScriptAPI\Texture2D.cpp">
-      <Filter>LTE\ScriptAPI</Filter>
-    </ClCompile>
-    <ClCompile Include="LTE\ScriptAPI\Thread.cpp">
       <Filter>LTE\ScriptAPI</Filter>
     </ClCompile>
     <ClCompile Include="LTE\ScriptAPI\Timer.cpp">
@@ -1162,14 +1075,8 @@
     <ClCompile Include="Module\SoundEngine.cpp">
       <Filter>Module</Filter>
     </ClCompile>
-    <ClCompile Include="Module\SoundEngine\Null.cpp">
-      <Filter>Module\SoundEngine</Filter>
-    </ClCompile>
     <ClCompile Include="Module\SoundEngine\XAudio2.cpp">
       <Filter>Module\SoundEngine</Filter>
-    </ClCompile>
-    <ClCompile Include="Strukt\CodeObject\Custom.cpp">
-      <Filter>Strukt\CodeObject</Filter>
     </ClCompile>
     <ClCompile Include="ThirdParty\KDTree.cpp">
       <Filter>ThirdParty</Filter>
@@ -1290,34 +1197,7 @@
     <ClInclude Include="AI\Types.h">
       <Filter>AI</Filter>
     </ClInclude>
-    <ClInclude Include="Audio\Audio.h">
-      <Filter>Audio</Filter>
-    </ClInclude>
-    <ClInclude Include="Audio\Common.h">
-      <Filter>Audio</Filter>
-    </ClInclude>
-    <ClInclude Include="Audio\Generator.h">
-      <Filter>Audio</Filter>
-    </ClInclude>
-    <ClInclude Include="Audio\IO.h">
-      <Filter>Audio</Filter>
-    </ClInclude>
-    <ClInclude Include="Audio\Note.h">
-      <Filter>Audio</Filter>
-    </ClInclude>
-    <ClInclude Include="Audio\Signal.h">
-      <Filter>Audio</Filter>
-    </ClInclude>
-    <ClInclude Include="Audio\Signals.h">
-      <Filter>Audio</Filter>
-    </ClInclude>
     <ClInclude Include="BuildMode.h" />
-    <ClInclude Include="CodeGen\CodeBlock.h">
-      <Filter>CodeGen</Filter>
-    </ClInclude>
-    <ClInclude Include="CodeGen\Common.h">
-      <Filter>CodeGen</Filter>
-    </ClInclude>
     <ClInclude Include="Common.h" />
     <ClInclude Include="Component\Account.h">
       <Filter>Component</Filter>
@@ -1694,12 +1574,6 @@
     <ClInclude Include="Game\UpdateState.h">
       <Filter>Game</Filter>
     </ClInclude>
-    <ClInclude Include="Game\Widgets.h">
-      <Filter>Game</Filter>
-    </ClInclude>
-    <ClInclude Include="LTE\Archive.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
     <ClInclude Include="LTE\Array.h">
       <Filter>LTE</Filter>
     </ClInclude>
@@ -1712,9 +1586,6 @@
     <ClInclude Include="LTE\AutoPtr.h">
       <Filter>LTE</Filter>
     </ClInclude>
-    <ClInclude Include="LTE\Axis.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
     <ClInclude Include="LTE\BaseType.h">
       <Filter>LTE</Filter>
     </ClInclude>
@@ -1722,12 +1593,6 @@
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="LTE\Bound.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
-    <ClInclude Include="LTE\Button.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
-    <ClInclude Include="LTE\Buttons.h">
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="LTE\Call.h">
@@ -1752,9 +1617,6 @@
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="LTE\Compare_Pointer_Reference.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
-    <ClInclude Include="LTE\Config.h">
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="LTE\CubeMap.h">
@@ -1890,9 +1752,6 @@
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="LTE\Job.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
-    <ClInclude Include="LTE\Joystick.h">
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="LTE\Keyboard.h">
@@ -2209,21 +2068,6 @@
     </ClInclude>
     <ClInclude Include="Module\SoundEngine.h">
       <Filter>Module</Filter>
-    </ClInclude>
-    <ClInclude Include="Network\Client.h">
-      <Filter>Network</Filter>
-    </ClInclude>
-    <ClInclude Include="Network\Common.h">
-      <Filter>Network</Filter>
-    </ClInclude>
-    <ClInclude Include="Strukt\CodeObject.h">
-      <Filter>Strukt</Filter>
-    </ClInclude>
-    <ClInclude Include="Strukt\CodeObjects.h">
-      <Filter>Strukt</Filter>
-    </ClInclude>
-    <ClInclude Include="Strukt\Common.h">
-      <Filter>Strukt</Filter>
     </ClInclude>
     <ClInclude Include="ThirdParty\KDTree.h">
       <Filter>ThirdParty</Filter>

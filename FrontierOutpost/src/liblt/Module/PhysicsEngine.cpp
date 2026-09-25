@@ -120,36 +120,6 @@ struct PhysicsEngineImpl : public PhysicsEngine {
   }
 };
 
-struct PhysicsEngineNullImpl : public PhysicsEngine {
-  bool CheckCollision(
-    ObjectT* e1,
-    ObjectT* e2,
-    V3* contactNormal)
-  {
-    return false;
-  }
-
-  bool Raycast(
-    WorldRay const& ray,
-    ObjectT* e,
-    float tMax,
-    float& tOut,
-    V3* normalOut)
-  {
-    return false;
-  }
-
-  char const* GetName() const {
-    return "PhysicsEngineNull";
-  }
-
-  void Update() {}
-};
-
 PhysicsEngine* CreatePhysicsEngine() {
   return new PhysicsEngineImpl;
-}
-
-PhysicsEngine* CreatePhysicsEngineNull() {
-  return new PhysicsEngineNullImpl;
 }

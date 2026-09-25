@@ -1,9 +1,7 @@
 #include "Settings.h"
 #include "SettingsEntry.h"
 
-#include "LTE/Axis.h"
 #include "LTE/AutoClass.h"
-#include "LTE/Button.h"
 #include "LTE/Color.h"
 #include "LTE/Hash.h"
 #include "LTE/Iterator.h"
@@ -113,32 +111,12 @@ namespace {
   };
 }
 
-GenericAxis Settings_Axis(String const& name, Axis const& defValue) {
-  SettingsNode& node = GetSettings().GetNode(name);
-  if (!node.value)
-    node.value = SettingsEntry_Axis(node.name, defValue);
-
-  GenericAxis g;
-  node.value->GetValue((void*)&g);
-  return g;
-}
-
 GenericBool Settings_Bool(String const& name, bool defValue) {
   SettingsNode& node = GetSettings().GetNode(name);
   if (!node.value)
     node.value = SettingsEntry_Bool(node.name, defValue);
 
   GenericBool g;
-  node.value->GetValue((void*)&g);
-  return g;
-}
-
-GenericButton Settings_Button(String const& name, Button const& defValue) {
-  SettingsNode& node = GetSettings().GetNode(name);
-  if (!node.value)
-    node.value = SettingsEntry_Button(node.name, defValue);
-
-  GenericButton g;
   node.value->GetValue((void*)&g);
   return g;
 }

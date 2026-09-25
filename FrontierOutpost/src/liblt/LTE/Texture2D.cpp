@@ -292,53 +292,6 @@ Texture2D Texture2D_Filter(Texture2D const& texture, Shader const& shader) {
   return self;
 }
 
-Texture2D Texture_Atlas(Vector<Texture2D> const& textures) {
-  LTE_ASSERT(textures.size() > 0);
-  uint width  = textures[0]->GetWidth();
-  uint height = textures[0]->GetHeight();
-
-  for (uint i = 1; i < textures.size(); ++i) {
-    Texture2D const& t = textures[i];
-    if (t->GetWidth() != width)
-      Log_Critical("Atlas texture widths do not match.");
-    if (t->GetHeight() != height)
-      Log_Critical("Atlas texture heights do not match.");
-  }
-
-  Texture2D self = Texture_Create(textures.size() * width, height);
-
-  Array<uchar> pixelBuffer(4 * width * height);
-  uint mipLevel = 0;
-  while (width > 0) {
-    for (uint i = 0; i < textures.size(); ++i) {
-      textures[i]->BindInput(0);
-      GL_GetTexImage(
-        GL_TextureTarget::T2D,
-        mipLevel,
-        GL_PixelFormat::RGBA,
-        GL_DataFormat::UnsignedByte,
-        pixelBuffer.data());
-
-      self->BindInput(0);
-      GL_TexSubImage2D(
-        GL_TextureTarget::T2D,
-        mipLevel,
-        width * i,
-        0,
-        width,
-        height,
-        GL_PixelFormat::RGBA,
-        GL_DataFormat::UnsignedByte,
-        pixelBuffer.data());
-    }
-
-    width /= 2;
-    height /= 2;
-    mipLevel++;
-  }
-  return self;
-}
-
 Texture2D Texture_Create(
   uint width,
   uint height,

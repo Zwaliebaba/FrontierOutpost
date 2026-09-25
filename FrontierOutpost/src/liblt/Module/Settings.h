@@ -8,17 +8,9 @@
 #include "UI/Common.h"
 #include "UI/Widget.h"
 
-LT_API GenericAxis Settings_Axis(
-  String const& name,
-  Axis const& defValue);
-
 LT_API GenericBool Settings_Bool(
   String const& name,
   bool defValue);
-
-LT_API GenericButton Settings_Button(
-  String const& name,
-  Button const& defValue);
 
 LT_API GenericColor Settings_Color(
   String const& name,

@@ -17,18 +17,6 @@
 
 #include "Module/Settings.h"
 
-// #define USE_TELEMETRY
-
-#ifdef LIBLT_LINUX
-  #ifdef USE_TELEMETRY
-    #define linux
-    #include "telemetry/telemetry.h"
-    #define TELEMETRY
-  #else
-    #include <iostream>
-  #endif
-#endif
-
 #include <algorithm>
 #include <cstring>
 #include <iostream>
@@ -60,66 +48,6 @@ struct StackFrame {
 };
 
 namespace {
-#ifdef TELEMETRY
-  HTELEMETRY g_context;
-
-  struct ProfilingModule : public ModuleT {
-    TmU8* arena;
-
-    ProfilingModule() {
-      tmLoadTelemetry(TM_LOAD_CHECKED_LIBRARY);
-      tmStartup();         // Only call this once
-
-      const unsigned int ARENA_SIZE = 2 * 1024 * 1024; // How much memory you want Telemetry to use
-      arena = (TmU8*) malloc( ARENA_SIZE );
-      tmInitializeContext( &g_context, (void*)arena, ARENA_SIZE );
-
-      if (tmOpen(
-            g_context,
-            "Limit Theory",
-            __DATE__ " " __TIME__,
-            "localhost",
-            TMCT_TCP,
-            TELEMETRY_DEFAULT_PORT,
-            TMOF_DEFAULT, 1000) != TM_OK )
-        Log_Warning("Could not connect to telemetry server");
-    }
-
-    ~ProfilingModule() {
-      tmClose(g_context);
-      tmShutdownContext(g_context);
-      tmShutdown();
-      free(arena);
-    }
-
-    void Auto(float duration) {}
-
-    void Flush() {}
-
-    char const* GetName() const {
-      return "Telemetry Profiler";
-    }
-
-    void Pop() {
-      tmLeave(g_context);
-    }
-
-    void Push(char const* name) {
-      tmEnter(g_context, TMZF_NONE, name, "");
-    }
-
-    void SetFlushes(bool flushes) {}
-    
-    void Start() {}
-    
-    void Stop() {}
-
-    void Update() {
-      tmTick(g_context);
-    }
-  };
-
-#else
   AutoClass(FrameSamples,
     StackFrame*, frame,
     uint, samples)
@@ -298,7 +226,6 @@ namespace {
       }
     }
   };
-#endif
 
   ProfilingModule* GetProfiler() {
     static Reference<ProfilingModule> profiler;

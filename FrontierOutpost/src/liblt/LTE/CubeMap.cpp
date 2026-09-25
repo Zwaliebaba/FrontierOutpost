@@ -209,24 +209,6 @@ namespace {
       return resolution;
     }
 
-    void SaveTo(String const& path, uint level) const {
-      uint res = GetLevelResolution(resolution, level);
-      Array<uchar> imageData(4 * res * res);
-      Bind();
-
-      for (uint i = 0; i < CubeFace::SIZE; ++i) {
-        GL_GetTexImage(
-          CubeFaceToTarget((CubeFace::Enum)i), level,
-          GL_PixelFormat::RGBA,
-          GL_DataFormat::UnsignedByte,
-          imageData.data());
-
-        sf::Image image;
-        image.create(res, res, (sf::Uint8*)imageData.data());
-        image.saveToFile(Stringize() | path | "_" | i | ".png");
-      }
-    }
-
     void SetData(
       CubeFace::Enum face,
       uint level,
