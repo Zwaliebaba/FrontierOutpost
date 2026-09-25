@@ -3,10 +3,9 @@
 How FrontierOutpost moves off OpenGL, GLEW, SFML and FreeType onto NeuronClient: Direct3D 12,
 DirectWrite, WIC, XAudio2 and Win32.
 
-- **Status:** Proposed, 2026-09-25. The owner took decisions N1–N12 the same day (§2). Phase 0 is
-  under way (§6): ADR-005 to ADR-013 are Proposed, the checkers run in CI, and the startup fixes are
-  in (`ea07b9c`). The `gl-final` tag waits for the owner to see the 16 kept apps start. Nothing of
-  NeuronClient exists yet.
+- **Status:** Proposed, 2026-09-25. The owner took decisions N1–N13 the same day (§2). Phase 0 is
+  done (§6): ADR-005 to ADR-013 are Proposed, the checkers run in CI, and the startup fixes are in
+  (`ea07b9c`). Phase 1 is under way. Nothing of NeuronClient exists yet.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
@@ -59,6 +58,7 @@ has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
 | N10 | **No AVX2.** NeuronClient states the instruction sets `lt` states: SSE2 on x64, and the compiler's default on ARM64. Inside `lt.dll`, a template or inline function that both libraries use keeps one copy, which the linker picks, so an AVX2 NeuronClient could run AVX2 code in liblt, even before a CPU check. There is no CPU floor beyond x64's and no check. | owner |
 | N11 | **liblt's shader folder is new code.** `FrontierOutpost/src/liblt/Shaders/` is carved out of ADR-001's exemption, so AGENTS.md's shader rules and the checkers, the registry check among them, apply to it. The rest of `lt` stays exempt. | owner |
 | N12 | **liblt keeps its own calls for OS services:** `SHGetFolderPath`, `GetModuleFileNameA`, `CreateDirectoryA`, `MessageBoxA` and DbgHelp in `LTE/OS.cpp`, `MessageBoxA` in `Common.cpp`'s assertion handler, and `WinMain` in `LTE/LTE.h`. NeuronClient takes what OpenGL, GLEW, SFML and FreeType did, and XAudio2. | owner |
+| N13 | **No `gl-final` tag and no frame-time comparison.** The OpenGL build stays in the history, but nothing marks it and nothing is measured against it. The owner judges each phase by the port itself. | owner |
 
 What N2 and N3 mean in practice. The first two points correct what the question offered:
 
@@ -107,8 +107,8 @@ What N2 and N3 mean in practice. The first two points correct what the question 
 3. **Nothing automatic can say the port looks right.** Under N3, CI can prove three things: the
    game builds, NeuronClient's tests pass, and each 3D app renders frames on WARP without a
    Direct3D 12 error. It cannot prove that the frames look right, that sound plays, or that ARM64
-   works. Those rest on the owner's GPU, speakers and ARM64 device, phase by phase. The last OpenGL
-   commit is tagged `gl-final`, so the old build can always be rebuilt for a side-by-side look.
+   works. Those rest on the owner's GPU, speakers and ARM64 device, phase by phase. There is no
+   tagged OpenGL build to compare against (N13).
 4. **ARM64 cannot be verified in CI.** No runner executes ARM64, and ARM64 GPU drivers see the
    least Direct3D 12 use. Every ARM64 claim waits for the owner's device.
 5. **This is a sixth NeuronClient.** Five repositories already carry copies that have drifted
@@ -431,9 +431,7 @@ Phase 3 touches nothing in liblt; it can start once step 1 of Phase 2 has landed
    - `.clang-tidy`'s `HeaderFilterRegex` names `FrontierCommander`, a leftover from another tree. As
      it stands, it would check no NeuronClient header.
    - The clang-format pin: `.clang-format` says 18.1.3, but `build.yml` installs 22.1.3.
-3. **Tag.** Last, once the owner has seen the 16 kept apps start (step 4): tag that commit
-   `gl-final`, the last OpenGL build known to run. A tag before the startup fixes would mark a build
-   in which most of those apps stop as they start.
+3. ~~**Tag.** Tag the last OpenGL build `gl-final`.~~ Dropped (N13).
 4. **Make the apps to keep start.**
    - **RandomScreenshot returns a plain colour (N8).** `Get` builds a 1×1 texture with calls
      scripts already have (`Texture2D_Create`, `BeginDrawTo`, `DrawClear`, `EndDrawTo`) and reads no
@@ -557,7 +555,6 @@ the smoke job is green.
    - All four builds, by hand.
    - The owner's GPUs.
    - A 30-minute soak of `war`, watching memory, the descriptor rings and deferred release.
-   - Frame time against `gl-final` on the same machine: recorded, but not a gate.
 
 ## 7. What each check can prove
 
@@ -662,7 +659,7 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 | Mixed build settings in one DLL | Always | Warning levels are harmless. `/arch` is not: a template or inline function both libraries use keeps one copy, which the linker picks, so NeuronClient states `lt`'s `/arch` (N10). Under `/fp:precise` and `lt`'s `/fp:fast`, such a copy rounds as either library would; nothing relies on bit-exact results (MIGRATION_NOTES.md BR6). The CRT must match (`/MD`). |
 | Missing-sound warnings hide broken content (N6) | Every app with sound | Phase 1's list of named sounds without a WAV file, re-run whenever sounds or scripts change. |
 | A converted WAV that XAudio2 cannot play stops the game (N9) | The first time that sound plays | Phase 1's check parses every named WAV by the engine's rules, before anything runs. |
-| No automatic acceptance (N3) | Every phase | The owner signs off each phase. `gl-final` is kept for a side-by-side look. |
+| No automatic acceptance (N3) | Every phase | The owner signs off each phase, by the port itself (N13). |
 
 ## 11. Not in this plan
 

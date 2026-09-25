@@ -14,8 +14,7 @@ apps, unreachable code, dead passes and shaders, and unused assets. What goes is
 Phase 1, 133 of the 169 shader files remain to port (plan §4.2, §5.6).
 
 Removal comes first, while OpenGL still renders, so a fault it causes cannot be the new renderer's
-(plan §1, §6). Phase 0 ends by tagging `gl-final`, the last OpenGL build known to run, once the
-owner has seen the kept apps start (plan Phase 0).
+(plan §1, §6). No tag marks the OpenGL build it starts from (N13).
 
 ## Decision
 
@@ -70,5 +69,5 @@ owner has seen the kept apps start (plan Phase 0).
 
 - **Porting any confirmed item** to Direct3D 12, HLSL or NeuronClient.
 - **Deleting anything a kept app still reaches,** whatever the survey said.
-- **Keeping unused material for later.** What goes stays in the history, and `gl-final` still
-  builds with it (plan §3, point 3).
+- **Keeping unused material for later.** What goes stays in the history, and nothing else keeps
+  it.
