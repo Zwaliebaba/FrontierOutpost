@@ -14,8 +14,9 @@ The owner then replaced FMOD Ex with XAudio2 on both platforms (D15, ADR-003, §
 repository's CI to build Debug|x64 (D19). **With that, Phase 2 is done: x64 Debug and Release
 build and link from a clean checkout (§16, run 7), and the repository's CI is green.** **Phase 3
 is done: x64 Debug and Release link at C++23** (§18), after one round of conformance fixes.
-**Phase 4 is done: ARM64 Debug and Release link** (§19). Next is Phase 5, verification. One
-question waits on the owner (O12).
+**Phase 4 is done: ARM64 Debug and Release link** (§19). **Phase 5 verified all four
+combinations from a clean state** (§20), and §21 is the final report. One question waits on the
+owner (O12).
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -883,7 +884,7 @@ Recorded, not to be done in this migration:
   `argv` is unused, and never closes the process and thread handles `CreateProcess` returns.
 - `sfml-audio` needs `std::auto_ptr` (`AudioDevice.cpp:110`, `:128`), and so C++14 (§18.1). SFML
   2.5.1 still has it; 2.6.0 replaced it (checked against both tags).
-- The original's 580 conversion warnings in `lt` (C4267, C4244; §19.3).
+- The original's 580 conversion warnings in `lt` (C4267, C4244; §21.4).
 - ARM64 builds use MSBuild's default cross compiler, the x86-hosted one (`HostX86\arm64`, §19.3).
   `PreferredToolArchitecture=x64` would select the 64-bit-hosted one, which has no 4 GB address
   space limit. Nothing has needed it.
@@ -1428,3 +1429,118 @@ warnings can be compared only once it compiles without error.
   differences are the C runtime's: ARM64 has no `VCRUNTIME140_1.dll`, which exists for x64 only,
   and its startup code imports a few more KERNEL32 functions.
 - **Not run:** no runner executes ARM64 (O4). Whether ARM64 also behaves like x64 depends on O12.
+
+## 20. Phase 5: verification
+
+### 20.1 All four combinations from a clean state
+
+Every job of the migration workflow starts on a fresh runner with a fresh checkout, so there is no
+`bin/`, `obj/` or other build state to delete: the clean state the brief asks for is where each job
+starts. [Migration run 12](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36109436424)
+(commit `a5444f1`) built all four with
+`msbuild FrontierOutpost.slnx /m /p:Configuration=<cfg> /p:Platform=<plat>`, MSBuild found through
+vswhere. Every later commit changes only this file.
+
+| Combination | Result | MSBuild's time | Warnings: MSBuild's total / unique |
+|---|---|---|---|
+| x64 Debug | links | 6 min 7 s | 613 / 585 |
+| x64 Release | links | 10 min 49 s | 613 / 585 |
+| ARM64 Debug | links | 6 min 19 s | 613 / 585 |
+| ARM64 Release | links | 9 min 40 s | 613 / 585 |
+
+Toolchain: MSVC 14.51.36231 (v145), Windows SDK 10.0.26100.0, MSBuild 18.9 and 18.10 on the
+`windows-2025-vs2026` runner image. The repository's own CI builds Debug|x64 on every pull request,
+and is green.
+
+### 20.2 No absolute paths, CMake files or generated-project artefacts
+
+- **No CMake file** (`CMakeLists.txt`, `*.cmake`, `CMakeCache.txt`, `cmake_install*`) anywhere in
+  `FrontierOutpost/`, and no `configure.py` (§15.1).
+- **No build file contains a drive letter, `CMake`, `ZERO_CHECK` or `ALL_BUILD`**: the solution,
+  the ten projects and their filters, `Directory.Build.props` and `src/resources.rc`, 23 files.
+  Every path in them is relative: to `$(FrontierOutpostDir)`, which is the shared props'
+  `$(MSBuildThisFileDirectory)`, to `$(SfmlDir)` below it, or to the project's own folder.
+- The words appear elsewhere only in files the build does not read:
+  - the original's `README.md` and `script/install_dependencies.sh`, copied unchanged, which
+    describe its CMake build (§13);
+  - SFML's `changelog.md`;
+  - substrings: OpenAL's `alcMakeContextCurrent`, FreeType's `"%s:\n"` trace formats, and a
+    `c:\temp\` example in a comment in `include/windirent.h`.
+
+### 20.3 `ltheory-old-main/` is unmodified
+
+Its tree is `112dc19d` at the branch point (`main`, `6d8b20e`) and at the branch's head. None of the
+branch's commits touches it, and the working tree has no change in it.
+
+### 20.4 Smoke test
+
+Dropped by the owner (D13). Nothing has been run: not the game, not its sound (O11), not ARM64
+(O4).
+
+## 21. Final report
+
+### 21.1 Each configuration
+
+**All four link**, from a clean state, with the same 585 unique warnings (§20.1):
+
+| | Debug | Release |
+|---|---|---|
+| **x64** | links (6 min 7 s) | links (10 min 49 s) |
+| **ARM64** | links (6 min 19 s) | links (9 min 40 s) |
+
+First-party code (`lt`, `launch`) compiles as `/std:c++latest` with `/permissive-` and
+`/Zc:__cplusplus`; five SFML projects as `/std:c++latest`; `sfml-audio` as C++14; FreeType and
+GLEW as C (§18.1).
+
+### 21.2 Deviations from the original build
+
+§10 has each with its reason. In short:
+
+- **Build system:** hand-written MSBuild in place of CMake; an output folder per platform and
+  configuration in place of one shared `bin/`; `/FC`; link lines without CMake's repetitions
+  (§10.2).
+- **Dependencies:** FreeType 2.5.5 and GLEW 1.7.0 built from source in place of prebuilt x86
+  binaries; no x86 binaries at all (§10.2, ADR-002, D14).
+- **Sound:** XAudio2 in place of FMOD Ex, WAV in place of Ogg, and no music engine (§10.3,
+  ADR-003).
+- **Language:** C++23 (`/std:c++latest`) and conformance mode for first-party code; C++23 for five
+  SFML projects (§10.4).
+- **Platforms:** x64 and ARM64, not Win32 (§10.2).
+
+### 21.3 BEHAVIOUR-RISK
+
+§12 has the detail. BR1: FreeType 2.5.5 in place of Win32's 2.3.5. BR2: GLEW built from source.
+BR3: XAudio2's mixer in place of FMOD's. BR4: what C++23 and `/permissive-` can change silently.
+BR5: three conditional expressions that now name their type (`LTE/Data.h:67`, `:248`,
+`LTE/ResourceMap.cpp:38`). BR6: ARM64's floating point.
+
+### 21.4 Remaining warnings, by category
+
+Identical in all four combinations; every one of them is the original's (§16, §18.3).
+
+| Code | What | Unique | Where |
+|---|---|---|---|
+| C4267 | `size_t` narrowed to a smaller integer: 64-bit's addition to the original's own | 358 | `lt` 356, SFML 2 |
+| C4244 | other narrowing conversions, such as `double` to `float` | 224 | `lt` |
+| C4996 | deprecated functions | 3 | SFML |
+
+By project: `lt` 580, `sfml-network` 3, `sfml-system` 1, `sfml-graphics` 1. The summary counts codes
+and projects separately; the split above follows from those totals and §9.4, which places every
+C4244 in `lt` and two C4267s in SFML. The unique counts include the continuation lines MSVC writes
+for a template's arguments (§18.3), so the number of distinct warnings is slightly lower. FreeType,
+at `/W4`, and GLEW raise none.
+
+### 21.5 Modernisation backlog
+
+§13: twelve items, among them the architecture detection that calls every Windows target 32-bit
+(H1), a relative user-data path, `offsetof` through null pointers, a leak in `OS_Spawn`,
+`sfml-audio`'s `auto_ptr`, and the warnings above.
+
+### 21.6 Open issues
+
+- **O12: the owner's decision.** Whether to fix the threaded jobs' hand-off, which ARM64's memory
+  ordering exposes (recommended), or to log it and leave it.
+- **O10 and O11: the owner's to do.** Convert the 79 Ogg sounds to WAV, then listen to them.
+- **O4:** ARM64 builds have not been run, for want of an ARM64 machine.
+- **O6:** the Win32 baseline's warning totals, a question about the measurement, not the product.
+- O1, O5 and O7 describe the environment and the source material. O2, O3, O8 and O9 are resolved.
