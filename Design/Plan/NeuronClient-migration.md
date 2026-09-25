@@ -3,7 +3,7 @@
 How FrontierOutpost moves off OpenGL, GLEW, SFML and FreeType onto NeuronClient: Direct3D 12,
 DirectWrite, WIC, XAudio2 and Win32.
 
-- **Status:** Proposed, 2026-09-25. The owner took decisions N1–N4 the same day (§2). Nothing in
+- **Status:** Proposed, 2026-09-25. The owner took decisions N1–N7 the same day (§2). Nothing in
   this plan has been built or run.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
@@ -48,6 +48,9 @@ has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
 | N2 | **Shaders are compiled at build time into headers.** | owner |
 | N3 | **Free to modernise.** Parity with the OpenGL build is not the acceptance bar, and there are no reference captures. | owner |
 | N4 | **Remove all four tiers of unused material:** toy and test apps, unreachable code, dead passes and shaders, unused assets (§9). | owner |
+| N5 | **AVX2 on x64.** NeuronClient compiles with `/arch:AVX2`, which puts the game's CPU floor at Intel Haswell or AMD Excavator. ARM64 keeps the compiler's default. | owner |
+| N6 | **A missing sound is a logged warning,** not the end of the program. The owner's WAV conversion (O10) can land whenever it is ready. | owner |
+| N7 | **Vsync stays off,** as it is today. | owner |
 
 What N2 and N3 mean in practice. The first two points correct what the question offered:
 
@@ -108,7 +111,7 @@ What N2 and N3 mean in practice. The first two points correct what the question 
      original author's folder. Seven kept apps and the DevPanel use it, and a failed load exits the
      program.
    - 9 of the 26 sounds the scripts play have no WAV yet (O10). Each stops the game the first time
-     it plays.
+     it plays; N6 turns that into a logged warning.
 
    Nothing can be checked at run time until both are fixed (Phase 0).
 
@@ -276,7 +279,7 @@ Not in NeuronClient:
     vertical flip of §5.5.
   - Two flip-discard buffers.
   - Vsync off, with tearing where supported, as the original asks
-    (`FrontierOutpost/src/launch/launch.cpp:41`).
+    (`FrontierOutpost/src/launch/launch.cpp:41`; N7).
   - Resize through `ResizeBuffers`.
   - No exclusive fullscreen: nothing uses it.
 - **Device removal.** DRED breadcrumbs and page-fault data go to the log, and the engine exits
@@ -410,15 +413,20 @@ Phase 3 touches nothing in liblt; it can start once step 1 of Phase 2 has landed
 3. **Tag.** Tag the last OpenGL commit `gl-final`.
 4. **Make the apps to keep start.**
    - Replace RandomScreenshot's hard-coded folder.
-   - Close O10: either the owner converts the Ogg sounds, or a missing sound becomes a logged
-     warning.
+   - A missing sound becomes a logged warning, naming each file once, and the sound plays silence
+     (N6). Today a missing file ends the program through `Log_Critical`
+     (`Module/SoundEngine/XAudio2.cpp:548-561`). A file that is present but that XAudio2 cannot play
+     still stops at the assertion handler, as ADR-003 has it: that is a broken asset, not a missing
+     one.
 
 **Done when:** the checkers run green in CI, and the 16 apps to keep start on the owner's GPU.
 
 ### Phase 1: Remove what is unused
 
 1. **Apps first.** Then re-run the reachability analysis, over C++ callers and script callers,
-   because removing the apps shrinks what everything else reaches.
+   because removing the apps shrinks what everything else reaches. The analysis also lists every
+   sound that code or scripts name and `GameData/sound` has no WAV for. That list, not the log, is
+   how N6's warnings stay visible.
 2. **Then the other tiers,** one commit each: code, then passes and shaders, then assets. The lists
    are in §9.
 3. **ADR-013** records what went.
@@ -437,6 +445,9 @@ OpenGL still renders throughout. Each step is its own commit.
      runner can run Direct3D 12.
    - A second test loads `d3dcompiler_47.dll` and reflects a compiled blob. The owner runs it on the
      ARM64 device as well.
+   - `launch.exe` checks the CPU for AVX2 before any NeuronClient code runs, and says so if it is
+     missing (N5). The alternative is an illegal-instruction crash (AGENTS.md R16). NeuronClient keeps
+     no dynamic initialisers, so nothing of it runs before that check.
 2. **Threads and clocks.** liblt moves to the standard library. No NeuronClient code is involved.
 3. **Images.**
    - `ImageFile` (WIC) replaces `sf::Image`.
@@ -532,7 +543,7 @@ mode renders offscreen and never creates one.
 | ADR | Decision |
 |---|---|
 | ADR-005 | NeuronClient is FrontierOutpost's platform layer (§5.1, §5.2). |
-| ADR-006 | NeuronClient builds for x64 and ARM64, amending AGENTS.md §3 (N1). It states `/arch`; see §12. |
+| ADR-006 | NeuronClient builds for x64 and ARM64, amending AGENTS.md §3 (N1). `/arch` is AVX2 on x64 and the default on ARM64 (N5). |
 | ADR-007 | Graphics is Direct3D 12, as the shared base of the NeuronClient projects: the policies of §5.3 and the conventions of §5.5. |
 | ADR-008 | Shaders are HLSL, compiled into headers by FXC at SM 5.1, with reflection by `D3DReflect` (§5.6). |
 | ADR-009 | SDF fields are interpreted by a compute shader (§5.7). |
@@ -544,7 +555,8 @@ mode renders offscreen and never creates one.
 **Changed.**
 - **ADR-001:** a scope note. NeuronClient and its tests are outside the exemption.
 - **ADR-002:** superseded. No vendored dependency is left.
-- **ADR-003:** amended. The engine's mechanism lives in NeuronClient; the adapter stays in liblt.
+- **ADR-003:** amended. The engine's mechanism lives in NeuronClient; the adapter stays in liblt. A
+  missing sound file becomes a logged warning (N6); a file XAudio2 cannot play still ends the program.
 - **ADR-004:** amended. `GameData/` holds no shaders, and the fonts are pruned.
 
 **Runtime files (R13).** None is added. Screenshots stay under `cache/screenshot/`. A PSO disk
@@ -607,7 +619,9 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 | The SDF interpreter is slow, or shapes change | `model`, `war` | Generation time measured on WARP and a GPU. Different shapes are acceptable under N3. |
 | Hitches the first time a PSO is used | The first seconds of each app | Known programs warmed at load. `ID3D12PipelineLibrary` later. |
 | Modernisation runs away | Phase 4 | Only the changes named in §5 go in; everything else is backlog. |
-| Mixed build settings in one DLL | Always | NeuronClient at `/W4 /WX /fp:precise`, inside `lt` at `/W3 /fp:fast`, is fine for a static library. The CRT must match (`/MD`), and NeuronClient's `/arch` sets the whole game's CPU floor (§12). |
+| Mixed build settings in one DLL | Always | NeuronClient at `/W4 /WX /fp:precise`, inside `lt` at `/W3 /fp:fast`, is fine for a static library. The CRT must match (`/MD`). |
+| The AVX2 floor (N5) shuts out older and low-power CPUs | Players' machines | Besides pre-Haswell and pre-Excavator CPUs, many low-power Pentium and Celeron chips lack AVX2. `launch.exe` checks at start and says so (Phase 2). |
+| Missing-sound warnings hide broken content (N6) | Every app with sound | Phase 1's list of named sounds without a WAV file, re-run whenever sounds or scripts change. |
 | No automatic acceptance (N3) | Every phase | The owner signs off each phase. `gl-final` is kept for a side-by-side look. |
 
 ## 11. Not in this plan
@@ -620,9 +634,7 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 
 ## 12. Still open for the owner
 
-1. **`/arch` on x64 (ADR-006).** AVX2, as the other NeuronClient projects use, raises the game's CPU
-   floor to Haswell or Excavator. SSE2 keeps today's floor.
-2. **O10.** Convert the Ogg sounds, or make a missing sound a warning.
-3. **RandomScreenshot.** What the background should be once the Dropbox folder is gone: the F1
-   screenshots in `cache/screenshot/`, or a plain colour.
-4. **Vsync.** Off, as now, or on.
+**RandomScreenshot.** What the background should be once the Dropbox folder is gone: the F1
+screenshots in `cache/screenshot/`, or a plain colour.
+
+N5–N7 settled the other open items: `/arch`, missing sounds and vsync.
