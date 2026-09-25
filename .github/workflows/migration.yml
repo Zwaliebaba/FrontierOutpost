@@ -458,6 +458,35 @@ jobs:
           python .github/migration/CommandLines.py --root "$env:GITHUB_WORKSPACE\FrontierOutpost=<src>" `
             --root "$env:MSVC_DIR=<MSVC>" --root "${env:ProgramFiles(x86)}\Windows Kits\10=<WindowsKits>" $log
 
+      # One-off, for Phase 3 (FrontierOutpost/MIGRATION_NOTES.md §18.3). The Phase 2 head compiles lt and
+      # launch as C++14. Built beside this checkout, it names the warnings the C++23 switch removed or
+      # added, where the summaries above only count them. Like the baseline, a reference that does not
+      # build is a result, reported as a warning. Both steps go once §18.3 records the answer.
+      - name: Check out the C++14 reference (Phase 2 head)
+        if: matrix.configuration == 'Debug'
+        uses: actions/checkout@v4
+        with:
+          ref: 2b2d405840ed3028df31d8384e5120d892f8821d
+          path: reference
+
+      - name: Build the C++14 reference and compare its warnings
+        if: matrix.configuration == 'Debug'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -prerelease -products * -requires Microsoft.Component.MSBuild `
+            -find 'MSBuild\**\Bin\amd64\MSBuild.exe' | Select-Object -First 1
+          $log = Join-Path $PWD "reference-$env:FO_PLATFORM-$env:FO_CONFIGURATION.log"
+          & $msbuild reference\FrontierOutpost.slnx /m /p:Configuration=$env:FO_CONFIGURATION /p:Platform=$env:FO_PLATFORM `
+            /nologo /v:quiet /clp:ErrorsOnly "/flp:LogFile=$log;Verbosity=normal"
+          $code = $LASTEXITCODE
+          Write-Output "== C++14 reference $env:FO_PLATFORM ${env:FO_CONFIGURATION}: exit code $code"
+          if ($code -ne 0) { Write-Output "::warning::The C++14 reference did not build (exit code $code)." }
+          python .github/migration/DiffWarnings.py `
+            "C++14 (Phase 2 head)=$log=$env:GITHUB_WORKSPACE\reference\FrontierOutpost" `
+            "C++23 (this commit)=build-$env:FO_PLATFORM-$env:FO_CONFIGURATION.log=$env:GITHUB_WORKSPACE\FrontierOutpost"
+
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -465,4 +494,5 @@ jobs:
           name: frontieroutpost-${{ matrix.platform }}-${{ matrix.configuration }}
           path: |
             build-*.log
+            reference-*.log
           if-no-files-found: ignore

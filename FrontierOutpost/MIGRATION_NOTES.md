@@ -12,8 +12,9 @@ user-facing strings keep their original names. `ltheory-old-main/` is read-only.
 the original, with identical warnings and matching command lines, and its link lacked only FMOD Ex.
 The owner then replaced FMOD Ex with XAudio2 on both platforms (D15, ADR-003, §17), and asked the
 repository's CI to build Debug|x64 (D19). **With that, Phase 2 is done: x64 Debug and Release
-build and link from a clean checkout (§16, run 7), and the repository's CI is green.** Phase 3,
-the C++23 bump, is in progress (§18).
+build and link from a clean checkout (§16, run 7), and the repository's CI is green.** **Phase 3
+is done: x64 Debug and Release link at C++23** (§18), after one round of conformance fixes. Next is
+Phase 4, ARM64.
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -1303,12 +1304,38 @@ what MSVC sees, and every source was scanned again. It found three: `Data.h:67` 
 
 ### 18.3 The build on the host
 
-**First attempt, commit `b076d03`** (Migration run 9, Build run 115): **`lt` did not compile**, so
-`launch` was not built. 167 errors, all C2445 at two places: `LTE/Data.h:248` (166, once per
-source that includes it) and `LTE/ResourceMap.cpp:38`. §18.2 explains why the container missed
-them; §11 and BR5 record the fix.
+**First attempt, commit `b076d03`**
+([Migration run 9](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36105704398),
+[Build run 115](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36105709300)):
+**`lt` did not compile**, so `launch` was not built. 167 errors, all C2445 at two places:
+`LTE/Data.h:248` (166, once per source that includes it) and `LTE/ResourceMap.cpp:38`. §18.2
+explains why the container missed them; §11 and BR5 record the fix.
 
 Everything else compiled, and it settles the SFML question: **the five SFML projects at C++23 raise
 exactly the warnings they raised at C++14** (`sfml-network` 3, `sfml-system` 1, `sfml-graphics` 1,
 `sfml-window` and `sfml-main` none), so they compile cleanly as §18.1 defines it. `lt`'s own
 warnings can be compared only once it compiles without error.
+
+**Second attempt, commit `8b61b97`**
+([Migration run 10](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36106720203),
+[Build run 116](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36106724883)):
+**gate passed.**
+
+- **Both x64 configurations link** from a clean checkout with
+  `msbuild FrontierOutpost.slnx /m /p:Configuration=<cfg> /p:Platform=x64`: Debug in 5 min 39 s,
+  Release in 11 min 2 s. Phase 2 took 4 min 3 s and 6 min 56 s; the increase is not analysed further.
+  The repository's own Debug|x64 build is green.
+- **The switches are the ones §18.1 sets**, from each project's compiler command line:
+  `/std:c++latest /permissive- /Zc:__cplusplus` for `lt` and `launch`, otherwise as in Phase 2;
+  `/std:c++latest /permissive` for the five SFML projects; `/std:c++14 /permissive` for
+  `sfml-audio`; FreeType and GLEW compile C (`/TC`) as before.
+- **Warnings: Phase 2's, less two.** 585 unique (C4267 358, C4244 224, C4996 3): `lt` 580,
+  `sfml-network` 3, `sfml-system` 1, `sfml-graphics` 1, in Debug and Release alike. Phase 2 had 587,
+  with two more C4244s in `lt`. No warning code is new: C++20's deprecation warnings (C5054, C5055)
+  and `/permissive-` raise nothing. A vanished conversion warning can mean a call now reaches another
+  overload (BR4), so the two are being named: the next commit's Debug job also builds the Phase 2
+  head beside it and lists the warnings the two builds do not share
+  (`.github/migration/DiffWarnings.py`).
+- **Binaries and imports: Phase 2's.** The same files, all x64, and per DLL the same imports as §16's
+  table: `lt.dll` imports `XAudio2_9.dll` and nothing of FMOD's, and `launch.exe` imports its 24
+  functions from `lt.dll`.
