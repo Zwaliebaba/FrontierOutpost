@@ -122,6 +122,7 @@
     <ClInclude Include="Check.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Repository.h" />
+    <ClInclude Include="TestDevice.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -134,6 +135,7 @@
     <ClCompile Include="KeyMapping.cpp" />
     <ClCompile Include="ShaderReflection.cpp" />
     <ClCompile Include="SoundParsing.cpp" />
+    <ClCompile Include="TextureTransfers.cpp" />
     <ClCompile Include="UnicodeText.cpp" />
     <ClCompile Include="WarpDevice.cpp" />
     <ClCompile Include="WindowEvents.cpp" />

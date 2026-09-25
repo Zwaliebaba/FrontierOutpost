@@ -10,6 +10,7 @@
 
 #include "Check.h"
 #include "GraphicsDevice.h"
+#include "TestDevice.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -26,41 +27,6 @@ namespace
 {
 
 using Microsoft::WRL::ComPtr;
-
-/// A device on WARP with the debug layer, and the failures it reported.
-struct TestDevice
-{
-  std::vector<std::string> failures;
-  Neuron::GraphicsDevice device; // after failures, which its onFailure writes to
-};
-
-void Open(TestDevice& _test)
-{
-  std::string error;
-  const Neuron::GraphicsDevice::Desc desc{.warp = true,
-                                          .debugLayer = true,
-                                          .gpuValidation = false,
-                                          .onFailure = [&_test](const std::string& _message) { _test.failures.push_back(_message); }};
-  Assert::IsTrue(Neuron::GraphicsDevice::Create(desc, _test.device, error), Widen(error).c_str());
-  // Direct3D 12 devices are singletons per adapter, so what the device logged before this test
-  // belongs to the tests before it.
-  static_cast<void>(_test.device.TakeDebugMessages());
-}
-
-/// No failure was reported, and the debug layer saw nothing wrong.
-void ExpectClean(TestDevice& _test)
-{
-  std::wstring faults;
-  for (const std::string& failure : _test.failures)
-  {
-    faults += Widen(failure) + L"; ";
-  }
-  for (const std::string& message : _test.device.TakeDebugMessages())
-  {
-    faults += Widen(message) + L"; ";
-  }
-  Assert::IsTrue(faults.empty(), faults.c_str());
-}
 
 } // namespace
 

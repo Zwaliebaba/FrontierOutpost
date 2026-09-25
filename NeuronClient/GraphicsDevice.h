@@ -1,6 +1,9 @@
 // NeuronClient/GraphicsDevice.h
 #pragma once
 
+#include "Buffer.h"
+#include "Texture.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -11,16 +14,22 @@
 namespace Neuron
 {
 
+class DrawContext;
+struct GraphicsCore;
+
 /// Direct3D 12 at feature level 11_0, on the default adapter or on WARP, with one direct queue and
 /// two frames in flight (Design/ADR/ADR-007). The CPU records a frame while the GPU runs the one
 /// before it, and waits only when it would get further ahead than that. Anything the GPU may still
-/// be using is released once the GPU has finished with it, never before. It is not thread-safe:
-/// one thread creates it, runs its frames and destroys it.
+/// be using is released once the GPU has finished with it, never before. Its textures and buffers
+/// keep what they need of it alive, so they may outlive it. It is not thread-safe: one thread
+/// creates it, runs its frames and destroys it.
 class GraphicsDevice
 {
 public:
   /// Frames the CPU may have submitted that the GPU has not finished.
   static constexpr std::uint32_t FRAMES_IN_FLIGHT = 2;
+
+  static constexpr std::uint32_t DEFAULT_UPLOAD_PAGE_BYTES = 4u << 20;
 
   struct Desc
   {
@@ -30,15 +39,19 @@ public:
     /// A call failed, or the device was removed. liblt ends the program here (ADR-007): nothing
     /// that depends on the device is recovered.
     std::function<void(const std::string&)> onFailure;
+    /// The size of each page of the upload ring, which constants, geometry and texture updates
+    /// share. An upload larger than a page gets a staging buffer of its own.
+    std::uint32_t uploadPageBytes = DEFAULT_UPLOAD_PAGE_BYTES;
   };
 
-  /// Creates the device and its queue. The debug layer, when asked for, is required: without
-  /// Windows' Graphics Tools it is not installed, and Create fails and says so. On failure
+  /// Creates the device, its queue and its context. The debug layer, when asked for, is required:
+  /// without Windows' Graphics Tools it is not installed, and Create fails and says so. On failure
   /// returns false and says why in _error.
   [[nodiscard]] static bool Create(const Desc& _desc, GraphicsDevice& _outDevice, std::string& _error);
 
   GraphicsDevice() noexcept;
-  /// Waits for the GPU to finish, then runs every release still waiting.
+  /// The device goes once its textures and buffers have: then it waits for the GPU to finish, and
+  /// runs every release still waiting.
   ~GraphicsDevice();
   GraphicsDevice(GraphicsDevice&& _other) noexcept;
   GraphicsDevice& operator=(GraphicsDevice&& _other) noexcept;
@@ -53,14 +66,25 @@ public:
 
   [[nodiscard]] bool IsDebugLayerOn() const noexcept;
 
+  /// A texture, or an empty one when it cannot be made, which onFailure is told about.
+  [[nodiscard]] Texture CreateTexture(const Texture::Desc& _desc);
+
+  /// A buffer, or an empty one when it cannot be made, which onFailure is told about.
+  [[nodiscard]] Buffer CreateBuffer(const Buffer::Desc& _desc);
+
+  /// The context that records the device's work. Only a created device has one.
+  [[nodiscard]] DrawContext& Context() noexcept;
+
   /// Starts the next frame. First waits until the GPU has finished the frame FRAMES_IN_FLIGHT
   /// before it, then runs the releases the GPU has finished with.
   void BeginFrame();
 
-  /// Ends the frame: submits it, and marks the queue so that its end can be waited for.
+  /// Ends the frame: submits what the context recorded, and marks the queue so that the frame's
+  /// end can be waited for.
   void EndFrame();
 
-  /// Waits until the GPU has finished everything submitted, then runs every release still waiting.
+  /// Submits what the context recorded, waits until the GPU has finished everything, and runs
+  /// every release still waiting.
   void WaitIdle();
 
   /// Frames begun so far.
@@ -71,8 +95,8 @@ public:
 
   /// Runs _release once the GPU has finished all the work submitted so far and all the work
   /// recorded for the current frame. Releases run in the order they were deferred, at the start
-  /// of a frame, in WaitIdle, or when the device is destroyed. The core releases its own objects
-  /// this way, so that nothing the GPU may still read goes away under it.
+  /// of a frame, in WaitIdle, or when the device goes. The core releases its own objects this way,
+  /// so that nothing the GPU may still read goes away under it.
   void DeferRelease(std::function<void()> _release);
 
   /// Releases waiting for the GPU.
@@ -83,9 +107,7 @@ public:
   [[nodiscard]] std::vector<std::string> TakeDebugMessages();
 
 private:
-  struct Native;
-
-  std::unique_ptr<Native> m_native;
+  std::shared_ptr<GraphicsCore> m_core;
 };
 
 } // namespace Neuron
