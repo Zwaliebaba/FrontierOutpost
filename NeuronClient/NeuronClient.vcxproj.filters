@@ -11,10 +11,22 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AudioDevice.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ComScope.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Float3.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="ImageFile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="FontFace.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SoundBuffer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Unicode.h">
@@ -25,10 +37,16 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AudioDevice.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="ImageFile.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="FontFace.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SoundBuffer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Unicode.cpp">

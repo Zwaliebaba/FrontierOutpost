@@ -7,6 +7,7 @@
 
 #include "Check.h"
 #include "FontFace.h"
+#include "Repository.h"
 #include "Unicode.h"
 
 #include <algorithm>
@@ -22,19 +23,6 @@ namespace
 {
 
 constexpr float EM_SIZE_PIXELS = 64.0f;
-constexpr int MODULE_ANCHOR = 0;
-
-/// The repository, found from this library: the tests build into <repository>\<platform>\<configuration>.
-std::filesystem::path Repository()
-{
-  HMODULE self = nullptr;
-  GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                     reinterpret_cast<LPCWSTR>(&MODULE_ANCHOR), &self);
-  std::wstring path(MAX_PATH, L'\0');
-  const DWORD length = GetModuleFileNameW(self, path.data(), static_cast<DWORD>(path.size()));
-  path.resize(length);
-  return std::filesystem::path(path).parent_path().parent_path().parent_path();
-}
 
 std::filesystem::path WindowsFonts()
 {

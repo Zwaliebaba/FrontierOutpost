@@ -2,8 +2,9 @@
 
 - **Status:** Accepted (owner, 2026-09-25, after the migration's first x64 build). Amended
   (owner, 2026-09-25): a missing sound file plays silence, by N6 and N9 of
-  `Design/Plan/NeuronClient-migration.md`.
-- **Scope:** `FrontierOutpost/`
+  `Design/Plan/NeuronClient-migration.md`. Amended in that plan's Phase 2 (2026-09-25), as its §8
+  and ADR-005 have it: the mechanism lives in NeuronClient, and liblt keeps an adapter.
+- **Scope:** `FrontierOutpost/`, and the sound in `NeuronClient/`
 - **Detail:** `FrontierOutpost/MIGRATION_NOTES.md` D15–D18, §11, §12 (BR3, BR9) and §17. This
   supersedes ADR-002's FMOD Ex row.
 
@@ -30,14 +31,20 @@ corresponds to FMOD's Event System or Designer projects.
 
 ## Decision
 
-1. **`src/liblt/Module/SoundEngine/XAudio2.cpp` implements `SoundEngine` with XAudio2 and
-   X3DAudio, on x64 and ARM64.** `launch` starts it (`SoundEngine_XAudio2()`). It reproduces what
-   `Fmod.cpp` configured:
+1. **XAudio2 and X3DAudio play every sound, on x64 and ARM64.** The mechanism is NeuronClient's
+   (ADR-005): `Neuron::AudioDevice` and its voices, `Neuron::SoundBuffer`, which reads WAV files,
+   and `Neuron::PanMatrix`. `src/liblt/Module/SoundEngine/XAudio2.cpp` is the adapter that
+   implements `SoundEngine` over them, and `launch` starts it (`SoundEngine_XAudio2()`). Together
+   they reproduce what `Fmod.cpp` configured:
    - positions relative to the camera, and FMOD's inverse rolloff from `50 × distanceDiv`, up to
      a distance of 100,000;
    - FMOD's speed of sound for the Doppler shift;
    - FMOD Ex's pan law for 2D sounds, and `SetPitch` as 44,100 Hz times the pitch;
-   - every failed call ends the program through liblt's assertion handler.
+   - every failed call ends the program through liblt's assertion handler. NeuronClient reports a
+     failed call and carries on; the adapter makes the report fatal.
+
+   The adapter keeps the policy: the camera as listener, carriers, the `distanceDiv` mapping, the
+   numbers above, and where sound files are found.
 2. **Sounds are WAV files.** The owner converts the Ogg files to WAV: 24 of them, since the
    NeuronClient plan's Phase 1 removed the 55 that nothing names (ADR-013). Code and scripts name
    the WAV files. The two Ogg files whose WAV name is already taken convert to `<name>_ogg.wav`.
@@ -45,7 +52,10 @@ corresponds to FMOD's Event System or Designer projects.
      every sound played from it is created finished. So the conversion can land whenever it is
      ready.
    - **A file that is there but that XAudio2 cannot play ends the program**, through the
-     assertion handler (N9). It is a broken asset, not a missing one.
+     assertion handler (N9). It is a broken asset, not a missing one. `Neuron::SoundBuffer` reads
+     a file by `Build/CheckSounds.py`'s rules, and the message gives the checker's reason, so a
+     file the checker passes is one the engine reads. It is refused when it is first read, with an
+     audio device or without one.
 3. **All FMOD material is deleted:** `Fmod.cpp` and `Fmod.h`, `MusicEngine.cpp`, `MusicEngine.h`,
    `MusicEngine/LtheoryTest01.h`, `include/FMOD`, and `resource/music`.
 4. **No new dependency.** XAudio2 is linked through the Windows SDK's `xaudio2.lib`, and needs

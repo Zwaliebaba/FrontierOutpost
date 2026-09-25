@@ -9,11 +9,12 @@ GameData/sound holds the file. A missing one does not fail the check: the engine
 the first time it is played and plays silence (N6), so this list, not the log, is where a missing
 sound shows.
 
-It then reads every WAV file in GameData/sound as the engine does (SoundData::Read in
-FrontierOutpost/src/liblt/Module/SoundEngine/XAudio2.cpp), and checks its format against those
-XAudio2 plays: PCM at 8, 16, 24 or 32 bits, 32-bit IEEE float, either of them through
-WAVE_FORMAT_EXTENSIBLE, and Microsoft ADPCM with its standard coefficients. A file that fails
-stops the game the first time it is played (N9), and fails the check.
+It then reads every WAV file in GameData/sound as the engine does, and checks its format against
+those XAudio2 plays: PCM at 8, 16, 24 or 32 bits, 32-bit IEEE float, either of them through
+WAVE_FORMAT_EXTENSIBLE, and Microsoft ADPCM with its standard coefficients. The engine's reader,
+Neuron::SoundBuffer::FromWav in NeuronClient/SoundBuffer.cpp, applies Problem()'s rules in the same
+order and refuses a file in the same words, so the two change together. A file that fails stops the
+game the first time it is played (N9), and fails the check.
 
 Exit 0 when every WAV file there can be played, whatever is missing; 1 otherwise.
 """

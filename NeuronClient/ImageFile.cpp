@@ -4,6 +4,7 @@
 #include <objbase.h>
 #include <wincodec.h>
 
+#include "ComScope.h"
 #include "ImageFile.h"
 
 #include <climits>
@@ -23,31 +24,6 @@ namespace
 using Microsoft::WRL::ComPtr;
 
 constexpr std::size_t BYTES_PER_PIXEL = 4;
-
-/// COM on the calling thread for as long as this lives. A thread that already has COM, in either
-/// apartment, keeps it as it is.
-class ComScope
-{
-public:
-  ComScope() noexcept
-    : m_result(CoInitializeEx(nullptr, COINIT_MULTITHREADED))
-  {
-  }
-
-  ~ComScope()
-  {
-    if (SUCCEEDED(m_result))
-    {
-      CoUninitialize();
-    }
-  }
-
-  ComScope(const ComScope&) = delete;
-  ComScope& operator=(const ComScope&) = delete;
-
-private:
-  HRESULT m_result;
-};
 
 bool Succeeded(HRESULT _result, const char* _step, std::string& _error)
 {
