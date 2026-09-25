@@ -93,10 +93,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="ImageFile.h" />
+    <ClInclude Include="FontFace.h" />
+    <ClInclude Include="Unicode.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ImageFile.cpp" />
+    <ClCompile Include="FontFace.cpp" />
+    <ClCompile Include="Unicode.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>

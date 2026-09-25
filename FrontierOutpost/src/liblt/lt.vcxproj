@@ -20,15 +20,16 @@
     - Two definitions that the original's generator added are gone: nothing reads them (§10).
 
     The link line keeps the original's order, with ADR-002's substitutions:
-    - glew32s and freetype are built in this solution;
+    - glew32s is built in this solution, and NeuronClient replaces FreeType (ADR-010);
     - xaudio2.lib, from the Windows SDK, stands where FMOD Ex's two libraries stood (ADR-003);
     - the Windows import libraries are the original's default set, without odbc32/odbccp32, which
       MSBuild would otherwise add.
     The references build the libraries first. They do not link them (LinkLibraryDependencies=false),
-    which keeps the order explicit, as the original did.
+    which keeps the order explicit, as the original did. NeuronClient's is the exception: its
+    library is linked through its reference (ADR-005).
 
     The original's POST_BUILD step copied the FMOD Ex, FreeType and zlib DLLs next to lt.dll. None of
-    them is left to copy: FreeType is linked statically, and XAudio2 is part of Windows.
+    them is left to copy: DirectWrite and XAudio2, which replace them, are part of Windows.
   -->
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -73,7 +74,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(SolutionDir)NeuronClient;$(FrontierOutpostDir)include;$(FrontierOutpostDir)include\FreeType;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(SolutionDir)NeuronClient;$(FrontierOutpostDir)include;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ExceptionHandling>SyncCThrow</ExceptionHandling>
       <FloatingPointModel>Fast</FloatingPointModel>
@@ -88,7 +89,7 @@
       <SubSystem>Console</SubSystem>
       <IgnoreSpecificDefaultLibraries>libcmt;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;freetype.lib;gdi32.lib;winmm.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;gdi32.lib;winmm.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
@@ -920,10 +921,6 @@
     </ProjectReference>
     <ProjectReference Include="..\..\ext\SFML\src\SFML\Window\sfml-window.vcxproj">
       <Project>{9485D241-96B7-504D-93A1-627D479EB4E3}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-    <ProjectReference Include="..\..\ext\freetype\freetype.vcxproj">
-      <Project>{8A9EE6C8-6DFE-532D-9C6B-51BC37EE4E19}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
     <ProjectReference Include="..\..\ext\glew\glew.vcxproj">

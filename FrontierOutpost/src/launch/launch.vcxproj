@@ -56,7 +56,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;$(FrontierOutpostDir)include\FreeType;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ExceptionHandling>SyncCThrow</ExceptionHandling>
       <FloatingPointModel>Fast</FloatingPointModel>
@@ -68,13 +68,13 @@
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ResourceCompile>
-      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;$(FrontierOutpostDir)include\FreeType;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(FrontierOutpostDir)src\liblt;$(FrontierOutpostDir)include;$(FrontierOutpostDir)ext\SFML\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_WINDOWS;SFML_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;lt.lib;winmm.lib;gdi32.lib;xaudio2.lib;glew32s.lib;freetype.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>sfml-system$(SfmlSuffix).lib;sfml-window$(SfmlSuffix).lib;opengl32.lib;glu32.lib;lt.lib;winmm.lib;gdi32.lib;xaudio2.lib;glew32s.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
@@ -112,10 +112,6 @@
     </ProjectReference>
     <ProjectReference Include="..\..\ext\SFML\src\SFML\Window\sfml-window.vcxproj">
       <Project>{9485D241-96B7-504D-93A1-627D479EB4E3}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-    <ProjectReference Include="..\..\ext\freetype\freetype.vcxproj">
-      <Project>{8A9EE6C8-6DFE-532D-9C6B-51BC37EE4E19}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
     <ProjectReference Include="..\..\ext\glew\glew.vcxproj">
