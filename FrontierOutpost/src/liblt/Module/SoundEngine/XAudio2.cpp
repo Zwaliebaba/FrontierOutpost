@@ -42,7 +42,9 @@
    - the Doppler shift uses FMOD's speed of sound, and velocities are scaled by kVelocityScale;
    - a 2D sound is panned by FMOD Ex's pan law, and SetPitch sets 44100 Hz times the pitch;
    - a failed call ends the program through the engine's assertion handler.
-   Sounds are WAV files. XAudio2 has no virtual voices: every voice is mixed, up to kMaxVoices. */
+   Sounds are WAV files. A missing one plays silence, where FMOD's engine ended the program: the
+   owner's conversion of the Ogg sounds can land when it is ready. XAudio2 has no virtual voices:
+   every voice is mixed, up to kMaxVoices. */
 
 const float kDistanceScale = 50.0f;
 const float kVelocityScale = 1.0f / 50.0f;
@@ -545,31 +547,39 @@ namespace {
       listener.Velocity.z = velocity.z;
     }
 
+    /* A missing file is named once, as a warning, and has no samples, so its sounds play silence.
+       A file that is there but that XAudio2 cannot play is a broken asset, and ends the program. */
     SoundData const* GetSource(String const& file) {
       String path = kDefaultSoundPath + file;
       if (!sources.contains(path)) {
-        AutoPtr< Array<uchar> > arr = Location_Resource(path)->Read();
-        if (!arr)
-          Log_Critical("Failed to read sound " + file);
-
+        Location location = Location_Resource(path);
         SoundData* source = new SoundData;
-        if (!source->Read(*arr)) {
-          std::stringstream stream;
-          stream << "XAudio2: " << path.c_str() << " is not a WAV file XAudio2 can play";
-          LTE_ASSERT_FAILURE(__FILE__, __LINE__, stream.str().c_str());
+        if (!location->Exists()) {
+          Log_Warning("XAudio2: " + path + " is missing, so it plays silence");
+          source->Set(Array<float>());
+        } else {
+          AutoPtr< Array<uchar> > arr = location->Read();
+          if (!arr)
+            Log_Critical("Failed to read sound " + file);
+
+          if (!source->Read(*arr)) {
+            std::stringstream stream;
+            stream << "XAudio2: " << path.c_str() << " is not a WAV file XAudio2 can play";
+            LTE_ASSERT_FAILURE(__FILE__, __LINE__, stream.str().c_str());
+          }
         }
         sources[path] = source;
       }
       return sources[path];
     }
 
-    /* A new voice, stopped, with the sound queued on it. Without a device or a free voice, the
-       sound is created finished. */
+    /* A new voice, stopped, with the sound queued on it. Without a device, a free voice or any
+       samples, the sound is created finished. */
     SoundImpl* CreateSound(SoundData const* data, String const& name, bool looped) {
       SoundImpl* s = new SoundImpl(this, data);
       s->looped = looped;
       live << s;
-      if (silent || !master)
+      if (silent || !master || !data->frames)
         return s;
 
       if (voices >= kMaxVoices) {

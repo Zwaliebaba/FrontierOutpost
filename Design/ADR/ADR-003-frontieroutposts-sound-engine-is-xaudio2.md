@@ -1,8 +1,10 @@
 # ADR-003: FrontierOutpost's sound engine is XAudio2
 
-- **Status:** Accepted (owner, 2026-09-25, after the migration's first x64 build)
+- **Status:** Accepted (owner, 2026-09-25, after the migration's first x64 build). Amended
+  (owner, 2026-09-25): a missing sound file plays silence, by N6 and N9 of
+  `Design/Plan/NeuronClient-migration.md`.
 - **Scope:** `FrontierOutpost/`
-- **Detail:** `FrontierOutpost/MIGRATION_NOTES.md` D15–D18, §11, §12 (BR3) and §17. This
+- **Detail:** `FrontierOutpost/MIGRATION_NOTES.md` D15–D18, §11, §12 (BR3, BR9) and §17. This
   supersedes ADR-002's FMOD Ex row.
 
 ## Context
@@ -38,6 +40,11 @@ corresponds to FMOD's Event System or Designer projects.
    - every failed call ends the program through liblt's assertion handler.
 2. **Sounds are WAV files.** The owner converts the 79 Ogg files to WAV. Code and scripts name
    the WAV files. The two Ogg files whose WAV name is already taken convert to `<name>_ogg.wav`.
+   - **A missing file plays silence** (amendment, N6). The log names it once, as a warning, and
+     every sound played from it is created finished. So the conversion can land whenever it is
+     ready.
+   - **A file that is there but that XAudio2 cannot play ends the program**, through the
+     assertion handler (N9). It is a broken asset, not a missing one.
 3. **All FMOD material is deleted:** `Fmod.cpp` and `Fmod.h`, `MusicEngine.cpp`, `MusicEngine.h`,
    `MusicEngine/LtheoryTest01.h`, `include/FMOD`, and `resource/music`.
 4. **No new dependency.** XAudio2 is linked through the Windows SDK's `xaudio2.lib`, and needs

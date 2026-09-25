@@ -804,9 +804,10 @@ only. §15.4 gives the reasoning for each entry.
 
 ## 11. Code changes
 
-Phases 1 and 2 changed no source file. The XAudio2 port (D15–D17, §17), Phase 3 (§18) and the
-owner's later decisions (D20, D23, D26–D28) change these. Paths are in `FrontierOutpost/`, except
-those in `GameData/`, which is `resource/` since D26:
+Phases 1 and 2 changed no source file. The XAudio2 port (D15–D17, §17), Phase 3 (§18), the
+owner's later decisions (D20, D23, D26–D28) and Phase 0 of the NeuronClient plan
+(`Design/Plan/NeuronClient-migration.md`, N6, N8 and N9) change these. Paths are in
+`FrontierOutpost/`, except those in `GameData/`, which is `resource/` since D26:
 
 | File | Change | Why |
 |---|---|---|
@@ -831,6 +832,10 @@ those in `GameData/`, which is `resource/` since D26:
 | `script/tloc.py:30` | counts `../GameData/` in place of `resource/` | D26 |
 | `README.md` (again) | where the assets are, and `launch.exe` started from anywhere | D26–D28 |
 | `src/liblt/LTE/OS.cpp:202-204` | `OS_Spawn` hands `CreateProcess` a writable, empty `char commandLine[]` in place of the literal `""` | Phase 3: `/permissive-` includes `/Zc:strictStrings`, which refuses a string literal as `LPSTR` (C2664). The API documents the parameter as writable. The command line is empty either way, so nothing changes at run time |
+| `src/liblt/Module/SoundEngine/XAudio2.cpp:45-47`, `:550-574`, `:576-583` | a sound file that is missing is named once in the log, as a warning, and has no samples, so every sound played from it is created finished. A file that is there but that XAudio2 cannot play still ends the program | N6, N9. BR9 |
+| `GameData/script/Texture/RandomScreenshot.lts` | `Get` returns a 1×1 texture cleared to one colour, `Fill`, a dark grey, in place of a screenshot picked from `/home/josh/Dropbox/lt/screenshot`. The branch through `Texture/Filters:Artistic`, which its `switch` never took, goes with it | N8: the folder is the original author's, so seven kept apps, `launcher` and the DevPanel ended the program as they started. BR10 |
+| `GameData/script/App/image.lts:7-9` | the editor opens RandomScreenshot's colour, in place of `data/screenshot/29.png` | N8: the file exists nowhere, so the app ended the program as it started. BR10 |
+| `GameData/script/Widget/ImageEditor.lts:23` | the load of `data/screenshot/10.png` into `tex2`, which nothing read, is removed | the same |
 
 ## 12. BEHAVIOUR-RISK register
 
@@ -928,6 +933,22 @@ those in `GameData/`, which is `resource/` since D26:
     `App/ui.lts:133`, `Widget/DevPanel/Apps.lts:4`, `Widget/FontPreview.lts:1`). The original's
     `../lt/resource/` found it only in a checkout folder named `lt`.
   - The Windows branch of `OS_GetExecutableDir` has been compiled, not run (§22.2).
+- **BR9: a missing sound plays silence** (N6), `src/liblt/Module/SoundEngine/XAudio2.cpp:550-583`.
+  The original ended the program through `Log_Critical` the first time a sound whose file is
+  missing played (`Fmod.cpp:435-437`), and so did this engine until now. Now the log names the
+  file once, as a warning, and every sound played from it is created finished, as with no audio
+  device (BR3). A game that plays a missing sound carries on, silently where the sound would be.
+  - A file that is there but that XAudio2 cannot play is a broken asset, and still ends the
+    program through the assertion handler (N9).
+  - The same rule creates finished a sample buffer with no samples, which nothing in the built
+    program plays.
+  - Compiled, not run.
+- **BR10: the screenshot backdrop is a plain colour** (N8),
+  `GameData/script/Texture/RandomScreenshot.lts`. The original picked a screenshot from its
+  author's folder, `/home/josh/Dropbox/lt/screenshot`, which no other machine has, so seven kept
+  apps, `launcher` and the DevPanel ended the program as they started. They now start, on a dark
+  grey. The `image` app opens the same colour, in place of a file that exists nowhere
+  (`GameData/script/App/image.lts:7-9`). Not run.
 
 ## 13. Modernisation backlog
 
@@ -996,8 +1017,8 @@ Recorded, not to be done in this migration:
   said (§8.3 item 4, D11), because GitHub refuses their LFS pointer files. **Resolved by D14:**
   they are left out.
 - **O10** (D16) **The WAV conversion is the owner's, and pending.** Until the 79 converted files
-  are in the runtime assets, each of those sounds stops the program, through the assertion
-  handler, the first time it plays. The rule: `GameData/sound/<name>.ogg` becomes
+  are in the runtime assets, each of those sounds plays silence, and the log names its file once,
+  as a warning (BR9). Until N6, each stopped the program the first time it played. The rule: `GameData/sound/<name>.ogg` becomes
   `GameData/sound/<name>.wav`, except `ui/objectmenuopen.ogg` and `warpnode/exit.ogg`, which become
   `<name>_ogg.wav`. The formats XAudio2 plays are PCM (16-bit, at the file's own rate and channel
   count, is lossless against the decoded Vorbis), IEEE float and MS-ADPCM. It does not play
@@ -1823,5 +1844,5 @@ converts them to WAV offline (D29). D16 stands, so the code and the scripts keep
   file is left.
 - **Still to do (O10).** The engine plays WAV files only. The code names `<name>.wav`, or
   `<name>_ogg.wav` for `ui/objectmenuopen` and `warpnode/exit`, whose `.wav` names are taken.
-  Until the converted files are in `GameData/sound/`, each of those sounds stops the game the
-  first time it plays.
+  Until the converted files are in `GameData/sound/`, each of those sounds plays silence, and the
+  log names it once (BR9).

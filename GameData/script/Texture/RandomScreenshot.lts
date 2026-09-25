@@ -1,16 +1,11 @@
-function Texture Get ()
-  var path "/home/josh/Dropbox/lt/screenshot"
-  while path.IsDirectory
-    path += "/"
-    var contents path.ListDir
-    var selection (contents.Get (Int_Random contents.Size))
-    path += selection
+# A plain colour, in place of a screenshot from the original author's folder (N8).
 
-  switch
-    true
-      Texture_LoadFrom
-        Location_File path
-    otherwise
-      Texture/Filters:Artistic
-        Texture_LoadFrom
-          Location_File path
+function Color Fill ()
+  Vec3 0.1 0.1 0.1
+
+function Texture Get ()
+  var texture (Texture2D_Create 1 1)
+  texture.BeginDrawTo
+  DrawClear Fill 1.0
+  texture.EndDrawTo
+  texture
