@@ -3,10 +3,11 @@
 How FrontierOutpost moves off OpenGL, GLEW, SFML and FreeType onto NeuronClient: Direct3D 12,
 DirectWrite, WIC, XAudio2 and Win32.
 
-- **Status:** Proposed, 2026-09-25. The owner took decisions N1–N13 the same day (§2). Phase 0 is
-  done (§6): ADR-005 to ADR-013 are Proposed, the checkers run in CI, and the startup fixes are in
-  (`ea07b9c`). Phase 1's removals are in (`04d440b` to `f20c684`); ADR-013 records what went. Its
-  done-when still needs the owner to see the 16 kept apps start. Nothing of NeuronClient exists yet.
+- **Status:** Proposed, 2026-09-25. The owner took decisions N1–N14 the same day (§2). Phase 0 is
+  done (§6): ADR-005 to ADR-012 are Proposed, the checkers run in CI, and the startup fixes are in
+  (`ea07b9c`). Phase 1's removals are in (`04d440b` to `f20c684`, and `b78a33f` for N14); ADR-013,
+  now Accepted, records what went. Its done-when still needs the owner to see the 16 kept apps
+  start. Nothing of NeuronClient exists yet.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
@@ -60,6 +61,7 @@ has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
 | N11 | **liblt's shader folder is new code.** `FrontierOutpost/src/liblt/Shaders/` is carved out of ADR-001's exemption, so AGENTS.md's shader rules and the checkers, the registry check among them, apply to it. The rest of `lt` stays exempt. | owner |
 | N12 | **liblt keeps its own calls for OS services:** `SHGetFolderPath`, `GetModuleFileNameA`, `CreateDirectoryA`, `MessageBoxA` and DbgHelp in `LTE/OS.cpp`, `MessageBoxA` in `Common.cpp`'s assertion handler, and `WinMain` in `LTE/LTE.h`. NeuronClient takes what OpenGL, GLEW, SFML and FreeType did, and XAudio2. | owner |
 | N13 | **No `gl-final` tag and no frame-time comparison.** The OpenGL build stays in the history, but nothing marks it and nothing is measured against it. The owner judges each phase by the port itself. | owner |
+| N14 | **The script API is an interface, not unused material.** Of the 265 natives that neither a script nor C++ reached after Phase 1, the 12 that were the only way into code of their own went, with what only they reached. The other 253 stay: 194 are members of families one macro builds per object type, item field, component or key, and 59 are short, none over 11 lines. | owner |
 
 What N2 and N3 mean in practice. The first two points correct what the question offered:
 
@@ -329,7 +331,7 @@ Not in NeuronClient:
 ### 5.5 Keeping OpenGL's conventions without OpenGL
 
 The port keeps OpenGL's memory layout, with row 0 at the bottom of an image. The alternative is to
-convert 131 shader files, and the C++ that places viewports and scissors and flips images, to
+convert 130 shader files, and the C++ that places viewports and scissors and flips images, to
 Direct3D's top-left origin. Instead:
 
 - **Clip space.** Every vertex shader ends in one macro. It negates clip-space y, and maps z from
@@ -344,7 +346,7 @@ Direct3D's top-left origin. Instead:
   flips.
 
 N3 would allow converting to Direct3D's own layout instead. It is not done here because a wrong flip
-is the likeliest porting bug, and the hardest to see across 131 files. This way every convention
+is the likeliest porting bug, and the hardest to see across 130 files. This way every convention
 lives in one macro and one pass. Converting later, pass by pass, stays possible.
 
 Other rules the context applies:
@@ -384,7 +386,7 @@ Other rules the context applies:
   dialect.
   - The port puts back SMAA's own HLSL 4.1 porting block, so no third-party code is added.
   - SMAA's licence notice goes beside the file, which closes O14.
-- **How much.** After Phase 1, 131 files remain, 5,346 lines. Setting SMAA.h aside, about 4,300
+- **How much.** After Phase 1, 130 files remain, 5,311 lines. Setting SMAA.h aside, about 4,300
   lines of GLSL are ported by hand.
 - **What goes:** `JSLPreprocess`, the `#version` injection, hot reload, and `GameData/shader`.
 
@@ -402,8 +404,8 @@ So the field moves to a precompiled compute shader:
 - **Gradient and occlusion** become compute passes.
 - **The LOD grids** are read back for the CPU polygoniser, asynchronously.
 - **The opcodes** are the SDF node types Phase 1 leaves. Of the two noise nodes, only
-  `FractalWorley` is constructed (`Game/Renderable/Ice.cpp:16`, `Asteroid.cpp:18`), so Worley noise
-  is ported to HLSL once. `FractalPerlin`, which nothing constructs, goes in Phase 1 (§9 C).
+  `FractalWorley` is constructed (`Game/Renderable/Asteroid.cpp:18`), so Worley noise is ported to
+  HLSL once. `FractalPerlin`, which nothing constructs, goes in Phase 1 (§9 C).
 
 The interpreter is slower than code specialised per mesh. It runs at generation time, and Phase 4
 measures it.

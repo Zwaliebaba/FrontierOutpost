@@ -33,8 +33,8 @@ two noise nodes are `NOT_IMPLEMENTED` there (`LTE/SDF.cpp`), and fields reach ab
 3. **Gradient and occlusion become compute passes.**
 4. **The LOD grids are read back asynchronously** for the CPU polygoniser.
 5. **The opcodes are the SDF node types that Phase 1 leaves** (ADR-013). Of the two noise nodes,
-   only `FractalWorley` is constructed (`Game/Renderable/Ice.cpp:16`, `Asteroid.cpp:18`), so Worley
-   noise is ported to HLSL once. `FractalPerlin`, which nothing constructs, goes in Phase 1.
+   only `FractalWorley` is constructed (`Game/Renderable/Asteroid.cpp:18`), so Worley noise is
+   ported to HLSL once. `FractalPerlin`, which nothing constructs, goes in Phase 1.
 6. **The interpreter's cost is measured, not assumed.** It is slower than code specialised per
    mesh, but it runs at generation time. Phase 4 measures generation time on WARP and on a GPU
    (plan §5.7, §10).

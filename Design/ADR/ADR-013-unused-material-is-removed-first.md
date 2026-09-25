@@ -1,17 +1,17 @@
 # ADR-013: Unused material is removed first, by reachability from the kept apps
 
-- **Status:** Proposed (2026-09-25, NeuronClient migration Phase 0), for the owner to accept
+- **Status:** Accepted (owner, 2026-09-25, after the NeuronClient migration's Phase 1 removals)
 - **Scope:** apps, code, render passes, shaders and assets in `FrontierOutpost.slnx`,
   `FrontierOutpost/` and `GameData/` that nothing kept reaches
 - **Detail:** `Design/Plan/NeuronClient-migration.md` §1, §3 (point 3), §5.6, §6 (Phase 1), §9,
-  N0, N4, N6 and N9. Engine paths are in `FrontierOutpost/src/liblt/`. The lists below are
+  N0, N4, N6, N9 and N14. Engine paths are in `FrontierOutpost/src/liblt/`. The lists below are
   candidates: Phase 1 re-verifies each one and records here what went.
 
 ## Context
 
 N0 removes unused features, and N4 extends that to all four tiers of unused material: toy and test
 apps, unreachable code, dead passes and shaders, and unused assets. What goes is not ported: after
-Phase 1, 131 of the 169 shader files remain to port (plan §4.2, §5.6).
+Phase 1, 130 of the 169 shader files remain to port (plan §4.2, §5.6).
 
 Removal comes first, while OpenGL still renders, so a fault it causes cannot be the new renderer's
 (plan §1, §6). No tag marks the OpenGL build it starts from (N13).
@@ -19,7 +19,8 @@ Removal comes first, while OpenGL still renders, so a fault it causes cannot be 
 ## Decision
 
 1. **Something goes when nothing kept reaches it,** through C++ callers or script callers.
-   Reachability starts at `launch.exe` and the 16 kept apps.
+   Reachability starts at `launch.exe` and the 16 kept apps. Decision 8 qualifies this for the
+   script API.
 2. **Apps go first,** and the analysis is then re-run, because removing the apps shrinks what
    everything else reaches (plan Phase 1 step 1).
 3. **Then one commit per tier:** code, then passes and shaders, then assets. All four builds pass
@@ -66,6 +67,10 @@ Removal comes first, while OpenGL still renders, so a fault it causes cannot be 
      and `SplashScreen` widgets that nothing opens. Rajdhani, Iceland, SourceCodePro and Gafata
      stay, with their licences (ADR-010).
    - **Textures:** `icon.png` and `splash.png`.
+8. **The script API is an interface, not unused material** (N14). A native that nothing reaches
+   goes only when it is the only way into code of its own, and that code goes with it. A member
+   of a family that one macro builds per object type, item field, component or key, and a short
+   native over code that stays, remain whether or not a script calls them today.
 
 ## What went (Phase 1, 2026-09-25)
 
@@ -107,27 +112,29 @@ pushed, and CI's four-way build after.
     `grammar/default.txt` is read.
 
   `GameData/` holds 324 files, 39 MB, where it held 630.
-- **Not removed: the script API.** The engine registers 1,045 natives, counting each member of a
-  macro-built family. 609 of them are reached from a remaining script: 526 by name, and 83 only
-  through an operator such as `+` or `==`, counted as reached when any script uses the operator,
-  since the overload it resolves to depends on types. 171 more are named in C++ and by no script.
-  The other 265 are reached by neither:
-  - 194 are members of macro-built families, one per object type, item field, component or key;
-  - 59 are short, none over 11 lines: `String_ToInt`, `Sound_IsFinished` and `Camera_SetFov`
-    among them;
-  - 12 are the only way into code of their own: the C++ warp rail, whose `warprail.jsl` nothing
-    else uses (the kept scripts build rails with `Object/WarpRail.lts`); the Custom, Drill, LOD
-    and Patrol tasks; the deposit event; the three workers; the construction drone type; the
-    custom compositor; and the settings widget.
+- **Script natives** (`b78a33f`, N14). The engine registered 1,045 natives, counting each member of
+  a macro-built family. 609 were reached from a remaining script: 526 by name, and 83 only through
+  an operator such as `+` or `==`, counted as reached when any script uses the operator, since the
+  overload it resolves to depends on types. 171 more were named in C++ and by no script. The other
+  265 were reached by neither, and 12 of them were the only way into code of their own. Those 12
+  went, with what only they reached:
+  - the C++ warp rail, whose model nothing built, with `warprail.jsl` and `Mesh_Cylinder` (the kept
+    scripts build rails with `Object/WarpRail.lts`);
+  - the Custom, Drill, LOD and Patrol tasks, and the deposit event;
+  - the three workers, with the skill getters on `ItemT` that nothing called;
+  - the construction drone type, with `Renderable_Ice`, which only it used;
+  - the custom compositor, and the settings widget with `SettingsEntry::GetWidget`.
 
-  Measured by preprocessing every `lt` and `launch` source, reading each `Function_Create` and
-  `Function_AddAlias` the registration macros expand to, and matching both against the scripts'
-  tokens as `StringList_ParseLine` splits them. Whether any of the 265 go is the owner's decision.
-  Until it is taken, `warprail.jsl` stays among the 131 files Phase 4 converts.
+  730 lines went, 35 of them the shader, leaving 130 shader files. The 253 natives that stay are
+  194 family members and 59 short ones, none over 11 lines (decision 8). Measured by preprocessing
+  every `lt` and `launch` source, reading each `Function_Create` and `Function_AddAlias` the
+  registration macros expand to, and matching both against the scripts' tokens as
+  `StringList_ParseLine` splits them. The same count after the removal gives 1,032 natives, 253 of
+  them reached by nothing.
 
 ## What this forecloses
 
 - **Porting any confirmed item** to Direct3D 12, HLSL or NeuronClient.
 - **Deleting anything a kept app still reaches,** whatever the survey said.
-- **Keeping unused material for later.** What goes stays in the history, and nothing else keeps
-  it.
+- **Keeping unused material for later,** the script API's natives aside (decision 8). What goes
+  stays in the history, and nothing else keeps it.
