@@ -8,8 +8,9 @@ for first-party code, x64 and ARM64, and Debug and Release.
 This is a build-system and language-standard migration only. Namespaces, identifiers, files and
 user-facing strings keep their original names. `ltheory-old-main/` is read-only.
 
-**Status:** Phase 1 (structure) is written and checked in the container (§15). Its first build on
-the host is in progress. Phase 2 (x64 parity) waits on the owner's FMOD Ex x64 files (D8, O8).
+**Status:** Phase 1 (structure) is done (§15). Phase 2's x64 build (§16) compiles at parity with
+the original, with identical warnings and matching command lines. Its link waits on the owner's
+FMOD Ex x64 files (D8, O8), which are all it lacks.
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -959,4 +960,95 @@ configuration; ARM64 joins in Phase 4. The job:
 - while the FMOD x64 files are missing (O8), links `lt` once more without the FMOD libraries and
   reports what is still unresolved.
 
-Results: pending.
+**Run 6** ([`36093182094`](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36093182094),
+commit `cb0aa0b`) is the first build, x64 only. The baseline ran beside it (`[baseline]`) and
+repeated run 3's result exactly.
+
+| Configuration | Result | Wall clock (build step) | Runner image, MSBuild | Baseline x64, same run |
+|---|---|---|---|---|
+| Debug | every project compiles; `lt`'s link stops at `LNK1104: cannot open file 'fmod_event64.lib'` (O8) | 3 min 56 s | `win25-vs2026` 20260907.229.1, MSBuild 18.9.1 | 5 min 9 s; `LNK1120`, 84 symbols |
+| Release | the same, reported as `LNK1181` | 8 min 31 s | `win25-vs2026` 20260922.246.2, MSBuild 18.10.1 | 9 min 31 s; the same |
+
+Both images carry the same compiler, MSVC 14.51.36231; the runner pool was part-way through an
+image update. `launch` is not built in either configuration, because it needs `lt`.
+
+**The probe**, the same link without the FMOD libraries, leaves **exactly 28 unresolved externals,
+all FMOD Ex's**:
+
+- 16 from the core library: six methods of `FMOD::System`, one of `Sound` and nine of `Channel`;
+- 12 from the Event System: `FMOD_EventSystem_Create`, and eleven methods of `EventSystem`, `Event`
+  and `EventParameter`.
+
+They are the baseline's 28. Its other 56 missing symbols, GLEW's, now resolve, and so does all of
+FreeType: nothing but FMOD is missing from the link. Provided the owner's libraries carry the names
+§10.2 expects, x64 should link without further change.
+
+**Warnings**, unique, by the same script over both builds:
+
+| Code | FrontierOutpost x64 | Baseline x64 (runs 3 and 6) |
+|---|---|---|
+| C4267 | 360 | 360 |
+| C4244 | 226 | 226 |
+| C4996 | 3 | 3 |
+| LNK4272 | — | 5, for the x86 libraries it skips |
+| **Unique in all** | **589** | **594** |
+| By project | `lt` 584, `sfml-network` 3, `sfml-system` 1, `sfml-graphics` 1 | the same, plus the five LNK4272 in `lt` |
+| MSBuild's own total | 615 | 620 |
+
+The counts are identical in Debug and Release. `freetype`, at `/W4`, and `glew` raise none. Not one
+compiler warning is gained or lost.
+
+**Outputs** in `bin\x64\<Configuration>\`, all x64 according to `dumpbin`:
+
+- **Debug:** `freetype.lib`, `glew32s.lib` and the six SFML libraries, each with a PDB named after
+  it. The SFML libraries also have their `sfml-<module>-s.pdb`, so the SFML files match the
+  original's `build/ext/SFML/lib/Debug/` name for name. The second, same-size PDB beside each
+  static library appears in both builds, so it is MSBuild's doing, not SFML's.
+- **Release:** the eight static libraries, and no PDB, since there is no `/Zi` (the original's
+  Release has none either).
+- `lt.dll`, `lt.lib` and `launch.exe` are not produced until O8 is resolved.
+
+**Command lines**, compared with the baseline's x64 ones from the same run:
+
+- **The same** for every project:
+  - include directories, in their order;
+  - definitions, apart from the two dropped (§10.2), with `NDEBUG` in Release and MSBuild's
+    `_WINDLL` for `lt` in both builds;
+  - `/W3`, `/GR`, and the exception model: `/EHs` for `lt`, `/EHsc` for SFML;
+  - `/fp:fast`, `/arch:SSE2` and `/MP` for `lt` only;
+  - Debug `/Od /Ob0 /RTC1 /Zi /MDd`, and Release `/O2 /Ob2 /MD`;
+  - SFML's compile PDB names;
+  - `lt`'s link switches: `/DLL`, `/DEBUG /INCREMENTAL` in Debug, `/NODEFAULTLIB:libcmt`,
+    `/SUBSYSTEM:CONSOLE` and the manifest switches.
+- **Different:**
+  - FrontierOutpost passes `/FC` (§10.2).
+  - It states a few compiler defaults outright: `/GS /Gd /Gm- /Zc:forScope /Zc:wchar_t /fp:precise
+    /std:c++14`, plus `/permissive` and `/sdl-` from `Directory.Build.props`. The generated
+    projects' empty elements leave them unstated (§9.3). Each is the compiler's default, so the
+    compilation is the same.
+  - `lt` compiles in 23 batches rather than 93. Its same-named sources are grouped by folder
+    (§15.4), where the original names each object separately.
+  - The linker gets `/DYNAMICBASE` and `/NXCOMPAT`, which are its defaults anyway, and library
+    search paths rather than absolute library paths. The original passes `/machine:x64` twice.
+  - The link lines themselves differ as §10.2 describes.
+  - Neither build passes `/Zc:inline` (§15.4).
+- `launch` is compared once it links: neither x64 build reaches it. The Win32 baseline has its
+  command lines.
+
+## 16. Phase 2: parity build (x64, C++14)
+
+The projects were written at the original's standard from the start (§15.3):
+`LanguageStandard=stdcpp14`, MSVC's default, and no `/permissive-`, since the original has none.
+Phase 2 therefore needed no change of its own, and run 6 (§15.6) is its build.
+
+**Gate:**
+
+- **Both x64 configurations link: not yet.** Every project compiles. `lt`, and with it `launch`,
+  waits on the FMOD Ex x64 libraries (D8, O8), and the probe shows that nothing else is missing.
+- **Warnings comparable to the baseline: yes, identical** (§15.6). There are 589 unique warnings,
+  with the same codes and counts in the same projects. The baseline's five more are its LNK4272s
+  on the x86 libraries.
+- **Binaries against the baseline:** the static libraries and their PDBs match name for name
+  (§15.6). `lt.dll`, `lt.lib`, `lt.exp`, `lt.pdb`, `launch.exe` and `launch.pdb` wait on O8.
+
+No project-file problem showed up, and no source file was touched.
