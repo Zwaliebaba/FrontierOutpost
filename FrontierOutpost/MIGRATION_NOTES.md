@@ -777,6 +777,7 @@ these, all in `FrontierOutpost/`:
 | `resource/script/Object/{Firework,Ship,WarpNode}.lts`, `Widget/HUD/WorldObject.lts`, `Widget/Market/Transaction.lts` | 10 sound names from `.ogg` to `.wav` | D16 |
 | `resource/script/Widget/Browser.lts:67` | `ui/objectmenuopen.ogg` to `ui/objectmenuopen_ogg.wav` | D16: `ui/objectmenuopen.wav` is a different sound |
 | `src/old/ltheory/ltheory.cpp`, `src/old/soundstudio/soundstudio.cpp` (not built) | `SoundEngine_XAudio2()`; the include of `MusicEngine.h` and a commented-out `CreateMusicEngine` call removed | D17: no code may name what was deleted |
+| `src/liblt/LTE/Data.h:67`, `:248`; `src/liblt/LTE/ResourceMap.cpp:38` | the string literal in a conditional expression whose other operand is a `String` is written `String("null")`, `String("")` | Phase 3: error C2445 under `/Zc:ternary` (part of `/permissive-`). `String` converts to `char const*` and a literal converts to `String`, so the standard calls the expression ambiguous. `Data.h:67` is the same expression, in a template nothing instantiates, so MSVC did not report it yet. BR5 |
 | `src/liblt/LTE/OS.cpp:181-183` | `OS_Spawn` hands `CreateProcess` a writable, empty `char commandLine[]` in place of the literal `""` | Phase 3: `/permissive-` includes `/Zc:strictStrings`, which refuses a string literal as `LPSTR` (C2664). The API documents the parameter as writable. The command line is empty either way, so nothing changes at run time |
 
 ## 12. BEHAVIOUR-RISK register
@@ -834,6 +835,16 @@ these, all in `FrontierOutpost/`:
   - **Not affected:** `__cplusplus` (nothing in reach compares it to a value), aligned `new` (no
     over-aligned type and no global `operator new`), and the library facilities C++17 to C++23
     removed (first-party code uses none).
+
+- **BR5: three conditional expressions now name their result type** (Phase 3),
+  `src/liblt/LTE/Data.h:67` and `:248`, and `src/liblt/LTE/ResourceMap.cpp:38`. Each chose between
+  a `String` and a string literal, which C++ calls ambiguous: either could convert to the other.
+  The fix makes the literal a `String`, so the result is a `String`. That is also what the
+  original's compiler chose: Microsoft's `/Zc:ternary` documentation gives this very case,
+  `true ? "A" : s` for a string class that converts both ways, and says the permissive compiler
+  preferred the class. So the same `operator<<` and the same return value follow as before. Had it
+  chosen `char const*` instead, a type name or path with an embedded NUL would now print in full
+  rather than to the NUL; neither holds one.
 
 Candidates, to be logged with file:line when they happen:
 
@@ -1280,6 +1291,24 @@ The container has no MSVC, so the bump was screened before it was pushed:
 What this cannot see is MSVC's own reading of the language and its library. The host's build is the
 gate.
 
+**It missed one rule**, which the host's first build found (§18.3): C2445, a conditional expression
+whose operands convert to each other. clang and GCC both accept `cond ? string : "null"` for a class
+that converts to `char const*` and back, because when they work out what the literal's type would
+convert to, they keep it an array; CWG 1895, which `/Zc:ternary` follows, decays it to
+`char const*`, so both conversions exist. Both compilers do report the ambiguity when the operand is
+already a pointer. To find every such expression, not just the ones MSVC reported first, a scratch
+copy of the tree gave `String` a conversion to `char const (&)[N]` as well, which makes clang see
+what MSVC sees, and every source was scanned again. It found three: `Data.h:67` and `:248`, and
+`ResourceMap.cpp:38`. After the fix, the same scan finds none.
+
 ### 18.3 The build on the host
 
-Pending: the first Phase 3 run.
+**First attempt, commit `b076d03`** (Migration run 9, Build run 115): **`lt` did not compile**, so
+`launch` was not built. 167 errors, all C2445 at two places: `LTE/Data.h:248` (166, once per
+source that includes it) and `LTE/ResourceMap.cpp:38`. §18.2 explains why the container missed
+them; §11 and BR5 record the fix.
+
+Everything else compiled, and it settles the SFML question: **the five SFML projects at C++23 raise
+exactly the warnings they raised at C++14** (`sfml-network` 3, `sfml-system` 1, `sfml-graphics` 1,
+`sfml-window` and `sfml-main` none), so they compile cleanly as §18.1 defines it. `lt`'s own
+warnings can be compared only once it compiles without error.

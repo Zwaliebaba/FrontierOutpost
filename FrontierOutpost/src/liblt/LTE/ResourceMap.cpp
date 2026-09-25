@@ -35,7 +35,7 @@ namespace {
       String const* result = pathMap.get(path);
       if (!result)
         dbg | "Bad lookup : " | path | endl;
-      return result ? *result : "";
+      return result ? *result : String("");
     }
   };
 }

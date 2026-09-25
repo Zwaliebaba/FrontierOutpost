@@ -64,7 +64,7 @@ namespace LTE {
 
     template <class StreamT>
     friend void _ToStream(StreamT& stream, DataRef const& self) {
-      stream << (self.type ? self.type->name : "null");
+      stream << (self.type ? self.type->name : String("null"));
     }
   };
 
@@ -245,7 +245,7 @@ namespace LTE {
 
     template <class StreamT>
     friend void _ToStream(StreamT& stream, Data const& self) {
-      stream << (self.type ? self.type->name : "null");
+      stream << (self.type ? self.type->name : String("null"));
     }
 
     DefineMetadataInline(Data)
