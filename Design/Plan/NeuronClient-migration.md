@@ -1,0 +1,628 @@
+# FrontierOutpost on NeuronClient
+
+How FrontierOutpost moves off OpenGL, GLEW, SFML and FreeType onto NeuronClient: Direct3D 12,
+DirectWrite, WIC, XAudio2 and Win32.
+
+- **Status:** Proposed, 2026-09-25. The owner took decisions N1–N4 the same day (§2). Nothing in
+  this plan has been built or run.
+- **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
+  repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
+- **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
+  engine paths without a prefix (`LTE/…`, `Game/…`, `UI/…`, `Module/…` and so on) are in it.
+- **Inputs:** a survey of this tree on 2026-09-25 (renderer, shaders and scripts, platform code, dead
+  code), and `Zwaliebaba/Outpost.Commander` at `15f9949` for NeuronClient's conventions.
+
+## 1. Summary
+
+**Today** liblt renders through OpenGL 2.1 by way of GLEW 1.7. It gets its window, input,
+threads, clocks, image codecs and one HTTP client from SFML 2.5. It rasterises glyphs with FreeType
+2.5.5, and already plays sound through XAudio2 (ADR-003).
+
+**The change** puts every call into Windows behind **NeuronClient**, a new static library linked
+into `lt.dll`:
+- Direct3D 12 for graphics;
+- DirectWrite for glyphs;
+- WIC for images;
+- XAudio2 and X3DAudio for sound;
+- plain Win32 for the window and input.
+
+Threads and clocks move to the C++ standard library.
+
+**liblt keeps its API** (`Renderer_*`, `Texture2D`, `Shader`, `ShaderInstance`, `Mesh`, `Font`,
+`Window`, `Keyboard`, `Mouse`, `SoundEngine`), so scripts change only where a feature is removed.
+Under that API, the OpenGL layer is rewritten onto NeuronClient, and the GLSL in `GameData/shader`
+becomes HLSL compiled into `lt.dll` at build time.
+
+**Removal comes first, while OpenGL still renders:** 12 toy apps, unreachable engine code, eight dead
+render passes, 36 shader files and 34 font families.
+
+**At the end** the solution holds `lt`, `launch`, `NeuronClient` and `NeuronClientTests`. The tree
+has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
+
+## 2. Decisions
+
+| # | Decision | By |
+|---|---|---|
+| N0 | **NeuronClient is new, written for this engine.** The NeuronClient in Outpost.Commander is a reference for conventions, not code to copy: it is UWP and CoreWindow, touch only, has no audio and loads only system fonts. Graphics are Direct3D 12, sound XAudio2, and the platform Win32. DirectWrite replaces FreeType, and unused features are removed. | owner (brief) |
+| N1 | **ARM64 stays.** NeuronClient builds for x64 and ARM64, under an ADR that amends AGENTS.md §3 for it. | owner |
+| N2 | **Shaders are compiled at build time into headers.** | owner |
+| N3 | **Free to modernise.** Parity with the OpenGL build is not the acceptance bar, and there are no reference captures. | owner |
+| N4 | **Remove all four tiers of unused material:** toy and test apps, unreachable code, dead passes and shaders, unused assets (§9). | owner |
+
+What N2 and N3 mean in practice. The first two points correct what the question offered:
+
+- **N2 uses FXC, not DXC.** liblt binds uniforms and textures by name: 243 lines in 46 C++ files,
+  and 57 in scripts. That needs shader reflection at run time.
+  - DXIL, DXC's output, can only be reflected by `dxcompiler.dll`, a redistributable (R14).
+  - DXBC, FXC's output, is reflected by `D3DReflect` in `d3dcompiler_47.dll`, which ships with
+    Windows 10 and 11.
+  - So shaders build with `FxCompile` at Shader Model 5.1, reflection runs at load, and nothing is
+    compiled at run time.
+  - SM 5.1 also keeps Windows 10. Outpost.Commander's SM 6.7 raised its floor to Windows 11 22H2
+    (its ADR-012).
+- **N2 keeps the script filters.** Their 19 `Shader_Create` calls (`GameData/script/Texture/Filters.lts`)
+  name literal files, so a registry keyed by the legacy name covers them. The observatory and image
+  apps keep working.
+- **N2 removes hot reload:** `Shader_RecompileAll`, and the T key that calls it in 7 apps.
+- **N2 replaces generated shader code.** `SDFMesh` compiles one program per mesh from
+  `#define FIELDFN <GLSL>`, built from a randomly seeded SDF tree (`liblt/LTE/SDFMesh.cpp:199-200`).
+  That cannot be enumerated at build time. §5.7 replaces it with a precompiled compute shader that
+  interprets the tree.
+- **N3 lets the port take the cheaper Direct3D 12 route** wherever emulating OpenGL would cost more,
+  and nothing beyond that. §5.3 and §5.5 list those choices. Visual modernisation (sRGB, HDR, MSAA)
+  is backlog (§11), not part of the port.
+
+## 3. Where the brief is weakest
+
+1. **Direct3D 12 buys this renderer nothing it needs, and costs the most code.** liblt is a 2013
+   OpenGL design:
+   - render state is implicit;
+   - uniforms are set by name and persist per program;
+   - textures bind to units when the uniform is set;
+   - `glGenerateMipmap` runs on every texture it creates;
+   - readbacks are synchronous, lens-flare visibility among them every frame;
+   - `glFinish` runs at every present (`liblt/LTE/Renderer.cpp:608-610`);
+   - resources are created and destroyed mid-frame.
+
+   Direct3D 12 provides none of that. NeuronClient must first build a D3D11-style layer: state
+   tracking and barriers, descriptor rings, a pipeline-state cache, upload and readback rings,
+   release deferred until the GPU is done, and a compute mip generator. That layer is the largest
+   single piece of new code, and Direct3D 11 would have supplied it. Direct3D 12 holds up only as
+   the shared base of the owner's NeuronClient projects. ADR-007 records that reason so it is not
+   reopened.
+2. **Build-time shaders cost two runtime features and pin a legacy compiler.** Hot reload goes, and
+   SDF fields need a redesign (§5.7). FXC is frozen at SM 5.1. Nothing in this content needs more,
+   but a later move to DXC must move reflection to build time as well.
+3. **Nothing automatic can say the port looks right.** Under N3, CI can prove three things: the
+   game builds, NeuronClient's tests pass, and each 3D app renders frames on WARP without a
+   Direct3D 12 error. It cannot prove that the frames look right, that sound plays, or that ARM64
+   works. Those rest on the owner's GPU, speakers and ARM64 device, phase by phase. The last OpenGL
+   commit is tagged `gl-final`, so the old build can always be rebuilt for a side-by-side look.
+4. **ARM64 cannot be verified in CI.** No runner executes ARM64, and ARM64 GPU drivers see the
+   least Direct3D 12 use. Every ARM64 claim waits for the owner's device.
+5. **This is a sixth NeuronClient.** Five repositories already carry copies that have drifted
+   apart, from 45 to 139 files. This one is written game-agnostic (R9), so it could become the
+   shared one. This plan does not extract it.
+6. **Most of the apps to keep cannot start today.**
+   - `GameData/script/Texture/RandomScreenshot.lts:2` loads `/home/josh/Dropbox/lt/screenshot`, the
+     original author's folder. Seven kept apps and the DevPanel use it, and a failed load exits the
+     program.
+   - 9 of the 26 sounds the scripts play have no WAV yet (O10). Each stops the game the first time
+     it plays.
+
+   Nothing can be checked at run time until both are fixed (Phase 0).
+
+## 4. Starting point
+
+### 4.1 Dependencies and where they are used
+
+| Dependency | What liblt uses it for | Where | Replaced by |
+|---|---|---|---|
+| SFML 2.5.0: 6 projects, 4 linked | Window, GL context and events; keyboard and mouse polling; joystick; threads, mutex, sleep and clock; image load and save; one HTTP client | 10 `.cpp` files, no header | NeuronClient for window, input and images; the standard library for threads and clocks; joystick and HTTP removed |
+| GLEW 1.7.0 and OpenGL 2.1 (compatibility profile) | All rendering | `LTE/GL.h`; gl calls in 9 files; GL types in 6 public headers; about 30 call sites pass `GL_TextureFormat` | NeuronClient (Direct3D 12) |
+| FreeType 2.5.5 | 64 px glyph coverage for the text atlas; kerning from the `kern` table | `LTE/Font.cpp` only, 8 functions | NeuronClient (DirectWrite) |
+| XAudio2 and X3DAudio | All sound (ADR-003) | `Module/SoundEngine/XAudio2.cpp`, 743 lines | NeuronClient; liblt keeps an adapter |
+
+### 4.2 The renderer
+
+- **Draws.** 66 GL entry points are live, and there is one draw call: `glDrawElements` with
+  triangles. It is fed four ways:
+  - meshes in VBOs and IBOs;
+  - a quad from client memory, with 8-bit indices;
+  - client-side vertex arrays;
+  - vertex structs described by liblt's type reflection.
+
+  There are no lines, points, stencil, polygon offset or instancing. Wireframe exists, but nothing
+  enables it.
+- **State.** Blend off, alpha or additive; depth test (`LESS`) and depth write; cull back or off;
+  scissor; viewport. All of it is pushed and popped on stacks.
+- **Render targets.**
+  - Four colour-slot stacks and a depth stack, resolved into cached FBOs. At most two targets are
+    written at once.
+  - Formats: R8, RG8, RGBA8, R16F, RGBA16F, R32F, RGBA32F, D32F.
+  - Cube faces are rendered into. 3D textures are filled by copying 2D slices through the CPU.
+  - The full-resolution depth buffer stays bound under the quarter-resolution bloom targets.
+- **Synchronisation.** `glFinish` after every present, plus synchronous readbacks:
+  - lens-flare visibility, every frame (`Game/RenderPass/LensFlares.cpp:159-188`);
+  - IR-map generation;
+  - SDF slices;
+  - plate-mesh occlusion;
+  - disk-cache saves of cube maps, 96 MiB each;
+  - screenshots.
+- **Mipmaps.** `glGenerateMipmap` runs when any 2D texture is created, render targets included
+  (`LTE/Texture2D.cpp:128`). It also runs after each new glyph and after cube generation.
+- **Uniforms.**
+  - Set by name; values persist per program across passes and frames.
+  - Setting one makes its program current, and some draws rely on that
+    (`LTE/RenderPass/Bloom.cpp:40-63`).
+  - Textures bind to units round-robin when their uniform is set.
+  - The location cache is keyed by the name's pointer, not its text (`LTE/Shader.cpp:31, 248-264`).
+- **Shaders.**
+  - 169 `.jsl` files (GLSL 1.20 with `EXT_gpu_shader4`), 6,357 lines.
+  - The engine prepends `#version 120` and runs its own preprocessor for `#include` and `#output`
+    (`LTE/Shader.cpp:23, 47-91`).
+  - 104 vertex/fragment pairs are reachable, plus one generated program per SDF mesh.
+- **Conventions.**
+  - The GL projection puts z in [−1, 1].
+  - Most vertex shaders overwrite `gl_Position.z` with a logarithmic depth
+    (`GameData/shader/common/vert.jsl:29-32`).
+  - Window-space viewports are flipped against the window height (`LTE/Viewport.cpp:59-66`).
+  - Shaders use the quad's uv and `gl_FragCoord * rcpFrame` interchangeably.
+  - The present samples with v flipped (`UI/Widget/Rendered.cpp:142-154`).
+- **A latent defect.** Nothing calls `glPixelStore`, so SMAA's search texture, 66 bytes wide, is
+  uploaded with 4-byte row alignment and comes out sheared (`ThirdParty/SMAA_SearchTex.h:4-7`). The
+  port uploads it correctly, so SMAA's output will change.
+
+### 4.3 Text, input, window, sound
+
+- **Text.**
+  - FreeType renders each glyph at 64 px into an R16F coverage atlas.
+  - A GPU pass (`GameData/shader/fragment/compute/sdffont.jsl`, 129² fetches per texel) turns it into
+    an R32F distance field, whose mipmaps are regenerated after every glyph.
+  - Text then draws at any size from the distance field (`LTE/Font.cpp:74-190`).
+  - Four families are used: Rajdhani, Iceland, SourceCodePro and Gafata. Play is used only by the
+    `font` toy app.
+- **Input.** The engine's `Key` enumeration (101 keys) is its own. SFML's codes are converted on
+  arrival; they are never stored, persisted or shown to scripts, which name keys (`Key_T`). So a
+  Win32 mapping has no compatibility constraint.
+- **Window.**
+  - A 1920×1080 client area, windowed, with vsync off and no frame cap.
+  - The OS cursor is hidden; scripts draw their own.
+  - The process is system-DPI-aware (SFML's choice).
+  - SFML swallows `WM_CLOSE`, so the close button and Alt+F4 do nothing today.
+- **Sound.** Already XAudio2. What moves is where the code lives, not what it does.
+
+## 5. Target architecture
+
+### 5.1 Layers
+
+```
+launch.exe         console program; main()                            legacy (ADR-001)
+    │
+lt.dll  (liblt)    engine and LTSL; owns every game concept           legacy (ADR-001)
+    │  links statically
+NeuronClient.lib   every call into Windows                            AGENTS.md in full, plus ARM64 (N1)
+    │
+Windows SDK        d3d12 dxgi d3dcompiler dwrite windowscodecs xaudio2 user32 ...
+```
+
+- **NeuronClient knows nothing of the game (R9).** No `String`, `V3`, `Object` or `Key_*`: only C++
+  and its own small types.
+- **No public header includes a Windows, DXGI or Direct3D header.** Each class keeps its platform
+  objects in a private implementation, as Outpost.Commander's NeuronClient does. The reason here is
+  concrete: liblt defines `near`, `far`, `DrawState`, `interface` and `GetObject`, which are all
+  Windows macros, and its include order is load-bearing (MIGRATION_NOTES.md H3).
+- **It is a static library linked into `lt.dll` only.** `launch.exe` never sees it. It uses `/MD`
+  and `/MDd` to match `lt`.
+- **Conventions.**
+  - Namespace `Neuron`. Unicode internally, UTF-8 at the API.
+  - COM objects in `Microsoft::WRL::ComPtr` (R12).
+  - No NuGet package, and no `d3dx12.h`, which is not in the SDK (R14).
+
+### 5.2 Components
+
+| Component | Responsibility | Windows API | Replaces |
+|---|---|---|---|
+| `Window` | An HWND with a given client size and title; the message pump; focus, close and resize; cursor visibility; mouse capture while a button is held; an input-event queue (key down and up with repeat, characters, mouse buttons, moves and wheel) | user32 | SFML's window and events; keyboard and mouse polling |
+| `Key` | NeuronClient's key enumeration and its mapping from virtual keys and scan codes, left and right Shift, Ctrl and Alt included | — | SFML's key tables |
+| `GraphicsDevice` | Adapter (the default, or WARP on request), device, queue, fences, frames in flight, release deferred by fence, a DRED report on device removal | d3d12, dxgi | The GL context |
+| `SwapChain` | A flip-discard swap chain on the HWND; resize; vsync or tearing | dxgi | `SwapBuffers` |
+| `Texture`, `Buffer` | 2D, cube and 3D textures in the eight formats, with mip chains; static and per-frame buffers | d3d12 | GL textures, VBOs, IBOs |
+| `Program` | Vertex and pixel, or compute, bytecode plus its reflection: constants, textures and samplers by name, and the input signature | d3d12, `D3DReflect` | GL programs |
+| `DrawContext` | A D3D11-style immediate context: target and depth binding, viewport, scissor, blend, depth and raster state, program, constants, textures and samplers, static or transient geometry, draw, clear, copy, mip generation, synchronous and asynchronous readback. Inside it: a PSO cache, automatic barriers and descriptor rings | d3d12 | OpenGL's state machine |
+| `FontFace` | A DirectWrite face opened from a file; glyph lookup; 8-bit coverage at a pixel size; advance and bearing; pair adjustment from the `kern` table | dwrite | FreeType |
+| `ImageFile` | Decode PNG and JPEG to RGBA8, top row first; encode PNG | windowscodecs | `sf::Image` |
+| `AudioDevice`, `SoundBuffer`, `Voice`, `Listener`, `Emitter` | The XAudio2 mastering voice and voice pool; WAV parsing (PCM, float, MS-ADPCM); X3DAudio positioning | xaudio2 | The mechanism in `XAudio2.cpp` |
+
+Not in NeuronClient:
+- threads, mutexes and clocks, which liblt takes from the standard library directly;
+- networking, since nothing is left that uses it;
+- joysticks, which are removed.
+
+### 5.3 The graphics core
+
+- **Floor.** Feature level 11_0, Shader Model 5.1. That covers every Direct3D 12 GPU and WARP, and
+  Windows 10 stays supported.
+- **Frames.** Two frames in flight on one direct queue. The GL build's per-frame wait for the GPU
+  goes (N3).
+- **Root signatures.** Both are built in C++:
+  - one for every liblt program: a root CBV at `b0` (the program's `$Globals`), an SRV table
+    `t0`–`t15`, and a sampler table `s0`–`s15`;
+  - one for compute: a CBV, an SRV table and a UAV table.
+- **Descriptors.**
+  - Views are created in CPU-only heaps.
+  - A shader-visible CBV/SRV/UAV ring per frame.
+  - One shader-visible sampler heap, 2,048 at most, whose tables are deduplicated by content.
+    Static samplers would not do, because the SDF field's border colour is red (1, 0, 0, 0).
+- **Pipeline states.** Cached under a key of: program, blend, depth, cull, render-target formats and
+  count, depth format, input layout and topology. They are created at first use. An
+  `ID3D12PipelineLibrary` disk cache is backlog.
+- **Barriers.** State is tracked per subresource, and the context inserts the transitions.
+- **Lifetimes.** Every release waits in a queue until its fence retires, because liblt creates and
+  destroys textures mid-frame: on resize, in generators, for SDF slices and for glyphs.
+- **Uploads.** A per-frame ring for constants, transient geometry and small texture updates. Large
+  uploads get their own staging buffer.
+- **Readbacks.**
+  - Synchronous (submit, then wait) for load-time work and screenshots.
+  - Asynchronous for per-frame work: the lens flares read the newest completed result, one or two
+    frames old (N3).
+- **Mipmaps.** A compute downsampler (2×2 box, odd sizes handled) for 2D and cube textures in all
+  seven colour formats. It runs when liblt asks for mips on a texture it samples with mips, not on
+  every creation (N3).
+- **Resource flags.** Colour textures allow render-target use, because liblt may bind any texture as
+  a target. Those with mips also allow unordered access. Depth is `D32_FLOAT`.
+- **Presentation.**
+  - Everything renders offscreen, and a present pass copies to the back buffer. It does the one
+    vertical flip of §5.5.
+  - Two flip-discard buffers.
+  - Vsync off, with tearing where supported, as the original asks
+    (`FrontierOutpost/src/launch/launch.cpp:41`).
+  - Resize through `ResizeBuffers`.
+  - No exclusive fullscreen: nothing uses it.
+- **Device removal.** DRED breadcrumbs and page-fault data go to the log, and the engine exits
+  through its fatal path. There is no recovery: liblt generates too much GPU content at run time to
+  rebuild it.
+- **Debugging.**
+  - The Direct3D 12 debug layer runs in Debug, with GPU-based validation behind a switch.
+  - PIX markers are written without WinPixEventRuntime (R14).
+
+### 5.4 liblt on NeuronClient
+
+| liblt | Change |
+|---|---|
+| `LTE/GL.h`, `GLEnum.h`, `GLType.h` | Deleted. `Renderer.h`, `Texture2D.h`, `Texture3D.h`, `CubeMap.h`, `Mesh.h` and `Shader.h` take engine-owned enumerations; about 30 call sites change spelling only. |
+| `LTE/Renderer.cpp` | The state and render-target stacks feed a `DrawContext`, and the FBO cache goes. Meshes become static buffers; the other three paths draw transient geometry from the ring. The quad's 8-bit indices become 16-bit. `Renderer_Flush` stops waiting for the GPU. |
+| `LTE/Texture2D.cpp`, `Texture3D.cpp`, `CubeMap.cpp` | NeuronClient textures. `SetData` converts on the CPU where GL converted during upload: float to half, float to unorm, RGB to RGBA. `GetData` and `SaveTo` read back. Images load and save through `ImageFile`. |
+| `LTE/Mesh.cpp` | NeuronClient buffers. A version bump uploads a new buffer, and the old one is released once its fence retires. |
+| `LTE/Shader.cpp`, `ShaderInstance.cpp` | Programs come from the compiled registry, by their legacy name. Each program keeps a CPU copy of its constants, so values persist as they did in GL. Names are resolved through reflection and cached by their text. Setting a value makes the program current, as `Use()` did. `JSLPreprocess` and `Shader_RecompileAll` go. |
+| `LTE/SDFMesh.cpp`, `LTE/SDF*.cpp` | `GetCode` and `FIELDFN` give way to an instruction encoder and one compute dispatch (§5.7). |
+| `LTE/Font.cpp` | `FontFace` replaces FreeType. The distance-field pass stays on the GPU. |
+| `LTE/Window.cpp`, `Keyboard.cpp`, `Mouse.cpp` | Events come from `Neuron::Window`, through a table from `Neuron::Key` to the engine's `Key`. Joystick polling goes. |
+| `LTE/Thread.cpp`, `Lock.cpp`, `Timer.cpp` | `std::jthread`, `std::this_thread::sleep_for`, `std::recursive_mutex` (SFML's mutex is recursive) and `std::chrono::steady_clock`. The `Timer` class keeps its interface, so its callers do not change. `TerminateThread` becomes a cooperative stop, or a detach at exit. |
+| `Module/SoundEngine/XAudio2.cpp` | An adapter over `Neuron::AudioDevice`. Carriers, the camera as listener and the `distanceDiv` mapping stay in liblt. |
+| `UI/Widget/Rendered.cpp`, `Module/Scheduler.cpp` | Their raw GL calls go: a depth texture and `glFinish`. |
+| `FrontierOutpost/src/launch/launch.cpp` | Gains a smoke mode for CI: `--warp`, `--frames N`, `--capture <path>`. |
+
+### 5.5 Keeping OpenGL's conventions without OpenGL
+
+The port keeps OpenGL's memory layout, with row 0 at the bottom of an image. The alternative is to
+convert 133 shader files, and the C++ that places viewports and scissors and flips images, to
+Direct3D's top-left origin. Instead:
+
+- **Clip space.** Every vertex shader ends in one macro. It negates clip-space y, and maps z from
+  GL's [−w, w] to Direct3D's [0, w] as z′ = (z + w) / 2. Stored depth and clipping then match GL's,
+  including the logarithmic depth and the skybox's z = w(1 − 10⁻⁶).
+- **Winding.** Negating y reverses the winding, so the rasteriser's front face flips with it.
+- **Viewport and scissor.** The rectangles keep liblt's numbers. Once images are stored bottom-up,
+  GL's bottom-left y and Direct3D's top-left y name the same row.
+- **`gl_FragCoord`.** It becomes `SV_Position` with the same meaning, so uv and
+  `gl_FragCoord * rcpFrame` stay interchangeable, as the shaders assume.
+- **Flips.** The present pass flips once, into the back buffer. Readbacks keep liblt's existing CPU
+  flips.
+
+N3 would allow converting to Direct3D's own layout instead. It is not done here because a wrong flip
+is the likeliest porting bug, and the hardest to see across 133 files. This way every convention
+lives in one macro and one pass. Converting later, pass by pass, stays possible.
+
+Other rules the context applies:
+
+| GL behaviour | Direct3D 12 rule |
+|---|---|
+| Formats | R8, RG8 and RGBA8 → `R8_UNORM`, `R8G8_UNORM`, `R8G8B8A8_UNORM`. R16F and RGBA16F → `R16_FLOAT`, `R16G16B16A16_FLOAT`. R32F and RGBA32F → `R32_FLOAT`, `R32G32B32A32_FLOAT`. D32F → `D32_FLOAT`. No sRGB: the game does its own gamma. |
+| Filtering and wrapping are properties of the texture | A sampler is chosen at bind time from the texture's settings. Anisotropy only with mipmapped linear minification. The border colour is kept. |
+| A depth buffer stays attached under targets of another size | Depth is bound only when the draw tests or writes it, since Direct3D 12 requires matching sizes. |
+| Slot 1 stays attached under a job that writes only slot 0 | Only as many targets are bound as the program writes. |
+| Blend modes | Alpha = (SRC_ALPHA, INV_SRC_ALPHA, ONE, ONE). Additive = (ONE, ONE, ONE, ONE). One state for all targets. |
+
+### 5.6 Shaders
+
+- **Where they live.** `FrontierOutpost/src/liblt/Shaders/`, flat, as `*.hlsl` and `*.hlsli`.
+  - Files are named from the legacy path: `post/blur.jsl` becomes `PostBlurPS.hlsl` (AGENTS.md §2;
+    ADR-008 fixes the rule).
+  - Output goes to `FrontierOutpost/src/liblt/CompiledShaders/`, which is build output and
+    git-ignored.
+  - NeuronClient's own shaders (mip generation, present) live in `NeuronClient/Shaders/` and compile
+    the same way.
+- **How they compile.** One `FxCompile` item per stage in the owning `.vcxproj`, at Shader Model
+  5.1, the same in Debug and Release, into a header holding a byte array.
+- **Registry.**
+  - A table maps the legacy names (`identity.jsl`, `post/blur.jsl`) to compiled programs.
+    `Shader_Create(vs, fs)` looks both up; an unknown name is fatal and names the path.
+  - The project checker verifies that every `Shaders/*.hlsl` is registered, and that every
+    registered name has a file.
+- **Names.** HLSL reserves `texture` and `sample`, and has `saturate` and `noise` as intrinsics. The
+  HLSL renames them, and the reflection layer maps the GLSL names, so C++ and scripts keep writing
+  `"texture"`.
+- **Includes.** `global.jsl`, `vert.jsl` and `frag.jsl` become one `Common.hlsli`. It holds the §5.5
+  macro, the output struct that replaces `#output`, and the HIGHQ/LOWQ switch.
+- **SMAA.** `GameData/shader/common/smaa.jsl` is SMAA.h itself. Only its short porting block is
+  hard-wired to GLSL (`smaa.jsl:373-385`), and the algorithm is already written in SMAA's HLSL-typed
+  dialect.
+  - The port puts back SMAA's own HLSL 4.1 porting block, so no third-party code is added.
+  - SMAA's licence notice goes beside the file, which closes O14.
+- **How much.** After Phase 1, 133 files remain. Setting SMAA aside, about 4,330 lines of GLSL are
+  ported by hand.
+- **What goes:** `JSLPreprocess`, the `#version` injection, hot reload, and `GameData/shader`.
+
+### 5.7 SDF fields without generated code
+
+Every SDF node already has a CPU `Evaluate`. But the two noise nodes are `NOT_IMPLEMENTED` there
+(`LTE/SDF.cpp`), and fields reach about 256³ voxels (`LTE/SDFMesh.cpp:27`). Evaluating on the CPU
+would be slow, and it would first need the noise ported to C++.
+
+So the field moves to a precompiled compute shader:
+- **The tree becomes an instruction stream:** postfix, opcode and parameters, in a structured
+  buffer.
+- **One compute shader walks it for each voxel,** with a value stack and a point stack, and writes
+  the R32F 3D texture directly through a UAV. The slice-by-slice copy through the CPU goes.
+- **Gradient and occlusion** become compute passes.
+- **The LOD grids** are read back for the CPU polygoniser, asynchronously.
+- **The opcodes** are the SDF node types Phase 1 leaves, plus Worley and Perlin noise. The noise is
+  ported to HLSL once.
+
+The interpreter is slower than code specialised per mesh. It runs at generation time, and Phase 4
+measures it.
+
+## 6. Phases
+
+**The rule:** one change at a time, and all four builds (x64 and ARM64, Debug and Release) pass after
+every step. CI builds Debug|x64. The other three are built by a temporary workflow for the length of
+the migration, as the last migration did, or by hand.
+
+Phases 1 and 2 happen while OpenGL still renders, so a fault there cannot be the new renderer's.
+Phase 3 touches nothing in liblt; it can start once step 1 of Phase 2 has landed.
+
+### Phase 0: Preconditions
+
+1. **ADRs.** Write the ADRs of §8 as Proposed, for the owner to accept.
+2. **Checkers.** Write the checkers AGENTS.md §6 relies on, because NeuronClient is the first code
+   they will gate:
+   - `Build/CheckFormat.py`;
+   - `Build/CheckProjectFiles.py`, allowing ARM64 for NeuronClient (N1);
+   - `Build/RunClangTidy.py`.
+
+   Outpost.Commander's `Scripts/` already checks x64 and ARM64 pairs and can be adapted. All three
+   checkers leave `FrontierOutpost/` and `GameData/` alone (ADR-001, ADR-004). Two fixes go with
+   them:
+   - `.clang-tidy`'s `HeaderFilterRegex` names `FrontierCommander`, a leftover from another tree. As
+     it stands, it would check no NeuronClient header.
+   - The clang-format pin: `.clang-format` says 18.1.3, but `build.yml` installs 22.1.3.
+3. **Tag.** Tag the last OpenGL commit `gl-final`.
+4. **Make the apps to keep start.**
+   - Replace RandomScreenshot's hard-coded folder.
+   - Close O10: either the owner converts the Ogg sounds, or a missing sound becomes a logged
+     warning.
+
+**Done when:** the checkers run green in CI, and the 16 apps to keep start on the owner's GPU.
+
+### Phase 1: Remove what is unused
+
+1. **Apps first.** Then re-run the reachability analysis, over C++ callers and script callers,
+   because removing the apps shrinks what everything else reaches.
+2. **Then the other tiers,** one commit each: code, then passes and shaders, then assets. The lists
+   are in §9.
+3. **ADR-013** records what went.
+
+**Done when:** all four builds pass, the kept apps start, and nothing refers to a removed name.
+
+### Phase 2: NeuronClient, and every swap that is not graphics
+
+OpenGL still renders throughout. Each step is its own commit.
+
+1. **The projects.**
+   - `NeuronClient/` (a static library) and `Tests/NeuronClientTests/`, both in the solution. The
+     tests keep the placeholder `SuiteSmoke` until real tests land.
+   - The tests build into `x64\Debug\`, where `build.yml` already looks.
+   - The first test creates a WARP device, clears a texture and reads it back. That proves the
+     runner can run Direct3D 12.
+   - A second test loads `d3dcompiler_47.dll` and reflects a compiled blob. The owner runs it on the
+     ARM64 device as well.
+2. **Threads and clocks.** liblt moves to the standard library. No NeuronClient code is involved.
+3. **Images.**
+   - `ImageFile` (WIC) replaces `sf::Image`.
+   - `Window.cpp` and `Mouse.cpp` move from `sf::RenderWindow` to `sf::Window`, and `sfml-graphics`
+     leaves the link.
+4. **Glyphs.** `FontFace` (DirectWrite) replaces FreeType, and `FrontierOutpost/ext/freetype` and
+   `FrontierOutpost/include/FreeType` go.
+5. **Sound.** The XAudio2 mechanism moves into NeuronClient, and liblt keeps the adapter.
+6. **Window and input.** `Neuron::Window` (Win32) replaces SFML's window.
+   - A temporary WGL bridge in liblt, about 150 lines, keeps OpenGL drawing on the new window through
+     an opaque handle, until Phase 4 deletes it. It costs little, and it keeps window and input
+     faults apart from renderer faults.
+   - Then `FrontierOutpost/ext/SFML` and its projects go.
+
+**Done when:**
+- there is no SFML or FreeType in the tree;
+- NeuronClientTests pass in CI (WIC round trip, glyph coverage and kerning, WAV parsing, key
+  mapping);
+- the owner has checked text, images, sound and input in the kept apps.
+
+### Phase 3: The Direct3D 12 core, built and tested alone
+
+Build §5.3 in NeuronClient. The tests run on WARP, with the debug layer on:
+- a draw into every format, read back and compared;
+- mip chains for 2D and cube textures, odd sizes included;
+- cube-face targets, and 3D UAV writes;
+- barrier sequences that raise no debug-layer error;
+- the descriptor ring wrapping around;
+- release after the fence retires;
+- PSO cache hits;
+- the reflection name map, including the renamed keywords;
+- one asymmetric image taken through render target, sampling and present, which pins down the §5.5
+  flips.
+
+**Done when:** every test passes on WARP in CI, with zero debug-layer errors.
+
+### Phase 4: liblt on Direct3D 12
+
+1. **Headers.** Engine-owned enumerations replace the GL types in the public headers. The change is
+   mechanical.
+2. **Shaders.** Port them to HLSL, with the registry and SMAA's HLSL porting block (§5.6).
+3. **The GL layer.** Rewrite it onto `DrawContext` (§5.4, §5.5).
+4. **SDF fields.** Add the instruction encoder and the compute interpreter (§5.7).
+5. **Bring-up,** in this order, each step checked in an app that shows it:
+   1. clear and present;
+   2. interface and text (`loading`, `ui`);
+   3. the camera pipeline in `war`, one pass at a time: depth prepass, G-buffer, global lighting,
+      local lighting, blended, particles, lens flares, bloom, tone map, colour grade;
+   4. SMAA, then the interface pass, then dither;
+   5. the generators: nebula, planets, IR map;
+   6. SDF meshes (`model`);
+   7. plate-mesh occlusion (`platemesh`);
+   8. script filters (`image`, `observatory`);
+   9. the remaining apps.
+6. **Deletion.** Delete OpenGL, the WGL bridge, `FrontierOutpost/ext/glew`, and
+   `FrontierOutpost/include/GL` and `include/Glew`.
+7. **A CI smoke job.** It runs each 3D app for N frames on WARP, offscreen, and fails on a
+   Direct3D 12 error or a removed device. It uploads one PNG per app for the owner to look at.
+
+**Done when:** the 16 kept apps run on the owner's GPU (x64) and on the owner's ARM64 device, and
+the smoke job is green.
+
+### Phase 5: Close out
+
+1. **Solution.** `FrontierOutpost.slnx` holds `lt`, `launch`, `NeuronClient` and
+   `NeuronClientTests`.
+2. **Build files.** `lt.vcxproj` and `launch.vcxproj` lose the SFML, GLEW, FreeType and OpenGL
+   include directories, definitions and libraries. `.gitignore` loses its SFML negations.
+3. **Documents.** The README, the migration notes, and the ADR changes of §8.
+4. **Final checks.**
+   - All four builds, by hand.
+   - The owner's GPUs.
+   - A 30-minute soak of `war`, watching memory, the descriptor rings and deferred release.
+   - Frame time against `gl-final` on the same machine: recorded, but not a gate.
+
+## 7. What each check can prove
+
+| Check | Proves | Cannot prove |
+|---|---|---|
+| CI build, Debug\|x64 (as today) | Compiles and links | Release, ARM64 |
+| NeuronClientTests on WARP | The Direct3D 12 core, DirectWrite, WIC, WAV parsing and key mapping, with no debug-layer error | Real-GPU driver behaviour |
+| CI smoke run on WARP | Every 3D app renders N frames without a Direct3D 12 error; PNGs to look at | That the frames look right |
+| Checkers | Formatting, naming and project shape for NeuronClient | — |
+| The owner, each phase | Looks, sound, input and feel; ARM64; real GPUs | — |
+
+If the runner has no interactive desktop, no swap chain can be created there. That is why the smoke
+mode renders offscreen and never creates one.
+
+## 8. ADRs
+
+**New.** Numbering continues from ADR-004.
+
+| ADR | Decision |
+|---|---|
+| ADR-005 | NeuronClient is FrontierOutpost's platform layer (§5.1, §5.2). |
+| ADR-006 | NeuronClient builds for x64 and ARM64, amending AGENTS.md §3 (N1). It states `/arch`; see §12. |
+| ADR-007 | Graphics is Direct3D 12, as the shared base of the NeuronClient projects: the policies of §5.3 and the conventions of §5.5. |
+| ADR-008 | Shaders are HLSL, compiled into headers by FXC at SM 5.1, with reflection by `D3DReflect` (§5.6). |
+| ADR-009 | SDF fields are interpreted by a compute shader (§5.7). |
+| ADR-010 | Glyphs are rasterised by DirectWrite, from the font files in `GameData/font`. |
+| ADR-011 | Images are decoded and encoded by WIC. |
+| ADR-012 | The window and input are Win32: `WM_CLOSE` quits, system DPI awareness stays, and there is no joystick. |
+| ADR-013 | What was removed as unused, and by what rule (§9). |
+
+**Changed.**
+- **ADR-001:** a scope note. NeuronClient and its tests are outside the exemption.
+- **ADR-002:** superseded. No vendored dependency is left.
+- **ADR-003:** amended. The engine's mechanism lives in NeuronClient; the adapter stays in liblt.
+- **ADR-004:** amended. `GameData/` holds no shaders, and the fonts are pruned.
+
+**Runtime files (R13).** None is added. Screenshots stay under `cache/screenshot/`. A PSO disk
+cache would need its own ADR.
+
+## 9. What goes (N4)
+
+These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item before deleting it.
+
+**A. Apps: 12 removed, 16 kept.**
+- **Removed:** `prime`, `sandbox`, `threads`, `font`, `draw`, `brain`, `hnn`, `life` (with
+  `App/Life/`), `universe`, `strukt`, `colony` and `launcher`, and whatever only they reach.
+- **Kept:** `war`, `dogfight`, `rails`, `ltheory`, `handling`, `observatory`, `model`, `platemesh`,
+  `map`, `market`, `objectinfo`, `hud`, `ui`, `image`, `loading`, and the `widget` host.
+
+**B. Unreachable code.**
+- `FrontierOutpost/src/old/`: seven programs no project builds.
+- The HTTP path: `LocationWeb` and `Location_Web`, and with them `sfml-network` and `ws2_32`.
+- Joysticks: `Joystick.*`, the joystick buttons and axes, and the per-frame polling in
+  `LTE/Program.cpp`.
+- The C++ HUD widget, `Game/Widget/HUD.cpp`, with `Settings_Button` and the button and axis wiring
+  that only it uses.
+- `Config.cpp`, the archive path (`kUseArchive` is false), the Telemetry profiler branch, `Audio/`,
+  `Network/`, `CodeGen/CodeBlock.h` and `CodeObject_Custom`.
+- Dead functions:
+  - the window setters for icon, position, fullscreen, cursor and capture;
+  - `Mouse_SetPos`, `GetX`, `GetY`, `GetIdleTime`, `GetDX`, `GetDY` and `GetDP`;
+  - `GetKeyChar`, `Keyboard_Block`, `Keyboard_IsBlocked`, `Keyboard_System` and `KeyWithModifiers`;
+  - `CubeMap::SaveTo` and `Texture_Atlas`;
+  - `SoundEngine_Null` and `CreatePhysicsEngineNull`;
+  - `Renderer_DrawQuadOutline` and `GLU::*`.
+- Vendored headers under `FrontierOutpost/include/` that nothing includes: `OVR/`, `enet/`,
+  `GL/glut.h`, `GL/glui.h`, `GL/GLAux.h`, `UTF8/checked.h`, `Glew/GL/wglew.h` and `Glew/GL/glxew.h`.
+- `sfml-audio` and `sfml-main`, which nothing links.
+
+**C. Dead passes and shaders.**
+- **Passes:** SSAO, DustClouds, MotionBlur, RadialBlur, Aberration, BloomLight, Composite and
+  ClearDepth, plus the imposter renderable.
+- **Shader files:** 36, 983 lines in all. 27 are referenced by nothing. 9 are reached only by the
+  dead code above, the broken `ui/rect` and `solidcolor` among them.
+- **SDF node types that nothing constructs.** Scripts call 3 of the 20 constructors; C++ callers
+  decide the rest.
+
+**D. Unused assets.**
+- **Fonts:** keep Rajdhani, Iceland, SourceCodePro and Gafata, with their licences. Remove the other
+  34 families, NotoSans, NotoSansCJKsc and Play among them, and the `FontPreview` and `SplashScreen`
+  widgets that nothing opens.
+- **Textures:** `icon.png` and `splash.png`.
+- **Sounds:** re-checked in Phase 1.
+
+## 10. Risks
+
+| Risk | Where it bites | Mitigation |
+|---|---|---|
+| Bugs in the D3D11-style layer: barriers, lifetimes, descriptors | Phases 3 and 4 | Built and tested alone on WARP with the debug layer before liblt uses it. Release deferred by fence from the first commit. |
+| GL behaviour liblt relies on without saying so: uniforms that persist, `Use()` on set, inherited attachments, units shared between programs | Phase 4 | The explicit rules of §5.4 and §5.5. Bring-up one pass at a time. |
+| Upside-down images or wrong depth | Phase 4 | One macro and one present flip. The asymmetric-image test in Phase 3. |
+| `d3dcompiler_47.dll` missing on a target | ARM64 | Phase 2 loads it and reflects a blob on the owner's ARM64 device. Fallback: reflection tables generated at build time. |
+| FXC is frozen | Later | Nothing here needs SM 6. ADR-008 records what moving to DXC would take. |
+| The SDF interpreter is slow, or shapes change | `model`, `war` | Generation time measured on WARP and a GPU. Different shapes are acceptable under N3. |
+| Hitches the first time a PSO is used | The first seconds of each app | Known programs warmed at load. `ID3D12PipelineLibrary` later. |
+| Modernisation runs away | Phase 4 | Only the changes named in §5 go in; everything else is backlog. |
+| Mixed build settings in one DLL | Always | NeuronClient at `/W4 /WX /fp:precise`, inside `lt` at `/W3 /fp:fast`, is fine for a static library. The CRT must match (`/MD`), and NeuronClient's `/arch` sets the whole game's CPU floor (§12). |
+| No automatic acceptance (N3) | Every phase | The owner signs off each phase. `gl-final` is kept for a side-by-side look. |
+
+## 11. Not in this plan
+
+- sRGB-correct colour; HDR output; MSAA.
+- Per-monitor DPI; borderless fullscreen; a vsync setting.
+- A PSO disk cache; moving the glyph distance field to the CPU.
+- liblt's Linux and macOS branches.
+- Extracting NeuronClient into a repository of its own.
+
+## 12. Still open for the owner
+
+1. **`/arch` on x64 (ADR-006).** AVX2, as the other NeuronClient projects use, raises the game's CPU
+   floor to Haswell or Excavator. SSE2 keeps today's floor.
+2. **O10.** Convert the Ogg sounds, or make a missing sound a warning.
+3. **RandomScreenshot.** What the background should be once the Dropbox folder is gone: the F1
+   screenshots in `cache/screenshot/`, or a plain colour.
+4. **Vsync.** Off, as now, or on.
