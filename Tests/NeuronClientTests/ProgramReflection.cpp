@@ -35,8 +35,8 @@ using Neuron::ProgramConstant;
 using Neuron::ProgramInput;
 using Neuron::ShaderStage;
 
-/// FXC's header holds the bytecode as an array of BYTE.
-template <std::size_t Bytes> std::span<const std::byte> Bytecode(const BYTE (&_bytecode)[Bytes])
+/// FXC's header holds the bytecode as an array of bytes.
+template <typename T, std::size_t Count> std::span<const std::byte> Bytecode(const T (&_bytecode)[Count])
 {
   return std::as_bytes(std::span(_bytecode));
 }

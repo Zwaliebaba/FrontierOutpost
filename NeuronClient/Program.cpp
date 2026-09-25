@@ -118,10 +118,10 @@ bool Program::Native::Reflect(std::span<const std::byte> _bytecode, ShaderStage 
       _error = std::format("a binding of the {} does not reflect", stageName);
       return false;
     }
-    const std::string_view name(bind.Name);
+    const std::string_view boundName(bind.Name);
     if (bind.Space != 0 || bind.BindCount != 1)
     {
-      _error = std::format("the {} binds {} in space {} as {} registers; the core binds single registers in space 0", stageName, name,
+      _error = std::format("the {} binds {} in space {} as {} registers; the core binds single registers in space 0", stageName, boundName,
                            bind.Space, bind.BindCount);
       return false;
     }
@@ -131,25 +131,25 @@ bool Program::Native::Reflect(std::span<const std::byte> _bytecode, ShaderStage 
     case D3D_SIT_CBUFFER:
       if (bind.BindPoint != 0)
       {
-        _error = std::format("the {} binds {} at b{}; only b0 is bound", stageName, name, bind.BindPoint);
+        _error = std::format("the {} binds {} at b{}; only b0 is bound", stageName, boundName, bind.BindPoint);
         bound = false;
       }
       break;
     case D3D_SIT_TEXTURE:
     case D3D_SIT_STRUCTURED:
     case D3D_SIT_BYTEADDRESS:
-      bound = Bind(shaderResources, name, bind.BindPoint, MAX_SHADER_RESOURCES, 't', _error);
+      bound = Bind(shaderResources, boundName, bind.BindPoint, MAX_SHADER_RESOURCES, 't', _error);
       break;
     case D3D_SIT_SAMPLER:
-      bound = Bind(samplers, name, bind.BindPoint, MAX_SAMPLERS, 's', _error);
+      bound = Bind(samplers, boundName, bind.BindPoint, MAX_SAMPLERS, 's', _error);
       break;
     case D3D_SIT_UAV_RWTYPED:
     case D3D_SIT_UAV_RWSTRUCTURED:
     case D3D_SIT_UAV_RWBYTEADDRESS:
-      bound = Bind(unorderedResources, name, bind.BindPoint, MAX_UNORDERED_RESOURCES, 'u', _error);
+      bound = Bind(unorderedResources, boundName, bind.BindPoint, MAX_UNORDERED_RESOURCES, 'u', _error);
       break;
     default:
-      _error = std::format("the {} binds {}, a kind of resource the core does not bind", stageName, name);
+      _error = std::format("the {} binds {}, a kind of resource the core does not bind", stageName, boundName);
       bound = false;
       break;
     }
