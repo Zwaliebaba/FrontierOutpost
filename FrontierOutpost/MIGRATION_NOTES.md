@@ -15,8 +15,9 @@ repository's CI to build Debug|x64 (D19). **With that, Phase 2 is done: x64 Debu
 build and link from a clean checkout (§16, run 7), and the repository's CI is green.** **Phase 3
 is done: x64 Debug and Release link at C++23** (§18), after one round of conformance fixes.
 **Phase 4 is done: ARM64 Debug and Release link** (§19). **Phase 5 verified all four
-combinations from a clean state** (§20), and §21 is the final report. One question waits on the
-owner (O12).
+combinations from a clean state** (§20), and §21 is the final report. The owner's decisions after
+it (D20–D25) fix O12, switch ARM64 to the 64-bit-hosted tools, correct the README and settle what
+CI builds after the merge; §20.5 verifies them.
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -47,6 +48,12 @@ phase.
 | D17 | **All FMOD material is deleted**: the FMOD engine, the never-created music engine and its FMOD Designer header, `include/FMOD`, and the `.fev`/`.fsb` banks in `resource/music`. | owner | after Phase 2 |
 | D18 | **The port is its own step, between Phases 2 and 3**, so that x64 links before the C++23 bump. | owner | after Phase 2 |
 | D19 | **The repository's CI builds `FrontierOutpost.slnx` at Debug\|x64.** `.github/workflows/build.yml` was a copy of another project's (it built `Lockstep.slnx`, which does not exist here, O3). It is rewritten, and its gates without an input yet (checkers, tests, clang-tidy, format) are skipped until the input lands, as AGENTS.md §6 prescribes. | owner | after Phase 2 |
+| D20 | **O12 is fixed**: `ThreadImpl::finished` becomes a `std::atomic<bool>`, stored with release and loaded with acquire (§11, BR7). | owner | after Phase 5 |
+| D21 | **After the merge, CI builds Debug\|x64 only**, as AGENTS.md §6 says: ARM64 and Release are built by hand before a release. The migration workflow and its scripts are removed before the merge, once they have verified D20 and D22 on all four combinations; this file keeps what they measured. | owner | after Phase 5 |
+| D22 | **Every platform uses the 64-bit-hosted tools** (`PreferredToolArchitecture=x64` in `Directory.Build.props`). For ARM64, MSBuild had picked the x86-hosted cross compiler (§19.3). | owner | after Phase 5 |
+| D23 | **`FrontierOutpost/README.md`'s build and run steps describe FrontierOutpost's build** instead of the original's CMake and `configure.py`; the rest of it stays verbatim. | owner | after Phase 5 |
+| D24 | **O6 is closed, not pursued**: it concerns how the original's Win32 build was measured, not FrontierOutpost. | owner | after Phase 5 |
+| D25 | **The pull request is merged with a merge commit**, which keeps the commits this file cites. | owner | after Phase 5 |
 
 ## 2. Environment
 
@@ -722,7 +729,10 @@ only. §15.4 gives the reasoning for each entry.
 - **Output layout** (the brief's). Every output goes to `bin\<Platform>\<Configuration>\` and
   every intermediate to `obj\<Platform>\<Configuration>\<Project>\`. The original writes `lt` and
   `launch` to one `bin/` in the source tree that every configuration overwrites, and the SFML
-  libraries to `build/ext/SFML/lib/<Config>/`.
+  libraries to `build/ext/SFML/lib/<Config>/`. One consequence: `launch.exe` looks for `resource/`
+  in its working directory and then one level up (`src/launch/launch.cpp:29-30`), which found it
+  from the original's `bin/` but not from `bin\<Platform>\<Configuration>\`. It has to be started
+  from `FrontierOutpost/`, as the README says (D23).
 - **No glob.** `lt`'s 382 sources are listed in `lt.vcxproj`, in the glob's order. A new source
   file is not built until it is added there and to the `.filters`.
 - **Two definitions dropped:** `CMAKE_INTDIR="<cfg>"` and `lt_EXPORTS`. Nothing reads either.
@@ -786,6 +796,8 @@ these, all in `FrontierOutpost/`:
 | `resource/script/Widget/Browser.lts:67` | `ui/objectmenuopen.ogg` to `ui/objectmenuopen_ogg.wav` | D16: `ui/objectmenuopen.wav` is a different sound |
 | `src/old/ltheory/ltheory.cpp`, `src/old/soundstudio/soundstudio.cpp` (not built) | `SoundEngine_XAudio2()`; the include of `MusicEngine.h` and a commented-out `CreateMusicEngine` call removed | D17: no code may name what was deleted |
 | `src/liblt/LTE/Data.h:67`, `:248`; `src/liblt/LTE/ResourceMap.cpp:38` | the string literal in a conditional expression whose other operand is a `String` is written `String("null")`, `String("")` | Phase 3: error C2445 under `/Zc:ternary` (part of `/permissive-`). `String` converts to `char const*` and a literal converts to `String`, so the standard calls the expression ambiguous. `Data.h:67` is the same expression, in a template nothing instantiates, so MSVC did not report it yet. BR5 |
+| `src/liblt/LTE/Thread.cpp:21`, `:34`, `:44`, `:49` | `finished` is a `std::atomic<bool>`: stored with release once the job has run, loaded with acquire by `IsFinished()` and the destructor; `<atomic>` included | D20: on ARM64, the main thread could see `finished` before the job's results (O12). BR7 |
+| `README.md` | the prerequisites, build, run and example sections describe the MSBuild build | D23 |
 | `src/liblt/LTE/OS.cpp:181-183` | `OS_Spawn` hands `CreateProcess` a writable, empty `char commandLine[]` in place of the literal `""` | Phase 3: `/permissive-` includes `/Zc:strictStrings`, which refuses a string literal as `LPSTR` (C2664). The API documents the parameter as writable. The command line is empty either way, so nothing changes at run time |
 
 ## 12. BEHAVIOUR-RISK register
@@ -865,6 +877,12 @@ these, all in `FrontierOutpost/`:
   - So ARM64 and x64 builds are not bit-identical. That matters only where results must match across
     machines, as in a replay or a lockstep simulation. No first-party source mentions a replay,
     lockstep, determinism or desync, so nothing is known to depend on it.
+- **BR7: a threaded job's hand-off is now ordered** (D20), `src/liblt/LTE/Thread.cpp:21`, `:34`,
+  `:44`, `:49`. The worker's writes now happen before the main thread reads the job's results, on
+  every platform. On ARM64 this removes a race (O12). On x64, which already kept the stores in
+  order, a release store and an acquire load compile to the plain moves they replace, so nothing
+  should change; that is reasoned from the memory model, not measured. Not tested on either
+  platform: nothing has been run (§20.4).
 
 ## 13. Modernisation backlog
 
@@ -886,11 +904,10 @@ Recorded, not to be done in this migration:
   2.5.1 still has it; 2.6.0 replaced it (checked against both tags).
 - The original's 580 conversion warnings in `lt` (C4267, C4244; §21.4).
 - ARM64 builds use MSBuild's default cross compiler, the x86-hosted one (`HostX86\arm64`, §19.3).
-  `PreferredToolArchitecture=x64` would select the 64-bit-hosted one, which has no 4 GB address
-  space limit. Nothing has needed it.
+  **Done by D22.**
 - `README.md` and `script/install_dependencies.sh` are the original's, copied unchanged: they
-  describe its CMake build and `configure.py`, which the copy leaves out. FrontierOutpost builds
-  from `FrontierOutpost.slnx`.
+  describe its CMake build and `configure.py`, which the copy leaves out. **The README is done by
+  D23**; `script/install_dependencies.sh`, the author's Linux setup script, stays as it is.
 
 ## 14. Open issues
 
@@ -905,7 +922,12 @@ Recorded, not to be done in this migration:
 - **O4** ARM64 binaries can be built on `windows-latest` but not run. An ARM64 smoke test needs
   an ARM64 host (§8).
 - **O5** The runtime assets are LFS objects. The build host can fetch them from upstream; this
-  container cannot (the proxy serves no LFS).
+  container cannot (the proxy serves no LFS). **To run the game**, the 230 pointer files under
+  `resource/` must be replaced by upstream's real files: every file in `resource/sound/`, the
+  `.ttf` and `.otf` fonts in `resource/font/`, and the `.jpg`, `.png` and `.bin` files in
+  `resource/texture/`. They come from a clone of `JoshParnell/ltheory-old` made with Git LFS
+  installed. Copy only those: FrontierOutpost changed six scripts in `resource/script/` (§11) and
+  removed `resource/music/` (D17). Then the Ogg sounds become WAV files (O10).
 - **O6** For Win32, MSBuild's own total (86 warnings) is *lower* than the de-duplicated count
   (229), which should be impossible if both count the same thing. This is unexplained.
   - The raw logs are in the run's `baseline-Win32` and `baseline-x64` artifacts, which this
@@ -917,6 +939,7 @@ Recorded, not to be done in this migration:
     a template's arguments as warnings of their own, and MSBuild does not. Whether that accounts
     for all of Win32's difference is not established; FrontierOutpost's own builds do not show it
     (MSBuild's total is above the unique count in all four).
+  - **Closed by D24**, not pursued.
 - **O7** This container can read job logs but not artifacts. The owner can download them from the
   run page.
 - **O8** (D8) The owner's FMOD Ex x64 files are not in the tree yet. **Superseded by D15:** no
@@ -934,8 +957,8 @@ Recorded, not to be done in this migration:
 - **O11** The XAudio2 engine is verified by compiling it, not by listening to it. No runner has an
   audio device, and the assets here are LFS pointers (D12, D13). AGENTS.md §3: audio has to be run
   to be checked, and that is the owner's to do.
-- **O12** (Phase 4, **the owner's decision**) **A threaded job's results reach the main thread
-  through a plain `bool`.** In `src/liblt/LTE/Thread.cpp`, the worker sets `finished = true` (line
+- **O12** (Phase 4) **A threaded job's results reached the main thread through a plain `bool`.**
+  **Resolved by D20: option A.** In `src/liblt/LTE/Thread.cpp`, the worker sets `finished = true` (line
   47) after `job->OnRun()`. The Scheduler polls `IsFinished()` (`Module/Scheduler.cpp:90`) and, once
   it reads true, drops the thread, whose destructor calls `job->OnEnd()` (line 34) before the
   `sf::Thread` member is destroyed and joins. Nothing orders the job's writes before the flag's: x64
@@ -961,7 +984,7 @@ copied file is byte-identical to its source.
 |---|---|---|---|
 | `src/` | 742 | upstream `0535d46` | `liblt`, `launch`, `resources.rc`, `resource.h`, and the unbuilt `src/old` |
 | `include/` | 122 | upstream | every vendored header, used or not (§6) |
-| `resource/` | 634 | upstream | runtime assets, 284 of them LFS pointer files (D12) |
+| `resource/` | 634 | upstream | runtime assets, 232 of them LFS pointer files (D12). §4's 284 also counts the 52 Linux and macOS libraries left out (D11) |
 | `script/` | 6 | upstream | the author's manual generators and tools (§5.1) |
 | `extlib/win32/`, `extbin/win32/` | **0** | — | **Not copied (D14).** Upstream stores these 9 x86 files in LFS and the container cannot fetch LFS objects (O5), so the copy would be LFS pointer files. GitHub refuses a push that adds pointers for LFS objects this repository does not hold (GH008). No FrontierOutpost platform can link or load x86 files. |
 | `LICENSE`, `README.md` | 2 | upstream | |
@@ -1406,7 +1429,7 @@ warnings can be compared only once it compiles without error.
 ### 19.2 What ARM64 changes at run time
 
 - **Floating point:** BR6.
-- **Memory ordering:** the threaded jobs' hand-off, O12, which waits on the owner.
+- **Memory ordering:** the threaded jobs' hand-off (O12) is ordered since D20 (BR7).
 - **`volatile`:** ARM64 defaults to `/volatile:iso`, which gives `volatile` no ordering. The only
   `volatile` objects (H10) are self-registration objects with no synchronising role.
 
@@ -1477,6 +1500,13 @@ branch's commits touches it, and the working tree has no change in it.
 Dropped by the owner (D13). Nothing has been run: not the game, not its sound (O11), not ARM64
 (O4).
 
+### 20.5 After the owner's decisions (D20–D25)
+
+D20 changes `LTE/Thread.cpp` and D22 changes which compiler builds ARM64, so all four combinations
+are built once more, by the migration workflow's last run, before D21 removes it.
+
+Pending: that run.
+
 ## 21. Final report
 
 ### 21.1 Each configuration
@@ -1512,7 +1542,8 @@ GLEW as C (§18.1).
 §12 has the detail. BR1: FreeType 2.5.5 in place of Win32's 2.3.5. BR2: GLEW built from source.
 BR3: XAudio2's mixer in place of FMOD's. BR4: what C++23 and `/permissive-` can change silently.
 BR5: three conditional expressions that now name their type (`LTE/Data.h:67`, `:248`,
-`LTE/ResourceMap.cpp:38`). BR6: ARM64's floating point.
+`LTE/ResourceMap.cpp:38`). BR6: ARM64's floating point. BR7: the threaded jobs' hand-off, now
+ordered (`LTE/Thread.cpp`).
 
 ### 21.4 Remaining warnings, by category
 
@@ -1538,9 +1569,8 @@ at `/W4`, and GLEW raise none.
 
 ### 21.6 Open issues
 
-- **O12: the owner's decision.** Whether to fix the threaded jobs' hand-off, which ARM64's memory
-  ordering exposes (recommended), or to log it and leave it.
-- **O10 and O11: the owner's to do.** Convert the 79 Ogg sounds to WAV, then listen to them.
+- **O10 and O11: the owner's to do.** Put the real assets in place (O5), convert the 79 Ogg sounds
+  to WAV, then listen to them.
 - **O4:** ARM64 builds have not been run, for want of an ARM64 machine.
-- **O6:** the Win32 baseline's warning totals, a question about the measurement, not the product.
-- O1, O5 and O7 describe the environment and the source material. O2, O3, O8 and O9 are resolved.
+- O1, O5 and O7 describe the environment and the source material. O2, O3, O8, O9 and O12 are
+  resolved, and O6 is closed (D24).

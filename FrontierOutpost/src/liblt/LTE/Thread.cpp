@@ -6,6 +6,8 @@
 
 #include "SFML/System.hpp"
 
+#include <atomic>
+
 namespace {
   Lock GetThreadLock() {
     /* NOTE : Locks cannot be static destructed. */
@@ -16,7 +18,7 @@ namespace {
   struct ThreadImpl : public ThreadT {
     Job job;
     AutoPtr<sf::Thread> thread;
-    bool finished;
+    std::atomic<bool> finished;
 
     ThreadImpl(Job const& job) :
       job(job),
@@ -29,7 +31,7 @@ namespace {
     }
 
     ~ThreadImpl() {
-      if (!finished)
+      if (!finished.load(std::memory_order_acquire))
         Terminate();
       job->OnEnd();
     }
@@ -39,12 +41,12 @@ namespace {
     }
 
     bool IsFinished() const {
-      return finished;
+      return finished.load(std::memory_order_acquire);
     }
 
     void Run() {
       job->OnRun(UINT_MAX);
-      finished = true;
+      finished.store(true, std::memory_order_release);
     }
 
     void Terminate() {
