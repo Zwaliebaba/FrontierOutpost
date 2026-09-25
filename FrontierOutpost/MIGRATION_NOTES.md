@@ -1742,13 +1742,26 @@ up from there until a folder holds `GameData/`, and changes to that folder. If n
   - staging without GameData's `.gitattributes`.
 
   Each failure stops the job with a message that names the file.
-- **To land:** 148 files, 197.9 MB: 88 fonts, 51 WAV sounds, and 9 textures (four JPEG, three PNG
-  and SMAA's two lookup tables). Pending: the job's run.
-- **Still pointers:** the 79 Ogg sounds, 55.8 MB (O13), and the three Noto fonts, 16.2 MB (O14).
+- **Landed:** the job of
+  [Migration run 15](https://github.com/Zwaliebaba/FrontierOutpost/actions/runs/36117430392)
+  committed `5b63420` in 28 seconds: 148 files, 197.9 MB:
+  - 88 fonts, 11.5 MB;
+  - 51 WAV sounds, 184.1 MB;
+  - 9 textures, 2.3 MB: four JPEG, three PNG and SMAA's two lookup tables.
+
+  Checked again in the container: each of the 148 was an LFS pointer at `78f624e`, and at
+  `5b63420` it has that pointer's size and SHA-256. Nothing else changed.
+- **The three Noto fonts were held back at first**, for want of their licence text. The job read
+  their name tables, which declare the Apache License 2.0: Noto Sans 1.04 (Google, 2012) and Noto
+  Sans CJK SC 1.001 (Adobe, 2014). That licence asks for its text to go with every copy. The
+  repository already has the text beside Droid Sans, byte for byte the canonical one, so a copy of
+  it now sits in both Noto folders. The job lands the three fonts, 16.2 MB, on its next run
+  (§22.4).
+- **Still pointers:** the 79 Ogg sounds, 55.8 MB (O13).
 - **Licences** (AGENTS.md R14):
-  - 36 of the 38 font folders carry their licence (§6). The two Noto folders do not, so those
-    fonts wait for the owner (O14).
-  - SMAA's two lookup textures land: SMAA's MIT licence says that binary distributions need not
+  - Every font folder carries its licence: 34 the SIL Open Font License, three the Apache License
+    (Droid Sans and the two Noto folders), and Ubuntu's the Ubuntu Font Licence (§6).
+  - SMAA's two lookup textures landed: SMAA's MIT licence says that binary distributions need not
     carry its notice. Its shader source does need the notice, and has lacked it since the
     original (O14).
   - The other assets carry no licence of their own, and are taken to be the original's own work,

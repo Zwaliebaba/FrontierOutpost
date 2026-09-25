@@ -496,15 +496,11 @@ jobs:
           git clone --quiet --no-checkout "$UPSTREAM_URL" "$upstream"
           git -C "$upstream" -c advice.detachedHead=false checkout --quiet "$UPSTREAM_SHA"
 
-          # Left as pointers for the owner to decide (MIGRATION_NOTES.md §22): the 79 Ogg sounds
-          # (D16, O13), and the three Noto fonts, which the original ships without their licence
-          # texts (AGENTS.md R14, O14).
+          # The 79 Ogg sounds are left as pointers for the owner to decide (MIGRATION_NOTES.md §22,
+          # D16, O13).
           message="$RUNNER_TEMP/message.txt"
           python3 .github/migration/RealAssets.py --upstream "$upstream" --sha "$UPSTREAM_SHA" --fetch \
-            --skip-suffix .ogg \
-            --hold font/NotoSans/Bold.ttf --hold font/NotoSans/Regular.ttf \
-            --hold font/NotoSansCJKsc/Regular.otf \
-            --message "$message"
+            --skip-suffix .ogg --message "$message"
           if [ ! -f "$message" ]; then exit 0; fi
 
           # Authored, and signed off, as the commit this run builds.
