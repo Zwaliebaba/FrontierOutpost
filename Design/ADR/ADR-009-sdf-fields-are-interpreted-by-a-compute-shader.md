@@ -46,7 +46,9 @@ two noise nodes are `NOT_IMPLEMENTED` there (`LTE/SDF.cpp`), and fields reach ab
    ported to HLSL once. `FractalPerlin`, which nothing constructs, goes in Phase 1.
 6. **The interpreter's cost is measured, not assumed.** It is slower than code specialised per
    mesh, but it runs at generation time. Phase 4 measures generation time on WARP and on a GPU
-   (plan §5.7, §10): `SDFMesh` logs how long each field took.
+   (plan §5.7, §10): `SDFMesh` logs how long each field took. On WARP, in Debug with the debug
+   layer, a field of 128³ voxels took 22 s (21989, 22126 and 22106 ms for `war`'s three asteroids
+   in the smoke job on `86634e8`); the figure on a GPU is the owner's to take.
 
 ## What this forecloses
 

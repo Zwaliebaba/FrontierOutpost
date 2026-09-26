@@ -23,8 +23,13 @@ DirectWrite, WIC, XAudio2 and Win32.
   launcher renders offscreen on WARP, and the smoke job runs `loading` and `ui` there for 30 frames
   each, with no debug-layer error, on `8534b2c`. Their frames show step 5.2's interface and text,
   which needs no SDF field, ahead of step 4; presenting (5.1) is the owner's to see, since the smoke
-  run makes no swap chain. The four builds link with 507 warnings, 458 unique, all lt's. Until
-  step 4, an app that draws an SDF field ends with a fatal error that says so.
+  run makes no swap chain. The four builds link with 507 warnings, 458 unique, all lt's. Step 4
+  is in (`0ad2974` and `fe51c4d`): a compute shader interprets each SDF field, as ADR-009 decides,
+  amended where building it showed the Proposed text wrong; the ADR stays Proposed until the owner
+  accepts it. Bring-up 5.3 runs `war` in the smoke job from `86634e8`. There it draws its 30 frames
+  with no debug-layer error, in 21 minutes on WARP, and its frame shows the ship, the star's bloom
+  and lens flare, the nebula, the interface, and the asteroids that are its SDF meshes, whose
+  128³ fields took 22 s each. `df48652` reads the lens flares' occlusion back asynchronously.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
