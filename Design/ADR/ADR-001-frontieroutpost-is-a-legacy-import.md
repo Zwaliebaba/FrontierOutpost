@@ -1,6 +1,7 @@
 # ADR-001: FrontierOutpost is a legacy import, exempt from the conformance rules
 
 - **Status:** Accepted (owner, 2026-09-24, at the start of the ltheory-old migration)
+- **Amended:** 2026-09-26 by ADR-015. The exemption now follows each legacy file, marked in its project, across NeuronCore, NeuronClient, GameLogic and FrontierOutpost (ADR-014); `FrontierOutpost/` holds only the executable's project.
 - **Scope:** `FrontierOutpost.slnx` and everything under `FrontierOutpost/`, and, since ADR-004,
   `GameData/`: the original's runtime data, moved out of `FrontierOutpost/`. Nothing else. The
   solution builds `NeuronClient/` and `Tests/NeuronClientTests/` from the NeuronClient plan's

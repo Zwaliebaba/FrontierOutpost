@@ -1,0 +1,811 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="LTE">
+      <UniqueIdentifier>{7D8550CD-7407-5D85-9723-73341BB60E1F}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\Expression">
+      <UniqueIdentifier>{3D759399-B584-5EEF-AD35-F274C17C5431}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\Function">
+      <UniqueIdentifier>{418ACDFC-8653-5D88-B9C7-62D3084CD711}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\SDF">
+      <UniqueIdentifier>{EDD03B0C-42C8-5CD3-97DF-FBC88A9659BD}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\ScriptAPI">
+      <UniqueIdentifier>{29415A8B-0A9B-550B-A666-4815C388E8B4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\Type">
+      <UniqueIdentifier>{7FAA83D1-45D6-5B81-9568-F796E5BE5A63}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="LTE\Warp">
+      <UniqueIdentifier>{74C4EFAC-F3B9-533D-99BB-D99736E34082}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Module">
+      <UniqueIdentifier>{81D8DCE5-F774-51CA-8E14-0E4B918AB1C0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ThirdParty">
+      <UniqueIdentifier>{A923B1C8-C056-510D-B231-DFAF5F07E7EB}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Volume">
+      <UniqueIdentifier>{4B61AB68-3451-5799-A053-BBE6B51FF2DF}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Access.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="Address.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClInclude Include="Array.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Array3D.cpp">
+      <Filter>Volume</Filter>
+    </ClCompile>
+    <ClInclude Include="Array3D.h">
+      <Filter>Volume</Filter>
+    </ClInclude>
+    <ClCompile Include="Assign.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="Attractor.cpp">
+      <Filter>LTE\Warp</Filter>
+    </ClCompile>
+    <ClInclude Include="AutoClass.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="AutoClass_Generated.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="AutoPtr.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="BaseType.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="BaseVector.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Bind.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClCompile Include="Block.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="Bool.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClInclude Include="Bound.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="BuildMode.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Cached.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="Call.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Capsule.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="CollisionMesh.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="CollisionMesh.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Color.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Color.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Common.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Compare_AutoPtr_Pointer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Compare_AutoPtr_Reference.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Compare_Pointer_Reference.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Constant.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="Constructor.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="Contour.cpp">
+      <Filter>Volume</Filter>
+    </ClCompile>
+    <ClCompile Include="Conversion.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClInclude Include="Cylinder.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Data.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="DataStack.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Debug.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Debug.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Declare.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClInclude Include="DeclareFunction.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Dereference.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="Diff.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Diff.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Distribution.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Double.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="DynamicDispatch.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClInclude Include="Enum.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Environment.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Expression.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Expression.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="ExpressionArray.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="ExpressionCall.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="ExpressionCast.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="ExpressionFunction.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="ExpressionFunctionCall.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="ExpressionList.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="ExpressionReference.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClInclude Include="Expressions.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="ExpressionType.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClInclude Include="Field.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Finite.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="For.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="FrameTimer.cpp">
+      <Filter>Module</Filter>
+    </ClCompile>
+    <ClInclude Include="FrameTimer.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClInclude Include="FreeFn.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClCompile Include="Function.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Function.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Function_Generated.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="FunctionCall.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="FunctionCast.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="FunctionPointer.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="FunctionValue.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="Generic.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Geom.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Geom.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Geometry.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Grammar.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Grammar.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Graph.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="GraphicsEnum.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Hash.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="HashMap.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="HashSet.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="IDMap.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="If.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="Int.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClInclude Include="InternalList.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Interpolated.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="IntrusiveList.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Iterator.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Job.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="KDTree.cpp">
+      <Filter>ThirdParty</Filter>
+    </ClCompile>
+    <ClInclude Include="KDTree.h">
+      <Filter>ThirdParty</Filter>
+    </ClInclude>
+    <ClInclude Include="LazyHash.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="List.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="ListElement.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Loader.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Loader.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Location.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Location.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Lock.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Lock.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Lookup.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="LookUpTable.h">
+      <Filter>Volume</Filter>
+    </ClInclude>
+    <ClInclude Include="LteCommon.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="LteMath.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="LteMath.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LteSegment.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="LteString.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="LteString.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="LteTime.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="LteTime.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LteTypes.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="LTSL.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="LTSL.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Map.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="MarchingCubes.cpp">
+      <Filter>Volume</Filter>
+    </ClCompile>
+    <ClInclude Include="MarchingCubes.h">
+      <Filter>Volume</Filter>
+    </ClInclude>
+    <ClInclude Include="Matrix.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="MemberFn.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="Mesh.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Meshes.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Meshes.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Model.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Module.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Module.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="ModuleCommon.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClInclude Include="Mutable.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Noop.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="OS.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="OS.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Package.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Package.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Parameter.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="ParticleSystem.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Patch.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Patch.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Plane.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="PlateMesh.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Pointer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Pool.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Print.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClInclude Include="PriorityQueue.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Profiler.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="ProgramLog.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Pushable.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Quaternion.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Radial.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClInclude Include="Ray.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Reference.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Renderable.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Renderable.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="ResourceMap.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="ResourceMap.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="RingBuffer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="RNG.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="RNG.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Scheduler.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClCompile Include="Script.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Script.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="ScriptApiData.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiExpression.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiFloat.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiGrammar.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiList.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiMesh.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiOS.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiPlateMesh.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiRay.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiRenderable.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiRNG.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiString.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiStringTree.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiTimer.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiV2.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiV3.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiV4.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptFunction.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="ScriptFunction.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="ScriptType.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="SDF.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="SDF.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="SdfBox.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="SdfCylinder.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClInclude Include="SDFMesh.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="SDFs.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="SdfScale.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="SdfSphere.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="Serializer.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Serializer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Shell.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClInclude Include="Singleton.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Smooth.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Sparse.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="SpatialPartition.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="SpatialPartition.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="SpatialPartition_HashGrid.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="SpatialPartition_UniformGrid.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="SpatialSignature.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="SpatialSignature_UniformGrid.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Sphere.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="SphereTree.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="SphereTree.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Stack.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="StackAlloc.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="StackArray.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="StackFrame.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="StackFrame.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Static.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Static.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="StdMath.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="StringList.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="StringList.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="StringPool.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="StringTree.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="StringTree.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Subtract.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="Switch.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClCompile Include="Thread.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Thread.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Timer.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Timer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Tokenizer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Torus.cpp">
+      <Filter>LTE\SDF</Filter>
+    </ClCompile>
+    <ClCompile Include="Transform.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Transform.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="TriTriOverlap.cpp">
+      <Filter>ThirdParty</Filter>
+    </ClCompile>
+    <ClInclude Include="Tuple.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Type.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Type.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="TypeArray.cpp">
+      <Filter>LTE\Type</Filter>
+    </ClCompile>
+    <ClCompile Include="TypePointer.cpp">
+      <Filter>LTE\Type</Filter>
+    </ClCompile>
+    <ClInclude Include="TypeTraits.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="UniString.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="UniString.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Utf8Core.h">
+      <Filter>ThirdParty</Filter>
+    </ClInclude>
+    <ClInclude Include="Utf8Unchecked.h">
+      <Filter>ThirdParty</Filter>
+    </ClInclude>
+    <ClCompile Include="V2.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="V2.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="V3.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="V3.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="V4.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="Variable.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClInclude Include="Vec.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Vector.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="VectorMap.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="VectorNP.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Vertex.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="View.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="VolumeCommon.h">
+      <Filter>Volume</Filter>
+    </ClInclude>
+    <ClCompile Include="Warp.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClInclude Include="Warp.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="WarpCustom.cpp">
+      <Filter>LTE\Warp</Filter>
+    </ClCompile>
+    <ClInclude Include="Warps.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClCompile Include="While.cpp">
+      <Filter>LTE\Expression</Filter>
+    </ClCompile>
+    <ClInclude Include="windirent.h">
+      <Filter>ThirdParty</Filter>
+    </ClInclude>
+    <ClInclude Include="Wrapper.h">
+      <Filter>LTE\Function</Filter>
+    </ClInclude>
+    <ClInclude Include="XEnum.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="XVector.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

@@ -17,25 +17,44 @@ import xml.etree.ElementTree as ET
 
 NS = "{http://schemas.microsoft.com/developer/msbuild/2003}"
 
-# ADR-001 and ADR-004: the legacy import and its data follow the original, not AGENTS.md.
-# _baseline_build/ holds the git-ignored scratch clones, which nothing builds. CompiledShaders/ is
-# build output (AGENTS.md §2).
-EXEMPT_PREFIXES = ("FrontierOutpost/", "GameData/", "_baseline_build/")
+# ADR-004: the game's runtime data follows the original, not AGENTS.md. _baseline_build/ holds the
+# git-ignored scratch clones, which nothing builds. CompiledShaders/ is build output (AGENTS.md §2).
+EXEMPT_PREFIXES = ("GameData/", "_baseline_build/")
 BUILD_OUTPUT_DIRS = {"CompiledShaders"}
-# The NeuronClient migration's N11 (ADR-001's scope note, ADR-008): liblt's shader folder is new
-# code, carved out of the exemption. The rest of its project keeps it.
-CARVED_OUT = ("FrontierOutpost/src/liblt/Shaders/",)
 
 CONDITION = re.compile(r"^\s*'([^']*)'\s*(==|!=)\s*'([^']*)'\s*$")
 ITEM_TYPES = ("ClCompile", "ClInclude", "FxCompile", "ResourceCompile", "None", "Image", "Text",
               "CopyFileToFolders", "Natvis", "Manifest")
 TOOLS = ("ClCompile", "Link", "Lib", "ResourceCompile", "FxCompile", "Midl", "Manifest")
 
+_legacy = {}
 
-def IsExempt(_relative):
+
+def LegacyFiles(_root):
+  """ADR-015: the files of the ltheory-old import, which a project marks <Legacy>true</Legacy>, as
+    paths relative to _root. They follow the original, not AGENTS.md, and the checkers leave them be."""
+  key = str(_root)
+  if key not in _legacy:
+    found = set()
+    for solution in SolutionFiles(_root):
+      for relative in SolutionProjects(solution):
+        path = _root / relative
+        if not path.is_file():
+          continue
+        folder = path.parent.relative_to(_root).as_posix()
+        for group in ET.parse(path).getroot().iter(NS + "ItemGroup"):
+          for item in group:
+            marker = item.find(NS + "Legacy")
+            if item.get("Include") and marker is not None and (marker.text or "").strip().lower() == "true":
+              found.add(f"{folder}/{item.get('Include').replace(chr(92), '/')}")
+    _legacy[key] = found
+  return _legacy[key]
+
+
+def IsExempt(_root, _relative):
   if BUILD_OUTPUT_DIRS & set(_relative.split("/")):
     return True
-  return _relative.startswith(EXEMPT_PREFIXES) and not _relative.startswith(CARVED_OUT)
+  return _relative.startswith(EXEMPT_PREFIXES) or _relative in LegacyFiles(_root)
 
 
 def TreeFiles(_root):

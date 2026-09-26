@@ -1,0 +1,125 @@
+#include "PhysicsEngine.h"
+
+#include "Object.h"
+
+#include "FrameTimer.h"
+
+#include "CollisionMesh.h"
+#include "HashMap.h"
+#include "Matrix.h"
+#include "Mesh.h"
+#include "Renderable.h"
+#include "StackFrame.h"
+#include "Transform.h"
+#include "Vector.h"
+
+/* TODO : Should multithread the creation of collision meshes. */
+
+const float kEvictionTime = 120;
+
+namespace {
+  Vector<PhysicsEngine*> gPhysicsEngineStack;
+}
+
+PhysicsEngine::PhysicsEngine() {
+  if (gPhysicsEngineStack.empty())
+    Push();
+}
+
+PhysicsEngine::~PhysicsEngine() {
+  if (gPhysicsEngineStack.back() == this)
+    Pop();
+}
+
+PhysicsEngine* GetPhysicsEngine() {
+  LTE_ASSERT(!gPhysicsEngineStack.empty());
+  return gPhysicsEngineStack.back();
+}
+
+void PhysicsEngine::Pop() {
+  LTE_ASSERT(!gPhysicsEngineStack.empty());
+  LTE_ASSERT(gPhysicsEngineStack.back() == this);
+  gPhysicsEngineStack.pop();
+}
+
+void PhysicsEngine::Push() {
+  LTE_ASSERT(gPhysicsEngineStack.size() < 100);
+  gPhysicsEngineStack << this;
+}
+
+struct PhysicsEngineImpl : public PhysicsEngine {
+  struct Entry {
+    CollisionMesh mesh;
+    float lastUse;
+
+    Entry() :
+      lastUse(0)
+      {}
+  };
+
+  typedef HashMap<size_t, Entry> MeshMapT;
+  MeshMapT meshes;
+
+  bool CheckCollision(
+    ObjectT* object1,
+    ObjectT* object2,
+    V3* contactNormal)
+  {
+    AUTO_FRAME;
+    CollisionMesh const& mesh1 = GetCollisionMesh(object1->GetRenderable());
+    CollisionMesh const& mesh2 = GetCollisionMesh(object2->GetRenderable());
+
+    if (!mesh1 || !mesh2)
+      return false;
+
+    Matrix const& world1 = object1->GetTransform().GetMatrix();
+    Matrix const& world2 = object2->GetTransform().GetMatrix();
+    return mesh1->Intersects(mesh2, world1, world2, contactNormal);
+  }
+
+  CollisionMesh const& GetCollisionMesh(Renderable const& renderable) {
+    size_t id = renderable->GetHash();
+    if (!meshes[id].mesh) {
+      Mesh source = renderable->GetCollisionMesh();
+      if (source)
+        FRAME("Build Collision Mesh")
+          meshes[id].mesh = CollisionMesh_Create(source);
+    }
+
+    Entry& e = meshes[id];
+    e.lastUse = 0;
+    return e.mesh;
+  }
+
+  char const* GetName() const {
+    return "PhysicsEngine";
+  }
+
+  bool Raycast(
+    WorldRay const& ray,
+    ObjectT* object,
+    float tMax,
+    float& tOut,
+    V3* normalOut)
+  {
+    CollisionMesh const& mesh = GetCollisionMesh(object->GetRenderable());
+    Matrix const& matrix = object->GetTransform().GetMatrix();
+    return mesh ? mesh->Intersects(ray, matrix, tMax, tOut, normalOut) : false;
+  }
+
+  void Update() {
+    SFRAME("Physics Update");
+    float dt = FrameTimer_Get();
+    for (MeshMapT::iterator it = meshes.begin(); it != meshes.end(); ++it) {
+      if ((it->second.lastUse += dt) >= kEvictionTime) {
+        it = meshes.erase(it);
+        if (it == meshes.end())
+          break;
+      }
+    }
+  }
+};
+
+PhysicsEngine* CreatePhysicsEngine() {
+  return new PhysicsEngineImpl;
+}

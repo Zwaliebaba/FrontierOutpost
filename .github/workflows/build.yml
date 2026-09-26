@@ -16,15 +16,15 @@ name: Build
 #   Build/CheckFormat.py         clang-format (its own job)      runs
 #   Build/TestCheckers.py        the checkers' own tests         runs, in both jobs
 #
-# The checkers leave FrontierOutpost/ and GameData/ alone (ADR-001, ADR-004), but for liblt's shader
-# folder (ADR-008), and check NeuronClient and its tests in full (ADR-005). TestCheckers.py is what
+# The checkers leave the files a project marks Legacy and GameData/ alone (ADR-015, ADR-004), and
+# check everything else in full, shaders included (ADR-008). TestCheckers.py is what
 # shows they catch what they should: it runs each one against small trees that break each rule.
 #
 # ── Why the build does not treat warnings as errors ───────────────────────────────────────────
 #
-# FrontierOutpost/ is a legacy import. It builds at the original's /W3, with the original's own
-# warnings (585 unique at C++23, every one of them the original's: MIGRATION_NOTES.md §21.4; 458,
-# all lt's, since the NeuronClient plan's Phase 4 step 3), and ADR-001 exempts it from /W4 /WX.
+# The legacy files (ADR-015) build at the original's /W3, with the original's own warnings (319
+# unique in Debug|x64 when the libraries were split, every one of them the original's), and ADR-001
+# exempts them from /W4 /WX.
 # MSBuild's /warnaserror would turn every one of them into an error, so it is not passed.
 # NeuronClient and its tests build at /W4 /WX in their own projects (ADR-005).
 #
@@ -39,8 +39,8 @@ name: Build
 # ── What it does not run ───────────────────────────────────────────────────────────────────────
 #
 # No app runs here. The smoke job ran the apps brought up so far on WARP until the owner had it
-# removed (the NeuronClient plan's N20); the owner runs them on the desktop, with launch.exe's
-# smoke options (FrontierOutpost/README.md).
+# removed (the NeuronClient plan's N20); the owner runs them on the desktop, with FrontierOutpost.exe's
+# smoke options (README.md).
 
 on:
   push:
@@ -110,7 +110,7 @@ jobs:
       - name: Run the tests
         shell: pwsh
         run: |
-          $suites = @(Get-ChildItem -Path FrontierOutpost\bin\x64\Debug, x64\Debug -Filter '*Tests.dll' `
+          $suites = @(Get-ChildItem -Path x64\Debug -Filter '*Tests.dll' `
             -File -ErrorAction SilentlyContinue | ForEach-Object FullName)
           if (-not $suites) {
             Write-Output "No test suite is built yet; nothing to run."

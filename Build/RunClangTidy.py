@@ -4,10 +4,11 @@
 Usage: python Build/RunClangTidy.py [--clang-tidy PATH] [--configuration Debug] [--platform x64]
                                     [--root DIR]
 
-For each project in the solution outside the legacy import (FrontierOutpost/, GameData/:
-ADR-001, ADR-004), it reads the project's sources, include directories and definitions, and runs
+For each project in the solution, it reads the project's sources, include directories and definitions, and runs
 clang-tidy in clang-cl mode with /.clang-tidy, whose HeaderFilterRegex decides which headers are
-reported. .clang-tidy makes every warning an error, so any diagnostic fails the run.
+reported. Files a project marks <Legacy>true</Legacy> (ADR-015) are neither run nor reported: their
+headers are excluded by name on the command line. .clang-tidy makes every warning an error, so any
+diagnostic fails the run.
 
 clang-tidy comes from --clang-tidy, else from Visual Studio's C++ Clang tools, else from PATH. It
 must be 19 or newer: an older one rejects .clang-tidy's ExcludeHeaderFilterRegex, checks nothing,
@@ -25,7 +26,7 @@ import shutil
 import subprocess
 import sys
 
-from ProjectModel import EXEMPT_PREFIXES, Project, SolutionFiles, SolutionProjects
+from ProjectModel import EXEMPT_PREFIXES, IsExempt, LegacyFiles, Project, SolutionFiles, SolutionProjects
 
 MINIMUM_MAJOR = 19
 DIAGNOSTIC = re.compile(r": (?:warning|error): ")
@@ -130,8 +131,17 @@ def Units(_root, _configuration, _platform):
     for source in project.Items().get("ClCompile", []):
       if source.split("/")[-1] == "pch.cpp":
         continue  # it creates the precompiled header and holds no code of its own
+      if IsExempt(_root, f"{project.folder.relative_to(_root).as_posix()}/{source}"):
+        continue  # the legacy import (ADR-015)
       units.append((project.folder / source, flags))
   return units
+
+
+def ExcludedHeaders(_root):
+  """The legacy headers (ADR-015) by name, with the Resource.h .clang-tidy excludes, whose key the command
+    line replaces."""
+  names = sorted({re.escape(path.split("/")[-1]) for path in LegacyFiles(_root) if path.endswith(".h")})
+  return "(^|[/\\\\])(" + "|".join(names + ["Resource\\.h"]) + ")$"
 
 
 def main():
@@ -161,9 +171,11 @@ def main():
     return 1
 
   environment = Environment()
+  exclude = ExcludedHeaders(root)
   failed = 0
   for source, flags in units:
-    result = subprocess.run([clangTidy, "--quiet", str(source), "--", *flags], capture_output=True, text=True,
+    result = subprocess.run([clangTidy, "--quiet", f"--exclude-header-filter={exclude}", str(source), "--", *flags],
+                            capture_output=True, text=True,
                             env=environment, cwd=root)
     output = "\n".join(line for line in (result.stdout + result.stderr).splitlines()
                        if not re.match(r"^\d+ warnings? (and \d+ errors? )?generated\.?$", line.strip()))

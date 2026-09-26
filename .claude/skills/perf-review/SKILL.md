@@ -1,7 +1,9 @@
 ---
 name: perf-review
-description: Multi-agent performance review of FrontierOutpost (lt.dll on NeuronClient and Direct3D 12) for load time and frame rate. DirectXMath is the named focus, multithreading and Direct3D 12 changes are in scope, and the game's behaviour does not change. The lead measures a baseline on a Windows GPU, launches read-only reviewers by lens, verifies their findings adversarially and reports a ranked list. Nothing is implemented until the owner approves items by ID; each approved item then lands as its own PR. Run it only when the owner asks, because it launches many agents.
+description: Multi-agent performance review of FrontierOutpost (FrontierOutpost.exe on NeuronClient and Direct3D 12) for load time and frame rate. DirectXMath is the named focus, multithreading and Direct3D 12 changes are in scope, and the game's behaviour does not change. The lead measures a baseline on a Windows GPU, launches read-only reviewers by lens, verifies their findings adversarially and reports a ranked list. Nothing is implemented until the owner approves items by ID; each approved item then lands as its own PR. Run it only when the owner asks, because it launches many agents.
 ---
+
+> **Layout since ADR-014 (2026-09-26).** `launch.exe` and `lt.dll` are now one executable, `FrontierOutpost.exe`, built from NeuronCore, NeuronClient, NeuronServer and GameLogic. Where this skill says lt, liblt or launch, read the legacy files of those libraries (ADR-015; `launch.cpp` is `FrontierOutpost/Main.cpp`). Paths like `LTE/Renderer.cpp` are now flat, e.g. `NeuronClient/Renderer.cpp`; the old-to-new list of renames is in ADR-014.
 
 # Performance review: load time and frame rate
 
@@ -153,7 +155,7 @@ dynamic scenes side by side, and the report says what to look at.
 ### Scenarios and numbers
 
 - **Survey.** From the repository root, run each of the 16 kept apps in `GameData/script/App/` once
-  in Release: `FrontierOutpost\bin\x64\Release\launch.exe <app> --frames 300`. The launcher prints
+  in Release: `x64\Release\FrontierOutpost.exe <app> --frames 300`. The launcher prints
   three lines:
   - `launch: <app> initialized after A s`
   - `launch: <app> drew its first frame after B s`
@@ -379,7 +381,7 @@ Constraints:
 - `LTE/Renderer.cpp`, `RendererCore.cpp`, `Shader.cpp`, `ShaderInstance.cpp`, `DrawState.cpp`;
 - the draw paths in `Mesh.cpp`, and `ParticleSystem.cpp`;
 - `Game/RenderPass/`, `LTE/RenderPass/` and `UI/WidgetRenderer*.cpp`;
-- the GPU cost of the shaders in `FrontierOutpost/src/liblt/Shaders/`.
+- the GPU cost of the shaders in `NeuronClient/Shaders/`.
 
 Leads:
 

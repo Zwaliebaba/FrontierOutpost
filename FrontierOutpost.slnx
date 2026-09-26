@@ -3,10 +3,12 @@
     <Platform Name="x64" />
     <Platform Name="ARM64" />
   </Configurations>
-  <Folder Name="/ltheory/">
-    <Project Path="FrontierOutpost/src/launch/launch.vcxproj" Id="b758f4e2-6c6f-5be3-b848-f9d633726e5b" />
-    <Project Path="FrontierOutpost/src/liblt/lt.vcxproj" Id="1cb67bee-da37-5d52-a875-fabecccd5014" />
-  </Folder>
+  <Project Path="FrontierOutpost/FrontierOutpost.vcxproj" Id="b758f4e2-6c6f-5be3-b848-f9d633726e5b" />
+  <Project Path="GameLogic/GameLogic.vcxproj" Id="2f8d4b3c-7a1e-4c95-b6d0-8e5f2a7c9d33" />
   <Project Path="NeuronClient/NeuronClient.vcxproj" Id="05010071-b8ca-465b-9fec-bcf2d87dad7a" />
-  <Project Path="Tests/NeuronClientTests/NeuronClientTests.vcxproj" Id="13a98a79-2606-44cf-9135-1d0c68e34ce2" />
+  <Project Path="NeuronCore/NeuronCore.vcxproj" Id="7b1a6c1e-3c2d-4f0b-9e47-2d6a1f9c0b11" />
+  <Project Path="NeuronServer/NeuronServer.vcxproj" Id="c4e2b7a9-5d18-4e63-8f2a-9b3d6e1a4c22" />
+  <Folder Name="/Tests/">
+    <Project Path="Tests/NeuronClientTests/NeuronClientTests.vcxproj" Id="13a98a79-2606-44cf-9135-1d0c68e34ce2" />
+  </Folder>
 </Solution>

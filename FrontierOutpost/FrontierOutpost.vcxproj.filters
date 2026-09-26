@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Module">
+      <UniqueIdentifier>{DA53F1C9-F3F6-5F66-A2F8-CF4191104D75}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Module\SoundEngine">
+      <UniqueIdentifier>{D7827191-D894-5FB1-81AA-ECA2D2A16A80}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{923ADD15-871B-51E8-A509-F78256D50839}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClInclude Include="Resource.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ResourceCompile Include="Resources.rc">
+      <Filter>Source Files</Filter>
+    </ResourceCompile>
+    <ClCompile Include="SoundEngineXAudio2.cpp">
+      <Filter>Module\SoundEngine</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

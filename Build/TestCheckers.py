@@ -137,41 +137,23 @@ void Window::Show(int _widthPixels)
 } // namespace Neuron
 """
 
-LEGACY = """<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <ItemGroup Label="ProjectConfigurations">
-    <ProjectConfiguration Include="Debug|Win32" />
-  </ItemGroup>
-  <PropertyGroup Label="Configuration">
-    <PlatformToolset>v145</PlatformToolset>
-  </PropertyGroup>
-  <ItemGroup>
-    <ClCompile Include="old_style.cxx" />
-  </ItemGroup>
-</Project>
-"""
+# A legacy file (ADR-015): registered in its project like any other, marked, and exempt from R7.
+LEGACY_ITEM = """    <ClCompile Include="old_style.cxx">
+      <Legacy>true</Legacy>
+    </ClCompile>"""
 
-
-# A legacy lt with one shader and one include in its carved-out Shaders/ folder (N11), and the
-# registry that holds the shader by its legacy name (ADR-008).
-LT = "FrontierOutpost/src/liblt/"
-LIBLT = """<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <ItemGroup Label="ProjectConfigurations">
-    <ProjectConfiguration Include="Debug|x64" />
-    <ProjectConfiguration Include="Release|x64" />
-  </ItemGroup>
-  <PropertyGroup Label="Configuration">
-    <PlatformToolset>v145</PlatformToolset>
-  </PropertyGroup>
-  <ItemDefinitionGroup>
+# NeuronClient's shader folder: one shader scripts name, held by the registry under its legacy name,
+# one include, and the registry itself, which is legacy code (ADR-008, ADR-015).
+SHADER_DEFINITIONS = """  <ItemDefinitionGroup>
     <FxCompile>
       <ShaderModel>5.1</ShaderModel>
       <HeaderFileOutput>$(ProjectDir)CompiledShaders\\%(Filename).h</HeaderFileOutput>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="LTE\\ShaderRegistry.cpp" />
+    <ClCompile Include="ShaderRegistry.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\\PostBlurPS.hlsl">
@@ -180,18 +162,12 @@ LIBLT = """<?xml version="1.0" encoding="utf-8"?>
     </FxCompile>
     <None Include="Shaders\\Common.hlsli" />
   </ItemGroup>
-</Project>
-"""
+  <Import Project="$(VCTargetsPath)\\Microsoft.Cpp.targets" />"""
 
-LIBLT_FILTERS = """<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <ItemGroup>
-    <ClCompile Include="LTE\\ShaderRegistry.cpp" />
+SHADER_FILTERS = """    <ClCompile Include="ShaderRegistry.cpp" />
     <FxCompile Include="Shaders\\PostBlurPS.hlsl" />
     <None Include="Shaders\\Common.hlsli" />
-  </ItemGroup>
-</Project>
-"""
+  </ItemGroup>"""
 
 REGISTRY = """namespace {
   Entry const kPixel[] = {
@@ -207,7 +183,6 @@ BLOOM_ITEM = """    <FxCompile Include="Shaders\\PostBloomPS.hlsl">
     <None Include="Shaders\\Common.hlsli" />"""
 
 UNFORMATTED_SOURCE = SOURCE.replace("{\n  m_widthPixels = _widthPixels;\n}", "{ m_widthPixels=_widthPixels; }")
-LEGACY_ENTRY = '  <Project Path="FrontierOutpost/old/old.vcxproj" />\n</Solution>'
 
 
 def Write(_root, _relative, _text):
@@ -234,15 +209,23 @@ def Conforming(_root):
   Write(_root, "NeuronClient/Window.cpp", SOURCE)
 
 
-def LibltTree(_root):
+def ShaderTree(_root):
   Conforming(_root)
-  Replace(_root, "FrontierOutpost.slnx", "</Solution>", f'  <Project Path="{LT}lt.vcxproj" />\n</Solution>')
-  Write(_root, LT + "lt.vcxproj", LIBLT)
-  Write(_root, LT + "lt.vcxproj.filters", LIBLT_FILTERS)
-  Write(_root, LT + "LTE/ShaderRegistry.cpp", REGISTRY)
-  Write(_root, LT + "Shaders/PostBlurPS.hlsl", "float4 main() : SV_Target0 { return 0.0; }\n")
-  Write(_root, LT + "Shaders/Common.hlsli", "static const float kPI = 3.1415926536;\n")
+  Replace(_root, "NeuronClient/NeuronClient.vcxproj", '  <Import Project="$(VCTargetsPath)\\Microsoft.Cpp.targets" />',
+          SHADER_DEFINITIONS)
+  Replace(_root, "NeuronClient/NeuronClient.vcxproj.filters", "  </ItemGroup>", SHADER_FILTERS)
+  Write(_root, "NeuronClient/ShaderRegistry.cpp", REGISTRY)
+  Write(_root, "NeuronClient/Shaders/PostBlurPS.hlsl", "float4 main() : SV_Target0 { return 0.0; }\n")
+  Write(_root, "NeuronClient/Shaders/Common.hlsli", "static const float kPI = 3.1415926536;\n")
 
+
+def Legacy(_root, _name, _text):
+  """A legacy file in NeuronClient, marked and registered (ADR-015)."""
+  Write(_root, f"NeuronClient/{_name}", _text)
+  Replace(_root, "NeuronClient/NeuronClient.vcxproj", '<ClCompile Include="Window.cpp" />',
+          '<ClCompile Include="Window.cpp" />\n' + LEGACY_ITEM.replace("old_style.cxx", _name))
+  Replace(_root, "NeuronClient/NeuronClient.vcxproj.filters", '<ClCompile Include="Window.cpp" />',
+          f'<ClCompile Include="Window.cpp" />\n    <ClCompile Include="{_name}" />')
 
 def WriteBytes(_root, _relative, _bytes):
   path = _root / _relative
@@ -353,66 +336,76 @@ PROJECT_CASES = [
      lambda r: Replace(r, "NeuronClient/NeuronClient.vcxproj", "$(SolutionDir)Shared;", "C:\\SDK\\include;"),
      1, "an absolute path"),
     ("a HeaderFilterRegex that misses the project",
-     lambda r: Replace(r, ".clang-tidy", "(NeuronClient|", "(Nothing|"),
+     lambda r: Replace(r, ".clang-tidy", "|NeuronClient|", "|Nothing|"),
      1, "HeaderFilterRegex does not match NeuronClient/"),
     ("a C++ file outside every project",
      lambda r: Write(r, "Tools/Stray.cpp", "int main() {}\n"),
      1, "outside every project folder"),
-    ("a legacy project, which keeps only ADR-001's rules",
-     lambda r: (Write(r, "FrontierOutpost/old/old.vcxproj", LEGACY), Write(r, "FrontierOutpost/old/old_style.cxx", ""),
-                Replace(r, "FrontierOutpost.slnx", "</Solution>", LEGACY_ENTRY)),
-     0, "1 legacy"),
-    ("a legacy project on another toolset",
-     lambda r: (Write(r, "FrontierOutpost/old/old.vcxproj", LEGACY.replace("v145", "v143")),
-                Replace(r, "FrontierOutpost.slnx", "</Solution>", LEGACY_ENTRY)),
-     1, "toolset 'v143'"),
+    ("a legacy file, which keeps only ADR-015's rules",
+     lambda r: Legacy(r, "old_style.cxx", ""),
+     0, "1 legacy file(s)"),
+    ("the same file without its marker",
+     lambda r: (Legacy(r, "old_style.cxx", ""),
+                Replace(r, "NeuronClient/NeuronClient.vcxproj",
+                        '<ClCompile Include="old_style.cxx">\n      <Legacy>true</Legacy>\n    </ClCompile>',
+                        '<ClCompile Include="old_style.cxx" />')),
+     1, "C++ lives in .h and .cpp only (R7)"),
+    ("a legacy file the project does not list, which is registered like any other",
+     lambda r: Write(r, "NeuronClient/old_style.cpp", ""),
+     1, "is not in NeuronClient.vcxproj"),
 ]
 
 SHADER_CASES = [
-    ("liblt's shaders, each compiled by lt.vcxproj and held by the registry", None, 0, "0 fault(s)"),
-    ("the rest of lt, which stays exempt",
-     lambda r: Write(r, LT + "LTE/old_style.cxx", ""),
-     0, "0 fault(s)"),
-    ("a liblt shader that lt.vcxproj does not compile",
-     lambda r: Write(r, LT + "Shaders/PostBloomPS.hlsl", ""),
-     1, "is not an FxCompile item of lt.vcxproj"),
-    ("a liblt include that lt.vcxproj does not list",
-     lambda r: Write(r, LT + "Shaders/Math.hlsli", ""),
-     1, "Shaders/Math.hlsli: is not in lt.vcxproj"),
-    ("a liblt shader in a subfolder",
-     lambda r: Write(r, LT + "Shaders/post/BlurPS.hlsl", ""),
-     1, "a file in a subfolder"),
-    ("a liblt shader named against ADR-008",
-     lambda r: Write(r, LT + "Shaders/post_blur.hlsl", ""),
+    ("NeuronClient's shaders, each compiled and held by the registry", None, 0, "0 fault(s)"),
+    ("a shader the project does not compile",
+     lambda r: Write(r, "NeuronClient/Shaders/PostBloomPS.hlsl", ""),
+     1, "Shaders/PostBloomPS.hlsl: is not in NeuronClient.vcxproj"),
+    ("an include the project does not list",
+     lambda r: Write(r, "NeuronClient/Shaders/Math.hlsli", ""),
+     1, "Shaders/Math.hlsli: is not in NeuronClient.vcxproj"),
+    ("a shader in a subfolder",
+     lambda r: Write(r, "NeuronClient/Shaders/post/BlurPS.hlsl", ""),
+     1, "a shader outside the project's Shaders/ folder"),
+    ("a shader named against ADR-008",
+     lambda r: Write(r, "NeuronClient/Shaders/post_blur.hlsl", ""),
      1, "(R7, ADR-008)"),
-    ("a liblt shader the registry does not hold",
-     lambda r: (Write(r, LT + "Shaders/PostBloomPS.hlsl", ""),
-                Replace(r, LT + "lt.vcxproj", '    <None Include="Shaders\\Common.hlsli" />', BLOOM_ITEM),
-                Replace(r, LT + "lt.vcxproj.filters", "<None",
+    ("a shader the registry does not hold",
+     lambda r: (Write(r, "NeuronClient/Shaders/PostBloomPS.hlsl", ""),
+                Replace(r, "NeuronClient/NeuronClient.vcxproj", '    <None Include="Shaders\\Common.hlsli" />', BLOOM_ITEM),
+                Replace(r, "NeuronClient/NeuronClient.vcxproj.filters", "<None",
                         '<FxCompile Include="Shaders\\PostBloomPS.hlsl" />\n    <None')),
-     1, "PostBloomPS.hlsl: is not in FrontierOutpost/src/liblt/LTE/ShaderRegistry.cpp under its legacy name"),
+     1, "PostBloomPS.hlsl: is not in NeuronClient/ShaderRegistry.cpp under its legacy name"),
+    ("a shader outside the registry that a source binds by its array",
+     lambda r: (Write(r, "NeuronClient/Shaders/PostBloomPS.hlsl", ""),
+                Replace(r, "NeuronClient/NeuronClient.vcxproj", '    <None Include="Shaders\\Common.hlsli" />', BLOOM_ITEM),
+                Replace(r, "NeuronClient/NeuronClient.vcxproj.filters", "<None",
+                        '<FxCompile Include="Shaders\\PostBloomPS.hlsl" />\n    <None'),
+                Replace(r, "NeuronClient/Window.cpp", "namespace Neuron\n{\n",
+                        "namespace Neuron\n{\nextern const unsigned char POST_BLOOM_PS[];\n")),
+     0, "0 fault(s)"),
     ("a registry entry with no shader",
-     lambda r: Replace(r, LT + "LTE/ShaderRegistry.cpp", "  };", '    {"post/bloom.jsl", Bytes(POST_BLOOM_PS)},\n  };'),
-     1, "holds post/bloom.jsl, but lt.vcxproj compiles no Shaders/PostBloomPS.hlsl"),
+     lambda r: Replace(r, "NeuronClient/ShaderRegistry.cpp", "  };", '    {"post/bloom.jsl", Bytes(POST_BLOOM_PS)},\n  };'),
+     1, "holds post/bloom.jsl, but NeuronClient.vcxproj compiles no Shaders/PostBloomPS.hlsl"),
     ("a registry entry with another shader's array",
-     lambda r: Replace(r, LT + "LTE/ShaderRegistry.cpp", "Bytes(POST_BLUR_PS)", "Bytes(UI_TEXTURE_PS)"),
+     lambda r: Replace(r, "NeuronClient/ShaderRegistry.cpp", "Bytes(POST_BLUR_PS)", "Bytes(UI_TEXTURE_PS)"),
      1, "holds post/blur.jsl as UI_TEXTURE_PS"),
     ("a registry entry the checker cannot read",
-     lambda r: Replace(r, LT + "LTE/ShaderRegistry.cpp", '{"post/blur.jsl", Bytes(POST_BLUR_PS)},',
+     lambda r: Replace(r, "NeuronClient/ShaderRegistry.cpp", '{"post/blur.jsl", Bytes(POST_BLUR_PS)},',
                        '{ "post/blur.jsl", Bytes(POST_BLUR_PS) },'),
      1, "not one entry the checker can read"),
     ("a shader's array not named for its file",
-     lambda r: Replace(r, LT + "lt.vcxproj", "<VariableName>POST_BLUR_PS</VariableName>",
+     lambda r: Replace(r, "NeuronClient/NeuronClient.vcxproj", "<VariableName>POST_BLUR_PS</VariableName>",
                        "<VariableName>g_blur</VariableName>"),
      1, "expected 'POST_BLUR_PS' (R3)"),
     ("a pixel shader compiled as a vertex shader",
-     lambda r: Replace(r, LT + "lt.vcxproj", "<ShaderType>Pixel</ShaderType>", "<ShaderType>Vertex</ShaderType>"),
+     lambda r: Replace(r, "NeuronClient/NeuronClient.vcxproj", "<ShaderType>Pixel</ShaderType>",
+                       "<ShaderType>Vertex</ShaderType>"),
      1, "where its name says 'Pixel'"),
-    ("liblt's shaders at another Shader Model in Release",
-     lambda r: Replace(r, LT + "lt.vcxproj", "  <ItemGroup>\n    <ClCompile",
+    ("shaders at another Shader Model in Release",
+     lambda r: Replace(r, "NeuronClient/NeuronClient.vcxproj", "  <ItemGroup>\n    <ClCompile Include=\"ShaderRegistry.cpp\">",
                        "  <ItemDefinitionGroup Condition=\"'$(Configuration)'=='Release'\">\n"
                        "    <FxCompile><ShaderModel>6.0</ShaderModel></FxCompile>\n  </ItemDefinitionGroup>\n"
-                       "  <ItemGroup>\n    <ClCompile"),
+                       "  <ItemGroup>\n    <ClCompile Include=\"ShaderRegistry.cpp\">"),
      1, "disagree on FxCompile.ShaderModel"),
 ]
 
@@ -424,11 +417,10 @@ FORMAT_CASES = [
     ("the same source, after --fix",
      lambda r: Write(r, "NeuronClient/Window.cpp", UNFORMATTED_SOURCE),
      ["--fix"], 0, "reformatted"),
-    ("an unformatted file in the legacy import, which is left alone",
-     lambda r: Write(r, "FrontierOutpost/src/legacy.cpp", "int  main( ){return 0;}\n"),
+    ("an unformatted legacy file, which is left alone",
+     lambda r: Legacy(r, "Legacy.cpp", "int  main( ){return 0;}\n"),
      [], 0, "0 not formatted"),
 ]
-
 TIDY_CASES = [
     ("a tree that keeps the naming table", None, 0, "0 with diagnostics"),
     ("a parameter without its _",
@@ -527,7 +519,7 @@ def main():
   failures = []
 
   Check("CheckProjectFiles.py", PROJECT_CASES, [], failures)
-  Check("CheckProjectFiles.py", SHADER_CASES, [], failures, _base=LibltTree)
+  Check("CheckProjectFiles.py", SHADER_CASES, [], failures, _base=ShaderTree)
   Check("CheckSounds.py", SOUND_CASES, [], failures, _base=SoundTree)
 
   clangFormat = args.clangFormat or shutil.which("clang-format")

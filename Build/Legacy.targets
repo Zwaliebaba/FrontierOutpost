@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The compile settings of the ltheory-old import (Design/ADR/ADR-015), for every ClCompile item a
+  project marks <Legacy>true</Legacy>. Every project imports this after Microsoft.Cpp.targets.
+
+  A project's own settings are AGENTS.md's (§3: /W4 /WX /fp:precise), and they are what a new file
+  gets. A legacy file keeps what the original compiled with (ADR-001): /W3 without /WX, /fp:fast,
+  /EHs, the multi-byte character set, WIN32 and _WINDOWS, no precompiled header, and no /utf-8, which
+  its sources were never written for. The checkers read the same marker and leave the file alone.
+
+  The metadata is set in a target rather than on each item, so that this file is the one place that
+  holds it. The IDE's property pages do not run targets, so they show a legacy file with its
+  project's settings; the build and the command line are what count.
+-->
+<Project>
+  <Target Name="ApplyLegacySettings" BeforeTargets="ClCompile">
+    <ItemGroup>
+      <ClCompile Condition="'%(ClCompile.Legacy)'=='true'">
+        <WarningLevel>Level3</WarningLevel>
+        <TreatWarningAsError>false</TreatWarningAsError>
+        <FloatingPointModel>Fast</FloatingPointModel>
+        <ExceptionHandling>SyncCThrow</ExceptionHandling>
+        <PrecompiledHeader>NotUsing</PrecompiledHeader>
+        <AdditionalOptions>/Zc:__cplusplus</AdditionalOptions>
+        <PreprocessorDefinitions>WIN32;_WINDOWS;_MBCS;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
+        <UndefinePreprocessorDefinitions>UNICODE;_UNICODE;%(ClCompile.UndefinePreprocessorDefinitions)</UndefinePreprocessorDefinitions>
+      </ClCompile>
+    </ItemGroup>
+  </Target>
+</Project>

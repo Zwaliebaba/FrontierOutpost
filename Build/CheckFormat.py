@@ -4,8 +4,9 @@
 Usage: python Build/CheckFormat.py [--clang-format PATH] [--fix] [--root DIR]
 
 It runs over the whole tree that git does not ignore, and leaves alone what AGENTS.md does not
-govern: the legacy import and its data (FrontierOutpost/, GameData/: ADR-001, ADR-004), the
-original's copy, build output, and the Resource.h that Visual Studio's resource editor rewrites.
+govern: the files a project marks <Legacy>true</Legacy> (the ltheory-old import, ADR-015), its data
+(GameData/, ADR-004), the original's copy, build output, and the Resource.h that Visual Studio's
+resource editor rewrites.
 
 The layout changes between clang-format releases, so the answer that counts is the pinned
 version's, which CI runs. A different version says so, and its verdict is advisory.
@@ -54,7 +55,7 @@ def main():
     print(f"  Not the pinned {PINNED}: its layout can differ, so treat this run as advisory.")
 
   files = [f for f in TreeFiles(root)
-           if f.endswith((".h", ".cpp")) and not IsExempt(f) and f.split("/")[-1] not in UNFORMATTED]
+           if f.endswith((".h", ".cpp")) and not IsExempt(root, f) and f.split("/")[-1] not in UNFORMATTED]
   style = f"--style=file:{root / '.clang-format'}"
   offenders = []
   for relative in files:

@@ -40,7 +40,7 @@ bld/
 # Scratch clones and builds of the original CMake tree (Design/Archive/MIGRATION_NOTES.md, Phase 0).
 _baseline_build/
 
-# What launch.exe keeps beside GameData/ (Design/ADR/ADR-004): cache/ is what it writes (config,
+# What FrontierOutpost.exe keeps beside GameData/ (Design/ADR/ADR-004): cache/ is what it writes (config,
 # settings, logs, crash dumps, screenshots, script caches), mod/ is where a player's mods go.
 /cache/
 /mod/

@@ -1,0 +1,882 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    NeuronCore: the engine both sides share: containers, math, strings, the type system, LTSL,
+    geometry, SDFs, the OS layer, threads and the scheduler (Design/ADR/ADR-014). A static library.
+    Items marked Legacy are the ltheory-old import and build as ADR-015 says (Build/Legacy.targets).
+  -->
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|ARM64">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64">
+      <Configuration>Release</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <ProjectGuid>{7B1A6C1E-3C2D-4F0B-9E47-2D6A1F9C0B11}</ProjectGuid>
+    <RootNamespace>NeuronCore</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v145</PlatformToolset>
+    <!-- The 64-bit-hosted compilers, for ARM64 too, as every project here uses. -->
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <FloatingPointModel>Precise</FloatingPointModel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!-- Sources are UTF-8 (.editorconfig). Legacy files are not, and Build/Legacy.targets drops this for them. -->
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <!-- The instruction sets every project states, the same in Debug and Release (ADR-006, R16). -->
+  <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
+    <ClCompile>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Platform)'=='ARM64'">
+    <ClCompile>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="Array.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Array3D.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="AutoClass.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="AutoClass_Generated.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="AutoPtr.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="BaseType.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="BaseVector.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Bind.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Bound.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="BuildMode.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Cached.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Call.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Capsule.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="CollisionMesh.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Color.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Common.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Compare_AutoPtr_Pointer.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Compare_AutoPtr_Reference.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Compare_Pointer_Reference.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Cylinder.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Data.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="DataStack.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Debug.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="DeclareFunction.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Diff.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Distribution.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Enum.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Environment.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Expression.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Expressions.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Field.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Finite.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="FrameTimer.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="FreeFn.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Function.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Function_Generated.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="FunctionCall.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="FunctionCast.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="FunctionPointer.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="FunctionValue.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Generic.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Geom.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Geometry.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Grammar.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Graph.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="GraphicsEnum.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Hash.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="HashMap.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="HashSet.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="IDMap.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="InternalList.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Interpolated.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="IntrusiveList.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Iterator.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Job.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="KDTree.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="LazyHash.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="List.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="ListElement.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Loader.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Location.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Lock.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Lookup.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="LookUpTable.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="LteCommon.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="LteMath.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="LteSegment.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="LteString.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="LteTime.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="LteTypes.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="LTSL.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Map.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="MarchingCubes.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Matrix.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="MemberFn.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Mesh.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Meshes.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Model.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Module.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="ModuleCommon.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Mutable.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="OS.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Package.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Parameter.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="ParticleSystem.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Patch.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Plane.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="PlateMesh.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Pointer.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Pool.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="PriorityQueue.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Profiler.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="ProgramLog.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Pushable.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Quaternion.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Ray.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Reference.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Renderable.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="ResourceMap.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="RingBuffer.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="RNG.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Scheduler.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Script.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="ScriptFunction.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="ScriptType.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="SDF.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="SDFMesh.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="SDFs.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Serializer.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Singleton.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Smooth.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Sparse.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="SpatialPartition.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="SpatialSignature.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Sphere.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="SphereTree.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Stack.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="StackAlloc.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="StackArray.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="StackFrame.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Static.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="StdMath.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="StringList.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="StringPool.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="StringTree.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Thread.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Timer.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Tokenizer.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Transform.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Tuple.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Type.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="TypeTraits.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="UniString.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Utf8Core.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Utf8Unchecked.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="V2.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="V3.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="V4.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Vec.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Vector.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="VectorMap.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="VectorNP.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Vertex.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="View.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="VolumeCommon.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Warp.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Warps.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="windirent.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Wrapper.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="XEnum.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="XVector.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Access.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Address.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Array3D.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Assign.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Attractor.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Block.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Bool.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="CollisionMesh.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Color.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Constant.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Constructor.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Contour.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Conversion.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Debug.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Declare.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Dereference.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Diff.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Double.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="DynamicDispatch.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Expression.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ExpressionArray.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ExpressionCall.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ExpressionCast.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ExpressionFunction.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ExpressionFunctionCall.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ExpressionList.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ExpressionReference.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ExpressionType.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="For.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="FrameTimer.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Function.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Geom.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Grammar.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="If.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Int.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="KDTree.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Loader.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Location.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Lock.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="LteMath.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="LteString.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="LteTime.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="LTSL.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="MarchingCubes.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Meshes.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Module.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Noop.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="OS.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Package.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Patch.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Print.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Radial.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Renderable.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ResourceMap.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="RNG.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Script.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiData.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiExpression.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiFloat.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiGrammar.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiList.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiMesh.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiOS.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiPlateMesh.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiRay.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiRenderable.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiRNG.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiString.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiStringTree.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiTimer.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiV2.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiV3.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiV4.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptFunction.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="SDF.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="SdfBox.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="SdfCylinder.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="SdfScale.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="SdfSphere.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Serializer.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Shell.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="SpatialPartition.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="SpatialPartition_HashGrid.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="SpatialPartition_UniformGrid.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="SpatialSignature_UniformGrid.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="SphereTree.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="StackFrame.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Static.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="StringList.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="StringTree.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Subtract.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Switch.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Thread.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Timer.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Torus.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Transform.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="TriTriOverlap.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Type.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="TypeArray.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="TypePointer.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="UniString.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="V2.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="V3.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Variable.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Warp.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="WarpCustom.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="While.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="..\Build\Legacy.targets" />
+</Project>
