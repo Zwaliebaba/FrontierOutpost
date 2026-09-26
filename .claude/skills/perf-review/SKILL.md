@@ -358,7 +358,7 @@ path. Protection against TDRs stays.
 - Constants (`:1220-1290`). Each draw copies each stage's constants into the upload ring. Also
   check the upload ring's page size (`uploadPageBytes`).
 - Pipeline states are created at first use, and nothing warms them. The plan names warming the known
-  programs at load as the mitigation (`Design/Plan/NeuronClient-migration.md` §10), and it does not
+  programs at load as the mitigation (`Design/Archive/NeuronClient-migration.md` §10), and it does not
   exist. `ID3D12Device`'s methods are free-threaded, so pipeline states can be created on workers.
 - Command allocator and list reuse, the number of submissions, and how often the heaps and the root
   signature are re-bound per list.
@@ -414,7 +414,7 @@ programs and reflection, textures, sounds, fonts, and procedural generation. Lea
 - **Scripts.** `ScriptFunction_Load` (in `launch.cpp`), `LTE/Script.cpp`, `LTE/LTSL.cpp` and
   `LTE/Expression/` load and compile the scripts. Caching them on disk is compiled out
   (`LTE/ScriptFunction.cpp:6` and its `#if 0` block). Turning it on would add a runtime file (R13,
-  ADR-004), with the caveats in `FrontierOutpost/MIGRATION_NOTES.md` H5 and H6. That is an owner
+  ADR-004), with the caveats in `Design/Archive/MIGRATION_NOTES.md` H5 and H6. That is an owner
   decision.
 - **Shader programs:** the registry lookup, and one `D3DReflect` per program at load
   (`LTE/ShaderRegistry.cpp`, `NeuronClient/Program.cpp`).
