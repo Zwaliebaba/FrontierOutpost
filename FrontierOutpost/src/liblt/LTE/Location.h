@@ -46,10 +46,6 @@ namespace LTE {
     return Location_Resource("script/" + name);
   }
 
-  inline Location Location_Shader(String const& name) {
-    return Location_Resource("shader/" + name);
-  }
-
   inline Location Location_Texture(String const& name) {
     return Location_Resource("texture/" + name);
   }

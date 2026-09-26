@@ -130,7 +130,7 @@ namespace {
     return std::as_bytes(std::span(bytecode));
   }
 
-  /* Each vertex shader, by its path below GameData/shader/vertex/. */
+  /* Each vertex shader, by its GLSL's path below GameData/shader/vertex/. */
   Entry const kVertex[] = {
     {"billboard.jsl", Bytes(BILLBOARD_VS)},
     {"billboard_axis.jsl", Bytes(BILLBOARD_AXIS_VS)},
@@ -149,7 +149,7 @@ namespace {
     {"worldray.jsl", Bytes(WORLDRAY_VS)},
   };
 
-  /* Each pixel shader, by its path below GameData/shader/fragment/. */
+  /* Each pixel shader, by its GLSL's path below GameData/shader/fragment/. */
   Entry const kPixel[] = {
     {"atmosphere.jsl", Bytes(ATMOSPHERE_PS)},
     {"beam.jsl", Bytes(BEAM_PS)},
@@ -245,8 +245,8 @@ namespace {
     {"wormhole.jsl", Bytes(WORMHOLE_PS)},
   };
 
-  /* Each compute shader, by the path below GameData/shader/fragment/ of the
-     pixel shader it replaced (Design/ADR/ADR-009). */
+  /* Each compute shader, by the GLSL path below GameData/shader/fragment/ of
+     the pixel shader it replaced (Design/ADR/ADR-009). */
   Entry const kCompute[] = {
     {"gen/field.jsl", Bytes(GEN_FIELD_CS)},
     {"gen/fieldcopy.jsl", Bytes(GEN_FIELDCOPY_CS)},

@@ -36,7 +36,8 @@ DirectWrite, WIC, XAudio2 and Win32.
   lists what is open. The owner also had `ltheory-old-main/`, the original's reference copy, deleted
   the same day; history holds it, and upstream `ltheory-old` at `0535d46` is the original. By N18,
   the migration's workflow went too: CI builds Debug|x64 only, and the other three builds are the
-  owner's, by hand.
+  owner's, by hand. By N19, so did `GameData/shader`, which nothing had read since step 3;
+  `8e13f92` is the last commit that holds it.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
@@ -95,6 +96,7 @@ has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
 | N16 | **Work pauses before Phase 4 step 3** (2026-09-26) until the owner has checked Phases 1 and 2 in the apps while OpenGL still renders. Steps 1 and 2 and the smoke mode's first part change nothing OpenGL is given. The owner released step 3 the same day; `8bc74a0` is the last commit that renders with OpenGL. | owner |
 | N17 | **Step 6 comes before the rest of bring-up** (2026-09-26). OpenGL, GLEW and the WGL bridge are deleted once `war` runs on Direct3D 12 (bring-up 5.3), ahead of 5.4 to 5.9: nothing has drawn through OpenGL since step 3. Their link libraries go with them, ahead of Phase 5, as SFML's went in Phase 2. | owner |
 | N18 | **The migration's workflow goes before Phase 5** (2026-09-26). `.github/workflows/neuronclient.yml` and `.github/migration/` are deleted, so CI builds Debug\|x64 only, with the tests, clang-tidy and the smoke job, as AGENTS.md §6 has it. x64 Release and both ARM64 builds are built by hand, before a release and in Phase 5's final checks, not after every step (§6, ADR-006 decision 5). The workflow's last run was on `8443028`, where x64 Debug and Release linked with 507 warnings, 458 unique, and ARM64 Debug linked. | owner |
+| N19 | **`GameData/shader` goes before Phase 5** (2026-09-26). Its 130 GLSL files, 5,311 lines (§5.6), had not been read since step 3, when liblt's shaders became HLSL compiled into `lt.dll`, and §12 proposed deleting them with Phase 5's close-out. They are deleted at the pause instead, and ADR-004's amendment (§8) lands with them. `8e13f92` is the last commit that holds them, and each HLSL file's header names what it was ported from. | owner |
 
 What N2 and N3 mean in practice. The first two points correct what the question offered:
 
@@ -600,8 +602,8 @@ the smoke job is green.
    ahead: SFML's and FreeType's went in Phase 2, GLEW's and OpenGL's in Phase 4 step 6 (N17).
    `$(FrontierOutpostDir)include` stays on the include path, for `UTF8/` and `windirent.h`.
 3. **Documents.** The README, the migration notes, and the ADR changes of §8. Brought up to date
-   when the owner paused after Phase 4 step 6, but for ADR-004's amendment, which waits for
-   `GameData/shader` to go (§12); Phase 5 checks them again at the end.
+   when the owner paused after Phase 4 step 6, and ADR-004's amendment landed when
+   `GameData/shader` went (N19); Phase 5 checks them again at the end.
 4. **Final checks.**
    - All four builds, by hand.
    - The owner's GPUs.
@@ -643,8 +645,8 @@ mode renders offscreen and never creates one.
 - **ADR-003:** amended. The engine's mechanism lives in NeuronClient; the adapter stays in liblt. A
   missing sound file becomes a logged warning (N6); a file XAudio2 cannot play still ends the program
   (N9). Done.
-- **ADR-004:** amended. `GameData/` holds no shaders, and the fonts are pruned. Waits for
-  `GameData/shader` to go (§12).
+- **ADR-004:** amended. `GameData/` holds no shaders, and the fonts are pruned. Done, when
+  `GameData/shader` went (N19).
 
 **Runtime files (R13).** None is added for players. Screenshots stay under `cache/screenshot/`. The
 CI smoke mode writes its PNG captures only where `--capture` says, and a relative path resolves
@@ -725,8 +727,9 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 ## 12. Still open for the owner
 
 N5–N12 settled the first open items: `/arch`, missing sounds, vsync, RandomScreenshot's background,
-unplayable sound files, liblt's shader folder and its calls for OS services. At the pause after
-Phase 4 step 6 (2026-09-26), these are open:
+unplayable sound files, liblt's shader folder and its calls for OS services. The pause after Phase
+4 step 6 (2026-09-26) left three, and N19 settled one of them, when `GameData/shader` goes. These
+are open:
 
 1. **The smoke job's shape, before bring-up 5.6 adds `model`.** One job running the apps in turn
    outgrows its 60 minutes: `war` alone takes 21 on WARP. The proposal is one job per app, in
@@ -734,11 +737,7 @@ Phase 4 step 6 (2026-09-26), these are open:
    every app on every push would cost an estimated 3 to 4 Windows runner-hours once all 16 are in,
    from `war`'s 21 minutes and `loading`'s and `ui`'s 2 to 3; nothing has measured the other 13 yet.
    The alternative is the full set on demand, and the apps brought up so far on each push.
-2. **When `GameData/shader` goes.** §5.6 and ADR-008 say it goes, and nothing has read it since
-   step 3, when liblt's shaders became HLSL compiled into `lt.dll`, but no step deletes it. The
-   proposal is to delete it with Phase 5's close-out, which also lets ADR-004's amendment (§8)
-   land.
-3. **The owner's checks of Phase 4:** presenting (5.1), which the smoke run cannot see, and the 16
+2. **The owner's checks of Phase 4:** presenting (5.1), which the smoke run cannot see, and the 16
    kept apps on a GPU and on the ARM64 device, the phase's done-when. ADR-009's sixth decision also
    asks for a field's generation time on a GPU, and since N18 the x64 Release and ARM64 builds are
    the owner's, by hand.

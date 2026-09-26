@@ -30,7 +30,7 @@ SFML left the tree in its Phases 1 and 2, FreeType in its Phase 2 (ADR-010 to AD
 GLEW and the WGL bridge in its Phase 4 (ADR-007), so nothing is vendored under
 `FrontierOutpost/ext/` any more and ADR-002 is superseded. `FrontierOutpost.slnx` holds `lt`,
 `launch`, `NeuronClient` and `NeuronClientTests`. liblt draws with Direct3D 12 through NeuronClient,
-and its shaders are HLSL compiled into `lt.dll` (ADR-008), so `GameData/shader` is no longer read.
+and its shaders are HLSL compiled into `lt.dll` (ADR-008), so `GameData/shader` went, on 2026-09-26.
 Where §5–§10 and §15–§22 give dependencies, projects, link lines and warning counts, they are this
 migration's, not the tree's now: the four builds link with 507 warnings, 458 unique, all `lt`'s,
 where this migration ended with 613, 585 unique (§21.4, §22.4). The owner then had
@@ -1090,7 +1090,8 @@ Recorded, not to be done in this migration:
     says that binary distributions need not carry the notice. Adding SMAA's `LICENSE.txt` beside
     the shader fixes it. **Resolved by ADR-008**, in the NeuronClient migration's Phase 4 step 2:
     SMAA's HLSL port, `FrontierOutpost/src/liblt/Shaders/Smaa.hlsli`, carries the notice in
-    `SmaaLicense.txt` beside it. `smaa.jsl` still lacks it until step 6 deletes `GameData/shader`.
+    `SmaaLicense.txt` beside it. `smaa.jsl` lacked it until `GameData/shader` was deleted, on
+    2026-09-26.
 
 ## 15. Phase 1: structure
 

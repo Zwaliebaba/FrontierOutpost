@@ -61,7 +61,9 @@ more.
    porting block is GLSL (`smaa.jsl:373-385`). No third-party code is added, and SMAA's licence
    notice goes beside the file, which closes `FrontierOutpost/MIGRATION_NOTES.md` O14 (plan §5.6).
 8. **What goes:** `JSLPreprocess`, the `#version` injection, hot reload (`Shader_RecompileAll`,
-   and the T key that calls it in 7 apps), and `GameData/shader` (plan §2, §5.6).
+   and the T key that calls it in 7 apps), and `GameData/shader` (plan §2, §5.6). The folder went
+   on 2026-09-26 (plan N19). `8e13f92` is the last commit that holds it, and each HLSL file's
+   header names what it was ported from.
 9. **`d3dcompiler_47.dll` is proved where it runs.** A NeuronClient test loads it and reflects a
    compiled blob, and the owner runs it on the ARM64 device as well. If a target lacks the DLL,
    the fallback is reflection tables generated at build time (plan Phase 2 step 1, §10).

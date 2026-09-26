@@ -37,7 +37,7 @@ They draw on WARP, Windows' software renderer, with the Direct3D 12 debug layer,
 
 ## Getting the Assets
 
-Everything LT loads at run time (fonts, sounds, textures, game data and LTSL scripts) is in `GameData/`, at the root of this repository, as ordinary files. The shaders are HLSL, in `FrontierOutpost/src/liblt/Shaders/`, and the build compiles them into `lt.dll`; `GameData/shader` still holds the GLSL they were ported from, which nothing reads. The game plays WAV sounds only, so its 24 Ogg sounds, in `GameData/sound/`, are due to be converted to WAV. Until they are, each of those sounds plays silence, and the log names it once as a warning. `FrontierOutpost/MIGRATION_NOTES.md` gives the names the WAV files take (O10).
+Everything LT loads at run time (fonts, sounds, textures, game data and LTSL scripts) is in `GameData/`, at the root of this repository, as ordinary files. The shaders are HLSL, in `FrontierOutpost/src/liblt/Shaders/`, and the build compiles them into `lt.dll`. The game plays WAV sounds only, so its 24 Ogg sounds, in `GameData/sound/`, are due to be converted to WAV. Until they are, each of those sounds plays silence, and the log names it once as a warning. `FrontierOutpost/MIGRATION_NOTES.md` gives the names the WAV files take (O10).
 
 ## Running an LTSL App
 
