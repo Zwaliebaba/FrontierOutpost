@@ -78,8 +78,6 @@ type ImageEditor
         Texture/Filters:Power 1.25
           Texture/Filters:Saturate 0.8 image
 
-    image.SaveTo "newImage.png"
-
   function List CreateChildren (Widget self)
     var l List
     l +=
