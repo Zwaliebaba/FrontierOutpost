@@ -37,7 +37,7 @@ They draw on WARP, Windows' software renderer, with the Direct3D 12 debug layer,
 
 ## Getting the Assets
 
-Everything LT loads at run time (fonts, sounds, textures, game data and LTSL scripts) is in `GameData/`, at the root of this repository, as ordinary files. The shaders are HLSL, in `FrontierOutpost/src/liblt/Shaders/`, and the build compiles them into `lt.dll`. The game plays WAV sounds only, so its 24 Ogg sounds, in `GameData/sound/`, are due to be converted to WAV. Until they are, each of those sounds plays silence, and the log names it once as a warning. `FrontierOutpost/MIGRATION_NOTES.md` gives the names the WAV files take (O10).
+Everything LT loads at run time (fonts, sounds, textures, game data and LTSL scripts) is in `GameData/`, at the root of this repository, as ordinary files. The shaders are HLSL, in `FrontierOutpost/src/liblt/Shaders/`, and the build compiles them into `lt.dll`. The game plays WAV sounds only, and every sound in `GameData/sound/` is one. A sound the code or a script names but that has no file plays silence, and the log names it once as a warning; `Build/CheckSounds.py` lists any such sound, and checks that every WAV file can be played.
 
 ## Running an LTSL App
 
@@ -51,7 +51,7 @@ All top-level scripts are in the `GameData/script/App` directory. So you can do,
 
 - `FrontierOutpost\bin\x64\Release\launch.exe war`
 
-To run the app 'war.lts', which is an AI skirmish test. Many of the apps are broken or incomplete, but some work enough to allow you to fly around in a system.
+To run the app 'war.lts', which is an AI skirmish test. The 15 apps there all start and draw, but many are tests or tools rather than a game, and some work enough to allow you to fly around in a system. `widget.lts` is not an app: it is the host the others open their widgets in.
 
 `launch.exe` also takes three options for a smoke run, which checks an app with nobody watching. `--frames N` runs the app for N frames and quits, `--capture <path>` saves the last of them as a PNG, and `--warp` draws on WARP, with the Direct3D 12 debug layer on and nothing shown. With `--frames`, nothing waits for a dialog to be answered, and the exit code is 1 when the app fails, stops short of its frames, or the debug layer reports an error. For example:
 
@@ -59,7 +59,7 @@ To run the app 'war.lts', which is an AI skirmish test. Many of the apps are bro
 
 # Example of the Entire Process
 
-An example of the entire sequence of commands to build and run an LTSL app, in a Developer PowerShell for Visual Studio 2026 at the root of this repository, once the assets are in place:
+An example of the entire sequence of commands to build and run an LTSL app, in a Developer PowerShell for Visual Studio 2026 at the root of this repository:
 
 ```
 msbuild FrontierOutpost.slnx /m /p:Configuration=Release /p:Platform=x64

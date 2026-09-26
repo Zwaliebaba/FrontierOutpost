@@ -47,7 +47,11 @@ corresponds to FMOD's Event System or Designer projects.
    numbers above, and where sound files are found.
 2. **Sounds are WAV files.** The owner converts the Ogg files to WAV: 24 of them, since the
    NeuronClient plan's Phase 1 removed the 55 that nothing names (ADR-013). Code and scripts name
-   the WAV files. The two Ogg files whose WAV name is already taken convert to `<name>_ogg.wav`.
+   the WAV files. The two Ogg files whose WAV name was already taken were to convert to
+   `<name>_ogg.wav`. The owner converted the 24 in `21a9201` (O10), and no Ogg file is left. Of the
+   two, `warpnode/exit.ogg` had gone in Phase 1, since nothing named it, and `ui/objectmenuopen.ogg`
+   is the same sound as its WAV (owner, 2026-09-26), so it keeps the one `.wav` name. No
+   `_ogg.wav` file exists.
    - **A missing file plays silence** (amendment, N6). The log names it once, as a warning, and
      every sound played from it is created finished. So the conversion can land whenever it is
      ready.

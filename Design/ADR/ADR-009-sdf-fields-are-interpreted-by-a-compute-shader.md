@@ -48,7 +48,9 @@ two noise nodes are `NOT_IMPLEMENTED` there (`LTE/SDF.cpp`), and fields reach ab
    mesh, but it runs at generation time. Phase 4 measures generation time on WARP and on a GPU
    (plan §5.7, §10): `SDFMesh` logs how long each field took. On WARP, in Debug with the debug
    layer, a field of 128³ voxels took 22 s (21989, 22126 and 22106 ms for `war`'s three asteroids
-   in the smoke job on `86634e8`); the figure on a GPU is the owner's to take.
+   in the smoke job on `86634e8`). On a GPU, an Intel Iris Xe, also in Debug with the debug layer,
+   the same field took 20 to 23 ms, and 67 ms at worst, over 24 fields in eight apps on
+   2026-09-26, a thousand times WARP's.
 
 ## What this forecloses
 

@@ -834,7 +834,7 @@ owner's later decisions (D20, D23, D26–D28) and Phase 0 of the NeuronClient pl
 | `include/FMOD/` (11 headers), `resource/music/` (2 `.fev`, 2 `.fsb`) | deleted | D17 |
 | `src/liblt/Game/Graphics/Effects.cpp`, `Game/Object/{DroneBay,Missile,ProductionLab,Shield,TechLab,TransferUnit}.cpp`, `Game/Task/Research.cpp`, `Game/Widget/HUD.cpp`, `Game/Item/WeaponType.cpp` | 19 sound names from `.ogg` to `.wav` | D16 |
 | `resource/script/Object/{Firework,Ship,WarpNode}.lts`, `Widget/HUD/WorldObject.lts`, `Widget/Market/Transaction.lts` | 10 sound names from `.ogg` to `.wav` | D16 |
-| `resource/script/Widget/Browser.lts:67` | `ui/objectmenuopen.ogg` to `ui/objectmenuopen_ogg.wav` | D16: `ui/objectmenuopen.wav` is a different sound |
+| `resource/script/Widget/Browser.lts:67` | `ui/objectmenuopen.ogg` to `ui/objectmenuopen_ogg.wav`, and on 2026-09-26 to `ui/objectmenuopen.wav` | D16: `ui/objectmenuopen.wav` was taken to be a different sound; the owner found it the same (O10) |
 | `src/old/ltheory/ltheory.cpp`, `src/old/soundstudio/soundstudio.cpp` (not built) | `SoundEngine_XAudio2()`; the include of `MusicEngine.h` and a commented-out `CreateMusicEngine` call removed | D17: no code may name what was deleted |
 | `src/liblt/LTE/Data.h:67`, `:248`; `src/liblt/LTE/ResourceMap.cpp:38` | the string literal in a conditional expression whose other operand is a `String` is written `String("null")`, `String("")` | Phase 3: error C2445 under `/Zc:ternary` (part of `/permissive-`). `String` converts to `char const*` and a literal converts to `String`, so the standard calls the expression ambiguous. `Data.h:67` is the same expression, in a template nothing instantiates, so MSVC did not report it yet. BR5 |
 | `src/liblt/LTE/Thread.cpp:21`, `:34`, `:44`, `:49` | `finished` is a `std::atomic<bool>`: stored with release once the job has run, loaded with acquire by `IsFinished()` and the destructor; `<atomic>` included | D20: on ARM64, the main thread could see `finished` before the job's results (O12). BR7 |
@@ -1044,6 +1044,11 @@ Recorded, not to be done in this migration:
   - Since D29, the Ogg sources are real files in `GameData/sound/`, beside where their WAV files
     go. Whether the Ogg files then leave the tree is the owner's call: they stay in the history
     either way.
+  - **Resolved in `21a9201`:** the owner converted the 24, and the Ogg files left the tree.
+    `warpnode/exit.ogg` had gone in Phase 1, since nothing named it, and `ui/objectmenuopen.ogg` is
+    the same sound as its WAV (owner, 2026-09-26), so `Browser.lts` names `ui/objectmenuopen.wav`
+    and no `_ogg.wav` file exists. `Build/CheckSounds.py` finds a file for every sound named, and
+    all 43 can be played.
 - **O11** The XAudio2 engine is verified by compiling it, not by listening to it. No runner has an
   audio device, and the sounds here were LFS pointers (D12, D13). Since D27 the 51 WAV sounds are
   real files, and since D29 so are the 79 Ogg sounds, which still have to become WAV (O10).
@@ -1709,9 +1714,12 @@ at `/W4`, and GLEW raise none.
 
 ### 21.6 Open issues
 
-- **O10: the owner's to do.** Convert the 24 Ogg sounds left in `GameData/sound/` to WAV.
-- **O11:** then listen to the sounds.
-- **O4:** ARM64 builds have not been run, for want of an ARM64 machine.
+- ~~**O10: the owner's to do.** Convert the 24 Ogg sounds left in `GameData/sound/` to WAV.~~
+  Done in `21a9201`.
+- **O11:** listen to the sounds. Closed by the owner without a recorded listen (NeuronClient
+  plan, N21).
+- **O4:** ARM64 builds have not been run, for want of an ARM64 machine. They build and link
+  (2026-09-26); running them is waived by the NeuronClient plan's N21.
 - O1 and O7 describe the environment and the source material. O2, O3, O5, O8, O9, O12, O13 and
   O14 are resolved, and O6 is closed (D24).
 
@@ -1866,3 +1874,4 @@ converts them to WAV offline (D29). D16 stands, so the code and the scripts keep
   `<name>_ogg.wav` for `ui/objectmenuopen` and `warpnode/exit`, whose `.wav` names are taken.
   Until the converted files are in `GameData/sound/`, each of those sounds plays silence, and the
   log names it once (BR9).
+  - **Done in `21a9201`** (O10): every sound is a WAV file, and no `_ogg.wav` name is left.

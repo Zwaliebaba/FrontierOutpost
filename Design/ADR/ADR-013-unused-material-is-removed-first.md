@@ -108,7 +108,7 @@ pushed, and CI's four-way build after.
   - the `FontPreview` and `SplashScreen` widgets;
   - `icon.png` and `splash.png`;
   - 31 WAV and 55 Ogg sounds that nothing names, leaving 20 WAV files and the 24 Ogg files that
-    are to be converted (FrontierOutpost/MIGRATION_NOTES.md O10);
+    were to be converted (FrontierOutpost/MIGRATION_NOTES.md O10), and were, in `21a9201`;
   - 52 of the 53 files in `gamedata/`, which the survey did not list. Only
     `grammar/default.txt` is read.
 

@@ -3,7 +3,8 @@
 How FrontierOutpost moves off OpenGL, GLEW, SFML and FreeType onto NeuronClient: Direct3D 12,
 DirectWrite, WIC, XAudio2 and Win32.
 
-- **Status:** Proposed, 2026-09-25. The owner took decisions N1–N14 the same day (§2). Phase 0 is
+- **Status:** Done, 2026-09-26: the owner closed every phase (N21), and Phase 5 is in. Proposed
+  2026-09-25. The owner took decisions N1–N14 the same day (§2). Phase 0 is
   done (§6): the checkers run in CI, and the startup fixes are in (`ea07b9c`). Phase 1's removals
   are in (`04d440b` to `f20c684`, and `b78a33f` for N14); ADR-013, now Accepted, records what went.
   Its done-when still needs the owner to see the 16 kept apps start. Phase 2's six steps are in
@@ -39,6 +40,21 @@ DirectWrite, WIC, XAudio2 and Win32.
   owner's, by hand. By N19, so did `GameData/shader`, which nothing had read since step 3;
   `8e13f92` is the last commit that holds it. By N20, the CI smoke job went as well, and the owner
   runs the apps on the desktop; its last complete run was on `86634e8`.
+
+  Bring-up 5.4 to 5.9 was then done on an Intel Iris Xe, with the smoke mode, the debug layer on,
+  on 2026-09-26. Running the apps found faults, each fixed in its own commit: the plate-mesh
+  occlusion bake ran one draw long enough for Windows to reset the GPU (`814b6fe`); a load cycle
+  through `ObjectInfo` left two of the world-object menu's entries dead (`21a9201`); the warp rails
+  handed double-precision directions where single were wanted (`1e1f508`); `hud` found no player
+  in an uninitialised system, `ltheory` kept an interface pass that never compiled, and six apps
+  still called hot reload, which N2 removed (`04a7406`); and a failed assertion in an unattended
+  run crashed in `lt.dll`'s static destructors rather than exiting with 1 (`904afef`). After them,
+  the 15 kept apps that start on their own run 120 frames each, exit 0, log no script or
+  Direct3D 12 error, and draw what §6's bring-up names; `widget` is the host the others open in,
+  not an app. The owner converted the sounds (O10, `21a9201`). All four builds link with 458
+  unique warnings, all lt's, and the checkers pass. By N21, the owner closed the phases without the
+  30-minute soak; two partial soaks of `war`, of 21 and 13 minutes, held its memory and handles
+  flat.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
@@ -98,6 +114,7 @@ has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
 | N17 | **Step 6 comes before the rest of bring-up** (2026-09-26). OpenGL, GLEW and the WGL bridge are deleted once `war` runs on Direct3D 12 (bring-up 5.3), ahead of 5.4 to 5.9: nothing has drawn through OpenGL since step 3. Their link libraries go with them, ahead of Phase 5, as SFML's went in Phase 2. | owner |
 | N18 | **The migration's workflow goes before Phase 5** (2026-09-26). `.github/workflows/neuronclient.yml` and `.github/migration/` are deleted, so CI builds Debug\|x64 only, with the tests, clang-tidy and the smoke job, as AGENTS.md §6 has it. x64 Release and both ARM64 builds are built by hand, before a release and in Phase 5's final checks, not after every step (§6, ADR-006 decision 5). The workflow's last run was on `8443028`, where x64 Debug and Release linked with 507 warnings, 458 unique, and ARM64 Debug linked. | owner |
 | N19 | **`GameData/shader` goes before Phase 5** (2026-09-26). Its 130 GLSL files, 5,311 lines (§5.6), had not been read since step 3, when liblt's shaders became HLSL compiled into `lt.dll`, and §12 proposed deleting them with Phase 5's close-out. They are deleted at the pause instead, and ADR-004's amendment (§8) lands with them. `8e13f92` is the last commit that holds them, and each HLSL file's header names what it was ported from. | owner |
+| N21 | **Every phase is closed** (2026-09-26), on the owner's word, once bring-up 5.4 to 5.9 ran clean on the owner's x64 GPU. The 30-minute soak of Phase 5 is waived: two partial soaks, of 21 and 13 minutes, saw no growth. The done-whens that were the owner's alone (text, images, sound and input by eye and ear; the ARM64 device) are closed by this decision rather than by a recorded check, and O4 and O11 in the migration notes say so. | owner |
 | N20 | **The CI smoke job goes** (2026-09-26). `build.yml` loses Smoke on WARP and the upload of the launcher that only it used, and `Build/LogFrame.py`, which only it ran, is deleted. The owner runs the apps on the desktop instead, with the launcher's smoke mode, which stays. This takes back N15's CI half: a bring-up step is checked when the owner runs it, not in CI's frames, and §12's question of the job's shape falls away. The job's last complete run was on `86634e8`. The pushes after it cancelled its runs, and the owner cancelled the last, on `28c6fe1`, 19 minutes into `war`, after `loading` and `ui` had drawn their frames. So `df48652`'s lens flares, step 6 and N19 have not run in CI; the owner's runs check them. | owner |
 
 What N2 and N3 mean in practice. The first two points correct what the question offered:
@@ -497,6 +514,8 @@ Phase 3 touches nothing in liblt; it can start once step 1 of Phase 2 has landed
      asset, not a missing one.
 
 **Done when:** the checkers run green in CI, and the 16 apps to keep start on the owner's GPU.
+Done, 2026-09-26: the checkers pass, and the 15 kept apps that start on their own run clean on
+the owner's x64 GPU (`widget` is their host, not an app).
 
 ### Phase 1: Remove what is unused
 
@@ -516,6 +535,8 @@ Phase 3 touches nothing in liblt; it can start once step 1 of Phase 2 has landed
 3. **ADR-013** records what went.
 
 **Done when:** all four builds pass, the kept apps start, and nothing refers to a removed name.
+Done, 2026-09-26: the four builds pass and the kept apps start. The last references to a removed
+name, six apps' calls to `Shader_RecompileAll`, went in `04a7406`.
 
 ### Phase 2: NeuronClient, and every swap that is not graphics
 
@@ -551,6 +572,9 @@ OpenGL still renders throughout. Each step is its own commit.
   mapping);
 - the owner has checked text, images, sound and input in the kept apps.
 
+Done, 2026-09-26. Text and images show in every kept app's frame; sound and input by ear and
+hand are closed by N21.
+
 ### Phase 3: The Direct3D 12 core, built and tested alone
 
 Build §5.3 in NeuronClient. The tests run on WARP, with the debug layer on:
@@ -566,6 +590,7 @@ Build §5.3 in NeuronClient. The tests run on WARP, with the debug layer on:
   flips.
 
 **Done when:** every test passes on WARP in CI, with zero debug-layer errors.
+Done on `bbd563f` (status, above).
 
 ### Phase 4: liblt on Direct3D 12
 
@@ -594,6 +619,8 @@ Build §5.3 in NeuronClient. The tests run on WARP, with the debug layer on:
 
 **Done when:** the 16 kept apps run on the owner's GPU (x64) and on the owner's ARM64 device. (The
 smoke job had to be green as well, until N20 removed it.)
+Done, 2026-09-26, on x64: the 15 kept apps that start on their own run clean on an Intel Iris
+Xe. The ARM64 device is waived (N21).
 
 ### Phase 5: Close out
 
@@ -605,11 +632,19 @@ smoke job had to be green as well, until N20 removed it.)
    `$(FrontierOutpostDir)include` stays on the include path, for `UTF8/` and `windirent.h`.
 3. **Documents.** The README, the migration notes, and the ADR changes of §8. Brought up to date
    when the owner paused after Phase 4 step 6, and ADR-004's amendment landed when
-   `GameData/shader` went (N19); Phase 5 checks them again at the end.
+   `GameData/shader` went (N19); Phase 5 checks them again at the end. Done: checked on
+   2026-09-26, when the README, the migration notes (O10) and ADR-003, ADR-009 (a field's time on a
+   GPU) and ADR-013 were brought up to date.
 4. **Final checks.**
-   - All four builds, by hand.
-   - The owner's GPUs.
+   - All four builds, by hand. Done: each links with 458 unique warnings, all lt's, and
+     `CheckSounds`, `CheckProjectFiles`, `CheckFormat` and `TestCheckers` pass.
+   - The owner's GPUs. Done on x64, an Intel Iris Xe: the 15 kept apps that start on their own
+     run clean. The ARM64 device is waived (N21).
    - A 30-minute soak of `war`, watching memory, the descriptor rings and deferred release.
+     Waived (N21); partial soaks of 21 and 13 minutes held private memory at about 915 MB and
+     handles at 350 or fewer, with no debug-layer error.
+
+**Done when:** the four builds pass and the owner closes the phase. Done, 2026-09-26 (N21).
 
 ## 7. What each check can prove
 
@@ -731,9 +766,6 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 N5–N12 settled the first open items: `/arch`, missing sounds, vsync, RandomScreenshot's background,
 unplayable sound files, liblt's shader folder and its calls for OS services. The pause after Phase
 4 step 6 (2026-09-26) left three. N19 and N20 settled two of them: `GameData/shader` went, and so
-did the smoke job whose shape was open. This is open:
-
-1. **The owner's checks of Phase 4:** presenting (5.1), which the smoke run cannot see, and the 16
-   kept apps on a GPU and on the ARM64 device, the phase's done-when. ADR-009's sixth decision also
-   asks for a field's generation time on a GPU. Since N18 the x64 Release and ARM64 builds are the
-   owner's, by hand, and since N20 so is every run of an app.
+did the smoke job whose shape was open. N21 settled the last, the owner's checks of Phase 4: the
+kept apps ran clean on the owner's x64 GPU, ADR-009 has a field's time on it, and the ARM64 device
+was waived. Nothing is open.
