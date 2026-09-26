@@ -68,6 +68,7 @@ float4 mod(float4 x, float y) { return x - (y * floor(x / y)); }
 #define texture3DLod(name, p, lod) name.SampleLevel(name##Sampler, p, lod)
 #define textureCube(name, p) name.Sample(name##Sampler, p)
 #define textureCubeLod(name, p, lod) name.SampleLevel(name##Sampler, p, lod)
+#define textureCubeGrad(name, p, dx, dy) name.SampleGrad(name##Sampler, p, dx, dy)
 
 // Every varying any .jsl declared, in one layout.
 struct Varyings
