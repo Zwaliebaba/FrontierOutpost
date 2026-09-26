@@ -125,7 +125,7 @@ namespace LTE {
 
         Expression statement = Expression_Block(sub, env, 1);
         if (!statement) {
-          Log_Message("switch -- case statement did not compile");
+          Log_Message("switch -- case statement did not compile: " + sub->GetString());
           continue;
         }
 

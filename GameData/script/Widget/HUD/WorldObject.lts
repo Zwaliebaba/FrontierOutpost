@@ -65,14 +65,10 @@ type WorldObjectMenu
           object.GetPos - (1.5 * object.GetRadius + 1000.0) * player.GetPiloting.GetLook
 
       (data.IsType "MessageInfo")
-        # self.SendUp
-          Messages:MessageAddWidget
-            ObjectInfo:CreateWindow player object
+        self.SendUp (Messages:MessageShowObjectInfo player object)
 
       (data.IsType "MessageOwner")
-        # self.SendUp
-          Messages:MessageAddWidget
-            ObjectInfo:CreateWindow player object.GetOwner
+        self.SendUp (Messages:MessageShowObjectInfo player object.GetOwner)
 
       (data.IsType "MessageTarget")
         switch

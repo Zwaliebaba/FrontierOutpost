@@ -34,6 +34,16 @@ type MapWidget
                 Vec2 256 128
                 message.widget
 
+      (data.IsType "MessageShowObjectInfo")
+        ref message (cast Widget/Messages:MessageShowObjectInfo data)
+        self.AddChild
+          Widget/Components:Expand
+            Widget/Components:AlignCenter
+              Widget/Components:Margin
+                Vec2 256 128
+                Vec2 256 128
+                Widget/ObjectInfo:CreateWindow message.player message.object
+
 type MapApp
   Object system
   Player player

@@ -115,6 +115,14 @@ type HUDLayer
               Components:Margin 128 128
                 msg.widget
 
+      (data.IsType "MessageShowObjectInfo")
+        ref msg (cast Widget/Messages:MessageShowObjectInfo data)
+        layerHUD.AddChild
+          Components:Expand
+            Components:AlignCenter
+              Components:Margin 128 128
+                ObjectInfo:CreateWindow msg.player msg.object
+
   function Void PostDraw (Widget self)
     var c 2.0 * Colors:Primary
     var cursor Icon/Cursors:Pointer

@@ -17,6 +17,13 @@ type MessageGetLabel
 
 type MessageRefresh
 
+# Asks whoever shows windows to open ObjectInfo on object. Widgets that
+# ObjectInfo itself loads, such as HUD/WorldObject by way of Map, send this
+# rather than call ObjectInfo, which is only half loaded while they compile.
+type MessageShowObjectInfo
+  Player player
+  Object object
+
 type MessageSelected
   Widget widget
 
