@@ -3,12 +3,21 @@
 - **Status:** Proposed 2026-09-26. Nothing is approved and nothing is implemented. The owner
   approves items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the
   same commit where the item is a decision (§3). The next free ADR number is ADR-017 (ADR-016 went to the library split's visuals).
-- **Scope:** the HLSL in `NeuronClient/Shaders/` and, since the library split moved the game's
-  shaders there, `FrontierOutpost/Shaders/`, and the C++ that dispatches it (file names are
-  unchanged; `Design/LibrarySplit-plan.md` item 8 says which folder each is in):
+- **Scope:** the HLSL in `NeuronClient/Shaders/` and `FrontierOutpost/Shaders/`, and the C++ that
+  dispatches it:
   - the four compute shaders;
   - the pixel shaders that do compute work at load;
   - the per-frame passes.
+- **Files:** a C++ or shader reference gives the file name alone, which is unique in the tree, and
+  scripts are under `GameData/script/`. After this plan was written, the library split's P2
+  (ADR-016) moved some of the files between projects without renaming any, and every reference was
+  checked again against `797f690`.
+  - `NeuronClient/Shaders/` holds the four compute shaders, `ComputeOcclusionPS`,
+    `ComputeSdffontPS`, `NpmVS`, `PostBlurPS`, `UiBasicPS`, `UiNonePS`, and `Common`, `Field` and
+    `Noise.hlsli`. Every other shader cited is in `FrontierOutpost/Shaders/`.
+  - The C++ is in `NeuronClient/`, except `DepthPrepass`, `GlobalLighting`, `IRMap`, `LensFlares`,
+    `LocalLighting`, `RenderableAsteroid`, `SMAA` and `Starfield.cpp`, which are the executable's,
+    in `FrontierOutpost/`, and `MipGeneration.cpp`, which is in `Tests/NeuronClientTests/`.
 - **Source:** a read-only review on 2026-09-26. The four compute shaders were analysed in depth. The
   other ~125 shaders were reviewed by lens (generation, scene, post and UI), and each finding's
   mechanism was checked against the code. §6 says what was measured and how; every other figure is
@@ -195,7 +204,7 @@ keeps any band size exactly, but moves the accumulation from the blend unit to a
 reloads and 27 VALU instructions. With (a) it costs 2 scalar loads and 24 VALU instructions, with
 no texture traffic. The reviewer's estimate for the system `hud.lts` builds is ~6.7 s → ~2.3 s per
 system init on a GTX 1060-class GPU, plus 80-260 ms from (b). The hull sizes behind that estimate
-were counted from `Generate.lts`, not run: M1 settles them.
+were counted from `Item/ShipType/Generate.lts`, not run: M1 settles them.
 
 ### E4. Mips made where they are needed
 
@@ -218,8 +227,9 @@ temporary cube, reads it back one face at a time, and uploads it into the IR map
 same round trip: 192 MB.
 
 **Change.**
-1. Render level i straight into mip i. liblt's `Renderer_PushColorBuffer` (`Renderer.cpp:721`) gains
-   a mip argument; `ColorTarget` already carries one (`DrawContext.h:149-154`).
+1. Render level i straight into mip i. The legacy renderer's `Renderer_PushColorBuffer`
+   (`Renderer.cpp:738`) gains a mip argument; `ColorTarget` already carries one
+   (`DrawContext.h:149-154`).
 2. Copy level 0 on the GPU, with a `Load` pass, since `DrawContext` has no copy.
 3. Read the 1,024 sample directions once, into `float4 sampleDirections[1024]`. They are not the
    raw vectors: `u = (i + 1) / (samples + 1)` misses texel centres, so each is a bilinear blend of
@@ -357,12 +367,15 @@ approved, each gets an ADR in the same commit.
 10. The D items, as approved. D2 and D3 do not depend on the rest.
 
 **For every item:**
-- **Build** Debug|x64 and Release|x64 through the solution, and ARM64 when NeuronClient C++
-  changes (ADR-006).
+- **Build** Debug|x64 and Release|x64 through the solution, and ARM64 when C++ changes, since
+  every project builds for it (ADR-006, ADR-014).
 - **Checkers:** `CheckFormat.py`, `CheckProjectFiles.py` (a new shader or test file is registered in
-  the `.vcxproj`, the `.filters` and the registry), and `RunClangTidy.py`.
-- **Tests:** NeuronClientTests, on WARP with the debug layer, including the item's new test. liblt
-  code gets no NeuronClientTests (R9), so E3 and E5 are proved by the comparisons below.
+  the `.vcxproj`, the `.filters` and, for a shader, its folder's registry: `ShaderRegistry.cpp` or
+  `GameShaderRegistry.cpp`), and `RunClangTidy.py`.
+- **Tests:** NeuronClientTests, on WARP with the debug layer, including the item's new test. Its
+  include path is NeuronClient's folder alone, so it cannot build against the legacy files
+  (ADR-015), which need NeuronCore's headers, and no suite links the executable. E3 and E5 are
+  therefore proved by the comparisons below.
 - **Bit-exact items:** on the same GPU before and after, a local edit prints a hash of every buffer
   the item generates (field, LOD grids, per-vertex AO, IR-map mips, glyph atlas), and the hashes
   match. `FrontierOutpost.exe <app> --frames N --capture <png>` gives identical images, with `srand`
