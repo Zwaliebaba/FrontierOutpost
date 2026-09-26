@@ -40,4 +40,4 @@ tells the two apart.
 - Exempting a folder, or a whole project, again.
 - New code with the marker. A new file follows AGENTS.md, even when it is carved out of a legacy
   one, unless it is a verbatim move of legacy code, as the untangling in
-  `Design/LibrarySplit-plan.md` P2 does.
+  `Design/Archive/LibrarySplit-plan.md` P2 does.

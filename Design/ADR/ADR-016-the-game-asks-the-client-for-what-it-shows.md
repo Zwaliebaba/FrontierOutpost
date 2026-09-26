@@ -5,7 +5,7 @@
   see NeuronClient (ADR-014). `GameLogic/Visual.h`, `GameLogic/Presentation.h`, the
   `FrontierOutpost/*Visual.cpp` files, `FrontierOutpost/ClientPresentation.cpp` and
   `FrontierOutpost/GameShaderRegistry.cpp`.
-- **Detail:** `Design/LibrarySplit-plan.md` §3 and §4.1
+- **Detail:** `Design/Archive/LibrarySplit-plan.md` §3 and §4.1
 
 ## Context
 

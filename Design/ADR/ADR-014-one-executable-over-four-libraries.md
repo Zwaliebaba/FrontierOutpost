@@ -4,7 +4,7 @@
 - **Scope:** the solution's projects and the edges between them. It supersedes ADR-005's layer
   list (point 3: `launch.exe`, then `lt.dll`, then `NeuronClient.lib`). The rest of ADR-005 still
   stands for NeuronClient's own code.
-- **Detail:** `Design/LibrarySplit-plan.md`
+- **Detail:** `Design/Archive/LibrarySplit-plan.md`
 
 ## Context
 

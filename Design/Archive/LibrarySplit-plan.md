@@ -1,7 +1,11 @@
 # Library split: one executable, four libraries
 
-- **Status:** Approved 2026-09-26. P0, P1 and P2 done (ADR-014, ADR-015, ADR-016); item 6 deferred. P3 is
-  next; §4.1 lists what is left.
+> **Archived** (2026-09-26). The split is done (P3), and this plan is kept as its record. It was
+> `Design/LibrarySplit-plan.md`. What still governs the code is ADR-014, ADR-015 and ADR-016; item 6,
+> collision through a geometry service, stays open with §8 point 1.
+
+- **Status:** Done, 2026-09-26. Approved 2026-09-26. P0, P1, P2 and P3 done (ADR-014, ADR-015,
+  ADR-016); item 6 deferred.
 - **Replaces:** `launch.exe` + `lt.dll` + `NeuronClient.lib`
 - **Owner's answers so far:** untangle fully now; legacy files keep ADR-001's exemption per file;
   clashing files get their former folder as a prefix, and only clashing files are renamed;
@@ -177,9 +181,16 @@ smoke-run against P0:
 
 P3:
 
-- [ ] 10. ARM64 Debug and Release builds.
-- [ ] 11. All 16 apps run interactively and looked at.
-- [ ] 12. This plan moves to `Design/Archive/`.
+- [x] 10. *(Both link `FrontierOutpost.exe` for machine `0xAA64`. A clean build gives the same 462
+  unique warnings as a clean x64 Debug build, and none of its own. Built, not run: this machine
+  is x64.)* ARM64 Debug and Release builds.
+- [x] 11. *(x64 Release, without `--frames`: each app photographed after 20 s and again after
+  the mouse moved and W and Space were pressed, then closed with `WM_CLOSE`. The 15 apps drew
+  and closed; `hud`, `image` and `map` match their P0 captures, and `map`'s W pans its view as
+  `Widget/Map.lts` says. `ltheory` and `observatory` were still loading at 20 s, as at P0 (first
+  frame at 71 s and 28 s). `widget` stops at once with "does not contain function 'Main'", as
+  before P1.)* All 16 apps run interactively and looked at.
+- [x] 12. This plan moves to `Design/Archive/`.
 
 Outside the plan: about 180 files still name liblt or `lt.dll` in comments, and `widget` has no
 `Main` and crashes on exit (it did on `main` before P1 too).
