@@ -57,7 +57,9 @@ enum class VertexFormat : std::uint8_t
   Float4
 };
 
-/// One attribute of a vertex, which the vertex shader's input of the same semantic reads.
+/// One attribute of a vertex, which the vertex shader's input of the same semantic reads. An input
+/// no attribute is given for reads (0, 0, 0, 1), as a GL attribute array that is not enabled reads
+/// the current attribute, which liblt leaves at its default (plan §5.5).
 struct VertexAttribute
 {
   std::string_view semantic; // POSITION, TEXCOORD and so on
@@ -119,6 +121,29 @@ struct SamplerDesc
   std::array<float, 4> borderColor; // for ClampToBorder: the SDF field's is red, (1, 0, 0, 0)
 };
 
+/// A rectangle of a target's pixels, from column xPixels and row yPixels, which is the bottom row,
+/// as SetScissor takes it.
+struct PixelRect
+{
+  std::int32_t xPixels;
+  std::int32_t yPixels;
+  std::int32_t widthPixels;
+  std::int32_t heightPixels;
+};
+
+/// A box of one mip's texels: from column xPixels, row yPixels, which is row 0 at the bottom, and
+/// slice zPixels of a 3D texture, widthPixels by heightPixels by depthPixels. A 2D texture's or a
+/// cube face's is one slice deep, from slice 0.
+struct TextureRegion
+{
+  std::uint32_t xPixels;
+  std::uint32_t yPixels;
+  std::uint32_t zPixels;
+  std::uint32_t widthPixels;
+  std::uint32_t heightPixels;
+  std::uint32_t depthPixels;
+};
+
 /// Where a draw's colour goes: mip `mip` of a texture, and the face of a cube or the slice of a 3D
 /// texture.
 struct ColorTarget
@@ -155,6 +180,12 @@ public:
   /// nothing is recorded.
   void UpdateTexture(Texture& _texture, std::uint32_t _mip, std::uint32_t _face, std::span<const std::byte> _texels);
 
+  /// Replaces _region of mip _mip of face _face with _texels, packed as the other UpdateTexture takes
+  /// them, and leaves the rest of the level as it was, as GL's glTexSubImage did. A region that is
+  /// empty or does not fit in the level is reported, and nothing is recorded.
+  void UpdateTexture(Texture& _texture, std::uint32_t _mip, std::uint32_t _face, const TextureRegion& _region,
+                     std::span<const std::byte> _texels);
+
   /// Reads mip _mip of face _face back, packed as UpdateTexture takes it. Submits what was recorded
   /// and waits for the GPU. Returns false, and leaves _outTexels alone, for a level that is not
   /// there or when the device failed.
@@ -172,9 +203,16 @@ public:
   /// that is not there is reported, and nothing is recorded.
   void ClearColor(Texture& _texture, std::uint32_t _mip, std::uint32_t _layer, const std::array<float, 4>& _color);
 
+  /// Clears only _rect of it, as GL's glClear cleared only the scissor's rectangle. What lies outside
+  /// the level is left out; a rectangle wholly outside it clears nothing.
+  void ClearColor(Texture& _texture, std::uint32_t _mip, std::uint32_t _layer, const std::array<float, 4>& _color, const PixelRect& _rect);
+
   /// Clears a depth texture to _depth, from 0 to 1. Anything else is reported, and nothing is
   /// recorded.
   void ClearDepth(Texture& _texture, float _depth);
+
+  /// Clears only _rect of it, as the colour ClearColor does.
+  void ClearDepth(Texture& _texture, float _depth, const PixelRect& _rect);
 
   /// Makes mips 1 and up of a 2D or cube colour texture, each face alone, from mip 0: each texel
   /// the average of the 2 by 2 texels above it, and of 3 in a direction where the mip above is odd
@@ -186,7 +224,9 @@ public:
   /// Draws into _colors, SV_Target0 first, and tests against _depth, which may be null. The colour
   /// targets are all one size, and the viewport and scissor become the whole of it. A target that
   /// is not there, is of the wrong kind or is another size is reported, and no target is set. A
-  /// texture that goes while it is a target stops being one.
+  /// texture that goes while it is a target stops being one. A draw binds as many of them as its
+  /// program writes; what a program writes past the last one set is discarded, as GL discarded
+  /// what went to a draw buffer with nothing attached (plan §5.5).
   void SetTargets(std::span<const ColorTarget> _colors, Texture* _depth);
 
   /// Where a draw's clip space lands, in pixels from column 0 and row 0, which is the bottom row.
@@ -269,6 +309,11 @@ private:
   /// Makes the root signature and the shader-visible heaps. On failure returns false and says why
   /// in _error.
   [[nodiscard]] bool Initialize(std::string& _error);
+
+  /// ClearColor and ClearDepth, within _rect, or over the whole level when it is null.
+  void ClearColorIn(Texture& _texture, std::uint32_t _mip, std::uint32_t _layer, const std::array<float, 4>& _color,
+                    const PixelRect* _rect);
+  void ClearDepthIn(Texture& _texture, float _depth, const PixelRect* _rect);
 
   /// Stops a texture that goes from being a target.
   void Forget(const Texture::Native& _texture) noexcept;

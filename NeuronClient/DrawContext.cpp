@@ -121,6 +121,17 @@ constexpr UINT COMPUTE_CONSTANTS_PARAMETER = 0;
 constexpr UINT COMPUTE_READS_PARAMETER = 1;
 constexpr UINT COMPUTE_WRITES_PARAMETER = 2;
 
+/// What a vertex shader's input reads when the layout gives it no attribute: GL's current
+/// attribute, which liblt leaves at (0, 0, 0, 1) (plan §5.5). It comes from its own vertex buffer,
+/// one instance of it, which every vertex of the one instance a draw makes reads.
+constexpr std::array<float, 4> DEFAULT_ATTRIBUTE = {0.0f, 0.0f, 0.0f, 1.0f};
+constexpr UINT DEFAULT_ATTRIBUTE_SLOT = 1;
+
+/// The format of the null view a program's output goes to when no target is set for it, which the
+/// pipeline state names for that output: writes to a null view are discarded, as GL discarded
+/// what went to a draw buffer with nothing attached.
+constexpr DXGI_FORMAT NULL_TARGET_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
+
 /// Everything a pipeline state is made from, which the context caches them under (ADR-007).
 struct PipelineKey
 {
@@ -307,6 +318,17 @@ D3D12_SAMPLER_DESC SamplerDescription(const SamplerDesc& _sampler) noexcept
                             maxLod};
 }
 
+/// The part of _rect inside a level _widthPixels by _heightPixels. Row 0 is the bottom row in both,
+/// so its numbers carry over (plan §5.5); what is left may be empty.
+D3D12_RECT ClippedRect(const PixelRect& _rect, std::uint32_t _widthPixels, std::uint32_t _heightPixels) noexcept
+{
+  const auto clamped = [](std::int64_t _value, std::uint32_t _limit)
+  { return static_cast<LONG>(std::clamp<std::int64_t>(_value, 0, _limit)); };
+  return D3D12_RECT{clamped(_rect.xPixels, _widthPixels), clamped(_rect.yPixels, _heightPixels),
+                    clamped(std::int64_t{_rect.xPixels} + _rect.widthPixels, _widthPixels),
+                    clamped(std::int64_t{_rect.yPixels} + _rect.heightPixels, _heightPixels)};
+}
+
 /// Semantics are matched as HLSL matches them, whatever their case.
 bool SameSemantic(std::string_view _a, std::string_view _b) noexcept
 {
@@ -356,6 +378,11 @@ struct DrawContext::Native
   std::map<PipelineKey, ComPtr<ID3D12PipelineState>> pipelines;
   ComPtr<ID3D12PipelineState> presentPipeline; // PresentVS.hlsl's and PresentPS.hlsl's, into BACK_BUFFER_FORMAT
 
+  // What every draw may bind, which Initialize makes: the buffer inputs without an attribute read,
+  // and the view outputs without a target go to.
+  ComPtr<ID3D12Resource> defaultAttribute;
+  D3D12_CPU_DESCRIPTOR_HANDLE nullTargetView{}; // CPU-only
+
   // What the next draw uses, which stays set from one draw to the next.
   struct Target
   {
@@ -376,6 +403,9 @@ struct DrawContext::Native
   Program::Native* program = nullptr;
   std::array<Texture::Native*, TABLE_DESCRIPTORS> textures{};
   std::array<D3D12_SAMPLER_DESC, TABLE_DESCRIPTORS> samplers = SamplerTable().samplers;
+  // What PrepareDraw found for the draw it readied, which RecordDraw binds.
+  std::uint32_t boundTargets = 0; // of the program's outputs, those that have a target
+  bool defaultsRead = false;      // whether an input reads the default attribute
 
   // The ring of shader-visible views each draw's table is taken from, after the null table. A
   // table is free again once the GPU has finished the list that took it.
@@ -871,13 +901,10 @@ struct DrawContext::Native
       FailDraw(std::format("of {} has no target set", program->name));
       return false;
     }
-    // Only as many targets are bound as the program writes (plan §5.5).
-    if (program->targetCount > colorTargetCount)
-    {
-      FailDraw(std::format("of {}, which writes {} targets, has {} set", program->name, program->targetCount, colorTargetCount));
-      return false;
-    }
-    for (std::uint32_t index = 0; index < program->targetCount; ++index)
+    // Only as many targets are bound as the program writes, and what it writes past the last one
+    // set goes to the null view (plan §5.5).
+    boundTargets = std::min(program->targetCount, colorTargetCount);
+    for (std::uint32_t index = 0; index < boundTargets; ++index)
     {
       if (colorTargets[index].texture == nullptr)
       {
@@ -904,12 +931,14 @@ struct DrawContext::Native
     key.targetCount = program->targetCount;
     for (std::uint32_t index = 0; index < program->targetCount; ++index)
     {
-      key.targetFormats[index] = colorTargets[index].texture->resourceDesc.Format;
+      key.targetFormats[index] = index < boundTargets ? colorTargets[index].texture->resourceDesc.Format : NULL_TARGET_FORMAT;
     }
     key.depthFormat = depthBound ? DXGI_FORMAT_D32_FLOAT : DXGI_FORMAT_UNKNOWN;
 
-    // The elements the vertex shader reads, in its signature's order; the layout may have more.
+    // The elements the vertex shader reads, in its signature's order; the layout may have more. An
+    // input it has no attribute for reads the default attribute's one instance.
     std::vector<D3D12_INPUT_ELEMENT_DESC> elements;
+    defaultsRead = false;
     for (const ProgramInput& input : program->inputs)
     {
       const auto attribute =
@@ -917,8 +946,11 @@ struct DrawContext::Native
                              { return _attribute.index == input.index && SameSemantic(_attribute.semantic, input.semantic); });
       if (attribute == _layout.attributes.end())
       {
-        FailDraw(std::format("of {} has no vertex attribute for its input {}{}", program->name, input.semantic, input.index));
-        return false;
+        elements.push_back({input.semantic.c_str(), input.index, DXGI_FORMAT_R32G32B32A32_FLOAT, DEFAULT_ATTRIBUTE_SLOT, 0,
+                            D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1});
+        key.inputLayout += std::format("{}{}:default;", input.semantic, input.index);
+        defaultsRead = true;
+        continue;
       }
       const DXGI_FORMAT format = ElementFormat(attribute->format);
       elements.push_back(
@@ -932,7 +964,7 @@ struct DrawContext::Native
     for (const auto& [name, slot] : program->shaderResources)
     {
       Texture::Native* const texture = textures[static_cast<std::size_t>(slot)];
-      const bool drawnInto = std::ranges::any_of(std::span(colorTargets).first(program->targetCount),
+      const bool drawnInto = std::ranges::any_of(std::span(colorTargets).first(boundTargets),
                                                  [texture](const Target& _target) { return _target.texture == texture; }) ||
                              (depthBound && depthTarget == texture);
       if (texture != nullptr && drawnInto)
@@ -1216,7 +1248,8 @@ struct DrawContext::Native
       return;
     }
     std::array<D3D12_CPU_DESCRIPTOR_HANDLE, MAX_COLOR_TARGETS> targetViews{};
-    for (std::uint32_t index = 0; index < program->targetCount; ++index)
+    std::fill_n(targetViews.begin(), program->targetCount, nullTargetView);
+    for (std::uint32_t index = 0; index < boundTargets; ++index)
     {
       const Target& target = colorTargets[index];
       if (!target.texture->TargetView(target.mip, target.layer, targetViews[index]))
@@ -1263,6 +1296,12 @@ struct DrawContext::Native
     list->RSSetScissorRects(1, &scissor);
     list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     list->IASetVertexBuffers(0, 1, &_vertices);
+    if (defaultsRead)
+    {
+      const D3D12_VERTEX_BUFFER_VIEW defaults{defaultAttribute->GetGPUVirtualAddress(), sizeof(DEFAULT_ATTRIBUTE),
+                                              sizeof(DEFAULT_ATTRIBUTE)};
+      list->IASetVertexBuffers(DEFAULT_ATTRIBUTE_SLOT, 1, &defaults);
+    }
     list->IASetIndexBuffer(&_indices);
     list->DrawIndexedInstanced(_indexCount, 1, _firstIndex, 0, 0);
   }
@@ -1277,6 +1316,13 @@ DrawContext::~DrawContext() = default;
 
 void DrawContext::UpdateTexture(Texture& _texture, std::uint32_t _mip, std::uint32_t _face, std::span<const std::byte> _texels)
 {
+  UpdateTexture(_texture, _mip, _face, {0, 0, 0, _texture.WidthPixels(_mip), _texture.HeightPixels(_mip), _texture.DepthPixels(_mip)},
+                _texels);
+}
+
+void DrawContext::UpdateTexture(Texture& _texture, std::uint32_t _mip, std::uint32_t _face, const TextureRegion& _region,
+                                std::span<const std::byte> _texels)
+{
   Native& context = *m_native;
   Texture::Native* const texture = _texture.m_native.get();
   if (texture == nullptr || texture->desc.format == TextureFormat::Depth32F || _mip >= texture->desc.mipLevels || _face >= texture->faces)
@@ -1285,31 +1331,50 @@ void DrawContext::UpdateTexture(Texture& _texture, std::uint32_t _mip, std::uint
                                   texture != nullptr ? texture->name : std::string("an empty texture")));
     return;
   }
+  // Each end is checked alone, so that no sum can wrap.
+  const std::uint32_t width = _texture.WidthPixels(_mip);
   const std::uint32_t height = _texture.HeightPixels(_mip);
   const std::uint32_t slices = _texture.DepthPixels(_mip);
-  const std::uint32_t subresource = texture->Subresource(_mip, _face);
-  const Footprint footprint = context.FootprintOf(*texture, subresource);
-  const std::uint64_t levelBytes = footprint.rowBytes * height * slices;
-  if (_texels.size() != levelBytes)
+  const auto inside = [](std::uint32_t _start, std::uint32_t _length, std::uint32_t _limit)
+  { return _length > 0 && _start < _limit && _length <= _limit - _start; };
+  if (!inside(_region.xPixels, _region.widthPixels, width) || !inside(_region.yPixels, _region.heightPixels, height) ||
+      !inside(_region.zPixels, _region.depthPixels, slices))
   {
-    context.core.Fail(std::format("Direct3D 12: UpdateTexture was given {} bytes for mip {} of {}, which holds {}", _texels.size(), _mip,
-                                  texture->name, levelBytes));
+    context.core.Fail(
+      std::format("Direct3D 12: UpdateTexture was given {} by {} by {} from ({}, {}, {}), which is not inside mip {} of {}, "
+                  "{} by {} by {}",
+                  _region.widthPixels, _region.heightPixels, _region.depthPixels, _region.xPixels, _region.yPixels, _region.zPixels, _mip,
+                  texture->name, width, height, slices));
     return;
   }
+  const std::uint64_t rowBytes = std::uint64_t{_region.widthPixels} * TexelBytes(texture->desc.format);
+  const std::uint64_t regionBytes = rowBytes * _region.heightPixels * _region.depthPixels;
+  if (_texels.size() != regionBytes)
+  {
+    context.core.Fail(std::format("Direct3D 12: UpdateTexture was given {} bytes for {} by {} by {} texels of mip {} of {}, which take {}",
+                                  _texels.size(), _region.widthPixels, _region.heightPixels, _region.depthPixels, _mip, texture->name,
+                                  regionBytes));
+    return;
+  }
+  const std::uint64_t rowPitch = AlignUp(rowBytes, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
   Upload upload;
-  if (!context.Open() || !context.AllocateUpload(footprint.totalBytes, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT, upload))
+  if (!context.Open() ||
+      !context.AllocateUpload(rowPitch * _region.heightPixels * _region.depthPixels, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT, upload))
   {
     return;
   }
-  CopyRows(upload.cpu, footprint.placed.Footprint.RowPitch, footprint.rows, _texels.data(), footprint.rowBytes, height, footprint.rowBytes,
-           height, slices);
-  D3D12_PLACED_SUBRESOURCE_FOOTPRINT placed = footprint.placed;
+  CopyRows(upload.cpu, rowPitch, _region.heightPixels, _texels.data(), rowBytes, _region.heightPixels, rowBytes, _region.heightPixels,
+           _region.depthPixels);
+  D3D12_PLACED_SUBRESOURCE_FOOTPRINT placed{};
   placed.Offset = upload.offsetBytes;
+  placed.Footprint = {texture->resourceDesc.Format, _region.widthPixels, _region.heightPixels, _region.depthPixels,
+                      static_cast<UINT>(rowPitch)};
+  const std::uint32_t subresource = texture->Subresource(_mip, _face);
   context.RequireCopyDestination(*texture, subresource);
   context.FlushBarriers();
   const D3D12_TEXTURE_COPY_LOCATION destination = SubresourceLocation(texture->resource.Get(), subresource);
   const D3D12_TEXTURE_COPY_LOCATION source = FootprintLocation(upload.buffer, placed);
-  context.list->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
+  context.list->CopyTextureRegion(&destination, _region.xPixels, _region.yPixels, _region.zPixels, &source, nullptr);
 }
 
 bool DrawContext::ReadTexture(const Texture& _texture, std::uint32_t _mip, std::uint32_t _face, std::vector<std::byte>& _outTexels)
@@ -1418,6 +1483,28 @@ bool DrawContext::ReadBuffer(const Buffer& _buffer, std::vector<std::byte>& _out
 
 void DrawContext::ClearColor(Texture& _texture, std::uint32_t _mip, std::uint32_t _layer, const std::array<float, 4>& _color)
 {
+  ClearColorIn(_texture, _mip, _layer, _color, nullptr);
+}
+
+void DrawContext::ClearColor(Texture& _texture, std::uint32_t _mip, std::uint32_t _layer, const std::array<float, 4>& _color,
+                             const PixelRect& _rect)
+{
+  ClearColorIn(_texture, _mip, _layer, _color, &_rect);
+}
+
+void DrawContext::ClearDepth(Texture& _texture, float _depth)
+{
+  ClearDepthIn(_texture, _depth, nullptr);
+}
+
+void DrawContext::ClearDepth(Texture& _texture, float _depth, const PixelRect& _rect)
+{
+  ClearDepthIn(_texture, _depth, &_rect);
+}
+
+void DrawContext::ClearColorIn(Texture& _texture, std::uint32_t _mip, std::uint32_t _layer, const std::array<float, 4>& _color,
+                               const PixelRect* _rect)
+{
   Native& context = *m_native;
   Texture::Native* const texture = _texture.m_native.get();
   const bool volume = texture != nullptr && texture->desc.dimension == TextureDimension::Texture3D;
@@ -1428,6 +1515,12 @@ void DrawContext::ClearColor(Texture& _texture, std::uint32_t _mip, std::uint32_
                                   texture != nullptr ? texture->name : std::string("an empty texture")));
     return;
   }
+  const D3D12_RECT rect =
+    _rect != nullptr ? ClippedRect(*_rect, _texture.WidthPixels(_mip), _texture.HeightPixels(_mip)) : D3D12_RECT{0, 0, 1, 1};
+  if (rect.left >= rect.right || rect.top >= rect.bottom)
+  {
+    return;
+  }
   D3D12_CPU_DESCRIPTOR_HANDLE view{};
   if (!context.Open() || !texture->TargetView(_mip, _layer, view))
   {
@@ -1436,10 +1529,10 @@ void DrawContext::ClearColor(Texture& _texture, std::uint32_t _mip, std::uint32_
   // The slices of a 3D texture's mip are one subresource.
   context.Require(*texture, texture->Subresource(_mip, volume ? 0 : _layer), D3D12_RESOURCE_STATE_RENDER_TARGET);
   context.FlushBarriers();
-  context.list->ClearRenderTargetView(view, _color.data(), 0, nullptr);
+  context.list->ClearRenderTargetView(view, _color.data(), _rect != nullptr ? 1 : 0, _rect != nullptr ? &rect : nullptr);
 }
 
-void DrawContext::ClearDepth(Texture& _texture, float _depth)
+void DrawContext::ClearDepthIn(Texture& _texture, float _depth, const PixelRect* _rect)
 {
   Native& context = *m_native;
   Texture::Native* const texture = _texture.m_native.get();
@@ -1450,6 +1543,11 @@ void DrawContext::ClearDepth(Texture& _texture, float _depth)
                                   texture != nullptr ? texture->name : std::string("an empty texture"), _depth));
     return;
   }
+  const D3D12_RECT rect = _rect != nullptr ? ClippedRect(*_rect, _texture.WidthPixels(), _texture.HeightPixels()) : D3D12_RECT{0, 0, 1, 1};
+  if (rect.left >= rect.right || rect.top >= rect.bottom)
+  {
+    return;
+  }
   D3D12_CPU_DESCRIPTOR_HANDLE view{};
   if (!context.Open() || !texture->DepthView(view))
   {
@@ -1457,7 +1555,8 @@ void DrawContext::ClearDepth(Texture& _texture, float _depth)
   }
   context.Require(*texture, 0, D3D12_RESOURCE_STATE_DEPTH_WRITE);
   context.FlushBarriers();
-  context.list->ClearDepthStencilView(view, D3D12_CLEAR_FLAG_DEPTH, _depth, 0, 0, nullptr);
+  context.list->ClearDepthStencilView(view, D3D12_CLEAR_FLAG_DEPTH, _depth, 0, _rect != nullptr ? 1 : 0,
+                                      _rect != nullptr ? &rect : nullptr);
 }
 
 bool DrawContext::Initialize(std::string& _error)
@@ -1621,6 +1720,26 @@ bool DrawContext::Initialize(std::string& _error)
   nullUnordered.Format = DXGI_FORMAT_R32_FLOAT;
   nullUnordered.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
   device.CreateUnorderedAccessView(nullptr, nullptr, &nullUnordered, context.nullUnorderedView);
+
+  // Where a program's outputs go when no target is set for them, and what its inputs read when the
+  // layout has no attribute for them (plan §5.5).
+  if (!context.core.targetViewPool.Allocate(context.core, context.nullTargetView))
+  {
+    _error = "Direct3D 12: the null target view's descriptor was not made";
+    return false;
+  }
+  D3D12_RENDER_TARGET_VIEW_DESC nullTarget{};
+  nullTarget.Format = NULL_TARGET_FORMAT;
+  nullTarget.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+  device.CreateRenderTargetView(nullptr, &nullTarget, context.nullTargetView);
+  std::byte* defaults = nullptr;
+  if (!context.CreateUploadBuffer(sizeof(DEFAULT_ATTRIBUTE), context.defaultAttribute, defaults))
+  {
+    _error = "Direct3D 12: the default vertex attribute's buffer was not made";
+    return false;
+  }
+  std::memcpy(defaults, DEFAULT_ATTRIBUTE.data(), sizeof(DEFAULT_ATTRIBUTE));
+  context.defaultAttribute->SetName(L"NeuronClient default vertex attribute");
   context.shaderIncrement = shaderIncrement;
   context.samplerIncrement = samplerIncrement;
   context.ringCapacity = shaderDescriptors - TABLE_DESCRIPTORS;

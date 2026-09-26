@@ -1,9 +1,10 @@
 // Tests/NeuronClientTests/TargetClears.cpp
 //
 // DrawContext clears a colour texture's mip, cube face or 3D slice, and nothing beside it, to the
-// value its format stores, and clears depth. It clears through views it makes on first use, which
-// stay each texture's own until the texture goes, and it refuses what it cannot clear
-// (Design/ADR/ADR-007; plan Phase 3).
+// value its format stores, and clears depth, the whole of a level or a rectangle of it, as GL's
+// glClear cleared under the scissor. It clears through views it makes on first use, which stay each
+// texture's own until the texture goes, and it refuses what it cannot clear (Design/ADR/ADR-007;
+// plan Phase 3 and Phase 4 step 3).
 #include "pch.h"
 
 #include "Check.h"
@@ -174,6 +175,43 @@ public:
     Assert::IsTrue(Read(test, depth, 0, 0) == Repeated(0.25f, 24), L"the first clear did not arrive");
     context.ClearDepth(depth, 1.0f);
     Assert::IsTrue(Read(test, depth, 0, 0) == Repeated(1.0f, 24), L"the second clear did not arrive");
+    ExpectClean(test);
+  }
+
+  TEST_METHOD(ClearsOnlyTheRectangle)
+  {
+    TestDevice test;
+    Open(test);
+    Texture color = Make(test, TextureDimension::Texture2D, TextureFormat::R32F, 4, 4, 1, 1);
+    Texture depth = Make(test, TextureDimension::Texture2D, TextureFormat::Depth32F, 4, 4, 1, 1);
+    Neuron::DrawContext& context = test.device.Context();
+    const auto cleared = [](std::vector<std::byte>& _texels, std::size_t _column, std::size_t _row, float _value)
+    { std::memcpy(&_texels[((_row * 4) + _column) * sizeof(float)], &_value, sizeof(_value)); };
+
+    // Columns 1 and 2 of row 2, counted from the bottom row, as the scissor counts them.
+    context.UpdateTexture(color, 0, 0, Counting(16));
+    context.ClearColor(color, 0, 0, TRANSPARENT_BLACK, {.xPixels = 1, .yPixels = 2, .widthPixels = 2, .heightPixels = 1});
+    std::vector<std::byte> expected = Counting(16);
+    cleared(expected, 1, 2, 0.0f);
+    cleared(expected, 2, 2, 0.0f);
+    Assert::IsTrue(Read(test, color, 0, 0) == expected, L"not the rectangle alone was cleared");
+
+    // What lies outside the level is left out, and a rectangle wholly outside it clears nothing.
+    context.ClearColor(color, 0, 0, TRANSPARENT_BLACK, {.xPixels = 3, .yPixels = -2, .widthPixels = 5, .heightPixels = 3});
+    context.ClearColor(color, 0, 0, TRANSPARENT_BLACK, {.xPixels = 4, .yPixels = 0, .widthPixels = 2, .heightPixels = 2});
+    cleared(expected, 3, 0, 0.0f);
+    Assert::IsTrue(Read(test, color, 0, 0) == expected, L"a rectangle partly outside the level");
+
+    // Depth likewise: the two columns on the left.
+    context.ClearDepth(depth, 1.0f);
+    context.ClearDepth(depth, 0.25f, {.xPixels = 0, .yPixels = 0, .widthPixels = 2, .heightPixels = 4});
+    std::vector<std::byte> depths = Repeated(1.0f, 16);
+    for (std::size_t row = 0; row < 4; ++row)
+    {
+      cleared(depths, 0, row, 0.25f);
+      cleared(depths, 1, row, 0.25f);
+    }
+    Assert::IsTrue(Read(test, depth, 0, 0) == depths, L"the depth rectangle");
     ExpectClean(test);
   }
 

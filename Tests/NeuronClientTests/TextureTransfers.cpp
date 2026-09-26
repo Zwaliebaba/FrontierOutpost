@@ -2,8 +2,9 @@
 //
 // What DrawContext uploads to a texture or buffer, it reads back unchanged: in every colour format,
 // in every mip of odd sizes, in every face of a cube and every slice of a 3D texture, through the
-// upload ring and around it. The barriers it inserts raise nothing in the debug layer, and a texture
-// goes only once the GPU is done with it (Design/ADR/ADR-007; plan Phase 3).
+// upload ring and around it, and a region of a level without the rest of it. The barriers it inserts
+// raise nothing in the debug layer, and a texture goes only once the GPU is done with it
+// (Design/ADR/ADR-007; plan Phase 3 and Phase 4 step 3).
 #include "pch.h"
 
 #include "Buffer.h"
@@ -92,6 +93,25 @@ Texture Make(TestDevice& _test, TextureDimension _dimension, TextureFormat _form
                                                 .name = "TextureTransfers"});
   Assert::IsTrue(static_cast<bool>(texture), L"the texture was not made");
   return texture;
+}
+
+/// _level, _width by _height texels of _texelBytes, with _patch written over _region, as
+/// UpdateTexture writes it: rows of the region's width, slice by slice.
+std::vector<std::byte> Patched(std::vector<std::byte> _level, std::uint32_t _width, std::uint32_t _height, std::uint32_t _texelBytes,
+                               const Neuron::TextureRegion& _region, const std::vector<std::byte>& _patch)
+{
+  const std::size_t rowBytes = std::size_t{_region.widthPixels} * _texelBytes;
+  for (std::uint32_t slice = 0; slice < _region.depthPixels; ++slice)
+  {
+    for (std::uint32_t row = 0; row < _region.heightPixels; ++row)
+    {
+      const std::size_t to =
+        ((((std::size_t{_region.zPixels} + slice) * _height) + _region.yPixels + row) * _width + _region.xPixels) * _texelBytes;
+      const std::size_t from = ((std::size_t{slice} * _region.heightPixels) + row) * rowBytes;
+      std::memcpy(&_level[to], &_patch[from], rowBytes);
+    }
+  }
+  return _level;
 }
 
 /// Fills every level of every face with its own pattern, then reads each back.
@@ -299,6 +319,67 @@ public:
     Assert::IsTrue(context.TakeRead(ticket, texels), L"the read was not there frames later");
     Assert::IsTrue(texels == Pattern(TextureFormat::R32F, 6, 12), L"the read did not give the texels");
     test.device.EndFrame();
+    ExpectClean(test);
+  }
+
+  TEST_METHOD(UpdatesOnlyTheRegionGiven)
+  {
+    TestDevice test;
+    Open(test);
+    Neuron::DrawContext& context = test.device.Context();
+    const auto read = [&context](const Texture& _texture, std::uint32_t _mip, std::uint32_t _face)
+    {
+      std::vector<std::byte> texels;
+      Assert::IsTrue(context.ReadTexture(_texture, _mip, _face, texels), L"ReadTexture failed");
+      return texels;
+    };
+
+    // A 2D texture's columns 1 and 2 of rows 1 and 2, as glTexSubImage2D gave them.
+    Texture flat = Make(test, TextureDimension::Texture2D, TextureFormat::R8, 4, 4, 1, 1);
+    const Neuron::TextureRegion middle{.xPixels = 1, .yPixels = 1, .zPixels = 0, .widthPixels = 2, .heightPixels = 2, .depthPixels = 1};
+    context.UpdateTexture(flat, 0, 0, Pattern(TextureFormat::R8, 16, 20));
+    context.UpdateTexture(flat, 0, 0, middle, Pattern(TextureFormat::R8, 4, 21));
+    Assert::IsTrue(read(flat, 0, 0) == Patched(Pattern(TextureFormat::R8, 16, 20), 4, 4, 1, middle, Pattern(TextureFormat::R8, 4, 21)),
+                   L"the 2D texture");
+
+    // One mip of one cube face, in a format of eight bytes a texel; the face beside it and the mip
+    // above it keep what they had.
+    Texture cube = Make(test, TextureDimension::TextureCube, TextureFormat::Rgba16F, 8, 8, 1, 2);
+    ExpectRoundTrip(test, cube, 30);
+    const Neuron::TextureRegion corner{.xPixels = 2, .yPixels = 0, .zPixels = 0, .widthPixels = 2, .heightPixels = 3, .depthPixels = 1};
+    context.UpdateTexture(cube, 1, 3, corner, Pattern(TextureFormat::Rgba16F, 6, 40));
+    Assert::IsTrue(read(cube, 1, 3) == Patched(Pattern(TextureFormat::Rgba16F, 16, 30 + (3 * 16) + 1), 4, 4, 8, corner,
+                                               Pattern(TextureFormat::Rgba16F, 6, 40)),
+                   L"mip 1 of face 3");
+    Assert::IsTrue(read(cube, 1, 2) == Pattern(TextureFormat::Rgba16F, 16, 30 + (2 * 16) + 1), L"mip 1 of face 2 changed");
+    Assert::IsTrue(read(cube, 0, 3) == Pattern(TextureFormat::Rgba16F, 64, 30 + (3 * 16)), L"mip 0 of face 3 changed");
+
+    // A box of a 3D texture.
+    Texture volume = Make(test, TextureDimension::Texture3D, TextureFormat::R32F, 4, 3, 3, 1);
+    const Neuron::TextureRegion box{.xPixels = 1, .yPixels = 1, .zPixels = 1, .widthPixels = 2, .heightPixels = 2, .depthPixels = 2};
+    context.UpdateTexture(volume, 0, 0, Pattern(TextureFormat::R32F, 36, 50));
+    context.UpdateTexture(volume, 0, 0, box, Pattern(TextureFormat::R32F, 8, 60));
+    Assert::IsTrue(read(volume, 0, 0) == Patched(Pattern(TextureFormat::R32F, 36, 50), 4, 3, 4, box, Pattern(TextureFormat::R32F, 8, 60)),
+                   L"the 3D texture");
+    ExpectClean(test);
+  }
+
+  TEST_METHOD(RefusesARegionOutsideTheLevel)
+  {
+    TestDevice test;
+    Open(test);
+    Texture texture = Make(test, TextureDimension::Texture2D, TextureFormat::Rgba8, 4, 4, 1, 1);
+    Neuron::DrawContext& context = test.device.Context();
+    context.UpdateTexture(texture, 0, 0, {.xPixels = 3, .yPixels = 0, .zPixels = 0, .widthPixels = 2, .heightPixels = 1, .depthPixels = 1},
+                          Pattern(TextureFormat::Rgba8, 2, 1)); // past the last column
+    context.UpdateTexture(texture, 0, 0, {.xPixels = 0, .yPixels = 0, .zPixels = 0, .widthPixels = 0, .heightPixels = 1, .depthPixels = 1},
+                          {}); // no texels at all
+    context.UpdateTexture(texture, 0, 0, {.xPixels = 0, .yPixels = 0, .zPixels = 1, .widthPixels = 1, .heightPixels = 1, .depthPixels = 1},
+                          Pattern(TextureFormat::Rgba8, 1, 1)); // a 2D texture's second slice
+    context.UpdateTexture(texture, 0, 0, {.xPixels = 0, .yPixels = 0, .zPixels = 0, .widthPixels = 2, .heightPixels = 2, .depthPixels = 1},
+                          Pattern(TextureFormat::Rgba8, 3, 1)); // three texels for four
+    Assert::AreEqual(std::size_t{4}, test.failures.size(), L"not every refusal was reported");
+    test.failures.clear();
     ExpectClean(test);
   }
 

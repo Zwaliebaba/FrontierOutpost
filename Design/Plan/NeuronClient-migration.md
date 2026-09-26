@@ -370,6 +370,10 @@ Other rules the context applies:
 | Filtering and wrapping are properties of the texture | A sampler is chosen at bind time from the texture's settings. Anisotropy only with mipmapped linear minification. The border colour is kept. |
 | A depth buffer stays attached under targets of another size | Depth is bound only when the draw tests or writes it, since Direct3D 12 requires matching sizes. |
 | Slot 1 stays attached under a job that writes only slot 0 | Only as many targets are bound as the program writes. |
+| A program writes to a draw buffer with nothing attached, and the write is discarded | Outputs past the last target set go to a null view, and are discarded. Depth alone can be drawn into. |
+| An attribute array that is not enabled reads the current attribute, which liblt leaves at (0, 0, 0, 1) | An input the layout has no attribute for reads (0, 0, 0, 1), from a buffer holding one instance. Channels an attribute lacks read 0, 0 and 1, as in GL. |
+| `glTexSubImage` replaces part of a level | Updates take a region of a mip: a rectangle, a cube face's, or a box of a 3D texture. |
+| `glClear` clears only inside the scissor | Clears take a rectangle, clipped to the level. |
 | Blend modes | Alpha = (SRC_ALPHA, INV_SRC_ALPHA, ONE, ONE). Additive = (ONE, ONE, ONE, ONE). One state for all targets. |
 
 ### 5.6 Shaders

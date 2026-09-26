@@ -2,13 +2,16 @@
 //
 // DrawContext draws as liblt's GL build did: into every colour format and into two targets at once,
 // with row 0 at the bottom, the viewport and scissor from the bottom left, GL's front faces, its
-// depth test and liblt's blend modes, from buffers or from the upload ring. It makes each pipeline
-// state once, forgets what goes, and refuses what it cannot draw (Design/ADR/ADR-007; plan §5.5
-// and Phase 3).
+// depth test and liblt's blend modes, from buffers or from the upload ring. What a program writes
+// with no target set for it is discarded, and an input the layout has no attribute for reads GL's
+// current attribute. It makes each pipeline state once, forgets what goes, and refuses what it
+// cannot draw (Design/ADR/ADR-007; plan §5.5, Phase 3 and Phase 4 step 3).
 #include "pch.h"
 
 #include "Buffer.h"
 #include "Check.h"
+#include "CompiledShaders/AttributePS.h"
+#include "CompiledShaders/AttributeVS.h"
 #include "CompiledShaders/NamesCS.h"
 #include "CompiledShaders/SolidPS.h"
 #include "CompiledShaders/SolidVS.h"
@@ -400,6 +403,66 @@ public:
     ExpectClean(test);
   }
 
+  TEST_METHOD(DiscardsWhatItHasNoTargetFor)
+  {
+    TestDevice test;
+    Open(test);
+    Program twoTargets = MakeProgram(test, Bytecode(TWO_TARGETS_PS), "TwoTargets");
+    Texture target = MakeTexture(test, TextureFormat::Rgba8, 3, 2);
+    Texture depth = MakeTexture(test, TextureFormat::Depth32F, 3, 2);
+    Neuron::DrawContext& context = test.device.Context();
+
+    // One target set: the first output goes to it, and the second nowhere, as in GL.
+    SetTarget(test, target);
+    context.SetState(PLAIN);
+    DrawWhole(test, twoTargets, UNORM_COLOR);
+    Assert::IsTrue(Read(test, target) == ExactTexels(TextureFormat::Rgba8, 6), L"the output that has a target");
+
+    // Depth alone: the draw still tests and writes it, as a GL draw into depth alone did.
+    context.SetTargets({}, &depth);
+    context.ClearDepth(depth, 1.0f);
+    context.SetState({.blend = BlendMode::Opaque, .cull = CullMode::None, .depthTest = true, .depthWrite = true, .wireframe = false});
+    DrawAtDepth(test, twoTargets, 0.5f, UNORM_COLOR[0]);
+    const float stored = 0.75f;
+    Assert::IsTrue(Read(test, depth) == Repeated(Bytes(stored), 6), L"the draw into depth alone did not write it");
+    ExpectClean(test);
+  }
+
+  TEST_METHOD(GivesAnInputWithoutAnAttributeGlsDefault)
+  {
+    TestDevice test;
+    Open(test);
+    Program attribute = test.device.CreateProgram(
+      {.vertexShader = Bytecode(ATTRIBUTE_VS), .pixelShader = Bytecode(ATTRIBUTE_PS), .computeShader = {}, .name = "Attribute"});
+    Assert::IsTrue(static_cast<bool>(attribute), L"the program was not made");
+    Texture target = MakeTexture(test, TextureFormat::Rgba8, 2, 2);
+    Neuron::DrawContext& context = test.device.Context();
+    SetTarget(test, target);
+    context.SetState(PLAIN);
+    context.SetProgram(attribute);
+
+    // No colour in the layout: the input reads (0, 0, 0, 1).
+    context.DrawTransient(Bytes(WHOLE), POSITIONS, Bytes(FRONT_FACING), IndexFormat::UInt16);
+    const std::array<std::uint8_t, 4> opaqueBlack = {0, 0, 0, 255};
+    Assert::IsTrue(Read(test, target) == Repeated(Bytes(opaqueBlack), 4), L"the input without an attribute did not read (0, 0, 0, 1)");
+
+    // Two of its four channels given: the other two are GL's, 0 and 1.
+    struct Vertex
+    {
+      std::array<float, 3> position;
+      std::array<float, 2> color;
+    };
+    constexpr std::array<float, 2> REDDISH = {UNORM_COLOR[0], UNORM_COLOR[1]};
+    const std::array<Vertex, 3> vertices = {
+      {{{WHOLE[0], WHOLE[1], WHOLE[2]}, REDDISH}, {{WHOLE[3], WHOLE[4], WHOLE[5]}, REDDISH}, {{WHOLE[6], WHOLE[7], WHOLE[8]}, REDDISH}}};
+    const std::array<VertexAttribute, 2> attributes = {
+      {{"POSITION", 0, VertexFormat::Float3, 0}, {"COLOR", 0, VertexFormat::Float2, sizeof(Vertex::position)}}};
+    context.DrawTransient(Bytes(vertices), {attributes, sizeof(Vertex)}, Bytes(FRONT_FACING), IndexFormat::UInt16);
+    const std::array<std::uint8_t, 4> partial = {UNORM_BYTES[0], UNORM_BYTES[1], 0, 255};
+    Assert::IsTrue(Read(test, target) == Repeated(Bytes(partial), 4), L"the channels the attribute lacks were not 0 and 1");
+    ExpectClean(test);
+  }
+
   TEST_METHOD(ForgetsWhatGoes)
   {
     TestDevice test;
@@ -436,7 +499,6 @@ public:
     TestDevice test;
     Open(test);
     Program solid = MakeProgram(test, Bytecode(SOLID_PS), "Solid");
-    Program twoTargets = MakeProgram(test, Bytecode(TWO_TARGETS_PS), "TwoTargets");
     Program compute =
       test.device.CreateProgram({.vertexShader = {}, .pixelShader = {}, .computeShader = Bytecode(NAMES_CS), .name = "Compute"});
     Texture fourByFour = MakeTexture(test, TextureFormat::R8, 4, 4);
@@ -453,17 +515,14 @@ public:
     context.SetProgram(compute);             // a program that draws nothing
 
     SetTarget(test, fourByFour);
-    DrawWhole(test, twoTargets, WHITE); // two targets written, one set
-    const std::array<VertexAttribute, 1> noPosition = {{{"TEXCOORD", 0, VertexFormat::Float3, 0}}};
     context.SetProgram(solid);
-    context.DrawTransient(Bytes(WHOLE), {noPosition, 12}, Bytes(FRONT_FACING), IndexFormat::UInt16); // an input not in the layout
-    context.DrawIndexed(vertices, POSITIONS, indices, IndexFormat::UInt16, 1, 3);                    // indices past the buffer
+    context.DrawIndexed(vertices, POSITIONS, indices, IndexFormat::UInt16, 1, 3); // indices past the buffer
 
     SetTarget(test, fourByFour, &depth);
     context.SetState({.blend = BlendMode::Opaque, .cull = CullMode::None, .depthTest = true, .depthWrite = true, .wireframe = false});
     DrawWhole(test, solid, WHITE); // a depth target of another size
 
-    Assert::AreEqual(std::size_t{7}, test.failures.size(), L"not every refusal was reported");
+    Assert::AreEqual(std::size_t{5}, test.failures.size(), L"not every refusal was reported");
     test.failures.clear();
     ExpectClean(test);
   }

@@ -156,6 +156,14 @@
       <ShaderType>Compute</ShaderType>
       <VariableName>ACCUMULATE_CS</VariableName>
     </FxCompile>
+    <FxCompile Include="Shaders\AttributePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>ATTRIBUTE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\AttributeVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>ATTRIBUTE_VS</VariableName>
+    </FxCompile>
     <FxCompile Include="Shaders\CubePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>CUBE_PS</VariableName>

@@ -103,6 +103,12 @@
     <FxCompile Include="Shaders\AccumulateCS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\AttributePS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\AttributeVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\CubePS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
