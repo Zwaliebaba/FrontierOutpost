@@ -118,8 +118,9 @@ namespace {
     PopulateIndices(glyphs.size());
 
     Type const& vertexFormat = glyphs[0].glyph->GetVertexFormat();
+    /* Sized, not only reserved: the glyphs write their vertices into it. */
     renderer.vertexBuffer.clear();
-    renderer.vertexBuffer.reserve(4 * glyphs.size() * vertexFormat->size);
+    renderer.vertexBuffer.resize(4 * glyphs.size() * vertexFormat->size, 0);
 
     for (size_t i = 0; i < glyphs.size(); ++i) {
       uchar* pBuffer = renderer.vertexBuffer.data() + 4 * i * vertexFormat->size;

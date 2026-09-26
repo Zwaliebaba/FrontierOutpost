@@ -108,12 +108,13 @@ struct Vector : public NullBase<Vector<T> > {
     return false;
   }
 
+  /* As std::vector's: defined when empty too, unlike &front(). */
   T* data() {
-    return &front();
+    return v.data();
   }
 
   T const* data() const {
-    return &front();
+    return v.data();
   }
 
   void deleteElements() {
