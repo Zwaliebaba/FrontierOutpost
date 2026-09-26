@@ -52,16 +52,16 @@ namespace {
         buffer = Texture_Create(
           bufferWidth,
           bufferHeight,
-          GL_TextureFormat::RGBA16F);
-        buffer->SetMinFilter(GL_TextureFilterMip::Linear);
-        buffer->SetWrapMode(GL_TextureWrapMode::ClampToEdge);
+          TextureFormat::RGBA16F);
+        buffer->SetMinFilter(TextureFilterMip::Linear);
+        buffer->SetWrapMode(TextureWrapMode::ClampToEdge);
       }
 
       Cursor_Push(Project(self, Cursor_Get()), Project(self, Cursor_GetLast()));
       Viewport_Push(Viewport_Create(0, self->size, V2(resolution), true));
 
       Renderer_PushZBuffer(false);
-      Renderer_PushDepthBuffer(GL_NullTexture);
+      Renderer_PushDepthBuffer(Texture2D());
       Renderer_PushScissorOn(0, V2(bufferWidth, bufferHeight));
       buffer->Bind(0);
       Renderer_Clear();

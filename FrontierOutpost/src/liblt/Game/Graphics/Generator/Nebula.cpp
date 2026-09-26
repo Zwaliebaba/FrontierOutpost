@@ -19,7 +19,7 @@ namespace {
 
   CubeMap NebulaImpl(Generator_Nebula_Args const& args) {
     SFRAME("Generate Nebula");
-    CubeMap self = CubeMap_Create(res, GL_TextureFormat::RGBA32F);
+    CubeMap self = CubeMap_Create(res, TextureFormat::RGBA32F);
     RNG rng = RNG_MTG(args.seed);
 
     /* Generate nebulae. */ {
@@ -41,7 +41,7 @@ namespace {
 #if 0
     /* Normalize radiance. */ {
       CubeMap lowRes = Generator_Blur(self, 0.75f, 128, 512)();
-      CubeMap result = CubeMap_Create(res, GL_TextureFormat::RGBA16F);
+      CubeMap result = CubeMap_Create(res, TextureFormat::RGBA16F);
 
       static Shader shader = Shader_Create("identity.jsl", "cubemap/multiply.jsl");
       (*shader)
@@ -55,7 +55,7 @@ namespace {
     /* TODO : Permuate. */ {
       // static Shader permuteShader = Shader_Create("identity.jsl", "cube_permute.jsl");
       // CubeMap e2 = CubeMap_CreatCubeMap_Create();
-      // e2->Create(res, GL_TextureFormat::RGBA16F);
+      // e2->Create(res, TextureFormat::RGBA16F);
     }
     return self;
   }

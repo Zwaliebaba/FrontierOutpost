@@ -57,7 +57,7 @@ ShaderInstance ShadingModel_Metal(
 
   if (!shader) {
     shader = Shader_Create("npm.jsl", "material/metal.jsl");
-    detailMap = Texture_Create(512, 512, GL_TextureFormat::RGBA8);
+    detailMap = Texture_Create(512, 512, TextureFormat::RGBA8);
     Texture_Generate(detailMap, 
       Shader_Create("identity.jsl", "filter_rust.jsl"));
   }

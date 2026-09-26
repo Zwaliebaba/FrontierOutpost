@@ -2,13 +2,13 @@
 
 #include "Array.h"
 #include "AutoPtr.h"
-#include "GL.h"
 #include "Location.h"
 #include "Matrix.h"
 #include "Pointer.h"
 #include "Program.h"
 #include "ProgramLog.h"
 #include "Renderer.h"
+#include "RendererGL.h"
 #include "Shader.h"
 #include "StackFrame.h"
 #include "Timer.h"
@@ -72,7 +72,7 @@ namespace {
     DERIVED_TYPE_EX(Texture2DImpl)
 
     GL_Texture glBuffer;
-    GL_TextureFormat::Enum format;
+    TextureFormat::Enum format;
     uint width;
     uint height;
     uint guid;
@@ -119,18 +119,22 @@ namespace {
     void Create(
       uint width,
       uint height,
-      GL_TextureFormat::Enum format,
+      TextureFormat::Enum format,
       void const* data)
     {
       this->width = width;
       this->height = height;
       this->format = format;
 
-      glBuffer = GLU::CreateTexture2D(width, height, format);
+      glBuffer = GLU::CreateTexture2D(width, height, ToGL(format));
       GL_TexImage2D(
-        GL_TextureTarget::T2D, 0, format, width, height,
-        GL_TextureFormat::PixelFormat(format),
-        GL_TextureFormat::DataFormat(format), data);
+        GL_TextureTarget::T2D, 0, ToGL(format), width, height,
+        ToGLPixelFormat(format),
+        ToGLDataFormat(format), data);
+
+      /* A depth buffer is only drawn into, so it has no mips. */
+      if (format == TextureFormat::Depth32F)
+        return;
       GL_GenerateMipmap(GL_TextureTarget::T2D);
 
       GLfloat fLargest;
@@ -146,20 +150,16 @@ namespace {
     void GetData(void* buffer) const {
       GL_BindTexture(GL_TextureTargetBindable::T2D, glBuffer);
       GL_GetTexImage(GL_TextureTarget::T2D, 0,
-                     GL_TextureFormat::PixelFormat(format),
-                     GL_TextureFormat::DataFormat(format), buffer);
+                     ToGLPixelFormat(format),
+                     ToGLDataFormat(format), buffer);
     }
 
-    GL_Texture GetGLData() const {
-      return glBuffer;
-    }
-
-    GL_TextureFormat::Enum GetFormat() const {
+    TextureFormat::Enum GetFormat() const {
       return format;
     }
 
     size_t GetMemory() const {
-      return GL_TextureFormat::Size(format) * width * height;
+      return TextureFormat::Size(format) * width * height;
     }
 
     uint GetHeight() const {
@@ -181,7 +181,7 @@ namespace {
         imageData.data());
 
       if (flip) {
-        uint bpp = GL_TextureFormat::Size(format);
+        uint bpp = TextureFormat::Size(format);
         Array<uchar> buf(bpp * width);
         for (uint y = 0; y < height / 2; ++y) {
           memcpy(buf.data(), &imageData[bpp * width * y], bpp * width);
@@ -222,13 +222,22 @@ namespace {
       uint h,
       void const* buffer)
     {
-      SetData(
-        x, y, w, h,
-        GL_TextureFormat::PixelFormat(format),
-        GL_TextureFormat::DataFormat(format), buffer);
+      Upload(x, y, w, h, ToGLPixelFormat(format), ToGLDataFormat(format), buffer);
     }
 
     void SetData(
+      uint x,
+      uint y,
+      uint w,
+      uint h,
+      PixelFormat::Enum pixelFormat,
+      DataFormat::Enum dataFormat,
+      void const* buffer)
+    {
+      Upload(x, y, w, h, ToGL(pixelFormat), ToGL(dataFormat), buffer);
+    }
+
+    void Upload(
       uint x,
       uint y,
       uint w,
@@ -251,9 +260,9 @@ namespace {
         bias);
     }
 
-    void SetMagFilter(GL_TextureFilter::Enum filter) {
+    void SetMagFilter(TextureFilter::Enum filter) {
       BindInput(0);
-      GL_TexMagFilter(GL_TextureTarget::T2D, filter);
+      GL_TexMagFilter(GL_TextureTarget::T2D, ToGL(filter));
     }
 
     void SetMaxLod(int maxLod) {
@@ -264,9 +273,9 @@ namespace {
         maxLod);
     }
 
-    void SetMinFilter(GL_TextureFilterMip::Enum filter) {
+    void SetMinFilter(TextureFilterMip::Enum filter) {
       BindInput(0);
-      GL_TexMinFilter(GL_TextureTarget::T2D, filter);
+      GL_TexMinFilter(GL_TextureTarget::T2D, ToGL(filter));
     }
 
     void SetMinLod(int minLod) {
@@ -277,10 +286,10 @@ namespace {
         minLod);
     }
 
-    void SetWrapMode(GL_TextureWrapMode::Enum mode) {
+    void SetWrapMode(TextureWrapMode::Enum mode) {
       BindInput(0);
-      GL_TexWrapMode(GL_TextureTarget::T2D, GL_TextureCoordinate::S, mode);
-      GL_TexWrapMode(GL_TextureTarget::T2D, GL_TextureCoordinate::T, mode);
+      GL_TexWrapMode(GL_TextureTarget::T2D, GL_TextureCoordinate::S, ToGL(mode));
+      GL_TexWrapMode(GL_TextureTarget::T2D, GL_TextureCoordinate::T, ToGL(mode));
     }
 
     FIELDS {
@@ -307,6 +316,10 @@ namespace {
   DERIVED_IMPLEMENT(Texture2DImpl)
 }
 
+GL_Texture Texture2D_GetGLTexture(Texture2DT const& texture) {
+  return static_cast<Texture2DImpl const&>(texture).glBuffer;
+}
+
 Texture2D Texture2D_Filter(Texture2D const& texture, Shader const& shader) {
   Texture2D self = Texture_Create(
     texture->GetWidth(),
@@ -320,7 +333,7 @@ Texture2D Texture2D_Filter(Texture2D const& texture, Shader const& shader) {
 Texture2D Texture_Create(
   uint width,
   uint height,
-  GL_TextureFormat::Enum format,
+  TextureFormat::Enum format,
   void const* data)
 {
   Reference<Texture2DImpl> self = new Texture2DImpl;
@@ -391,7 +404,7 @@ DefineFunction(Texture_LoadFrom) {
   return Texture_Create(
     image.WidthPixels(),
     image.HeightPixels(),
-    GL_TextureFormat::RGBA8,
+    TextureFormat::RGBA8,
     image.Pixels().data());
 }
 
@@ -417,5 +430,5 @@ DefineFunction(Texture_ScreenCapture) {
   for (uint x = 0; x < size.x; ++x)
     Swap(buf[y * size.x + x], buf[(size.y - y - 1) * size.x + x]);
 
-  return Texture_Create(size.x, size.y, GL_TextureFormat::RGBA8, buf.data());
+  return Texture_Create(size.x, size.y, TextureFormat::RGBA8, buf.data());
 }

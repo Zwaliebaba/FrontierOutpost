@@ -1637,6 +1637,9 @@
     <ClInclude Include="LTE\Graph.h">
       <Filter>LTE</Filter>
     </ClInclude>
+    <ClInclude Include="LTE\GraphicsEnum.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
     <ClInclude Include="LTE\Hash.h">
       <Filter>LTE</Filter>
     </ClInclude>
@@ -1785,6 +1788,9 @@
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="LTE\Renderer.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="LTE\RendererGL.h">
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="LTE\ResourceMap.h">

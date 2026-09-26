@@ -1,12 +1,12 @@
 #include "Texture3D.h"
 
-#include "GL.h"
 #include "Program.h"
+#include "RendererGL.h"
 
 namespace {
   struct Texture3DImpl : public Texture3DT {
     GL_Texture texture;
-    GL_TextureFormat::Enum format;
+    TextureFormat::Enum format;
     uint width;
     uint height;
     uint depth;
@@ -18,7 +18,7 @@ namespace {
         uint width,
         uint height,
         uint depth,
-        GL_TextureFormat::Enum format) :
+        TextureFormat::Enum format) :
       format(format),
       width(width),
       height(height),
@@ -33,7 +33,7 @@ namespace {
       GL_TexMagFilter(GL_TextureTarget::T3D, GL_TextureFilter::Linear);
       GL_TexMinFilter(GL_TextureTarget::T3D, GL_TextureFilterMip::Linear);
       GL_TexImage3D(
-        GL_TextureTarget::T3D, 0, format,
+        GL_TextureTarget::T3D, 0, ToGL(format),
         width, height, depth,
         GL_PixelFormat::Red, GL_DataFormat::Float, nullptr);
     }
@@ -116,37 +116,37 @@ namespace {
       return depth;
     }
 
-    void GetData(uchar* buffer, GL_PixelFormat::Enum format, uint lod) const {
+    void GetData(uchar* buffer, PixelFormat::Enum format, uint lod) const {
       GL_BindTexture(GL_TextureTargetBindable::T3D, texture);
-      GL_GetTexImage(GL_TextureTarget::T3D, lod, format, GL_DataFormat::UnsignedByte,
+      GL_GetTexImage(GL_TextureTarget::T3D, lod, ToGL(format), GL_DataFormat::UnsignedByte,
                      buffer);
     }
 
-    void GetData(float* buffer, GL_PixelFormat::Enum format, uint lod) const {
+    void GetData(float* buffer, PixelFormat::Enum format, uint lod) const {
       GL_BindTexture(GL_TextureTargetBindable::T3D, texture);
-      GL_GetTexImage(GL_TextureTarget::T3D, lod, format, GL_DataFormat::Float, buffer);
+      GL_GetTexImage(GL_TextureTarget::T3D, lod, ToGL(format), GL_DataFormat::Float, buffer);
     }
 
     void SetData(
       uint x, uint y, uint z,
       uint width, uint height, uint depth,
-      GL_PixelFormat::Enum pixelFormat,
-      GL_DataFormat::Enum dataFormat,
+      PixelFormat::Enum pixelFormat,
+      DataFormat::Enum dataFormat,
       void const* buffer)
     {
       GL_BindTexture(GL_TextureTargetBindable::T3D, texture);
       GL_TexSubImage3D(GL_TextureTarget::T3D, 0, x, y, z, width, height, depth,
-        pixelFormat, dataFormat, buffer);
+        ToGL(pixelFormat), ToGL(dataFormat), buffer);
     }
 
-    void SetMagFilter(GL_TextureFilter::Enum filter) {
+    void SetMagFilter(TextureFilter::Enum filter) {
       GL_BindTexture(GL_TextureTargetBindable::T3D, texture);
-      GL_TexMagFilter(GL_TextureTarget::T3D, filter);
+      GL_TexMagFilter(GL_TextureTarget::T3D, ToGL(filter));
     }
 
-    void SetMinFilter(GL_TextureFilterMip::Enum filter) {
+    void SetMinFilter(TextureFilterMip::Enum filter) {
       GL_BindTexture(GL_TextureTargetBindable::T3D, texture);
-      GL_TexMinFilter(GL_TextureTarget::T3D, filter);
+      GL_TexMinFilter(GL_TextureTarget::T3D, ToGL(filter));
     }
   };
 }
@@ -155,7 +155,7 @@ Texture3D Texture3D_Create(
   uint width,
   uint height,
   uint depth,
-  GL_TextureFormat::Enum format)
+  TextureFormat::Enum format)
 {
   return new Texture3DImpl(width, height, depth, format);
 }

@@ -770,6 +770,7 @@
     <ClInclude Include="LTE\Geometry.h" />
     <ClInclude Include="LTE\Grammar.h" />
     <ClInclude Include="LTE\Graph.h" />
+    <ClInclude Include="LTE\GraphicsEnum.h" />
     <ClInclude Include="LTE\Hash.h" />
     <ClInclude Include="LTE\HashMap.h" />
     <ClInclude Include="LTE\HashSet.h" />
@@ -820,6 +821,7 @@
     <ClInclude Include="LTE\RenderStyle.h" />
     <ClInclude Include="LTE\Renderable.h" />
     <ClInclude Include="LTE\Renderer.h" />
+    <ClInclude Include="LTE\RendererGL.h" />
     <ClInclude Include="LTE\ResourceMap.h" />
     <ClInclude Include="LTE\RingBuffer.h" />
     <ClInclude Include="LTE\SDF.h" />

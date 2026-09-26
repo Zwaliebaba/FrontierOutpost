@@ -255,9 +255,9 @@ namespace {
     }
 
     void OnBegin() {
-      output = Texture3D_Create(res.x, res.y, res.z, GL_TextureFormat::R32F);
+      output = Texture3D_Create(res.x, res.y, res.z, TextureFormat::R32F);
       output->AddressBorder(1, 0, 0, 0);
-      fieldSlice = Texture_Create(res.x, res.y, GL_TextureFormat::R32F);
+      fieldSlice = Texture_Create(res.x, res.y, TextureFormat::R32F);
     }
 
     void OnEnd() {
@@ -282,7 +282,7 @@ namespace {
         fieldSlice->GetData(buffer.data());
         output->SetData(
           0, 0, z, res.x, res.y, 1,
-          GL_PixelFormat::Red, GL_DataFormat::Float, buffer.data());
+          PixelFormat::Red, DataFormat::Float, buffer.data());
         z++;
       }
       fieldSlice->Unbind();
@@ -364,7 +364,7 @@ namespace {
     }
 
     void OnBegin() {
-      slice = Texture_Create(level.res.x, level.res.y, GL_TextureFormat::R32F);
+      slice = Texture_Create(level.res.x, level.res.y, TextureFormat::R32F);
     }
 
     void OnEnd() {
@@ -463,8 +463,8 @@ namespace {
         normalBuffer[i] = V4(input->vertices[i].n, 0);
       }
 
-      positionTexture = Texture_Create(dim, dim, GL_TextureFormat::RGBA32F, positionBuffer.data());
-      normalTexture = Texture_Create(dim, dim, GL_TextureFormat::RGBA32F, normalBuffer.data());
+      positionTexture = Texture_Create(dim, dim, TextureFormat::RGBA32F, positionBuffer.data());
+      normalTexture = Texture_Create(dim, dim, TextureFormat::RGBA32F, normalBuffer.data());
       positionBuffer.clear();
       normalBuffer.clear();
 
@@ -484,8 +484,8 @@ namespace {
         }
       }
       
-      noiseTexture = Texture_Create(samples, 1, GL_TextureFormat::RGBA32F, noiseBuffer.data());
-      occlusionTexture = Texture_Create(dim, dim, GL_TextureFormat::R32F);
+      noiseTexture = Texture_Create(samples, 1, TextureFormat::RGBA32F, noiseBuffer.data());
+      occlusionTexture = Texture_Create(dim, dim, TextureFormat::R32F);
     }
 
     void OnEnd() {

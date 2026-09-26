@@ -44,7 +44,7 @@ FreeFunction(Texture2D, Texture2D_CreateHDR,
   int, width,
   int, height)
 {
-  return Texture_Create(width, height, GL_TextureFormat::RGBA32F);
+  return Texture_Create(width, height, TextureFormat::RGBA32F);
 }
 
 VoidFreeFunction(Texture2D_EndDrawTo,

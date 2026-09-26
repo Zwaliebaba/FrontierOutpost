@@ -98,7 +98,7 @@ namespace {
       Type_Get<T>(),
       renderer.indexBuffer.data(),
       6 * (vertexBuffer.size() / 4),
-      GL_IndexFormat::Int);
+      IndexFormat::Int);
     Profiler_Flush();
   }
 
@@ -133,7 +133,7 @@ namespace {
       vertexFormat,
       renderer.indexBuffer.data(),
       6 * glyphs.size(),
-      GL_IndexFormat::Int);
+      IndexFormat::Int);
     Profiler_Flush();
   }
 }

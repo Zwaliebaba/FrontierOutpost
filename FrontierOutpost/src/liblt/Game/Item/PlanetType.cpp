@@ -115,7 +115,7 @@ Renderable Generate(PlanetType const& type) {
     static Shader generate = Shader_Create("identity.jsl", "gen/planetring.jsl");
     (*generate)("seed", rg->GetFloat());
 
-    Texture2D ringTexture = Texture_Create(1024, 1, GL_TextureFormat::R32F);
+    Texture2D ringTexture = Texture_Create(1024, 1, TextureFormat::R32F);
     Texture_Generate(ringTexture, generate);
 
     ShaderInstance ringShaderInstance = ShaderInstance_Create(ringShader);

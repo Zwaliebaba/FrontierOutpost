@@ -2,8 +2,7 @@
 #define LTE_CubeMap_h__
 
 #include "BaseType.h"
-#include "GLType.h"
-#include "GLEnum.h"
+#include "GraphicsEnum.h"
 #include "Reference.h"
 #include "String.h"
 
@@ -26,7 +25,7 @@ struct CubeMapT : public RefCounted {
     uint mipLevel,
     void* buffer) const = 0;
 
-  virtual GL_TextureFormat::Enum GetFormat() const = 0;
+  virtual TextureFormat::Enum GetFormat() const = 0;
 
   virtual uint GetResolution() const = 0;
 
@@ -41,6 +40,6 @@ struct CubeMapT : public RefCounted {
 
 LT_API CubeMap CubeMap_Create(
   uint resolution,
-  GL_TextureFormat::Enum format = GL_TextureFormat::RGBA8);
+  TextureFormat::Enum format = TextureFormat::RGBA8);
 
 #endif

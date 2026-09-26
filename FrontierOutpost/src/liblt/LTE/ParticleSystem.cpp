@@ -129,7 +129,7 @@ namespace {
           Type_Get<ParticleVertex>(),
           indices.data(),
           indices.size(),
-          GL_IndexFormat::Int);
+          IndexFormat::Int);
 
         state->primary->Unbind();
         shader->End();

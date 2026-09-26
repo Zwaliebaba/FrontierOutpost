@@ -629,10 +629,6 @@ ShaderT* Shader_GetActive() {
   return gActiveShader;
 }
 
-GL_Program Shader_GetCurrentProgram() {
-  return gActiveProgram;
-}
-
 DefineFunction(Shader_RecompileAll) {
   for (ShaderMap::iterator it = GetShaderCache().begin();
        it != GetShaderCache().end(); ++it)

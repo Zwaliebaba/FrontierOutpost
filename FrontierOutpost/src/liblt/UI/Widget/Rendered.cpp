@@ -1,7 +1,6 @@
 #include "../Widgets.h"
 
 #include "LTE/DrawState.h"
-#include "LTE/GL.h"
 #include "LTE/Renderer.h"
 #include "LTE/RenderPass.h"
 #include "LTE/Shader.h"
@@ -24,7 +23,7 @@ namespace {
   AutoClassDerived(WidgetRendered, WidgetComponentT,
     Vector<RenderPass>, passes)
     Shader presentShader;
-    GL_Texture depthBuffer;
+    Texture2D depthBuffer;
     Texture2D buffers[3];
     Texture2D smallBuffers[2];
     uint width;
@@ -42,23 +41,21 @@ namespace {
       presentShader = Shader_Create("widgetTexture.jsl", "ui/texture.jsl");
       width = 0;
       height = 0;
-      depthBuffer = GL_NullTexture;
     }
 
     void Clear() {
-      if (depthBuffer != GL_NullTexture)
-        GL_DeleteTexture(depthBuffer);
+      depthBuffer = Texture2D();
     }
 
     Texture2D CreateBuffer(
       uint width,
       uint height,
-      GL_TextureFormat::Enum format)
+      TextureFormat::Enum format)
     {
       Texture2D self = Texture_Create(width, height, format);
-      self->SetMagFilter(GL_TextureFilter::Linear);
-      self->SetMinFilter(GL_TextureFilterMip::Linear);
-      self->SetWrapMode(GL_TextureWrapMode::ClampToEdge);
+      self->SetMagFilter(TextureFilter::Linear);
+      self->SetMinFilter(TextureFilterMip::Linear);
+      self->SetWrapMode(TextureWrapMode::ClampToEdge);
       return self;
     }
 
@@ -76,28 +73,21 @@ namespace {
           width = targetWidth;
           height = targetHeight;
 
-          buffers[0] = CreateBuffer(width, height, GL_TextureFormat::RGBA16F);
-          buffers[1] = CreateBuffer(width, height, GL_TextureFormat::RGBA16F);
-          buffers[2] = CreateBuffer(width, height, GL_TextureFormat::RGBA16F);
+          buffers[0] = CreateBuffer(width, height, TextureFormat::RGBA16F);
+          buffers[1] = CreateBuffer(width, height, TextureFormat::RGBA16F);
+          buffers[2] = CreateBuffer(width, height, TextureFormat::RGBA16F);
 
           smallBuffers[0] = CreateBuffer(
             width / kDSFactor,
             height / kDSFactor,
-            GL_TextureFormat::RGBA16F);
+            TextureFormat::RGBA16F);
 
           smallBuffers[1] = CreateBuffer(
             width / kDSFactor,
             height / kDSFactor,
-            GL_TextureFormat::RGBA16F);
+            TextureFormat::RGBA16F);
 
-          depthBuffer = GL_GenTexture();
-          GL_BindTexture(GL_TextureTargetBindable::T2D, depthBuffer);
-          GL_TexImage2D(
-            GL_TextureTarget::T2D, 0,
-            GL_TextureFormat::DepthComponent32F,
-            width, height,
-            GL_PixelFormat::DepthComponent,
-            GL_DataFormat::Float, nullptr);
+          depthBuffer = Texture_Create(width, height, TextureFormat::Depth32F);
         }
       }
 

@@ -136,9 +136,9 @@ DefineFunction(Mesh_ComputeOcclusion) {
   }
 
   Texture2D sPointBuffer =
-    Texture_Create(sDim, sDim, GL_TextureFormat::RGBA32F, points.data());
+    Texture_Create(sDim, sDim, TextureFormat::RGBA32F, points.data());
   Texture2D sNormalBuffer =
-    Texture_Create(sDim, sDim, GL_TextureFormat::RGBA32F, normals.data());
+    Texture_Create(sDim, sDim, TextureFormat::RGBA32F, normals.data());
 
   /* Fill vertex buffers. */
   points.clear();
@@ -156,13 +156,13 @@ DefineFunction(Mesh_ComputeOcclusion) {
   }
 
   Texture2D vPointBuffer =
-    Texture_Create(vDim, vDim, GL_TextureFormat::RGBA32F, points.data());
+    Texture_Create(vDim, vDim, TextureFormat::RGBA32F, points.data());
   Texture2D vNormalBuffer = 
-    Texture_Create(vDim, vDim, GL_TextureFormat::RGBA32F, normals.data());
+    Texture_Create(vDim, vDim, TextureFormat::RGBA32F, normals.data());
 
   /* GPU computation. */
   Texture2D occlusionBuffer =
-    Texture_Create(vDim, vDim, GL_TextureFormat::R32F);
+    Texture_Create(vDim, vDim, TextureFormat::R32F);
   static Shader shader = Shader_Create("identity.jsl", "compute/occlusion.jsl");
 
   occlusionBuffer->Bind(0);

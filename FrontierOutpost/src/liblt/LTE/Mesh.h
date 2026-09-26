@@ -3,8 +3,7 @@
 
 #include "AutoClass.h"
 #include "Geometry.h"
-#include "GLEnum.h"
-#include "GLType.h"
+#include "GraphicsEnum.h"
 #include "V3.h"
 #include "Vector.h"
 #include "Vertex.h"
@@ -14,15 +13,16 @@ AutoClassDerived(MeshT, GeometryT,
   Vector<uint>, indices)
   DERIVED_TYPE_EX(MeshT)
 
-  mutable GL_Buffer vbo;
-  mutable GL_Buffer ibo;
-  mutable GL_IndexFormat::Enum indexFormat;
+  /* The renderer's copies of the vertices and indices; 0 until it makes them. */
+  mutable uint vbo;
+  mutable uint ibo;
+  mutable IndexFormat::Enum indexFormat;
   mutable short bufferVersion;
   short version;
 
   MeshT() :
-    vbo(GL_NullBuffer),
-    ibo(GL_NullBuffer),
+    vbo(0),
+    ibo(0),
     bufferVersion(0),
     version(0)
     {}

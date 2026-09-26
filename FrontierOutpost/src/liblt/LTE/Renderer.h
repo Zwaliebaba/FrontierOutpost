@@ -1,8 +1,7 @@
 #ifndef LTE_Renderer_h__
 #define LTE_Renderer_h__
 
-#include "GLEnum.h"
-#include "GLType.h"
+#include "GraphicsEnum.h"
 #include "String.h"
 #include "V3.h"
 #include "V4.h"
@@ -65,7 +64,7 @@ namespace LTE {
     Type const& vertexFormat,
     void const* indexData,
     uint indices,
-    GL_IndexFormat::Enum indexFormat);
+    IndexFormat::Enum indexFormat);
 
   LT_API void Renderer_Flush();
 
@@ -74,9 +73,6 @@ namespace LTE {
   LT_API void Renderer_ResetCounters();
 
   /* Cachable State. */
-  LT_API void Renderer_BindIndexBuffer(GL_Buffer buffer, bool force = false);
-  LT_API void Renderer_BindVertexBuffer(GL_Buffer buffer, bool force = false);
-
   LT_API void Renderer_DisableAttribArray(uint index);
   LT_API void Renderer_EnableAttribArray(uint index);
 
@@ -99,18 +95,13 @@ namespace LTE {
   LT_API void Renderer_PopColorBuffers();
   LT_API void Renderer_PushColorBuffers();
 
-  LT_API void Renderer_PushColorBuffer(
-    uint index,
-    GL_Texture texture,
-    uint guid,
-    GL_TextureTarget::Enum target = GL_TextureTarget::T2D);
-
   LT_API void Renderer_PopColorBuffer(uint index);
 
   LT_API void Renderer_PushCullMode(CullMode::Enum mode);
   LT_API void Renderer_PopCullMode();
 
-  LT_API void Renderer_PushDepthBuffer(GL_Texture texture);
+  /* A null texture draws with no depth buffer. */
+  LT_API void Renderer_PushDepthBuffer(Texture2D const& texture);
   LT_API void Renderer_PopDepthBuffer();
 
   LT_API void Renderer_PushScissorOff();

@@ -59,8 +59,8 @@ namespace {
       queryBufferData(kMaxFlares),
       queryResultData(kMaxFlares)
     {
-      queryBuffer = Texture_Create(kMaxFlares, 1, GL_TextureFormat::RGBA32F);
-      resultBuffer = Texture_Create(kMaxFlares, 1, GL_TextureFormat::R32F);
+      queryBuffer = Texture_Create(kMaxFlares, 1, TextureFormat::RGBA32F);
+      resultBuffer = Texture_Create(kMaxFlares, 1, TextureFormat::R32F);
     }
 
     char const* GetName() const {
@@ -73,7 +73,7 @@ namespace {
       /* Generate flare texture. */ {
         static Shader generate = Shader_Create("identity.jsl", "gen/lensflare.jsl");
         if (!flareTexture) {
-          flareTexture = Texture_Create(1024, 1024, GL_TextureFormat::R16F);
+          flareTexture = Texture_Create(1024, 1024, TextureFormat::R16F);
           Texture_Generate(flareTexture, generate);
         }
       }
@@ -164,8 +164,8 @@ namespace {
         queryBuffer->SetData(
           0, 0,
           Min(kMaxFlares, (uint)flares.size()), 1,
-          GL_PixelFormat::RGBA,
-          GL_DataFormat::Float,
+          PixelFormat::RGBA,
+          DataFormat::Float,
           queryBufferData.data());
 
         resultBuffer->Bind(0);

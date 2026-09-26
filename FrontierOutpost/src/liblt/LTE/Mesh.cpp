@@ -2,12 +2,12 @@
 
 #include "Array.h"
 #include "Bound.h"
-#include "GL.h"
 #include "Math.h"
 #include "Matrix.h"
 #include "Program.h"
 #include "Ray.h"
 #include "Renderer.h"
+#include "RendererGL.h"
 #include "Sphere.h"
 
 #include "ThirdParty/KDTree.h"
@@ -29,10 +29,10 @@ namespace {
 
 MeshT::~MeshT() {
   if (!Program_InStaticSection()) {
-    if (vbo != GL_NullBuffer)
-      GL_DeleteBuffer(vbo);
-    if (ibo != GL_NullBuffer)
-      GL_DeleteBuffer(ibo);
+    if (vbo != 0)
+      GL_DeleteBuffer(GL_Buffer(vbo));
+    if (ibo != 0)
+      GL_DeleteBuffer(GL_Buffer(ibo));
   }
 }
 
@@ -171,8 +171,8 @@ Mesh MeshT::AddVertex(
 }
 
 Mesh MeshT::Clear() {
-  vbo = GL_NullBuffer;
-  ibo = GL_NullBuffer;
+  vbo = 0;
+  ibo = 0;
   version = 0;
   vertices.clear();
   indices.clear();

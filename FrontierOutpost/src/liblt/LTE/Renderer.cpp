@@ -2,10 +2,10 @@
 #include "Bound.h"
 #include "Color.h"
 #include "CubeMap.h"
-#include "GL.h"
 #include "Matrix.h"
 #include "Mesh.h"
 #include "ProgramLog.h"
+#include "RendererGL.h"
 #include "ShaderInstance.h"
 #include "Stack.h"
 #include "Texture2D.h"
@@ -252,20 +252,20 @@ namespace LTE {
      * the CPU and GPU. */
     if (mesh->bufferVersion != mesh->version) {
       mesh->bufferVersion = mesh->version;
-      GL_DeleteBuffer(mesh->vbo);
-      GL_DeleteBuffer(mesh->ibo);
-      mesh->vbo = GL_NullBuffer;
-      mesh->ibo = GL_NullBuffer;
+      GL_DeleteBuffer(GL_Buffer(mesh->vbo));
+      GL_DeleteBuffer(GL_Buffer(mesh->ibo));
+      mesh->vbo = 0;
+      mesh->ibo = 0;
     }
 
-    if (mesh->vbo == GL_NullBuffer) {
+    if (mesh->vbo == 0) {
       mesh->vbo = GL_GenBuffer();
       mesh->ibo = GL_GenBuffer();
 
       /* Need to force these bindings, as it is impossible that the new buffers
          are already bound. */
-      Renderer_BindVertexBuffer(mesh->vbo, true);
-      Renderer_BindIndexBuffer(mesh->ibo, true);
+      Renderer_BindVertexBuffer(GL_Buffer(mesh->vbo), true);
+      Renderer_BindIndexBuffer(GL_Buffer(mesh->ibo), true);
 
       GL_BufferData(
         GL_BufferTarget::Array,
@@ -281,7 +281,7 @@ namespace LTE {
         for (uint i = 0; i < mesh->indices.size(); ++i)
           indices << (ushort)mesh->indices[i];
 
-        mesh->indexFormat = GL_IndexFormat::Short;
+        mesh->indexFormat = IndexFormat::Short;
         GL_BufferData(
           GL_BufferTarget::ElementArray,
           sizeof(ushort) * indices.size(),
@@ -291,7 +291,7 @@ namespace LTE {
 
       /* Otherwise, fall back on standard unsigned int format. */
       else {
-        mesh->indexFormat = GL_IndexFormat::Int;
+        mesh->indexFormat = IndexFormat::Int;
         GL_BufferData(
           GL_BufferTarget::ElementArray,
           sizeof(uint) * mesh->indices.size(),
@@ -439,8 +439,8 @@ namespace LTE {
   void Renderer_DrawMesh(MeshT const* mesh) {
     PrepareMeshForDraw(mesh);
 
-    Renderer_BindVertexBuffer(mesh->vbo);
-    Renderer_BindIndexBuffer(mesh->ibo);
+    Renderer_BindVertexBuffer(GL_Buffer(mesh->vbo));
+    Renderer_BindIndexBuffer(GL_Buffer(mesh->ibo));
 
     Renderer_EnableAttribArray(0);
     Renderer_EnableAttribArray(1);
@@ -455,7 +455,7 @@ namespace LTE {
     GL_DrawElements(
       GL_DrawMode::Triangles,
       mesh->GetIndices(),
-      mesh->indexFormat,
+      ToGL(mesh->indexFormat),
       nullptr);
 
     renderer.callCount++;
@@ -555,7 +555,7 @@ namespace LTE {
     Type const& vertexFormat,
     void const* indexData,
     uint indices,
-    GL_IndexFormat::Enum indexFormat)
+    IndexFormat::Enum indexFormat)
   {
     Renderer_BindVertexBuffer(GL_NullBuffer);
     Renderer_BindIndexBuffer(GL_NullBuffer);
@@ -586,7 +586,7 @@ namespace LTE {
         field.address);
     }
 
-    GL_DrawElements(GL_DrawMode::Triangles, indices, indexFormat, indexData);
+    GL_DrawElements(GL_DrawMode::Triangles, indices, ToGL(indexFormat), indexData);
 
     for (uint i = 3; i < attribs; ++i)
       Renderer_DisableAttribArray(i);
@@ -667,7 +667,7 @@ namespace LTE {
   void Renderer_PushAllBuffers() {
     for (size_t i = 0; i < kMaxColorAttachments; ++i)
       Renderer_PushColorBuffer(i, GL_NullTexture, 0);
-    Renderer_PushDepthBuffer(GL_NullTexture);
+    Renderer_PushDepthBuffer(Texture2D());
   }
 
   void Renderer_PopColorBuffers() {
@@ -697,8 +697,8 @@ namespace LTE {
     Renderer_UpdateFramebuffer();
   }
 
-  void Renderer_PushDepthBuffer(GL_Texture buffer) {
-    renderer.depthAttachment.push(buffer);
+  void Renderer_PushDepthBuffer(Texture2D const& texture) {
+    renderer.depthAttachment.push(texture ? Texture2D_GetGLTexture(*texture) : GL_NullTexture);
     Renderer_UpdateFramebuffer();
   }
 

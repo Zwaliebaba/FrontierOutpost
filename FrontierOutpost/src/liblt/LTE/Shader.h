@@ -2,7 +2,6 @@
 #define LTE_Shader_h__
 
 #include "DeclareFunction.h"
-#include "GLType.h"
 #include "Reference.h"
 #include "String.h"
 
@@ -149,7 +148,6 @@ LT_API Shader Shader_Create(
   String const& fsHeader);
 
 LT_API ShaderT* Shader_GetActive();
-LT_API GL_Program Shader_GetCurrentProgram();
 
 DeclareFunctionNoParams(Shader_RecompileAll, void)
 

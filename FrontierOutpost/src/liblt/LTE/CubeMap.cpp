@@ -2,11 +2,11 @@
 
 #include "Array.h"
 #include "AutoPtr.h"
-#include "GL.h"
 #include "Location.h"
 #include "Math.h"
 #include "Matrix.h"
 #include "Renderer.h"
+#include "RendererGL.h"
 #include "Shader.h"
 #include "StackFrame.h"
 #include "Texture2D.h"
@@ -50,12 +50,12 @@ namespace {
     GL_Texture texture;
     uint resolution;
     uint guid;
-    GL_TextureFormat::Enum format;
+    TextureFormat::Enum format;
 
     CubeMapImpl() :
       texture(GL_NullTexture),
       resolution(0),
-      format(GL_TextureFormat::RGBA8)
+      format(TextureFormat::RGBA8)
     {
       static uint nextGUID = 0;
       this->guid = nextGUID++;
@@ -79,7 +79,7 @@ namespace {
       GL_BindTexture(GL_TextureTargetBindable::CubeMap, texture);
     }
 
-    void Create(uint res, GL_TextureFormat::Enum format) {
+    void Create(uint res, TextureFormat::Enum format) {
       this->texture = GL_GenTexture();
       this->resolution = res;
       this->format = format;
@@ -101,17 +101,17 @@ namespace {
         GL_TextureCoordinate::R,
         GL_TextureWrapMode::ClampToEdge);
       
-      GL_TexImage2D(GL_TextureTarget::CubeMapPositiveX, 0, format, res, res,
+      GL_TexImage2D(GL_TextureTarget::CubeMapPositiveX, 0, ToGL(format), res, res,
         GL_PixelFormat::RGBA, GL_DataFormat::UnsignedByte, nullptr);
-      GL_TexImage2D(GL_TextureTarget::CubeMapPositiveY, 0, format, res, res,
+      GL_TexImage2D(GL_TextureTarget::CubeMapPositiveY, 0, ToGL(format), res, res,
         GL_PixelFormat::RGBA, GL_DataFormat::UnsignedByte, nullptr);
-      GL_TexImage2D(GL_TextureTarget::CubeMapPositiveZ, 0, format, res, res,
+      GL_TexImage2D(GL_TextureTarget::CubeMapPositiveZ, 0, ToGL(format), res, res,
         GL_PixelFormat::RGBA, GL_DataFormat::UnsignedByte, nullptr);
-      GL_TexImage2D(GL_TextureTarget::CubeMapNegativeX, 0, format, res, res,
+      GL_TexImage2D(GL_TextureTarget::CubeMapNegativeX, 0, ToGL(format), res, res,
         GL_PixelFormat::RGBA, GL_DataFormat::UnsignedByte, nullptr);
-      GL_TexImage2D(GL_TextureTarget::CubeMapNegativeY, 0, format, res, res,
+      GL_TexImage2D(GL_TextureTarget::CubeMapNegativeY, 0, ToGL(format), res, res,
         GL_PixelFormat::RGBA, GL_DataFormat::UnsignedByte, nullptr);
-      GL_TexImage2D(GL_TextureTarget::CubeMapNegativeZ, 0, format, res, res,
+      GL_TexImage2D(GL_TextureTarget::CubeMapNegativeZ, 0, ToGL(format), res, res,
         GL_PixelFormat::RGBA, GL_DataFormat::UnsignedByte, nullptr);
     }
 
@@ -196,11 +196,11 @@ namespace {
       Bind();
       GL_GetTexImage(
         CubeFaceToTarget(face), level,
-        GL_TextureFormat::PixelFormat(format),
-        GL_TextureFormat::DataFormat(format), buffer);
+        ToGLPixelFormat(format),
+        ToGLDataFormat(format), buffer);
     }
 
-    GL_TextureFormat::Enum GetFormat() const {
+    TextureFormat::Enum GetFormat() const {
       return format;
     }
 
@@ -216,9 +216,9 @@ namespace {
       uint res = GetLevelResolution(resolution, level);
       Bind();
       GL_TexImage2D(
-        CubeFaceToTarget(face), level, format, res, res,
-        GL_TextureFormat::PixelFormat(format),
-        GL_TextureFormat::DataFormat(format), buffer);
+        CubeFaceToTarget(face), level, ToGL(format), res, res,
+        ToGLPixelFormat(format),
+        ToGLDataFormat(format), buffer);
     }
 
     void SetFace(CubeFace::Enum face) {
@@ -263,7 +263,7 @@ namespace {
       m(&self->format, "format", Type_Get(self->format), aux);
       m(&self->resolution, "resolution", Type_Get(self->resolution), aux);
 
-      size_t totalSize = GL_TextureFormat::Size(self->format) *
+      size_t totalSize = TextureFormat::Size(self->format) *
         self->resolution * self->resolution;
 
       Array<uchar> buf(totalSize);
@@ -276,8 +276,8 @@ namespace {
 
           GL_GetTexImage(
             target, 0,
-            GL_TextureFormat::PixelFormat(self->format),
-            GL_TextureFormat::DataFormat(self->format), buf.data());
+            ToGLPixelFormat(self->format),
+            ToGLDataFormat(self->format), buf.data());
 
           m(&buf, "data", Type_Get(buf), aux);
         }
@@ -296,11 +296,11 @@ namespace {
           GL_TexImage2D(
             target,
             0,
-            self->format,
+            ToGL(self->format),
             self->resolution,
             self->resolution,
-            GL_TextureFormat::PixelFormat(self->format),
-            GL_TextureFormat::DataFormat(self->format),
+            ToGLPixelFormat(self->format),
+            ToGLDataFormat(self->format),
             buf.data());
         }
 
@@ -314,7 +314,7 @@ namespace {
   DERIVED_IMPLEMENT(CubeMapImpl)
 }
 
-CubeMap CubeMap_Create(uint resolution, GL_TextureFormat::Enum format) {
+CubeMap CubeMap_Create(uint resolution, TextureFormat::Enum format) {
   Reference<CubeMapImpl> self = new CubeMapImpl;
   self->Create(resolution, format);
   return self;

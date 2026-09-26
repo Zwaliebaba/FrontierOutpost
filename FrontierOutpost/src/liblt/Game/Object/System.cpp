@@ -131,9 +131,9 @@ AutoClassDerived(System, SystemBaseT,
   }
 
   Texture2D CreateColorCurve(RNG const& rng) {
-    Texture2D curve = Texture_Create(kColorPoints, 1, GL_TextureFormat::R8);
-    curve->SetMagFilter(GL_TextureFilter::Linear);
-    curve->SetMinFilter(GL_TextureFilterMip::Linear);
+    Texture2D curve = Texture_Create(kColorPoints, 1, TextureFormat::R8);
+    curve->SetMagFilter(TextureFilter::Linear);
+    curve->SetMinFilter(TextureFilterMip::Linear);
     curve->SetMaxLod(0);
     curve->SetMinLod(0);
 
@@ -178,7 +178,7 @@ AutoClassDerived(System, SystemBaseT,
 
     curve->SetData(
       0, 0, kColorPoints, 1,
-      GL_PixelFormat::Red, GL_DataFormat::Float, points.data());
+      PixelFormat::Red, DataFormat::Float, points.data());
     return curve;
   }
 
