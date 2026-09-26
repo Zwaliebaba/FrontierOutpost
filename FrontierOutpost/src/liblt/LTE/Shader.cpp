@@ -24,7 +24,7 @@
  * program here keeps: its constants, which NeuronClient's Program holds on the
  * CPU, and the texture each of its samplers was last given. Setting either makes
  * the program current, as GL's Use() did, and a draw takes the current program
- * as it is then (Design/Plan/NeuronClient-migration.md, section 5.4). */
+ * as it is then (Design/Archive/NeuronClient-migration.md, section 5.4). */
 
 const uint kTextureUnits = Neuron::Program::MAX_SHADER_RESOURCES;
 

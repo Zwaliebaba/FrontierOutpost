@@ -8,7 +8,7 @@
   `FrontierOutpost/src/liblt/Shaders/`, from that plan's Phase 4: liblt's shaders are new code (its
   N11, ADR-008), so AGENTS.md's rules for shaders and the checkers apply to them, in `lt.vcxproj`.
   The rest of `lt` stays exempt.
-- **Detail:** `FrontierOutpost/MIGRATION_NOTES.md`
+- **Detail:** `Design/Archive/MIGRATION_NOTES.md`
 
 ## Context
 

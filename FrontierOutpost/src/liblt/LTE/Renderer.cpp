@@ -19,7 +19,7 @@
 #include <cstdint>
 #include <span>
 
-/* liblt's renderer on NeuronClient's DrawContext (Design/Plan/NeuronClient-
+/* liblt's renderer on NeuronClient's DrawContext (Design/Archive/NeuronClient-
  * migration.md, sections 5.4 and 5.5). It keeps the state GL kept, as GL kept
  * it: pushed and popped on stacks, and taken by each draw and clear as it is
  * then. The targets are the colour attachments of the stacks' tops, in the

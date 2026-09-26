@@ -2,10 +2,10 @@
 
 - **Status:** Accepted (owner, 2026-09-25, after the migration's first x64 build). Amended
   (owner, 2026-09-25): a missing sound file plays silence, by N6 and N9 of
-  `Design/Plan/NeuronClient-migration.md`. Amended in that plan's Phase 2 (2026-09-25), as its §8
+  `Design/Archive/NeuronClient-migration.md`. Amended in that plan's Phase 2 (2026-09-25), as its §8
   and ADR-005 have it: the mechanism lives in NeuronClient, and liblt keeps an adapter.
 - **Scope:** `FrontierOutpost/`, and the sound in `NeuronClient/`
-- **Detail:** `FrontierOutpost/MIGRATION_NOTES.md` D15–D18, §11, §12 (BR3, BR9) and §17. This
+- **Detail:** `Design/Archive/MIGRATION_NOTES.md` D15–D18, §11, §12 (BR3, BR9) and §17. This
   supersedes ADR-002's FMOD Ex row.
 
 ## Context

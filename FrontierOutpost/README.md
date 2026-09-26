@@ -17,7 +17,7 @@ The game runs on Windows 10 or later, on x64 or ARM64, with a GPU that runs Dire
 
 # Building
 
-FrontierOutpost builds with MSBuild from `FrontierOutpost.slnx`, at the root of this repository. The solution builds the engine, `lt.dll`, and `launch.exe`, and NeuronClient, the platform layer the engine draws, plays sound and takes input through, with its tests. The build is described in `FrontierOutpost/MIGRATION_NOTES.md`, and the move onto NeuronClient and Direct3D 12 in `Design/Plan/NeuronClient-migration.md`.
+FrontierOutpost builds with MSBuild from `FrontierOutpost.slnx`, at the root of this repository. The solution builds the engine, `lt.dll`, and `launch.exe`, and NeuronClient, the platform layer the engine draws, plays sound and takes input through, with its tests. The decisions that shape it are the ADRs in `Design/ADR/`. How it got here, from the original's CMake build and from OpenGL onto NeuronClient and Direct3D 12, is recorded in `Design/Archive/`.
 
 ## Compiling
 

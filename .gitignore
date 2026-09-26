@@ -37,7 +37,7 @@ bld/
 [Ll]og/
 [Ll]ogs/
 
-# Scratch clones and builds of the original CMake tree (FrontierOutpost/MIGRATION_NOTES.md, Phase 0).
+# Scratch clones and builds of the original CMake tree (Design/Archive/MIGRATION_NOTES.md, Phase 0).
 _baseline_build/
 
 # What launch.exe keeps beside GameData/ (Design/ADR/ADR-004): cache/ is what it writes (config,

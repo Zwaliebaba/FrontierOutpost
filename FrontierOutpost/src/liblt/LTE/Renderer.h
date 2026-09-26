@@ -27,7 +27,7 @@ namespace LTE {
   }
 
   /* Makes the Direct3D 12 device the renderer draws with
-   * (Design/Plan/NeuronClient-migration.md, section 5.3). With warp, Windows'
+   * (Design/Archive/NeuronClient-migration.md, section 5.3). With warp, Windows'
    * software adapter draws, with the debug layer, for the launcher's smoke
    * mode. Offscreen, no swap chain is made: frames stay in the frame texture,
    * which Texture_ScreenCapture reads. */

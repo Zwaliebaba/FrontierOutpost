@@ -4,7 +4,7 @@
 #include <cstddef>
 
 /* What the engine asks of the GPU, in its own names rather than a graphics
- * API's (Design/Plan/NeuronClient-migration.md, Phase 4 step 1). Only what the
+ * API's (Design/Archive/NeuronClient-migration.md, Phase 4 step 1). Only what the
  * engine uses: the seven colour formats of the plan's section 5.5, and depth. */
 namespace LTE {
   namespace TextureFormat {

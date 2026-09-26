@@ -10,6 +10,8 @@ This file is about **how code is written here**: naming, layout, build settings 
 2. **`Design/ADR/`**: engineering decisions taken while building, one file per decision (§6). Numbering starts at `ADR-001` in each repository and does not continue another's.
 3. **The surrounding code**: for anything neither of the above covers, match the file you are editing.
 
+**`Design/Archive/`** holds finished plans, migration records and superseded ADRs. They are history, not authority: where one disagrees with the above, the above wins.
+
 A design document, when there is one, sits alongside rather than above: it says what is built and this file says how. Where no design authority exists, a task that needs a design answer asks the owner and gets the answer written down before the code is.
 
 If a rule here conflicts with a habit from another codebase, this file wins. If you think a rule is wrong or your task cannot be done without deviating, **say so in your report. Never deviate silently.**

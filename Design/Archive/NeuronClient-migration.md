@@ -1,5 +1,9 @@
 # FrontierOutpost on NeuronClient
 
+> **Archived** (2026-09-26). The migration is done (N21), and this plan is kept as its record. It
+> was `Design/Plan/NeuronClient-migration.md`. What still governs the code is in the ADRs under
+> `Design/ADR/`.
+
 How FrontierOutpost moves off OpenGL, GLEW, SFML and FreeType onto NeuronClient: Direct3D 12,
 DirectWrite, WIC, XAudio2 and Win32.
 

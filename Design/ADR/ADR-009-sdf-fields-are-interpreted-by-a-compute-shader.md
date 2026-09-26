@@ -5,7 +5,7 @@
   4 changed decisions 1 and 3 to what it found, and added to 4 and 6, before it was accepted.
 - **Scope:** how `lt.dll` builds SDF fields: `LTE/SDFMesh.cpp` and the `LTE/SDF*.cpp` node types in
   `FrontierOutpost/src/liblt/`, and the shaders that fill the field and derive from it
-- **Detail:** `Design/Plan/NeuronClient-migration.md` §2 (on N2), §3 (point 2), §4.2, §5.4, §5.7
+- **Detail:** `Design/Archive/NeuronClient-migration.md` §2 (on N2), §3 (point 2), §4.2, §5.4, §5.7
   and §10, N2 and N3
 
 ## Context

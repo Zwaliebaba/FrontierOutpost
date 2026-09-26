@@ -3,7 +3,7 @@
 - **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2).
   Amended (owner, 2026-09-26, the plan's N18): decision 5's temporary workflow is gone.
 - **Scope:** the platforms, `/arch` and `/fp` of `NeuronClient/` and `Tests/NeuronClientTests/`
-- **Detail:** `Design/Plan/NeuronClient-migration.md` §3 (point 4), §5.1, §6 (the rule, Phase 0
+- **Detail:** `Design/Archive/NeuronClient-migration.md` §3 (point 4), §5.1, §6 (the rule, Phase 0
   step 2, Phase 2 step 1), §7, §10, N1, N5 and N10. This amends AGENTS.md §3 for these two
   projects, and is the record of the `/arch` choice that AGENTS.md R16 asks for.
 
@@ -41,7 +41,7 @@ Direct3D 12 use (plan §3, point 4).
    floor is the platform's own.
 3. **`/fp:precise`,** as AGENTS.md §3 has it, where `lt` is at `/fp:fast`. A copy of a shared
    template may round as either library would. Nothing relies on bit-exact results (plan §10,
-   `FrontierOutpost/MIGRATION_NOTES.md` BR6).
+   `Design/Archive/MIGRATION_NOTES.md` BR6).
 4. **`Build/CheckProjectFiles.py` enforces both:** ARM64 for these two projects and no other, and
    each platform's `/arch` as decision 2 states it (plan Phase 0 step 2).
 5. **All four builds pass after every migration step** (plan §6). CI builds Debug|x64. The other

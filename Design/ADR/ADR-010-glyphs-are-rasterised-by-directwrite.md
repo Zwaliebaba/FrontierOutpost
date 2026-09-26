@@ -3,7 +3,7 @@
 - **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2)
 - **Scope:** NeuronClient's `FontFace`, text in `lt.dll`
   (`FrontierOutpost/src/liblt/LTE/Font.cpp`), and `GameData/font`
-- **Detail:** `Design/Plan/NeuronClient-migration.md` §4.1, §4.3, §5.2 (`FontFace`), §5.4
+- **Detail:** `Design/Archive/NeuronClient-migration.md` §4.1, §4.3, §5.2 (`FontFace`), §5.4
   (`Font.cpp`), §9 D, §11, Phase 2 step 4, N0 and N3
 
 ## Context

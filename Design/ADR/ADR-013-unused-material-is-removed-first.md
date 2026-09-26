@@ -3,7 +3,7 @@
 - **Status:** Accepted (owner, 2026-09-25, after the NeuronClient migration's Phase 1 removals)
 - **Scope:** apps, code, render passes, shaders and assets in `FrontierOutpost.slnx`,
   `FrontierOutpost/` and `GameData/` that nothing kept reaches
-- **Detail:** `Design/Plan/NeuronClient-migration.md` §1, §3 (point 3), §5.6, §6 (Phase 1), §9,
+- **Detail:** `Design/Archive/NeuronClient-migration.md` §1, §3 (point 3), §5.6, §6 (Phase 1), §9,
   N0, N4, N6, N9 and N14. Engine paths are in `FrontierOutpost/src/liblt/`. The lists below are
   candidates: Phase 1 re-verifies each one and records here what went.
 
@@ -108,7 +108,7 @@ pushed, and CI's four-way build after.
   - the `FontPreview` and `SplashScreen` widgets;
   - `icon.png` and `splash.png`;
   - 31 WAV and 55 Ogg sounds that nothing names, leaving 20 WAV files and the 24 Ogg files that
-    were to be converted (FrontierOutpost/MIGRATION_NOTES.md O10), and were, in `21a9201`;
+    were to be converted (Design/Archive/MIGRATION_NOTES.md O10), and were, in `21a9201`;
   - 52 of the 53 files in `gamedata/`, which the survey did not list. Only
     `grammar/default.txt` is read.
 

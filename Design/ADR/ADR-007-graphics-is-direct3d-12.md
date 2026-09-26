@@ -3,7 +3,7 @@
 - **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 3)
 - **Scope:** NeuronClient's graphics core (`GraphicsDevice`, `SwapChain`, `Texture`, `Buffer`,
   `Program`, `DrawContext`), and `lt.dll`'s renderer on top of it
-- **Detail:** `Design/Plan/NeuronClient-migration.md` §2, §3 (point 1), §4.2, §5.3, §5.5, §11, N0,
+- **Detail:** `Design/Archive/NeuronClient-migration.md` §2, §3 (point 1), §4.2, §5.3, §5.5, §11, N0,
   N3 and N7. This is the graphics decision AGENTS.md R12 asks for.
 
 ## Context

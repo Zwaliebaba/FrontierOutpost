@@ -182,7 +182,7 @@ struct Launcher : public Program {
    app runs N frames and the launcher quits, and nothing waits for a click on a
    dialog. With --capture as well, the last frame is saved as a PNG at path; a
    relative path starts from the folder that holds GameData/ (ADR-011). This is
-   the smoke mode of Design/Plan/NeuronClient-migration.md section 5.4. The
+   the smoke mode of Design/Archive/NeuronClient-migration.md section 5.4. The
    exit code is 1 when the arguments or the app's script cannot be used, when
    the app stops short of its frames, when the capture was not saved, or when
    a run of set frames saw the debug layer report an error. */

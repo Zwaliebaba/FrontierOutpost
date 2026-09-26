@@ -4,7 +4,7 @@
 /* The renderer's own plumbing on NeuronClient's Direct3D 12 core, which
  * Renderer.cpp, RendererCore.cpp, Shader.cpp, Texture2D.cpp, Texture3D.cpp,
  * CubeMap.cpp, Mesh.cpp and Window.cpp share and nothing else includes
- * (Design/Plan/NeuronClient-migration.md, section 5.4). The public headers
+ * (Design/Archive/NeuronClient-migration.md, section 5.4). The public headers
  * speak GraphicsEnum.h; this turns it into NeuronClient's. */
 
 #include "Common.h"

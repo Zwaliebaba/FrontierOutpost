@@ -3,7 +3,7 @@
 - **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 3)
 - **Scope:** the shaders of `lt.dll` (`FrontierOutpost/src/liblt/Shaders/`) and of NeuronClient
   (`NeuronClient/Shaders/`): their language, names and compilation, and how liblt finds them
-- **Detail:** `Design/Plan/NeuronClient-migration.md` §2 (on N2), §3 (point 2), §4.2, §5.2, §5.4,
+- **Detail:** `Design/Archive/NeuronClient-migration.md` §2 (on N2), §3 (point 2), §4.2, §5.2, §5.4,
   §5.6, §10 and Phase 2 step 1, N2, N3 and N11
 
 ## Context
@@ -59,7 +59,7 @@ more.
    HIGHQ/LOWQ switch.
 7. **SMAA gets its own HLSL porting block back.** `smaa.jsl` is SMAA.h itself, and only its short
    porting block is GLSL (`smaa.jsl:373-385`). No third-party code is added, and SMAA's licence
-   notice goes beside the file, which closes `FrontierOutpost/MIGRATION_NOTES.md` O14 (plan §5.6).
+   notice goes beside the file, which closes `Design/Archive/MIGRATION_NOTES.md` O14 (plan §5.6).
 8. **What goes:** `JSLPreprocess`, the `#version` injection, hot reload (`Shader_RecompileAll`,
    and the T key that calls it in 7 apps), and `GameData/shader` (plan §2, §5.6). The folder went
    on 2026-09-26 (plan N19). `8e13f92` is the last commit that holds it, and each HLSL file's

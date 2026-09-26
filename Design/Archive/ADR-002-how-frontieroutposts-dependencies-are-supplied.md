@@ -1,5 +1,7 @@
 # ADR-002: How FrontierOutpost's dependencies are supplied
 
+> **Archived** (2026-09-26), since it is superseded (below). It was in `Design/ADR/`.
+
 - **Status:** Accepted (owner, 2026-09-25, at the migration's Checkpoint 0). Superseded
   (2026-09-26): no vendored dependency is left. The NeuronClient plan removed SFML in its Phases 1
   and 2, FreeType in its Phase 2, and GLEW, with OpenGL and GLU, in its Phase 4 step 6; ADR-003
@@ -7,7 +9,7 @@
   links is the Windows SDK's (ADR-005, ADR-007). The table records what was supplied, and how,
   until then.
 - **Scope:** `FrontierOutpost/`
-- **Detail:** `FrontierOutpost/MIGRATION_NOTES.md` §6, §8 and §9.4. This implements ADR-001's
+- **Detail:** `Design/Archive/MIGRATION_NOTES.md` §6, §8 and §9.4. This implements ADR-001's
   decision 4 and AGENTS.md R14.
 
 ## Context

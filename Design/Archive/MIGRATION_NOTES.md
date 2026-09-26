@@ -1,5 +1,10 @@
 # FrontierOutpost migration notes
 
+> **Archived** (2026-09-26). The ltheory-old migration is done, and the NeuronClient migration
+> after it (`Design/Archive/NeuronClient-migration.md`) replaced much of what this record describes.
+> It was `FrontierOutpost/MIGRATION_NOTES.md`, and its paths are as they were: a path without a
+> prefix, such as `src/liblt/…`, is under `FrontierOutpost/`, and `resource/` is `GameData/` today.
+
 The migration of `ltheory-old` (C++ written 2012–2015; CMake; Windows build resurrected by its
 author in July 2022) to hand-authored MSBuild. Everything lands in `FrontierOutpost.slnx` at the
 repository root and the projects under `FrontierOutpost/`. The targets are toolset v145, C++23
@@ -24,7 +29,7 @@ CI builds after the merge; §20.5 verifies them. Last, the owner moved the runti
 and its scripts are gone (D21, §22.4). After the merge, the owner had the 79 Ogg sounds land as
 they are, to convert them to WAV offline (D29, §22.5).
 
-**Since then**, the NeuronClient migration (`Design/Plan/NeuronClient-migration.md`, from
+**Since then**, the NeuronClient migration (`Design/Archive/NeuronClient-migration.md`, from
 2026-09-25) has changed much of what this record describes, and its status says where it stands.
 SFML left the tree in its Phases 1 and 2, FreeType in its Phase 2 (ADR-010 to ADR-013), and OpenGL,
 GLEW and the WGL bridge in its Phase 4 (ADR-007), so nothing is vendored under
@@ -821,7 +826,7 @@ only. §15.4 gives the reasoning for each entry.
 
 Phases 1 and 2 changed no source file. The XAudio2 port (D15–D17, §17), Phase 3 (§18), the
 owner's later decisions (D20, D23, D26–D28) and Phase 0 of the NeuronClient plan
-(`Design/Plan/NeuronClient-migration.md`, N6, N8 and N9) change these. Paths are in
+(`Design/Archive/NeuronClient-migration.md`, N6, N8 and N9) change these. Paths are in
 `FrontierOutpost/`, except those in `GameData/`, which is `resource/` since D26:
 
 | File | Change | Why |

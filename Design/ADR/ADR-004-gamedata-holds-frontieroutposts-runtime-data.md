@@ -1,10 +1,10 @@
 # ADR-004: GameData holds FrontierOutpost's runtime data
 
 - **Status:** Accepted (owner, 2026-09-25, after the migration's Phase 5). Amended (owner,
-  2026-09-26), as `Design/Plan/NeuronClient-migration.md` §8 and N19 have it: `GameData/` holds no
+  2026-09-26), as `Design/Archive/NeuronClient-migration.md` §8 and N19 have it: `GameData/` holds no
   shaders, and its fonts are the four families that plan kept.
 - **Scope:** `GameData/`, and how `launch.exe` finds it
-- **Detail:** `FrontierOutpost/MIGRATION_NOTES.md` D26–D29, §22, O13 and O14. This amends
+- **Detail:** `Design/Archive/MIGRATION_NOTES.md` D26–D29, §22, O13 and O14. This amends
   ADR-001's scope and supersedes ADR-002's row for the runtime assets.
 
 ## Context

@@ -3,7 +3,7 @@
 - **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2)
 - **Scope:** `NeuronClient/` and `Tests/NeuronClientTests/`, two new projects at the repository
   root, and the boundary between them and `lt.dll`
-- **Detail:** `Design/Plan/NeuronClient-migration.md` §1, §3 (point 5), §4.1, §5.1, §5.2, §5.4,
+- **Detail:** `Design/Archive/NeuronClient-migration.md` §1, §3 (point 5), §4.1, §5.1, §5.2, §5.4,
   §10, N0, N10 and N12. Plan §8 lists how ADR-001 to ADR-004 change with this ADR and the eight
   after it.
 
@@ -25,7 +25,7 @@ NeuronClient, and they have drifted apart, from 45 to 139 files (plan §3, point
 
 The boundary has one hard constraint (plan §5.1). liblt defines `near`, `far`, `DrawState`,
 `interface` and `GetObject`, which Windows headers define as macros, and its include order is
-load-bearing (`FrontierOutpost/MIGRATION_NOTES.md` H3).
+load-bearing (`Design/Archive/MIGRATION_NOTES.md` H3).
 
 ## Decision
 
