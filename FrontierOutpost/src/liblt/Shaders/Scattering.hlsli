@@ -67,20 +67,24 @@ float4 shadeAtmosphere(
   return toLinear(float4(color, saturate(lum(color))));
 }
 
+// This and getScatteringInside return once, at the end, where the .jsl returned early: FXC takes
+// an early return ahead of shadeAtmosphere's loop for a return value it cannot see set (X4000).
 float4 getScattering(float3 center, float3 ro, float3 rd, float depth) {
   float3 p = ro + rd * depth;
   float rInner = scale.x;
   float rOuter = rInner * kOuterRadius;
   float2 inner = interSphere(float4(center, rInner), ro, rd);
   float2 outer = interSphere(float4(center, rOuter), ro, rd);
-  if (inner.x < 0 && inner.y > 0)
-    return ((float4)(0.0));
-  outer.x = max(outer.x, 0.0);
-  if (inner.x > 0)
-    outer.y = min(outer.y, inner.x);
-  float3 tn = ((ro + rd * outer.x) - center) / rInner;
-  float3 tf = ((ro + rd * outer.y) - center) / rInner;
-  return shadeAtmosphere(rd, tn, tf, normalize(starPos - p), 0.0);
+  float4 scattering = ((float4)(0.0));
+  if (!(inner.x < 0 && inner.y > 0)) {
+    outer.x = max(outer.x, 0.0);
+    if (inner.x > 0)
+      outer.y = min(outer.y, inner.x);
+    float3 tn = ((ro + rd * outer.x) - center) / rInner;
+    float3 tf = ((ro + rd * outer.y) - center) / rInner;
+    scattering = shadeAtmosphere(rd, tn, tf, normalize(starPos - p), 0.0);
+  }
+  return scattering;
 }
 
 float4 getScatteringInside(float3 ro, float3 rd, float depth, float occlusion) {
@@ -90,6 +94,8 @@ float4 getScatteringInside(float3 ro, float3 rd, float depth, float occlusion) {
   float3 near = 0.0;
   float3 far = 0.0;
 
+  bool atmosphere = true;
+
   /* Space. */
   if (outerT.x > 0.0 && outerT.x < farPlane) {
     near = (ro + rd * outerT.x) / kPlanetRadius;
@@ -98,10 +104,13 @@ float4 getScatteringInside(float3 ro, float3 rd, float depth, float occlusion) {
     near = ro / kPlanetRadius;
     far = (ro + rd * min(outerT.y, depth)) / kPlanetRadius;
   } else {
-    return ((float4)(0.0));
+    atmosphere = false;
   }
 
-  return shadeAtmosphere(rd, near, far, normalize(starPos - ro), occlusion);
+  float4 scattering = ((float4)(0.0));
+  if (atmosphere)
+    scattering = shadeAtmosphere(rd, near, far, normalize(starPos - ro), occlusion);
+  return scattering;
 }
 
 #endif
