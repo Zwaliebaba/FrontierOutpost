@@ -22,6 +22,7 @@
 
   #include <crtdbg.h>
   #include <cstdlib>
+  #include <intrin.h>
 
   #undef CreateDirectory
   #undef MessageBox
@@ -193,28 +194,16 @@ namespace {
 
 #ifdef LIBLT_WINDOWS
   /* Unattended, nobody can attach a debugger either, so a crash prints what it
-     was and where: the exception, then each frame of the stack, with its
-     function and line where the PDBs beside the executable have them. The
-     process then ends as it would have, with the exception's code. */
-  LONG WINAPI PrintCrash(EXCEPTION_POINTERS* pointers) {
-    EXCEPTION_RECORD const& record = *pointers->ExceptionRecord;
-    std::cout << "CRASH: exception 0x" << std::hex << record.ExceptionCode
-      << " at 0x" << (DWORD64)record.ExceptionAddress;
-    if (record.ExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
-        record.NumberParameters >= 2)
-    {
-      ULONG_PTR const access = record.ExceptionInformation[0];
-      std::cout << (access == 1 ? ", writing" : access == 8 ? ", executing" : ", reading")
-        << " 0x" << record.ExceptionInformation[1];
-    }
-    std::cout << std::dec << '\n';
-
+     was and where: what failed, then each frame of the stack, with its function
+     and line where the PDBs beside the executable have them. The process then
+     ends as it would have. */
+  void PrintStack(CONTEXT const& start) {
     HANDLE const process = GetCurrentProcess();
     HANDLE const thread = GetCurrentThread();
     SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
     SymInitialize(process, OS_GetExecutableDir().c_str(), TRUE);
 
-    CONTEXT context = *pointers->ContextRecord;
+    CONTEXT context = start;
     STACKFRAME64 frame = {};
   #ifdef _M_ARM64
     DWORD const machine = IMAGE_FILE_MACHINE_ARM64;
@@ -267,7 +256,64 @@ namespace {
     }
     std::cout << std::flush;
     StackFrame_Print();
+  }
+
+  /* An exception nothing handled, which ends the process with its code. */
+  LONG WINAPI PrintCrash(EXCEPTION_POINTERS* pointers) {
+    EXCEPTION_RECORD const& record = *pointers->ExceptionRecord;
+    std::cout << "CRASH: exception 0x" << std::hex << record.ExceptionCode
+      << " at 0x" << (DWORD64)record.ExceptionAddress;
+    if (record.ExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
+        record.NumberParameters >= 2)
+    {
+      ULONG_PTR const access = record.ExceptionInformation[0];
+      std::cout << (access == 1 ? ", writing" : access == 8 ? ", executing" : ", reading")
+        << " 0x" << record.ExceptionInformation[1];
+    }
+    std::cout << std::dec << '\n';
+    PrintStack(*pointers->ContextRecord);
     return EXCEPTION_CONTINUE_SEARCH;
+  }
+
+  void PrintWide(wchar_t const* text) {
+    for (; text && *text; ++text)
+      std::cout << (char)(*text < 128 ? *text : L'?');
+  }
+
+  /* A check of the C runtime's or the standard library's, a subscript out of
+     range among them, which fails fast: no exception filter sees it. The debug
+     CRT names the check and where it failed; the release CRT names nothing. */
+  void PrintInvalidParameter(
+    wchar_t const* expression,
+    wchar_t const* function,
+    wchar_t const* file,
+    unsigned int line,
+    uintptr_t)
+  {
+    std::cout << "CRASH: a check of the C runtime's failed";
+    if (expression) {
+      std::cout << ": ";
+      PrintWide(expression);
+      std::cout << " in ";
+      PrintWide(function);
+      std::cout << " (";
+      PrintWide(file);
+      std::cout << ':' << line << ')';
+    }
+    std::cout << '\n';
+    CONTEXT context;
+    RtlCaptureContext(&context);
+    PrintStack(context);
+    __fastfail(FAST_FAIL_INVALID_ARG);
+  }
+
+  /* abort(), from assert() or std::terminate, which ends the process with 3. */
+  void PrintAbort(int) {
+    std::cout << "CRASH: abort\n";
+    CONTEXT context;
+    RtlCaptureContext(&context);
+    PrintStack(context);
+    _exit(3);
   }
 #endif
 }
@@ -281,6 +327,8 @@ void OS_SetUnattended() {
 #ifdef LIBLT_WINDOWS
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
   SetUnhandledExceptionFilter(PrintCrash);
+  _set_invalid_parameter_handler(PrintInvalidParameter);
+  signal(SIGABRT, PrintAbort);
   _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
   /* The debug CRT's own dialogs, which the release CRT does not have. */
   #ifdef _DEBUG
