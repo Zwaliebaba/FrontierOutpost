@@ -42,7 +42,8 @@ polling in `LTE/Program.cpp` are unreachable (plan §9 B).
 7. **The window moves before the renderer does** (plan Phase 2 step 6). While OpenGL still
    renders, a temporary WGL bridge in liblt, about 150 lines, keeps it drawing on the new window
    through an opaque handle, so window and input faults stay apart from renderer faults. Then SFML
-   leaves the tree. Phase 4 deletes the bridge with OpenGL.
+   leaves the tree. Phase 4 deletes the bridge with OpenGL. Its step 6 did (`57c67bb`), with the
+   window class's `CS_OWNDC`, which only OpenGL wanted.
 
 ## What this forecloses
 

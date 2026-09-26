@@ -30,7 +30,10 @@ DirectWrite, WIC, XAudio2 and Win32.
   with no debug-layer error, in 21 minutes on WARP, and its frame shows the ship, the star's bloom
   and lens flare, the nebula, the interface, and the asteroids that are its SDF meshes, whose
   128³ fields took 22 s each. `df48652` reads the lens flares' occlusion back asynchronously. The
-  owner then took N17: step 6 is in (`57c67bb`), and OpenGL, GLEW and the WGL bridge are gone.
+  owner then took N17: step 6 is in (`57c67bb`), and OpenGL, GLEW and the WGL bridge are gone. The
+  four builds still link with 507 warnings, 458 unique. The owner paused there, on 2026-09-26, with
+  bring-up 5.4 to 5.9 still to come; the documents were brought up to date for the pause, and §12
+  lists what is open.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
@@ -586,10 +589,14 @@ the smoke job is green.
 ### Phase 5: Close out
 
 1. **Solution.** `FrontierOutpost.slnx` holds `lt`, `launch`, `NeuronClient` and
-   `NeuronClientTests`.
+   `NeuronClientTests`. Done ahead: it has held these four and nothing else since Phase 4 step 6.
 2. **Build files.** `lt.vcxproj` and `launch.vcxproj` lose the SFML, GLEW, FreeType and OpenGL
-   include directories, definitions and libraries. `.gitignore` loses its SFML negations.
-3. **Documents.** The README, the migration notes, and the ADR changes of §8.
+   include directories, definitions and libraries. `.gitignore` loses its SFML negations. Done
+   ahead: SFML's and FreeType's went in Phase 2, GLEW's and OpenGL's in Phase 4 step 6 (N17).
+   `$(FrontierOutpostDir)include` stays on the include path, for `UTF8/` and `windirent.h`.
+3. **Documents.** The README, the migration notes, and the ADR changes of §8. Brought up to date
+   when the owner paused after Phase 4 step 6, but for ADR-004's amendment, which waits for
+   `GameData/shader` to go (§12); Phase 5 checks them again at the end.
 4. **Final checks.**
    - All four builds, by hand.
    - The owner's GPUs.
@@ -626,12 +633,13 @@ mode renders offscreen and never creates one.
 
 **Changed.**
 - **ADR-001:** a scope note. NeuronClient and its tests are outside the exemption, and so is
-  `FrontierOutpost/src/liblt/Shaders/` (N11), from the commit that adds its first file.
-- **ADR-002:** superseded. No vendored dependency is left.
+  `FrontierOutpost/src/liblt/Shaders/` (N11), from the commit that adds its first file. Done.
+- **ADR-002:** superseded. No vendored dependency is left. Done, after Phase 4 step 6.
 - **ADR-003:** amended. The engine's mechanism lives in NeuronClient; the adapter stays in liblt. A
   missing sound file becomes a logged warning (N6); a file XAudio2 cannot play still ends the program
-  (N9).
-- **ADR-004:** amended. `GameData/` holds no shaders, and the fonts are pruned.
+  (N9). Done.
+- **ADR-004:** amended. `GameData/` holds no shaders, and the fonts are pruned. Waits for
+  `GameData/shader` to go (§12).
 
 **Runtime files (R13).** None is added for players. Screenshots stay under `cache/screenshot/`. The
 CI smoke mode writes its PNG captures only where `--capture` says, and a relative path resolves
@@ -692,7 +700,8 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 | Upside-down images or wrong depth | Phase 4 | One macro and one present flip. The asymmetric-image test in Phase 3. |
 | `d3dcompiler_47.dll` missing on a target | ARM64 | Phase 2 loads it and reflects a blob on the owner's ARM64 device. Fallback: reflection tables generated at build time. |
 | FXC is frozen | Later | Nothing here needs SM 6. ADR-008 records what moving to DXC would take. |
-| The SDF interpreter is slow, or shapes change | `model`, `war` | Generation time measured on WARP and a GPU. Different shapes are acceptable under N3. |
+| The SDF interpreter is slow, or shapes change | `model`, `war` | Generation time measured on WARP and a GPU: on WARP, 22 s for a 128³ field (ADR-009). Different shapes are acceptable under N3. |
+| The smoke job's time grows with each app | Bring-up 5.6 to 5.9 | `war` takes 21 minutes on WARP in Debug with the debug layer, 19 of them before its first frame, and most kept apps build star systems as it does. One job per app, in parallel, keeps the wait near the slowest app's (§12). |
 | Hitches the first time a PSO is used | The first seconds of each app | Known programs warmed at load. `ID3D12PipelineLibrary` later. |
 | Modernisation runs away | Phase 4 | Only the changes named in §5 go in; everything else is backlog. |
 | Mixed build settings in one DLL | Always | Warning levels are harmless. `/arch` is not: a template or inline function both libraries use keeps one copy, which the linker picks, so NeuronClient states `lt`'s `/arch` (N10). Under `/fp:precise` and `lt`'s `/fp:fast`, such a copy rounds as either library would; nothing relies on bit-exact results (MIGRATION_NOTES.md BR6). The CRT must match (`/MD`). |
@@ -710,5 +719,20 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 
 ## 12. Still open for the owner
 
-Nothing. N5–N12 settled the open items: `/arch`, missing sounds, vsync, RandomScreenshot's
-background, unplayable sound files, liblt's shader folder and its calls for OS services.
+N5–N12 settled the first open items: `/arch`, missing sounds, vsync, RandomScreenshot's background,
+unplayable sound files, liblt's shader folder and its calls for OS services. At the pause after
+Phase 4 step 6 (2026-09-26), these are open:
+
+1. **The smoke job's shape, before bring-up 5.6 adds `model`.** One job running the apps in turn
+   outgrows its 60 minutes: `war` alone takes 21 on WARP. The proposal is one job per app, in
+   parallel, which keeps the wait near the slowest app's for about the same runner minutes. Running
+   every app on every push would cost an estimated 3 to 4 Windows runner-hours once all 16 are in,
+   from `war`'s 21 minutes and `loading`'s and `ui`'s 2 to 3; nothing has measured the other 13 yet.
+   The alternative is the full set on demand, and the apps brought up so far on each push.
+2. **When `GameData/shader` goes.** §5.6 and ADR-008 say it goes, and nothing has read it since
+   step 3, when liblt's shaders became HLSL compiled into `lt.dll`, but no step deletes it. The
+   proposal is to delete it with Phase 5's close-out, which also lets ADR-004's amendment (§8)
+   land.
+3. **The owner's checks of Phase 4:** presenting (5.1), which the smoke run cannot see, and the 16
+   kept apps on a GPU and on the ARM64 device, the phase's done-when. ADR-009's sixth decision also
+   asks for a field's generation time on a GPU.

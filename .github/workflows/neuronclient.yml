@@ -6,9 +6,10 @@ name: NeuronClient migration
 #
 #   build     FrontierOutpost.slnx at x64 and ARM64, Debug and Release, from a clean checkout, with
 #             each build's warnings counted by .github/migration/SummarizeBuildLog.py. The baseline
-#             is 522 warnings, 485 unique, all lt's, in all four since Phase 2 (run 18, on 0625822).
-#             Phase 1 left 549, 523 unique (run 8, on 204eadf), and before it there were 613, 585
-#             unique (FrontierOutpost/MIGRATION_NOTES.md §22.4).
+#             is 507 warnings, 458 unique, all lt's, in all four since Phase 4 step 3 (on 8534b2c).
+#             Phase 2 left 522, 485 unique (run 18, on 0625822), Phase 1 left 549, 523 unique (run
+#             8, on 204eadf), and before it there were 613, 585 unique (FrontierOutpost/
+#             MIGRATION_NOTES.md §22.4).
 #             The x64 Debug build then runs Build/RunClangTidy.py, as build.yml does, after the build,
 #             because a test includes a header the shader compiler writes during it.
 #   checks    Build/CheckProjectFiles.py and Build/CheckSounds.py, as build.yml runs them.

@@ -92,7 +92,8 @@ pushed, and CI's four-way build after.
     - the scripts `Common/Grammar`, `Task/Test` and `Widget/RadialButton`;
     - the Thread and StringList script APIs, which only the removed apps used.
   - Less went than listed: `GLU::CreateTexture2D`, which `Texture2D` uses, and GLEW's `wglew.h`
-    and `glxew.h`, which `glew.c` includes. They go with OpenGL and GLEW in Phase 4.
+    and `glxew.h`, which `glew.c` includes. They go with OpenGL and GLEW in Phase 4, and did:
+    `Texture2D` stopped using GLU in step 3 (`d5272c6`), and step 6 deleted the rest (`57c67bb`).
     `KeyWithModifiers` is not in the tree.
 - **Passes, shaders and SDF nodes** (`e75f064`):
   - the eight passes and the imposter renderable;

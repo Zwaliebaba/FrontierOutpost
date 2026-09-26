@@ -23,6 +23,17 @@ CI builds after the merge; §20.5 verifies them. Last, the owner moved the runti
 and its scripts are gone (D21, §22.4). After the merge, the owner had the 79 Ogg sounds land as
 they are, to convert them to WAV offline (D29, §22.5).
 
+**Since then**, the NeuronClient migration (`Design/Plan/NeuronClient-migration.md`, from
+2026-09-25) has changed much of what this record describes, and its status says where it stands.
+SFML left the tree in its Phases 1 and 2, FreeType in its Phase 2 (ADR-010 to ADR-013), and OpenGL,
+GLEW and the WGL bridge in its Phase 4 (ADR-007), so nothing is vendored under
+`FrontierOutpost/ext/` any more and ADR-002 is superseded. `FrontierOutpost.slnx` holds `lt`,
+`launch`, `NeuronClient` and `NeuronClientTests`. liblt draws with Direct3D 12 through NeuronClient,
+and its shaders are HLSL compiled into `lt.dll` (ADR-008), so `GameData/shader` is no longer read.
+Where §5–§10 and §15–§22 give dependencies, projects, link lines and warning counts, they are this
+migration's, not the tree's now: the four builds link with 507 warnings, 458 unique, all `lt`'s,
+where this migration ended with 613, 585 unique (§21.4, §22.4).
+
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
 phase.
@@ -1010,7 +1021,8 @@ Recorded, not to be done in this migration:
     (MSBuild's total is above the unique count in all four).
   - **Closed by D24**, not pursued.
 - **O7** This container can read job logs but not artifacts. The owner can download them from the
-  run page.
+  run page. The NeuronClient plan's CI smoke job writes a copy of each app's frame into its log for
+  this reason (its N15).
 - **O8** (D8) The owner's FMOD Ex x64 files are not in the tree yet. **Superseded by D15:** no
   FMOD file is needed any more, and the link probe is gone from the workflow.
 - **O9** (§15.1) `extlib/win32` and `extbin/win32` could not be copied as the approved scope

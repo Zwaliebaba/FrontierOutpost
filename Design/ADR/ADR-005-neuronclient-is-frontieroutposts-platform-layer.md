@@ -71,7 +71,8 @@ load-bearing (`FrontierOutpost/MIGRATION_NOTES.md` H3).
 - **Copying Outpost.Commander's NeuronClient,** or any of the other copies, into this tree (N0).
 - **Game concepts in NeuronClient.** Code that has to name one belongs in liblt (AGENTS.md R9).
 - **A second route from liblt to graphics, glyphs, images, sound, the window or input.** SFML,
-  GLEW, OpenGL and FreeType leave the tree (plan §1).
+  GLEW, OpenGL and FreeType leave the tree (plan §1): SFML and FreeType had gone by the end of
+  Phase 2, GLEW and OpenGL went in Phase 4 step 6.
 - **Moving liblt's calls for OS services into NeuronClient** in this migration (N12).
 - **NeuronClient as a DLL, or linked into `launch.exe`.**
 - **Extracting NeuronClient into a repository of its own** as part of this migration (plan §11).
