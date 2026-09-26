@@ -18,4 +18,10 @@ std::span<std::byte const> ShaderRegistry_Vertex(String const& name);
 std::span<std::byte const> ShaderRegistry_Pixel(String const& name);
 std::span<std::byte const> ShaderRegistry_Compute(String const& name);
 
+/* The file in Shaders/ a name was compiled from, by ADR-008's rule, which
+ * Build/CheckProjectFiles.py's LegacyShader also spells: drop .jsl, start a
+ * word at each / and _, and add the stage, so "post/tonemap.jsl" and "PS" give
+ * "PostTonemapPS.hlsl". */
+String ShaderRegistry_SourceName(String const& name, char const* stage);
+
 #endif

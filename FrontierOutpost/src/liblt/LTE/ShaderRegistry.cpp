@@ -116,6 +116,8 @@ typedef unsigned char BYTE;
 #include "CompiledShaders/GenFieldcopyCS.h"
 #include "CompiledShaders/GenFieldocclusionCS.h"
 
+#include <cctype>
+
 /* Build/CheckProjectFiles.py reads the tables below, one entry a line, and
  * holds them to ADR-008: every shader in Shaders/ is here, under the legacy
  * name its file is named for, and with the array lt.vcxproj compiles it to. */
@@ -272,4 +274,20 @@ std::span<std::byte const> ShaderRegistry_Pixel(String const& name) {
 
 std::span<std::byte const> ShaderRegistry_Compute(String const& name) {
   return Find(kCompute, name);
+}
+
+String ShaderRegistry_SourceName(String const& name, char const* stage) {
+  std::size_t const end = name.ends_with(".jsl") ? name.size() - 4 : name.size();
+  String source;
+  bool wordStart = true;
+  for (std::size_t i = 0; i < end; ++i) {
+    char const c = name[i];
+    if (c == '/' || c == '_') {
+      wordStart = true;
+      continue;
+    }
+    source += wordStart ? (char)std::toupper((unsigned char)c) : c;
+    wordStart = false;
+  }
+  return source + stage + ".hlsl";
 }

@@ -96,6 +96,14 @@ namespace {
       }
     }
 
+    /* How a warning names the pair: the file each stage was compiled from, and
+       the legacy name the game asked for it by (Design/ADR/ADR-008). */
+    String Label() const {
+      return Stringize() | "Shader(" | ShaderRegistry_SourceName(vertPath, "VS") |
+        " as " | vertPath | ", " | ShaderRegistry_SourceName(fragPath, "PS") |
+        " as " | fragPath | ")";
+    }
+
     void CacheWVP() {
       mWorld = GetUniformLocation("WORLD", false);
       mView = GetUniformLocation("VIEW", false);
@@ -128,9 +136,7 @@ namespace {
       uniformIndex[key] = index;
 
       if (warn && index < 0) {
-        String warning = Stringize() |
-          "Unused variable " | name | " in Shader(" | vertPath | ", " |
-          fragPath | ")";
+        String warning = Stringize() | "Unused variable " | name | " in " | Label();
         Log_Warning(warning);
       }
       return index;
@@ -142,8 +148,7 @@ namespace {
         if (warned[i] == uniform.name)
           return;
       warned.push_back(uniform.name);
-      Log_Warning(Stringize() | "Shader(" | vertPath | ", " | fragPath | "): " |
-        uniform.name | " " | what | "; it was not set");
+      Log_Warning(Stringize() | Label() | ": " | uniform.name | " " | what | "; it was not set");
     }
 
     /* _size bytes to the constant at _varIndex, which GL refused when they did
@@ -492,8 +497,7 @@ bool Shader_BindActive(
         static bool warned = false;
         if (!warned) {
           warned = true;
-          Log_Warning(Stringize() | "Shader(" | program->vertPath | ", " |
-            program->fragPath | ") reads a texture it draws into, which GL "
+          Log_Warning(Stringize() | program->Label() | " reads a texture it draws into, which GL "
             "left undefined; it reads nothing there");
         }
       }
