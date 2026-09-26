@@ -28,6 +28,15 @@ FreeFunction(V3, Vec3_Create,
   return V3(x, y, z);
 } FunctionAlias(Vec3_Create, Vec3);
 
+/* Vec3f widens to Vec3d on its own, but not back: a direction taken from two
+   positions has to be narrowed to hand to SetLook or a particle's velocity. */
+FreeFunction(V3, Vec3_Vec3d,
+  "Convert the double-precision vector 'v' into a single-precision one",
+  V3D, v)
+{
+  return V3(v);
+} FunctionAlias(Vec3_Vec3d, Vec3);
+
 FreeFunction(V3, Vec3d_Create,
   "Create a 3D, double-precision vector ('x', 'y', 'z')",
   float, x,
