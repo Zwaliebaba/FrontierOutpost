@@ -15,7 +15,7 @@ DirectWrite, WIC, XAudio2 and Win32.
   §5.3's device, resources, context, compute, mips, readbacks, swap chain and present pass, DRED's
   report and PIX's regions, each with its tests. Its done-when holds on `bbd563f`: all 115 tests
   pass on WARP in CI with zero debug-layer errors, and the four builds still link with Phase 2's 522
-  warnings, all lt's. ADR-009 stays Proposed until Phase 4, which implements it. The owner took
+  warnings, all lt's. ADR-009 stayed Proposed until Phase 4 implemented it. The owner took
   N15 and N16 on 2026-09-26. Phase 4 is under way (from `e630300`): step 1 is in, step 2 is in but
   for the four field shaders that step 4 replaces, and so is the first part of the launcher's smoke
   mode (N15). The owner released step 3 on 2026-09-26 (N16); `8bc74a0` is the last commit that
@@ -25,8 +25,8 @@ DirectWrite, WIC, XAudio2 and Win32.
   which needs no SDF field, ahead of step 4; presenting (5.1) is the owner's to see, since the smoke
   run makes no swap chain. The four builds link with 507 warnings, 458 unique, all lt's. Step 4
   is in (`0ad2974` and `fe51c4d`): a compute shader interprets each SDF field, as ADR-009 decides,
-  amended where building it showed the Proposed text wrong; the ADR stays Proposed until the owner
-  accepts it. Bring-up 5.3 runs `war` in the smoke job from `86634e8`. There it draws its 30 frames
+  amended where building it showed the Proposed text wrong; the owner accepted the ADR on
+  2026-09-26. Bring-up 5.3 runs `war` in the smoke job from `86634e8`. There it draws its 30 frames
   with no debug-layer error, in 21 minutes on WARP, and its frame shows the ship, the star's bloom
   and lens flare, the nebula, the interface, and the asteroids that are its SDF meshes, whose
   128³ fields took 22 s each. `df48652` reads the lens flares' occlusion back asynchronously.

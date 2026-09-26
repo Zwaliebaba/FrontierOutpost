@@ -1,8 +1,8 @@
 # ADR-009: SDF fields are interpreted by a compute shader
 
-- **Status:** Proposed (2026-09-25, NeuronClient migration Phase 0), for the owner to accept.
-  Phase 4 step 4 implements it: it changed decisions 1 and 3 to what it found, and added to 4 and
-  6 (2026-09-26).
+- **Status:** Accepted (owner, 2026-09-26, after the NeuronClient migration's Phase 4 step 4
+  implemented it and `war`'s smoke run showed its fields). Proposed on 2026-09-25, in Phase 0; step
+  4 changed decisions 1 and 3 to what it found, and added to 4 and 6, before it was accepted.
 - **Scope:** how `lt.dll` builds SDF fields: `LTE/SDFMesh.cpp` and the `LTE/SDF*.cpp` node types in
   `FrontierOutpost/src/liblt/`, and the shaders that fill the field and derive from it
 - **Detail:** `Design/Plan/NeuronClient-migration.md` §2 (on N2), §3 (point 2), §4.2, §5.4, §5.7
