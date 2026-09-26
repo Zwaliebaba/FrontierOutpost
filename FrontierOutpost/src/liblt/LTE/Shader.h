@@ -149,8 +149,6 @@ LT_API Shader Shader_Create(
 
 LT_API ShaderT* Shader_GetActive();
 
-DeclareFunctionNoParams(Shader_RecompileAll, void)
-
 LT_API void Shader_UseFixedFunction();
 
 #endif

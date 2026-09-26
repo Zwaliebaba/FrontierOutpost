@@ -20,6 +20,9 @@
   #include "Tchar.h"
   #include "Direct.h"
 
+  #include <crtdbg.h>
+  #include <cstdlib>
+
   #undef CreateDirectory
   #undef MessageBox
 
@@ -185,8 +188,35 @@ Vector<String> OS_ListDir(String const& path) {
   return result;
 }
 
+namespace {
+  bool gUnattended = false;
+}
+
+bool OS_IsUnattended() {
+  return gUnattended;
+}
+
+void OS_SetUnattended() {
+  gUnattended = true;
+#ifdef LIBLT_WINDOWS
+  SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+  _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+  /* The debug CRT's own dialogs, which the release CRT does not have. */
+  #ifdef _DEBUG
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+  #endif
+#endif
+}
+
 void OS_MessageBox(String const& title, String const& message) {
 #ifdef LIBLT_WINDOWS
+  if (gUnattended) {
+    std::cout << "[" << title << "] : " << message << '\n' << std::flush;
+    return;
+  }
   MessageBoxA(NULL, message, title, MB_OK);
 #else
   std::cout << "[" << title << "] : " << message << '\n';

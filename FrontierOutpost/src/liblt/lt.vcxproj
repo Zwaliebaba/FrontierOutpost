@@ -394,6 +394,7 @@
     <ClCompile Include="LTE\Renderer.cpp">
       <ObjectFileName>$(IntDir)LTE\</ObjectFileName>
     </ClCompile>
+    <ClCompile Include="LTE\RendererCore.cpp" />
     <ClCompile Include="LTE\ResourceMap.cpp" />
     <ClCompile Include="LTE\SDF.cpp" />
     <ClCompile Include="LTE\SDF\Box.cpp">
@@ -834,7 +835,7 @@
     <ClInclude Include="LTE\RenderStyle.h" />
     <ClInclude Include="LTE\Renderable.h" />
     <ClInclude Include="LTE\Renderer.h" />
-    <ClInclude Include="LTE\RendererGL.h" />
+    <ClInclude Include="LTE\RendererCore.h" />
     <ClInclude Include="LTE\ResourceMap.h" />
     <ClInclude Include="LTE\RingBuffer.h" />
     <ClInclude Include="LTE\SDF.h" />

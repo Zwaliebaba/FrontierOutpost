@@ -8,7 +8,7 @@
 #include "Program.h"
 #include "ProgramLog.h"
 #include "Renderer.h"
-#include "RendererGL.h"
+#include "RendererCore.h"
 #include "Shader.h"
 #include "StackFrame.h"
 #include "Timer.h"
@@ -18,6 +18,7 @@
 
 #include <cctype>
 #include <cstring>
+#include <memory>
 #include <span>
 #include <string>
 #include <vector>
@@ -40,16 +41,16 @@ namespace {
       /* Variable job-size algorithm for making sure to achieve optimal GPU
          utilization without causing a timeout. In most cases, 1 second should
          be allowable (Windows default timeout is 2s) */
-      GL_Enable(GL_Capability::ScissorTest);
       uint jobSize = 1;
       uint x = 0;
 
       Timer timer;
       while (x < width) {
         timer.Reset();
-        GL_Scissor(x, 0, jobSize, height);
+        Renderer_PushScissorOn(V2((float)x, 0), V2((float)jobSize, (float)height));
         Renderer_DrawQuad();
-        GL_Finish();
+        Renderer_PopScissor();
+        Renderer_Finish();
         x += jobSize;
 
         /* NOTE : This is a bit scary...if the first job terminates really
@@ -59,7 +60,6 @@ namespace {
         float elapsed = timer.GetElapsed();
         jobSize = Min(Max((uint)((float)jobSize * (maxJobTime / elapsed)), 1U), width);
       }
-      GL_Disable(GL_Capability::ScissorTest);
     } else {
       Renderer_DrawQuad();
     }
@@ -71,18 +71,24 @@ namespace {
     typedef Texture2DT BaseType;
     DERIVED_TYPE_EX(Texture2DImpl)
 
-    GL_Texture glBuffer;
+    /* The texture on the GPU (LTE/RendererCore.h), which a copy shares, as a
+       copy shared GL's name. One without texels, 0 by 0, has none, as GL's had
+       none to draw into. */
+    std::shared_ptr<GpuTexture> gpu;
     TextureFormat::Enum format;
     uint width;
     uint height;
     uint guid;
     int attachmentIndex;
+    bool created;
 
     Texture2DImpl() :
-      glBuffer(GL_NullTexture),
+      gpu(std::make_shared<GpuTexture>()),
+      format(TextureFormat::RGBA8),
       width(0),
       height(0),
-      attachmentIndex(-1)
+      attachmentIndex(-1),
+      created(false)
     {
       static uint nextGUID = 0;
       this->guid = nextGUID++;
@@ -91,15 +97,13 @@ namespace {
     ~Texture2DImpl() {
       /* Deleting a texture that is bound to the framebuffer is an error. */
       LTE_ASSERT(attachmentIndex == -1);
-      if (!Program_InStaticSection())
-        GL_DeleteTexture(glBuffer);
     }
 
     void Bind(uint bufferIndex) {
       if (attachmentIndex >= 0)
         Unbind();
       attachmentIndex = bufferIndex;
-      Renderer_PushColorBuffer(attachmentIndex, glBuffer, guid);
+      Renderer_PushColorBuffer(attachmentIndex, gpu->id);
       Renderer_PushViewport(0, 0, width, height);
     }
 
@@ -108,12 +112,6 @@ namespace {
       Renderer_PopViewport();
       Renderer_PopColorBuffer(attachmentIndex);
       attachmentIndex = -1;
-    }
-
-    void BindInput(uint unitIndex) const {
-      GL_ActiveTexture(unitIndex);
-      GL_BindTexture(GL_TextureTargetBindable::T2D, glBuffer);
-      GL_ActiveTexture(0);
     }
 
     void Create(
@@ -125,33 +123,49 @@ namespace {
       this->width = width;
       this->height = height;
       this->format = format;
-
-      glBuffer = GLU::CreateTexture2D(width, height, ToGL(format));
-      GL_TexImage2D(
-        GL_TextureTarget::T2D, 0, ToGL(format), width, height,
-        ToGLPixelFormat(format),
-        ToGLDataFormat(format), data);
-
-      /* A depth buffer is only drawn into, so it has no mips. */
-      if (format == TextureFormat::Depth32F)
+      created = true;
+      if (!width || !height)
         return;
-      GL_GenerateMipmap(GL_TextureTarget::T2D);
 
-      GLfloat fLargest;
-      glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &fLargest);
-      glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, fLargest);
+      /* Colour textures have every mip, as GL gave them; depth is only drawn
+         into, so it has one. */
+      bool const depth = format == TextureFormat::Depth32F;
+      Neuron::Texture::Desc desc;
+      desc.dimension = Neuron::TextureDimension::Texture2D;
+      desc.format = ToNeuron(format);
+      desc.widthPixels = width;
+      desc.heightPixels = height;
+      desc.depthPixels = 1;
+      desc.mipLevels = depth ? 1 : Renderer_FullMipLevels(width, height);
+      desc.name = "liblt texture";
+      gpu->texture = Renderer_Device().CreateTexture(desc);
+      if (depth)
+        return;
+
+      /* GL gave every colour texture the most anisotropy it had. */
+      gpu->sampler.maxAnisotropy = 16;
+
+      /* GL made the mips of a texture made from data, which it may be sampled
+         with. Made without, the texture is all 0, mips included, as GL's
+         were. */
+      if (data) {
+        Renderer_Context().UpdateTexture(gpu->texture, 0, 0,
+          std::span<std::byte const>((std::byte const*)data, GetMemory()));
+        GenerateMipmap();
+      }
     }
 
     void GenerateMipmap() {
-      GL_BindTexture(GL_TextureTargetBindable::T2D, glBuffer);
-      GL_GenerateMipmap(GL_TextureTarget::T2D);
+      if (gpu->texture && format != TextureFormat::Depth32F)
+        Renderer_Context().GenerateMips(gpu->texture);
     }
 
     void GetData(void* buffer) const {
-      GL_BindTexture(GL_TextureTargetBindable::T2D, glBuffer);
-      GL_GetTexImage(GL_TextureTarget::T2D, 0,
-                     ToGLPixelFormat(format),
-                     ToGLDataFormat(format), buffer);
+      if (!gpu->texture)
+        return;
+      std::vector<std::byte> texels;
+      if (Renderer_Context().ReadTexture(gpu->texture, 0, 0, texels))
+        memcpy(buffer, texels.data(), texels.size());
     }
 
     TextureFormat::Enum GetFormat() const {
@@ -171,14 +185,12 @@ namespace {
     }
 
     void SaveTo(String const& path, bool flip) {
+      /* RGBA8, as glGetTexImage converted it. */
       Array<uchar> imageData(4 * GetWidth() * GetHeight());
-      GL_BindTexture(GL_TextureTargetBindable::T2D, glBuffer);
-      GL_GetTexImage(
-        GL_TextureTarget::T2D,
-        0,
-        GL_PixelFormat::RGBA,
-        GL_DataFormat::UnsignedByte,
-        imageData.data());
+      std::vector<std::byte> texels;
+      if (gpu->texture && Renderer_Context().ReadTexture(gpu->texture, 0, 0, texels))
+        Texels_Read(texels.data(), format, (size_t)width * height,
+          PixelFormat::RGBA, DataFormat::UnsignedByte, imageData.data());
 
       if (flip) {
         uint bpp = TextureFormat::Size(format);
@@ -222,7 +234,8 @@ namespace {
       uint h,
       void const* buffer)
     {
-      Upload(x, y, w, h, ToGLPixelFormat(format), ToGLDataFormat(format), buffer);
+      Upload(x, y, w, h, std::span<std::byte const>(
+        (std::byte const*)buffer, TextureFormat::Size(format) * w * h));
     }
 
     void SetData(
@@ -234,7 +247,9 @@ namespace {
       DataFormat::Enum dataFormat,
       void const* buffer)
     {
-      Upload(x, y, w, h, ToGL(pixelFormat), ToGL(dataFormat), buffer);
+      std::vector<std::byte> texels;
+      Texels_Convert(buffer, pixelFormat, dataFormat, (size_t)w * h, format, texels);
+      Upload(x, y, w, h, texels);
     }
 
     void Upload(
@@ -242,54 +257,74 @@ namespace {
       uint y,
       uint w,
       uint h,
-      GL_PixelFormat::Enum pixelFormat,
-      GL_DataFormat::Enum dataFormat,
-      void const* buffer)
+      std::span<std::byte const> texels)
     {
-      BindInput(0);
-      GL_TexSubImage2D(
-        GL_TextureTarget::T2D, 0, x, y, w, h,
-        pixelFormat, dataFormat, buffer);
+      if (!gpu->texture || !w || !h)
+        return;
+      if (format == TextureFormat::Depth32F) {
+        Log_Error("Texture2D: a depth texture is only drawn into, not filled");
+        return;
+      }
+      /* GL refused a region outside the texture, and set nothing. */
+      if (x >= width || w > width - x || y >= height || h > height - y) {
+        Log_Error(Stringize() | "Texture2D: " | w | " by " | h | " texels at (" |
+          x | ", " | y | ") do not fit in " | width | " by " | height |
+          "; nothing was set");
+        return;
+      }
+      Neuron::TextureRegion region;
+      region.xPixels = x;
+      region.yPixels = y;
+      region.zPixels = 0;
+      region.widthPixels = w;
+      region.heightPixels = h;
+      region.depthPixels = 1;
+      Renderer_Context().UpdateTexture(gpu->texture, 0, 0, region, texels);
     }
 
     void SetLodBias(float bias) {
-      BindInput(0);
-      GL_TexParameter(
-        GL_TextureTarget::T2D,
-        GL_TextureParameter::LODBias,
-        bias);
+      gpu->sampler.lodBias = bias;
     }
 
     void SetMagFilter(TextureFilter::Enum filter) {
-      BindInput(0);
-      GL_TexMagFilter(GL_TextureTarget::T2D, ToGL(filter));
+      gpu->sampler.magFilter = filter == TextureFilter::Nearest
+        ? Neuron::TextureFilter::Nearest
+        : Neuron::TextureFilter::Linear;
     }
 
     void SetMaxLod(int maxLod) {
-      BindInput(0);
-      GL_TexParameter(
-        GL_TextureTarget::T2D,
-        GL_TextureParameter::MaxLOD,
-        maxLod);
+      gpu->sampler.maxLod = (float)maxLod;
     }
 
     void SetMinFilter(TextureFilterMip::Enum filter) {
-      BindInput(0);
-      GL_TexMinFilter(GL_TextureTarget::T2D, ToGL(filter));
+      switch (filter) {
+      case TextureFilterMip::Linear:
+        gpu->sampler.minFilter = Neuron::TextureFilter::Linear;
+        gpu->sampler.mipFilter = Neuron::MipFilter::None;
+        break;
+      case TextureFilterMip::LinearMipLinear:
+        gpu->sampler.minFilter = Neuron::TextureFilter::Linear;
+        gpu->sampler.mipFilter = Neuron::MipFilter::Linear;
+        break;
+      case TextureFilterMip::Nearest:
+        gpu->sampler.minFilter = Neuron::TextureFilter::Nearest;
+        gpu->sampler.mipFilter = Neuron::MipFilter::None;
+        break;
+      }
     }
 
     void SetMinLod(int minLod) {
-      BindInput(0);
-      GL_TexParameter(
-        GL_TextureTarget::T2D,
-        GL_TextureParameter::MinLOD,
-        minLod);
+      gpu->sampler.minLod = (float)minLod;
     }
 
     void SetWrapMode(TextureWrapMode::Enum mode) {
-      BindInput(0);
-      GL_TexWrapMode(GL_TextureTarget::T2D, GL_TextureCoordinate::S, ToGL(mode));
-      GL_TexWrapMode(GL_TextureTarget::T2D, GL_TextureCoordinate::T, ToGL(mode));
+      Neuron::TextureWrap wrap = Neuron::TextureWrap::Repeat;
+      if (mode == TextureWrapMode::ClampToBorder)
+        wrap = Neuron::TextureWrap::ClampToBorder;
+      else if (mode == TextureWrapMode::ClampToEdge)
+        wrap = Neuron::TextureWrap::ClampToEdge;
+      gpu->sampler.wrapU = wrap;
+      gpu->sampler.wrapV = wrap;
     }
 
     FIELDS {
@@ -301,7 +336,7 @@ namespace {
 
       Array<uchar> buffer(self->GetMemory());
 
-      if (self->glBuffer == GL_NullTexture) {
+      if (!self->created) {
         m(&buffer, "data", Type_Get(buffer), aux);
         self->Create(self->width, self->height, self->format, buffer.data());
       } else {
@@ -316,8 +351,8 @@ namespace {
   DERIVED_IMPLEMENT(Texture2DImpl)
 }
 
-GL_Texture Texture2D_GetGLTexture(Texture2DT const& texture) {
-  return static_cast<Texture2DImpl const&>(texture).glBuffer;
+GpuTexture* Texture2D_GetGpu(Texture2DT const& texture) {
+  return static_cast<Texture2DImpl const&>(texture).gpu.get();
 }
 
 Texture2D Texture2D_Filter(Texture2D const& texture, Shader const& shader) {
@@ -413,13 +448,14 @@ DefineFunction(Texture_ScreenCapture) {
     uchar c[4];
   };
 
-  V2U size = Window_Get()->GetSize();
+  /* The frame the window shows, GL's default framebuffer: RGBA8, its bottom
+     row first, as glReadPixels read it. */
+  Neuron::Texture const& frame = Renderer_GetFrame().texture;
+  V2U size(frame.WidthPixels(), frame.HeightPixels());
   Array<char4> buf(size.x * size.y);
-  GL_ReadPixels(
-    0, 0, size.x, size.y,
-    GL_PixelFormat::RGBA,
-    GL_DataFormat::UnsignedByte,
-    buf.data());
+  std::vector<std::byte> texels;
+  if (Renderer_Context().ReadTexture(frame, 0, 0, texels))
+    memcpy(buf.data(), texels.data(), texels.size());
 
   /* Set alpha to 1. */
   for (uint i = 0; i < size.x * size.y; ++i)

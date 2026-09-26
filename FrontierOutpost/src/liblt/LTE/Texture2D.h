@@ -12,8 +12,6 @@ struct Texture2DT : public RefCounted {
   virtual void Bind(uint bufferIndex = 0) = 0;
   virtual void Unbind() = 0;
 
-  virtual void BindInput(uint unitIndex) const = 0;
-
   virtual void GenerateMipmap() = 0;
 
   virtual void GetData(void* buffer) const = 0;

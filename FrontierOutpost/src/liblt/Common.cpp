@@ -52,6 +52,11 @@ void LTE_ASSERT_FAILURE(const char* file, int line, const char* statement) {
 #ifdef BUILD_DEBUG
   PrintAssert(stream, file, line, statement);
   #ifdef LIBLT_WINDOWS
+    /* Nobody would answer the dialog (LTE/OS.h). */
+    if (OS_IsUnattended()) {
+      std::cout << stream.str() << std::flush;
+      exit(1);
+    }
     stream << "CONTINUE to continue, CANCEL to exit, TRY AGAIN to break.\n";
     int result = MessageBoxA(NULL, stream.str().c_str(), "LT Engine Error", MB_CANCELTRYCONTINUE);
     if (result == IDCANCEL)

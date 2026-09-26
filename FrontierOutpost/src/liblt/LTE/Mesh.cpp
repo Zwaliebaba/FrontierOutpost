@@ -7,7 +7,7 @@
 #include "Program.h"
 #include "Ray.h"
 #include "Renderer.h"
-#include "RendererGL.h"
+#include "RendererCore.h"
 #include "Sphere.h"
 
 #include "ThirdParty/KDTree.h"
@@ -27,14 +27,12 @@ namespace {
   }
 }
 
-MeshT::~MeshT() {
-  if (!Program_InStaticSection()) {
-    if (vbo != 0)
-      GL_DeleteBuffer(GL_Buffer(vbo));
-    if (ibo != 0)
-      GL_DeleteBuffer(GL_Buffer(ibo));
-  }
+void MeshBufferHandle::Reset() {
+  delete buffers;
+  buffers = nullptr;
 }
+
+MeshT::~MeshT() {}
 
 void MeshT::Draw() const {
   Renderer_DrawMesh(this);
@@ -171,8 +169,7 @@ Mesh MeshT::AddVertex(
 }
 
 Mesh MeshT::Clear() {
-  vbo = 0;
-  ibo = 0;
+  gpu.Reset();
   version = 0;
   vertices.clear();
   indices.clear();

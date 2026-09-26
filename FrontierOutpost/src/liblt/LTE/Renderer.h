@@ -7,8 +7,6 @@
 #include "V4.h"
 #include "Vector.h"
 
-const size_t kAttribArrays = 8;
-
 namespace LTE {
   namespace BlendMode {
     enum Enum {
@@ -28,7 +26,16 @@ namespace LTE {
     };
   }
 
-  LT_API void Renderer_Initialize();
+  /* Makes the Direct3D 12 device the renderer draws with
+   * (Design/Plan/NeuronClient-migration.md, section 5.3). With warp, Windows'
+   * software adapter draws, with the debug layer, for the launcher's smoke
+   * mode. Offscreen, no swap chain is made: frames stay in the frame texture,
+   * which Texture_ScreenCapture reads. */
+  LT_API void Renderer_Initialize(bool warp = false, bool offscreen = false);
+
+  /* The errors the Direct3D 12 debug layer has reported, which the smoke mode
+   * fails on. 0 without the debug layer. */
+  LT_API uint Renderer_GetDeviceErrorCount();
 
   /* Clears only the color buffers. */
   LT_API void Renderer_Clear(V4 const& clearColor = V4(0));
@@ -66,20 +73,19 @@ namespace LTE {
     uint indices,
     IndexFormat::Enum indexFormat);
 
+  /* Sends what was drawn to the GPU, without waiting for it. */
   LT_API void Renderer_Flush();
+
+  /* Waits for the GPU to finish what was drawn, as glFinish did, for the jobs
+   * that time how long the GPU takes. */
+  LT_API void Renderer_Finish();
 
   LT_API int Renderer_GetDrawCallCount();
   LT_API int Renderer_GetPolyCount();
   LT_API void Renderer_ResetCounters();
 
   /* Cachable State. */
-  LT_API void Renderer_DisableAttribArray(uint index);
-  LT_API void Renderer_EnableAttribArray(uint index);
-
-  LT_API void Renderer_SetColor(Color const& color, float alpha = 1);
-
   LT_API void Renderer_SetShader(ShaderT& shader);
-  LT_API void Renderer_SetShaderFF();
 
   LT_API void Renderer_SetViewport(V2 const& origin, V2 const& size);
 

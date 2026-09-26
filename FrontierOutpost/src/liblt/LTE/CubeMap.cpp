@@ -6,7 +6,7 @@
 #include "Math.h"
 #include "Matrix.h"
 #include "Renderer.h"
-#include "RendererGL.h"
+#include "RendererCore.h"
 #include "Shader.h"
 #include "StackFrame.h"
 #include "Texture2D.h"
@@ -14,29 +14,15 @@
 #include "Transform.h"
 #include "V3.h"
 
+#include <cstring>
+#include <memory>
+#include <span>
+#include <vector>
+
 
 TypeAlias(Reference<CubeMapT>, CubeMap);
 
 namespace {
-  GL_TextureTarget::Enum CubeFaceToTarget(CubeFace::Enum face) {
-    switch (face) {
-      case CubeFace::PositiveX :
-        return GL_TextureTarget::CubeMapPositiveX;
-      case CubeFace::NegativeX :
-        return GL_TextureTarget::CubeMapNegativeX;
-      case CubeFace::PositiveY : 
-        return GL_TextureTarget::CubeMapPositiveY;
-      case CubeFace::NegativeY :
-        return GL_TextureTarget::CubeMapNegativeY;
-      case CubeFace::PositiveZ :
-        return GL_TextureTarget::CubeMapPositiveZ;
-      case CubeFace::NegativeZ :
-        return GL_TextureTarget::CubeMapNegativeZ;
-      default :
-        return GL_TextureTarget::CubeMapPositiveX;
-    }
-  }
-
   inline uint GetLevelResolution(uint resolution, uint level) {
     for (uint i = 0; i < level; ++i)
       resolution /= 2;
@@ -47,23 +33,23 @@ namespace {
     typedef CubeMapT BaseType;
     DERIVED_TYPE_EX(CubeMapImpl)
 
-    GL_Texture texture;
+    /* The texture on the GPU (LTE/RendererCore.h), with every mip, which
+       generation and the IR map fill. A copy shares it, as a copy shared GL's
+       name. */
+    std::shared_ptr<GpuTexture> gpu;
     uint resolution;
     uint guid;
     TextureFormat::Enum format;
+    bool created;
 
     CubeMapImpl() :
-      texture(GL_NullTexture),
+      gpu(std::make_shared<GpuTexture>()),
       resolution(0),
-      format(TextureFormat::RGBA8)
+      format(TextureFormat::RGBA8),
+      created(false)
     {
       static uint nextGUID = 0;
       this->guid = nextGUID++;
-    }
-
-    ~CubeMapImpl() {
-      if (texture != GL_NullTexture)
-        GL_DeleteTexture(texture);
     }
 
     void BeginRender() {
@@ -75,44 +61,26 @@ namespace {
       Renderer_PushZBuffer(false);
     }
 
-    void Bind() const {
-      GL_BindTexture(GL_TextureTargetBindable::CubeMap, texture);
-    }
-
     void Create(uint res, TextureFormat::Enum format) {
-      this->texture = GL_GenTexture();
       this->resolution = res;
       this->format = format;
-      
-      Bind();
-      GL_TexMagFilter(GL_TextureTarget::CubeMap, GL_TextureFilter::Linear);
-      GL_TexMinFilter(GL_TextureTarget::CubeMap, GL_TextureFilterMip::LinearMipLinear);
+      created = true;
 
-      GL_TexWrapMode(
-        GL_TextureTarget::CubeMap,
-        GL_TextureCoordinate::S,
-        GL_TextureWrapMode::ClampToEdge);
-      GL_TexWrapMode(
-        GL_TextureTarget::CubeMap,
-        GL_TextureCoordinate::T,
-        GL_TextureWrapMode::ClampToEdge);
-      GL_TexWrapMode(
-        GL_TextureTarget::CubeMap,
-        GL_TextureCoordinate::R,
-        GL_TextureWrapMode::ClampToEdge);
-      
-      GL_TexImage2D(GL_TextureTarget::CubeMapPositiveX, 0, ToGL(format), res, res,
-        GL_PixelFormat::RGBA, GL_DataFormat::UnsignedByte, nullptr);
-      GL_TexImage2D(GL_TextureTarget::CubeMapPositiveY, 0, ToGL(format), res, res,
-        GL_PixelFormat::RGBA, GL_DataFormat::UnsignedByte, nullptr);
-      GL_TexImage2D(GL_TextureTarget::CubeMapPositiveZ, 0, ToGL(format), res, res,
-        GL_PixelFormat::RGBA, GL_DataFormat::UnsignedByte, nullptr);
-      GL_TexImage2D(GL_TextureTarget::CubeMapNegativeX, 0, ToGL(format), res, res,
-        GL_PixelFormat::RGBA, GL_DataFormat::UnsignedByte, nullptr);
-      GL_TexImage2D(GL_TextureTarget::CubeMapNegativeY, 0, ToGL(format), res, res,
-        GL_PixelFormat::RGBA, GL_DataFormat::UnsignedByte, nullptr);
-      GL_TexImage2D(GL_TextureTarget::CubeMapNegativeZ, 0, ToGL(format), res, res,
-        GL_PixelFormat::RGBA, GL_DataFormat::UnsignedByte, nullptr);
+      /* Linear between mips, and clamped at the edges, as GL's were. */
+      gpu->sampler.wrapU = Neuron::TextureWrap::ClampToEdge;
+      gpu->sampler.wrapV = Neuron::TextureWrap::ClampToEdge;
+      gpu->sampler.wrapW = Neuron::TextureWrap::ClampToEdge;
+      if (!res)
+        return;
+      Neuron::Texture::Desc desc;
+      desc.dimension = Neuron::TextureDimension::TextureCube;
+      desc.format = ToNeuron(format);
+      desc.widthPixels = res;
+      desc.heightPixels = res;
+      desc.depthPixels = 1;
+      desc.mipLevels = Renderer_FullMipLevels(res, res);
+      desc.name = "liblt cube map";
+      gpu->texture = Renderer_Device().CreateTexture(desc);
     }
 
     void EndRender() {
@@ -164,7 +132,7 @@ namespace {
           Renderer_DrawQuad();
           Renderer_PopScissor();
 
-          GL_Finish();
+          Renderer_Finish();
           x += jobSize;
 
           /* NOTE : This is a bit scary...if the first job terminates really
@@ -184,8 +152,8 @@ namespace {
     }
 
     void GenerateMipmap() {
-      Bind();
-      GL_GenerateMipmap(GL_TextureTarget::CubeMap);
+      if (gpu->texture)
+        Renderer_Context().GenerateMips(gpu->texture);
     }
 
     void GetData(
@@ -193,11 +161,11 @@ namespace {
       uint level,
       void* buffer) const
     {
-      Bind();
-      GL_GetTexImage(
-        CubeFaceToTarget(face), level,
-        ToGLPixelFormat(format),
-        ToGLDataFormat(format), buffer);
+      if (!gpu->texture || level >= gpu->texture.MipLevels())
+        return;
+      std::vector<std::byte> texels;
+      if (Renderer_Context().ReadTexture(gpu->texture, level, (uint)face, texels))
+        memcpy(buffer, texels.data(), texels.size());
     }
 
     TextureFormat::Enum GetFormat() const {
@@ -213,18 +181,18 @@ namespace {
       uint level,
       void const* buffer) const
     {
+      if (!gpu->texture || level >= gpu->texture.MipLevels())
+        return;
       uint res = GetLevelResolution(resolution, level);
-      Bind();
-      GL_TexImage2D(
-        CubeFaceToTarget(face), level, ToGL(format), res, res,
-        ToGLPixelFormat(format),
-        ToGLDataFormat(format), buffer);
+      Renderer_Context().UpdateTexture(
+        const_cast<Neuron::Texture&>(gpu->texture), level, (uint)face,
+        std::span<std::byte const>((std::byte const*)buffer,
+          TextureFormat::Size(format) * res * res));
     }
 
     void SetFace(CubeFace::Enum face) {
-      /* Bind the appropriate face to the framebuffer color attachment. */
-      GL_TextureTarget::Enum target = CubeFaceToTarget(face);
-      Renderer_PushColorBuffer(0, texture, guid, target);
+      /* The face is the target's layer (plan section 5.5). */
+      Renderer_PushColorBuffer(0, gpu->id, (uint)face);
 
       /* Set the view and projection matrices accordingly for this face. */
       V3 look = 0;
@@ -268,43 +236,20 @@ namespace {
 
       Array<uchar> buf(totalSize);
 
-      if (self->texture != GL_NullTexture) {
-        self->Bind();
+      if (self->created) {
         for (uint i = 0; i < CubeFace::SIZE; ++i) {
-          GL_TextureTarget::Enum target =
-            (GL_TextureTarget::Enum)(GL_TextureTarget::CubeMapPositiveX + i);
-
-          GL_GetTexImage(
-            target, 0,
-            ToGLPixelFormat(self->format),
-            ToGLDataFormat(self->format), buf.data());
-
+          self->GetData((CubeFace::Enum)i, 0, buf.data());
           m(&buf, "data", Type_Get(buf), aux);
         }
       }
 
       else {
         self->Create(self->resolution, self->format);
-        self->Bind();
-
         for (uint i = 0; i < CubeFace::SIZE; ++i) {
           m(&buf, "data", Type_Get(buf), aux);
-
-          GL_TextureTarget::Enum target =
-            (GL_TextureTarget::Enum)(GL_TextureTarget::CubeMapPositiveX + i);
-
-          GL_TexImage2D(
-            target,
-            0,
-            ToGL(self->format),
-            self->resolution,
-            self->resolution,
-            ToGLPixelFormat(self->format),
-            ToGLDataFormat(self->format),
-            buf.data());
+          self->SetData((CubeFace::Enum)i, 0, buf.data());
         }
-
-        GL_GenerateMipmap(GL_TextureTarget::CubeMap);
+        self->GenerateMipmap();
       }
     }
 
@@ -312,6 +257,10 @@ namespace {
   };
 
   DERIVED_IMPLEMENT(CubeMapImpl)
+}
+
+GpuTexture* CubeMap_GetGpu(CubeMapT const& cubeMap) {
+  return static_cast<CubeMapImpl const&>(cubeMap).gpu.get();
 }
 
 CubeMap CubeMap_Create(uint resolution, TextureFormat::Enum format) {

@@ -28,6 +28,13 @@ LT_API bool OS_IsDir(String const& path);
 
 LT_API bool OS_IsFile(String const& path);
 
+/* Whether a person is there to answer a dialog. Unattended, as the launcher's
+   smoke mode runs in CI, message boxes and failed assertions print what they
+   would have shown and the program exits with 1, rather than waiting for a
+   click that never comes; Windows' own error dialogs are off too. */
+LT_API bool OS_IsUnattended();
+LT_API void OS_SetUnattended();
+
 LT_API Vector<String> OS_ListDir(String const& path);
 
 LT_API void OS_MessageBox(String const& title, String const& message);

@@ -12,8 +12,6 @@ struct Texture3DT : public RefCounted {
   virtual void AddressClamp() = 0;
   virtual void AddressRepeat() = 0;
 
-  virtual void Bind(uint textureUnit) const = 0;
-
   virtual void GenerateMipmap() = 0;
 
   virtual uint GetWidth() const = 0;

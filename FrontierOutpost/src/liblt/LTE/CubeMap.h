@@ -10,7 +10,6 @@ struct CubeMapT : public RefCounted {
   BASE_TYPE(CubeMapT)
 
   virtual void BeginRender() = 0;
-  virtual void Bind() const = 0;
   virtual void EndRender() = 0;
 
   virtual void GenerateFromShader(

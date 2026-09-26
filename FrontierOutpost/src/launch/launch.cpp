@@ -33,12 +33,16 @@ struct Launcher : public Program {
   String capturePath;
   bool failed;
 
-  Launcher(String const& appName, uint frames, String const& capturePath) :
+  Launcher(String const& appName, uint frames, String const& capturePath, bool warp) :
     appName(appName),
     framesLeft(frames),
     capturePath(capturePath),
     failed(false)
   {
+    /* A run with a set number of frames has nobody to answer a dialog. */
+    if (frames)
+      OS_SetUnattended();
+
     /* Work from the folder that holds GameData/: the executable's own folder or
        the nearest parent of it that has one (ADR-004). Without one, stay in the
        working directory launch was started in. */
@@ -52,7 +56,9 @@ struct Launcher : public Program {
       OS_ChangeDir(dir);
     window = Window_Create("App Launcher", V2U(1920, 1080), true, false);
     window->SetSync(false);
-    Renderer_Initialize();
+    /* On WARP, the smoke mode draws offscreen: it never makes a swap chain
+       (plan section 7). */
+    Renderer_Initialize(warp, warp);
   }
 
   void OnInitialize() {
@@ -146,21 +152,26 @@ struct Launcher : public Program {
   }
 };
 
-/* launch <app> [--frames N] [--capture <path>]
-   With --frames, the app runs N frames and the launcher quits. With --capture
-   as well, the last frame is saved as a PNG at path; a relative path starts
-   from the folder that holds GameData/ (ADR-011). This is the smoke mode of
-   Design/Plan/NeuronClient-migration.md section 5.4; --warp joins it when
-   liblt renders through Direct3D 12 (Phase 4 step 3). The exit code is 1 when
-   the arguments or the app's script cannot be used, when the app stops short
-   of its frames, or when the capture was not saved. */
+/* launch <app> [--warp] [--frames N] [--capture <path>]
+   With --warp, the app draws on WARP, Windows' software adapter, with the
+   Direct3D 12 debug layer, and offscreen: nothing is shown. With --frames, the
+   app runs N frames and the launcher quits, and nothing waits for a click on a
+   dialog. With --capture as well, the last frame is saved as a PNG at path; a
+   relative path starts from the folder that holds GameData/ (ADR-011). This is
+   the smoke mode of Design/Plan/NeuronClient-migration.md section 5.4. The
+   exit code is 1 when the arguments or the app's script cannot be used, when
+   the app stops short of its frames, when the capture was not saved, or when
+   a run of set frames saw the debug layer report an error. */
 int main(int argc, char const* argv[]) {
   String app;
   uint frames = 0;
   String capture;
+  bool warp = false;
   for (int i = 1; i < argc; ++i) {
     String arg = argv[i];
-    if (arg == "--frames" && i + 1 < argc) {
+    if (arg == "--warp")
+      warp = true;
+    else if (arg == "--frames" && i + 1 < argc) {
       char* end = nullptr;
       unsigned long n = std::strtoul(argv[++i], &end, 10);
       if (*end || n == 0 || n > 1000000) {
@@ -188,7 +199,7 @@ int main(int argc, char const* argv[]) {
     return 1;
   }
 
-  Launcher launcher(app, frames, capture);
+  Launcher launcher(app, frames, capture, warp);
   /* Only this run's capture counts, so an earlier one at the path goes. */
   if (capture.size())
     std::remove(capture.c_str());
@@ -203,6 +214,11 @@ int main(int argc, char const* argv[]) {
   }
   if (capture.size() && !OS_FileExists(capture)) {
     printf("ERROR: Launcher did not save %s\n", capture.c_str());
+    return 1;
+  }
+  if (frames && Renderer_GetDeviceErrorCount()) {
+    printf("ERROR: the Direct3D 12 debug layer reported %u error(s) in %s\n",
+      Renderer_GetDeviceErrorCount(), app.c_str());
     return 1;
   }
   return 0;

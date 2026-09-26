@@ -766,6 +766,9 @@
     <ClCompile Include="LTE\Renderer.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
+    <ClCompile Include="LTE\RendererCore.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
     <ClCompile Include="LTE\ResourceMap.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
@@ -1796,7 +1799,7 @@
     <ClInclude Include="LTE\Renderer.h">
       <Filter>LTE</Filter>
     </ClInclude>
-    <ClInclude Include="LTE\RendererGL.h">
+    <ClInclude Include="LTE\RendererCore.h">
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="LTE\ResourceMap.h">
