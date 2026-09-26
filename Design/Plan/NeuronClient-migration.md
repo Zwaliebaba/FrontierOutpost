@@ -15,7 +15,10 @@ DirectWrite, WIC, XAudio2 and Win32.
   §5.3's device, resources, context, compute, mips, readbacks, swap chain and present pass, DRED's
   report and PIX's regions, each with its tests. Its done-when holds on `bbd563f`: all 115 tests
   pass on WARP in CI with zero debug-layer errors, and the four builds still link with Phase 2's 522
-  warnings, all lt's. ADR-009 stays Proposed until Phase 4, which implements it.
+  warnings, all lt's. ADR-009 stays Proposed until Phase 4, which implements it. The owner took
+  N15 and N16 on 2026-09-26. Phase 4 is under way (from `e630300`): step 1 is in, step 2 is in but
+  for the four field shaders that step 4 replaces, and so is the first part of the launcher's smoke
+  mode (N15). Work pauses before step 3 until the owner has checked Phases 1 and 2 (N16).
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
@@ -70,6 +73,8 @@ has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
 | N12 | **liblt keeps its own calls for OS services:** `SHGetFolderPath`, `GetModuleFileNameA`, `CreateDirectoryA`, `MessageBoxA` and DbgHelp in `LTE/OS.cpp`, `MessageBoxA` in `Common.cpp`'s assertion handler, and `WinMain` in `LTE/LTE.h`. NeuronClient takes what OpenGL, GLEW, SFML and FreeType did, and XAudio2. | owner |
 | N13 | **No `gl-final` tag and no frame-time comparison.** The OpenGL build stays in the history, but nothing marks it and nothing is measured against it. The owner judges each phase by the port itself. | owner |
 | N14 | **The script API is an interface, not unused material.** Of the 265 natives that neither a script nor C++ reached after Phase 1, the 12 that were the only way into code of their own went, with what only they reached. The other 253 stay: 194 are members of families one macro builds per object type, item field, component or key, and 59 are short, none over 11 lines. | owner |
+| N15 | **The smoke job comes before bring-up** (2026-09-26). Step 7's CI job lands with step 3, and the launcher's smoke mode before it: `--frames` and `--capture` before the pause, `--warp` and offscreen rendering with step 3, which gives liblt a device to put on WARP. Besides failing on a Direct3D 12 error, the job writes a downscaled copy of each app's frame into its log, since the session that ports liblt cannot fetch CI artefacts. Each bring-up step is checked in those frames, and the owner checks on a GPU at the done-when. | owner |
+| N16 | **Work pauses before Phase 4 step 3** (2026-09-26) until the owner has checked Phases 1 and 2 in the apps while OpenGL still renders. Steps 1 and 2 and the smoke mode's first part change nothing OpenGL is given. | owner |
 
 What N2 and N3 mean in practice. The first two points correct what the question offered:
 
@@ -553,7 +558,9 @@ Build §5.3 in NeuronClient. The tests run on WARP, with the debug layer on:
 6. **Deletion.** Delete OpenGL, the WGL bridge, `FrontierOutpost/ext/glew`, and
    `FrontierOutpost/include/GL` and `include/Glew`.
 7. **A CI smoke job.** It runs each 3D app for N frames on WARP, offscreen, and fails on a
-   Direct3D 12 error or a removed device. It uploads one PNG per app for the owner to look at.
+   Direct3D 12 error or a removed device. It uploads one PNG per app for the owner to look at. By
+   N15 it lands with step 3, ahead of bring-up, and writes a downscaled copy of each frame into its
+   log as well.
 
 **Done when:** the 16 kept apps run on the owner's GPU (x64) and on the owner's ARM64 device, and
 the smoke job is green.

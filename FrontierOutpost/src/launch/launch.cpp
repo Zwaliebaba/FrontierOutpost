@@ -10,6 +10,9 @@
 #include "LTE/Texture2D.h"
 #include "LTE/Window.h"
 
+#include <cstdio>
+#include <cstdlib>
+
 // #define TIME_LTSL_COMPILE
 
 #ifdef TIME_LTSL_COMPILE
@@ -24,8 +27,18 @@ struct Launcher : public Program {
   Data instance;
   Module physicsEngine;
   Module soundEngine;
+  /* The smoke mode: how many frames are left before the launcher quits, 0 for
+     no limit, and where the last of them is saved, empty for nowhere. */
+  uint framesLeft;
+  String capturePath;
+  bool failed;
 
-  Launcher(String const& appName) : appName(appName) {
+  Launcher(String const& appName, uint frames, String const& capturePath) :
+    appName(appName),
+    framesLeft(frames),
+    capturePath(capturePath),
+    failed(false)
+  {
     /* Work from the folder that holds GameData/: the executable's own folder or
        the nearest parent of it that has one (ADR-004). Without one, stay in the
        working directory launch was started in. */
@@ -64,6 +77,7 @@ struct Launcher : public Program {
 
     if (!main) {
       printf("ERROR: Launcher failed to load script %s\n", appName.c_str());
+      failed = true;
       deleted = true;
       return;
     }
@@ -110,6 +124,13 @@ struct Launcher : public Program {
       physicsEngine->Update();
     if (soundEngine)
       soundEngine->Update();
+
+    /* The app has drawn this frame, and it is not yet displayed. */
+    if (framesLeft && --framesLeft == 0) {
+      if (capturePath.size())
+        Texture_ScreenCapture()->SaveTo(capturePath);
+      deleted = true;
+    }
   }
 
   void SaveScreenshot() {
@@ -125,13 +146,65 @@ struct Launcher : public Program {
   }
 };
 
+/* launch <app> [--frames N] [--capture <path>]
+   With --frames, the app runs N frames and the launcher quits. With --capture
+   as well, the last frame is saved as a PNG at path; a relative path starts
+   from the folder that holds GameData/ (ADR-011). This is the smoke mode of
+   Design/Plan/NeuronClient-migration.md section 5.4; --warp joins it when
+   liblt renders through Direct3D 12 (Phase 4 step 3). The exit code is 1 when
+   the arguments or the app's script cannot be used, when the app stops short
+   of its frames, or when the capture was not saved. */
 int main(int argc, char const* argv[]) {
-  if (argc != 2) {
-    printf("ERROR: Launcher expects one argument (application name)\n");
-    return 0;
+  String app;
+  uint frames = 0;
+  String capture;
+  for (int i = 1; i < argc; ++i) {
+    String arg = argv[i];
+    if (arg == "--frames" && i + 1 < argc) {
+      char* end = nullptr;
+      unsigned long n = std::strtoul(argv[++i], &end, 10);
+      if (*end || n == 0 || n > 1000000) {
+        printf("ERROR: --frames takes a count from 1 to 1000000, not %s\n", argv[i]);
+        return 1;
+      }
+      frames = (uint)n;
+    }
+    else if (arg == "--capture" && i + 1 < argc)
+      capture = argv[++i];
+    else if (arg.size() && arg[0] != '-' && app.empty())
+      app = arg;
+    else {
+      printf("ERROR: Launcher does not understand %s\n", arg.c_str());
+      return 1;
+    }
   }
 
-  Launcher(argv[1]).Execute();
+  if (app.empty()) {
+    printf("ERROR: Launcher expects an application name\n");
+    return 1;
+  }
+  if (capture.size() && !frames) {
+    printf("ERROR: --capture needs --frames, to know which frame to save\n");
+    return 1;
+  }
+
+  Launcher launcher(app, frames, capture);
+  /* Only this run's capture counts, so an earlier one at the path goes. */
+  if (capture.size())
+    std::remove(capture.c_str());
+  launcher.Execute();
+
+  if (launcher.failed)
+    return 1;
+  if (launcher.framesLeft) {
+    printf("ERROR: %s stopped %u frames short of %u\n",
+      app.c_str(), launcher.framesLeft, frames);
+    return 1;
+  }
+  if (capture.size() && !OS_FileExists(capture)) {
+    printf("ERROR: Launcher did not save %s\n", capture.c_str());
+    return 1;
+  }
   return 0;
 }
 
