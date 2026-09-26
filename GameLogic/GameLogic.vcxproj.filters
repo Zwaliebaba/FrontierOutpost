@@ -920,4 +920,9 @@
       <Filter>Game\Object</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Colony.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>

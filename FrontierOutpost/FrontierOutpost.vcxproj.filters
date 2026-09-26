@@ -159,4 +159,9 @@
       <Filter>Visuals</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ColonyVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+  </ItemGroup>
 </Project>
