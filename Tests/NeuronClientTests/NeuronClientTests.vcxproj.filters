@@ -1,103 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h</Extensions>
-    </Filter>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp</Extensions>
-    </Filter>
     <Filter Include="Shaders">
       <UniqueIdentifier>{7A2C1B64-5D1E-4F2B-9C44-2E6B1C0F9A31}</UniqueIdentifier>
       <Extensions>hlsl;hlsli</Extensions>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Check.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ExactColors.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="pch.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Repository.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="TestDevice.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
+    <ClInclude Include="Check.h" />
+    <ClInclude Include="ExactColors.h" />
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="Repository.h" />
+    <ClInclude Include="TestDevice.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="pch.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="AudioOutput.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ComputeDispatches.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="CubeTargets.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="DebugEvents.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="DrawCalls.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="GlyphRendering.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="GraphicsDeviceFrames.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ImageCoding.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="KeyMapping.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="MipGeneration.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Presentation.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ProgramReflection.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="RemovalReports.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ShaderReflection.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="SoundParsing.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TargetClears.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TexturedDraws.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TextureTransfers.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="UnicodeText.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="WarpDevice.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="WindowEvents.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
+    <ClCompile Include="AudioOutput.cpp" />
+    <ClCompile Include="ComputeDispatches.cpp" />
+    <ClCompile Include="CubeTargets.cpp" />
+    <ClCompile Include="DebugEvents.cpp" />
+    <ClCompile Include="DrawCalls.cpp" />
+    <ClCompile Include="GlyphRendering.cpp" />
+    <ClCompile Include="GraphicsDeviceFrames.cpp" />
+    <ClCompile Include="ImageCoding.cpp" />
+    <ClCompile Include="KeyMapping.cpp" />
+    <ClCompile Include="MipGeneration.cpp" />
+    <ClCompile Include="pch.cpp" />
+    <ClCompile Include="Presentation.cpp" />
+    <ClCompile Include="ProgramReflection.cpp" />
+    <ClCompile Include="RemovalReports.cpp" />
+    <ClCompile Include="ShaderReflection.cpp" />
+    <ClCompile Include="SoundParsing.cpp" />
+    <ClCompile Include="TargetClears.cpp" />
+    <ClCompile Include="TexturedDraws.cpp" />
+    <ClCompile Include="TextureTransfers.cpp" />
+    <ClCompile Include="UnicodeText.cpp" />
+    <ClCompile Include="WarpDevice.cpp" />
+    <ClCompile Include="WindowEvents.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\AccumulateCS.hlsl">

@@ -7,22 +7,19 @@
     <Filter Include="Module\SoundEngine">
       <UniqueIdentifier>{D7827191-D894-5FB1-81AA-ECA2D2A16A80}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{923ADD15-871B-51E8-A509-F78256D50839}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Main.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClInclude Include="Resource.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ResourceCompile Include="Resources.rc">
-      <Filter>Source Files</Filter>
-    </ResourceCompile>
     <ClCompile Include="SoundEngineXAudio2.cpp">
       <Filter>Module\SoundEngine</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Resources.rc" />
   </ItemGroup>
 </Project>
