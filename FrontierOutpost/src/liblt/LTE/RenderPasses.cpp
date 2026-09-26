@@ -51,9 +51,13 @@ namespace {
     void OnRender(DrawState* state) {
       shaderInstance->Begin();
       DrawState_Link(shader);
-      (*shader)
-        ("seed", Rand())
-        ("texture", state->primary);
+      /* Every effect is offered a seed, and those that do not dither leave it
+         unread. Rand() is drawn either way, so rand()'s sequence is the same. */
+      float const seed = Rand();
+      int const seedIndex = shader->QueryUniformLocation("seed");
+      if (seedIndex >= 0)
+        (*shader)(seedIndex, seed);
+      (*shader)("texture", state->primary);
       Renderer_SetShader(*shader);
       DrawSecondaryFSQ(state);
       shaderInstance->End();

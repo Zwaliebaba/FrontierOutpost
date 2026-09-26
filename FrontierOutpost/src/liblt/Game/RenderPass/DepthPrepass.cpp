@@ -59,8 +59,13 @@ namespace {
         !shader->HasState(RenderStateSwitch_ZWritableOff) &&
         !shader->HasState(RenderStateSwitch_ZBufferOff);
 
-      if (willRender)
-        currentShader->GetShader()->SetInt("prepass", 1);
+      /* Offered to every shader; only the materials read it. */
+      if (willRender) {
+        Shader const& program = currentShader->GetShader();
+        int const prepassIndex = program->QueryUniformLocation("prepass");
+        if (prepassIndex >= 0)
+          program->SetInt(prepassIndex, 1);
+      }
     }
 
     void SetTransform(Transform const& transform) {

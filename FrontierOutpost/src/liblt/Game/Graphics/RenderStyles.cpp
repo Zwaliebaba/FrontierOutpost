@@ -50,7 +50,11 @@ namespace {
         willRender = true;
         if (currentShader != shader) {
           currentShader = shader;
-          currentShader->GetShader()->SetInt("prepass", 0);
+          /* Offered to every shader; only the materials read it. */
+          Shader const& program = currentShader->GetShader();
+          int const prepassIndex = program->QueryUniformLocation("prepass");
+          if (prepassIndex >= 0)
+            program->SetInt(prepassIndex, 0);
         }
         DrawState_Inject(currentShader->GetShader());
       } else {
