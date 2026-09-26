@@ -6,7 +6,6 @@
 #include "Orientation.h"
 
 #include "Player.h"
-#include "GameSettings.h"
 #include "Name.h"
 #include "AttributeValue.h"
 

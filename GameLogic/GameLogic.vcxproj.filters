@@ -297,9 +297,6 @@
     <ClInclude Include="GameCommon.h">
       <Filter>Game</Filter>
     </ClInclude>
-    <ClInclude Include="GameSettings.h">
-      <Filter>Game</Filter>
-    </ClInclude>
     <ClInclude Include="GameTasks.h">
       <Filter>Game</Filter>
     </ClInclude>

@@ -238,4 +238,9 @@
       <Filter>Game\ScriptAPI</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="GameSettings.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>

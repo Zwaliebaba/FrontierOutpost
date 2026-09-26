@@ -7,12 +7,10 @@
 #include "Messages.h"
 #include "Player.h"
 
-#include "Keyboard.h"
 #include "LteMath.h"
 #include "Pointer.h"
 #include "Pool.h"
 
-#include "ModuleSettings.h"
 
 const double kEfficiencyFactor = 1.0;
 const float kCapacitance = 8.0f;
