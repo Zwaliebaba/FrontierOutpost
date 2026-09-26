@@ -1,7 +1,6 @@
 #include "Items.h"
 
 #include "Constants.h"
-#include "Materials.h"
 #include "Objects.h"
 #include "AttributeCapability.h"
 #include "AttributeColor.h"
@@ -19,6 +18,7 @@
 #include "Script.h"
 
 #include "Glyphs.h"
+#include "Renderable.h"
 
 const float kThrustMult = 100;
 

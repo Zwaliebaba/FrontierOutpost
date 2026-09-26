@@ -1,19 +1,17 @@
 #include "Items.h"
 
-#include "Materials.h"
 #include "Objects.h"
 #include "Socket.h"
 #include "AttributeIcon.h"
 #include "Mass.h"
 
 #include "Array.h"
-#include "Model.h"
 #include "Script.h"
 #include "SDFs.h"
-#include "SDFMesh.h"
 #include "Transform.h"
 
 #include "Glyphs.h"
+#include "Renderable.h"
 
 const Icon kIcon = Icon_Create()
   ->Add(Glyph_Box(V2(0, 0.8f), V2(1, 0.2f), 1, 1))

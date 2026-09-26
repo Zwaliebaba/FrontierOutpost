@@ -2,7 +2,6 @@
 
 #include "Constants.h"
 #include "Icons.h"
-#include "Materials.h"
 #include "Objects.h"
 #include "AttributeCapability.h"
 #include "AttributeIcon.h"
@@ -17,6 +16,7 @@
 #include "AttributeValue.h"
 
 #include "Script.h"
+#include "Renderable.h"
 
 typedef
     Attribute_Capability

@@ -1,7 +1,6 @@
 #include "Items.h"
 
 #include "Constants.h"
-#include "Materials.h"
 #include "Objects.h"
 #include "AttributeCapability.h"
 #include "AttributeIcon.h"
@@ -16,18 +15,15 @@
 
 #include "LteMath.h"
 #include "Meshes.h"
-#include "Model.h"
-#include "PlateMesh.h"
 #include "RNG.h"
 #include "Ray.h"
 #include "Script.h"
 #include "SDFs.h"
-#include "SDFMesh.h"
 #include "StackFrame.h"
 
 #include "Glyphs.h"
+#include "Renderable.h"
 
-#include "Renderables.h"
 
 const uint kThrusterAttempts = 10;
 const uint kTurretAttempts = 100;
