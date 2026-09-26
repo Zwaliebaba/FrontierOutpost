@@ -8,7 +8,7 @@
 #include "Math.hlsli"
 #include "Field.hlsli"
 
-static const uint ITERATIONS = 32;
+static const uint ITERATIONS = 32u;
 
 Texture2D<float4> positions : register(t0);
 Texture2D<float4> normals : register(t1);
@@ -33,12 +33,12 @@ float Occlusion(float3 p, float3 n) {
   float3 tangent = abs(n.x) < 0.5 ? normalize(cross(n, float3(1, 0, 0))) : normalize(cross(n, float3(0, 1, 0)));
   float3 cotangent = cross(n, tangent);
   float occluded = 0.0;
-  [loop] for (uint i = 0; i < samples; ++i) {
+  [loop] for (uint i = 0u; i < samples; ++i) {
     float3 dir = directions.Load(int3(i, 0, 0)).xyz;
     float3 samplePos = p + (dir.x * n + dir.y * tangent + dir.z * cotangent);
     occluded += exp(-1000.0 * max(Field(samplePos), 0.0));
   }
-  return pow4(1.0 - sqrt(occluded / float(samples - 1)));
+  return pow4(1.0 - sqrt(occluded / float(samples - 1u)));
 }
 
 [numthreads(8, 8, 1)]
@@ -51,8 +51,8 @@ void main(uint3 id : SV_DispatchThreadID) {
 
   // From inside the field, the vertex steps out along its normal, as fieldocclusion.jsl's did.
   float value = Field(p);
-  float3 iterationStep = n * fieldStep / float(ITERATIONS - 1);
-  [loop] for (uint i = 0; i < ITERATIONS && value <= 1e-5; ++i) {
+  float3 iterationStep = n * fieldStep / float(ITERATIONS - 1u);
+  [loop] for (uint i = 0u; i < ITERATIONS && value <= 1e-5; ++i) {
     p += iterationStep;
     value = Field(p);
   }

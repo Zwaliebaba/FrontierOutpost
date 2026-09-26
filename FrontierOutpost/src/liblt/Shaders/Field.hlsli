@@ -37,11 +37,13 @@ float torus(float3 p, float3 center, float radius, float thickness) {
 }
 
 // A texel of the field, and the border colour's 1 past its edges, as the field texture's
-// AddressBorder(1, 0, 0, 0) gave GL.
+// AddressBorder(1, 0, 0, 0) gave GL. One result, returned at the end: FXC reads an early return
+// as a path that leaves the value unset (X4000).
 float FieldTexel(Texture3D<float> source, uint3 size, int3 at) {
-  if (any(at < 0) || any(at >= int3(size)))
-    return 1.0;
-  return source.Load(int4(at, 0));
+  float value = 1.0;
+  if (all(at >= 0) && all(at < int3(size)))
+    value = source.Load(int4(at, 0));
+  return value;
 }
 
 // The field at coord, from 0 to 1 across it, filtered as GL's texture3D filtered it: linearly

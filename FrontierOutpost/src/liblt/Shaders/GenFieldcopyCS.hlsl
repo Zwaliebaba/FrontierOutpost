@@ -17,5 +17,5 @@ uint3 resolution;
 void main(uint3 id : SV_DispatchThreadID) {
   if (any(id >= resolution))
     return;
-  level[id] = SampleField(fieldTexture, fieldResolution, float3(id) / float3(resolution - 1));
+  level[id] = SampleField(fieldTexture, fieldResolution, float3(id) / float3(resolution - 1u));
 }
