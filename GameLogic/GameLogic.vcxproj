@@ -248,9 +248,6 @@
     <ClInclude Include="GameCommon.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="GameRenderPasses.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="GameSettings.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -422,9 +419,6 @@
     <ClInclude Include="Renderables.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="RenderStyles.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="Scriptable.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -517,9 +511,6 @@
     <ClCompile Include="Beam.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="Blended.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Blueprint.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
@@ -536,9 +527,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Cargo.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Clear.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Collidable.cpp">
@@ -566,9 +554,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="DataDestroyed.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="DepthPrepass.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Destroy.cpp">
@@ -601,13 +586,7 @@
     <ClCompile Include="Explosion.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="GBuffer.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Generators.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="GlobalLighting.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Goto.cpp">
@@ -640,13 +619,7 @@
     <ClCompile Include="ItemProperty.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="LensFlares.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Light.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="LocalLighting.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Log.cpp">
@@ -811,15 +784,6 @@
     <ClCompile Include="RenderableAsteroid.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="RenderPassCamera.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="RenderPassParticles.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="RenderStyles.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Research.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
@@ -830,9 +794,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Scriptable.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="ScriptApiCamera.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="ScriptApiItem.cpp">
@@ -866,9 +827,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="ShipType.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="SMAA.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Sockets.cpp">
@@ -941,9 +899,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Universe.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Visibility.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Wait.cpp">

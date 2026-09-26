@@ -156,9 +156,6 @@
     <ClInclude Include="Beam.h">
       <Filter>Game</Filter>
     </ClInclude>
-    <ClCompile Include="Blended.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
     <ClCompile Include="Blueprint.cpp">
       <Filter>Game\Item</Filter>
     </ClCompile>
@@ -192,9 +189,6 @@
     <ClInclude Include="Cargo.h">
       <Filter>Component</Filter>
     </ClInclude>
-    <ClCompile Include="Clear.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
     <ClCompile Include="Collidable.cpp">
       <Filter>Component</Filter>
     </ClCompile>
@@ -255,9 +249,6 @@
     <ClInclude Include="Density.h">
       <Filter>Game\Attribute</Filter>
     </ClInclude>
-    <ClCompile Include="DepthPrepass.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
     <ClCompile Include="Destroy.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>
@@ -315,27 +306,18 @@
     <ClInclude Include="GameCommon.h">
       <Filter>Game</Filter>
     </ClInclude>
-    <ClInclude Include="GameRenderPasses.h">
-      <Filter>Game</Filter>
-    </ClInclude>
     <ClInclude Include="GameSettings.h">
       <Filter>Game</Filter>
     </ClInclude>
     <ClInclude Include="GameTasks.h">
       <Filter>Game</Filter>
     </ClInclude>
-    <ClCompile Include="GBuffer.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
     <ClCompile Include="Generators.cpp">
       <Filter>Game\Graphics</Filter>
     </ClCompile>
     <ClInclude Include="Generators.h">
       <Filter>Game\Graphics</Filter>
     </ClInclude>
-    <ClCompile Include="GlobalLighting.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
     <ClCompile Include="Goto.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>
@@ -399,9 +381,6 @@
     <ClInclude Include="ItemWrapper.h">
       <Filter>Game</Filter>
     </ClInclude>
-    <ClCompile Include="LensFlares.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
     <ClInclude Include="Level.h">
       <Filter>Game\Attribute</Filter>
     </ClInclude>
@@ -411,9 +390,6 @@
     <ClInclude Include="Light.h">
       <Filter>Game</Filter>
     </ClInclude>
-    <ClCompile Include="LocalLighting.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
     <ClCompile Include="Log.cpp">
       <Filter>Component</Filter>
     </ClCompile>
@@ -699,18 +675,6 @@
     <ClInclude Include="Renderables.h">
       <Filter>Game</Filter>
     </ClInclude>
-    <ClCompile Include="RenderPassCamera.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
-    <ClCompile Include="RenderPassParticles.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
-    <ClCompile Include="RenderStyles.cpp">
-      <Filter>Game\Graphics</Filter>
-    </ClCompile>
-    <ClInclude Include="RenderStyles.h">
-      <Filter>Game\Graphics</Filter>
-    </ClInclude>
     <ClCompile Include="Research.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>
@@ -726,9 +690,6 @@
     <ClInclude Include="Scriptable.h">
       <Filter>Component</Filter>
     </ClInclude>
-    <ClCompile Include="ScriptApiCamera.cpp">
-      <Filter>Game\ScriptAPI</Filter>
-    </ClCompile>
     <ClCompile Include="ScriptApiItem.cpp">
       <Filter>Game\ScriptAPI</Filter>
     </ClCompile>
@@ -774,9 +735,6 @@
     <ClInclude Include="Signature.h">
       <Filter>Game</Filter>
     </ClInclude>
-    <ClCompile Include="SMAA.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
     <ClInclude Include="Socket.h">
       <Filter>Game</Filter>
     </ClInclude>
@@ -897,9 +855,6 @@
     <ClInclude Include="Uses.h">
       <Filter>Game\Attribute</Filter>
     </ClInclude>
-    <ClCompile Include="Visibility.cpp">
-      <Filter>Game\RenderPass</Filter>
-    </ClCompile>
     <ClCompile Include="Wait.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>

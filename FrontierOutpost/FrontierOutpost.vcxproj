@@ -152,6 +152,53 @@
       <Project>{2F8D4B3C-7A1E-4C95-B6D0-8E5F2A7C9D33}</Project>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="GameRenderPasses.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClCompile Include="Blended.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Clear.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="DepthPrepass.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="GBuffer.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="GlobalLighting.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="LensFlares.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="LocalLighting.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="RenderPassCamera.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="RenderPassParticles.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="SMAA.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Visibility.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClInclude Include="RenderStyles.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClCompile Include="RenderStyles.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiCamera.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\Build\Legacy.targets" />
 </Project>

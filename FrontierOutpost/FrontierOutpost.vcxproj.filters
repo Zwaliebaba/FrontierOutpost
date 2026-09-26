@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Game\ScriptAPI">
+      <UniqueIdentifier>{259349F2-510C-5C98-B2AA-602EF930FF53}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Graphics">
+      <UniqueIdentifier>{F9D6550F-F199-50F5-8B5A-0E6F4DECC60A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\RenderPass">
+      <UniqueIdentifier>{C5C3A49D-C314-527A-AAF2-87729B80E8DE}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game">
+      <UniqueIdentifier>{01F2D13A-1239-5DE9-9A3D-13D6DA7B46EB}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Module">
       <UniqueIdentifier>{DA53F1C9-F3F6-5F66-A2F8-CF4191104D75}</UniqueIdentifier>
     </Filter>
@@ -21,5 +33,52 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Resources.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="GameRenderPasses.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClCompile Include="Blended.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Clear.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="DepthPrepass.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="GBuffer.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="GlobalLighting.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="LensFlares.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="LocalLighting.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderPassCamera.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderPassParticles.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="SMAA.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClCompile Include="Visibility.cpp">
+      <Filter>Game\RenderPass</Filter>
+    </ClCompile>
+    <ClInclude Include="RenderStyles.h">
+      <Filter>Game\Graphics</Filter>
+    </ClInclude>
+    <ClCompile Include="RenderStyles.cpp">
+      <Filter>Game\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="ScriptApiCamera.cpp">
+      <Filter>Game\ScriptAPI</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
