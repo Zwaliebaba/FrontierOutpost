@@ -130,4 +130,23 @@
       <Filter>Visuals</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="WormholeVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+    <ClCompile Include="PodVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+    <ClCompile Include="WarpNodeVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DustFlecksVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+    <ClCompile Include="StationVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+  </ItemGroup>
 </Project>

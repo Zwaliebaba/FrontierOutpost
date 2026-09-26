@@ -26,14 +26,13 @@
 
 #include "StationType.h"
 
-#include "DrawState.h"
 #include "Grammar.h"
-#include "Model.h"
 #include "Pointer.h"
 #include "Pool.h"
 #include "RNG.h"
-#include "RenderStyle.h"
 #include "SDFs.h"
+
+#include "Visual.h"
 
 typedef ObjectWrapper
   < Component_Affectable
@@ -76,9 +75,9 @@ AutoClassDerivedEmpty(Station, StationBaseT)
     GetContainer()->BeginDrawInterior(state);
   }
 
+  /* Drawn by the client, where there is one (FrontierOutpost/StationVisual.cpp, ADR-016). */
   void OnDrawInterior(DrawState* state) {
-    RenderStyle_Get()->SetTransform(Transform_Scale(2000));
-    ((StationType*)(ItemT*)Supertyped.type)->interiorModel->Render(state);
+    Game::Draw("Station", Game::DrawPhase::Interior, this, state);
   }
 
   void EndDrawInterior(DrawState* state) {

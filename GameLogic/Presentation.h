@@ -25,6 +25,9 @@ public:
   virtual void DrawObject(ObjectT* _object, RenderableT* _renderable, DrawState* _state) = 0;
   /// Draws what is inside _interior, when the view is inside it.
   virtual void DrawInterior(ObjectT* _interior, DrawState* _state) = 0;
+  /// Where the view being drawn is: game code that follows the camera while it is drawn, such as
+  /// a zone's asteroid fields, reads it here.
+  [[nodiscard]] virtual V3T<double> ViewPosition(DrawState* _state) = 0;
 
   /// An interior's particles, which it steps and makes current for effects around its update.
   /// _interior identifies the interior; the presentation makes its particles on first use.

@@ -8,28 +8,19 @@
 #include "Orientation.h"
 #include "Zoned.h"
 
-#include "DrawState.h"
-#include "Meshes.h"
-#include "Model.h"
 #include "Pool.h"
+#include "Renderable.h"
 #include "Script.h"
-#include "SDFMesh.h"
 #include "SDFs.h"
-#include "ShaderInstance.h"
 
 #include "Icon.h"
 
+#include "Visual.h"
+
 namespace {
+  /* The client's model, where there is a client (FrontierOutpost/WormholeVisual.cpp, ADR-016). */
   Renderable GetWormholeModel() {
-    static Renderable model;
-    if (!model) {
-      ShaderInstance ss = ShaderInstance_Create("npm.jsl", "wormhole.jsl");
-      (*ss)(RenderStateSwitch_BlendModeAdditive);
-      DrawState_Link(ss);
-      model = (Renderable)Model_Create()
-        ->Add(Mesh_BoxSphere(5, true)->ReverseWinding(), ss);
-    }
-    return model;
+    return (Renderable)Game::CreateVisual("Wormhole", nullptr);
   }
 }
 

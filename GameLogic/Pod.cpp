@@ -11,20 +11,16 @@
 #include "Orientation.h"
 
 #include "Item.h"
-#include "Materials.h"
 
 #include "LteMath.h"
-#include "Model.h"
 #include "Pool.h"
-#include "SDFs.h"
-#include "SDFMesh.h"
+#include "Renderable.h"
 
+#include "Visual.h"
+
+/* The client's model, where there is a client (FrontierOutpost/PodVisual.cpp, ADR-016). */
 Renderable GetPodModel() {
-  static Renderable model;
-  if (!model)
-    model = (Renderable)Model_Create()
-      ->Add(SDFMesh_Create(SDF_RoundBox(0, 1, 0.1f)), Material_Metal());
-  return model;
+  return (Renderable)Game::CreateVisual("Pod", nullptr);
 }
 
 typedef ObjectWrapper

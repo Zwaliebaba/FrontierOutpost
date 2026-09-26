@@ -10,16 +10,16 @@
 #include "Orientation.h"
 #include "Scriptable.h"
 
-#include "Materials.h"
 #include "Messages.h"
 
 #include "SoundEngine.h"
 
-#include "DrawState.h"
 #include "Meshes.h"
-#include "Model.h"
+#include "Renderable.h"
 
 #include "Debug.h"
+
+#include "Visual.h"
 
 const float kPadding = 5;
 const float kRailForce = 2.0f * 2048;
@@ -32,26 +32,9 @@ namespace {
   typedef Reference<struct RailSlotT> RailSlot;
   typedef Reference<struct WarpNodeControllerT> WarpNodeController;
 
+  /* The client's model, where there is a client (FrontierOutpost/WarpNodeVisual.cpp, ADR-016). */
   Renderable GetModel() {
-#if 0
-    static Renderable model;
-    if (!model) {
-      ShaderInstance ss = ShaderInstance_Create("npm.jsl", "wormhole.jsl");
-      (*ss)(RenderStateSwitch_BlendModeAdditive);
-      DrawState_Link(ss);
-      model = (Renderable)Model_Create()
-        ->Add(Mesh_BoxSphere(5, true)
-            ->ReverseWinding(), ss);
-    }
-    return model;
-#else
-    static Model model;
-    if (!model)
-      model = Model_Create()->Add(
-        Mesh_BoxSphere(16, true)->SetU(1),
-        Material_Ice());
-    return model;
-#endif
+    return (Renderable)Game::CreateVisual("WarpNode", nullptr);
   }
 
   AutoClass(Passenger,

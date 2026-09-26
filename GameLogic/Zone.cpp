@@ -6,34 +6,21 @@
 #include "Seeded.h"
 #include "Zoned.h"
 
-#include "Materials.h"
-
-#include "DrawState.h"
+#include "AutoPtr.h"
+#include "Bound.h"
+#include "Hash.h"
 #include "LteMath.h"
-#include "Model.h"
 #include "RNG.h"
 #include "SDFs.h"
-#include "SDFMesh.h"
 #include "StackFrame.h"
-#include "View.h"
+
+#include "Presentation.h"
 
 const float kInitialSize = 8;
 const uint kAsteroidCount = 24;
 const float kCompression = 0.8f;
 const uint kFieldLevels = 6;
 const float kMaxScale = 10000;
-
-namespace {
-  ShaderInstance GetZoneMaterial() {
-    static ShaderInstance shader;
-    if (!shader) {
-      shader = ShaderInstance_Create("npm.jsl", "material/lodfade.jsl");
-      (*shader)(RenderStateSwitch_BlendModeAlpha);
-      DrawState_Link(shader);
-    }
-    return shader;
-  }
-}
 
 typedef ObjectWrapper
   < Component_Nameable
@@ -118,8 +105,13 @@ AutoClassDerivedEmpty(Zone, ZoneBaseT)
 
   void OnDraw(DrawState* state) {
     BaseType::OnDraw(state);
+    /* The fields follow the view, which only a client has (ADR-016). */
+    Game::Presentation* presentation = Game::GetPresentation();
+    if (!presentation)
+      return;
+    Position eye = presentation->ViewPosition(state);
     for (size_t i = 0; i < kFieldLevels; ++i)
-      field[i]->Update(this, state->view->transform.pos);
+      field[i]->Update(this, eye);
   }
 };
 

@@ -12,6 +12,7 @@
 #include "RenderStyle.h"
 #include "StackFrame.h"
 #include "Transform.h"
+#include "View.h"
 
 #include "Presentation.h"
 
@@ -43,6 +44,10 @@ namespace {
         RenderStyle_Get()->SetTransform(Transform_Identity());
         self->OnDrawInterior(state);
       }
+    }
+
+    V3D ViewPosition(DrawState* state) override {
+      return state->view->transform.pos;
     }
 
     void BeginInteriorUpdate(void const* interior, float dt) override {

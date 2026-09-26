@@ -245,6 +245,25 @@
       <Legacy>true</Legacy>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="WormholeVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="PodVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="WarpNodeVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="DustFlecksVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="StationVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\Build\Legacy.targets" />
 </Project>
