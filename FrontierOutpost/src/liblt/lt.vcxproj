@@ -923,6 +923,26 @@
     <ClInclude Include="Volume\MarchingCubes.h" />
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="Shaders\BillboardAxisVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>BILLBOARD_AXIS_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\BillboardAxisWrappedVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>BILLBOARD_AXIS_WRAPPED_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\BillboardSoftVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>BILLBOARD_SOFT_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\BillboardVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>BILLBOARD_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\ComputeOcclusionPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>COMPUTE_OCCLUSION_PS</VariableName>
+    </FxCompile>
     <FxCompile Include="Shaders\IdentityVS.hlsl">
       <ShaderType>Vertex</ShaderType>
       <VariableName>IDENTITY_VS</VariableName>
@@ -935,9 +955,101 @@
       <ShaderType>Vertex</ShaderType>
       <VariableName>NPM_VS</VariableName>
     </FxCompile>
+    <FxCompile Include="Shaders\ParticleVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>PARTICLE_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostAddPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_ADD_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostBloomCompositePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_BLOOM_COMPOSITE_PS</VariableName>
+    </FxCompile>
     <FxCompile Include="Shaders\PostBlurPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>POST_BLUR_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostCircleminmaxPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_CIRCLEMINMAX_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostColorgrade1DPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_COLORGRADE1D_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostColorgradebezierPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_COLORGRADEBEZIER_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostDitherPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_DITHER_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostEdgedetectPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_EDGEDETECT_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostExpmapPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_EXPMAP_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostGlowthreshPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_GLOWTHRESH_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostLensflareCompositePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_LENSFLARE_COMPOSITE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostLevelsPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_LEVELS_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostLinearPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_LINEAR_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostMaxPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_MAX_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostMedianPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_MEDIAN_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostMinPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_MIN_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostMultiplyPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_MULTIPLY_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostPowerPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_POWER_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostSamplecubicPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_SAMPLECUBIC_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostSaturatePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_SATURATE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostTonemapPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_TONEMAP_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostVignettePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_VIGNETTE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\SkyboxVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>SKYBOX_VS</VariableName>
     </FxCompile>
     <FxCompile Include="Shaders\Smaa1PS.hlsl">
       <ShaderType>Pixel</ShaderType>
@@ -947,9 +1059,93 @@
       <ShaderType>Vertex</ShaderType>
       <VariableName>SMAA1_VS</VariableName>
     </FxCompile>
+    <FxCompile Include="Shaders\Smaa2PS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>SMAA2_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\Smaa2VS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>SMAA2_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\Smaa3PS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>SMAA3_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\Smaa3VS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>SMAA3_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\TrailVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>TRAIL_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiArcPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_ARC_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiBasicPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_BASIC_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiBoxPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_BOX_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiCirclePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_CIRCLE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiCompositePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_COMPOSITE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiGradientPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_GRADIENT_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiGridPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_GRID_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiLinePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_LINE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiLinefadePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_LINEFADE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiNonePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_NONE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiPanelPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_PANEL_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiRadialpanelPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_RADIALPANEL_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiRingPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_RING_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiTextPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_TEXT_PS</VariableName>
+    </FxCompile>
     <FxCompile Include="Shaders\UiTexturePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_TEXTURE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiTextureadditivePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_TEXTUREADDITIVE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiTrianglePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_TRIANGLE_PS</VariableName>
     </FxCompile>
     <FxCompile Include="Shaders\WidgetTextureVS.hlsl">
       <ShaderType>Vertex</ShaderType>
@@ -958,6 +1154,10 @@
     <FxCompile Include="Shaders\WidgetVS.hlsl">
       <ShaderType>Vertex</ShaderType>
       <VariableName>WIDGET_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\WorldrayVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>WORLDRAY_VS</VariableName>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>

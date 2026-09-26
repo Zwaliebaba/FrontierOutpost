@@ -20,14 +20,14 @@ float hueToComponent(float p, float q, float t) {
 
 float3 oversaturate(float3 c, float amount) {
   c = max(c, ((float3)(0.0)));
-  float avg = (c.x + c.y + c.z) / 3.0 + 0.00001;
+  float average = (c.x + c.y + c.z) / 3.0 + 0.00001;
 #if 0
   return lerp(
-    c / (1.0 + amount * (avg / c - 1.0)),
-    c * (1.0 + amount * (c / avg - 1.0)),
-    step(avg, c));
+    c / (1.0 + amount * (average / c - 1.0)),
+    c * (1.0 + amount * (c / average - 1.0)),
+    step(average, c));
 #else
-  return c * max(((float3)(0.0)), (1.0 + amount * (c / avg - 1.0)));
+  return c * max(((float3)(0.0)), (1.0 + amount * (c / average - 1.0)));
 #endif
 }
 
