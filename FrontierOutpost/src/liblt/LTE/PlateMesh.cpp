@@ -165,21 +165,37 @@ DefineFunction(Mesh_ComputeOcclusion) {
     Texture_Create(vDim, vDim, TextureFormat::R32F);
   static Shader shader = Shader_Create("identity.jsl", "compute/occlusion.jsl");
 
+  /* Every vertex sums over every surfel: one draw of that on a big hull ran
+     past Windows' GPU timeout (TDR) and lost the device. So the surfel rows
+     are split into bands small enough to finish quickly, each drawn and
+     waited for on its own, and the sums added up with additive blending. */
+  const double kInteractionsPerDraw = 1 << 25;
+  int rowsPerDraw = (int)(kInteractionsPerDraw / ((double)vDim * vDim * sDim));
+  rowsPerDraw = Max(1, Min(sDim, rowsPerDraw));
+
   occlusionBuffer->Bind(0);
-  (*shader)
-    ("sDim", sDim)
-    ("sPointBuffer", sPointBuffer)
-    ("sNormalBuffer", sNormalBuffer)
-    ("vPointBuffer", vPointBuffer)
-    ("vNormalBuffer", vNormalBuffer);
-  Renderer_SetShader(*shader);
-  Renderer_DrawFSQ();
+  Renderer_Clear(V4(0));
+  Renderer_PushBlendMode(BlendMode::Additive);
+  for (int rowBegin = 0; rowBegin < sDim; rowBegin += rowsPerDraw) {
+    (*shader)
+      ("sDim", sDim)
+      ("sRowBegin", rowBegin)
+      ("sRowEnd", Min(sDim, rowBegin + rowsPerDraw))
+      ("sPointBuffer", sPointBuffer)
+      ("sNormalBuffer", sNormalBuffer)
+      ("vPointBuffer", vPointBuffer)
+      ("vNormalBuffer", vNormalBuffer);
+    Renderer_SetShader(*shader);
+    Renderer_DrawFSQ();
+    Renderer_Finish();
+  }
+  Renderer_PopBlendMode();
   occlusionBuffer->Unbind();
 
   /* Write result to mesh. */
   Array<float> result(vDim * vDim);
   occlusionBuffer->GetData(result.data());
   for (size_t i = 0; i < m->vertices.size(); ++i)
-    m->vertices[i].u = result[i];
+    m->vertices[i].u = Exp(-Pow(Abs(result[i]), 0.75f));
   m->version++;
 }
