@@ -24,6 +24,12 @@
         <AdditionalOptions>/Zc:__cplusplus</AdditionalOptions>
         <PreprocessorDefinitions>WIN32;_WINDOWS;_MBCS;%(ClCompile.PreprocessorDefinitions)</PreprocessorDefinitions>
         <UndefinePreprocessorDefinitions>UNICODE;_UNICODE;%(ClCompile.UndefinePreprocessorDefinitions)</UndefinePreprocessorDefinitions>
+        <!-- What the original's projects left at the compiler's own defaults, as the old
+             FrontierOutpost/Directory.Build.props pinned them: no /JMC, no /Zc:inline, no module
+             dependency scan. /JMC slows every call in Debug, which makes the first frames longer. -->
+        <SupportJustMyCode>false</SupportJustMyCode>
+        <RemoveUnreferencedCodeData>false</RemoveUnreferencedCodeData>
+        <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
       </ClCompile>
     </ItemGroup>
   </Target>
