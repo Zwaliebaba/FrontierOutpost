@@ -18,6 +18,20 @@ std::span<std::byte const> ShaderRegistry_Vertex(String const& name);
 std::span<std::byte const> ShaderRegistry_Pixel(String const& name);
 std::span<std::byte const> ShaderRegistry_Compute(String const& name);
 
+/* A shader another project compiled, by its legacy name: the game's, which
+ * FrontierOutpost compiles from its own Shaders/ (Design/ADR/ADR-014). */
+struct ShaderRegistryEntry {
+  char const* name;
+  std::span<std::byte const> bytecode;
+};
+
+/* Adds another project's tables, which the lookups above search after this
+ * library's own. The tables must outlive every lookup. */
+void ShaderRegistry_Add(
+  std::span<ShaderRegistryEntry const> vertex,
+  std::span<ShaderRegistryEntry const> pixel,
+  std::span<ShaderRegistryEntry const> compute);
+
 /* The file in Shaders/ a name was compiled from, by ADR-008's rule, which
  * Build/CheckProjectFiles.py's LegacyShader also spells: drop .jsl, start a
  * word at each / and _, and add the stage, so "post/tonemap.jsl" and "PS" give

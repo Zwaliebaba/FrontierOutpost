@@ -404,34 +404,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Shaders\AtmospherePS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>ATMOSPHERE_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\BeamPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>BEAM_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\BillboardAxisVS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-      <VariableName>BILLBOARD_AXIS_VS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\BillboardAxisWrappedVS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-      <VariableName>BILLBOARD_AXIS_WRAPPED_VS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\BillboardSoftVS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-      <VariableName>BILLBOARD_SOFT_VS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\BillboardVS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-      <VariableName>BILLBOARD_VS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\ComputeLensflareVisibilityPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>COMPUTE_LENSFLARE_VISIBILITY_PS</VariableName>
-    </FxCompile>
     <FxCompile Include="Shaders\ComputeOcclusionPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>COMPUTE_OCCLUSION_PS</VariableName>
@@ -439,42 +411,6 @@
     <FxCompile Include="Shaders\ComputeSdffontPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>COMPUTE_SDFFONT_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\CubemapBlurPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>CUBEMAP_BLUR_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\CubemapIrmapPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>CUBEMAP_IRMAP_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\CubemapMultiplyPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>CUBEMAP_MULTIPLY_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\DepthprepassPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>DEPTHPREPASS_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\DustfleckPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>DUSTFLECK_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\ExplosionPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>EXPLOSION_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\FilterAoPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>FILTER_AO_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\FilterDirtPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>FILTER_DIRT_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\FilterRustPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>FILTER_RUST_PS</VariableName>
     </FxCompile>
     <FxCompile Include="Shaders\GenFieldcopyCS.hlsl">
       <ShaderType>Compute</ShaderType>
@@ -488,42 +424,6 @@
       <ShaderType>Compute</ShaderType>
       <VariableName>GEN_FIELDOCCLUSION_CS</VariableName>
     </FxCompile>
-    <FxCompile Include="Shaders\GenLensflarePS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>GEN_LENSFLARE_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\GenNebulaPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>GEN_NEBULA_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\GenNormalmapLumPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>GEN_NORMALMAP_LUM_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\GenPlanetPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>GEN_PLANET_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\GenPlanetringPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>GEN_PLANETRING_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\GenPlanetskyboxPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>GEN_PLANETSKYBOX_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\GenPlatingPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>GEN_PLATING_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\GenRockPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>GEN_ROCK_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\GenStarbgPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>GEN_STARBG_PS</VariableName>
-    </FxCompile>
     <FxCompile Include="Shaders\HologramPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>HOLOGRAM_PS</VariableName>
@@ -532,73 +432,9 @@
       <ShaderType>Vertex</ShaderType>
       <VariableName>IDENTITY_VS</VariableName>
     </FxCompile>
-    <FxCompile Include="Shaders\LensflarePS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>LENSFLARE_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\LightCompositePS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>LIGHT_COMPOSITE_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\LightGlobalPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>LIGHT_GLOBAL_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\LightPointPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>LIGHT_POINT_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\MaterialDebugPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>MATERIAL_DEBUG_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\MaterialFresnelPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>MATERIAL_FRESNEL_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\MaterialLambertPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>MATERIAL_LAMBERT_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\MaterialLodfadePS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>MATERIAL_LODFADE_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\MaterialMetalPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>MATERIAL_METAL_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\MaterialWaterPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>MATERIAL_WATER_PS</VariableName>
-    </FxCompile>
     <FxCompile Include="Shaders\NpmVS.hlsl">
       <ShaderType>Vertex</ShaderType>
       <VariableName>NPM_VS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\ParticleRadialPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>PARTICLE_RADIAL_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\ParticleRadialtexturedPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>PARTICLE_RADIALTEXTURED_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\ParticleVS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-      <VariableName>PARTICLE_VS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PlanetPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>PLANET_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PlanetringPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>PLANETRING_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostAddPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_ADD_PS</VariableName>
     </FxCompile>
     <FxCompile Include="Shaders\PostBloomCompositePS.hlsl">
       <ShaderType>Pixel</ShaderType>
@@ -608,157 +444,13 @@
       <ShaderType>Pixel</ShaderType>
       <VariableName>POST_BLUR_PS</VariableName>
     </FxCompile>
-    <FxCompile Include="Shaders\PostCircleminmaxPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_CIRCLEMINMAX_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostColorgrade1DPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_COLORGRADE1D_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostColorgradebezierPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_COLORGRADEBEZIER_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostDitherPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_DITHER_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostEdgedetectPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_EDGEDETECT_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostExpmapPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_EXPMAP_PS</VariableName>
-    </FxCompile>
     <FxCompile Include="Shaders\PostGlowthreshPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>POST_GLOWTHRESH_PS</VariableName>
     </FxCompile>
-    <FxCompile Include="Shaders\PostLensflareCompositePS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_LENSFLARE_COMPOSITE_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostLevelsPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_LEVELS_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostLinearPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_LINEAR_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostMaxPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_MAX_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostMedianPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_MEDIAN_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostMinPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_MIN_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostMultiplyPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_MULTIPLY_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostPowerPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_POWER_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostSamplecubicPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_SAMPLECUBIC_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostSaturatePS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_SATURATE_PS</VariableName>
-    </FxCompile>
     <FxCompile Include="Shaders\PostTonemapPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>POST_TONEMAP_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PostVignettePS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>POST_VIGNETTE_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PulseHeadPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>PULSE_HEAD_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\PulseTailPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>PULSE_TAIL_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\RailPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>RAIL_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\ShieldExplosionPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>SHIELD_EXPLOSION_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\ShieldPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>SHIELD_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\SkyboxPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>SKYBOX_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\SkyboxVS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-      <VariableName>SKYBOX_VS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\Smaa1PS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>SMAA1_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\Smaa1VS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-      <VariableName>SMAA1_VS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\Smaa2PS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>SMAA2_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\Smaa2VS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-      <VariableName>SMAA2_VS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\Smaa3PS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>SMAA3_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\Smaa3VS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-      <VariableName>SMAA3_VS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\StarbgPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>STARBG_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\ThrusterTrailPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>THRUSTER_TRAIL_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\TrailPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>TRAIL_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\TrailVS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-      <VariableName>TRAIL_VS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\TransferbeamPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>TRANSFERBEAM_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\TreePS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>TREE_PS</VariableName>
     </FxCompile>
     <FxCompile Include="Shaders\UiArcPS.hlsl">
       <ShaderType>Pixel</ShaderType>
@@ -836,36 +528,18 @@
       <ShaderType>Vertex</ShaderType>
       <VariableName>WIDGET_VS</VariableName>
     </FxCompile>
-    <FxCompile Include="Shaders\WorldrayVS.hlsl">
-      <ShaderType>Vertex</ShaderType>
-      <VariableName>WORLDRAY_VS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\WormholePS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>WORMHOLE_PS</VariableName>
-    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shaders\Bezier.hlsli" />
     <None Include="Shaders\Color.hlsli" />
     <None Include="Shaders\Common.hlsli" />
-    <None Include="Shaders\Cube.hlsli" />
-    <None Include="Shaders\Deferred.hlsli" />
-    <None Include="Shaders\Fdm.hlsli" />
     <None Include="Shaders\Field.hlsli" />
-    <None Include="Shaders\Lighting.hlsli" />
     <None Include="Shaders\Math.hlsli" />
     <None Include="Shaders\Noise.hlsli" />
-    <None Include="Shaders\Quat.hlsli" />
-    <None Include="Shaders\Raytracing.hlsli" />
-    <None Include="Shaders\Scattering.hlsli" />
-    <None Include="Shaders\Smaa.hlsli" />
-    <None Include="Shaders\Softparticle.hlsli" />
     <None Include="Shaders\Texturing.hlsli" />
     <None Include="Shaders\Ui.hlsli" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="Shaders\SmaaLicense.txt" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\NeuronCore\NeuronCore.vcxproj">

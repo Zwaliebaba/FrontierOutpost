@@ -2,8 +2,10 @@
 
 - **Status:** Proposed 2026-09-26. Nothing is approved and nothing is implemented. The owner
   approves items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the
-  same commit where the item is a decision (§3). The next free ADR number is ADR-016.
-- **Scope:** the HLSL in `NeuronClient/Shaders/` and the C++ that dispatches it:
+  same commit where the item is a decision (§3). The next free ADR number is ADR-017 (ADR-016 went to the library split's visuals).
+- **Scope:** the HLSL in `NeuronClient/Shaders/` and, since the library split moved the game's
+  shaders there, `FrontierOutpost/Shaders/`, and the C++ that dispatches it (file names are
+  unchanged; `Design/LibrarySplit-plan.md` item 8 says which folder each is in):
   - the four compute shaders;
   - the pixel shaders that do compute work at load;
   - the per-frame passes.

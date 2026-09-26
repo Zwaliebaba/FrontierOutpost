@@ -77,7 +77,8 @@ SHADER_MODEL = "5.1"
 SHADER_HEADER = "$(ProjectDir)CompiledShaders/%(Filename).h"
 # ADR-008: the registry of each shader folder that scripts name shaders in, and the form of its
 # tables, one entry a line: Entry const kPixel[] = { {"post/blur.jsl", Bytes(POST_BLUR_PS)}, ... };
-REGISTRIES = {"NeuronClient/Shaders/": "NeuronClient/ShaderRegistry.cpp"}
+REGISTRIES = {"NeuronClient/Shaders/": "NeuronClient/ShaderRegistry.cpp",
+              "FrontierOutpost/Shaders/": "FrontierOutpost/GameShaderRegistry.cpp"}
 REGISTRY_TABLE = re.compile(r"\bEntry const k(Vertex|Pixel|Compute)\[\] = \{(.*?)\};", re.S)
 REGISTRY_ENTRY = re.compile(r'\{"([^"]+)", Bytes\((\w+)\)\},?')
 TABLE_STAGES = {"Vertex": "VS", "Pixel": "PS", "Compute": "CS"}
