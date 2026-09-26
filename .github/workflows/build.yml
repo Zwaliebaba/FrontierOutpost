@@ -15,6 +15,7 @@ name: Build
 #   Build/RunClangTidy.py        clang-tidy                      runs
 #   Build/CheckFormat.py         clang-format (its own job)      runs
 #   Build/TestCheckers.py        the checkers' own tests         runs, in both jobs
+#   launch.exe and lt.dll        the smoke job (its own job)     runs the apps brought up so far
 #
 # The checkers leave FrontierOutpost/ and GameData/ alone (ADR-001, ADR-004), so until NeuronClient
 # lands they check almost nothing in this tree. TestCheckers.py is what shows they catch what they
@@ -141,6 +142,87 @@ jobs:
         with:
           name: test-results
           path: TestResults
+          if-no-files-found: ignore
+
+      # What the smoke job runs, with the PDBs that let a crash print its stack.
+      - name: Upload the launcher
+        uses: actions/upload-artifact@v4
+        with:
+          name: launch-x64-Debug
+          path: |
+            FrontierOutpost/bin/x64/Debug/launch.exe
+            FrontierOutpost/bin/x64/Debug/launch.pdb
+            FrontierOutpost/bin/x64/Debug/lt.dll
+            FrontierOutpost/bin/x64/Debug/lt.pdb
+          if-no-files-found: error
+
+  # The smoke job (Design/Plan/NeuronClient-migration.md, Phase 4 step 7 and N15). Each app runs a
+  # number of frames on WARP, Windows' software adapter, offscreen and with the Direct3D 12 debug
+  # layer, and fails on an error the layer reports, a removed device, a fatal error, a crash or a
+  # capture it did not save. It never makes a swap chain (plan section 7). A crash prints its
+  # stack into the log (LTE/OS.h). The last frame of each app is uploaded for the owner, and
+  # printed into the log, downscaled, by Build/LogFrame.py, for a session that cannot fetch
+  # artefacts. The apps are those brought up so far: each joins as the bring-up step that shows it
+  # lands (plan Phase 4 step 5).
+  smoke:
+    name: Smoke on WARP
+    needs: windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: launch-x64-Debug
+          path: FrontierOutpost/bin/x64/Debug
+
+      - name: Run the apps on WARP
+        shell: pwsh
+        run: |
+          $apps = @('loading', 'ui')
+          $frames = 30
+          $minutesEach = 10
+          $launch = Join-Path $PWD 'FrontierOutpost\bin\x64\Debug\launch.exe'
+          $failed = @()
+          foreach ($app in $apps) {
+            Write-Output "::group::$app"
+            $capture = "smoke-$app.png"
+            $process = Start-Process -FilePath $launch `
+              -ArgumentList $app, '--warp', '--frames', $frames, '--capture', $capture `
+              -NoNewWindow -PassThru -RedirectStandardOutput "smoke-$app.log" -RedirectStandardError "smoke-$app.err"
+            # Without its handle, a finished process's exit code reads as nothing.
+            $null = $process.Handle
+            if (-not $process.WaitForExit($minutesEach * 60000)) {
+              $process.Kill()
+              $process.WaitForExit()
+              Write-Output "$app did not finish within $minutesEach minutes"
+            }
+            Get-Content "smoke-$app.log", "smoke-$app.err" -ErrorAction SilentlyContinue
+            Write-Output "::endgroup::"
+            Write-Output "$app exited with $($process.ExitCode)"
+            if ($process.ExitCode -ne 0) { $failed += $app }
+            if (Test-Path $capture) {
+              python Build\LogFrame.py $capture
+              if ($LASTEXITCODE -ne 0) { $failed += "$app's frame, which Build\LogFrame.py could not read" }
+            }
+          }
+          if ($failed) { throw "The smoke run failed for: $($failed -join ', ')" }
+
+      - name: Upload the captures and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke
+          path: |
+            smoke-*.png
+            smoke-*.log
+            smoke-*.err
           if-no-files-found: ignore
 
   format:

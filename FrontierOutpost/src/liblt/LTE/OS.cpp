@@ -190,6 +190,86 @@ Vector<String> OS_ListDir(String const& path) {
 
 namespace {
   bool gUnattended = false;
+
+#ifdef LIBLT_WINDOWS
+  /* Unattended, nobody can attach a debugger either, so a crash prints what it
+     was and where: the exception, then each frame of the stack, with its
+     function and line where the PDBs beside the executable have them. The
+     process then ends as it would have, with the exception's code. */
+  LONG WINAPI PrintCrash(EXCEPTION_POINTERS* pointers) {
+    EXCEPTION_RECORD const& record = *pointers->ExceptionRecord;
+    std::cout << "CRASH: exception 0x" << std::hex << record.ExceptionCode
+      << " at 0x" << (DWORD64)record.ExceptionAddress;
+    if (record.ExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
+        record.NumberParameters >= 2)
+    {
+      ULONG_PTR const access = record.ExceptionInformation[0];
+      std::cout << (access == 1 ? ", writing" : access == 8 ? ", executing" : ", reading")
+        << " 0x" << record.ExceptionInformation[1];
+    }
+    std::cout << std::dec << '\n';
+
+    HANDLE const process = GetCurrentProcess();
+    HANDLE const thread = GetCurrentThread();
+    SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
+    SymInitialize(process, OS_GetExecutableDir().c_str(), TRUE);
+
+    CONTEXT context = *pointers->ContextRecord;
+    STACKFRAME64 frame = {};
+  #ifdef _M_ARM64
+    DWORD const machine = IMAGE_FILE_MACHINE_ARM64;
+    frame.AddrPC.Offset = context.Pc;
+    frame.AddrFrame.Offset = context.Fp;
+    frame.AddrStack.Offset = context.Sp;
+  #else
+    DWORD const machine = IMAGE_FILE_MACHINE_AMD64;
+    frame.AddrPC.Offset = context.Rip;
+    frame.AddrFrame.Offset = context.Rbp;
+    frame.AddrStack.Offset = context.Rsp;
+  #endif
+    frame.AddrPC.Mode = AddrModeFlat;
+    frame.AddrFrame.Mode = AddrModeFlat;
+    frame.AddrStack.Mode = AddrModeFlat;
+
+    for (int i = 0; i < 64; ++i) {
+      if (!StackWalk64(machine, process, thread, &frame, &context, nullptr,
+            SymFunctionTableAccess64, SymGetModuleBase64, nullptr) ||
+          !frame.AddrPC.Offset)
+        break;
+      /* A return address is the instruction after the call, which can be on
+         the next line: the call is the byte before it. */
+      DWORD64 const address = frame.AddrPC.Offset;
+      DWORD64 const lookup = i ? address - 1 : address;
+      std::cout << "  " << i << ": ";
+      DWORD64 const base = SymGetModuleBase64(process, address);
+      char module[MAX_PATH];
+      if (base && GetModuleFileNameA((HMODULE)base, module, MAX_PATH)) {
+        char const* name = strrchr(module, '\\');
+        std::cout << (name ? name + 1 : module) << "+0x" << std::hex << (address - base);
+      }
+      else
+        std::cout << "0x" << std::hex << address;
+      std::cout << std::dec;
+
+      alignas(SYMBOL_INFO) char buffer[sizeof(SYMBOL_INFO) + 256] = {};
+      SYMBOL_INFO* symbol = (SYMBOL_INFO*)buffer;
+      symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+      symbol->MaxNameLen = 256;
+      DWORD64 displacement = 0;
+      if (SymFromAddr(process, lookup, &displacement, symbol))
+        std::cout << ' ' << symbol->Name;
+      IMAGEHLP_LINE64 line = {};
+      line.SizeOfStruct = sizeof(line);
+      DWORD column = 0;
+      if (SymGetLineFromAddr64(process, lookup, &column, &line))
+        std::cout << " (" << line.FileName << ':' << line.LineNumber << ')';
+      std::cout << '\n';
+    }
+    std::cout << std::flush;
+    StackFrame_Print();
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+#endif
 }
 
 bool OS_IsUnattended() {
@@ -200,6 +280,7 @@ void OS_SetUnattended() {
   gUnattended = true;
 #ifdef LIBLT_WINDOWS
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+  SetUnhandledExceptionFilter(PrintCrash);
   _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
   /* The debug CRT's own dialogs, which the release CRT does not have. */
   #ifdef _DEBUG

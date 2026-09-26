@@ -83,7 +83,7 @@
       <SubSystem>Console</SubSystem>
       <IgnoreSpecificDefaultLibraries>libcmt;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;gdi32.lib;winmm.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalDependencies>opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;gdi32.lib;winmm.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;dbghelp.lib</AdditionalDependencies>
     </Link>
     <!-- liblt's shaders, as NeuronClient's: Shader Model 5.1, the same in Debug and Release, into a
          header in CompiledShaders/ and no .cso (Design/ADR/ADR-008). Shaders/ is new code, outside
