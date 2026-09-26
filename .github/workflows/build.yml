@@ -187,8 +187,9 @@ jobs:
         run: |
           # Each app, and the minutes it may run before it counts as hung. war first generates its
           # star system on WARP: the nebula, its blur and IR map, five ship hulls' occlusion, and
-          # the SDF fields of three asteroids.
-          $apps = [ordered]@{ loading = 10; ui = 10; war = 25 }
+          # the SDF fields of three asteroids. It took 21 minutes on 86634e8, 19 of them before its
+          # first frame.
+          $apps = [ordered]@{ loading = 10; ui = 10; war = 35 }
           $frames = 30
           $launch = Join-Path $PWD 'FrontierOutpost\bin\x64\Debug\launch.exe'
           $failed = @()
