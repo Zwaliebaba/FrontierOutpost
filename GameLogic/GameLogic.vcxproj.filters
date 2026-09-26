@@ -915,4 +915,9 @@
     <ClInclude Include="Presentation.h" />
     <ClCompile Include="Presentation.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="System.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>

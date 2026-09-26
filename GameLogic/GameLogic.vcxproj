@@ -963,6 +963,11 @@
     <ClInclude Include="Presentation.h" />
     <ClCompile Include="Presentation.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="System.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\Build\Legacy.targets" />
 </Project>
