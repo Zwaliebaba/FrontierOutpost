@@ -1,16 +1,12 @@
 <Solution>
   <Configurations>
-    <BuildType Name="Debug" />
-    <BuildType Name="Release" />
     <Platform Name="x64" />
     <Platform Name="ARM64" />
   </Configurations>
   <Folder Name="/ltheory/">
-    <Project Path="FrontierOutpost/src/launch/launch.vcxproj" />
-    <Project Path="FrontierOutpost/src/liblt/lt.vcxproj" />
+    <Project Path="FrontierOutpost/src/launch/launch.vcxproj" Id="b758f4e2-6c6f-5be3-b848-f9d633726e5b" />
+    <Project Path="FrontierOutpost/src/liblt/lt.vcxproj" Id="1cb67bee-da37-5d52-a875-fabecccd5014" />
   </Folder>
-  <Folder Name="/NeuronClient/">
-    <Project Path="NeuronClient/NeuronClient.vcxproj" />
-    <Project Path="Tests/NeuronClientTests/NeuronClientTests.vcxproj" />
-  </Folder>
+  <Project Path="NeuronClient/NeuronClient.vcxproj" Id="05010071-b8ca-465b-9fec-bcf2d87dad7a" />
+  <Project Path="Tests/NeuronClientTests/NeuronClientTests.vcxproj" Id="13a98a79-2606-44cf-9135-1d0c68e34ce2" />
 </Solution>
