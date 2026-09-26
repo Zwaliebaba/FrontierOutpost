@@ -61,6 +61,12 @@ struct Launcher : public Program {
     Renderer_Initialize(warp, warp);
   }
 
+  /* The app goes before the engines it uses, which its members would outlive:
+     its windows play a sound as they close. */
+  ~Launcher() {
+    instance.Clear();
+  }
+
   void OnInitialize() {
     Launch();
   }
