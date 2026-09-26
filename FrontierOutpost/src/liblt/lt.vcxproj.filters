@@ -85,6 +85,9 @@
     <Filter Include="Module\SoundEngine">
       <UniqueIdentifier>{9DEBD71C-969E-579A-B2F7-166F01EB30DD}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{D50F5261-EFC7-5C12-8187-D782374C3F20}</UniqueIdentifier>
+    </Filter>
     <Filter Include="ThirdParty">
       <UniqueIdentifier>{C1BA3B51-1AF6-5538-A822-D664CF1A3CB3}</UniqueIdentifier>
     </Filter>
@@ -884,6 +887,9 @@
       <Filter>LTE</Filter>
     </ClCompile>
     <ClCompile Include="LTE\ShaderInstance.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="LTE\ShaderRegistry.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
     <ClCompile Include="LTE\SpatialPartition.cpp">
@@ -1829,6 +1835,9 @@
     <ClInclude Include="LTE\ShaderInstance.h">
       <Filter>LTE</Filter>
     </ClInclude>
+    <ClInclude Include="LTE\ShaderRegistry.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
     <ClInclude Include="LTE\Singleton.h">
       <Filter>LTE</Filter>
     </ClInclude>
@@ -2048,5 +2057,85 @@
     <ClInclude Include="Volume\MarchingCubes.h">
       <Filter>Volume</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="Shaders\IdentityVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\MaterialLambertPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\NpmVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostBlurPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Smaa1PS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Smaa1VS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiTexturePS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\WidgetTextureVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\WidgetVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <None Include="Shaders\Bezier.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Color.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Common.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Cube.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Deferred.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Fdm.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Lighting.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Math.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Noise.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Quat.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Raytracing.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Scattering.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Smaa.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Softparticle.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Texturing.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Ui.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <Text Include="Shaders\SmaaLicense.txt">
+      <Filter>Shaders</Filter>
+    </Text>
   </ItemGroup>
 </Project>

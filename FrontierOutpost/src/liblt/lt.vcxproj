@@ -85,6 +85,18 @@
       <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;gdi32.lib;winmm.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
     </Link>
+    <!-- liblt's shaders, as NeuronClient's: Shader Model 5.1, the same in Debug and Release, into a
+         header in CompiledShaders/ and no .cso (Design/ADR/ADR-008). Shaders/ is new code, outside
+         ADR-001's exemption (plan N11), and LTE/ShaderRegistry.cpp holds every one by its legacy
+         name. -->
+    <FxCompile>
+      <ShaderModel>5.1</ShaderModel>
+      <HeaderFileOutput>$(ProjectDir)CompiledShaders\%(Filename).h</HeaderFileOutput>
+      <ObjectFileOutput></ObjectFileOutput>
+      <DisableOptimizations>false</DisableOptimizations>
+      <EnableDebuggingInformation>false</EnableDebuggingInformation>
+      <TreatWarningAsError>true</TreatWarningAsError>
+    </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
     <ClCompile>
@@ -463,6 +475,7 @@
     <ClCompile Include="LTE\ShaderInstance.cpp">
       <ObjectFileName>$(IntDir)LTE\</ObjectFileName>
     </ClCompile>
+    <ClCompile Include="LTE\ShaderRegistry.cpp" />
     <ClCompile Include="LTE\SpatialPartition.cpp" />
     <ClCompile Include="LTE\SpatialPartition_HashGrid.cpp" />
     <ClCompile Include="LTE\SpatialPartition_UniformGrid.cpp" />
@@ -834,6 +847,7 @@
     <ClInclude Include="LTE\Serializer.h" />
     <ClInclude Include="LTE\Shader.h" />
     <ClInclude Include="LTE\ShaderInstance.h" />
+    <ClInclude Include="LTE\ShaderRegistry.h" />
     <ClInclude Include="LTE\Singleton.h" />
     <ClInclude Include="LTE\Smooth.h" />
     <ClInclude Include="LTE\Sparse.h" />
@@ -909,6 +923,65 @@
     <ClInclude Include="Volume\MarchingCubes.h" />
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="Shaders\IdentityVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>IDENTITY_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\MaterialLambertPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>MATERIAL_LAMBERT_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\NpmVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>NPM_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\PostBlurPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_BLUR_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\Smaa1PS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>SMAA1_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\Smaa1VS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>SMAA1_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\UiTexturePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>UI_TEXTURE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\WidgetTextureVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>WIDGET_TEXTURE_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\WidgetVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>WIDGET_VS</VariableName>
+    </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Shaders\Bezier.hlsli" />
+    <None Include="Shaders\Color.hlsli" />
+    <None Include="Shaders\Common.hlsli" />
+    <None Include="Shaders\Cube.hlsli" />
+    <None Include="Shaders\Deferred.hlsli" />
+    <None Include="Shaders\Fdm.hlsli" />
+    <None Include="Shaders\Lighting.hlsli" />
+    <None Include="Shaders\Math.hlsli" />
+    <None Include="Shaders\Noise.hlsli" />
+    <None Include="Shaders\Quat.hlsli" />
+    <None Include="Shaders\Raytracing.hlsli" />
+    <None Include="Shaders\Scattering.hlsli" />
+    <None Include="Shaders\Smaa.hlsli" />
+    <None Include="Shaders\Softparticle.hlsli" />
+    <None Include="Shaders\Texturing.hlsli" />
+    <None Include="Shaders\Ui.hlsli" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="Shaders\SmaaLicense.txt" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- NeuronClient.lib is linked through this reference (Design/ADR/ADR-005). -->
     <ProjectReference Include="..\..\..\NeuronClient\NeuronClient.vcxproj">
       <Project>{05010071-B8CA-465B-9FEC-BCF2D87DAD7A}</Project>
@@ -920,4 +993,8 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
+  <!-- CompiledShaders/ is build output (AGENTS.md §2), made on every build before FXC writes to it. -->
+  <Target Name="MakeCompiledShadersFolder" BeforeTargets="FxCompile">
+    <MakeDir Directories="$(ProjectDir)CompiledShaders" />
+  </Target>
 </Project>

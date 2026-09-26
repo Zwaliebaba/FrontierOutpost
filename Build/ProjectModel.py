@@ -22,6 +22,9 @@ NS = "{http://schemas.microsoft.com/developer/msbuild/2003}"
 # scratch clones; neither is built. CompiledShaders/ is build output (AGENTS.md §2).
 EXEMPT_PREFIXES = ("FrontierOutpost/", "GameData/", "ltheory-old-main/", "_baseline_build/")
 BUILD_OUTPUT_DIRS = {"CompiledShaders"}
+# The NeuronClient migration's N11 (ADR-001's scope note, ADR-008): liblt's shader folder is new
+# code, carved out of the exemption. The rest of its project keeps it.
+CARVED_OUT = ("FrontierOutpost/src/liblt/Shaders/",)
 
 CONDITION = re.compile(r"^\s*'([^']*)'\s*(==|!=)\s*'([^']*)'\s*$")
 ITEM_TYPES = ("ClCompile", "ClInclude", "FxCompile", "ResourceCompile", "None", "Image", "Text",
@@ -30,7 +33,9 @@ TOOLS = ("ClCompile", "Link", "Lib", "ResourceCompile", "FxCompile", "Midl", "Ma
 
 
 def IsExempt(_relative):
-  return _relative.startswith(EXEMPT_PREFIXES) or bool(BUILD_OUTPUT_DIRS & set(_relative.split("/")))
+  if BUILD_OUTPUT_DIRS & set(_relative.split("/")):
+    return True
+  return _relative.startswith(EXEMPT_PREFIXES) and not _relative.startswith(CARVED_OUT)
 
 
 def TreeFiles(_root):
@@ -84,6 +89,16 @@ class Project:
         if include and Tag(item) in ITEM_TYPES:
           items.setdefault(Tag(item), []).append(include.replace("\\", "/"))
     return items
+
+  def ItemMetadata(self, _type):
+    """{path, as Items() spells it: {metadata name: value}} for the items of one type."""
+    metadata = {}
+    for group in self.xml.iter(NS + "ItemGroup"):
+      for item in group:
+        if Tag(item) == _type and item.get("Include"):
+          path = item.get("Include").replace("\\", "/")
+          metadata[path] = {Tag(leaf): (leaf.text or "").strip() for leaf in item}
+    return metadata
 
   def FilterItems(self):
     path = self.path.with_name(self.path.name + ".filters")

@@ -4,7 +4,10 @@
 - **Scope:** `FrontierOutpost.slnx` and everything under `FrontierOutpost/`, and, since ADR-004,
   `GameData/`: the original's runtime data, moved out of `FrontierOutpost/`. Nothing else. The
   solution builds `NeuronClient/` and `Tests/NeuronClientTests/` from the NeuronClient plan's
-  Phase 2; they are outside the exemption, and AGENTS.md governs them in full (ADR-005).
+  Phase 2; they are outside the exemption, and AGENTS.md governs them in full (ADR-005). So is
+  `FrontierOutpost/src/liblt/Shaders/`, from that plan's Phase 4: liblt's shaders are new code (its
+  N11, ADR-008), so AGENTS.md's rules for shaders and the checkers apply to them, in `lt.vcxproj`.
+  The rest of `lt` stays exempt.
 - **Detail:** `FrontierOutpost/MIGRATION_NOTES.md`
 
 ## Context
@@ -72,7 +75,8 @@ The exemption covers the migrated code only. New first-party code written outsid
 ## What this forecloses
 
 - Running `.clang-tidy`, `.clang-format` or a future `Build/CheckProjectFiles.py` as gates over
-  `FrontierOutpost/`. Any such checker must exclude it until a later ADR narrows this one.
+  `FrontierOutpost/`. Any such checker must exclude it until a later ADR narrows this one, as
+  ADR-008 does for `src/liblt/Shaders/`.
 - Renaming, flattening or reformatting the imported code as part of the migration. That work, if
   wanted, is its own decision afterwards.
 - Reading "x64 is the only platform" as forbidding the ARM64 configurations of

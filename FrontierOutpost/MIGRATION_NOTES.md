@@ -1072,7 +1072,9 @@ Recorded, not to be done in this migration:
     permission notice, which its MIT licence requires in copies of the source. It has lacked it
     since the original; D26 only moves it. SMAA's two lookup textures did land: the same licence
     says that binary distributions need not carry the notice. Adding SMAA's `LICENSE.txt` beside
-    the shader fixes it. **Open, the owner's call.**
+    the shader fixes it. **Resolved by ADR-008**, in the NeuronClient migration's Phase 4 step 2:
+    SMAA's HLSL port, `FrontierOutpost/src/liblt/Shaders/Smaa.hlsli`, carries the notice in
+    `SmaaLicense.txt` beside it. `smaa.jsl` still lacks it until step 6 deletes `GameData/shader`.
 
 ## 15. Phase 1: structure
 
@@ -1692,10 +1694,9 @@ at `/W4`, and GLEW raise none.
 
 - **O10: the owner's to do.** Convert the 24 Ogg sounds left in `GameData/sound/` to WAV.
 - **O11:** then listen to the sounds.
-- **O14: the owner's to decide.** The licence notice for SMAA's shader source.
 - **O4:** ARM64 builds have not been run, for want of an ARM64 machine.
-- O1 and O7 describe the environment and the source material. O2, O3, O5, O8, O9, O12 and O13
-  are resolved, and O6 is closed (D24).
+- O1 and O7 describe the environment and the source material. O2, O3, O5, O8, O9, O12, O13 and
+  O14 are resolved, and O6 is closed (D24).
 
 ## 22. GameData (D26–D29)
 

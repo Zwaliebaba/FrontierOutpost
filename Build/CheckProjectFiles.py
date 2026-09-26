@@ -17,12 +17,17 @@ What no compiler checks, read from the files themselves:
                   its .filters, and every file they list exists (§2).
   Layout          Project folders are flat; shaders sit in Shaders/ only (§2). Files are
                   PascalCase .h and .cpp, and shaders are named for their stage (R7, ADR-008).
+  Shaders         Each compiles as the stage its name ends in, at Shader Model 5.1, into a header
+                  in CompiledShaders/ whose array its name spells in UPPER_CASE (R3, ADR-008).
   Names           No type carries an affix (R2), and no identifier a British spelling (R11).
   clang-tidy      .clang-tidy's HeaderFilterRegex covers every project it should lint.
   Dependencies    No NuGet package without an ADR (R14).
 
 FrontierOutpost/ and GameData/ are the legacy import (ADR-001, ADR-004). Of the above, only the
 rules ADR-001 keeps apply to them: they are in the solution, on toolset v145, with relative paths.
+liblt's Shaders/ folder is new code, carved out of that (N11): the rules for shaders apply to it in
+lt.vcxproj, and LTE/ShaderRegistry.cpp must hold each of its shaders under the legacy name the
+file is named for, and nothing else (ADR-008).
 
 Exit 0 when nothing is wrong, 1 otherwise, naming each file and rule.
 """
@@ -32,8 +37,8 @@ import pathlib
 import re
 import sys
 
-from ProjectModel import (EXEMPT_PREFIXES, IsExempt, Project, SolutionFiles, SolutionPlatforms, SolutionProjects,
-                          StripCode, TreeFiles)
+from ProjectModel import (CARVED_OUT, EXEMPT_PREFIXES, IsExempt, Project, SolutionFiles, SolutionPlatforms,
+                          SolutionProjects, StripCode, TreeFiles)
 
 TOOLSET = "v145"
 CONFIGURATIONS = ("Debug", "Release")
@@ -64,6 +69,17 @@ SHADERS = (".hlsl", ".hlsli")
 WIZARD_FILES = {"pch.h", "pch.cpp", "framework.h", "targetver.h", "Resource.h"}
 PASCAL_FILE = re.compile(r"^[A-Z][A-Za-z0-9]*\.(h|cpp)$")
 SHADER_FILE = re.compile(r"^[A-Z][A-Za-z0-9]*(VS|PS|CS|GS|HS|DS)\.hlsl$|^[A-Z][A-Za-z0-9]*\.hlsli$")
+# ADR-008: the stage a shader's name ends in, as FxCompile's ShaderType spells it, and the one
+# Shader Model every shader compiles at.
+STAGES = {"VS": "Vertex", "PS": "Pixel", "CS": "Compute", "GS": "Geometry", "HS": "Hull", "DS": "Domain"}
+SHADER_MODEL = "5.1"
+SHADER_HEADER = "$(ProjectDir)CompiledShaders/%(Filename).h"
+# ADR-008: the registry of each carved-out shader folder, and the form of its tables, one entry a
+# line: Entry const kPixel[] = { {"post/blur.jsl", Bytes(POST_BLUR_PS)}, ... };
+REGISTRIES = {"FrontierOutpost/src/liblt/Shaders/": "FrontierOutpost/src/liblt/LTE/ShaderRegistry.cpp"}
+REGISTRY_TABLE = re.compile(r"\bEntry const k(Vertex|Pixel|Compute)\[\] = \{(.*?)\};", re.S)
+REGISTRY_ENTRY = re.compile(r'\{"([^"]+)", Bytes\((\w+)\)\},?')
+TABLE_STAGES = {"Vertex": "VS", "Pixel": "PS", "Compute": "CS"}
 
 # R2: no prefix and no suffix on a type name. clang-tidy can require the absence of a prefix but
 # cannot see a present suffix, so this carries both.
@@ -176,6 +192,7 @@ def CheckProject(_root, _project, _files):
 
   for fault in _project.faults:
     Fault(relative, fault)
+  CheckShaderItems(_project, settings, "Shaders")
 
   # §2 and R14: registration, layout and dependencies.
   folder = _project.folder.relative_to(_root).as_posix()
@@ -208,6 +225,133 @@ def CheckProject(_root, _project, _files):
       Fault(f"{folder}/{path}", "a NuGet package is a dependency, and needs an ADR first (R14)")
   if "PackageReference" in _project.path.read_text(encoding="utf-8-sig"):
     Fault(relative, "a PackageReference is a dependency, and needs an ADR first (R14)")
+
+
+def ShaderVariable(_stem):
+  """R3: the array FXC writes is a compile-time constant, so it is its file's name in UPPER_CASE."""
+  return re.sub(r"(?<=[a-z])(?=[A-Z])", "_", _stem[:-2]).upper() + "_" + _stem[-2:]
+
+
+def LegacyShader(_legacy, _stage):
+  """ADR-008: the file a legacy name becomes. Drop .jsl, start a word at each / and _, add the stage."""
+  words = re.split(r"[/_]", _legacy.removesuffix(".jsl"))
+  return "".join(word[:1].upper() + word[1:] for word in words) + _stage + ".hlsl"
+
+
+def CheckShaderItems(_project, _settings, _folder):
+  """ADR-008 for the FxCompile items in the project's _folder: each compiles as the stage its name
+    ends in, into the array its name spells (R3), at Shader Model 5.1, into CompiledShaders/."""
+  relative = _project.relative
+  items = {path: metadata for path, metadata in _project.ItemMetadata("FxCompile").items()
+           if path.startswith(_folder + "/")}
+  for path, metadata in sorted(items.items()):
+    name = path.split("/")[-1]
+    if not SHADER_FILE.match(name):
+      continue  # CheckNames reports it
+    stem = name.removesuffix(".hlsl")
+    stage = STAGES[stem[-2:]]
+    if metadata.get("ShaderType") != stage:
+      Fault(relative, f"compiles {path} as {metadata.get('ShaderType')!r}, where its name says {stage!r} (ADR-008)")
+    if metadata.get("VariableName") != ShaderVariable(stem):
+      Fault(relative, f"names the array of {path} {metadata.get('VariableName')!r}, expected "
+                      f"{ShaderVariable(stem)!r} (R3)")
+  if not items:
+    return
+  for (configuration, platform), values in _settings.items():
+    pair = f"{configuration}|{platform}"
+    if values.get("FxCompile.ShaderModel") != SHADER_MODEL:
+      Fault(relative, f"{pair} compiles shaders at Shader Model {values.get('FxCompile.ShaderModel')!r}, "
+                      f"expected {SHADER_MODEL!r} (ADR-008)")
+    header = values.get("FxCompile.HeaderFileOutput", "").replace("\\", "/")
+    if header != SHADER_HEADER:
+      Fault(relative, f"{pair} writes each shader's header to {header!r}, expected {SHADER_HEADER!r} (§2, ADR-008)")
+
+
+def CheckRegistry(_root, _project, _folder, _registry):
+  """ADR-008: the registry holds every shader in the carved-out _folder, under the legacy name the
+    file is named for and with the array its FxCompile item writes, and holds nothing else."""
+  path = _root / _registry
+  if not path.is_file():
+    Fault(_registry, f"is missing, so nothing holds the shaders of {_folder} by their legacy names (ADR-008)")
+    return
+  text = path.read_text(encoding="utf-8-sig")
+  folder = _folder.rstrip("/").split("/")[-1]
+  items = {p: metadata for p, metadata in _project.ItemMetadata("FxCompile").items() if p.startswith(folder + "/")}
+  registered = set()
+  tables = list(REGISTRY_TABLE.finditer(text))
+  if not tables:
+    Fault(_registry, "has no table the checker can read (ADR-008)")
+  for table in tables:
+    stage = TABLE_STAGES[table[1]]
+    names = set()
+    for number, line in enumerate(table[2].split("\n"), text.count("\n", 0, table.start(2)) + 1):
+      line = line.strip()
+      if not line or line.startswith(("//", "/*", "*")):
+        continue
+      where = f"{_registry}:{number}"
+      entry = REGISTRY_ENTRY.fullmatch(line)
+      if not entry:
+        Fault(where, f"a line of k{table[1]} that is not one entry the checker can read (ADR-008)")
+        continue
+      legacy, variable = entry[1], entry[2]
+      shader = f"{folder}/{LegacyShader(legacy, stage)}"
+      if legacy in names:
+        Fault(where, f"holds {legacy} twice")
+      names.add(legacy)
+      if shader not in items:
+        Fault(where, f"holds {legacy}, but {_project.path.name} compiles no {shader} (ADR-008)")
+        continue
+      registered.add(shader)
+      if variable != items[shader].get("VariableName"):
+        Fault(where, f"holds {legacy} as {variable}, where {shader} compiles to "
+                     f"{items[shader].get('VariableName')!r} (ADR-008)")
+  for shader in sorted(set(items) - registered):
+    Fault(_folder + shader.split("/")[-1], f"is not in {_registry} under its legacy name (ADR-008)")
+
+
+def CheckCarvedOut(_root, _projects, _files):
+  """N11: a shader folder carved out of the legacy import keeps §2's rules and ADR-008's in the
+    project that owns it, though the rest of that project stays exempt."""
+  for carved in CARVED_OUT:
+    parent, _, folder = carved.rstrip("/").rpartition("/")
+    mine = [f for f in _files if f.startswith(carved) and not IsExempt(f)]
+    owner = next((p for p in _projects if p.folder == _root / parent), None)
+    if owner is None:
+      if mine:
+        Fault(carved, "is in no project of the solution (N11)")
+      continue
+    items = owner.Items()
+    filters = owner.FilterItems() or {}
+    listed = {p for paths in items.values() for p in paths if p.startswith(folder + "/")}
+    filtered = {p for paths in filters.values() for p in paths if p.startswith(folder + "/")}
+    for path in sorted(listed | filtered):
+      if not (owner.folder / path).is_file():
+        Fault(owner.relative, f"lists {path}, which does not exist (§2)")
+    for path in sorted(listed - filtered):
+      Fault(owner.relative, f"lists {path}, which its .filters does not (§2)")
+    for path in sorted(filtered - listed):
+      Fault(owner.relative + ".filters", f"lists {path}, which the project does not (§2)")
+    for relative in mine:
+      name = relative[len(carved):]
+      if "/" in name:
+        Fault(relative, f"a file in a subfolder of {carved}, which is flat (§2)")
+      elif name.endswith(CPP):
+        Fault(relative, f"C++ in {carved}, which holds shaders (§2)")
+      elif name.endswith(".hlsl") and f"{folder}/{name}" not in items.get("FxCompile", []):
+        Fault(relative, f"is not an FxCompile item of {owner.path.name} (§2, ADR-008)")
+      elif name.endswith(".hlsli") and f"{folder}/{name}" not in listed:
+        Fault(relative, f"is not in {owner.path.name} (§2)")
+
+    # §3 and ADR-008: how the folder's shaders compile, the same in Debug and Release.
+    settings = {tuple(pair.split("|")): owner.Settings(*pair.split("|")) for pair in owner.Configurations()}
+    CheckShaderItems(owner, settings, folder)
+    for platform in sorted({platform for _, platform in settings}):
+      debug, release = settings.get(("Debug", platform), {}), settings.get(("Release", platform), {})
+      for key in sorted(k for k in set(debug) | set(release) if k.startswith("FxCompile.")):
+        if debug.get(key) != release.get(key):
+          Fault(owner.relative, f"Debug|{platform} and Release|{platform} disagree on {key}: "
+                                f"{debug.get(key)!r} against {release.get(key)!r} (§3)")
+    CheckRegistry(_root, owner, carved, REGISTRIES[carved])
 
 
 def CheckNames(_root, _files):
@@ -267,10 +411,11 @@ def main():
     CheckLegacyProject(root, project)
   for project in firstParty:
     CheckProject(root, project, files)
+  CheckCarvedOut(root, legacy, files)
   CheckNames(root, files)
   CheckHeaderFilter(root, firstParty)
 
-  homes = [p.folder.relative_to(root).as_posix() + "/" for p in firstParty]
+  homes = [p.folder.relative_to(root).as_posix() + "/" for p in firstParty] + list(CARVED_OUT)
   for relative in files:
     if relative.endswith(CPP + SHADERS) and not IsExempt(relative) and not relative.startswith(tuple(homes)):
       Fault(relative, "a source, header or shader outside every project folder (§2)")
