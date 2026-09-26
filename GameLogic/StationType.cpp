@@ -2,21 +2,19 @@
 
 #include "Constants.h"
 #include "Icons.h"
-#include "Materials.h"
 #include "Objects.h"
 
 #include "Bound.h"
 #include "LteMath.h"
 #include "Mesh.h"
-#include "Model.h"
-#include "PlateMesh.h"
 #include "RNG.h"
 #include "Ray.h"
+#include "Renderable.h"
 #include "Script.h"
 #include "SDFs.h"
-#include "SDFMesh.h"
-#include "ShaderInstance.h"
 #include "StackFrame.h"
+
+#include "Visual.h"
 
 DERIVED_IMPLEMENT(StationType)
 
@@ -45,11 +43,8 @@ DefineFunction(Item_StationType) { AUTO_FRAME;
 
   self->integrity = integrity;
 
-  SDF interior = SDF_Shell(0, 1, 0.1f)
-    ->Subtract(SDF_Cylinder(0, V3(0, 0, 1), 0.1f));
-
-  self->interiorModel =
-    (Renderable)Model_Create()->Add(SDFMesh_Create(interior), Material_Rock());
+  /* The interior and the hull are the client's (FrontierOutpost/StationTypeVisual.cpp, ADR-016). */
+  Game::CreateItemVisual("StationTypeInterior", self, 0, self->interiorModel);
 
   self->metatype = Item_StationType_Args(args);
 
@@ -57,12 +52,7 @@ DefineFunction(Item_StationType) { AUTO_FRAME;
 
   self->scale = Constant_MassToScale(mass);
 
-  PlateMesh pm;
-  ScriptFunction_Load("Item/StationType/Generate:Main")
-    ->Call(pm, (int)rg->GetInt());
-  Mesh mesh = pm->GetMesh();
-  Mesh_ComputeOcclusion(mesh);
-  self->renderable = (Renderable)Model_Create()->Add(mesh, Material_Metal());
+  Game::CreateItemVisual("StationType", self, (uint32)(int)rg->GetInt(), self->renderable);
 
   self->value = args.value;
   return self;

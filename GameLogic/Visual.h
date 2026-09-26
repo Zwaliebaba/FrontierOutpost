@@ -4,6 +4,7 @@
 #include <cstdint>
 
 struct DrawState;
+struct ItemT;
 struct ObjectT;
 struct RenderableT;
 template <class T> struct Reference;
@@ -32,6 +33,17 @@ void RegisterSeededVisual(const char* _kind, SeededVisualFactory _factory);
 /// Makes the renderable of _kind for _seed and _count into _visual, or leaves it as it was where no
 /// factory is registered for _kind.
 void CreateSeededVisual(const char* _kind, std::uint32_t _seed, std::uint32_t _count, Reference<RenderableT>& _visual);
+
+/// Makes a renderable for an item type as it is generated: a planet's surface, a station's hull.
+/// _seed is what the generator drew for it from the item's RNG, so the item's draws stay in order.
+using ItemVisualFactory = void (*)(ItemT*, std::uint32_t, Reference<RenderableT>&);
+
+/// Registers the factory for a kind of item renderable.
+void RegisterItemVisual(const char* _kind, ItemVisualFactory _factory);
+
+/// Makes the renderable of _kind for _item into _visual, or leaves it as it was where no factory
+/// is registered for _kind.
+void CreateItemVisual(const char* _kind, ItemT* _item, std::uint32_t _seed, Reference<RenderableT>& _visual);
 
 /// The draw methods a kind of object overrides: its own drawing, and its interior's before, while
 /// and after the objects inside it are drawn.

@@ -925,4 +925,9 @@
       <Filter>Game\Object</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="PlanetType.h">
+      <Filter>Game\Item</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>

@@ -973,6 +973,11 @@
       <Legacy>true</Legacy>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="PlanetType.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\Build\Legacy.targets" />
 </Project>

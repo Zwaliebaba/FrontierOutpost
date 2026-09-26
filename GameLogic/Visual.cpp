@@ -24,6 +24,12 @@ std::map<std::string, SeededVisualFactory>& SeededFactories()
   return g_seededFactories;
 }
 
+std::map<std::string, ItemVisualFactory>& ItemFactories()
+{
+  static std::map<std::string, ItemVisualFactory> g_itemFactories;
+  return g_itemFactories;
+}
+
 std::map<std::pair<std::string, DrawPhase>, DrawFunction>& Draws()
 {
   static std::map<std::pair<std::string, DrawPhase>, DrawFunction> g_draws;
@@ -43,6 +49,20 @@ void CreateSeededVisual(const char* _kind, std::uint32_t _seed, std::uint32_t _c
   if (found != SeededFactories().end())
   {
     found->second(_seed, _count, _visual);
+  }
+}
+
+void RegisterItemVisual(const char* _kind, ItemVisualFactory _factory)
+{
+  ItemFactories()[_kind] = _factory;
+}
+
+void CreateItemVisual(const char* _kind, ItemT* _item, std::uint32_t _seed, Reference<RenderableT>& _visual)
+{
+  auto found = ItemFactories().find(_kind);
+  if (found != ItemFactories().end())
+  {
+    found->second(_item, _seed, _visual);
   }
 }
 

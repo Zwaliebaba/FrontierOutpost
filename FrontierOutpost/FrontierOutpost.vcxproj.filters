@@ -164,4 +164,12 @@
       <Filter>Visuals</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="PlanetTypeVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+    <ClCompile Include="StationTypeVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+  </ItemGroup>
 </Project>
