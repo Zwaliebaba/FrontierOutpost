@@ -34,8 +34,7 @@ struct Launcher : public Program {
   uint framesLeft;
   String capturePath;
   bool failed;
-  /* From the start, for the smoke mode's timings: the smoke job's time limits
-     are set from them. */
+  /* From the start, for the smoke mode's timings. */
   Timer timer;
 
   Launcher(String const& appName, uint frames, String const& capturePath, bool warp) :
@@ -158,7 +157,7 @@ struct Launcher : public Program {
     }
   }
 
-  /* Flushed, so that the line is kept if the smoke job stops the launcher. */
+  /* Flushed, so that the line is kept if the launcher is stopped. */
   void PrintTime(char const* what) {
     printf("launch: %s %s after %.1f s\n", appName.c_str(), what, timer.GetElapsed());
     fflush(stdout);

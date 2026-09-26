@@ -1025,8 +1025,8 @@ Recorded, not to be done in this migration:
     (MSBuild's total is above the unique count in all four).
   - **Closed by D24**, not pursued.
 - **O7** This container can read job logs but not artifacts. The owner can download them from the
-  run page. The NeuronClient plan's CI smoke job writes a copy of each app's frame into its log for
-  this reason (its N15).
+  run page. The NeuronClient plan's CI smoke job wrote a copy of each app's frame into its log for
+  this reason (its N15), until its N20 removed the job.
 - **O8** (D8) The owner's FMOD Ex x64 files are not in the tree yet. **Superseded by D15:** no
   FMOD file is needed any more, and the link probe is gone from the workflow.
 - **O9** (§15.1) `extlib/win32` and `extbin/win32` could not be copied as the approved scope

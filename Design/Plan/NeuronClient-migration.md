@@ -37,7 +37,8 @@ DirectWrite, WIC, XAudio2 and Win32.
   the same day; history holds it, and upstream `ltheory-old` at `0535d46` is the original. By N18,
   the migration's workflow went too: CI builds Debug|x64 only, and the other three builds are the
   owner's, by hand. By N19, so did `GameData/shader`, which nothing had read since step 3;
-  `8e13f92` is the last commit that holds it.
+  `8e13f92` is the last commit that holds it. By N20, the CI smoke job went as well, and the owner
+  runs the apps on the desktop; its last complete run was on `86634e8`.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
@@ -97,6 +98,7 @@ has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
 | N17 | **Step 6 comes before the rest of bring-up** (2026-09-26). OpenGL, GLEW and the WGL bridge are deleted once `war` runs on Direct3D 12 (bring-up 5.3), ahead of 5.4 to 5.9: nothing has drawn through OpenGL since step 3. Their link libraries go with them, ahead of Phase 5, as SFML's went in Phase 2. | owner |
 | N18 | **The migration's workflow goes before Phase 5** (2026-09-26). `.github/workflows/neuronclient.yml` and `.github/migration/` are deleted, so CI builds Debug\|x64 only, with the tests, clang-tidy and the smoke job, as AGENTS.md §6 has it. x64 Release and both ARM64 builds are built by hand, before a release and in Phase 5's final checks, not after every step (§6, ADR-006 decision 5). The workflow's last run was on `8443028`, where x64 Debug and Release linked with 507 warnings, 458 unique, and ARM64 Debug linked. | owner |
 | N19 | **`GameData/shader` goes before Phase 5** (2026-09-26). Its 130 GLSL files, 5,311 lines (§5.6), had not been read since step 3, when liblt's shaders became HLSL compiled into `lt.dll`, and §12 proposed deleting them with Phase 5's close-out. They are deleted at the pause instead, and ADR-004's amendment (§8) lands with them. `8e13f92` is the last commit that holds them, and each HLSL file's header names what it was ported from. | owner |
+| N20 | **The CI smoke job goes** (2026-09-26). `build.yml` loses Smoke on WARP and the upload of the launcher that only it used, and `Build/LogFrame.py`, which only it ran, is deleted. The owner runs the apps on the desktop instead, with the launcher's smoke mode, which stays. This takes back N15's CI half: a bring-up step is checked when the owner runs it, not in CI's frames, and §12's question of the job's shape falls away. The job's last complete run was on `86634e8`. The pushes after it cancelled its runs, and the owner cancelled the last, on `28c6fe1`, 19 minutes into `war`, after `loading` and `ui` had drawn their frames. So `df48652`'s lens flares, step 6 and N19 have not run in CI; the owner's runs check them. | owner |
 
 What N2 and N3 mean in practice. The first two points correct what the question offered:
 
@@ -588,10 +590,10 @@ Build §5.3 in NeuronClient. The tests run on WARP, with the debug layer on:
 7. **A CI smoke job.** It runs each 3D app for N frames on WARP, offscreen, and fails on a
    Direct3D 12 error or a removed device. It uploads one PNG per app for the owner to look at. By
    N15 it lands with step 3, ahead of bring-up, and writes a downscaled copy of each frame into its
-   log as well.
+   log as well. By N20 it goes after bring-up 5.3, and the owner runs the apps on the desktop.
 
-**Done when:** the 16 kept apps run on the owner's GPU (x64) and on the owner's ARM64 device, and
-the smoke job is green.
+**Done when:** the 16 kept apps run on the owner's GPU (x64) and on the owner's ARM64 device. (The
+smoke job had to be green as well, until N20 removed it.)
 
 ### Phase 5: Close out
 
@@ -615,9 +617,9 @@ the smoke job is green.
 |---|---|---|
 | CI build, Debug\|x64 (as today) | Compiles and links | Release, ARM64 |
 | NeuronClientTests on WARP | The Direct3D 12 core, DirectWrite, WIC, WAV parsing and key mapping, with no debug-layer error | Real-GPU driver behaviour |
-| CI smoke run on WARP | Every 3D app renders N frames without a Direct3D 12 error; PNGs to look at | That the frames look right |
+| CI smoke run on WARP, until N20 | Every 3D app renders N frames without a Direct3D 12 error; PNGs to look at | That the frames look right |
 | Checkers | Formatting, naming and project shape for NeuronClient | — |
-| The owner, each phase | Looks, sound, input and feel; ARM64; real GPUs | — |
+| The owner, each phase | Looks, sound, input and feel; ARM64; real GPUs; since N20, the smoke mode's runs | — |
 
 If the runner has no interactive desktop, no swap chain can be created there. That is why the smoke
 mode renders offscreen and never creates one.
@@ -649,7 +651,7 @@ mode renders offscreen and never creates one.
   `GameData/shader` went (N19).
 
 **Runtime files (R13).** None is added for players. Screenshots stay under `cache/screenshot/`. The
-CI smoke mode writes its PNG captures only where `--capture` says, and a relative path resolves
+smoke mode writes its PNG captures only where `--capture` says, and a relative path resolves
 against the folder `launch.exe` works from, the one that holds `GameData/` (ADR-004). ADR-011
 records it. A PSO disk cache would need its own ADR.
 
@@ -708,7 +710,7 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 | `d3dcompiler_47.dll` missing on a target | ARM64 | Phase 2 loads it and reflects a blob on the owner's ARM64 device. Fallback: reflection tables generated at build time. |
 | FXC is frozen | Later | Nothing here needs SM 6. ADR-008 records what moving to DXC would take. |
 | The SDF interpreter is slow, or shapes change | `model`, `war` | Generation time measured on WARP and a GPU: on WARP, 22 s for a 128³ field (ADR-009). Different shapes are acceptable under N3. |
-| The smoke job's time grows with each app | Bring-up 5.6 to 5.9 | `war` takes 21 minutes on WARP in Debug with the debug layer, 19 of them before its first frame, and most kept apps build star systems as it does. One job per app, in parallel, keeps the wait near the slowest app's (§12). |
+| Faults that only running an app shows | Bring-up 5.4 to 5.9 | Since N20 no app runs in CI, so a debug-layer error, a crash or a wrong frame shows only when the owner runs the app. The smoke mode runs one unattended on WARP with the debug layer, as CI did: `launch <app> --warp --frames 30 --capture <app>.png`. |
 | Hitches the first time a PSO is used | The first seconds of each app | Known programs warmed at load. `ID3D12PipelineLibrary` later. |
 | Modernisation runs away | Phase 4 | Only the changes named in §5 go in; everything else is backlog. |
 | Mixed build settings in one DLL | Always | Warning levels are harmless. `/arch` is not: a template or inline function both libraries use keeps one copy, which the linker picks, so NeuronClient states `lt`'s `/arch` (N10). Under `/fp:precise` and `lt`'s `/fp:fast`, such a copy rounds as either library would; nothing relies on bit-exact results (MIGRATION_NOTES.md BR6). The CRT must match (`/MD`). |
@@ -728,16 +730,10 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 
 N5–N12 settled the first open items: `/arch`, missing sounds, vsync, RandomScreenshot's background,
 unplayable sound files, liblt's shader folder and its calls for OS services. The pause after Phase
-4 step 6 (2026-09-26) left three, and N19 settled one of them, when `GameData/shader` goes. These
-are open:
+4 step 6 (2026-09-26) left three. N19 and N20 settled two of them: `GameData/shader` went, and so
+did the smoke job whose shape was open. This is open:
 
-1. **The smoke job's shape, before bring-up 5.6 adds `model`.** One job running the apps in turn
-   outgrows its 60 minutes: `war` alone takes 21 on WARP. The proposal is one job per app, in
-   parallel, which keeps the wait near the slowest app's for about the same runner minutes. Running
-   every app on every push would cost an estimated 3 to 4 Windows runner-hours once all 16 are in,
-   from `war`'s 21 minutes and `loading`'s and `ui`'s 2 to 3; nothing has measured the other 13 yet.
-   The alternative is the full set on demand, and the apps brought up so far on each push.
-2. **The owner's checks of Phase 4:** presenting (5.1), which the smoke run cannot see, and the 16
+1. **The owner's checks of Phase 4:** presenting (5.1), which the smoke run cannot see, and the 16
    kept apps on a GPU and on the ARM64 device, the phase's done-when. ADR-009's sixth decision also
-   asks for a field's generation time on a GPU, and since N18 the x64 Release and ARM64 builds are
-   the owner's, by hand.
+   asks for a field's generation time on a GPU. Since N18 the x64 Release and ARM64 builds are the
+   owner's, by hand, and since N20 so is every run of an app.
