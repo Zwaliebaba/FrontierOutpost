@@ -103,17 +103,22 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
   }
   if (_desc.debugLayer && SUCCEEDED(core->device.As(&core->infoQueue)))
   {
-    // Only what is worth failing a test over, or logging: corruption, errors and warnings, less the
-    // two warnings that a clear to a value other than the one given when the resource was made is
-    // slower. liblt clears to whatever a pass asks for, so no value given in advance would match.
+    // Only what is worth failing a test over, or logging: corruption, errors and warnings, less
+    // three warnings about what liblt does on purpose. Two say that a clear to a value other than
+    // the one given when the resource was made is slower: liblt clears to whatever a pass asks for,
+    // so no value given in advance would match. The third says that a pixel shader writes a target
+    // the pipeline state does not name, and that the write is discarded: that is how GL discarded
+    // what went to a draw buffer with nothing attached, which liblt's depth prepass relies on
+    // (plan §5.5).
     std::array<D3D12_MESSAGE_SEVERITY, 2> quiet = {D3D12_MESSAGE_SEVERITY_INFO, D3D12_MESSAGE_SEVERITY_MESSAGE};
-    std::array<D3D12_MESSAGE_ID, 2> slowClears = {D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
-                                                  D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE};
+    std::array<D3D12_MESSAGE_ID, 3> intended = {D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
+                                                D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE,
+                                                D3D12_MESSAGE_ID_CREATEGRAPHICSPIPELINESTATE_RENDERTARGETVIEW_NOT_SET};
     D3D12_INFO_QUEUE_FILTER filter{};
     filter.DenyList.NumSeverities = static_cast<UINT>(quiet.size());
     filter.DenyList.pSeverityList = quiet.data();
-    filter.DenyList.NumIDs = static_cast<UINT>(slowClears.size());
-    filter.DenyList.pIDList = slowClears.data();
+    filter.DenyList.NumIDs = static_cast<UINT>(intended.size());
+    filter.DenyList.pIDList = intended.data();
     core->storageFilterPushed = SUCCEEDED(core->infoQueue->PushStorageFilter(&filter));
   }
 

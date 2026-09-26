@@ -127,11 +127,6 @@ constexpr UINT COMPUTE_WRITES_PARAMETER = 2;
 constexpr std::array<float, 4> DEFAULT_ATTRIBUTE = {0.0f, 0.0f, 0.0f, 1.0f};
 constexpr UINT DEFAULT_ATTRIBUTE_SLOT = 1;
 
-/// The format of the null view a program's output goes to when no target is set for it, which the
-/// pipeline state names for that output: writes to a null view are discarded, as GL discarded
-/// what went to a draw buffer with nothing attached.
-constexpr DXGI_FORMAT NULL_TARGET_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
-
 /// Everything a pipeline state is made from, which the context caches them under (ADR-007).
 struct PipelineKey
 {
@@ -378,10 +373,8 @@ struct DrawContext::Native
   std::map<PipelineKey, ComPtr<ID3D12PipelineState>> pipelines;
   ComPtr<ID3D12PipelineState> presentPipeline; // PresentVS.hlsl's and PresentPS.hlsl's, into BACK_BUFFER_FORMAT
 
-  // What every draw may bind, which Initialize makes: the buffer inputs without an attribute read,
-  // and the view outputs without a target go to.
+  // What an input without an attribute reads, which Initialize makes.
   ComPtr<ID3D12Resource> defaultAttribute;
-  D3D12_CPU_DESCRIPTOR_HANDLE nullTargetView{}; // CPU-only
 
   // What the next draw uses, which stays set from one draw to the next.
   struct Target
@@ -901,8 +894,8 @@ struct DrawContext::Native
       FailDraw(std::format("of {} has no target set", program->name));
       return false;
     }
-    // Only as many targets are bound as the program writes, and what it writes past the last one
-    // set goes to the null view (plan §5.5).
+    // Only as many targets are bound as the program writes, and the pipeline state names no more
+    // than are set: what the program writes past the last of them is discarded (plan §5.5).
     boundTargets = std::min(program->targetCount, colorTargetCount);
     for (std::uint32_t index = 0; index < boundTargets; ++index)
     {
@@ -928,10 +921,10 @@ struct DrawContext::Native
     key.depthTest = depthBound;
     key.depthWrite = depthBound && state.depthWrite;
     key.wireframe = state.wireframe;
-    key.targetCount = program->targetCount;
-    for (std::uint32_t index = 0; index < program->targetCount; ++index)
+    key.targetCount = boundTargets;
+    for (std::uint32_t index = 0; index < boundTargets; ++index)
     {
-      key.targetFormats[index] = index < boundTargets ? colorTargets[index].texture->resourceDesc.Format : NULL_TARGET_FORMAT;
+      key.targetFormats[index] = colorTargets[index].texture->resourceDesc.Format;
     }
     key.depthFormat = depthBound ? DXGI_FORMAT_D32_FLOAT : DXGI_FORMAT_UNKNOWN;
 
@@ -1248,7 +1241,6 @@ struct DrawContext::Native
       return;
     }
     std::array<D3D12_CPU_DESCRIPTOR_HANDLE, MAX_COLOR_TARGETS> targetViews{};
-    std::fill_n(targetViews.begin(), program->targetCount, nullTargetView);
     for (std::uint32_t index = 0; index < boundTargets; ++index)
     {
       const Target& target = colorTargets[index];
@@ -1291,7 +1283,7 @@ struct DrawContext::Native
     list->SetGraphicsRootDescriptorTable(SHADER_RESOURCES_PARAMETER, {shaderStart.ptr + (std::uint64_t{shaderTable} * shaderIncrement)});
     list->SetGraphicsRootDescriptorTable(SAMPLERS_PARAMETER,
                                          {samplerStart.ptr + (std::uint64_t{samplerTable} * TABLE_DESCRIPTORS * samplerIncrement)});
-    list->OMSetRenderTargets(program->targetCount, targetViews.data(), FALSE, depthBound ? &depthView : nullptr);
+    list->OMSetRenderTargets(boundTargets, targetViews.data(), FALSE, depthBound ? &depthView : nullptr);
     list->RSSetViewports(1, &viewport);
     list->RSSetScissorRects(1, &scissor);
     list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1721,17 +1713,7 @@ bool DrawContext::Initialize(std::string& _error)
   nullUnordered.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
   device.CreateUnorderedAccessView(nullptr, nullptr, &nullUnordered, context.nullUnorderedView);
 
-  // Where a program's outputs go when no target is set for them, and what its inputs read when the
-  // layout has no attribute for them (plan §5.5).
-  if (!context.core.targetViewPool.Allocate(context.core, context.nullTargetView))
-  {
-    _error = "Direct3D 12: the null target view's descriptor was not made";
-    return false;
-  }
-  D3D12_RENDER_TARGET_VIEW_DESC nullTarget{};
-  nullTarget.Format = NULL_TARGET_FORMAT;
-  nullTarget.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-  device.CreateRenderTargetView(nullptr, &nullTarget, context.nullTargetView);
+  // What a program's inputs read when the layout has no attribute for them (plan §5.5).
   std::byte* defaults = nullptr;
   if (!context.CreateUploadBuffer(sizeof(DEFAULT_ATTRIBUTE), context.defaultAttribute, defaults))
   {
