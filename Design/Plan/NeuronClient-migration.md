@@ -29,7 +29,8 @@ DirectWrite, WIC, XAudio2 and Win32.
   2026-09-26. Bring-up 5.3 runs `war` in the smoke job from `86634e8`. There it draws its 30 frames
   with no debug-layer error, in 21 minutes on WARP, and its frame shows the ship, the star's bloom
   and lens flare, the nebula, the interface, and the asteroids that are its SDF meshes, whose
-  128³ fields took 22 s each. `df48652` reads the lens flares' occlusion back asynchronously.
+  128³ fields took 22 s each. `df48652` reads the lens flares' occlusion back asynchronously. The
+  owner then took N17: step 6 is in (`57c67bb`), and OpenGL, GLEW and the WGL bridge are gone.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
@@ -86,6 +87,7 @@ has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
 | N14 | **The script API is an interface, not unused material.** Of the 265 natives that neither a script nor C++ reached after Phase 1, the 12 that were the only way into code of their own went, with what only they reached. The other 253 stay: 194 are members of families one macro builds per object type, item field, component or key, and 59 are short, none over 11 lines. | owner |
 | N15 | **The smoke job comes before bring-up** (2026-09-26). Step 7's CI job lands with step 3, and the launcher's smoke mode before it: `--frames` and `--capture` before the pause, `--warp` and offscreen rendering with step 3, which gives liblt a device to put on WARP. Besides failing on a Direct3D 12 error, the job writes a downscaled copy of each app's frame into its log, since the session that ports liblt cannot fetch CI artefacts. Each bring-up step is checked in those frames, and the owner checks on a GPU at the done-when. | owner |
 | N16 | **Work pauses before Phase 4 step 3** (2026-09-26) until the owner has checked Phases 1 and 2 in the apps while OpenGL still renders. Steps 1 and 2 and the smoke mode's first part change nothing OpenGL is given. The owner released step 3 the same day; `8bc74a0` is the last commit that renders with OpenGL. | owner |
+| N17 | **Step 6 comes before the rest of bring-up** (2026-09-26). OpenGL, GLEW and the WGL bridge are deleted once `war` runs on Direct3D 12 (bring-up 5.3), ahead of 5.4 to 5.9: nothing has drawn through OpenGL since step 3. Their link libraries go with them, ahead of Phase 5, as SFML's went in Phase 2. | owner |
 
 What N2 and N3 mean in practice. The first two points correct what the question offered:
 
