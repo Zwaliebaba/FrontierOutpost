@@ -1,6 +1,6 @@
 # Library split: one executable, four libraries
 
-- **Status:** Approved 2026-09-26. P0 and P1 done (ADR-014, ADR-015). P2, the game untangle, is
+- **Status:** Approved 2026-09-26. P0, P1 and P2 done (ADR-014, ADR-015, ADR-016); item 6 deferred. P3 is
   next; §4.1 lists what is left.
 - **Replaces:** `launch.exe` + `lt.dll` + `NeuronClient.lib`
 - **Owner's answers so far:** untangle fully now; legacy files keep ADR-001's exemption per file;
@@ -154,25 +154,25 @@ not only captured. Archive this plan to `Design/Archive/`.
 P2, in this order. Each item is its own commit series, and each ends building, tested and
 smoke-run against P0:
 
-- [~] 1. **Pure client code to the exe** *(partly, `6ee75ef`: the render passes, `RenderStyles` and the camera's script bindings. The rest is still included by object and item code, and moves with items 4 and 5.)* (route 4): `Game/RenderPass/*`, `Game/Graphics/*`,
+- [x] 1. **Pure client code to the exe** *(`6ee75ef`, and the rest with items 4 and 5: the render passes, `RenderStyles` and the camera's script bindings. The rest is still included by object and item code, and moves with items 4 and 5.)* (route 4): `Game/RenderPass/*`, `Game/Graphics/*`,
   `Materials`, `ShadingModels`, `Particles`, `Renderable/Starfield`, `Beam`, `Camera`, the camera
   script bindings, and `SoundEngineXAudio2.cpp`, whose part without game types can move down to
   NeuronClient.
-- [~] 2. **UI members out of game headers** *(`92d222a`: `UiCommon.h`, Icon and Glyph are NeuronCore now. Widget members remain in `Object.cpp`, `ObjectCustom.cpp`, `Colony.cpp` and `ScriptApiObject.cpp`.)* (route 6): `Object.h`, `Item.h`, `Items.h`, `Task.h`.
-- [ ] 3. *(Folds into item 4: F6 is read in `System::BeginDrawInterior`, a draw method; `PowerGenerator.cpp` only has an unused include.)* **Debug keys out of simulation code** (route 5): `System.cpp` F6, `PowerGenerator.cpp`.
-- [ ] 4. **Draw virtuals off `ObjectT` and the component mixins** (route 1): replaced by an
+- [x] 2. **UI members out of game headers** *(`92d222a`: `UiCommon.h`, Icon and Glyph are NeuronCore now. Widget members remain in `Object.cpp`, `ObjectCustom.cpp`, `Colony.cpp` and `ScriptApiObject.cpp`.)* (route 6): `Object.h`, `Item.h`, `Items.h`, `Task.h`.
+- [x] 3. *(Done with System's look, `3d5c44a`. Folds into item 4: F6 is read in `System::BeginDrawInterior`, a draw method; `PowerGenerator.cpp` only has an unused include.)* **Debug keys out of simulation code** (route 5): `System.cpp` F6, `PowerGenerator.cpp`.
+- [x] 4. *(Through Game::Draw and Game::Presentation, ADR-016.)* **Draw virtuals off `ObjectT` and the component mixins** (route 1): replaced by an
   `ObjectView` table in the exe, keyed by `ObjectType`, which keeps the order components draw in.
-- [ ] 5. **Item visuals built by the client** (route 2): planet textures, ship, station and turret
+- [x] 5. *(Game::CreateItemVisual and scripts, ADR-016.)* **Item visuals built by the client** (route 2): planet textures, ship, station and turret
   Models, and item Icons, built from parameters GameLogic keeps.
-- [ ] 6. **Collision through a NeuronCore geometry service** (route 3), which NeuronClient implements
+- [-] 6. *(Deferred: physics reads Renderable, a NeuronCore type, which the client makes. How a server gets shapes is the open question of §8 point 1, and ADR-016 says why the service waits for it.)* **Collision through a NeuronCore geometry service** (route 3), which NeuronClient implements
   on the GPU. Physics stops reading `Renderable`.
 - [x] 7. *(`504bc2e`: NeuronCore links and includes nothing of NeuronClient. Mesh drawing and buffer release, the profiler's GPU flush and the assert's window close go through hooks the client installs; Model, ParticleSystem, SDFMesh, PlateMesh and Scheduler are NeuronClient's. PlateMesh and SDFMesh still build geometry on the GPU, which is item 6.)* **The 12 mixed engine files split**: `Mesh`, `Model`, `PlateMesh`, `ParticleSystem`,
   `SDFMesh`, `Profiler`, `Program`, `ProgramLog`, `Common.cpp`, `Scheduler`, `Settings` and
   `Array3D`. Each gets its GPU-free half in NeuronCore and its GPU half in NeuronClient.
   `Renderable::Render` leaves the NeuronCore base type.
-- [ ] 8. **Game shaders to `FrontierOutpost/Shaders/`,** with a second registry in the exe and one
+- [x] 8. *(`084f470`: 79 shaders to FrontierOutpost/Shaders, 31 stay.)* **Game shaders to `FrontierOutpost/Shaders/`,** with a second registry in the exe and one
   lookup by legacy name.
-- [ ] 9. **`Tests/GameLogicTests`**, linking NeuronCore, GameLogic and NeuronServer only. Then
+- [x] 9. *(`2c52444`; GameLogic.vcxproj sees NeuronCore alone since `812b7af`.)* **`Tests/GameLogicTests`**, linking NeuronCore, GameLogic and NeuronServer only. Then
   GameLogic.vcxproj drops NeuronClient from its include path and its references.
 
 P3:

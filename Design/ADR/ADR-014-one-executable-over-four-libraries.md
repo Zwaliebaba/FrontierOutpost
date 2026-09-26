@@ -26,8 +26,8 @@ with no `src/` or `include/`, and names made unique by renaming where flattening
 2. **Edges run one way:**
    - NeuronCore sees nothing of the others.
    - NeuronClient and NeuronServer see NeuronCore only.
-   - GameLogic sees NeuronCore. Until the plan's P2 it also sees NeuronClient, and P2 removes that
-     edge.
+   - GameLogic sees NeuronCore alone. It saw NeuronClient too until the plan's P2 removed that edge
+     (ADR-016), and `Tests/GameLogicTests` proves it stays removed.
    - The exe sees all four.
 3. **The exe links every library with `/WHOLEARCHIVE`.** LTSL functions, types and conversions
    register themselves from static constructors (`FreeFunction`, `DefineConversion`, …). A plain
