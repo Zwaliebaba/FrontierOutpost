@@ -417,10 +417,13 @@ struct DrawContext::Native
   std::deque<RingMark> ringMarks;
 
   // The last table of views, which the next draw reuses when it reads the same textures in the
-  // same list.
+  // same list, whatever draws that read none came between them.
   std::array<Texture::Native*, TABLE_DESCRIPTORS> tableTextures{};
-  UINT shaderTable = 0;        // its first descriptor in the heap; 0 is the null table
+  UINT lastTable = 0;          // its first descriptor in the heap
   std::uint64_t tableList = 0; // the list it was taken for; 0 for none
+  // The table the next draw reads through: the last table, or 0, the null table, when it reads
+  // no texture.
+  UINT shaderTable = 0;
 
   // The sampler tables in the heap, by their contents, and the next draw's.
   std::map<SamplerTable, UINT> samplerTables;
@@ -853,6 +856,8 @@ struct DrawContext::Native
     }
     samplerTable = program->samplers.empty() ? 0 : SamplerTableFor(wanted);
 
+    // A draw that reads none leaves the last table alone: the next that reads what it holds still
+    // takes it, and not the null table.
     if (std::ranges::all_of(_read, [](const Texture::Native* _texture) { return _texture == nullptr; }))
     {
       shaderTable = 0;
@@ -860,6 +865,7 @@ struct DrawContext::Native
     }
     if (tableList == listSerial && _read == tableTextures)
     {
+      shaderTable = lastTable;
       return true;
     }
     const UINT first = AllocateTables();
@@ -875,8 +881,9 @@ struct DrawContext::Native
       core.device->CopyDescriptorsSimple(1, {start.ptr + (offset * shaderIncrement)}, view, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     }
     tableTextures = _read;
-    shaderTable = first;
+    lastTable = first;
     tableList = listSerial;
+    shaderTable = first;
     return true;
   }
 

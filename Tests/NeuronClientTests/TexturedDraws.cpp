@@ -3,12 +3,15 @@
 // Draws sample textures through the samplers liblt describes: a 2D texture with its row 0 at the
 // bottom, as GL had it; each wrap mode, the border colour and linear filtering; depth; a cube's
 // faces and a 3D texture's slices. The shader-visible tables they go through wrap around their
-// ring, and the sampler heap starts again when it fills, with no debug-layer error. A draw may not
-// sample what it draws into (Design/ADR/ADR-007; plan §5.3 and Phase 3).
+// ring, a draw that reads none leaves the last table to the next draw that reads its textures, and
+// the sampler heap starts again when it fills, with no debug-layer error. A draw may not sample
+// what it draws into (Design/ADR/ADR-007; plan §5.3 and Phase 3).
 #include "pch.h"
 
 #include "Check.h"
 #include "CompiledShaders/CubePS.h"
+#include "CompiledShaders/SolidPS.h"
+#include "CompiledShaders/SolidVS.h"
 #include "CompiledShaders/TexturedPS.h"
 #include "CompiledShaders/TexturedVS.h"
 #include "CompiledShaders/VolumePS.h"
@@ -322,6 +325,35 @@ public:
     }
     // Four frames of four ones and four twos.
     Assert::IsTrue(Read(test, target) == Repeated(48.0f, 1), L"a draw read the wrong table");
+    ExpectClean(test);
+  }
+
+  TEST_METHOD(ReadsItsTexturesAfterADrawThatReadsNone)
+  {
+    TestDevice test;
+    Open(test);
+    Program textured = MakeProgram(test, Bytecode(TEXTURED_PS), "Textured");
+    Program solid = test.device.CreateProgram(
+      {.vertexShader = Bytecode(SOLID_VS), .pixelShader = Bytecode(SOLID_PS), .computeShader = {}, .name = "Solid"});
+    Assert::IsTrue(static_cast<bool>(solid), L"the program was not made");
+    Texture image = MakeTexture(test, TextureDimension::Texture2D, TextureFormat::R32F, 1, 1);
+    Texture target = MakeTexture(test, TextureDimension::Texture2D, TextureFormat::R32F, 1, 1);
+    Neuron::DrawContext& context = test.device.Context();
+    context.UpdateTexture(image, 0, 0, Bytes(1.0f));
+    context.ClearColor(target, 0, 0, {0.0f, 0.0f, 0.0f, 0.0f});
+    SetTarget(test, target);
+    context.SetState(ADDITIVE);
+    context.SetSampler(0, Sampler(TextureFilter::Nearest, TextureWrap::ClampToEdge));
+    context.SetTexture(0, &image);
+    // Text over panels, as liblt's interface draws it: one texture read twice in one list, with a
+    // draw between that reads none. The solid program's colour is left at 0, so it adds nothing.
+    context.SetProgram(textured);
+    DrawAt(test, 0.5f, 0.5f);
+    context.SetProgram(solid);
+    DrawAt(test, 0.5f, 0.5f);
+    context.SetProgram(textured);
+    DrawAt(test, 0.5f, 0.5f);
+    Assert::IsTrue(Read(test, target) == Repeated(2.0f, 1), L"the second textured draw read the null table");
     ExpectClean(test);
   }
 
