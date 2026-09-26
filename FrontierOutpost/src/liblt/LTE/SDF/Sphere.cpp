@@ -19,9 +19,8 @@ namespace {
       return Bound3(center - V3(radius), center + V3(radius));
     }
 
-    String GetCode(String const& p) const {
-      return Stringize()
-        | "(length(" | p | " - " | center | ") - " | radius | ")";
+    void Encode(SDFProgram& program) const {
+      program.Emit(SDFOp::Sphere, {center.x, center.y, center.z, radius});
     }
   };
 

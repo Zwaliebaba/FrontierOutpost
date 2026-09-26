@@ -3,26 +3,43 @@
 
 #include "AutoClass.h"
 #include "Geometry.h"
-#include "GLEnum.h"
-#include "GLType.h"
+#include "GraphicsEnum.h"
 #include "V3.h"
 #include "Vector.h"
 #include "Vertex.h"
+
+/* The renderer's copies of a mesh's vertices and indices on the GPU
+   (LTE/RendererCore.h), null until it makes them. A copy of the mesh makes its
+   own when it is drawn, rather than share them. */
+struct MeshBufferHandle {
+  struct MeshBuffers* buffers;
+
+  MeshBufferHandle() : buffers(nullptr) {}
+  MeshBufferHandle(MeshBufferHandle const&) : buffers(nullptr) {}
+
+  MeshBufferHandle& operator=(MeshBufferHandle const&) {
+    Reset();
+    return *this;
+  }
+
+  ~MeshBufferHandle() {
+    Reset();
+  }
+
+  /* Lets the buffers go, once the GPU has finished with them. */
+  LT_API void Reset();
+};
 
 AutoClassDerived(MeshT, GeometryT,
   Vector<Vertex>, vertices,
   Vector<uint>, indices)
   DERIVED_TYPE_EX(MeshT)
 
-  mutable GL_Buffer vbo;
-  mutable GL_Buffer ibo;
-  mutable GL_IndexFormat::Enum indexFormat;
+  mutable MeshBufferHandle gpu;
   mutable short bufferVersion;
   short version;
 
   MeshT() :
-    vbo(GL_NullBuffer),
-    ibo(GL_NullBuffer),
     bufferVersion(0),
     version(0)
     {}

@@ -8,13 +8,16 @@
 #include "LTE/Renderer.h"
 #include "LTE/Script.h"
 #include "LTE/Texture2D.h"
+#include "LTE/Timer.h"
 #include "LTE/Window.h"
+
+#include <cstdio>
+#include <cstdlib>
 
 // #define TIME_LTSL_COMPILE
 
 #ifdef TIME_LTSL_COMPILE
 #include "LTE/Debug.h"
-#include "LTE/Timer.h"
 #endif
 
 struct Launcher : public Program {
@@ -24,8 +27,27 @@ struct Launcher : public Program {
   Data instance;
   Module physicsEngine;
   Module soundEngine;
+  /* The smoke mode: how many frames the app runs and how many are left before
+     the launcher quits, 0 for no limit, and where the last of them is saved,
+     empty for nowhere. */
+  uint frames;
+  uint framesLeft;
+  String capturePath;
+  bool failed;
+  /* From the start, for the smoke mode's timings. */
+  Timer timer;
 
-  Launcher(String const& appName) : appName(appName) {
+  Launcher(String const& appName, uint frames, String const& capturePath, bool warp) :
+    appName(appName),
+    frames(frames),
+    framesLeft(frames),
+    capturePath(capturePath),
+    failed(false)
+  {
+    /* A run with a set number of frames has nobody to answer a dialog. */
+    if (frames)
+      OS_SetUnattended();
+
     /* Work from the folder that holds GameData/: the executable's own folder or
        the nearest parent of it that has one (ADR-004). Without one, stay in the
        working directory launch was started in. */
@@ -39,7 +61,15 @@ struct Launcher : public Program {
       OS_ChangeDir(dir);
     window = Window_Create("App Launcher", V2U(1920, 1080), true, false);
     window->SetSync(false);
-    Renderer_Initialize();
+    /* On WARP, the smoke mode draws offscreen: it never makes a swap chain
+       (plan section 7). */
+    Renderer_Initialize(warp, warp);
+  }
+
+  /* The app goes before the engines it uses, which its members would outlive:
+     its windows play a sound as they close. */
+  ~Launcher() {
+    instance.Clear();
   }
 
   void OnInitialize() {
@@ -64,6 +94,7 @@ struct Launcher : public Program {
 
     if (!main) {
       printf("ERROR: Launcher failed to load script %s\n", appName.c_str());
+      failed = true;
       deleted = true;
       return;
     }
@@ -81,6 +112,8 @@ struct Launcher : public Program {
 
     if (initialize)
       initialize->VoidCall(0, instance);
+    if (frames)
+      PrintTime("initialized");
     if (!update)
       deleted = true;
   }
@@ -110,6 +143,24 @@ struct Launcher : public Program {
       physicsEngine->Update();
     if (soundEngine)
       soundEngine->Update();
+
+    /* The app has drawn this frame, and it is not yet displayed. */
+    if (framesLeft) {
+      if (framesLeft == frames)
+        PrintTime("drew its first frame");
+      if (--framesLeft == 0) {
+        PrintTime("drew its last frame");
+        if (capturePath.size())
+          Texture_ScreenCapture()->SaveTo(capturePath);
+        deleted = true;
+      }
+    }
+  }
+
+  /* Flushed, so that the line is kept if the launcher is stopped. */
+  void PrintTime(char const* what) {
+    printf("launch: %s %s after %.1f s\n", appName.c_str(), what, timer.GetElapsed());
+    fflush(stdout);
   }
 
   void SaveScreenshot() {
@@ -125,13 +176,75 @@ struct Launcher : public Program {
   }
 };
 
+/* launch <app> [--warp] [--frames N] [--capture <path>]
+   With --warp, the app draws on WARP, Windows' software adapter, with the
+   Direct3D 12 debug layer, and offscreen: nothing is shown. With --frames, the
+   app runs N frames and the launcher quits, and nothing waits for a click on a
+   dialog. With --capture as well, the last frame is saved as a PNG at path; a
+   relative path starts from the folder that holds GameData/ (ADR-011). This is
+   the smoke mode of Design/Plan/NeuronClient-migration.md section 5.4. The
+   exit code is 1 when the arguments or the app's script cannot be used, when
+   the app stops short of its frames, when the capture was not saved, or when
+   a run of set frames saw the debug layer report an error. */
 int main(int argc, char const* argv[]) {
-  if (argc != 2) {
-    printf("ERROR: Launcher expects one argument (application name)\n");
-    return 0;
+  String app;
+  uint frames = 0;
+  String capture;
+  bool warp = false;
+  for (int i = 1; i < argc; ++i) {
+    String arg = argv[i];
+    if (arg == "--warp")
+      warp = true;
+    else if (arg == "--frames" && i + 1 < argc) {
+      char* end = nullptr;
+      unsigned long n = std::strtoul(argv[++i], &end, 10);
+      if (*end || n == 0 || n > 1000000) {
+        printf("ERROR: --frames takes a count from 1 to 1000000, not %s\n", argv[i]);
+        return 1;
+      }
+      frames = (uint)n;
+    }
+    else if (arg == "--capture" && i + 1 < argc)
+      capture = argv[++i];
+    else if (arg.size() && arg[0] != '-' && app.empty())
+      app = arg;
+    else {
+      printf("ERROR: Launcher does not understand %s\n", arg.c_str());
+      return 1;
+    }
   }
 
-  Launcher(argv[1]).Execute();
+  if (app.empty()) {
+    printf("ERROR: Launcher expects an application name\n");
+    return 1;
+  }
+  if (capture.size() && !frames) {
+    printf("ERROR: --capture needs --frames, to know which frame to save\n");
+    return 1;
+  }
+
+  Launcher launcher(app, frames, capture, warp);
+  /* Only this run's capture counts, so an earlier one at the path goes. */
+  if (capture.size())
+    std::remove(capture.c_str());
+  launcher.Execute();
+
+  if (launcher.failed)
+    return 1;
+  if (launcher.framesLeft) {
+    printf("ERROR: %s stopped %u frames short of %u\n",
+      app.c_str(), launcher.framesLeft, frames);
+    return 1;
+  }
+  if (capture.size() && !OS_FileExists(capture)) {
+    printf("ERROR: Launcher did not save %s\n", capture.c_str());
+    return 1;
+  }
+  if (frames && Renderer_GetDeviceErrorCount()) {
+    printf("ERROR: the Direct3D 12 debug layer reported %u error(s) in %s\n",
+      Renderer_GetDeviceErrorCount(), app.c_str());
+    return 1;
+  }
   return 0;
 }
 

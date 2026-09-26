@@ -20,8 +20,10 @@ namespace {
       return Bound3(bound.lower * scale, bound.upper * scale);
     }
 
-    String GetCode(String const& p) const {
-      return source->GetCode(Stringize() | "(" | p | " / " | scale | ")");
+    void Encode(SDFProgram& program) const {
+      program.Emit(SDFOp::ScaleBegin, {scale.x, scale.y, scale.z});
+      source->Encode(program);
+      program.Emit(SDFOp::ScaleEnd);
     }
   };
 

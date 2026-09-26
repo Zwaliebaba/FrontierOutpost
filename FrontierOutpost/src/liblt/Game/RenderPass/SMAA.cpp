@@ -33,22 +33,22 @@ namespace {
       areaTex = Texture_Create(
         AREATEX_WIDTH,
         AREATEX_HEIGHT,
-        GL_TextureFormat::RG8,
+        TextureFormat::RG8,
         areaTexData->data());
 
-      areaTex->SetMagFilter(GL_TextureFilter::Linear);
-      areaTex->SetMinFilter(GL_TextureFilterMip::Linear);
-      areaTex->SetWrapMode(GL_TextureWrapMode::ClampToEdge);
+      areaTex->SetMagFilter(TextureFilter::Linear);
+      areaTex->SetMinFilter(TextureFilterMip::Linear);
+      areaTex->SetWrapMode(TextureWrapMode::ClampToEdge);
 
       searchTex = Texture_Create(
         SEARCHTEX_WIDTH,
         SEARCHTEX_HEIGHT,
-        GL_TextureFormat::R8,
+        TextureFormat::R8,
         searchTexData->data());
 
-      searchTex->SetMagFilter(GL_TextureFilter::Nearest);
-      searchTex->SetMinFilter(GL_TextureFilterMip::Nearest);
-      searchTex->SetWrapMode(GL_TextureWrapMode::ClampToEdge);
+      searchTex->SetMagFilter(TextureFilter::Nearest);
+      searchTex->SetMinFilter(TextureFilterMip::Nearest);
+      searchTex->SetWrapMode(TextureWrapMode::ClampToEdge);
     }
 
     char const* GetName() const {

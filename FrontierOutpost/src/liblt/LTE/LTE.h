@@ -41,7 +41,6 @@
 #include "Generic.h"
 #include "Geom.h"
 #include "Geometry.h"
-#include "GL.h"
 #include "Grammar.h"
 #include "HashSet.h"
 #include "InternalList.h"

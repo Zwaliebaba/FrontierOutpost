@@ -136,7 +136,6 @@ type App
     # Widget/Dev/FrameInfo:Draw self
 
   function Void PreUpdate (Widget self)
-    if Key_T.Pressed Shader_RecompileAll
     station.Update FrameTimer_Get
 
 function Data Main ()

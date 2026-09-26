@@ -13,7 +13,4 @@
     <Project Path="NeuronClient/NeuronClient.vcxproj" />
     <Project Path="Tests/NeuronClientTests/NeuronClientTests.vcxproj" />
   </Folder>
-  <Folder Name="/dependencies/">
-    <Project Path="FrontierOutpost/ext/glew/glew.vcxproj" />
-  </Folder>
 </Solution>

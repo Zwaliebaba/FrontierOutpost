@@ -10,15 +10,15 @@
 ## Why
 
 <!-- The problem, or the decision this implements. Link the ADR or Design/ document if there is
-     one; add one if this change IS a decision (Design/README.md says which is which). -->
+     one; add one if this change IS a decision (AGENTS.md §6 says which is which). -->
 
 ## How it was verified
 
 <!-- Be specific and be honest. "Builds clean, not run" and "builds and runs" are different
      claims. Say which configurations you actually built. -->
 
-- [ ] `msbuild Lockstep.slnx /p:Configuration=Debug /p:Platform=x64` — clean
-- [ ] All four test suites run and pass
+- [ ] `msbuild FrontierOutpost.slnx /p:Configuration=Debug /p:Platform=x64` — clean
+- [ ] Every test suite runs and passes
 - [ ] `python Build\CheckProjectFiles.py`
 - [ ] `python Build\CheckFormat.py`
 - [ ] `python Build\RunClangTidy.py`

@@ -104,8 +104,8 @@ namespace {
       /* Write glyph to bitmap. */
       glyphBitmap->SetData(
         px, py, sx, sy,
-        GL_PixelFormat::Red,
-        GL_DataFormat::Float,
+        PixelFormat::Red,
+        DataFormat::Float,
         buffer.data());
 
       TextGlyph& glyph = glyphs[codepoint];
@@ -158,17 +158,17 @@ namespace {
         glyphBitmap = Texture_Create(
           kTextureSize.x,
           kTextureSize.y,
-          GL_TextureFormat::R16F);
+          TextureFormat::R16F);
 
         glyphBitmap->Bind(0);
         Renderer_Clear(V4(0));
         glyphBitmap->Unbind();
-        glyphBitmap->SetWrapMode(GL_TextureWrapMode::ClampToEdge);
+        glyphBitmap->SetWrapMode(TextureWrapMode::ClampToEdge);
 
         texture = Texture_Create(
           kSDFSize.x,
           kSDFSize.y,
-          GL_TextureFormat::R32F);
+          TextureFormat::R32F);
       }
     }
 
@@ -252,7 +252,7 @@ namespace {
           Type_Get<TextVertex>(),
           indices.data(),
           indices.size(),
-          GL_IndexFormat::Int);
+          IndexFormat::Int);
       }
     }
 

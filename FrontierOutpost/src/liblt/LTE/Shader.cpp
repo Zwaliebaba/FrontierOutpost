@@ -1,190 +1,73 @@
 #include "Shader.h"
 
-#include "AutoPtr.h"
-#include "BuildMode.h"
 #include "CubeMap.h"
-#include "GL.h"
-#include "Location.h"
 #include "Map.h"
 #include "Matrix.h"
 #include "Pointer.h"
 #include "Program.h"
 #include "ProgramLog.h"
 #include "Renderer.h"
-#include "StackFrame.h"
+#include "RendererCore.h"
+#include "ShaderRegistry.h"
 #include "Texture2D.h"
 #include "Texture3D.h"
 #include "V4.h"
-#include "VectorMap.h"
 
-#include <sstream>
+#include <array>
+#include <cstring>
 #include <iostream>
+#include <string>
+#include <vector>
 
-const String kVersionDirective = "#version 120\n";
-const uint kTextureUnits = 16;
+/* Programs from the shaders FXC compiled into lt.dll, found by the legacy names
+ * Shader_Create is given (Design/ADR/ADR-008). What GL kept in a program, a
+ * program here keeps: its constants, which NeuronClient's Program holds on the
+ * CPU, and the texture each of its samplers was last given. Setting either makes
+ * the program current, as GL's Use() did, and a draw takes the current program
+ * as it is then (Design/Plan/NeuronClient-migration.md, section 5.4). */
+
+const uint kTextureUnits = Neuron::Program::MAX_SHADER_RESOURCES;
+
+/* HLSL lays each element of an array in $Globals out on its own 16 bytes. */
+const size_t kArrayStrideBytes = 16;
 
 namespace {
-  typedef Reference<struct ShaderObjectT> ShaderObject;
   typedef Reference<struct ProgramObjectT> ProgramObject;
-  typedef Map<String, ShaderObject> ShaderMap;
   typedef Map<String, ProgramObject> ProgramMap;
-  typedef Map<char const*, int> LocationCache;
 
-  GL_Program gActiveProgram = GL_NullProgram;
+  struct ProgramObjectT* gActiveProgram = nullptr;
   Pointer<ShaderT> gActiveShader;
-
-  ShaderMap& GetShaderCache() {
-    static ShaderMap map;
-    return map;
-  }
 
   ProgramMap& GetProgramCache() {
     static ProgramMap map;
     return map;
   }
 
-  /* Run a manual preprocessor on the shader code to support #include. */
-  String JSLPreprocess(String const& code) {
-    std::stringstream parsed;
-    std::stringstream codestream(code);
-    String buf;
-
-    while (getline(codestream, buf)) {
-      if (buf.size() && buf.front() == '#') {
-        Vector<String> tokens;
-        String_Split(tokens, buf.substr(1), ' ');
-
-        if (!tokens.size()) {
-          parsed << buf << '\n';
-          continue;
-        }
-
-        if (tokens[0] == "include") {
-          LTE_ASSERT(tokens.size() == 2);
-          parsed << JSLPreprocess(
-            Location_Shader("common/" + tokens[1])->ReadAscii());
-        }
-
-        else if (tokens[0] == "output") {
-          LTE_ASSERT(tokens.size() == 4);
-          int index = FromString<int>(tokens[1]);
-          String const& varType = tokens[2];
-          int components = 1;
-          if (varType.contains('2'))
-            components = 2;
-          else if (varType.contains('3'))
-            components = 3;
-          else if (varType.contains('4'))
-            components = 4;
-          
-          parsed << "#define " << tokens[3] << " gl_FragData[" << index << "]."; 
-          parsed << String("xyzw").substr(0, components);  
-          parsed << '\n';
-        }
-
-        else
-          parsed << buf << '\n';
-      } else
-        parsed << buf << '\n';
-    }
-    return parsed.str();
-  }
-
-  struct ShaderObjectT : public RefCounted {
-    GL_Shader id;
-    String path;
-    String source;
-    int version;
-
-    ShaderObjectT() : version(0) {}
-
-    ~ShaderObjectT() {
-      if (!Program_InStaticSection()) {
-        GL_DeleteShader(id);
-        if (path.size() && GetShaderCache().get(path))
-          GetShaderCache().erase(path);
-      }
-    }
-
-    bool Compile() {
-      SFRAME("Compile GPU Shader");
-      version++;
-      GL_ShaderSource(id, source);
-      GL_CompileShader(id);
-
-      /* Check the compilation status to see if there was an error. */
-      int compileStatus = GL_GetShaderI(id, GL_ShaderProperty::CompileStatus);
-
-      if (compileStatus == 0) {
-        Log_Error("Failed to compile shader.");
-        PrintSource();
-        Log_Message("Compiler Log:");
-        Log_Message(GetLog());
-        getchar();
-        return false;
-      }
-      return true;
-    }
-
-    String GetLog() const {
-      String log;
-      GL_GetShaderInfoLog(id, log);
-      return log;
-    }
-
-    void PrintSource() {
-      Vector<String> splitSource;
-      String_Split(splitSource, source, '\n');
-      for (size_t i = 0; i < splitSource.size(); ++i)
-        Log_Message(ToString(i) + '\t' + splitSource[i]);
-    }
+  /* A name a program was asked for: a constant, in one stage or both, or a
+     texture and the sampler of its own that the shaders declare beside it. */
+  struct Uniform {
+    String name;
+    std::vector<Neuron::ProgramConstant> constant;
+    int textureSlot;
+    int samplerSlot;
   };
 
-  ShaderObject ShaderObject_Create(
-    String const& code,
-    GL_ShaderType::Enum type)
-  {
-    ShaderObject self = new ShaderObjectT;
-    self->id = GL_CreateShader(type);
-    self->source = kVersionDirective + JSLPreprocess(code);
-    if (!self->Compile())
-      return nullptr;
-    return self;
-  }
-
-  ShaderObject ShaderObject_Load(
-    String const& path,
-    GL_ShaderType::Enum type)
-  {
-    if (GetShaderCache().get(path))
-      return GetShaderCache()[path];
-
-    String code = Location_Shader(path)->ReadAscii();
-    if (code.empty()) {
-      Log_Error("Failed to load shader <" + path + ">");
-      return nullptr;
-    }
-
-    ShaderObject self = ShaderObject_Create(code, type);
-    if (self) {
-      GetShaderCache()[path] = self;
-      self->path = path;
-    } else {
-      Log_Error("Failed to load shader <" + path + ">");
-    }
-
-    return self;
-  }
+  /* The texture a sampler holds, by its id (LTE/RendererCore.h), which does
+     not keep it alive, as a GL texture unit did not. */
+  struct TextureBinding {
+    uint64 id;
+    int samplerSlot;
+  };
 
   struct ProgramObjectT : public RefCounted {
-    ShaderObject vertShader;
-    ShaderObject fragShader;
-    GL_Program id;
+    Neuron::Program program;
+    String vertPath;
+    String fragPath;
     String path;
-    int textureUnitIndex;
-    int version;
-
-    LocationCache uniforms;
+    Vector<Uniform> uniforms;
+    Map<String, int> uniformIndex;
+    std::array<TextureBinding, kTextureUnits> textures;
+    std::vector<String> warned;
     int mWorld;
     int mView;
     int mProj;
@@ -192,110 +75,138 @@ namespace {
     int mWVP;
 
     ProgramObjectT() :
-      textureUnitIndex(0),
-      version(0),
       mWorld(-1),
       mView(-1),
       mProj(-1),
       mWorldIT(-1),
       mWVP(-1)
-      {}
+    {
+      for (size_t i = 0; i < textures.size(); ++i) {
+        textures[i].id = 0;
+        textures[i].samplerSlot = -1;
+      }
+    }
 
     ~ProgramObjectT() {
       if (!Program_InStaticSection()) {
-        GL_DeleteProgram(id);
-        if (gActiveProgram == id)
+        if (gActiveProgram == this)
           Shader_UseFixedFunction();
         if (path.size() && GetProgramCache().get(path))
           GetProgramCache().erase(path);
       }
     }
 
-    void BindGlobalAttributes() {
-      BindInput(0, "vertex_position");
-      BindInput(1, "vertex_normal");
-      BindInput(2, "vertex_uv");
-      BindInput(3, "vertex_color");
-      BindOutput(0, "fragment_color0");
-      BindOutput(1, "fragment_linearDepth");
-    }
-
-    void BindInput(size_t attribIndex, char const* name) {
-      LTE_ASSERT(attribIndex < kAttribArrays);
-      GL_BindAttribLocation(id, attribIndex, name);
-    }
-
-    void BindOutput(size_t bufferIndex, char const* name) {
-      LTE_ASSERT(bufferIndex < GL_MAX_DRAW_BUFFERS);
-      GL_BindFragDataLocation(id, bufferIndex, name);
-    }
-
     void CacheWVP() {
-      /* Cache the locations of WVP matrices. */
-      mWorld = GL_GetUniformLocation(id, "WORLD");
-      mView = GL_GetUniformLocation(id, "VIEW");
-      mProj = GL_GetUniformLocation(id, "PROJ");
-      mWorldIT = GL_GetUniformLocation(id, "WORLDIT");
-      mWVP = GL_GetUniformLocation(id, "WVP");
+      mWorld = GetUniformLocation("WORLD", false);
+      mView = GetUniformLocation("VIEW", false);
+      mProj = GetUniformLocation("PROJ", false);
+      mWorldIT = GetUniformLocation("WORLDIT", false);
+      mWVP = GetUniformLocation("WVP", false);
     }
 
-    String GetLog() const {
-      String log;
-      GL_GetProgramInfoLog(id, log);
-      return log;
-    }
-
+    /* Names are found once, by their text, and a name no stage reads is -1, as
+       GL's location was. */
     int GetUniformLocation(char const* name, bool warn) {
-      int* it = uniforms.get(name);
-      if (it)
-        return *it;
+      String const key(name);
+      int* found = uniformIndex.get(key);
+      if (found)
+        return *found;
 
-      int index = GL_GetUniformLocation(id, name);
-      uniforms[name] = index;
+      Uniform uniform;
+      uniform.name = key;
+      uniform.constant = program.FindConstant(name);
+      uniform.textureSlot = program.ShaderResourceSlot(name);
+      uniform.samplerSlot = uniform.textureSlot >= 0
+        ? program.SamplerSlot(std::string(Neuron::Program::HlslName(name)) + "Sampler")
+        : -1;
+
+      int index = -1;
+      if (!uniform.constant.empty() || uniform.textureSlot >= 0) {
+        index = (int)uniforms.size();
+        uniforms.push(uniform);
+      }
+      uniformIndex[key] = index;
 
       if (warn && index < 0) {
         String warning = Stringize() |
-          "Unused variable " | name | " in Shader(" | vertShader->path |
-          ", " | fragShader->path | ")";
+          "Unused variable " | name | " in Shader(" | vertPath | ", " |
+          fragPath | ")";
         Log_Warning(warning);
       }
-
       return index;
     }
 
-    void Link() {
-      SFRAME("Link GPU Program");
-      GL_LinkProgram(id);
+    /* Once for each name, what GL refused with an error and nothing set. */
+    void WarnOnce(Uniform const& uniform, char const* what) {
+      for (size_t i = 0; i < warned.size(); ++i)
+        if (warned[i] == uniform.name)
+          return;
+      warned.push_back(uniform.name);
+      Log_Warning(Stringize() | "Shader(" | vertPath | ", " | fragPath | "): " |
+        uniform.name | " " | what | "; it was not set");
+    }
 
-      if (GL_GetProgramI(id, GL_ProgramProperty::LinkStatus) == 0) {
-        Log_Error("Failed to link program.");
-        Log_Error(GetLog());
-        vertShader->PrintSource();
-        fragShader->PrintSource();
+    /* _size bytes to the constant at _varIndex, which GL refused when they did
+       not fit it. */
+    void SetConstant(int varIndex, void const* data, size_t size) {
+      if (varIndex < 0 || varIndex >= (int)uniforms.size())
+        return;
+      Uniform const& uniform = uniforms[varIndex];
+      if (uniform.constant.empty()) {
+        WarnOnce(uniform, "is a texture, not a value");
+        return;
       }
+      for (size_t i = 0; i < uniform.constant.size(); ++i) {
+        if (size > uniform.constant[i].sizeBytes) {
+          WarnOnce(uniform, "is smaller than the value given");
+          return;
+        }
+      }
+      program.SetConstant(uniform.constant,
+        std::span<std::byte const>((std::byte const*)data, size));
+    }
 
-      CacheWVP();
-      version = vertShader->version ^ fragShader->version;
+    /* An array of _count elements of _elementBytes each, laid out as HLSL lays
+       out an array: each element on 16 bytes of its own. Elements past the
+       array's end are left out, as GL left them. */
+    void SetArray(int varIndex, void const* data, size_t count, size_t elementBytes) {
+      if (varIndex < 0 || varIndex >= (int)uniforms.size() || !count)
+        return;
+      Uniform const& uniform = uniforms[varIndex];
+      if (uniform.constant.empty()) {
+        WarnOnce(uniform, "is a texture, not a value");
+        return;
+      }
+      size_t capacity = count;
+      for (size_t i = 0; i < uniform.constant.size(); ++i) {
+        size_t const bytes = uniform.constant[i].sizeBytes;
+        size_t const fits = bytes < elementBytes ? 0 : 1 + (bytes - elementBytes) / kArrayStrideBytes;
+        capacity = Min(capacity, fits);
+      }
+      if (!capacity) {
+        WarnOnce(uniform, "is smaller than the value given");
+        return;
+      }
+      std::vector<std::byte> packed((capacity - 1) * kArrayStrideBytes + elementBytes);
+      for (size_t i = 0; i < capacity; ++i)
+        std::memcpy(packed.data() + i * kArrayStrideBytes,
+          (std::byte const*)data + i * elementBytes, elementBytes);
+      program.SetConstant(uniform.constant, packed);
+    }
+
+    void SetTexture(int varIndex, GpuTexture const* texture) {
+      if (varIndex < 0 || varIndex >= (int)uniforms.size())
+        return;
+      Uniform const& uniform = uniforms[varIndex];
+      if (uniform.textureSlot < 0) {
+        WarnOnce(uniform, "is a value, not a texture");
+        return;
+      }
+      TextureBinding& binding = textures[uniform.textureSlot];
+      binding.id = texture ? texture->id : 0;
+      binding.samplerSlot = uniform.samplerSlot;
     }
   };
-
-  ProgramObject ProgramObject_Create(
-    ShaderObject const& vertex,
-    ShaderObject const& fragment)
-  {
-    ProgramObject self = new ProgramObjectT;
-    self->id = GL_CreateProgram();
-    if (self->id == GL_NullProgram)
-      return nullptr;
-
-    self->vertShader = vertex;
-    self->fragShader = fragment;
-    GL_AttachShader(self->id, vertex->id);
-    GL_AttachShader(self->id, fragment->id);
-    self->BindGlobalAttributes();
-    self->Link();
-    return self;
-  }
 
   ProgramObject ProgramObject_Load(
     String const& vertPath,
@@ -305,22 +216,27 @@ namespace {
     if (GetProgramCache().get(programPath))
       return GetProgramCache()[programPath];
 
-    ShaderObject vs = ShaderObject_Load("vertex/" + vertPath, GL_ShaderType::Vertex);
-    if (!vs)
-      return nullptr;
+    std::span<std::byte const> vs = ShaderRegistry_Vertex(vertPath);
+    if (vs.empty())
+      Log_Critical("Shader: no vertex shader was compiled for vertex/" + vertPath +
+        " (Design/ADR/ADR-008)");
+    std::span<std::byte const> ps = ShaderRegistry_Pixel(fragPath);
+    if (ps.empty())
+      Log_Critical("Shader: no pixel shader was compiled for fragment/" + fragPath +
+        " (Design/ADR/ADR-008)");
 
-    ShaderObject fs = ShaderObject_Load("fragment/" + fragPath, GL_ShaderType::Fragment);
-    if (!fs)
-      return nullptr;
-
-    ProgramObject self = ProgramObject_Create(vs, fs);
-    if (self) {
-      GetProgramCache()[programPath] = self;
-      self->path = programPath;
-    } else {
-      Log_Error("Failed to load program <" + vertPath + ", " + fragPath + ">");
-    }
-
+    ProgramObject self = new ProgramObjectT;
+    std::string const name(programPath.c_str());
+    Neuron::Program::Desc desc;
+    desc.vertexShader = vs;
+    desc.pixelShader = ps;
+    desc.name = name;
+    self->program = Renderer_Device().CreateProgram(desc);
+    self->vertPath = vertPath;
+    self->fragPath = fragPath;
+    self->path = programPath;
+    self->CacheWVP();
+    GetProgramCache()[programPath] = self;
     return self;
   }
 
@@ -332,13 +248,10 @@ namespace {
         gActiveShader = nullptr;
     }
 
-    void BindInput(size_t attribIndex, char const* name) {
-      program->BindInput(attribIndex, name);
-    }
-
-    void BindOutput(size_t bufferIndex, char const* name) {
-      program->BindOutput(bufferIndex, name);
-    }
+    /* The shaders name their inputs and outputs by register, so there is
+       nothing to bind or link (Design/ADR/ADR-008). */
+    void BindInput(size_t, char const*) {}
+    void BindOutput(size_t, char const*) {}
 
     void BindMatrices(
       Matrix const& world,
@@ -359,25 +272,9 @@ namespace {
         SetMatrix(program->mWVP, &WVP);
     }
 
-    bool Create(String const& vertCode, String const& fragCode) {
-      ShaderObject vertex =
-        ShaderObject_Create(vertCode, GL_ShaderType::Vertex);
-      if (!vertex)
-        return false;
-
-      ShaderObject fragment =
-        ShaderObject_Create(fragCode, GL_ShaderType::Fragment);
-      if (!fragment)
-        return false;
-
-      program = ProgramObject_Create(vertex, fragment);
-      return program != nullptr;
-    }
-
-    int GetTextureUnit() {
-      int index = program->textureUnitIndex++;
-      program->textureUnitIndex = program->textureUnitIndex % kTextureUnits;
-      return index;
+    bool Create(String const&, String const&) {
+      Log_Error("Shader: shaders are compiled into lt.dll, not from source (Design/ADR/ADR-008)");
+      return false;
     }
 
     int GetUniformLocation(char const* name) {
@@ -389,18 +286,11 @@ namespace {
     }
 
     void PrintLogs() const {
-      std::cout
-        << ">>> Vertex Shader:\n"
-        << program->vertShader->GetLog() << "\n\n"
-        << ">>> Fragment Shader:\n"
-        << program->fragShader->GetLog() << "\n\n"
-        << ">>> Program:\n"
-        << program->GetLog() << "\n\n";
+      std::cout << ">>> Program " << program->path.c_str()
+        << ": compiled at build time (Design/ADR/ADR-008)\n\n";
     }
 
-    void Relink() {
-      program->Link();
-    }
+    void Relink() {}
 
     ShaderT& SetCubeMap(char const* name, CubeMap const& cubeMap) {
       int varIndex = GetUniformLocation(name);
@@ -411,11 +301,7 @@ namespace {
 
     ShaderT& SetCubeMap(int varIndex, CubeMap const& cubeMap) {
       Use();
-      int unit = GetTextureUnit();
-      GL_Uniform(varIndex, unit);
-      GL_ActiveTexture(unit);
-      cubeMap->Bind();
-      GL_ActiveTexture(0);
+      program->SetTexture(varIndex, cubeMap ? CubeMap_GetGpu(*cubeMap) : nullptr);
       return *this;
     }
 
@@ -428,7 +314,7 @@ namespace {
 
     ShaderT& SetFloat(int varIndex, float f) {
       Use();
-      GL_Uniform(varIndex, f);
+      program->SetConstant(varIndex, &f, sizeof(f));
       return *this;
     }
 
@@ -441,7 +327,7 @@ namespace {
 
     ShaderT& SetFloatArray(int varIndex, float const* data, size_t size) {
       Use();
-      GL_UniformArray1(varIndex, size, data);
+      program->SetArray(varIndex, data, size, sizeof(float));
       return *this;
     }
 
@@ -454,7 +340,8 @@ namespace {
 
     ShaderT& SetFloat2(int varIndex, V2 const& v) {
       Use();
-      GL_Uniform(varIndex, v.x, v.y);
+      float const values[] = {v.x, v.y};
+      program->SetConstant(varIndex, values, sizeof(values));
       return *this;
     }
 
@@ -467,7 +354,8 @@ namespace {
 
     ShaderT& SetFloat3(int varIndex, V3 const& v) {
       Use();
-      GL_Uniform(varIndex, v.x, v.y, v.z);
+      float const values[] = {v.x, v.y, v.z};
+      program->SetConstant(varIndex, values, sizeof(values));
       return *this;
     }
 
@@ -480,7 +368,8 @@ namespace {
 
     ShaderT& SetFloat4(int varIndex, V4 const& v) {
       Use();
-      GL_Uniform(varIndex, v.x, v.y, v.z, v.w);
+      float const values[] = {v.x, v.y, v.z, v.w};
+      program->SetConstant(varIndex, values, sizeof(values));
       return *this;
     }
 
@@ -493,7 +382,13 @@ namespace {
 
     ShaderT& SetFloat3Array(int varIndex, V3 const* data, size_t size) {
       Use();
-      GL_UniformArray3(varIndex, size, (float const*)data);
+      std::vector<float> values(3 * size);
+      for (size_t i = 0; i < size; ++i) {
+        values[3 * i + 0] = data[i].x;
+        values[3 * i + 1] = data[i].y;
+        values[3 * i + 2] = data[i].z;
+      }
+      program->SetArray(varIndex, values.data(), size, 3 * sizeof(float));
       return *this;
     }
 
@@ -506,7 +401,14 @@ namespace {
 
     ShaderT& SetFloat4Array(int varIndex, V4 const* data, size_t size) {
       Use();
-      GL_UniformArray4(varIndex, size, (float const*)data);
+      std::vector<float> values(4 * size);
+      for (size_t i = 0; i < size; ++i) {
+        values[4 * i + 0] = data[i].x;
+        values[4 * i + 1] = data[i].y;
+        values[4 * i + 2] = data[i].z;
+        values[4 * i + 3] = data[i].w;
+      }
+      program->SetArray(varIndex, values.data(), size, 4 * sizeof(float));
       return *this;
     }
 
@@ -518,8 +420,10 @@ namespace {
     }
 
     ShaderT& SetMatrix(int varIndex, Matrix const* m) {
+      /* Its columns first, as GL took it, which HLSL's column-major float4x4
+         reads the same way. */
       Use();
-      GL_UniformMatrix4(varIndex, &(m->e[0]));
+      program->SetConstant(varIndex, &(m->e[0]), sizeof(m->e));
       return *this;
     }
 
@@ -532,7 +436,7 @@ namespace {
 
     ShaderT& SetInt(int varIndex, int i) {
       Use();
-      GL_Uniform(varIndex, i);
+      program->SetConstant(varIndex, &i, sizeof(i));
       return *this;
     }
 
@@ -545,15 +449,7 @@ namespace {
 
     ShaderT& SetTexture2D(int varIndex, Texture2D const& t) {
       Use();
-      int unit = GetTextureUnit();
-      GL_Uniform(varIndex, unit);
-      if (t) {
-        t->BindInput(unit);
-      } else {
-        GL_ActiveTexture(unit);
-        GL_BindTexture(GL_TextureTargetBindable::T2D, GL_NullTexture);
-      }
-      GL_ActiveTexture(0);
+      program->SetTexture(varIndex, t ? Texture2D_GetGpu(*t) : nullptr);
       return *this;
     }
 
@@ -566,26 +462,47 @@ namespace {
 
     ShaderT& SetTexture3D(int varIndex, Texture3D const& t) {
       Use();
-      int unit = GetTextureUnit();
-      GL_Uniform(varIndex, unit);
-      if (t) {
-        t->Bind(unit);
-      } else {
-        GL_ActiveTexture(unit);
-        GL_BindTexture(GL_TextureTargetBindable::T3D, GL_NullTexture);
-      }
-      GL_ActiveTexture(0);
+      program->SetTexture(varIndex, t ? Texture3D_GetGpu(*t) : nullptr);
       return *this;
     }
 
     void Use() {
-      if (gActiveProgram != program->id) {
-        gActiveProgram = program->id;
-        gActiveShader = this;
-        GL_UseProgram(program->id);
-      }
+      gActiveProgram = program.t;
+      gActiveShader = this;
     }
   };
+}
+
+bool Shader_BindActive(
+  Neuron::DrawContext& context,
+  std::span<Neuron::Texture const* const> targets)
+{
+  ProgramObjectT* program = gActiveProgram;
+  if (!program || !program->program)
+    return false;
+
+  context.SetProgram(program->program);
+  for (uint slot = 0; slot < kTextureUnits; ++slot) {
+    TextureBinding const& binding = program->textures[slot];
+    GpuTexture* texture = binding.id ? GpuTexture_Find(binding.id) : nullptr;
+    Neuron::Texture const* bound = texture && texture->texture ? &texture->texture : nullptr;
+    for (size_t i = 0; bound && i < targets.size(); ++i) {
+      if (targets[i] == bound) {
+        bound = nullptr;
+        static bool warned = false;
+        if (!warned) {
+          warned = true;
+          Log_Warning(Stringize() | "Shader(" | program->vertPath | ", " |
+            program->fragPath | ") reads a texture it draws into, which GL "
+            "left undefined; it reads nothing there");
+        }
+      }
+    }
+    context.SetTexture(slot, bound);
+    if (bound && binding.samplerSlot >= 0)
+      context.SetSampler(binding.samplerSlot, texture->sampler);
+  }
+  return true;
 }
 
 DefineFunction(Shader_Create) {
@@ -595,77 +512,11 @@ DefineFunction(Shader_Create) {
   return self;
 }
 
-Shader Shader_Create(
-  String const& vs,
-  String const& fs,
-  String const& vsHeader,
-  String const& fsHeader)
-{
-  Reference<ShaderImpl> self = new ShaderImpl;
-  String vertCode =
-    Location_Shader("vertex/" + vs)->ReadAscii();
-
-  if (vertCode.empty()) {
-    Log_Error("Failed to load shader <" + vs + ">");
-    return nullptr;
-  }
-  vertCode = vsHeader + '\n' + vertCode;
-
-  String fragCode =
-    Location_Shader("fragment/" + fs)->ReadAscii();
-
-  if (fragCode.empty()) {
-    Log_Error("Could to load shader <" + fs + ">");
-    return nullptr;
-  }
-  fragCode = fsHeader + '\n' + fragCode;
-
-  if (!self->Create(vertCode, fragCode))
-    Log_Error("Failed to create shader <" + vs + ", " + fs + ">");
-  return self;
-}
-
 ShaderT* Shader_GetActive() {
   return gActiveShader;
 }
 
-GL_Program Shader_GetCurrentProgram() {
-  return gActiveProgram;
-}
-
-DefineFunction(Shader_RecompileAll) {
-  for (ShaderMap::iterator it = GetShaderCache().begin();
-       it != GetShaderCache().end(); ++it)
-  {
-    ShaderObject const& shader = it->second;
-    if (!shader->path.size())
-      continue;
-
-    String code = Location_Shader(shader->path)->ReadAscii();
-    if (!code.size())
-      continue;
-
-    code = kVersionDirective + JSLPreprocess(code);
-    if (code != shader->source) {
-      shader->source = code;
-      shader->Compile();
-    }
-  }
-
-  for (ProgramMap::iterator it = GetProgramCache().begin();
-       it != GetProgramCache().end(); ++it)
-  {
-    ProgramObject const& program = it->second;
-    int version = program->vertShader->version ^ program->fragShader->version;
-    if (program->version != version)
-      it->second->Link();
-  }
-}
-
 void Shader_UseFixedFunction() {
-  if (gActiveProgram != GL_NullProgram) {
-    gActiveProgram = GL_NullProgram;
-    gActiveShader = nullptr;
-    GL_UseProgram(GL_NullProgram);
-  }
+  gActiveProgram = nullptr;
+  gActiveShader = nullptr;
 }

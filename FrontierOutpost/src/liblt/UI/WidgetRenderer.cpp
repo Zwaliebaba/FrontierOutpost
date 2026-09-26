@@ -98,7 +98,7 @@ namespace {
       Type_Get<T>(),
       renderer.indexBuffer.data(),
       6 * (vertexBuffer.size() / 4),
-      GL_IndexFormat::Int);
+      IndexFormat::Int);
     Profiler_Flush();
   }
 
@@ -118,8 +118,9 @@ namespace {
     PopulateIndices(glyphs.size());
 
     Type const& vertexFormat = glyphs[0].glyph->GetVertexFormat();
+    /* Sized, not only reserved: the glyphs write their vertices into it. */
     renderer.vertexBuffer.clear();
-    renderer.vertexBuffer.reserve(4 * glyphs.size() * vertexFormat->size);
+    renderer.vertexBuffer.resize(4 * glyphs.size() * vertexFormat->size, 0);
 
     for (size_t i = 0; i < glyphs.size(); ++i) {
       uchar* pBuffer = renderer.vertexBuffer.data() + 4 * i * vertexFormat->size;
@@ -133,7 +134,7 @@ namespace {
       vertexFormat,
       renderer.indexBuffer.data(),
       6 * glyphs.size(),
-      GL_IndexFormat::Int);
+      IndexFormat::Int);
     Profiler_Flush();
   }
 }

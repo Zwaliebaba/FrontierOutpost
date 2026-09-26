@@ -11,28 +11,36 @@ name: Build
 #   Build/CheckProjectFiles.py   the build-shape check           runs
 #   Build/CheckSounds.py         the sounds the game names       runs; only an unplayable WAV fails
 #   FrontierOutpost.slnx         the build                       runs
-#   *Tests.dll in the output     the test suites                 none yet: skipped
+#   *Tests.dll in the output     the test suites                 runs NeuronClientTests, on WARP
 #   Build/RunClangTidy.py        clang-tidy                      runs
 #   Build/CheckFormat.py         clang-format (its own job)      runs
 #   Build/TestCheckers.py        the checkers' own tests         runs, in both jobs
 #
-# The checkers leave FrontierOutpost/ and GameData/ alone (ADR-001, ADR-004), so until NeuronClient
-# lands they check almost nothing in this tree. TestCheckers.py is what shows they catch what they
-# should: it runs each one against small trees that break each rule.
+# The checkers leave FrontierOutpost/ and GameData/ alone (ADR-001, ADR-004), but for liblt's shader
+# folder (ADR-008), and check NeuronClient and its tests in full (ADR-005). TestCheckers.py is what
+# shows they catch what they should: it runs each one against small trees that break each rule.
 #
 # ── Why the build does not treat warnings as errors ───────────────────────────────────────────
 #
 # FrontierOutpost/ is a legacy import. It builds at the original's /W3, with the original's own
-# warnings (585 unique at C++23, every one of them the original's: MIGRATION_NOTES.md §21.4), and
-# ADR-001 exempts it from /W4 /WX. MSBuild's /warnaserror would turn every one of them into an
-# error, so it is not passed.
+# warnings (585 unique at C++23, every one of them the original's: MIGRATION_NOTES.md §21.4; 458,
+# all lt's, since the NeuronClient plan's Phase 4 step 3), and ADR-001 exempts it from /W4 /WX.
+# MSBuild's /warnaserror would turn every one of them into an error, so it is not passed.
+# NeuronClient and its tests build at /W4 /WX in their own projects (ADR-005).
 #
 # ── What it does not build ─────────────────────────────────────────────────────────────────────
 #
-# Debug and x64 only (AGENTS.md §3, §6, MIGRATION_NOTES.md D21). Release and ARM64 are built
-# before a release by whoever ships. The migration's own workflow built all four combinations
-# while the migration lasted; it is gone, and MIGRATION_NOTES.md §20 and §22 keep what it
-# measured.
+# Debug and x64 only (AGENTS.md §3, §6, MIGRATION_NOTES.md D21). Release and ARM64 are built by
+# hand: before a release, by whoever ships, and in the NeuronClient plan's Phase 5 checks. Each
+# migration's own workflow built all four combinations while it lasted, and both are gone:
+# MIGRATION_NOTES.md §20 and §22 keep what the first measured, and the NeuronClient plan's N18 the
+# last run of the second.
+#
+# ── What it does not run ───────────────────────────────────────────────────────────────────────
+#
+# No app runs here. The smoke job ran the apps brought up so far on WARP until the owner had it
+# removed (the NeuronClient plan's N20); the owner runs them on the desktop, with launch.exe's
+# smoke options (FrontierOutpost/README.md).
 
 on:
   push:

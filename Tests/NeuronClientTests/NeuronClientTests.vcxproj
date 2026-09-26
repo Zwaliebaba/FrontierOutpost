@@ -120,27 +120,101 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Check.h" />
+    <ClInclude Include="ExactColors.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Repository.h" />
+    <ClInclude Include="TestDevice.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="AudioOutput.cpp" />
+    <ClCompile Include="ComputeDispatches.cpp" />
+    <ClCompile Include="CubeTargets.cpp" />
+    <ClCompile Include="DebugEvents.cpp" />
+    <ClCompile Include="DrawCalls.cpp" />
     <ClCompile Include="GlyphRendering.cpp" />
+    <ClCompile Include="GraphicsDeviceFrames.cpp" />
     <ClCompile Include="ImageCoding.cpp" />
     <ClCompile Include="KeyMapping.cpp" />
+    <ClCompile Include="MipGeneration.cpp" />
+    <ClCompile Include="Presentation.cpp" />
+    <ClCompile Include="ProgramReflection.cpp" />
+    <ClCompile Include="RemovalReports.cpp" />
     <ClCompile Include="ShaderReflection.cpp" />
     <ClCompile Include="SoundParsing.cpp" />
+    <ClCompile Include="TargetClears.cpp" />
+    <ClCompile Include="TexturedDraws.cpp" />
+    <ClCompile Include="TextureTransfers.cpp" />
     <ClCompile Include="UnicodeText.cpp" />
     <ClCompile Include="WarpDevice.cpp" />
     <ClCompile Include="WindowEvents.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="Shaders\AccumulateCS.hlsl">
+      <ShaderType>Compute</ShaderType>
+      <VariableName>ACCUMULATE_CS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\AttributePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>ATTRIBUTE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\AttributeVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>ATTRIBUTE_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\CubePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>CUBE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\FieldCS.hlsl">
+      <ShaderType>Compute</ShaderType>
+      <VariableName>FIELD_CS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\NamedBufferPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>NAMED_BUFFER_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\NamesCS.hlsl">
+      <ShaderType>Compute</ShaderType>
+      <VariableName>NAMES_CS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\NamesPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>NAMES_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\NamesVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>NAMES_VS</VariableName>
+    </FxCompile>
     <FxCompile Include="Shaders\ProbePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>PROBE_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\SolidPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>SOLID_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\SolidVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>SOLID_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\TexturedPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>TEXTURED_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\TexturedVS.hlsl">
+      <ShaderType>Vertex</ShaderType>
+      <VariableName>TEXTURED_VS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\TwoTargetsPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>TWO_TARGETS_PS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\VolumePS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>VOLUME_PS</VariableName>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>

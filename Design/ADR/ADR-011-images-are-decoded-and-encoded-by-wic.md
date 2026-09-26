@@ -1,6 +1,8 @@
 # ADR-011: Images are decoded and encoded by WIC
 
-- **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2)
+- **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2).
+  Amended (owner, 2026-09-26, the plan's N20): the CI job that ran the smoke mode is gone, and the
+  owner runs the mode by hand; its captures are still as decisions 2 and 5 say.
 - **Scope:** NeuronClient's `ImageFile`, and how `lt.dll` loads and saves images
 - **Detail:** `Design/Plan/NeuronClient-migration.md` §4.1, §5.2 (`ImageFile`), §5.4, §5.5, §7,
   §8 (runtime files), §9, Phase 2 step 3 and Phase 4 step 7

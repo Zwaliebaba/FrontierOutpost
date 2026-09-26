@@ -20,8 +20,8 @@ namespace {
     
     if (!texture) {
       static Shader generate = Shader_Create("identity.jsl", "gen/starbg.jsl");
-      texture = Texture_Create(64, 64, GL_TextureFormat::R16F);
-      texture->SetMinFilter(GL_TextureFilterMip::Linear);
+      texture = Texture_Create(64, 64, TextureFormat::R16F);
+      texture->SetMinFilter(TextureFilterMip::Linear);
       Texture_Generate(texture, generate);
     }
 

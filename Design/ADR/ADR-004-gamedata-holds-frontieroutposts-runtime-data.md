@@ -1,6 +1,8 @@
 # ADR-004: GameData holds FrontierOutpost's runtime data
 
-- **Status:** Accepted (owner, 2026-09-25, after the migration's Phase 5)
+- **Status:** Accepted (owner, 2026-09-25, after the migration's Phase 5). Amended (owner,
+  2026-09-26), as `Design/Plan/NeuronClient-migration.md` §8 and N19 have it: `GameData/` holds no
+  shaders, and its fonts are the four families that plan kept.
 - **Scope:** `GameData/`, and how `launch.exe` finds it
 - **Detail:** `FrontierOutpost/MIGRATION_NOTES.md` D26–D29, §22, O13 and O14. This amends
   ADR-001's scope and supersedes ADR-002's row for the runtime assets.
@@ -26,11 +28,16 @@ and lifetime, and for written paths to resolve against a known location.
 
 ## Decision
 
-1. **The runtime data live in `GameData/`, at the repository root**, beside `FrontierOutpost.slnx`,
-   `FrontierOutpost/` and `ltheory-old-main/`. All of the migrated `resource/` moved there, with
-   its layout and file names unchanged. The engine's root is `GameData/` (`Location.cpp`), and so
-   is the font loader's (`Font.cpp`). `GameData/` is required: without it, `launch.exe` finds no
-   script to run.
+1. **The runtime data live in `GameData/`, at the repository root**, beside `FrontierOutpost.slnx`
+   and `FrontierOutpost/` (and `ltheory-old-main/`, until its deletion on 2026-09-26). All of the
+   migrated `resource/` moved there, with its layout and file names unchanged. The engine's root is
+   `GameData/` (`Location.cpp`), and so is the font loader's (`Font.cpp`). `GameData/` is required:
+   without it, `launch.exe` finds no script to run.
+   - **No shaders** (amendment, N19). `GameData/shader`, the GLSL that liblt compiled at run
+     time, went on 2026-09-26: the shaders are HLSL compiled into `lt.dll` (ADR-008), and
+     `8e13f92` is the last commit that holds the folder.
+   - **Four font families** (amendment): Gafata, Iceland, Rajdhani and SourceCodePro, each with
+     its licence. The NeuronClient plan's Phase 1 removed the other 34 (ADR-013).
 2. **`launch.exe` works from the folder that holds `GameData/`.** At start, it looks in its own
    folder and then in each parent folder in turn. It changes its working directory to the first
    one that has `GameData/`. If none has, it stays in the working directory it was started in. So

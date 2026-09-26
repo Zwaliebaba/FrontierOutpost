@@ -21,10 +21,9 @@ namespace {
       return Bound3(-FLT_MAX, FLT_MAX);
     }
 
-    String GetCode(String const& p) const {
-      return Stringize()
-        | "cylinder(" | p | ", " | center | ", " | axis
-        | ", " | radius | ")";
+    void Encode(SDFProgram& program) const {
+      program.Emit(SDFOp::Cylinder,
+        {center.x, center.y, center.z, axis.x, axis.y, axis.z, radius});
     }
   };
 

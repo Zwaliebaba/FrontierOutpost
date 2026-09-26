@@ -11,7 +11,34 @@ DirectWrite, WIC, XAudio2 and Win32.
   images, glyphs, sound, window and input, and no SFML or FreeType is left. SFML's include
   directories, definition, libraries and `.gitignore` negation went with it, ahead of Phase 5.
   Phase 2's done-when needs the owner to check text, images, sound and input in the kept apps.
-  ADR-007 to ADR-009 stay Proposed until Phase 3.
+  Phase 3 is done (`633b371` to `bbd563f`): ADR-007 and ADR-008 are Accepted, and NeuronClient has
+  §5.3's device, resources, context, compute, mips, readbacks, swap chain and present pass, DRED's
+  report and PIX's regions, each with its tests. Its done-when holds on `bbd563f`: all 115 tests
+  pass on WARP in CI with zero debug-layer errors, and the four builds still link with Phase 2's 522
+  warnings, all lt's. ADR-009 stayed Proposed until Phase 4 implemented it. The owner took
+  N15 and N16 on 2026-09-26. Phase 4 is under way (from `e630300`): step 1 is in, step 2 is in but
+  for the four field shaders that step 4 replaces, and so is the first part of the launcher's smoke
+  mode (N15). The owner released step 3 on 2026-09-26 (N16); `8bc74a0` is the last commit that
+  renders with OpenGL. Step 3 is in (`7a2695e` to `8534b2c`): liblt draws through `DrawContext`, the
+  launcher renders offscreen on WARP, and the smoke job runs `loading` and `ui` there for 30 frames
+  each, with no debug-layer error, on `8534b2c`. Their frames show step 5.2's interface and text,
+  which needs no SDF field, ahead of step 4; presenting (5.1) is the owner's to see, since the smoke
+  run makes no swap chain. The four builds link with 507 warnings, 458 unique, all lt's. Step 4
+  is in (`0ad2974` and `fe51c4d`): a compute shader interprets each SDF field, as ADR-009 decides,
+  amended where building it showed the Proposed text wrong; the owner accepted the ADR on
+  2026-09-26. Bring-up 5.3 runs `war` in the smoke job from `86634e8`. There it draws its 30 frames
+  with no debug-layer error, in 21 minutes on WARP, and its frame shows the ship, the star's bloom
+  and lens flare, the nebula, the interface, and the asteroids that are its SDF meshes, whose
+  128³ fields took 22 s each. `df48652` reads the lens flares' occlusion back asynchronously. The
+  owner then took N17: step 6 is in (`57c67bb`), and OpenGL, GLEW and the WGL bridge are gone. The
+  four builds still link with 507 warnings, 458 unique. The owner paused there, on 2026-09-26, with
+  bring-up 5.4 to 5.9 still to come; the documents were brought up to date for the pause, and §12
+  lists what is open. The owner also had `ltheory-old-main/`, the original's reference copy, deleted
+  the same day; history holds it, and upstream `ltheory-old` at `0535d46` is the original. By N18,
+  the migration's workflow went too: CI builds Debug|x64 only, and the other three builds are the
+  owner's, by hand. By N19, so did `GameData/shader`, which nothing had read since step 3;
+  `8e13f92` is the last commit that holds it. By N20, the CI smoke job went as well, and the owner
+  runs the apps on the desktop; its last complete run was on `86634e8`.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
@@ -66,6 +93,12 @@ has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
 | N12 | **liblt keeps its own calls for OS services:** `SHGetFolderPath`, `GetModuleFileNameA`, `CreateDirectoryA`, `MessageBoxA` and DbgHelp in `LTE/OS.cpp`, `MessageBoxA` in `Common.cpp`'s assertion handler, and `WinMain` in `LTE/LTE.h`. NeuronClient takes what OpenGL, GLEW, SFML and FreeType did, and XAudio2. | owner |
 | N13 | **No `gl-final` tag and no frame-time comparison.** The OpenGL build stays in the history, but nothing marks it and nothing is measured against it. The owner judges each phase by the port itself. | owner |
 | N14 | **The script API is an interface, not unused material.** Of the 265 natives that neither a script nor C++ reached after Phase 1, the 12 that were the only way into code of their own went, with what only they reached. The other 253 stay: 194 are members of families one macro builds per object type, item field, component or key, and 59 are short, none over 11 lines. | owner |
+| N15 | **The smoke job comes before bring-up** (2026-09-26). Step 7's CI job lands with step 3, and the launcher's smoke mode before it: `--frames` and `--capture` before the pause, `--warp` and offscreen rendering with step 3, which gives liblt a device to put on WARP. Besides failing on a Direct3D 12 error, the job writes a downscaled copy of each app's frame into its log, since the session that ports liblt cannot fetch CI artefacts. Each bring-up step is checked in those frames, and the owner checks on a GPU at the done-when. | owner |
+| N16 | **Work pauses before Phase 4 step 3** (2026-09-26) until the owner has checked Phases 1 and 2 in the apps while OpenGL still renders. Steps 1 and 2 and the smoke mode's first part change nothing OpenGL is given. The owner released step 3 the same day; `8bc74a0` is the last commit that renders with OpenGL. | owner |
+| N17 | **Step 6 comes before the rest of bring-up** (2026-09-26). OpenGL, GLEW and the WGL bridge are deleted once `war` runs on Direct3D 12 (bring-up 5.3), ahead of 5.4 to 5.9: nothing has drawn through OpenGL since step 3. Their link libraries go with them, ahead of Phase 5, as SFML's went in Phase 2. | owner |
+| N18 | **The migration's workflow goes before Phase 5** (2026-09-26). `.github/workflows/neuronclient.yml` and `.github/migration/` are deleted, so CI builds Debug\|x64 only, with the tests, clang-tidy and the smoke job, as AGENTS.md §6 has it. x64 Release and both ARM64 builds are built by hand, before a release and in Phase 5's final checks, not after every step (§6, ADR-006 decision 5). The workflow's last run was on `8443028`, where x64 Debug and Release linked with 507 warnings, 458 unique, and ARM64 Debug linked. | owner |
+| N19 | **`GameData/shader` goes before Phase 5** (2026-09-26). Its 130 GLSL files, 5,311 lines (§5.6), had not been read since step 3, when liblt's shaders became HLSL compiled into `lt.dll`, and §12 proposed deleting them with Phase 5's close-out. They are deleted at the pause instead, and ADR-004's amendment (§8) lands with them. `8e13f92` is the last commit that holds them, and each HLSL file's header names what it was ported from. | owner |
+| N20 | **The CI smoke job goes** (2026-09-26). `build.yml` loses Smoke on WARP and the upload of the launcher that only it used, and `Build/LogFrame.py`, which only it ran, is deleted. The owner runs the apps on the desktop instead, with the launcher's smoke mode, which stays. This takes back N15's CI half: a bring-up step is checked when the owner runs it, not in CI's frames, and §12's question of the job's shape falls away. The job's last complete run was on `86634e8`. The pushes after it cancelled its runs, and the owner cancelled the last, on `28c6fe1`, 19 minutes into `war`, after `loading` and `ui` had drawn their frames. So `df48652`'s lens flares, step 6 and N19 have not run in CI; the owner's runs check them. | owner |
 
 What N2 and N3 mean in practice. The first two points correct what the question offered:
 
@@ -361,6 +394,10 @@ Other rules the context applies:
 | Filtering and wrapping are properties of the texture | A sampler is chosen at bind time from the texture's settings. Anisotropy only with mipmapped linear minification. The border colour is kept. |
 | A depth buffer stays attached under targets of another size | Depth is bound only when the draw tests or writes it, since Direct3D 12 requires matching sizes. |
 | Slot 1 stays attached under a job that writes only slot 0 | Only as many targets are bound as the program writes. |
+| A program writes to a draw buffer with nothing attached, and the write is discarded | The pipeline state names only the targets set, and what a program writes past them is discarded. Depth alone can be drawn into. |
+| An attribute array that is not enabled reads the current attribute, which liblt leaves at (0, 0, 0, 1) | An input the layout has no attribute for reads (0, 0, 0, 1), from a buffer holding one instance. Channels an attribute lacks read 0, 0 and 1, as in GL. |
+| `glTexSubImage` replaces part of a level | Updates take a region of a mip: a rectangle, a cube face's, or a box of a 3D texture. |
+| `glClear` clears only inside the scissor | Clears take a rectangle, clipped to the level. |
 | Blend modes | Alpha = (SRC_ALPHA, INV_SRC_ALPHA, ONE, ONE). Additive = (ONE, ONE, ONE, ONE). One state for all targets. |
 
 ### 5.6 Shaders
@@ -401,11 +438,12 @@ Every SDF node already has a CPU `Evaluate`. But the two noise nodes are `NOT_IM
 would be slow, and it would first need the noise ported to C++.
 
 So the field moves to a precompiled compute shader:
-- **The tree becomes an instruction stream:** postfix, opcode and parameters, in a structured
-  buffer.
+- **The tree becomes an instruction stream:** postfix, opcode and parameters, in the compute
+  shader's constant buffer (ADR-009 as amended in step 4; it first said a structured buffer).
 - **One compute shader walks it for each voxel,** with a value stack and a point stack, and writes
   the R32F 3D texture directly through a UAV. The slice-by-slice copy through the CPU goes.
-- **Gradient and occlusion** become compute passes.
+- **Occlusion, and the resampling into each level's grid,** become compute passes. The gradient
+  pass goes, since nothing ran it.
 - **The LOD grids** are read back for the CPU polygoniser, asynchronously.
 - **The opcodes** are the SDF node types Phase 1 leaves. Of the two noise nodes, only
   `FractalWorley` is constructed (`Game/Renderable/Asteroid.cpp:18`), so Worley noise is ported to
@@ -418,7 +456,8 @@ measures it.
 
 **The rule:** one change at a time, and all four builds (x64 and ARM64, Debug and Release) pass after
 every step. CI builds Debug|x64. The other three are built by a temporary workflow for the length of
-the migration, as the last migration did, or by hand.
+the migration, as the last migration did, or by hand. From N18 the workflow is gone, and the owner
+builds the three by hand: before a release, and in Phase 5's final checks, not after every step.
 
 Phases 1 and 2 happen while OpenGL still renders, so a fault there cannot be the new renderer's.
 Phase 3 touches nothing in liblt; it can start once step 1 of Phase 2 has landed.
@@ -549,18 +588,24 @@ Build §5.3 in NeuronClient. The tests run on WARP, with the debug layer on:
 6. **Deletion.** Delete OpenGL, the WGL bridge, `FrontierOutpost/ext/glew`, and
    `FrontierOutpost/include/GL` and `include/Glew`.
 7. **A CI smoke job.** It runs each 3D app for N frames on WARP, offscreen, and fails on a
-   Direct3D 12 error or a removed device. It uploads one PNG per app for the owner to look at.
+   Direct3D 12 error or a removed device. It uploads one PNG per app for the owner to look at. By
+   N15 it lands with step 3, ahead of bring-up, and writes a downscaled copy of each frame into its
+   log as well. By N20 it goes after bring-up 5.3, and the owner runs the apps on the desktop.
 
-**Done when:** the 16 kept apps run on the owner's GPU (x64) and on the owner's ARM64 device, and
-the smoke job is green.
+**Done when:** the 16 kept apps run on the owner's GPU (x64) and on the owner's ARM64 device. (The
+smoke job had to be green as well, until N20 removed it.)
 
 ### Phase 5: Close out
 
 1. **Solution.** `FrontierOutpost.slnx` holds `lt`, `launch`, `NeuronClient` and
-   `NeuronClientTests`.
+   `NeuronClientTests`. Done ahead: it has held these four and nothing else since Phase 4 step 6.
 2. **Build files.** `lt.vcxproj` and `launch.vcxproj` lose the SFML, GLEW, FreeType and OpenGL
-   include directories, definitions and libraries. `.gitignore` loses its SFML negations.
-3. **Documents.** The README, the migration notes, and the ADR changes of §8.
+   include directories, definitions and libraries. `.gitignore` loses its SFML negations. Done
+   ahead: SFML's and FreeType's went in Phase 2, GLEW's and OpenGL's in Phase 4 step 6 (N17).
+   `$(FrontierOutpostDir)include` stays on the include path, for `UTF8/` and `windirent.h`.
+3. **Documents.** The README, the migration notes, and the ADR changes of §8. Brought up to date
+   when the owner paused after Phase 4 step 6, and ADR-004's amendment landed when
+   `GameData/shader` went (N19); Phase 5 checks them again at the end.
 4. **Final checks.**
    - All four builds, by hand.
    - The owner's GPUs.
@@ -572,9 +617,9 @@ the smoke job is green.
 |---|---|---|
 | CI build, Debug\|x64 (as today) | Compiles and links | Release, ARM64 |
 | NeuronClientTests on WARP | The Direct3D 12 core, DirectWrite, WIC, WAV parsing and key mapping, with no debug-layer error | Real-GPU driver behaviour |
-| CI smoke run on WARP | Every 3D app renders N frames without a Direct3D 12 error; PNGs to look at | That the frames look right |
+| CI smoke run on WARP, until N20 | Every 3D app renders N frames without a Direct3D 12 error; PNGs to look at | That the frames look right |
 | Checkers | Formatting, naming and project shape for NeuronClient | — |
-| The owner, each phase | Looks, sound, input and feel; ARM64; real GPUs | — |
+| The owner, each phase | Looks, sound, input and feel; ARM64; real GPUs; since N20, the smoke mode's runs | — |
 
 If the runner has no interactive desktop, no swap chain can be created there. That is why the smoke
 mode renders offscreen and never creates one.
@@ -597,15 +642,16 @@ mode renders offscreen and never creates one.
 
 **Changed.**
 - **ADR-001:** a scope note. NeuronClient and its tests are outside the exemption, and so is
-  `FrontierOutpost/src/liblt/Shaders/` (N11), from the commit that adds its first file.
-- **ADR-002:** superseded. No vendored dependency is left.
+  `FrontierOutpost/src/liblt/Shaders/` (N11), from the commit that adds its first file. Done.
+- **ADR-002:** superseded. No vendored dependency is left. Done, after Phase 4 step 6.
 - **ADR-003:** amended. The engine's mechanism lives in NeuronClient; the adapter stays in liblt. A
   missing sound file becomes a logged warning (N6); a file XAudio2 cannot play still ends the program
-  (N9).
-- **ADR-004:** amended. `GameData/` holds no shaders, and the fonts are pruned.
+  (N9). Done.
+- **ADR-004:** amended. `GameData/` holds no shaders, and the fonts are pruned. Done, when
+  `GameData/shader` went (N19).
 
 **Runtime files (R13).** None is added for players. Screenshots stay under `cache/screenshot/`. The
-CI smoke mode writes its PNG captures only where `--capture` says, and a relative path resolves
+smoke mode writes its PNG captures only where `--capture` says, and a relative path resolves
 against the folder `launch.exe` works from, the one that holds `GameData/` (ADR-004). ADR-011
 records it. A PSO disk cache would need its own ADR.
 
@@ -663,7 +709,8 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 | Upside-down images or wrong depth | Phase 4 | One macro and one present flip. The asymmetric-image test in Phase 3. |
 | `d3dcompiler_47.dll` missing on a target | ARM64 | Phase 2 loads it and reflects a blob on the owner's ARM64 device. Fallback: reflection tables generated at build time. |
 | FXC is frozen | Later | Nothing here needs SM 6. ADR-008 records what moving to DXC would take. |
-| The SDF interpreter is slow, or shapes change | `model`, `war` | Generation time measured on WARP and a GPU. Different shapes are acceptable under N3. |
+| The SDF interpreter is slow, or shapes change | `model`, `war` | Generation time measured on WARP and a GPU: on WARP, 22 s for a 128³ field (ADR-009). Different shapes are acceptable under N3. |
+| Faults that only running an app shows | Bring-up 5.4 to 5.9 | Since N20 no app runs in CI, so a debug-layer error, a crash or a wrong frame shows only when the owner runs the app. The smoke mode runs one unattended on WARP with the debug layer, as CI did: `launch <app> --warp --frames 30 --capture <app>.png`. |
 | Hitches the first time a PSO is used | The first seconds of each app | Known programs warmed at load. `ID3D12PipelineLibrary` later. |
 | Modernisation runs away | Phase 4 | Only the changes named in §5 go in; everything else is backlog. |
 | Mixed build settings in one DLL | Always | Warning levels are harmless. `/arch` is not: a template or inline function both libraries use keeps one copy, which the linker picks, so NeuronClient states `lt`'s `/arch` (N10). Under `/fp:precise` and `lt`'s `/fp:fast`, such a copy rounds as either library would; nothing relies on bit-exact results (MIGRATION_NOTES.md BR6). The CRT must match (`/MD`). |
@@ -681,5 +728,12 @@ These lists come from the 2026-09-25 survey. Phase 1 re-verifies each item befor
 
 ## 12. Still open for the owner
 
-Nothing. N5–N12 settled the open items: `/arch`, missing sounds, vsync, RandomScreenshot's
-background, unplayable sound files, liblt's shader folder and its calls for OS services.
+N5–N12 settled the first open items: `/arch`, missing sounds, vsync, RandomScreenshot's background,
+unplayable sound files, liblt's shader folder and its calls for OS services. The pause after Phase
+4 step 6 (2026-09-26) left three. N19 and N20 settled two of them: `GameData/shader` went, and so
+did the smoke job whose shape was open. This is open:
+
+1. **The owner's checks of Phase 4:** presenting (5.1), which the smoke run cannot see, and the 16
+   kept apps on a GPU and on the ARM64 device, the phase's done-when. ADR-009's sixth decision also
+   asks for a field's generation time on a GPU. Since N18 the x64 Release and ARM64 builds are the
+   owner's, by hand, and since N20 so is every run of an app.

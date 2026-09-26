@@ -1,6 +1,6 @@
 # ADR-007: Graphics is Direct3D 12, as the shared base of the NeuronClient projects
 
-- **Status:** Proposed (2026-09-25, NeuronClient migration Phase 0), for the owner to accept
+- **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 3)
 - **Scope:** NeuronClient's graphics core (`GraphicsDevice`, `SwapChain`, `Texture`, `Buffer`,
   `Program`, `DrawContext`), and `lt.dll`'s renderer on top of it
 - **Detail:** `Design/Plan/NeuronClient-migration.md` §2, §3 (point 1), §4.2, §5.3, §5.5, §11, N0,
@@ -32,7 +32,8 @@ route wherever emulating OpenGL would cost more, and nothing beyond that (plan �
 
 1. **Direct3D 12, at feature level 11_0 and Shader Model 5.1.** That covers every Direct3D 12 GPU
    and WARP, and keeps Windows 10 (plan §5.3). OpenGL, GLEW and the temporary WGL bridge are
-   deleted once liblt runs on it (plan Phase 4 step 6).
+   deleted once liblt runs on it (plan Phase 4 step 6). They were on 2026-09-26, once `war` ran on
+   it, ahead of the rest of bring-up (`57c67bb`, plan N17).
 2. **The core's policies** (plan §5.3):
    - two frames in flight on one direct queue, with no per-frame wait for the GPU;
    - two root signatures built in C++: one for every liblt program (a root CBV at `b0`, an SRV

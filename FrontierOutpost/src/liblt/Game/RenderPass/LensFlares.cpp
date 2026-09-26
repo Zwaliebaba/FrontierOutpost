@@ -8,6 +8,7 @@
 #include "LTE/Location.h"
 #include "LTE/Meshes.h"
 #include "LTE/Renderer.h"
+#include "LTE/RendererCore.h"
 #include "LTE/Shader.h"
 #include "LTE/Texture2D.h"
 #include "LTE/Vector.h"
@@ -16,6 +17,9 @@
 #include "Module/FrameTimer.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <vector>
 
 const float kCullBrightness = 0.01f;
 const float kOcclusionSpeed = 8.0f;
@@ -49,6 +53,13 @@ namespace {
     Array<V4> queryBufferData;
     Array<float> queryResultData;
     Vector<LensFlare> flares;
+    /* The occlusion is read back while the next frames are drawn, not waited
+       for (plan section 5.3): the ticket of the read in flight, 0 for none,
+       the lights it measured, held until its result is in, and the time since
+       it was asked for. */
+    std::uint64_t read;
+    Vector<LightRef> readLights;
+    float readTime;
     DERIVED_TYPE_EX(LensFlares)
 
     LensFlares() :
@@ -57,10 +68,12 @@ namespace {
       shaderComputeVisibility(Shader_Create("identity.jsl", "compute/lensflare_visibility.jsl")),
       dirtTexture(Texture_LoadFrom(Location_Texture("lensdirt.jpg"))),
       queryBufferData(kMaxFlares),
-      queryResultData(kMaxFlares)
+      queryResultData(kMaxFlares),
+      read(0),
+      readTime(0)
     {
-      queryBuffer = Texture_Create(kMaxFlares, 1, GL_TextureFormat::RGBA32F);
-      resultBuffer = Texture_Create(kMaxFlares, 1, GL_TextureFormat::R32F);
+      queryBuffer = Texture_Create(kMaxFlares, 1, TextureFormat::RGBA32F);
+      resultBuffer = Texture_Create(kMaxFlares, 1, TextureFormat::R32F);
     }
 
     char const* GetName() const {
@@ -73,7 +86,7 @@ namespace {
       /* Generate flare texture. */ {
         static Shader generate = Shader_Create("identity.jsl", "gen/lensflare.jsl");
         if (!flareTexture) {
-          flareTexture = Texture_Create(1024, 1024, GL_TextureFormat::R16F);
+          flareTexture = Texture_Create(1024, 1024, TextureFormat::R16F);
           Texture_Generate(flareTexture, generate);
         }
       }
@@ -157,15 +170,38 @@ namespace {
       }
 
       /* Compute Occlusion. */ {
-        for (size_t i = 0; i < flares.size() && i < kMaxFlares; ++i)
+        Neuron::DrawContext& context = Renderer_Context();
+        readTime += FrameTimer_Get();
+
+        /* The read in flight, once the GPU has copied it. Each light it
+           measured moves toward its result as far as it would have moved,
+           frame by frame, in the time since. Until then no other read starts. */
+        if (read) {
+          std::vector<std::byte> texels;
+          if (!context.TakeRead(read, texels))
+            return;
+          size_t const results = Min(readLights.size(), texels.size() / sizeof(float));
+          std::memcpy(queryResultData.data(), texels.data(), results * sizeof(float));
+          float factor = 1.0f - Exp(-kOcclusionSpeed * readTime);
+          for (size_t i = 0; i < results; ++i)
+            readLights[i]->visibility =
+              Mix(readLights[i]->visibility, queryResultData[i], factor);
+          read = 0;
+          readLights.clear();
+        }
+
+        uint const count = Min(kMaxFlares, (uint)flares.size());
+        if (!count)
+          return;
+        for (uint i = 0; i < count; ++i)
           queryBufferData[i] =
             V4(flares[i].center.x, flares[i].center.y, flares[i].depth, 0);
 
         queryBuffer->SetData(
           0, 0,
-          Min(kMaxFlares, (uint)flares.size()), 1,
-          GL_PixelFormat::RGBA,
-          GL_DataFormat::Float,
+          count, 1,
+          PixelFormat::RGBA,
+          DataFormat::Float,
           queryBufferData.data());
 
         resultBuffer->Bind(0);
@@ -178,12 +214,10 @@ namespace {
         Renderer_DrawQuad();
 
         resultBuffer->Unbind();
-        resultBuffer->GetData(queryResultData.data());
-
-        float factor = 1.0f - Exp(-kOcclusionSpeed * FrameTimer_Get());
-        for (size_t i = 0; i < flares.size() && i < kMaxFlares; ++i)
-          flares[i].light->visibility =
-            Mix(flares[i].light->visibility, queryResultData[i], factor);
+        read = context.RequestRead(Texture2D_GetGpu(*resultBuffer)->texture, 0, 0);
+        readTime = 0;
+        for (uint i = 0; i < count; ++i)
+          readLights.push(flares[i].light);
       }
     }
   };

@@ -6,7 +6,8 @@ repository root and the projects under `FrontierOutpost/`. The targets are tools
 for first-party code, x64 and ARM64, and Debug and Release.
 
 This is a build-system and language-standard migration only. Namespaces, identifiers, files and
-user-facing strings keep their original names. `ltheory-old-main/` is read-only.
+user-facing strings keep their original names. `ltheory-old-main/` was read-only, and is deleted
+since 2026-09-26 (below).
 
 **Status:** Phase 1 (structure) is done (§15). Phase 2's x64 build (§16) compiled at parity with
 the original, with identical warnings and matching command lines, and its link lacked only FMOD Ex.
@@ -22,6 +23,20 @@ CI builds after the merge; §20.5 verifies them. Last, the owner moved the runti
 (D26–D28, ADR-004, §22). With that verified on all four combinations, the migration workflow
 and its scripts are gone (D21, §22.4). After the merge, the owner had the 79 Ogg sounds land as
 they are, to convert them to WAV offline (D29, §22.5).
+
+**Since then**, the NeuronClient migration (`Design/Plan/NeuronClient-migration.md`, from
+2026-09-25) has changed much of what this record describes, and its status says where it stands.
+SFML left the tree in its Phases 1 and 2, FreeType in its Phase 2 (ADR-010 to ADR-013), and OpenGL,
+GLEW and the WGL bridge in its Phase 4 (ADR-007), so nothing is vendored under
+`FrontierOutpost/ext/` any more and ADR-002 is superseded. `FrontierOutpost.slnx` holds `lt`,
+`launch`, `NeuronClient` and `NeuronClientTests`. liblt draws with Direct3D 12 through NeuronClient,
+and its shaders are HLSL compiled into `lt.dll` (ADR-008), so `GameData/shader` went, on 2026-09-26.
+Where §5–§10 and §15–§22 give dependencies, projects, link lines and warning counts, they are this
+migration's, not the tree's now: the four builds link with 507 warnings, 458 unique, all `lt`'s,
+where this migration ended with 613, 585 unique (§21.4, §22.4). The owner then had
+`ltheory-old-main/` deleted, on 2026-09-26. Where this record cites it (D1, D12, §4, O1, O2, §15.1,
+§20.3), every commit from `6d8b20e` until its deletion holds it unchanged, and upstream
+`JoshParnell/ltheory-old` at `0535d46` is the complete original it was copied from.
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later
@@ -1010,7 +1025,8 @@ Recorded, not to be done in this migration:
     (MSBuild's total is above the unique count in all four).
   - **Closed by D24**, not pursued.
 - **O7** This container can read job logs but not artifacts. The owner can download them from the
-  run page.
+  run page. The NeuronClient plan's CI smoke job wrote a copy of each app's frame into its log for
+  this reason (its N15), until its N20 removed the job.
 - **O8** (D8) The owner's FMOD Ex x64 files are not in the tree yet. **Superseded by D15:** no
   FMOD file is needed any more, and the link probe is gone from the workflow.
 - **O9** (§15.1) `extlib/win32` and `extbin/win32` could not be copied as the approved scope
@@ -1072,7 +1088,10 @@ Recorded, not to be done in this migration:
     permission notice, which its MIT licence requires in copies of the source. It has lacked it
     since the original; D26 only moves it. SMAA's two lookup textures did land: the same licence
     says that binary distributions need not carry the notice. Adding SMAA's `LICENSE.txt` beside
-    the shader fixes it. **Open, the owner's call.**
+    the shader fixes it. **Resolved by ADR-008**, in the NeuronClient migration's Phase 4 step 2:
+    SMAA's HLSL port, `FrontierOutpost/src/liblt/Shaders/Smaa.hlsli`, carries the notice in
+    `SmaaLicense.txt` beside it. `smaa.jsl` lacked it until `GameData/shader` was deleted, on
+    2026-09-26.
 
 ## 15. Phase 1: structure
 
@@ -1692,10 +1711,9 @@ at `/W4`, and GLEW raise none.
 
 - **O10: the owner's to do.** Convert the 24 Ogg sounds left in `GameData/sound/` to WAV.
 - **O11:** then listen to the sounds.
-- **O14: the owner's to decide.** The licence notice for SMAA's shader source.
 - **O4:** ARM64 builds have not been run, for want of an ARM64 machine.
-- O1 and O7 describe the environment and the source material. O2, O3, O5, O8, O9, O12 and O13
-  are resolved, and O6 is closed (D24).
+- O1 and O7 describe the environment and the source material. O2, O3, O5, O8, O9, O12, O13 and
+  O14 are resolved, and O6 is closed (D24).
 
 ## 22. GameData (D26–D29)
 

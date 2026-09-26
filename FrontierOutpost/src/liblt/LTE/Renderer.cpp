@@ -2,29 +2,44 @@
 #include "Bound.h"
 #include "Color.h"
 #include "CubeMap.h"
-#include "GL.h"
 #include "Matrix.h"
 #include "Mesh.h"
 #include "ProgramLog.h"
+#include "RendererCore.h"
+#include "Shader.h"
 #include "ShaderInstance.h"
 #include "Stack.h"
 #include "Texture2D.h"
 #include "Transform.h"
 #include "Tuple.h"
-#include "VectorMap.h"
 #include "Window.h"
+
+#include <array>
+#include <climits>
+#include <cstdint>
+#include <span>
+
+/* liblt's renderer on NeuronClient's DrawContext (Design/Plan/NeuronClient-
+ * migration.md, sections 5.4 and 5.5). It keeps the state GL kept, as GL kept
+ * it: pushed and popped on stacks, and taken by each draw and clear as it is
+ * then. The targets are the colour attachments of the stacks' tops, in the
+ * order of their slots, or the frame texture when neither colour nor depth is
+ * pushed, as GL drew into its default framebuffer. */
 
 const bool kAllow16BitIndices = true;
 const bool kCameraSpaceRendering = true;
 const size_t kMaxColorAttachments = 4;
-const size_t kFramebufferCacheSize = 128;
 
 namespace {
-  AutoClass(Attachment,
-    GL_Texture, texture,
-    GL_TextureTarget::Enum, target,
-    uint, guid)
+  struct Attachment {
+    uint64 id;
+    uint layer;
+
     Attachment() {}
+    Attachment(uint64 id, uint layer) :
+      id(id),
+      layer(layer)
+      {}
   };
 
   struct Renderer {
@@ -39,12 +54,8 @@ namespace {
     int polyCount;
     int polyCountLast;
 
-    bool attribArrayEnabled[kAttribArrays];
-    GL_Buffer indexBuffer;
-    GL_Buffer vertexBuffer;
-
     Stack<Attachment> colorAttachment[kMaxColorAttachments];
-    Stack<GL_Texture> depthAttachment;
+    Stack<uint64> depthAttachment;
 
     Stack<BlendMode::Enum> blendMode;
     Stack<CullMode::Enum> cullMode;
@@ -52,180 +63,344 @@ namespace {
     Stack< V4T<int> > viewport;
     Vector<int> zBuffer;
     Vector<int> zWritable;
-    VectorMap<size_t, GL_Framebuffer> fboCache;
-    
+
+    /* The culling GL was left with: the cull stack's, until a clear reset it
+       to back faces, as Renderer_Clear did GL's. */
+    CullMode::Enum cull;
+    bool wireframe;
+    /* The viewport GL was left with, which popping the last one did not
+       change; until the first push, the whole target. */
+    V4T<int> glViewport;
+    bool glViewportSet;
+    bool warnedBlend;
+    bool warnedNoProgram;
+    bool warnedIncomplete;
+    bool warnedDepthSize;
+
     Renderer() :
       callCount(0),
       callCountLast(0),
       polyCount(0),
       polyCountLast(0),
-      indexBuffer(GL_NullBuffer),
-      vertexBuffer(GL_NullBuffer)
+      cull(CullMode::Backface),
+      wireframe(false),
+      glViewport(0, 0, 0, 0),
+      glViewportSet(false),
+      warnedBlend(false),
+      warnedNoProgram(false),
+      warnedIncomplete(false),
+      warnedDepthSize(false)
       {}
   } renderer;
 
-  void Renderer_ResetGlobalState() {
-    /* Force synchronization of GL state. */
-    for (size_t i = 0; i < kAttribArrays; ++i) {
-      renderer.attribArrayEnabled[i] = false;
-      GL_DisableVertexAttribArray(i);
-    }
+  /* What a draw's colour and depth go to, as GL's bound framebuffer had them.
+     A texture attached that has gone, or that has no texels, left GL's
+     framebuffer incomplete, and GL drew nothing into it. */
+  struct Targets {
+    Neuron::ColorTarget colors[kMaxColorAttachments];
+    uint colorCount;
+    Neuron::Texture* depth;
+    bool incomplete;
+  };
 
-    renderer.indexBuffer = GL_NullBuffer;
-    renderer.vertexBuffer = GL_NullBuffer;
-
-    GL_BindBuffer(GL_BufferTarget::Array, GL_NullBuffer);
-    GL_BindBuffer(GL_BufferTarget::ElementArray, GL_NullBuffer);
-    Shader_UseFixedFunction();
-
-    GL_Enable(GL_Capability::CullFace);
-    GL_Enable(GL_Capability::CubemapSeamless);
-    GL_CullFace(GL_CullMode::Back);
-    GL_FrontFace(GL_FaceOrientation::CCW);
-    GL_Disable(GL_Capability::MultiSample);
-  }
-
-  void Renderer_FlushFBOCache() {
-    if (renderer.fboCache.size() > kFramebufferCacheSize) {
-      for (size_t i = 0; i < renderer.fboCache.size(); ++i)
-        GL_DeleteFramebuffer(renderer.fboCache.entries[i].value);
-      renderer.fboCache.clear();
-    }
-  }
-
-  void Renderer_UpdateFramebuffer() {
-    static std::vector<GLenum> buffers;
-    buffers.clear();
-
-    Hasher hasher;
-    bool hasAttachment = false;
+  Targets CurrentTargets() {
+    Targets targets;
+    targets.colorCount = 0;
+    targets.depth = nullptr;
+    targets.incomplete = false;
     for (size_t i = 0; i < kMaxColorAttachments; ++i) {
-      if (renderer.colorAttachment[i].size() &&
-          renderer.colorAttachment[i].back().texture != GL_NullTexture)
+      if (!renderer.colorAttachment[i].size() || !renderer.colorAttachment[i].back().id)
+        continue;
+      Attachment const& attachment = renderer.colorAttachment[i].back();
+      GpuTexture* texture = GpuTexture_Find(attachment.id);
+      if (!texture || !texture->texture) {
+        targets.incomplete = true;
+        continue;
+      }
+      Neuron::ColorTarget& target = targets.colors[targets.colorCount++];
+      target.texture = &texture->texture;
+      target.mip = 0;
+      target.layer = attachment.layer;
+    }
+
+    if (renderer.depthAttachment.size() && renderer.depthAttachment.back()) {
+      GpuTexture* texture = GpuTexture_Find(renderer.depthAttachment.back());
+      if (texture && texture->texture)
+        targets.depth = &texture->texture;
+      else
+        targets.incomplete = true;
+    }
+
+    /* Neither colour nor depth: GL's default framebuffer. */
+    if (!targets.colorCount && !targets.depth && !targets.incomplete) {
+      Neuron::ColorTarget& target = targets.colors[targets.colorCount++];
+      target.texture = &Renderer_GetFrame().texture;
+      target.mip = 0;
+      target.layer = 0;
+    }
+    return targets;
+  }
+
+  bool ScissorOn() {
+    return renderer.scissor.size() && renderer.scissor.back().x;
+  }
+
+  /* GL refused a negative size and kept the rectangle it had; nothing is
+     drawn in one here. */
+  Neuron::PixelRect ScissorRect() {
+    V2 const& origin = renderer.scissor.back().y;
+    V2 const& size = renderer.scissor.back().z;
+    Neuron::PixelRect rect;
+    rect.xPixels = (int)origin.x;
+    rect.yPixels = (int)origin.y;
+    rect.widthPixels = Max((int)size.x, 0);
+    rect.heightPixels = Max((int)size.y, 0);
+    return rect;
+  }
+
+  Neuron::BlendMode ToNeuron(BlendMode::Enum mode) {
+    switch (mode) {
+    case BlendMode::Additive: return Neuron::BlendMode::Additive;
+    case BlendMode::Alpha:    return Neuron::BlendMode::Alpha;
+    case BlendMode::Disabled: return Neuron::BlendMode::Opaque;
+    default:
+      /* Complementary and Multiplicative: nothing sets them, and the core has
+         neither (plan section 5.5). Were one set, it would show here. */
+      if (!renderer.warnedBlend) {
+        renderer.warnedBlend = true;
+        Log_Error("Renderer: blend mode " + ToString((int)mode) +
+          " is not in the Direct3D 12 core; drawing opaque");
+      }
+      return Neuron::BlendMode::Opaque;
+    }
+  }
+
+  Neuron::CullMode ToNeuron(CullMode::Enum mode) {
+    switch (mode) {
+    case CullMode::Backface:  return Neuron::CullMode::Back;
+    case CullMode::Frontface: return Neuron::CullMode::Front;
+    default:                  return Neuron::CullMode::None;
+    }
+  }
+
+  /* Sets the context's targets, viewport, scissor and state as GL's were. */
+  Targets PrepareTargets(Neuron::DrawContext& context) {
+    Targets targets = CurrentTargets();
+    context.SetTargets(
+      std::span<Neuron::ColorTarget const>(targets.colors, targets.colorCount),
+      targets.depth);
+
+    /* GL kept its viewport and scissor through a change of framebuffer. */
+    if (renderer.glViewportSet)
+      context.SetViewport(
+        renderer.glViewport.x, renderer.glViewport.y,
+        Max(renderer.glViewport.z, 0), Max(renderer.glViewport.w, 0));
+    if (ScissorOn()) {
+      Neuron::PixelRect const rect = ScissorRect();
+      context.SetScissor(rect.xPixels, rect.yPixels, rect.widthPixels, rect.heightPixels);
+    }
+
+    Neuron::RenderState state;
+    state.blend = ToNeuron(renderer.blendMode.back());
+    state.cull = ToNeuron(renderer.cull);
+    state.depthTest = renderer.zBuffer.back() != 0;
+    state.depthWrite = renderer.zWritable.back() != 0;
+    state.wireframe = renderer.wireframe;
+
+    /* GL drew into colour and depth of different sizes where they overlapped;
+       Direct3D 12 binds depth only under targets of its size, so such a draw
+       goes without its depth test. */
+    if (state.depthTest && targets.depth && targets.colorCount) {
+      Neuron::ColorTarget const& first = targets.colors[0];
+      if (first.texture->WidthPixels(first.mip) != targets.depth->WidthPixels() ||
+          first.texture->HeightPixels(first.mip) != targets.depth->HeightPixels())
       {
-        buffers.push_back((GLenum)(GL_COLOR_ATTACHMENT0 + i));
-        hasher | i | renderer.colorAttachment[i].back();
-        hasAttachment = true;
+        state.depthTest = false;
+        targets.depth = nullptr;
+        if (!renderer.warnedDepthSize) {
+          renderer.warnedDepthSize = true;
+          Log_Warning("Renderer: a depth-tested draw under targets of another "
+            "size than its depth buffer; drawn without the depth test");
+        }
       }
     }
+    context.SetState(state);
+    return targets;
+  }
 
-    if (renderer.depthAttachment.size() &&
-        renderer.depthAttachment.back() != GL_NullTexture)
-    {
-      hasher | (size_t)renderer.depthAttachment.back();
-      hasAttachment = true;
+  /* Readies a draw: false when no program is current, as a draw GL gave to
+     its fixed function, which Direct3D 12 does not have, and when the targets
+     are incomplete. */
+  bool PrepareDraw(Neuron::DrawContext& context) {
+    if (CurrentTargets().incomplete) {
+      if (!renderer.warnedIncomplete) {
+        renderer.warnedIncomplete = true;
+        Log_Warning("Renderer: a draw into a texture that has gone or has no "
+          "texels; nothing was drawn");
+      }
+      return false;
     }
-
-    if (!hasAttachment) {
-      GL_BindFramebuffer(GL_FramebufferTarget::Draw, GL_NullFramebuffer);
-      return;
+    Targets const targets = PrepareTargets(context);
+    Neuron::Texture const* drawnInto[kMaxColorAttachments + 1];
+    size_t count = 0;
+    for (uint i = 0; i < targets.colorCount; ++i)
+      drawnInto[count++] = targets.colors[i].texture;
+    if (targets.depth && renderer.zBuffer.back())
+      drawnInto[count++] = targets.depth;
+    if (!Shader_BindActive(context, std::span<Neuron::Texture const* const>(drawnInto, count))) {
+      if (!renderer.warnedNoProgram) {
+        renderer.warnedNoProgram = true;
+        Log_Error("Renderer: a draw with no shader set, which only GL's fixed "
+          "function drew; nothing was drawn");
+      }
+      return false;
     }
+    return true;
+  }
 
-    Renderer_FlushFBOCache();
+  void Renderer_ResetGlobalState() {
+    /* What Renderer_Clear did to GL behind the stacks' backs: no program, and
+       back faces culled. */
+    Shader_UseFixedFunction();
+    renderer.cull = CullMode::Backface;
+  }
 
-    HashT hash = (HashT)hasher;
-    GL_Framebuffer* pBuffer = renderer.fboCache.get(hash);
+  Neuron::VertexAttribute Attribute(uint index, Neuron::VertexFormat format, size_t offset) {
+    Neuron::VertexAttribute attribute;
+    attribute.semantic = "ATTRIB";
+    attribute.index = index;
+    attribute.format = format;
+    attribute.offsetBytes = (uint32_t)offset;
+    return attribute;
+  }
 
-    if (pBuffer) {
-      GL_BindFramebuffer(GL_FramebufferTarget::Draw, *pBuffer);
+  /* A mesh's vertex: position, normal and uv, which the shaders read as
+     attributes 0, 1 and 2, as GL's bound them. */
+  std::array<Neuron::VertexAttribute, 3> const& VertexAttributes() {
+    static std::array<Neuron::VertexAttribute, 3> const attributes = {
+      Attribute(0, Neuron::VertexFormat::Float3, offsetof(Vertex, p)),
+      Attribute(1, Neuron::VertexFormat::Float3, offsetof(Vertex, n)),
+      Attribute(2, Neuron::VertexFormat::Float2, offsetof(Vertex, u))};
+    return attributes;
+  }
+
+  Neuron::VertexLayout VertexLayoutOf() {
+    Neuron::VertexLayout layout;
+    layout.attributes = VertexAttributes();
+    layout.strideBytes = sizeof(Vertex);
+    return layout;
+  }
+
+  MeshBuffers& PrepareMeshForDraw(MeshT const* mesh) {
+    /* A mesh is uploaded when it is first drawn, and again once it has
+       changed. The old buffers go once the GPU has finished with them. */
+    if (mesh->gpu.buffers && mesh->bufferVersion == mesh->version)
+      return *mesh->gpu.buffers;
+
+    mesh->gpu.Reset();
+    mesh->bufferVersion = mesh->version;
+    MeshBuffers* buffers = new MeshBuffers;
+    mesh->gpu.buffers = buffers;
+
+    Neuron::GraphicsDevice& device = Renderer_Device();
+    Neuron::DrawContext& context = device.Context();
+
+    Neuron::Buffer::Desc vertexDesc;
+    vertexDesc.sizeBytes = (uint32_t)(sizeof(Vertex) * mesh->vertices.size());
+    vertexDesc.strideBytes = sizeof(Vertex);
+    vertexDesc.name = "liblt mesh vertices";
+    buffers->vertices = device.CreateBuffer(vertexDesc);
+    context.UpdateBuffer(buffers->vertices, 0,
+      std::as_bytes(std::span<Vertex const>(mesh->vertices.data(), mesh->vertices.size())));
+
+    /* If the indices fit in 16 bits, they are stored that way to save space. */
+    buffers->indexCount = (uint)mesh->indices.size();
+    Neuron::Buffer::Desc indexDesc;
+    indexDesc.name = "liblt mesh indices";
+    if (kAllow16BitIndices && mesh->vertices.size() < USHRT_MAX) {
+      static Vector<ushort> indices;
+      indices.clear();
+      for (uint i = 0; i < mesh->indices.size(); ++i)
+        indices << (ushort)mesh->indices[i];
+      buffers->indexFormat = Neuron::IndexFormat::UInt16;
+      indexDesc.sizeBytes = (uint32_t)(sizeof(ushort) * indices.size());
+      indexDesc.strideBytes = sizeof(ushort);
+      buffers->indices = device.CreateBuffer(indexDesc);
+      context.UpdateBuffer(buffers->indices, 0,
+        std::as_bytes(std::span<ushort const>(indices.data(), indices.size())));
     } else {
-      GL_Framebuffer buffer = GL_GenFramebuffer();
-      renderer.fboCache[hash] = buffer;
-
-      GL_BindFramebuffer(GL_FramebufferTarget::Draw, buffer);
-
-      for (size_t i = 0; i < kMaxColorAttachments; ++i)
-        if (renderer.colorAttachment[i].size())
-          GL_FramebufferTexture2D(
-            GL_FramebufferTarget::Draw,
-            (GL_FramebufferAttachment::Enum)
-            (GL_FramebufferAttachment::ColorAttachment0 + i),
-            renderer.colorAttachment[i].back().target,
-            renderer.colorAttachment[i].back().texture,
-            0);
-
-      if (renderer.depthAttachment.size())
-        GL_FramebufferTexture2D(
-          GL_FramebufferTarget::Draw,
-          GL_FramebufferAttachment::DepthAttachment,
-          GL_TextureTarget::T2D,
-          renderer.depthAttachment.back(),
-          0);
+      buffers->indexFormat = Neuron::IndexFormat::UInt32;
+      indexDesc.sizeBytes = (uint32_t)(sizeof(uint) * mesh->indices.size());
+      indexDesc.strideBytes = sizeof(uint);
+      buffers->indices = device.CreateBuffer(indexDesc);
+      context.UpdateBuffer(buffers->indices, 0,
+        std::as_bytes(std::span<uint const>(mesh->indices.data(), mesh->indices.size())));
     }
+    return *buffers;
+  }
 
-    glDrawBuffers(buffers.size(), buffers.data());
-    DEBUG_GL_ERRORS;
+  /* Direct3D has no 8-bit indices, so those are widened to 16 bits. */
+  std::span<std::byte const> Indices(
+    void const* data,
+    uint count,
+    IndexFormat::Enum format,
+    Neuron::IndexFormat& outFormat,
+    uint& outLargest)
+  {
+    static Vector<ushort> widened;
+    outLargest = 0;
+    switch (format) {
+    case IndexFormat::Byte: {
+      widened.clear();
+      for (uint i = 0; i < count; ++i) {
+        ushort const index = ((uchar const*)data)[i];
+        widened << index;
+        outLargest = Max(outLargest, (uint)index);
+      }
+      outFormat = Neuron::IndexFormat::UInt16;
+      return std::as_bytes(std::span<ushort const>(widened.data(), widened.size()));
+    }
+    case IndexFormat::Short:
+      for (uint i = 0; i < count; ++i)
+        outLargest = Max(outLargest, (uint)((ushort const*)data)[i]);
+      outFormat = Neuron::IndexFormat::UInt16;
+      return std::as_bytes(std::span<ushort const>((ushort const*)data, count));
+    case IndexFormat::Int:
+      for (uint i = 0; i < count; ++i)
+        outLargest = Max(outLargest, ((uint const*)data)[i]);
+      outFormat = Neuron::IndexFormat::UInt32;
+      return std::as_bytes(std::span<uint const>((uint const*)data, count));
+    }
+    outFormat = Neuron::IndexFormat::UInt32;
+    return std::span<std::byte const>();
+  }
+
+  void StaticDrawVertices(
+    Vertex const* vertexData,
+    size_t vertexCount,
+    void const* indexData,
+    IndexFormat::Enum indexFormat,
+    size_t indexCount)
+  {
+    if (!vertexCount || !indexCount)
+      return;
+    Neuron::DrawContext& context = Renderer_Context();
+    if (!PrepareDraw(context))
+      return;
+    Neuron::IndexFormat format;
+    uint largest;
+    std::span<std::byte const> indices = Indices(indexData, (uint)indexCount, indexFormat, format, largest);
+    context.DrawTransient(
+      std::as_bytes(std::span<Vertex const>(vertexData, vertexCount)),
+      VertexLayoutOf(), indices, format);
+    renderer.callCount++;
+    renderer.polyCount += (int)(indexCount / 3);
   }
 }
 
 namespace LTE {
-  void Renderer_Initialize() {
-    char const* version = (char const*)glGetString(GL_VERSION);
-    Log_Message(Stringize() | "OpenGL Version " | version);
-
-    /* For OS X + Intel drivers, we need to make use of (supported) 3+
-       functions, even though the driver will claim not to support 3. */
-    glewExperimental = GL_TRUE;
-
-    GLenum err = glewInit();
-    if (err != GLEW_OK)
-      Log_Critical("GLEW failed to initialize");
-    if (!GLEW_VERSION_2_1)
-      Log_Critical("GLEW failed to support OpenGL 2.1");
-
-    /* Assert every OpenGL extension function that we're going to use, just
-       to be safe! May help find compatability errors on older cards. */
-    #define CHECK(x) if (!x)                                                   \
-      Log_Critical(String("GL failed to support ") + #x + ". Hardware incompatibility!");
-
-    CHECK(glActiveTexture);
-    CHECK(glAttachShader);
-    CHECK(glBindAttribLocation);
-    CHECK(glBindBuffer);
-    CHECK(glBindFragDataLocation);
-    CHECK(glBindFramebuffer);
-    CHECK(glBindRenderbuffer);
-    CHECK(glBufferData);
-    CHECK(glCompileShader);
-    CHECK(glDeleteBuffers);
-    CHECK(glDeleteProgram);
-    CHECK(glDeleteShader);
-    CHECK(glDisableVertexAttribArray);
-    CHECK(glEnableVertexAttribArray);
-    CHECK(glFramebufferTexture2D);
-    CHECK(glGenBuffers);
-    CHECK(glGenRenderbuffers);
-    CHECK(glGenerateMipmap);
-    CHECK(glGenFramebuffers);
-    CHECK(glGetProgramiv);
-    CHECK(glGetProgramInfoLog);
-    CHECK(glGetShaderInfoLog);
-    CHECK(glGetUniformLocation);
-    CHECK(glLinkProgram);
-    CHECK(glShaderSource);
-    CHECK(glTexImage3D);
-    CHECK(glTexSubImage3D);
-    CHECK(glUniform1f);
-    CHECK(glUniform2f);
-    CHECK(glUniform3f);
-    CHECK(glUniform4f);
-    CHECK(glUniform1i);
-    CHECK(glUniform2i);
-    CHECK(glUniform3i);
-    CHECK(glUniform4i);
-    CHECK(glUniformMatrix2fv);
-    CHECK(glUniformMatrix3fv);
-    CHECK(glUniformMatrix4fv);
-    CHECK(glUseProgram);
-    CHECK(glVertexAttrib1f);
-    CHECK(glVertexAttrib2f);
-    CHECK(glVertexAttrib3f);
-    CHECK(glVertexAttrib4f);
-    CHECK(glVertexAttribPointer);
-    #undef CHECK
-
-    /* Enable back-face culling; front-faces must be specified CCW
-     * (CW faces get culled). */
+  void Renderer_Initialize(bool warp, bool offscreen) {
+    Renderer_InitializeCore(warp, offscreen);
     Renderer_ResetGlobalState();
     Renderer_ClearMatrices();
 
@@ -246,152 +421,41 @@ namespace LTE {
       Renderer_GetWorldViewProjMatrix());
   }
 
-  static void PrepareMeshForDraw(MeshT const* mesh) {
-    /* If the mesh has not yet been bound to a buffer object, we need to create
-     * one and load in the data. Using VBOs minimizes data transfer between
-     * the CPU and GPU. */
-    if (mesh->bufferVersion != mesh->version) {
-      mesh->bufferVersion = mesh->version;
-      GL_DeleteBuffer(mesh->vbo);
-      GL_DeleteBuffer(mesh->ibo);
-      mesh->vbo = GL_NullBuffer;
-      mesh->ibo = GL_NullBuffer;
-    }
-
-    if (mesh->vbo == GL_NullBuffer) {
-      mesh->vbo = GL_GenBuffer();
-      mesh->ibo = GL_GenBuffer();
-
-      /* Need to force these bindings, as it is impossible that the new buffers
-         are already bound. */
-      Renderer_BindVertexBuffer(mesh->vbo, true);
-      Renderer_BindIndexBuffer(mesh->ibo, true);
-
-      GL_BufferData(
-        GL_BufferTarget::Array,
-        sizeof(Vertex) * mesh->vertices.size(),
-        mesh->GetVertexPointer(),
-        GL_BufferUsage::StaticDraw);
-
-      /* If the indices can fit in unsigned short format, store them that way
-         to save space. */
-      if (kAllow16BitIndices && mesh->vertices.size() < USHRT_MAX) {
-        static Vector<ushort> indices;
-        indices.clear();
-        for (uint i = 0; i < mesh->indices.size(); ++i)
-          indices << (ushort)mesh->indices[i];
-
-        mesh->indexFormat = GL_IndexFormat::Short;
-        GL_BufferData(
-          GL_BufferTarget::ElementArray,
-          sizeof(ushort) * indices.size(),
-          (void const*)indices.data(),
-          GL_BufferUsage::StaticDraw);
-      }
-
-      /* Otherwise, fall back on standard unsigned int format. */
-      else {
-        mesh->indexFormat = GL_IndexFormat::Int;
-        GL_BufferData(
-          GL_BufferTarget::ElementArray,
-          sizeof(uint) * mesh->indices.size(),
-          mesh->GetIndexPointer(),
-          GL_BufferUsage::StaticDraw);
-      }
-    }
-  }
-
-  static void SetBlendMode(BlendMode::Enum mode) {
-    if (mode == BlendMode::Additive) {
-      GL_Enable(GL_Capability::Blend);
-      GL_BlendFuncSeparate(
-        GL_BlendFunction::One,
-        GL_BlendFunction::One,
-        GL_BlendFunction::One,
-        GL_BlendFunction::One);
-    } else if (mode == BlendMode::Alpha) {
-      GL_Enable(GL_Capability::Blend);
-      GL_BlendFuncSeparate(
-        GL_BlendFunction::SourceAlpha,
-        GL_BlendFunction::OneMinusSourceAlpha,
-        GL_BlendFunction::One,
-        GL_BlendFunction::One);
-    } else if (mode == BlendMode::Complementary) {
-      GL_Enable(GL_Capability::Blend);
-      GL_BlendFunc(
-        GL_BlendFunction::One,
-        GL_BlendFunction::OneMinusSourceColor);
-    } else if (mode == BlendMode::Disabled) {
-      GL_Disable(GL_Capability::Blend);
-    } else if (mode == BlendMode::Multiplicative) {
-      GL_Enable(GL_Capability::Blend);
-      GL_BlendFunc(GL_BlendFunction::DestColor, GL_BlendFunction::Zero);
-    }
-  }
-
-  inline static void SetZBuffer(bool useZBuffer) {
-    if (useZBuffer)
-      GL_Enable(GL_Capability::DepthTest);
-    else
-      GL_Disable(GL_Capability::DepthTest);
-  }
-
-  inline static void SetCullMode(CullMode::Enum mode) {
-    if (mode == CullMode::Backface) {
-      GL_Enable(GL_Capability::CullFace);
-      GL_CullFace(GL_CullMode::Back);
-    } else if (mode == CullMode::Frontface) {
-      GL_Enable(GL_Capability::CullFace);
-      GL_CullFace(GL_CullMode::Front);
-    } else
-      GL_Disable(GL_Capability::CullFace);
-  }
-
-  inline static void SetZWritable(bool zWritable) {
-    GL_DepthMask(zWritable);
-  }
-
-// ----------------------------------------------------------------------------
-
-  void Renderer_BindIndexBuffer(GL_Buffer buffer, bool force) {
-    if (force || renderer.indexBuffer != buffer) {
-      renderer.indexBuffer = buffer;
-      GL_BindBuffer(GL_BufferTarget::ElementArray, renderer.indexBuffer);
-    }
-  }
-
-  void Renderer_BindVertexBuffer(GL_Buffer buffer, bool force) {
-    if (force || renderer.vertexBuffer != buffer) {
-      renderer.vertexBuffer = buffer;
-      GL_BindBuffer(GL_BufferTarget::Array, renderer.vertexBuffer);
-    }
-  }
-
-  void Renderer_DisableAttribArray(uint index) {
-    if (renderer.attribArrayEnabled[index]) {
-      renderer.attribArrayEnabled[index] = false;
-      GL_DisableVertexAttribArray(index);
-    }
-  }
-
-  void Renderer_EnableAttribArray(uint index) {
-    if (!renderer.attribArrayEnabled[index]) {
-      renderer.attribArrayEnabled[index] = true;
-      GL_EnableVertexAttribArray(index);
-    }
-  }
-
 // ----------------------------------------------------------------------------
 
   void Renderer_Clear(V4 const& clearColor) {
-    GL_ClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
-    GL_Clear(GL_BufferBit::Color);
+    /* GL cleared every colour buffer drawn into, within the scissor when it
+       was on. */
+    Neuron::DrawContext& context = Renderer_Context();
+    Targets const targets = CurrentTargets();
+    if (targets.incomplete) {
+      Renderer_ResetGlobalState();
+      return;
+    }
+    std::array<float, 4> const color = {clearColor.x, clearColor.y, clearColor.z, clearColor.w};
+    for (uint i = 0; i < targets.colorCount; ++i) {
+      Neuron::ColorTarget const& target = targets.colors[i];
+      if (ScissorOn())
+        context.ClearColor(*target.texture, target.mip, target.layer, color, ScissorRect());
+      else
+        context.ClearColor(*target.texture, target.mip, target.layer, color);
+    }
     Renderer_ResetGlobalState();
   }
 
   void Renderer_ClearDepth(float depth) {
-    GL_ClearDepth(depth);
-    GL_Clear(GL_BufferBit::Depth);
+    /* GL's depth mask held for clears as for draws, and its depth range is
+       [0, 1]. */
+    if (!renderer.zWritable.back())
+      return;
+    Targets const targets = CurrentTargets();
+    if (targets.incomplete || !targets.depth)
+      return;
+    float const clamped = Clamp(depth, 0.0f, 1.0f);
+    if (ScissorOn())
+      Renderer_Context().ClearDepth(*targets.depth, clamped, ScissorRect());
+    else
+      Renderer_Context().ClearDepth(*targets.depth, clamped);
   }
 
   void Renderer_ClearMatrices() {
@@ -413,53 +477,41 @@ namespace LTE {
   }
 
   void Renderer_DrawFSQInParts(uint width, uint height, uint parts) {
-    GL_Enable(GL_Capability::ScissorTest);
     uint x = 0;
     uint w = width / parts;
 
     for (size_t i = 0; i < parts - 1; ++i) {
-      GL_Scissor(x, 0, w, height);
+      Renderer_PushScissorOn(V2((float)x, 0), V2((float)w, (float)height));
       Renderer_DrawQuad();
-      GL_Finish();
+      Renderer_PopScissor();
+      Renderer_Finish();
       x += w;
     }
 
-    GL_Scissor(x, 0, (width - x), height);
+    Renderer_PushScissorOn(V2((float)x, 0), V2((float)(width - x), (float)height));
     Renderer_DrawQuad();
-    GL_Disable(GL_Capability::ScissorTest);
+    Renderer_PopScissor();
   }
 
   void Renderer_DrawFSQPart(uint x, uint y, uint width, uint height) {
-    GL_Enable(GL_Capability::ScissorTest);
-    GL_Scissor(x, y, width, height);
+    Renderer_PushScissorOn(V2((float)x, (float)y), V2((float)width, (float)height));
     Renderer_DrawQuad();
-    GL_Disable(GL_Capability::ScissorTest);
+    Renderer_PopScissor();
   }
 
   void Renderer_DrawMesh(MeshT const* mesh) {
-    PrepareMeshForDraw(mesh);
-
-    Renderer_BindVertexBuffer(mesh->vbo);
-    Renderer_BindIndexBuffer(mesh->ibo);
-
-    Renderer_EnableAttribArray(0);
-    Renderer_EnableAttribArray(1);
-    Renderer_EnableAttribArray(2);
-
-    GL_VertexAttribPointer(0, 3, GL_DataFormat::Float, false, sizeof(Vertex),
-                           (void const*)offset_of(Vertex, p));
-    GL_VertexAttribPointer(1, 3, GL_DataFormat::Float, false, sizeof(Vertex),
-                           (void const*)offset_of(Vertex, n));
-    GL_VertexAttribPointer(2, 2, GL_DataFormat::Float, false, sizeof(Vertex),
-                           (void const*)offset_of(Vertex, u));
-    GL_DrawElements(
-      GL_DrawMode::Triangles,
-      mesh->GetIndices(),
-      mesh->indexFormat,
-      nullptr);
+    if (!mesh->vertices.size() || !mesh->indices.size())
+      return;
+    MeshBuffers& buffers = PrepareMeshForDraw(mesh);
+    Neuron::DrawContext& context = Renderer_Context();
+    if (!PrepareDraw(context))
+      return;
+    context.DrawIndexed(
+      buffers.vertices, VertexLayoutOf(), buffers.indices, buffers.indexFormat,
+      0, buffers.indexCount);
 
     renderer.callCount++;
-    renderer.polyCount += mesh->GetIndices() / 3;
+    renderer.polyCount += (int)(buffers.indexCount / 3);
   }
 
   void Renderer_DrawQuad(
@@ -486,46 +538,27 @@ namespace LTE {
       VertexPT(V3(p1.x, p2.y, depth), V2(t1.x, t2.y)),
     };
 
-    uchar indices[] = {
+    /* 16-bit, since Direct3D has no 8-bit indices. */
+    const ushort indices[] = {
       0, 1, 2, 0, 2, 3,
     };
 
-    Renderer_BindVertexBuffer(GL_NullBuffer);
-    Renderer_BindIndexBuffer(GL_NullBuffer);
-    Renderer_EnableAttribArray(0);
-    Renderer_DisableAttribArray(1);
-    Renderer_EnableAttribArray(2);
+    /* Position and uv; the shaders' normal reads GL's (0, 0, 0, 1), as the
+       attribute array GL had disabled did. */
+    static std::array<Neuron::VertexAttribute, 2> const attributes = {
+      Attribute(0, Neuron::VertexFormat::Float3, offsetof(VertexPT, p)),
+      Attribute(2, Neuron::VertexFormat::Float2, offsetof(VertexPT, t))};
+    Neuron::VertexLayout layout;
+    layout.attributes = attributes;
+    layout.strideBytes = sizeof(VertexPT);
 
-    GL_VertexAttribPointer(0, 3, GL_DataFormat::Float, false, sizeof(VertexPT),
-                           (void const*)&vertices[0].p);
-    GL_VertexAttribPointer(2, 2, GL_DataFormat::Float, false, sizeof(VertexPT),
-                           (void const*)&vertices[0].t);
-    GL_DrawElements(GL_DrawMode::Triangles, 6, GL_IndexFormat::Byte, indices);
+    Neuron::DrawContext& context = Renderer_Context();
+    if (!PrepareDraw(context))
+      return;
+    context.DrawTransient(
+      std::as_bytes(std::span<VertexPT const>(vertices)), layout,
+      std::as_bytes(std::span<ushort const>(indices)), Neuron::IndexFormat::UInt16);
     renderer.callCount++;
-  }
-
-  void StaticDrawVertices(
-    Vertex const* vertexData,
-    void const* indexData,
-    GL_IndexFormat::Enum indexFormat,
-    size_t indexCount)
-  {
-    Renderer_BindVertexBuffer(GL_NullBuffer);
-    Renderer_BindIndexBuffer(GL_NullBuffer);
-    Renderer_EnableAttribArray(0);
-    Renderer_EnableAttribArray(1);
-    Renderer_EnableAttribArray(2);
-
-    GL_VertexAttribPointer(0, 3, GL_DataFormat::Float, false, sizeof(Vertex),
-                           &vertexData->p);
-    GL_VertexAttribPointer(1, 3, GL_DataFormat::Float, false, sizeof(Vertex),
-                           &vertexData->n);
-    GL_VertexAttribPointer(2, 2, GL_DataFormat::Float, false, sizeof(Vertex),
-                           &vertexData->u);
-
-    GL_DrawElements(GL_DrawMode::Triangles, indexCount, indexFormat, indexData);
-    renderer.callCount++;
-    renderer.polyCount += indexCount / 3;
   }
 
   void Renderer_DrawVertices(
@@ -534,8 +567,9 @@ namespace LTE {
   {
     StaticDrawVertices(
       vertices.data(),
+      vertices.size(),
       indices.data(),
-      GL_IndexFormat::Int,
+      IndexFormat::Int,
       indices.size());
   }
 
@@ -545,8 +579,9 @@ namespace LTE {
   {
     StaticDrawVertices(
       vertices.data(),
+      vertices.size(),
       indices.data(),
-      GL_IndexFormat::Short,
+      IndexFormat::Short,
       indices.size());
   }
 
@@ -555,48 +590,59 @@ namespace LTE {
     Type const& vertexFormat,
     void const* indexData,
     uint indices,
-    GL_IndexFormat::Enum indexFormat)
+    IndexFormat::Enum indexFormat)
   {
-    Renderer_BindVertexBuffer(GL_NullBuffer);
-    Renderer_BindIndexBuffer(GL_NullBuffer);
+    if (!indices)
+      return;
 
+    /* Each field of the vertex is an attribute, in the order of its fields,
+       as GL's attribute arrays were. */
+    static Vector<Neuron::VertexAttribute> attributes;
+    attributes.clear();
     uint attribs = vertexFormat->GetFieldCount((void*)vertexData);
     for (uint i = 0; i < attribs; ++i) {
       FieldType field = vertexFormat->GetField((void*)vertexData, i);
-      Renderer_EnableAttribArray(i);
 
-      uint components = 0;
+      Neuron::VertexFormat format = Neuron::VertexFormat::Float1;
       if (field.type == Type_Get<float>())
-        components = 1;
+        format = Neuron::VertexFormat::Float1;
       else if (field.type == Type_Get<V2>())
-        components = 2;
+        format = Neuron::VertexFormat::Float2;
       else if (field.type == Type_Get<V3>())
-        components = 3;
+        format = Neuron::VertexFormat::Float3;
       else if (field.type == Type_Get<V4>())
-        components = 4;
+        format = Neuron::VertexFormat::Float4;
       else
         error("Vertex format must contain only float, vec2, vec3, or vec4 types");
 
-      GL_VertexAttribPointer(
-        i,
-        components,
-        GL_DataFormat::Float,
-        false,
-        vertexFormat->size,
-        field.address);
+      size_t const offset = (char const*)field.address - (char const*)vertexData;
+      attributes.push(Attribute(i, format, offset));
     }
 
-    GL_DrawElements(GL_DrawMode::Triangles, indices, indexFormat, indexData);
+    Neuron::DrawContext& context = Renderer_Context();
+    if (!PrepareDraw(context))
+      return;
 
-    for (uint i = 3; i < attribs; ++i)
-      Renderer_DisableAttribArray(i);
+    /* GL read the vertices in client memory that the indices named; the
+       upload takes them up to the largest. */
+    Neuron::IndexFormat format;
+    uint largest;
+    std::span<std::byte const> indexBytes = Indices(indexData, indices, indexFormat, format, largest);
+    size_t const vertexBytes = (size_t)(largest + 1) * vertexFormat->size;
+
+    Neuron::VertexLayout layout;
+    layout.attributes = std::span<Neuron::VertexAttribute const>(attributes.data(), attributes.size());
+    layout.strideBytes = (uint32_t)vertexFormat->size;
+    context.DrawTransient(
+      std::span<std::byte const>((std::byte const*)vertexData, vertexBytes),
+      layout, indexBytes, format);
 
     renderer.callCount++;
-    renderer.polyCount += indices / 3;
+    renderer.polyCount += (int)(indices / 3);
   }
 
   void Renderer_Flush() {
-    GL_Finish();
+    Renderer_Context().Flush();
   }
 
   int Renderer_GetDrawCallCount() {
@@ -614,153 +660,117 @@ namespace LTE {
     renderer.polyCount = 0;
   }
 
-  void Renderer_SetColor(Color const& color, float alpha) {
-    GL_Color(color.x, color.y, color.z, alpha);
-  }
-
   void Renderer_SetShader(ShaderT& shader) {
     shader.Use();
     InjectMatrices(shader);
   }
 
-  void Renderer_SetShaderFF() {
-    Shader_UseFixedFunction();
-  }
-
   void Renderer_SetViewport(V2 const& origin, V2 const& size) {
-    GL_Viewport((int)origin.x, (int)origin.y, (size_t)size.x, (size_t)size.y);
+    renderer.glViewport = V4T<int>((int)origin.x, (int)origin.y, (int)size.x, (int)size.y);
+    renderer.glViewportSet = true;
   }
 
   void Renderer_SetWireframe(bool wireframe) {
-    if (wireframe)
-      GL_PolygonMode(GL_FaceType::FrontAndBack, GL_FillMode::Line);
-    else
-      GL_PolygonMode(GL_FaceType::FrontAndBack, GL_FillMode::Fill);
+    renderer.wireframe = wireframe;
   }
 
   void Renderer_PushBlendMode(BlendMode::Enum mode) {
     renderer.blendMode.push(mode);
-    SetBlendMode(mode);
   }
 
   void Renderer_PopBlendMode() {
     renderer.blendMode.pop();
-    SetBlendMode(renderer.blendMode.back());
   }
 
   void Renderer_PushCullMode(CullMode::Enum mode) {
     renderer.cullMode.push(mode);
-    SetCullMode(mode);
+    renderer.cull = mode;
   }
 
   void Renderer_PopCullMode() {
     renderer.cullMode.pop();
-    SetCullMode(renderer.cullMode.back());
+    renderer.cull = renderer.cullMode.back();
   }
 
   void Renderer_PopAllBuffers() {
     for (size_t i = 0; i < kMaxColorAttachments; ++i)
-      Renderer_PopColorBuffer(i);
+      Renderer_PopColorBuffer((uint)i);
     Renderer_PopDepthBuffer();
   }
 
   void Renderer_PushAllBuffers() {
     for (size_t i = 0; i < kMaxColorAttachments; ++i)
-      Renderer_PushColorBuffer(i, GL_NullTexture, 0);
-    Renderer_PushDepthBuffer(GL_NullTexture);
+      Renderer_PushColorBuffer((uint)i, 0);
+    Renderer_PushDepthBuffer(Texture2D());
   }
 
   void Renderer_PopColorBuffers() {
     for (size_t i = 0; i < kMaxColorAttachments; ++i)
-      Renderer_PopColorBuffer(i);
+      Renderer_PopColorBuffer((uint)i);
   }
 
   void Renderer_PushColorBuffers() {
     for (size_t i = 0; i < kMaxColorAttachments; ++i)
-      Renderer_PushColorBuffer(i, GL_NullTexture, 0);
+      Renderer_PushColorBuffer((uint)i, 0);
   }
 
-  void Renderer_PushColorBuffer(
-    uint index,
-    GL_Texture buffer,
-    uint guid,
-    GL_TextureTarget::Enum target)
-  {
+  void Renderer_PushColorBuffer(uint index, uint64 id, uint layer) {
     LTE_ASSERT(index < kMaxColorAttachments);
-    renderer.colorAttachment[index].push(Attachment(buffer, target, guid));
-    Renderer_UpdateFramebuffer();
+    renderer.colorAttachment[index].push(Attachment(id, layer));
   }
 
   void Renderer_PopColorBuffer(uint index) {
     LTE_ASSERT(index < kMaxColorAttachments);
     renderer.colorAttachment[index].pop();
-    Renderer_UpdateFramebuffer();
   }
 
-  void Renderer_PushDepthBuffer(GL_Texture buffer) {
-    renderer.depthAttachment.push(buffer);
-    Renderer_UpdateFramebuffer();
+  void Renderer_PushDepthBuffer(Texture2D const& texture) {
+    GpuTexture* gpu = texture ? Texture2D_GetGpu(*texture) : nullptr;
+    renderer.depthAttachment.push(gpu ? gpu->id : 0);
   }
 
   void Renderer_PopDepthBuffer() {
     renderer.depthAttachment.pop();
-    Renderer_UpdateFramebuffer();
   }
 
   void Renderer_PushScissorOff() {
-    renderer.scissor.push(Tuple(false, 0, 0));
-    GL_Disable(GL_Capability::ScissorTest);
+    renderer.scissor.push(Tuple(false, V2(0), V2(0)));
   }
 
   void Renderer_PushScissorOn(V2 const& origin, V2 const& size) {
     renderer.scissor.push(Tuple(true, origin, size));
-    GL_Enable(GL_Capability::ScissorTest);
-    GL_Scissor((int)origin.x, (int)origin.y, (int)size.x, (int)size.y);
   }
 
   void Renderer_PopScissor() {
     renderer.scissor.pop();
-    if (renderer.scissor.empty() || !renderer.scissor.back().x)
-      GL_Disable(GL_Capability::ScissorTest);
-    else {
-      GL_Enable(GL_Capability::ScissorTest);
-      V2 origin = renderer.scissor.back().y;
-      V2 size = renderer.scissor.back().z;
-      GL_Scissor((int)origin.x, (int)origin.y, (int)size.x, (int)size.y);
-    }
   }
 
   void Renderer_PushViewport(int x, int y, int w, int h) {
     renderer.viewport.push(V4T<int>(x, y, w, h));
-    GL_Viewport(x, y, w, h);
+    renderer.glViewport = renderer.viewport.back();
+    renderer.glViewportSet = true;
   }
 
   void Renderer_PopViewport() {
     renderer.viewport.pop();
-    if (renderer.viewport.size()) {
-      V4T<int> const& vp = renderer.viewport.back();
-      GL_Viewport(vp.x, vp.y, vp.z, vp.w);
-    }
+    if (renderer.viewport.size())
+      renderer.glViewport = renderer.viewport.back();
   }
 
   void Renderer_PushZBuffer(bool useZBuffer) {
     renderer.zBuffer.push(useZBuffer);
-    SetZBuffer(useZBuffer);
   }
 
   void Renderer_PopZBuffer() {
     renderer.zBuffer.pop();
-    SetZBuffer(renderer.zBuffer.back());
   }
 
   void Renderer_PopZWritable() {
     renderer.zWritable.pop();
-    SetZWritable(renderer.zWritable.back());
   }
 
   void Renderer_PushZWritable(bool zWritable) {
     renderer.zWritable.push(zWritable);
-    SetZWritable(zWritable);
   }
 
   void Renderer_SetWorldTransform(Transform const& world) {

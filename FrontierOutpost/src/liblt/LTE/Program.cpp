@@ -1,6 +1,5 @@
 #include "Program.h"
 
-#include "GL.h"
 #include "Keyboard.h"
 #include "Module.h"
 #include "Mouse.h"

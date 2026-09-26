@@ -26,7 +26,7 @@ namespace {
       dirtShader = Shader_Create("identity.jsl", "filter_dirt.jsl");
     }
 
-    Texture2D albedoMap = Texture_Create(kTextureRes, kTextureRes, GL_TextureFormat::R8);
+    Texture2D albedoMap = Texture_Create(kTextureRes, kTextureRes, TextureFormat::R8);
     Texture2D normalMap = Texture_Create(kTextureRes, kTextureRes);
     
     (*platingShader)
@@ -81,7 +81,7 @@ DefineFunction(Material_Metal) {
       shader = ShadingModel_Debug();
     else {
       int data = 0;
-      static Texture2D kDefaultDecal = Texture_Create(1, 1, GL_TextureFormat::RGBA8, &data);
+      static Texture2D kDefaultDecal = Texture_Create(1, 1, TextureFormat::RGBA8, &data);
       shader = ShadingModel_Metal(Lookup(g, 0), Lookup(g, 1));
       (*shader)
         ("decal", kDefaultDecal);

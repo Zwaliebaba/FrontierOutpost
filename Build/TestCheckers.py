@@ -8,9 +8,10 @@ first first-party project, NeuronClient, lands only in Phase 2 of the NeuronClie
 each checker runs here against a small tree that keeps every rule and must pass, and against
 copies of it that each break one rule, which must fail and say which.
 
-CheckSounds.py runs against a small GameData of its own, with WAV files that keep and break
-XAudio2's formats. The clang-format and clang-tidy cases need those tools, and are reported as
-skipped without them.
+CheckProjectFiles.py also runs against a tree that adds a legacy lt, whose Shaders/ folder is
+carved out of the exemption (N11), with a shader registry to hold to ADR-008. CheckSounds.py runs
+against a small GameData of its own, with WAV files that keep and break XAudio2's formats. The
+clang-format and clang-tidy cases need those tools, and are reported as skipped without them.
 On Windows, one more case includes <windows.h>, which takes RunClangTidy.py through Visual
 Studio's vcvarsall.bat and the Windows SDK headers. Exit 0 when every case behaves, 1 otherwise.
 """
@@ -151,6 +152,60 @@ LEGACY = """<?xml version="1.0" encoding="utf-8"?>
 """
 
 
+# A legacy lt with one shader and one include in its carved-out Shaders/ folder (N11), and the
+# registry that holds the shader by its legacy name (ADR-008).
+LT = "FrontierOutpost/src/liblt/"
+LIBLT = """<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64" />
+    <ProjectConfiguration Include="Release|x64" />
+  </ItemGroup>
+  <PropertyGroup Label="Configuration">
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <FxCompile>
+      <ShaderModel>5.1</ShaderModel>
+      <HeaderFileOutput>$(ProjectDir)CompiledShaders\\%(Filename).h</HeaderFileOutput>
+    </FxCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="LTE\\ShaderRegistry.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="Shaders\\PostBlurPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_BLUR_PS</VariableName>
+    </FxCompile>
+    <None Include="Shaders\\Common.hlsli" />
+  </ItemGroup>
+</Project>
+"""
+
+LIBLT_FILTERS = """<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="LTE\\ShaderRegistry.cpp" />
+    <FxCompile Include="Shaders\\PostBlurPS.hlsl" />
+    <None Include="Shaders\\Common.hlsli" />
+  </ItemGroup>
+</Project>
+"""
+
+REGISTRY = """namespace {
+  Entry const kPixel[] = {
+    {"post/blur.jsl", Bytes(POST_BLUR_PS)},
+  };
+}
+"""
+
+BLOOM_ITEM = """    <FxCompile Include="Shaders\\PostBloomPS.hlsl">
+      <ShaderType>Pixel</ShaderType>
+      <VariableName>POST_BLOOM_PS</VariableName>
+    </FxCompile>
+    <None Include="Shaders\\Common.hlsli" />"""
+
 UNFORMATTED_SOURCE = SOURCE.replace("{\n  m_widthPixels = _widthPixels;\n}", "{ m_widthPixels=_widthPixels; }")
 LEGACY_ENTRY = '  <Project Path="FrontierOutpost/old/old.vcxproj" />\n</Solution>'
 
@@ -177,6 +232,16 @@ def Conforming(_root):
   Write(_root, "NeuronClient/NeuronClient.vcxproj.filters", FILTERS)
   Write(_root, "NeuronClient/Window.h", HEADER)
   Write(_root, "NeuronClient/Window.cpp", SOURCE)
+
+
+def LibltTree(_root):
+  Conforming(_root)
+  Replace(_root, "FrontierOutpost.slnx", "</Solution>", f'  <Project Path="{LT}lt.vcxproj" />\n</Solution>')
+  Write(_root, LT + "lt.vcxproj", LIBLT)
+  Write(_root, LT + "lt.vcxproj.filters", LIBLT_FILTERS)
+  Write(_root, LT + "LTE/ShaderRegistry.cpp", REGISTRY)
+  Write(_root, LT + "Shaders/PostBlurPS.hlsl", "float4 main() : SV_Target0 { return 0.0; }\n")
+  Write(_root, LT + "Shaders/Common.hlsli", "static const float kPI = 3.1415926536;\n")
 
 
 def WriteBytes(_root, _relative, _bytes):
@@ -303,6 +368,54 @@ PROJECT_CASES = [
      1, "toolset 'v143'"),
 ]
 
+SHADER_CASES = [
+    ("liblt's shaders, each compiled by lt.vcxproj and held by the registry", None, 0, "0 fault(s)"),
+    ("the rest of lt, which stays exempt",
+     lambda r: Write(r, LT + "LTE/old_style.cxx", ""),
+     0, "0 fault(s)"),
+    ("a liblt shader that lt.vcxproj does not compile",
+     lambda r: Write(r, LT + "Shaders/PostBloomPS.hlsl", ""),
+     1, "is not an FxCompile item of lt.vcxproj"),
+    ("a liblt include that lt.vcxproj does not list",
+     lambda r: Write(r, LT + "Shaders/Math.hlsli", ""),
+     1, "Shaders/Math.hlsli: is not in lt.vcxproj"),
+    ("a liblt shader in a subfolder",
+     lambda r: Write(r, LT + "Shaders/post/BlurPS.hlsl", ""),
+     1, "a file in a subfolder"),
+    ("a liblt shader named against ADR-008",
+     lambda r: Write(r, LT + "Shaders/post_blur.hlsl", ""),
+     1, "(R7, ADR-008)"),
+    ("a liblt shader the registry does not hold",
+     lambda r: (Write(r, LT + "Shaders/PostBloomPS.hlsl", ""),
+                Replace(r, LT + "lt.vcxproj", '    <None Include="Shaders\\Common.hlsli" />', BLOOM_ITEM),
+                Replace(r, LT + "lt.vcxproj.filters", "<None",
+                        '<FxCompile Include="Shaders\\PostBloomPS.hlsl" />\n    <None')),
+     1, "PostBloomPS.hlsl: is not in FrontierOutpost/src/liblt/LTE/ShaderRegistry.cpp under its legacy name"),
+    ("a registry entry with no shader",
+     lambda r: Replace(r, LT + "LTE/ShaderRegistry.cpp", "  };", '    {"post/bloom.jsl", Bytes(POST_BLOOM_PS)},\n  };'),
+     1, "holds post/bloom.jsl, but lt.vcxproj compiles no Shaders/PostBloomPS.hlsl"),
+    ("a registry entry with another shader's array",
+     lambda r: Replace(r, LT + "LTE/ShaderRegistry.cpp", "Bytes(POST_BLUR_PS)", "Bytes(UI_TEXTURE_PS)"),
+     1, "holds post/blur.jsl as UI_TEXTURE_PS"),
+    ("a registry entry the checker cannot read",
+     lambda r: Replace(r, LT + "LTE/ShaderRegistry.cpp", '{"post/blur.jsl", Bytes(POST_BLUR_PS)},',
+                       '{ "post/blur.jsl", Bytes(POST_BLUR_PS) },'),
+     1, "not one entry the checker can read"),
+    ("a shader's array not named for its file",
+     lambda r: Replace(r, LT + "lt.vcxproj", "<VariableName>POST_BLUR_PS</VariableName>",
+                       "<VariableName>g_blur</VariableName>"),
+     1, "expected 'POST_BLUR_PS' (R3)"),
+    ("a pixel shader compiled as a vertex shader",
+     lambda r: Replace(r, LT + "lt.vcxproj", "<ShaderType>Pixel</ShaderType>", "<ShaderType>Vertex</ShaderType>"),
+     1, "where its name says 'Pixel'"),
+    ("liblt's shaders at another Shader Model in Release",
+     lambda r: Replace(r, LT + "lt.vcxproj", "  <ItemGroup>\n    <ClCompile",
+                       "  <ItemDefinitionGroup Condition=\"'$(Configuration)'=='Release'\">\n"
+                       "    <FxCompile><ShaderModel>6.0</ShaderModel></FxCompile>\n  </ItemDefinitionGroup>\n"
+                       "  <ItemGroup>\n    <ClCompile"),
+     1, "disagree on FxCompile.ShaderModel"),
+]
+
 FORMAT_CASES = [
     ("a formatted tree", None, [], 0, "0 not formatted"),
     ("an unformatted source",
@@ -414,6 +527,7 @@ def main():
   failures = []
 
   Check("CheckProjectFiles.py", PROJECT_CASES, [], failures)
+  Check("CheckProjectFiles.py", SHADER_CASES, [], failures, _base=LibltTree)
   Check("CheckSounds.py", SOUND_CASES, [], failures, _base=SoundTree)
 
   clangFormat = args.clangFormat or shutil.which("clang-format")

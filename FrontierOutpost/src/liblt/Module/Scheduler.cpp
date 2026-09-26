@@ -1,6 +1,5 @@
 #include "Scheduler.h"
 
-#include "LTE/GL.h"
 #include "LTE/Job.h"
 #include "LTE/Module.h"
 #include "LTE/Pointer.h"
@@ -137,7 +136,7 @@ namespace {
 
         if (!flushed) {
           FRAME("Pre Flush")
-            GL_Finish();
+            Renderer_Finish();
           flushed = true;
         }
 
@@ -152,7 +151,7 @@ namespace {
 
           Timer timer;
           job->OnRun(jobSize);
-          GL_Finish();
+          Renderer_Finish();
 
           float elapsed = timer.GetElapsed();
           job->totalUnits += jobSize;

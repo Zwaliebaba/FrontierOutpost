@@ -1,14 +1,11 @@
 #ifndef LTE_Renderer_h__
 #define LTE_Renderer_h__
 
-#include "GLEnum.h"
-#include "GLType.h"
+#include "GraphicsEnum.h"
 #include "String.h"
 #include "V3.h"
 #include "V4.h"
 #include "Vector.h"
-
-const size_t kAttribArrays = 8;
 
 namespace LTE {
   namespace BlendMode {
@@ -29,7 +26,16 @@ namespace LTE {
     };
   }
 
-  LT_API void Renderer_Initialize();
+  /* Makes the Direct3D 12 device the renderer draws with
+   * (Design/Plan/NeuronClient-migration.md, section 5.3). With warp, Windows'
+   * software adapter draws, with the debug layer, for the launcher's smoke
+   * mode. Offscreen, no swap chain is made: frames stay in the frame texture,
+   * which Texture_ScreenCapture reads. */
+  LT_API void Renderer_Initialize(bool warp = false, bool offscreen = false);
+
+  /* The errors the Direct3D 12 debug layer has reported, which the smoke mode
+   * fails on. 0 without the debug layer. */
+  LT_API uint Renderer_GetDeviceErrorCount();
 
   /* Clears only the color buffers. */
   LT_API void Renderer_Clear(V4 const& clearColor = V4(0));
@@ -65,25 +71,21 @@ namespace LTE {
     Type const& vertexFormat,
     void const* indexData,
     uint indices,
-    GL_IndexFormat::Enum indexFormat);
+    IndexFormat::Enum indexFormat);
 
+  /* Sends what was drawn to the GPU, without waiting for it. */
   LT_API void Renderer_Flush();
+
+  /* Waits for the GPU to finish what was drawn, as glFinish did, for the jobs
+   * that time how long the GPU takes. */
+  LT_API void Renderer_Finish();
 
   LT_API int Renderer_GetDrawCallCount();
   LT_API int Renderer_GetPolyCount();
   LT_API void Renderer_ResetCounters();
 
   /* Cachable State. */
-  LT_API void Renderer_BindIndexBuffer(GL_Buffer buffer, bool force = false);
-  LT_API void Renderer_BindVertexBuffer(GL_Buffer buffer, bool force = false);
-
-  LT_API void Renderer_DisableAttribArray(uint index);
-  LT_API void Renderer_EnableAttribArray(uint index);
-
-  LT_API void Renderer_SetColor(Color const& color, float alpha = 1);
-
   LT_API void Renderer_SetShader(ShaderT& shader);
-  LT_API void Renderer_SetShaderFF();
 
   LT_API void Renderer_SetViewport(V2 const& origin, V2 const& size);
 
@@ -99,18 +101,13 @@ namespace LTE {
   LT_API void Renderer_PopColorBuffers();
   LT_API void Renderer_PushColorBuffers();
 
-  LT_API void Renderer_PushColorBuffer(
-    uint index,
-    GL_Texture texture,
-    uint guid,
-    GL_TextureTarget::Enum target = GL_TextureTarget::T2D);
-
   LT_API void Renderer_PopColorBuffer(uint index);
 
   LT_API void Renderer_PushCullMode(CullMode::Enum mode);
   LT_API void Renderer_PopCullMode();
 
-  LT_API void Renderer_PushDepthBuffer(GL_Texture texture);
+  /* A null texture draws with no depth buffer. */
+  LT_API void Renderer_PushDepthBuffer(Texture2D const& texture);
   LT_API void Renderer_PopDepthBuffer();
 
   LT_API void Renderer_PushScissorOff();

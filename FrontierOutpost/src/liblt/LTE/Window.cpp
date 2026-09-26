@@ -7,10 +7,10 @@
 #include "Pointer.h"
 #include "ProgramLog.h"
 #include "Renderer.h"
+#include "RendererCore.h"
 #include "String.h"
 #include "Texture2D.h"
 #include "Viewport.h"
-#include "WglBridge.h"
 
 /* NeuronClient's Window.h, which the quoted form cannot reach from here: it finds this folder's
    own Window.h first. */
@@ -103,11 +103,14 @@ namespace {
 
   struct WindowImpl : public WindowT {
     Neuron::Window impl;
-    WglBridge gl;
+    /* After the window, so that it goes first (Design/ADR/ADR-007). Made when
+       the first frame is shown, since the device is made after the window. */
+    Neuron::SwapChain swapChain;
     String title;
     Viewport viewport;
     V2U size;
     bool hasFocus;
+    bool sync;
 
     WindowImpl(
         String const& title,
@@ -116,7 +119,8 @@ namespace {
         bool fullscreen) :
       title(title),
       size(size),
-      hasFocus(true)
+      hasFocus(true),
+      sync(false)
     {
       if (fullscreen)
         Log_Critical("Window: exclusive fullscreen is not supported (ADR-012)");
@@ -134,22 +138,35 @@ namespace {
       if (!Neuron::Window::Open(desc, impl, error))
         Log_Critical(error);
 
-      String glError;
-      if (!gl.Create(impl.NativeHandle(), glError))
-        Log_Critical(glError);
-
-      /* SFML turned vertical sync off for every new window. */
-      gl.SetSwapInterval(0);
+      /* Vertical sync starts off, as SFML turned it off for every new window
+         (N7). */
       viewport->size = size;
     }
 
     void Close() {
-      gl.Destroy();
+      swapChain = Neuron::SwapChain();
       impl.Close();
     }
 
+    /* Shows the frame liblt drew, GL's default framebuffer, through the
+       present pass, which flips it once (plan section 5.5), and starts the next
+       frame. Offscreen, for the smoke mode, it only starts the next. */
     void Display() {
-      gl.Swap();
+      Neuron::GraphicsDevice& device = Renderer_Device();
+      if (!Renderer_IsOffscreen()) {
+        if (!swapChain) {
+          Neuron::SwapChain::Desc desc;
+          desc.window = &impl;
+          desc.widthPixels = size.x;
+          desc.heightPixels = size.y;
+          desc.vsync = sync;
+          swapChain = device.CreateSwapChain(desc);
+        }
+        swapChain.Present(Renderer_GetFrame().texture);
+      }
+      device.EndFrame();
+      Renderer_TakeDeviceMessages();
+      device.BeginFrame();
     }
 
     V2I GetCursorPos() const {
@@ -170,7 +187,12 @@ namespace {
     }
 
     void SetSync(bool sync) {
-      gl.SetSwapInterval(sync ? 1 : 0);
+      /* The swap chain takes it when it is made, so one made already is made
+         again. */
+      if (sync != this->sync) {
+        this->sync = sync;
+        swapChain = Neuron::SwapChain();
+      }
     }
 
     void Update() {
@@ -180,6 +202,8 @@ namespace {
           size.x = resize->widthPixels;
           size.y = resize->heightPixels;
           viewport->size = V2((float)resize->widthPixels, (float)resize->heightPixels);
+          if (swapChain)
+            swapChain.Resize(resize->widthPixels, resize->heightPixels);
         }
 
         else if (Neuron::KeyEvent const* key = std::get_if<Neuron::KeyEvent>(&e)) {

@@ -93,10 +93,10 @@ namespace {
         buffer = Texture_Create(
           state->primary->GetWidth(),
           state->primary->GetHeight(),
-          GL_TextureFormat::R32F);
-        buffer->SetMagFilter(GL_TextureFilter::Nearest);
-        buffer->SetMinFilter(GL_TextureFilterMip::Nearest);
-        buffer->SetWrapMode(GL_TextureWrapMode::ClampToEdge);
+          TextureFormat::R32F);
+        buffer->SetMagFilter(TextureFilter::Nearest);
+        buffer->SetMinFilter(TextureFilterMip::Nearest);
+        buffer->SetWrapMode(TextureWrapMode::ClampToEdge);
       }
       
       RenderStyle_Push(style);

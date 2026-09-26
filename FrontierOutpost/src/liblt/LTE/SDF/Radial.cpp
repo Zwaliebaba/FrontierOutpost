@@ -20,10 +20,9 @@ namespace {
       return Bound3(V3(-rMax), V3(rMax));
     }
 
-    String GetCode(String const& p) const {
-      return Stringize()
-        | "(length(" | p | ") - mix(" | rMin | ", " | rMax | ", "
-        | source->GetCode(p) | "))";
+    void Encode(SDFProgram& program) const {
+      source->Encode(program);
+      program.Emit(SDFOp::Radial, {rMin, rMax});
     }
   };
 

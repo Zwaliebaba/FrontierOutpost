@@ -20,6 +20,10 @@
   #include "Tchar.h"
   #include "Direct.h"
 
+  #include <crtdbg.h>
+  #include <cstdlib>
+  #include <intrin.h>
+
   #undef CreateDirectory
   #undef MessageBox
 
@@ -185,8 +189,180 @@ Vector<String> OS_ListDir(String const& path) {
   return result;
 }
 
+namespace {
+  bool gUnattended = false;
+
+#ifdef LIBLT_WINDOWS
+  /* Unattended, nobody can attach a debugger either, so a crash prints what it
+     was and where: what failed, then each frame of the stack, with its function
+     and line where the PDBs beside the executable have them. The process then
+     ends as it would have. */
+  void PrintStack(CONTEXT const& start) {
+    HANDLE const process = GetCurrentProcess();
+    HANDLE const thread = GetCurrentThread();
+    SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
+    SymInitialize(process, OS_GetExecutableDir().c_str(), TRUE);
+
+    CONTEXT context = start;
+    STACKFRAME64 frame = {};
+  #ifdef _M_ARM64
+    DWORD const machine = IMAGE_FILE_MACHINE_ARM64;
+    frame.AddrPC.Offset = context.Pc;
+    frame.AddrFrame.Offset = context.Fp;
+    frame.AddrStack.Offset = context.Sp;
+  #else
+    DWORD const machine = IMAGE_FILE_MACHINE_AMD64;
+    frame.AddrPC.Offset = context.Rip;
+    frame.AddrFrame.Offset = context.Rbp;
+    frame.AddrStack.Offset = context.Rsp;
+  #endif
+    frame.AddrPC.Mode = AddrModeFlat;
+    frame.AddrFrame.Mode = AddrModeFlat;
+    frame.AddrStack.Mode = AddrModeFlat;
+
+    for (int i = 0; i < 64; ++i) {
+      if (!StackWalk64(machine, process, thread, &frame, &context, nullptr,
+            SymFunctionTableAccess64, SymGetModuleBase64, nullptr) ||
+          !frame.AddrPC.Offset)
+        break;
+      /* A return address is the instruction after the call, which can be on
+         the next line: the call is the byte before it. */
+      DWORD64 const address = frame.AddrPC.Offset;
+      DWORD64 const lookup = i ? address - 1 : address;
+      std::cout << "  " << i << ": ";
+      DWORD64 const base = SymGetModuleBase64(process, address);
+      char module[MAX_PATH];
+      if (base && GetModuleFileNameA((HMODULE)base, module, MAX_PATH)) {
+        char const* name = strrchr(module, '\\');
+        std::cout << (name ? name + 1 : module) << "+0x" << std::hex << (address - base);
+      }
+      else
+        std::cout << "0x" << std::hex << address;
+      std::cout << std::dec;
+
+      alignas(SYMBOL_INFO) char buffer[sizeof(SYMBOL_INFO) + 256] = {};
+      SYMBOL_INFO* symbol = (SYMBOL_INFO*)buffer;
+      symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+      symbol->MaxNameLen = 256;
+      DWORD64 displacement = 0;
+      if (SymFromAddr(process, lookup, &displacement, symbol))
+        std::cout << ' ' << symbol->Name;
+      IMAGEHLP_LINE64 line = {};
+      line.SizeOfStruct = sizeof(line);
+      DWORD column = 0;
+      if (SymGetLineFromAddr64(process, lookup, &column, &line))
+        std::cout << " (" << line.FileName << ':' << line.LineNumber << ')';
+      std::cout << '\n';
+    }
+    std::cout << std::flush;
+    StackFrame_Print();
+  }
+
+  /* An exception nothing handled, which ends the process with its code. */
+  LONG WINAPI PrintCrash(EXCEPTION_POINTERS* pointers) {
+    EXCEPTION_RECORD const& record = *pointers->ExceptionRecord;
+    std::cout << "CRASH: exception 0x" << std::hex << record.ExceptionCode
+      << " at 0x" << (DWORD64)record.ExceptionAddress;
+    if (record.ExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
+        record.NumberParameters >= 2)
+    {
+      ULONG_PTR const access = record.ExceptionInformation[0];
+      std::cout << (access == 1 ? ", writing" : access == 8 ? ", executing" : ", reading")
+        << " 0x" << record.ExceptionInformation[1];
+    }
+    std::cout << std::dec << '\n';
+    PrintStack(*pointers->ContextRecord);
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+
+  void PrintWide(wchar_t const* text) {
+    for (; text && *text; ++text)
+      std::cout << (char)(*text < 128 ? *text : L'?');
+  }
+
+  /* A check of the C runtime's or the standard library's, a subscript out of
+     range among them, which fails fast: no exception filter sees it. The debug
+     CRT names the check and where it failed; the release CRT names nothing. */
+  void PrintInvalidParameter(
+    wchar_t const* expression,
+    wchar_t const* function,
+    wchar_t const* file,
+    unsigned int line,
+    uintptr_t)
+  {
+    std::cout << "CRASH: a check of the C runtime's failed";
+    if (expression) {
+      std::cout << ": ";
+      PrintWide(expression);
+      std::cout << " in ";
+      PrintWide(function);
+      std::cout << " (";
+      PrintWide(file);
+      std::cout << ':' << line << ')';
+    }
+    std::cout << '\n';
+    CONTEXT context;
+    RtlCaptureContext(&context);
+    PrintStack(context);
+    __fastfail(FAST_FAIL_INVALID_ARG);
+  }
+
+#ifdef _DEBUG
+  /* The debug CRT's report of a failed check, before it acts on it. The
+     standard library's checks, a subscript out of range among them, fail fast
+     after their report without calling the invalid-parameter handler, so the
+     stack is printed here, where the check failed. */
+  int __cdecl PrintReport(int type, char*, int*) {
+    if (type == _CRT_ASSERT || type == _CRT_ERROR) {
+      std::cout << "The C runtime reports a failed check (on stderr) here:\n";
+      CONTEXT context;
+      RtlCaptureContext(&context);
+      PrintStack(context);
+    }
+    return FALSE;
+  }
+#endif
+
+  /* abort(), from assert() or std::terminate, which ends the process with 3. */
+  void PrintAbort(int) {
+    std::cout << "CRASH: abort\n";
+    CONTEXT context;
+    RtlCaptureContext(&context);
+    PrintStack(context);
+    _exit(3);
+  }
+#endif
+}
+
+bool OS_IsUnattended() {
+  return gUnattended;
+}
+
+void OS_SetUnattended() {
+  gUnattended = true;
+#ifdef LIBLT_WINDOWS
+  SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+  SetUnhandledExceptionFilter(PrintCrash);
+  _set_invalid_parameter_handler(PrintInvalidParameter);
+  signal(SIGABRT, PrintAbort);
+  _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+  /* The debug CRT's own dialogs, which the release CRT does not have. */
+  #ifdef _DEBUG
+    _CrtSetReportHook2(_CRT_RPTHOOK_INSTALL, PrintReport);
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+  #endif
+#endif
+}
+
 void OS_MessageBox(String const& title, String const& message) {
 #ifdef LIBLT_WINDOWS
+  if (gUnattended) {
+    std::cout << "[" << title << "] : " << message << '\n' << std::flush;
+    return;
+  }
   MessageBoxA(NULL, message, title, MB_OK);
 #else
   std::cout << "[" << title << "] : " << message << '\n';

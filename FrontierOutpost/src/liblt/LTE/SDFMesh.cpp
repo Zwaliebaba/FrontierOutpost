@@ -6,11 +6,12 @@
 #include "Math.h"
 #include "Matrix.h"
 #include "Mesh.h"
+#include "ProgramLog.h"
 #include "Ray.h"
 #include "Renderer.h"
+#include "RendererCore.h"
 #include "SDF.h"
-#include "Shader.h"
-#include "Texture2D.h"
+#include "ShaderRegistry.h"
 #include "Texture3D.h"
 #include "Thread.h"
 #include "Vector.h"
@@ -21,7 +22,17 @@
 
 #include "LTE/Debug.h"
 
-/* Field Texture -> (LOD Level -> MC) -> Ambient Occlusion */
+#include <cstdint>
+#include <cstring>
+#include <span>
+#include <vector>
+
+/* Field Texture -> (LOD Level -> MC) -> Ambient Occlusion
+ *
+ * On the GPU, by three compute shaders (Design/ADR/ADR-009): Shaders/GenFieldCS.hlsl interprets the
+ * SDF, encoded as instructions (LTE/SDF.h), for each voxel of the field; GenFieldcopyCS.hlsl
+ * resamples the field into each level of detail's grid, which is read back for the marching cubes
+ * on the CPU; GenFieldocclusionCS.hlsl gives each vertex of a level its ambient occlusion. */
 
 const uint kMaxQuality = 128;
 const uint kMaxResolution = 256;
@@ -38,19 +49,79 @@ const uint kOcclusionSamples = 2048;
 const float kBaseOcclusionRadius = 0.3f;
 const bool kPreload = false;
 
+/* What Shaders/GenFieldCS.hlsl holds of an SDF: its MAX_ macros. */
+const size_t kMaxInstructions = 64;
+const uint kMaxValues = 16;
+const uint kMaxPoints = 8;
+
 typedef V3T<uint> SV3;
 
 namespace {
-  Shader gCopyShader;
-  Shader gGradientShader;
-  Shader gOcclusionShader;
+  Neuron::Program MakeProgram(char const* name) {
+    std::span<std::byte const> bytecode = ShaderRegistry_Compute(name);
+    if (bytecode.empty())
+      Log_Critical(String("SDFMesh: no compute shader was compiled for ") + name +
+        " (Design/ADR/ADR-008)");
+    Neuron::Program::Desc desc;
+    desc.computeShader = bytecode;
+    desc.name = name;
+    return Renderer_Device().CreateProgram(desc);
+  }
 
-  void StaticInitialize() {
-    if (!gCopyShader) {
-      gCopyShader = Shader_Create("identity.jsl", "gen/fieldcopy.jsl");
-      gGradientShader = Shader_Create("identity.jsl", "gen/fieldgradient.jsl");
-      gOcclusionShader = Shader_Create("identity.jsl", "gen/fieldocclusion.jsl");
-    }
+  /* Made when first used, and shared by every mesh, so each dispatch sets all
+     the constants it reads. */
+  Neuron::Program& FieldProgram() {
+    static Neuron::Program program = MakeProgram("gen/field.jsl");
+    return program;
+  }
+
+  Neuron::Program& CopyProgram() {
+    static Neuron::Program program = MakeProgram("gen/fieldcopy.jsl");
+    return program;
+  }
+
+  Neuron::Program& OcclusionProgram() {
+    static Neuron::Program program = MakeProgram("gen/fieldocclusion.jsl");
+    return program;
+  }
+
+  template <class T>
+  void SetConstant(Neuron::Program& program, char const* name, T const& value) {
+    program.SetConstant(name, std::as_bytes(std::span<T const>(&value, 1)));
+  }
+
+  void SetConstant(Neuron::Program& program, char const* name, SV3 const& value) {
+    std::uint32_t const values[3] = {value.x, value.y, value.z};
+    program.SetConstant(name, std::as_bytes(std::span(values)));
+  }
+
+  void SetConstant(Neuron::Program& program, char const* name, V3 const& value) {
+    float const values[3] = {value.x, value.y, value.z};
+    program.SetConstant(name, std::as_bytes(std::span(values)));
+  }
+
+  /* Thread groups of _size that cover _count. */
+  uint Groups(uint count, uint size) {
+    return (count + size - 1) / size;
+  }
+
+  Neuron::Texture MakeTexture(
+    Neuron::TextureDimension dimension,
+    Neuron::TextureFormat format,
+    uint width,
+    uint height,
+    uint depth,
+    char const* name)
+  {
+    Neuron::Texture::Desc desc;
+    desc.dimension = dimension;
+    desc.format = format;
+    desc.widthPixels = width;
+    desc.heightPixels = height;
+    desc.depthPixels = depth;
+    desc.mipLevels = 1;
+    desc.name = name;
+    return Renderer_Device().CreateTexture(desc);
   }
 
   struct SDFMesh;
@@ -75,7 +146,6 @@ namespace {
     bool, eliminateFloaters)
     Vector<SDFMeshLevel> levels;
     SDFMeshLevel collisionLevel;
-    Shader fieldShader;
     Texture3D fieldTexture;
     Bound3 bound;
     bool isLoaded;
@@ -85,7 +155,6 @@ namespace {
     SDFMesh() {}
  
     DefineInitializer {
-      StaticInitialize();
       this->collisionLevel = SDFMeshLevel(kCollisionMeshResolution);
       this->bound = function->GetBound().GetExpanded(1.05f);
       this->isLoaded = false;
@@ -196,10 +265,6 @@ namespace {
           levelResolution = V3(levelResolution) * kLodDownsampleFactor;
         }
 
-        fieldShader = Shader_Create("identity.jsl", "gen/field.jsl",
-                                    "", "#define FIELDFN " + function->GetCode());
-        fieldShader->BindOutput(0, "field_value");
-        
         Scheduler_Add(Job_GenerateFieldTexture(this, fullRes), false);
         Scheduler_Add(Job_GenerateLodLevel(this, collisionLevel), false);
 
@@ -213,7 +278,6 @@ namespace {
     }
 
     void Unload() {
-      fieldShader = nullptr;
       fieldTexture = nullptr;
     }
 
@@ -228,14 +292,12 @@ namespace {
     Texture3D output;
     SV3 res;
     uint z;
-    Texture2D fieldSlice;
-    Array<float> buffer;
+    SDFProgram program;
 
     GenerateFieldTexture(SDFMesh* parent, SV3 const& res) :
       parent(parent),
       res(res),
-      z(0),
-      buffer(res.x * res.y)
+      z(0)
       {}
 
     char const* GetName() const {
@@ -255,37 +317,42 @@ namespace {
     }
 
     void OnBegin() {
-      output = Texture3D_Create(res.x, res.y, res.z, GL_TextureFormat::R32F);
-      output->AddressBorder(1, 0, 0, 0);
-      fieldSlice = Texture_Create(res.x, res.y, GL_TextureFormat::R32F);
+      output = Texture3D_Create(res.x, res.y, res.z, TextureFormat::R32F);
+      parent->function->Encode(program);
+      if (program.Instructions() > kMaxInstructions ||
+          program.maxValues > kMaxValues ||
+          program.maxPoints > kMaxPoints)
+      {
+        Log_Critical(Stringize() | "SDFMesh: an SDF of " | (uint)program.Instructions() |
+          " instructions, " | program.maxValues | " values and " | program.maxPoints |
+          " points deep is more than Shaders/GenFieldCS.hlsl holds");
+      }
     }
 
+    /* How long the interpreter took (Design/ADR/ADR-009): the scheduler times
+       each run of a job with the GPU's work finished. */
     void OnEnd() {
       parent->fieldTexture = output;
+      Log_Message(Stringize() | "SDFMesh: a field of " | res.x | "x" | res.y | "x" |
+        res.z | " voxels took " | (uint)(1000.0f * totalTime) | " ms");
     }
 
+    /* jobSize slices at a time, as the render passes before did. */
     void OnRun(uint jobSize) {
-      RendererBlendMode blendMode(BlendMode::Disabled);
-      RendererZBuffer zBuffer(false);
-      V3 range = parent->bound.GetSideLengths();
-      (*parent->fieldShader)
-        ("du", range.GetX())("dv", range.GetY())
-        ("halfTexel", V3(0.5f / (float)res.x, 0.5f / (float)res.y, 0))
-        ("texelScale", V3((float)res.x / (float)(res.x - 1),
-                          (float)res.y / (float)(res.y - 1), 1));
+      uint const slices = Min(Max(jobSize, 1u), res.z - z);
+      Neuron::Program& field = FieldProgram();
+      field.SetConstant("instructions", std::as_bytes(std::span(program.words)));
+      SetConstant(field, "instructionCount", (std::uint32_t)program.Instructions());
+      SetConstant(field, "origin", parent->bound.lower);
+      SetConstant(field, "extent", parent->bound.GetSideLengths());
+      SetConstant(field, "resolution", res);
+      SetConstant(field, "firstSlice", (std::uint32_t)z);
 
-      fieldSlice->Bind(0);
-      for (uint i = 0; i < jobSize && z < res.z; ++i) {
-        (*parent->fieldShader)
-          ("origin", parent->bound.lower + (float)z / (float)(res.z - 1) * range.GetZ());
-        Renderer_DrawQuad();
-        fieldSlice->GetData(buffer.data());
-        output->SetData(
-          0, 0, z, res.x, res.y, 1,
-          GL_PixelFormat::Red, GL_DataFormat::Float, buffer.data());
-        z++;
-      }
-      fieldSlice->Unbind();
+      Neuron::DrawContext& context = Renderer_Context();
+      context.SetUnorderedTexture(0, &Texture3D_GetGpu(*output)->texture);
+      context.Dispatch(field, Groups(res.x, 4), Groups(res.y, 4), Groups(slices, 4));
+      context.SetUnorderedTexture(0, nullptr);
+      z += slices;
     }
   };
 
@@ -293,10 +360,12 @@ namespace {
     SDFMesh* p;
     SDFMeshLevel& level;
     Mesh output;
-    Texture2D slice;
     Array3DFloat grid;
-    Array<float> buffer;
-    uint z;
+    /* The level's grid on the GPU, and the ticket of its readback, 0 until
+       it starts (Design/ADR/ADR-009). */
+    Neuron::Texture texture;
+    std::uint64_t read;
+    bool polygonizing;
 
     struct Polygonize : public JobT {
       Reference<GenerateLodLevel> parent;
@@ -339,12 +408,12 @@ namespace {
       p(p),
       level(level),
       grid(level.res.x, level.res.y, level.res.z),
-      buffer(level.res.x * level.res.y),
-      z(0)
+      read(0),
+      polygonizing(false)
       {}
 
     bool CanRun() const {
-      return p->fieldTexture != nullptr && z < level.res.z;
+      return p->fieldTexture != nullptr && !polygonizing;
     }
 
     char const* GetName() const {
@@ -364,49 +433,46 @@ namespace {
     }
 
     void OnBegin() {
-      slice = Texture_Create(level.res.x, level.res.y, GL_TextureFormat::R32F);
+      texture = MakeTexture(Neuron::TextureDimension::Texture3D, Neuron::TextureFormat::R32F,
+        level.res.x, level.res.y, level.res.z, "SDFMesh level of detail");
     }
 
     void OnEnd() {
       level.mesh = output;
     }
 
+    /* The first run resamples the field and starts reading the grid back; the
+       runs after it take the grid once the GPU has copied it, and launch the
+       contouring job. */
     void OnRun(uint jobSize) {
-      if (z >= level.res.z)
+      Neuron::DrawContext& context = Renderer_Context();
+      if (!read) {
+        Neuron::Program& copy = CopyProgram();
+        Texture3D const& field = p->fieldTexture;
+        SetConstant(copy, "fieldResolution",
+          SV3(field->GetWidth(), field->GetHeight(), field->GetDepth()));
+        SetConstant(copy, "resolution", level.res);
+        context.SetTexture(0, &Texture3D_GetGpu(*field)->texture);
+        context.SetUnorderedTexture(0, &texture);
+        context.Dispatch(copy,
+          Groups(level.res.x, 4), Groups(level.res.y, 4), Groups(level.res.z, 4));
+        context.SetUnorderedTexture(0, nullptr);
+        context.SetTexture(0, nullptr);
+        read = context.RequestRead(texture, 0, 0);
+        context.Flush();
         return;
-
-      RendererBlendMode blendMode(BlendMode::Disabled);
-      RendererZBuffer zBuffer(false);
-
-      V3 range = p->bound.GetSideLengths();
-      SV3 res = level.res;
-      (*gCopyShader)
-        ("du", range.GetX())
-        ("dv", range.GetY())
-        ("fieldSampler", p->fieldTexture)
-        ("fieldOrigin", p->bound.lower)
-        ("fieldExtent", range)
-        ("halfTexel", V3(0.5f / (float)res.x, 0.5f / (float)res.y, 0))
-        ("texelScale", V3((float)res.x / (float)(res.x - 1),
-                          (float)res.y / (float)(res.y - 1),
-                          1));
-
-      slice->Bind(0);
-      for (uint i = 0; i < jobSize && z < res.z; ++i) {
-        (*gCopyShader)
-          ("origin", p->bound.lower + (float)z / (float)(res.z - 1) * range.GetZ());
-        Renderer_DrawQuad();
-        slice->GetData(buffer.data());
-        for (uint y = 0; y < res.y; ++y)
-        for (uint x = 0; x < res.x; ++x)
-          grid.SetData(buffer[x + y * res.x], x, y, z);
-        z++;
       }
-      slice->Unbind();
 
-      /* If we've finished generating the grid, launch the contouring job. */
-      if (z >= res.z)
-        Scheduler_Add(new Polygonize(this), true);
+      std::vector<std::byte> texels;
+      if (!context.TakeRead(read, texels))
+        return;
+      size_t const bytes = grid.data.size() * sizeof(float);
+      if (texels.size() == bytes)
+        std::memcpy(grid.data.data(), texels.data(), bytes);
+      else
+        Log_Error("SDFMesh: a level of detail read back at another size than its grid");
+      polygonizing = true;
+      Scheduler_Add(new Polygonize(this), true);
     }
   };
 
@@ -416,17 +482,24 @@ namespace {
     uint x;
     uint dim;
     uint samples;
-    Texture2D positionTexture;
-    Texture2D normalTexture;
-    Texture2D noiseTexture;
-    Texture2D occlusionTexture;
+    /* Each vertex's position and normal at texel i % dim, i / dim, the
+       directions sampled, and the occlusion written for each vertex. */
+    Neuron::Texture positionTexture;
+    Neuron::Texture normalTexture;
+    Neuron::Texture noiseTexture;
+    Neuron::Texture occlusionTexture;
+    std::uint64_t read;
+    std::vector<std::byte> occlusion;
+    bool done;
 
     GenerateOcclusion(SDFMesh* p, SDFMeshLevel& level) :
       p(p),
       level(level),
-      x(0)
+      x(0),
+      read(0),
+      done(false)
       {}
-    
+
     bool CanRun() const {
       return level.mesh != nullptr;
     }
@@ -444,7 +517,7 @@ namespace {
     }
 
     bool IsFinished() const {
-      return x >= dim;
+      return done;
     }
 
     void OnBegin() {
@@ -453,23 +526,26 @@ namespace {
       samples = (uint)Ceil(Sqrt((float)kOcclusionSamples));
       uint rootSamples = samples;
       samples *= samples;
-      dim = (uint)Ceil(Sqrt((float)input->vertices.size()));
+      dim = Max((uint)Ceil(Sqrt((float)input->vertices.size())), 1u);
 
       /* Create the vertex position & normal buffers. */
-      Array<V4> positionBuffer(dim * dim);
-      Array<V4> normalBuffer(dim * dim);
+      std::vector<V4> positionBuffer(dim * dim, V4(0));
+      std::vector<V4> normalBuffer(dim * dim, V4(0));
       for (size_t i = 0; i < input->vertices.size(); ++i) {
         positionBuffer[i] = V4(input->vertices[i].p, 0);
         normalBuffer[i] = V4(input->vertices[i].n, 0);
       }
 
-      positionTexture = Texture_Create(dim, dim, GL_TextureFormat::RGBA32F, positionBuffer.data());
-      normalTexture = Texture_Create(dim, dim, GL_TextureFormat::RGBA32F, normalBuffer.data());
-      positionBuffer.clear();
-      normalBuffer.clear();
+      Neuron::DrawContext& context = Renderer_Context();
+      positionTexture = MakeTexture(Neuron::TextureDimension::Texture2D,
+        Neuron::TextureFormat::Rgba32F, dim, dim, 1, "SDFMesh vertex positions");
+      normalTexture = MakeTexture(Neuron::TextureDimension::Texture2D,
+        Neuron::TextureFormat::Rgba32F, dim, dim, 1, "SDFMesh vertex normals");
+      context.UpdateTexture(positionTexture, 0, 0, std::as_bytes(std::span(positionBuffer)));
+      context.UpdateTexture(normalTexture, 0, 0, std::as_bytes(std::span(normalBuffer)));
 
       /* Create the sampling pattern buffer. */
-      Array<V4> noiseBuffer(samples);
+      std::vector<V4> noiseBuffer(samples);
       uint bufferIndex = 0;
       for (uint i = 0; i < rootSamples; ++i) {
         float thisRadius = Sqrt((float)i / (float)(rootSamples - 1));
@@ -483,40 +559,63 @@ namespace {
           noiseBuffer[bufferIndex++] = V4((radius * factor) * V3(x, y, z), 0);
         }
       }
-      
-      noiseTexture = Texture_Create(samples, 1, GL_TextureFormat::RGBA32F, noiseBuffer.data());
-      occlusionTexture = Texture_Create(dim, dim, GL_TextureFormat::R32F);
+
+      noiseTexture = MakeTexture(Neuron::TextureDimension::Texture2D,
+        Neuron::TextureFormat::Rgba32F, samples, 1, 1, "SDFMesh occlusion directions");
+      context.UpdateTexture(noiseTexture, 0, 0, std::as_bytes(std::span(noiseBuffer)));
+      occlusionTexture = MakeTexture(Neuron::TextureDimension::Texture3D,
+        Neuron::TextureFormat::R32F, dim, dim, 1, "SDFMesh occlusion");
     }
 
     void OnEnd() {
       Mesh const& input = level.mesh;
-      Array<float> occlusionBuffer(dim * dim);
-      occlusionTexture->GetData(occlusionBuffer.data());
-      for (size_t i = 0; i < input->vertices.size(); ++i)
-        input->vertices[i].u = occlusionBuffer[i];
+      float const* values = (float const*)occlusion.data();
+      size_t const count = occlusion.size() / sizeof(float);
+      for (size_t i = 0; i < input->vertices.size() && i < count; ++i)
+        input->vertices[i].u = values[i];
 
       input->version++;
     }
 
+    /* jobSize columns at a time, as the render passes before did, then one
+       readback of them all (Design/ADR/ADR-009). */
     void OnRun(uint jobSize) {
-      jobSize = Min(jobSize, dim - x);
-      V3 extent = p->bound.GetSideLengths();
-      (*gOcclusionShader)
-        ("samples", (int)samples)
-        ("positionSampler", positionTexture)
-        ("normalSampler", normalTexture)
-        ("noiseSampler", noiseTexture)
-        ("fieldSampler", p->fieldTexture)
-        ("fieldOrigin", p->bound.lower)
-        ("fieldExtent", extent)
-        ("fieldStep", extent / V3(level.res));
+      Neuron::DrawContext& context = Renderer_Context();
+      if (x < dim) {
+        uint const columns = Min(Max(jobSize, 1u), dim - x);
+        V3 extent = p->bound.GetSideLengths();
+        Texture3D const& field = p->fieldTexture;
+        Neuron::Program& program = OcclusionProgram();
+        SetConstant(program, "samples", (std::uint32_t)samples);
+        SetConstant(program, "dimension", (std::uint32_t)dim);
+        SetConstant(program, "firstColumn", (std::uint32_t)x);
+        SetConstant(program, "endColumn", (std::uint32_t)(x + columns));
+        SetConstant(program, "fieldOrigin", p->bound.lower);
+        SetConstant(program, "fieldExtent", extent);
+        SetConstant(program, "fieldStep", extent / V3(level.res));
+        SetConstant(program, "fieldResolution",
+          SV3(field->GetWidth(), field->GetHeight(), field->GetDepth()));
 
-      RendererBlendMode blendMode(BlendMode::Disabled);
-      RendererZBuffer zBuffer(false);
-      occlusionTexture->Bind(0);
-      Renderer_DrawFSQPart(x, 0, jobSize, dim);
-      occlusionTexture->Unbind();
-      x += jobSize;
+        context.SetTexture(0, &positionTexture);
+        context.SetTexture(1, &normalTexture);
+        context.SetTexture(2, &noiseTexture);
+        context.SetTexture(3, &Texture3D_GetGpu(*field)->texture);
+        context.SetUnorderedTexture(0, &occlusionTexture);
+        context.Dispatch(program, Groups(columns, 8), Groups(dim, 8), 1);
+        context.SetUnorderedTexture(0, nullptr);
+        for (uint slot = 0; slot < 4; ++slot)
+          context.SetTexture(slot, nullptr);
+        x += columns;
+
+        if (x >= dim) {
+          read = context.RequestRead(occlusionTexture, 0, 0);
+          context.Flush();
+        }
+        return;
+      }
+
+      if (read && context.TakeRead(read, occlusion))
+        done = true;
     }
   };
 

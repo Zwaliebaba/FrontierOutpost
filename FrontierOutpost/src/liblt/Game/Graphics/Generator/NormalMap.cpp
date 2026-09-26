@@ -16,7 +16,7 @@ namespace {
     Texture2D normalMap = Texture_Create(
       texture->GetWidth(),
       texture->GetHeight(),
-      GL_TextureFormat::RGBA8);
+      TextureFormat::RGBA8);
 
     (*shader)
       ("cellW", 1.0f)

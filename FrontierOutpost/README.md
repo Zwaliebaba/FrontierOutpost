@@ -13,11 +13,11 @@ To build Limit Theory, you'll need a few standard developer tools. All of them a
 - Git: https://git-scm.com/downloads
 - Visual Studio 2026 Community, with the "Desktop development with C++" workload, and its MSVC ARM64 build tools to build for ARM64: https://visualstudio.microsoft.com/vs/
 
-The game runs on Windows 10 or later, on x64 or ARM64.
+The game runs on Windows 10 or later, on x64 or ARM64, with a GPU that runs Direct3D 12 at feature level 11_0.
 
 # Building
 
-FrontierOutpost builds with MSBuild from `FrontierOutpost.slnx`, at the root of this repository. Its build is described in `FrontierOutpost/MIGRATION_NOTES.md`.
+FrontierOutpost builds with MSBuild from `FrontierOutpost.slnx`, at the root of this repository. The solution builds the engine, `lt.dll`, and `launch.exe`, and NeuronClient, the platform layer the engine draws, plays sound and takes input through, with its tests. The build is described in `FrontierOutpost/MIGRATION_NOTES.md`, and the move onto NeuronClient and Direct3D 12 in `Design/Plan/NeuronClient-migration.md`.
 
 ## Compiling
 
@@ -25,11 +25,19 @@ Open a **Developer PowerShell for Visual Studio 2026** at the root of the reposi
 
 - `msbuild FrontierOutpost.slnx /m /p:Configuration=Release /p:Platform=x64`
 
-Use `Configuration=Debug` for a debug build, and `Platform=ARM64` to build for ARM64. Opening `FrontierOutpost.slnx` in Visual Studio 2026 works too. The binaries land in `FrontierOutpost/bin/<Platform>/<Configuration>/`.
+Use `Configuration=Debug` for a debug build, and `Platform=ARM64` to build for ARM64. Opening `FrontierOutpost.slnx` in Visual Studio 2026 works too. The binaries land in `FrontierOutpost/bin/<Platform>/<Configuration>/`, and NeuronClient's in `<Platform>/<Configuration>/`.
+
+## Testing
+
+NeuronClient's tests are in `Tests/NeuronClientTests/`. After a Debug build, run them in the same Developer PowerShell:
+
+- `vstest.console.exe x64\Debug\NeuronClientTests.dll /Platform:x64`
+
+They draw on WARP, Windows' software renderer, with the Direct3D 12 debug layer, which comes with Windows' optional Graphics Tools, so they need no GPU.
 
 ## Getting the Assets
 
-Everything LT loads at run time (fonts, sounds, textures, game data, LTSL scripts and shaders) is in `GameData/`, at the root of this repository, as ordinary files. The game plays WAV sounds only, so its 24 Ogg sounds, in `GameData/sound/`, are due to be converted to WAV. Until they are, each of those sounds plays silence, and the log names it once as a warning. `FrontierOutpost/MIGRATION_NOTES.md` gives the names the WAV files take (O10).
+Everything LT loads at run time (fonts, sounds, textures, game data and LTSL scripts) is in `GameData/`, at the root of this repository, as ordinary files. The shaders are HLSL, in `FrontierOutpost/src/liblt/Shaders/`, and the build compiles them into `lt.dll`. The game plays WAV sounds only, so its 24 Ogg sounds, in `GameData/sound/`, are due to be converted to WAV. Until they are, each of those sounds plays silence, and the log names it once as a warning. `FrontierOutpost/MIGRATION_NOTES.md` gives the names the WAV files take (O10).
 
 ## Running an LTSL App
 
@@ -44,6 +52,10 @@ All top-level scripts are in the `GameData/script/App` directory. So you can do,
 - `FrontierOutpost\bin\x64\Release\launch.exe war`
 
 To run the app 'war.lts', which is an AI skirmish test. Many of the apps are broken or incomplete, but some work enough to allow you to fly around in a system.
+
+`launch.exe` also takes three options for a smoke run, which checks an app with nobody watching. `--frames N` runs the app for N frames and quits, `--capture <path>` saves the last of them as a PNG, and `--warp` draws on WARP, with the Direct3D 12 debug layer on and nothing shown. With `--frames`, nothing waits for a dialog to be answered, and the exit code is 1 when the app fails, stops short of its frames, or the debug layer reports an error. For example:
+
+- `FrontierOutpost\bin\x64\Debug\launch.exe war --warp --frames 30 --capture war.png`
 
 # Example of the Entire Process
 

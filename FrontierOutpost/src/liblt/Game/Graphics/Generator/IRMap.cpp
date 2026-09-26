@@ -15,10 +15,10 @@ namespace {
 
     CubeMap const& source = args.source();
     size_t res = source->GetResolution();
-    GL_TextureFormat::Enum format = source->GetFormat();
+    TextureFormat::Enum format = source->GetFormat();
 
     CubeMap self = CubeMap_Create(res, format);
-    size_t bpp = GL_TextureFormat::Size(format);
+    size_t bpp = TextureFormat::Size(format);
 
     /* Copy level 0, unchanged. */ {
       Array<uchar> buffer(Squared(source->GetResolution()) * bpp);
@@ -29,7 +29,7 @@ namespace {
     }
 
     Texture2D sampleBuffer = Texture_Create(
-      args.samples, 1, GL_TextureFormat::RGBA16F);
+      args.samples, 1, TextureFormat::RGBA16F);
 
     /* Populate sample buffer. */ {
       RNG rng = RNG_MTG(128);
@@ -38,7 +38,7 @@ namespace {
         samples.push(rng->GetExp() * rng->GetDirection());
 
       sampleBuffer->SetData(0, 0, args.samples, 1,
-        GL_PixelFormat::RGB, GL_DataFormat::Float, samples.data());
+        PixelFormat::RGB, DataFormat::Float, samples.data());
     }
 
     uint levels = 0;

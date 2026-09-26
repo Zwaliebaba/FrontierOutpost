@@ -8,8 +8,7 @@
 
   Only what is identical across all of the original's targets lives here (MIGRATION_NOTES.md §9.3).
   Everything that differs between them (exception model, floating point, /MP, definitions, include
-  directories, link lines) is written in the project that has it. GLEW follows its own upstream
-  build instead, and says so where it differs.
+  directories, link lines) is written in the project that has it.
 -->
 <Project>
   <PropertyGroup>
