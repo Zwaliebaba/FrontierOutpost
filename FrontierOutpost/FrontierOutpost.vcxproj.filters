@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Game\Renderable">
+      <UniqueIdentifier>{8D9D6F39-B816-5FBB-B9D3-24164F6E712A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game\Graphics\Generator">
+      <UniqueIdentifier>{C65A9AF9-AA26-5811-BF67-277DA9602016}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Visuals">
       <UniqueIdentifier>{1D8FFB07-5F56-5872-B7A1-06B4BA2A0D11}</UniqueIdentifier>
     </Filter>
@@ -170,6 +176,53 @@
     </ClCompile>
     <ClCompile Include="StationTypeVisual.cpp">
       <Filter>Visuals</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Blur.cpp">
+      <Filter>Game\Graphics\Generator</Filter>
+    </ClCompile>
+    <ClCompile Include="Generators.cpp">
+      <Filter>Game\Graphics</Filter>
+    </ClCompile>
+    <ClInclude Include="Generators.h">
+      <Filter>Game\Graphics</Filter>
+    </ClInclude>
+    <ClCompile Include="IRMap.cpp">
+      <Filter>Game\Graphics\Generator</Filter>
+    </ClCompile>
+    <ClCompile Include="Materials.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClInclude Include="Materials.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClCompile Include="Nebula.cpp">
+      <Filter>Game\Graphics\Generator</Filter>
+    </ClCompile>
+    <ClCompile Include="NormalMap.cpp">
+      <Filter>Game\Graphics\Generator</Filter>
+    </ClCompile>
+    <ClCompile Include="PlanetSkybox.cpp">
+      <Filter>Game\Graphics\Generator</Filter>
+    </ClCompile>
+    <ClCompile Include="PlanetSurface.cpp">
+      <Filter>Game\Graphics\Generator</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderableAsteroid.cpp">
+      <Filter>Game\Renderable</Filter>
+    </ClCompile>
+    <ClInclude Include="Renderables.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClCompile Include="ShadingModels.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClInclude Include="ShadingModels.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClCompile Include="Starfield.cpp">
+      <Filter>Game\Renderable</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

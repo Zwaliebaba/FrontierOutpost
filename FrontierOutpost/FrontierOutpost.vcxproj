@@ -287,6 +287,53 @@
       <Legacy>true</Legacy>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Blur.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Generators.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClInclude Include="Generators.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClCompile Include="IRMap.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Materials.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClInclude Include="Materials.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClCompile Include="Nebula.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="NormalMap.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="PlanetSkybox.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="PlanetSurface.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="RenderableAsteroid.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClInclude Include="Renderables.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClCompile Include="ShadingModels.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClInclude Include="ShadingModels.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClCompile Include="Starfield.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\Build\Legacy.targets" />
 </Project>

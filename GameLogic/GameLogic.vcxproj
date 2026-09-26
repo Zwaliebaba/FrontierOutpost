@@ -254,9 +254,6 @@
     <ClInclude Include="GameTasks.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="Generators.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="GraphicsEffects.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -303,9 +300,6 @@
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="Mass.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
-    <ClInclude Include="Materials.h">
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="Messages.h">
@@ -413,9 +407,6 @@
     <ClInclude Include="Rate.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="Renderables.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="Scriptable.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -423,9 +414,6 @@
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="Seeded.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
-    <ClInclude Include="ShadingModels.h">
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="Signature.h">
@@ -511,9 +499,6 @@
     <ClCompile Include="Blueprint.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="Blur.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="BoundingBox.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
@@ -583,9 +568,6 @@
     <ClCompile Include="Explosion.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="Generators.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Goto.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
@@ -607,9 +589,6 @@
     <ClCompile Include="Interior.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="IRMap.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Item.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
@@ -626,9 +605,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Market.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Materials.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Messages.cpp">
@@ -658,16 +634,10 @@
     <ClCompile Include="Nearby.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="Nebula.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="NLP.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="NLPPhrase.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="NormalMap.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Object.cpp">
@@ -713,12 +683,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Planet.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="PlanetSkybox.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="PlanetSurface.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="PlanetType.cpp">
@@ -775,9 +739,6 @@
     <ClCompile Include="Region.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="RenderableAsteroid.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Research.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
@@ -808,9 +769,6 @@
     <ClCompile Include="Sell.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="ShadingModels.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Shield.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
@@ -836,9 +794,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Star.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Starfield.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Station.cpp">

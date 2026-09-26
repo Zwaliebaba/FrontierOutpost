@@ -162,9 +162,6 @@
     <ClInclude Include="Blueprint.h">
       <Filter>Game\Item</Filter>
     </ClInclude>
-    <ClCompile Include="Blur.cpp">
-      <Filter>Game\Graphics\Generator</Filter>
-    </ClCompile>
     <ClCompile Include="BoundingBox.cpp">
       <Filter>Component</Filter>
     </ClCompile>
@@ -312,12 +309,6 @@
     <ClInclude Include="GameTasks.h">
       <Filter>Game</Filter>
     </ClInclude>
-    <ClCompile Include="Generators.cpp">
-      <Filter>Game\Graphics</Filter>
-    </ClCompile>
-    <ClInclude Include="Generators.h">
-      <Filter>Game\Graphics</Filter>
-    </ClInclude>
     <ClCompile Include="Goto.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>
@@ -357,9 +348,6 @@
     <ClInclude Include="Interior.h">
       <Filter>Component</Filter>
     </ClInclude>
-    <ClCompile Include="IRMap.cpp">
-      <Filter>Game\Graphics\Generator</Filter>
-    </ClCompile>
     <ClCompile Include="Item.cpp">
       <Filter>Game</Filter>
     </ClCompile>
@@ -407,12 +395,6 @@
     </ClInclude>
     <ClInclude Include="Mass.h">
       <Filter>Game\Attribute</Filter>
-    </ClInclude>
-    <ClCompile Include="Materials.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
-    <ClInclude Include="Materials.h">
-      <Filter>Game</Filter>
     </ClInclude>
     <ClCompile Include="Messages.cpp">
       <Filter>Game</Filter>
@@ -474,9 +456,6 @@
     <ClCompile Include="Nearby.cpp">
       <Filter>Game\Condition</Filter>
     </ClCompile>
-    <ClCompile Include="Nebula.cpp">
-      <Filter>Game\Graphics\Generator</Filter>
-    </ClCompile>
     <ClCompile Include="NLP.cpp">
       <Filter>Game</Filter>
     </ClCompile>
@@ -492,9 +471,6 @@
     <ClInclude Include="NLPPhrase.h">
       <Filter>AI</Filter>
     </ClInclude>
-    <ClCompile Include="NormalMap.cpp">
-      <Filter>Game\Graphics\Generator</Filter>
-    </ClCompile>
     <ClCompile Include="Object.cpp">
       <Filter>Game</Filter>
     </ClCompile>
@@ -573,12 +549,6 @@
     <ClInclude Include="Planet.h">
       <Filter>Game\Object</Filter>
     </ClInclude>
-    <ClCompile Include="PlanetSkybox.cpp">
-      <Filter>Game\Graphics\Generator</Filter>
-    </ClCompile>
-    <ClCompile Include="PlanetSurface.cpp">
-      <Filter>Game\Graphics\Generator</Filter>
-    </ClCompile>
     <ClCompile Include="PlanetType.cpp">
       <Filter>Game\Item</Filter>
     </ClCompile>
@@ -663,12 +633,6 @@
     <ClCompile Include="Region.cpp">
       <Filter>Game\Object</Filter>
     </ClCompile>
-    <ClCompile Include="RenderableAsteroid.cpp">
-      <Filter>Game\Renderable</Filter>
-    </ClCompile>
-    <ClInclude Include="Renderables.h">
-      <Filter>Game</Filter>
-    </ClInclude>
     <ClCompile Include="Research.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>
@@ -708,12 +672,6 @@
     <ClCompile Include="Sell.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>
-    <ClCompile Include="ShadingModels.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
-    <ClInclude Include="ShadingModels.h">
-      <Filter>Game</Filter>
-    </ClInclude>
     <ClCompile Include="Shield.cpp">
       <Filter>Game\Object</Filter>
     </ClCompile>
@@ -758,9 +716,6 @@
     </ClInclude>
     <ClCompile Include="Star.cpp">
       <Filter>Game\Object</Filter>
-    </ClCompile>
-    <ClCompile Include="Starfield.cpp">
-      <Filter>Game\Renderable</Filter>
     </ClCompile>
     <ClCompile Include="Station.cpp">
       <Filter>Game\Object</Filter>
