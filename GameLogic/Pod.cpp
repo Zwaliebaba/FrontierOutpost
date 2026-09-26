@@ -20,7 +20,9 @@
 
 /* The client's model, where there is a client (FrontierOutpost/PodVisual.cpp, ADR-016). */
 Renderable GetPodModel() {
-  return (Renderable)Game::CreateVisual("Pod", nullptr);
+  Renderable model;
+  Game::CreateVisual("Pod", nullptr, model);
+  return model;
 }
 
 typedef ObjectWrapper

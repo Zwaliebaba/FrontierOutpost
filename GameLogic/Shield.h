@@ -64,7 +64,9 @@ AutoClassDerived(Shield, ShieldBaseT,
     recharge(1)
   {
     /* Drawn by the client's visual, where there is a client (ADR-016). */
-    Drawable.renderable = (Renderable)Game::CreateVisual("Shield", this);
+    Renderable visual;
+    Game::CreateVisual("Shield", this, visual);
+    Drawable.renderable = visual;
     Explodable.explosionType = ExplosionType_Plasma;
     hitAge.resize(kMaxHits, 1e10f);
     hitPosition.resize(kMaxHits, 0);

@@ -80,8 +80,8 @@ namespace {
     }
   };
 
-  RenderableT* Create(ObjectT* object) {
-    return new RenderComponent((Pulse*)object);
+  void Create(ObjectT* object, Renderable& visual) {
+    visual = new RenderComponent((Pulse*)object);
   }
 
   bool registered = (Game::RegisterVisual("Pulse", Create), true);

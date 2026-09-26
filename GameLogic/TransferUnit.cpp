@@ -6,6 +6,8 @@ DefineFunction(Object_TransferUnit) {
   Reference<TransferUnit> self = new TransferUnit();
   self->SetSupertype(args.type);
   /* Drawn by the client's visual, where there is a client (ADR-016). */
-  self->Drawable.renderable = (Renderable)Game::CreateVisual("TransferUnit", self);
+  Renderable visual;
+  Game::CreateVisual("TransferUnit", self, visual);
+  self->Drawable.renderable = visual;
   return self;
 }

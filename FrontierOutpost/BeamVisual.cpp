@@ -48,8 +48,8 @@ namespace {
     }
   };
 
-  RenderableT* Create(ObjectT* object) {
-    return new RenderComponent((BeamImpl*)object);
+  void Create(ObjectT* object, Renderable& visual) {
+    visual = new RenderComponent((BeamImpl*)object);
   }
 
   bool registered = (Game::RegisterVisual("Beam", Create), true);

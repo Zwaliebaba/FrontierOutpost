@@ -33,8 +33,8 @@ namespace {
 #endif
   }
 
-  RenderableT* Create(ObjectT*) {
-    return GetModel().t;
+  void Create(ObjectT*, Renderable& visual) {
+    visual = GetModel();
   }
 
   bool registered = (Game::RegisterVisual("WarpNode", Create), true);

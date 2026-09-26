@@ -34,7 +34,9 @@ namespace {
 
   /* The client's model, where there is a client (FrontierOutpost/WarpNodeVisual.cpp, ADR-016). */
   Renderable GetModel() {
-    return (Renderable)Game::CreateVisual("WarpNode", nullptr);
+    Renderable model;
+    Game::CreateVisual("WarpNode", nullptr, model);
+    return model;
   }
 
   AutoClass(Passenger,

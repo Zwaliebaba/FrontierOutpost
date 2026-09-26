@@ -19,8 +19,8 @@ namespace {
     return model;
   }
 
-  RenderableT* Create(ObjectT*) {
-    return GetPodModel().t;
+  void Create(ObjectT*, Renderable& visual) {
+    visual = GetPodModel();
   }
 
   bool registered = (Game::RegisterVisual("Pod", Create), true);

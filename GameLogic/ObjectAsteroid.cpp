@@ -9,12 +9,12 @@
 #include "Orientation.h"
 #include "Seeded.h"
 
-#include "Renderables.h"
-
 #include "LteMath.h"
 #include "Pool.h"
 #include "RNG.h"
-#include "ShaderInstance.h"
+#include "Renderable.h"
+
+#include "Visual.h"
 
 typedef ObjectWrapper
   < Component_BoundingBox
@@ -32,8 +32,10 @@ AutoClassDerivedEmpty(Asteroid, AsteroidBaseT)
   POOLED_TYPE
 
   void Initialize() {
-    Drawable.renderable =
-      Renderable_Asteroid(Seeded.seed);
+    /* The client's shape, where there is a client (FrontierOutpost/SeededVisuals.cpp, ADR-016). */
+    Renderable visual;
+    Game::CreateSeededVisual("Asteroid", Seeded.seed, 0, visual);
+    Drawable.renderable = visual;
   }
 };
 
@@ -57,8 +59,10 @@ AutoClassDerivedEmpty(AsteroidRich, AsteroidRichBaseT)
   POOLED_TYPE
 
   void Initialize() {
-    Drawable.renderable =
-      Renderable_Asteroid(Seeded.seed);
+    /* The client's shape, where there is a client (FrontierOutpost/SeededVisuals.cpp, ADR-016). */
+    Renderable visual;
+    Game::CreateSeededVisual("Asteroid", Seeded.seed, 0, visual);
+    Drawable.renderable = visual;
   }
 
   Signature GetSignature() const {

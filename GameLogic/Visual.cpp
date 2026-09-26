@@ -18,6 +18,12 @@ std::map<std::string, VisualFactory>& Factories()
   return g_factories;
 }
 
+std::map<std::string, SeededVisualFactory>& SeededFactories()
+{
+  static std::map<std::string, SeededVisualFactory> g_seededFactories;
+  return g_seededFactories;
+}
+
 std::map<std::pair<std::string, DrawPhase>, DrawFunction>& Draws()
 {
   static std::map<std::pair<std::string, DrawPhase>, DrawFunction> g_draws;
@@ -25,6 +31,20 @@ std::map<std::pair<std::string, DrawPhase>, DrawFunction>& Draws()
 }
 
 } // namespace
+
+void RegisterSeededVisual(const char* _kind, SeededVisualFactory _factory)
+{
+  SeededFactories()[_kind] = _factory;
+}
+
+void CreateSeededVisual(const char* _kind, std::uint32_t _seed, std::uint32_t _count, Reference<RenderableT>& _visual)
+{
+  auto found = SeededFactories().find(_kind);
+  if (found != SeededFactories().end())
+  {
+    found->second(_seed, _count, _visual);
+  }
+}
 
 void RegisterDraw(const char* _kind, DrawPhase _phase, DrawFunction _draw)
 {
@@ -45,10 +65,13 @@ void RegisterVisual(const char* _kind, VisualFactory _factory)
   Factories()[_kind] = _factory;
 }
 
-RenderableT* CreateVisual(const char* _kind, ObjectT* _object)
+void CreateVisual(const char* _kind, ObjectT* _object, Reference<RenderableT>& _visual)
 {
   auto found = Factories().find(_kind);
-  return found == Factories().end() ? nullptr : found->second(_object);
+  if (found != Factories().end())
+  {
+    found->second(_object, _visual);
+  }
 }
 
 } // namespace Game

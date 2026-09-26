@@ -20,7 +20,9 @@
 namespace {
   /* The client's model, where there is a client (FrontierOutpost/WormholeVisual.cpp, ADR-016). */
   Renderable GetWormholeModel() {
-    return (Renderable)Game::CreateVisual("Wormhole", nullptr);
+    Renderable model;
+    Game::CreateVisual("Wormhole", nullptr, model);
+    return model;
   }
 }
 

@@ -48,7 +48,9 @@ AutoClassDerived(Rail, RailBaseT,
     cast(false)
   {
     /* Drawn by the client's visual, where there is a client (ADR-016). */
-    Drawable.renderable = (Renderable)Game::CreateVisual("Rail", this);
+    Renderable visual;
+    Game::CreateVisual("Rail", this, visual);
+    Drawable.renderable = visual;
   }
 
   void OnUpdate(UpdateState& state) {

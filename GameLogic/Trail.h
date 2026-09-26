@@ -46,7 +46,9 @@ AutoClassDerived(Trail, TrailBaseT,
     age(0)
   {
     /* Drawn by the client's visual, where there is a client (ADR-016). */
-    Drawable.renderable = (Renderable)Game::CreateVisual("Trail", this);
+    Renderable visual;
+    Game::CreateVisual("Trail", this, visual);
+    Drawable.renderable = visual;
   }
 
   void OnUpdate(UpdateState& state) {

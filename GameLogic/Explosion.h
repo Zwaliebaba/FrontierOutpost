@@ -36,7 +36,9 @@ AutoClassDerived(Explosion, ExplosionBaseT,
     duration(1)
   {
     /* Drawn by the client's visual, where there is a client (ADR-016). */
-    Drawable.renderable = (Renderable)Game::CreateVisual("Explosion", this);
+    Renderable visual;
+    Game::CreateVisual("Explosion", this, visual);
+    Drawable.renderable = visual;
   }
 
   float GetOpacity() const {

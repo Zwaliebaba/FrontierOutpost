@@ -22,8 +22,8 @@ namespace {
     return model;
   }
 
-  RenderableT* Create(ObjectT*) {
-    return GetWormholeModel().t;
+  void Create(ObjectT*, Renderable& visual) {
+    visual = GetWormholeModel();
   }
 
   bool registered = (Game::RegisterVisual("Wormhole", Create), true);

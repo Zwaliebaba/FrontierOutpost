@@ -49,7 +49,9 @@ AutoClassDerived(Pulse, PulseBaseT,
     opacity(1)
   {
     /* Drawn by the client's visual, where there is a client (ADR-016). */
-    Drawable.renderable = (Renderable)Game::CreateVisual("Pulse", this);
+    Renderable visual;
+    Game::CreateVisual("Pulse", this, visual);
+    Drawable.renderable = visual;
   }
 
   void OnCreate() {

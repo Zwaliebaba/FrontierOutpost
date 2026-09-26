@@ -63,8 +63,8 @@ namespace {
     }
   };
 
-  RenderableT* Create(ObjectT* object) {
-    return new RenderComponent((Thruster*)object);
+  void Create(ObjectT* object, Renderable& visual) {
+    visual = new RenderComponent((Thruster*)object);
   }
 
   bool registered = (Game::RegisterVisual("Thruster", Create), true);

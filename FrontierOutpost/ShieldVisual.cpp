@@ -79,8 +79,8 @@ namespace {
     }
   };
 
-  RenderableT* Create(ObjectT* object) {
-    return new RenderComponent((Shield*)object);
+  void Create(ObjectT* object, Renderable& visual) {
+    visual = new RenderComponent((Shield*)object);
   }
 
   bool registered = (Game::RegisterVisual("Shield", Create), true);

@@ -62,8 +62,8 @@ namespace {
     }
   };
 
-  RenderableT* Create(ObjectT* object) {
-    return new RenderComponent((Rail*)object);
+  void Create(ObjectT* object, Renderable& visual) {
+    visual = new RenderComponent((Rail*)object);
   }
 
   bool registered = (Game::RegisterVisual("Rail", Create), true);

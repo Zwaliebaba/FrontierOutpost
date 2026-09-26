@@ -59,8 +59,8 @@ namespace {
     }
   };
 
-  RenderableT* Create(ObjectT* object) {
-    return new RenderComponent((TransferUnit*)object);
+  void Create(ObjectT* object, Renderable& visual) {
+    visual = new RenderComponent((TransferUnit*)object);
   }
 
   bool registered = (Game::RegisterVisual("TransferUnit", Create), true);

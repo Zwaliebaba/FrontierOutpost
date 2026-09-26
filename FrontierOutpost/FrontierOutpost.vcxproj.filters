@@ -149,4 +149,9 @@
       <Filter>Visuals</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="SeededVisuals.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+  </ItemGroup>
 </Project>

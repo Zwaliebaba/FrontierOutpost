@@ -98,8 +98,8 @@ namespace {
     }
   };
 
-  RenderableT* Create(ObjectT* object) {
-    return new RenderComponent((Trail*)object);
+  void Create(ObjectT* object, Renderable& visual) {
+    visual = new RenderComponent((Trail*)object);
   }
 
   bool registered = (Game::RegisterVisual("Trail", Create), true);

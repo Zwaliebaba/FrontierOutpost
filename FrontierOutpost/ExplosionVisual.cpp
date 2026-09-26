@@ -69,8 +69,8 @@ namespace {
     }
   };
 
-  RenderableT* Create(ObjectT* object) {
-    return new RenderComponent((Explosion*)object);
+  void Create(ObjectT* object, Renderable& visual) {
+    visual = new RenderComponent((Explosion*)object);
   }
 
   bool registered = (Game::RegisterVisual("Explosion", Create), true);
