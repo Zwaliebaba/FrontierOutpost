@@ -931,6 +931,40 @@
       <Project>{05010071-B8CA-465B-9FEC-BCF2D87DAD7A}</Project>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Visual.h" />
+    <ClCompile Include="Visual.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="BeamImpl.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Explosion.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Pulse.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Rail.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Thruster.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Trail.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="TransferUnit.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Shield.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\Build\Legacy.targets" />
 </Project>

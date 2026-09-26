@@ -1,0 +1,148 @@
+#ifndef TransferUnit_h__
+#define TransferUnit_h__
+
+#include "Objects.h"
+#include "Attachable.h"
+#include "BoundingBox.h"
+#include "Cullable.h"
+#include "Drawable.h"
+#include "Mineable.h"
+#include "Orientation.h"
+#include "Queryable.h"
+#include "Pluggable.h"
+#include "Supertyped.h"
+#include "Actions.h"
+#include "Light.h"
+#include "Messages.h"
+#include "Socket.h"
+#include "SoundEngine.h"
+#include "Color.h"
+#include "Meshes.h"
+#include "Pool.h"
+#include "Smooth.h"
+#include "Visual.h"
+
+const float kWidthMult = 4;
+const Color kDefaultColor = Color(0.3f, 0.7f, 1.0f);
+const Color kStressColor = Color(1.0f, 0.3f, 0.1f);
+
+
+typedef ObjectWrapper
+  < Component_Attachable
+  < Component_BoundingBox
+  < Component_Cullable
+  < Component_Drawable
+  < Component_Orientation
+  < Component_Pluggable
+  < Component_Supertyped
+  < ObjectWrapperTail<ObjectType_TransferUnit>
+  > > > > > > > >
+  TransferUnitBaseT;
+
+AutoClassDerived(TransferUnit, TransferUnitBaseT,
+  float, age,
+  Smooth<Position>, targetPos,
+  Smooth<float>, frequency,
+  Smooth<float>, active,
+  Smooth<Color>, color,
+  LightRef, backLight,
+  LightRef, frontLight,
+  bool, firing)
+  Sound loop1;
+  Sound loop2;
+
+  DERIVED_TYPE_EX(TransferUnit)
+  POOLED_TYPE
+
+  TransferUnit() :
+    age(0),
+    targetPos(0),
+    frequency(1),
+    active(0),
+    color(kDefaultColor),
+    firing(false)
+    {}
+
+  bool CanCollide(ObjectT const* object) const {
+    return object->GetRoot() != GetRoot();
+  }
+
+  void OnMessage(Data& m) {
+    BaseType::OnMessage(m);
+    if (m.type == Type_Get<MessageFire>())
+      firing = true;
+
+    else if (m.type == Type_Get<MessageTargetPosition>())
+      targetPos.target = m.Convert<MessageTargetPosition>().position;
+  }
+
+  void OnUpdate(UpdateState& state) {
+    BaseType::OnUpdate(state);
+
+    Pluggable.powerRequest = Supertyped.type->GetPowerDrain();
+    active.target = firing ? Saturate(GetPowerFraction()) : 0.0f;
+    frequency.target = 0.2f * RandExp();
+    age += state.dt;
+
+    active.Update(4.0f * state.dt);
+    color.Update(4.0f * state.dt);
+    frequency.Update(0.25f * state.dt);
+    targetPos.value = targetPos.target;
+
+    if (!backLight) {
+      backLight = Light_Create(this);
+      backLight->radius = 2.0f;
+    }
+
+    if (!frontLight) {
+      frontLight = Light_Create(this);
+      frontLight->radius = 1.0f;
+    }
+
+    if (!loop1) {
+      loop1 = Sound_Play3D("transferunit/loop.wav", this, 0, 0, Length(GetScale()), true);
+      loop2 = Sound_Play3D("transferunit/loop.wav", this, 0, 0, Length(GetScale()), true);
+      loop1->SetCursor(Rand() * loop1->GetDuration());
+      loop2->SetCursor(Rand() * loop2->GetDuration());
+    }
+
+    loop1->SetVolume(0.2f * active);
+    loop2->SetVolume(0.2f * active);
+    loop1->SetPitch(frequency);
+    loop2->SetPitch(frequency);
+
+    ObjectT* root = GetRoot();
+    float stress = 1.0f - Exp(-root->GetUsedCapacity() / root->GetCapability().Storage);
+    color.target = Mix(kDefaultColor, kStressColor, stress);
+
+    frontLight->color = active * (1.0f + 0.2f * RandExp()) * color;
+
+    if (active > 0.5f) {
+      Position origin = GetPos();
+      V3 direction = Normalize((V3)(targetPos.value - origin));
+      WorldRay ray(origin, direction);
+
+      float t;
+      float range = Supertyped.type->GetRange();
+      ObjectT* hitObject = GetContainer()->QueryInterior(
+        ray, t, range, nullptr, true, RaycastCanCollideBidirectional, this);
+
+      t = Min(t, range);
+      backLight->Attachable.SetPos(GetTransform().InversePoint(ray(t)));
+
+      if (hitObject) {
+        backLight->color = 4.0f * active * (1.0f + 0.2f * RandExp()) * color;
+        if (hitObject->GetMineable())
+          Action_Mine(this, hitObject, ray(t))->Execute(state);
+      } else {
+        backLight->color = Color(0);
+      }
+    } else {
+      backLight->color = Color(0);
+    }
+
+    firing = false;
+  }
+};
+
+#endif

@@ -883,4 +883,38 @@
       <Filter>Component</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Visual.h" />
+    <ClCompile Include="Visual.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="BeamImpl.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Explosion.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="Pulse.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="Rail.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="Thruster.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="Trail.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+    <ClInclude Include="TransferUnit.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Shield.h">
+      <Filter>Game\Object</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>

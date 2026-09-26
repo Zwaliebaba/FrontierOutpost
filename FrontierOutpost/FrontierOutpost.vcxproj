@@ -199,6 +199,36 @@
       <Legacy>true</Legacy>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="BeamVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ExplosionVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="PulseVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="RailVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ThrusterVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="TrailVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="TransferUnitVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ShieldVisual.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\Build\Legacy.targets" />
 </Project>

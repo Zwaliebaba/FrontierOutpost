@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="Visuals">
+      <UniqueIdentifier>{1D8FFB07-5F56-5872-B7A1-06B4BA2A0D11}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Game\ScriptAPI">
       <UniqueIdentifier>{259349F2-510C-5C98-B2AA-602EF930FF53}</UniqueIdentifier>
     </Filter>
@@ -79,6 +82,36 @@
     </ClCompile>
     <ClCompile Include="ScriptApiCamera.cpp">
       <Filter>Game\ScriptAPI</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="BeamVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ExplosionVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+    <ClCompile Include="PulseVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+    <ClCompile Include="RailVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+    <ClCompile Include="ThrusterVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+    <ClCompile Include="TrailVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+    <ClCompile Include="TransferUnitVisual.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ShieldVisual.cpp">
+      <Filter>Visuals</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
