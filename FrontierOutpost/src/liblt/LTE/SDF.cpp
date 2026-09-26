@@ -22,10 +22,8 @@ namespace {
       return Bound3(-FLT_MAX, FLT_MAX);
     }
 
-    String GetCode(String const& p) const {
-      return Stringize()
-        | "fcnoise(" | p | ", " | seed | ", "
-        | octaves | ", " | lac | ")";
+    void Encode(SDFProgram& program) const {
+      program.Emit(SDFOp::FractalWorley, {seed, (float)octaves, lac});
     }
   };
 

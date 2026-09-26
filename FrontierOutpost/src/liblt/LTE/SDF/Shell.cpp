@@ -21,9 +21,8 @@ namespace {
                   center + V3(radius + thickness));
     }
 
-    String GetCode(String const& p) const {
-      return Stringize()
-        | "shell(" | p | ", " | center | ", " | radius | ", " | thickness | ")";
+    void Encode(SDFProgram& program) const {
+      program.Emit(SDFOp::Shell, {center.x, center.y, center.z, radius, thickness});
     }
   };
 

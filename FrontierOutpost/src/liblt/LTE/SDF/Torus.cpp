@@ -23,9 +23,8 @@ namespace {
         center + V3(radius + thickness));
     }
 
-    String GetCode(String const& p) const {
-      return Stringize()
-        | "torus(" | p | ", " | center | ", " | radius | ", " | thickness | ")";
+    void Encode(SDFProgram& program) const {
+      program.Emit(SDFOp::Torus, {center.x, center.y, center.z, radius, thickness});
     }
   };
 

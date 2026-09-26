@@ -996,6 +996,18 @@
       <ShaderType>Pixel</ShaderType>
       <VariableName>FILTER_RUST_PS</VariableName>
     </FxCompile>
+    <FxCompile Include="Shaders\GenFieldCS.hlsl">
+      <ShaderType>Compute</ShaderType>
+      <VariableName>GEN_FIELD_CS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\GenFieldcopyCS.hlsl">
+      <ShaderType>Compute</ShaderType>
+      <VariableName>GEN_FIELDCOPY_CS</VariableName>
+    </FxCompile>
+    <FxCompile Include="Shaders\GenFieldocclusionCS.hlsl">
+      <ShaderType>Compute</ShaderType>
+      <VariableName>GEN_FIELDOCCLUSION_CS</VariableName>
+    </FxCompile>
     <FxCompile Include="Shaders\GenLensflarePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>GEN_LENSFLARE_PS</VariableName>
@@ -1360,6 +1372,7 @@
     <None Include="Shaders\Cube.hlsli" />
     <None Include="Shaders\Deferred.hlsli" />
     <None Include="Shaders\Fdm.hlsli" />
+    <None Include="Shaders\Field.hlsli" />
     <None Include="Shaders\Lighting.hlsli" />
     <None Include="Shaders\Math.hlsli" />
     <None Include="Shaders\Noise.hlsli" />

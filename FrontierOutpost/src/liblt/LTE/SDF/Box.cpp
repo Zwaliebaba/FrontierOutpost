@@ -26,10 +26,9 @@ namespace {
       return Bound3(center - sides, center + sides);
     }
 
-    String GetCode(String const& p) const {
-      return Stringize()
-        | "boxr(" | p | ", " | center | ", " | sides | ", "
-        | radius | ")";
+    void Encode(SDFProgram& program) const {
+      program.Emit(SDFOp::RoundBox,
+        {center.x, center.y, center.z, sides.x, sides.y, sides.z, radius});
     }
   };
 

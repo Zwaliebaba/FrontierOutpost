@@ -420,11 +420,12 @@ Every SDF node already has a CPU `Evaluate`. But the two noise nodes are `NOT_IM
 would be slow, and it would first need the noise ported to C++.
 
 So the field moves to a precompiled compute shader:
-- **The tree becomes an instruction stream:** postfix, opcode and parameters, in a structured
-  buffer.
+- **The tree becomes an instruction stream:** postfix, opcode and parameters, in the compute
+  shader's constant buffer (ADR-009 as amended in step 4; it first said a structured buffer).
 - **One compute shader walks it for each voxel,** with a value stack and a point stack, and writes
   the R32F 3D texture directly through a UAV. The slice-by-slice copy through the CPU goes.
-- **Gradient and occlusion** become compute passes.
+- **Occlusion, and the resampling into each level's grid,** become compute passes. The gradient
+  pass goes, since nothing ran it.
 - **The LOD grids** are read back for the CPU polygoniser, asynchronously.
 - **The opcodes** are the SDF node types Phase 1 leaves. Of the two noise nodes, only
   `FractalWorley` is constructed (`Game/Renderable/Asteroid.cpp:18`), so Worley noise is ported to

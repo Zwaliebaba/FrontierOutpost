@@ -2116,6 +2116,15 @@
     <FxCompile Include="Shaders\FilterRustPS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\GenFieldCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\GenFieldcopyCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\GenFieldocclusionCS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
     <FxCompile Include="Shaders\GenLensflarePS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
@@ -2399,6 +2408,9 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="Shaders\Fdm.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Field.hlsli">
       <Filter>Shaders</Filter>
     </None>
     <None Include="Shaders\Lighting.hlsli">

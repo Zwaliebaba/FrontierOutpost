@@ -141,12 +141,6 @@ DeclareFunction(Shader_Create, Shader,
   String, vsPath,
   String, fsPath)
 
-LT_API Shader Shader_Create(
-  String const& vsPath,
-  String const& fsPath,
-  String const& vsHeader,
-  String const& fsHeader);
-
 LT_API ShaderT* Shader_GetActive();
 
 LT_API void Shader_UseFixedFunction();

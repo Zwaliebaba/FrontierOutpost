@@ -512,21 +512,6 @@ DefineFunction(Shader_Create) {
   return self;
 }
 
-Shader Shader_Create(
-  String const& vs,
-  String const& fs,
-  String const& vsHeader,
-  String const& fsHeader)
-{
-  /* Only the SDF field made a shader of generated code, and a compute shader
-     interprets fields in its place (Design/Plan/NeuronClient-migration.md,
-     section 5.7, Phase 4 step 4). */
-  Log_Critical("Shader: (" + vs + ", " + fs + ") is built from code made at run "
-    "time, which the compiled shaders cannot hold; SDF fields move to a compute "
-    "shader in Phase 4 step 4 (Design/ADR/ADR-009)");
-  return nullptr;
-}
-
 ShaderT* Shader_GetActive() {
   return gActiveShader;
 }

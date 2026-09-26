@@ -112,6 +112,10 @@ typedef unsigned char BYTE;
 #include "CompiledShaders/UiTrianglePS.h"
 #include "CompiledShaders/WormholePS.h"
 
+#include "CompiledShaders/GenFieldCS.h"
+#include "CompiledShaders/GenFieldcopyCS.h"
+#include "CompiledShaders/GenFieldocclusionCS.h"
+
 /* Build/CheckProjectFiles.py reads the tables below, one entry a line, and
  * holds them to ADR-008: every shader in Shaders/ is here, under the legacy
  * name its file is named for, and with the array lt.vcxproj compiles it to. */
@@ -241,6 +245,14 @@ namespace {
     {"wormhole.jsl", Bytes(WORMHOLE_PS)},
   };
 
+  /* Each compute shader, by the path below GameData/shader/fragment/ of the
+     pixel shader it replaced (Design/ADR/ADR-009). */
+  Entry const kCompute[] = {
+    {"gen/field.jsl", Bytes(GEN_FIELD_CS)},
+    {"gen/fieldcopy.jsl", Bytes(GEN_FIELDCOPY_CS)},
+    {"gen/fieldocclusion.jsl", Bytes(GEN_FIELDOCCLUSION_CS)},
+  };
+
   template <std::size_t Count>
   std::span<std::byte const> Find(Entry const (&entries)[Count], String const& name) {
     for (Entry const& entry : entries)
@@ -256,4 +268,8 @@ std::span<std::byte const> ShaderRegistry_Vertex(String const& name) {
 
 std::span<std::byte const> ShaderRegistry_Pixel(String const& name) {
   return Find(kPixel, name);
+}
+
+std::span<std::byte const> ShaderRegistry_Compute(String const& name) {
+  return Find(kCompute, name);
 }

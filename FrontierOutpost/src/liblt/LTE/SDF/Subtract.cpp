@@ -23,10 +23,10 @@ namespace {
       return a->GetBound();
     }
 
-    String GetCode(const String& p) const {
-      return Stringize()
-        | "intersect(" | a->GetCode(p) | ", -" | b->GetCode(p) | ", "
-        | sharpness | ")";
+    void Encode(SDFProgram& program) const {
+      a->Encode(program);
+      b->Encode(program);
+      program.Emit(SDFOp::Subtract, {sharpness});
     }
   };
 
@@ -47,9 +47,10 @@ namespace {
       return a->GetBound();
     }
 
-    String GetCode(const String& p) const {
-      return Stringize()
-        | "max(" | a->GetCode(p) | ", -" | b->GetCode(p) | ")";
+    void Encode(SDFProgram& program) const {
+      a->Encode(program);
+      b->Encode(program);
+      program.Emit(SDFOp::SubtractHard);
     }
   };
 
