@@ -225,4 +225,17 @@
       <Filter>Game\Renderable</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Camera.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClCompile Include="Camera.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ScriptApiObjectWidget.cpp">
+      <Filter>Game\ScriptAPI</Filter>
+    </ClCompile>
+  </ItemGroup>
 </Project>

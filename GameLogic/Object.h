@@ -92,7 +92,9 @@ struct ObjectT : public RefCounted {
 
   LT_API virtual Icon GetIcon() const;
 
-  LT_API virtual Widget GetWidget(Player const& self);
+  /* The object's widget, as 'self' sees it, written to *widget, a Widget the client owns; left as
+     it is when the object has none. The game never holds a widget itself (ADR-016). */
+  LT_API virtual void GetWidget(Player const& self, void* widget);
 
   LT_API float GetMaxRange() const;
 

@@ -31,8 +31,6 @@
 #include "Script.h"
 #include "SDFs.h"
 
-#include "Widget.h"
-
 #include "Visual.h"
 
 const uint kTerrainQuality = 750;
@@ -115,11 +113,11 @@ AutoClassDerived(Colony, ColonyBaseT,
     return Signature(100, 2, 0.25f, 0.75f);
   }
 
-  Widget GetWidget(Player const& self) {
-    Widget widget;
+  void GetWidget(Player const& self, void* widget) {
+    Object object = this;
+    void* args[] = { (void*)&self, (void*)&object };
     ScriptFunction_Load("Object/Widget/Colony:Create")
-      ->Call(widget, self, (Object)this);
-    return widget;
+      ->Call(widget, args);
   }
 
   void Initialize() {

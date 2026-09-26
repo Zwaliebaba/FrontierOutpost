@@ -7,8 +7,6 @@
 #include "Script.h"
 #include "Transform.h"
 
-#include "Widget.h"
-
 TypeAlias(Reference<ObjectT>, Object);
 TypeAlias(Reference<PlayerT>, Player);
 TypeAlias(Position, Position);
@@ -153,14 +151,6 @@ FreeFunction(String, Object_GetType,
 {
   return object->GetTypeString();
 } FunctionAlias(Object_GetType, GetType);
-
-FreeFunction(Widget, Object_GetWidget,
-  "Return the object-specific widget for 'object' from 'player's point-of-view",
-  Object, object,
-  Player, player)
-{
-  return object->GetWidget(player);
-} FunctionAlias(Object_GetWidget, GetWidget);
 
 FreeFunction(bool, Object_NotEqual,
   "Return a != b",

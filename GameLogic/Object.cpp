@@ -22,7 +22,6 @@
 #include "Static.h"
 
 #include "Glyphs.h"
-#include "Widget.h"
 
 const float kDefaultSimulationFrequency = 60;
 const float kDislikeThreshold = -0.5f;
@@ -65,9 +64,7 @@ Icon ObjectT::GetIcon() const {
   return icon;
 }
 
-Widget ObjectT::GetWidget(Player const& self) {
-  return nullptr;
-}
+void ObjectT::GetWidget(Player const& self, void* widget) {}
 
 Pointer<ObjectT> ObjectT::GetRoot() {
   ObjectT* o = this;

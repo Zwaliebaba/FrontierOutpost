@@ -179,9 +179,6 @@
     <ClInclude Include="BoundingBox.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="Camera.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="Capability.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -503,9 +500,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Buy.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Camera.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Cargo.cpp">

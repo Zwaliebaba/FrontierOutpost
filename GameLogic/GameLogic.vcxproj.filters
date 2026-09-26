@@ -171,12 +171,6 @@
     <ClCompile Include="Buy.cpp">
       <Filter>Game\Task</Filter>
     </ClCompile>
-    <ClCompile Include="Camera.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
-    <ClInclude Include="Camera.h">
-      <Filter>Game</Filter>
-    </ClInclude>
     <ClInclude Include="Capability.h">
       <Filter>Game</Filter>
     </ClInclude>

@@ -12,8 +12,6 @@
 
 #include "Script.h"
 
-#include "Widget.h"
-
 typedef ObjectWrapper
   < Component_BoundingBox
   < Component_Drawable
@@ -36,14 +34,13 @@ AutoClassDerived(ObjectCustom, CustomBaseT,
 
   ObjectCustom() {}
 
-  Widget GetWidget(Player const& self) {
+  void GetWidget(Player const& self, void* widget) {
     if (getWidget) {
-      Widget widget;
-      getWidget->VoidCall(&widget, instance, (Object)this, self);
-      return widget;
+      getWidget->VoidCall(widget, instance, (Object)this, self);
+      return;
     }
 
-    return BaseType::GetWidget(self);
+    BaseType::GetWidget(self, widget);
   }
 
   void OnCreate() {
