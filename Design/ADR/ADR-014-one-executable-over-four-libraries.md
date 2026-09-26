@@ -47,6 +47,13 @@ with no `src/` or `include/`, and names made unique by renaming where flattening
    `x64\<Configuration>\FrontierOutpost.exe`. It still finds `GameData/` by walking up (ADR-004).
 8. **x64 and ARM64 for every project** (ADR-006).
 
+9. **Where NeuronCore code has to reach the GPU or the window, it calls a hook the client
+   installs.** The hooks are `Mesh_SetRenderer` (draw a mesh, release its buffers),
+   `Glyph_SetRenderer`, `Profiler_SetGpuFlush` (from `Renderer_Initialize`), `LTE_SetAssertHook`
+   (from `Window_Create`), and `DrawState_SetGameTime` (from `Main.cpp`, the other way round: the
+   renderer reads the game's clock). A server installs none of them, and the calls do nothing
+   (added with the plan's P2, `504bc2e` and `92d222a`).
+
 ## What this forecloses
 
 - A DLL, and a second executable, for the game.

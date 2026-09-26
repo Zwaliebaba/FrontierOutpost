@@ -154,19 +154,19 @@ not only captured. Archive this plan to `Design/Archive/`.
 P2, in this order. Each item is its own commit series, and each ends building, tested and
 smoke-run against P0:
 
-- [ ] 1. **Pure client code to the exe** (route 4): `Game/RenderPass/*`, `Game/Graphics/*`,
+- [~] 1. **Pure client code to the exe** *(partly, `6ee75ef`: the render passes, `RenderStyles` and the camera's script bindings. The rest is still included by object and item code, and moves with items 4 and 5.)* (route 4): `Game/RenderPass/*`, `Game/Graphics/*`,
   `Materials`, `ShadingModels`, `Particles`, `Renderable/Starfield`, `Beam`, `Camera`, the camera
   script bindings, and `SoundEngineXAudio2.cpp`, whose part without game types can move down to
   NeuronClient.
-- [ ] 2. **UI members out of game headers** (route 6): `Object.h`, `Item.h`, `Items.h`, `Task.h`.
-- [ ] 3. **Debug keys out of simulation code** (route 5): `System.cpp` F6, `PowerGenerator.cpp`.
+- [~] 2. **UI members out of game headers** *(`92d222a`: `UiCommon.h`, Icon and Glyph are NeuronCore now. Widget members remain in `Object.cpp`, `ObjectCustom.cpp`, `Colony.cpp` and `ScriptApiObject.cpp`.)* (route 6): `Object.h`, `Item.h`, `Items.h`, `Task.h`.
+- [ ] 3. *(Folds into item 4: F6 is read in `System::BeginDrawInterior`, a draw method; `PowerGenerator.cpp` only has an unused include.)* **Debug keys out of simulation code** (route 5): `System.cpp` F6, `PowerGenerator.cpp`.
 - [ ] 4. **Draw virtuals off `ObjectT` and the component mixins** (route 1): replaced by an
   `ObjectView` table in the exe, keyed by `ObjectType`, which keeps the order components draw in.
 - [ ] 5. **Item visuals built by the client** (route 2): planet textures, ship, station and turret
   Models, and item Icons, built from parameters GameLogic keeps.
 - [ ] 6. **Collision through a NeuronCore geometry service** (route 3), which NeuronClient implements
   on the GPU. Physics stops reading `Renderable`.
-- [ ] 7. **The 12 mixed engine files split**: `Mesh`, `Model`, `PlateMesh`, `ParticleSystem`,
+- [x] 7. *(`504bc2e`: NeuronCore links and includes nothing of NeuronClient. Mesh drawing and buffer release, the profiler's GPU flush and the assert's window close go through hooks the client installs; Model, ParticleSystem, SDFMesh, PlateMesh and Scheduler are NeuronClient's. PlateMesh and SDFMesh still build geometry on the GPU, which is item 6.)* **The 12 mixed engine files split**: `Mesh`, `Model`, `PlateMesh`, `ParticleSystem`,
   `SDFMesh`, `Profiler`, `Program`, `ProgramLog`, `Common.cpp`, `Scheduler`, `Settings` and
   `Array3D`. Each gets its GPU-free half in NeuronCore and its GPU half in NeuronClient.
   `Renderable::Render` leaves the NeuronCore base type.
