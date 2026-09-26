@@ -8,8 +8,9 @@ smaller copy in the log itself, between a BEGIN line and an END line that name t
     python Build/LogFrame.py <capture.png> [--width 320]
 
 The copy is RGB, each pixel the average of a square of the capture's, at most --width pixels wide.
-It reads the PNGs the smoke mode writes (ADR-011): 8-bit RGB or RGBA, not interlaced. The standard
-library does all of it, so CI installs nothing for it.
+After it come the mean colour, the share of pixels that are not black, and a thumbnail in text,
+its luminance scaled to the frame's brightest, so that the frame can be judged from the log alone. It reads the PNGs the smoke mode writes (ADR-011):
+8-bit RGB or RGBA, not interlaced. The standard library does all of it, so CI installs nothing for it.
 """
 
 import argparse
@@ -21,6 +22,8 @@ import zlib
 
 SIGNATURE = b"\x89PNG\r\n\x1a\n"
 LINE_CHARACTERS = 76
+THUMBNAIL_COLUMNS = 96
+RAMP = " .:-=+*#%@"
 
 
 def Paeth(_left, _up, _upLeft):
@@ -115,6 +118,43 @@ def Downscale(_width, _height, _channels, _rows, _maxWidth):
   return width, height, out
 
 
+def Describe(_width, _height, _rows):
+  """The mean colour and the share of pixels that are not black, of RGB rows."""
+  sums = [0, 0, 0]
+  lit = 0
+  for row in _rows:
+    for x in range(_width):
+      r, g, b = row[x * 3], row[x * 3 + 1], row[x * 3 + 2]
+      sums[0] += r
+      sums[1] += g
+      sums[2] += b
+      lit += 1 if r or g or b else 0
+  count = max(1, _width * _height)
+  mean = ", ".join(str(total // count) for total in sums)
+  return f"mean RGB ({mean}), {100 * lit // count}% not black"
+
+
+def Thumbnail(_width, _height, _rows):
+  """Text rows of luminance, black as a space and the brightest cell as the last of RAMP; a
+  character is about twice as tall as it is wide."""
+  columns = min(THUMBNAIL_COLUMNS, _width)
+  lines = max(1, _height * columns // _width // 2)
+  cells = []
+  for line in range(lines):
+    y0, y1 = line * _height // lines, max(line * _height // lines + 1, (line + 1) * _height // lines)
+    cells.append([])
+    for column in range(columns):
+      x0, x1 = column * _width // columns, max(column * _width // columns + 1, (column + 1) * _width // columns)
+      total = 0
+      for y in range(y0, y1):
+        row = _rows[y]
+        for x in range(x0, x1):
+          total += 2 * row[x * 3] + 5 * row[x * 3 + 1] + row[x * 3 + 2]
+      cells[-1].append(total // (8 * (y1 - y0) * (x1 - x0)))
+  brightest = max(1, max(max(line) for line in cells))
+  return ["".join(RAMP[level * (len(RAMP) - 1) // brightest] for level in line).rstrip() for line in cells]
+
+
 def Chunk(_kind, _body):
   return struct.pack(">I", len(_body)) + _kind + _body + struct.pack(">I", zlib.crc32(_kind + _body) & 0xFFFFFFFF)
 
@@ -139,6 +179,9 @@ def main():
   for start in range(0, len(encoded), LINE_CHARACTERS):
     print(encoded[start:start + LINE_CHARACTERS])
   print(f"----- END FRAME {name} -----")
+  print(f"{name}: {Describe(smallWidth, smallHeight, small)}")
+  for line in Thumbnail(smallWidth, smallHeight, small):
+    print(f"|{line}")
   return 0
 
 
