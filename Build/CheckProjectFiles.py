@@ -44,7 +44,8 @@ TOOLSET = "v145"
 CONFIGURATIONS = ("Debug", "Release")
 # ADR-006 (the owner's N1): the game, every library it links, and the tests that exercise NeuronClient
 # on an ARM64 device, build for ARM64 as well as x64 (ADR-014). Any other project is x64 only (§3).
-ARM64_PROJECTS = {"NeuronCore", "NeuronClient", "NeuronServer", "GameLogic", "FrontierOutpost", "NeuronClientTests"}
+ARM64_PROJECTS = {"NeuronCore", "NeuronClient", "NeuronServer", "GameLogic", "FrontierOutpost", "NeuronClientTests",
+                  "GameLogicTests"}
 # ADR-006 (N5, N10): lt's instruction sets, SSE2 on x64 and the compiler's default on ARM64, stated
 # rather than inherited (R16), so no binary mixes /arch.
 ARCH = {"x64": "StreamingSIMDExtensions2", "ARM64": "NotSet"}

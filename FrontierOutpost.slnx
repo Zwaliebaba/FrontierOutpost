@@ -9,6 +9,7 @@
   <Project Path="NeuronCore/NeuronCore.vcxproj" Id="7b1a6c1e-3c2d-4f0b-9e47-2d6a1f9c0b11" />
   <Project Path="NeuronServer/NeuronServer.vcxproj" Id="c4e2b7a9-5d18-4e63-8f2a-9b3d6e1a4c22" />
   <Folder Name="/Tests/">
+    <Project Path="Tests/GameLogicTests/GameLogicTests.vcxproj" Id="8e3c1d57-4b2a-4f6e-a9d0-7c5b3e2f1a44" />
     <Project Path="Tests/NeuronClientTests/NeuronClientTests.vcxproj" Id="13a98a79-2606-44cf-9135-1d0c68e34ce2" />
   </Folder>
 </Solution>
