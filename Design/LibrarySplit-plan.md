@@ -1,6 +1,7 @@
 # Library split: one executable, four libraries
 
-- **Status:** Approved 2026-09-26. P0 and P1 done (ADR-014, ADR-015); P2, the game untangle, is next.
+- **Status:** Approved 2026-09-26. P0 and P1 done (ADR-014, ADR-015). P2, the game untangle, is
+  next; §4.1 lists what is left.
 - **Replaces:** `launch.exe` + `lt.dll` + `NeuronClient.lib`
 - **Owner's answers so far:** untangle fully now; legacy files keep ADR-001's exemption per file;
   clashing files get their former folder as a prefix, and only clashing files are renamed;
@@ -124,15 +125,19 @@ kept outside the repo.
 
 **P1 Restructure, no code changes beyond includes.**
 1. Create the NeuronCore, GameLogic, NeuronServer and FrontierOutpost projects and
-   `Build/Legacy.props`, and add them to the slnx with their references.
+   `Build/Legacy.targets`, and add them to the slnx with their references.
 2. `git mv` every file to its library (§6) with its rename (§7), so `git log --follow` keeps the
    history.
 3. Rewrite every `#include` to the flat name. The mapping comes from a script, and the build
    proves it.
 4. `launch.cpp` becomes `FrontierOutpost/Main.cpp`. `LT_API` becomes empty. `lt.vcxproj` and
    `launch.vcxproj` go.
-5. For P1 only, GameLogic may include NeuronClient headers. No other upward edge is allowed, so
-   the 12 mixed engine files are split here already.
+5. For P1 only, GameLogic may include NeuronClient headers. No other upward edge is allowed.
+   *As done:* no NeuronCore file includes a NeuronClient header, but the 12 mixed engine files were
+   not split. Their headers are in NeuronCore and their whole `.cpp` in NeuronClient, so NeuronCore
+   still needs NeuronClient at link time. The split moved to P2 (§4.1, item 7). The one upward
+   include from the renderer, `DrawState.cpp` reading the game clock, became a hook
+   (`DrawState_SetGameTime`) that `Main.cpp` installs.
 6. Update the checkers (`ProjectModel.py` exemption by marker, `REGISTRIES`, `TestCheckers.py`'s
    fixture trees), CI's test-suite search path, README, `.gitignore`, and the perf-review skill's
    paths. Write ADR-014 and ADR-015.
@@ -143,6 +148,41 @@ GameLogic.vcxproj loses NeuronClient's include path and `Tests/GameLogicTests` l
 
 **P3 Close-out.** ARM64 Debug and Release build. A full run of all 16 apps, looked at on screen and
 not only captured. Archive this plan to `Design/Archive/`.
+
+### 4.1 What is left (2026-09-26, after P1 landed as `a0123e0`)
+
+P2, in this order. Each item is its own commit series, and each ends building, tested and
+smoke-run against P0:
+
+- [ ] 1. **Pure client code to the exe** (route 4): `Game/RenderPass/*`, `Game/Graphics/*`,
+  `Materials`, `ShadingModels`, `Particles`, `Renderable/Starfield`, `Beam`, `Camera`, the camera
+  script bindings, and `SoundEngineXAudio2.cpp`, whose part without game types can move down to
+  NeuronClient.
+- [ ] 2. **UI members out of game headers** (route 6): `Object.h`, `Item.h`, `Items.h`, `Task.h`.
+- [ ] 3. **Debug keys out of simulation code** (route 5): `System.cpp` F6, `PowerGenerator.cpp`.
+- [ ] 4. **Draw virtuals off `ObjectT` and the component mixins** (route 1): replaced by an
+  `ObjectView` table in the exe, keyed by `ObjectType`, which keeps the order components draw in.
+- [ ] 5. **Item visuals built by the client** (route 2): planet textures, ship, station and turret
+  Models, and item Icons, built from parameters GameLogic keeps.
+- [ ] 6. **Collision through a NeuronCore geometry service** (route 3), which NeuronClient implements
+  on the GPU. Physics stops reading `Renderable`.
+- [ ] 7. **The 12 mixed engine files split**: `Mesh`, `Model`, `PlateMesh`, `ParticleSystem`,
+  `SDFMesh`, `Profiler`, `Program`, `ProgramLog`, `Common.cpp`, `Scheduler`, `Settings` and
+  `Array3D`. Each gets its GPU-free half in NeuronCore and its GPU half in NeuronClient.
+  `Renderable::Render` leaves the NeuronCore base type.
+- [ ] 8. **Game shaders to `FrontierOutpost/Shaders/`,** with a second registry in the exe and one
+  lookup by legacy name.
+- [ ] 9. **`Tests/GameLogicTests`**, linking NeuronCore, GameLogic and NeuronServer only. Then
+  GameLogic.vcxproj drops NeuronClient from its include path and its references.
+
+P3:
+
+- [ ] 10. ARM64 Debug and Release builds.
+- [ ] 11. All 16 apps run interactively and looked at.
+- [ ] 12. This plan moves to `Design/Archive/`.
+
+Outside the plan: about 180 files still name liblt or `lt.dll` in comments, and `widget` has no
+`Main` and crashes on exit (it did on `main` before P1 too).
 
 ## 5. Verification
 
