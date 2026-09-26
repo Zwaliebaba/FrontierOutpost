@@ -8,6 +8,7 @@
 #include "LTE/Renderer.h"
 #include "LTE/Script.h"
 #include "LTE/Texture2D.h"
+#include "LTE/Timer.h"
 #include "LTE/Window.h"
 
 #include <cstdio>
@@ -17,7 +18,6 @@
 
 #ifdef TIME_LTSL_COMPILE
 #include "LTE/Debug.h"
-#include "LTE/Timer.h"
 #endif
 
 struct Launcher : public Program {
@@ -27,14 +27,20 @@ struct Launcher : public Program {
   Data instance;
   Module physicsEngine;
   Module soundEngine;
-  /* The smoke mode: how many frames are left before the launcher quits, 0 for
-     no limit, and where the last of them is saved, empty for nowhere. */
+  /* The smoke mode: how many frames the app runs and how many are left before
+     the launcher quits, 0 for no limit, and where the last of them is saved,
+     empty for nowhere. */
+  uint frames;
   uint framesLeft;
   String capturePath;
   bool failed;
+  /* From the start, for the smoke mode's timings: the smoke job's time limits
+     are set from them. */
+  Timer timer;
 
   Launcher(String const& appName, uint frames, String const& capturePath, bool warp) :
     appName(appName),
+    frames(frames),
     framesLeft(frames),
     capturePath(capturePath),
     failed(false)
@@ -107,6 +113,8 @@ struct Launcher : public Program {
 
     if (initialize)
       initialize->VoidCall(0, instance);
+    if (frames)
+      PrintTime("initialized");
     if (!update)
       deleted = true;
   }
@@ -138,11 +146,22 @@ struct Launcher : public Program {
       soundEngine->Update();
 
     /* The app has drawn this frame, and it is not yet displayed. */
-    if (framesLeft && --framesLeft == 0) {
-      if (capturePath.size())
-        Texture_ScreenCapture()->SaveTo(capturePath);
-      deleted = true;
+    if (framesLeft) {
+      if (framesLeft == frames)
+        PrintTime("drew its first frame");
+      if (--framesLeft == 0) {
+        PrintTime("drew its last frame");
+        if (capturePath.size())
+          Texture_ScreenCapture()->SaveTo(capturePath);
+        deleted = true;
+      }
     }
+  }
+
+  /* Flushed, so that the line is kept if the smoke job stops the launcher. */
+  void PrintTime(char const* what) {
+    printf("launch: %s %s after %.1f s\n", appName.c_str(), what, timer.GetElapsed());
+    fflush(stdout);
   }
 
   void SaveScreenshot() {

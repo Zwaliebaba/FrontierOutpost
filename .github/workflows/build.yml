@@ -168,7 +168,7 @@ jobs:
     name: Smoke on WARP
     needs: windows
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -185,12 +185,15 @@ jobs:
       - name: Run the apps on WARP
         shell: pwsh
         run: |
-          $apps = @('loading', 'ui')
+          # Each app, and the minutes it may run before it counts as hung. war first generates its
+          # star system on WARP: the nebula, its blur and IR map, five ship hulls' occlusion, and
+          # the SDF fields of three asteroids.
+          $apps = [ordered]@{ loading = 10; ui = 10; war = 25 }
           $frames = 30
-          $minutesEach = 10
           $launch = Join-Path $PWD 'FrontierOutpost\bin\x64\Debug\launch.exe'
           $failed = @()
-          foreach ($app in $apps) {
+          foreach ($app in $apps.Keys) {
+            $minutes = $apps[$app]
             Write-Output "::group::$app"
             $capture = "smoke-$app.png"
             $process = Start-Process -FilePath $launch `
@@ -198,10 +201,10 @@ jobs:
               -NoNewWindow -PassThru -RedirectStandardOutput "smoke-$app.log" -RedirectStandardError "smoke-$app.err"
             # Without its handle, a finished process's exit code reads as nothing.
             $null = $process.Handle
-            if (-not $process.WaitForExit($minutesEach * 60000)) {
+            if (-not $process.WaitForExit($minutes * 60000)) {
               $process.Kill()
               $process.WaitForExit()
-              Write-Output "$app did not finish within $minutesEach minutes"
+              Write-Output "$app did not finish within $minutes minutes"
             }
             Get-Content "smoke-$app.log", "smoke-$app.err" -ErrorAction SilentlyContinue
             Write-Output "::endgroup::"
