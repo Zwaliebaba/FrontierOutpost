@@ -1,7 +1,6 @@
 #include "Glyphs.h"
 
 #include "Pool.h"
-#include "Shader.h"
 #include "V4.h"
 
 namespace {
@@ -22,8 +21,8 @@ namespace {
       return Glyph_Ring(args);
     }
 
-    Shader GetShader() const {
-      return Shader_Create("widget.jsl", "ui/ring.jsl");
+    char const* GetShaderName() const {
+      return "ui/ring.jsl";
     }
 
     Type GetVertexFormat() const {

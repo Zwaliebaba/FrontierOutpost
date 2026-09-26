@@ -1,7 +1,6 @@
 #include "Glyphs.h"
 
 #include "Pool.h"
-#include "Shader.h"
 #include "V4.h"
 
 const float kExpansion = 32;
@@ -25,8 +24,8 @@ namespace {
       return Glyph_Triangle(args);
     }
 
-    Shader GetShader() const {
-      return Shader_Create("widget.jsl", "ui/triangle.jsl");
+    char const* GetShaderName() const {
+      return "ui/triangle.jsl";
     }
 
     Type GetVertexFormat() const {

@@ -29,7 +29,9 @@ struct GlyphT : public RefCounted {
 
   LT_API void Draw(GlyphState const& state = GlyphState()) const;
 
-  virtual Shader GetShader() const = 0;
+  /* The pixel shader the widget renderer draws the glyph with, by its legacy
+     name; the vertex shader is always widget.jsl. */
+  virtual char const* GetShaderName() const = 0;
 
   virtual Type GetVertexFormat() const = 0;
 
@@ -39,5 +41,9 @@ struct GlyphT : public RefCounted {
 
   FIELDS {}
 };
+
+/* How glyphs are drawn: the renderer installs it. Without one, as on a server,
+   a glyph draws nothing (ADR-014). */
+LT_API void Glyph_SetRenderer(void (*draw)(GlyphT const*, GlyphState const&));
 
 #endif

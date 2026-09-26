@@ -181,15 +181,6 @@
     <ClInclude Include="Font.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="Glyph.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
-    <ClInclude Include="Glyphs.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
-    <ClInclude Include="Icon.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="Interface.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -250,9 +241,6 @@
     <ClInclude Include="Texture3D.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="UiCommon.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="Viewport.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -270,16 +258,10 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Arc.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Basic.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Bloom.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Circle.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="ClipRegion.cpp">
@@ -303,21 +285,6 @@
     <ClCompile Include="Font.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="Glyph.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="GlyphBox.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Gradient.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Grid.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Icon.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Interface.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
@@ -325,9 +292,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Layer.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Line.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="LteProgram.cpp">
@@ -372,16 +336,7 @@
     <ClCompile Include="RenderStyle.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="Ring.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Scheduler.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="ScriptApiGlyph.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="ScriptApiIcon.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="ScriptApiInterface.cpp">
@@ -424,9 +379,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Texture3D.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Triangle.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Viewport.cpp">

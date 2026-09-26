@@ -111,7 +111,7 @@ namespace {
 
     Shader& shader = renderer.shaderCache[glyphType];
     if (!shader) {
-      shader = glyphs[0].glyph->GetShader();
+      shader = Shader_Create("widget.jsl", glyphs[0].glyph->GetShaderName());
       BindShaderInputs(shader);
     }
 

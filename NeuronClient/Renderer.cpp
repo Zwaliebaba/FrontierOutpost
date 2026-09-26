@@ -2,6 +2,7 @@
 #include "Bound.h"
 #include "Color.h"
 #include "CubeMap.h"
+#include "Glyph.h"
 #include "Matrix.h"
 #include "Mesh.h"
 #include "Profiler.h"
@@ -14,6 +15,7 @@
 #include "Transform.h"
 #include "Tuple.h"
 #include "LteWindow.h"
+#include "WidgetRenderer.h"
 
 #include <array>
 #include <climits>
@@ -407,6 +409,10 @@ namespace {
   void ReleaseMeshBuffers(MeshBuffers* buffers) {
     delete buffers;
   }
+
+  void DrawGlyph(GlyphT const* glyph, GlyphState const& state) {
+    WidgetRenderer_DrawGlyph((GlyphT*)glyph, state);
+  }
 }
 
 namespace LTE {
@@ -414,6 +420,7 @@ namespace LTE {
     Renderer_InitializeCore(warp, offscreen);
     /* NeuronCore draws meshes and times GPU work through these (ADR-014). */
     Mesh_SetRenderer(Renderer_DrawMesh, ReleaseMeshBuffers);
+    Glyph_SetRenderer(DrawGlyph);
     Profiler_SetGpuFlush(Renderer_Flush);
     Renderer_ResetGlobalState();
     Renderer_ClearMatrices();

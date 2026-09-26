@@ -1,7 +1,6 @@
 #include "Glyphs.h"
 
 #include "Pool.h"
-#include "Shader.h"
 #include "V4.h"
 
 namespace {
@@ -22,8 +21,8 @@ namespace {
       return Glyph_Box(args);
     }
 
-    Shader GetShader() const {
-      return Shader_Create("widget.jsl", "ui/box.jsl");
+    char const* GetShaderName() const {
+      return "ui/box.jsl";
     }
 
     Type GetVertexFormat() const {

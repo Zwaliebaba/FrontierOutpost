@@ -873,6 +873,56 @@
       <Legacy>true</Legacy>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="UiCommon.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Glyph.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClCompile Include="Glyph.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClInclude Include="Glyphs.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Icon.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClCompile Include="Icon.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Arc.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Circle.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="GlyphBox.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Gradient.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Grid.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Line.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Ring.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Triangle.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiGlyph.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ScriptApiIcon.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\Build\Legacy.targets" />
 </Project>

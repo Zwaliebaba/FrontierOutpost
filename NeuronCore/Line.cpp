@@ -1,7 +1,6 @@
 #include "Glyphs.h"
 
 #include "Pool.h"
-#include "Shader.h"
 #include "V4.h"
 
 const float kExpansion = 32;
@@ -47,8 +46,8 @@ namespace {
       return Glyph_Line(args);
     }
 
-    Shader GetShader() const {
-      return Shader_Create("widget.jsl", "ui/line.jsl");
+    char const* GetShaderName() const {
+      return "ui/line.jsl";
     }
 
     Type GetVertexFormat() const {
@@ -76,8 +75,8 @@ namespace {
       return Glyph_LineFade(args);
     }
 
-    Shader GetShader() const {
-      return Shader_Create("widget.jsl", "ui/linefade.jsl");
+    char const* GetShaderName() const {
+      return "ui/linefade.jsl";
     }
 
     Type GetVertexFormat() const {

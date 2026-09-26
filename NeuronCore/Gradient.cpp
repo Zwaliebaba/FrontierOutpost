@@ -1,7 +1,6 @@
 #include "Glyphs.h"
 
 #include "Pool.h"
-#include "Shader.h"
 #include "V4.h"
 
 namespace {
@@ -23,8 +22,8 @@ namespace {
       return Glyph_Gradient(args);
     }
 
-    Shader GetShader() const {
-      return Shader_Create("widget.jsl", "ui/gradient.jsl");
+    char const* GetShaderName() const {
+      return "ui/gradient.jsl";
     }
 
     Type GetVertexFormat() const {

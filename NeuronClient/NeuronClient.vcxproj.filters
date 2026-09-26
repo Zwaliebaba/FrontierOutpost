@@ -89,17 +89,11 @@
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Arc.cpp">
-      <Filter>UI\Glyph</Filter>
-    </ClCompile>
     <ClCompile Include="Basic.cpp">
       <Filter>UI\Compositor</Filter>
     </ClCompile>
     <ClCompile Include="Bloom.cpp">
       <Filter>LTE\RenderPass</Filter>
-    </ClCompile>
-    <ClCompile Include="Circle.cpp">
-      <Filter>UI\Glyph</Filter>
     </ClCompile>
     <ClCompile Include="ClipRegion.cpp">
       <Filter>UI</Filter>
@@ -143,30 +137,6 @@
     <ClInclude Include="Font.h">
       <Filter>LTE</Filter>
     </ClInclude>
-    <ClCompile Include="Glyph.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
-    <ClInclude Include="Glyph.h">
-      <Filter>UI</Filter>
-    </ClInclude>
-    <ClCompile Include="GlyphBox.cpp">
-      <Filter>UI\Glyph</Filter>
-    </ClCompile>
-    <ClInclude Include="Glyphs.h">
-      <Filter>UI</Filter>
-    </ClInclude>
-    <ClCompile Include="Gradient.cpp">
-      <Filter>UI\Glyph</Filter>
-    </ClCompile>
-    <ClCompile Include="Grid.cpp">
-      <Filter>UI\Glyph</Filter>
-    </ClCompile>
-    <ClCompile Include="Icon.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
-    <ClInclude Include="Icon.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClCompile Include="Interface.cpp">
       <Filter>UI</Filter>
     </ClCompile>
@@ -181,9 +151,6 @@
     </ClInclude>
     <ClCompile Include="Layer.cpp">
       <Filter>UI\Widget</Filter>
-    </ClCompile>
-    <ClCompile Include="Line.cpp">
-      <Filter>UI\Glyph</Filter>
     </ClCompile>
     <ClInclude Include="LTE.h">
       <Filter>LTE</Filter>
@@ -257,17 +224,8 @@
     <ClInclude Include="RenderStyle.h">
       <Filter>LTE</Filter>
     </ClInclude>
-    <ClCompile Include="Ring.cpp">
-      <Filter>UI\Glyph</Filter>
-    </ClCompile>
     <ClCompile Include="Scheduler.cpp">
       <Filter>Module</Filter>
-    </ClCompile>
-    <ClCompile Include="ScriptApiGlyph.cpp">
-      <Filter>UI\ScriptAPI</Filter>
-    </ClCompile>
-    <ClCompile Include="ScriptApiIcon.cpp">
-      <Filter>UI\ScriptAPI</Filter>
     </ClCompile>
     <ClCompile Include="ScriptApiInterface.cpp">
       <Filter>UI\ScriptAPI</Filter>
@@ -718,12 +676,6 @@
     </ClCompile>
     <ClInclude Include="Texture3D.h">
       <Filter>LTE</Filter>
-    </ClInclude>
-    <ClCompile Include="Triangle.cpp">
-      <Filter>UI\Glyph</Filter>
-    </ClCompile>
-    <ClInclude Include="UiCommon.h">
-      <Filter>UI</Filter>
     </ClInclude>
     <ClCompile Include="Viewport.cpp">
       <Filter>LTE</Filter>

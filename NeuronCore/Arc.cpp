@@ -1,7 +1,6 @@
 #include "Glyphs.h"
 
 #include "Pool.h"
-#include "Shader.h"
 #include "V4.h"
 
 const float kExpansion = 16;
@@ -25,8 +24,8 @@ namespace {
       return Glyph_Arc(args);
     }
 
-    Shader GetShader() const {
-      return Shader_Create("widget.jsl", "ui/arc.jsl");
+    char const* GetShaderName() const {
+      return "ui/arc.jsl";
     }
 
     Type GetVertexFormat() const {
