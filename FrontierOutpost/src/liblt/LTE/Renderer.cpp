@@ -30,6 +30,10 @@ const bool kAllow16BitIndices = true;
 const bool kCameraSpaceRendering = true;
 const size_t kMaxColorAttachments = 4;
 
+/* PERF HARNESS (local, uncommitted) */
+long long g_perfDraws = 0;
+long long g_perfPolys = 0;
+
 namespace {
   struct Attachment {
     uint64 id;
@@ -393,8 +397,8 @@ namespace {
     context.DrawTransient(
       std::as_bytes(std::span<Vertex const>(vertexData, vertexCount)),
       VertexLayoutOf(), indices, format);
-    renderer.callCount++;
-    renderer.polyCount += (int)(indexCount / 3);
+    renderer.callCount++; ++g_perfDraws;
+    renderer.polyCount += (int)(indexCount / 3); g_perfPolys += (int)(indexCount / 3);
   }
 }
 
@@ -473,7 +477,7 @@ namespace LTE {
     Renderer_DrawQuad();
     Renderer_PopZBuffer();
     Renderer_PopBlendMode();
-    renderer.callCount++;
+    renderer.callCount++; ++g_perfDraws;
   }
 
   void Renderer_DrawFSQInParts(uint width, uint height, uint parts) {
@@ -510,8 +514,8 @@ namespace LTE {
       buffers.vertices, VertexLayoutOf(), buffers.indices, buffers.indexFormat,
       0, buffers.indexCount);
 
-    renderer.callCount++;
-    renderer.polyCount += (int)(buffers.indexCount / 3);
+    renderer.callCount++; ++g_perfDraws;
+    renderer.polyCount += (int)(buffers.indexCount / 3); g_perfPolys += (int)(buffers.indexCount / 3);
   }
 
   void Renderer_DrawQuad(
@@ -558,7 +562,7 @@ namespace LTE {
     context.DrawTransient(
       std::as_bytes(std::span<VertexPT const>(vertices)), layout,
       std::as_bytes(std::span<ushort const>(indices)), Neuron::IndexFormat::UInt16);
-    renderer.callCount++;
+    renderer.callCount++; ++g_perfDraws;
   }
 
   void Renderer_DrawVertices(
@@ -637,8 +641,8 @@ namespace LTE {
       std::span<std::byte const>((std::byte const*)vertexData, vertexBytes),
       layout, indexBytes, format);
 
-    renderer.callCount++;
-    renderer.polyCount += (int)(indices / 3);
+    renderer.callCount++; ++g_perfDraws;
+    renderer.polyCount += (int)(indices / 3); g_perfPolys += (int)(indices / 3);
   }
 
   void Renderer_Flush() {

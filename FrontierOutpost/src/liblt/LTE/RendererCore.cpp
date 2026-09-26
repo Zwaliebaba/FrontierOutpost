@@ -350,7 +350,7 @@ namespace LTE {
        A Debug build asks for it too, and runs without it where Windows' Graphics
        Tools are not installed. */
 #ifdef _DEBUG
-    desc.debugLayer = true;
+    desc.debugLayer = !getenv("PERF_NO_DEBUG_LAYER"); /* PERF HARNESS (local, uncommitted) */
 #else
     desc.debugLayer = warp;
 #endif

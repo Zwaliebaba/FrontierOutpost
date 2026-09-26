@@ -159,7 +159,7 @@ struct Launcher : public Program {
 
   /* Flushed, so that the line is kept if the launcher is stopped. */
   void PrintTime(char const* what) {
-    printf("launch: %s %s after %.1f s\n", appName.c_str(), what, timer.GetElapsed());
+    printf("launch: %s %s after %.3f s\n", appName.c_str(), what, timer.GetElapsed());
     fflush(stdout);
   }
 

@@ -75,6 +75,10 @@
   XY(LSystem, LeftSystem)                                                      \
   XY(RSystem, RightSystem)
 
+#include <chrono>
+/* PERF HARNESS (local, uncommitted) */
+extern double g_perfPresentMs, g_perfEndFrameMs, g_perfBeginFrameMs;
+
 namespace {
   Vector<Window>& GetStack() {
     static Vector<Window> stack;
@@ -162,11 +166,17 @@ namespace {
           desc.vsync = sync;
           swapChain = device.CreateSwapChain(desc);
         }
+        auto perfA = std::chrono::steady_clock::now();
         swapChain.Present(Renderer_GetFrame().texture);
+        g_perfPresentMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - perfA).count();
       }
+      auto perfB = std::chrono::steady_clock::now();
       device.EndFrame();
       Renderer_TakeDeviceMessages();
+      auto perfC = std::chrono::steady_clock::now();
       device.BeginFrame();
+      g_perfEndFrameMs += std::chrono::duration<double, std::milli>(perfC - perfB).count();
+      g_perfBeginFrameMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - perfC).count();
     }
 
     V2I GetCursorPos() const {

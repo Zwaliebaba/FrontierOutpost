@@ -4,9 +4,16 @@
 #include "DeviceRemoval.h"
 #include "GraphicsCore.h"
 
+#include <chrono>
 #include <exception>
 #include <format>
 #include <utility>
+
+// PERF HARNESS (local, uncommitted)
+double g_perfWaitMs = 0;
+long long g_perfWaitCount = 0;
+double g_perfWaitIdleMs = 0;
+long long g_perfWaitIdleCount = 0;
 
 namespace Neuron
 {
@@ -157,7 +164,10 @@ void GraphicsCore::WaitFor(std::uint64_t _value)
   // Without an event, SetEventOnCompletion returns once the fence reaches the value.
   if (Completed() < _value)
   {
+    auto const perfStart = std::chrono::steady_clock::now();
     Check(fence->SetEventOnCompletion(_value, nullptr), "ID3D12Fence::SetEventOnCompletion");
+    g_perfWaitMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - perfStart).count();
+    ++g_perfWaitCount;
   }
 }
 
