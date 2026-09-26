@@ -1,6 +1,9 @@
 #include "Module/PhysicsEngine.h"
 #include "Module/SoundEngine.h"
 
+#include "Game/Common.h"
+
+#include "LTE/DrawState.h"
 #include "LTE/Keyboard.h"
 #include "LTE/Profiler.h"
 #include "LTE/Program.h"
@@ -19,6 +22,11 @@
 #ifdef TIME_LTSL_COMPILE
 #include "LTE/Debug.h"
 #endif
+
+/* Shaders' 'time': the game's clock, in seconds, wrapping each minute. */
+static float GameTime() {
+  return (float)(Universe_Age() % (kTimeScale * 60)) / (float)kTimeScale;
+}
 
 struct Launcher : public Program {
   String appName;
@@ -64,6 +72,7 @@ struct Launcher : public Program {
     /* On WARP, the smoke mode draws offscreen: it never makes a swap chain
        (plan section 7). */
     Renderer_Initialize(warp, warp);
+    DrawState_SetGameTime(GameTime);
   }
 
   /* The app goes before the engines it uses, which its members would outlive:

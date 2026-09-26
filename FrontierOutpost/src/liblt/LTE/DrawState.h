@@ -40,6 +40,9 @@ LT_API void DrawState_Inject(Shader const& shader);
 LT_API void DrawState_Link(Shader const& shader);
 LT_API void DrawState_Link(ShaderInstance const& shaderState);
 
+/* Where shaders' 'time' comes from: the game's clock, in seconds, wrapping each minute. */
+LT_API void DrawState_SetGameTime(float (*source)());
+
 DeclareFunctionNoParams(DrawState_Clear, void)
 
 DeclareFunction(DrawState_Pop, void,

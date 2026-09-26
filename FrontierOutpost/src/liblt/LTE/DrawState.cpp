@@ -11,9 +11,10 @@
 #include "LTE/View.h"
 #include "LTE/Viewport.h"
 
-#include "Game/Common.h"
-
 namespace {
+  /* The game's clock, which the game installs: the engine does not know it. */
+  float (*gameTimeSource)() = nullptr;
+
   typedef Map< char const*, Vector<Data> > DataMap;
 
   DataMap& GetDataMap() {
@@ -67,7 +68,7 @@ namespace {
   }
 
   float GetGameTime() {
-    return (float)(Universe_Age() % (kTimeScale * 60))  / (float)kTimeScale;
+    return gameTimeSource ? gameTimeSource() : 0.0f;
   }
 
   V2 GetFrame() {
@@ -144,6 +145,10 @@ void DrawState_Inject(Shader const& shader) {
         shader->SetTexture3D(index, data.Convert<Texture3D>());
     }
   }
+}
+
+void DrawState_SetGameTime(float (*source)()) {
+  gameTimeSource = source;
 }
 
 void DrawState_Link(Shader const& s) {
