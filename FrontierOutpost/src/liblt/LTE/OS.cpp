@@ -307,6 +307,22 @@ namespace {
     __fastfail(FAST_FAIL_INVALID_ARG);
   }
 
+#ifdef _DEBUG
+  /* The debug CRT's report of a failed check, before it acts on it. The
+     standard library's checks, a subscript out of range among them, fail fast
+     after their report without calling the invalid-parameter handler, so the
+     stack is printed here, where the check failed. */
+  int __cdecl PrintReport(int type, char*, int*) {
+    if (type == _CRT_ASSERT || type == _CRT_ERROR) {
+      std::cout << "The C runtime reports a failed check (on stderr) here:\n";
+      CONTEXT context;
+      RtlCaptureContext(&context);
+      PrintStack(context);
+    }
+    return FALSE;
+  }
+#endif
+
   /* abort(), from assert() or std::terminate, which ends the process with 3. */
   void PrintAbort(int) {
     std::cout << "CRASH: abort\n";
@@ -332,6 +348,7 @@ void OS_SetUnattended() {
   _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
   /* The debug CRT's own dialogs, which the release CRT does not have. */
   #ifdef _DEBUG
+    _CrtSetReportHook2(_CRT_RPTHOOK_INSTALL, PrintReport);
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
     _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
