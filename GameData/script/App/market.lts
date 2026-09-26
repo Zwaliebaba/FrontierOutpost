@@ -93,7 +93,6 @@ type App
             MarketWidget player station
 
   function Void Update ()
-    if Key_T.Pressed Shader_RecompileAll
     station.Update FrameTimer_Get
     ui.Update
     ui.Draw

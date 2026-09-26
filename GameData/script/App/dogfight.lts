@@ -81,9 +81,6 @@ type App
     ui.Add (Widget/HUD:Create player)
 
   function Void Update ()
-    if Key_T.Pressed
-      Shader_RecompileAll
-
     var dt FrameTimer_Get
     dt = (Min dt 0.1)
     if Key_H.Down dt *= 20.0

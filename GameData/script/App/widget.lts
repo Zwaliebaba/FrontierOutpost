@@ -25,9 +25,6 @@ type App
         otherwise
           desktop.Delete
         
-    if Key_T.Pressed
-      Shader_RecompileAll
-
     #
       if Key_F4.Pressed
         settingsVisible = settingsVisible.!
