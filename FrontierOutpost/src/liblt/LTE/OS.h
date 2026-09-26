@@ -36,6 +36,12 @@ LT_API bool OS_IsFile(String const& path);
 LT_API bool OS_IsUnattended();
 LT_API void OS_SetUnattended();
 
+/* Ends the process with _code at once, after flushing stdout, and runs no
+   static destructor. std::_Exit is not enough on Windows: it ends through
+   ExitProcess, which still runs a DLL's static destructors as the DLL
+   detaches, and after a failure those can crash on what was left behind. */
+LT_API void OS_ExitImmediately(int code);
+
 LT_API Vector<String> OS_ListDir(String const& path);
 
 LT_API void OS_MessageBox(String const& title, String const& message);

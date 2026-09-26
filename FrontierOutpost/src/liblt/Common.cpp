@@ -57,7 +57,7 @@ void LTE_ASSERT_FAILURE(const char* file, int line, const char* statement) {
        skipped: what failed may have left them unable to run. */
     if (OS_IsUnattended()) {
       std::cout << stream.str() << std::flush;
-      std::_Exit(1);
+      OS_ExitImmediately(1);
     }
     stream << "CONTINUE to continue, CANCEL to exit, TRY AGAIN to break.\n";
     int result = MessageBoxA(NULL, stream.str().c_str(), "LT Engine Error", MB_CANCELTRYCONTINUE);
@@ -80,7 +80,7 @@ void LTE_ASSERT_FAILURE(const char* file, int line, const char* statement) {
   OS_MessageBox("LT Engine Error", stream.str().c_str());
   /* Unattended, the exit code is what reports the failure (LTE/OS.h). */
   if (OS_IsUnattended())
-    std::_Exit(1);
+    OS_ExitImmediately(1);
   exit(0);
 
 #endif

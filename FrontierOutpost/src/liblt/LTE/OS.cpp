@@ -5,6 +5,7 @@
 #include "String.h"
 
 #include <csignal>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 
@@ -329,13 +330,21 @@ namespace {
     CONTEXT context;
     RtlCaptureContext(&context);
     PrintStack(context);
-    _exit(3);
+    OS_ExitImmediately(3);
   }
 #endif
 }
 
 bool OS_IsUnattended() {
   return gUnattended;
+}
+
+void OS_ExitImmediately(int code) {
+  std::cout << std::flush;
+#ifdef LIBLT_WINDOWS
+  TerminateProcess(GetCurrentProcess(), (UINT)code);
+#endif
+  std::_Exit(code);
 }
 
 void OS_SetUnattended() {
