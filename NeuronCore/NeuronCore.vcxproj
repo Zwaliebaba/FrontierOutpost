@@ -329,9 +329,6 @@
     <ClInclude Include="Meshes.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="Model.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="Module.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -350,16 +347,10 @@
     <ClInclude Include="Parameter.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="ParticleSystem.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="Patch.h">
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="Plane.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
-    <ClInclude Include="PlateMesh.h">
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="Pointer.h">
@@ -401,9 +392,6 @@
     <ClInclude Include="RNG.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="Scheduler.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="Script.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -414,9 +402,6 @@
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="SDF.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
-    <ClInclude Include="SDFMesh.h">
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="SDFs.h">
@@ -742,9 +727,6 @@
     <ClCompile Include="ScriptApiOS.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="ScriptApiPlateMesh.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="ScriptApiRay.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
@@ -876,6 +858,20 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Mesh.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Common.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="ProgramLog.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+    <ClCompile Include="Profiler.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\Build\Legacy.targets" />

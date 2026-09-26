@@ -4,15 +4,16 @@
 #include "Bound.h"
 #include "LteMath.h"
 #include "Matrix.h"
-#include "LteProgram.h"
 #include "Ray.h"
-#include "Renderer.h"
-#include "RendererCore.h"
 #include "Sphere.h"
 
 #include "KDTree.h"
 
 namespace {
+  /* The renderer's, once it has installed them (Mesh_SetRenderer). */
+  void (*drawMesh)(MeshT const*) = nullptr;
+  void (*releaseBuffers)(MeshBuffers*) = nullptr;
+
   void CreateAdjacencyTable(MeshT const* mesh, Array<Vector<uint> >& table) {
     table.resize(mesh->vertices.size());
     for (size_t i = 0; i < mesh->indices.size(); i += 3)
@@ -27,15 +28,23 @@ namespace {
   }
 }
 
+void Mesh_SetRenderer(void (*draw)(MeshT const*), void (*release)(MeshBuffers*)) {
+  drawMesh = draw;
+  releaseBuffers = release;
+}
+
 void MeshBufferHandle::Reset() {
-  delete buffers;
+  /* Only the renderer makes buffers, so there are none without one. */
+  if (buffers && releaseBuffers)
+    releaseBuffers(buffers);
   buffers = nullptr;
 }
 
 MeshT::~MeshT() {}
 
 void MeshT::Draw() const {
-  Renderer_DrawMesh(this);
+  if (drawMesh)
+    drawMesh(this);
 }
 
 Bound3 MeshT::GetBound() const {

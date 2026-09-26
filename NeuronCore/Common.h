@@ -120,6 +120,10 @@ LT_API void LTE_ASSERT_FAILURE(
   int line,
   char const* statement);
 
+/* What an assertion failure does before it writes its dump, such as closing
+   the window; the client installs it (ADR-014). */
+LT_API void LTE_SetAssertHook(void (*hook)());
+
 LT_API void LTE_DEBUG_BREAK(char const* file, int line);
 
 LT_API void LTE_PRINT_FILE(char const* file, int line);

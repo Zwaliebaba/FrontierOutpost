@@ -399,9 +399,6 @@
     <ClInclude Include="Meshes.h">
       <Filter>LTE</Filter>
     </ClInclude>
-    <ClInclude Include="Model.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
     <ClCompile Include="Module.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
@@ -432,9 +429,6 @@
     <ClInclude Include="Parameter.h">
       <Filter>LTE</Filter>
     </ClInclude>
-    <ClInclude Include="ParticleSystem.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
     <ClCompile Include="Patch.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
@@ -442,9 +436,6 @@
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="Plane.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
-    <ClInclude Include="PlateMesh.h">
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="Pointer.h">
@@ -501,9 +492,6 @@
     <ClInclude Include="RNG.h">
       <Filter>LTE</Filter>
     </ClInclude>
-    <ClInclude Include="Scheduler.h">
-      <Filter>Module</Filter>
-    </ClInclude>
     <ClCompile Include="Script.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
@@ -529,9 +517,6 @@
       <Filter>LTE\ScriptAPI</Filter>
     </ClCompile>
     <ClCompile Include="ScriptApiOS.cpp">
-      <Filter>LTE\ScriptAPI</Filter>
-    </ClCompile>
-    <ClCompile Include="ScriptApiPlateMesh.cpp">
       <Filter>LTE\ScriptAPI</Filter>
     </ClCompile>
     <ClCompile Include="ScriptApiRay.cpp">
@@ -582,9 +567,6 @@
     <ClCompile Include="SdfCylinder.cpp">
       <Filter>LTE\SDF</Filter>
     </ClCompile>
-    <ClInclude Include="SDFMesh.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
     <ClInclude Include="SDFs.h">
       <Filter>LTE</Filter>
     </ClInclude>
@@ -807,5 +789,19 @@
     <ClInclude Include="XVector.h">
       <Filter>LTE</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Mesh.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="Common.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="ProgramLog.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
+    <ClCompile Include="Profiler.cpp">
+      <Filter>LTE</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

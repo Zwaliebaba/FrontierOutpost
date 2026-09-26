@@ -27,4 +27,8 @@ DeclareFunctionNoParams(Profiler_Stop, void)
 
 LT_API void Profiler_SetFlushes(bool flushes);
 
+/* What the profiler calls to wait for the GPU, so that a section's time
+   includes its drawing: the renderer installs it (ADR-014). */
+LT_API void Profiler_SetGpuFlush(void (*flush)());
+
 #endif

@@ -285,9 +285,6 @@
     <ClCompile Include="ClipRegion.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="Common.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="CubeMap.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
@@ -342,9 +339,6 @@
     <ClCompile Include="LteWindow.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="Mesh.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Model.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
@@ -361,12 +355,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="PlateMesh.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Profiler.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="ProgramLog.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Rendered.cpp">
@@ -931,6 +919,26 @@
     <ProjectReference Include="..\NeuronCore\NeuronCore.vcxproj">
       <Project>{7B1A6C1E-3C2D-4F0B-9E47-2D6A1F9C0B11}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Model.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="ParticleSystem.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="SDFMesh.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="PlateMesh.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClInclude Include="Scheduler.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClCompile Include="ScriptApiPlateMesh.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\Build\Legacy.targets" />

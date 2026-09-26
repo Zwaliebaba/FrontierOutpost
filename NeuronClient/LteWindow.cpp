@@ -248,6 +248,11 @@ namespace {
       }
     }
   };
+
+  void CloseWindowOnAssert() {
+    if (Window_Get())
+      Window_Get()->Close();
+  }
 }
 
 Window Window_Create(
@@ -256,6 +261,8 @@ Window Window_Create(
   bool border,
   bool fullscreen)
 {
+  /* A failed assertion closes the window before it writes its dump. */
+  LTE_SetAssertHook(CloseWindowOnAssert);
   return new WindowImpl(title, size, border, fullscreen);
 }
 

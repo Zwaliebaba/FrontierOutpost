@@ -1,5 +1,6 @@
 #include "Profiler.h"
 #include "Array.h"
+#include "Hash.h"
 #include "HashMap.h"
 #include "Job.h"
 #include "Lock.h"
@@ -8,20 +9,26 @@
 #include "Module.h"
 #include "Pointer.h"
 #include "ProgramLog.h"
-#include "Renderer.h"
 #include "Stack.h"
 #include "LteString.h"
 #include "Timer.h"
 #include "Thread.h"
 #include "V3.h"
-
-#include "ModuleSettings.h"
+#include "Vector.h"
 
 #include <algorithm>
 #include <cstring>
 #include <iostream>
 
 const bool kDefaultFlush = false;
+
+/* The renderer's, once it has installed it (Profiler_SetGpuFlush). */
+static void (*gpuFlush)() = nullptr;
+
+static void FlushGpu() {
+  if (gpuFlush)
+    gpuFlush();
+}
 
 /* Number of microseconds to wait between each interrupt. */
 const uint kSampleInterval = 1;
@@ -125,7 +132,7 @@ namespace {
 
     void Flush() {
       if (active)
-        Renderer_Flush();
+        FlushGpu();
     }
 
     StackFrame* GetFrame() {
@@ -149,7 +156,7 @@ namespace {
 
     void Pop() {
       if (active && flushes)
-        Renderer_Flush();
+        FlushGpu();
       segments.pop();
       if (active)
         currentFrame = GetFrame();
@@ -267,4 +274,8 @@ DefineFunction(Profiler_Start) {
 
 DefineFunction(Profiler_Stop) {
   GetProfiler()->Stop();
+}
+
+void Profiler_SetGpuFlush(void (*flush)()) {
+  gpuFlush = flush;
 }

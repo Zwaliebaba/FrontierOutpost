@@ -3,7 +3,6 @@
 
 #include "OS.h"
 #include "StackFrame.h"
-#include "LteWindow.h"
 
 #include <csignal>
 #include <cstdlib>
@@ -16,6 +15,10 @@
   #include <windows.h>
   #undef MessageBox
 #endif
+
+namespace {
+  void (*assertHook)() = nullptr;
+}
 
 void PrintAssert(
   std::ostream& stream,
@@ -30,14 +33,18 @@ void PrintAssert(
   stream << " Statement : " << statement << '\n';
 }
 
+void LTE_SetAssertHook(void (*hook)()) {
+  assertHook = hook;
+}
+
 void LTE_ASSERT_FAILURE(const char* file, int line, const char* statement) {
   /* Write a log of assertions. */ {
     std::ofstream log((OS_GetUserDataPath() + "logAsserts.txt").c_str(), std::ios::app);
     PrintAssert(log, file, line, statement);
   }
 
-  if (Window_Get())
-    Window_Get()->Close();
+  if (assertHook)
+    assertHook();
   std::stringstream stream;
 
   /* Create a dump file. */ {

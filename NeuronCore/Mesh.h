@@ -30,6 +30,12 @@ struct MeshBufferHandle {
   LT_API void Reset();
 };
 
+/* How meshes are drawn and their GPU buffers let go: the renderer installs
+   both. Without one, as on a server, a mesh draws nothing (ADR-014). */
+LT_API void Mesh_SetRenderer(
+  void (*draw)(struct MeshT const*),
+  void (*release)(struct MeshBuffers*));
+
 AutoClassDerived(MeshT, GeometryT,
   Vector<Vertex>, vertices,
   Vector<uint>, indices)

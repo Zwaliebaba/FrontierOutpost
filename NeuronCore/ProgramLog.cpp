@@ -3,7 +3,6 @@
 #include "OS.h"
 #include "StackFrame.h"
 #include "Vector.h"
-#include "LteWindow.h"
 
 #include <iostream>
 #include <fstream>

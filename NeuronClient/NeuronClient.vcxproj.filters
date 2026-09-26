@@ -107,9 +107,6 @@
     <ClInclude Include="ClipRegion.h">
       <Filter>UI</Filter>
     </ClInclude>
-    <ClCompile Include="Common.cpp">
-      <Filter>LTE</Filter>
-    </ClCompile>
     <ClInclude Include="Compositor.h">
       <Filter>UI</Filter>
     </ClInclude>
@@ -209,9 +206,6 @@
     <ClInclude Include="LteWindow.h">
       <Filter>LTE</Filter>
     </ClInclude>
-    <ClCompile Include="Mesh.cpp">
-      <Filter>LTE</Filter>
-    </ClCompile>
     <ClCompile Include="Model.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
@@ -234,12 +228,6 @@
       <Filter>LTE</Filter>
     </ClCompile>
     <ClCompile Include="PlateMesh.cpp">
-      <Filter>LTE</Filter>
-    </ClCompile>
-    <ClCompile Include="Profiler.cpp">
-      <Filter>LTE</Filter>
-    </ClCompile>
-    <ClCompile Include="ProgramLog.cpp">
       <Filter>LTE</Filter>
     </ClCompile>
     <ClCompile Include="Rendered.cpp">
@@ -772,6 +760,26 @@
     </ClInclude>
     <ClCompile Include="WidgetStack.cpp">
       <Filter>UI\Widget</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Model.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="ParticleSystem.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="SDFMesh.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="PlateMesh.h">
+      <Filter>LTE</Filter>
+    </ClInclude>
+    <ClInclude Include="Scheduler.h">
+      <Filter>Module</Filter>
+    </ClInclude>
+    <ClCompile Include="ScriptApiPlateMesh.cpp">
+      <Filter>LTE\ScriptAPI</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

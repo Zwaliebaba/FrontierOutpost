@@ -4,6 +4,7 @@
 #include "CubeMap.h"
 #include "Matrix.h"
 #include "Mesh.h"
+#include "Profiler.h"
 #include "ProgramLog.h"
 #include "RendererCore.h"
 #include "Shader.h"
@@ -402,9 +403,18 @@ namespace {
   }
 }
 
+namespace {
+  void ReleaseMeshBuffers(MeshBuffers* buffers) {
+    delete buffers;
+  }
+}
+
 namespace LTE {
   void Renderer_Initialize(bool warp, bool offscreen) {
     Renderer_InitializeCore(warp, offscreen);
+    /* NeuronCore draws meshes and times GPU work through these (ADR-014). */
+    Mesh_SetRenderer(Renderer_DrawMesh, ReleaseMeshBuffers);
+    Profiler_SetGpuFlush(Renderer_Flush);
     Renderer_ResetGlobalState();
     Renderer_ClearMatrices();
 
