@@ -8,13 +8,15 @@ technology must become, and Part C is the order of work.
 - **Status:** Proposed, 2026-09-26, for the owner's review. It governs nothing until the owner
   accepts it. AGENTS.md and `Design/ADR/` govern how code is written; this document says what is
   built (AGENTS.md, preamble).
-- **Decisions so far:** the owner's G1 to G4, 2026-09-26 (§2).
-- **Evidence:** the tree at `287340b`. Four read-only audits surveyed the engine, and every claim
-  here about the code was then checked against the source by hand. Engine paths are relative to
-  `FrontierOutpost/src/liblt/` and script paths to `GameData/script/`; `launch.cpp` is
-  `FrontierOutpost/src/launch/launch.cpp`. Nothing was built or run, because the environment that
-  wrote this has no MSVC. Counts come from the source. Estimates are marked as such, and none may
-  enter an ADR until it is measured (AGENTS.md §6).
+- **Decisions so far:** the owner's G1 to G4, 2026-09-26 (§2). ADR-015 has since answered Q8
+  (§19).
+- **Evidence:** the tree at `287340b`, before the library split. Four read-only audits surveyed the
+  engine, and every claim here about the code was then checked against the source by hand. After
+  the split (ADR-014 to ADR-016), every reference was checked again against `797f690` and points
+  there, and the claims the split changed were restated. Code paths are relative to the repository
+  root and script paths to `GameData/script/`. Nothing was built or run, because the environment
+  that wrote this has no MSVC. Counts come from the source. Estimates are marked as such, and none
+  may enter an ADR until it is measured (AGENTS.md §6).
 
 ## 1. Summary
 
@@ -68,7 +70,7 @@ ADR in the commit that implements it (§15).
 | P7 | Clients hold a replica world made of the engine's own objects, so the LTSL interface keeps working. Every change a client makes to the world is a command. | §13.6 |
 | P8 | The world is generated once per era and then owned by its save. There is no seed-and-delta scheme. | §13.7 |
 | P9 | LTSL stays for the interface, tools and content generation, and runs in both roles. The rules of play are C++. | §13.8 |
-| P10 | Transport is a new game-agnostic static library, NeuronNet, over Winsock, linked into `lt.dll` as NeuronClient is. No third-party networking library. | §13.6 |
+| P10 | Transport is a new game-agnostic static library, NeuronNet, over Winsock, linked into `FrontierOutpost.exe` as the other libraries are (ADR-014). No third-party networking library. | §13.3, §13.6 |
 | P11 | The simulation replays on the same binary and machine: seeded random streams, iteration ordered by identity, no wall clock. | §13.4 |
 | P12 | Two fidelities. *Live* systems, which have players in them, are simulated in full. *Ledger* systems run as accounts and schedules. | §13.5 |
 
@@ -78,7 +80,7 @@ ADR in the commit that implements it (§15).
    flight model, procedural generation, an interface toolkit, and fragments of an economy and an AI
    (§4.3). Beyond `dogfight`'s shooting, no loop closes. A player cannot sell, dock, refit, repair,
    research, hire or leave the system, and nothing happens when their ship dies
-   (`Component/Pilotable.cpp:8-9`: "TODO : What if player dies?"). A complete game here is mostly
+   (`GameLogic/Pilotable.cpp:8-9`: "TODO : What if player dies?"). A complete game here is mostly
    new game code, on a simulation that must first be rebuilt for multiplayer.
 2. **Multiplayer changes the foundations.** The simulation has no tick of its own, takes gameplay
    facts from the GPU and the camera, names objects by a process counter with no registry behind
@@ -93,14 +95,14 @@ ADR in the commit that implements it (§15).
    victim's weakness, server rule sets, and dedicated servers for PvP among strangers. If that is
    not enough in play, the fallback is the Lawful rule set, not a redesign.
 4. **A persistent world for a small group is mostly an AI world, and the AI does not work yet.** The
-   one brain, `Task_Play`, adopts a random opportunity each update (`Game/Task/Play.cpp:167-174`).
+   one brain, `Task_Play`, adopts a random opportunity each update (`GameLogic/Play.cpp:167-174`).
    Three of the fifteen tasks can never look profitable, because they declare `GetOutput` where the
-   base class has `GetOutputs` (`Game/Task/Pirate.cpp:62`, `Produce.cpp:56`, `Spawn.cpp:28`;
-   `Game/Task.h:56`). AI players act only while piloting a ship, so governors and station managers
-   never act (`Component/Pilotable.cpp:5-6`). Pillar 1 (§5) rests on the largest body of new game
-   code in this plan.
+   base class has `GetOutputs` (`GameLogic/Pirate.cpp:62`, `Produce.cpp:56`, `Spawn.cpp:28`;
+   `GameLogic/Task.h:56`). AI players act only while piloting a ship, so governors and station
+   managers never act (`GameLogic/Pilotable.cpp:5-6`). Pillar 1 (§5) rests on the largest body of
+   new game code in this plan.
 5. **"Hosted by a player" cannot mean in the same process.** The engine keeps one world per process:
-   `Universe_Get()` returns the top of a global stack (`Game/Universe.cpp:15-19`), and the ID
+   `Universe_Get()` returns the top of a global stack (`GameLogic/Universe.cpp:15-19`), and the ID
    counters, pools and settings are process-wide. Hosting therefore starts the server role as a
    child process, which also makes single-player the same code path as multiplayer (P2). The cost
    is a second process on the host's machine; the gain is that no mode is special.
@@ -113,22 +115,27 @@ ADR in the commit that implements it (§15).
    ship them in that order, and each must be playable alone before the next begins (§14).
 8. **Procedural generation is the engine's strength and a multiplayer hazard.** Gameplay facts come
    from generated render meshes, and some of them are random per run. Sockets are ray-cast against
-   the generated hull (`Game/Item/ShipType.cpp:223-259`). Bounds come from the renderable
-   (`Game/Object.cpp:165-166`, marked "CRITICAL"). Asteroid shapes, and their collision with them,
-   change between runs, because they are seeded by `Rand` after `srand(time(0))`
-   (`Game/Renderable/Asteroid.cpp:17`, `LTE/Program.cpp:17`). A server and its clients would
-   disagree about the world; P5 and P6 exist for this.
+   the generated hull (`GameLogic/ShipType.cpp:219-255`). Bounds come from the renderable
+   (`GameLogic/Object.cpp:162-163`, marked "CRITICAL"). Asteroid shapes, and their collision with
+   them, change between runs, because they are seeded by `Rand` after `srand(time(0))`
+   (`FrontierOutpost/RenderableAsteroid.cpp:17`, `NeuronClient/LteProgram.cpp:36`). A server and its
+   clients would disagree about the world; P5 and P6 exist for this.
 
 ## 4. Starting point
 
 ### 4.1 The engine
 
-`lt.dll` is the 2012–2015 Limit Theory engine (LTE), its game layer and its scripting language
+The engine is the 2012–2015 Limit Theory engine (LTE), its game layer and its scripting language
 (LTSL): about 66,000 lines of C++, imported under ADR-001's legacy exemption and moved onto
-NeuronClient and Direct3D 12 by the migration recorded in `Design/Archive/`. `launch.exe` runs one
-LTSL app, named on its command line, in a 1920×1080 window (`launch.cpp:62-66`). `GameData/` holds
-121 scripts (9,274 lines), four font families, 43 WAV sounds, eight texture files and one data
-file, the naming grammar.
+NeuronClient and Direct3D 12 by the migration recorded in `Design/Archive/`. The library split then
+made it one executable over four libraries (ADR-014). `FrontierOutpost.exe` holds `main` and the
+game's client side. NeuronCore is the engine both sides share, LTSL included. NeuronClient is
+rendering, the window, input, glyphs, images, sound and the UI toolkit. GameLogic is the game's
+rules and state: it sees NeuronCore alone, and asks the executable for everything it shows
+(ADR-016). NeuronServer is a placeholder. The imported files keep their exemption, now marked file
+by file (ADR-015). `FrontierOutpost.exe` runs one LTSL app, named on its command line, in a
+1920×1080 window (`FrontierOutpost/Main.cpp:70-74`). `GameData/` holds 121 scripts (9,274 lines),
+four font families, 43 WAV sounds, eight texture files and one data file, the naming grammar.
 
 ### 4.2 A script per scene
 
@@ -141,59 +148,67 @@ the container the player's ship is in (`App/ltheory.lts:80-83`).
 
 There are two conventions: an `App` type with `Initialize` and `Update` (war, dogfight, rails, map,
 market), and a widget tree hosted by `App/widget.lts` with up to 14 named hooks (the other ten;
-`UI/Widget/Custom.cpp:111-131`). Neither has a game flow. No app can start another, because the
-DevPanel's app list is only text. The game menu's SAVE GAME and EXIT buttons send a message that
+`NeuronClient/WidgetCustom.cpp:111-131`). Neither has a game flow. No app can start another, because
+the DevPanel's app list is only text. The game menu's SAVE GAME and EXIT buttons send a message that
 nothing handles (`Widget/GameMenu.lts:4-8`), and an app ends when its window closes. The scene
 model survives as test scenarios (§13.8).
 
 ### 4.3 What works, what is a fragment, what is missing
 
-| Area | State at `287340b` | Evidence |
+| Area | State at `797f690` | Evidence |
 |---|---|---|
-| Flight | **Works.** Newtonian motion with drag. The AI steers by potential fields; the player flies by keys and mouse. The player's heading is set directly by a script, not by thrust. | `Component/Motion.cpp:10-45`, `Component/MotionControl.cpp:21-60`, `Widget/Handling.lts:35-69` |
-| Combat | **Fragment.** Pulse turrets hit through shields to the hull, and every generated weapon is a pulse weapon; beams are `#if 0`. Shields recharge from a power fraction that ships do not supply (by reading the code). Collision damage is off, and collisions are checked only for objects a human owns. Destroyed ships are not removed, and scanners return before detecting anything. | `Game/Item/WeaponType.cpp:65-67,101-112`, `Game/Object/Shield.cpp:171`, `Game/Object.h:399-401`, `Component/Collidable.cpp:41-43,62-65`, `Component/Explodable.cpp:7-16`, `Game/Object/Scanner.cpp:31-32` |
-| Travel | **Fragment.** Warp rails inside a system work, for the AI and for the player (Y and U). Wormholes join systems, but route planning ignores them ("CRITICAL"), no player input reaches one, and only one system updates. Docking works for the AI only, and `CanDock` is inverted. | `Game/Task/Goto.cpp:100-102,240-243`, `App/ltheory.lts:66-78`, `Component/Dockable.cpp:15-16` |
-| Economy | **Fragment.** Order-book markets with escrow, matched at the mid price. Scripts create the money: 1.5 M per AI player, and 1 M per governor and per station manager. Each planet governor gets 10⁹. A partly filled bid is refunded its whole escrow, which creates credits. Transport moves nothing and nothing consumes. Production and research cannot be reached, because no blueprint is ever created. | `Component/Market.cpp:102-118`, `Object/System.lts:1,61,156,212`, `Game/Object/Planet.cpp:105-106`, `Game/Task/Transport.cpp:44-49` |
-| AI | **Fragment.** Each object has a task stack, and there are 15 tasks. The one brain, `Task_Play`, adopts a random opportunity from a list that each system rebuilds every update, at a cost of O(markets² × items). | `Component/Tasks.cpp:13-22`, `Game/Task/Play.cpp:167-174`, `Component/Economy.cpp:99-139` |
-| Generation | **Works.** One universe holds one region, and the region holds 1 + ⌊5·Exp⌋ systems. `Object/System:Init`, in LTSL, fills each system with a planet and its colonies, radial rails, two asteroid zones of 96 rich asteroids, stations with 32 listings, patrols, pirates, and two AI players. That is about 380 to 400 objects per system (an estimate from the script, not a count at run time). | `Game/Universe.cpp:80`, `Game/Object/Region.cpp:20,95-96,153`, `Object/System.lts` |
-| Story hooks | **Skeletons.** Names come from a grammar, and there are seven personality traits. Opinions are keyed by `ObjectID` and never fade. The history component never runs. Each object keeps a log. Seven lifetime stats exist and are never written. Missions exist, but their constraints all evaluate to 1.0. | `LTE/Grammar.cpp`, `AI/Traits.h`, `Component/Opinion.h:8`, `Component/History.cpp:5`, `Component/Log.h`, `Game/Player.h:47`, `Game/Mission.cpp:14,29` |
+| Flight | **Works.** Newtonian motion with drag. The AI steers by potential fields; the player flies by keys and mouse. The player's heading is set directly by a script, not by thrust. | `GameLogic/Motion.cpp:10-45`, `GameLogic/MotionControl.cpp:21-60`, `Widget/Handling.lts:35-69` |
+| Combat | **Fragment.** Pulse turrets hit through shields to the hull, and every generated weapon is a pulse weapon; beams are `#if 0`. Shields recharge from a power fraction that ships do not supply (by reading the code). Collision damage is off, and collisions are checked only for objects a human owns. Destroyed ships are not removed, and scanners return before detecting anything. | `GameLogic/WeaponType.cpp:65-67,101-112`, `GameLogic/Shield.h:102`, `GameLogic/Object.h:401-403`, `GameLogic/Collidable.cpp:40-42,61-64`, `GameLogic/Explodable.cpp:7-16`, `GameLogic/Scanner.cpp:31-32` |
+| Travel | **Fragment.** Warp rails inside a system work, for the AI and for the player (Y and U). Wormholes join systems, but route planning ignores them ("CRITICAL"), no player input reaches one, and only one system updates. Docking works for the AI only, and `CanDock` is inverted. | `GameLogic/Goto.cpp:100-102,240-243`, `App/ltheory.lts:66-78`, `GameLogic/Dockable.cpp:15-16` |
+| Economy | **Fragment.** Order-book markets with escrow, matched at the mid price. Scripts create the money: 1.5 M per AI player, and 1 M per governor and per station manager. Each planet governor gets 10⁹. A partly filled bid is refunded its whole escrow, which creates credits. Transport moves nothing and nothing consumes. Production and research cannot be reached, because no blueprint is ever created. | `GameLogic/Market.cpp:102-118`, `Object/System.lts:1,61,156,212`, `GameLogic/Planet.cpp:100-101`, `GameLogic/Transport.cpp:44-49` |
+| AI | **Fragment.** Each object has a task stack, and there are 15 tasks. The one brain, `Task_Play`, adopts a random opportunity from a list that each system rebuilds every update, at a cost of O(markets² × items). | `GameLogic/ComponentTasks.cpp:13-22`, `GameLogic/Play.cpp:167-174`, `GameLogic/Economy.cpp:99-139` |
+| Generation | **Works.** One universe holds one region, and the region holds 1 + ⌊5·Exp⌋ systems. `Object/System:Init`, in LTSL, fills each system with a planet and its colonies, radial rails, two asteroid zones of 96 rich asteroids, stations with 32 listings, patrols, pirates, and two AI players. That is about 380 to 400 objects per system (an estimate from the script, not a count at run time). | `GameLogic/Universe.cpp:80`, `GameLogic/Region.cpp:20,95-96,153`, `Object/System.lts` |
+| Story hooks | **Skeletons.** Names come from a grammar, and there are seven personality traits. Opinions are keyed by `ObjectID` and never fade. The history component never runs. Each object keeps a log. Seven lifetime stats exist and are never written. Missions exist, but their constraints all evaluate to 1.0. | `NeuronCore/Grammar.cpp`, `GameLogic/Traits.h`, `GameLogic/Opinion.h:8`, `GameLogic/History.cpp:5`, `GameLogic/Log.h`, `GameLogic/Player.h:47`, `GameLogic/Mission.cpp:14,29` |
 | Interface | **Mostly works.** The HUD, a system map, an object inspector (5 of its 12 tabs have content), and a market with a working order dialog. The game menu's buttons do nothing. The settings window calls `WidgetSettings`, a native that ADR-013 removed, and its only caller is commented out. | `Widget/HUD.lts`, `Widget/Map.lts`, `Widget/ObjectInfo.lts:135-164`, `Widget/Market/Transaction.lts:162-181`, `Widget/Settings.lts:13`, `App/widget.lts:28-41` |
-| Time | **Missing.** Frame time drives the world. `kDefaultSimulationFrequency` is declared and never used. The universe's age never advances, so every log and trade timestamp is 0. | `Game/Object.cpp:27`, `Module/FrameTimer.cpp:26`, `Game/Universe.h:26` |
-| Persistence | **Missing, with a foundation.** No game state is saved. A versioned binary serializer, driven by reflection, exists and saves the settings and the disk caches. | `LTE/Serializer.h:15-42`, `Module/Settings.cpp:39-45` |
+| Time | **Missing.** Frame time drives the world. `kDefaultSimulationFrequency` is declared and never used. The universe's age never advances, so every log and trade timestamp is 0. | `GameLogic/Object.cpp:26`, `NeuronCore/FrameTimer.cpp:26`, `GameLogic/Universe.h:26` |
+| Persistence | **Missing, with a foundation.** No game state is saved. A versioned binary serializer, driven by reflection, exists and saves the settings and the disk caches. | `NeuronCore/Serializer.h:15-42`, `NeuronClient/ModuleSettings.cpp:39-45` |
 | Network | **Missing.** What little existed was removed as unreachable. | ADR-013, ADR-005 |
-| Front end, input | **Missing.** One app per process. Keys are literals in scripts, with no rebinding. The settings file has no setter. | `launch.cpp:209`, ADR-013, `Module/Settings.cpp` |
-| Mods | **Minimal.** Whole-file overrides from `mod/*/`; the last one read wins. | `LTE/Location.cpp:17-41` |
+| Front end, input | **Missing.** One app per process. Keys are literals in scripts, with no rebinding. The settings file has no setter. | `FrontierOutpost/Main.cpp:218`, ADR-013, `NeuronClient/ModuleSettings.cpp` |
+| Mods | **Minimal.** Whole-file overrides from `mod/*/`; the last one read wins. | `NeuronCore/Location.cpp:17-41` |
 
 ### 4.4 What blocks multiplayer, most work first
 
-1. **The simulation depends on the GPU, the renderer and the camera.** Building a system creates GPU
-   textures and a 100,000-star mesh (`Game/Object/System.cpp:81-114`). A ship type runs its hull
-   generator, which bakes occlusion on the GPU (`Item/ShipType/Generate.lts:89`), and then
-   ray-casts its sockets against that hull (`Game/Item/ShipType.cpp:219-259`). Bounds and
-   collision meshes come from renderables (`Game/Object.cpp:165-166`), and asteroid fields exist
-   only on the GPU (ADR-009). Zones create and delete asteroids while *drawing*, around the camera
-   (`Game/Object/Zone.cpp:62-100,119-124`), and simulation code plays sounds and spawns lights and
-   explosions. A server has no GPU, no audio and no camera.
-2. **There is no tick.** The frame's wall-clock time is the step (`Module/FrameTimer.cpp:26`). The
-   player's control script sets the ship's heading from the frame time and moves the camera in the
-   same function (`Widget/Handling.lts:35-69`), and some behaviour counts updates rather than time.
+1. **The simulation depends on the GPU, the renderer and the camera.** The library split removed the
+   dependency at build time: GameLogic includes and links nothing of NeuronClient, and asks the
+   executable for what it shows through registries, which `Tests/GameLogicTests` proves by linking
+   without the client (ADR-016). At run time the dependency stands. Building a system has the client
+   make GPU textures and a 100,000-star mesh (`GameLogic/System.h:44-47`,
+   `FrontierOutpost/SystemVisual.cpp:49-82`). A ship type runs its hull generator, a script that
+   calls client functions and bakes occlusion on the GPU (`Item/ShipType/Generate.lts:89`), and
+   then ray-casts its sockets against that hull (`GameLogic/ShipType.cpp:215-255`). Bounds and
+   collision meshes come from renderables the client makes (`GameLogic/Object.cpp:162-163`), and
+   asteroid fields exist only on the GPU (ADR-009). Zones create and delete asteroids while
+   *drawing*, around the view the client reports (`GameLogic/Zone.cpp:49-87,106-115`), and
+   simulation code plays sounds and spawns lights and explosions. A server has no GPU, no audio and
+   no camera. Without a client the registries answer nothing, so a server would have no shapes,
+   would run scripts that call functions nobody registered, and would draw less on the shared
+   `Rand` (ADR-016).
+2. **There is no tick.** The frame's wall-clock time is the step (`NeuronCore/FrameTimer.cpp:26`).
+   The player's control script sets the ship's heading from the frame time and moves the camera in
+   the same function (`Widget/Handling.lts:35-69`), and some behaviour counts updates rather than
+   time.
 3. **Identity.** IDs come from one process-wide counter that presentation objects consume too
-   (`Game/Object.cpp:32-37`). The counter is never saved (`LTE/Static.h:6`), and nothing maps an ID
-   back to its object. `parent` and `container` are raw pointers into pooled memory that is reused
-   last-in-first-out, and deleted objects linger while anything holds them.
+   (`GameLogic/Object.cpp:31-36`). The counter is never saved (`NeuronCore/Static.h:6`), and nothing
+   maps an ID back to its object. `parent` and `container` are raw pointers into pooled memory that
+   is reused last-in-first-out, and deleted objects linger while anything holds them.
 4. **Persistence coverage.** The serializer walks reflected fields, but renderables ("CRITICAL :
-   Serialization of renderable", `Component/Drawable.h:10`), the universe's own members and the
+   Serialization of renderable", `GameLogic/Drawable.h:10`), the universe's own members and the
    pilot link are not reflected, and an unreflected type is copied as raw bytes
-   (`LTE/Type.h:432-440`). Reflected type storage also differs between `launch.exe` and `lt.dll`
-   (`launch.cpp:102-107`), so code that walks the reflection must live in `lt.dll`.
-5. **Nondeterminism.** `srand(time(0))` at start-up (`LTE/Program.cpp:17`) feeds weapon cooldowns,
-   docking, mining, AI choices and asteroid shapes. Cargo, databases and storage are `std::map`s
-   ordered by memory address (`Component/Cargo.h:10`, `LTE/Reference.h:110-112`). Nothing replays.
+   (`NeuronCore/Type.h:432-440`).
+5. **Nondeterminism.** `srand(time(0))` at start-up (`NeuronClient/LteProgram.cpp:36`) feeds weapon
+   cooldowns, docking, mining, AI choices and asteroid shapes. Cargo, databases and storage are
+   `std::map`s ordered by memory address (`GameLogic/Cargo.h:10`, `NeuronCore/Reference.h:110-112`).
+   Nothing replays.
 6. **One system is simulated.** Nothing updates the universe, the region, or any system the player
    is not in.
 7. **Update cost grows with the world**: the opportunity rebuild above, a spatial hash rebuilt every
    update, and every pulse ray-marching that hash.
-8. **Reference counts are not atomic** (`LTE/Reference.h`), so no network thread may touch an
+8. **Reference counts are not atomic** (`NeuronCore/Reference.h`), so no network thread may touch an
    object.
 
 ## Part A: The game
@@ -244,7 +259,7 @@ gone. Later arcs can open that door; the first release does not need to.
 **Faction archetypes.** Factions are generated, and their names already come from the grammar's
 `$faction` rule, whose suffixes are brotherhood, cartel, collective, corporation, imperium,
 industries, guild and technologies (`GameData/gamedata/grammar/default.txt`). An archetype says
-what a faction wants, and each is a preset over the seven traits in `AI/Traits.h`:
+what a faction wants, and each is a preset over the seven traits in `GameLogic/Traits.h`:
 
 | Archetype | Wants | Law | What it is to a player |
 |---|---|---|---|
@@ -286,32 +301,32 @@ contract, and a pilot's twenty minutes still move a faction's numbers a little.
 ### 9.1 Flight and combat
 
 Flight keeps the engine's model: Newtonian motion with drag, 0.8 linear and 2 angular
-(`Component/Motion.h:10-11`), thrusters as fitted equipment, and warp rails as the highways inside
+(`GameLogic/Motion.h:10-11`), thrusters as fitted equipment, and warp rails as the highways inside
 a system, with nodes every 15,000 units (`Object/WarpNode.lts:2`). The player's heading stops being
 set directly by an interface script and becomes part of the flight command the server applies
-(§13.4), as boost and cruise do; their messages already exist (`Game/Messages.h`).
+(§13.4), as boost and cruise do; their messages already exist (`GameLogic/Messages.h`).
 
 Between systems, the wormholes are the jump points. Each region already joins its systems along two
-randomised spanning trees (`Game/Object/Region.cpp:163-188`). A jump is a handover between
+randomised spanning trees (`GameLogic/Region.cpp:163-188`). A jump is a handover between
 systems whose short transit hides the load (§13.5), and the AI's route planning over the cluster's
-graph fills the empty branch in `Game/Task/Goto.cpp:240-243`.
+graph fills the empty branch in `GameLogic/Goto.cpp:240-243`.
 
 Weapons get their four classes back. Pulse is the only one that fires today. Beam is hitscan and
 lag-compensated (§13.6), and is `#if 0` today. Missile is guided, and rail is a fast projectile.
 The generator's class weights, `{0, 0, 1, 0}` today, move into tuning data
-(`Game/Item/WeaponType.cpp:65-67`). Power becomes the fitting constraint: generators supply it, and
+(`GameLogic/WeaponType.cpp:65-67`). Power becomes the fitting constraint: generators supply it, and
 shields, weapons and engines draw on it. Shields already recharge from it
-(`Game/Object/Shield.cpp:171`); ships just never supply any. Scanners, disabled today
-(`Game/Object/Scanner.cpp:31-32`), read the signatures the engine already defines and decide what
+(`GameLogic/Shield.h:102`); ships just never supply any. Scanners, disabled today
+(`GameLogic/Scanner.cpp:31-32`), read the signatures the engine already defines and decide what
 can be targeted. That makes sensor fits and stealth part of combat, and it also decides what the
 server sends each client (§13.6). Collision is checked for every mover and deals damage within
 limits. Today it is checked only for objects a human owns, and it never deals damage
-(`Component/Collidable.cpp:41-43,62-65`).
+(`GameLogic/Collidable.cpp:40-42,61-64`).
 
 Ship roles follow scale, and the engine already names the classes, from Fighter through Corvette,
-Destroyer and Battleship to Colossus (`ScaleToClass`, `Game/NLP.cpp`). A hull is generated from one
-budget, its value, which is split between hull, thrusters and generator
-(`Game/Item/ShipType.cpp:188-196`). So roles are trade-offs within a budget, and no hull is best at
+Destroyer and Battleship to Colossus (`ScaleToClass`, `GameLogic/NLP.cpp`). A hull is generated from
+one budget, its value, which is split between hull, thrusters and generator
+(`GameLogic/ShipType.cpp:184-192`). So roles are trade-offs within a budget, and no hull is best at
 everything.
 
 **Death is loss, not failure.** The ship is destroyed, and the captain ejects and respawns at their
@@ -319,7 +334,7 @@ registered berth, a station where they have docking rights. Each cargo stack and
 drops with a set chance (proposed: 50%, tuning data) as a cargo pod, and the rest is destroyed. The
 hull is lost, and Authority insurance refunds part of it unless the owner committed a crime. The
 pod already exists: `Pod` holds an item and a quantity, and anything with cargo that touches it
-takes it (`Game/Object/Pod.cpp:59-76`). Nothing spawns one in space today. Loot is free to take in
+takes it (`GameLogic/Pod.cpp:57-74`). Nothing spawns one in space today. Loot is free to take in
 Lawless space; elsewhere, taking another captain's loot is theft.
 
 ### 9.2 Law, crime and PvP
@@ -334,7 +349,7 @@ changes it afterwards: the Authority thins out in Act II (§10.2), and factions 
 | Lawless | nobody | Not a crime; only opinions and reputation move. | attackable after reinforcement timers | the best ores, relics, anomalies |
 
 Crime is an event, judged by the law of the system it happens in. Damage is already an event, and
-destruction is declared as one but never defined (`Game/Events.h`, Appendix A7). The HUD states
+destruction is declared as one but never defined (`GameLogic/Events.h`, Appendix A7). The HUD states
 what an act will cost before it happens: "Attacking this ship is a crime here: Authority response,
 bounty 12,000." A duel needs mutual
 consent and is legal anywhere. Faction war is declared with a cost and a delay, appears in the
@@ -369,25 +384,25 @@ stolen, lost or blockaded, and nothing teleports between markets. **Money moves 
 except at named faucets and sinks**, each a tuning value whose flow the server reports (§13.11).
 **Prices come from stock and demand** at each market. **The AI factions are most of the producers
 and consumers**, and a player can take any role in the chain. **Value is energy**:
-`Game/Constants.h` defines value in resource units, with conversions to mass, capacity, integrity
-and output. They are unused today, and become the balancing basis.
+`GameLogic/Constants.h` defines value in resource units, with conversions to mass, capacity,
+integrity and output. They are unused today, and become the balancing basis.
 
 Goods come in four tiers, plus data. Raw goods are the universe's eight generated ores and its basis
-ore (`Game/Universe.cpp:49-63`), and the ice and gas that zones take as arguments and never use
-(`Game/Objects.h:154-156`). There is one refined good per raw good. Manufactured goods are
+ore (`GameLogic/Universe.cpp:49-63`), and the ice and gas that zones take as arguments and never use
+(`GameLogic/Objects.h:154-156`). There is one refined good per raw good. Manufactured goods are
 components, equipment, hulls and station kits, and consumables are what colonies live on. Data
 (survey data, charts and blueprints, carried in the database hold) is cargo that can be sold,
 copied, stolen or lost (§9.4, §9.7). Production converts goods at rates stated in resource units,
 in refineries, factories and shipyards (§9.6), with the item's assembly chip as the recipe. The
-chip's requirements are `#if 0` today (`Game/Item/AssemblyChip.cpp:21-31`).
+chip's requirements are `#if 0` today (`GameLogic/AssemblyChip.cpp:21-31`).
 
 Consumers are what the economy lacks. Colonies consume goods, pay for them from population income,
 and grow or shrink with supply; the colony already has a population field that nothing uses
-(`Game/Object/Colony.cpp:156`). Outposts consume upkeep, shipyards consume components, and missiles
+(`GameLogic/Colony.h:87`). Outposts consume upkeep, shipyards consume components, and missiles
 consume ammunition.
 
 **Money is Charter scrip.** The engine already backs value with an ore, the universe's
-`currencyBasis` (`Game/Universe.cpp:53`). The design makes that literal: the Authority's mint
+`currencyBasis` (`GameLogic/Universe.cpp:53`). The design makes that literal: the Authority's mint
 converts delivered basis ore into scrip at a set rate. The two faucets are the mint and colony
 income. The Authority pays bounties and contracts from its taxes, so its spending mostly recycles
 money. The sinks are destruction, fees and taxes, wages, upkeep, insurance premiums (a net sink
@@ -397,12 +412,12 @@ pay-off is that control of the basis ore becomes a strategic objective for facti
 deflation if the sinks outrun the mint, which is why the flows are instrumented from the first day
 (§13.11) and balanced by soak tests (M4).
 
-Markets keep the engine's order book, escrow and mid-price matching (`Component/Market.cpp`), with
+Markets keep the engine's order book, escrow and mid-price matching (`GameLogic/Market.cpp`), with
 its refund fixed (Appendix A1). Each station's owner runs a market maker that quotes around a
 reference price of value × scarcity, where scarcity is stock against the owner's target. What a
 captain knows of prices elsewhere is what they last saw or bought (§9.4), so hauling pays for
 information as well as for distance. Contracts grow from the engine's `Mission`, which has an owner,
-a pool, a price and constraints on the item (`Game/Mission.h`). Every contract's reward sits in
+a pool, a price and constraints on the item (`GameLogic/Mission.h`). Every contract's reward sits in
 escrow. Its kinds are procurement (the engine's case), delivery, courier with collateral, bounty,
 survey and escort. AI factions post most contracts, and players post their own from T3.
 
@@ -413,7 +428,7 @@ Surveying scans a system's objects into survey data, which the Authority's and t
 cartographers buy. Knowledge of markets, stations, ship types and anomalies belongs to a captain and
 their faction, and it goes stale. The engine's `Info` component already models knowledge that
 expires, and never expires it today because the universe's age never advances
-(`Game/Universe.h:26`). Stale prices are a feature: they are what a trader bets on. First
+(`GameLogic/Universe.h:26`). Stale prices are a feature: they are what a trader bets on. First
 discoveries go into the Chronicle and count towards the Discovered stat. Naming rights for the first
 surveyor are a server setting, because names need moderation. Anomalies are the Director's (§10.3):
 derelicts with salvage and a fragment of story, relic rails, rare ore fields, and transient
@@ -428,10 +443,10 @@ traits, a wage, and loyalty, which is their opinion of their employer. Traits st
 *Aggressive* captain engages sooner, a *Greedy* one asks more and may skim, and a *Lawless* one
 accepts criminal orders. *Explorative*, *Intellectual* and *Creative* captains survey, research and
 produce better, and a *Sociable* one keeps a wing together. The engine's like and dislike
-thresholds (±0.5, `Game/Object.cpp:28-29`) decide when a captain quits or defects.
+thresholds (±0.5, `GameLogic/Object.cpp:27-28`) decide when a captain quits or defects.
 
 Orders use the AI's own tasks, so the design stays symmetric: Goto (with travel between systems),
-Dock, Mine, Transport (which must actually carry goods, `Game/Task/Transport.cpp:44-49`), Buy, Sell,
+Dock, Mine, Transport (which must actually carry goods, `GameLogic/Transport.cpp:44-49`), Buy, Sell,
 Destroy and Hunt. They are joined by new tasks for Escort, Survey and Salvage, and by Patrol, which
 ADR-013 deleted as unreachable and which comes back. A standing order is a loop of tasks with
 conditions (`Condition` exists, with one case, Nearby). The engine's `Project` already assigns
@@ -468,15 +483,16 @@ contest and profit from.
 
 ### 9.7 Research and technology
 
-An item type is generated from a value, a seed and a few multipliers (`Game/Items.h`), so technology
-is value and quality, not a tree. A blueprint is the right to produce an item type, and research at
-a laboratory derives a new one. The engine's derivation raises one parameter and lowers another by
-the same factor (`Game/Item/Blueprint.cpp:48-70`); that becomes the player's choice rather than a
-roll, such as more range for less rate. Each tier of value follows `Constant_ResearchIncrement`,
-x + 0.25·√x, so progress is quick early and slows later. Blueprints are data: they can be copied for
-a cost, traded and carried, and a copy in the hold is lost with the ship, while originals stay in
-the laboratory. Relics unlock rare blueprints, which is where exploration and the story pay into
-technology. Derivation draws from the laboratory's own seeded stream, not from `rand()` (§13.4).
+An item type is generated from a value, a seed and a few multipliers (`GameLogic/Items.h`), so
+technology is value and quality, not a tree. A blueprint is the right to produce an item type, and
+research at a laboratory derives a new one. The engine's derivation raises one parameter and lowers
+another by the same factor (`GameLogic/Blueprint.cpp:48-70`); that becomes the player's choice
+rather than a roll, such as more range for less rate. Each tier of value follows
+`Constant_ResearchIncrement`, x + 0.25·√x, so progress is quick early and slows later. Blueprints
+are data: they can be copied for a cost, traded and carried, and a copy in the hold is lost with the
+ship, while originals stay in the laboratory. Relics unlock rare blueprints, which is where
+exploration and the story pay into technology. Derivation draws from the laboratory's own seeded
+stream, not from `rand()` (§13.4).
 
 ### 9.8 Factions and diplomacy
 
@@ -484,11 +500,11 @@ An AI faction has an archetype and traits, a treasury, assets, held systems and 
 replaces `Task_Play`'s random pick with projects chosen by expected utility over the ledger economy
 (§13.5): expand (found an outpost), develop (production), trade (routes), secure (patrols and law),
 raid (piracy) and war (claims). `Task_Manage` already splits a budget across Develop, Expand,
-Monopolize and Secure (`Game/Task/Manage.cpp:139-142`); the idea stays and its stubs are filled.
+Monopolize and Secure (`GameLogic/Manage.cpp:139-142`); the idea stays and its stubs are filled.
 
 Standing is an opinion from −1 to 1 that a faction holds about each captain and each other faction.
 It decays towards a default, which fixes "opinions are currently permanent"
-(`Component/Opinion.h:8`), and it gates docking, market access, contract tiers, and whether patrols
+(`GameLogic/Opinion.h:8`), and it gates docking, market access, contract tiers, and whether patrols
 attack.
 
 A player faction (T4) is chartered at the Authority for a fee. It has members, players or NPC
@@ -569,8 +585,8 @@ for a newcomer. Entries above a threshold are kept for good, and those below it 
 periodic summaries such as "In week 3, Winterskytech lost 14 freighters to raiders in Kess."
 
 The engine offers the start of it: events for damage and mining; `Event_Destroyed`, declared and
-never defined (`Game/Events.h:15`); a history component whose `Run` does nothing
-(`Component/History.cpp:5`); and logs that already carry an importance (`Component/Log.h`).
+never defined (`GameLogic/Events.h:15`); a history component whose `Run` does nothing
+(`GameLogic/History.cpp:5`); and logs that already carry an importance (`GameLogic/Log.h`).
 
 ### 10.5 Characters
 
@@ -582,7 +598,7 @@ ship and a grudge, and the trader you rescued sends you work. That is how the ga
 cheaply.
 
 Players earn titles from the seven lifetime stats that the engine already names and never writes
-(`STATS_X`, `Game/Common.h`):
+(`STATS_X`, `GameLogic/GameCommon.h`):
 
 | Stat | Title |
 |---|---|
@@ -660,55 +676,66 @@ rather than something a reviewer can check.
 
 | Model | What it needs | Verdict |
 |---|---|---|
-| Lockstep: every client simulates everything from shared inputs | a bit-identical simulation on every machine | **Rejected.** `lt` builds at `/fp:fast` (ADR-001), clients are x64 and ARM64 (ADR-006), and asteroid fields come from the GPU (ADR-009). Every client would also hold the whole world, which in open PvP is a map hack. |
+| Lockstep: every client simulates everything from shared inputs | a bit-identical simulation on every machine | **Rejected.** The imported files build at `/fp:fast` (ADR-001, ADR-015), clients are x64 and ARM64 (ADR-006), and asteroid fields come from the GPU (ADR-009). Every client would also hold the whole world, which in open PvP is a map hack. |
 | Peer authority: each client owns its own objects | trust in clients | **Rejected.** In open PvP (G2), every client is an adversary. |
 | **Authoritative server, replicated state** | a server that runs without a GPU; bandwidth | **Proposed (P1).** Clients receive only what they may see. |
 
 ### 13.2 Processes and roles
 
-`launch.exe` gains a role. The **client** role, the default, is today's window, renderer, audio and
-LTSL interface, plus a network session. The **server** role (proposed flag `--server <world>`) has
-no window, no Direct3D device and no audio. It runs unattended, so no dialog can appear, as
-`--frames` already arranges (`OS_SetUnattended`, `launch.cpp:47-49`), and it has a console and a
-log. For single-player and hosting, the client starts the server role as a child process, bound to
-localhost or, for hosting, to a public port, and then connects to it like any other client. A
-dedicated server runs the server role alone, on a PC or a virtual machine. The server does not run
-inside the client's process because the engine keeps one world per process (§3, point 5).
+`FrontierOutpost.exe` gains a role. The **client** role, the default, is today's window, renderer,
+audio and LTSL interface, plus a network session. The **server** role (proposed flag
+`--server <world>`) has no window, no Direct3D device and no audio. It runs unattended, so no
+dialog can appear, as `--frames` already arranges (`OS_SetUnattended`,
+`FrontierOutpost/Main.cpp:55-57`), and it has a console and a log. For single-player and hosting,
+the client starts the server role as a child process, bound to localhost or, for hosting, to a
+public port, and then connects to it like any other client. A dedicated server runs the server role
+alone, on a PC or a virtual machine. The server does not run inside the client's process because
+the engine keeps one world per process (§3, point 5).
 
-One executable keeps deployment simple, and `lt.dll` is the same in both roles. It still imports
-Direct3D 12, DXGI, XAudio2, DirectWrite and WIC through NeuronClient, all of which ship with desktop
-Windows 10 and 11. Whether it loads on Windows Server Core, which lacks some graphics components, is
-unverified; delay-loading those DLLs is the fallback.
+One executable keeps deployment simple, and ADR-014 has already made `FrontierOutpost.exe` the only
+one, with the same code in both roles. It still imports Direct3D 12, DXGI, XAudio2, DirectWrite and
+WIC through NeuronClient, all of which ship with desktop Windows 10 and 11. Whether it loads on
+Windows Server Core, which lacks some graphics components, is unverified; delay-loading those DLLs
+is the fallback.
 
 ### 13.3 Layers, and where new code lives
 
 ```
-launch.exe      client role | server role (--server)                    legacy host (ADR-001)
-    |
-lt.dll          world, objects, rules, LTSL, replication, saves          legacy engine (ADR-001)
-    |-- NeuronClient.lib   graphics, glyphs, images, sound, window, input   governed (ADR-005)
-    '-- NeuronNet.lib      sockets, packets, channels, connections          governed, new (P10)
+FrontierOutpost.exe  client role | server role (--server): main, the game's client side
+    |-- GameLogic.lib      world, objects, rules, replication, saves           sees NeuronCore
+    |-- NeuronClient.lib   graphics, glyphs, images, sound, window, input, UI  sees NeuronCore
+    |-- NeuronServer.lib   the server's engine side, a placeholder today       sees NeuronCore
+    |-- NeuronNet.lib      new (P10): sockets, packets, channels, connections  sees none
+    '-- NeuronCore.lib     the shared engine: containers, math, types, LTSL    sees none
 ```
 
-**NeuronNet**, with its tests, is the only new project, and it is game-agnostic in the way
-NeuronClient is: namespace `Neuron`, with no `Object`, no `String` and no liblt types (AGENTS.md
-R9). Its shape is AGENTS.md's own worked example for R2: a `Transport` concept, a `UdpTransport`
-over Winsock, which is part of the Windows SDK and so adds no dependency (R14), a
-`LoopbackTransport` for tests, and a link conditioner
-that adds latency, loss and jitter. It links into `lt.dll`, so it builds wherever `lt` does: x64 and
-ARM64, with `lt`'s `/arch`, as ADR-006 requires of NeuronClient. `Build/CheckProjectFiles.py`'s list
-of ARM64 projects grows by NeuronNet and its tests. AGENTS.md governs it in full, and NeuronNetTests
-carries the placeholder `SuiteSmoke` until its first real test (AGENTS.md §3).
+The executable sees every library; GameLogic, NeuronClient and NeuronServer see NeuronCore alone,
+and NeuronCore sees none of them (ADR-014). Imported and new files share these projects, and the
+imported ones are marked file by file (ADR-015).
 
-**Everything else lives in `lt.dll`**, for three reasons. Reflection storage differs between
-`launch.exe` and `lt.dll` ("a major design flaw in the Type system", `launch.cpp:102-107`), so code
-that walks reflected types to save or replicate them must run inside `lt.dll`. New components,
-tasks and events can only be C++ inside `lt`, because `TaskT` is an abstract C++ class
-(`Game/Task.h`) and components are compile-time mixins. And the interface scripts reach new systems
-through the script API that `lt` registers. New code in `lt.dll` follows liblt's idiom under
-ADR-001, is held to R18 to R25 (§16), and marks every override `override`: three tasks carry the bug
-that keyword would have caught (Appendix A2). Holding new liblt files to more of AGENTS.md is the
-owner's call (§19, Q8).
+**NeuronNet**, with its tests, is the only new project. It is game-agnostic: namespace `Neuron`,
+with no `Object`, no `String` and no other imported type (AGENTS.md R9), so it sees none of the
+other libraries. Its shape is AGENTS.md's own worked example for R2: a `Transport` concept, a
+`UdpTransport` over Winsock, which is part of the Windows SDK and so adds no dependency (R14), a
+`LoopbackTransport` for tests, and a link conditioner that adds latency, loss and jitter. It links
+into `FrontierOutpost.exe` as the other libraries do, so it builds for x64 and ARM64 with their
+`/arch` (ADR-006, ADR-014). `Build/CheckProjectFiles.py`'s list of ARM64 projects grows by NeuronNet
+and its tests. AGENTS.md governs it in full, and NeuronNetTests carries the placeholder `SuiteSmoke`
+until its first real test (AGENTS.md §3). Which libraries may see NeuronNet is open: replication
+lives in GameLogic, which sees NeuronCore alone, so an edge from GameLogic would amend ADR-014. The
+NeuronNet ADR settles it (§15).
+
+**Everything else lives where ADR-014 puts it**: the rules and state of play in GameLogic, what a
+client shows in the executable, as ADR-016 does for today's looks, and the server's engine side in
+NeuronServer. New components, tasks and events can only be C++ in GameLogic, because `TaskT` is an
+abstract C++ class (`GameLogic/Task.h`) and components are compile-time mixins. The interface
+scripts reach new systems through the script API the libraries register, and the executable links
+every library whole so that no registration is dropped (ADR-014, decision 3). The old rule that
+code walking reflected types, to save or replicate them, had to run inside `lt.dll` went with the
+DLL: in one image, `Type_Get<T>` keeps a single copy of its storage (ADR-014, decision 4). New files
+follow AGENTS.md in full, even beside imported ones (ADR-015), are held to R18 to R25 (§16), and
+mark every override `override`: three tasks carry the bug that keyword would have caught
+(Appendix A2).
 
 ### 13.4 The simulation core
 
@@ -725,24 +752,27 @@ second; beams, for example, retarget every other update, and colonies roll 1% pe
 ticks per wall second, for scenarios and single-player, and never change the step.
 
 **(b) Presentation leaves the simulation.** The server builds and runs only simulation state.
-Everything below moves to the client, which builds it lazily at first draw and never on the server:
+Everything below moves to the client, which builds it lazily at first draw and never on the server.
+The library split has done part of this: what objects and item types look like is already the
+executable's code, which GameLogic asks for through registries (ADR-016). It is still made when the
+simulation makes the object, not at first draw, and physics still takes its shapes from it.
 
 | In the simulation today | Becomes |
 |---|---|
-| A system's nebula, starfield, IR map and colour grade (`Game/Object/System.cpp:81-114`) | the client's presentation of the system, built from its seed |
-| Planet surfaces and rings, made on the GPU (`Game/Item/PlanetType.cpp`) | client presentation, from the seed |
-| The hull's occlusion bake on the GPU (`Item/ShipType/Generate.lts:89`, `LTE/PlateMesh.cpp:112`) | client-only. The hull's *geometry* is still built on the CPU in both roles, because sockets are ray-cast against it (`Game/Item/ShipType.cpp:223-259`). |
-| Bounds read from the renderable (`Game/Object.cpp:165-166`) | bounds stored on the item type, computed once from its geometry |
-| Collision meshes from renderables (`Module/PhysicsEngine.cpp`) | for hulls, from the CPU geometry; for asteroids, from a proxy (below) |
-| Asteroid fields on the GPU, with shapes that differ per run (ADR-009; `Game/Renderable/Asteroid.cpp:17`) | visuals as ADR-009 decides, but seeded from each asteroid's own seed. Collision and mining use a convex proxy that the server computes from the same seed and scale. |
-| Zone asteroids created and deleted while drawing, around the camera (`Game/Object/Zone.cpp:62-100,119-124`) | **gameplay asteroids**, finite, mineable and persistent, placed when the era is created; and **a decorative field** that follows the camera on the client only and has no effect on play |
-| Sounds, lights, explosions, particles and trails spawned by simulation code and object scripts (`Game/Item/WeaponType.cpp:89-117`, `Object/Ship.lts`, `Object/WarpNode.lts`) | **effects**: events the simulation emits with a kind, a place or entity, and parameters. The server sends them, and the client plays them. |
-| The light children of weapons, pulses and thrusters (`Game/Light.cpp`) | client presentation, which stops consuming entity identities |
+| A system's nebula, starfield, IR map and colour grade, which the client makes when the simulation builds the system (`GameLogic/System.h:44-47`, `FrontierOutpost/SystemVisual.cpp:49-82`) | the client's presentation of the system, built from its seed |
+| Planet surfaces and rings, which the client makes on the GPU when the planet type is generated (`GameLogic/PlanetType.cpp:35`, `FrontierOutpost/PlanetTypeVisual.cpp`) | client presentation, from the seed |
+| The hull's occlusion bake on the GPU (`Item/ShipType/Generate.lts:89`, `NeuronClient/PlateMesh.cpp:112`) | client-only. The hull's *geometry* is still built on the CPU in both roles, because sockets are ray-cast against it (`GameLogic/ShipType.cpp:219-255`). |
+| Bounds read from the renderable (`GameLogic/Object.cpp:162-163`) | bounds stored on the item type, computed once from its geometry |
+| Collision meshes from renderables (`GameLogic/PhysicsEngine.cpp`) | for hulls, from the CPU geometry; for asteroids, from a proxy (below) |
+| Asteroid fields on the GPU, with shapes that differ per run (ADR-009; `FrontierOutpost/RenderableAsteroid.cpp:17`) | visuals as ADR-009 decides, but seeded from each asteroid's own seed. Collision and mining use a convex proxy that the server computes from the same seed and scale. |
+| Zone asteroids created and deleted while drawing, around the camera (`GameLogic/Zone.cpp:49-87,106-115`) | **gameplay asteroids**, finite, mineable and persistent, placed when the era is created; and **a decorative field** that follows the camera on the client only and has no effect on play |
+| Sounds, lights, explosions, particles and trails spawned by simulation code and object scripts (`GameLogic/WeaponType.cpp:89-117`, `Object/Ship.lts`, `Object/WarpNode.lts`) | **effects**: events the simulation emits with a kind, a place or entity, and parameters. The server sends them, and the client plays them. |
+| The light children of weapons, pulses and thrusters (`GameLogic/Light.cpp`) | client presentation, which stops consuming entity identities |
 
 Asteroid proxies are the one place where a player can see the gap. A proxy follows the visible
 surface closely but not exactly, so a ship scraping a crater may touch rock a hand's breadth early
 or late, and that is accepted. The alternative, a coarse collision field built on the CPU, needs
-Worley noise in C++ (`FractalWorley` is `NOT_IMPLEMENTED` on the CPU, `LTE/SDF.cpp`) and an
+Worley noise in C++ (`FractalWorley` is `NOT_IMPLEMENTED` on the CPU, `NeuronCore/SDF.cpp`) and an
 amendment to ADR-009, which forecloses CPU fields. The ADR for this step chooses between them.
 
 **(c) Identity.** An `EntityId` is 64 bits, allocated by the server from a counter saved with the
@@ -751,9 +781,10 @@ to its object on the server and to its replica on the client. What crosses a bou
 wire, a reference between systems) is an id, never a pointer (R22). Destruction is real: a destroyed
 object leaves the registry and its container, and references held by id resolve to nothing instead
 of keeping a zombie alive. Item types become canonical. Today the same generator arguments give two
-distinct items with two ids (`Game/Item.cpp`); a registry keyed by kind and arguments makes them one
-`ItemTypeId`, the same everywhere. Cargo, databases, storage and markets key by that id, which also
-ends the iteration ordered by memory address (`Component/Cargo.h:10`, `LTE/Reference.h:110-112`).
+distinct items with two ids (`GameLogic/Item.cpp`); a registry keyed by kind and arguments makes
+them one `ItemTypeId`, the same everywhere. Cargo, databases, storage and markets key by that id,
+which also ends the iteration ordered by memory address (`GameLogic/Cargo.h:10`,
+`NeuronCore/Reference.h:110-112`).
 
 **(d) Commands.** A client changes the world only by asking. Flight input (thrust, heading target,
 boost, fire groups) goes every tick, unreliably and with redundancy. Discrete commands (dock, board a
@@ -764,22 +795,22 @@ commands. Each of the engine's 1,032 natives (ADR-013) must be classed as readin
 presentation only, or as changing the world, and M2 starts with that audit. Today's world-changing
 script calls include boarding a rail by sending `MessageStartUsing` (`App/ltheory.lts:66-78`),
 placing a market order (`Widget/Market/Transaction.lts:162-181`) and fitting equipment (`Plug`). The
-message types are already reflected (`Game/Messages.h`), which makes them a natural command format.
-`Handling.lts` splits in two: reading input and moving the camera stay on the client and emit the
-flight command, while turning a heading into motion becomes simulation, authoritative on the server
-and predicted on the client (§13.6).
+message types are already reflected (`GameLogic/Messages.h`), which makes them a natural command
+format. `Handling.lts` splits in two: reading input and moving the camera stay on the client and
+emit the flight command, while turning a heading into motion becomes simulation, authoritative on
+the server and predicted on the client (§13.6).
 
 **(e) Randomness and replay (P11).** Every random draw in the simulation comes from a stream derived
 from the era's seed and the drawing system's id, and generation has streams of its own. `rand()`,
-`Rand*`, `RNG_Default` and the effect of `srand(time(0))` (`LTE/Program.cpp:17`) leave simulation
-code, although presentation may keep them. The audit found them in weapon cooldowns, beams,
-docking, mining, four AI tasks, projects, blueprint derivation, the economy's item pick and asteroid
-shapes. Iteration that reaches an outcome is ordered by identity (c), and `FrameTimer_Get` inside
-object scripts moves to presentation or to the tick. A server run then replays from its save and
-its command log, on the same binary and the same machine. It does not replay across machines, and it
-need not: `lt` stays at `/fp:fast` (ADR-001), x64 and ARM64 differ, and on x64 the CRT chooses its
-transcendental functions by whether the CPU has FMA3 (`_set_FMA3_enable`). Replay is a debugging and
-testing tool, not a network model.
+`Rand*`, `RNG_Default` and the effect of `srand(time(0))` (`NeuronClient/LteProgram.cpp:36`) leave
+simulation code, although presentation may keep them. The audit found them in weapon cooldowns,
+beams, docking, mining, four AI tasks, projects, blueprint derivation, the economy's item pick and
+asteroid shapes. Iteration that reaches an outcome is ordered by identity (c), and `FrameTimer_Get`
+inside object scripts moves to presentation or to the tick. A server run then replays from its save
+and its command log, on the same binary and the same machine. It does not replay across machines,
+and it need not: the imported files stay at `/fp:fast` (ADR-015), x64 and ARM64 differ, and on x64
+the CRT chooses its transcendental functions by whether the CPU has FMA3 (`_set_FMA3_enable`).
+Replay is a debugging and testing tool, not a network model.
 
 **(f) Threading.** At first, one thread ticks all live systems in turn. Because systems meet only
 through jumps that are handed over between ticks, live systems can later tick in parallel as jobs,
@@ -844,9 +875,9 @@ cluster map and the Chronicle reach it as summaries on the reliable channel. Onc
 **detection is relevance**: a client receives what its sensors detect, plus what is always visible
 (stars, stations, rails), so a cheat that reveals everything reveals only what the player could see
 anyway. Effects travel unreliably, stamped with their tick. Positions are doubles in each system's
-own frame (`LTE/Common.h:59`), and the renderer already works relative to the camera. On the wire,
-positions are quantised relative to a sector origin, so precision holds from a rail node to the
-system's edge.
+own frame (`NeuronCore/LteCommon.h:59`), and the renderer already works relative to the camera. On
+the wire, positions are quantised relative to a sector origin, so precision holds from a rail node
+to the system's edge.
 
 **Prediction.** The client predicts only its own ship, running the same flight code at the same step,
 replaying unacknowledged inputs on each correction and smoothing what is visible. Everything else is
@@ -872,10 +903,11 @@ kept per object for presentation only. Seed-and-delta is rejected: it would re-r
 delta against generators that change constantly during development, and corrupt worlds silently.
 
 The mechanism exists. The engine's reflection serializer walks object graphs by id, restores derived
-types by name, and is versioned (`LTE/Serializer.h:15-42`); the settings file already goes through
-it (`Module/Settings.cpp:39-45`). For world saves it runs over a whitelist of persistent types,
-refuses unreflected types instead of copying their raw bytes (`LTE/Type.h:432-440`), never saves
-presentation (`Component/Drawable.h:10`), and runs inside `lt.dll` (§13.3).
+types by name, and is versioned (`NeuronCore/Serializer.h:15-42`); the settings file already goes
+through it (`NeuronClient/ModuleSettings.cpp:39-45`). For world saves it runs over a whitelist of
+persistent types, refuses unreflected types instead of copying their raw bytes
+(`NeuronCore/Type.h:432-440`), never saves presentation (`GameLogic/Drawable.h:10`), and lives in
+GameLogic, with the state it saves (§13.3).
 
 A saved world is one chunk per system, plus a cluster file for factions, players, the ledger, the
 arc's state and the entity and item-type counters, plus the Chronicle as an append-only log. A
@@ -902,8 +934,8 @@ The game becomes one app with states (front end, loading, in the world) instead 
 process. Today's apps become **scenarios**, a seed plus a bootstrap script that the server role can
 load, and `war`, `dogfight` and `rails` become the first headless tests (§13.11). The server fails
 fast. Today, a statement that fails to compile is dropped with a log line while the script runs on
-(`LTE/Expression.cpp:141-149`), and a failed call at run time shows a message box and exits
-(`LTE/Expression/DynamicDispatch.cpp:51-78`). In the server role, a compile failure stops the server
+(`NeuronCore/Expression.cpp:141-149`), and a failed call at run time shows a message box and exits
+(`NeuronCore/DynamicDispatch.cpp:51-78`). In the server role, a compile failure stops the server
 at start-up, and no dialog is ever shown.
 
 Lua is not proposed. The newer Limit Theory moved to it, but here it would be a new dependency and a
@@ -917,18 +949,18 @@ The front end needs a main menu (continue, new world, host, join, settings, quit
 a server list (LAN, favourites, direct address), a loading screen reusing the `loading` app's, and a
 game menu whose buttons work (`Widget/GameMenu.lts:4-8`). The settings window is rebuilt: it calls
 `WidgetSettings`, a native that ADR-013 removed (`Widget/Settings.lts:13`), and its only caller is
-commented out (`App/widget.lts:28-41`). `Module/Settings.cpp` gets setters and a script API, and
-NeuronClient's backlog becomes necessary: borderless fullscreen, resolution and vsync (ADR-007,
-ADR-012). Input moves to a C++ input map whose script API names actions rather than keys, with
-rebinding saved as a runtime file (R13); it replaces the Button/Axis system that ADR-013 removed.
-Joysticks stay out unless decided otherwise (ADR-012).
+commented out (`App/widget.lts:28-41`). `NeuronClient/ModuleSettings.cpp` gets setters and a script
+API, and NeuronClient's backlog becomes necessary: borderless fullscreen, resolution and vsync
+(ADR-007, ADR-012). Input moves to a C++ input map whose script API names actions rather than keys,
+with rebinding saved as a runtime file (R13); it replaces the Button/Axis system that ADR-013
+removed. Joysticks stay out unless decided otherwise (ADR-012).
 
 The new panels are the contract board, a cluster map (today's map shows one system), fleet and
 orders, construction and production, faction and diplomacy, law indicators (the HUD's sovereignty is
 hard-coded "Unclaimed", `Widget/HUD/Container.lts:37`), the Chronicle's views, chat and the player
 list, and the digest. Some widgets rebuild every frame (`Dynamic` re-runs `CreateChildren` and diffs
-the result, `UI/Widget/Dynamic.cpp:21-56`), so the interface's cost is measured before new panels
-multiply it (§13.11).
+the result, `NeuronClient/WidgetDynamic.cpp:21-56`), so the interface's cost is measured before new
+panels multiply it (§13.11).
 
 ### 13.10 Audio and music
 
@@ -962,13 +994,13 @@ rate.
 ### 13.12 Operations
 
 Dedicated servers run on Windows x64, as a console application or a service, on a home PC or a cloud
-VM. The engine is Windows-only today (liblt's Linux branches are backlog, NeuronClient-migration
-§11), and because the server role never touches NeuronClient's device, a later Linux port stays
-possible. Each world has one configuration file, holding the settings of §11 (R13). In the first
-release, client and server must run the same build and content, and the handshake refuses a mismatch
-and says why. Updates are save, stop, update, start, with saves migrating forward (§13.7). Logs and
-crash dumps go under the world folder rather than `cache/`, so each server's logs stay with its
-world.
+VM. The engine is Windows-only today (the imported code's Linux branches are backlog,
+NeuronClient-migration §11), and because the server role never touches NeuronClient's device, a
+later Linux port stays possible. Each world has one configuration file, holding the settings of §11
+(R13). In the first release, client and server must run the same build and content, and the
+handshake refuses a mismatch and says why. Updates are save, stop, update, start, with saves
+migrating forward (§13.7). Logs and crash dumps go under the world folder rather than `cache/`, so
+each server's logs stay with its world.
 
 ### 13.13 Budgets
 
@@ -1077,8 +1109,9 @@ device cannot draw.
    jobs later (§13.4f).
 6. **Saves break during development.** Generate-then-own and migrations contain it, and test servers
    accept era resets.
-7. **New code in exempt liblt drifts from any standard.** R18 to R25, `override`, and tests in the
-   server role hold it, with an optional ADR that narrows ADR-001 for new files (§19, Q8).
+7. **New code among the exempt imported files drifts from any standard.** ADR-015 now holds every
+   new file to AGENTS.md in full (§19, Q8). For new code inside an imported file, R18 to R25,
+   `override`, and tests in the server role hold it.
 8. **Internet servers without encryption invite hijacked sessions.** Encryption lands before public
    servers, in M3.
 9. **Scope.** Five tiers and a story, for a small team. Every phase ends in something playable; cut
@@ -1109,7 +1142,7 @@ device cannot draw.
 | Q5 | **Distribution.** Standalone or Steam? Steam brings a relay for NAT traversal and an identity, and is a dependency (R14). | M3's reach beyond LAN and direct connections |
 | Q6 | **Server platform.** Windows x64 only, for the first release? | M3 |
 | Q7 | **Scripting.** LTSL for the interface and content with the rules in C++, or rules that mods can change? | M2 |
-| Q8 | **New liblt code.** Hold it to R18 to R25 only, or narrow ADR-001 so that new files follow more of AGENTS.md? | M0 |
+| Q8 | **New code among the imported files.** *Answered by ADR-015 (owner, 2026-09-26):* ADR-001's exemption now covers a marked list of files, and every new file follows AGENTS.md in full. | nothing now |
 | Q9 | **The old apps.** Keep them as test scenarios, or retire them once the game flow exists? | M1 |
 | Q10 | **The reference machine** for the budgets in §13.13. | M0's measurement |
 
@@ -1120,15 +1153,15 @@ Each is its own change, and most land naturally in the phase named.
 
 | # | Defect | Where | Effect | Phase |
 |---|---|---|---|---|
-| A1 | A partly filled bid is refunded `bid->price × bid->volume − totalPrice` before its volume is reduced, while the bid stays open. The refund should be (bid price − trade price) × trade volume. | `Component/Market.cpp:113` | Creates credits on every partial fill below the bid. | M3 |
-| A2 | `Pirate`, `Produce` and `Spawn` declare `GetOutput`, which does not override `TaskT::GetOutputs`. | `Game/Task/Pirate.cpp:62`, `Produce.cpp:56`, `Spawn.cpp:28`; `Game/Task.h:56` | The AI never sees what these tasks produce, so it never chooses them. | M4 |
-| A3 | `CanDock` returns `docked >= capacity`. | `Component/Dockable.cpp:15-16` | Inverted. | M3 |
-| A4 | `Traits` lists seven traits and declares `XSIZE 6`. | `AI/Traits.h:4-15` | Every `Vec` operation (`LTE/Vec.h` loops to N) skips `Sociable`, while reflection sees all seven. | M5 |
-| A5 | `Universe::age` is never advanced. | `Game/Universe.h:26`, `Game/Universe.cpp:36-39` | `Universe_Age()` is always 0, so log entries and trades carry no time, and knowledge never expires. | M0 |
-| A6 | The mining task increments `index` and then reads `offsets[index]`. | `Game/Task/Mine.cpp:112-118` | Reads one element past the end. | M4 |
-| A7 | `Event_Destroyed` is declared and never defined. | `Game/Events.h:15` | Nothing records a destruction as an event. | M4 |
-| A8 | Each hit adds a newly generated `Item_Data_Damaged` item to the attacker's store. `ComponentIntegrity::GetDataDamaged` caches one per object, and `Damage.cpp` does not use it. | `Game/Event/Damage.cpp:39`, `Component/Integrity.cpp` | By reading, since stores key items by address: the attacker's store grows with every hit. | M3 |
-| A9 | Asteroid models are seeded by `Rand` after `srand(time(0))`. | `Game/Renderable/Asteroid.cpp:17` | Shapes and collision differ from run to run. | M0 |
-| A10 | Blueprint derivation uses `RandExp` and unseeded `rand()`. | `Game/Item/Blueprint.cpp:48-70` | Research cannot be reproduced. | M6 |
-| A11 | ADR-004 lists cached script results under `cache/cache/`, but script caching is compiled out. | ADR-004, decision 3; `LTE/ScriptFunction.cpp:6-29` | The document has drifted from the code. | now |
-| A12 | The perf-review skill says the GPU field time "has not been taken", but ADR-009 records it (20 to 23 ms on an Intel Iris Xe). | `.claude/skills/perf-review/SKILL.md:429-430` | The document has drifted from the code. | now |
+| A1 | A partly filled bid is refunded `bid->price × bid->volume − totalPrice` before its volume is reduced, while the bid stays open. The refund should be (bid price − trade price) × trade volume. | `GameLogic/Market.cpp:113` | Creates credits on every partial fill below the bid. | M3 |
+| A2 | `Pirate`, `Produce` and `Spawn` declare `GetOutput`, which does not override `TaskT::GetOutputs`. | `GameLogic/Pirate.cpp:62`, `Produce.cpp:56`, `Spawn.cpp:28`; `GameLogic/Task.h:56` | The AI never sees what these tasks produce, so it never chooses them. | M4 |
+| A3 | `CanDock` returns `docked >= capacity`. | `GameLogic/Dockable.cpp:15-16` | Inverted. | M3 |
+| A4 | `Traits` lists seven traits and declares `XSIZE 6`. | `GameLogic/Traits.h:4-15` | Every `Vec` operation (`NeuronCore/Vec.h` loops to N) skips `Sociable`, while reflection sees all seven. | M5 |
+| A5 | `Universe::age` is never advanced. | `GameLogic/Universe.h:26`, `GameLogic/Universe.cpp:36-39` | `Universe_Age()` is always 0, so log entries and trades carry no time, and knowledge never expires. | M0 |
+| A6 | The mining task increments `index` and then reads `offsets[index]`. | `GameLogic/TaskMine.cpp:112-118` | Reads one element past the end. | M4 |
+| A7 | `Event_Destroyed` is declared and never defined. | `GameLogic/Events.h:15` | Nothing records a destruction as an event. | M4 |
+| A8 | Each hit adds a newly generated `Item_Data_Damaged` item to the attacker's store. `ComponentIntegrity::GetDataDamaged` caches one per object, and `EventDamage.cpp` does not use it. | `GameLogic/EventDamage.cpp:39`, `GameLogic/Integrity.cpp` | By reading, since stores key items by address: the attacker's store grows with every hit. | M3 |
+| A9 | Asteroid models are seeded by `Rand` after `srand(time(0))`. | `FrontierOutpost/RenderableAsteroid.cpp:17` | Shapes and collision differ from run to run. | M0 |
+| A10 | Blueprint derivation uses `RandExp` and unseeded `rand()`. | `GameLogic/Blueprint.cpp:48-70` | Research cannot be reproduced. | M6 |
+| A11 | ADR-004 lists cached script results under `cache/cache/`, but script caching is compiled out. | ADR-004, decision 3; `NeuronCore/ScriptFunction.cpp:6-29` | The document has drifted from the code. | now |
+| A12 | The perf-review skill says the GPU field time "has not been taken", but ADR-009 records it (20 to 23 ms on an Intel Iris Xe). | `.claude/skills/perf-review/SKILL.md:431-432` | The document has drifted from the code. | now |
