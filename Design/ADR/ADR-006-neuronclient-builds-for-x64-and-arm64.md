@@ -1,6 +1,7 @@
 # ADR-006: NeuronClient builds for x64 and ARM64, with lt's instruction sets
 
-- **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2)
+- **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2).
+  Amended (owner, 2026-09-26, the plan's N18): decision 5's temporary workflow is gone.
 - **Scope:** the platforms, `/arch` and `/fp` of `NeuronClient/` and `Tests/NeuronClientTests/`
 - **Detail:** `Design/Plan/NeuronClient-migration.md` §3 (point 4), §5.1, §6 (the rule, Phase 0
   step 2, Phase 2 step 1), §7, §10, N1, N5 and N10. This amends AGENTS.md §3 for these two
@@ -44,7 +45,9 @@ Direct3D 12 use (plan §3, point 4).
 4. **`Build/CheckProjectFiles.py` enforces both:** ARM64 for these two projects and no other, and
    each platform's `/arch` as decision 2 states it (plan Phase 0 step 2).
 5. **All four builds pass after every migration step** (plan §6). CI builds Debug|x64. The other
-   three are built by a temporary workflow for the length of the migration, or by hand.
+   three are built by a temporary workflow for the length of the migration, or by hand. The
+   workflow went on 2026-09-26 (N18); its last run was on `8443028`. From then, the owner builds
+   the three by hand, before a release and in the plan's Phase 5 checks, not after every step.
 6. **Every run-time claim about ARM64 waits for the owner's ARM64 device** (plan §3 point 4, §7).
    That includes the test that loads `d3dcompiler_47.dll` and reflects a compiled blob (ADR-008).
 

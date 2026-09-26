@@ -34,7 +34,9 @@ DirectWrite, WIC, XAudio2 and Win32.
   four builds still link with 507 warnings, 458 unique. The owner paused there, on 2026-09-26, with
   bring-up 5.4 to 5.9 still to come; the documents were brought up to date for the pause, and §12
   lists what is open. The owner also had `ltheory-old-main/`, the original's reference copy, deleted
-  the same day; history holds it, and upstream `ltheory-old` at `0535d46` is the original.
+  the same day; history holds it, and upstream `ltheory-old` at `0535d46` is the original. By N18,
+  the migration's workflow went too: CI builds Debug|x64 only, and the other three builds are the
+  owner's, by hand.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and
@@ -92,6 +94,7 @@ has no SFML, GLEW, FreeType, OpenGL or `GameData/shader`.
 | N15 | **The smoke job comes before bring-up** (2026-09-26). Step 7's CI job lands with step 3, and the launcher's smoke mode before it: `--frames` and `--capture` before the pause, `--warp` and offscreen rendering with step 3, which gives liblt a device to put on WARP. Besides failing on a Direct3D 12 error, the job writes a downscaled copy of each app's frame into its log, since the session that ports liblt cannot fetch CI artefacts. Each bring-up step is checked in those frames, and the owner checks on a GPU at the done-when. | owner |
 | N16 | **Work pauses before Phase 4 step 3** (2026-09-26) until the owner has checked Phases 1 and 2 in the apps while OpenGL still renders. Steps 1 and 2 and the smoke mode's first part change nothing OpenGL is given. The owner released step 3 the same day; `8bc74a0` is the last commit that renders with OpenGL. | owner |
 | N17 | **Step 6 comes before the rest of bring-up** (2026-09-26). OpenGL, GLEW and the WGL bridge are deleted once `war` runs on Direct3D 12 (bring-up 5.3), ahead of 5.4 to 5.9: nothing has drawn through OpenGL since step 3. Their link libraries go with them, ahead of Phase 5, as SFML's went in Phase 2. | owner |
+| N18 | **The migration's workflow goes before Phase 5** (2026-09-26). `.github/workflows/neuronclient.yml` and `.github/migration/` are deleted, so CI builds Debug\|x64 only, with the tests, clang-tidy and the smoke job, as AGENTS.md §6 has it. x64 Release and both ARM64 builds are built by hand, before a release and in Phase 5's final checks, not after every step (§6, ADR-006 decision 5). The workflow's last run was on `8443028`, where x64 Debug and Release linked with 507 warnings, 458 unique, and ARM64 Debug linked. | owner |
 
 What N2 and N3 mean in practice. The first two points correct what the question offered:
 
@@ -449,7 +452,8 @@ measures it.
 
 **The rule:** one change at a time, and all four builds (x64 and ARM64, Debug and Release) pass after
 every step. CI builds Debug|x64. The other three are built by a temporary workflow for the length of
-the migration, as the last migration did, or by hand.
+the migration, as the last migration did, or by hand. From N18 the workflow is gone, and the owner
+builds the three by hand: before a release, and in Phase 5's final checks, not after every step.
 
 Phases 1 and 2 happen while OpenGL still renders, so a fault there cannot be the new renderer's.
 Phase 3 touches nothing in liblt; it can start once step 1 of Phase 2 has landed.
@@ -736,4 +740,5 @@ Phase 4 step 6 (2026-09-26), these are open:
    land.
 3. **The owner's checks of Phase 4:** presenting (5.1), which the smoke run cannot see, and the 16
    kept apps on a GPU and on the ARM64 device, the phase's done-when. ADR-009's sixth decision also
-   asks for a field's generation time on a GPU.
+   asks for a field's generation time on a GPU, and since N18 the x64 Release and ARM64 builds are
+   the owner's, by hand.

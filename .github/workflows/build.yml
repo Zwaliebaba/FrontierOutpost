@@ -31,11 +31,11 @@ name: Build
 #
 # ── What it does not build ─────────────────────────────────────────────────────────────────────
 #
-# Debug and x64 only (AGENTS.md §3, §6, MIGRATION_NOTES.md D21). Release and ARM64 are built
-# before a release by whoever ships. The first migration's own workflow built all four
-# combinations while it lasted; it is gone, and MIGRATION_NOTES.md §20 and §22 keep what it
-# measured. The NeuronClient migration's, neuronclient.yml, does the same on its branch until that
-# plan's Phase 5 removes it.
+# Debug and x64 only (AGENTS.md §3, §6, MIGRATION_NOTES.md D21). Release and ARM64 are built by
+# hand: before a release, by whoever ships, and in the NeuronClient plan's Phase 5 checks. Each
+# migration's own workflow built all four combinations while it lasted, and both are gone:
+# MIGRATION_NOTES.md §20 and §22 keep what the first measured, and the NeuronClient plan's N18 the
+# last run of the second.
 
 on:
   push:
