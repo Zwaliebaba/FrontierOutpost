@@ -549,12 +549,6 @@
     <ClCompile Include="Owner.cpp">
       <Filter>Game\ItemProperty</Filter>
     </ClCompile>
-    <ClCompile Include="Particles.cpp">
-      <Filter>Game</Filter>
-    </ClCompile>
-    <ClInclude Include="Particles.h">
-      <Filter>Game</Filter>
-    </ClInclude>
     <ClCompile Include="Payload.cpp">
       <Filter>Game\Object</Filter>
     </ClCompile>
@@ -916,5 +910,9 @@
     <ClInclude Include="Shield.h">
       <Filter>Game\Object</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Presentation.h" />
+    <ClCompile Include="Presentation.cpp" />
   </ItemGroup>
 </Project>

@@ -229,6 +229,22 @@
       <Legacy>true</Legacy>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Particles.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClCompile Include="Particles.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ClientPresentation.h">
+      <Legacy>true</Legacy>
+    </ClInclude>
+    <ClCompile Include="ClientPresentation.cpp">
+      <Legacy>true</Legacy>
+    </ClCompile>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\Build\Legacy.targets" />
 </Project>

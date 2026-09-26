@@ -4,6 +4,7 @@
 
 #include "Object.h"
 #include "RenderStyles.h"
+#include "ClientPresentation.h"
 
 #include "DrawState.h"
 #include "ParticleSystem.h"
@@ -25,7 +26,7 @@ namespace {
     void OnRender(DrawState* state) {
       RenderStyle_Push(style);
       ObjectT* container = (ObjectT*)state->visible[0];
-      container->GetInterior()->particles->Draw(state);
+      ClientPresentation_Particles(container->GetInterior())->Draw(state);
       RenderStyle_Pop();
     }
   };

@@ -3,18 +3,17 @@
 
 #include "Object.h"
 
-#include "DrawState.h"
 #include "Function.h"
-#include "RenderStyle.h"
+
+#include "Presentation.h"
 
 void ComponentDrawable::Draw(ObjectT* self, DrawState* state) {
   if (!renderable)
     return;
 
-  RenderStyle_Get()->SetTransform(self->GetTransform());
-  // DrawState_Push("objectRadius", self->GetRadius());
-  renderable()->Render(state);
-  // DrawState_Pop("objectRadius");
+  /* Drawn by the client's presentation, where there is one (ADR-016). */
+  if (Game::Presentation* presentation = Game::GetPresentation())
+    presentation->DrawObject(self, renderable().t, state);
 }
 
 VoidFreeFunction(Object_SetRenderable,

@@ -2,7 +2,6 @@
 
 #include "Drawable.h"
 
-#include "Particles.h"
 #include "Objects.h"
 
 #include "SoundEngine.h"
@@ -10,9 +9,13 @@
 #include "Bound.h"
 #include "LteMath.h"
 #include "Matrix.h"
-#include "ParticleSystem.h"
 #include "Transform.h"
 #include "Vector.h"
+
+#include "Presentation.h"
+
+/* The particle effects are the client's (FrontierOutpost/ClientPresentation.cpp), called here where
+   the game has always called them, so that they draw on Rand in the same order (ADR-016). */
 
 void Effect_BeamHit(
   Position const& origin,
@@ -20,16 +23,8 @@ void Effect_BeamHit(
   float scale,
   V3 const& color)
 {
-  V3 velocity = baseVelocity + scale * SampleSphere();
-  float life = Rand(1.0f, 2.0f);
-  ParticleSystem_Add(
-    ParticleSystem_Get(),
-    Particle_Firefly(),
-    origin,
-    velocity,
-    Rand(0.5f, 1) * scale,
-    life,
-    color);
+  if (Game::Presentation* presentation = Game::GetPresentation())
+    presentation->BeamHit(origin, baseVelocity, scale, color);
 }
 
 void Effect_ParticleFirefly(
@@ -39,14 +34,8 @@ void Effect_ParticleFirefly(
   float size,
   float lifeTime)
 {
-  ParticleSystem_Add(
-    ParticleSystem_Get(),
-    Particle_Firefly(),
-    origin,
-    velocity,
-    size,
-    lifeTime,
-    color);
+  if (Game::Presentation* presentation = Game::GetPresentation())
+    presentation->ParticleFirefly(origin, velocity, color, size, lifeTime);
 }
 
 void Effect_MultiExplosionRadial(
@@ -83,20 +72,6 @@ void Effect_SmallPlume(
   V3 const& color,
   float size)
 {
-  ParticleSystem const& ps = ParticleSystem_Get();
-  for (size_t i = 0; i < 15; ++i) {
-    V3 p = origin + 0.5f * size * SampleSphere();
-    V3 v = baseVelocity + 8.0f * size * SampleSphere();
-    V3 c = color * RandV3(1.0f, 1.2f);
-    float life = Rand(0.25f, 0.5f);
-
-    ParticleSystem_Add(
-      ps,
-      Particle_Fire(),
-      p,
-      v,
-      (1.0f + RandExp()) * size,
-      life,
-      c);
-  }
+  if (Game::Presentation* presentation = Game::GetPresentation())
+    presentation->SmallPlume(origin, baseVelocity, color, size);
 }

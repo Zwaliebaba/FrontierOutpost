@@ -5,7 +5,6 @@
 #include "Object.h"
 #include "AutoClass.h"
 #include "Map.h"
-#include "ParticleSystem.h"
 #include "Pointer.h"
 #include "V3.h"
 #include "Vector.h"
@@ -18,11 +17,8 @@ AutoClass(ComponentInterior,
   ObjectMapT, objectMap,
   bool, allowMovement)
 
-  ParticleSystem particles;
-
-  ComponentInterior() :
-    particles(ParticleSystem_Create())
-    {}
+  /* Its particles are the client's, which keeps them by this component (ADR-016). */
+  ComponentInterior() {}
 
   LT_API ~ComponentInterior();
 

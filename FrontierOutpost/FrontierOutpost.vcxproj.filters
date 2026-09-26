@@ -114,4 +114,20 @@
       <Filter>Visuals</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Particles.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClCompile Include="Particles.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ClientPresentation.h">
+      <Filter>Visuals</Filter>
+    </ClInclude>
+    <ClCompile Include="ClientPresentation.cpp">
+      <Filter>Visuals</Filter>
+    </ClCompile>
+  </ItemGroup>
 </Project>

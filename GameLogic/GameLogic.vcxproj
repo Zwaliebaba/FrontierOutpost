@@ -374,9 +374,6 @@
     <ClInclude Include="Orientation.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="Particles.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="PhysicsEngine.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -703,9 +700,6 @@
     <ClCompile Include="Owner.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
-    <ClCompile Include="Particles.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
     <ClCompile Include="Payload.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
@@ -964,6 +958,10 @@
     <ClInclude Include="Shield.h">
       <Legacy>true</Legacy>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Presentation.h" />
+    <ClCompile Include="Presentation.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\Build\Legacy.targets" />

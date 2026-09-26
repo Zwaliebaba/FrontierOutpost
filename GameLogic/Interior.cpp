@@ -1,13 +1,15 @@
 #include "Interior.h"
 #include "Queryable.h"
-#include "DrawState.h"
 #include "Function.h"
 #include "Iterator.h"
-#include "RenderStyle.h"
 #include "StackFrame.h"
 #include "Transform.h"
 
+#include "Presentation.h"
+
 ComponentInterior::~ComponentInterior() {
+  if (Game::Presentation* presentation = Game::GetPresentation())
+    presentation->ForgetInterior(this);
   for (size_t i = 0; i < objects.size(); ++i)
     objects[i]->Delete();
   objects.clear();
@@ -28,10 +30,9 @@ void ComponentInterior::Add(ObjectT* self, Object const& object) {
 }
 
 void ComponentInterior::Draw(ObjectT* self, DrawState* state) {
-  if (state->visible[0] == self) {
-    RenderStyle_Get()->SetTransform(Transform_Identity());
-    self->OnDrawInterior(state);
-  }
+  /* Drawn by the client's presentation, where there is one (ADR-016). */
+  if (Game::Presentation* presentation = Game::GetPresentation())
+    presentation->DrawInterior(self, state);
 }
 
 void ComponentInterior::Remove(ObjectT* self, Object const& object) {
@@ -48,10 +49,11 @@ void ComponentInterior::Remove(ObjectT* self, Object const& object) {
 
 void ComponentInterior::Run(ObjectT* self, UpdateState& state) {
   AUTO_FRAME;
-  ParticleSystem_Push(particles);
-
-  FRAME("Particle Update")
-    particles->Run(state.dt);
+  /* The interior's particles are the client's: it steps them, and makes them current for the
+     effects the updates below set off (ADR-016). */
+  Game::Presentation* presentation = Game::GetPresentation();
+  if (presentation)
+    presentation->BeginInteriorUpdate(this, state.dt);
 
   for (ObjectType type = 0; type < ObjectType_SIZE; ++type) {
     FRAME(ObjectType_String[type]) {
@@ -85,7 +87,8 @@ void ComponentInterior::Run(ObjectT* self, UpdateState& state) {
     }
   }
   
-  ParticleSystem_Pop(particles);
+  if (presentation)
+    presentation->EndInteriorUpdate(this);
 }
 
 namespace {
