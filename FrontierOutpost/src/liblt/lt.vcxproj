@@ -19,14 +19,12 @@
     - Two definitions that the original's generator added are gone: nothing reads them (§10).
 
     The link line keeps the original's order, with ADR-002's substitutions:
-    - glew32s is built in this solution, and NeuronClient replaces FreeType and SFML (ADR-010,
-      ADR-012);
+    - NeuronClient replaces FreeType and SFML (ADR-010, ADR-012), and OpenGL, GLU and GLEW went
+      with the GL renderer (NeuronClient plan, Phase 4 step 6);
     - xaudio2.lib, from the Windows SDK, stands where FMOD Ex's two libraries stood (ADR-003);
     - the Windows import libraries are the original's default set, without odbc32/odbccp32, which
       MSBuild would otherwise add.
-    The references build the libraries first. They do not link them (LinkLibraryDependencies=false),
-    which keeps the order explicit, as the original did. NeuronClient's is the exception: its
-    library is linked through its reference (ADR-005).
+    The one reference, NeuronClient's, builds its library first and links it (ADR-005).
 
     The original's POST_BUILD step copied the FMOD Ex, FreeType and zlib DLLs next to lt.dll. None of
     them is left to copy: DirectWrite and XAudio2, which replace them, are part of Windows.
@@ -83,7 +81,7 @@
       <SubSystem>Console</SubSystem>
       <IgnoreSpecificDefaultLibraries>libcmt;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opengl32.lib;glu32.lib;xaudio2.lib;glew32s.lib;gdi32.lib;winmm.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;dbghelp.lib</AdditionalDependencies>
+      <AdditionalDependencies>xaudio2.lib;gdi32.lib;winmm.lib;kernel32.lib;user32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;dbghelp.lib</AdditionalDependencies>
     </Link>
     <!-- liblt's shaders, as NeuronClient's: Shader Model 5.1, the same in Debug and Release, into a
          header in CompiledShaders/ and no .cso (Design/ADR/ADR-008). Shaders/ is new code, outside
@@ -527,7 +525,6 @@
     <ClCompile Include="LTE\Warp\Custom.cpp">
       <ObjectFileName>$(IntDir)LTE\Warp\</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="LTE\WglBridge.cpp" />
     <ClCompile Include="LTE\Window.cpp" />
     <ClCompile Include="Module\FrameTimer.cpp" />
     <ClCompile Include="Module\PhysicsEngine.cpp" />
@@ -776,9 +773,6 @@
     <ClInclude Include="LTE\Function\Value.h" />
     <ClInclude Include="LTE\Function\Wrapper.h" />
     <ClInclude Include="LTE\Function_Generated.h" />
-    <ClInclude Include="LTE\GL.h" />
-    <ClInclude Include="LTE\GLEnum.h" />
-    <ClInclude Include="LTE\GLType.h" />
     <ClInclude Include="LTE\Generic.h" />
     <ClInclude Include="LTE\Geom.h" />
     <ClInclude Include="LTE\Geometry.h" />
@@ -890,7 +884,6 @@
     <ClInclude Include="LTE\Viewport.h" />
     <ClInclude Include="LTE\Warp.h" />
     <ClInclude Include="LTE\Warps.h" />
-    <ClInclude Include="LTE\WglBridge.h" />
     <ClInclude Include="LTE\Window.h" />
     <ClInclude Include="LTE\XEnum.h" />
     <ClInclude Include="LTE\XVector.h" />
@@ -1391,10 +1384,6 @@
     <!-- NeuronClient.lib is linked through this reference (Design/ADR/ADR-005). -->
     <ProjectReference Include="..\..\..\NeuronClient\NeuronClient.vcxproj">
       <Project>{05010071-B8CA-465B-9FEC-BCF2D87DAD7A}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\ext\glew\glew.vcxproj">
-      <Project>{336FF534-8B32-5BE0-AC58-41790BAC62D3}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

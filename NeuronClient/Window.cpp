@@ -259,7 +259,6 @@ bool Window::Open(const Desc& _desc, Window& _outWindow, std::string& _error)
   const HINSTANCE instance = GetModuleHandleW(nullptr);
   WNDCLASSEXW windowClass{};
   windowClass.cbSize = sizeof(windowClass);
-  windowClass.style = CS_OWNDC; // a device context of its own, as OpenGL wants
   windowClass.lpfnWndProc = &Native::Procedure;
   windowClass.hInstance = instance;
   windowClass.lpszClassName = CLASS_NAME;
