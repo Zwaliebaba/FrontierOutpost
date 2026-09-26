@@ -18,9 +18,9 @@ import xml.etree.ElementTree as ET
 NS = "{http://schemas.microsoft.com/developer/msbuild/2003}"
 
 # ADR-001 and ADR-004: the legacy import and its data follow the original, not AGENTS.md.
-# ltheory-old-main/ is the original's committed copy, and _baseline_build/ the git-ignored
-# scratch clones; neither is built. CompiledShaders/ is build output (AGENTS.md §2).
-EXEMPT_PREFIXES = ("FrontierOutpost/", "GameData/", "ltheory-old-main/", "_baseline_build/")
+# _baseline_build/ holds the git-ignored scratch clones, which nothing builds. CompiledShaders/ is
+# build output (AGENTS.md §2).
+EXEMPT_PREFIXES = ("FrontierOutpost/", "GameData/", "_baseline_build/")
 BUILD_OUTPUT_DIRS = {"CompiledShaders"}
 # The NeuronClient migration's N11 (ADR-001's scope note, ADR-008): liblt's shader folder is new
 # code, carved out of the exemption. The rest of its project keeps it.

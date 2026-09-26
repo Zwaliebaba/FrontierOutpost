@@ -1,5 +1,0 @@
-#include frag.jsl
-
-void main() {
-  RETURN(vec4(linearDepth));
-}

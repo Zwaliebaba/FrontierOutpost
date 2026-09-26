@@ -6,7 +6,8 @@ repository root and the projects under `FrontierOutpost/`. The targets are tools
 for first-party code, x64 and ARM64, and Debug and Release.
 
 This is a build-system and language-standard migration only. Namespaces, identifiers, files and
-user-facing strings keep their original names. `ltheory-old-main/` is read-only.
+user-facing strings keep their original names. `ltheory-old-main/` was read-only, and is deleted
+since 2026-09-26 (below).
 
 **Status:** Phase 1 (structure) is done (§15). Phase 2's x64 build (§16) compiled at parity with
 the original, with identical warnings and matching command lines, and its link lacked only FMOD Ex.
@@ -32,7 +33,10 @@ GLEW and the WGL bridge in its Phase 4 (ADR-007), so nothing is vendored under
 and its shaders are HLSL compiled into `lt.dll` (ADR-008), so `GameData/shader` is no longer read.
 Where §5–§10 and §15–§22 give dependencies, projects, link lines and warning counts, they are this
 migration's, not the tree's now: the four builds link with 507 warnings, 458 unique, all `lt`'s,
-where this migration ended with 613, 585 unique (§21.4, §22.4).
+where this migration ended with 613, 585 unique (§21.4, §22.4). The owner then had
+`ltheory-old-main/` deleted, on 2026-09-26. Where this record cites it (D1, D12, §4, O1, O2, §15.1,
+§20.3), every commit from `6d8b20e` until its deletion holds it unchanged, and upstream
+`JoshParnell/ltheory-old` at `0535d46` is the complete original it was copied from.
 
 §1–§9 record Phase 0. §10–§14 are the running registers the brief asks for: deviations, code
 changes, BEHAVIOUR-RISK, the modernisation backlog and open issues. §15 onward logs each later

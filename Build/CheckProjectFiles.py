@@ -113,7 +113,7 @@ def CheckSolution(_root, _files):
   for relative in listed:
     if not (_root / relative).is_file():
       Fault(solution.name, f"names {relative}, which does not exist")
-  onDisk = [f for f in _files if f.endswith(".vcxproj") and not f.startswith(("ltheory-old-main/", "_baseline_build/"))]
+  onDisk = [f for f in _files if f.endswith(".vcxproj") and not f.startswith("_baseline_build/")]
   for relative in onDisk:
     if relative not in listed:
       Fault(relative, f"is not in {solution.name}, so no solution build compiles it (§3)")

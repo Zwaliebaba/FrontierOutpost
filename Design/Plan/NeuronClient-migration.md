@@ -33,7 +33,8 @@ DirectWrite, WIC, XAudio2 and Win32.
   owner then took N17: step 6 is in (`57c67bb`), and OpenGL, GLEW and the WGL bridge are gone. The
   four builds still link with 507 warnings, 458 unique. The owner paused there, on 2026-09-26, with
   bring-up 5.4 to 5.9 still to come; the documents were brought up to date for the pause, and §12
-  lists what is open.
+  lists what is open. The owner also had `ltheory-old-main/`, the original's reference copy, deleted
+  the same day; history holds it, and upstream `ltheory-old` at `0535d46` is the original.
 - **Scope:** `FrontierOutpost.slnx`, `FrontierOutpost/`, `GameData/`, and two new projects at the
   repository root: `NeuronClient/` and `Tests/NeuronClientTests/`.
 - **Paths:** relative to the repository root. `liblt/` is short for `FrontierOutpost/src/liblt/`, and

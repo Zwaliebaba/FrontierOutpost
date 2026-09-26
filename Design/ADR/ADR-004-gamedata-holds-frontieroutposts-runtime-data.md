@@ -26,11 +26,11 @@ and lifetime, and for written paths to resolve against a known location.
 
 ## Decision
 
-1. **The runtime data live in `GameData/`, at the repository root**, beside `FrontierOutpost.slnx`,
-   `FrontierOutpost/` and `ltheory-old-main/`. All of the migrated `resource/` moved there, with
-   its layout and file names unchanged. The engine's root is `GameData/` (`Location.cpp`), and so
-   is the font loader's (`Font.cpp`). `GameData/` is required: without it, `launch.exe` finds no
-   script to run.
+1. **The runtime data live in `GameData/`, at the repository root**, beside `FrontierOutpost.slnx`
+   and `FrontierOutpost/` (and `ltheory-old-main/`, until its deletion on 2026-09-26). All of the
+   migrated `resource/` moved there, with its layout and file names unchanged. The engine's root is
+   `GameData/` (`Location.cpp`), and so is the font loader's (`Font.cpp`). `GameData/` is required:
+   without it, `launch.exe` finds no script to run.
 2. **`launch.exe` works from the folder that holds `GameData/`.** At start, it looks in its own
    folder and then in each parent folder in turn. It changes its working directory to the first
    one that has `GameData/`. If none has, it stays in the working directory it was started in. So
