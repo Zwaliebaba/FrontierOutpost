@@ -6,7 +6,6 @@
 #include "Object.h"
 
 #include "Matrix.h"
-#include "Model.h"
 
 void ComponentBoundingBox::Recompute(ObjectT const* self) {
   ComponentOrientation const& orientation = *self->GetOrientation();

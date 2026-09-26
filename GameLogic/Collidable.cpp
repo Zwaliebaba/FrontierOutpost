@@ -10,7 +10,6 @@
 
 #include "CollisionMesh.h"
 #include "ProgramLog.h"
-#include "Renderer.h"
 #include "StackFrame.h"
 
 const double kCollisionDamageCoefficient = 1.0 / 1000.0;

@@ -11,14 +11,11 @@
 
 #include "SoundEngine.h"
 
-#include "DrawState.h"
 #include "LteMath.h"
 #include "Meshes.h"
-#include "Model.h"
 #include "Pointer.h"
 #include "Pool.h"
 #include "Ray.h"
-#include "ShaderInstance.h"
 
 typedef ObjectWrapper
   < Component_Damager

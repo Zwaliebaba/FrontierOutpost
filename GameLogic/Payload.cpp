@@ -7,7 +7,6 @@
 #include "Queryable.h"
 
 #include "Light.h"
-#include "Renderables.h"
 
 #include "LteMath.h"
 #include "Pool.h"

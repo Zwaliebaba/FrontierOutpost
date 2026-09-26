@@ -9,7 +9,6 @@
 #include "Constants.h"
 #include "Icons.h"
 #include "Items.h"
-#include "Materials.h"
 #include "Messages.h"
 #include "Objects.h"
 #include "Socket.h"
@@ -21,9 +20,7 @@
 #include "AttributeValue.h"
 
 #include "LteMath.h"
-#include "Model.h"
 #include "Pool.h"
-#include "SDFMesh.h"
 
 #include "SoundEngine.h"
 

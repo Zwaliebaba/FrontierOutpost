@@ -5,16 +5,11 @@
 #include "Items.h"
 #include "Objects.h"
 
-#include "DrawState.h"
 #include "Grammar.h"
 #include "Location.h"
 #include "LteMath.h"
-#include "Model.h"
 #include "Meshes.h"
 #include "RNG.h"
-#include "RenderStyle.h"
-#include "ShaderInstance.h"
-#include "Texture2D.h"
 
 #include "Debug.h"
 
