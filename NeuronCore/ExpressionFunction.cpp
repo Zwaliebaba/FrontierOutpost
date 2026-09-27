@@ -23,7 +23,7 @@ namespace LTE {
     }
 
     String const& name = list->Get(2)->GetValue();
-    ScriptFunction fn = env.script->functions[name];
+    ScriptFunction fn = env.script->GetFunction(name);
     if (fn) {
       Log_Error(Stringize() | "Function '" | name | "' already exists");
       return nullptr;
