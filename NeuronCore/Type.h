@@ -256,10 +256,12 @@ struct Type {
   Type& operator=(Type const& ref) {
     if (this == &ref)
       return *this;
-    if (ref.t)
-      Mutable(ref.t)->RefCountIncrement();
+    /* Read the source first: releasing the old object can destroy it. */
+    TypeT* incoming = ref.t;
+    if (incoming)
+      Mutable(incoming)->RefCountIncrement();
     Release();
-    t = ref.t;
+    t = incoming;
     return *this;
   }
 

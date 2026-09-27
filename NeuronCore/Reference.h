@@ -90,10 +90,12 @@ struct Reference : public NullBase<Reference<T> > {
   Reference& operator=(Reference const& ref) {
     if (this == &ref)
       return *this;
-    if (ref.t)
-      Mutable(ref.t)->RefCountIncrement();
+    /* Read the source first: releasing the old object can destroy it (x = x->child). */
+    T* incoming = ref.t;
+    if (incoming)
+      Mutable(incoming)->RefCountIncrement();
     Release();
-    t = ref.t;
+    t = incoming;
     return *this;
   }
 
