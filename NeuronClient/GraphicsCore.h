@@ -103,6 +103,7 @@ struct GraphicsCore
   Microsoft::WRL::ComPtr<ID3D12InfoQueue> infoQueue; // with the debug layer only
   bool storageFilterPushed = false;
   std::string adapterName;
+  DeviceCapabilities capabilities{};
 
   /// What the next submission signals: work recorded now is done once the fence reaches it.
   std::uint64_t nextFenceValue = 1;

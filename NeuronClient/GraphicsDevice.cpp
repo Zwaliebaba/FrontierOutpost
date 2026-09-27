@@ -37,6 +37,87 @@ std::string_view SeverityName(D3D12_MESSAGE_SEVERITY _severity) noexcept
   }
 }
 
+/// The shader models these headers name, newest first. A runtime refuses one newer than it knows,
+/// so the question comes down the list; a device beyond the newest answers the newest.
+constexpr std::array<D3D_SHADER_MODEL, 8> SHADER_MODELS = {D3D_SHADER_MODEL_6_7, D3D_SHADER_MODEL_6_6, D3D_SHADER_MODEL_6_5,
+                                                           D3D_SHADER_MODEL_6_4, D3D_SHADER_MODEL_6_3, D3D_SHADER_MODEL_6_2,
+                                                           D3D_SHADER_MODEL_6_1, D3D_SHADER_MODEL_6_0};
+
+/// Asks _device what DeviceCapabilities names. A question the runtime cannot answer, as an older one
+/// cannot, is a no. With the debug layer on, _infoQueue stores nothing meanwhile: a no is an answer
+/// here, not a fault, and would otherwise fail every test and smoke run that counts the layer's
+/// errors.
+DeviceCapabilities Probe(ID3D12Device& _device, ID3D12InfoQueue* _infoQueue)
+{
+  std::array<D3D12_MESSAGE_SEVERITY, 5> every = {D3D12_MESSAGE_SEVERITY_CORRUPTION, D3D12_MESSAGE_SEVERITY_ERROR,
+                                                 D3D12_MESSAGE_SEVERITY_WARNING, D3D12_MESSAGE_SEVERITY_INFO,
+                                                 D3D12_MESSAGE_SEVERITY_MESSAGE};
+  D3D12_INFO_QUEUE_FILTER nothing{};
+  nothing.DenyList.NumSeverities = static_cast<UINT>(every.size());
+  nothing.DenyList.pSeverityList = every.data();
+  const bool quiet = _infoQueue != nullptr && SUCCEEDED(_infoQueue->PushStorageFilter(&nothing));
+
+  DeviceCapabilities capabilities{.shaderModelMajor = 5,
+                                  .shaderModelMinor = 1,
+                                  .resourceBindingTier = 1,
+                                  .directlyIndexedHeaps = false,
+                                  .pipelineLibrary = false,
+                                  .automaticDiskCache = false};
+  for (const D3D_SHADER_MODEL asked : SHADER_MODELS)
+  {
+    D3D12_FEATURE_DATA_SHADER_MODEL model{asked};
+    if (SUCCEEDED(_device.CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &model, sizeof(model))))
+    {
+      // The major version is the high nibble, the minor the low one: 0x66 is 6.6.
+      capabilities.shaderModelMajor = static_cast<std::uint32_t>(model.HighestShaderModel) >> 4;
+      capabilities.shaderModelMinor = static_cast<std::uint32_t>(model.HighestShaderModel) & 0xFu;
+      break;
+    }
+  }
+
+  // An out parameter only: its tiers have no zero value for {} to give.
+  D3D12_FEATURE_DATA_D3D12_OPTIONS options;
+  if (SUCCEEDED(_device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options))))
+  {
+    capabilities.resourceBindingTier = static_cast<std::uint32_t>(options.ResourceBindingTier);
+  }
+
+  D3D12_FEATURE_DATA_SHADER_CACHE cache{};
+  if (SUCCEEDED(_device.CheckFeatureSupport(D3D12_FEATURE_SHADER_CACHE, &cache, sizeof(cache))))
+  {
+    capabilities.pipelineLibrary = (cache.SupportFlags & D3D12_SHADER_CACHE_SUPPORT_LIBRARY) != 0;
+    capabilities.automaticDiskCache = (cache.SupportFlags & D3D12_SHADER_CACHE_SUPPORT_AUTOMATIC_DISK_CACHE) != 0;
+  }
+
+  // From Shader Model 6.6, shaders index the heaps directly when a root signature of version 1.1
+  // says they may. Whether such a root signature can be made is the answer.
+  const bool shaderModel66 =
+    capabilities.shaderModelMajor > 6 || (capabilities.shaderModelMajor == 6 && capabilities.shaderModelMinor >= 6);
+  D3D12_FEATURE_DATA_ROOT_SIGNATURE signatureVersion{D3D_ROOT_SIGNATURE_VERSION_1_1};
+  if (shaderModel66 && SUCCEEDED(_device.CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &signatureVersion, sizeof(signatureVersion))) &&
+      signatureVersion.HighestVersion >= D3D_ROOT_SIGNATURE_VERSION_1_1)
+  {
+    // D3D_ROOT_SIGNATURE_VERSION has no zero value for {} to give, so both parts are set.
+    D3D12_VERSIONED_ROOT_SIGNATURE_DESC desc;
+    desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
+    desc.Desc_1_1 = D3D12_ROOT_SIGNATURE_DESC1{0, nullptr, 0, nullptr,
+                                               D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED |
+                                                 D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED};
+    ComPtr<ID3DBlob> signature;
+    ComPtr<ID3DBlob> errors;
+    ComPtr<ID3D12RootSignature> rootSignature;
+    capabilities.directlyIndexedHeaps =
+      SUCCEEDED(D3D12SerializeVersionedRootSignature(&desc, &signature, &errors)) &&
+      SUCCEEDED(_device.CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
+  }
+
+  if (quiet)
+  {
+    _infoQueue->PopStorageFilter();
+  }
+  return capabilities;
+}
+
 } // namespace
 
 bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::string& _error)
@@ -121,6 +202,7 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
     filter.DenyList.pIDList = intended.data();
     core->storageFilterPushed = SUCCEEDED(core->infoQueue->PushStorageFilter(&filter));
   }
+  core->capabilities = Probe(*core->device.Get(), core->infoQueue.Get());
 
   D3D12_COMMAND_QUEUE_DESC queueDesc{};
   queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -164,6 +246,11 @@ std::string GraphicsDevice::AdapterName() const
 bool GraphicsDevice::IsDebugLayerOn() const noexcept
 {
   return m_core && m_core->desc.debugLayer;
+}
+
+DeviceCapabilities GraphicsDevice::Capabilities() const noexcept
+{
+  return m_core ? m_core->capabilities : DeviceCapabilities{};
 }
 
 Texture GraphicsDevice::CreateTexture(const Texture::Desc& _desc)

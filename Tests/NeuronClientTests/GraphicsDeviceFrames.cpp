@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <string>
 #include <vector>
 
@@ -40,6 +41,38 @@ public:
     Assert::IsTrue(static_cast<bool>(test.device));
     Assert::IsTrue(test.device.IsDebugLayerOn());
     Assert::IsFalse(test.device.AdapterName().empty());
+    ExpectClean(test);
+  }
+
+  TEST_METHOD(ReportsWhatTheDeviceSupports)
+  {
+    TestDevice test;
+    Open(test);
+    const Neuron::DeviceCapabilities capabilities = test.device.Capabilities();
+    // WARP's answers, which Design/ShaderPipeline-plan.md's P0.1 asks for, go to the test's output;
+    // nothing but their consistency is required.
+    Logger::WriteMessage(std::format("WARP: shader model {}.{}, resource binding tier {}, directly indexed heaps {}, pipeline "
+                                     "libraries {}, disk cache of shaders {}",
+                                     capabilities.shaderModelMajor, capabilities.shaderModelMinor, capabilities.resourceBindingTier,
+                                     capabilities.directlyIndexedHeaps, capabilities.pipelineLibrary, capabilities.automaticDiskCache)
+                           .c_str());
+    const std::uint32_t shaderModel = (capabilities.shaderModelMajor * 10) + capabilities.shaderModelMinor;
+    Assert::IsTrue(shaderModel >= 51, L"below Shader Model 5.1, which every Direct3D 12 device runs");
+    Assert::IsTrue(capabilities.resourceBindingTier >= 1 && capabilities.resourceBindingTier <= 3, L"no resource binding tier");
+    Assert::IsTrue(!capabilities.directlyIndexedHeaps || shaderModel >= 66, L"directly indexed heaps below Shader Model 6.6");
+
+    // Devices are singletons per adapter, so a second one on WARP probes the test device's again,
+    // after Open took its messages: whatever the answers, the probe leaves none.
+    {
+      std::string error;
+      Neuron::GraphicsDevice again;
+      const Neuron::GraphicsDevice::Desc desc{.warp = true,
+                                              .debugLayer = true,
+                                              .gpuValidation = false,
+                                              .onFailure = [&test](const std::string& _message) { test.failures.push_back(_message); }};
+      Assert::IsTrue(Neuron::GraphicsDevice::Create(desc, again, error), Widen(error).c_str());
+      Assert::IsTrue(again.Capabilities() == capabilities, L"the same device answered otherwise");
+    }
     ExpectClean(test);
   }
 

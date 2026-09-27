@@ -376,6 +376,16 @@ namespace LTE {
     Log_Message("Direct3D 12 on " + String(core.device.AdapterName().c_str()) +
       (core.device.IsDebugLayerOn() ? ", with the debug layer" : "") +
       (offscreen ? ", offscreen" : ""));
+
+    /* What the later phases of Design/ShaderPipeline-plan.md need (P0.1):
+       logged on every device the game runs on, required by nothing yet. */
+    Neuron::DeviceCapabilities const caps = core.device.Capabilities();
+    Log_Message("Direct3D 12 supports shader model " + ToString(caps.shaderModelMajor) +
+      "." + ToString(caps.shaderModelMinor) +
+      ", resource binding tier " + ToString(caps.resourceBindingTier) +
+      (caps.directlyIndexedHeaps ? ", directly indexed heaps" : ", no directly indexed heaps") +
+      (caps.pipelineLibrary ? ", pipeline libraries" : ", no pipeline libraries") +
+      (caps.automaticDiskCache ? ", and a disk cache of shaders" : ", and no disk cache of shaders"));
     core.device.BeginFrame();
   }
 

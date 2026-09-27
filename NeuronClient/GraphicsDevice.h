@@ -19,6 +19,21 @@ namespace Neuron
 class DrawContext;
 struct GraphicsCore;
 
+/// What the device supports of what Design/ShaderPipeline-plan.md's later phases need: Shader Model
+/// 6.6 and descriptor heaps that shaders index directly (P5, P6), and the shader caches (§3.2). The
+/// device asks once, when it is made, and nothing today depends on the answers.
+struct DeviceCapabilities
+{
+  std::uint32_t shaderModelMajor;    // the highest shader model the device runs: 6 for 6.6
+  std::uint32_t shaderModelMinor;    // and 6
+  std::uint32_t resourceBindingTier; // 1 to 3
+  bool directlyIndexedHeaps;         // a root signature that lets shaders index both heaps directly was made
+  bool pipelineLibrary;              // ID3D12PipelineLibrary is there
+  bool automaticDiskCache;           // Windows keeps compiled shaders on disk from one run to the next
+
+  bool operator==(const DeviceCapabilities&) const = default;
+};
+
 /// Direct3D 12 at feature level 11_0, on the default adapter or on WARP, with one direct queue and
 /// two frames in flight (Design/ADR/ADR-007). The CPU records a frame while the GPU runs the one
 /// before it, and waits only when it would get further ahead than that. Anything the GPU may still
@@ -72,6 +87,9 @@ public:
   [[nodiscard]] std::string AdapterName() const;
 
   [[nodiscard]] bool IsDebugLayerOn() const noexcept;
+
+  /// What the device said it supports when it was made; all zero for a device never made.
+  [[nodiscard]] DeviceCapabilities Capabilities() const noexcept;
 
   /// A texture, or an empty one when it cannot be made, which onFailure is told about.
   [[nodiscard]] Texture CreateTexture(const Texture::Desc& _desc);
