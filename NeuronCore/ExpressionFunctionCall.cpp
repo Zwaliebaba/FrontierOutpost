@@ -172,8 +172,14 @@ namespace {
 
     else {
       std::sort(matches.begin(), matches.end());
-      if (matches[1].order > matches[0].order)
-        return matches[0].fn;
+      if (matches[1].order > matches[0].order) {
+        /* Create implicit conversion, as for a single match: the native reads each argument as
+           its parameter's type. */
+        Function const& fn = matches[0].fn;
+        for (size_t i = 0; i < expressions.size(); ++i)
+          expressions[i] = Expression_Conversion(expressions[i], fn->params[i].type);
+        return fn;
+      }
 
 #if 0
       Log_Error(Stringize()
