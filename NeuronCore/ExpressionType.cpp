@@ -179,9 +179,9 @@ namespace LTE {
 
         type->initializers.push(initializer);
 
-        /* Field padding. */ {
-          size_t padding = type->size % fieldType->alignment;
-          type->size += padding;
+        /* Field padding: round up to the field's alignment. */ {
+          size_t fieldAlignment = fieldType->alignment;
+          type->size = (type->size + fieldAlignment - 1) / fieldAlignment * fieldAlignment;
         }
 
         type->fields.push(Field(fieldName, fieldType, type->size));
@@ -190,9 +190,8 @@ namespace LTE {
       }
     }
 
-    /* Final padding. */
-    if (type->size)
-      type->size += type->size % alignment;
+    /* Final padding: round up to the type's alignment, so array elements stay aligned. */
+    type->size = (type->size + alignment - 1) / alignment * alignment;
 
     /* TODO : Type leakage. */
     Type hardType = Type_Create(type->name, type->size);
