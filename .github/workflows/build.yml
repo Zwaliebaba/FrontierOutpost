@@ -95,7 +95,8 @@ jobs:
         shell: pwsh
         run: python Build\CheckSounds.py
 
-      # The NuGet packages ADR-018 approved, into packages/, before anything compiles against them.
+      # The NuGet packages ADR-018 and ADR-019 approved, into packages/, before anything compiles
+      # against them.
       - name: Restore NuGet packages
         if: hashFiles('**/packages.config') != ''
         shell: pwsh

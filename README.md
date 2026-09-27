@@ -24,8 +24,8 @@ FrontierOutpost builds with MSBuild from `FrontierOutpost.slnx`, at the root of 
 Open a **Developer PowerShell for Visual Studio 2026** at the root of the repository, and run
 
 - `msbuild FrontierOutpost.slnx -t:restore -p:RestorePackagesConfig=true`, once, and again when a
-  `packages.config` changes: it fetches the one NuGet package, WinPixEventRuntime, into `packages/`
-  (ADR-018). Visual Studio does this by itself.
+  `packages.config` changes: it fetches the NuGet packages, WinPixEventRuntime (ADR-018) and
+  C++/WinRT (ADR-019), into `packages/`. Visual Studio does this by itself.
 - `msbuild FrontierOutpost.slnx /m /p:Configuration=Release /p:Platform=x64`
 
 Use `Configuration=Debug` for a debug build, and `Platform=ARM64` to build for ARM64. Opening `FrontierOutpost.slnx` in Visual Studio 2026 works too. The binaries land in `FrontierOutpost/bin/<Platform>/<Configuration>/`, and NeuronClient's in `<Platform>/<Configuration>/`.
