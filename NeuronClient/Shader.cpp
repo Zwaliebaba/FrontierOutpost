@@ -15,7 +15,6 @@
 
 #include <array>
 #include <cstring>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -253,11 +252,6 @@ namespace {
         gActiveShader = nullptr;
     }
 
-    /* The shaders name their inputs and outputs by register, so there is
-       nothing to bind or link (Design/ADR/ADR-008). */
-    void BindInput(size_t, char const*) {}
-    void BindOutput(size_t, char const*) {}
-
     void BindMatrices(
       Matrix const& world,
       Matrix const& view,
@@ -277,11 +271,6 @@ namespace {
         SetMatrix(program->mWVP, &WVP);
     }
 
-    bool Create(String const&, String const&) {
-      Log_Error("Shader: shaders are compiled into lt.dll, not from source (Design/ADR/ADR-008)");
-      return false;
-    }
-
     int GetUniformLocation(char const* name) {
       return program->GetUniformLocation(name, true);
     }
@@ -289,13 +278,6 @@ namespace {
     int QueryUniformLocation(char const* name) {
       return program->GetUniformLocation(name, false);
     }
-
-    void PrintLogs() const {
-      std::cout << ">>> Program " << program->path.c_str()
-        << ": compiled at build time (Design/ADR/ADR-008)\n\n";
-    }
-
-    void Relink() {}
 
     ShaderT& SetCubeMap(char const* name, CubeMap const& cubeMap) {
       int varIndex = GetUniformLocation(name);

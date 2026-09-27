@@ -255,10 +255,6 @@ namespace {
 
       /* Render. */ {
         static Shader shader = Shader_Create("widget.jsl", "ui/text.jsl");
-        shader->BindInput(1, "vert_attrib1");
-        shader->BindInput(2, "vert_attrib2");
-        shader->BindInput(3, "vert_attrib3");
-        shader->BindInput(4, "vert_attrib4");
 
         DrawState_Link(shader);
         (*shader)
