@@ -1,9 +1,12 @@
 # Shader pipeline: effects, pipeline states and bindless parameters
 
-- **Status:** Proposed 2026-09-27. The owner answered four scoping questions the same day (§0).
-  No item is approved yet. The owner approves items by ID; each lands as its own PR, with its ADR
-  in the same commit where the item is a decision (AGENTS.md §6). ADR numbers are the next free
-  ones when each lands; the performance plan's D items take numbers from the same sequence.
+- **Status:** Proposed 2026-09-27. The owner answered four scoping questions the same day (§0),
+  and approved P0.1 to P0.6. Those landed together, as the owner asked, one commit each on
+  `claude/vibrant-planck-8jxlx1`; none was built or run, and each P0 item in §4 says what it
+  still needs from a run. Nothing from P1 on is approved. The owner approves items by ID; from P1
+  on each lands as its own PR, with its ADR in the same commit where the item is a decision
+  (AGENTS.md §6). ADR numbers are the next free ones when each lands; the performance plan's D
+  items take numbers from the same sequence.
 - **Scope:** how a shader becomes a draw or a dispatch:
   - `Program`, and `DrawContext`'s pipeline-state cache, root signatures and binding;
   - the two shader registries;
@@ -143,7 +146,7 @@ The whole script surface that reaches shaders:
 | `RenderPass_PostFilter "post/dither.jsl"` | 8 scripts: the apps' pass lists, `Widget/Observatory.lts`, `Widget/ModelEditor/Preview.lts` | a post pass by name; `LteRenderPasses.cpp:51-64` links the engine's values by name |
 | `RenderPass_CustomFilter` | `Widget/Observatory.lts` | runs the script's own `Filters` |
 | `Material_Metal`, `Material_Ice`, `Model_Add` | 8 lines: the item generators, `Widget/ModelEditor.lts`, `Object/WarpRail.lts` | a material is a `ShaderInstance` made in C++ |
-| `ShaderInstance_Clone` | no caller | hangs (H1) |
+| `ShaderInstance_Clone` | no caller | hung until P0.5 (H1) |
 | `DrawState_Push`, `Pop`, `Clear` | no script caller | C++ pushes `fogDensity` and `camVelocity` |
 
 Scripts never choose a vertex shader other than `identity.jsl`. The set of shaders is closed at
@@ -160,7 +163,7 @@ None of that needs a name lookup at draw time.
 
 - **H1: `ShaderInstanceT::Clone` never advances its loop** (`ShaderInstance.cpp:171-176`). An
   instance with any render-state switch loops forever and allocates as it goes. Scripts can reach
-  it through `Clone`; nothing calls it today.
+  it through `Clone`; nothing calls it today. P0.5 fixes it.
 - **H2: `prepass` is a program constant that two render styles toggle.**
   - The depth-prepass style sets it to 1 (`DepthPrepass.cpp:52-67`), and clears its cached
     instance at the start of every pass (`DepthPrepass.cpp:30-36`).
@@ -168,9 +171,12 @@ None of that needs a name lookup at draw time.
     (`RenderStyles.cpp:47-57`), and never clears its cache.
 
   Suppose a frame's first G-buffer draw uses the same material instance as the previous frame's
-  last G-buffer draw, as in a scene with one material. That draw keeps this frame's `prepass = 1`,
-  and writes depth into the G-buffer. Found by reading; not reproduced.
-- **H3: unreachable material (ADR-013).**
+  last G-buffer draw, as in a scene with one material. That draw, and those right after it with the
+  same instance, keep this frame's `prepass = 1` and write linear depth into the G-buffer.
+  Instances are shared: every asteroid draws with `Material_Rock`'s one instance. The starfield and
+  the dust flecks each system draws are additive, and the G-buffer style passes over them without
+  touching its cache. Found by reading; not reproduced. P0.6 clears the cache.
+- **H3: unreachable material (ADR-013).** P0.4 removed all three.
   - `MaterialLodfadePS` is registered, and nothing reaches it.
   - `DepthPrepassStyle` makes `DepthprepassPS` and an instance of it (`DepthPrepass.cpp:18-27`),
     and never draws with either.
@@ -410,12 +416,13 @@ files.
 
 ## 4. Items
 
-Effort is S, M or L, as in the performance plan. Every item lands as its own PR.
+Effort is S, M or L, as in the performance plan. From P1 on, every item lands as its own PR;
+P0.1 to P0.6 went together, as the Status says.
 
 | ID | Change | Output | Effort | Needs |
 |---|---|---|---|---|
 | P0.1 | Device probe: highest shader model, binding tier, shader-cache support, directly indexed heaps | unchanged | S | — |
-| P0.2 | Pipeline-state telemetry: count, time, and a log line for each state made after the first frame | unchanged | S | — |
+| P0.2 | Pipeline-state telemetry: count, time, and a log line for each state made, with its frame | unchanged | S | — |
 | P0.3 | Draw-path timing behind a define, as M1's glyph line is | unchanged | S | — |
 | P0.4 | Remove H3's unreachable material | bit-exact | S | — |
 | P0.5 | Fix H1: advance `Clone`'s loop | bit-exact | S | — |
@@ -445,25 +452,45 @@ Effort is S, M or L, as in the performance plan. Every item lands as its own PR.
   - The owner runs any app on the Iris Xe and on the ARM64 device.
   - **Gate for P5 and P6:** all four (the Iris Xe, the ARM64 device, local WARP, CI's WARP) report
     SM 6.6 or higher and make the root signature. Otherwise O2 and O3 are decided before P5.
+  - **Landed:** `GraphicsDevice::Capabilities()`, which liblt logs at startup as one line
+    beginning `Direct3D 12 supports shader model`, and the NeuronClientTests case
+    `ReportsWhatTheDeviceSupports`, which writes WARP's answers to the test log. The four runs are
+    the owner's.
 - **P0.2: pipeline-state telemetry.** It counts and times every pipeline state made, and logs each
-  one made after the app's first frame, with its key. This gives G1's size, and later the proof of
-  P2.
+  one with its key and the frame it was made in, so the states made after the app's first frame
+  are the lines with a later frame. This gives G1's size, and later the proof of P2.
+  - **Landed:** `GraphicsDevice::Desc::onNote` hears one line per state: its number, its program,
+    each part of its key by name, the time it took, its frame, and the time spent on all of them so
+    far. liblt writes the lines to its log. It logs every state, not only the late ones, so P2a
+    needs no change to it.
 - **P0.3: draw-path timing.** It measures the CPU time from a draw call to its record, summed per
   frame. It sits behind a define, as `TIME_GLYPHS` does (M1), and gives G2's size and point 2 of §2
   its number.
+  - **Landed:** `TIME_DRAW_PATH` in `Renderer.cpp`, off. Defined, it logs for each frame the CPU
+    time its draws spent from each draw call to its record, and how many draws there were.
 - **P0.4: H3.** Remove:
   - `MaterialLodfadePS`;
   - `DepthprepassPS`, and `DepthPrepassStyle`'s unused shader and instance;
   - the GL no-ops `BindInput`, `BindOutput`, `Relink`, `PrintLogs` and `Create`, with their calls.
 
-  This follows ADR-013 decision 1.
+  This follows ADR-013 decision 1. **Landed** as listed; `CheckProjectFiles.py`'s registry rule
+  passes without the two shaders.
 - **P0.5: H1.** One line: `next = next->next;` in the loop. Whether the function stays is O7.
   NeuronClientTests cannot link the legacy files (ADR-015), so the fix is proved by reading and by
   one script run.
+  - **Landed.** The loop was also run on its own, verbatim over `ListElement`'s members: without
+    the line it never ends for a list of one cell, and with it lists of 0, 1 and 3 cells are copied
+    in order. The script run is the owner's.
 - **P0.6: H2.** First reproduce it in a scene with one material instance, for example one model in
   `model`, captured with `--frames` and `--capture` before and after. Then clear the G-buffer
   style's cached instance in `OnBegin`, as the prepass style does. Output changes only where the
   bug shows. P4c removes the cause.
+  - **Landed without the reproduction,** which needs Windows. Whether `model` as shipped shows H2
+    depends on what is in view, since the first and last G-buffer draws must share an instance. A
+    scene where every G-buffer draw shares one: set the ship, station and planet blocks of
+    `GenObject` in `App/model.lts` to `if false` locally, which leaves the 1024 asteroids, and run
+    `FrontierOutpost.exe model --frames 30 --capture model.png` before and after this item. If H2
+    is real, the asteroids come out wrong from the second frame on before it, and right after it.
 
 ### P1. Effects
 
@@ -483,9 +510,9 @@ Effort is S, M or L, as in the performance plan. Every item lands as its own PR.
 
 ### P2. Pipeline states before first use
 
-- **P2a: the recording.** P0.2's log line is extended to every pipeline state made, not only the
-  late ones, and carries each key by name. A `Tools/` script reads the logs of all fifteen apps'
-  `--frames` runs and writes the manifest table.
+- **P2a: the recording.** P0.2's log line already covers every pipeline state made and names each
+  part of its key. A `Tools/` script reads the logs of all fifteen apps' `--frames` runs and writes
+  the manifest table.
 - **P2b: the replay.** The workers, the wait on use, and the log of late states (§3.2). Its ADR is
   (B).
   - **Proof:** P0.2's count of states made after the first frame falls to zero for every app the
@@ -644,8 +671,8 @@ Effort is S, M or L, as in the performance plan. Every item lands as its own PR.
   this session; P0.1 decides.
 - Whether the Iris Xe, the ARM64 device, and local and CI WARP support SM 6.6 with directly indexed
   heaps (P0.1).
-- H2 in a run (P0.6).
-- Every cost figure (P0.2, P0.3).
+- H2 in a run (P0.6), whose fix landed without one.
+- Every cost figure (P0.2, P0.3), whose instruments landed without a run.
 - How far DXC's output differs from FXC's on this content (P5).
 - That every shader compiles under DXC with `-HV 2018` without edits. A search found every `?:`,
   `&&` and `||` in the HLSL applied to scalars, which HLSL 2021 accepts too, so P7's move to 2021
@@ -654,5 +681,5 @@ Effort is S, M or L, as in the performance plan. Every item lands as its own PR.
 ## 10. Open for the owner
 
 1. O1 to O8 (§5).
-2. Approval of items by ID. P0.1 to P0.6 can start now; nothing from P1 on starts before the
-   performance items the owner approves after M2 have landed.
+2. Approval of items by ID. P0.1 to P0.6 have landed, and their runs are the owner's (§4, P0);
+   nothing from P1 on starts before the performance items the owner approves after M2 have landed.
