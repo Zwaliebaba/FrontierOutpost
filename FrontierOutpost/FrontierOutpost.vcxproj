@@ -6,6 +6,7 @@
     game's client side and links every library whole (Design/ADR/ADR-014). Items marked Legacy
     build as ADR-015 says (Build/Legacy.targets).
   -->
+  <Import Project="..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.props" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.props')" />
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
@@ -682,6 +683,7 @@
       <ShaderType>Pixel</ShaderType>
       <VariableName>WORMHOLE_PS</VariableName>
     </FxCompile>
+    <None Include="packages.config" />
     <None Include="Shaders\Cube.hlsli" />
     <None Include="Shaders\Deferred.hlsli" />
     <None Include="Shaders\Fdm.hlsli" />
@@ -704,4 +706,12 @@
   <Target Name="MakeCompiledShadersFolder" BeforeTargets="FxCompile">
     <MakeDir Directories="$(ProjectDir)CompiledShaders" />
   </Target>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.props'))" />
+    <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.targets'))" />
+  </Target>
+  <Import Project="..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.targets')" />
 </Project>
