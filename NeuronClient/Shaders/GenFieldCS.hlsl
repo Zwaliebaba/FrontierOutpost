@@ -36,6 +36,10 @@ float3 origin;
 float3 extent;
 uint3 resolution;
 uint firstSlice;
+// The slices from firstSlice that this dispatch computes. A group is 4 slices deep, so a batch
+// that is not a multiple of 4 leaves the lanes past it idle, rather than computing slices that the
+// next batch computes again.
+uint sliceCount;
 
 RWTexture3D<float> field : register(u0);
 
@@ -96,7 +100,7 @@ float Evaluate(float3 p) {
 [numthreads(4, 4, 4)]
 void main(uint3 id : SV_DispatchThreadID) {
   uint3 voxel = uint3(id.xy, id.z + firstSlice);
-  if (any(voxel >= resolution))
+  if (id.z >= sliceCount || any(voxel >= resolution))
     return;
   field[voxel] = Evaluate(origin + extent * (float3(voxel) / float3(resolution - 1u)));
 }

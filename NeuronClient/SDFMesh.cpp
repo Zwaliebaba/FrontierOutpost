@@ -337,9 +337,11 @@ namespace {
         res.z | " voxels took " | (uint)(1000.0f * totalTime) | " ms");
     }
 
-    /* jobSize slices at a time, as the render passes before did. */
+    /* jobSize slices at a time, as the render passes before did, rounded up
+       to the 4 slices a thread group spans wherever the field has room: the
+       group's lanes cost the same whether they compute or not. */
     void OnRun(uint jobSize) {
-      uint const slices = Min(Max(jobSize, 1u), res.z - z);
+      uint const slices = Min(4 * Groups(Max(jobSize, 1u), 4), res.z - z);
       Neuron::Program& field = FieldProgram();
       field.SetConstant("instructions", std::as_bytes(std::span(program.words)));
       SetConstant(field, "instructionCount", (std::uint32_t)program.Instructions());
@@ -347,6 +349,7 @@ namespace {
       SetConstant(field, "extent", parent->bound.GetSideLengths());
       SetConstant(field, "resolution", res);
       SetConstant(field, "firstSlice", (std::uint32_t)z);
+      SetConstant(field, "sliceCount", (std::uint32_t)slices);
 
       Neuron::DrawContext& context = Renderer_Context();
       context.SetUnorderedTexture(0, &Texture3D_GetGpu(*output)->texture);

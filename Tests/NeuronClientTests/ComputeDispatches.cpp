@@ -2,13 +2,14 @@
 //
 // A compute program writes a 3D field through a UAV from a texture it reads and its constants, as
 // the SDF interpreter will; dispatches that write the same texture one after the other each see the
-// writes before; and the context refuses what it cannot dispatch (Design/ADR/ADR-007, ADR-009; plan
-// Phase 3).
+// writes before; the SDF interpreter writes only the slices of its batch (Design/ShaderPerformance-plan.md
+// E1); and the context refuses what it cannot dispatch (Design/ADR/ADR-007, ADR-009; plan Phase 3).
 #include "pch.h"
 
 #include "Check.h"
 #include "CompiledShaders/AccumulateCS.h"
 #include "CompiledShaders/FieldCS.h"
+#include "CompiledShaders/GenFieldCS.h"
 #include "CompiledShaders/SolidPS.h"
 #include "CompiledShaders/SolidVS.h"
 #include "DrawContext.h"
@@ -84,6 +85,25 @@ std::vector<std::byte> Read(TestDevice& _test, const Texture& _texture)
   return texels;
 }
 
+/// Runs GenFieldCS over slices [_firstSlice, _firstSlice + _sliceCount) of a 4 by 4 by 8 field, for
+/// a sphere of _radius at the field's centre: LTE/SDF.h's one-instruction program, opcode 1.
+void DispatchSphere(TestDevice& _test, Program& _program, Texture& _field, float _radius, std::uint32_t _firstSlice,
+                    std::uint32_t _sliceCount, std::uint32_t _groupsZ)
+{
+  const std::array<float, 8> sphere{1.0f, 0.5f, 0.5f, 0.5f, _radius, 0.0f, 0.0f, 0.0f};
+  _program.SetConstant("instructions", std::as_bytes(std::span(sphere)));
+  _program.SetConstant("instructionCount", Bytes(std::uint32_t{1}));
+  _program.SetConstant("origin", Bytes(std::array<float, 3>{0.0f, 0.0f, 0.0f}));
+  _program.SetConstant("extent", Bytes(std::array<float, 3>{1.0f, 1.0f, 1.0f}));
+  _program.SetConstant("resolution", Bytes(std::array<std::uint32_t, 3>{4, 4, 8}));
+  _program.SetConstant("firstSlice", Bytes(_firstSlice));
+  _program.SetConstant("sliceCount", Bytes(_sliceCount));
+  Neuron::DrawContext& context = _test.device.Context();
+  context.SetUnorderedTexture(0, &_field, 0);
+  context.Dispatch(_program, 1, 1, _groupsZ);
+  context.SetUnorderedTexture(0, nullptr, 0);
+}
+
 } // namespace
 
 TEST_CLASS(ComputeDispatches)
@@ -124,6 +144,29 @@ public:
     Assert::IsTrue(Read(test, field) == Floats(fieldValues), L"the field was not written as the offsets and slices give it");
     // The one pipeline state the dispatch made was noted (Design/ShaderPipeline-plan.md P0.2).
     Assert::IsTrue(test.notes.size() == 1 && test.notes[0].contains("for Field: compute;"), L"the compute pipeline state was not noted");
+    ExpectClean(test);
+  }
+
+  TEST_METHOD(ComputesOnlyTheSlicesOfItsBatch)
+  {
+    TestDevice test;
+    Open(test);
+    Program interpreter = MakeCompute(test, Bytecode(GEN_FIELD_CS), "GenField");
+    Texture field = MakeTexture(test, TextureDimension::Texture3D, 4, 4, 8, 1);
+    Texture other = MakeTexture(test, TextureDimension::Texture3D, 4, 4, 8, 1);
+    // Every slice, of one sphere in field and of a larger one in other.
+    DispatchSphere(test, interpreter, field, 0.25f, 0, 8, 2);
+    DispatchSphere(test, interpreter, other, 0.75f, 0, 8, 2);
+    const std::vector<std::byte> smallSphere = Read(test, field);
+    const std::vector<std::byte> largeSphere = Read(test, other);
+    Assert::IsTrue(smallSphere != largeSphere, L"the two spheres gave the same field");
+
+    // One slice of the larger sphere into field, from a group 4 slices deep.
+    DispatchSphere(test, interpreter, field, 0.75f, 2, 1, 1);
+    constexpr std::size_t SLICE_BYTES = sizeof(float) * 4 * 4;
+    std::vector<std::byte> expected = smallSphere;
+    std::memcpy(expected.data() + (2 * SLICE_BYTES), largeSphere.data() + (2 * SLICE_BYTES), SLICE_BYTES);
+    Assert::IsTrue(Read(test, field) == expected, L"the batch wrote other than its one slice");
     ExpectClean(test);
   }
 
