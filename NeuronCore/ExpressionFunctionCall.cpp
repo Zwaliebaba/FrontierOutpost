@@ -12,6 +12,9 @@
 #include <algorithm>
 
 namespace {
+  /* The widest native binding, DeclareFunction24, takes 24 arguments. */
+  size_t const kMaxNativeArgs = 24;
+
   AutoClass(ArgData,
     Expression, expression,
     Type, type,
@@ -28,8 +31,6 @@ namespace {
   AutoClassDerived(ExpressionFunctionCall, ExpressionT,
     Function, function,
     Array<ArgData>, args)
-    Array<void*> argStack;
-
     DERIVED_TYPE_EX(ExpressionFunctionCall)
     POOLED_TYPE
 
@@ -41,8 +42,8 @@ namespace {
         Vector<Expression> const& arguments) :
       function(function)
     {
+      LTE_ASSERT(arguments.size() <= kMaxNativeArgs);
       args.resize(arguments.size());
-      argStack.resize(arguments.size(), nullptr);
       for (size_t i = 0; i < arguments.size(); ++i)
         args[i] = ArgData(arguments[i]);
     }
@@ -61,6 +62,10 @@ namespace {
     void Evaluate(void* returnValue, Environment& env) const {
       // SFRAME(function->name.data());
 
+      /* The argument pointers belong to this call: a native that runs a script can evaluate
+         this node again before the call returns. */
+      void* argStack[kMaxNativeArgs];
+
       for (size_t i = 0; i < args.size(); ++i) {
         ArgData const& arg = args[i];
         if (!arg.isLValue) {
@@ -71,7 +76,7 @@ namespace {
         }
       }
 
-      function->call(argStack.data(), returnValue);
+      function->call(argStack, returnValue);
 
       for (size_t i = 0; i < args.size(); ++i) {
         size_t index = args.size() - i - 1;
