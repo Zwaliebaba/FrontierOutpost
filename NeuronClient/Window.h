@@ -77,23 +77,25 @@ using WindowEvent = std::variant<KeyEvent, CharacterEvent, MouseButtonEvent, Mou
 
 /// A Win32 window and its message pump (Design/ADR/ADR-012). Messages become WindowEvents, in the
 /// order they arrive. WM_CLOSE, from the close button or Alt+F4, closes it; Alt and F10 do not open
-/// the system menu. While a mouse button is held down over it, it captures the mouse. It is not
-/// thread-safe: one thread opens it, pumps it and closes it.
+/// the system menu. While a mouse button is held down over it, it captures the mouse. Fullscreen,
+/// it is a borderless popup over the whole of the primary display, never DXGI's exclusive mode
+/// (Design/ADR/ADR-017). It is not thread-safe: one thread opens it, pumps it and closes it.
 class Window
 {
 public:
   struct Desc
   {
     std::string_view titleUtf8;
-    std::uint32_t widthPixels; // of the client area
+    std::uint32_t widthPixels; // of the client area, unless fullscreen
     std::uint32_t heightPixels;
-    bool border;        // a title bar and a resizable frame, or a bare popup without them
+    bool border;        // a title bar and a resizable frame, or a bare popup, unless fullscreen
     bool cursorVisible; // the OS cursor, over the window
+    bool fullscreen;    // the whole of the primary display, whatever size and border say
   };
 
   /// Makes the process system-DPI-aware, then opens a window, shown and centered on the primary
-  /// display, with a client area of the size asked for, even one larger than the display. On
-  /// failure returns false and says why in _error.
+  /// display, with a client area of the size asked for, even one larger than the display, or
+  /// covering that display when fullscreen. On failure returns false and says why in _error.
   [[nodiscard]] static bool Open(const Desc& _desc, Window& _outWindow, std::string& _error);
 
   Window() noexcept;
@@ -112,6 +114,10 @@ public:
   /// The oldest event not yet returned. When there is none, the thread's pending messages are
   /// dispatched first. Returns false when there is still none.
   [[nodiscard]] bool PollEvent(WindowEvent& _outEvent);
+
+  /// The client area's size, as last reported: what Open made, then the latest ResizeEvent queued.
+  [[nodiscard]] std::uint32_t WidthPixels() const noexcept;
+  [[nodiscard]] std::uint32_t HeightPixels() const noexcept;
 
   /// Where the cursor is now.
   [[nodiscard]] ClientPoint CursorPosition() const noexcept;

@@ -1,6 +1,9 @@
 # ADR-012: The window and input are plain Win32
 
 - **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2)
+- **Amended:** 2026-09-27 by ADR-017. A player's run opens borderless fullscreen over the primary
+  display instead of decision 6's 1920×1080 window, which the smoke mode and WARP keep; borderless
+  fullscreen is no longer foreclosed. Exclusive fullscreen still is.
 - **Scope:** NeuronClient's `Window` and `Key`, and `lt.dll`'s window, keyboard and mouse
   (`LTE/Window.cpp`, `Keyboard.cpp` and `Mouse.cpp` in `FrontierOutpost/src/liblt/`)
 - **Detail:** `Design/Archive/NeuronClient-migration.md` §4.1, §4.3, §5.2, §5.3, §5.4, §8, §9 B,

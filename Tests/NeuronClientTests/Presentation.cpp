@@ -101,7 +101,8 @@ Neuron::Window OpenWindow()
                                        .widthPixels = WIDTH_PIXELS,
                                        .heightPixels = HEIGHT_PIXELS,
                                        .border = false,
-                                       .cursorVisible = true},
+                                       .cursorVisible = true,
+                                       .fullscreen = false},
                                       window, error),
                  Widen(error).c_str());
   return window;

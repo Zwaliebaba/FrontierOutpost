@@ -67,7 +67,11 @@ struct Launcher : public Program {
     }
     if (dir.size())
       OS_ChangeDir(dir);
-    window = Window_Create("App Launcher", V2U(1920, 1080), true, false);
+    /* A player's run is borderless fullscreen at the display's size. The
+       smoke mode and WARP keep a 1920x1080 window, so that their captures stay
+       that size (ADR-017). */
+    bool const fullscreen = !frames && !warp;
+    window = Window_Create("App Launcher", V2U(1920, 1080), true, fullscreen);
     window->SetSync(false);
     /* On WARP, the smoke mode draws offscreen: it never makes a swap chain
        (plan section 7). */
@@ -186,6 +190,8 @@ struct Launcher : public Program {
 };
 
 /* launch <app> [--warp] [--frames N] [--capture <path>]
+   The app opens borderless fullscreen; with --warp or --frames, in a 1920x1080
+   window (ADR-017).
    With --warp, the app draws on WARP, Windows' software adapter, with the
    Direct3D 12 debug layer, and offscreen: nothing is shown. With --frames, the
    app runs N frames and the launcher quits, and nothing waits for a click on a

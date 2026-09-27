@@ -126,9 +126,6 @@ namespace {
       hasFocus(true),
       sync(false)
     {
-      if (fullscreen)
-        Log_Critical("Window: exclusive fullscreen is not supported (ADR-012)");
-
       viewport = Viewport_Create(0, size, 1, true);
 
       Neuron::Window::Desc desc;
@@ -137,14 +134,18 @@ namespace {
       desc.heightPixels = size.y;
       desc.border = border;
       desc.cursorVisible = false;
+      /* Borderless over the display, never DXGI's exclusive mode (ADR-017). */
+      desc.fullscreen = fullscreen;
 
       std::string error;
       if (!Neuron::Window::Open(desc, impl, error))
         Log_Critical(error);
 
-      /* Vertical sync starts off, as SFML turned it off for every new window
+      /* Fullscreen, the size is the display's rather than the one asked for.
+         Vertical sync starts off, as SFML turned it off for every new window
          (N7). */
-      viewport->size = size;
+      this->size = V2U(impl.WidthPixels(), impl.HeightPixels());
+      viewport->size = this->size;
     }
 
     void Close() {

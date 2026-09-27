@@ -1,7 +1,8 @@
 // Tests/NeuronClientTests/WindowEvents.cpp
 //
 // Neuron::Window opens at the client size asked for, turns the messages sent to it into events in
-// their order, and closes on WM_CLOSE without Windows destroying it (Design/ADR/ADR-012).
+// their order, and closes on WM_CLOSE without Windows destroying it (Design/ADR/ADR-012). Fullscreen,
+// it is borderless over the primary display (Design/ADR/ADR-017).
 #include "pch.h"
 
 #include "Check.h"
@@ -24,21 +25,43 @@ constexpr std::uint32_t WIDTH_PIXELS = 320;
 constexpr std::uint32_t HEIGHT_PIXELS = 200;
 constexpr LPARAM REPEATED = LPARAM{1} << 30;
 
-Neuron::Window Open()
+Neuron::Window Open(bool _fullscreen = false)
 {
   Neuron::Window window;
   std::string error;
-  Assert::IsTrue(
-    Neuron::Window::Open(
-      {.titleUtf8 = "NeuronClientTests", .widthPixels = WIDTH_PIXELS, .heightPixels = HEIGHT_PIXELS, .border = true, .cursorVisible = true},
-      window, error),
-    Widen(error).c_str());
+  Assert::IsTrue(Neuron::Window::Open({.titleUtf8 = "NeuronClientTests",
+                                       .widthPixels = WIDTH_PIXELS,
+                                       .heightPixels = HEIGHT_PIXELS,
+                                       .border = true,
+                                       .cursorVisible = true,
+                                       .fullscreen = _fullscreen},
+                                      window, error),
+                 Widen(error).c_str());
   return window;
 }
 
 HWND Handle(const Neuron::Window& _window)
 {
   return static_cast<HWND>(_window.NativeHandle());
+}
+
+/// The whole of the primary display, which fullscreen covers.
+RECT PrimaryDisplay()
+{
+  MONITORINFO monitor{};
+  monitor.cbSize = sizeof(monitor);
+  Assert::IsTrue(GetMonitorInfoW(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY), &monitor) != 0);
+  return monitor.rcMonitor;
+}
+
+void AssertClientSize(const Neuron::Window& _window, LONG _widthPixels, LONG _heightPixels)
+{
+  RECT client{};
+  Assert::IsTrue(GetClientRect(Handle(_window), &client) != 0);
+  Assert::AreEqual(static_cast<int>(_widthPixels), static_cast<int>(client.right), L"client width");
+  Assert::AreEqual(static_cast<int>(_heightPixels), static_cast<int>(client.bottom), L"client height");
+  Assert::AreEqual(static_cast<std::uint32_t>(_widthPixels), _window.WidthPixels(), L"reported width");
+  Assert::AreEqual(static_cast<std::uint32_t>(_heightPixels), _window.HeightPixels(), L"reported height");
 }
 
 /// The events of one kind the window has, once the thread's messages are dispatched. Windows may
@@ -142,6 +165,24 @@ public:
       moved = moved || (move.position.xPixels == -5 && move.position.yPixels == 17);
     }
     Assert::IsTrue(moved, L"no move to (-5, 17), left of the client area");
+  }
+
+  TEST_METHOD(OpensFullscreenOverThePrimaryDisplayWithoutAFrame)
+  {
+    Neuron::Window window = Open(true);
+    Assert::IsTrue(IsWindowVisible(Handle(window)) != 0);
+    Assert::IsTrue((GetWindowLongPtrW(Handle(window), GWL_STYLE) & WS_CAPTION) == 0, L"a frame while fullscreen");
+    const RECT display = PrimaryDisplay();
+    RECT placed{};
+    Assert::IsTrue(GetWindowRect(Handle(window), &placed) != 0);
+    Assert::IsTrue(EqualRect(&placed, &display) != 0, L"not over the whole of the primary display");
+    AssertClientSize(window, display.right - display.left, display.bottom - display.top);
+  }
+
+  TEST_METHOD(ReportsTheClientSizeItOpensAt)
+  {
+    Neuron::Window window = Open();
+    AssertClientSize(window, static_cast<LONG>(WIDTH_PIXELS), static_cast<LONG>(HEIGHT_PIXELS));
   }
 
   TEST_METHOD(ClosesOnWmCloseAndStaysUntilClose)

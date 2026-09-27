@@ -2,7 +2,7 @@
 
 - **Status:** Proposed 2026-09-26. Nothing is approved and nothing is implemented. The owner
   approves items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the
-  same commit where the item is a decision (§3). The next free ADR number is ADR-017 (ADR-016 went to the library split's visuals).
+  same commit where the item is a decision (§3). The next free ADR number is ADR-018 (ADR-016 went to the library split's visuals, ADR-017 to borderless fullscreen).
 - **Scope:** the HLSL in `NeuronClient/Shaders/` and `FrontierOutpost/Shaders/`, and the C++ that
   dispatches it:
   - the four compute shaders;

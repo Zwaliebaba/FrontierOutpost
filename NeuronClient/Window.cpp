@@ -268,21 +268,44 @@ bool Window::Open(const Desc& _desc, Window& _outWindow, std::string& _error)
     return false;
   }
 
-  const DWORD style = WS_VISIBLE | (_desc.border ? WS_CAPTION | WS_MINIMIZEBOX | WS_THICKFRAME | WS_MAXIMIZEBOX | WS_SYSMENU : WS_POPUP);
-
-  // Centered by the client area's size, then grown by the frame, where SFML placed it.
-  const HDC screen = GetDC(nullptr);
-  const int left = (GetDeviceCaps(screen, HORZRES) - static_cast<int>(_desc.widthPixels)) / 2;
-  const int top = (GetDeviceCaps(screen, VERTRES) - static_cast<int>(_desc.heightPixels)) / 2;
-  ReleaseDC(nullptr, screen);
-  RECT frame{0, 0, static_cast<LONG>(_desc.widthPixels), static_cast<LONG>(_desc.heightPixels)};
-  AdjustWindowRect(&frame, style, FALSE);
-  const int width = frame.right - frame.left;
-  const int height = frame.bottom - frame.top;
-
   auto native = std::make_unique<Native>();
-  native->widthPixels = _desc.widthPixels;
-  native->heightPixels = _desc.heightPixels;
+  DWORD style = WS_VISIBLE | WS_POPUP;
+  int left = 0;
+  int top = 0;
+  int width = 0;
+  int height = 0;
+  if (_desc.fullscreen)
+  {
+    // A popup over the whole of the primary display, which DWM shows with the swap chain's own
+    // flips, as it would DXGI's exclusive mode (Design/ADR/ADR-017).
+    MONITORINFO monitor{};
+    monitor.cbSize = sizeof(monitor);
+    GetMonitorInfoW(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY), &monitor);
+    left = monitor.rcMonitor.left;
+    top = monitor.rcMonitor.top;
+    width = monitor.rcMonitor.right - monitor.rcMonitor.left;
+    height = monitor.rcMonitor.bottom - monitor.rcMonitor.top;
+    native->widthPixels = static_cast<std::uint32_t>(width);
+    native->heightPixels = static_cast<std::uint32_t>(height);
+  }
+  else
+  {
+    if (_desc.border)
+    {
+      style = WS_VISIBLE | WS_CAPTION | WS_MINIMIZEBOX | WS_THICKFRAME | WS_MAXIMIZEBOX | WS_SYSMENU;
+    }
+    // Centered by the client area's size, then grown by the frame, where SFML placed it.
+    const HDC screen = GetDC(nullptr);
+    left = (GetDeviceCaps(screen, HORZRES) - static_cast<int>(_desc.widthPixels)) / 2;
+    top = (GetDeviceCaps(screen, VERTRES) - static_cast<int>(_desc.heightPixels)) / 2;
+    ReleaseDC(nullptr, screen);
+    RECT frame{0, 0, static_cast<LONG>(_desc.widthPixels), static_cast<LONG>(_desc.heightPixels)};
+    AdjustWindowRect(&frame, style, FALSE);
+    width = frame.right - frame.left;
+    height = frame.bottom - frame.top;
+    native->widthPixels = _desc.widthPixels;
+    native->heightPixels = _desc.heightPixels;
+  }
   const std::wstring title = Utf8ToUtf16(_desc.titleUtf8);
   const HWND handle = CreateWindowExW(0, CLASS_NAME, title.c_str(), style, left, top, width, height, nullptr, nullptr, instance, nullptr);
   if (handle == nullptr)
@@ -351,6 +374,16 @@ bool Window::PollEvent(WindowEvent& _outEvent)
   _outEvent = m_native->events.front();
   m_native->events.pop_front();
   return true;
+}
+
+std::uint32_t Window::WidthPixels() const noexcept
+{
+  return m_native ? m_native->widthPixels : 0;
+}
+
+std::uint32_t Window::HeightPixels() const noexcept
+{
+  return m_native ? m_native->heightPixels : 0;
 }
 
 ClientPoint Window::CursorPosition() const noexcept

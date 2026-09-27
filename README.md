@@ -51,9 +51,9 @@ All top-level scripts are in the `GameData/script/App` directory. So you can do,
 
 - `x64\Release\FrontierOutpost.exe war`
 
-To run the app 'war.lts', which is an AI skirmish test. The 15 apps there all start and draw, but many are tests or tools rather than a game, and some work enough to allow you to fly around in a system. `widget.lts` is not an app: it is the host the others open their widgets in.
+To run the app 'war.lts', which is an AI skirmish test. The game opens borderless fullscreen on the primary display, at its resolution (ADR-017); Alt+F4 quits. The 15 apps there all start and draw, but many are tests or tools rather than a game, and some work enough to allow you to fly around in a system. `widget.lts` is not an app: it is the host the others open their widgets in.
 
-`FrontierOutpost.exe` also takes three options for a smoke run, which checks an app with nobody watching. `--frames N` runs the app for N frames and quits, `--capture <path>` saves the last of them as a PNG, and `--warp` draws on WARP, with the Direct3D 12 debug layer on and nothing shown. With `--frames`, nothing waits for a dialog to be answered, and the exit code is 1 when the app fails, stops short of its frames, or the debug layer reports an error. For example:
+`FrontierOutpost.exe` also takes three options for a smoke run, which checks an app with nobody watching. `--frames N` runs the app for N frames and quits, `--capture <path>` saves the last of them as a PNG, and `--warp` draws on WARP, with the Direct3D 12 debug layer on and nothing shown. Either of `--frames` and `--warp` opens a 1920×1080 window rather than fullscreen, so captures are that size on any display. With `--frames`, nothing waits for a dialog to be answered, and the exit code is 1 when the app fails, stops short of its frames, or the debug layer reports an error. For example:
 
 - `x64\Debug\FrontierOutpost.exe war --warp --frames 30 --capture war.png`
 
