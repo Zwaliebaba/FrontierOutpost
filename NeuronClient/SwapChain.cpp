@@ -19,7 +19,7 @@ namespace Neuron
 namespace
 {
 
-using Microsoft::WRL::ComPtr;
+using winrt::com_ptr;
 
 /// One buffer for the GPU to draw into while the display shows the other (plan §5.3).
 constexpr UINT BUFFER_COUNT = 2;
@@ -27,7 +27,7 @@ constexpr UINT BUFFER_COUNT = 2;
 /// Whether DXGI may show a frame torn when vsync is off, as Windows and the display allow.
 bool TearingAllowed(IDXGIFactory4& _factory)
 {
-  ComPtr<IDXGIFactory5> factory;
+  com_ptr<IDXGIFactory5> factory;
   BOOL allowed = FALSE;
   return SUCCEEDED(_factory.QueryInterface(IID_PPV_ARGS(&factory))) &&
          SUCCEEDED(factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allowed, sizeof(allowed))) && allowed == TRUE;
@@ -39,8 +39,8 @@ bool TearingAllowed(IDXGIFactory4& _factory)
 struct SwapChain::Native
 {
   GraphicsCore* core = nullptr;
-  ComPtr<IDXGISwapChain3> swapChain;
-  std::array<ComPtr<ID3D12Resource>, BUFFER_COUNT> buffers;
+  com_ptr<IDXGISwapChain3> swapChain;
+  std::array<com_ptr<ID3D12Resource>, BUFFER_COUNT> buffers;
   std::array<D3D12_CPU_DESCRIPTOR_HANDLE, BUFFER_COUNT> views{};
   std::uint32_t widthPixels = 0;
   std::uint32_t heightPixels = 0;
@@ -84,7 +84,7 @@ struct SwapChain::Native
         return false;
       }
       buffers[index]->SetName(L"NeuronClient back buffer");
-      core->device->CreateRenderTargetView(buffers[index].Get(), nullptr, views[index]);
+      core->device->CreateRenderTargetView(buffers[index].get(), nullptr, views[index]);
     }
     return true;
   }
@@ -94,7 +94,7 @@ struct SwapChain::Native
   {
     for (UINT index = 0; index < BUFFER_COUNT; ++index)
     {
-      buffers[index].Reset();
+      buffers[index] = nullptr;
       if (views[index].ptr != 0)
       {
         core->targetViewPool.Free(views[index]);
@@ -119,7 +119,7 @@ SwapChain SwapChain::Make(const std::shared_ptr<GraphicsCore>& _core, const Desc
   native->widthPixels = _desc.widthPixels;
   native->heightPixels = _desc.heightPixels;
   native->vsync = _desc.vsync;
-  native->tearing = TearingAllowed(*core.factory.Get());
+  native->tearing = TearingAllowed(*core.factory.get());
   const DXGI_SWAP_CHAIN_DESC1 desc{.Width = _desc.widthPixels,
                                    .Height = _desc.heightPixels,
                                    .Format = BACK_BUFFER_FORMAT,
@@ -132,11 +132,11 @@ SwapChain SwapChain::Make(const std::shared_ptr<GraphicsCore>& _core, const Desc
                                    .AlphaMode = DXGI_ALPHA_MODE_IGNORE,
                                    .Flags = native->Flags()};
   const HWND handle = static_cast<HWND>(window);
-  ComPtr<IDXGISwapChain1> swapChain;
+  com_ptr<IDXGISwapChain1> swapChain;
   // No exclusive fullscreen, which nothing uses: Alt+Enter is DXGI's way into it (plan §5.3).
-  if (!core.Check(core.factory->CreateSwapChainForHwnd(core.queue.Get(), handle, &desc, nullptr, nullptr, &swapChain),
+  if (!core.Check(core.factory->CreateSwapChainForHwnd(core.queue.get(), handle, &desc, nullptr, nullptr, swapChain.put()),
                   "IDXGIFactory2::CreateSwapChainForHwnd") ||
-      !core.Check(swapChain.As(&native->swapChain), "IDXGISwapChain1::QueryInterface for IDXGISwapChain3") ||
+      !core.Check(swapChain->QueryInterface(IID_PPV_ARGS(&native->swapChain)), "IDXGISwapChain1::QueryInterface for IDXGISwapChain3") ||
       !core.Check(core.factory->MakeWindowAssociation(handle, DXGI_MWA_NO_ALT_ENTER), "IDXGIFactory::MakeWindowAssociation") ||
       !native->TakeBuffers())
   {
@@ -254,7 +254,7 @@ bool SwapChain::Show(const Texture& _image, std::vector<std::byte>* _outCapture)
   Native& native = *m_native;
   GraphicsCore& core = *m_core;
   const UINT index = native.swapChain->GetCurrentBackBufferIndex();
-  PresentTarget target{.buffer = native.buffers[index].Get(),
+  PresentTarget target{.buffer = native.buffers[index].get(),
                        .view = native.views[index],
                        .widthPixels = native.widthPixels,
                        .heightPixels = native.heightPixels,

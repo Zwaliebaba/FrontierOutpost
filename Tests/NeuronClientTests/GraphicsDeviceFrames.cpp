@@ -27,7 +27,7 @@ namespace NeuronClientTests
 namespace
 {
 
-using Microsoft::WRL::ComPtr;
+using winrt::com_ptr;
 
 } // namespace
 
@@ -82,12 +82,12 @@ public:
     Open(test);
     // The same device as the test device's, since devices are singletons per adapter, asked for a
     // texture with no width.
-    ComPtr<IDXGIFactory4> factory;
+    com_ptr<IDXGIFactory4> factory;
     Check(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)), L"CreateDXGIFactory2");
-    ComPtr<IDXGIAdapter> warp;
+    com_ptr<IDXGIAdapter> warp;
     Check(factory->EnumWarpAdapter(IID_PPV_ARGS(&warp)), L"EnumWarpAdapter");
-    ComPtr<ID3D12Device> device;
-    Check(D3D12CreateDevice(warp.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)), L"D3D12CreateDevice on WARP");
+    com_ptr<ID3D12Device> device;
+    Check(D3D12CreateDevice(warp.get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)), L"D3D12CreateDevice on WARP");
     const D3D12_HEAP_PROPERTIES heap{D3D12_HEAP_TYPE_DEFAULT, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0};
     D3D12_RESOURCE_DESC desc{};
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -97,7 +97,7 @@ public:
     desc.MipLevels = 1;
     desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     desc.SampleDesc.Count = 1;
-    ComPtr<ID3D12Resource> texture;
+    com_ptr<ID3D12Resource> texture;
     Assert::IsTrue(FAILED(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr,
                                                           IID_PPV_ARGS(&texture))),
                    L"a texture with no width was made");

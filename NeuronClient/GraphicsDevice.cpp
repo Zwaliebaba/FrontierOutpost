@@ -18,7 +18,7 @@ namespace Neuron
 namespace
 {
 
-using Microsoft::WRL::ComPtr;
+using winrt::com_ptr;
 
 std::string_view SeverityName(D3D12_MESSAGE_SEVERITY _severity) noexcept
 {
@@ -103,11 +103,11 @@ GraphicsCapabilities Probe(ID3D12Device& _device, ID3D12InfoQueue* _infoQueue)
     desc.Desc_1_1 = D3D12_ROOT_SIGNATURE_DESC1{0, nullptr, 0, nullptr,
                                                D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED |
                                                  D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED};
-    ComPtr<ID3DBlob> signature;
-    ComPtr<ID3DBlob> errors;
-    ComPtr<ID3D12RootSignature> rootSignature;
+    com_ptr<ID3DBlob> signature;
+    com_ptr<ID3DBlob> errors;
+    com_ptr<ID3D12RootSignature> rootSignature;
     capabilities.directlyIndexedHeaps =
-      SUCCEEDED(D3D12SerializeVersionedRootSignature(&desc, &signature, &errors)) &&
+      SUCCEEDED(D3D12SerializeVersionedRootSignature(&desc, signature.put(), errors.put())) &&
       SUCCEEDED(_device.CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
   }
 
@@ -131,7 +131,7 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
   // The debug layer and DRED apply to devices created after they are set.
   if (_desc.debugLayer)
   {
-    ComPtr<ID3D12Debug> debug;
+    com_ptr<ID3D12Debug> debug;
     if (FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
     {
       _error = "Direct3D 12: the debug layer is not installed; it comes with Windows' optional feature Graphics Tools";
@@ -140,8 +140,8 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
     debug->EnableDebugLayer();
     if (_desc.gpuValidation)
     {
-      ComPtr<ID3D12Debug1> debug1;
-      if (FAILED(debug.As(&debug1)))
+      com_ptr<ID3D12Debug1> debug1;
+      if (FAILED(debug->QueryInterface(IID_PPV_ARGS(&debug1))))
       {
         _error = "Direct3D 12: GPU-based validation is not available with this debug layer";
         return false;
@@ -150,7 +150,7 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
     }
   }
   // Without DRED (before Windows 10 1903), a removal is still reported, only with less to say.
-  ComPtr<ID3D12DeviceRemovedExtendedDataSettings> dred;
+  com_ptr<ID3D12DeviceRemovedExtendedDataSettings> dred;
   if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dred))))
   {
     dred->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
@@ -164,7 +164,7 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
   {
     return fail("CreateDXGIFactory2", result);
   }
-  result = _desc.warp ? core->factory->EnumWarpAdapter(IID_PPV_ARGS(&core->adapter)) : core->factory->EnumAdapters1(0, &core->adapter);
+  result = _desc.warp ? core->factory->EnumWarpAdapter(IID_PPV_ARGS(&core->adapter)) : core->factory->EnumAdapters1(0, core->adapter.put());
   if (FAILED(result))
   {
     return fail(_desc.warp ? "IDXGIFactory4::EnumWarpAdapter" : "IDXGIFactory1::EnumAdapters1", result);
@@ -177,12 +177,12 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
   }
   core->adapterName = Utf16ToUtf8(adapterDesc.Description);
 
-  result = D3D12CreateDevice(core->adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&core->device));
+  result = D3D12CreateDevice(core->adapter.get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&core->device));
   if (FAILED(result))
   {
     return fail(std::format("D3D12CreateDevice on {}", core->adapterName), result);
   }
-  if (_desc.debugLayer && SUCCEEDED(core->device.As(&core->infoQueue)))
+  if (_desc.debugLayer && SUCCEEDED(core->device->QueryInterface(IID_PPV_ARGS(&core->infoQueue))))
   {
     // Only what is worth failing a test over, or logging: corruption, errors and warnings, less
     // three warnings about what liblt does on purpose. Two say that a clear to a value other than
@@ -202,7 +202,7 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
     filter.DenyList.pIDList = intended.data();
     core->storageFilterPushed = SUCCEEDED(core->infoQueue->PushStorageFilter(&filter));
   }
-  core->capabilities = Probe(*core->device.Get(), core->infoQueue.Get());
+  core->capabilities = Probe(*core->device.get(), core->infoQueue.get());
 
   D3D12_COMMAND_QUEUE_DESC queueDesc{};
   queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -381,7 +381,7 @@ std::vector<std::string> GraphicsDevice::TakeDebugMessages()
   {
     return messages;
   }
-  ID3D12InfoQueue& infoQueue = *m_core->infoQueue.Get();
+  ID3D12InfoQueue& infoQueue = *m_core->infoQueue.get();
   const UINT64 count = infoQueue.GetNumStoredMessages();
   for (UINT64 index = 0; index < count; ++index)
   {

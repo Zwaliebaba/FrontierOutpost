@@ -42,7 +42,7 @@ bool DescriptorPool::Allocate(GraphicsCore& _core, D3D12_CPU_DESCRIPTOR_HANDLE& 
     D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
     heapDesc.Type = type;
     heapDesc.NumDescriptors = BLOCK_DESCRIPTORS;
-    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> block;
+    winrt::com_ptr<ID3D12DescriptorHeap> block;
     if (!_core.Check(_core.device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&block)), "ID3D12Device::CreateDescriptorHeap"))
     {
       return false;
@@ -125,10 +125,10 @@ void GraphicsCore::ReportRemoval()
   }
   removed = true;
   // What DRED recorded, which GraphicsDevice::Create turned on (ADR-007).
-  Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedData> dred;
+  winrt::com_ptr<ID3D12DeviceRemovedExtendedData> dred;
   D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT breadcrumbs{};
   D3D12_DRED_PAGE_FAULT_OUTPUT pageFault{};
-  const bool recorded = SUCCEEDED(device.As(&dred));
+  const bool recorded = SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&dred)));
   const bool haveBreadcrumbs = recorded && SUCCEEDED(dred->GetAutoBreadcrumbsOutput(&breadcrumbs));
   const bool havePageFault = recorded && SUCCEEDED(dred->GetPageFaultAllocationOutput(&pageFault));
   Fail(DescribeRemoval(device->GetDeviceRemovedReason(), haveBreadcrumbs ? &breadcrumbs : nullptr, havePageFault ? &pageFault : nullptr));
@@ -137,7 +137,7 @@ void GraphicsCore::ReportRemoval()
 std::uint64_t GraphicsCore::Signal()
 {
   const std::uint64_t value = nextFenceValue++;
-  Check(queue->Signal(fence.Get(), value), "ID3D12CommandQueue::Signal");
+  Check(queue->Signal(fence.get(), value), "ID3D12CommandQueue::Signal");
   lastSignaled = value;
   return value;
 }

@@ -56,7 +56,7 @@ struct PresentTarget
   std::uint32_t widthPixels;
   std::uint32_t heightPixels;
   bool capture; // whether the pass also copies what it drew, which it then gives in the two below
-  Microsoft::WRL::ComPtr<ID3D12Resource> captureBuffer;
+  winrt::com_ptr<ID3D12Resource> captureBuffer;
   D3D12_PLACED_SUBRESOURCE_FOOTPRINT captureFootprint;
 };
 
@@ -76,7 +76,7 @@ struct DescriptorPool
 
   D3D12_DESCRIPTOR_HEAP_TYPE type;
   UINT incrementBytes = 0;
-  std::vector<Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>> blocks;
+  std::vector<winrt::com_ptr<ID3D12DescriptorHeap>> blocks;
   std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> available;
 
   bool Allocate(GraphicsCore& _core, D3D12_CPU_DESCRIPTOR_HANDLE& _outHandle);
@@ -95,12 +95,12 @@ struct GraphicsCore
   };
 
   GraphicsDevice::Desc desc;
-  Microsoft::WRL::ComPtr<IDXGIFactory4> factory;
-  Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
-  Microsoft::WRL::ComPtr<ID3D12Device> device;
-  Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue;
-  Microsoft::WRL::ComPtr<ID3D12Fence> fence;
-  Microsoft::WRL::ComPtr<ID3D12InfoQueue> infoQueue; // with the debug layer only
+  winrt::com_ptr<IDXGIFactory4> factory;
+  winrt::com_ptr<IDXGIAdapter1> adapter;
+  winrt::com_ptr<ID3D12Device> device;
+  winrt::com_ptr<ID3D12CommandQueue> queue;
+  winrt::com_ptr<ID3D12Fence> fence;
+  winrt::com_ptr<ID3D12InfoQueue> infoQueue; // with the debug layer only
   bool storageFilterPushed = false;
   std::string adapterName;
   GraphicsCapabilities capabilities{};
@@ -175,7 +175,7 @@ struct Texture::Native
   Texture::Desc desc; // its name is in name
   std::string name;
   D3D12_RESOURCE_DESC resourceDesc{};
-  Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+  winrt::com_ptr<ID3D12Resource> resource;
   std::uint32_t faces = 1;                   // six for a cube, one otherwise
   std::vector<D3D12_RESOURCE_STATES> states; // one per subresource, mip + face * mipLevels
   std::vector<std::uint64_t> copiedLists;    // per subresource, the command list that last copied into it
@@ -226,7 +226,7 @@ struct Buffer::Native
 {
   Buffer::Desc desc; // its name is in name
   std::string name;
-  Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+  winrt::com_ptr<ID3D12Resource> resource;
   D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON;
   std::uint64_t stateList = 0;  // the command list state is from
   std::uint64_t copiedList = 0; // the command list that last copied into it

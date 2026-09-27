@@ -382,7 +382,7 @@ path. Protection against TDRs stays.
 
 Constraints:
 
-- AGENTS.md applies in full: the naming table, R12 (`ComPtr` RAII), no `d3dx12.h`, R14, and R15
+- AGENTS.md applies in full: the naming table, R12 (`winrt::com_ptr` RAII), no `d3dx12.h`, R14, and R15
   (no pool allocator without an ADR).
 - The layer stays game-agnostic (R9), and its public headers stay free of Windows and Direct3D
   headers (ADR-005 decision 5).

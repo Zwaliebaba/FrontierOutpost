@@ -10,4 +10,8 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include <wrl/client.h>
+// winrt::com_ptr owns every COM object (AGENTS.md R12, Design/ADR/ADR-019). unknwn.h comes
+// first: base.h supports classic COM interfaces, as Direct3D's are, only once IUnknown is declared,
+// and WIN32_LEAN_AND_MEAN keeps windows.h from declaring it.
+#include <unknwn.h>
+#include <winrt/base.h>

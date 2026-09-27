@@ -35,7 +35,7 @@ namespace Neuron
 namespace
 {
 
-using Microsoft::WRL::ComPtr;
+using winrt::com_ptr;
 
 /// Uploads of a buffer's bytes need no alignment; this keeps them on cache lines' boundaries.
 constexpr std::uint64_t BUFFER_UPLOAD_ALIGNMENT_BYTES = 16;
@@ -424,27 +424,27 @@ struct DrawContext::Native
 {
   struct Allocator
   {
-    ComPtr<ID3D12CommandAllocator> allocator;
+    com_ptr<ID3D12CommandAllocator> allocator;
     std::uint64_t fenceValue; // the allocator is free once the fence reaches this
   };
 
   /// A page of the upload ring, mapped for as long as it lives. The CPU only writes it.
   struct Page
   {
-    ComPtr<ID3D12Resource> buffer;
+    com_ptr<ID3D12Resource> buffer;
     std::byte* cpu = nullptr;
     std::uint64_t usedBytes = 0;
     std::uint64_t fenceValue = 0; // the page is free once the fence reaches this
   };
 
   GraphicsCore& core;
-  ComPtr<ID3D12GraphicsCommandList> list;
-  ComPtr<ID3D12CommandAllocator> allocator;     // the open list's
+  com_ptr<ID3D12GraphicsCommandList> list;
+  com_ptr<ID3D12CommandAllocator> allocator;    // the open list's
   std::deque<Allocator> allocators;             // submitted, oldest first
   Page page;                                    // where uploads are taken from now
   std::vector<Page> fullPages;                  // pages the open list filled
   std::deque<Page> pages;                       // submitted pages, oldest first
-  std::vector<ComPtr<ID3D12Resource>> staging;  // the open list's own staging buffers
+  std::vector<com_ptr<ID3D12Resource>> staging; // the open list's own staging buffers
   std::vector<D3D12_RESOURCE_BARRIER> barriers; // waiting to be recorded
   std::uint64_t listSerial = 1;                 // counts command lists: a buffer's state is from one of them
   bool open = false;
@@ -454,15 +454,15 @@ struct DrawContext::Native
   bool computeReady = false;  // the compute root signature
 
   // The draw path's objects, which Initialize makes.
-  ComPtr<ID3D12RootSignature> graphicsSignature;
-  ComPtr<ID3D12DescriptorHeap> shaderHeap;  // shader-visible: the null table, then the ring
-  ComPtr<ID3D12DescriptorHeap> samplerHeap; // shader-visible: the default table, then the tables in use
-  std::map<PipelineKey, ComPtr<ID3D12PipelineState>> pipelines;
-  double pipelineStatesMs = 0.0;               // the time spent making the cached pipeline states, graphics and compute
-  ComPtr<ID3D12PipelineState> presentPipeline; // PresentVS.hlsl's and PresentPS.hlsl's, into BACK_BUFFER_FORMAT
+  com_ptr<ID3D12RootSignature> graphicsSignature;
+  com_ptr<ID3D12DescriptorHeap> shaderHeap;  // shader-visible: the null table, then the ring
+  com_ptr<ID3D12DescriptorHeap> samplerHeap; // shader-visible: the default table, then the tables in use
+  std::map<PipelineKey, com_ptr<ID3D12PipelineState>> pipelines;
+  double pipelineStatesMs = 0.0;                // the time spent making the cached pipeline states, graphics and compute
+  com_ptr<ID3D12PipelineState> presentPipeline; // PresentVS.hlsl's and PresentPS.hlsl's, into BACK_BUFFER_FORMAT
 
   // What an input without an attribute reads, which Initialize makes.
-  ComPtr<ID3D12Resource> defaultAttribute;
+  com_ptr<ID3D12Resource> defaultAttribute;
 
   // What the next draw uses, which stays set from one draw to the next.
   struct Target
@@ -524,9 +524,9 @@ struct DrawContext::Native
     Texture::Native* texture = nullptr; // null once it has gone
     std::uint32_t mip = 0;
   };
-  ComPtr<ID3D12RootSignature> computeSignature;
-  ComPtr<ID3D12PipelineState> mipPipeline;                               // GenerateMipsCS.hlsl's
-  std::map<std::uint64_t, ComPtr<ID3D12PipelineState>> computePipelines; // by program
+  com_ptr<ID3D12RootSignature> computeSignature;
+  com_ptr<ID3D12PipelineState> mipPipeline;                               // GenerateMipsCS.hlsl's
+  std::map<std::uint64_t, com_ptr<ID3D12PipelineState>> computePipelines; // by program
   std::array<Unordered, Program::MAX_UNORDERED_RESOURCES> unordered{};
   D3D12_CPU_DESCRIPTOR_HANDLE nullUnorderedView{}; // CPU-only, copied into the u slots nothing is bound to
 
@@ -535,7 +535,7 @@ struct DrawContext::Native
   {
     std::uint64_t ticket = 0;
     std::uint64_t fenceValue = 0; // the copy's submission's, once it is submitted
-    ComPtr<ID3D12Resource> buffer;
+    com_ptr<ID3D12Resource> buffer;
     Footprint footprint;
     std::uint32_t heightPixels = 0;
     std::uint32_t depthPixels = 0;
@@ -558,7 +558,7 @@ struct DrawContext::Native
     {
       return true;
     }
-    ComPtr<ID3D12CommandAllocator> next;
+    com_ptr<ID3D12CommandAllocator> next;
     if (!allocators.empty() && allocators.front().fenceValue <= core.Completed())
     {
       next = std::move(allocators.front().allocator);
@@ -575,14 +575,14 @@ struct DrawContext::Native
     }
     if (!list)
     {
-      if (!core.Check(core.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, next.Get(), nullptr, IID_PPV_ARGS(&list)),
+      if (!core.Check(core.device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, next.get(), nullptr, IID_PPV_ARGS(&list)),
                       "ID3D12Device::CreateCommandList"))
       {
         return false;
       }
       list->SetName(L"NeuronClient command list");
     }
-    else if (!core.Check(list->Reset(next.Get(), nullptr), "ID3D12GraphicsCommandList::Reset"))
+    else if (!core.Check(list->Reset(next.get(), nullptr), "ID3D12GraphicsCommandList::Reset"))
     {
       return false;
     }
@@ -603,7 +603,7 @@ struct DrawContext::Native
   /// '%' in it is shown as it is.
   void BeginEventOnList(const std::wstring& _name) const
   {
-    PIXBeginEvent(list.Get(), PIX_COLOR_DEFAULT, L"%s", _name.c_str());
+    PIXBeginEvent(list.get(), PIX_COLOR_DEFAULT, L"%s", _name.c_str());
   }
 
   /// Submits the open list, if there is one, and marks the queue after it. What the list used is
@@ -615,18 +615,18 @@ struct DrawContext::Native
       FlushBarriers();
       for (std::size_t event = 0; event < events.size(); ++event)
       {
-        PIXEndEvent(list.Get());
+        PIXEndEvent(list.get());
       }
       if (core.Check(list->Close(), "ID3D12GraphicsCommandList::Close"))
       {
-        const std::array<ID3D12CommandList*, 1> lists = {list.Get()};
+        const std::array<ID3D12CommandList*, 1> lists = {list.get()};
         core.queue->ExecuteCommandLists(static_cast<UINT>(lists.size()), lists.data());
       }
       open = false;
       ++listSerial;
     }
     // Deferred before the signal, so that they wait for it.
-    for (ComPtr<ID3D12Resource>& buffer : staging)
+    for (com_ptr<ID3D12Resource>& buffer : staging)
     {
       core.DeferRelease([held = std::move(buffer)] {});
     }
@@ -681,7 +681,7 @@ struct DrawContext::Native
       D3D12_RESOURCE_STATES& current = states[_subresource];
       if (current != _state)
       {
-        barriers.push_back(Transition(_texture.resource.Get(), _subresource, current, _state));
+        barriers.push_back(Transition(_texture.resource.get(), _subresource, current, _state));
         current = _state;
       }
       return;
@@ -691,7 +691,7 @@ struct DrawContext::Native
     {
       if (first != _state)
       {
-        barriers.push_back(Transition(_texture.resource.Get(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, first, _state));
+        barriers.push_back(Transition(_texture.resource.get(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, first, _state));
         std::ranges::fill(states, _state);
       }
       return;
@@ -700,7 +700,7 @@ struct DrawContext::Native
     {
       if (states[index] != _state)
       {
-        barriers.push_back(Transition(_texture.resource.Get(), static_cast<std::uint32_t>(index), states[index], _state));
+        barriers.push_back(Transition(_texture.resource.get(), static_cast<std::uint32_t>(index), states[index], _state));
         states[index] = _state;
       }
     }
@@ -717,7 +717,7 @@ struct DrawContext::Native
     }
     if (_buffer.state != _state)
     {
-      barriers.push_back(Transition(_buffer.resource.Get(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, _buffer.state, _state));
+      barriers.push_back(Transition(_buffer.resource.get(), D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, _buffer.state, _state));
       _buffer.state = _state;
     }
   }
@@ -748,7 +748,7 @@ struct DrawContext::Native
     _buffer.copiedList = listSerial;
   }
 
-  bool CreateBuffer(D3D12_HEAP_TYPE _heap, D3D12_RESOURCE_STATES _state, std::uint64_t _sizeBytes, ComPtr<ID3D12Resource>& _outBuffer,
+  bool CreateBuffer(D3D12_HEAP_TYPE _heap, D3D12_RESOURCE_STATES _state, std::uint64_t _sizeBytes, com_ptr<ID3D12Resource>& _outBuffer,
                     std::string_view _what)
   {
     const D3D12_HEAP_PROPERTIES heap = HeapProperties(_heap);
@@ -758,7 +758,7 @@ struct DrawContext::Native
   }
 
   /// An upload buffer, mapped for as long as it lives.
-  bool CreateUploadBuffer(std::uint64_t _sizeBytes, ComPtr<ID3D12Resource>& _outBuffer, std::byte*& _outCpu)
+  bool CreateUploadBuffer(std::uint64_t _sizeBytes, com_ptr<ID3D12Resource>& _outBuffer, std::byte*& _outCpu)
   {
     if (!CreateBuffer(D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ, _sizeBytes, _outBuffer, "an upload buffer"))
     {
@@ -801,14 +801,14 @@ struct DrawContext::Native
     const std::uint64_t pageBytes = core.desc.uploadPageBytes;
     if (_sizeBytes > pageBytes)
     {
-      ComPtr<ID3D12Resource> buffer;
+      com_ptr<ID3D12Resource> buffer;
       std::byte* cpu = nullptr;
       if (!CreateUploadBuffer(_sizeBytes, buffer, cpu))
       {
         return false;
       }
       buffer->SetName(L"NeuronClient staging buffer");
-      _outUpload = {buffer.Get(), 0, cpu};
+      _outUpload = {buffer.get(), 0, cpu};
       staging.push_back(std::move(buffer));
       return true;
     }
@@ -827,7 +827,7 @@ struct DrawContext::Native
       offset = 0;
     }
     page.usedBytes = offset + _sizeBytes;
-    _outUpload = {page.buffer.Get(), offset, page.cpu + offset};
+    _outUpload = {page.buffer.get(), offset, page.cpu + offset};
     return true;
   }
 
@@ -1073,7 +1073,7 @@ struct DrawContext::Native
     ReadyHeaps();
     if (!graphicsReady)
     {
-      list->SetGraphicsRootSignature(graphicsSignature.Get());
+      list->SetGraphicsRootSignature(graphicsSignature.get());
       graphicsReady = true;
     }
     return true;
@@ -1084,7 +1084,7 @@ struct DrawContext::Native
   {
     if (!heapsReady)
     {
-      const std::array<ID3D12DescriptorHeap*, 2> heaps = {shaderHeap.Get(), samplerHeap.Get()};
+      const std::array<ID3D12DescriptorHeap*, 2> heaps = {shaderHeap.get(), samplerHeap.get()};
       list->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
       heapsReady = true;
     }
@@ -1095,21 +1095,21 @@ struct DrawContext::Native
   {
     if (const auto found = computePipelines.find(_program.id); found != computePipelines.end())
     {
-      return found->second.Get();
+      return found->second.get();
     }
-    const D3D12_COMPUTE_PIPELINE_STATE_DESC desc{computeSignature.Get(),
+    const D3D12_COMPUTE_PIPELINE_STATE_DESC desc{computeSignature.get(),
                                                  {_program.computeShader.data(), _program.computeShader.size()},
                                                  0,
                                                  {nullptr, 0},
                                                  D3D12_PIPELINE_STATE_FLAG_NONE};
-    ComPtr<ID3D12PipelineState> pipeline;
+    com_ptr<ID3D12PipelineState> pipeline;
     const auto start = std::chrono::steady_clock::now();
     if (!core.Check(core.device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&pipeline)),
                     std::format("ID3D12Device::CreateComputePipelineState for program {}", _program.name)))
     {
       return nullptr;
     }
-    ID3D12PipelineState* const made = computePipelines.emplace(_program.id, std::move(pipeline)).first->second.Get();
+    ID3D12PipelineState* const made = computePipelines.emplace(_program.id, std::move(pipeline)).first->second.get();
     NotePipelineState(_program.name, "compute", start);
     return made;
   }
@@ -1161,7 +1161,7 @@ struct DrawContext::Native
     sourceDesc.Texture2DArray.MipLevels = 1;
     sourceDesc.Texture2DArray.FirstArraySlice = _face;
     sourceDesc.Texture2DArray.ArraySize = 1;
-    core.device->CreateShaderResourceView(_texture.resource.Get(), &sourceDesc,
+    core.device->CreateShaderResourceView(_texture.resource.get(), &sourceDesc,
                                           {start.ptr + (std::uint64_t{sourceTable} * shaderIncrement)});
     D3D12_UNORDERED_ACCESS_VIEW_DESC destinationDesc{};
     destinationDesc.Format = _texture.resourceDesc.Format;
@@ -1169,7 +1169,7 @@ struct DrawContext::Native
     destinationDesc.Texture2DArray.MipSlice = _mip;
     destinationDesc.Texture2DArray.FirstArraySlice = _face;
     destinationDesc.Texture2DArray.ArraySize = 1;
-    core.device->CreateUnorderedAccessView(_texture.resource.Get(), nullptr, &destinationDesc,
+    core.device->CreateUnorderedAccessView(_texture.resource.get(), nullptr, &destinationDesc,
                                            {start.ptr + (std::uint64_t{destinationTable} * shaderIncrement)});
     if (!Open())
     {
@@ -1178,7 +1178,7 @@ struct DrawContext::Native
     ReadyHeaps();
     if (!computeReady)
     {
-      list->SetComputeRootSignature(computeSignature.Get());
+      list->SetComputeRootSignature(computeSignature.get());
       computeReady = true;
     }
     // The shader's $Globals: the mip above's size, then this one's.
@@ -1192,7 +1192,7 @@ struct DrawContext::Native
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     Require(_texture, _texture.Subresource(_mip, _face), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     FlushBarriers();
-    list->SetPipelineState(mipPipeline.Get());
+    list->SetPipelineState(mipPipeline.get());
     list->SetComputeRootConstantBufferView(COMPUTE_CONSTANTS_PARAMETER, constants.buffer->GetGPUVirtualAddress() + constants.offsetBytes);
     list->SetComputeRootDescriptorTable(COMPUTE_READS_PARAMETER, ShaderTableHandle(sourceTable));
     list->SetComputeRootDescriptorTable(COMPUTE_WRITES_PARAMETER, ShaderTableHandle(destinationTable));
@@ -1232,7 +1232,7 @@ struct DrawContext::Native
     ReadyHeaps();
     if (!graphicsReady)
     {
-      list->SetGraphicsRootSignature(graphicsSignature.Get());
+      list->SetGraphicsRootSignature(graphicsSignature.get());
       graphicsReady = true;
     }
     // Neither shader has constants, but every root parameter is set.
@@ -1249,7 +1249,7 @@ struct DrawContext::Native
                                   D3D12_RESOURCE_STATE_RENDER_TARGET));
     FlushBarriers();
 
-    list->SetPipelineState(presentPipeline.Get());
+    list->SetPipelineState(presentPipeline.get());
     list->SetGraphicsRootConstantBufferView(VERTEX_CONSTANTS_PARAMETER, constantsAddress);
     list->SetGraphicsRootConstantBufferView(PIXEL_CONSTANTS_PARAMETER, constantsAddress);
     list->SetGraphicsRootDescriptorTable(SHADER_RESOURCES_PARAMETER, ShaderTableHandle(table));
@@ -1269,7 +1269,7 @@ struct DrawContext::Native
       barriers.push_back(Transition(_target.buffer, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, D3D12_RESOURCE_STATE_RENDER_TARGET,
                                     D3D12_RESOURCE_STATE_COPY_SOURCE));
       FlushBarriers();
-      const D3D12_TEXTURE_COPY_LOCATION destination = FootprintLocation(_target.captureBuffer.Get(), _target.captureFootprint);
+      const D3D12_TEXTURE_COPY_LOCATION destination = FootprintLocation(_target.captureBuffer.get(), _target.captureFootprint);
       const D3D12_TEXTURE_COPY_LOCATION source = SubresourceLocation(_target.buffer, 0);
       list->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
       last = D3D12_RESOURCE_STATE_COPY_SOURCE;
@@ -1289,10 +1289,10 @@ struct DrawContext::Native
   {
     if (const auto found = pipelines.find(_key); found != pipelines.end())
     {
-      return found->second.Get();
+      return found->second.get();
     }
     D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{
-      .pRootSignature = graphicsSignature.Get(),
+      .pRootSignature = graphicsSignature.get(),
       .VS = {program->vertexShader.data(), program->vertexShader.size()},
       .PS = {program->pixelShader.data(), program->pixelShader.size()},
       .DS = {nullptr, 0},
@@ -1315,14 +1315,14 @@ struct DrawContext::Native
       .Flags = D3D12_PIPELINE_STATE_FLAG_NONE,
     };
     std::ranges::copy(_key.targetFormats, std::begin(desc.RTVFormats));
-    ComPtr<ID3D12PipelineState> pipeline;
+    com_ptr<ID3D12PipelineState> pipeline;
     const auto start = std::chrono::steady_clock::now();
     if (!core.Check(core.device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline)),
                     std::format("ID3D12Device::CreateGraphicsPipelineState for program {}", program->name)))
     {
       return nullptr;
     }
-    ID3D12PipelineState* const made = pipelines.emplace(_key, std::move(pipeline)).first->second.Get();
+    ID3D12PipelineState* const made = pipelines.emplace(_key, std::move(pipeline)).first->second.get();
     NotePipelineState(program->name, MadeFor(_key, _elements), start);
     return made;
   }
@@ -1481,7 +1481,7 @@ void DrawContext::UpdateTexture(Texture& _texture, std::uint32_t _mip, std::uint
   const std::uint32_t subresource = texture->Subresource(_mip, _face);
   context.RequireCopyDestination(*texture, subresource);
   context.FlushBarriers();
-  const D3D12_TEXTURE_COPY_LOCATION destination = SubresourceLocation(texture->resource.Get(), subresource);
+  const D3D12_TEXTURE_COPY_LOCATION destination = SubresourceLocation(texture->resource.get(), subresource);
   const D3D12_TEXTURE_COPY_LOCATION source = FootprintLocation(upload.buffer, placed);
   context.list->CopyTextureRegion(&destination, _region.xPixels, _region.yPixels, _region.zPixels, &source, nullptr);
 }
@@ -1500,7 +1500,7 @@ bool DrawContext::ReadTexture(const Texture& _texture, std::uint32_t _mip, std::
   const std::uint32_t slices = _texture.DepthPixels(_mip);
   const std::uint32_t subresource = texture->Subresource(_mip, _face);
   const Footprint footprint = context.FootprintOf(*texture, subresource);
-  ComPtr<ID3D12Resource> readback;
+  com_ptr<ID3D12Resource> readback;
   if (!context.Open() ||
       !context.CreateBuffer(D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST, footprint.totalBytes, readback, "a readback buffer"))
   {
@@ -1508,8 +1508,8 @@ bool DrawContext::ReadTexture(const Texture& _texture, std::uint32_t _mip, std::
   }
   context.Require(*texture, subresource, D3D12_RESOURCE_STATE_COPY_SOURCE);
   context.FlushBarriers();
-  const D3D12_TEXTURE_COPY_LOCATION destination = FootprintLocation(readback.Get(), footprint.placed);
-  const D3D12_TEXTURE_COPY_LOCATION source = SubresourceLocation(texture->resource.Get(), subresource);
+  const D3D12_TEXTURE_COPY_LOCATION destination = FootprintLocation(readback.get(), footprint.placed);
+  const D3D12_TEXTURE_COPY_LOCATION source = SubresourceLocation(texture->resource.get(), subresource);
   context.list->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
   if (!context.SubmitAndWait())
   {
@@ -1549,7 +1549,7 @@ void DrawContext::UpdateBuffer(Buffer& _buffer, std::uint32_t _offsetBytes, std:
   std::memcpy(upload.cpu, _bytes.data(), _bytes.size());
   context.RequireCopyDestination(*buffer);
   context.FlushBarriers();
-  context.list->CopyBufferRegion(buffer->resource.Get(), _offsetBytes, upload.buffer, upload.offsetBytes, _bytes.size());
+  context.list->CopyBufferRegion(buffer->resource.get(), _offsetBytes, upload.buffer, upload.offsetBytes, _bytes.size());
 }
 
 bool DrawContext::ReadBuffer(const Buffer& _buffer, std::vector<std::byte>& _outBytes)
@@ -1562,7 +1562,7 @@ bool DrawContext::ReadBuffer(const Buffer& _buffer, std::vector<std::byte>& _out
     return false;
   }
   const std::uint64_t sizeBytes = buffer->desc.sizeBytes;
-  ComPtr<ID3D12Resource> readback;
+  com_ptr<ID3D12Resource> readback;
   if (!context.Open() ||
       !context.CreateBuffer(D3D12_HEAP_TYPE_READBACK, D3D12_RESOURCE_STATE_COPY_DEST, sizeBytes, readback, "a readback buffer"))
   {
@@ -1570,7 +1570,7 @@ bool DrawContext::ReadBuffer(const Buffer& _buffer, std::vector<std::byte>& _out
   }
   context.Require(*buffer, D3D12_RESOURCE_STATE_COPY_SOURCE);
   context.FlushBarriers();
-  context.list->CopyBufferRegion(readback.Get(), 0, buffer->resource.Get(), 0, sizeBytes);
+  context.list->CopyBufferRegion(readback.get(), 0, buffer->resource.get(), 0, sizeBytes);
   if (!context.SubmitAndWait())
   {
     return false;
@@ -1671,7 +1671,7 @@ void DrawContext::ClearDepthIn(Texture& _texture, float _depth, const PixelRect*
 bool DrawContext::Initialize(std::string& _error)
 {
   Native& context = *m_native;
-  ID3D12Device& device = *context.core.device.Get();
+  ID3D12Device& device = *context.core.device.get();
 
   // The one root signature every liblt program draws with: its two stages' $Globals at b0, and
   // tables of t0 to t15 and s0 to s15 (ADR-007).
@@ -1686,9 +1686,9 @@ bool DrawContext::Initialize(std::string& _error)
   parameters[SAMPLERS_PARAMETER].DescriptorTable = {1, &samplers};
   const D3D12_ROOT_SIGNATURE_DESC signatureDesc{static_cast<UINT>(parameters.size()), parameters.data(), 0, nullptr,
                                                 D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT};
-  ComPtr<ID3DBlob> signature;
-  ComPtr<ID3DBlob> errors;
-  HRESULT result = D3D12SerializeRootSignature(&signatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &errors);
+  com_ptr<ID3DBlob> signature;
+  com_ptr<ID3DBlob> errors;
+  HRESULT result = D3D12SerializeRootSignature(&signatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, signature.put(), errors.put());
   if (SUCCEEDED(result))
   {
     result =
@@ -1713,9 +1713,9 @@ bool DrawContext::Initialize(std::string& _error)
   computeParameters[COMPUTE_WRITES_PARAMETER].DescriptorTable = {1, &computeWrites};
   const D3D12_ROOT_SIGNATURE_DESC computeDesc{static_cast<UINT>(computeParameters.size()), computeParameters.data(), 0, nullptr,
                                               D3D12_ROOT_SIGNATURE_FLAG_NONE};
-  signature.Reset();
-  errors.Reset();
-  result = D3D12SerializeRootSignature(&computeDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &errors);
+  signature = nullptr;
+  errors = nullptr;
+  result = D3D12SerializeRootSignature(&computeDesc, D3D_ROOT_SIGNATURE_VERSION_1, signature.put(), errors.put());
   if (SUCCEEDED(result))
   {
     result =
@@ -1730,7 +1730,7 @@ bool DrawContext::Initialize(std::string& _error)
   }
   context.computeSignature->SetName(L"NeuronClient compute root signature");
   const D3D12_COMPUTE_PIPELINE_STATE_DESC mipDesc{
-    context.computeSignature.Get(), {GENERATE_MIPS_CS, sizeof(GENERATE_MIPS_CS)}, 0, {nullptr, 0}, D3D12_PIPELINE_STATE_FLAG_NONE};
+    context.computeSignature.get(), {GENERATE_MIPS_CS, sizeof(GENERATE_MIPS_CS)}, 0, {nullptr, 0}, D3D12_PIPELINE_STATE_FLAG_NONE};
   result = device.CreateComputePipelineState(&mipDesc, IID_PPV_ARGS(&context.mipPipeline));
   if (FAILED(result))
   {
@@ -1739,7 +1739,7 @@ bool DrawContext::Initialize(std::string& _error)
   }
   // The present pass's: a triangle over the back buffer, which reads the image through t0.
   const D3D12_GRAPHICS_PIPELINE_STATE_DESC presentDesc{
-    .pRootSignature = context.graphicsSignature.Get(),
+    .pRootSignature = context.graphicsSignature.get(),
     .VS = {PRESENT_VS, sizeof(PRESENT_VS)},
     .PS = {PRESENT_PS, sizeof(PRESENT_PS)},
     .DS = {nullptr, 0},
@@ -2168,7 +2168,7 @@ void DrawContext::Dispatch(Program& _program, std::uint32_t _groupsX, std::uint3
   context.ReadyHeaps();
   if (!context.computeReady)
   {
-    context.list->SetComputeRootSignature(context.computeSignature.Get());
+    context.list->SetComputeRootSignature(context.computeSignature.get());
     context.computeReady = true;
   }
   const std::vector<std::byte>& values = program->constantValues[static_cast<std::size_t>(ShaderStage::Compute)];
@@ -2212,13 +2212,13 @@ void DrawContext::Dispatch(Program& _program, std::uint32_t _groupsX, std::uint3
     {
       D3D12_RESOURCE_BARRIER barrier{};
       barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-      barrier.UAV.pResource = texture.resource.Get();
+      barrier.UAV.pResource = texture.resource.get();
       context.barriers.push_back(barrier);
     }
   }
   context.FlushBarriers();
 
-  ID3D12GraphicsCommandList& list = *context.list.Get();
+  ID3D12GraphicsCommandList& list = *context.list.get();
   list.SetPipelineState(pipeline);
   list.SetComputeRootConstantBufferView(COMPUTE_CONSTANTS_PARAMETER, constants.buffer->GetGPUVirtualAddress() + constants.offsetBytes);
   list.SetComputeRootDescriptorTable(COMPUTE_READS_PARAMETER, context.ShaderTableHandle(readTable));
@@ -2247,8 +2247,8 @@ std::uint64_t DrawContext::RequestRead(const Texture& _texture, std::uint32_t _m
   }
   context.Require(*texture, subresource, D3D12_RESOURCE_STATE_COPY_SOURCE);
   context.FlushBarriers();
-  const D3D12_TEXTURE_COPY_LOCATION destination = FootprintLocation(read.buffer.Get(), read.footprint.placed);
-  const D3D12_TEXTURE_COPY_LOCATION source = SubresourceLocation(texture->resource.Get(), subresource);
+  const D3D12_TEXTURE_COPY_LOCATION destination = FootprintLocation(read.buffer.get(), read.footprint.placed);
+  const D3D12_TEXTURE_COPY_LOCATION source = SubresourceLocation(texture->resource.get(), subresource);
   context.list->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
   read.ticket = context.nextReadTicket++;
   context.reads.push_back(std::move(read));
@@ -2383,7 +2383,7 @@ void DrawContext::EndEvent()
   PIXEndEvent();
   if (context.open)
   {
-    PIXEndEvent(context.list.Get());
+    PIXEndEvent(context.list.get());
   }
 }
 
