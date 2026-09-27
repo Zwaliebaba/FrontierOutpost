@@ -7,7 +7,7 @@
 
 #include <d3d12.h>
 #include <d3d12sdklayers.h>
-#include <dxgi1_4.h>
+#include <dxgi1_6.h>
 
 #include "Buffer.h"
 #include "DrawContext.h"
@@ -95,7 +95,7 @@ struct GraphicsCore
   };
 
   GraphicsDevice::Desc desc;
-  winrt::com_ptr<IDXGIFactory4> factory;
+  winrt::com_ptr<IDXGIFactory6> factory;
   winrt::com_ptr<IDXGIAdapter1> adapter;
   winrt::com_ptr<ID3D12Device> device;
   winrt::com_ptr<ID3D12CommandQueue> queue;

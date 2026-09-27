@@ -36,12 +36,12 @@ struct GraphicsCapabilities
   bool operator==(const GraphicsCapabilities&) const = default;
 };
 
-/// Direct3D 12 at feature level 11_0, on the default adapter or on WARP, with one direct queue and
-/// two frames in flight (Design/ADR/ADR-007). The CPU records a frame while the GPU runs the one
-/// before it, and waits only when it would get further ahead than that. Anything the GPU may still
-/// be using is released once the GPU has finished with it, never before. Its textures and buffers
-/// keep what they need of it alive, so they may outlive it. It is not thread-safe: one thread
-/// creates it, runs its frames and destroys it.
+/// Direct3D 12 at feature level 11_0, on the highest-performance adapter or on WARP, with one
+/// direct queue and two frames in flight (Design/ADR/ADR-007). The CPU records a frame while the
+/// GPU runs the one before it, and waits only when it would get further ahead than that. Anything
+/// the GPU may still be using is released once the GPU has finished with it, never before. Its
+/// textures and buffers keep what they need of it alive, so they may outlive it. It is not
+/// thread-safe: one thread creates it, runs its frames and destroys it.
 class GraphicsDevice
 {
 public:
@@ -54,7 +54,7 @@ public:
 
   struct Desc
   {
-    bool warp;          // WARP, Windows' software adapter, instead of the default adapter
+    bool warp;          // WARP, Windows' software adapter, instead of the highest-performance adapter
     bool debugLayer;    // the Direct3D 12 debug layer, which liblt turns on in Debug
     bool gpuValidation; // GPU-based validation on top of the debug layer: slow, so behind a switch
     /// A call failed, or the device was removed. liblt ends the program here (ADR-007): nothing

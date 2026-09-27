@@ -164,10 +164,13 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
   {
     return fail("CreateDXGIFactory2", result);
   }
-  result = _desc.warp ? core->factory->EnumWarpAdapter(IID_PPV_ARGS(&core->adapter)) : core->factory->EnumAdapters1(0, core->adapter.put());
+  // The adapter DXGI ranks first for performance: a laptop's discrete GPU, where adapter 0 is
+  // usually the integrated one (Design/ADR/ADR-007).
+  result = _desc.warp ? core->factory->EnumWarpAdapter(IID_PPV_ARGS(&core->adapter))
+                      : core->factory->EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&core->adapter));
   if (FAILED(result))
   {
-    return fail(_desc.warp ? "IDXGIFactory4::EnumWarpAdapter" : "IDXGIFactory1::EnumAdapters1", result);
+    return fail(_desc.warp ? "IDXGIFactory4::EnumWarpAdapter" : "IDXGIFactory6::EnumAdapterByGpuPreference", result);
   }
   DXGI_ADAPTER_DESC1 adapterDesc{};
   result = core->adapter->GetDesc1(&adapterDesc);

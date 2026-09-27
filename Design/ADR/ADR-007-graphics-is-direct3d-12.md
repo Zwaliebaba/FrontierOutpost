@@ -2,7 +2,8 @@
 
 - **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 3)
 - **Amended:** 2026-09-27 by ADR-018. Decision 2's PIX markers are written by WinPixEventRuntime,
-  a NuGet package, and no longer by hand.
+  a NuGet package, and no longer by hand. The same day, the owner had the device made on the
+  highest-performance adapter instead of adapter 0 (decision 1).
 - **Scope:** NeuronClient's graphics core (`GraphicsDevice`, `SwapChain`, `Texture`, `Buffer`,
   `Program`, `DrawContext`), and `lt.dll`'s renderer on top of it
 - **Detail:** `Design/Archive/NeuronClient-migration.md` §2, §3 (point 1), §4.2, §5.3, §5.5, §11, N0,
@@ -35,7 +36,13 @@ route wherever emulating OpenGL would cost more, and nothing beyond that (plan �
 1. **Direct3D 12, at feature level 11_0 and Shader Model 5.1.** That covers every Direct3D 12 GPU
    and WARP, and keeps Windows 10 (plan §5.3). OpenGL, GLEW and the temporary WGL bridge are
    deleted once liblt runs on it (plan Phase 4 step 6). They were on 2026-09-26, once `war` ran on
-   it, ahead of the rest of bring-up (`57c67bb`, plan N17).
+   it, ahead of the rest of bring-up (`57c67bb`, plan N17). **The device is made on the
+   highest-performance adapter** (owner, 2026-09-27): the first that
+   `IDXGIFactory6::EnumAdapterByGpuPreference` returns for `DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE`,
+   which ranks external GPUs before discrete ones and discrete before integrated. Until then it was
+   adapter 0, the GPU that drives the main display, which on a laptop is usually the integrated
+   one: on the owner's, the Intel Iris Xe, where the game now runs on the NVIDIA GeForce RTX 3070 Ti
+   Laptop GPU. `IDXGIFactory6` needs Windows 10 version 1803 or later.
 2. **The core's policies** (plan §5.3):
    - two frames in flight on one direct queue, with no per-frame wait for the GPU;
    - two root signatures built in C++: one for every liblt program (a root CBV at `b0`, an SRV
@@ -87,3 +94,5 @@ route wherever emulating OpenGL would cost more, and nothing beyond that (plan �
 - **Exclusive fullscreen,** which nothing uses. Borderless fullscreen, a vsync setting, sRGB, HDR,
   MSAA and a PSO disk cache are backlog (plan §11), and the disk cache would need its own ADR
   (plan §8).
+- **A choice of GPU in the game.** It runs on the highest-performance adapter, or on WARP with
+  `--warp`, and has no option for any other.
