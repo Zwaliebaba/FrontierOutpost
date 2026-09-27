@@ -83,7 +83,6 @@ Type Type_Create(String const& name, size_t size) {
 
 TypeT::~TypeT() {
   LTE_ASSERT(refCount == 0);
-  ((TypeImpl*)this)->extra.~TypeExtra();
 }
 
 Data& TypeT::GetAux() {

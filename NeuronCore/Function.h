@@ -20,8 +20,6 @@ struct FunctionT : public RefCounted {
 
   LT_API ~FunctionT();
 
-  LT_API Data& GetAux(); 
-
   LT_API String GetSignature() const;
 
   template <class StreamT>

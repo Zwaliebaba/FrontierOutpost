@@ -30,18 +30,10 @@ namespace {
     static FunctionMapT m;
     return m;
   }
-
-  struct FunctionExtra {
-    Data aux;
-  };
-
-  struct FunctionImpl : FunctionT {
-    FunctionExtra extra;
-  };
 }
 
 Function Function_Create(String const& name) {
-  Reference<FunctionImpl> self = new FunctionImpl;
+  Function self = new FunctionT;
 
   self->name = name;
   self->call = 0;
@@ -55,12 +47,7 @@ Function Function_Create(String const& name) {
 }
 
 FunctionT::~FunctionT() {
-  ((FunctionImpl*)this)->extra.~FunctionExtra();
   delete[] params;
-}
-
-Data& FunctionT::GetAux() {
-  return ((FunctionImpl*)this)->extra.aux;
 }
 
 String FunctionT::GetSignature() const {

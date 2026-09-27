@@ -131,7 +131,8 @@ struct TypeT {
 
   TypeT() : refCount(0) {}
 
-  LT_API ~TypeT();
+  /* Virtual, because every TypeT is a TypeImpl and is deleted as a TypeT. */
+  LT_API virtual ~TypeT();
 
   LT_API void AddConversion(ConversionType const& cast);
   LT_API void AddDerived(Type const& type);
