@@ -138,30 +138,33 @@ DefineFunction(Mesh_ComputeOcclusion) {
     normals.push(V4(0));
   }
 
-  Texture2D sPointBuffer =
-    Texture_Create(sDim, sDim, TextureFormat::RGBA32F, points.data());
-  Texture2D sNormalBuffer =
-    Texture_Create(sDim, sDim, TextureFormat::RGBA32F, normals.data());
+  /* The surfels go to the shader's constant buffer a band at a time, at most
+     the MAX_SURFELS of Shaders/ComputeOcclusionPS.hlsl. */
+  const int kMaxSurfels = 2040;
+  if (sDim > kMaxSurfels) {
+    Log_Critical(Stringize() | "PlateMesh: a surfel row of " | sDim |
+      " is more than Shaders/ComputeOcclusionPS.hlsl holds");
+  }
 
   /* Fill vertex buffers. */
-  points.clear();
-  normals.clear();
+  Vector<V4> vPoints;
+  Vector<V4> vNormals;
   for (size_t i = 0; i < m->vertices.size(); ++i) {
-    points.push(V4(m->vertices[i].p, 0));
-    normals.push(V4(m->vertices[i].n, 0));
+    vPoints.push(V4(m->vertices[i].p, 0));
+    vNormals.push(V4(m->vertices[i].n, 0));
   }
-  
-  int vDim = (int)Ceil(Sqrt((float)points.size()));
 
-  while ((int)points.size() < vDim * vDim) {
-    points.push(V4(0));
-    normals.push(V4(0));
+  int vDim = (int)Ceil(Sqrt((float)vPoints.size()));
+
+  while ((int)vPoints.size() < vDim * vDim) {
+    vPoints.push(V4(0));
+    vNormals.push(V4(0));
   }
 
   Texture2D vPointBuffer =
-    Texture_Create(vDim, vDim, TextureFormat::RGBA32F, points.data());
-  Texture2D vNormalBuffer = 
-    Texture_Create(vDim, vDim, TextureFormat::RGBA32F, normals.data());
+    Texture_Create(vDim, vDim, TextureFormat::RGBA32F, vPoints.data());
+  Texture2D vNormalBuffer =
+    Texture_Create(vDim, vDim, TextureFormat::RGBA32F, vNormals.data());
 
   /* GPU computation. */
   Texture2D occlusionBuffer =
@@ -170,11 +173,14 @@ DefineFunction(Mesh_ComputeOcclusion) {
 
   /* Every vertex sums over every surfel: one draw of that on a big hull ran
      past Windows' GPU timeout (TDR) and lost the device. So the surfel rows
-     are split into bands small enough to finish quickly, each drawn and
-     waited for on its own, and the sums added up with additive blending. */
+     are split into bands small enough to finish quickly, and no larger than
+     the constant buffer holds, each drawn and submitted on its own, and the
+     sums added up with additive blending. The CPU waits only every
+     kBandsPerWait bands, so that the upload ring recycles its pages. */
   const double kInteractionsPerDraw = 1 << 25;
+  const uint kBandsPerWait = 16;
   int rowsPerDraw = (int)(kInteractionsPerDraw / ((double)vDim * vDim * sDim));
-  rowsPerDraw = Max(1, Min(sDim, rowsPerDraw));
+  rowsPerDraw = Max(1, Min(Min(sDim, kMaxSurfels / sDim), rowsPerDraw));
 
   uint bands = 0;
   occlusionBuffer->Bind(0);
@@ -182,17 +188,23 @@ DefineFunction(Mesh_ComputeOcclusion) {
   Renderer_PushBlendMode(BlendMode::Additive);
   for (int rowBegin = 0; rowBegin < sDim; rowBegin += rowsPerDraw) {
     ++bands;
+    int const rowEnd = Min(sDim, rowBegin + rowsPerDraw);
+    size_t const first = (size_t)rowBegin * sDim;
+    size_t const count = (size_t)(rowEnd - rowBegin) * sDim;
     (*shader)
       ("sDim", sDim)
       ("sRowBegin", rowBegin)
-      ("sRowEnd", Min(sDim, rowBegin + rowsPerDraw))
-      ("sPointBuffer", sPointBuffer)
-      ("sNormalBuffer", sNormalBuffer)
+      ("sRowEnd", rowEnd)
       ("vPointBuffer", vPointBuffer)
       ("vNormalBuffer", vNormalBuffer);
+    shader->SetFloat4Array("sPoint", points.data() + first, count);
+    shader->SetFloat4Array("sNormal", normals.data() + first, count);
     Renderer_SetShader(*shader);
     Renderer_DrawFSQ();
-    Renderer_Finish();
+    if (bands % kBandsPerWait == 0)
+      Renderer_Finish();
+    else
+      Renderer_Flush();
   }
   Renderer_PopBlendMode();
   occlusionBuffer->Unbind();
@@ -204,8 +216,8 @@ DefineFunction(Mesh_ComputeOcclusion) {
     m->vertices[i].u = Exp(-Pow(Abs(result[i]), 0.75f));
   m->version++;
 
-  /* How long the bake took, GPU included, since each band is waited for
-     (plan M1, Design/ShaderPerformance-plan.md). */
+  /* How long the bake took, GPU included, since the readback waits for every
+     band (plan M1, Design/ShaderPerformance-plan.md). */
   Log_Message(Stringize() | "PlateMesh: occlusion of " |
     (uint)m->vertices.size() | " vertices over " | (uint)(m->indices.size() / 3) |
     " surfels in " | bands | " bands took " |

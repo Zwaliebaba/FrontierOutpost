@@ -13,13 +13,22 @@
 #include "Math.hlsli"
 #include "Noise.hlsli"
 
+//
+// A band's surfels are in the constant buffer, in the order the texture held them, from row
+// sRowBegin: every lane reads the same surfel at the same time, which a constant buffer serves as a
+// broadcast and a texture as a filtered fetch per lane (Design/ShaderPerformance-plan.md E3). Two
+// arrays of MAX_SURFELS fill $Globals to 65,296 of its 65,536 bytes, so nothing more fits in it:
+// FXC refuses a constant buffer past 4,096 registers rather than truncating one.
+
+#define MAX_SURFELS 2040
+
 static float total = 0.0;
 
 int sDim;
 int sRowBegin;
 int sRowEnd;
-TEXTURE2D(sPointBuffer);
-TEXTURE2D(sNormalBuffer);
+float4 sPoint[MAX_SURFELS];
+float4 sNormal[MAX_SURFELS];
 TEXTURE2D(vPointBuffer);
 TEXTURE2D(vNormalBuffer);
 
@@ -27,13 +36,11 @@ void Shade() {
   float3 p = texture2D(vPointBuffer, uv).xyz;
   float3 n = texture2D(vNormalBuffer, uv).xyz;
 
+  int surfel = 0;
   for (int y = sRowBegin; y < sRowEnd; ++y) {
-    float v = (float(y) + 0.5) / float(sDim);
-    for (int x = 0; x < sDim; ++x) {
-      float u = (float(x) + 0.5) / float(sDim);
-
-      float4 sp = texture2DLod(sPointBuffer, float2(u, v), 0.0);
-      float4 sn = texture2DLod(sNormalBuffer, float2(u, v), 0.0);
+    for (int x = 0; x < sDim; ++x, ++surfel) {
+      float4 sp = sPoint[surfel];
+      float4 sn = sNormal[surfel];
       float area = sp.w;
 
       float3 r = sp.xyz - p;
