@@ -132,12 +132,10 @@ typedef void (*DestructFn)(TypeT*, void*);
 typedef void (*MapperFn)(TypeT*, void*, FieldMapper&, void*);
 typedef void (*ToStringFn)(TypeT*, void*, String*);
 
+/* The offset of a T after a char, which the old null-pointer arithmetic computed. */
 template <class T>
 size_t AlignOf() {
-  struct Aligner { char c; T t; };
-  return (size_t)(
-    (volatile char*)&((Aligner*)0)->t -
-    (volatile char*)&((Aligner*)0)->c);
+  return alignof(T);
 }
 
 struct TypeT {
