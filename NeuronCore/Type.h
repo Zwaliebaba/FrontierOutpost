@@ -239,6 +239,7 @@ struct Type {
 
   Type(TypeT* t = 0) : t(t) { Acquire(); }
   Type(Type const& other) : t(other.t) { Acquire(); }
+  Type(Type&& other) noexcept : t(other.t) { other.t = 0; }
   ~Type() { Release(); }
 
   operator bool() { return t != 0; }
@@ -259,6 +260,16 @@ struct Type {
       Mutable(ref.t)->RefCountIncrement();
     Release();
     t = ref.t;
+    return *this;
+  }
+
+  Type& operator=(Type&& ref) noexcept {
+    if (this == &ref)
+      return *this;
+    TypeT* incoming = ref.t;
+    ref.t = 0;
+    Release();
+    t = incoming;
     return *this;
   }
 

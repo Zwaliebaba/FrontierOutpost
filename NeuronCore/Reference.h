@@ -43,6 +43,11 @@ struct Reference : public NullBase<Reference<T> > {
     Acquire();
   }
 
+  /* A move hands the count over instead of adding and dropping one. */
+  Reference(Reference&& ref) noexcept : t(ref.t) {
+    ref.t = 0;
+  }
+
   template <class B>
   Reference(B* t) : t(static_cast<T*>(t)) {
     Acquire();
@@ -51,6 +56,11 @@ struct Reference : public NullBase<Reference<T> > {
   template <class B>
   Reference(Reference<B> const& ref) : t(static_cast<T*>(ref.t)) {
     Acquire();
+  }
+
+  template <class B>
+  Reference(Reference<B>&& ref) noexcept : t(static_cast<T*>(ref.t)) {
+    ref.t = 0;
   }
 
   ~Reference() {
@@ -84,6 +94,16 @@ struct Reference : public NullBase<Reference<T> > {
       Mutable(ref.t)->RefCountIncrement();
     Release();
     t = ref.t;
+    return *this;
+  }
+
+  Reference& operator=(Reference&& ref) noexcept {
+    if (this == &ref)
+      return *this;
+    T* incoming = ref.t;
+    ref.t = 0;
+    Release();
+    t = incoming;
     return *this;
   }
 

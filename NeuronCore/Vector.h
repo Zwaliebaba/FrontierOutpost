@@ -2,6 +2,7 @@
 #define LTE_Vector_h__
 
 #include "Function.h"
+#include <utility>
 #include <vector>
 
 template <class T>
@@ -70,6 +71,10 @@ struct Vector : public NullBase<Vector<T> > {
 
   void append(T const& element) {
     v.push_back(element);
+  }
+
+  void append(T&& element) {
+    v.push_back(std::move(element));
   }
 
   void append(Vector const& other) {
@@ -218,6 +223,10 @@ struct Vector : public NullBase<Vector<T> > {
 
   void push(T const& t) {
     append(t);
+  }
+
+  void push(T&& t) {
+    append(std::move(t));
   }
 
   void pushEmpty() {
