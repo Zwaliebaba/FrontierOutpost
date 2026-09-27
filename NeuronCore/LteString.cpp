@@ -41,10 +41,17 @@ namespace LTE {
     String const& self,
     char delim)
   {
-    std::stringstream stream(self);
-    String buf;
+    /* What a getline loop gives: a piece before each delimiter, the rest if not empty. */
     result.clear();
-    while (getline(stream, buf, delim))
-      result.push(buf);
+    size_t start = 0;
+    while (start < self.size()) {
+      size_t end = self.find(delim, start);
+      if (end == std::string::npos) {
+        result.push(self.substr(start));
+        break;
+      }
+      result.push(self.substr(start, end - start));
+      start = end + 1;
+    }
   }
 }
