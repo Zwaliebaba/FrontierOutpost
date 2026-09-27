@@ -14,7 +14,12 @@ float2 lightPosSS;
 
 void Shade() {
   float4 albedo = texture2D(albedoBuffer, uv);
-  float3 fg = albedo.xyz * texture2D(lightBuffer, uv).xyz;
+  /* A point light beside a surface (a thruster's, at its nozzle) can overflow the RGBA16F light
+     buffer to Inf. The lerps below turn Inf into NaN, and bloom spreads one NaN into a black
+     square. min() returns the other operand for a NaN, so this also clears a NaN. */
+  static const float kLightMax = 65504.0;
+  float3 light = min(texture2D(lightBuffer, uv).xyz, kLightMax);
+  float3 fg = albedo.xyz * light;
   float depth = GetDepthNormalized() * length(worldRayD);
   float fog = getFoginess(depth);
 
