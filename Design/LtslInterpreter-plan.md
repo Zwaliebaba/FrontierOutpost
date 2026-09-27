@@ -5,7 +5,7 @@
   this plan follows the verdict. The quick wins the owner allowed landed on this branch, one commit
   each (§3). Nothing in §4 to §7 is approved. The owner approves items by ID, and each approved
   item lands as its own PR (AGENTS.md §6), with its ADR in the same commit where the item is a
-  decision. The next free ADR number is ADR-018.
+  decision. The next free ADR number is ADR-020.
 - **Scope:** the LTSL interpreter in `NeuronCore/`:
   - the front end: `Tokenizer.h`, `StringList.*` and `LTSL.*`;
   - the compiler and the evaluator: `Expression.*`, one `Expression_*` node per file (`Access.cpp`
@@ -359,15 +359,15 @@ branch (§3); their IDs stay, so that references to them hold.
 | L4 | The HUD's per-frame rebuilds | EVAL-10 | `Sockets` alone: 129k Ir per frame (measured shape); saving not estimated | M | owner |
 | L5 | `Data`, boxing and returned values | BIND-6, BIND-10, BIND-15, EVAL-12 | `List_Get` 400 → 222 Ir, −11% on a list-reading loop (measured); ~100-130 Ir per boxing (estimated) | S-M | owner |
 | L6 | Hot reload after the stat gate | COMPILE-1 (a), (b) | ~11 M Ir and ~5,900 system calls left at ltheory's startup (measured, Linux) | S-M | owner; ADR for (b) |
-| L7 | The front end and the compiler's resolver | COMPILE-3, -13, -14 | up to −24 M Ir, 7.6% of load (measured upper bound); no 2^depth worst case | L | ADR-018 |
+| L7 | The front end and the compiler's resolver | COMPILE-3, -13, -14 | up to −24 M Ir, 7.6% of load (measured upper bound); no 2^depth worst case | L | ADR-020 |
 | L8 | Float text and float literals | EVAL-3, SUPPORT-4, SUPPORT-7, COMPILE-12 | 6.4 M Ir, 2.1% of load (measured cost); ~1,400 Ir per float printed (estimated) | S | MSVC proof |
 | L9 | The pool allocator under R15 | SUPPORT-6, CONFORM-11 | keeps the 8.7% of load plain `new` and `delete` would add (measured, glibc) | S | R15 ADR |
 | L10 | Moves for handles and strings: **landed** (§3) | SUPPORT-8 | see §3 | — | — |
-| L11 | Explicit names in registration, and the surface contract | BIND-1, CONFORM-2 | every later rename without touching a script | M | ADR-018 |
-| L12 | The binding layer as templates | BIND-2, -7, -8, -12, -14 | −4,400 generated lines (counted); `Type` refcounts, 1.6% of load (measured share) | L | ADR-018; owner for BIND-7 |
+| L11 | Explicit names in registration, and the surface contract | BIND-1, CONFORM-2 | every later rename without touching a script | M | ADR-020 |
+| L12 | The binding layer as templates | BIND-2, -7, -8, -12, -14 | −4,400 generated lines (counted); `Type` refcounts, 1.6% of load (measured share) | L | ADR-020; owner for BIND-7 |
 | L13 | Registration without static constructors | BIND-9 | `/WHOLEARCHIVE` dropped; aliases independent of link order | M | supersedes ADR-014 decision 3 |
 | L14 | Dead code: **landed** (§3) | EVAL-13, SUPPORT-13, BIND-13 | see §3 | — | — |
-| L15 | The support layer in conformant form | SUPPORT-10, -11, -12, -14 | `std::expected` usable; conformance | L | ADR-018 |
+| L15 | The support layer in conformant form | SUPPORT-10, -11, -12, -14 | `std::expected` usable; conformance | L | ADR-020 |
 
 ### L1. An evaluation stack for temporaries and locals
 
@@ -531,7 +531,7 @@ that, and with it what compiles (D1).
 
 **Proof.** `ast --all`, the fresh-process compile, SAFETY's corpus, the parse dump, and the
 tokenizer's fuzzer, since the corpus has no tab, multi-line literal or `\r`. **Rules.** New files
-under ADR-018; it replaces cluster C1 (§6).
+under ADR-020; it replaces cluster C1 (§6).
 
 ### L8. Float text and float literals
 
@@ -599,7 +599,7 @@ loading. The verifiers add three conditions. It comes from the MSVC executable's
 duplicate names resolve by link order (D25). Construction counts go with it, since it cannot see
 them. Type creation order needs its own dump, since the golden sorts (D24).
 
-**Rules.** ADR-013 decision 8, R1-R3, R8, R9; ADR-018.
+**Rules.** ADR-013 decision 8, R1-R3, R8, R9; ADR-020.
 
 ### L12. The binding layer as templates
 
@@ -660,7 +660,7 @@ its FNV-1 hash (widget identity in `Widget/Text.lts:7` and four more) and every 
 `AutoPtr` stealing from a `const&`) become honest signatures, `mutable` counts, `std::span` and
 `std::unique_ptr`. The containers map onto the standard ones, keeping the conversion order (D17),
 the key order of reflected maps, `removeIndex`'s swap-and-pop, the `rand()` calls and what `@`
-prints. **Rules.** §1, §4, R1, R2, R9, R10, R17; ADR-018. `long` is 8 bytes on Linux and 4 on
+prints. **Rules.** §1, §4, R1, R2, R9, R10, R17; ADR-020. `long` is 8 bytes on Linux and 4 on
 Windows, so a golden is generated on the platform it is compared on.
 
 ## 5. Defects found
@@ -873,7 +873,7 @@ scripts (`Script.*`, `ScriptFunction.*`, `ScriptType.h`: 5, 485, 52); C8 the nat
 
 | Phase | PRs | Content | Proof |
 |---|---|---|---|
-| 0. Proof and hygiene | ~8 | ADR-018; `Common.h`'s pragmas into `Legacy.targets`; `/W4` hygiene, legacy style, of the closure **and** the core headers; `Tests/NeuronCoreTests` with the goldens; the checker gaps; `SupportJustMyCode`; L9's decision | warnings a subset of today's; identical object code but for debug information |
+| 0. Proof and hygiene | ~8 | ADR-020; `Common.h`'s pragmas into `Legacy.targets`; `/W4` hygiene, legacy style, of the closure **and** the core headers; `Tests/NeuronCoreTests` with the goldens; the checker gaps; `SupportJustMyCode`; L9's decision | warnings a subset of today's; identical object code but for debug information |
 | 1. Decisions | — | L1's ADR, L2, the approved §5 fixes, each its own PR | the goldens |
 | 2. Format | 3 | the pinned clang-format over C1, C2, C3, C5 and C7 (23 files), then C6 (25), then C8 (21); C4 waits for Phase 3 | the token comparison |
 | 3. Mechanism | ~5 | the conformant registry with explicit names beside the legacy macros (L11, L12); the LTSL-owned registrations; the 21 native files | full-surface golden, construction counts, type order |
@@ -914,7 +914,7 @@ This collides with "identical results". Worse, the math is inline in shared head
 is not inlined one copy per link, whichever the linker meets first, serves every file, so mid-way
 an optimized build's results depend on link order; and under the proxy today's Debug and Release
 already disagree on these bits. The choices (§7 question 11): (a) keep `/fp:fast` for the float
-natives and the inline math they share, as an exception ADR-018 lists and `CheckProjectFiles.py`
+natives and the inline math they share, as an exception ADR-020 lists and `CheckProjectFiles.py`
 checks per item; (b) move the whole float surface in one PR, accepting what an MSVC run measures;
 (c), rejected, reproduce `/fp:fast` results by hand. The evidence is CONFORM's differential built
 with MSVC: x64 Debug and Release, and ARM64 Release, where `/fp:fast` also contracts to FMA.
@@ -998,7 +998,7 @@ carry it, plus the Windows checks the item names; and **look**: launch `war`, `l
 app, because scripts drive the UI, the HUD and every object, and no Linux run reaches their hooks
 (AGENTS.md §3).
 
-### ADR-018 outline: the LTSL layer is converted to AGENTS.md behind a frozen script surface
+### ADR-020 outline: the LTSL layer is converted to AGENTS.md behind a frozen script surface
 
 CONFORM's outline, corrected by its verdict.
 
@@ -1038,8 +1038,9 @@ CONFORM's outline, corrected by its verdict.
 
 ## 7. Decisions for the owner
 
-Answered before this plan: Q1 to Q4 (header). The conversion's ADR is called ADR-018 here, as
-CONFORM proposed; whichever ADR lands first takes that number.
+Answered before this plan: Q1 to Q4 (header). The conversion's ADR is called ADR-020 here. CONFORM
+proposed ADR-018, but `main` has since given ADR-018 to PIX events and ADR-019 to C++/WinRT;
+whichever ADR lands next takes the number.
 
 1. **L1: the evaluation stack.** Recommended: approve, with its ADR. It is the largest measured
    gain, its prerequisites (EVAL-2's fix, zero-fill) are in, and its proofs are strong. Take the
@@ -1087,7 +1088,7 @@ CONFORM proposed; whichever ADR lands first takes that number.
     aliases are checked once, after everything; `/WHOLEARCHIVE` goes with the last self-registering
     file; type creation order stays as its golden pins it. *Forecloses:* registration from static
     initializers; a script API that depends on link order.
-11. **`/fp`.** Recommended: (a) now, as ADR-018's exception, checked per item by
+11. **`/fp`.** Recommended: (a) now, as ADR-020's exception, checked per item by
     `CheckProjectFiles.py`; decide (b) with the MSVC differential in hand, ARM64 included, when the
     engine's math converts as one. (b) without that evidence breaks "identical results".
 12. **The test project.** Recommended: `Tests/NeuronCoreTests`, x64 and ARM64 like the other test
