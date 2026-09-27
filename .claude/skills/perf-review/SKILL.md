@@ -166,7 +166,11 @@ dynamic scenes side by side, and the report says what to look at.
   that C − B is at least 10 s, so that one slow frame does not move the average. An app that fails
   exits with 1. Some apps are incomplete, so note it and go on. The load-time bakes also log their
   own times (`SDFMesh:`, `PlateMesh:` and `IRMap:` lines, and glyphs with `TIME_GLYPHS` defined in
-  `Font.cpp`; the shader performance plan's M1).
+  `Font.cpp`; the shader performance plan's M1). Each pipeline state logs how long it took to make
+  and the frame it was made in (`Direct3D 12: pipeline state` lines; the shader pipeline plan's
+  P0.2), so the states made after the first frame are the hitches. With `TIME_DRAW_PATH` defined in
+  `Renderer.cpp`, each frame logs the CPU time of its draws, from each draw call to its record
+  (P0.3). That adds a little work to every draw, so leave it out of the timed runs.
 - **Primary scenarios.** Use three apps:
   - `war`: 32 AI ships in combat, in a generated system;
   - `ltheory`: a generated universe, seed 39;
@@ -335,12 +339,12 @@ the GPU, or the GPU for the CPU, at load and in each frame, and how well the two
   inside the frame.
 - Generation in strips, with a full wait after each strip and the strip width adapted from
   CPU-measured time: `LTE/Texture2D.cpp:40-60`, `LTE/CubeMap.cpp:122-145`,
-  `LTE/Renderer.cpp:473-487` (`Renderer_DrawFSQInParts`) and `LTE/PlateMesh.cpp:176-192`. The split
+  `LTE/Renderer.cpp:551-566` (`Renderer_DrawFSQInParts`) and `LTE/PlateMesh.cpp:176-192`. The split
   keeps each GPU submission under the Windows TDR limit, as the code's comments say and `814b6fe`
   did for the occlusion bake, so it stays. What can go is the CPU wait between strips: GPU
   timestamps can size the strips, and submissions can queue without a wait.
-- `NeuronClient/DrawContext.cpp:781-820` and `:822-848`. The descriptor ring waits for the GPU when
-  it is full, and a full sampler heap calls `SubmitAndWait` (`:830`). Find how often each happens.
+- `NeuronClient/DrawContext.cpp:866-906` and `:908-933`. The descriptor ring waits for the GPU when
+  it is full, and a full sampler heap calls `SubmitAndWait` (`:919`). Find how often each happens.
 - `Game/Graphics/Generator/IRMap.cpp:26,65`: a synchronous readback (`GetData`) per face.
 - Submissions per frame: `Renderer_Flush` in `UI/Widget/Rendered.cpp:143` and
   `LTE/Profiler.cpp:128,152`.
@@ -356,27 +360,29 @@ path. Protection against TDRs stays.
 `GraphicsDevice.cpp`, `GraphicsCore.cpp`, `Program.cpp`, `Texture.cpp`, `Buffer.cpp` and
 `SwapChain.cpp` in `NeuronClient/`. Leads:
 
-- `PrepareDraw` (`DrawContext.cpp:892` onwards). Every draw builds a
+- `PrepareDraw` (`DrawContext.cpp:979` onwards). Every draw builds a
   `std::vector<D3D12_INPUT_ELEMENT_DESC>`, builds an input-layout key as a `std::string` with
   `std::format`, and looks it up in a `std::map<PipelineKey, …>` that compares that string
-  (`:131-145`, `:373`).
-- `PrepareTables` (`:849-890`). Every draw builds a table of 16 `D3D12_SAMPLER_DESC` and looks it
-  up in a `std::map` (`:429`). Each new table of views costs 16 `CopyDescriptorsSimple` calls
+  (`:133-148`, `:460`).
+- `PrepareTables` (`:935-977`). Every draw builds a table of 16 `D3D12_SAMPLER_DESC` and looks it
+  up in a `std::map` (`:517`). Each new table of views costs 16 `CopyDescriptorsSimple` calls
   instead of one `CopyDescriptors`.
 - Every draw iterates `program->samplers` and `program->shaderResources`, which are held by name.
-- Barrier tracking (`Require`, `:587-660`): a vector of states per subresource, and how barriers
+- Barrier tracking (`Require`, `:674-723`): a vector of states per subresource, and how barriers
   are batched into `ResourceBarrier` calls.
-- Constants (`:1220-1290`). Each draw copies each stage's constants into the upload ring. Also
+- Constants (`:1330-1397`). Each draw copies each stage's constants into the upload ring. Also
   check the upload ring's page size (`uploadPageBytes`).
 - Pipeline states are created at first use, and nothing warms them. The plan names warming the known
   programs at load as the mitigation (`Design/Archive/NeuronClient-migration.md` §10), and it does not
   exist. `ID3D12Device`'s methods are free-threaded, so pipeline states can be created on workers.
+  `Design/ShaderPipeline-plan.md` P2 plans that, and its P0.2 already logs each state made, with
+  the frame it was made in.
 - Command allocator and list reuse, the number of submissions, and how often the heaps and the root
   signature are re-bound per list.
 
 Constraints:
 
-- AGENTS.md applies in full: the naming table, R12 (`ComPtr` RAII), no `d3dx12.h`, R14, and R15
+- AGENTS.md applies in full: the naming table, R12 (`winrt::com_ptr` RAII), no `d3dx12.h`, R14, and R15
   (no pool allocator without an ADR).
 - The layer stays game-agnostic (R9), and its public headers stay free of Windows and Direct3D
   headers (ADR-005 decision 5).
@@ -394,17 +400,17 @@ Constraints:
 
 Leads:
 
-- `Shader.cpp:109` and from `:308`. Every `SetFloat("name", …)` builds a `String` and looks it up
+- `Shader.cpp:116` and from `:282`. Every `SetFloat("name", …)` builds a `String` and looks it up
   in a `Map`. The `(*shader)("name", value)` chains do this for each uniform on each draw.
-- `Renderer.cpp:781-796`. Every change to the world matrix computes a general 4×4 inverse and
-  transpose (`worldIT`) and two matrix products. `InjectMatrices` (`:415-422`) then binds five
+- `Renderer.cpp:857-864`. Every change to the world matrix computes a general 4×4 inverse and
+  transpose (`worldIT`) and two matrix products. `InjectMatrices` (`:487-493`) then binds five
   matrices per draw.
-- The transient draw paths (`Renderer.cpp:393`, `:558`, `:636`) upload geometry and convert indices
+- The transient draw paths (`Renderer.cpp:448`, `:619`, `:700`) upload geometry and convert indices
   on every draw. Which of these draws could be static?
 - `Game/RenderPass/Visibility.cpp:18-50` culls each object recursively every frame, and calls
   `Cullable::Recompute` for each one.
 - `LTE/ParticleSystem.cpp:69-130` builds particle vertices on the CPU every frame.
-- The UI calls `WidgetRenderer_Flush` (`UI/WidgetRenderer.cpp:276`) from many places. Count the
+- The UI calls `WidgetRenderer_Flush` (`UI/WidgetRenderer.cpp:266`) from many places. Count the
   flushes and draws per frame in the HUD.
 - GPU time per pass, from the PIX capture: render-target formats and sizes (bandwidth), full-screen
   passes, SMAA's three passes, bloom, lens flares, and local lights
@@ -521,7 +527,7 @@ pay.
 - Culling in `Game/RenderPass/Visibility.cpp`, with `BoundingFrustum` and `BoundingSphere` from
   DirectXCollision. They are float, so use them only on camera-relative data.
 - The vertex build in `LTE/ParticleSystem.cpp`, and the per-draw matrix work in
-  `Renderer.cpp:781-796`.
+  `Renderer.cpp:857-864`.
 - Texel conversion that involves half floats (`ConvertTexels`, `LTE/RendererCore.cpp:187`), with
   DirectXPackedVector.
 - The double round trips in `StdMath.h`, where the profile shows them.

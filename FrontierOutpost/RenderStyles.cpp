@@ -28,6 +28,10 @@ namespace {
       Renderer_PushZBuffer(true);
       Renderer_PushZWritable(!blended);
       willRender = true;
+      /* The depth prepass sets prepass to 1 on the same programs, so the
+         first draw of every pass sets it back, even when it uses the
+         instance this style's previous pass ended with. */
+      currentShader = nullptr;
     }
 
     void OnEnd() {

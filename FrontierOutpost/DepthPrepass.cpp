@@ -15,17 +15,12 @@
 namespace {
   struct DepthPrepassStyle : public RenderStyleT {
     ShaderInstanceT* currentShader;
-    Shader prepassShader;
-    ShaderInstance state;
     bool willRender;
 
     DepthPrepassStyle() :
       currentShader(nullptr),
-      prepassShader(Shader_Create("npm.jsl", "depthprepass.jsl")),
       willRender(true)
-    {
-      state = ShaderInstance_Create(prepassShader);
-    }
+      {}
 
     void OnBegin() {
       Renderer_PushBlendMode(BlendMode::Disabled);

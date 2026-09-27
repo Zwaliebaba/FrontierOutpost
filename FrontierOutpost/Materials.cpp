@@ -21,7 +21,6 @@ namespace {
     static Shader dirtShader;
     if (!platingShader) {
       platingShader = Shader_Create("identity.jsl", "gen/plating.jsl");
-      platingShader->BindOutput(1, "fragment_color1");
       aoShader = Shader_Create("identity.jsl", "filter_ao.jsl");
       dirtShader = Shader_Create("identity.jsl", "filter_dirt.jsl");
     }

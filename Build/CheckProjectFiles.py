@@ -66,7 +66,8 @@ WINDOWS_MACROS = {"NOMINMAX", "WIN32_LEAN_AND_MEAN", "VC_EXTRALEAN", "STRICT", "
                   "NOHELP", "NOCOMM", "NOKERNEL", "NOUSER"}
 # R14: the NuGet packages, at the version, that an ADR approved. A new package or version is a new
 # decision, so it lands here with its ADR.
-APPROVED_PACKAGES = {("WinPixEventRuntime", "1.0.240308001"): "ADR-018"}
+APPROVED_PACKAGES = {("WinPixEventRuntime", "1.0.240308001"): "ADR-018",
+                     ("Microsoft.Windows.CppWinRT", "3.0.260818.1"): "ADR-019"}
 
 CPP = (".h", ".cpp")
 NOT_CPP = (".hpp", ".hh", ".hxx", ".cc", ".cxx", ".c++", ".inl", ".ipp", ".tpp", ".c")

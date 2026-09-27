@@ -16,12 +16,12 @@
 namespace Neuron
 {
 
-using Microsoft::WRL::ComPtr;
+using winrt::com_ptr;
 
 struct FontFace::Native
 {
-  ComPtr<IDWriteFactory> factory;
-  ComPtr<IDWriteFontFace1> face;
+  com_ptr<IDWriteFactory> factory;
+  com_ptr<IDWriteFontFace1> face;
   float emSizePixels = 0.0f;
   float pixelsPerDesignUnit = 0.0f;
 };
@@ -52,16 +52,16 @@ bool FontFace::Open(std::string_view _pathUtf8, float _emSizePixels, FontFace& _
 {
   auto native = std::make_unique<Native>();
   const std::wstring path = Utf8ToUtf16(_pathUtf8);
-  ComPtr<IDWriteFontFile> file;
+  com_ptr<IDWriteFontFile> file;
   BOOL supported = FALSE;
   DWRITE_FONT_FILE_TYPE fileType = DWRITE_FONT_FILE_TYPE_UNKNOWN;
   DWRITE_FONT_FACE_TYPE faceType = DWRITE_FONT_FACE_TYPE_UNKNOWN;
   UINT32 faceCount = 0;
   // An isolated factory: faces come from their files, and the system's font cache is not involved.
-  if (!Succeeded(DWriteCreateFactory(DWRITE_FACTORY_TYPE_ISOLATED, __uuidof(IDWriteFactory),
-                                     reinterpret_cast<IUnknown**>(native->factory.GetAddressOf())),
-                 "creating the factory", _error) ||
-      !Succeeded(native->factory->CreateFontFileReference(path.c_str(), nullptr, &file), "opening the file", _error) ||
+  if (!Succeeded(
+        DWriteCreateFactory(DWRITE_FACTORY_TYPE_ISOLATED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(native->factory.put())),
+        "creating the factory", _error) ||
+      !Succeeded(native->factory->CreateFontFileReference(path.c_str(), nullptr, file.put()), "opening the file", _error) ||
       !Succeeded(file->Analyze(&supported, &fileType, &faceType, &faceCount), "reading the file", _error))
   {
     return false;
@@ -72,10 +72,11 @@ bool FontFace::Open(std::string_view _pathUtf8, float _emSizePixels, FontFace& _
     return false;
   }
 
-  ComPtr<IDWriteFontFace> face;
-  if (!Succeeded(native->factory->CreateFontFace(faceType, 1, file.GetAddressOf(), 0, DWRITE_FONT_SIMULATIONS_NONE, &face),
-                 "creating the face", _error) ||
-      !Succeeded(face.As(&native->face), "reaching IDWriteFontFace1", _error))
+  com_ptr<IDWriteFontFace> face;
+  IDWriteFontFile* const files[] = {file.get()};
+  if (!Succeeded(native->factory->CreateFontFace(faceType, 1, files, 0, DWRITE_FONT_SIMULATIONS_NONE, face.put()), "creating the face",
+                 _error) ||
+      !Succeeded(face->QueryInterface(IID_PPV_ARGS(&native->face)), "reaching IDWriteFontFace1", _error))
   {
     return false;
   }
@@ -120,17 +121,17 @@ bool FontFace::RenderGlyph(std::uint16_t _glyphIndex, GlyphBitmap& _outBitmap, s
   const FLOAT advance = 0.0f;
   const DWRITE_GLYPH_OFFSET offset{};
   DWRITE_GLYPH_RUN run{};
-  run.fontFace = m_native->face.Get();
+  run.fontFace = m_native->face.get();
   run.fontEmSize = m_native->emSizePixels;
   run.glyphCount = 1;
   run.glyphIndices = &index;
   run.glyphAdvances = &advance;
   run.glyphOffsets = &offset;
   // ClearType's 3x1 texture, averaged per pixel, is grayscale coverage on every Windows.
-  ComPtr<IDWriteGlyphRunAnalysis> analysis;
+  com_ptr<IDWriteGlyphRunAnalysis> analysis;
   RECT bounds{};
   if (!Succeeded(m_native->factory->CreateGlyphRunAnalysis(&run, 1.0f, nullptr, DWRITE_RENDERING_MODE_CLEARTYPE_NATURAL_SYMMETRIC,
-                                                           DWRITE_MEASURING_MODE_NATURAL, 0.0f, 0.0f, &analysis),
+                                                           DWRITE_MEASURING_MODE_NATURAL, 0.0f, 0.0f, analysis.put()),
                  "analyzing the glyph", _error) ||
       !Succeeded(analysis->GetAlphaTextureBounds(DWRITE_TEXTURE_CLEARTYPE_3x1, &bounds), "measuring the glyph", _error))
   {

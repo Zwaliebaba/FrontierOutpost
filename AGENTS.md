@@ -209,7 +209,7 @@ python Build\RunClangTidy.py          # needs a Developer PowerShell (INCLUDE mu
 
 **R12: Graphics is an open choice, recorded as a decision.** No graphics API, presentation model or rendering technique is mandated or excluded by this file. Direct3D 12, Direct3D 11, Vulkan, OpenGL, a software rasterizer, or several of them behind an abstraction are all legitimate, as are any resolution strategy, window style, multisampling, HDR, post-processing or presentation scheme. The choice is made by the project, recorded in an ADR, and applied consistently from then on. What holds regardless of the choice:
 
-- **GPU and COM object lifetimes are RAII from the first line.** Use the appropriate owner (`Microsoft::WRL::ComPtr` for COM, a small owning wrapper for Vulkan/GL handles). A raw `AddRef`/`Release` pair or an unpaired create/destroy in new code is a defect, not a style.
+- **GPU and COM object lifetimes are RAII from the first line.** Use the appropriate owner (`winrt::com_ptr` for COM, as ADR-019 records; a small owning wrapper for Vulkan/GL handles). A raw `AddRef`/`Release` pair or an unpaired create/destroy in new code is a defect, not a style.
 - **Graphics code lives in its own layer** (R9). Application code talks to it through the project's own types, so a later change of API or technique touches that layer and not everything above it.
 - **Anything that is a policy rather than a mechanism** (how the frame reaches the window, how it scales, what resolution content is authored at) lives in one place and is written down in the ADR, so it is not re-decided pass by pass.
 

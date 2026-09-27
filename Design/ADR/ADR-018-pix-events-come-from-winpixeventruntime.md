@@ -6,6 +6,9 @@
   `Build/CheckProjectFiles.py`'s `APPROVED_PACKAGES`, and the restore step in
   `.github/workflows/build.yml`
 - **Amends:** ADR-007 decision 2 ("PIX markers without WinPixEventRuntime")
+- **Amended:** 2026-09-27 by ADR-019. Decision 1's "one NuGet package" has C++/WinRT beside it
+  now, in every project. Decision 2 still holds for WinPixEventRuntime; ADR-019 says why C++/WinRT's
+  settings come from its own build files instead.
 
 ## Context
 

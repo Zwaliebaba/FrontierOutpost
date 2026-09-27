@@ -135,6 +135,16 @@ pushed, and CI's four-way build after.
   `StringList_ParseLine` splits them. The same count after the removal gives 1,032 natives, 253 of
   them reached by nothing.
 
+## What went later
+
+- **The shader pipeline's P0.4 (2026-09-27),** under decision 1, after a search of the C++ and the
+  scripts (H3 in `Design/ShaderPipeline-plan.md`):
+  - `MaterialLodfadePS`, which nothing reached;
+  - `DepthprepassPS`, and the program and instance of it that `DepthPrepassStyle` made and never
+    drew with;
+  - `ShaderT`'s `Create`, `BindInput`, `BindOutput`, `PrintLogs` and `Relink`, no-ops since the
+    port to Direct3D 12, with their calls.
+
 ## What this forecloses
 
 - **Porting any confirmed item** to Direct3D 12, HLSL or NeuronClient.

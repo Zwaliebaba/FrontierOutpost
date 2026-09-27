@@ -23,7 +23,7 @@ namespace NeuronClientTests
 namespace
 {
 
-using Microsoft::WRL::ComPtr;
+using winrt::com_ptr;
 
 using Library = std::unique_ptr<std::remove_pointer_t<HMODULE>, decltype(&FreeLibrary)>;
 
@@ -56,7 +56,7 @@ public:
     const Library compiler(LoadLibraryExW(L"d3dcompiler_47.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32), &FreeLibrary);
     Assert::IsNotNull(compiler.get(), L"d3dcompiler_47.dll did not load");
 
-    ComPtr<ID3D12ShaderReflection> reflection;
+    com_ptr<ID3D12ShaderReflection> reflection;
     Check(D3DReflect(PROBE_PS, sizeof(PROBE_PS), IID_PPV_ARGS(&reflection)), L"D3DReflect");
 
     // Loose globals are gathered into $Globals.
@@ -67,8 +67,8 @@ public:
     ExpectVariable(globals, "tint", 0, 16);
     ExpectVariable(globals, "gain", 16, 4);
 
-    ExpectBinding(reflection.Get(), "image", D3D_SIT_TEXTURE, 0);
-    ExpectBinding(reflection.Get(), "imageSampler", D3D_SIT_SAMPLER, 0);
+    ExpectBinding(reflection.get(), "image", D3D_SIT_TEXTURE, 0);
+    ExpectBinding(reflection.get(), "imageSampler", D3D_SIT_SAMPLER, 0);
 
     D3D12_SHADER_DESC shaderDesc{};
     Check(reflection->GetDesc(&shaderDesc), L"GetDesc");

@@ -79,7 +79,7 @@ struct AudioDevice::Native
 {
   Desc desc;
   ComScope com;
-  Microsoft::WRL::ComPtr<IXAudio2> xaudio;
+  winrt::com_ptr<IXAudio2> xaudio;
   VoicePtr<IXAudio2MasteringVoice> master;
   X3DAUDIO_HANDLE x3d{};
   X3DAUDIO_LISTENER listener{};
@@ -367,7 +367,7 @@ AudioDevice::AudioDevice(Desc _desc)
   native.listener.OrientFront.z = 1.0f;
   native.listener.OrientTop.y = 1.0f;
 
-  if (!native.Check(XAudio2Create(&native.xaudio, 0, XAUDIO2_DEFAULT_PROCESSOR), "XAudio2Create"))
+  if (!native.Check(XAudio2Create(native.xaudio.put(), 0, XAUDIO2_DEFAULT_PROCESSOR), "XAudio2Create"))
   {
     native.silent = true;
     return;
@@ -405,7 +405,7 @@ AudioDevice::~AudioDevice()
   }
   m_native->voices.clear();
   m_native->master.reset();
-  m_native->xaudio.Reset();
+  m_native->xaudio = nullptr;
 }
 
 bool AudioDevice::IsSilent() const noexcept

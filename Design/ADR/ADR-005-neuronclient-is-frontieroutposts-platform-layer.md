@@ -5,6 +5,8 @@
 - **Amended:** 2026-09-27 by ADR-018. Point 6's "no NuGet package" now allows one,
   WinPixEventRuntime, for PIX's events; any other still needs its own ADR, and "no `d3dx12.h`"
   stands.
+- **Amended:** 2026-09-27 by ADR-019. Point 6 now allows a second NuGet package, C++/WinRT, in
+  every project, and holds COM objects in `winrt::com_ptr` in place of `Microsoft::WRL::ComPtr`.
 - **Scope:** `NeuronClient/` and `Tests/NeuronClientTests/`, two new projects at the repository
   root, and the boundary between them and `lt.dll`
 - **Detail:** `Design/Archive/NeuronClient-migration.md` §1, §3 (point 5), §4.1, §5.1, §5.2, §5.4,

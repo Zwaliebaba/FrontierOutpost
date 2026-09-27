@@ -3,7 +3,7 @@
 - **Status:** Proposed 2026-09-26. M1 and M2 approved (owner, 2026-09-27), and M1 is done. D1,
   D2, D3, D4, D5, D7, D8 and D9 approved the same day (§3). The E and L items, D6 and D10 are not
   approved yet. The owner approves items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the
-  same commit where the item is a decision (§3). The next free ADR number is ADR-019 (ADR-016 went to the library split's visuals, ADR-017 to borderless fullscreen, ADR-018 to PIX's events).
+  same commit where the item is a decision (§3). The next free ADR number is ADR-020 (ADR-016 went to the library split's visuals, ADR-017 to borderless fullscreen, ADR-018 to PIX's events, ADR-019 to C++/WinRT).
 - **Scope:** the HLSL in `NeuronClient/Shaders/` and `FrontierOutpost/Shaders/`, and the C++ that
   dispatches it:
   - the four compute shaders;

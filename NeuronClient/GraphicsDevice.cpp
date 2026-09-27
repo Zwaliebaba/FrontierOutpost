@@ -18,7 +18,7 @@ namespace Neuron
 namespace
 {
 
-using Microsoft::WRL::ComPtr;
+using winrt::com_ptr;
 
 std::string_view SeverityName(D3D12_MESSAGE_SEVERITY _severity) noexcept
 {
@@ -37,6 +37,87 @@ std::string_view SeverityName(D3D12_MESSAGE_SEVERITY _severity) noexcept
   }
 }
 
+/// The shader models these headers name, newest first. A runtime refuses one newer than it knows,
+/// so the question comes down the list; a device beyond the newest answers the newest.
+constexpr std::array<D3D_SHADER_MODEL, 8> SHADER_MODELS = {D3D_SHADER_MODEL_6_7, D3D_SHADER_MODEL_6_6, D3D_SHADER_MODEL_6_5,
+                                                           D3D_SHADER_MODEL_6_4, D3D_SHADER_MODEL_6_3, D3D_SHADER_MODEL_6_2,
+                                                           D3D_SHADER_MODEL_6_1, D3D_SHADER_MODEL_6_0};
+
+/// Asks _device what GraphicsCapabilities names. A question the runtime cannot answer, as an older one
+/// cannot, is a no. With the debug layer on, _infoQueue stores nothing meanwhile: a no is an answer
+/// here, not a fault, and would otherwise fail every test and smoke run that counts the layer's
+/// errors.
+GraphicsCapabilities Probe(ID3D12Device& _device, ID3D12InfoQueue* _infoQueue)
+{
+  std::array<D3D12_MESSAGE_SEVERITY, 5> every = {D3D12_MESSAGE_SEVERITY_CORRUPTION, D3D12_MESSAGE_SEVERITY_ERROR,
+                                                 D3D12_MESSAGE_SEVERITY_WARNING, D3D12_MESSAGE_SEVERITY_INFO,
+                                                 D3D12_MESSAGE_SEVERITY_MESSAGE};
+  D3D12_INFO_QUEUE_FILTER nothing{};
+  nothing.DenyList.NumSeverities = static_cast<UINT>(every.size());
+  nothing.DenyList.pSeverityList = every.data();
+  const bool quiet = _infoQueue != nullptr && SUCCEEDED(_infoQueue->PushStorageFilter(&nothing));
+
+  GraphicsCapabilities capabilities{.shaderModelMajor = 5,
+                                    .shaderModelMinor = 1,
+                                    .resourceBindingTier = 1,
+                                    .directlyIndexedHeaps = false,
+                                    .pipelineLibrary = false,
+                                    .automaticDiskCache = false};
+  for (const D3D_SHADER_MODEL asked : SHADER_MODELS)
+  {
+    D3D12_FEATURE_DATA_SHADER_MODEL model{asked};
+    if (SUCCEEDED(_device.CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &model, sizeof(model))))
+    {
+      // The major version is the high nibble, the minor the low one: 0x66 is 6.6.
+      capabilities.shaderModelMajor = static_cast<std::uint32_t>(model.HighestShaderModel) >> 4;
+      capabilities.shaderModelMinor = static_cast<std::uint32_t>(model.HighestShaderModel) & 0xFu;
+      break;
+    }
+  }
+
+  // An out parameter only: its tiers have no zero value for {} to give.
+  D3D12_FEATURE_DATA_D3D12_OPTIONS options;
+  if (SUCCEEDED(_device.CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options))))
+  {
+    capabilities.resourceBindingTier = static_cast<std::uint32_t>(options.ResourceBindingTier);
+  }
+
+  D3D12_FEATURE_DATA_SHADER_CACHE cache{};
+  if (SUCCEEDED(_device.CheckFeatureSupport(D3D12_FEATURE_SHADER_CACHE, &cache, sizeof(cache))))
+  {
+    capabilities.pipelineLibrary = (cache.SupportFlags & D3D12_SHADER_CACHE_SUPPORT_LIBRARY) != 0;
+    capabilities.automaticDiskCache = (cache.SupportFlags & D3D12_SHADER_CACHE_SUPPORT_AUTOMATIC_DISK_CACHE) != 0;
+  }
+
+  // From Shader Model 6.6, shaders index the heaps directly when a root signature of version 1.1
+  // says they may. Whether such a root signature can be made is the answer.
+  const bool shaderModel66 =
+    capabilities.shaderModelMajor > 6 || (capabilities.shaderModelMajor == 6 && capabilities.shaderModelMinor >= 6);
+  D3D12_FEATURE_DATA_ROOT_SIGNATURE signatureVersion{D3D_ROOT_SIGNATURE_VERSION_1_1};
+  if (shaderModel66 && SUCCEEDED(_device.CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &signatureVersion, sizeof(signatureVersion))) &&
+      signatureVersion.HighestVersion >= D3D_ROOT_SIGNATURE_VERSION_1_1)
+  {
+    // D3D_ROOT_SIGNATURE_VERSION has no zero value for {} to give, so both parts are set.
+    D3D12_VERSIONED_ROOT_SIGNATURE_DESC desc;
+    desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
+    desc.Desc_1_1 = D3D12_ROOT_SIGNATURE_DESC1{0, nullptr, 0, nullptr,
+                                               D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED |
+                                                 D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED};
+    com_ptr<ID3DBlob> signature;
+    com_ptr<ID3DBlob> errors;
+    com_ptr<ID3D12RootSignature> rootSignature;
+    capabilities.directlyIndexedHeaps =
+      SUCCEEDED(D3D12SerializeVersionedRootSignature(&desc, signature.put(), errors.put())) &&
+      SUCCEEDED(_device.CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
+  }
+
+  if (quiet)
+  {
+    _infoQueue->PopStorageFilter();
+  }
+  return capabilities;
+}
+
 } // namespace
 
 bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::string& _error)
@@ -50,7 +131,7 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
   // The debug layer and DRED apply to devices created after they are set.
   if (_desc.debugLayer)
   {
-    ComPtr<ID3D12Debug> debug;
+    com_ptr<ID3D12Debug> debug;
     if (FAILED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug))))
     {
       _error = "Direct3D 12: the debug layer is not installed; it comes with Windows' optional feature Graphics Tools";
@@ -59,8 +140,8 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
     debug->EnableDebugLayer();
     if (_desc.gpuValidation)
     {
-      ComPtr<ID3D12Debug1> debug1;
-      if (FAILED(debug.As(&debug1)))
+      com_ptr<ID3D12Debug1> debug1;
+      if (FAILED(debug->QueryInterface(IID_PPV_ARGS(&debug1))))
       {
         _error = "Direct3D 12: GPU-based validation is not available with this debug layer";
         return false;
@@ -69,7 +150,7 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
     }
   }
   // Without DRED (before Windows 10 1903), a removal is still reported, only with less to say.
-  ComPtr<ID3D12DeviceRemovedExtendedDataSettings> dred;
+  com_ptr<ID3D12DeviceRemovedExtendedDataSettings> dred;
   if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dred))))
   {
     dred->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
@@ -83,7 +164,7 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
   {
     return fail("CreateDXGIFactory2", result);
   }
-  result = _desc.warp ? core->factory->EnumWarpAdapter(IID_PPV_ARGS(&core->adapter)) : core->factory->EnumAdapters1(0, &core->adapter);
+  result = _desc.warp ? core->factory->EnumWarpAdapter(IID_PPV_ARGS(&core->adapter)) : core->factory->EnumAdapters1(0, core->adapter.put());
   if (FAILED(result))
   {
     return fail(_desc.warp ? "IDXGIFactory4::EnumWarpAdapter" : "IDXGIFactory1::EnumAdapters1", result);
@@ -96,12 +177,12 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
   }
   core->adapterName = Utf16ToUtf8(adapterDesc.Description);
 
-  result = D3D12CreateDevice(core->adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&core->device));
+  result = D3D12CreateDevice(core->adapter.get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&core->device));
   if (FAILED(result))
   {
     return fail(std::format("D3D12CreateDevice on {}", core->adapterName), result);
   }
-  if (_desc.debugLayer && SUCCEEDED(core->device.As(&core->infoQueue)))
+  if (_desc.debugLayer && SUCCEEDED(core->device->QueryInterface(IID_PPV_ARGS(&core->infoQueue))))
   {
     // Only what is worth failing a test over, or logging: corruption, errors and warnings, less
     // three warnings about what liblt does on purpose. Two say that a clear to a value other than
@@ -121,6 +202,7 @@ bool GraphicsDevice::Create(const Desc& _desc, GraphicsDevice& _outDevice, std::
     filter.DenyList.pIDList = intended.data();
     core->storageFilterPushed = SUCCEEDED(core->infoQueue->PushStorageFilter(&filter));
   }
+  core->capabilities = Probe(*core->device.get(), core->infoQueue.get());
 
   D3D12_COMMAND_QUEUE_DESC queueDesc{};
   queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -164,6 +246,11 @@ std::string GraphicsDevice::AdapterName() const
 bool GraphicsDevice::IsDebugLayerOn() const noexcept
 {
   return m_core && m_core->desc.debugLayer;
+}
+
+GraphicsCapabilities GraphicsDevice::Capabilities() const noexcept
+{
+  return m_core ? m_core->capabilities : GraphicsCapabilities{};
 }
 
 Texture GraphicsDevice::CreateTexture(const Texture::Desc& _desc)
@@ -294,7 +381,7 @@ std::vector<std::string> GraphicsDevice::TakeDebugMessages()
   {
     return messages;
   }
-  ID3D12InfoQueue& infoQueue = *m_core->infoQueue.Get();
+  ID3D12InfoQueue& infoQueue = *m_core->infoQueue.get();
   const UINT64 count = infoQueue.GetNumStoredMessages();
   for (UINT64 index = 0; index < count; ++index)
   {

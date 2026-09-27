@@ -407,10 +407,6 @@
       <ShaderType>Pixel</ShaderType>
       <VariableName>CUBEMAP_MULTIPLY_PS</VariableName>
     </FxCompile>
-    <FxCompile Include="Shaders\DepthprepassPS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>DEPTHPREPASS_PS</VariableName>
-    </FxCompile>
     <FxCompile Include="Shaders\DustfleckPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>DUSTFLECK_PS</VariableName>
@@ -494,10 +490,6 @@
     <FxCompile Include="Shaders\MaterialLambertPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>MATERIAL_LAMBERT_PS</VariableName>
-    </FxCompile>
-    <FxCompile Include="Shaders\MaterialLodfadePS.hlsl">
-      <ShaderType>Pixel</ShaderType>
-      <VariableName>MATERIAL_LODFADE_PS</VariableName>
     </FxCompile>
     <FxCompile Include="Shaders\MaterialMetalPS.hlsl">
       <ShaderType>Pixel</ShaderType>

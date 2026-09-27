@@ -26,7 +26,7 @@ namespace NeuronClientTests
 namespace
 {
 
-using Microsoft::WRL::ComPtr;
+using winrt::com_ptr;
 
 constexpr UINT TEXTURE_SIZE_PIXELS = 4;
 constexpr std::size_t BYTES_PER_PIXEL = 4;
@@ -59,21 +59,21 @@ TEST_CLASS(WarpDevice)
 public:
   TEST_METHOD(ClearsATextureAndReadsItBack)
   {
-    ComPtr<IDXGIFactory4> factory;
+    com_ptr<IDXGIFactory4> factory;
     Check(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)), L"CreateDXGIFactory2");
-    ComPtr<IDXGIAdapter> warp;
+    com_ptr<IDXGIAdapter> warp;
     Check(factory->EnumWarpAdapter(IID_PPV_ARGS(&warp)), L"EnumWarpAdapter");
-    ComPtr<ID3D12Device> device;
-    Check(D3D12CreateDevice(warp.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)), L"D3D12CreateDevice on WARP");
+    com_ptr<ID3D12Device> device;
+    Check(D3D12CreateDevice(warp.get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)), L"D3D12CreateDevice on WARP");
 
     D3D12_COMMAND_QUEUE_DESC queueDesc{};
     queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-    ComPtr<ID3D12CommandQueue> queue;
+    com_ptr<ID3D12CommandQueue> queue;
     Check(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&queue)), L"CreateCommandQueue");
-    ComPtr<ID3D12CommandAllocator> allocator;
+    com_ptr<ID3D12CommandAllocator> allocator;
     Check(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator)), L"CreateCommandAllocator");
-    ComPtr<ID3D12GraphicsCommandList> commands;
-    Check(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.Get(), nullptr, IID_PPV_ARGS(&commands)),
+    com_ptr<ID3D12GraphicsCommandList> commands;
+    Check(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.get(), nullptr, IID_PPV_ARGS(&commands)),
           L"CreateCommandList");
 
     // The texture, as a render target.
@@ -88,7 +88,7 @@ public:
     textureDesc.SampleDesc.Count = 1;
     textureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
     textureDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-    ComPtr<ID3D12Resource> texture;
+    com_ptr<ID3D12Resource> texture;
     Check(device->CreateCommittedResource(&defaultHeap, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr,
                                           IID_PPV_ARGS(&texture)),
           L"CreateCommittedResource for the texture");
@@ -96,10 +96,10 @@ public:
     D3D12_DESCRIPTOR_HEAP_DESC targetHeapDesc{};
     targetHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
     targetHeapDesc.NumDescriptors = 1;
-    ComPtr<ID3D12DescriptorHeap> targetHeap;
+    com_ptr<ID3D12DescriptorHeap> targetHeap;
     Check(device->CreateDescriptorHeap(&targetHeapDesc, IID_PPV_ARGS(&targetHeap)), L"CreateDescriptorHeap");
     const D3D12_CPU_DESCRIPTOR_HANDLE target = targetHeap->GetCPUDescriptorHandleForHeapStart();
-    device->CreateRenderTargetView(texture.Get(), nullptr, target);
+    device->CreateRenderTargetView(texture.get(), nullptr, target);
 
     // Where the copy lands: a buffer the CPU can read, its rows padded to the pitch alignment.
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
@@ -115,32 +115,32 @@ public:
     bufferDesc.Format = DXGI_FORMAT_UNKNOWN;
     bufferDesc.SampleDesc.Count = 1;
     bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    ComPtr<ID3D12Resource> readback;
+    com_ptr<ID3D12Resource> readback;
     Check(device->CreateCommittedResource(&readbackHeap, D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
                                           IID_PPV_ARGS(&readback)),
           L"CreateCommittedResource for the readback buffer");
 
     commands->ClearRenderTargetView(target, CLEAR_COLOR.data(), 0, nullptr);
     const D3D12_RESOURCE_BARRIER toCopySource =
-      Transition(texture.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+      Transition(texture.get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
     commands->ResourceBarrier(1, &toCopySource);
     D3D12_TEXTURE_COPY_LOCATION source{};
-    source.pResource = texture.Get();
+    source.pResource = texture.get();
     source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
     source.SubresourceIndex = 0;
     D3D12_TEXTURE_COPY_LOCATION destination{};
-    destination.pResource = readback.Get();
+    destination.pResource = readback.get();
     destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
     destination.PlacedFootprint = footprint;
     commands->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
     Check(commands->Close(), L"Close");
-    const std::array<ID3D12CommandList*, 1> lists = {commands.Get()};
+    const std::array<ID3D12CommandList*, 1> lists = {commands.get()};
     queue->ExecuteCommandLists(static_cast<UINT>(lists.size()), lists.data());
 
     // With no event to signal, SetEventOnCompletion returns once the fence reaches the value.
-    ComPtr<ID3D12Fence> fence;
+    com_ptr<ID3D12Fence> fence;
     Check(device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)), L"CreateFence");
-    Check(queue->Signal(fence.Get(), 1), L"Signal");
+    Check(queue->Signal(fence.get(), 1), L"Signal");
     Check(fence->SetEventOnCompletion(1, nullptr), L"SetEventOnCompletion");
 
     // Copied out and unmapped before anything is asserted, so a failure cannot leave it mapped.

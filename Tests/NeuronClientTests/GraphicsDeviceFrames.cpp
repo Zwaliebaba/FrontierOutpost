@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <string>
 #include <vector>
 
@@ -26,7 +27,7 @@ namespace NeuronClientTests
 namespace
 {
 
-using Microsoft::WRL::ComPtr;
+using winrt::com_ptr;
 
 } // namespace
 
@@ -43,18 +44,50 @@ public:
     ExpectClean(test);
   }
 
+  TEST_METHOD(ReportsWhatTheDeviceSupports)
+  {
+    TestDevice test;
+    Open(test);
+    const Neuron::GraphicsCapabilities capabilities = test.device.Capabilities();
+    // WARP's answers, which Design/ShaderPipeline-plan.md's P0.1 asks for, go to the test's output;
+    // nothing but their consistency is required.
+    Logger::WriteMessage(std::format("WARP: shader model {}.{}, resource binding tier {}, directly indexed heaps {}, pipeline "
+                                     "libraries {}, disk cache of shaders {}",
+                                     capabilities.shaderModelMajor, capabilities.shaderModelMinor, capabilities.resourceBindingTier,
+                                     capabilities.directlyIndexedHeaps, capabilities.pipelineLibrary, capabilities.automaticDiskCache)
+                           .c_str());
+    const std::uint32_t shaderModel = (capabilities.shaderModelMajor * 10) + capabilities.shaderModelMinor;
+    Assert::IsTrue(shaderModel >= 51, L"below Shader Model 5.1, which every Direct3D 12 device runs");
+    Assert::IsTrue(capabilities.resourceBindingTier >= 1 && capabilities.resourceBindingTier <= 3, L"no resource binding tier");
+    Assert::IsTrue(!capabilities.directlyIndexedHeaps || shaderModel >= 66, L"directly indexed heaps below Shader Model 6.6");
+
+    // Devices are singletons per adapter, so a second one on WARP probes the test device's again,
+    // after Open took its messages: whatever the answers, the probe leaves none.
+    {
+      std::string error;
+      Neuron::GraphicsDevice again;
+      const Neuron::GraphicsDevice::Desc desc{.warp = true,
+                                              .debugLayer = true,
+                                              .gpuValidation = false,
+                                              .onFailure = [&test](const std::string& _message) { test.failures.push_back(_message); }};
+      Assert::IsTrue(Neuron::GraphicsDevice::Create(desc, again, error), Widen(error).c_str());
+      Assert::IsTrue(again.Capabilities() == capabilities, L"the same device answered otherwise");
+    }
+    ExpectClean(test);
+  }
+
   TEST_METHOD(ReportsWhatTheDebugLayerSees)
   {
     TestDevice test;
     Open(test);
     // The same device as the test device's, since devices are singletons per adapter, asked for a
     // texture with no width.
-    ComPtr<IDXGIFactory4> factory;
+    com_ptr<IDXGIFactory4> factory;
     Check(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory)), L"CreateDXGIFactory2");
-    ComPtr<IDXGIAdapter> warp;
+    com_ptr<IDXGIAdapter> warp;
     Check(factory->EnumWarpAdapter(IID_PPV_ARGS(&warp)), L"EnumWarpAdapter");
-    ComPtr<ID3D12Device> device;
-    Check(D3D12CreateDevice(warp.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)), L"D3D12CreateDevice on WARP");
+    com_ptr<ID3D12Device> device;
+    Check(D3D12CreateDevice(warp.get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)), L"D3D12CreateDevice on WARP");
     const D3D12_HEAP_PROPERTIES heap{D3D12_HEAP_TYPE_DEFAULT, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 0, 0};
     D3D12_RESOURCE_DESC desc{};
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -64,7 +97,7 @@ public:
     desc.MipLevels = 1;
     desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     desc.SampleDesc.Count = 1;
-    ComPtr<ID3D12Resource> texture;
+    com_ptr<ID3D12Resource> texture;
     Assert::IsTrue(FAILED(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr,
                                                           IID_PPV_ARGS(&texture))),
                    L"a texture with no width was made");
