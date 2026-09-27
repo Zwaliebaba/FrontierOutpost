@@ -479,6 +479,23 @@ P0.1 to P0.6 went together, as the Status says.
     build, and 35 ms in the next, a Debug run of the same bytecode. The device reports no automatic
     disk cache, so the driver's own cache is the likely reason; §3.2's question, whether first-run
     compiles still matter, needs more apps and a cold cache on purpose.
+  - **Second reading** (2026-09-27, the RTX 3070 Ti, one run of `war` played past frame 944, with
+    the debug layer): the same 44 states in frame 1, 39 ms in all, then 6 made in play, each a
+    hitch of 4.5 to 18.9 ms and 64 ms together. They are the effects the first 120 frames never
+    drew:
+
+    | State | Program | Frame | ms |
+    |---|---|---|---|
+    | 45 | `billboard_axis.jsl?pulse_tail.jsl` | 81 | 18.851 |
+    | 46 | `billboard.jsl?pulse_head.jsl` | 81 | 10.124 |
+    | 47 | `billboard_axis.jsl?thruster_trail.jsl` | 173 | 8.692 |
+    | 48 | `billboard_soft.jsl?explosion.jsl` | 333 | 10.873 |
+    | 49 | `particle.jsl?particle_radial.jsl` | 440 | 11.252 |
+    | 50 | `widget.jsl?ui/panel.jsl` | 944 | 4.496 |
+
+    This is G1's size in `war`, and what P2 removes. Most frame-1 states took 0.4 to 1.5 ms, and
+    the late ones 3 to 30 times that, so frame 1's total is a poor guide to the cost in play. One
+    run only; whether the late states are also cheaper on a second run is not yet measured.
 - **P0.3: draw-path timing.** It measures the CPU time from a draw call to its record, summed per
   frame. It sits behind a define, as `TIME_GLYPHS` does (M1), and gives G2's size and point 2 of §2
   its number.
