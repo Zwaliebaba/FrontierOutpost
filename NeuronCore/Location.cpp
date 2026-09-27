@@ -68,13 +68,13 @@ namespace {
       size_t size = (size_t)stream.tellg();
       stream.seekg(0);
 
-      char* buf = new char[size];
-      if (!stream.read(buf, size)) {
-        free(buf);
+      uchar* buf = new uchar[size];
+      if (!stream.read((char*)buf, size)) {
+        delete[] buf;
         Log_Warning("Failed to read file <" + path + ">");
         return nullptr;
       }
-      return (new Array<uchar>)->set((uchar*)buf, size);
+      return (new Array<uchar>)->set(buf, size);
     }
 
     String ToString() const {
