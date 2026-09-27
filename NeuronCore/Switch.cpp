@@ -136,6 +136,14 @@ namespace LTE {
           continue;
         }
 
+        /* Evaluate writes a case's predicate into a bool, so it must be one, as the
+           predicates of 'if' and 'while' are. */
+        predicate = Expression_Conversion(predicate, Type_Get<bool>());
+        if (!predicate) {
+          Log_Message("switch -- case predicate could not be converted to bool");
+          continue;
+        }
+
         Expression statement = Expression_Block(sub, env, 1);
         if (!statement) {
           Log_Message("switch -- case statement did not compile: " + sub->GetString());
