@@ -14,11 +14,12 @@
 namespace NeuronClientTests
 {
 
-/// A device on WARP with the debug layer, and the failures it reported.
+/// A device on WARP with the debug layer, and the failures it reported and the notes it made.
 struct TestDevice
 {
   std::vector<std::string> failures;
-  Neuron::GraphicsDevice device; // after failures, which its onFailure writes to
+  std::vector<std::string> notes;
+  Neuron::GraphicsDevice device; // after failures and notes, which its onFailure and onNote write to
 };
 
 inline void Open(TestDevice& _test, std::uint32_t _uploadPageBytes = Neuron::GraphicsDevice::DEFAULT_UPLOAD_PAGE_BYTES,
@@ -29,6 +30,7 @@ inline void Open(TestDevice& _test, std::uint32_t _uploadPageBytes = Neuron::Gra
                                           .debugLayer = true,
                                           .gpuValidation = false,
                                           .onFailure = [&_test](const std::string& _message) { _test.failures.push_back(_message); },
+                                          .onNote = [&_test](const std::string& _note) { _test.notes.push_back(_note); },
                                           .uploadPageBytes = _uploadPageBytes,
                                           .shaderDescriptors = _shaderDescriptors};
   Microsoft::VisualStudio::CppUnitTestFramework::Assert::IsTrue(Neuron::GraphicsDevice::Create(desc, _test.device, error),

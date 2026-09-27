@@ -19,6 +19,23 @@ namespace Neuron
 class DrawContext;
 struct GraphicsCore;
 
+/// What the device supports of what Design/ShaderPipeline-plan.md's later phases need: Shader Model
+/// 6.6 and descriptor heaps that shaders index directly (P5, P6), and the shader caches (§3.2). The
+/// device asks once, when it is made, and nothing today depends on the answers. Not named
+/// DeviceCapabilities: wingdi.h defines that as a macro, so a file that includes windows.h first
+/// would name another type than one that does not, and the two would not link.
+struct GraphicsCapabilities
+{
+  std::uint32_t shaderModelMajor;    // the highest shader model the device runs: 6 for 6.6
+  std::uint32_t shaderModelMinor;    // and 6
+  std::uint32_t resourceBindingTier; // 1 to 3
+  bool directlyIndexedHeaps;         // a root signature that lets shaders index both heaps directly was made
+  bool pipelineLibrary;              // ID3D12PipelineLibrary is there
+  bool automaticDiskCache;           // Windows keeps compiled shaders on disk from one run to the next
+
+  bool operator==(const GraphicsCapabilities&) const = default;
+};
+
 /// Direct3D 12 at feature level 11_0, on the default adapter or on WARP, with one direct queue and
 /// two frames in flight (Design/ADR/ADR-007). The CPU records a frame while the GPU runs the one
 /// before it, and waits only when it would get further ahead than that. Anything the GPU may still
@@ -43,6 +60,9 @@ public:
     /// A call failed, or the device was removed. liblt ends the program here (ADR-007): nothing
     /// that depends on the device is recovered.
     std::function<void(const std::string&)> onFailure;
+    /// What the core notes that is no failure: for now, each pipeline state it makes, what for, how
+    /// long it took and in which frame (Design/ShaderPipeline-plan.md P0.2). It may be left empty.
+    std::function<void(const std::string&)> onNote = {};
     /// The size of each page of the upload ring, which constants, geometry and texture updates
     /// share. An upload larger than a page gets a staging buffer of its own.
     std::uint32_t uploadPageBytes = DEFAULT_UPLOAD_PAGE_BYTES;
@@ -72,6 +92,9 @@ public:
   [[nodiscard]] std::string AdapterName() const;
 
   [[nodiscard]] bool IsDebugLayerOn() const noexcept;
+
+  /// What the device said it supports when it was made; all zero for a device never made.
+  [[nodiscard]] GraphicsCapabilities Capabilities() const noexcept;
 
   /// A texture, or an empty one when it cannot be made, which onFailure is told about.
   [[nodiscard]] Texture CreateTexture(const Texture::Desc& _desc);
@@ -118,7 +141,7 @@ public:
   [[nodiscard]] std::size_t PendingReleases() const noexcept;
 
   /// Pipeline states the context holds: one for each program and state a draw has used, made at
-  /// the first such draw.
+  /// the first such draw. Desc::onNote hears of each as it is made.
   [[nodiscard]] std::size_t PipelineStates() const noexcept;
 
   /// The messages the debug layer stored since the last call, oldest first: corruption, errors

@@ -22,6 +22,58 @@
 #include <cstdint>
 #include <span>
 
+/* Times the CPU's side of each draw, from the draw call to its record in the
+ * command list, and logs each frame's sum at the first draw of the next
+ * (Design/ShaderPipeline-plan.md, P0.3). It leaves out what callers do before
+ * they draw, such as ShaderInstance::Begin and DrawState_Link. Defined only in
+ * a build that measures, as TIME_GLYPHS is in Font.cpp. */
+// #define TIME_DRAW_PATH
+
+#ifdef TIME_DRAW_PATH
+#include <chrono>
+#include <format>
+
+namespace {
+  /* The draws of the frame being timed, and their CPU time. */
+  struct DrawPathTime {
+    uint64 frame;
+    uint draws;
+    double ms;
+
+    DrawPathTime() :
+      frame(0),
+      draws(0),
+      ms(0.0)
+      {}
+  } drawPathTime;
+
+  /* Times one draw, from when it is made to when it goes. */
+  struct DrawPathTimer {
+    std::chrono::steady_clock::time_point start;
+
+    DrawPathTimer() :
+      start(std::chrono::steady_clock::now())
+      {}
+
+    ~DrawPathTimer() {
+      double const ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - start).count();
+      uint64 const frame = Renderer_Device().FramesBegun();
+      if (frame != drawPathTime.frame) {
+        if (drawPathTime.draws)
+          Log_Message(String(std::format(
+            "Renderer: frame {} spent {:.3f} ms of CPU in {} draws, from each draw call to its record",
+            drawPathTime.frame, drawPathTime.ms, drawPathTime.draws).c_str()));
+        drawPathTime = DrawPathTime();
+        drawPathTime.frame = frame;
+      }
+      drawPathTime.draws++;
+      drawPathTime.ms += ms;
+    }
+  };
+}
+#endif
+
 /* liblt's renderer on NeuronClient's DrawContext (Design/Archive/NeuronClient-
  * migration.md, sections 5.4 and 5.5). It keeps the state GL kept, as GL kept
  * it: pushed and popped on stacks, and taken by each draw and clear as it is
@@ -387,6 +439,9 @@ namespace {
   {
     if (!vertexCount || !indexCount)
       return;
+#ifdef TIME_DRAW_PATH
+    DrawPathTimer timer;
+#endif
     Neuron::DrawContext& context = Renderer_Context();
     if (!PrepareDraw(context))
       return;
@@ -519,6 +574,9 @@ namespace LTE {
   void Renderer_DrawMesh(MeshT const* mesh) {
     if (!mesh->vertices.size() || !mesh->indices.size())
       return;
+#ifdef TIME_DRAW_PATH
+    DrawPathTimer timer;
+#endif
     MeshBuffers& buffers = PrepareMeshForDraw(mesh);
     Neuron::DrawContext& context = Renderer_Context();
     if (!PrepareDraw(context))
@@ -538,6 +596,9 @@ namespace LTE {
     V2 const& t2,
     float depth)
   {
+#ifdef TIME_DRAW_PATH
+    DrawPathTimer timer;
+#endif
     struct VertexPT {
       V3 p;
       V2 t;
@@ -611,6 +672,9 @@ namespace LTE {
   {
     if (!indices)
       return;
+#ifdef TIME_DRAW_PATH
+    DrawPathTimer timer;
+#endif
 
     /* Each field of the vertex is an attribute, in the order of its fields,
        as GL's attribute arrays were. */

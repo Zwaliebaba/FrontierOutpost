@@ -131,8 +131,8 @@ NeuronClient and Direct3D 12 by the migration recorded in `Design/Archive/`. The
 made it one executable over four libraries (ADR-014). `FrontierOutpost.exe` holds `main` and the
 game's client side. NeuronCore is the engine both sides share, LTSL included. NeuronClient is
 rendering, the window, input, glyphs, images, sound and the UI toolkit. GameLogic is the game's
-rules and state: it sees NeuronCore alone, and asks the executable for everything it shows
-(ADR-016). NeuronServer is a placeholder. The imported files keep their exemption, now marked file
+rules and state: it sees NeuronCore and NeuronServer, and asks the executable for everything it
+shows (ADR-016). NeuronServer is a placeholder. The imported files keep their exemption, now marked file
 by file (ADR-015). `FrontierOutpost.exe` runs one LTSL app, named on its command line, in a
 1920×1080 window (`FrontierOutpost/Main.cpp:70-74`). `GameData/` holds 121 scripts (9,274 lines),
 four font families, 43 WAV sounds, eight texture files and one data file, the naming grammar.
@@ -702,15 +702,15 @@ is the fallback.
 
 ```
 FrontierOutpost.exe  client role | server role (--server): main, the game's client side
-    |-- GameLogic.lib      world, objects, rules, replication, saves           sees NeuronCore
+    |-- GameLogic.lib      world, objects, rules, replication, saves           sees NeuronCore, NeuronServer
     |-- NeuronClient.lib   graphics, glyphs, images, sound, window, input, UI  sees NeuronCore
     |-- NeuronServer.lib   the server's engine side, a placeholder today       sees NeuronCore
     |-- NeuronNet.lib      new (P10): sockets, packets, channels, connections  sees none
     '-- NeuronCore.lib     the shared engine: containers, math, types, LTSL    sees none
 ```
 
-The executable sees every library; GameLogic, NeuronClient and NeuronServer see NeuronCore alone,
-and NeuronCore sees none of them (ADR-014). Imported and new files share these projects, and the
+The executable sees every library; GameLogic sees NeuronCore and NeuronServer, NeuronClient and
+NeuronServer see NeuronCore alone, and NeuronCore sees none of them (ADR-014). Imported and new files share these projects, and the
 imported ones are marked file by file (ADR-015).
 
 **NeuronNet**, with its tests, is the only new project. It is game-agnostic: namespace `Neuron`,
@@ -722,7 +722,8 @@ into `FrontierOutpost.exe` as the other libraries do, so it builds for x64 and A
 `/arch` (ADR-006, ADR-014). `Build/CheckProjectFiles.py`'s list of ARM64 projects grows by NeuronNet
 and its tests. AGENTS.md governs it in full, and NeuronNetTests carries the placeholder `SuiteSmoke`
 until its first real test (AGENTS.md §3). Which libraries may see NeuronNet is open: replication
-lives in GameLogic, which sees NeuronCore alone, so an edge from GameLogic would amend ADR-014. The
+lives in GameLogic, which sees NeuronCore and NeuronServer, so an edge from GameLogic to NeuronNet
+would amend ADR-014. The
 NeuronNet ADR settles it (§15).
 
 **Everything else lives where ADR-014 puts it**: the rules and state of play in GameLogic, what a

@@ -21,7 +21,7 @@ namespace Neuron
 namespace
 {
 
-using Microsoft::WRL::ComPtr;
+using winrt::com_ptr;
 
 /// liblt's GLSL names that HLSL will not take, and what the HLSL calls them instead.
 constexpr std::array<std::pair<std::string_view, std::string_view>, 4> RENAMED = {
@@ -65,7 +65,7 @@ bool Bind(std::map<std::string, int, std::less<>>& _registers, std::string_view 
 bool Program::Native::Reflect(std::span<const std::byte> _bytecode, ShaderStage _stage, std::string& _error)
 {
   const std::string_view stageName = StageName(_stage);
-  ComPtr<ID3D12ShaderReflection> reflection;
+  com_ptr<ID3D12ShaderReflection> reflection;
   HRESULT result = D3DReflect(_bytecode.data(), _bytecode.size(), IID_PPV_ARGS(&reflection));
   D3D12_SHADER_DESC shaderDesc{};
   if (SUCCEEDED(result))

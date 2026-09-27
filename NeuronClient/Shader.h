@@ -8,11 +8,6 @@
 struct ShaderT : public RefCounted {
   virtual ~ShaderT() {}
 
-  virtual bool Create(String const& vsCode, String const& fsCode) = 0;
-
-  virtual void BindInput(size_t attribIndex, char const* name) = 0;
-  virtual void BindOutput(size_t bufferIndex, char const* name) = 0;
-  
   virtual void BindMatrices(
     Matrix const& world,
     Matrix const& view,
@@ -22,9 +17,6 @@ struct ShaderT : public RefCounted {
 
   virtual int GetUniformLocation(char const* name) = 0;
   virtual int QueryUniformLocation(char const* name) = 0;
-
-  virtual void PrintLogs() const = 0;
-  virtual void Relink() = 0;
 
   virtual ShaderT& SetCubeMap(char const* var, CubeMap const& map) = 0;
   virtual ShaderT& SetCubeMap(int varIndex, CubeMap const& map) = 0;

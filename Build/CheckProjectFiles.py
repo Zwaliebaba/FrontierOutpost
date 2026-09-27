@@ -21,7 +21,8 @@ What no compiler checks, read from the files themselves:
                   in CompiledShaders/ whose array its name spells in UPPER_CASE (R3, ADR-008).
   Names           No type carries an affix (R2), and no identifier a British spelling (R11).
   clang-tidy      .clang-tidy's HeaderFilterRegex covers every project it should lint.
-  Dependencies    No NuGet package without an ADR (R14).
+  Dependencies    No NuGet package, and no version of one, without an ADR (R14). A project's
+                  packages.config names only what APPROVED_PACKAGES lists; no PackageReference.
 
 A file a project marks <Legacy>true</Legacy> is the ltheory-old import (ADR-015), and GameData/ is
 its data (ADR-004). They are registered and laid out like any other file, but R2, R7 and R11 leave
@@ -36,6 +37,7 @@ import argparse
 import pathlib
 import re
 import sys
+import xml.etree.ElementTree as ET
 
 from ProjectModel import (EXEMPT_PREFIXES, IsExempt, LegacyFiles, Project, SolutionFiles, SolutionPlatforms,
                           SolutionProjects, StripCode, TreeFiles)
@@ -62,6 +64,10 @@ DEFINE = {"Debug": "_DEBUG", "Release": "NDEBUG"}
 # §4: one header owns these, and no project file defines any of them.
 WINDOWS_MACROS = {"NOMINMAX", "WIN32_LEAN_AND_MEAN", "VC_EXTRALEAN", "STRICT", "NOGDI", "NOSERVICE", "NOMCX",
                   "NOHELP", "NOCOMM", "NOKERNEL", "NOUSER"}
+# R14: the NuGet packages, at the version, that an ADR approved. A new package or version is a new
+# decision, so it lands here with its ADR.
+APPROVED_PACKAGES = {("WinPixEventRuntime", "1.0.240308001"): "ADR-018",
+                     ("Microsoft.Windows.CppWinRT", "3.0.260818.1"): "ADR-019"}
 
 CPP = (".h", ".cpp")
 NOT_CPP = (".hpp", ".hh", ".hxx", ".cc", ".cxx", ".c++", ".inl", ".ipp", ".tpp", ".c")
@@ -213,10 +219,23 @@ def CheckProject(_root, _project, _files):
       Fault(f"{folder}/{path}", "a shader outside the project's Shaders/ folder (§2)")
     elif name.endswith(CPP + SHADERS) and path not in listed:
       Fault(f"{folder}/{path}", f"is not in {_project.path.name} (§2)")
-    if name in ("packages.config",):
-      Fault(f"{folder}/{path}", "a NuGet package is a dependency, and needs an ADR first (R14)")
+    if name == "packages.config":
+      CheckPackages(f"{folder}/{path}", _project.folder / path)
   if "PackageReference" in _project.path.read_text(encoding="utf-8-sig"):
     Fault(relative, "a PackageReference is a dependency, and needs an ADR first (R14)")
+
+
+def CheckPackages(_relative, _path):
+  """R14: every package a packages.config names is one an ADR approved, at that version."""
+  try:
+    packages = ET.parse(_path).getroot().iter("package")
+  except ET.ParseError as error:
+    Fault(_relative, f"cannot be read: {error}")
+    return
+  for package in packages:
+    key = (package.get("id"), package.get("version"))
+    if key not in APPROVED_PACKAGES:
+      Fault(_relative, f"{key[0]} {key[1]} is a dependency no ADR approves (R14)")
 
 
 def ShaderVariable(_stem):

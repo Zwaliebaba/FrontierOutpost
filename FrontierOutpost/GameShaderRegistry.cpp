@@ -13,7 +13,6 @@ typedef unsigned char BYTE;
 #include "CompiledShaders/CubemapBlurPS.h"
 #include "CompiledShaders/CubemapIrmapPS.h"
 #include "CompiledShaders/CubemapMultiplyPS.h"
-#include "CompiledShaders/DepthprepassPS.h"
 #include "CompiledShaders/DustfleckPS.h"
 #include "CompiledShaders/ExplosionPS.h"
 #include "CompiledShaders/FilterAoPS.h"
@@ -35,7 +34,6 @@ typedef unsigned char BYTE;
 #include "CompiledShaders/MaterialDebugPS.h"
 #include "CompiledShaders/MaterialFresnelPS.h"
 #include "CompiledShaders/MaterialLambertPS.h"
-#include "CompiledShaders/MaterialLodfadePS.h"
 #include "CompiledShaders/MaterialMetalPS.h"
 #include "CompiledShaders/MaterialWaterPS.h"
 #include "CompiledShaders/ParticleRadialPS.h"
@@ -116,7 +114,6 @@ namespace {
     {"cubemap/blur.jsl", Bytes(CUBEMAP_BLUR_PS)},
     {"cubemap/irmap.jsl", Bytes(CUBEMAP_IRMAP_PS)},
     {"cubemap/multiply.jsl", Bytes(CUBEMAP_MULTIPLY_PS)},
-    {"depthprepass.jsl", Bytes(DEPTHPREPASS_PS)},
     {"dustfleck.jsl", Bytes(DUSTFLECK_PS)},
     {"explosion.jsl", Bytes(EXPLOSION_PS)},
     {"filter_ao.jsl", Bytes(FILTER_AO_PS)},
@@ -138,7 +135,6 @@ namespace {
     {"material/debug.jsl", Bytes(MATERIAL_DEBUG_PS)},
     {"material/fresnel.jsl", Bytes(MATERIAL_FRESNEL_PS)},
     {"material/lambert.jsl", Bytes(MATERIAL_LAMBERT_PS)},
-    {"material/lodfade.jsl", Bytes(MATERIAL_LODFADE_PS)},
     {"material/metal.jsl", Bytes(MATERIAL_METAL_PS)},
     {"material/water.jsl", Bytes(MATERIAL_WATER_PS)},
     {"particle_radial.jsl", Bytes(PARTICLE_RADIAL_PS)},

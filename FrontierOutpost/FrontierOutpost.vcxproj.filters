@@ -277,9 +277,6 @@
     <FxCompile Include="Shaders\CubemapMultiplyPS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\DepthprepassPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
     <FxCompile Include="Shaders\DustfleckPS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
@@ -341,9 +338,6 @@
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\MaterialLambertPS.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\MaterialLodfadePS.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\MaterialMetalPS.hlsl">
@@ -519,5 +513,8 @@
     <ClCompile Include="GameShaderRegistry.cpp">
       <Filter>Shaders</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

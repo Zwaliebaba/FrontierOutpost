@@ -3,7 +3,7 @@
 - **Status:** Proposed 2026-09-26. M1 and M2 approved (owner, 2026-09-27), and M1 is done. D1,
   D2, D3, D4, D5, D7, D8 and D9 approved the same day (§3). The E and L items, D6 and D10 are not
   approved yet. The owner approves items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the
-  same commit where the item is a decision (§3). The next free ADR number is ADR-018 (ADR-016 went to the library split's visuals, ADR-017 to borderless fullscreen).
+  same commit where the item is a decision (§3). The next free ADR number is ADR-020 (ADR-016 went to the library split's visuals, ADR-017 to borderless fullscreen, ADR-018 to PIX's events, ADR-019 to C++/WinRT).
 - **Scope:** the HLSL in `NeuronClient/Shaders/` and `FrontierOutpost/Shaders/`, and the C++ that
   dispatches it:
   - the four compute shaders;
@@ -126,8 +126,14 @@ three runs.
 - M1's lines for `war`, `ltheory` and `hud` (the system with the boss hull);
 - the time to first frame, and the time until the scheduler is idle;
 - a PIX capture of one steady-state `war` frame, for per-pass GPU times, and whether the frame is
-  CPU-bound or GPU-bound. The owner takes it (2026-09-27); with the counters gone, it is the only
-  source for the second answer;
+  CPU-bound or GPU-bound; with the counters gone, it is the only source for the second answer. Each
+  render pass and each scheduler job run is a named region, on the GPU and on the CPU timeline,
+  from WinPixEventRuntime (ADR-018), so a timing capture of a load also shows the generation jobs.
+  It is taken unattended with `war --frames 900 --gpu-capture <path>`, and its timings exported
+  with `pixtool open-capture <path> save-event-list <csv> --counters=*Duration*`. The export needs
+  PIX's performance-logging permission: the account in Performance Log Users, or an elevated
+  shell. The first capture (2026-09-27) has the regions and 334 draws, and no timings for that
+  reason;
 - the WARP smoke run, `FrontierOutpost.exe war --warp --frames 30`, as a reference only: WARP time
   is not a goal (§7 question 2).
 

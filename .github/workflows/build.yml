@@ -10,6 +10,7 @@ name: Build
 #
 #   Build/CheckProjectFiles.py   the build-shape check           runs
 #   Build/CheckSounds.py         the sounds the game names       runs; only an unplayable WAV fails
+#   **/packages.config           the NuGet restore (ADR-018)     runs, before the build
 #   FrontierOutpost.slnx         the build                       runs
 #   *Tests.dll in the output     the test suites                 runs NeuronClientTests, on WARP
 #   Build/RunClangTidy.py        clang-tidy                      runs
@@ -93,6 +94,15 @@ jobs:
         if: hashFiles('Build/CheckSounds.py') != ''
         shell: pwsh
         run: python Build\CheckSounds.py
+
+      # The NuGet packages ADR-018 and ADR-019 approved, into packages/, before anything compiles
+      # against them.
+      - name: Restore NuGet packages
+        if: hashFiles('**/packages.config') != ''
+        shell: pwsh
+        run: |
+          & $env:MSBUILD_EXE FrontierOutpost.slnx -t:restore -p:RestorePackagesConfig=true /nologo /v:minimal
+          if ($LASTEXITCODE -ne 0) { throw "NuGet restore failed with exit code $LASTEXITCODE." }
 
       - name: Build
         if: hashFiles('FrontierOutpost.slnx') != ''

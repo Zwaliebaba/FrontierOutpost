@@ -127,6 +127,12 @@ def Units(_root, _configuration, _platform):
       if directory and "$(" not in directory and "%(" not in directory:
         path = pathlib.Path(directory)
         flags.append(f"/I{path if path.is_absolute() else project.folder / path}")
+    # C++/WinRT's package writes its headers into the project's intermediate folder as it builds,
+    # and puts that folder on the include path from its own build files, which the project file
+    # does not show (ADR-019). Without it, winrt/base.h would come from the SDK, another version.
+    generated = _root / _platform / _configuration / project.name / "Generated Files"
+    if generated.is_dir():
+      flags.append(f"/I{generated}")
     # cl searches the including file's own folder for a quoted include; clang-cl does the same.
     for source in project.Items().get("ClCompile", []):
       if source.split("/")[-1] == "pch.cpp":

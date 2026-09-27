@@ -59,21 +59,12 @@ namespace {
     Map<Type, Shader> shaderCache;
   } renderer;
 
-  void BindShaderInputs(ShaderT* shader) {
-    shader->BindInput(1, "vert_attrib1");
-    shader->BindInput(2, "vert_attrib2");
-    shader->BindInput(3, "vert_attrib3");
-    shader->BindInput(4, "vert_attrib4");
-    shader->Relink();
-  }
-
   void WidgetRenderer_Initialize() {
     if (!renderer.panelShader) {
       renderer.panelShader = Shader_Create("widget.jsl", "ui/panel.jsl");
       renderer.radialPanelShader = Shader_Create("widget.jsl", "ui/radialpanel.jsl");
       renderer.textureShader = Shader_Create("widgetTexture.jsl", "ui/texture.jsl");
       renderer.textureShaderAdditive = Shader_Create("widgetTexture.jsl", "ui/textureadditive.jsl");
-      BindShaderInputs(renderer.panelShader);
     }
   }
 
@@ -112,7 +103,6 @@ namespace {
     Shader& shader = renderer.shaderCache[glyphType];
     if (!shader) {
       shader = Shader_Create("widget.jsl", glyphs[0].glyph->GetShaderName());
-      BindShaderInputs(shader);
     }
 
     PopulateIndices(glyphs.size());

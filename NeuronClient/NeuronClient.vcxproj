@@ -5,6 +5,7 @@
     and input (Design/ADR/ADR-005). A static library that lt.dll links; launch.exe never sees it.
     AGENTS.md governs it in full, and ADR-006 adds ARM64 with lt's instruction sets.
   -->
+  <Import Project="..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.props" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.props')" />
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
@@ -49,6 +50,9 @@
   <PropertyGroup>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <!-- WinPixEventRuntime, from packages.config (Design/ADR/ADR-018). Its settings are stated here
+         rather than taken from the package's .targets, so that the checkers can read them. -->
+    <WinPixEventRuntimeDir>$(SolutionDir)packages\WinPixEventRuntime.1.0.240308001\</WinPixEventRuntimeDir>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -61,7 +65,7 @@
            link that is not incremental ignores, with warning LNK4075. -->
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <PrecompiledHeader>Use</PrecompiledHeader>
-      <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;$(SolutionDir)packages\WinPixEventRuntime.1.0.240308001\Include\WinPixEventRuntime;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <!-- Sources are UTF-8 (.editorconfig), and so is text at NeuronClient's API (ADR-005). -->
@@ -72,11 +76,17 @@
     <FxCompile>
       <ShaderModel>5.1</ShaderModel>
       <HeaderFileOutput>$(ProjectDir)CompiledShaders\%(Filename).h</HeaderFileOutput>
-      <ObjectFileOutput></ObjectFileOutput>
+      <ObjectFileOutput>
+      </ObjectFileOutput>
       <DisableOptimizations>false</DisableOptimizations>
       <EnableDebuggingInformation>false</EnableDebuggingInformation>
       <TreatWarningAsError>true</TreatWarningAsError>
     </FxCompile>
+    <!-- PIX's import library goes into NeuronClient.lib, so that what links NeuronClient links it
+         too (Design/ADR/ADR-018). -->
+    <Lib>
+      <AdditionalDependencies>$(WinPixEventRuntimeDir)bin\$(Platform)\WinPixEventRuntime.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Lib>
   </ItemDefinitionGroup>
   <!-- lt's instruction sets, the same in Debug and Release (ADR-006, R16). -->
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
@@ -116,6 +126,7 @@
     <ClInclude Include="GraphicsDevice.h" />
     <ClInclude Include="ImageFile.h" />
     <ClInclude Include="FontFace.h" />
+    <ClInclude Include="GpuCapture.h" />
     <ClInclude Include="Key.h" />
     <ClInclude Include="Program.h" />
     <ClInclude Include="SoundBuffer.h" />
@@ -130,6 +141,7 @@
     <ClCompile Include="Buffer.cpp" />
     <ClCompile Include="DeviceRemoval.cpp" />
     <ClCompile Include="DrawContext.cpp" />
+    <ClCompile Include="GpuCapture.cpp" />
     <ClCompile Include="GraphicsCore.cpp" />
     <ClCompile Include="GraphicsDevice.cpp" />
     <ClCompile Include="ImageFile.cpp" />
@@ -527,6 +539,7 @@
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="packages.config" />
     <None Include="Shaders\Bezier.hlsli" />
     <None Include="Shaders\Color.hlsli" />
     <None Include="Shaders\Common.hlsli" />
@@ -569,4 +582,21 @@
   <Target Name="MakeCompiledShadersFolder" BeforeTargets="FxCompile">
     <MakeDir Directories="$(ProjectDir)CompiledShaders" />
   </Target>
+  <!-- WinPixEventRuntime must be restored before the build (Design/ADR/ADR-018). -->
+  <Target Name="RequireWinPixEventRuntime" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(WinPixEventRuntimeDir)bin\$(Platform)\WinPixEventRuntime.lib')" Text="WinPixEventRuntime is not restored. Run: msbuild FrontierOutpost.slnx -t:restore -p:RestorePackagesConfig=true" />
+  </Target>
+  <!-- Its DLL goes to the output folder that the executable and the test suites share, since both
+       load it at startup (Design/ADR/ADR-018). -->
+  <Target Name="CopyWinPixEventRuntime" AfterTargets="Build">
+    <Copy SourceFiles="$(WinPixEventRuntimeDir)bin\$(Platform)\WinPixEventRuntime.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.props'))" />
+    <Error Condition="!Exists('..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.targets'))" />
+  </Target>
+  <Import Project="..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.targets" Condition="Exists('..\packages\Microsoft.Windows.CppWinRT.3.0.260818.1\build\native\Microsoft.Windows.CppWinRT.targets')" />
 </Project>

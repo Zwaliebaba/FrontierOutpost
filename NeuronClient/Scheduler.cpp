@@ -12,6 +12,9 @@
 #include "StackFrame.h"
 #include "Vector.h"
 
+#include "DrawContext.h"
+#include "RendererCore.h"
+
 const float kMaxRunTime = 1.0f / 60.0f;
 
 const bool kEnableFlushing = true;
@@ -149,8 +152,11 @@ namespace {
           if (job->totalUnits == 0)
             job->OnBegin();
 
+          /* Each run is a region in PIX, named for its job (Design/ADR/ADR-018). */
           Timer timer;
+          Renderer_Context().BeginEvent(job->GetName());
           job->OnRun(jobSize);
+          Renderer_Context().EndEvent();
           Renderer_Finish();
 
           float elapsed = timer.GetElapsed();

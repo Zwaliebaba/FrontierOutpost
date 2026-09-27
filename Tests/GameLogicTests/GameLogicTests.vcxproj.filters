@@ -7,4 +7,7 @@
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="ClientlessGame.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
 </Project>

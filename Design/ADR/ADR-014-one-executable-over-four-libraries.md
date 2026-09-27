@@ -1,6 +1,9 @@
 # ADR-014: One executable over four libraries
 
 - **Status:** Accepted (owner, 2026-09-26)
+- **Amended:** 2026-09-27. A player's run opens borderless fullscreen (ADR-017), and the launcher
+  takes `--gpu-capture <path>` beside decision 1's arguments (ADR-018). The same day, the owner let
+  GameLogic see NeuronServer (decision 2), because GameLogic will run on the server.
 - **Scope:** the solution's projects and the edges between them. It supersedes ADR-005's layer
   list (point 3: `launch.exe`, then `lt.dll`, then `NeuronClient.lib`). The rest of ADR-005 still
   stands for NeuronClient's own code.
@@ -26,8 +29,10 @@ with no `src/` or `include/`, and names made unique by renaming where flattening
 2. **Edges run one way:**
    - NeuronCore sees nothing of the others.
    - NeuronClient and NeuronServer see NeuronCore only.
-   - GameLogic sees NeuronCore alone. It saw NeuronClient too until the plan's P2 removed that edge
-     (ADR-016), and `Tests/GameLogicTests` proves it stays removed.
+   - GameLogic sees NeuronCore and NeuronServer. The game's rules will run on the server, and reach
+     the server's side of the engine directly (owner, 2026-09-27; the reference came in `cfb52de`).
+     GameLogic saw NeuronClient too until the plan's P2 removed that edge (ADR-016), and
+     `Tests/GameLogicTests` proves it stays removed.
    - The exe sees all four.
 3. **The exe links every library with `/WHOLEARCHIVE`.** LTSL functions, types and conversions
    register themselves from static constructors (`FreeFunction`, `DefineConversion`, …). A plain
@@ -58,7 +63,11 @@ with no `src/` or `include/`, and names made unique by renaming where flattening
 
 - A DLL, and a second executable, for the game.
 - An edge from NeuronClient, NeuronServer or NeuronCore to GameLogic, or from any library to the
-  exe.
+  exe. Since GameLogic sees NeuronServer, an edge back would also be a cycle: the server's side of
+  the engine reaches the game only through what GameLogic calls, or through the exe.
+- NeuronServer code that acts merely because it is linked. Every run links it, the client's
+  included (decision 1), and GameLogic runs in both roles, so what GameLogic calls in NeuronServer
+  does nothing in a run that is not the server.
 - `src/`, `include/` or any other subfolder in a project, apart from `Shaders/` and
   `CompiledShaders/`.
 

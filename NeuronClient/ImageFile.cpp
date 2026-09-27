@@ -21,7 +21,7 @@ namespace Neuron
 namespace
 {
 
-using Microsoft::WRL::ComPtr;
+using winrt::com_ptr;
 
 constexpr std::size_t BYTES_PER_PIXEL = 4;
 
@@ -35,9 +35,9 @@ bool Succeeded(HRESULT _result, const char* _step, std::string& _error)
   return false;
 }
 
-ComPtr<IWICImagingFactory> CreateFactory(std::string& _error)
+com_ptr<IWICImagingFactory> CreateFactory(std::string& _error)
 {
-  ComPtr<IWICImagingFactory> factory;
+  com_ptr<IWICImagingFactory> factory;
   Succeeded(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)),
             "creating the imaging factory", _error);
   return factory;
@@ -64,25 +64,25 @@ bool ImageFile::Decode(std::span<const std::byte> _fileBytes, ImageFile& _outIma
     return false;
   }
   const ComScope com;
-  const ComPtr<IWICImagingFactory> factory = CreateFactory(_error);
+  const com_ptr<IWICImagingFactory> factory = CreateFactory(_error);
   if (!factory)
   {
     return false;
   }
 
   std::vector<BYTE> file = Copy(_fileBytes);
-  ComPtr<IWICStream> stream;
-  ComPtr<IWICBitmapDecoder> decoder;
-  ComPtr<IWICBitmapFrameDecode> frame;
-  ComPtr<IWICFormatConverter> rgba;
-  if (!Succeeded(factory->CreateStream(&stream), "creating a stream", _error) ||
+  com_ptr<IWICStream> stream;
+  com_ptr<IWICBitmapDecoder> decoder;
+  com_ptr<IWICBitmapFrameDecode> frame;
+  com_ptr<IWICFormatConverter> rgba;
+  if (!Succeeded(factory->CreateStream(stream.put()), "creating a stream", _error) ||
       !Succeeded(stream->InitializeFromMemory(file.data(), static_cast<DWORD>(file.size())), "reading the file", _error) ||
-      !Succeeded(factory->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder),
+      !Succeeded(factory->CreateDecoderFromStream(stream.get(), nullptr, WICDecodeMetadataCacheOnDemand, decoder.put()),
                  "recognizing the format", _error) ||
-      !Succeeded(decoder->GetFrame(0, &frame), "decoding the first frame", _error) ||
-      !Succeeded(factory->CreateFormatConverter(&rgba), "creating a converter", _error) ||
+      !Succeeded(decoder->GetFrame(0, frame.put()), "decoding the first frame", _error) ||
+      !Succeeded(factory->CreateFormatConverter(rgba.put()), "creating a converter", _error) ||
       !Succeeded(
-        rgba->Initialize(frame.Get(), GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom),
+        rgba->Initialize(frame.get(), GUID_WICPixelFormat32bppRGBA, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom),
         "converting to RGBA8", _error))
   {
     return false;
@@ -131,22 +131,22 @@ bool ImageFile::EncodePng(std::uint32_t _widthPixels, std::uint32_t _heightPixel
     return false;
   }
   const ComScope com;
-  const ComPtr<IWICImagingFactory> factory = CreateFactory(_error);
+  const com_ptr<IWICImagingFactory> factory = CreateFactory(_error);
   if (!factory)
   {
     return false;
   }
 
-  ComPtr<IStream> memory;
-  ComPtr<IWICBitmapEncoder> encoder;
-  ComPtr<IWICBitmapFrameEncode> frame;
-  ComPtr<IPropertyBag2> options;
+  com_ptr<IStream> memory;
+  com_ptr<IWICBitmapEncoder> encoder;
+  com_ptr<IWICBitmapFrameEncode> frame;
+  com_ptr<IPropertyBag2> options;
   WICPixelFormatGUID format = GUID_WICPixelFormat32bppRGBA;
-  if (!Succeeded(CreateStreamOnHGlobal(nullptr, TRUE, &memory), "creating a stream", _error) ||
-      !Succeeded(factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder), "creating the PNG encoder", _error) ||
-      !Succeeded(encoder->Initialize(memory.Get(), WICBitmapEncoderNoCache), "starting the file", _error) ||
-      !Succeeded(encoder->CreateNewFrame(&frame, &options), "creating the frame", _error) ||
-      !Succeeded(frame->Initialize(options.Get()), "starting the frame", _error) ||
+  if (!Succeeded(CreateStreamOnHGlobal(nullptr, TRUE, memory.put()), "creating a stream", _error) ||
+      !Succeeded(factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, encoder.put()), "creating the PNG encoder", _error) ||
+      !Succeeded(encoder->Initialize(memory.get(), WICBitmapEncoderNoCache), "starting the file", _error) ||
+      !Succeeded(encoder->CreateNewFrame(frame.put(), options.put()), "creating the frame", _error) ||
+      !Succeeded(frame->Initialize(options.get()), "starting the frame", _error) ||
       !Succeeded(frame->SetSize(_widthPixels, _heightPixels), "setting the size", _error) ||
       !Succeeded(frame->SetPixelFormat(&format), "setting the pixel format", _error))
   {
@@ -165,15 +165,16 @@ bool ImageFile::EncodePng(std::uint32_t _widthPixels, std::uint32_t _heightPixel
   else
   {
     // The encoder asked for another layout: convert to it.
-    ComPtr<IWICBitmap> bitmap;
-    ComPtr<IWICFormatConverter> converted;
+    com_ptr<IWICBitmap> bitmap;
+    com_ptr<IWICFormatConverter> converted;
     if (!Succeeded(factory->CreateBitmapFromMemory(_widthPixels, _heightPixels, GUID_WICPixelFormat32bppRGBA,
-                                                   static_cast<UINT>(strideBytes), static_cast<UINT>(sizeBytes), pixels.data(), &bitmap),
+                                                   static_cast<UINT>(strideBytes), static_cast<UINT>(sizeBytes), pixels.data(),
+                                                   bitmap.put()),
                    "wrapping the pixels", _error) ||
-        !Succeeded(factory->CreateFormatConverter(&converted), "creating a converter", _error) ||
-        !Succeeded(converted->Initialize(bitmap.Get(), format, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom),
+        !Succeeded(factory->CreateFormatConverter(converted.put()), "creating a converter", _error) ||
+        !Succeeded(converted->Initialize(bitmap.get(), format, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom),
                    "converting for the encoder", _error) ||
-        !Succeeded(frame->WriteSource(converted.Get(), nullptr), "writing the pixels", _error))
+        !Succeeded(frame->WriteSource(converted.get(), nullptr), "writing the pixels", _error))
     {
       return false;
     }

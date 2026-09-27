@@ -2,6 +2,11 @@
 
 - **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 2)
 - **Amended:** 2026-09-26 by ADR-014. Point 3's layers (`launch.exe`, `lt.dll`, `NeuronClient.lib`) are replaced by one executable over NeuronCore, NeuronClient, NeuronServer and GameLogic, and liblt's client code now lives in NeuronClient as legacy files (ADR-015).
+- **Amended:** 2026-09-27 by ADR-018. Point 6's "no NuGet package" now allows one,
+  WinPixEventRuntime, for PIX's events; any other still needs its own ADR, and "no `d3dx12.h`"
+  stands.
+- **Amended:** 2026-09-27 by ADR-019. Point 6 now allows a second NuGet package, C++/WinRT, in
+  every project, and holds COM objects in `winrt::com_ptr` in place of `Microsoft::WRL::ComPtr`.
 - **Scope:** `NeuronClient/` and `Tests/NeuronClientTests/`, two new projects at the repository
   root, and the boundary between them and `lt.dll`
 - **Detail:** `Design/Archive/NeuronClient-migration.md` §1, §3 (point 5), §4.1, §5.1, §5.2, §5.4,

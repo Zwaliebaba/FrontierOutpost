@@ -211,7 +211,7 @@ bool Texture::Native::TargetView(std::uint32_t _mip, std::uint32_t _layer, D3D12
     viewDesc.Texture3D.WSize = 1;
     break;
   }
-  core->device->CreateRenderTargetView(resource.Get(), &viewDesc, view);
+  core->device->CreateRenderTargetView(resource.get(), &viewDesc, view);
   targetViews.emplace(key, view);
   _outView = view;
   return true;
@@ -228,7 +228,7 @@ bool Texture::Native::DepthView(D3D12_CPU_DESCRIPTOR_HANDLE& _outView)
     D3D12_DEPTH_STENCIL_VIEW_DESC viewDesc{};
     viewDesc.Format = DXGI_FORMAT_D32_FLOAT;
     viewDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-    core->device->CreateDepthStencilView(resource.Get(), &viewDesc, depthView);
+    core->device->CreateDepthStencilView(resource.get(), &viewDesc, depthView);
   }
   _outView = depthView;
   return true;
@@ -260,7 +260,7 @@ bool Texture::Native::ShaderView(D3D12_CPU_DESCRIPTOR_HANDLE& _outView)
       viewDesc.Texture3D.MipLevels = desc.mipLevels;
       break;
     }
-    core->device->CreateShaderResourceView(resource.Get(), &viewDesc, shaderView);
+    core->device->CreateShaderResourceView(resource.get(), &viewDesc, shaderView);
   }
   _outView = shaderView;
   return true;
@@ -297,7 +297,7 @@ bool Texture::Native::UnorderedView(std::uint32_t _mip, D3D12_CPU_DESCRIPTOR_HAN
     viewDesc.Texture3D.WSize = MipSize(desc.depthPixels, _mip);
     break;
   }
-  core->device->CreateUnorderedAccessView(resource.Get(), nullptr, &viewDesc, view);
+  core->device->CreateUnorderedAccessView(resource.get(), nullptr, &viewDesc, view);
   unorderedViews.emplace(_mip, view);
   _outView = view;
   return true;

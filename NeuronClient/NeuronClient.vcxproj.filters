@@ -47,6 +47,7 @@
     <ClInclude Include="DrawContext.h" />
     <ClInclude Include="Float3.h" />
     <ClInclude Include="FontFace.h" />
+    <ClInclude Include="GpuCapture.h" />
     <ClInclude Include="GraphicsCore.h" />
     <ClInclude Include="GraphicsDevice.h" />
     <ClInclude Include="ImageFile.h" />
@@ -64,6 +65,7 @@
     <ClCompile Include="Buffer.cpp" />
     <ClCompile Include="DeviceRemoval.cpp" />
     <ClCompile Include="DrawContext.cpp" />
+    <ClCompile Include="GpuCapture.cpp" />
     <ClCompile Include="FontFace.cpp" />
     <ClCompile Include="GraphicsCore.cpp" />
     <ClCompile Include="GraphicsDevice.cpp" />
@@ -463,5 +465,8 @@
     <ClCompile Include="ScriptApiPlateMesh.cpp">
       <Filter>LTE\ScriptAPI</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>
