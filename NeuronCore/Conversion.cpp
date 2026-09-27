@@ -127,6 +127,14 @@ namespace LTE {
     return nullptr;
   }
 
+  /* Whether Expression_Conversion from a value of type src to dst would succeed. */
+  bool Expression_CanConvert(Type const& src, Type const& dst) {
+    return src == dst
+        || src == Type_Get<Data>()
+        || dst == Type_Get<Data>()
+        || FindConversion(src, dst);
+  }
+
   Expression Expression_ConversionFromData(
     Expression const& statement,
     Type const& dstType)

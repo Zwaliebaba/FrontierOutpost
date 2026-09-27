@@ -60,6 +60,8 @@ namespace LTE {
 
   LT_API Expression Expression_ConversionToData(Expression const& statement);
 
+  LT_API bool Expression_CanConvert(Type const& src, Type const& dst);
+
   LT_API Expression Expression_Constant(Data const& value);
 
   LT_API Expression Expression_Constant(

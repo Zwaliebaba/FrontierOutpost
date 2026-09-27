@@ -129,7 +129,7 @@ namespace {
       for (size_t j = 0; j < expressions.size(); ++j) {
         if (types[j] != fn->params[j].type) {
           order++;
-          if (!Expression_Conversion(expressions[j], fn->params[j].type))
+          if (!Expression_CanConvert(types[j], fn->params[j].type))
             match = false;
         }
       }
