@@ -1,7 +1,7 @@
 # Shader performance: generation passes, compute shaders and the frame
 
-- **Status:** Proposed 2026-09-26. Nothing is approved and nothing is implemented. The owner
-  approves items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the
+- **Status:** Proposed 2026-09-26. M1 and M2 approved (owner, 2026-09-27); nothing else is
+  approved. The owner approves items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the
   same commit where the item is a decision (§3). The next free ADR number is ADR-018 (ADR-016 went to the library split's visuals, ADR-017 to borderless fullscreen).
 - **Scope:** the HLSL in `NeuronClient/Shaders/` and `FrontierOutpost/Shaders/`, and the C++ that
   dispatches it:
@@ -59,6 +59,11 @@ instructions.
 per-frame items are worth doing, but they will not fix a low frame rate if the frame is
 CPU-bound; M2 answers that.
 
+**The frame's figures are for 1080p.** Since ADR-017 a player's run draws at the display's
+resolution, so on a 1440p or 4K display the per-frame costs above grow roughly with the pixel
+count, about 1.8× and 4×. The load-time costs do not depend on it. The smoke mode still draws
+1920×1080.
+
 ## 2. Items that keep the output
 
 Each is one PR. "Bit-exact" items are proved by comparing generated data on the same GPU (§4).
@@ -100,6 +105,13 @@ The AO bakes and the IR map already wait for the GPU, so their times include GPU
 scheduler waits after each job run, the plate bake after each band, and the IR map at each
 readback. A glyph's time needs a GPU wait added in the measuring build. Whether the lines stay
 committed is question 3 in §7.
+
+**The frame is already partly timed.** `83c4cc9` added counters to `LteProgram.cpp`,
+`LteWindow.cpp`, `Renderer.cpp`, `RendererCore.cpp`, `GraphicsCore.cpp` and `GraphicsDevice.cpp`,
+marked "PERF HARNESS (local, uncommitted)" although they are committed: time in Present, EndFrame
+and BeginFrame, GPU waits and their count, and draws and triangles, printed by `LteProgram.cpp`. In
+a Debug build `PERF_NO_DEBUG_LAYER` turns the debug layer off. M1 does not touch them; M2 reads
+them for whether the frame is CPU-bound, and question 3 in §7 covers whether they stay.
 
 ### M2. Baseline
 
@@ -192,6 +204,10 @@ and the band keeps its row boundaries.
 - Smaller meshes whose bands exceed 2,040 surfels split there, which changes their bands'
   summation grouping in the last bits.
 - The upload page is 4 MB (`GraphicsDevice.h:34`), so a 64 KB block per band stays in the ring.
+- **The constant buffer is at its limit.** 2 × 2,040 `float4` is 65,280 of 65,536 bytes, which
+  leaves 256 bytes for the rest of `$Globals`. `sDim`, `sRowBegin` and `sRowEnd` take 16 today;
+  one more constant array in this shader would not fit. The job checks the reflected size of
+  `$Globals` at load and fails loudly rather than truncating.
 
 **(b) No CPU wait per band.** `PlateMesh.cpp:190` becomes `Renderer_Flush()`: each band is still
 its own submission, which is what protects against a TDR, but the CPU no longer waits for it. Wait
@@ -454,8 +470,10 @@ to 1.0.
 
 ## 7. Open for the owner
 
-1. **Which GPU and configuration** the numbers are taken on. ADR-009 used an Iris Xe, in Debug with
-   the debug layer.
+1. **Which configuration** the numbers are taken on. The GPU is settled: the owner's machine has an
+   Intel Iris Xe (the same one ADR-009 measured on, and where §1 puts the frame at 2-3× its
+   GTX 1660-class estimate). Open is Release, as the perf-review skill's §4 says, or Debug with the
+   debug layer, as ADR-009 measured.
 2. **Whether WARP time is a goal.** E1 and E2(c) matter most there, and they shorten the smoke
    runs.
 3. **Whether M1's timing lines stay committed,** as the field's does (ADR-009 decision 6), or stay
