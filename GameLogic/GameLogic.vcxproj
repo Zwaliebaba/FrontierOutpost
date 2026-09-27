@@ -66,7 +66,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;$(SolutionDir)NeuronServer;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <!-- Sources are UTF-8 (.editorconfig). Legacy files are not, and Build/Legacy.targets drops this for them. -->
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
