@@ -75,7 +75,8 @@
     <FxCompile>
       <ShaderModel>5.1</ShaderModel>
       <HeaderFileOutput>$(ProjectDir)CompiledShaders\%(Filename).h</HeaderFileOutput>
-      <ObjectFileOutput></ObjectFileOutput>
+      <ObjectFileOutput>
+      </ObjectFileOutput>
       <DisableOptimizations>false</DisableOptimizations>
       <EnableDebuggingInformation>false</EnableDebuggingInformation>
       <TreatWarningAsError>true</TreatWarningAsError>
@@ -159,14 +160,17 @@
     <FxCompile Include="Shaders\GenerateMipsCS.hlsl">
       <ShaderType>Compute</ShaderType>
       <VariableName>GENERATE_MIPS_CS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\PresentPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>PRESENT_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\PresentVS.hlsl">
       <ShaderType>Vertex</ShaderType>
       <VariableName>PRESENT_VS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
@@ -417,126 +421,157 @@
     <FxCompile Include="Shaders\ComputeOcclusionPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>COMPUTE_OCCLUSION_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\ComputeSdffontPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>COMPUTE_SDFFONT_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\GenFieldcopyCS.hlsl">
       <ShaderType>Compute</ShaderType>
       <VariableName>GEN_FIELDCOPY_CS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\GenFieldCS.hlsl">
       <ShaderType>Compute</ShaderType>
       <VariableName>GEN_FIELD_CS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\GenFieldocclusionCS.hlsl">
       <ShaderType>Compute</ShaderType>
       <VariableName>GEN_FIELDOCCLUSION_CS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\HologramPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>HOLOGRAM_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\IdentityVS.hlsl">
       <ShaderType>Vertex</ShaderType>
       <VariableName>IDENTITY_VS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\NpmVS.hlsl">
       <ShaderType>Vertex</ShaderType>
       <VariableName>NPM_VS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\PostBloomCompositePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>POST_BLOOM_COMPOSITE_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\PostBlurPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>POST_BLUR_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\PostGlowthreshPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>POST_GLOWTHRESH_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\PostTonemapPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>POST_TONEMAP_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiArcPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_ARC_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiBasicPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_BASIC_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiBoxPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_BOX_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiCirclePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_CIRCLE_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiCompositePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_COMPOSITE_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiGradientPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_GRADIENT_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiGridPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_GRID_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiLinefadePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_LINEFADE_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiLinePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_LINE_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiNonePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_NONE_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiPanelPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_PANEL_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiRadialpanelPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_RADIALPANEL_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiRingPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_RING_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiTextPS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_TEXT_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiTextureadditivePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_TEXTUREADDITIVE_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiTexturePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_TEXTURE_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\UiTrianglePS.hlsl">
       <ShaderType>Pixel</ShaderType>
       <VariableName>UI_TRIANGLE_PS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\WidgetTextureVS.hlsl">
       <ShaderType>Vertex</ShaderType>
       <VariableName>WIDGET_TEXTURE_VS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
     <FxCompile Include="Shaders\WidgetVS.hlsl">
       <ShaderType>Vertex</ShaderType>
       <VariableName>WIDGET_VS</VariableName>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">6.7</ShaderModel>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
@@ -584,13 +619,11 @@
   </Target>
   <!-- WinPixEventRuntime must be restored before the build (Design/ADR/ADR-018). -->
   <Target Name="RequireWinPixEventRuntime" BeforeTargets="PrepareForBuild">
-    <Error Condition="!Exists('$(WinPixEventRuntimeDir)bin\$(Platform)\WinPixEventRuntime.lib')"
-           Text="WinPixEventRuntime is not restored. Run: msbuild FrontierOutpost.slnx -t:restore -p:RestorePackagesConfig=true" />
+    <Error Condition="!Exists('$(WinPixEventRuntimeDir)bin\$(Platform)\WinPixEventRuntime.lib')" Text="WinPixEventRuntime is not restored. Run: msbuild FrontierOutpost.slnx -t:restore -p:RestorePackagesConfig=true" />
   </Target>
   <!-- Its DLL goes to the output folder that the executable and the test suites share, since both
        load it at startup (Design/ADR/ADR-018). -->
   <Target Name="CopyWinPixEventRuntime" AfterTargets="Build">
-    <Copy SourceFiles="$(WinPixEventRuntimeDir)bin\$(Platform)\WinPixEventRuntime.dll" DestinationFolder="$(OutDir)"
-          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(WinPixEventRuntimeDir)bin\$(Platform)\WinPixEventRuntime.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
 </Project>

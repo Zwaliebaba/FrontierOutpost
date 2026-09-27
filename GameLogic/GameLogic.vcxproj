@@ -868,6 +868,9 @@
     <ProjectReference Include="..\NeuronCore\NeuronCore.vcxproj">
       <Project>{7B1A6C1E-3C2D-4F0B-9E47-2D6A1F9C0B11}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\NeuronServer\NeuronServer.vcxproj">
+      <Project>{c4e2b7a9-5d18-4e63-8f2a-9b3d6e1a4c22}</Project>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Visual.h" />
