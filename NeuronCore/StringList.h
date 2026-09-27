@@ -22,8 +22,9 @@ struct StringListT : public RefCounted {
 
   virtual String GetString() const = 0;
 
-  virtual String GetValue() const {
-    return "";
+  virtual String const& GetValue() const {
+    static String const kNone;
+    return kNone;
   }
 
   virtual bool IsAtom() const = 0;
@@ -48,7 +49,7 @@ AutoClassDerived(StringListAtom, StringListT,
     return value;
   }
 
-  String GetValue() const {
+  String const& GetValue() const {
     return value;
   }
 
