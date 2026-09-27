@@ -5,6 +5,9 @@
 #include "Mutable.h"
 #include "LteString.h"
 
+#include <cstring>
+#include <new>
+
 #define DECLARE_DEFAULT_REFLECTION(name)                                       \
   LT_API Type _Type_Get(name const& t);
 
@@ -381,9 +384,20 @@ Type& Type_GetStorage() {
   return t;
 }
 
+/* New values start zeroed, so a scalar, a pointer or a vector whose constructor is empty reads 0
+   rather than what the heap held. The memory comes from the allocation function that 'new T'
+   would use, and T is constructed once, as before. */
 template <class T>
 void* __type_default_allocator(TypeT*) {
-  return (void*)new T;
+  void* buffer;
+  if constexpr (requires { T::operator new(sizeof(T)); })
+    buffer = T::operator new(sizeof(T));
+  else if constexpr (alignof(T) > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+    buffer = ::operator new(sizeof(T), std::align_val_t(alignof(T)));
+  else
+    buffer = ::operator new(sizeof(T));
+  memset(buffer, 0, sizeof(T));
+  return (void*)::new (buffer) T;
 }
 
 template <class T>
@@ -403,6 +417,7 @@ double __type_default_castreal(TypeT*, void const* t) {
 
 template <class T>
 void __type_default_construct(TypeT*, void* buf) {
+  memset(buf, 0, sizeof(T));
   new (buf) T;
 }
 
