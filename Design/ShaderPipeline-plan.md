@@ -2,8 +2,9 @@
 
 - **Status:** Proposed 2026-09-27. The owner answered four scoping questions the same day (§0),
   and approved P0.1 to P0.6. Those landed together, as the owner asked, one commit each on
-  `claude/vibrant-planck-8jxlx1`; none was built or run, and each P0 item in §4 says what it
-  still needs from a run. Nothing from P1 on is approved. The owner approves items by ID; from P1
+  `claude/vibrant-planck-8jxlx1`. CI builds them at Debug|x64 and passes every test on WARP; none
+  has been run in the game, and each P0 item in §4 says what it still needs from a run. Nothing
+  from P1 on is approved. The owner approves items by ID; from P1
   on each lands as its own PR, with its ADR in the same commit where the item is a decision
   (AGENTS.md §6). ADR numbers are the next free ones when each lands; the performance plan's D
   items take numbers from the same sequence.
@@ -455,8 +456,11 @@ P0.1 to P0.6 went together, as the Status says.
     SM 6.6 or higher and make the root signature. Otherwise O2 and O3 are decided before P5.
   - **Landed:** `GraphicsDevice::Capabilities()`, which liblt logs at startup as one line
     beginning `Direct3D 12 supports shader model`, and the NeuronClientTests case
-    `ReportsWhatTheDeviceSupports`, which writes WARP's answers to the test log. The four runs are
-    the owner's.
+    `ReportsWhatTheDeviceSupports`, which writes WARP's answers to the test log.
+  - **CI's WARP answered** on 2026-09-27, on GitHub's `windows-latest` runner (image
+    `win25-vs2026`, 20260922): shader model 6.7, binding tier 3, directly indexed heaps, pipeline
+    libraries, and no automatic disk cache. It passes the gate. The Iris Xe, the ARM64 device and
+    local WARP are the owner's to run.
 - **P0.2: pipeline-state telemetry.** It counts and times every pipeline state made, and logs each
   one with its key and the frame it was made in, so the states made after the app's first frame
   are the lines with a later frame. This gives G1's size, and later the proof of P2.
@@ -670,8 +674,8 @@ P0.1 to P0.6 went together, as the Status says.
 **Not verified:**
 - Which binding tier directly indexed heaps need. The SM 6.6 specification's site was blocked from
   this session; P0.1 decides.
-- Whether the Iris Xe, the ARM64 device, and local and CI WARP support SM 6.6 with directly indexed
-  heaps (P0.1).
+- Whether the Iris Xe, the ARM64 device and local WARP support SM 6.6 with directly indexed heaps
+  (P0.1). CI's WARP does: shader model 6.7 at binding tier 3, on 2026-09-27.
 - H2 in a run (P0.6), whose fix landed without one.
 - Every cost figure (P0.2, P0.3), whose instruments landed without a run.
 - How far DXC's output differs from FXC's on this content (P5).

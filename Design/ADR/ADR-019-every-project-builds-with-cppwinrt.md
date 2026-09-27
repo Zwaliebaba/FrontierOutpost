@@ -78,7 +78,10 @@ beside the executable.
 
 Not built on 2026-09-27 by the session that wrote this, which had no Windows: CI is the build.
 `Build/CheckProjectFiles.py` passes with the package approved, and `Build/TestCheckers.py` passes.
-The time the projection adds to a build is not measured. Decision 4 was checked with mingw-w64
+With the package, CI built Debug|x64 and passed all 129 tests (`2b4d35f`). Its build step took 4:49
+at `f884ca3`, before the package, and 5:19 at `2b4d35f`, after it: one run each on GitHub's
+`windows-latest` runner, and the second also builds P0's own additions, so what the projection
+adds is not separated from them or from the runner's variance. Decision 4 was checked with mingw-w64
 against a stand-in for `base.h` that follows `com_ptr` at this version's tag, with no `operator&`
 and a `put()` that releases first. Every NeuronClient and test source compiles against it at
 `-Wall -Wextra`, but for errors in headers the Linux harness lacks or has in another form, and
