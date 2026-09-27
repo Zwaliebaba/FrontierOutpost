@@ -64,7 +64,9 @@ void Function_AddAlias(String const& source, String const& alias) {
 }
 
 Vector<Function> const& Function_Find(String const& name) {
-  return GetFunctionMap()[name];
+  static Vector<Function> const kNone;
+  Vector<Function> const* found = GetFunctionMap().get(name);
+  return found ? *found : kNone;
 }
 
 Vector<Function> const& Function_GetList() {

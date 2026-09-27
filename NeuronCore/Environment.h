@@ -62,7 +62,8 @@ namespace LTE {
     }
 
     bool Contains(String const& name) {
-      return variables[name].size() > 0;
+      Stack<Variable> const* found = variables.get(name);
+      return found && found->size() > 0;
     }
 
     void Free(String const& name) {

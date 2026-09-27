@@ -29,6 +29,11 @@ namespace {
   Script& GetCache(String const& name) {
     return GetScriptCache()[name];
   }
+
+  Script FindCache(String const& name) {
+    Script const* script = GetScriptCache().get(name);
+    return script ? *script : nullptr;
+  }
 }
 
 namespace LTE {
@@ -135,15 +140,17 @@ namespace LTE {
   }
 
   DefineFunction(Script_Load) {
-    Script& script = GetCache(args.name);
-    if (script)
-      return script;
+    Script cached = FindCache(args.name);
+    if (cached)
+      return cached;
 
     String scriptPath = args.name + kScriptExtension;
     Location location = Location_Script(scriptPath);
     if (!location->Exists())
       return nullptr;
     
+    /* In the cache before Reload, so a script that reaches itself finds itself. */
+    Script& script = GetCache(args.name);
     script = new ScriptT;
     script->name = args.name;
     script->Reload();
@@ -151,7 +158,7 @@ namespace LTE {
   }
 
   DefineFunction(Script_Reload) {
-    bool loaded = GetCache(args.name) != nullptr;
+    bool loaded = FindCache(args.name) != nullptr;
     Script script = Script_Load(args.name);
     if (loaded) {
       Vector<Script> scripts;
