@@ -5,14 +5,9 @@
 #include "Unicode.h"
 
 #include <array>
-#include <chrono>
 #include <format>
 #include <string_view>
 #include <utility>
-
-// PERF HARNESS (local, uncommitted)
-extern double g_perfWaitIdleMs;
-extern long long g_perfWaitIdleCount;
 
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -239,12 +234,9 @@ void GraphicsDevice::WaitIdle()
   {
     return;
   }
-  auto const perfStart = std::chrono::steady_clock::now();
   m_core->context->Flush();
   m_core->WaitFor(m_core->lastSignaled);
   m_core->Retire();
-  g_perfWaitIdleMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - perfStart).count();
-  ++g_perfWaitIdleCount;
 }
 
 std::uint64_t GraphicsDevice::FramesBegun() const noexcept
