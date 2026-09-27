@@ -49,6 +49,9 @@
   <PropertyGroup>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <!-- WinPixEventRuntime, from packages.config (Design/ADR/ADR-018). Its settings are stated here
+         rather than taken from the package's .targets, so that the checkers can read them. -->
+    <WinPixEventRuntimeDir>$(SolutionDir)packages\WinPixEventRuntime.1.0.240308001\</WinPixEventRuntimeDir>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -61,7 +64,7 @@
            link that is not incremental ignores, with warning LNK4075. -->
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <PrecompiledHeader>Use</PrecompiledHeader>
-      <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)NeuronCore;$(SolutionDir)packages\WinPixEventRuntime.1.0.240308001\Include\WinPixEventRuntime;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <!-- Sources are UTF-8 (.editorconfig), and so is text at NeuronClient's API (ADR-005). -->
@@ -77,6 +80,11 @@
       <EnableDebuggingInformation>false</EnableDebuggingInformation>
       <TreatWarningAsError>true</TreatWarningAsError>
     </FxCompile>
+    <!-- PIX's import library goes into NeuronClient.lib, so that what links NeuronClient links it
+         too (Design/ADR/ADR-018). -->
+    <Lib>
+      <AdditionalDependencies>$(WinPixEventRuntimeDir)bin\$(Platform)\WinPixEventRuntime.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Lib>
   </ItemDefinitionGroup>
   <!-- lt's instruction sets, the same in Debug and Release (ADR-006, R16). -->
   <ItemDefinitionGroup Condition="'$(Platform)'=='x64'">
@@ -571,5 +579,16 @@
   <!-- CompiledShaders/ is build output (AGENTS.md §2), made on every build before FXC writes to it. -->
   <Target Name="MakeCompiledShadersFolder" BeforeTargets="FxCompile">
     <MakeDir Directories="$(ProjectDir)CompiledShaders" />
+  </Target>
+  <!-- WinPixEventRuntime must be restored before the build (Design/ADR/ADR-018). -->
+  <Target Name="RequireWinPixEventRuntime" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(WinPixEventRuntimeDir)bin\$(Platform)\WinPixEventRuntime.lib')"
+           Text="WinPixEventRuntime is not restored. Run: msbuild FrontierOutpost.slnx -t:restore -p:RestorePackagesConfig=true" />
+  </Target>
+  <!-- Its DLL goes to the output folder that the executable and the test suites share, since both
+       load it at startup (Design/ADR/ADR-018). -->
+  <Target Name="CopyWinPixEventRuntime" AfterTargets="Build">
+    <Copy SourceFiles="$(WinPixEventRuntimeDir)bin\$(Platform)\WinPixEventRuntime.dll" DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
   </Target>
 </Project>

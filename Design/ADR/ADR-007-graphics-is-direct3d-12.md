@@ -1,6 +1,8 @@
 # ADR-007: Graphics is Direct3D 12, as the shared base of the NeuronClient projects
 
 - **Status:** Accepted (owner, 2026-09-25, at the start of the NeuronClient migration's Phase 3)
+- **Amended:** 2026-09-27 by ADR-018. Decision 2's PIX markers are written by WinPixEventRuntime,
+  a NuGet package, and no longer by hand.
 - **Scope:** NeuronClient's graphics core (`GraphicsDevice`, `SwapChain`, `Texture`, `Buffer`,
   `Program`, `DrawContext`), and `lt.dll`'s renderer on top of it
 - **Detail:** `Design/Archive/NeuronClient-migration.md` §2, §3 (point 1), §4.2, §5.3, §5.5, §11, N0,

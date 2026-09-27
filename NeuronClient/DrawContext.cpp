@@ -1,6 +1,12 @@
 // NeuronClient/DrawContext.cpp
 #include "pch.h"
 
+// PIX's events in every configuration, not only in the Debug builds where pix3.h turns them on by
+// itself: the measurements are taken in Release (Design/ADR/ADR-018).
+#define USE_PIX
+#include <d3d12.h>
+#include <pix3.h>
+
 #include "CompiledShaders/GenerateMipsCS.h"
 #include "CompiledShaders/PresentPS.h"
 #include "CompiledShaders/PresentVS.h"
@@ -111,10 +117,6 @@ constexpr UINT VERTEX_CONSTANTS_PARAMETER = 0;
 constexpr UINT PIXEL_CONSTANTS_PARAMETER = 1;
 constexpr UINT SHADER_RESOURCES_PARAMETER = 2;
 constexpr UINT SAMPLERS_PARAMETER = 3;
-
-/// How BeginEvent's data is read without PIX's runtime: WINPIX_EVENT_UNICODE_VERSION, a UTF-16
-/// name and its terminator.
-constexpr UINT PIX_UNICODE_EVENT = 0;
 
 /// The compute root signature's.
 constexpr UINT COMPUTE_CONSTANTS_PARAMETER = 0;
@@ -511,10 +513,11 @@ struct DrawContext::Native
     return true;
   }
 
-  /// Begins a region named _name in the open list.
+  /// Begins a region named _name in the open list. The name is an argument, not the format, so a
+  /// '%' in it is shown as it is.
   void BeginEventOnList(const std::wstring& _name) const
   {
-    list->BeginEvent(PIX_UNICODE_EVENT, _name.c_str(), static_cast<UINT>((_name.size() + 1) * sizeof(wchar_t)));
+    PIXBeginEvent(list.Get(), PIX_COLOR_DEFAULT, L"%s", _name.c_str());
   }
 
   /// Submits the open list, if there is one, and marks the queue after it. What the list used is
@@ -526,7 +529,7 @@ struct DrawContext::Native
       FlushBarriers();
       for (std::size_t event = 0; event < events.size(); ++event)
       {
-        list->EndEvent();
+        PIXEndEvent(list.Get());
       }
       if (core.Check(list->Close(), "ID3D12GraphicsCommandList::Close"))
       {
@@ -2253,6 +2256,8 @@ void DrawContext::BeginEvent(std::string_view _name)
 {
   Native& context = *m_native;
   context.events.push_back(Utf8ToUtf16(_name));
+  // The same region on the CPU's timeline, for PIX's timing captures.
+  PIXBeginEvent(PIX_COLOR_DEFAULT, L"%s", context.events.back().c_str());
   if (context.open)
   {
     context.BeginEventOnList(context.events.back());
@@ -2268,9 +2273,10 @@ void DrawContext::EndEvent()
     return;
   }
   context.events.pop_back();
+  PIXEndEvent();
   if (context.open)
   {
-    context.list->EndEvent();
+    PIXEndEvent(context.list.Get());
   }
 }
 
