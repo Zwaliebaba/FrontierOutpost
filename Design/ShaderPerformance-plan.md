@@ -1,7 +1,8 @@
 # Shader performance: generation passes, compute shaders and the frame
 
-- **Status:** Proposed 2026-09-26. M1 and M2 approved (owner, 2026-09-27), and M1 is done;
-  nothing else is approved. The owner approves items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the
+- **Status:** Proposed 2026-09-26. M1 and M2 approved (owner, 2026-09-27), and M1 is done. D1,
+  D2, D3, D4, D5, D7, D8 and D9 approved the same day (§3). The E and L items, D6 and D10 are not
+  approved yet. The owner approves items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the
   same commit where the item is a decision (§3). The next free ADR number is ADR-018 (ADR-016 went to the library split's visuals, ADR-017 to borderless fullscreen).
 - **Scope:** the HLSL in `NeuronClient/Shaders/` and `FrontierOutpost/Shaders/`, and the C++ that
   dispatches it:
@@ -96,8 +97,7 @@ an estimate unless §6 gives a measurement.
 **Done** (2026-09-27). The SDF AO, plate AO and IR map lines are always logged, as the field's
 line is. The glyph line waits for the GPU before and after each glyph, which play does not, so it
 is compiled only with `TIME_GLYPHS` defined at the top of `Font.cpp`, as `Main.cpp` has
-`TIME_LTSL_COMPILE`. That answers question 3 in §7 for these lines unless the owner decides
-otherwise.
+`TIME_LTSL_COMPILE`.
 
 `SDFMesh` logs how long each field took (ADR-009 decision 6), and nothing else here is timed. Add
 the same line to:
@@ -112,22 +112,24 @@ scheduler waits after each job run, the plate bake after each band, and the IR m
 readback. A glyph's time needs a GPU wait added in the measuring build. Whether the lines stay
 committed is question 3 in §7.
 
-**The frame is already partly timed.** `83c4cc9` added counters to `LteProgram.cpp`,
-`LteWindow.cpp`, `Renderer.cpp`, `RendererCore.cpp`, `GraphicsCore.cpp` and `GraphicsDevice.cpp`,
-marked "PERF HARNESS (local, uncommitted)" although they are committed: time in Present, EndFrame
-and BeginFrame, GPU waits and their count, and draws and triangles, printed by `LteProgram.cpp`. In
-a Debug build `PERF_NO_DEBUG_LAYER` turns the debug layer off. M1 does not touch them; M2 reads
-them for whether the frame is CPU-bound, and question 3 in §7 covers whether they stay.
+**The frame's counters are gone.** `83c4cc9` had committed counters marked "PERF HARNESS (local,
+uncommitted)" in six NeuronClient files: time in Present, EndFrame and BeginFrame, GPU waits, and
+draws and triangles, written per frame to `PERF_CSV`, with `PERF_PROFILE` and
+`PERF_NO_DEBUG_LAYER` switches. The owner had them removed on 2026-09-27 (§7 question 3); the
+launcher's three-decimal timings from the same commit stay.
 
 ### M2. Baseline
 
-This follows the perf-review skill's §4: Release|x64 on the owner's GPU, median of three runs.
+This follows the perf-review skill's §4: Release|x64 on the owner's GPU (an Iris Xe), median of
+three runs.
 
 - M1's lines for `war`, `ltheory` and `hud` (the system with the boss hull);
 - the time to first frame, and the time until the scheduler is idle;
 - a PIX capture of one steady-state `war` frame, for per-pass GPU times, and whether the frame is
-  CPU-bound or GPU-bound;
-- the WARP smoke run: `FrontierOutpost.exe war --warp --frames 30`.
+  CPU-bound or GPU-bound. The owner takes it (2026-09-27); with the counters gone, it is the only
+  source for the second answer;
+- the WARP smoke run, `FrontierOutpost.exe war --warp --frames 30`, as a reference only: WARP time
+  is not a goal (§7 question 2).
 
 The ranks of E3, E5 and the per-frame items are provisional until this exists.
 
@@ -361,6 +363,11 @@ explicit gradients replace implicit ones.
 Each of these crosses an ADR, adds a runtime file (R13), or changes what is seen or generated. If
 approved, each gets an ADR in the same commit.
 
+**Approved (owner, 2026-09-27): D1, D2, D3, D4, D5, D7, D8 and D9.** D6 and D10 stay open until
+M2's numbers are in. Approval is of the decision; each still lands as its own PR, in §4's order,
+with its ADR. D2 changes every generated shape, so no capture taken before it compares with one
+taken after: the bit-exact items that follow it are proved against a new baseline.
+
 | ID | Decision | What it buys | What it costs or forecloses |
 |---|---|---|---|
 | D1 | A static sampler in the compute root signature for the SDF field: trilinear, border, `D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE`. `GenFieldocclusionCS` and `GenFieldcopyCS` then filter in hardware. | With E2(b), RDNA2: 175 → 32 instructions and 9 → 1 memory ops per AO sample; 3.8× on lavapipe (measured, §6); 3-5× expected on a GPU. | Amends ADR-009 decision 3 ("compute is given no samplers"). ADR-007 says static samplers "would not do: the SDF field's border colour is red", but the field is R32F, so only red is read, and opaque white's red is 1.0. Hardware filters with ≥ 8-bit sub-texel weights: emulated, AO moves by ≤ 8.2e-4 (§6), and results then differ between GPUs in the last bits. |
@@ -378,7 +385,8 @@ approved, each gets an ADR in the same commit.
 
 **Order.**
 1. M1 and M2, before anything else.
-2. E1, the smallest change, which also speeds up the WARP smoke runs.
+2. E1, the smallest change. It also speeds up the WARP smoke runs, though WARP time is not a goal
+   (§7 question 2).
 3. E3, the largest estimated cost.
 4. E2, and D1 after it if approved (D1 builds on E2's structure).
 5. E4: (c) lands only if E5 is not approved.
@@ -476,12 +484,13 @@ to 1.0.
 
 ## 7. Open for the owner
 
-1. **Which configuration** the numbers are taken on. The GPU is settled: the owner's machine has an
-   Intel Iris Xe (the same one ADR-009 measured on, and where §1 puts the frame at 2-3× its
-   GTX 1660-class estimate). Open is Release, as the perf-review skill's §4 says, or Debug with the
-   debug layer, as ADR-009 measured.
-2. **Whether WARP time is a goal.** E1 and E2(c) matter most there, and they shorten the smoke
-   runs.
-3. **Whether M1's timing lines stay committed,** as the field's does (ADR-009 decision 6), or stay
-   a local edit for the measurements.
-4. **D1 to D10,** one by one.
+1. ~~Which configuration the numbers are taken on.~~ **Answered (owner, 2026-09-27):** Release|x64
+   on the owner's Intel Iris Xe (the same GPU ADR-009 measured on, and where §1 puts the frame at
+   2-3× its GTX 1660-class estimate).
+2. ~~Whether WARP time is a goal.~~ **Answered (owner, 2026-09-27): no.** E1 and E2(c) are ranked
+   by their GPU gains; the WARP smoke run is timed only as a reference.
+3. ~~Whether M1's timing lines stay committed.~~ **Answered:** M1's lines stay, the glyph line
+   behind `TIME_GLYPHS` (M1). The counters `83c4cc9` added were removed (owner, 2026-09-27).
+4. ~~D1 to D10, one by one.~~ **Answered (owner, 2026-09-27):** D1, D2, D3, D4, D5, D7, D8 and D9
+   approved (§3). Still open: **D6** (pass merges) and **D10** (per-frame options that change the
+   image), until M2's numbers are in.
