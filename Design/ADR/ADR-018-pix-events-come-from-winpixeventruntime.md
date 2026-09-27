@@ -32,7 +32,8 @@ because none was left, and `Build/CheckProjectFiles.py` refused any `packages.co
    share, and a build without the restore stops with the command to run.
 3. **Events are on in every configuration.** `DrawContext.cpp` defines `USE_PIX` before `pix3.h`,
    which otherwise turns them on in Debug only, because the measurements are taken in Release (the
-   plan's §7 question 1). `pix3.h` is included there and nowhere else.
+   plan's §7 question 1). `pix3.h` is included there and in `GpuCapture.cpp` (decision 7), and
+   nowhere else.
 4. **`DrawContext::BeginEvent` and `EndEvent` keep their contract** (they nest, and stay open across
    command lists), and write each region with `PIXBeginEvent`/`PIXEndEvent` on the command list and
    on the calling thread. The name is an argument to `"%s"`, never the format.
@@ -42,6 +43,13 @@ because none was left, and `Build/CheckProjectFiles.py` refused any `packages.co
 6. **`Build/CheckProjectFiles.py` accepts a package only at a version in `APPROVED_PACKAGES`,** with
    the ADR that approved it. A new package or version is a new decision. `PackageReference` stays
    refused.
+7. **The program can take a GPU capture of itself** (owner, 2026-09-27, so that M2 needs nobody at
+   the keyboard): `FrontierOutpost.exe <app> --frames N --gpu-capture <path>` loads the newest
+   `WinPixGpuCapturer.dll` of the PIX installed on the machine before the device is made, asks for
+   one frame 60 frames before the last, and waits for PIX to write the `.wpix` file. It fails with a
+   message when PIX is not installed. `NeuronClient/GpuCapture.cpp` holds the two calls, and is,
+   with `DrawContext.cpp`, the only file that includes `pix3.h`. PIX itself is a development tool on
+   the machine, not a dependency: nothing links or ships it.
 
 ## Runtime file (R13)
 
@@ -63,4 +71,10 @@ On 2026-09-27, on the owner's machine: the restore command put the package into 
 and Release built for x64, and the executable lists `WinPixEventRuntime.dll` among its imports, found
 beside it. `war` and `hud` ran 60 frames in Debug with the Direct3D 12 debug layer and exited 0, so no
 region was left unbalanced. NeuronClientTests' `DebugEvents` passed, with the rest of the 127 tests.
-What a capture shows can only be seen in PIX.
+
+`war --frames 900 --gpu-capture` in Release, with PIX 2603.25 installed and the desktop locked,
+wrote a 484 MB capture. `pixtool open-capture … save-event-list` listed its 3,647 events under the
+named regions: Camera Pass (Depth Prepass, GBuffer Pass, Global Lighting Pass, Local Lighting,
+Blended, Lens Flares, Bloom, tonemap, colour grade), SMAA, Interface and dither, 334 draws in all.
+The events' GPU times need PIX's performance-logging permission, which an unelevated account
+outside Performance Log Users does not have (`E_PIX_MISSING_PERFORMANCE_LOGGING_PERMISSIONS`).

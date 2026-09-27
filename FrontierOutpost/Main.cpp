@@ -14,14 +14,22 @@
 #include "Timer.h"
 #include "LteWindow.h"
 
+#include "GpuCapture.h"
+
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
+#include <thread>
 
 // #define TIME_LTSL_COMPILE
 
 #ifdef TIME_LTSL_COMPILE
 #include "Debug.h"
 #endif
+
+/* How many frames before the last --gpu-capture takes its frame (ADR-018). */
+static const uint kGpuCaptureLead = 60;
 
 /* Shaders' 'time': the game's clock, in seconds, wrapping each minute. */
 static float GameTime() {
@@ -41,15 +49,19 @@ struct Launcher : public Program {
   uint frames;
   uint framesLeft;
   String capturePath;
+  /* Where a PIX GPU capture of one frame goes, empty for none (ADR-018). */
+  String gpuCapturePath;
   bool failed;
   /* From the start, for the smoke mode's timings. */
   Timer timer;
 
-  Launcher(String const& appName, uint frames, String const& capturePath, bool warp) :
+  Launcher(String const& appName, uint frames, String const& capturePath,
+           String const& gpuCapturePath, bool warp) :
     appName(appName),
     frames(frames),
     framesLeft(frames),
     capturePath(capturePath),
+    gpuCapturePath(gpuCapturePath),
     failed(false)
   {
     /* A run with a set number of frames has nobody to answer a dialog. */
@@ -73,6 +85,15 @@ struct Launcher : public Program {
     bool const fullscreen = !frames && !warp;
     window = Window_Create("App Launcher", V2U(1920, 1080), true, fullscreen);
     window->SetSync(false);
+    /* PIX's capturer must be in the process before the device is made. */
+    if (this->gpuCapturePath.size()) {
+      std::string error;
+      if (!Neuron::LoadGpuCapturer(error)) {
+        printf("ERROR: %s\n", error.c_str());
+        failed = true;
+        this->gpuCapturePath.clear();
+      }
+    }
     /* On WARP, the smoke mode draws offscreen: it never makes a swap chain
        (plan section 7). */
     Renderer_Initialize(warp, warp);
@@ -161,6 +182,17 @@ struct Launcher : public Program {
     if (framesLeft) {
       if (framesLeft == frames)
         PrintTime("drew its first frame");
+      /* The GPU capture takes a frame kGpuCaptureLead frames before the last,
+         so that the capturer has frames left to write it in. */
+      if (gpuCapturePath.size() && framesLeft == kGpuCaptureLead) {
+        std::string error;
+        if (Neuron::CaptureNextFrame(gpuCapturePath.c_str(), error))
+          PrintTime("asked PIX for a GPU capture");
+        else {
+          printf("ERROR: %s\n", error.c_str());
+          failed = true;
+        }
+      }
       if (--framesLeft == 0) {
         PrintTime("drew its last frame");
         if (capturePath.size())
@@ -189,9 +221,12 @@ struct Launcher : public Program {
   }
 };
 
-/* launch <app> [--warp] [--frames N] [--capture <path>]
+/* launch <app> [--warp] [--frames N] [--capture <path>] [--gpu-capture <path>]
    The app opens borderless fullscreen; with --warp or --frames, in a 1920x1080
    window (ADR-017).
+   With --gpu-capture, PIX, which must be installed, captures one frame into a
+   .wpix file at path, kGpuCaptureLead frames before the last of --frames
+   (ADR-018).
    With --warp, the app draws on WARP, Windows' software adapter, with the
    Direct3D 12 debug layer, and offscreen: nothing is shown. With --frames, the
    app runs N frames and the launcher quits, and nothing waits for a click on a
@@ -205,6 +240,7 @@ int main(int argc, char const* argv[]) {
   String app;
   uint frames = 0;
   String capture;
+  String gpuCapture;
   bool warp = false;
   for (int i = 1; i < argc; ++i) {
     String arg = argv[i];
@@ -221,6 +257,8 @@ int main(int argc, char const* argv[]) {
     }
     else if (arg == "--capture" && i + 1 < argc)
       capture = argv[++i];
+    else if (arg == "--gpu-capture" && i + 1 < argc)
+      gpuCapture = argv[++i];
     else if (arg.size() && arg[0] != '-' && app.empty())
       app = arg;
     else {
@@ -238,11 +276,27 @@ int main(int argc, char const* argv[]) {
     return 1;
   }
 
-  Launcher launcher(app, frames, capture, warp);
+  if (gpuCapture.size() && frames <= kGpuCaptureLead) {
+    printf("ERROR: --gpu-capture needs --frames above %u, to know which frame to capture\n",
+      kGpuCaptureLead);
+    return 1;
+  }
+
+  Launcher launcher(app, frames, capture, gpuCapture, warp);
   /* Only this run's capture counts, so an earlier one at the path goes. */
   if (capture.size())
     std::remove(capture.c_str());
+  if (gpuCapture.size())
+    std::remove(gpuCapture.c_str());
   launcher.Execute();
+
+  /* PIX writes the capture on a thread of its own: give it time to finish. */
+  for (int i = 0; gpuCapture.size() && !OS_FileExists(gpuCapture) && i < 300; ++i)
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  if (gpuCapture.size() && !OS_FileExists(gpuCapture)) {
+    printf("ERROR: PIX did not save %s\n", gpuCapture.c_str());
+    return 1;
+  }
 
   if (launcher.failed)
     return 1;

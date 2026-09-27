@@ -124,6 +124,7 @@
     <ClInclude Include="GraphicsDevice.h" />
     <ClInclude Include="ImageFile.h" />
     <ClInclude Include="FontFace.h" />
+    <ClInclude Include="GpuCapture.h" />
     <ClInclude Include="Key.h" />
     <ClInclude Include="Program.h" />
     <ClInclude Include="SoundBuffer.h" />
@@ -138,6 +139,7 @@
     <ClCompile Include="Buffer.cpp" />
     <ClCompile Include="DeviceRemoval.cpp" />
     <ClCompile Include="DrawContext.cpp" />
+    <ClCompile Include="GpuCapture.cpp" />
     <ClCompile Include="GraphicsCore.cpp" />
     <ClCompile Include="GraphicsDevice.cpp" />
     <ClCompile Include="ImageFile.cpp" />

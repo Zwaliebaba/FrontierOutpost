@@ -60,6 +60,8 @@ To run the app 'war.lts', which is an AI skirmish test. The game opens borderles
 
 - `x64\Debug\FrontierOutpost.exe war --warp --frames 30 --capture war.png`
 
+With PIX installed, `--gpu-capture <path>` also takes a PIX GPU capture of one frame, 60 frames before the last, into a `.wpix` file (ADR-018), so `--frames` must be above 60. Each render pass and each load-time job is a named region in it.
+
 # Example of the Entire Process
 
 An example of the entire sequence of commands to build and run an LTSL app, in a Developer PowerShell for Visual Studio 2026 at the root of this repository:

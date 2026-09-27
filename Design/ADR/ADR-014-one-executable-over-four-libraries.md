@@ -1,6 +1,8 @@
 # ADR-014: One executable over four libraries
 
 - **Status:** Accepted (owner, 2026-09-26)
+- **Amended:** 2026-09-27. A player's run opens borderless fullscreen (ADR-017), and the launcher
+  takes `--gpu-capture <path>` beside decision 1's arguments (ADR-018).
 - **Scope:** the solution's projects and the edges between them. It supersedes ADR-005's layer
   list (point 3: `launch.exe`, then `lt.dll`, then `NeuronClient.lib`). The rest of ADR-005 still
   stands for NeuronClient's own code.

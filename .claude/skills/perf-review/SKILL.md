@@ -162,9 +162,11 @@ dynamic scenes side by side, and the report says what to look at.
   - `launch: <app> drew its last frame after C s`
 
   B is the time to the first frame, and (N − 1) / (C − B) is the average frame rate. The times are
-  printed to a tenth of a second (`launch.cpp:162`), so choose N large enough that C − B is at
-  least 10 s, or print more digits with a local edit. An app that fails exits with 1. Some apps are
-  incomplete, so note it and go on.
+  printed to the millisecond (`FrontierOutpost/Main.cpp`, `PrintTime`); still choose N large enough
+  that C − B is at least 10 s, so that one slow frame does not move the average. An app that fails
+  exits with 1. Some apps are incomplete, so note it and go on. The load-time bakes also log their
+  own times (`SDFMesh:`, `PlateMesh:` and `IRMap:` lines, and glyphs with `TIME_GLYPHS` defined in
+  `Font.cpp`; the shader performance plan's M1).
 - **Primary scenarios.** Use three apps:
   - `war`: 32 AI ships in combat, in a generated system;
   - `ltheory`: a generated universe, seed 39;
@@ -193,8 +195,15 @@ dynamic scenes side by side, and the report says what to look at.
     `Profiler_Auto(1.0f)` from a local edit of the launcher at a chosen frame. Take one profile
     during the warm-up and one at steady state.
   - Take a CPU sampling profile with symbols, for the functions inside the scopes.
-  - Take a PIX GPU capture of one steady-state frame of `war`, for the time per pass.
-  - Where a tool needs a person at the GUI (PIX, WPA, the Visual Studio profiler), write the owner
+  - Take a PIX GPU capture of one steady-state frame of `war`, for the time per pass. It needs no
+    person (ADR-018): `x64\Release\FrontierOutpost.exe war --frames 900 --gpu-capture <file.wpix>`
+    captures the frame 60 before the last, with every render pass and scheduler job as a named
+    region. Export it with `pixtool open-capture <file.wpix> save-event-list <file.csv>`, and add
+    `--counters=*Duration*` for GPU times. `pixtool` is in `C:\Program Files\Microsoft PIX\<version>\`.
+    The timings need PIX's performance-logging permission: the account in the Performance Log Users
+    group, or an elevated shell. Without it the export fails with
+    `E_PIX_MISSING_PERFORMANCE_LOGGING_PERMISSIONS`; ask the owner, never elevate yourself.
+  - Where a tool still needs a person at the GUI (WPA, the Visual Studio profiler), write the owner
     exact steps: the build, the app, the moment to capture, and what to export. Wait for the result,
     and never guess what a capture would show.
 - **The Debug gap.** Take the same numbers in Debug, and attribute the difference between the two
