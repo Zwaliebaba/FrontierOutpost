@@ -1,7 +1,7 @@
 # Shader performance: generation passes, compute shaders and the frame
 
-- **Status:** Proposed 2026-09-26. M1 and M2 approved (owner, 2026-09-27); nothing else is
-  approved. The owner approves items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the
+- **Status:** Proposed 2026-09-26. M1 and M2 approved (owner, 2026-09-27), and M1 is done;
+  nothing else is approved. The owner approves items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the
   same commit where the item is a decision (§3). The next free ADR number is ADR-018 (ADR-016 went to the library split's visuals, ADR-017 to borderless fullscreen).
 - **Scope:** the HLSL in `NeuronClient/Shaders/` and `FrontierOutpost/Shaders/`, and the C++ that
   dispatches it:
@@ -92,6 +92,12 @@ an estimate unless §6 gives a measurement.
 | L7 | Material and planet micro-fixes | last bits | S | 0.03-0.1 ms |
 
 ### M1. Timing lines
+
+**Done** (2026-09-27). The SDF AO, plate AO and IR map lines are always logged, as the field's
+line is. The glyph line waits for the GPU before and after each glyph, which play does not, so it
+is compiled only with `TIME_GLYPHS` defined at the top of `Font.cpp`, as `Main.cpp` has
+`TIME_LTSL_COMPILE`. That answers question 3 in §7 for these lines unless the owner decides
+otherwise.
 
 `SDFMesh` logs how long each field took (ADR-009 decision 6), and nothing else here is timed. Add
 the same line to:

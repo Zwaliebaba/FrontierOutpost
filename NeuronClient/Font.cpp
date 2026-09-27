@@ -20,6 +20,15 @@
 #include <cmath>
 #include <string>
 
+/* Logs how long each glyph's distance field takes, GPU included (plan M1,
+   Design/ShaderPerformance-plan.md). It waits for the GPU after every glyph,
+   which play does not, so it is for a measuring build only. */
+// #define TIME_GLYPHS
+
+#ifdef TIME_GLYPHS
+#include "Timer.h"
+#endif
+
 const V2U kTextureSize = 1024;
 const V2U kSDFSize = 1024;
 const int kFontSize = 64;
@@ -120,6 +129,11 @@ namespace {
       glyph.size = V2(2 * kPadding + kFontSize);
       glyph.exists = true;
       
+#ifdef TIME_GLYPHS
+      Renderer_Finish();
+      Timer timer;
+#endif
+
       /* Compute the distance field. */ {
         // glyphBitmap->GenerateMipmap();
         Renderer_PushAllBuffers();
@@ -137,6 +151,12 @@ namespace {
         texture->GenerateMipmap();
         Renderer_PopAllBuffers();
       }
+
+#ifdef TIME_GLYPHS
+      Renderer_Finish();
+      Log_Message(Stringize() | "Font: the distance field of glyph " | codepoint |
+        " took " | (uint)(1000.0f * timer.GetElapsed()) | " ms");
+#endif
 
       /* Advance the cursor. */
       cursor.x += 2 * kPadding + kFontSize;

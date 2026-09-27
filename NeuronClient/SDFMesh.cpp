@@ -567,6 +567,9 @@ namespace {
         Neuron::TextureFormat::R32F, dim, dim, 1, "SDFMesh occlusion");
     }
 
+    /* How long the bake took, as the field's time is logged (plan M1,
+       Design/ShaderPerformance-plan.md): the scheduler times each run with the
+       GPU's work finished. */
     void OnEnd() {
       Mesh const& input = level.mesh;
       float const* values = (float const*)occlusion.data();
@@ -575,6 +578,9 @@ namespace {
         input->vertices[i].u = values[i];
 
       input->version++;
+      Log_Message(Stringize() | "SDFMesh: occlusion of " |
+        (uint)input->vertices.size() | " vertices at " | samples |
+        " samples took " | (uint)(1000.0f * totalTime) | " ms");
     }
 
     /* jobSize columns at a time, as the render passes before did, then one

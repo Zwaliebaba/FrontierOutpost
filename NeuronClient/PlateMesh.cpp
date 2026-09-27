@@ -6,9 +6,11 @@
 #include "Warp.h"
 
 #include "Array.h"
+#include "ProgramLog.h"
 #include "Renderer.h"
 #include "Shader.h"
 #include "Texture2D.h"
+#include "Timer.h"
 
 namespace {
   AutoClass(Plate,
@@ -112,6 +114,7 @@ DefineFunction(PlateMesh_Create) {
 DefineFunction(Mesh_ComputeOcclusion) {
   AUTO_FRAME;
   Mesh const& m = args.mesh;
+  Timer timer;
 
   Vector<V4> points;
   Vector<V4> normals;
@@ -173,10 +176,12 @@ DefineFunction(Mesh_ComputeOcclusion) {
   int rowsPerDraw = (int)(kInteractionsPerDraw / ((double)vDim * vDim * sDim));
   rowsPerDraw = Max(1, Min(sDim, rowsPerDraw));
 
+  uint bands = 0;
   occlusionBuffer->Bind(0);
   Renderer_Clear(V4(0));
   Renderer_PushBlendMode(BlendMode::Additive);
   for (int rowBegin = 0; rowBegin < sDim; rowBegin += rowsPerDraw) {
+    ++bands;
     (*shader)
       ("sDim", sDim)
       ("sRowBegin", rowBegin)
@@ -198,4 +203,11 @@ DefineFunction(Mesh_ComputeOcclusion) {
   for (size_t i = 0; i < m->vertices.size(); ++i)
     m->vertices[i].u = Exp(-Pow(Abs(result[i]), 0.75f));
   m->version++;
+
+  /* How long the bake took, GPU included, since each band is waited for
+     (plan M1, Design/ShaderPerformance-plan.md). */
+  Log_Message(Stringize() | "PlateMesh: occlusion of " |
+    (uint)m->vertices.size() | " vertices over " | (uint)(m->indices.size() / 3) |
+    " surfels in " | bands | " bands took " |
+    (uint)(1000.0f * timer.GetElapsed()) | " ms");
 }

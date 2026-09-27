@@ -2,16 +2,19 @@
 
 #include "Array.h"
 #include "CubeMap.h"
+#include "ProgramLog.h"
 #include "RNG.h"
 #include "ShaderInstance.h"
 #include "StackFrame.h"
 #include "Texture2D.h"
+#include "Timer.h"
 #include "Vector.h"
 
 namespace {
   CubeMap Generate(Generator_IRMap_Args const& args) {
     SFRAME("Generate IRMap");
     static Shader shader = Shader_Create("identity.jsl", "cubemap/irmap.jsl");
+    Timer timer;
 
     CubeMap const& source = args.source();
     size_t res = source->GetResolution();
@@ -69,6 +72,11 @@ namespace {
 
     }
 
+    /* How long the map took, GPU included, since every level is read back
+       (plan M1, Design/ShaderPerformance-plan.md). */
+    Log_Message(Stringize() | "IRMap: " | (uint)res | "^2 per face, " | levels |
+      " levels at " | (uint)args.samples | " samples took " |
+      (uint)(1000.0f * timer.GetElapsed()) | " ms");
     return self;
   }
 }
