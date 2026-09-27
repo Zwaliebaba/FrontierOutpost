@@ -74,29 +74,6 @@
     return type;                                                               \
   }
 
-#define AUTOMATIC_REFLECTION_PARAMETRIC2(T, T1, T2)                            \
-  friend Type _Type_Get(T const& t) {                                          \
-    Type& type = Type_GetStorage<T>();                                         \
-    if (!type) {                                                               \
-      Type t1Type = Type_Get<T1>();                                            \
-      Type t2Type = Type_Get<T2>();                                            \
-      type = Type_Create(                                                      \
-        String(#T) + "<" + t1Type->name + ", " + t2Type->name + ">",           \
-        sizeof(T));                                                            \
-      type->alignment = AlignOf<T>();                                          \
-      type->allocate = __type_default_allocator<T>;                            \
-      type->assign = __type_default_assign<T>;                                 \
-      type->base = Type_Get<T::BaseType>();                                    \
-      type->construct = __type_default_construct<T>;                           \
-      type->deallocate = __type_default_deallocator<T>;                        \
-      type->destruct = __type_default_destruct<T>;                             \
-      type->mapper = T::MapFields;                                             \
-      type->toString = __type_default_tostring<T>;                             \
-      FillMetadata(type);                                                      \
-    }                                                                          \
-    return type;                                                               \
-  }
-
 #define TypeAlias(SourceType, alias)                                           \
   template <int unused>                                                        \
   int __Register_Typedef_##alias() {                                           \
@@ -118,13 +95,9 @@
 #define METADATA                                                               \
   static void FillMetadata(Type const& type)
 
-#define REGISTER_TYPE(name)                                                    \
-  volatile static Type _##name##_type_registration = Type_Get<name>();
-
 typedef void* (*AllocateFn)(TypeT*);
 typedef void (*AssignFn)(TypeT*, void const*, void*);
 typedef void (*ConversionFn)(TypeT*, void const*, void*);
-typedef int64 (*CastIntFn)(TypeT*, void const*);
 typedef double (*CastRealFn)(TypeT*, void const*);
 typedef void (*ConstructFn)(TypeT*, void*);
 typedef void (*DeallocateFn)(TypeT*, void*);
@@ -149,7 +122,6 @@ struct TypeT {
 
   AllocateFn allocate;
   AssignFn assign;
-  CastIntFn castInt;
   CastRealFn castReal;
   ConstructFn construct;
   DeallocateFn deallocate;
@@ -180,10 +152,6 @@ struct TypeT {
 
   void Assign(void const* src, void* dst) {
     assign(this, src, dst);
-  }
-
-  int64 CastInt(void const* src) {
-    return castInt(this, src);
   }
 
   double CastReal(void const* src) {
@@ -401,16 +369,6 @@ void* __type_default_allocator(TypeT*) {
 template <class T>
 void __type_default_assign(TypeT*, void const* src, void* dst) {
   *(T*)dst = *(T*)src;
-}
-
-template <class T>
-int64 __type_default_castint(TypeT*, void const* t) {
-  return (int64)(*(T*)t);
-}
-
-template <class T>
-double __type_default_castreal(TypeT*, void const* t) {
-  return (double)(*(T*)t);
 }
 
 template <class T>

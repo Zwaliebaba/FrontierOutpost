@@ -20,10 +20,6 @@ struct Map : public NullBase<Map<KeyT, ValueT> > {
     return m[index];
   }
 
-  ValueT const& operator[](KeyT const& index) const {
-    return m[index];
-  }
-
   ValueT* operator()(KeyT const& index) {
     return get(index);
   }

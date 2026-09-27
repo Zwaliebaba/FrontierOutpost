@@ -30,10 +30,6 @@ struct VectorMap : public NullBase<VectorMap<KeyT, ValueT> > {
     return entries.back().value;
   }
 
-  ValueT const& operator[](KeyT const& key) const {
-    return ((const VectorMap*)this)->operator[](key);
-  }
-
   void clear() {
     entries.clear();
   }

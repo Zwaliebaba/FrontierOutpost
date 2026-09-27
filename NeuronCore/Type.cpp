@@ -72,7 +72,6 @@ Type Type_Create(String const& name, size_t size) {
 
   self->allocate = 0;
   self->assign = 0;
-  self->castInt = 0;
   self->castReal = 0;
   self->construct = 0;
   self->deallocate = 0;

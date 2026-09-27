@@ -5,28 +5,6 @@
 
 namespace LTE {
   template <class T>
-  struct GetDereferenceType {
-    typedef void Result;
-  };
-
-  template <class T>
-  struct GetDereferenceType<T*> {
-    typedef T Result;
-  };
-
-  template <class T>
-  struct GetDereferenceType<const T> : public GetDereferenceType<T> {};
-
-  template <class T>
-  struct GetDereferenceType<AutoPtr<T> > : public GetDereferenceType<T*> {};
-
-  template <class T>
-  struct GetDereferenceType<Pointer<T> > : public GetDereferenceType<T*> {};
-
-  template <class T>
-  struct GetDereferenceType<Reference<T> > : public GetDereferenceType<T*> {};
-
-  template <class T>
   struct GetReturnType { 
     typedef typename T::ReturnType Result;
   };

@@ -250,8 +250,6 @@ namespace LTE {
   #undef XLIST
 }
 
-#define offset_of(type, member) ((volatile void const*)&((type*)0)->member)
-
 #define MACRO_IDENTITY(x) x
 
 #define DeclareMetadata(T)                                                     \
