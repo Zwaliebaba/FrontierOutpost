@@ -5,6 +5,7 @@
 #include "LteString.h"
 #include "Vector.h"
 
+#include <functional>
 #include <string_view>
 #include <unordered_map>
 
