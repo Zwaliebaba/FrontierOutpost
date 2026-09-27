@@ -91,10 +91,7 @@ namespace {
       }
 
       /* Parse inner block. */ {
-        size_t cursor = tokenizer.GetCursor();
-        String nextLine = tokenizer.ReadLine();
-        uint nextIndent = Tokenizer::GetIndent(nextLine, kTab);
-        tokenizer.SetCursor(cursor);
+        uint nextIndent = tokenizer.PeekIndent();
 
         if (nextIndent > indent) {
           StringList list = StringList_ParseBlock(tokenizer, nextIndent);
