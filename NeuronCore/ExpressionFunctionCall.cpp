@@ -19,13 +19,26 @@ namespace {
     Expression, expression,
     Type, type,
     bool, isLValue)
-    ArgData() {}
+    /* A plain variable's address is its register plus an offset, both fixed at compile time. */
+    bool isRegister;
+    uint registerIndex;
+    uint registerOffset;
+
+    ArgData() :
+      isRegister(false),
+      registerIndex(0),
+      registerOffset(0)
+      {}
 
     ArgData(Expression const& expression) :
       expression(expression),
       type(expression->GetType()),
-      isLValue(expression->IsLValue())
-      {}
+      isLValue(expression->IsLValue()),
+      registerIndex(0),
+      registerOffset(0)
+    {
+      isRegister = expression->GetRegister(registerIndex, registerOffset);
+    }
   };
 
   AutoClassDerived(ExpressionFunctionCall, ExpressionT,
@@ -68,7 +81,9 @@ namespace {
 
       for (size_t i = 0; i < args.size(); ++i) {
         ArgData const& arg = args[i];
-        if (!arg.isLValue) {
+        if (arg.isRegister) {
+          argStack[i] = (char*)env.registers[env.base + arg.registerIndex] + arg.registerOffset;
+        } else if (!arg.isLValue) {
           argStack[i] = env.Allocate(arg.type);
           arg.expression->Evaluate(argStack[i], env);
         } else {

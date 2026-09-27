@@ -29,6 +29,12 @@ namespace {
       return (char*)env.registers[env.base + index] + offset;
     }
 
+    bool GetRegister(uint& index, uint& offset) const {
+      index = this->index;
+      offset = this->offset;
+      return true;
+    }
+
     Type GetType() const {
       return type;
     }
