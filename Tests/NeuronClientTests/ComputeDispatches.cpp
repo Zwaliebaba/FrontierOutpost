@@ -122,6 +122,8 @@ public:
       }
     }
     Assert::IsTrue(Read(test, field) == Floats(fieldValues), L"the field was not written as the offsets and slices give it");
+    // The one pipeline state the dispatch made was noted (Design/ShaderPipeline-plan.md P0.2).
+    Assert::IsTrue(test.notes.size() == 1 && test.notes[0].contains("for Field: compute;"), L"the compute pipeline state was not noted");
     ExpectClean(test);
   }
 

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cstring>
 #include <deque>
 #include <format>
@@ -235,6 +236,90 @@ DXGI_FORMAT ElementFormat(VertexFormat _format) noexcept
   return DXGI_FORMAT_UNKNOWN;
 }
 
+/// A format as DXGI spells it, for the notes: the formats the core makes targets and vertex inputs
+/// in by name, and any other by its number.
+std::string FormatName(DXGI_FORMAT _format)
+{
+  switch (_format)
+  {
+  case DXGI_FORMAT_R8_UNORM:
+    return "R8_UNORM";
+  case DXGI_FORMAT_R8G8_UNORM:
+    return "R8G8_UNORM";
+  case DXGI_FORMAT_R8G8B8A8_UNORM:
+    return "R8G8B8A8_UNORM";
+  case DXGI_FORMAT_R16_FLOAT:
+    return "R16_FLOAT";
+  case DXGI_FORMAT_R16G16B16A16_FLOAT:
+    return "R16G16B16A16_FLOAT";
+  case DXGI_FORMAT_R32_FLOAT:
+    return "R32_FLOAT";
+  case DXGI_FORMAT_R32G32_FLOAT:
+    return "R32G32_FLOAT";
+  case DXGI_FORMAT_R32G32B32_FLOAT:
+    return "R32G32B32_FLOAT";
+  case DXGI_FORMAT_R32G32B32A32_FLOAT:
+    return "R32G32B32A32_FLOAT";
+  case DXGI_FORMAT_D32_FLOAT:
+    return "D32_FLOAT";
+  default:
+    return std::format("format {}", static_cast<int>(_format));
+  }
+}
+
+std::string_view BlendName(BlendMode _mode) noexcept
+{
+  switch (_mode)
+  {
+  case BlendMode::Opaque:
+    return "opaque";
+  case BlendMode::Alpha:
+    return "alpha";
+  case BlendMode::Additive:
+    return "additive";
+  }
+  return "unknown";
+}
+
+std::string_view CullName(CullMode _cull) noexcept
+{
+  switch (_cull)
+  {
+  case CullMode::None:
+    return "no culling";
+  case CullMode::Back:
+    return "back faces culled";
+  case CullMode::Front:
+    return "front faces culled";
+  }
+  return "unknown culling";
+}
+
+/// What a graphics pipeline state was made for, in words, for the notes: _key's state and targets,
+/// and _elements, the inputs its vertex shader reads.
+std::string MadeFor(const PipelineKey& _key, std::span<const D3D12_INPUT_ELEMENT_DESC> _elements)
+{
+  std::string targets;
+  for (std::uint32_t index = 0; index < _key.targetCount; ++index)
+  {
+    targets += (index == 0 ? "" : ", ") + FormatName(_key.targetFormats[index]);
+  }
+  if (_key.depthFormat != DXGI_FORMAT_UNKNOWN)
+  {
+    targets += (targets.empty() ? "depth " : ", depth ") + FormatName(_key.depthFormat);
+  }
+  std::string inputs;
+  for (const D3D12_INPUT_ELEMENT_DESC& element : _elements)
+  {
+    inputs += std::format("{}{}{} ", inputs.empty() ? "" : ", ", element.SemanticName, element.SemanticIndex);
+    inputs += element.InputSlot == DEFAULT_ATTRIBUTE_SLOT ? std::string("from the default attribute")
+                                                          : std::format("{} at {}", FormatName(element.Format), element.AlignedByteOffset);
+  }
+  const std::string_view depth = !_key.depthTest ? "no depth test" : (_key.depthWrite ? "depth tested and written" : "depth tested");
+  return std::format("blend {}, {}, {}, {}; targets {}; inputs {}", BlendName(_key.blend), CullName(_key.cull), depth,
+                     _key.wireframe ? "wireframe" : "solid", targets.empty() ? "none" : targets, inputs.empty() ? "none" : inputs);
+}
+
 /// What slots no sampler is set in sample with, and the table the heap starts with.
 constexpr D3D12_SAMPLER_DESC POINT_SAMPLER{D3D12_FILTER_MIN_MAG_MIP_POINT,
                                            D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
@@ -373,6 +458,7 @@ struct DrawContext::Native
   ComPtr<ID3D12DescriptorHeap> shaderHeap;  // shader-visible: the null table, then the ring
   ComPtr<ID3D12DescriptorHeap> samplerHeap; // shader-visible: the default table, then the tables in use
   std::map<PipelineKey, ComPtr<ID3D12PipelineState>> pipelines;
+  double pipelineStatesMs = 0.0;               // the time spent making the cached pipeline states, graphics and compute
   ComPtr<ID3D12PipelineState> presentPipeline; // PresentVS.hlsl's and PresentPS.hlsl's, into BACK_BUFFER_FORMAT
 
   // What an input without an attribute reads, which Initialize makes.
@@ -1017,12 +1103,30 @@ struct DrawContext::Native
                                                  {nullptr, 0},
                                                  D3D12_PIPELINE_STATE_FLAG_NONE};
     ComPtr<ID3D12PipelineState> pipeline;
+    const auto start = std::chrono::steady_clock::now();
     if (!core.Check(core.device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&pipeline)),
                     std::format("ID3D12Device::CreateComputePipelineState for program {}", _program.name)))
     {
       return nullptr;
     }
-    return computePipelines.emplace(_program.id, std::move(pipeline)).first->second.Get();
+    ID3D12PipelineState* const made = computePipelines.emplace(_program.id, std::move(pipeline)).first->second.Get();
+    NotePipelineState(_program.name, "compute", start);
+    return made;
+  }
+
+  /// Counts the time since _start, when the pipeline state just added to the cache began to be made
+  /// for _program, and tells onNote what it was made for, how long it took and in which frame
+  /// (Design/ShaderPipeline-plan.md P0.2).
+  void NotePipelineState(std::string_view _program, std::string_view _madeFor, std::chrono::steady_clock::time_point _start)
+  {
+    const double madeInMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - _start).count();
+    pipelineStatesMs += madeInMs;
+    if (core.desc.onNote)
+    {
+      core.desc.onNote(std::format("Direct3D 12: pipeline state {} for {}: {}; made in {:.3f} ms, in frame {} ({:.3f} ms in all)",
+                                   pipelines.size() + computePipelines.size(), _program, _madeFor, madeInMs, core.framesBegun,
+                                   pipelineStatesMs));
+    }
   }
 
   /// Copies a table's views into the ring: _views[slot], or _null where that is empty.
@@ -1212,12 +1316,15 @@ struct DrawContext::Native
     };
     std::ranges::copy(_key.targetFormats, std::begin(desc.RTVFormats));
     ComPtr<ID3D12PipelineState> pipeline;
+    const auto start = std::chrono::steady_clock::now();
     if (!core.Check(core.device->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipeline)),
                     std::format("ID3D12Device::CreateGraphicsPipelineState for program {}", program->name)))
     {
       return nullptr;
     }
-    return pipelines.emplace(_key, std::move(pipeline)).first->second.Get();
+    ID3D12PipelineState* const made = pipelines.emplace(_key, std::move(pipeline)).first->second.Get();
+    NotePipelineState(program->name, MadeFor(_key, _elements), start);
+    return made;
   }
 
   /// A stage's constants as the program holds them now, in the upload ring. A stage without

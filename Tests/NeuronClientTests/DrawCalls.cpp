@@ -351,6 +351,35 @@ public:
     ExpectClean(test);
   }
 
+  TEST_METHOD(NotesEachPipelineStateItMakes)
+  {
+    TestDevice test;
+    Open(test);
+    Program solid = MakeProgram(test, Bytecode(SOLID_PS), "Solid");
+    Texture target = MakeTexture(test, TextureFormat::Rgba8, 2, 2);
+    Neuron::DrawContext& context = test.device.Context();
+    SetTarget(test, target);
+    context.SetState(PLAIN);
+    DrawWhole(test, solid, WHITE);
+    DrawWhole(test, solid, WHITE);
+    context.SetState({.blend = BlendMode::Alpha, .cull = CullMode::None, .depthTest = false, .depthWrite = false, .wireframe = false});
+    DrawWhole(test, solid, WHITE);
+
+    // One note for each state made, none for one taken from the cache, and each says what the
+    // state was made for and how long it took (Design/ShaderPipeline-plan.md P0.2).
+    Assert::AreEqual(std::size_t{2}, test.notes.size(), L"a state made was not noted, or one reused was");
+    Assert::AreEqual(test.device.PipelineStates(), test.notes.size());
+    for (const std::string& note : test.notes)
+    {
+      Assert::IsTrue(note.contains("for Solid:") && note.contains("targets R8G8B8A8_UNORM") &&
+                       note.contains("POSITION0 R32G32B32_FLOAT at 0") && note.contains(" ms"),
+                     Widen(note).c_str());
+    }
+    Assert::IsTrue(test.notes[0].contains("blend opaque") && test.notes[1].contains("blend alpha"), L"the notes name the wrong blends");
+    test.device.WaitIdle();
+    ExpectClean(test);
+  }
+
   TEST_METHOD(DrawsIndexedFromBuffers)
   {
     TestDevice test;

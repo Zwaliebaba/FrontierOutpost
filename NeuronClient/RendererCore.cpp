@@ -361,6 +361,11 @@ namespace LTE {
       Renderer_TakeDeviceMessages();
       Log_Critical(String(message.c_str()));
     };
+    /* Each pipeline state as it is made, and how long it took
+       (Design/ShaderPipeline-plan.md, P0.2). */
+    desc.onNote = [](std::string const& note) {
+      Log_Message(String(note.c_str()));
+    };
 
     std::string error;
     if (!Neuron::GraphicsDevice::Create(desc, core.device, error)) {

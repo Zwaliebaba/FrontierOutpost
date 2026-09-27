@@ -58,6 +58,9 @@ public:
     /// A call failed, or the device was removed. liblt ends the program here (ADR-007): nothing
     /// that depends on the device is recovered.
     std::function<void(const std::string&)> onFailure;
+    /// What the core notes that is no failure: for now, each pipeline state it makes, what for, how
+    /// long it took and in which frame (Design/ShaderPipeline-plan.md P0.2). It may be left empty.
+    std::function<void(const std::string&)> onNote = {};
     /// The size of each page of the upload ring, which constants, geometry and texture updates
     /// share. An upload larger than a page gets a staging buffer of its own.
     std::uint32_t uploadPageBytes = DEFAULT_UPLOAD_PAGE_BYTES;
@@ -136,7 +139,7 @@ public:
   [[nodiscard]] std::size_t PendingReleases() const noexcept;
 
   /// Pipeline states the context holds: one for each program and state a draw has used, made at
-  /// the first such draw.
+  /// the first such draw. Desc::onNote hears of each as it is made.
   [[nodiscard]] std::size_t PipelineStates() const noexcept;
 
   /// The messages the debug layer stored since the last call, oldest first: corruption, errors
