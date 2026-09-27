@@ -43,7 +43,9 @@ namespace LTE {
     if (!location->Exists())
       return;
 
-    HashT hash = Max((HashT)1, location->GetHash());
+    /* One read serves both the change check and the parse. */
+    String text = location->ReadAscii();
+    HashT hash = Max((HashT)1, String_Hash(text));
     if (hash == this->hash)
       return;
     this->hash = hash;
@@ -52,7 +54,7 @@ namespace LTE {
     types.clear();
     dependencies.clear();
 
-    StringList list = StringList_Load(location);
+    StringList list = StringList_Create(text);
     list = LTSL_ApplyRewrites(list);
 
     FRAME(&name.front()) {

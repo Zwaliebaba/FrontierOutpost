@@ -196,12 +196,10 @@ namespace LTE {
     if (!arr)
       return str;
 
-    str.reserve(arr->size());
-    for (size_t i = 0; i < arr->size(); ++i) {
-      char c = (*arr)[i];
-      if (c != '\r')
-        str.push_back(c);
-    }
+    Array<uchar> const& bytes = *arr;
+    if (bytes.size())
+      str.assign((char const*)bytes.data(), bytes.size());
+    std::erase(str, '\r');
     return str;
   }
 
