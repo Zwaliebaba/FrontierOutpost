@@ -98,7 +98,8 @@ namespace LTE {
 
         ScriptType t = script->GetType(typeName);
         if (t) {
-          Mutable(dependencies).push(script);
+          if (!dependencies.contains(script))
+            Mutable(dependencies).push(script);
           return t->type;
         }
       }

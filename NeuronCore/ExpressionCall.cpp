@@ -128,7 +128,7 @@ namespace LTE {
       Script script = env.script->ResolveRelativePath(scriptName);
       if (script) {
         function = script->GetFunction(functionName);
-        if (function)
+        if (function && !env.script->dependencies.contains(script))
           env.script->dependencies.push(script);
       }
     } else {
