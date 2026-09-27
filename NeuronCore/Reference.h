@@ -4,7 +4,11 @@
 #include "Mutable.h"
 #include "Type.h"
 
-#define DEBUG_POINTERS
+/* The null test on every dereference costs 3% to 7% of a script's instructions, so it is a
+   Debug check. In Release a null handle is an access violation, which the crash handler reports. */
+#ifdef _DEBUG
+  #define DEBUG_POINTERS
+#endif
 
 struct RefCounted : public NullBase<RefCounted> {
   uint refCount;
