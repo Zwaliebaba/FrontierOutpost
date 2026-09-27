@@ -2,8 +2,18 @@
 
 - **Status:** Proposed 2026-09-26. M1 and M2 approved (owner, 2026-09-27), and M1 is done. D1,
   D2, D3, D4, D5, D7, D8 and D9 approved the same day (§3). The E and L items, D6 and D10 are not
-  approved yet. The owner approves items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the
-  same commit where the item is a decision (§3). The next free ADR number is ADR-020 (ADR-016 went to the library split's visuals, ADR-017 to borderless fullscreen, ADR-018 to PIX's events, ADR-019 to C++/WinRT).
+  approved yet; they wait for M2. Nothing from the E, L or D items has landed. The owner approves
+  items by ID. Each approved item lands as its own PR (AGENTS.md §6), with its ADR in the same
+  commit where the item is a decision (§3). ADR numbers are the next free ones when each lands, as
+  `Design/ShaderPipeline-plan.md` has it: `Design/LtslInterpreter-plan.md` has claimed ADR-020.
+- **Where it stands (2026-09-27):**
+  - The game runs on the highest-performance adapter (ADR-007, amended the same day), so M2 is
+    measured on the owner's NVIDIA GeForce RTX 3070 Ti Laptop GPU; the owner set the Iris Xe
+    aside. One smoke run on it gave the first M1 readings (§6).
+  - M2 is blocked. A PIX capture exports no GPU timings until the owner's account is in
+    Performance Log Users, and that group is still empty (M2).
+  - Next: the owner adds the account; M2 runs; the owner approves E and L items by ID from its
+    numbers, and answers §7's questions 5 to 8 before the D items they touch are built.
 - **Scope:** the HLSL in `NeuronClient/Shaders/` and `FrontierOutpost/Shaders/`, and the C++ that
   dispatches it:
   - the four compute shaders;
@@ -12,7 +22,8 @@
 - **Files:** a C++ or shader reference gives the file name alone, which is unique in the tree, and
   scripts are under `GameData/script/`. After this plan was written, the library split's P2
   (ADR-016) moved some of the files between projects without renaming any, and every reference was
-  checked again against `797f690`.
+  checked again against `797f690`. M1, ADR-018 and the shader pipeline plan's P0 then moved lines,
+  and every reference was checked a third time on 2026-09-27, against `8d74581`.
   - `NeuronClient/Shaders/` holds the four compute shaders, `ComputeOcclusionPS`,
     `ComputeSdffontPS`, `NpmVS`, `PostBlurPS`, `UiBasicPS`, `UiNonePS`, and `Common`, `Field` and
     `Noise.hlsli`. Every other shader cited is in `FrontierOutpost/Shaders/`.
@@ -25,7 +36,10 @@
   an estimate, and says its method.
 - **Bounds:**
   - FXC at Shader Model 5.1 and feature level 11_0 (ADR-007, ADR-008): no wave intrinsics, no
-    SM 6, no 16-bit types. Nothing below needs them.
+    SM 6, no 16-bit types. Nothing below needs them. This holds until
+    `Design/ShaderPipeline-plan.md`'s P5 moves the shaders to DXC at Shader Model 6.6, the floor
+    the owner chose for later. That plan starts its P1 only once the items approved here after M2
+    have landed, and its §7 lists where its items and these meet.
   - The equivalence bar is "visually equivalent", as `.claude/skills/perf-review/SKILL.md` §3
     defines it. An item that lowers quality, changes seeds or changes generated content is a
     decision for the owner (§3), however cheap.
@@ -44,6 +58,11 @@ four compute shaders. It is a pixel shader doing compute work: the plate-mesh oc
 | Glyph SDF (`ComputeSdffontPS`) | each glyph, at first use (a frame hitch) | 1-2 ms per glyph; 3-4 ms on an Iris Xe | estimated: 106.5M taps per glyph |
 | The frame | every frame | ~3-5 ms at 1080p on a GTX 1660-class GPU; 2-3× that on an iGPU | estimated from the passes' bytes and operations |
 
+**The first readings on the owner's GPU agree on the order** (§6: one Release run of `war` on the
+RTX 3070 Ti, not M2). The plate AO took 1.4 s over eight hulls, 1.04 s of it for the largest; the
+IR map 474 ms, more than its estimate above; the SDF AO 159 ms over 24 levels; a field 2 ms once
+its pipeline state existed.
+
 **Three of the hottest loops share one pattern.** Every thread of a wave reads the same element,
 at the same time, through the texture unit:
 
@@ -58,7 +77,10 @@ instructions.
 
 **The frame has no single dominant cost.** The frame's cost is spread over a dozen passes. The
 per-frame items are worth doing, but they will not fix a low frame rate if the frame is
-CPU-bound; M2 answers that.
+CPU-bound; M2 answers that. On the owner's GPU it may well be: a perf-review baseline on the same
+RTX 3070 Ti, taken before the library split, found `war`'s frame CPU-bound at a median of 2.7 ms
+(§6). If M2 agrees, the per-frame items buy little frame rate there, and the load-time items keep
+their rank.
 
 **The frame's figures are for 1080p.** Since ADR-017 a player's run draws at the display's
 resolution, so on a 1440p or 4K display the per-frame costs above grow roughly with the pixel
@@ -99,29 +121,32 @@ line is. The glyph line waits for the GPU before and after each glyph, which pla
 is compiled only with `TIME_GLYPHS` defined at the top of `Font.cpp`, as `Main.cpp` has
 `TIME_LTSL_COMPILE`.
 
-`SDFMesh` logs how long each field took (ADR-009 decision 6), and nothing else here is timed. Add
-the same line to:
+`SDFMesh` logged how long each field took (ADR-009 decision 6), and nothing else here was timed.
+The same line is now in:
 
-- `GenerateOcclusion::OnEnd` (`SDFMesh.cpp:570`), per level, with its vertex count;
-- `Mesh_ComputeOcclusion` (`PlateMesh.cpp:112`), with vertices, surfels and bands;
-- `Generator_IRMap` (`IRMap.cpp:12`);
-- `AddGlyph` (`Font.cpp:68`).
+- `GenerateOcclusion::OnEnd` (`SDFMesh.cpp:573`), per level, with its vertex count;
+- `Mesh_ComputeOcclusion` (`PlateMesh.cpp:114`), with vertices, surfels and bands;
+- `Generator_IRMap`, in the `Generate` it binds (`IRMap.cpp:14`);
+- `AddGlyph` (`Font.cpp:77`), behind `TIME_GLYPHS`.
 
 The AO bakes and the IR map already wait for the GPU, so their times include GPU time: the
 scheduler waits after each job run, the plate bake after each band, and the IR map at each
 readback. A glyph's time needs a GPU wait added in the measuring build. Whether the lines stay
 committed is question 3 in §7.
 
-**The frame's counters are gone.** `83c4cc9` had committed counters marked "PERF HARNESS (local,
-uncommitted)" in six NeuronClient files: time in Present, EndFrame and BeginFrame, GPU waits, and
-draws and triangles, written per frame to `PERF_CSV`, with `PERF_PROFILE` and
+**The harness's frame counters are gone.** `83c4cc9` had committed counters marked "PERF HARNESS
+(local, uncommitted)" in six NeuronClient files: time in Present, EndFrame and BeginFrame, GPU
+waits, and draws and triangles, written per frame to `PERF_CSV`, with `PERF_PROFILE` and
 `PERF_NO_DEBUG_LAYER` switches. The owner had them removed on 2026-09-27 (§7 question 3); the
-launcher's three-decimal timings from the same commit stay.
+launcher's three-decimal timings from the same commit stay. The renderer's own draw and triangle
+counts were never part of it and remain (`Renderer_GetDrawCallCount`, `Renderer_GetPolyCount`),
+and the shader pipeline plan's P0.2 now logs each pipeline state made, with its time and frame.
 
 ### M2. Baseline
 
-This follows the perf-review skill's §4: Release|x64 on the owner's GPU (an Iris Xe), median of
-three runs.
+This follows the perf-review skill's §4: Release|x64 on the owner's GPU, median of three runs.
+That is the NVIDIA GeForce RTX 3070 Ti Laptop GPU, which the game runs on since it picks the
+highest-performance adapter (ADR-007, amended 2026-09-27); the owner set the Iris Xe aside.
 
 - M1's lines for `war`, `ltheory` and `hud` (the system with the boss hull);
 - the time to first frame, and the time until the scheduler is idle;
@@ -132,12 +157,15 @@ three runs.
   It is taken unattended with `war --frames 900 --gpu-capture <path>`, and its timings exported
   with `pixtool open-capture <path> save-event-list <csv> --counters=*Duration*`. The export needs
   PIX's performance-logging permission: the account in Performance Log Users, or an elevated
-  shell. The first capture (2026-09-27) has the regions and 334 draws, and no timings for that
-  reason;
+  shell. The first capture (2026-09-27, on the Iris Xe) has the regions and 334 draws, and no
+  timings for that reason. **The group was still empty later that day, so M2 waits for the
+  owner** to run `Add-LocalGroupMember -Group "Performance Log Users" -Member "zwali"` from an
+  elevated shell and sign in again. An agent never elevates itself;
 - the WARP smoke run, `FrontierOutpost.exe war --warp --frames 30`, as a reference only: WARP time
   is not a goal (§7 question 2).
 
-The ranks of E3, E5 and the per-frame items are provisional until this exists.
+The ranks of E3, E5 and the per-frame items are provisional until this exists. §6's first
+readings and the earlier baseline on the same GPU are priors, not M2.
 
 ### E1. `GenFieldCS` computes only its batch
 
@@ -145,7 +173,7 @@ The ranks of E3, E5 and the per-frame items are provisional until this exists.
 then tests each voxel against the whole field, not the batch. So a 1-slice batch computes 4 slices,
 and the next batch recomputes 3 of them.
 
-**Why WARP pays 4×.** The scheduler's first run of a job is always 1 unit (`Scheduler.cpp:144-147`).
+**Why WARP pays 4×.** The scheduler's first run of a job is always 1 unit (`Scheduler.cpp:147-150`).
 At ADR-009's 22 s per 128³ field, a run takes about 170 ms, which is over the 16.7 ms budget, so
 WARP's batch never grows past 1 slice. Every WARP field is computed about four times, and the 22 s
 holds about 5.5 s of work.
@@ -158,7 +186,7 @@ field, and checks that no other slice is written.
 
 ### E2. SDF AO: the same arithmetic, fewer instructions
 
-Where: `Field.hlsli:42-62`, `GenFieldocclusionCS.hlsl`, and `SDFMesh.cpp:479-620`. Three
+Where: `Field.hlsli:42-62`, `GenFieldocclusionCS.hlsl`, and `SDFMesh.cpp:479-626`. Three
 independent changes. (a) and (b) came out bit-identical on lavapipe (§6). (c) only changes which
 thread computes which vertex, so it is exact by construction.
 
@@ -185,6 +213,10 @@ float SampleField(Texture3D<float> source, uint3 size, float3 coord) {
 }
 ```
 
+**With D1, which the owner approved, (a) is superseded.** D1 filters the field in hardware in
+`GenFieldocclusionCS` and `GenFieldcopyCS`, the only callers of `SampleField`, and its figure in §3
+assumes (b). §7 question 6 asks whether to approve (b) and (c) alone.
+
 **(b) Directions in the constant buffer.** They become `float4 directions[MAX_SAMPLES]` in
 `$Globals`, with `#define MAX_SAMPLES 2116u`. That is 33.9 KB, under the 64 KB limit. The job sets
 them with `SetConstant("directions", …)` instead of creating `noiseTexture`, and checks that
@@ -206,24 +238,24 @@ coordinates and at border coordinates.
 
 ### E3. Plate AO: surfels from the constant buffer
 
-Where: `ComputeOcclusionPS.hlsl:26-49` and `PlateMesh.cpp:112-201`.
+Where: `ComputeOcclusionPS.hlsl:26-49` and `PlateMesh.cpp:114-213`.
 
 **(a) Surfels in the constant buffer.** Each band's surfels go into `float4 sPoint[2040]` and
 `float4 sNormal[2040]` in the pixel shader's `$Globals`, through `SetFloat4Array`
-(`Shader.cpp:400`), in today's order, padding included. The loop indexes them with its counter,
+(`Shader.cpp:382`), in today's order, padding included. The loop indexes them with its counter,
 and the band keeps its row boundaries.
 - Big hulls have one-row bands of at most 2,040 surfels (the boss hull's sDim is about 601, by
   the reviewer's count), so they are bit-exact in practice: a sample at a texel centre returns the
   texel.
 - Smaller meshes whose bands exceed 2,040 surfels split there, which changes their bands'
   summation grouping in the last bits.
-- The upload page is 4 MB (`GraphicsDevice.h:34`), so a 64 KB block per band stays in the ring.
+- The upload page is 4 MB (`GraphicsDevice.h:51`), so a 64 KB block per band stays in the ring.
 - **The constant buffer is at its limit.** 2 × 2,040 `float4` is 65,280 of 65,536 bytes, which
   leaves 256 bytes for the rest of `$Globals`. `sDim`, `sRowBegin` and `sRowEnd` take 16 today;
   one more constant array in this shader would not fit. The job checks the reflected size of
   `$Globals` at load and fails loudly rather than truncating.
 
-**(b) No CPU wait per band.** `PlateMesh.cpp:190` becomes `Renderer_Flush()`: each band is still
+**(b) No CPU wait per band.** `PlateMesh.cpp:195` becomes `Renderer_Flush()`: each band is still
 its own submission, which is what protects against a TDR, but the CPU no longer waits for it. Wait
 every N bands, so that the upload ring recycles.
 
@@ -234,31 +266,40 @@ keeps any band size exactly, but moves the accumulation from the blend unit to a
 reloads and 27 VALU instructions. With (a) it costs 2 scalar loads and 24 VALU instructions, with
 no texture traffic. The reviewer's estimate for the system `hud.lts` builds is ~6.7 s → ~2.3 s per
 system init on a GTX 1060-class GPU, plus 80-260 ms from (b). The hull sizes behind that estimate
-were counted from `Item/ShipType/Generate.lts`, not run: M1 settles them.
+were counted from `Item/ShipType/Generate.lts`, not run. M1's lines now give `war`'s: its largest
+hull, 138,240 vertices over 232,320 surfels in 482 one-row bands, took 1,042 ms on the RTX 3070 Ti,
+about 31 billion pairs a second (§6). `hud`'s boss hull waits for M2.
+
+**With D3 and D5, which the owner approved.** D3's cache runs this bake only on a load that misses
+it, and D5 replaces the all-pairs loop that (a) speeds up. §7 question 7 asks whether E3 still goes
+first.
 
 ### E4. Mips made where they are needed
 
-- **(a) The font atlas.** `Font.cpp:137` rebuilds the whole 1024² atlas's chain after every glyph:
+- **(a) The font atlas.** `Font.cpp:151` rebuilds the whole 1024² atlas's chain after every glyph:
   10 dispatches and 10 barrier batches, in the middle of a frame. Build it once per `Draw` or
   `GetTextSize` that added glyphs. Mips depend only on mip 0, so this is exact.
-- **(b) Cube maps.** `DrawContext.cpp:1826-1837` issues one dispatch per face per mip, each after a
+- **(b) Cube maps.** `DrawContext.cpp:1936-1947` issues one dispatch per face per mip, each after a
   barrier flush of its own: 60 for a 1024 cube, where 10 would do.
-  - The SRV and UAV in `MakeMip` (`DrawContext.cpp:1040-1094`) become arrays of `faces` slices.
+  - The SRV and UAV in `MakeMip` (`DrawContext.cpp:1147-1202`) become arrays of `faces` slices.
   - `GenerateMipsCS` takes its slice from `SV_DispatchThreadID.z`.
   - One barrier batch covers all six faces.
   - `MipGeneration.cpp` gains a cube case.
-- **(c) IR-map temporaries.** `IRMap.cpp:60` builds a full mip chain for each temporary cube, and
+- **(c) IR-map temporaries.** `IRMap.cpp:63` builds a full mip chain for each temporary cube, and
   never reads it. Pass `generateMips = false`. E5 removes the temporaries altogether.
 
 ### E5. IR map rendered into its own mips
 
-Where: `IRMap.cpp:12-73` and `CubemapIrmapPS.hlsl:16-30`. Today each level renders into a
+Where: `IRMap.cpp:14-81` and `CubemapIrmapPS.hlsl:16-30`. Today each level renders into a
 temporary cube, reads it back one face at a time, and uploads it into the IR map. Level 0 makes the
-same round trip: 192 MB.
+same round trip: 192 MB. One run measured the whole map at 474 ms on the RTX 3070 Ti (§6), against
+§1's estimate of about 155 to 215 ms on a slower GPU, so this item may be worth more than its
+estimate. With D3, which the owner approved, it pays only on a load that misses the cache, and D8
+changes the format it is compared in (§7 questions 7 and 8).
 
 **Change.**
 1. Render level i straight into mip i. The legacy renderer's `Renderer_PushColorBuffer`
-   (`Renderer.cpp:738`) gains a mip argument; `ColorTarget` already carries one
+   (`Renderer.cpp:798`) gains a mip argument; `ColorTarget` already carries one
    (`DrawContext.h:149-154`).
 2. Copy level 0 on the GPU, with a `Load` pass, since `DrawContext` has no copy.
 3. Read the 1,024 sample directions once, into `float4 sampleDirections[1024]`. They are not the
@@ -317,23 +358,29 @@ explicit gradients replace implicit ones.
   blending returns the destination there anyway. `UiBasicPS` otherwise runs ~22 transcendentals
   on every screen pixel.
 - **(b)** Rendered's copy into the frame (`Rendered.cpp:133-137`): `BlendMode::Disabled`. Blending
-  with alpha 1 gives the source anyway.
+  with alpha 1 gives the source anyway, in colour. Not in alpha: `BlendMode::Alpha` adds the
+  destination's alpha (`DestBlendAlpha` is ONE, `DrawContext.cpp:172`), so today the frame's alpha
+  becomes 1 plus what it held. The item is bit-exact only if nothing reads that alpha afterwards,
+  and it shows that first.
 - **(c)** `LightCompositePS.hlsl:19-27`: `[branch] if (fog > 0)` around the fog colour. Fog is
   exactly 0 away from asteroid fields.
 - **(d)** `PostBlurPS.hlsl:23-24`: `SampleLevel(…, 0)` instead of `SampleGrad`.
-  - Bit-exact for bloom, whose sampler has MaxLOD 0 and linear min and mag.
+  - Bit-exact for bloom, whose sampler has MaxLOD 0 and linear min and mag. The sampler comes
+    from the textures, which `Rendered.cpp:50-60` makes without mips, not from `Bloom.cpp`.
   - Gated by a uniform that `Bloom.cpp` sets, because `Filters.lts` runs the same shader with other
     samplers.
 - **(e)** Lens flares: skip the clear and the composite when no flare was drawn. The output is
   exactly the input then.
 - **(f)** Per-draw constants that are computed per pixel move to the vertex shader, as
   `nointerpolation` varyings: `StarbgPS.hlsl:19`, `LensflarePS.hlsl:18`, `LightGlobalPS.hlsl:16`,
-  `ExplosionPS.hlsl:27-29`, `ShieldExplosionPS.hlsl:31-35`, `TransferbeamPS.hlsl:22` and
-  `WormholePS.hlsl:18`.
+  `ExplosionPS.hlsl:27-29`, `ShieldExplosionPS.hlsl:31`, `:34` and `:35` (32 and 33 are per
+  pixel), `TransferbeamPS.hlsl:22` and `WormholePS.hlsl:18`.
 - **(g)** SMAA's weight pass (preset ULTRA, `Smaa.hlsli:244`) runs on every pixel.
   - A depth mask written where the edge pass does not discard lets early-Z cull non-edge tiles.
-    `Smaa.hlsli:131-134` recommends it.
-  - It needs a depth function in the pipeline-state key; `DrawContext.cpp:212` fixes LESS today.
+    `Smaa.hlsli:131-134` recommends a stencil mask to the same end; depth needs no stencil format
+    beside `D32_FLOAT` (ADR-007 decision 5).
+  - It needs a depth function in the pipeline-state key; `DrawContext.cpp:215` fixes LESS today.
+    The shader pipeline plan's P1b interns that key later, depth function included.
   - The weights clear at `SMAA.cpp:76` is redundant today, but not once the mask exists.
 
 ### L1 to L7. Last-bits items
@@ -348,9 +395,9 @@ explicit gradients replace implicit ones.
 - **L4** `LightCompositePS`: `[branch] if (albedo.w < 1)` around the background, with
   `textureCubeGrad`. `SkyboxPS` writes alpha 1 under all geometry.
 - **L5** Early-Z:
-  - keep the prepass depth (`DepthPrepass.cpp:113` clears it);
+  - keep the prepass depth (`DepthPrepass.cpp:108` clears it);
   - draw the G-buffer with LESS_EQUAL and depth writes off;
-  - drop the `EARLY_Z` discard (`Common.hlsli:219`);
+  - drop the `EARLY_Z` discard (`Common.hlsli:221`, under the define at 219);
   - mark `NpmVS`'s position math `precise`;
   - draw the System interior (the skybox) last.
 
@@ -372,7 +419,9 @@ approved, each gets an ADR in the same commit.
 **Approved (owner, 2026-09-27): D1, D2, D3, D4, D5, D7, D8 and D9.** D6 and D10 stay open until
 M2's numbers are in. Approval is of the decision; each still lands as its own PR, in §4's order,
 with its ADR. D2 changes every generated shape, so no capture taken before it compares with one
-taken after: the bit-exact items that follow it are proved against a new baseline.
+taken after: the bit-exact items that follow it are proved against a new baseline. How the
+approved items meet the E items is still open: D2's scope and timing, E2(a) with D1, E3 with D3 and
+D5, and D8's order (§7 questions 5 to 8).
 
 | ID | Decision | What it buys | What it costs or forecloses |
 |---|---|---|---|
@@ -394,20 +443,24 @@ taken after: the bit-exact items that follow it are proved against a new baselin
 2. E1, the smallest change. It also speeds up the WARP smoke runs, though WARP time is not a goal
    (§7 question 2).
 3. E3, the largest estimated cost.
-4. E2, and D1 after it if approved (D1 builds on E2's structure).
+4. E2, then D1, which is approved and builds on E2(b). With D1, E2(a) is superseded (§7
+   question 6).
 5. E4: (c) lands only if E5 is not approved.
 6. E5.
 7. E6.
 8. E7, E8, then E9 (a) to (g). E9(g) lands the pipeline-state key change that L5 reuses.
 9. L1 to L7, once the owner has seen the numbers from the steps above.
-10. The D items, as approved. D2 and D3 do not depend on the rest.
+10. The D items, as approved. D3 does not depend on the rest, but D8 goes before it (§7
+    question 8). D2 resets every generated baseline, and `Design/ShaderPipeline-plan.md` puts it in
+    one window with its P5, the compiler switch, which comes after that plan's P1 to P4 (§7
+    question 5).
 
 **For every item:**
 - **Build** Debug|x64 and Release|x64 through the solution, and ARM64 when C++ changes, since
   every project builds for it (ADR-006, ADR-014).
 - **Checkers:** `CheckFormat.py`, `CheckProjectFiles.py` (a new shader or test file is registered in
   the `.vcxproj`, the `.filters` and, for a shader, its folder's registry: `ShaderRegistry.cpp` or
-  `GameShaderRegistry.cpp`), and `RunClangTidy.py`.
+  `GameShaderRegistry.cpp`), `RunClangTidy.py`, and `TestCheckers.py`, which CI runs too.
 - **Tests:** NeuronClientTests, on WARP with the debug layer, including the item's new test. Its
   include path is NeuronClient's folder alone, so it cannot build against the legacy files
   (ADR-015), which need NeuronCore's headers, and no suite links the executable. E3 and E5 are
@@ -436,7 +489,8 @@ taken after: the bit-exact items that follow it are proved against a new baselin
 - **The present pass, the full-screen quad's diagonal, and the shared 22-register varyings.** Each
   costs well under 1% of the frame.
 - **Shader Model 6 and wave intrinsics.** Nothing above needs them, and ADR-008 forecloses DXC while
-  reflection runs at load.
+  reflection runs at load. `Design/ShaderPipeline-plan.md` lifts both with its P3 and P5, after the
+  items here; an item can be revisited on Shader Model 6.6 then, if a measurement asks for it.
 
 ## 6. Evidence
 
@@ -482,17 +536,47 @@ to 1.0.
 
 **`GenFieldcopyCS`.** 181 → 39 instructions and 9 → 2 memory ops with D1's sampler.
 
+**First readings on the RTX 3070 Ti (2026-09-27).** One Release|x64 run of
+`FrontierOutpost.exe war --frames 120 --capture <png>`, in the smoke mode's framed 1920×1080
+window, on the owner's laptop (NVIDIA GeForce RTX 3070 Ti Laptop GPU, driver 596.36), at `8d74581`
+with ADR-007's adapter change. One run, not M2's median of three, with nothing pinned and no
+cool-down. A job's first run includes making its pipeline state, which the shader pipeline plan's
+P0.2 logs.
+
+| What | Measured |
+|---|---|
+| Launch | initialized after 4.07 s, first frame after 5.95 s, 120th frame after 6.84 s |
+| Plate AO | 1,405 ms over eight hulls. The largest: 138,240 vertices over 232,320 surfels in 482 bands, 1,042 ms. The next: 44,928 over 75,504 in 138 bands, 180 ms |
+| IR map | 474 ms, at 1024² per face, 11 levels and 1,024 samples |
+| SDF fields, 127³ | 57 ms for the first, which made its 50 ms pipeline state; 2 ms for each of the other two |
+| SDF AO, 2,116 samples | 159 ms over 24 levels: 3 to 9 ms each, and 43 ms for one 18-vertex level |
+| Pipeline states | 44, all in frame 1: 520 ms in this run, the first after the build, and 35 ms in the next, a Debug run of the same bytecode |
+| Debug, with the debug layer | initialized after 7.64 s, first frame after 10.36 s; the largest plate AO 1,188 ms, the IR map 504 ms; the debug layer reported nothing |
+
+At `war`'s measured rate, about 31 billion vertex-surfel pairs a second (138,384 × 232,324 once
+padded, in 1.042 s), the ~1.1e11 pairs §1 estimates for `hud`'s system would take about 3.5 s. That
+is an estimate from a measured rate; M2 measures it.
+
+**A prior on the same GPU (2026-09-26).** A perf-review baseline on the RTX 3070 Ti, at `287340b`:
+before the library split and ADR-017, in a framed 1920×1080 window, Release, pinned to the
+performance cores, 90 s between runs, median of three. `war` drew its first frame after 3.66 s and
+then ran at a median of 2.7 ms a frame, CPU-bound: the wait on the frame fence was 0 to 0.13 ms a
+frame. `ltheory` initialized after about 22 s with about one core busy, which is CPU work, not
+shaders. Its notes are in `%LOCALAPPDATA%\FrontierOutpost-perf\2026-09-26\` on the owner's machine,
+outside the repository (the perf-review skill's §4).
+
 **Not verified.**
 - FXC's DXBC for any of this. Whether FXC flattens `Field.hlsli`'s bounds test, or hoists L6's
   uniform terms, needs `fxc /T cs_5_1 /Fc` (or `ps_5_1`), or RGA's DX12 mode, on Windows.
-- The hull sizes behind E3's estimate.
+- `hud`'s boss hull, behind E3's estimate. `war`'s hulls are in the first readings.
 - Every per-frame figure, which comes from counting operations and bytes.
 
 ## 7. Open for the owner
 
 1. ~~Which configuration the numbers are taken on.~~ **Answered (owner, 2026-09-27):** Release|x64
-   on the owner's Intel Iris Xe (the same GPU ADR-009 measured on, and where §1 puts the frame at
-   2-3× its GTX 1660-class estimate).
+   on the owner's GPU. That was the Intel Iris Xe at first. The owner then set the Iris Xe aside,
+   and the game now runs on the highest-performance adapter (ADR-007, amended): on the owner's
+   laptop, the NVIDIA GeForce RTX 3070 Ti Laptop GPU.
 2. ~~Whether WARP time is a goal.~~ **Answered (owner, 2026-09-27): no.** E1 and E2(c) are ranked
    by their GPU gains; the WARP smoke run is timed only as a reference.
 3. ~~Whether M1's timing lines stay committed.~~ **Answered:** M1's lines stay, the glyph line
@@ -500,3 +584,14 @@ to 1.0.
 4. ~~D1 to D10, one by one.~~ **Answered (owner, 2026-09-27):** D1, D2, D3, D4, D5, D7, D8 and D9
    approved (§3). Still open: **D6** (pass merges) and **D10** (per-frame options that change the
    image), until M2's numbers are in.
+5. **D2's scope and timing.** D2 was approved without its scope: the SDF path's Worley noise only,
+   or every noise user (§3). Its timing is open too. `Design/ShaderPipeline-plan.md` puts it in one
+   window with that plan's P5, so every generated baseline resets once, which holds it until after
+   that plan's P1 to P4. §4 had it free to land at any time.
+6. **E2 with D1.** D1 is approved and builds on E2(b), which is not. Approve E2(b) and (c) alone,
+   since D1 supersedes (a)?
+7. **E3 with D3 and D5.** D3's cache makes E3 and E5 pay only on a load that misses it, and D5
+   replaces the loop that E3 speeds up. Does E3 still land first, as the cheap bit-exact step, or
+   does D5 take its place?
+8. **D8 before D3 and E5.** RGBA16F changes the IR map's format. Landing D8 first writes D3's cache
+   once, in its final format, and compares E5 bit for bit in that format. Confirm the order.

@@ -2,12 +2,13 @@
 
 - **Status:** Proposed 2026-09-27. The owner answered four scoping questions the same day (§0),
   and approved P0.1 to P0.6. Those landed together, as the owner asked, one commit each on
-  `claude/vibrant-planck-8jxlx1`. CI builds them at Debug|x64 and passes every test on WARP; none
-  has been run in the game, and each P0 item in §4 says what it still needs from a run. Nothing
-  from P1 on is approved. The owner approves items by ID; from P1
-  on each lands as its own PR, with its ADR in the same commit where the item is a decision
-  (AGENTS.md §6). ADR numbers are the next free ones when each lands; the performance plan's D
-  items take numbers from the same sequence.
+  `claude/vibrant-planck-8jxlx1`. CI builds them at Debug|x64 and passes every test on WARP. On
+  2026-09-27 `war` ran in the game with all six, in Release and in Debug with the debug layer, on
+  the owner's RTX 3070 Ti: that answered P0.1 on that GPU and gave P0.2's first reading. Each P0
+  item in §4 says what it still needs from a run. Nothing from P1 on is approved. The owner
+  approves items by ID; from P1 on each lands as its own PR, with its ADR in the same commit where
+  the item is a decision (AGENTS.md §6). ADR numbers are the next free ones when each lands; the
+  performance plan's D items take numbers from the same sequence.
 - **Scope:** how a shader becomes a draw or a dispatch:
   - `Program`, and `DrawContext`'s pipeline-state cache, root signatures and binding;
   - the two shader registries;
@@ -451,16 +452,21 @@ P0.1 to P0.6 went together, as the Status says.
     - whether a root signature with both `*_HEAP_DIRECTLY_INDEXED` flags can be made.
   - A NeuronClientTests case logs the same for WARP, locally and in CI. Where SM 6.6 is missing,
     the case reports it and does not fail, since nothing needs SM 6.6 before P5.
-  - The owner runs any app on the Iris Xe and on the ARM64 device.
-  - **Gate for P5 and P6:** all four (the Iris Xe, the ARM64 device, local WARP, CI's WARP) report
-    SM 6.6 or higher and make the root signature. Otherwise O2 and O3 are decided before P5.
+  - The owner runs any app on the owner's GPU and on the ARM64 device.
+  - **Gate for P5 and P6:** all four (the owner's GPU, the ARM64 device, local WARP, CI's WARP)
+    report SM 6.6 or higher and make the root signature. Otherwise O2 and O3 are decided before
+    P5. The owner's GPU was the Iris Xe until the owner set it aside on 2026-09-27; the game now
+    runs on the highest-performance adapter (ADR-007, amended), which on the owner's laptop is the
+    NVIDIA GeForce RTX 3070 Ti Laptop GPU.
   - **Landed:** `GraphicsDevice::Capabilities()`, which liblt logs at startup as one line
     beginning `Direct3D 12 supports shader model`, and the NeuronClientTests case
     `ReportsWhatTheDeviceSupports`, which writes WARP's answers to the test log.
   - **CI's WARP answered** on 2026-09-27, on GitHub's `windows-latest` runner (image
     `win25-vs2026`, 20260922): shader model 6.7, binding tier 3, directly indexed heaps, pipeline
-    libraries, and no automatic disk cache. It passes the gate. The Iris Xe, the ARM64 device and
-    local WARP are the owner's to run.
+    libraries, and no automatic disk cache. It passes the gate.
+  - **The RTX 3070 Ti answered** on 2026-09-27, in `war` (driver 596.36): the same, shader model
+    6.7, binding tier 3, directly indexed heaps, pipeline libraries, and no automatic disk cache. It
+    passes the gate. The ARM64 device and local WARP are the owner's to run.
 - **P0.2: pipeline-state telemetry.** It counts and times every pipeline state made, and logs each
   one with its key and the frame it was made in, so the states made after the app's first frame
   are the lines with a later frame. This gives G1's size, and later the proof of P2.
@@ -468,6 +474,11 @@ P0.1 to P0.6 went together, as the Status says.
     each part of its key by name, the time it took, its frame, and the time spent on all of them so
     far. liblt writes the lines to its log. It logs every state, not only the late ones, so P2a
     needs no change to it.
+  - **First reading** (2026-09-27, the RTX 3070 Ti, one run each): `war --frames 120` made 44
+    states, all in frame 1, and none later. They took 520 ms in all in the first run after the
+    build, and 35 ms in the next, a Debug run of the same bytecode. The device reports no automatic
+    disk cache, so the driver's own cache is the likely reason; §3.2's question, whether first-run
+    compiles still matter, needs more apps and a cold cache on purpose.
 - **P0.3: draw-path timing.** It measures the CPU time from a draw call to its record, summed per
   frame. It sits behind a define, as `TIME_GLYPHS` does (M1), and gives G2's size and point 2 of §2
   its number.
@@ -674,10 +685,11 @@ P0.1 to P0.6 went together, as the Status says.
 **Not verified:**
 - Which binding tier directly indexed heaps need. The SM 6.6 specification's site was blocked from
   this session; P0.1 decides.
-- Whether the Iris Xe, the ARM64 device and local WARP support SM 6.6 with directly indexed heaps
-  (P0.1). CI's WARP does: shader model 6.7 at binding tier 3, on 2026-09-27.
+- Whether the ARM64 device and local WARP support SM 6.6 with directly indexed heaps (P0.1). CI's
+  WARP and the owner's RTX 3070 Ti do: shader model 6.7 at binding tier 3, on 2026-09-27.
 - H2 in a run (P0.6), whose fix landed without one.
-- Every cost figure (P0.2, P0.3), whose instruments landed without a run.
+- Every cost figure but one: P0.2 has a single reading, from `war` (P0.2), and P0.3's instrument
+  has not been run.
 - How far DXC's output differs from FXC's on this content (P5).
 - That every shader compiles under DXC with `-HV 2018` without edits. A search found every `?:`,
   `&&` and `||` in the HLSL applied to scalars, which HLSL 2021 accepts too, so P7's move to 2021
