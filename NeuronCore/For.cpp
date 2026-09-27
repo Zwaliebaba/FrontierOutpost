@@ -23,11 +23,19 @@ namespace LTE {
     Vector<Expression> expressions;
     expressions.push(Expression_DeclareLocal(value, valueName));
 
+    /* A 'for' that does not compile gives back the registers it took, so the locals declared
+       after it keep their own. */
     Expression predicate = Expression_Compile(list->Get(3), env);
-    if (!predicate) return nullptr;
+    if (!predicate) {
+      env.Free(valueName);
+      return nullptr;
+    }
 
     predicate = Expression_Conversion(predicate, Type_Get<bool>());
-    if (!predicate) return nullptr;
+    if (!predicate) {
+      env.Free(valueName);
+      return nullptr;
+    }
 
     /* Compile inner block + operation. */ {
       Vector<Expression> innerExpressions;
@@ -40,8 +48,12 @@ namespace LTE {
 
       /* Operation. */ {
         Expression operation = Expression_Compile(list->Get(4), env);
-        if (!operation)
+        if (!operation) {
+          for (size_t i = localNames.size(); i-- > 0; )
+            env.Free(localNames[i]);
+          env.Free(valueName);
           return nullptr;
+        }
         innerExpressions.push(operation);
       }
 

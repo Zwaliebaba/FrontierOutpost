@@ -125,7 +125,6 @@ struct Type;
 struct TypeT;
 
 typedef Reference<struct FunctionT> Function;
-typedef Reference<struct PackageT> Package;
 
 /* Misc. */
 struct DrawState;
@@ -135,7 +134,6 @@ namespace LTE {
   /* Engine. */
   struct Data;
   struct DataRef;
-  struct DataStack;
   struct Diff;
   struct Grammar;
   struct Patch;
@@ -251,8 +249,6 @@ namespace LTE {
   #undef XTYPE
   #undef XLIST
 }
-
-#define offset_of(type, member) ((volatile void const*)&((type*)0)->member)
 
 #define MACRO_IDENTITY(x) x
 

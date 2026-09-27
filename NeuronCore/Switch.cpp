@@ -21,6 +21,8 @@ namespace {
     Vector<SwitchCase>, cases,
     Expression, defaultExpression,
     Type, returnType)
+    Type defaultType;
+
     DERIVED_TYPE_EX(ExpressionSwitch)
     POOLED_TYPE
 
@@ -37,6 +39,8 @@ namespace {
           expressions[2*i + 1],
           expressions[2*i + 1]->GetType()));
       returnType = GetType();
+      if (defaultExpression)
+        defaultType = defaultExpression->GetType();
     }
 
     void Evaluate(void* returnValue, Environment& env) const {
@@ -56,8 +60,17 @@ namespace {
         }
       }
 
-      if (defaultExpression)
-        defaultExpression->Evaluate(returnValue, env);
+      /* A switch whose branches disagree on their type is void, and its caller may give it no
+         storage for a value: the default then evaluates into a temporary, as the cases do. */
+      if (defaultExpression) {
+        if (defaultType && defaultType != returnType && defaultType->allocate) {
+          void* lv = env.Allocate(defaultType);
+          defaultExpression->Evaluate(lv, env);
+          env.Free(defaultType, lv);
+        } else {
+          defaultExpression->Evaluate(returnValue, env);
+        }
+      }
     }
 
     Type GetType() const {
@@ -120,6 +133,14 @@ namespace LTE {
         Expression predicate = Expression_Compile(sub->Get(0), env);
         if (!predicate) {
           Log_Message("switch -- case predicate did not compile");
+          continue;
+        }
+
+        /* Evaluate writes a case's predicate into a bool, so it must be one, as the
+           predicates of 'if' and 'while' are. */
+        predicate = Expression_Conversion(predicate, Type_Get<bool>());
+        if (!predicate) {
+          Log_Message("switch -- case predicate could not be converted to bool");
           continue;
         }
 

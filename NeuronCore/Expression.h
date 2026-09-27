@@ -26,6 +26,12 @@ namespace LTE {
       return nullptr;
     }
 
+    /* True for a node whose l-value is a fixed register and offset, a plain variable, and gives
+       them, so that a caller can compute its address without a virtual call. */
+    virtual bool GetRegister(uint& index, uint& offset) const {
+      return false;
+    }
+
     virtual Type GetType() const = 0;
 
     virtual bool IsConstant(CompileEnvironment& env) const = 0;

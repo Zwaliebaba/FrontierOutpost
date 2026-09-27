@@ -7,6 +7,23 @@
 #include "LteString.h"
 
 namespace LTE {
+  /* A file's size and last write time; valid only when both could be read. */
+  struct FileStamp {
+    uint64 size;
+    int64 time;
+    bool valid;
+
+    FileStamp() :
+      size(0),
+      time(0),
+      valid(false)
+      {}
+
+    friend bool operator==(FileStamp const& a, FileStamp const& b) {
+      return a.valid == b.valid && a.size == b.size && a.time == b.time;
+    }
+  };
+
   struct LocationT : public RefCounted {
     BASE_TYPE(LocationT)
 
@@ -17,6 +34,11 @@ namespace LTE {
     virtual bool Exists() const = 0;
     virtual AutoPtr< Array<uchar> > Read() const = 0;
     virtual bool Write(Array<uchar> const& data) const = 0;
+
+    /* The size and last write time, without opening the file; invalid when unknown. */
+    virtual FileStamp GetStamp() const {
+      return FileStamp();
+    }
 
     FIELDS {}
   };

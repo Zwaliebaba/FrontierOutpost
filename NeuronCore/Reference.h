@@ -4,7 +4,11 @@
 #include "Mutable.h"
 #include "Type.h"
 
-#define DEBUG_POINTERS
+/* The null test on every dereference costs 3% to 7% of a script's instructions, so it is a
+   Debug check. In Release a null handle is an access violation, which the crash handler reports. */
+#ifdef _DEBUG
+  #define DEBUG_POINTERS
+#endif
 
 struct RefCounted : public NullBase<RefCounted> {
   uint refCount;
@@ -39,6 +43,11 @@ struct Reference : public NullBase<Reference<T> > {
     Acquire();
   }
 
+  /* A move hands the count over instead of adding and dropping one. */
+  Reference(Reference&& ref) noexcept : t(ref.t) {
+    ref.t = 0;
+  }
+
   template <class B>
   Reference(B* t) : t(static_cast<T*>(t)) {
     Acquire();
@@ -47,6 +56,11 @@ struct Reference : public NullBase<Reference<T> > {
   template <class B>
   Reference(Reference<B> const& ref) : t(static_cast<T*>(ref.t)) {
     Acquire();
+  }
+
+  template <class B>
+  Reference(Reference<B>&& ref) noexcept : t(static_cast<T*>(ref.t)) {
+    ref.t = 0;
   }
 
   ~Reference() {
@@ -76,10 +90,22 @@ struct Reference : public NullBase<Reference<T> > {
   Reference& operator=(Reference const& ref) {
     if (this == &ref)
       return *this;
-    if (ref.t)
-      Mutable(ref.t)->RefCountIncrement();
+    /* Read the source first: releasing the old object can destroy it (x = x->child). */
+    T* incoming = ref.t;
+    if (incoming)
+      Mutable(incoming)->RefCountIncrement();
     Release();
-    t = ref.t;
+    t = incoming;
+    return *this;
+  }
+
+  Reference& operator=(Reference&& ref) noexcept {
+    if (this == &ref)
+      return *this;
+    T* incoming = ref.t;
+    ref.t = 0;
+    Release();
+    t = incoming;
     return *this;
   }
 

@@ -10,6 +10,7 @@
 
 #include "BuildMode.h"
 
+#include <filesystem>
 #include <fstream>
 
 #include "Debug.h"
@@ -67,17 +68,33 @@ namespace {
       size_t size = (size_t)stream.tellg();
       stream.seekg(0);
 
-      char* buf = new char[size];
-      if (!stream.read(buf, size)) {
-        free(buf);
+      uchar* buf = new uchar[size];
+      if (!stream.read((char*)buf, size)) {
+        delete[] buf;
         Log_Warning("Failed to read file <" + path + ">");
         return nullptr;
       }
-      return (new Array<uchar>)->set((uchar*)buf, size);
+      return (new Array<uchar>)->set(buf, size);
     }
 
     String ToString() const {
       return path;
+    }
+
+    FileStamp GetStamp() const {
+      FileStamp stamp;
+      std::error_code error;
+      std::filesystem::path file(path.c_str());
+      uintmax_t size = std::filesystem::file_size(file, error);
+      if (error)
+        return stamp;
+      std::filesystem::file_time_type time = std::filesystem::last_write_time(file, error);
+      if (error)
+        return stamp;
+      stamp.size = (uint64)size;
+      stamp.time = (int64)time.time_since_epoch().count();
+      stamp.valid = true;
+      return stamp;
     }
 
     bool Write(Array<uchar> const& data) const {
@@ -177,6 +194,10 @@ namespace {
       return kResourcePath + name;
     }
 
+    FileStamp GetStamp() const {
+      return LocationFile(GetResourceMap()->Get(name)).GetStamp();
+    }
+
     bool Write(Array<uchar> const& data) const {
       return LocationFile(GetResourceMap()->Get(name)).Write(data);
     }
@@ -196,12 +217,10 @@ namespace LTE {
     if (!arr)
       return str;
 
-    str.reserve(arr->size());
-    for (size_t i = 0; i < arr->size(); ++i) {
-      char c = (*arr)[i];
-      if (c != '\r')
-        str.push_back(c);
-    }
+    Array<uchar> const& bytes = *arr;
+    if (bytes.size())
+      str.assign((char const*)bytes.data(), bytes.size());
+    std::erase(str, '\r');
     return str;
   }
 

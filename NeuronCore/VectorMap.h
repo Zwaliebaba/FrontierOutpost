@@ -30,10 +30,6 @@ struct VectorMap : public NullBase<VectorMap<KeyT, ValueT> > {
     return entries.back().value;
   }
 
-  ValueT const& operator[](KeyT const& key) const {
-    return ((const VectorMap*)this)->operator[](key);
-  }
-
   void clear() {
     entries.clear();
   }
@@ -121,6 +117,9 @@ struct VectorMap : public NullBase<VectorMap<KeyT, ValueT> > {
 
   FIELDS {
     VectorMap* self = (VectorMap*)addr;
+    /* FindField(0, name) passes no value, and a container's fields all come from its contents. */
+    if (!self)
+      return;
     size_t oldSize = self->size();
     size_t sz = oldSize;
 

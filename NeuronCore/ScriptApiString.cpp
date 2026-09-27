@@ -2,6 +2,20 @@
 #include "LteString.h"
 #include "Vector.h"
 
+#include <charconv>
+
+namespace {
+  /* The decimal text of an integer, which is what ToString<T> writes through a stream in the
+     classic locale, without building the stream. Not for chars, which a stream prints as
+     characters. */
+  template <class T>
+  void IntegerToString(T value, String& dest) {
+    char buffer[24];
+    std::to_chars_result result = std::to_chars(buffer, buffer + sizeof(buffer), value);
+    dest.assign(buffer, result.ptr);
+  }
+}
+
 DefineConversion(bool_to_string, bool, String) {
   dest = src ? "true" : "false";
 }
@@ -10,18 +24,18 @@ DefineConversion(float_to_string, float, String) { dest = ToString<float>(src); 
 DefineConversion(double_to_string, double, String) { dest = ToString<double>(src); }
 DefineConversion(schar_to_string, signed char, String) { dest = ToString<signed char>(src); }
 DefineConversion(uchar_to_string, unsigned char, String) { dest = ToString<unsigned char>(src); }
-DefineConversion(sshort_to_string, signed short, String) { dest = ToString<signed short>(src); }
-DefineConversion(ushort_to_string, unsigned short, String) { dest = ToString<unsigned short>(src); }
-DefineConversion(sint_to_string, signed int, String) { dest = ToString<signed int>(src); }
-DefineConversion(uint_to_string, unsigned int, String) { dest = ToString<unsigned int>(src); }
-DefineConversion(slong_to_string, signed long, String) { dest = ToString<signed long>(src); }
-DefineConversion(ulong_to_string, unsigned long, String) { dest = ToString<unsigned long>(src); }
-DefineConversion(sllong_to_string, signed long long, String) { dest = ToString<signed long long>(src); }
-DefineConversion(ullong_to_string, unsigned long long, String) { dest = ToString<unsigned long long>(src); }
-DefineConversion(int32_to_string, int32, String) { dest = ToString<int32>(src); }
-DefineConversion(int64_to_string, int64, String) { dest = ToString<int64>(src); }
-DefineConversion(uint32_to_string, int32, String) { dest = ToString<uint32>(src); }
-DefineConversion(uint64_to_string, int64, String) { dest = ToString<uint64>(src); }
+DefineConversion(sshort_to_string, signed short, String) { IntegerToString<signed short>(src, dest); }
+DefineConversion(ushort_to_string, unsigned short, String) { IntegerToString<unsigned short>(src, dest); }
+DefineConversion(sint_to_string, signed int, String) { IntegerToString<signed int>(src, dest); }
+DefineConversion(uint_to_string, unsigned int, String) { IntegerToString<unsigned int>(src, dest); }
+DefineConversion(slong_to_string, signed long, String) { IntegerToString<signed long>(src, dest); }
+DefineConversion(ulong_to_string, unsigned long, String) { IntegerToString<unsigned long>(src, dest); }
+DefineConversion(sllong_to_string, signed long long, String) { IntegerToString<signed long long>(src, dest); }
+DefineConversion(ullong_to_string, unsigned long long, String) { IntegerToString<unsigned long long>(src, dest); }
+DefineConversion(int32_to_string, int32, String) { IntegerToString<int32>(src, dest); }
+DefineConversion(int64_to_string, int64, String) { IntegerToString<int64>(src, dest); }
+DefineConversion(uint32_to_string, int32, String) { IntegerToString<uint32>(src, dest); }
+DefineConversion(uint64_to_string, int64, String) { IntegerToString<uint64>(src, dest); }
 
 VoidFreeFunction(String_Append,
   "Append 'b' to 'a'",

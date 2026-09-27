@@ -67,8 +67,11 @@ namespace {
       dstType->Assign(source.data, returnValue);
     }
 
+    /* Null for a Data that is not an l-value, like any other rvalue: the caller then evaluates
+       the conversion into a temporary. */
     void* GetLValue(Environment& env) const {
-      return ((Data*)statement->GetLValue(env))->data;
+      Data* source = (Data*)statement->GetLValue(env);
+      return source ? source->data : nullptr;
     }
 
     Type GetType() const {
@@ -125,6 +128,14 @@ namespace LTE {
     if (FindConversion(src, dst))
       return new ExpressionConversion(statement, dst);
     return nullptr;
+  }
+
+  /* Whether Expression_Conversion from a value of type src to dst would succeed. */
+  bool Expression_CanConvert(Type const& src, Type const& dst) {
+    return src == dst
+        || src == Type_Get<Data>()
+        || dst == Type_Get<Data>()
+        || FindConversion(src, dst);
   }
 
   Expression Expression_ConversionFromData(

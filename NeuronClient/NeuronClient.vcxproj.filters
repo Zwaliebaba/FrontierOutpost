@@ -154,9 +154,6 @@
     <ClCompile Include="Layer.cpp">
       <Filter>UI\Widget</Filter>
     </ClCompile>
-    <ClInclude Include="LTE.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
     <ClCompile Include="LteProgram.cpp">
       <Filter>LTE</Filter>
     </ClCompile>

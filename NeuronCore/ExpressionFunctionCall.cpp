@@ -12,24 +12,38 @@
 #include <algorithm>
 
 namespace {
+  /* The widest native binding, DeclareFunction24, takes 24 arguments. */
+  size_t const kMaxNativeArgs = 24;
+
   AutoClass(ArgData,
     Expression, expression,
     Type, type,
     bool, isLValue)
-    ArgData() {}
+    /* A plain variable's address is its register plus an offset, both fixed at compile time. */
+    bool isRegister;
+    uint registerIndex;
+    uint registerOffset;
+
+    ArgData() :
+      isRegister(false),
+      registerIndex(0),
+      registerOffset(0)
+      {}
 
     ArgData(Expression const& expression) :
       expression(expression),
       type(expression->GetType()),
-      isLValue(expression->IsLValue())
-      {}
+      isLValue(expression->IsLValue()),
+      registerIndex(0),
+      registerOffset(0)
+    {
+      isRegister = expression->GetRegister(registerIndex, registerOffset);
+    }
   };
 
   AutoClassDerived(ExpressionFunctionCall, ExpressionT,
     Function, function,
     Array<ArgData>, args)
-    Array<void*> argStack;
-
     DERIVED_TYPE_EX(ExpressionFunctionCall)
     POOLED_TYPE
 
@@ -41,8 +55,8 @@ namespace {
         Vector<Expression> const& arguments) :
       function(function)
     {
+      LTE_ASSERT(arguments.size() <= kMaxNativeArgs);
       args.resize(arguments.size());
-      argStack.resize(arguments.size(), nullptr);
       for (size_t i = 0; i < arguments.size(); ++i)
         args[i] = ArgData(arguments[i]);
     }
@@ -61,9 +75,15 @@ namespace {
     void Evaluate(void* returnValue, Environment& env) const {
       // SFRAME(function->name.data());
 
+      /* The argument pointers belong to this call: a native that runs a script can evaluate
+         this node again before the call returns. */
+      void* argStack[kMaxNativeArgs];
+
       for (size_t i = 0; i < args.size(); ++i) {
         ArgData const& arg = args[i];
-        if (!arg.isLValue) {
+        if (arg.isRegister) {
+          argStack[i] = (char*)env.registers[env.base + arg.registerIndex] + arg.registerOffset;
+        } else if (!arg.isLValue) {
           argStack[i] = env.Allocate(arg.type);
           arg.expression->Evaluate(argStack[i], env);
         } else {
@@ -71,7 +91,7 @@ namespace {
         }
       }
 
-      function->call(argStack.data(), returnValue);
+      function->call(argStack, returnValue);
 
       for (size_t i = 0; i < args.size(); ++i) {
         size_t index = args.size() - i - 1;
@@ -129,7 +149,7 @@ namespace {
       for (size_t j = 0; j < expressions.size(); ++j) {
         if (types[j] != fn->params[j].type) {
           order++;
-          if (!Expression_Conversion(expressions[j], fn->params[j].type))
+          if (!Expression_CanConvert(types[j], fn->params[j].type))
             match = false;
         }
       }
@@ -167,8 +187,14 @@ namespace {
 
     else {
       std::sort(matches.begin(), matches.end());
-      if (matches[1].order > matches[0].order)
-        return matches[0].fn;
+      if (matches[1].order > matches[0].order) {
+        /* Create implicit conversion, as for a single match: the native reads each argument as
+           its parameter's type. */
+        Function const& fn = matches[0].fn;
+        for (size_t i = 0; i < expressions.size(); ++i)
+          expressions[i] = Expression_Conversion(expressions[i], fn->params[i].type);
+        return fn;
+      }
 
 #if 0
       Log_Error(Stringize()

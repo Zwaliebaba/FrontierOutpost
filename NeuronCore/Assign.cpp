@@ -63,6 +63,13 @@ namespace LTE {
     Expression value = Expression_Compile(list->Get(2), env);
     if (!value) return nullptr;
 
+    /* An rvalue has no storage to write to: its GetLValue is null at run time. Checked after
+       both sides compile, so compiling them has the same effects as before. */
+    if (!location->IsLValue()) {
+      Log_Error("'set' -- the location is not an l-value");
+      return nullptr;
+    }
+
     Type locationType = location->GetType();
     Type valueType = value->GetType();
 

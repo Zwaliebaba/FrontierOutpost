@@ -20,10 +20,6 @@ struct Map : public NullBase<Map<KeyT, ValueT> > {
     return m[index];
   }
 
-  ValueT const& operator[](KeyT const& index) const {
-    return m[index];
-  }
-
   ValueT* operator()(KeyT const& index) {
     return get(index);
   }
@@ -101,6 +97,9 @@ struct Map : public NullBase<Map<KeyT, ValueT> > {
 
   FIELDS {
     Map* self = (Map*)addr;
+    /* FindField(0, name) passes no value, and a container's fields all come from its contents. */
+    if (!self)
+      return;
     size_t oldSize = self->size();
     size_t sz = oldSize;
 

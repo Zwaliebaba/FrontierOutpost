@@ -2,6 +2,7 @@
 #define LTE_Vector_h__
 
 #include "Function.h"
+#include <utility>
 #include <vector>
 
 template <class T>
@@ -70,6 +71,10 @@ struct Vector : public NullBase<Vector<T> > {
 
   void append(T const& element) {
     v.push_back(element);
+  }
+
+  void append(T&& element) {
+    v.push_back(std::move(element));
   }
 
   void append(Vector const& other) {
@@ -220,6 +225,10 @@ struct Vector : public NullBase<Vector<T> > {
     append(t);
   }
 
+  void push(T&& t) {
+    append(std::move(t));
+  }
+
   void pushEmpty() {
     append(T());
   }
@@ -276,6 +285,9 @@ struct Vector : public NullBase<Vector<T> > {
 
   FIELDS {
     Vector* self = (Vector*)addr;
+    /* FindField(0, name) passes no value, and a container's fields all come from its contents. */
+    if (!self)
+      return;
     size_t oldSize = self->size();
     size_t sz = oldSize;
 

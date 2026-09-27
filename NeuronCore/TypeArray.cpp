@@ -101,9 +101,6 @@ namespace {
     void Pop() {
       size--;
       type->Destruct(&buffer[size * type->size]);
-
-      if (!size)
-        type = 0;
     }
 
     void Remove(size_t index) {

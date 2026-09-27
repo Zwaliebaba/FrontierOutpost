@@ -4,7 +4,22 @@
 #include "Pool.h"
 #include "StringList.h"
 
+#include <charconv>
+
 namespace {
+  /* FromString<int> for an integer literal. When std::from_chars reads the whole token, and the
+     token does not start with '+' (which from_chars rejects), it is the value the stream gives;
+     anything else, an overflow or a lone sign for instance, keeps the stream. */
+  int ParseInt(String const& value) {
+    int result = 0;
+    char const* first = value.data();
+    char const* last = first + value.size();
+    std::from_chars_result parsed = std::from_chars(first, last, result);
+    if (parsed.ec == std::errc() && parsed.ptr == last && *first != '+')
+      return result;
+    return FromString<int>(value);
+  }
+
   AutoClassDerived(ExpressionConstant, ExpressionT,
     Data, value)
     DERIVED_TYPE_EX(ExpressionConstant)
@@ -83,7 +98,7 @@ namespace LTE {
 
     /* Integer. */
     if (!alpha && digit && decimal == 0)
-      return Expression_Constant(FromString<int>(value));
+      return Expression_Constant(ParseInt(value));
 
     /* Float. */
     if (!alpha && digit && decimal == 1)

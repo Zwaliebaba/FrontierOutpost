@@ -33,12 +33,6 @@ namespace LTE {
     DataRef(Data const& other);
     DataRef& operator=(Data const& other);
 
-    int64 CastInt() const {
-      if (!type || !type->castInt)
-        error("Contained type does not support integer cast");
-      return type->CastInt(data);
-    }
-
     double CastReal() const {
       if (!type || !type->castReal)
         error("Contained type does not support real cast");
@@ -163,12 +157,6 @@ namespace LTE {
         type->Assign(other.data, data);
       }
       return *this;
-    }
-
-    int64 CastInt() const {
-      if (!type || !type->castInt)
-        error("Contained type does not support integer cast");
-      return type->CastInt(data);
     }
 
     double CastReal() const {

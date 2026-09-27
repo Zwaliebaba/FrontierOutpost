@@ -75,8 +75,49 @@ namespace LTE {
       return result;
     }
 
+    /* ReadToken("\n", "\r") in one pass: the line up to the next newline outside a string
+       literal. A '\r' outside a literal makes ReadToken drop the character after it too, so
+       that rare case keeps the old loop. */
     String ReadLine() {
-      return ReadToken("\n", "\r");
+      if (cursor >= data.size())
+        return String();
+
+      size_t start = cursor;
+      bool literal = false;
+      bool escaped = false;
+      for (size_t i = start; i < data.size(); ) {
+        char c = data[i++];
+        if (c == '\"' && !escaped)
+          literal = !literal;
+
+        if (escaped)
+          escaped = false;
+
+        if (!literal) {
+          if (c == '\r')
+            return ReadToken("\n", "\r");
+          if (c == '\n') {
+            cursor = i;
+            return data.substr(start, i - 1 - start);
+          }
+        } else if (c == '\\')
+          escaped = true;
+      }
+
+      cursor = data.size();
+      return data.substr(start);
+    }
+
+    /* GetIndent(ReadLine(), " ") without reading the line; the cursor does not move. */
+    uint PeekIndent() const {
+      size_t i = cursor;
+      while (i < data.size() && data[i] == ' ')
+        i++;
+      if (i < data.size() && data[i] == '\r') {
+        Tokenizer copy(*this);
+        return GetIndent(copy.ReadLine(), " ");
+      }
+      return (uint)(i - cursor);
     }
 
     String ReadSubset(String const& subset) {

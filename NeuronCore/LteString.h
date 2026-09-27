@@ -5,6 +5,7 @@
 #include <cstring>
 #include <string>
 #include <sstream>
+#include <utility>
 
 namespace LTE {
   struct String : public std::string {
@@ -13,6 +14,10 @@ namespace LTE {
 
     String(std::string const& str) :
       std::string(str)
+      {}
+
+    String(std::string&& str) noexcept :
+      std::string(std::move(str))
       {}
 
     String(char const* str) :

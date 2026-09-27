@@ -32,8 +32,10 @@ namespace {
       return type;
     }
 
+    /* A local can be asked after its block has closed (a case's local, asked while the 'var'
+       the switch initializes is declared): it is out of scope then, and not constant. */
     bool IsConstant(CompileEnvironment& env) const {
-      return env.Get(name).constant;
+      return env.Contains(name) && env.Get(name).constant;
     }
 
     bool IsLValue() const {

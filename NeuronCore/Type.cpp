@@ -9,7 +9,10 @@
 #include "LteString.h"
 #include "Vector.h"
 
+#include <functional>
 #include <iostream>
+#include <string_view>
+#include <unordered_map>
 
 String const kAutoPtrName = "AutoPtr";
 String const kHandleName = "Handle";
@@ -17,13 +20,25 @@ String const kPointerName = "Pointer";
 String const kReferenceName = "Reference";
 
 namespace {
+  /* Hashes any string-like key, so a lookup never builds a String. */
+  struct NameHash {
+    typedef void is_transparent;
+
+    size_t operator()(std::string_view name) const noexcept {
+      return std::hash<std::string_view>()(name);
+    }
+  };
+
+  /* Nothing iterates the name table, so its order is free. */
+  typedef std::unordered_map<String, Type, NameHash, std::equal_to<> > TypeMapT;
+
   Vector<Type>& GetTypeList() {
     static Vector<Type> v;
     return v;
   }
 
-  Map<String, Type>& GetTypeMap() {
-    static Map<String, Type> m;
+  TypeMapT& GetTypeMap() {
+    static TypeMapT m;
     return m;
   }
 
@@ -58,7 +73,6 @@ Type Type_Create(String const& name, size_t size) {
 
   self->allocate = 0;
   self->assign = 0;
-  self->castInt = 0;
   self->castReal = 0;
   self->construct = 0;
   self->deallocate = 0;
@@ -70,7 +84,6 @@ Type Type_Create(String const& name, size_t size) {
 
 TypeT::~TypeT() {
   LTE_ASSERT(refCount == 0);
-  ((TypeImpl*)this)->extra.~TypeExtra();
 }
 
 Data& TypeT::GetAux() {
@@ -225,7 +238,8 @@ void Type_AddAlias(Type const& type, String const& alias) {
 }
 
 Type Type_Find(String const& name) {
-  return GetTypeMap()[name];
+  TypeMapT::const_iterator found = GetTypeMap().find(name);
+  return found != GetTypeMap().end() ? found->second : Type();
 }
 
 Vector<Type> const& Type_GetList() {

@@ -4,9 +4,9 @@
 namespace {
   void RewriteDot(StringList& list) {
     String const& value = list->GetValue();
-    if (!String_IsNumeric(value) &&
-         value.contains('.') &&
-        !value.contains('"'))
+    if ( value.contains('.') &&
+        !value.contains('"') &&
+        !String_IsNumeric(value))
     {
       Vector<String> parts;
       String_Split(parts, value, '.');
@@ -18,6 +18,27 @@ namespace {
 
       list = newList;
     }
+  }
+
+  /* True when the element is an atom spelled like one of the 18 operators of RewriteList. */
+  bool IsOperatorAtom(StringList const& list) {
+    if (!list->IsAtom())
+      return false;
+    String const& v = list->GetValue();
+    if (v.size() == 1) {
+      char c = v[0];
+      return c == '^' || c == '*' || c == '/' || c == '+' || c == '-' ||
+             c == '<' || c == '>' || c == '=';
+    }
+    if (v.size() == 2) {
+      char a = v[0];
+      char b = v[1];
+      if (b == '=')
+        return a == '<' || a == '>' || a == '=' || a == '!' ||
+               a == '+' || a == '-' || a == '*' || a == '/';
+      return (a == '&' && b == '&') || (a == '|' && b == '|');
+    }
+    return false;
   }
 
   bool IsBinaryOp(StringList const& list, Vector<String> const& ops) {
@@ -58,6 +79,15 @@ namespace {
       Vector<String>() << "||",
       Vector<String>() << "=" << "+=" << "-=" << "*=" << "/="
     };
+
+    /* An operator is only rewritten at positions 1 to n - 2, so without one there no pass
+       changes anything. */
+    StringListList* l = (StringListList*)list.t;
+    bool any = false;
+    for (size_t e = 1; e + 1 < l->elements.size() && !any; ++e)
+      any = IsOperatorAtom(l->elements[e]);
+    if (!any)
+      return;
 
     for (uint i = 0; i < sizeof(precedence) / sizeof(*precedence); ++i)
       RewriteBinaryOp(list, precedence[i]);

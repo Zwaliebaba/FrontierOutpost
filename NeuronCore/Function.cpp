@@ -5,28 +5,36 @@
 #include "LteString.h"
 #include "Vector.h"
 
+#include <functional>
+#include <string_view>
+#include <unordered_map>
+
 namespace {
+  /* Hashes any string-like key, so a lookup never builds a String. */
+  struct NameHash {
+    typedef void is_transparent;
+
+    size_t operator()(std::string_view name) const noexcept {
+      return std::hash<std::string_view>()(name);
+    }
+  };
+
+  /* Nothing iterates the name table, so its order is free. */
+  typedef std::unordered_map<String, Vector<Function>, NameHash, std::equal_to<> > FunctionMapT;
+
   Vector<Function>& GetFunctionList() {
     static Vector<Function> v;
     return v;
   }
 
-  Map<String, Vector<Function> >& GetFunctionMap() {
-    static Map<String, Vector<Function> > m;
+  FunctionMapT& GetFunctionMap() {
+    static FunctionMapT m;
     return m;
   }
-
-  struct FunctionExtra {
-    Data aux;
-  };
-
-  struct FunctionImpl : FunctionT {
-    FunctionExtra extra;
-  };
 }
 
 Function Function_Create(String const& name) {
-  Reference<FunctionImpl> self = new FunctionImpl;
+  Function self = new FunctionT;
 
   self->name = name;
   self->call = 0;
@@ -40,12 +48,7 @@ Function Function_Create(String const& name) {
 }
 
 FunctionT::~FunctionT() {
-  ((FunctionImpl*)this)->extra.~FunctionExtra();
   delete[] params;
-}
-
-Data& FunctionT::GetAux() {
-  return ((FunctionImpl*)this)->extra.aux;
 }
 
 String FunctionT::GetSignature() const {
@@ -64,7 +67,9 @@ void Function_AddAlias(String const& source, String const& alias) {
 }
 
 Vector<Function> const& Function_Find(String const& name) {
-  return GetFunctionMap()[name];
+  static Vector<Function> const kNone;
+  FunctionMapT::const_iterator found = GetFunctionMap().find(name);
+  return found != GetFunctionMap().end() ? found->second : kNone;
 }
 
 Vector<Function> const& Function_GetList() {

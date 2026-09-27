@@ -5,6 +5,9 @@
 #include "Mutable.h"
 #include "LteString.h"
 
+#include <cstring>
+#include <new>
+
 #define DECLARE_DEFAULT_REFLECTION(name)                                       \
   LT_API Type _Type_Get(name const& t);
 
@@ -71,29 +74,6 @@
     return type;                                                               \
   }
 
-#define AUTOMATIC_REFLECTION_PARAMETRIC2(T, T1, T2)                            \
-  friend Type _Type_Get(T const& t) {                                          \
-    Type& type = Type_GetStorage<T>();                                         \
-    if (!type) {                                                               \
-      Type t1Type = Type_Get<T1>();                                            \
-      Type t2Type = Type_Get<T2>();                                            \
-      type = Type_Create(                                                      \
-        String(#T) + "<" + t1Type->name + ", " + t2Type->name + ">",           \
-        sizeof(T));                                                            \
-      type->alignment = AlignOf<T>();                                          \
-      type->allocate = __type_default_allocator<T>;                            \
-      type->assign = __type_default_assign<T>;                                 \
-      type->base = Type_Get<T::BaseType>();                                    \
-      type->construct = __type_default_construct<T>;                           \
-      type->deallocate = __type_default_deallocator<T>;                        \
-      type->destruct = __type_default_destruct<T>;                             \
-      type->mapper = T::MapFields;                                             \
-      type->toString = __type_default_tostring<T>;                             \
-      FillMetadata(type);                                                      \
-    }                                                                          \
-    return type;                                                               \
-  }
-
 #define TypeAlias(SourceType, alias)                                           \
   template <int unused>                                                        \
   int __Register_Typedef_##alias() {                                           \
@@ -115,13 +95,9 @@
 #define METADATA                                                               \
   static void FillMetadata(Type const& type)
 
-#define REGISTER_TYPE(name)                                                    \
-  volatile static Type _##name##_type_registration = Type_Get<name>();
-
 typedef void* (*AllocateFn)(TypeT*);
 typedef void (*AssignFn)(TypeT*, void const*, void*);
 typedef void (*ConversionFn)(TypeT*, void const*, void*);
-typedef int64 (*CastIntFn)(TypeT*, void const*);
 typedef double (*CastRealFn)(TypeT*, void const*);
 typedef void (*ConstructFn)(TypeT*, void*);
 typedef void (*DeallocateFn)(TypeT*, void*);
@@ -129,12 +105,10 @@ typedef void (*DestructFn)(TypeT*, void*);
 typedef void (*MapperFn)(TypeT*, void*, FieldMapper&, void*);
 typedef void (*ToStringFn)(TypeT*, void*, String*);
 
+/* The offset of a T after a char, which the old null-pointer arithmetic computed. */
 template <class T>
 size_t AlignOf() {
-  struct Aligner { char c; T t; };
-  return (size_t)(
-    (volatile char*)&((Aligner*)0)->t -
-    (volatile char*)&((Aligner*)0)->c);
+  return alignof(T);
 }
 
 struct TypeT {
@@ -148,7 +122,6 @@ struct TypeT {
 
   AllocateFn allocate;
   AssignFn assign;
-  CastIntFn castInt;
   CastRealFn castReal;
   ConstructFn construct;
   DeallocateFn deallocate;
@@ -158,7 +131,8 @@ struct TypeT {
 
   TypeT() : refCount(0) {}
 
-  LT_API ~TypeT();
+  /* Virtual, because every TypeT is a TypeImpl and is deleted as a TypeT. */
+  LT_API virtual ~TypeT();
 
   LT_API void AddConversion(ConversionType const& cast);
   LT_API void AddDerived(Type const& type);
@@ -179,10 +153,6 @@ struct TypeT {
 
   void Assign(void const* src, void* dst) {
     assign(this, src, dst);
-  }
-
-  int64 CastInt(void const* src) {
-    return castInt(this, src);
   }
 
   double CastReal(void const* src) {
@@ -269,6 +239,7 @@ struct Type {
 
   Type(TypeT* t = 0) : t(t) { Acquire(); }
   Type(Type const& other) : t(other.t) { Acquire(); }
+  Type(Type&& other) noexcept : t(other.t) { other.t = 0; }
   ~Type() { Release(); }
 
   operator bool() { return t != 0; }
@@ -285,10 +256,22 @@ struct Type {
   Type& operator=(Type const& ref) {
     if (this == &ref)
       return *this;
-    if (ref.t)
-      Mutable(ref.t)->RefCountIncrement();
+    /* Read the source first: releasing the old object can destroy it. */
+    TypeT* incoming = ref.t;
+    if (incoming)
+      Mutable(incoming)->RefCountIncrement();
     Release();
-    t = ref.t;
+    t = incoming;
+    return *this;
+  }
+
+  Type& operator=(Type&& ref) noexcept {
+    if (this == &ref)
+      return *this;
+    TypeT* incoming = ref.t;
+    ref.t = 0;
+    Release();
+    t = incoming;
     return *this;
   }
 
@@ -381,9 +364,20 @@ Type& Type_GetStorage() {
   return t;
 }
 
+/* New values start zeroed, so a scalar, a pointer or a vector whose constructor is empty reads 0
+   rather than what the heap held. The memory comes from the allocation function that 'new T'
+   would use, and T is constructed once, as before. */
 template <class T>
 void* __type_default_allocator(TypeT*) {
-  return (void*)new T;
+  void* buffer;
+  if constexpr (requires { T::operator new(sizeof(T)); })
+    buffer = T::operator new(sizeof(T));
+  else if constexpr (alignof(T) > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+    buffer = ::operator new(sizeof(T), std::align_val_t(alignof(T)));
+  else
+    buffer = ::operator new(sizeof(T));
+  memset(buffer, 0, sizeof(T));
+  return (void*)::new (buffer) T;
 }
 
 template <class T>
@@ -392,17 +386,8 @@ void __type_default_assign(TypeT*, void const* src, void* dst) {
 }
 
 template <class T>
-int64 __type_default_castint(TypeT*, void const* t) {
-  return (int64)(*(T*)t);
-}
-
-template <class T>
-double __type_default_castreal(TypeT*, void const* t) {
-  return (double)(*(T*)t);
-}
-
-template <class T>
 void __type_default_construct(TypeT*, void* buf) {
+  memset(buf, 0, sizeof(T));
   new (buf) T;
 }
 

@@ -1492,42 +1492,6 @@
 #define VoidMemberFunction(Name, Desc, ...) \
   MACRO_IDENTITY(_VoidMemberFunction(void ,Name,Desc,__VA_ARGS__,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
 
-#define _ConstMemberFunction(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(MemberFunction##x(,const,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define ConstMemberFunction(RT, Name, Desc, ...) \
-  MACRO_IDENTITY(_ConstMemberFunction(RT,Name,Desc,__VA_ARGS__,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
-#define _ConstVoidMemberFunction(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(VoidMemberFunction##x(,const,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define ConstVoidMemberFunction(Name, Desc, ...) \
-  MACRO_IDENTITY(_ConstVoidMemberFunction(void ,Name,Desc,__VA_ARGS__,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
-#define _VirtualMemberFunction(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(MemberFunction##x(virtual,,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define VirtualMemberFunction(RT, Name, Desc, ...) \
-  MACRO_IDENTITY(_VirtualMemberFunction(RT,Name,Desc,__VA_ARGS__,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
-#define _VirtualVoidMemberFunction(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(VoidMemberFunction##x(virtual,,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define VirtualVoidMemberFunction(Name, Desc, ...) \
-  MACRO_IDENTITY(_VirtualVoidMemberFunction(void ,Name,Desc,__VA_ARGS__,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
-#define _ConstVirtualMemberFunction(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(MemberFunction##x(virtual,const,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define ConstVirtualMemberFunction(RT, Name, Desc, ...) \
-  MACRO_IDENTITY(_ConstVirtualMemberFunction(RT,Name,Desc,__VA_ARGS__,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
-#define _ConstVirtualVoidMemberFunction(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(VoidMemberFunction##x(virtual,const,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define ConstVirtualVoidMemberFunction(Name, Desc, ...) \
-  MACRO_IDENTITY(_ConstVirtualVoidMemberFunction(void ,Name,Desc,__VA_ARGS__,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
 #define _FreeFunctionNoParams(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
   MACRO_IDENTITY(FreeFunction##x(,,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
 
@@ -1545,46 +1509,4 @@
 
 #define MemberFunctionNoParams(RT, Name, Desc) \
   MACRO_IDENTITY(_MemberFunctionNoParams(RT,Name,Desc,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
-#define _VoidMemberFunctionNoParams(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(VoidMemberFunction##x(,,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define VoidMemberFunctionNoParams(Name, Desc) \
-  MACRO_IDENTITY(_VoidMemberFunctionNoParams(void ,Name,Desc,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
-#define _ConstMemberFunctionNoParams(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(MemberFunction##x(,const,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define ConstMemberFunctionNoParams(RT, Name, Desc) \
-  MACRO_IDENTITY(_ConstMemberFunctionNoParams(RT,Name,Desc,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
-#define _ConstVoidMemberFunctionNoParams(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(VoidMemberFunction##x(,const,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define ConstVoidMemberFunctionNoParams(Name, Desc) \
-  MACRO_IDENTITY(_ConstVoidMemberFunctionNoParams(void ,Name,Desc,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
-#define _VirtualMemberFunctionNoParams(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(MemberFunction##x(virtual,,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define VirtualMemberFunctionNoParams(RT, Name, Desc) \
-  MACRO_IDENTITY(_VirtualMemberFunctionNoParams(RT,Name,Desc,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
-#define _VirtualVoidMemberFunctionNoParams(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(VoidMemberFunction##x(virtual,,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define VirtualVoidMemberFunctionNoParams(Name, Desc) \
-  MACRO_IDENTITY(_VirtualVoidMemberFunctionNoParams(void ,Name,Desc,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
-#define _ConstVirtualMemberFunctionNoParams(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(MemberFunction##x(virtual,const,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define ConstVirtualMemberFunctionNoParams(RT, Name, Desc) \
-  MACRO_IDENTITY(_ConstVirtualMemberFunctionNoParams(RT,Name,Desc,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
-
-#define _ConstVirtualVoidMemberFunctionNoParams(RT, Name, Desc, T0, N0, T1, N1, T2, N2, T3, N3, T4, N4, T5, N5, T6, N6, T7, N7, x, ...) \
-  MACRO_IDENTITY(VoidMemberFunction##x(virtual,const,RT,Name,Desc,T0,N0,T1,N1,T2,N2,T3,N3,T4,N4,T5,N5,T6,N6,T7,N7))\
-
-#define ConstVirtualVoidMemberFunctionNoParams(Name, Desc) \
-  MACRO_IDENTITY(_ConstVirtualVoidMemberFunctionNoParams(void ,Name,Desc,8,8,7,7,6,6,5,5,4,4,3,3,2,2,1,1,0,0))\
 
