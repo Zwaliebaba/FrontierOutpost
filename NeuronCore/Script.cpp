@@ -34,6 +34,12 @@ namespace {
     Script const* script = GetScriptCache().get(name);
     return script ? *script : nullptr;
   }
+
+  /* The size and write time each script had when it was last read. */
+  Map<String, FileStamp>& GetStamps() {
+    static Map<String, FileStamp> stamps;
+    return stamps;
+  }
 }
 
 namespace LTE {
@@ -43,9 +49,17 @@ namespace LTE {
     if (!location->Exists())
       return;
 
+    /* A script whose size and last write time are what they were when it was last read has
+       not changed: hot reload checks it without opening the file. */
+    FileStamp stamp = location->GetStamp();
+    FileStamp& known = GetStamps()[name];
+    if (this->hash && stamp.valid && stamp == known)
+      return;
+
     /* One read serves both the change check and the parse. */
     String text = location->ReadAscii();
     HashT hash = Max((HashT)1, String_Hash(text));
+    known = stamp;
     if (hash == this->hash)
       return;
     this->hash = hash;

@@ -10,6 +10,7 @@
 
 #include "BuildMode.h"
 
+#include <filesystem>
 #include <fstream>
 
 #include "Debug.h"
@@ -78,6 +79,22 @@ namespace {
 
     String ToString() const {
       return path;
+    }
+
+    FileStamp GetStamp() const {
+      FileStamp stamp;
+      std::error_code error;
+      std::filesystem::path file(path.c_str());
+      uintmax_t size = std::filesystem::file_size(file, error);
+      if (error)
+        return stamp;
+      std::filesystem::file_time_type time = std::filesystem::last_write_time(file, error);
+      if (error)
+        return stamp;
+      stamp.size = (uint64)size;
+      stamp.time = (int64)time.time_since_epoch().count();
+      stamp.valid = true;
+      return stamp;
     }
 
     bool Write(Array<uchar> const& data) const {
@@ -175,6 +192,10 @@ namespace {
 
     String ToString() const {
       return kResourcePath + name;
+    }
+
+    FileStamp GetStamp() const {
+      return LocationFile(GetResourceMap()->Get(name)).GetStamp();
     }
 
     bool Write(Array<uchar> const& data) const {
