@@ -166,6 +166,9 @@ struct VectorNP : public NullBase<VectorNP> {
 
   FIELDS {
     VectorNP* self = (VectorNP*)addr;
+    /* FindField(0, name) passes no value, and a container's fields all come from its contents. */
+    if (!self)
+      return;
     m(&self->type, "type", Type_Get(self->type), aux);
     for (size_t i = 0; i < self->size; ++i)
       m(&self->buffer[i * self->type->size], "elem", self->type, aux);

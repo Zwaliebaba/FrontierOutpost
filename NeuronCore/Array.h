@@ -186,6 +186,9 @@ struct Array : public NullBase<Array<T> > {
 
   FIELDS {
     Array* self = (Array*)addr;
+    /* FindField(0, name) passes no value, and a container's fields all come from its contents. */
+    if (!self)
+      return;
     size_t oldSize = self->size();
     size_t sz = oldSize;
 

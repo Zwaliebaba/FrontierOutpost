@@ -127,6 +127,9 @@ struct List : public NullBase<List<T> > {
 
   FIELDS {
     List* self = (List*)addr;
+    /* FindField(0, name) passes no value, and a container's fields all come from its contents. */
+    if (!self)
+      return;
     static Type subType = Type_Get(*(T const**)0);
 
     T** t = &self->head;
