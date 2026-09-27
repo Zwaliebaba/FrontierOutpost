@@ -65,44 +65,85 @@ namespace LTE {
 
     if (list->Get(0)->IsAtom()) {
       String const& value = list->Get(0)->GetValue();
-      if (value == "#")
-        return nullptr;
-      if (value == "@")
-        return Expression_Print(list, env);
-      if (value == "address")
-        return Expression_Address(list, env);
-      if (value == "block")
-        return Expression_Block(list, env, 1);
-      if (value == "call")
-        return Expression_DynamicDispatch(list, env);
-      if (value == "cast")
-        return Expression_Cast(list, env);
-      if (value == "desc")
-        return Expression_Block(list, env, 2);
-      if (value == "deref")
-        return Expression_DereferencePointer(list, env);
-      if (value == "for")
-        return Expression_For(list, env);
-      if (value == "function")
-        return Expression_Function(list, env);
-      if (value == "if")
-        return Expression_If(list, env);
-      if (value == "list")
-        return Expression_List(list, env);
-      if (value == "ref")
-        return Expression_DeclareReference(list, env, locals);
-      if (value == "set" || value == "=")
-        return Expression_Assign(list, env);
-      if (value == "static")
-        return Expression_DeclareStatic(list, env, locals);
-      if (value == "switch" || value == "?")
-        return Expression_Switch(list, env);
-      if (value == "type")
-        return Expression_Type(list, env);
-      if (value == "var")
-        return Expression_DeclareLocal(list, env, locals);
-      if (value == "while")
-        return Expression_While(list, env);
+
+      /* The keywords, grouped by their first character so that a list whose head is not a
+         keyword costs one test. */
+      switch (value.empty() ? 0 : value[0]) {
+        case '#':
+          if (value == "#")
+            return nullptr;
+          break;
+        case '@':
+          if (value == "@")
+            return Expression_Print(list, env);
+          break;
+        case '=':
+          if (value == "=")
+            return Expression_Assign(list, env);
+          break;
+        case '?':
+          if (value == "?")
+            return Expression_Switch(list, env);
+          break;
+        case 'a':
+          if (value == "address")
+            return Expression_Address(list, env);
+          break;
+        case 'b':
+          if (value == "block")
+            return Expression_Block(list, env, 1);
+          break;
+        case 'c':
+          if (value == "call")
+            return Expression_DynamicDispatch(list, env);
+          if (value == "cast")
+            return Expression_Cast(list, env);
+          break;
+        case 'd':
+          if (value == "desc")
+            return Expression_Block(list, env, 2);
+          if (value == "deref")
+            return Expression_DereferencePointer(list, env);
+          break;
+        case 'f':
+          if (value == "for")
+            return Expression_For(list, env);
+          if (value == "function")
+            return Expression_Function(list, env);
+          break;
+        case 'i':
+          if (value == "if")
+            return Expression_If(list, env);
+          break;
+        case 'l':
+          if (value == "list")
+            return Expression_List(list, env);
+          break;
+        case 'r':
+          if (value == "ref")
+            return Expression_DeclareReference(list, env, locals);
+          break;
+        case 's':
+          if (value == "set")
+            return Expression_Assign(list, env);
+          if (value == "static")
+            return Expression_DeclareStatic(list, env, locals);
+          if (value == "switch")
+            return Expression_Switch(list, env);
+          break;
+        case 't':
+          if (value == "type")
+            return Expression_Type(list, env);
+          break;
+        case 'v':
+          if (value == "var")
+            return Expression_DeclareLocal(list, env, locals);
+          break;
+        case 'w':
+          if (value == "while")
+            return Expression_While(list, env);
+          break;
+      }
     }
 
     /* Function call. */ {
