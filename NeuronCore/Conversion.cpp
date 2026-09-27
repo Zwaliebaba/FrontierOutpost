@@ -67,8 +67,11 @@ namespace {
       dstType->Assign(source.data, returnValue);
     }
 
+    /* Null for a Data that is not an l-value, like any other rvalue: the caller then evaluates
+       the conversion into a temporary. */
     void* GetLValue(Environment& env) const {
-      return ((Data*)statement->GetLValue(env))->data;
+      Data* source = (Data*)statement->GetLValue(env);
+      return source ? source->data : nullptr;
     }
 
     Type GetType() const {
