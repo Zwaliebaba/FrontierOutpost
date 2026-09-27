@@ -43,11 +43,11 @@ constexpr std::array<D3D_SHADER_MODEL, 8> SHADER_MODELS = {D3D_SHADER_MODEL_6_7,
                                                            D3D_SHADER_MODEL_6_4, D3D_SHADER_MODEL_6_3, D3D_SHADER_MODEL_6_2,
                                                            D3D_SHADER_MODEL_6_1, D3D_SHADER_MODEL_6_0};
 
-/// Asks _device what DeviceCapabilities names. A question the runtime cannot answer, as an older one
+/// Asks _device what GraphicsCapabilities names. A question the runtime cannot answer, as an older one
 /// cannot, is a no. With the debug layer on, _infoQueue stores nothing meanwhile: a no is an answer
 /// here, not a fault, and would otherwise fail every test and smoke run that counts the layer's
 /// errors.
-DeviceCapabilities Probe(ID3D12Device& _device, ID3D12InfoQueue* _infoQueue)
+GraphicsCapabilities Probe(ID3D12Device& _device, ID3D12InfoQueue* _infoQueue)
 {
   std::array<D3D12_MESSAGE_SEVERITY, 5> every = {D3D12_MESSAGE_SEVERITY_CORRUPTION, D3D12_MESSAGE_SEVERITY_ERROR,
                                                  D3D12_MESSAGE_SEVERITY_WARNING, D3D12_MESSAGE_SEVERITY_INFO,
@@ -57,12 +57,12 @@ DeviceCapabilities Probe(ID3D12Device& _device, ID3D12InfoQueue* _infoQueue)
   nothing.DenyList.pSeverityList = every.data();
   const bool quiet = _infoQueue != nullptr && SUCCEEDED(_infoQueue->PushStorageFilter(&nothing));
 
-  DeviceCapabilities capabilities{.shaderModelMajor = 5,
-                                  .shaderModelMinor = 1,
-                                  .resourceBindingTier = 1,
-                                  .directlyIndexedHeaps = false,
-                                  .pipelineLibrary = false,
-                                  .automaticDiskCache = false};
+  GraphicsCapabilities capabilities{.shaderModelMajor = 5,
+                                    .shaderModelMinor = 1,
+                                    .resourceBindingTier = 1,
+                                    .directlyIndexedHeaps = false,
+                                    .pipelineLibrary = false,
+                                    .automaticDiskCache = false};
   for (const D3D_SHADER_MODEL asked : SHADER_MODELS)
   {
     D3D12_FEATURE_DATA_SHADER_MODEL model{asked};
@@ -248,9 +248,9 @@ bool GraphicsDevice::IsDebugLayerOn() const noexcept
   return m_core && m_core->desc.debugLayer;
 }
 
-DeviceCapabilities GraphicsDevice::Capabilities() const noexcept
+GraphicsCapabilities GraphicsDevice::Capabilities() const noexcept
 {
-  return m_core ? m_core->capabilities : DeviceCapabilities{};
+  return m_core ? m_core->capabilities : GraphicsCapabilities{};
 }
 
 Texture GraphicsDevice::CreateTexture(const Texture::Desc& _desc)

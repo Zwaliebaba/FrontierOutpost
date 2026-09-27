@@ -384,7 +384,7 @@ namespace LTE {
 
     /* What the later phases of Design/ShaderPipeline-plan.md need (P0.1):
        logged on every device the game runs on, required by nothing yet. */
-    Neuron::DeviceCapabilities const caps = core.device.Capabilities();
+    Neuron::GraphicsCapabilities const caps = core.device.Capabilities();
     Log_Message("Direct3D 12 supports shader model " + ToString(caps.shaderModelMajor) +
       "." + ToString(caps.shaderModelMinor) +
       ", resource binding tier " + ToString(caps.resourceBindingTier) +

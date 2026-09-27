@@ -21,8 +21,10 @@ struct GraphicsCore;
 
 /// What the device supports of what Design/ShaderPipeline-plan.md's later phases need: Shader Model
 /// 6.6 and descriptor heaps that shaders index directly (P5, P6), and the shader caches (§3.2). The
-/// device asks once, when it is made, and nothing today depends on the answers.
-struct DeviceCapabilities
+/// device asks once, when it is made, and nothing today depends on the answers. Not named
+/// DeviceCapabilities: wingdi.h defines that as a macro, so a file that includes windows.h first
+/// would name another type than one that does not, and the two would not link.
+struct GraphicsCapabilities
 {
   std::uint32_t shaderModelMajor;    // the highest shader model the device runs: 6 for 6.6
   std::uint32_t shaderModelMinor;    // and 6
@@ -31,7 +33,7 @@ struct DeviceCapabilities
   bool pipelineLibrary;              // ID3D12PipelineLibrary is there
   bool automaticDiskCache;           // Windows keeps compiled shaders on disk from one run to the next
 
-  bool operator==(const DeviceCapabilities&) const = default;
+  bool operator==(const GraphicsCapabilities&) const = default;
 };
 
 /// Direct3D 12 at feature level 11_0, on the default adapter or on WARP, with one direct queue and
@@ -92,7 +94,7 @@ public:
   [[nodiscard]] bool IsDebugLayerOn() const noexcept;
 
   /// What the device said it supports when it was made; all zero for a device never made.
-  [[nodiscard]] DeviceCapabilities Capabilities() const noexcept;
+  [[nodiscard]] GraphicsCapabilities Capabilities() const noexcept;
 
   /// A texture, or an empty one when it cannot be made, which onFailure is told about.
   [[nodiscard]] Texture CreateTexture(const Texture::Desc& _desc);

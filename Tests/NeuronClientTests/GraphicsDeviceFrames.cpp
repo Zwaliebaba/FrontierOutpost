@@ -48,7 +48,7 @@ public:
   {
     TestDevice test;
     Open(test);
-    const Neuron::DeviceCapabilities capabilities = test.device.Capabilities();
+    const Neuron::GraphicsCapabilities capabilities = test.device.Capabilities();
     // WARP's answers, which Design/ShaderPipeline-plan.md's P0.1 asks for, go to the test's output;
     // nothing but their consistency is required.
     Logger::WriteMessage(std::format("WARP: shader model {}.{}, resource binding tier {}, directly indexed heaps {}, pipeline "
