@@ -1,6 +1,9 @@
 # ADR-016: The game asks the client for what it shows
 
 - **Status:** Accepted (owner, 2026-09-26, with the library split's Phase 2)
+- **Amended:** 2026-09-27, when ADR-014 let GameLogic see NeuronServer as well. The context below
+  says GameLogic sees only NeuronCore, as it did then; the decisions stand, since GameLogic still
+  sees nothing of NeuronClient.
 - **Scope:** how GameLogic reaches everything that is drawn, played or shown, now that it may not
   see NeuronClient (ADR-014). `GameLogic/Visual.h`, `GameLogic/Presentation.h`, the
   `FrontierOutpost/*Visual.cpp` files, `FrontierOutpost/ClientPresentation.cpp` and

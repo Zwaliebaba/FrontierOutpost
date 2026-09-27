@@ -14,7 +14,8 @@
   - the LTSL functions that reach them;
   - the declarations in the HLSL, not its bodies.
 - **Files:** C++ and shader references give the file name, which is unique in the tree. Scripts are
-  under `GameData/script/`.
+  under `GameData/script/`. Line numbers are those of `f884ca3`, the commit reviewed: P0 has since
+  moved some, and removed the code H3's point to.
 - **Source:** a read-only review of `f884ca3` on 2026-09-27. Nothing was built or run: the session
   had no Windows, MSBuild or GPU. Every cost below is an estimate and says how it was reached. §9
   separates what was checked by reading, what Microsoft's documentation confirms, and what needs a
