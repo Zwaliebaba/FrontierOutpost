@@ -117,12 +117,9 @@ namespace LTE {
 
 #include "Bind.h"
 #include "Cached.h"
-#include "FunctionCall.h"
-#include "FunctionCast.h"
 #include "FreeFn.h"
 #include "Lookup.h"
 #include "FunctionPointer.h"
-#include "MemberFn.h"
 #include "FunctionValue.h"
 
 namespace LTE {

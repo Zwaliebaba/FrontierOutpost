@@ -187,9 +187,6 @@
     <ClInclude Include="Keyboard.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="LTE.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="LteProgram.h">
       <Legacy>true</Legacy>
     </ClInclude>

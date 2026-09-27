@@ -131,9 +131,6 @@
     <ClInclude Include="Cached.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="Call.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="Capsule.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -159,9 +156,6 @@
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="Data.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
-    <ClInclude Include="DataStack.h">
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="Debug.h">
@@ -206,12 +200,6 @@
     <ClInclude Include="Function_Generated.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="FunctionCall.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
-    <ClInclude Include="FunctionCast.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="FunctionPointer.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -248,13 +236,7 @@
     <ClInclude Include="IDMap.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="InternalList.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="Interpolated.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
-    <ClInclude Include="IntrusiveList.h">
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="Iterator.h">
@@ -320,9 +302,6 @@
     <ClInclude Include="Matrix.h">
       <Legacy>true</Legacy>
     </ClInclude>
-    <ClInclude Include="MemberFn.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
     <ClInclude Include="Mesh.h">
       <Legacy>true</Legacy>
     </ClInclude>
@@ -339,9 +318,6 @@
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="OS.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
-    <ClInclude Include="Package.h">
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="Parameter.h">
@@ -432,9 +408,6 @@
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="Stack.h">
-      <Legacy>true</Legacy>
-    </ClInclude>
-    <ClInclude Include="StackAlloc.h">
       <Legacy>true</Legacy>
     </ClInclude>
     <ClInclude Include="StackArray.h">
@@ -680,9 +653,6 @@
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="OS.cpp">
-      <Legacy>true</Legacy>
-    </ClCompile>
-    <ClCompile Include="Package.cpp">
       <Legacy>true</Legacy>
     </ClCompile>
     <ClCompile Include="Patch.cpp">

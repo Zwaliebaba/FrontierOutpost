@@ -96,9 +96,6 @@
     <ClInclude Include="Cached.h">
       <Filter>LTE\Function</Filter>
     </ClInclude>
-    <ClInclude Include="Call.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
     <ClInclude Include="Capsule.h">
       <Filter>LTE</Filter>
     </ClInclude>
@@ -142,9 +139,6 @@
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="Data.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
-    <ClInclude Include="DataStack.h">
       <Filter>LTE</Filter>
     </ClInclude>
     <ClCompile Include="Debug.cpp">
@@ -243,12 +237,6 @@
     <ClInclude Include="Function_Generated.h">
       <Filter>LTE</Filter>
     </ClInclude>
-    <ClInclude Include="FunctionCall.h">
-      <Filter>LTE\Function</Filter>
-    </ClInclude>
-    <ClInclude Include="FunctionCast.h">
-      <Filter>LTE\Function</Filter>
-    </ClInclude>
     <ClInclude Include="FunctionPointer.h">
       <Filter>LTE\Function</Filter>
     </ClInclude>
@@ -297,13 +285,7 @@
     <ClCompile Include="Int.cpp">
       <Filter>LTE\ScriptAPI</Filter>
     </ClCompile>
-    <ClInclude Include="InternalList.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
     <ClInclude Include="Interpolated.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
-    <ClInclude Include="IntrusiveList.h">
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="Iterator.h">
@@ -396,9 +378,6 @@
     <ClInclude Include="Matrix.h">
       <Filter>LTE</Filter>
     </ClInclude>
-    <ClInclude Include="MemberFn.h">
-      <Filter>LTE\Function</Filter>
-    </ClInclude>
     <ClInclude Include="Mesh.h">
       <Filter>LTE</Filter>
     </ClInclude>
@@ -427,12 +406,6 @@
       <Filter>LTE</Filter>
     </ClCompile>
     <ClInclude Include="OS.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
-    <ClCompile Include="Package.cpp">
-      <Filter>LTE</Filter>
-    </ClCompile>
-    <ClInclude Include="Package.h">
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="Parameter.h">
@@ -631,9 +604,6 @@
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="Stack.h">
-      <Filter>LTE</Filter>
-    </ClInclude>
-    <ClInclude Include="StackAlloc.h">
       <Filter>LTE</Filter>
     </ClInclude>
     <ClInclude Include="StackArray.h">

@@ -483,7 +483,7 @@ Facts:
 - **Storage types stay as they are.** `V2`, `V3`, `V4`, `Transform` and `Bound` are `AutoClass`
   types that the LTSL type system and serialisation see. Their size, alignment and members are part
   of the script ABI. Never store `XMVECTOR` or `XMMATRIX` in liblt objects: they need 16-byte
-  alignment, which liblt's own allocators (`LTE/Pool.h`, `LTE/StackAlloc.h`) may not give. Use
+  alignment, which liblt's own pool allocator (`LTE/Pool.h`) may not give. Use
   DirectXMath inside hot functions: load, compute, store. `XMFLOAT3`, `XMFLOAT4` and `XMFLOAT4X4`
   match `V3`, `V4` and `Matrix` in size; prove it with `static_assert`.
 - **Double precision stays double.** `Position`, `WorldMatrix`, `Bound3D` and `RayD` are double.
