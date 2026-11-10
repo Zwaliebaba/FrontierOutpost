@@ -462,6 +462,40 @@ impl Store {
         Ok(())
     }
 
+    /// Changes one account in one transaction: `change` edits the document's
+    /// outpost, processor or hangar and returns the transfers that pay for the
+    /// edit; both are saved together, or neither. A refusal from `change`, or
+    /// a transfer the account cannot cover, leaves everything as it was and
+    /// comes back as `Ok(Err(reason))`.
+    ///
+    /// # Errors
+    /// Fails if the account is missing or the database fails.
+    pub fn update<F>(&self, id: AccountId, change: F) -> Result<Result<Account, String>, StoreError>
+    where
+        F: FnOnce(&mut Account) -> Result<Vec<Transfer>, String>,
+    {
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()?;
+        let mut account = load(&transaction, id, &self.world)?;
+        let before = account.clone();
+        let transfers = match change(&mut account) {
+            Ok(transfers) => transfers,
+            Err(reason) => return Ok(Err(reason)),
+        };
+        // Stock moves only through transfers.
+        account.credits = before.credits;
+        account.stock = before.stock;
+        save(&transaction, id, &account)?;
+        match apply(&transaction, &self.world, &transfers) {
+            Ok(()) => {}
+            Err(StoreError::Transfer(error)) => return Ok(Err(error.to_string())),
+            Err(error) => return Err(error),
+        }
+        let account = load(&transaction, id, &self.world)?;
+        transaction.commit()?;
+        Ok(Ok(account))
+    }
+
     /// The ledger folded for one account: what every transfer in and out of it
     /// adds up to, by item. Equals the account's stock.
     ///
@@ -662,26 +696,73 @@ mod tests {
 
     #[test]
     fn the_ledger_folded_equals_the_stock_saved() {
-        use crate::ledger::supplies_due;
         let store = Store::in_memory().unwrap();
         let pilots: Vec<AccountId> = ["Vega", "Rigel", "Deneb"]
             .iter()
             .map(|callsign| store.create_account(callsign).unwrap())
             .collect();
-        // A seeded walk through launches, banked cargo, payouts and refused
-        // overdrafts, checking conservation after every batch.
+        // A seeded walk through launches, banked cargo, payouts, refused
+        // overdrafts and the home's actions, checking conservation after each.
         let mut seed: u32 = 2_266;
         let mut next = |below: u32| {
             seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
             (seed >> 8) % below
         };
-        for round in 0..300 {
+        for round in 0..600 {
             let pilot = pilots[next(3) as usize];
             let run = Some(format!("run-{round}"));
             let account = store.load(pilot).unwrap();
+            if next(2) == 0 {
+                use crate::home::{self, Action};
+                use frontier_sim::goods::Good;
+                let good = Good::ALL[next(5) as usize];
+                let amount = 1 + next(6);
+                let action = match next(8) {
+                    0 => Some(Action::Install {
+                        socket: ["a", "b"][next(2) as usize].into(),
+                        facility: ["sensor_array", "refinery", "fabrication_bay"][next(3) as usize]
+                            .into(),
+                    }),
+                    1 => Some(Action::Upgrade { socket: "a".into() }),
+                    2 => Some(Action::Remove {
+                        socket: ["a", "b"][next(2) as usize].into(),
+                    }),
+                    3 => Some(Action::Sell { good, amount }),
+                    4 => Some(Action::Buy { good, amount }),
+                    5 => Some(Action::Process {
+                        recipe: ["alloy", "components"][next(2) as usize].into(),
+                        batches: amount,
+                    }),
+                    6 => Some(Action::BuyFitting {
+                        fitting: frontier_sim::fitting::FITTINGS[next(7) as usize].id.into(),
+                    }),
+                    _ => None,
+                };
+                let _ = match &action {
+                    Some(action) => store
+                        .update(pilot, |account| home::act(pilot, account, action))
+                        .unwrap(),
+                    None => {
+                        let run = format!("run-{round}");
+                        store
+                            .update(pilot, |account| {
+                                Ok(home::finish_processing(pilot, account, &run))
+                            })
+                            .unwrap()
+                    }
+                };
+                for &id in &pilots {
+                    assert_eq!(
+                        store.ledger_balance(id).unwrap(),
+                        stock_of(&store.load(id).unwrap()),
+                        "account {id:?} after round {round}: {action:?}"
+                    );
+                }
+                continue;
+            }
             let batch = match next(4) {
                 0 => {
-                    let due = supplies_due(account.credits);
+                    let due = account.credits.min(frontier_sim::run::LAUNCH_COST);
                     if due == 0 {
                         continue;
                     }
@@ -696,7 +777,7 @@ mod tests {
                 }
                 1 => vec![
                     Transfer {
-                        item: Item::Ore,
+                        item: Item::ORE,
                         amount: 1 + next(20),
                         from: Party::Site,
                         to: Party::Account(pilot),
@@ -713,7 +794,7 @@ mod tests {
                     },
                 ],
                 2 => vec![Transfer {
-                    item: Item::Volatiles,
+                    item: Item::VOLATILES,
                     amount: 1 + next(5),
                     from: Party::Site,
                     to: Party::Account(pilot),
@@ -723,7 +804,7 @@ mod tests {
                 _ => vec![
                     // A batch that cannot be covered: none of it may apply.
                     Transfer {
-                        item: Item::Ore,
+                        item: Item::ORE,
                         amount: 1,
                         from: Party::Site,
                         to: Party::Account(pilot),
@@ -731,7 +812,7 @@ mod tests {
                         run: run.clone(),
                     },
                     Transfer {
-                        item: Item::Salvage,
+                        item: Item::SALVAGE,
                         amount: account.stock.salvage + 1,
                         from: Party::Account(pilot),
                         to: Party::Npc(Npc::Supplies),
@@ -758,7 +839,7 @@ mod tests {
         let before = store.load(id).unwrap();
         let result = store.transfer(&[
             Transfer {
-                item: Item::Ore,
+                item: Item::ORE,
                 amount: 5,
                 from: Party::Site,
                 to: Party::Account(id),

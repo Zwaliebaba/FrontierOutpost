@@ -6,35 +6,50 @@
 //! writes the current one. Stage 1 data may be wiped, but saves are still
 //! versioned (AGENTS.md section 8).
 
+use frontier_sim::fitting::Hangar;
+use frontier_sim::goods::Good;
+use frontier_sim::market::Queue;
+use frontier_sim::outpost::{self, Outpost};
 use serde::{Deserialize, Serialize};
 
 /// The version [`Account::to_json`] writes.
-pub const DOCUMENT_VERSION: u32 = 2;
+pub const DOCUMENT_VERSION: u32 = 3;
 
 /// Credits a new pilot starts with (design section 10).
 pub const STARTING_CREDITS: u32 = 100;
 
-/// Raw materials held at home, banked from runs.
+/// Goods held at home: raw materials banked from runs, and goods processed
+/// from them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Stock {
     pub ore: u32,
     pub salvage: u32,
     pub volatiles: u32,
+    pub alloy: u32,
+    pub components: u32,
 }
 
-/// A facility tier the pilot has bought: theirs for good (design section 2).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Unlock {
-    pub facility: String,
-    pub tier: u32,
-}
+impl Stock {
+    #[must_use]
+    pub const fn get(&self, good: Good) -> u32 {
+        match good {
+            Good::Ore => self.ore,
+            Good::Salvage => self.salvage,
+            Good::Volatiles => self.volatiles,
+            Good::Alloy => self.alloy,
+            Good::Components => self.components,
+        }
+    }
 
-/// A facility installed in a socket of the outpost.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Installed {
-    pub socket: String,
-    pub facility: String,
-    pub tier: u32,
+    pub fn get_mut(&mut self, good: Good) -> &mut u32 {
+        match good {
+            Good::Ore => &mut self.ore,
+            Good::Salvage => &mut self.salvage,
+            Good::Volatiles => &mut self.volatiles,
+            Good::Alloy => &mut self.alloy,
+            Good::Components => &mut self.components,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,12 +58,14 @@ pub struct Account {
     pub callsign: String,
     pub credits: u32,
     pub stock: Stock,
-    /// Everything ever bought, kept apart from the layout (design section 10):
-    /// capabilities come from what is installed and powered, not from this.
-    /// Empty until the outpost exists (plan M5).
-    pub unlocks: Vec<Unlock>,
-    /// What is installed in each socket. Empty until plan M5.
-    pub layout: Vec<Installed>,
+    /// Unlocks, kept apart from the layout (design section 10): capabilities
+    /// come from what is installed and powered, not from what was bought.
+    #[serde(flatten)]
+    pub outpost: Outpost,
+    /// Batches waiting at the processor; their inputs have left the stock.
+    pub processing: Queue,
+    /// Rigs and modules owned, and the saved fitting.
+    pub hangar: Hangar,
 }
 
 /// Why a document could not be read.
@@ -62,12 +79,38 @@ pub enum DocumentError {
     WrongWorld { expected: String, found: String },
 }
 
-/// Version 2: the account as it is.
+/// Version 3: the account as it is.
 #[derive(Serialize, Deserialize)]
-struct V2 {
+struct V3 {
     version: u32,
     #[serde(flatten)]
     account: Account,
+}
+
+/// Version 2: three raw materials, and unlocks and a layout that stayed empty
+/// before the outpost existed.
+#[derive(Deserialize)]
+struct V2 {
+    world: String,
+    callsign: String,
+    credits: u32,
+    stock: V2Stock,
+    unlocks: Vec<outpost::Unlock>,
+    layout: Vec<V2Installed>,
+}
+
+#[derive(Deserialize)]
+struct V2Stock {
+    ore: u32,
+    salvage: u32,
+    volatiles: u32,
+}
+
+#[derive(Deserialize)]
+struct V2Installed {
+    socket: String,
+    facility: String,
+    tier: u32,
 }
 
 /// Version 1: credits and stock side by side, with no unlocks or layout.
@@ -96,8 +139,9 @@ impl Account {
             callsign: callsign.to_owned(),
             credits: 0,
             stock: Stock::default(),
-            unlocks: Vec::new(),
-            layout: Vec::new(),
+            outpost: Outpost::default(),
+            processing: Queue::default(),
+            hangar: Hangar::default(),
         }
     }
 
@@ -112,20 +156,34 @@ impl Account {
         let account = match version {
             1 => {
                 let v1: V1 = serde_json::from_str(json)?;
-                Self {
-                    world: v1.world,
-                    callsign: v1.callsign,
-                    credits: v1.credits,
-                    stock: Stock {
-                        ore: v1.ore,
-                        salvage: v1.salvage,
-                        volatiles: v1.volatiles,
-                    },
-                    unlocks: Vec::new(),
-                    layout: Vec::new(),
-                }
+                let mut account = Self::new(&v1.world, &v1.callsign);
+                account.credits = v1.credits;
+                account.stock.ore = v1.ore;
+                account.stock.salvage = v1.salvage;
+                account.stock.volatiles = v1.volatiles;
+                account
             }
-            2 => serde_json::from_str::<V2>(json)?.account,
+            2 => {
+                let v2: V2 = serde_json::from_str(json)?;
+                let mut account = Self::new(&v2.world, &v2.callsign);
+                account.credits = v2.credits;
+                account.stock.ore = v2.stock.ore;
+                account.stock.salvage = v2.stock.salvage;
+                account.stock.volatiles = v2.stock.volatiles;
+                account.outpost.unlocks = v2.unlocks;
+                // Version 2 recorded the tier installed; it ran at that tier.
+                account.outpost.layout = v2
+                    .layout
+                    .into_iter()
+                    .map(|installed| outpost::Installed {
+                        socket: installed.socket,
+                        facility: installed.facility,
+                        run: installed.tier,
+                    })
+                    .collect();
+                account
+            }
+            3 => serde_json::from_str::<V3>(json)?.account,
             newer => return Err(DocumentError::TooNew(newer)),
         };
         if account.world != world {
@@ -142,7 +200,7 @@ impl Account {
     /// # Errors
     /// Cannot fail for these types; the error is serde's.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(&V2 {
+        serde_json::to_string(&V3 {
             version: DOCUMENT_VERSION,
             account: self.clone(),
         })
@@ -189,27 +247,50 @@ mod tests {
             account.stock,
             Stock {
                 ore: 12,
-                salvage: 0,
-                volatiles: 3
+                volatiles: 3,
+                ..Stock::default()
             }
         );
-        assert!(account.unlocks.is_empty() && account.layout.is_empty());
+        assert_eq!(account.outpost, Outpost::default());
         // Saved again, it is written at the current version.
-        assert!(account.to_json().unwrap().contains(r#""version":2"#));
+        assert!(account.to_json().unwrap().contains(r#""version":3"#));
+    }
+
+    #[test]
+    fn loads_a_version_2_document_as_the_previous_build_wrote_it() {
+        // Written by commit 044ede5, the last build before the outpost. Its
+        // unlocks and layout were always empty; a layout is upgraded anyway.
+        let v2 = r#"{"version":2,"world":"w","callsign":"Vega","credits":220,"stock":{"ore":20,"salvage":1,"volatiles":0},"unlocks":[{"facility":"refinery","tier":1}],"layout":[{"socket":"a","facility":"refinery","tier":1}]}"#;
+        let account = Account::from_json(v2, "w").unwrap();
+        assert_eq!(account.credits, 220);
+        assert_eq!(account.stock.ore, 20);
+        assert_eq!(account.stock.alloy, 0);
+        assert_eq!(account.outpost.owned("refinery"), 1);
+        assert_eq!(account.outpost.installed("a").unwrap().run, 1);
+        assert_eq!(account.hangar, Hangar::default());
+        let empty = r#"{"version":2,"world":"w","callsign":"Vega","credits":100,"stock":{"ore":0,"salvage":0,"volatiles":0},"unlocks":[],"layout":[]}"#;
+        assert_eq!(
+            Account::from_json(empty, "w").unwrap().outpost,
+            Outpost::default()
+        );
     }
 
     #[test]
     fn keeps_unlocks_apart_from_the_layout() {
         let mut account = Account::new("w", "Vega");
-        account.unlocks.push(Unlock {
+        account.outpost.unlocks.push(outpost::Unlock {
             facility: "refinery".into(),
             tier: 2,
         });
-        account.layout.push(Installed {
+        account.outpost.layout.push(outpost::Installed {
             socket: "a".into(),
             facility: "refinery".into(),
-            tier: 1,
+            run: 1,
         });
+        account.processing.add("alloy", 3);
+        account
+            .hangar
+            .add(frontier_sim::fitting::fitting("extraction_rig").unwrap());
         let json = account.to_json().unwrap();
         assert!(json.contains(r#""unlocks":[{"facility":"refinery","tier":2}]"#));
         assert_eq!(Account::from_json(&json, "w").unwrap(), account);

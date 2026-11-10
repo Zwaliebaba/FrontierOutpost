@@ -21,19 +21,21 @@ use frontier_protocol::{
 use frontier_sim::TICKS_PER_SECOND;
 use frontier_sim::combat::Event;
 use frontier_sim::extraction::{EXTRACT_RANGE, ExtractorState, Refusal};
+use frontier_sim::outcome;
 use frontier_sim::profile::ShipKind;
 use frontier_sim::run::{
     Checkpoint, Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Run, RunEvent,
     Summary, seconds,
 };
 use frontier_sim::ship::ShipInput;
-use frontier_sim::site::{Site, SiteTemplate, ThreatTier, crew_scaling};
+use frontier_sim::site::{Capability, Site, SiteTemplate, ThreatTier, crew_scaling};
 use frontier_sim::world::{ShipId, World};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{MissedTickBehavior, interval};
 use tracing::{debug, info, warn};
 use web_transport_quinn::Session;
 
+use crate::home;
 use crate::input_queue::InputQueue;
 use crate::ledger::{Item, Npc, Party, Reason, Transfer};
 use crate::runs::{Flying, Runs};
@@ -66,8 +68,9 @@ impl SnapshotSink for Session {
 /// What the expedition tells one pilot's session, besides snapshots.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PilotEvent {
-    /// A message to pass on as it is.
-    Message(ServerMessage),
+    /// A message to pass on as it is. Boxed: an account is far larger than
+    /// the other events.
+    Message(Box<ServerMessage>),
     /// The pilot's run is over; they are home. The session offers a new contract.
     RunOver(RunSummary),
 }
@@ -84,6 +87,8 @@ pub struct LaunchOrder {
     pub run: String,
     /// The account the pilot flies for.
     pub pilot: AccountId,
+    /// What the pilot's powered layout grants: the pockets they may work.
+    pub access: Vec<Capability>,
     pub store: Store,
     pub runs: Runs,
 }
@@ -164,7 +169,7 @@ impl Expedition {
         sink: impl SnapshotSink,
         events: mpsc::UnboundedSender<PilotEvent>,
     ) -> Launched {
-        let site = Site::generate(order.template, order.seed, order.tier, 1, &[]);
+        let site = Site::generate(order.template, order.seed, order.tier, 1, &order.access);
         let (run, ships) = Run::launch(site, 1, order.options);
         let ship = ships[0];
         let joined = joined(&run, ship, order.tier);
@@ -434,7 +439,7 @@ fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
 
 fn tell(pilots: &HashMap<ShipId, Pilot>, ship: ShipId, message: ServerMessage) {
     if let Some(pilot) = pilots.get(&ship) {
-        let _ = pilot.events.send(PilotEvent::Message(message));
+        let _ = pilot.events.send(PilotEvent::Message(Box::new(message)));
     }
 }
 
@@ -466,14 +471,16 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &Book
             RunEvent::Scanned { .. } => {
                 let message = scanned(run);
                 for pilot in pilots.values() {
-                    let _ = pilot.events.send(PilotEvent::Message(message.clone()));
+                    let _ = pilot
+                        .events
+                        .send(PilotEvent::Message(Box::new(message.clone())));
                 }
             }
             RunEvent::LimitWarning => {
                 let seconds_left = seconds(INSTANCE_LIMIT_TICKS - LIMIT_WARNING_TICKS);
                 for pilot in pilots.values() {
                     let message = ServerMessage::LimitWarning { seconds_left };
-                    let _ = pilot.events.send(PilotEvent::Message(message));
+                    let _ = pilot.events.send(PilotEvent::Message(Box::new(message)));
                 }
             }
             RunEvent::Docked { pilot, summary }
@@ -486,7 +493,7 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &Book
                 if let Some(home) = pilots.remove(&pilot) {
                     if let Some(holdings) = holdings {
                         let message = ServerMessage::Account { account: holdings };
-                        let _ = home.events.send(PilotEvent::Message(message));
+                        let _ = home.events.send(PilotEvent::Message(Box::new(message)));
                     }
                     let _ = home
                         .events
@@ -505,7 +512,7 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &Book
 async fn bank(books: &Books, pilot: ShipId, summary: &Summary) -> Option<AccountInfo> {
     let account = *books.accounts.get(&pilot)?;
     let run = Some(books.run.clone());
-    let mut batch: Vec<Transfer> = [Item::Ore, Item::Salvage, Item::Volatiles]
+    let mut batch: Vec<Transfer> = [Item::ORE, Item::SALVAGE, Item::VOLATILES]
         .into_iter()
         .zip(summary.banked)
         .filter(|&(_, units)| units > 0)
@@ -528,17 +535,27 @@ async fn bank(books: &Books, pilot: ShipId, summary: &Summary) -> Option<Account
             run,
         });
     }
+    let run = books.run.clone();
+    let completed = summary.ending == outcome::Ending::Docked;
     let result = books
         .store
         .call(move |store| {
-            if !batch.is_empty() {
-                store.transfer(&batch)?;
-            }
-            store.load(account)
+            // Banking and processing are one transaction: a completed run
+            // finishes the queued batches (design section 10).
+            store.update(account, |holdings| {
+                if completed {
+                    batch.extend(home::finish_processing(account, holdings, &run));
+                }
+                Ok(batch)
+            })
         })
         .await;
     match result {
-        Ok(holdings) => Some(wire::account(&holdings)),
+        Ok(Ok(holdings)) => Some(wire::account(&holdings)),
+        Ok(Err(reason)) => {
+            warn!(reason, account = account.0, "could not bank the run");
+            None
+        }
         Err(error) => {
             warn!(%error, account = account.0, "could not bank the run");
             None
@@ -790,6 +807,7 @@ mod tests {
             },
             run: "test".into(),
             pilot,
+            access: Vec::new(),
             store,
             runs: Runs::default(),
         }
@@ -861,9 +879,9 @@ mod tests {
         let message = told.recv().await.unwrap();
         assert_eq!(
             message,
-            PilotEvent::Message(ServerMessage::ExtractRefused {
+            PilotEvent::Message(Box::new(ServerMessage::ExtractRefused {
                 reason: ExtractRefusal::NotAtDeposit
-            })
+            }))
         );
     }
 
@@ -921,7 +939,7 @@ mod tests {
             (200, 12, 2)
         );
         let folded = store.ledger_balance(account).unwrap();
-        assert!(folded.contains(&(crate::ledger::Item::Ore, 12)));
+        assert!(folded.contains(&(crate::ledger::Item::ORE, 12)));
         assert!(folded.contains(&(crate::ledger::Item::Credits, 200)));
     }
 }

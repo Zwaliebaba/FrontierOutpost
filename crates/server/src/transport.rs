@@ -21,7 +21,8 @@ use web_transport_quinn::{RecvStream, SendStream, Server, Session, crypto, quinn
 use crate::auth::{Auth, AuthError, Ceremony};
 use crate::cert::DevCertificate;
 use crate::expedition::{Expedition, LaunchOrder, PilotEvent};
-use crate::ledger::{Item, Npc, Party, Reason, Transfer, supplies_due};
+use crate::home::{self, Action};
+use crate::ledger::{Item, Npc, Party, Reason, Transfer};
 use crate::runs::Runs;
 use crate::store::{AccountId, Store, StoreError, random_hex};
 use crate::{handshake, wire};
@@ -31,8 +32,8 @@ use crate::{handshake, wire};
 pub struct Settings {
     /// The site every contract offers.
     pub template: SiteTemplate,
-    /// Tiers a pilot may choose, up to 3. Tiers open with facilities (design
-    /// section 10), which arrive in plan M5; until then this is a switch.
+    /// Tiers every pilot may choose, up to 3, whatever their facilities have
+    /// opened (design section 10): a switch for trying higher tiers early.
     pub open_tiers: u32,
     /// A fixed seed for every contract, for tests; random otherwise.
     pub seed: Option<u32>,
@@ -257,8 +258,60 @@ impl Pilot<'_> {
     async fn offer(&mut self) -> Result<(), SessionError> {
         self.seed = self.settings.next_seed();
         self.offered_at = Instant::now();
-        let contract = wire::contract(self.settings.template, self.seed, self.settings.open_tiers);
+        self.show_contract().await
+    }
+
+    /// Sends the contract on offer as this pilot's home opens it: the tiers
+    /// their unlocks open and the pockets their powered layout opens.
+    async fn show_contract(&mut self) -> Result<(), SessionError> {
+        let Some(account) = self.account else {
+            return Ok(());
+        };
+        let holdings = self.identity.store.call(move |s| s.load(account)).await?;
+        let contract = wire::contract(
+            self.settings.template,
+            self.seed,
+            self.open_tiers(&holdings),
+            &home::capabilities(&holdings),
+        );
         write_frame(&mut self.send, &contract).await
+    }
+
+    fn open_tiers(&self, holdings: &crate::account::Account) -> u32 {
+        self.settings.open_tiers.max(home::open_tiers(holdings))
+    }
+
+    /// Does what the pilot asked at home, and shows them the outcome.
+    async fn at_home(&mut self, account: AccountId, action: Action) -> Result<(), SessionError> {
+        let changes_outpost = action.changes_outpost();
+        let logged = format!("{action:?}");
+        let outcome = self
+            .identity
+            .store
+            .call(move |s| s.update(account, |holdings| home::act(account, holdings, &action)))
+            .await?;
+        match outcome {
+            Ok(holdings) => {
+                info!(target: "frontier::home", account = account.0, action = logged, "done");
+                let message = ServerMessage::Account {
+                    account: wire::account(&holdings),
+                };
+                write_frame(&mut self.send, &message).await?;
+                if changes_outpost {
+                    self.show_contract().await?;
+                }
+                Ok(())
+            }
+            Err(reason) => {
+                debug!(
+                    account = account.0,
+                    action = logged,
+                    reason,
+                    "refused at home"
+                );
+                write_frame(&mut self.send, &ServerMessage::HomeRefused { reason }).await
+            }
+        }
     }
 
     /// Logs the time since the last run ended: design section 2's unloading
@@ -338,6 +391,13 @@ impl Pilot<'_> {
             return self.sign_in(message).await;
         };
         let flying = self.flying.as_ref().map(|(e, s)| (e.clone(), *s));
+        if let Some(action) = home_action(&message) {
+            if flying.is_some() {
+                let reason = "That waits until you are home.".to_owned();
+                return write_frame(&mut self.send, &ServerMessage::HomeRefused { reason }).await;
+            }
+            return self.at_home(account, action).await;
+        }
         match (message, flying) {
             (ClientMessage::Launch { tier }, None) => self.launch(account, tier).await?,
             (ClientMessage::Lock { target }, Some((expedition, ship))) => {
@@ -356,6 +416,19 @@ impl Pilot<'_> {
                 | ClientMessage::Scan,
                 None,
             ) => {}
+            (
+                ClientMessage::Install { .. }
+                | ClientMessage::Upgrade { .. }
+                | ClientMessage::Remove { .. }
+                | ClientMessage::Power { .. }
+                | ClientMessage::Sell { .. }
+                | ClientMessage::Buy { .. }
+                | ClientMessage::Process { .. }
+                | ClientMessage::Unqueue { .. }
+                | ClientMessage::BuyFitting { .. }
+                | ClientMessage::SaveFitting { .. },
+                _,
+            ) => unreachable!("home actions are handled above"),
             (
                 ClientMessage::Launch { .. }
                 | ClientMessage::Hello { .. }
@@ -451,6 +524,10 @@ impl Pilot<'_> {
             account: wire::account(&holdings),
         };
         write_frame(&mut self.send, &message).await?;
+        let catalog = ServerMessage::Catalog {
+            catalog: wire::catalog(),
+        };
+        write_frame(&mut self.send, &catalog).await?;
         // A pilot whose run is still going rejoins it (design section 6).
         if let Some(flying) = self.identity.runs.get(account) {
             let rejoined = flying
@@ -468,21 +545,24 @@ impl Pilot<'_> {
     }
 
     async fn launch(&mut self, account: AccountId, tier: u32) -> Result<(), SessionError> {
-        let Some(tier) =
-            ThreatTier::from_number(tier).filter(|tier| tier.number() <= self.settings.open_tiers)
-        else {
-            let reason = format!("tier {tier} is not open");
-            return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
-        };
         let run = random_hex(8)?;
         let paid_for = run.clone();
-        // Supplies are paid before launching: the posted price, or all the pilot
-        // has if that is less.
-        let (paid, holdings) = self
+        let open_tiers = self.settings.open_tiers;
+        // Supplies are paid before launching (design section 10).
+        let outcome = self
             .identity
             .store
             .call(move |s| {
-                let due = supplies_due(s.load(account)?.credits);
+                let holdings = s.load(account)?;
+                let open = open_tiers.max(home::open_tiers(&holdings));
+                let Some(tier) = ThreatTier::from_number(tier).filter(|t| t.number() <= open)
+                else {
+                    return Ok(Err(format!("Tier {tier} is not open.")));
+                };
+                let due = match home::supplies_due(&holdings) {
+                    Ok(due) => due,
+                    Err(reason) => return Ok(Err(reason)),
+                };
                 if due > 0 {
                     s.transfer(&[Transfer {
                         item: Item::Credits,
@@ -493,9 +573,15 @@ impl Pilot<'_> {
                         run: Some(paid_for),
                     }])?;
                 }
-                Ok((due, s.load(account)?))
+                Ok(Ok((tier, due, s.load(account)?)))
             })
             .await?;
+        let (tier, paid, holdings) = match outcome {
+            Ok(launched) => launched,
+            Err(reason) => {
+                return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
+            }
+        };
         self.log_unloading();
         info!(
             target: "frontier::run",
@@ -513,6 +599,7 @@ impl Pilot<'_> {
             },
             run,
             pilot: account,
+            access: home::capabilities(&holdings),
             store: self.identity.store.clone(),
             runs: self.identity.runs.clone(),
         };
@@ -525,6 +612,29 @@ impl Pilot<'_> {
         self.flying = Some((launched.expedition, launched.ship));
         Ok(())
     }
+}
+
+/// The home action a message asks for, if it is one.
+fn home_action(message: &ClientMessage) -> Option<Action> {
+    Some(match message.clone() {
+        ClientMessage::Install { socket, facility } => Action::Install { socket, facility },
+        ClientMessage::Upgrade { socket } => Action::Upgrade { socket },
+        ClientMessage::Remove { socket } => Action::Remove { socket },
+        ClientMessage::Power { socket, run } => Action::Power { socket, run },
+        ClientMessage::Sell { good, amount } => Action::Sell {
+            good: wire::from_good(good),
+            amount,
+        },
+        ClientMessage::Buy { good, amount } => Action::Buy {
+            good: wire::from_good(good),
+            amount,
+        },
+        ClientMessage::Process { recipe, batches } => Action::Process { recipe, batches },
+        ClientMessage::Unqueue { recipe, batches } => Action::Unqueue { recipe, batches },
+        ClientMessage::BuyFitting { fitting } => Action::BuyFitting { fitting },
+        ClientMessage::SaveFitting { rig, modules } => Action::SaveFitting { rig, modules },
+        _ => return None,
+    })
 }
 
 /// Resolves when a session is told to leave; never, for one not yet signed in.
