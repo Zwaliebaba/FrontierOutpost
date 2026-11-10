@@ -312,7 +312,7 @@ function fly(
     const focus = poses.find((pose) => pose.id === selection.focus);
     const centre = focus ?? own;
     if (centre) target.set(centre.x, 0, centre.z);
-    view.render(poses, target, look.pitch, look.yaw, shots);
+    view.render(poses, selection.lock, target, look.pitch, look.yaw, shots);
 
     const locked = poses.find((pose) => pose.id === selection.lock);
     if (locked && own) {

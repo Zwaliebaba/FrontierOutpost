@@ -1,26 +1,20 @@
 import {
-  AlwaysStencilFunc,
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,
-  Color,
   CylinderGeometry,
   DirectionalLight,
   DoubleSide,
-  EqualStencilFunc,
-  GreaterDepth,
   GridHelper,
   Group,
   HemisphereLight,
   IcosahedronGeometry,
-  LinearSRGBColorSpace,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   PerspectiveCamera,
   Points,
   PointsMaterial,
-  ReplaceStencilOp,
   RingGeometry,
   Scene,
   Vector3,
@@ -66,32 +60,14 @@ import {
   planeDepthScale,
   towardCamera,
 } from "../view/view";
-import { SHIP_BEAM, SHIP_LENGTH, forkedHull, wedgeHull } from "../view/hulls";
+import { SHIP_BEAM, SHIP_LENGTH } from "../view/hulls";
+import { BOLT, SIGNAL, STRUCTURE_STENCIL, linear, shipMeshes } from "../view/readability";
 
 const STEP = 1 / 60;
 const PICK_RADIUS_PX = 20;
 const DESIGNATE_MS = 700;
 const TRIAL_TIMEOUT_MS = 6000;
 const GAP_MS = 700;
-
-/** Stencil value written by structures. */
-const STRUCTURE = 1;
-
-const linear = (r: number, g: number, b: number) =>
-  new Color().setRGB(r, g, b, LinearSRGBColorSpace);
-
-// Greybox placeholders, not a visual language: hull tones come from the style guide's material
-// baselines, and allegiance always pairs a colour with a shape (design §5).
-const HULL: Record<Allegiance, Color> = {
-  self: linear(0.53, 0.57, 0.61),
-  ally: linear(0.29, 0.35, 0.43),
-  hostile: linear(0.3, 0.11, 0.07),
-};
-const SIGNAL: Record<Allegiance, Color> = {
-  self: linear(1, 1, 1),
-  ally: linear(0.04, 0.65, 1),
-  hostile: linear(1, 0.4, 0.055),
-};
 
 function element<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -189,11 +165,7 @@ function occluderMesh(occluder: Occluder): Mesh<BufferGeometry, MeshStandardMate
     metalness: occluder.kind === "sphere" ? 0 : 0.6,
     flatShading: true,
     transparent: config.occlusion === "fade",
-    // Structures mark the pixels they own, so silhouettes show behind them and nowhere else.
-    stencilWrite: true,
-    stencilRef: STRUCTURE,
-    stencilFunc: AlwaysStencilFunc,
-    stencilZPass: ReplaceStencilOp,
+    ...STRUCTURE_STENCIL,
   });
   switch (occluder.kind) {
     case "sphere": {
@@ -224,9 +196,6 @@ function occluderMesh(occluder: Occluder): Mesh<BufferGeometry, MeshStandardMate
 const occluderMeshes = world.occluders.map(occluderMesh);
 for (const mesh of occluderMeshes) scene.add(mesh);
 
-const wedge = wedgeHull();
-const forked = forkedHull();
-
 function planeMarker(allegiance: Allegiance): Group {
   const material = new MeshBasicMaterial({ color: SIGNAL[allegiance], side: DoubleSide });
   const group = new Group();
@@ -249,42 +218,13 @@ interface ShipView {
   longestHidden: number;
 }
 
+// Ships draw through the same readability rules as the expedition view (view/readability).
 const shipViews = world.ships.map((ship): ShipView => {
-  const geometry = ship.allegiance === "hostile" ? forked : wedge;
-  const hull = new Mesh(
-    geometry,
-    new MeshStandardMaterial({
-      color: HULL[ship.allegiance],
-      roughness: 0.45,
-      metalness: 0.5,
-      // A visible hull clears the structure mark, so a ship in front of one is drawn normally.
-      stencilWrite: true,
-      stencilRef: 0,
-      stencilFunc: AlwaysStencilFunc,
-      stencilZPass: ReplaceStencilOp,
-    }),
-  );
+  const meshes = shipMeshes(ship.allegiance);
+  const hull = meshes.hull;
   scene.add(hull);
-
-  let silhouette: Mesh | null = null;
-  if (config.occlusion === "silhouette") {
-    // Drawn only where a structure is the nearest surface and this hull lies behind it.
-    silhouette = new Mesh(
-      geometry,
-      new MeshBasicMaterial({
-        color: SIGNAL[ship.allegiance],
-        depthFunc: GreaterDepth,
-        depthWrite: false,
-        transparent: true,
-        opacity: 0.9,
-        stencilWrite: true,
-        stencilRef: STRUCTURE,
-        stencilFunc: EqualStencilFunc,
-      }),
-    );
-    silhouette.renderOrder = 10;
-    scene.add(silhouette);
-  }
+  const silhouette = config.occlusion === "silhouette" ? meshes.silhouette : null;
+  if (silhouette) scene.add(silhouette);
 
   let marker: Group | null = null;
   let drop: Mesh | null = null;
@@ -809,7 +749,7 @@ function syncViews(): void {
     if (!bolt) return;
     group.position.set(bolt.x, bolt.y, bolt.z);
     group.rotation.set(0, -bolt.heading, 0);
-    edge.material.color.copy(bolt.allegiance === "hostile" ? linear(1, 0.25, 0.05) : SIGNAL.ally);
+    edge.material.color.copy(bolt.allegiance === "hostile" ? BOLT.hostile : BOLT.pilot);
   });
 
   cameraTarget.set(player.ship.state.x, 0, player.ship.state.z).lerp(focusPoint, focusBlend);

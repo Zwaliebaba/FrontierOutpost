@@ -6,7 +6,8 @@ import { LARGE_ASTEROID_RADIUS, stationOccluders } from "./stationProxy";
 
 export const SCENE_IDS = ["crossing", "rock", "station", "headon"] as const;
 export type SceneId = (typeof SCENE_IDS)[number];
-export type Allegiance = "self" | "ally" | "hostile";
+export type { Allegiance } from "../view/readability";
+import type { Allegiance } from "../view/readability";
 export type HeightMode = "flat" | "varied";
 
 export const SCENE_LABELS: Record<SceneId, string> = {
