@@ -261,13 +261,23 @@ async fn a_pilot_in_the_ore_field_can_lock_and_fire_at_a_drone_and_be_destroyed(
 }
 
 #[tokio::test]
-async fn a_silent_session_is_dropped_after_the_idle_timeout() {
+async fn a_pilot_at_home_stays_connected_past_the_idle_timeout() {
+    // Between runs the client sends nothing. The server's keep-alive pings,
+    // which the client acknowledges, must keep the connection open: the owner
+    // was disconnected about ten seconds after docking before this.
     let idle = Duration::from_millis(600);
     let (url, sha256) = start_server_with_idle_timeout(idle);
     let (session, mut send, mut recv) = connect_to(&url, sha256).await;
     hello(&mut send, &mut recv).await;
-    // At home nobody sends datagrams, so the connection goes quiet.
-    tokio::time::timeout(idle * 4, session.closed())
-        .await
-        .expect("the session should time out");
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::Contract { .. }
+    ));
+    let closed = tokio::time::timeout(idle * 5, session.closed()).await;
+    assert!(closed.is_err(), "the session closed: {closed:?}");
+    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::Joined { .. }
+    ));
 }

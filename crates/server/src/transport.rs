@@ -81,11 +81,18 @@ const PROTOCOL_VIOLATION: u32 = 1;
 /// Session close code for a client whose protocol version is not supported.
 const VERSION_REJECTED: u32 = 2;
 
-/// How long a session may go silent before the server drops it. A pilot's
-/// client sends inputs 20 times a second, so only a client that has gone away
-/// is ever this quiet. Browsers do not always close a session when a page
-/// closes, and QUIC's usual 30 s would leave a ghost ship that long.
+/// How long a connection may go without hearing from the client before the
+/// server drops it. Browsers do not always close a session when a page closes,
+/// and QUIC's usual 30 s would leave a ghost ship that long.
 pub const IDLE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How often the server pings a client. A pilot at home between runs sends
+/// nothing, but their browser acknowledges each ping, which keeps the
+/// connection alive; a closed page stops acknowledging and is dropped after
+/// [`IDLE_TIMEOUT`]. A third of the timeout leaves room for a lost ping or two.
+fn keep_alive(idle_timeout: Duration) -> Duration {
+    idle_timeout / 3
+}
 
 /// Why the WebTransport endpoint could not be bound.
 #[derive(Debug, thiserror::Error)]
@@ -128,6 +135,7 @@ pub fn bind_with_idle_timeout(
 
     let mut transport = quinn::TransportConfig::default();
     transport.max_idle_timeout(Some(idle_timeout.try_into()?));
+    transport.keep_alive_interval(Some(keep_alive(idle_timeout)));
     let mut config = quinn::ServerConfig::with_crypto(Arc::new(
         quinn::crypto::rustls::QuicServerConfig::try_from(tls)?,
     ));
