@@ -12,7 +12,7 @@ use std::time::Duration;
 use common::{connect_to, hello, read, start_server};
 use frontier_protocol::ServerMessage;
 use frontier_protocol::input::{Controls, InputDatagram, quantize_control};
-use frontier_protocol::snapshot::{EntityState, Snapshot};
+use frontier_protocol::snapshot::{EntityKind, EntityState, Snapshot};
 use web_transport_quinn::Session;
 
 /// Joins a pilot and returns the session and the ship it flies.
@@ -50,6 +50,16 @@ async fn last_snapshot(session: &Session, duration: Duration) -> Snapshot {
     last.expect("no snapshot arrived")
 }
 
+/// The ids of the player ships in a snapshot; the skirmish's NPCs are there too.
+fn pilots(snapshot: &Snapshot) -> Vec<u16> {
+    snapshot
+        .entities
+        .iter()
+        .filter(|e| e.kind == EntityKind::PlayerShip)
+        .map(|e| e.id)
+        .collect()
+}
+
 fn find(snapshot: &Snapshot, id: u16) -> EntityState {
     *snapshot.entities.iter().find(|e| e.id == id).unwrap()
 }
@@ -83,7 +93,7 @@ async fn two_pilots_see_each_other_and_one_moves() {
     let seen_by_watcher = last_snapshot(&watcher, Duration::from_millis(200)).await;
     let seen_by_pilot = last_snapshot(&pilot, Duration::from_millis(200)).await;
     for snapshot in [&seen_by_watcher, &seen_by_pilot] {
-        let mut ids: Vec<u16> = snapshot.entities.iter().map(|e| e.id).collect();
+        let mut ids: Vec<u16> = pilots(snapshot);
         ids.sort_unstable();
         assert_eq!(
             ids,
@@ -122,6 +132,5 @@ async fn a_pilot_who_leaves_frees_their_place() {
     leaves.close(0, b"bye");
     tokio::time::sleep(Duration::from_millis(300)).await;
     let snapshot = last_snapshot(&stays, Duration::from_millis(200)).await;
-    let ids: Vec<u16> = snapshot.entities.iter().map(|e| e.id).collect();
-    assert_eq!(ids, [stays_ship]);
+    assert_eq!(pilots(&snapshot), [stays_ship]);
 }

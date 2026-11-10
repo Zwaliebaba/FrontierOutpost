@@ -1,19 +1,46 @@
 //! The state of one expedition instance.
 
 use crate::Tick;
-use crate::collision::{self, Obstacle, SHIP_RADIUS};
-use crate::ship::{self, STARTER_HANDLING, ShipInput, ShipState};
+use crate::collision::{self, Obstacle};
+use crate::npc;
+use crate::profile::ShipKind;
+use crate::ship::{self, ShipInput, ShipState};
 
 /// Identifies a ship within one instance. Small, because it crosses the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ShipId(pub u16);
 
-/// A ship and the input it is currently flying with.
+/// A ship: a pilot's or an NPC's.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ship {
     pub id: ShipId,
+    pub kind: ShipKind,
     pub state: ShipState,
+    /// What it is flying with this tick: a pilot's controls, or an NPC's choice.
     pub input: ShipInput,
+    pub hull: f32,
+    /// Cargo units carried. Always 0 until extraction (plan M3).
+    pub cargo: u32,
+    /// Where an NPC patrols, or a warden's post. A pilot's spawn point.
+    pub home: (f32, f32),
+    /// The ship this one has locked: chosen by its pilot, or by its NPC logic.
+    pub lock: Option<ShipId>,
+}
+
+impl Ship {
+    #[must_use]
+    pub fn new(id: ShipId, kind: ShipKind, state: ShipState) -> Self {
+        Self {
+            id,
+            kind,
+            state,
+            input: ShipInput::default(),
+            hull: kind.profile().max_hull,
+            cargo: 0,
+            home: (state.x, state.z),
+            lock: None,
+        }
+    }
 }
 
 /// Every entity in an instance, advanced one tick at a time.
@@ -29,6 +56,14 @@ pub struct World {
 /// join together do not start on top of one another.
 const SPAWN_RADIUS: f32 = 6.0;
 const SPAWN_SLOTS: u16 = 8;
+
+/// Which spawn slot a pilot's home is, if it is one.
+fn spawn_slot(home: (f32, f32)) -> Option<u16> {
+    (0..SPAWN_SLOTS).find(|slot| {
+        let angle = f32::from(*slot) * std::f32::consts::TAU / f32::from(SPAWN_SLOTS);
+        (home.0 - angle.cos() * SPAWN_RADIUS).hypot(home.1 - angle.sin() * SPAWN_RADIUS) < 0.01
+    })
+}
 
 impl World {
     #[must_use]
@@ -65,22 +100,44 @@ impl World {
         self.ships.iter().find(|ship| ship.id == id)
     }
 
-    /// Adds a ship at the next spawn point and returns its id.
-    pub fn spawn_ship(&mut self) -> ShipId {
+    fn next_id(&mut self) -> ShipId {
         let id = ShipId(self.next_id);
         self.next_id = self.next_id.wrapping_add(1);
-        let slot = f32::from(id.0 % SPAWN_SLOTS);
-        let angle = slot * std::f32::consts::TAU / f32::from(SPAWN_SLOTS);
-        self.ships.push(Ship {
-            id,
-            state: ShipState {
-                x: angle.cos() * SPAWN_RADIUS,
-                z: angle.sin() * SPAWN_RADIUS,
-                heading: angle,
-                speed: 0.0,
-            },
-            input: ShipInput::default(),
-        });
+        id
+    }
+
+    /// Adds a pilot's ship at the next free spawn point and returns its id.
+    pub fn spawn_ship(&mut self) -> ShipId {
+        let id = self.next_id();
+        let taken = |slot: u16| {
+            self.ships
+                .iter()
+                .any(|ship| ship.kind == ShipKind::Pilot && spawn_slot(ship.home) == Some(slot))
+        };
+        let slot = (0..SPAWN_SLOTS)
+            .find(|slot| !taken(*slot))
+            .unwrap_or(id.0 % SPAWN_SLOTS);
+        let angle = f32::from(slot) * std::f32::consts::TAU / f32::from(SPAWN_SLOTS);
+        let state = ShipState {
+            x: angle.cos() * SPAWN_RADIUS,
+            z: angle.sin() * SPAWN_RADIUS,
+            heading: angle,
+            speed: 0.0,
+        };
+        self.ships.push(Ship::new(id, ShipKind::Pilot, state));
+        id
+    }
+
+    /// Adds an NPC at `home` and returns its id.
+    pub fn spawn_npc(&mut self, kind: ShipKind, home: (f32, f32)) -> ShipId {
+        let id = self.next_id();
+        let state = ShipState {
+            x: home.0,
+            z: home.1,
+            heading: 0.0,
+            speed: 0.0,
+        };
+        self.ships.push(Ship::new(id, kind, state));
         id
     }
 
@@ -103,23 +160,50 @@ impl World {
         }
     }
 
-    /// Advances every ship by one step, then resolves collisions: ships push
-    /// one another apart, and obstacles last, so no ship ends a step inside one.
+    /// Advances the world by one step: NPCs decide, every ship moves, then
+    /// collisions resolve. Ships push one another apart, and obstacles go last,
+    /// so no ship ends a step inside one.
     pub fn step(&mut self) {
+        self.think();
         for ship in &mut self.ships {
-            ship.state = ship::step(ship.state, ship.input, &STARTER_HANDLING);
+            let handling = ship.kind.profile().handling;
+            ship.state = ship::step(ship.state, ship.input, &handling);
         }
         for i in 0..self.ships.len() {
             let (done, rest) = self.ships.split_at_mut(i + 1);
             let Some(a) = done.last_mut() else { continue };
             for b in rest {
-                collision::separate(&mut a.state, SHIP_RADIUS, &mut b.state, SHIP_RADIUS);
+                let (ra, rb) = (a.kind.profile().radius, b.kind.profile().radius);
+                collision::separate(&mut a.state, ra, &mut b.state, rb);
             }
         }
         for ship in &mut self.ships {
-            ship.state = collision::resolve_obstacles(ship.state, SHIP_RADIUS, &self.obstacles);
+            let radius = ship.kind.profile().radius;
+            ship.state = collision::resolve_obstacles(ship.state, radius, &self.obstacles);
         }
         self.tick = self.tick.next();
+    }
+
+    /// Lets every NPC choose a target and how to steer.
+    fn think(&mut self) {
+        let tick = self.tick.get();
+        let decisions: Vec<(usize, Option<ShipId>, ShipInput)> = self
+            .ships
+            .iter()
+            .enumerate()
+            .filter(|(_, ship)| ship.kind != ShipKind::Pilot)
+            .map(|(index, npc)| {
+                let target = npc::choose_target(npc, &self.ships);
+                let target_ship = target.and_then(|id| self.ship(id));
+                (index, target, npc::steer(npc, target_ship, tick))
+            })
+            .collect();
+        for (index, target, input) in decisions {
+            if let Some(npc) = self.ships.get_mut(index) {
+                npc.lock = target;
+                npc.input = input;
+            }
+        }
     }
 }
 
@@ -198,7 +282,7 @@ mod tests {
         for _ in 0..40 {
             world.step();
             let (sa, sb) = (world.ship(a).unwrap().state, world.ship(b).unwrap().state);
-            assert!((sa.x - sb.x).hypot(sa.z - sb.z) >= 2.0 * SHIP_RADIUS - 1e-3);
+            assert!((sa.x - sb.x).hypot(sa.z - sb.z) >= 2.0 * crate::collision::SHIP_RADIUS - 1e-3);
         }
     }
 
@@ -222,9 +306,50 @@ mod tests {
         for _ in 0..200 {
             world.step();
             let state = world.ship(id).unwrap().state;
-            assert!((state.x - rock.x).hypot(state.z) >= rock.radius + SHIP_RADIUS - 1e-3);
+            assert!(
+                (state.x - rock.x).hypot(state.z)
+                    >= rock.radius + crate::collision::SHIP_RADIUS - 1e-3
+            );
         }
         assert!(world.ship(id).unwrap().state.x < rock.x);
+    }
+
+    #[test]
+    fn a_pilot_gets_a_free_spawn_point_after_others_leave() {
+        let mut world = World::new();
+        let a = world.spawn_ship();
+        let b = world.spawn_ship();
+        world.remove_ship(a);
+        let c = world.spawn_ship();
+        let (sb, sc) = (world.ship(b).unwrap().state, world.ship(c).unwrap().state);
+        assert!((sb.x - sc.x).hypot(sb.z - sc.z) > 1.0);
+    }
+
+    #[test]
+    fn npcs_lock_and_chase_a_pilot_they_notice() {
+        let mut world = World::new();
+        let pilot = world.spawn_ship();
+        let drone = world.spawn_npc(ShipKind::Drone, (30.0, 0.0));
+        let start = world.ship(drone).unwrap().state;
+        for _ in 0..40 {
+            world.step();
+        }
+        let after = world.ship(drone).unwrap();
+        assert_eq!(after.lock, Some(pilot));
+        let (p, d0, d1) = (world.ship(pilot).unwrap().state, start, after.state);
+        assert!((d1.x - p.x).hypot(d1.z - p.z) < (d0.x - p.x).hypot(d0.z - p.z));
+    }
+
+    #[test]
+    fn npcs_patrol_near_home_when_no_pilot_is_near() {
+        let mut world = World::new();
+        let raider = world.spawn_npc(ShipKind::Raider, (100.0, 100.0));
+        for _ in 0..600 {
+            world.step();
+        }
+        let raider = world.ship(raider).unwrap();
+        assert_eq!(raider.lock, None);
+        assert!((raider.state.x - 100.0).hypot(raider.state.z - 100.0) < 25.0);
     }
 
     #[test]

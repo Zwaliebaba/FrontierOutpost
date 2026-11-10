@@ -13,7 +13,9 @@ use frontier_protocol::snapshot::{
 };
 use frontier_sim::TICKS_PER_SECOND;
 use frontier_sim::collision::{Obstacle, asteroid_field};
+use frontier_sim::profile::ShipKind;
 use frontier_sim::ship::ShipInput;
+use frontier_sim::skirmish::Skirmish;
 use frontier_sim::world::{ShipId, World};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{MissedTickBehavior, interval};
@@ -116,6 +118,8 @@ struct Pilot {
 }
 
 async fn run(mut commands: mpsc::UnboundedReceiver<Command>, mut world: World) {
+    // NPCs to fight until sites exist (plan M3).
+    let mut skirmish = Skirmish::populate(&mut world);
     let mut pilots: HashMap<ShipId, Pilot> = HashMap::new();
     let mut ticker = interval(Duration::from_secs(1) / TICKS_PER_SECOND);
     // After a stall, carry on at the normal rate rather than racing to catch up.
@@ -142,6 +146,7 @@ async fn run(mut commands: mpsc::UnboundedReceiver<Command>, mut world: World) {
                         );
                     }
                 }
+                skirmish.step(&mut world);
                 world.step();
                 broadcast(&world, &mut pilots);
             }
@@ -191,15 +196,22 @@ fn broadcast(world: &World, pilots: &mut HashMap<ShipId, Pilot>) {
         .iter()
         .map(|ship| {
             let (vx, vz) = ship.state.velocity();
+            let max_hull = ship.kind.profile().max_hull;
             EntityState {
                 id: ship.id.0,
-                kind: EntityKind::PlayerShip,
+                kind: match ship.kind {
+                    ShipKind::Pilot => EntityKind::PlayerShip,
+                    ShipKind::Drone => EntityKind::Drone,
+                    ShipKind::Raider => EntityKind::Raider,
+                    ShipKind::Warden => EntityKind::Warden,
+                },
                 x: quantize_position(ship.state.x),
                 z: quantize_position(ship.state.z),
                 heading: quantize_heading(ship.state.heading),
                 vx: quantize_velocity(vx),
                 vz: quantize_velocity(vz),
-                hull: u8::MAX,
+                // The clamp keeps the product within u8, so `as` cannot saturate.
+                hull: ((ship.hull / max_hull).clamp(0.0, 1.0) * 255.0).round() as u8,
             }
         })
         .collect();
@@ -303,9 +315,29 @@ mod tests {
             .unwrap()
             .entities
             .iter()
+            .filter(|e| e.kind == EntityKind::PlayerShip)
             .map(|e| e.id)
             .collect();
         assert_eq!(ids, vec![stays.0]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn snapshots_carry_the_skirmish_npcs_at_full_hull() {
+        let expedition = Expedition::start();
+        let (sink, snapshots) = channel();
+        expedition.join(sink).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let snapshot = latest(&snapshots).unwrap();
+        let npcs: Vec<&EntityState> = snapshot
+            .entities
+            .iter()
+            .filter(|e| e.kind != EntityKind::PlayerShip)
+            .collect();
+        assert_eq!(npcs.len(), Skirmish::size());
+        for kind in [EntityKind::Drone, EntityKind::Raider, EntityKind::Warden] {
+            assert!(npcs.iter().any(|e| e.kind == kind), "{kind:?} missing");
+        }
+        assert!(snapshot.entities.iter().all(|e| e.hull == u8::MAX));
     }
 
     #[tokio::test(start_paused = true)]

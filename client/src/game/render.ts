@@ -38,6 +38,17 @@ const HULL = {
 };
 
 export const RESTING_ELEVATION = 33;
+
+/**
+ * Each kind's collision radius over the starter hull's (frontier_sim::profile), so a drawn
+ * hull is as large as the ship the server collides.
+ */
+const SIZE: Record<EntityKind, number> = {
+  playerShip: 1,
+  drone: 0.9 / 1.3,
+  raider: 1,
+  warden: 2.2 / 1.3,
+};
 const SKY_FOV = 50;
 const LANDMARK_SEED = 2266;
 
@@ -123,10 +134,12 @@ export class ExpeditionView {
   #shipMesh(kind: EntityKind, own: boolean): Mesh {
     const hostile = kind !== "playerShip";
     const color = hostile ? HULL.hostile : own ? HULL.own : HULL.pilot;
-    return new Mesh(
+    const mesh = new Mesh(
       hostile ? forkedHull() : wedgeHull(),
       new MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.5 }),
     );
+    mesh.scale.setScalar(SIZE[kind]);
+    return mesh;
   }
 
   #addStars(): void {
