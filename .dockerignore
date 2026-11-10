@@ -1,0 +1,17 @@
+# Send the image build only what it compiles. Everything else, above all target/ and the Git LFS
+# assets under Design/, stays out of the build context.
+*
+!Cargo.toml
+!Cargo.lock
+!rust-toolchain.toml
+!.cargo/
+!crates/
+!client/
+
+**/target/
+client/node_modules/
+client/dist/
+client/src/sim/pkg/
+client/coverage/
+client/test-results/
+client/playwright-report/

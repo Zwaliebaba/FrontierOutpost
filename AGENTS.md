@@ -53,6 +53,7 @@ FRONTIER_TIERS=3 cargo run -p frontier-server             # open tiers II and II
 FRONTIER_SEED=29 cargo run -p frontier-server             # every contract on one seed (the e2e tests use 29)
 FRONTIER_NPCS=24 cargo run -p frontier-server             # opening threat at the NPC cap (frame time shows in the client)
 cargo run --release -p frontier-server --example caps     # server tick cost and snapshot size at the caps
+docker compose up --build       # server and built client in a Linux container, http://localhost:8080/
 
 # Client
 cd client
@@ -61,6 +62,7 @@ npm run build:sim               # frontier-sim to WebAssembly; run by dev, build
 npm run dev                     # Vite dev server
 npm run check                   # format:check, lint, typecheck, test, build (= CI)
 npm run e2e                     # browser tests against the real server; run `npm run build` first
+npm run e2e:container           # the same tests against `docker compose up`
 npm run format                  # apply Prettier
 
 # Scene generator (Blender 4.3+ or 5.x); write output outside the repo to verify it
@@ -141,8 +143,8 @@ change ships with a test. Keep comments for the *why*.
 
 ## 7. Workflow
 
-- Branch from `main`; merge through pull requests. Every CI job blocks: `rust`, `rust-windows`,
-  `client`, `e2e` and `repo`. The protection is defined in `.github/rulesets/main.json` and
+- Branch from `main`; merge through pull requests. Every CI job blocks: `rust`, `client`, `e2e`
+  and `repo`, all on Linux. The protection is defined in `.github/rulesets/main.json` and
   imported by hand under Settings → Rules → Rulesets. When a CI job is added or renamed, update
   the ruleset and re-import it; the `repo` job fails until they match. Check the CI run after pushing; a red `main` is a stop-everything event.
 - Make small commits, one logical change each, and make sure each one builds and passes tests.

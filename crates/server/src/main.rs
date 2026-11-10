@@ -14,12 +14,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = Config::from_env()?;
     let host = config.web_transport_addr.ip().to_string();
-    let cert = DevCertificate::generate(&["localhost", &host], OffsetDateTime::now_utc())?;
+    let public_host = config
+        .public_web_transport_addr
+        .map_or_else(|| host.clone(), |addr| addr.ip().to_string());
+    let cert = DevCertificate::generate(
+        &["localhost", &host, &public_host],
+        OffsetDateTime::now_utc(),
+    )?;
     let server = transport::bind(config.web_transport_addr, &cert)?;
     let web_transport_addr = server.local_addr()?;
 
     // With an impairment set, browsers connect through the relay instead.
-    let browser_addr = if config.impairment.is_active() {
+    let listening_addr = if config.impairment.is_active() {
         let relay_bind = (web_transport_addr.ip(), 0).into();
         let relay_addr = relay::start(relay_bind, web_transport_addr, config.impairment).await?;
         warn!(
@@ -33,6 +39,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         web_transport_addr
     };
+    let browser_addr = config.browser_addr(listening_addr);
+    if browser_addr.ip().is_unspecified() {
+        warn!(
+            %browser_addr,
+            "browsers cannot dial an unspecified address: set FRONTIER_PUBLIC_WEBTRANSPORT_ADDR"
+        );
+    }
 
     let connect = ConnectInfo {
         web_transport_url: format!("https://{browser_addr}/"),
@@ -41,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(config.http_addr).await?;
     let http_addr = listener.local_addr()?;
 
-    info!(protocol = PROTOCOL_VERSION, %web_transport_addr, "WebTransport listening");
+    info!(protocol = PROTOCOL_VERSION, %web_transport_addr, %browser_addr, "WebTransport listening");
     info!(client = %config.client_dir.display(), "open http://{http_addr}/");
 
     info!(
@@ -51,9 +64,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     tokio::spawn(transport::serve(server, config.settings));
     axum::serve(listener, http::router(connect, &config.client_dir))
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
+        .with_graceful_shutdown(shutdown_signal())
         .await?;
+    info!("stopped");
     Ok(())
+}
+
+/// Resolves when the process is asked to stop: Ctrl+C, or on Unix SIGTERM,
+/// which is how `docker stop` asks. A process running as a container's PID 1
+/// ignores SIGTERM unless it handles it, and is killed after a timeout.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        match signal(SignalKind::terminate()) {
+            Ok(mut terminate) => {
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = terminate.recv() => {}
+                }
+                return;
+            }
+            Err(error) => warn!(%error, "cannot listen for SIGTERM; only Ctrl+C stops the server"),
+        }
+    }
+    let _ = tokio::signal::ctrl_c().await;
 }

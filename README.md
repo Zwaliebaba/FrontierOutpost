@@ -57,6 +57,32 @@ Optional: `FRONTIER_IMPAIR_JITTER_MS` adds up to that much random extra delay pe
 line shows the measured round trip, which includes up to one 50 ms server tick, and the last
 prediction correction.
 
+## Running in a container
+
+The server and the built client also run as one Linux image, for example under Docker Desktop.
+Nothing else needs installing; the image builds both.
+
+```sh
+docker compose up --build
+```
+
+Open <http://localhost:8080/>. `docker compose down` stops it. In VS Code, the **Game in container
+(Edge)** launch configuration does all of this in one step: it starts the container, opens the
+game in Edge with the debugger attached, and stops the container when Edge closes. To run the end-to-end tests against
+the container, start it, then run `npx playwright install chromium` once and
+`npm run e2e:container` in `client/`.
+
+[compose.yaml](compose.yaml) publishes HTTP on TCP 8080 and WebTransport on **UDP** 4443, both on
+loopback only, because WebTransport needs a secure context and plain HTTP is one only on
+localhost. Inside the container the server binds `0.0.0.0`, which a browser cannot dial, so
+`FRONTIER_PUBLIC_WEBTRANSPORT_ADDR` gives the address browsers should use instead: the host side
+of the UDP mapping. Change it together with the port mapping.
+
+The latency relay does not work in a container: it listens on a port it picks at start, which
+cannot be published in advance, so the server refuses `FRONTIER_IMPAIR_*` together with a public
+address. The server makes a new certificate each time it starts, valid for 13 days. Restart a
+container that has been up longer than that.
+
 ## Licence
 
 All rights reserved. See [LICENSE](LICENSE).

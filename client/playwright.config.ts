@@ -24,7 +24,8 @@ const server = (port: number, extra: Record<string, string>) => ({
   timeout: 600_000,
 });
 
-export default defineConfig({
+/** Settings for every run, whichever server the tests talk to. */
+export const shared = defineConfig({
   testDir: "e2e",
   testMatch: "**/*.e2e.ts",
   timeout: 30_000,
@@ -39,5 +40,9 @@ export default defineConfig({
     launchOptions: { args: ["--no-proxy-server"] },
   },
   projects: [{ name: "chromium", use: { browserName: "chromium" } }],
+});
+
+export default defineConfig({
+  ...shared,
   webServer: [server(HTTP_PORT, {}), server(QUIET_PORT, { FRONTIER_NPCS: "0" })],
 });
