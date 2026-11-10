@@ -62,9 +62,10 @@ On Windows the Python launcher is `py`, not `python`.
 
 1. **The server is authoritative** (design §5). It validates movement, hits, inventory and
    access. The client sends intents and renders server state; it never decides outcomes.
-2. **`frontier-sim` is deterministic.** No I/O, wall-clock time, threads, or unseeded randomness.
-   Pass seeds and inputs in, and advance in fixed `Tick`s. The server must be able to replay a
-   session from its inputs.
+2. **`frontier-sim` holds the game rules and does no I/O.** It advances in fixed `Tick`s and is
+   handed its inputs; it does not read the clock or the network. A site is generated from its
+   seed, and the same seed must give the same site (design §10). Replaying a whole session from
+   its inputs is not required.
 3. **`frontier-protocol` is the only contract between server and client.**
    - Every wire type derives `TS` with `#[ts(export)]` and uses
      `#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]` for enums.
@@ -75,7 +76,7 @@ On Windows the Python launcher is `py`, not `python`.
      Rust change. CI fails if they differ. Never edit generated files by hand.
    - Reliable messages travel as JSON on streams. Snapshots travel as compact binary datagrams
      and must fit the browser's datagram limit (1,024 bytes in Chromium). The transport is
-     WebTransport, provisionally (see §8).
+     WebTransport, with no fallback (see §8).
 4. **The client imports wire types only through `client/src/protocol/index.ts`.**
 5. **One camera, one plane** (design §5, style guide §6). All activities share one orthographic
    tactical view that rests at 33° elevation (`client/src/camera.ts`). A player may orbit it while
@@ -133,19 +134,19 @@ change ships with a test. Keep comments for the *why*.
 
 ## 8. Open decisions — ask, don't assume
 
-- Whether a fallback transport is needed for browsers and networks without WebTransport or UDP.
-- HTTP framework, if one is needed beside WebTransport (none chosen yet).
-- How a player is identified (required for Stage 1 saves and reconnection).
-- Persistence for home and account saves (required for Stage 1).
-- Project license (none yet).
+- HTTP framework for serving the client and anything else that needs plain HTTPS (none chosen
+  yet).
+- Project license (none yet). Needed before invited testers see a build.
 
 Decided:
 
 - Server async runtime: Tokio.
+- Network transport: WebTransport, served by quinn and `web-transport-quinn`, with no fallback.
+  `spikes/webtransport` confirms it in Chromium; Firefox and Safari have not been run.
 - Wire format: JSON on reliable streams for everything except snapshots, which are compact binary
-  datagrams. `spikes/webtransport` shows why: on a lossy link, large reliable messages hitch.
-
-Provisional:
-
-- Network transport: WebTransport, served by quinn and `web-transport-quinn`. The spike confirms
-  it in Chromium; Firefox and Safari have not been run.
+  datagrams. The spike shows why: on a lossy link, large reliable messages hitch.
+- Identity: passkeys (WebAuthn).
+- Persistence: embedded SQLite, with an append-only ledger beside the saves. Stage 1 data may be
+  wiped; saves are still versioned.
+- Hosting for Stage 1: the owner's machine. Testers play in person or on the same network.
+- Art for Stage 1: sockets and facility modules come from `create_scene.py`, not primitives.
