@@ -169,6 +169,20 @@ pub enum ServerMessage {
     LimitWarning { seconds_left: u32 },
     /// The pilot's run is over. A new `Contract` follows.
     RunOver { summary: RunSummary },
+    /// The instance ended and the crew's pot was paid: `share` of it to this
+    /// pilot, by the host's split. A pilot who docked last also sees their
+    /// share in `RunOver`.
+    PotPaid { pot: PotInfo, share: u32 },
+}
+
+/// What a crew earned between them (design section 10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PotInfo {
+    pub contract: u32,
+    pub bounty: u32,
+    pub relay: u32,
 }
 
 /// A pocket of the site, as a contract shows it.
@@ -312,7 +326,8 @@ pub struct RunSummary {
     pub ore: u32,
     pub salvage: u32,
     pub volatiles: u32,
-    /// The pilot's share of the contract pot, credits.
+    /// The pilot's share of the crew's pot, credits, when it was paid as they
+    /// came home; otherwise 0 and a `PotPaid` follows when the instance ends.
     pub payout: u32,
     pub launch_cost: u32,
     pub cargo_lost: u32,

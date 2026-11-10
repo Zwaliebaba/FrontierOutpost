@@ -26,6 +26,7 @@ export type { OutpostInfo } from "./generated/OutpostInfo";
 export type { OwnStatus } from "./generated/OwnStatus";
 export type { PocketInfo } from "./generated/PocketInfo";
 export type { PocketKind } from "./generated/PocketKind";
+export type { PotInfo } from "./generated/PotInfo";
 export type { PriceInfo } from "./generated/PriceInfo";
 export type { QueuedInfo } from "./generated/QueuedInfo";
 export type { RecipeInfo } from "./generated/RecipeInfo";

@@ -115,6 +115,8 @@ pub enum Reason {
     Banked,
     ContractPayout,
     NestBounty,
+    /// The relay link's bonus on the contract (design section 10).
+    RelayBonus,
     Sold,
     Bought,
     /// A facility bought, upgraded or installed again.
@@ -138,6 +140,7 @@ impl Reason {
             Self::Banked => "banked cargo",
             Self::ContractPayout => "contract payout",
             Self::NestBounty => "nest bounty",
+            Self::RelayBonus => "relay bonus",
             Self::Sold => "sold",
             Self::Bought => "bought",
             Self::Construction => "construction",

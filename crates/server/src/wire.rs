@@ -290,7 +290,7 @@ pub fn material(material: site::Material) -> Material {
 }
 
 #[must_use]
-pub fn summary(summary: &run::Summary) -> RunSummary {
+pub fn summary(summary: &run::Summary, payout: u32) -> RunSummary {
     let [ore, salvage, volatiles] = summary.banked;
     RunSummary {
         ending: match summary.ending {
@@ -301,7 +301,7 @@ pub fn summary(summary: &run::Summary) -> RunSummary {
         ore,
         salvage,
         volatiles,
-        payout: summary.payout,
+        payout,
         launch_cost: summary.launch_cost,
         cargo_lost: summary.lost.cargo,
         modules_lost: summary.lost.upgraded_modules,

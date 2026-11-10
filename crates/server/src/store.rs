@@ -77,12 +77,30 @@ pub(crate) fn random_hex(bytes: usize) -> Result<String, StoreError> {
     Ok(buffer.iter().map(|b| format!("{b:02x}")).collect())
 }
 
+/// A pilot's place in a checkpointed run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Seat {
+    pub account: AccountId,
+    pub ship: u16,
+    /// Their share of the pot, in whole percent.
+    pub share: u32,
+}
+
+/// A seat as JSON: account, ship and share. Checkpoints written before crews
+/// (plan M6) have no share; theirs were solo runs, which take the whole pot.
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum SeatJson {
+    Crew(i64, u16, u32),
+    Solo(i64, u16),
+}
+
 /// A run's latest checkpoint as the store keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavedRun {
     pub run: String,
-    /// Each pilot's account and the ship they fly in the run.
-    pub crew: Vec<(AccountId, u16)>,
+    /// Each pilot's account, ship and share.
+    pub crew: Vec<Seat>,
     /// The checkpoint, as JSON.
     pub document: String,
 }
@@ -381,20 +399,20 @@ impl Store {
         Ok(token)
     }
 
-    /// Saves a run's latest checkpoint, replacing the one before. `crew` pairs
-    /// each pilot's account with the ship they fly in the run.
+    /// Saves a run's latest checkpoint, replacing the one before, with each
+    /// pilot's seat in the run.
     ///
     /// # Errors
     /// Fails only if the database does.
     pub fn save_checkpoint(
         &self,
         run: &str,
-        crew: &[(AccountId, u16)],
+        crew: &[Seat],
         document: &str,
     ) -> Result<(), StoreError> {
-        let crew: Vec<(i64, u16)> = crew
+        let crew: Vec<(i64, u16, u32)> = crew
             .iter()
-            .map(|&(account, ship)| (account.0, ship))
+            .map(|seat| (seat.account.0, seat.ship, seat.share))
             .collect();
         self.lock()?.execute(
             "INSERT INTO checkpoints (run, crew, document, saved) VALUES (?1, ?2, ?3, ?4)
@@ -433,12 +451,23 @@ impl Store {
         let mut runs = Vec::new();
         for row in rows {
             let (run, crew, document) = row?;
-            let crew: Vec<(i64, u16)> = serde_json::from_str(&crew)?;
+            let crew: Vec<SeatJson> = serde_json::from_str(&crew)?;
             runs.push(SavedRun {
                 run,
                 crew: crew
                     .into_iter()
-                    .map(|(account, ship)| (AccountId(account), ship))
+                    .map(|seat| match seat {
+                        SeatJson::Crew(account, ship, share) => Seat {
+                            account: AccountId(account),
+                            ship,
+                            share,
+                        },
+                        SeatJson::Solo(account, ship) => Seat {
+                            account: AccountId(account),
+                            ship,
+                            share: 100,
+                        },
+                    })
                     .collect(),
                 document,
             });
@@ -945,19 +974,49 @@ mod tests {
     fn keeps_the_latest_checkpoint_of_each_run_until_it_is_over() {
         let store = Store::in_memory().unwrap();
         let id = store.create_account("Vega").unwrap();
+        let seat = |ship, share| Seat {
+            account: id,
+            ship,
+            share,
+        };
         store
-            .save_checkpoint("run-a", &[(id, 0)], "{\"v\":1}")
+            .save_checkpoint("run-a", &[seat(0, 100)], "{\"v\":1}")
             .unwrap();
         store
-            .save_checkpoint("run-a", &[(id, 0)], "{\"v\":2}")
+            .save_checkpoint("run-a", &[seat(0, 60)], "{\"v\":2}")
             .unwrap();
-        store.save_checkpoint("run-b", &[(id, 3)], "{}").unwrap();
+        store
+            .save_checkpoint("run-b", &[seat(3, 100)], "{}")
+            .unwrap();
         let saved = store.checkpoints().unwrap();
         assert_eq!(saved.len(), 2);
         assert_eq!(saved[0].document, "{\"v\":2}");
-        assert_eq!(saved[0].crew, [(id, 0)]);
+        assert_eq!(saved[0].crew, [seat(0, 60)]);
         store.delete_checkpoint("run-a").unwrap();
         assert_eq!(store.checkpoints().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_checkpoint_saved_before_crews_reads_as_a_solo_seat() {
+        let store = Store::in_memory().unwrap();
+        let id = store.create_account("Vega").unwrap();
+        store
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO checkpoints (run, crew, document, saved) VALUES ('old', ?1, '{}', 0)",
+                params![format!("[[{},2]]", id.0)],
+            )
+            .unwrap();
+        let saved = store.checkpoints().unwrap();
+        assert_eq!(
+            saved[0].crew,
+            [Seat {
+                account: id,
+                ship: 2,
+                share: 100
+            }]
+        );
     }
 
     #[test]
@@ -967,7 +1026,17 @@ mod tests {
         let store = Store::open(&path).unwrap();
         let id = store.create_account("Vega").unwrap();
         store.issue_token(id).unwrap();
-        store.save_checkpoint("run", &[(id, 0)], "{}").unwrap();
+        store
+            .save_checkpoint(
+                "run",
+                &[Seat {
+                    account: id,
+                    ship: 0,
+                    share: 100,
+                }],
+                "{}",
+            )
+            .unwrap();
         let old_world = store.world().to_owned();
         assert!(!store.is_empty().unwrap());
         drop(store);

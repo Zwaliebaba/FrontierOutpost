@@ -62,6 +62,13 @@ pub const CHECKPOINT_TICKS: u32 = minutes(1);
 pub const NEST_BOUNTY: u32 = 120;
 /// Salvage breaking the nest core puts in the hold (design section 10).
 pub const NEST_SALVAGE: u32 = 6;
+/// Crew members may launch into the host's instance this long after it opens
+/// (the owner's choice for plan M6: the host launches and the others follow).
+pub const JOIN_WINDOW_TICKS: u32 = 60 * TICKS_PER_SECOND;
+/// A relay counts as held by a ship this close to it, metres. A placeholder.
+pub const RELAY_RADIUS: f32 = 8.0;
+/// Both relays must be held together this long (design section 10).
+pub const RELAY_HOLD_TICKS: u32 = 30 * TICKS_PER_SECOND;
 /// Impacts slower than this are scrapes and do no damage, m/s.
 const MIN_DEBRIS_IMPACT: f32 = 1.0;
 
@@ -122,11 +129,29 @@ pub struct Summary {
     pub ending: Ending,
     /// Cargo banked at home; empty unless docked.
     pub banked: Cargo,
-    /// This pilot's share of the contract pot, credits.
-    pub payout: u32,
     pub launch_cost: u32,
     pub lost: Loadout,
     pub phases: PhaseTimes,
+}
+
+/// What the crew earned between them (design section 10): one pot, paid at
+/// the end of the instance and split by the host's shares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Pot {
+    /// The contract payout, once a ship has docked with enough site cargo.
+    pub contract: u32,
+    /// The nest core's bounty, once it has broken.
+    pub bounty: u32,
+    /// Half the contract payout more, once the relays were linked and the
+    /// contract earned.
+    pub relay: u32,
+}
+
+impl Pot {
+    #[must_use]
+    pub const fn total(&self) -> u32 {
+        self.contract + self.bounty + self.relay
+    }
 }
 
 /// Something that happened in the run, for the event log.
@@ -223,6 +248,20 @@ pub enum RunEvent {
     },
     /// The run was restored from a checkpoint after a server restart.
     Restored,
+    /// A crew member launched into the instance.
+    Joined {
+        pilot: ShipId,
+    },
+    /// A ship docked with enough site cargo: the contract is earned.
+    ContractEarned {
+        pilot: ShipId,
+    },
+    /// Both relays were held together for long enough.
+    RelaysLinked,
+    /// The instance is over and the pot is paid.
+    PotSettled {
+        pot: Pot,
+    },
     /// The nest core broke: salvage to the pilot who broke it, a bounty to
     /// the pot.
     CoreBroken {
@@ -250,6 +289,18 @@ pub struct PilotStatus {
     pub alert: u32,
     /// Ticks since launch.
     pub elapsed: u32,
+    /// The relay link: ticks both relays have been held together, until linked.
+    pub relay: Relay,
+}
+
+/// The two-place objective's progress (design section 10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Relay {
+    #[default]
+    Idle,
+    /// Both relays held for this many ticks so far.
+    Holding(u32),
+    Linked,
 }
 
 /// Whether a pilot's cruise drive may engage this tick, and if not, why.
@@ -288,7 +339,6 @@ struct PilotRun {
     undocked_at: Option<u32>,
     first_pocket_at: Option<u32>,
     last_pocket_exit_at: Option<u32>,
-    payout: u32,
     /// The pilot holds the cruise control.
     cruise_requested: bool,
     drive: Drive,
@@ -378,6 +428,9 @@ pub struct Checkpoint {
     /// What the crew's outposts grant: a checkpoint from before plan M5 has none.
     #[serde(default)]
     pub access: Vec<Capability>,
+    /// The relay link's progress.
+    #[serde(default)]
+    pub relay: Relay,
 }
 
 /// One expedition instance from launch to its end.
@@ -403,24 +456,22 @@ pub struct Run {
     core: Option<ShipId>,
     /// Bounty earned and not yet paid.
     bounty: u32,
+    relay: Relay,
 }
 
 impl Run {
     /// Launches `pilots` ships from the site's dock and places the opening
-    /// threat. Returns the run and the pilots' ships, in order.
+    /// threat, scaled for the site's crew. Returns the run and the pilots'
+    /// ships, in order. The rest of a crew may [`Run::join`] for a while.
     #[must_use]
     pub fn launch(site: Site, pilots: u32, options: Options) -> (Self, Vec<ShipId>) {
         let mut world = World::with_obstacles(site.obstacles.clone());
         let (dx, dz) = site.template.dock;
         let (cx, cz) = site.template.centre;
         let heading = (cz - dz).atan2(cx - dx);
+        let crew = site.pilots.max(pilots);
         let ships: Vec<ShipId> = (0..pilots)
-            .map(|i| {
-                // Side by side across the launch direction, 4 m apart.
-                let offset = (i as f32 - (pilots as f32 - 1.0) / 2.0) * 4.0;
-                let home = (dx - heading.sin() * offset, dz + heading.cos() * offset);
-                world.spawn_pilot_at(home, heading)
-            })
+            .map(|i| world.spawn_pilot_at(berth(&site, i, crew), heading))
             .collect();
         let mut run = Self {
             world,
@@ -438,7 +489,6 @@ impl Run {
                     undocked_at: None,
                     first_pocket_at: None,
                     last_pocket_exit_at: None,
-                    payout: 0,
                     cruise_requested: false,
                     drive: Drive::Ready,
                     disconnected_at: None,
@@ -462,6 +512,7 @@ impl Run {
             checkpoint_due: false,
             core: None,
             bounty: 0,
+            relay: Relay::Idle,
         };
         run.log(RunEvent::Launched { pilots });
         for &pilot in &ships {
@@ -549,7 +600,73 @@ impl Run {
             alert: self.alert,
             elapsed: self.elapsed(),
             drive: pilot.drive,
+            relay: self.relay,
         })
+    }
+
+    /// Launches one more crew member into the instance, at the dock, while
+    /// the join window is open and the crew the site was scaled for is not
+    /// all here. Returns their ship.
+    pub fn join(&mut self) -> Option<ShipId> {
+        let joined = u32::try_from(self.pilots.len()).unwrap_or(u32::MAX);
+        if self.ended.is_some() || self.elapsed() > JOIN_WINDOW_TICKS || joined >= self.site.pilots
+        {
+            return None;
+        }
+        let (dx, dz) = self.site.template.dock;
+        let (cx, cz) = self.site.template.centre;
+        let heading = (cz - dz).atan2(cx - dx);
+        let ship = self
+            .world
+            .spawn_pilot_at(berth(&self.site, joined, self.site.pilots), heading);
+        self.pilots.push(PilotRun {
+            ship,
+            phase: Phase::AtDock,
+            cargo: [0; 3],
+            capacity: BASIC_CAPACITY,
+            extractor: Extractor::default(),
+            scan: None,
+            pocket: None,
+            intercepted: false,
+            undocked_at: None,
+            first_pocket_at: None,
+            last_pocket_exit_at: None,
+            cruise_requested: false,
+            drive: Drive::Ready,
+            disconnected_at: None,
+            exposure_ends: 0,
+            inert: None,
+            last_combat: None,
+            fitted: Vec::new(),
+            fitting: Fitting::BASIC,
+        });
+        self.log(RunEvent::Joined { pilot: ship });
+        self.log(RunEvent::SuppliesSpent {
+            pilot: ship,
+            credits: self.launch_cost,
+        });
+        Some(ship)
+    }
+
+    /// The pilots' ships in the run, in the order they launched.
+    #[must_use]
+    pub fn ships(&self) -> Vec<ShipId> {
+        self.pilots.iter().map(|pilot| pilot.ship).collect()
+    }
+
+    /// Where the relays are: at the centres of their two pockets.
+    #[must_use]
+    pub fn relays(&self) -> [(f32, f32); 2] {
+        self.site
+            .values
+            .relays
+            .map(|pocket| self.site.pockets[pocket].template.centre)
+    }
+
+    /// The relay link's progress.
+    #[must_use]
+    pub fn relay(&self) -> Relay {
+        self.relay
     }
 
     /// Fits a pilot's ship with the rigs and modules called `fitted`, as the
@@ -861,6 +978,7 @@ impl Run {
                 .map(|core| core.hull),
             bounty: self.bounty,
             access: self.site.access.clone(),
+            relay: self.relay,
         }
     }
 
@@ -909,7 +1027,6 @@ impl Run {
                     undocked_at: saved.undocked_at,
                     first_pocket_at: saved.first_pocket_at,
                     last_pocket_exit_at: saved.last_pocket_exit_at,
-                    payout: 0,
                     cruise_requested: false,
                     drive: Drive::Ready,
                     disconnected_at: away.then_some(now),
@@ -937,6 +1054,7 @@ impl Run {
             checkpoint_due: false,
             core: None,
             bounty: checkpoint.bounty,
+            relay: checkpoint.relay,
         };
         for pilot in &run.pilots {
             run.world.reserve(pilot.ship);
@@ -1039,6 +1157,7 @@ impl Run {
             self.work_extractor(index);
             self.work_scan(index);
         }
+        self.work_relays();
         let elapsed = self.elapsed();
         if elapsed.is_multiple_of(CHECKPOINT_TICKS) {
             self.checkpoint_due = true;
@@ -1507,16 +1626,9 @@ impl Run {
         let carried = pilot.total();
         let phases = pilot.times(now);
         let modules = u32::try_from(pilot.fitted.len()).unwrap_or(u32::MAX);
-        let mut payout = 0;
-        if ending == Ending::Docked && carried >= CONTRACT_MIN_CARGO && !self.contract_paid {
-            self.contract_paid = true;
-            payout = self.site.payout() / self.site.pilots.max(1);
-        }
-        if ending == Ending::Docked && self.bounty > 0 {
-            // The bounty joins the pot and is paid on docking (plan M5); a
-            // crew's split is plan M6.
-            payout += std::mem::take(&mut self.bounty);
-        }
+        // The contract is earned once; the pot is paid when the instance ends.
+        let earned =
+            ending == Ending::Docked && carried >= CONTRACT_MIN_CARGO && !self.contract_paid;
         let banked = if ending == Ending::Docked {
             pilot.cargo
         } else {
@@ -1525,7 +1637,6 @@ impl Run {
         let summary = Summary {
             ending,
             banked,
-            payout,
             launch_cost: self.launch_cost,
             lost: losses(
                 ending,
@@ -1542,7 +1653,6 @@ impl Run {
             Ending::Destroyed => Phase::Destroyed,
             Ending::Abandoned => Phase::Abandoned,
         };
-        pilot.payout = payout;
         pilot.extractor = Extractor::default();
         pilot.scan = None;
         pilot.cargo = [0; 3];
@@ -1560,20 +1670,101 @@ impl Run {
                 summary,
             },
         });
+        if earned {
+            self.contract_paid = true;
+            self.log(RunEvent::ContractEarned { pilot: ship });
+        }
     }
 
+    /// Ends the instance when every connected pilot has docked or been
+    /// destroyed (design section 10). A disconnected pilot does not hold it
+    /// open for a crew, and their run is abandoned; a run whose every pilot is
+    /// away waits for them until the grace window closes.
     fn check_end(&mut self) {
-        if self.ended.is_none() && self.pilots.iter().all(|pilot| pilot.phase.is_over()) {
-            self.end(EndReason::AllDone);
+        if self.ended.is_some() {
+            return;
+        }
+        let any_over = self.pilots.iter().any(|pilot| pilot.phase.is_over());
+        let all_settled = self
+            .pilots
+            .iter()
+            .all(|pilot| pilot.phase.is_over() || pilot.disconnected_at.is_some());
+        if !(any_over && all_settled) {
+            return;
+        }
+        for index in 0..self.pilots.len() {
+            if !self.pilots[index].phase.is_over() {
+                let ship = self.pilots[index].ship;
+                self.world.remove_ship(ship);
+                self.pilots[index].inert = None;
+                self.finish(index, Ending::Abandoned);
+            }
+        }
+        self.end(EndReason::AllDone);
+    }
+
+    /// What the crew has earned so far.
+    #[must_use]
+    pub fn pot(&self) -> Pot {
+        let contract = if self.contract_paid {
+            self.site.payout()
+        } else {
+            0
+        };
+        Pot {
+            contract,
+            bounty: self.bounty,
+            relay: if self.relay == Relay::Linked {
+                contract / 2
+            } else {
+                0
+            },
         }
     }
 
     fn end(&mut self, reason: EndReason) {
         if self.ended.is_none() {
             self.ended = Some(reason);
+            let pot = self.pot();
+            self.log(RunEvent::PotSettled { pot });
             self.log(RunEvent::Ended { reason });
         }
     }
+
+    /// Counts how long both relays have been held together by pilots' ships.
+    fn work_relays(&mut self) {
+        if self.relay == Relay::Linked {
+            return;
+        }
+        let relays = self.relays();
+        let held = relays.iter().all(|&(rx, rz)| {
+            self.pilots.iter().any(|pilot| {
+                !pilot.phase.is_over()
+                    && self.world.ship(pilot.ship).is_some_and(|ship| {
+                        (ship.state.x - rx).hypot(ship.state.z - rz) <= RELAY_RADIUS
+                    })
+            })
+        });
+        self.relay = match (held, self.relay) {
+            (false, _) => Relay::Idle,
+            (true, Relay::Holding(ticks)) if ticks + 1 >= RELAY_HOLD_TICKS => {
+                self.log(RunEvent::RelaysLinked);
+                Relay::Linked
+            }
+            (true, Relay::Holding(ticks)) => Relay::Holding(ticks + 1),
+            (true, _) => Relay::Holding(1),
+        };
+    }
+}
+
+/// Where crew member `index` of `crew` starts: side by side across the launch
+/// direction at the dock, 4 m apart.
+fn berth(site: &Site, index: u32, crew: u32) -> (f32, f32) {
+    let (dx, dz) = site.template.dock;
+    let (cx, cz) = site.template.centre;
+    let heading = (cz - dz).atan2(cx - dx);
+    let offset = (index as f32 - (crew as f32 - 1.0) / 2.0) * 4.0;
+    (dx - heading.sin() * offset, dz + heading.cos() * offset)
 }
 
 /// How long a scan takes in `fitting`.
@@ -1639,6 +1830,14 @@ mod tests {
             .into_iter()
             .map(|(_, event)| event)
             .collect()
+    }
+
+    /// The pot paid when the instance ended, if it has.
+    fn settled(log: &[RunEvent]) -> Option<Pot> {
+        log.iter().find_map(|event| match event {
+            RunEvent::PotSettled { pot } => Some(*pot),
+            _ => None,
+        })
     }
 
     /// Takes the pilot from the dock into the ore field, at its first deposit.
@@ -1715,13 +1914,14 @@ mod tests {
         place(&mut run, ship, COMPACT_SITE.dock);
         run.step();
         assert_eq!(run.ended(), Some(EndReason::AllDone));
-        let docked = events(&mut run).into_iter().find_map(|event| match event {
-            RunEvent::Docked { summary, .. } => Some(summary),
+        let log = events(&mut run);
+        let docked = log.iter().find_map(|event| match event {
+            RunEvent::Docked { summary, .. } => Some(*summary),
             _ => None,
         });
         let summary = docked.expect("the pilot docked");
         assert_eq!(summary.ending, Ending::Docked);
-        assert_eq!(summary.payout, 0, "no cargo, no contract");
+        assert_eq!(settled(&log), Some(Pot::default()), "no cargo, no contract");
         assert_eq!(summary.phases.approach, 102, "100 steps and two placements");
         assert_eq!(summary.phases.objective, 201);
         assert_eq!(summary.phases.return_leg, 61);
@@ -1837,13 +2037,14 @@ mod tests {
         run.pilots[0].cargo = [12, 0, 0];
         place(&mut run, ship, COMPACT_SITE.dock);
         run.step();
-        let summary = events(&mut run).into_iter().find_map(|event| match event {
-            RunEvent::Docked { summary, .. } => Some(summary),
+        let log = events(&mut run);
+        let summary = log.iter().find_map(|event| match event {
+            RunEvent::Docked { summary, .. } => Some(*summary),
             _ => None,
         });
         let summary = summary.expect("docked");
         assert_eq!(summary.banked, [12, 0, 0]);
-        assert_eq!(summary.payout, 100);
+        assert_eq!(settled(&log).map(|pot| pot.contract), Some(100));
         assert_eq!(summary.lost, Loadout::default());
     }
 
@@ -2370,12 +2571,18 @@ mod tests {
         let dock = run.site.template.dock;
         place(&mut run, ship, dock);
         run.step();
-        let summary = events(&mut run).into_iter().find_map(|event| match event {
-            RunEvent::Docked { summary, .. } => Some(summary),
+        let log = events(&mut run);
+        let summary = log.iter().find_map(|event| match event {
+            RunEvent::Docked { summary, .. } => Some(*summary),
             _ => None,
         });
         let summary = summary.expect("docked");
-        assert_eq!(summary.payout, NEST_BOUNTY);
+        let pot = settled(&log).expect("the instance ended");
+        assert_eq!(
+            (pot.contract, pot.bounty),
+            (0, NEST_BOUNTY),
+            "six salvage is short of ten"
+        );
         assert_eq!(summary.banked[Material::Salvage.index()], NEST_SALVAGE);
     }
 
@@ -2409,6 +2616,142 @@ mod tests {
         }
         let checkpoint: Checkpoint = serde_json::from_value(json).unwrap();
         assert!(Run::restore(&checkpoint).is_some());
+    }
+
+    /// A quiet run for a crew of `crew`, with only the host launched.
+    fn crew_run(seed: u32, crew: u32) -> (Run, ShipId) {
+        let site = Site::generate(COMPACT_SITE, seed, ThreatTier::I, crew, &[]);
+        let (run, ships) = Run::launch(
+            site,
+            1,
+            Options {
+                opening_threat: Some(0),
+                ..Options::default()
+            },
+        );
+        (run, ships[0])
+    }
+
+    #[test]
+    fn crew_members_join_within_the_window_up_to_the_crew() {
+        let (mut run, host) = crew_run(40, 3);
+        let second = run.join().expect("within the window");
+        assert_ne!(second, host);
+        steps(&mut run, JOIN_WINDOW_TICKS);
+        let third = run.join().expect("still at the window's last tick");
+        assert_eq!(run.ships(), [host, second, third]);
+        assert_eq!(run.join(), None, "the crew is all here");
+        let (mut late, _) = crew_run(40, 2);
+        steps(&mut late, JOIN_WINDOW_TICKS + 1);
+        assert_eq!(late.join(), None, "the window has closed");
+        // Side by side at the dock, not on top of each other.
+        let (a, b) = (
+            run.world.ship(host).unwrap().state,
+            run.world.ship(second).unwrap().state,
+        );
+        assert!((a.x - b.x).hypot(a.z - b.z) >= 3.9);
+    }
+
+    #[test]
+    fn a_crew_contract_pays_the_crew_table_into_one_pot() {
+        // Design section 10: two pilots' contract pays 1.6 times a solo one.
+        let (mut run, host) = crew_run(41, 2);
+        let wing = run.join().unwrap();
+        at_deposit(&mut run, host);
+        run.pilots[0].cargo = [12, 0, 0];
+        let dock = run.site.template.dock;
+        place(&mut run, host, dock);
+        run.step();
+        assert_eq!(run.ended(), None, "the wing is still out");
+        run.world.damage(wing, 10_000.0);
+        run.step();
+        assert_eq!(run.ended(), Some(EndReason::AllDone));
+        let pot = settled(&events(&mut run)).expect("settled at the end");
+        assert_eq!(pot.contract, 160);
+    }
+
+    #[test]
+    fn the_instance_ends_without_a_disconnected_crew_member_and_abandons_them() {
+        let (mut run, host) = crew_run(42, 2);
+        let wing = run.join().unwrap();
+        place(&mut run, wing, (-60.0, 0.0));
+        run.step();
+        run.disconnect(wing);
+        place(&mut run, host, (-60.0, 5.0));
+        run.step();
+        let dock = run.site.template.dock;
+        place(&mut run, host, dock);
+        run.step();
+        assert_eq!(run.ended(), Some(EndReason::AllDone));
+        let log = events(&mut run);
+        assert!(log.iter().any(|event| matches!(
+            event,
+            RunEvent::Abandoned { pilot, .. } if *pilot == wing
+        )));
+        assert!(!run.reconnect(wing), "nothing left to rejoin");
+    }
+
+    #[test]
+    fn a_solo_pilot_away_keeps_the_instance_waiting() {
+        let (mut run, ship) = quiet(43);
+        place(&mut run, ship, (-60.0, 0.0));
+        run.step();
+        run.disconnect(ship);
+        steps(&mut run, EXPOSURE_TICKS + 20);
+        assert_eq!(run.ended(), None, "inside the grace window");
+    }
+
+    /// A crew of two with each ship on a relay.
+    fn on_relays(seed: u32) -> (Run, ShipId, ShipId) {
+        let (mut run, host) = crew_run(seed, 2);
+        let wing = run.join().unwrap();
+        let [a, b] = run.relays();
+        place(&mut run, host, (a.0 + 5.0, a.1));
+        place(&mut run, wing, (b.0 + 5.0, b.1));
+        (run, host, wing)
+    }
+
+    #[test]
+    fn holding_both_relays_together_for_thirty_seconds_links_them() {
+        let (mut run, host, _) = on_relays(44);
+        steps(&mut run, RELAY_HOLD_TICKS - 1);
+        assert_eq!(run.relay(), Relay::Holding(RELAY_HOLD_TICKS - 1));
+        assert_eq!(run.status(host).unwrap().relay, run.relay());
+        run.step();
+        assert_eq!(run.relay(), Relay::Linked);
+        assert!(events(&mut run).contains(&RunEvent::RelaysLinked));
+    }
+
+    #[test]
+    fn leaving_a_relay_starts_the_count_again() {
+        let (mut run, host, _) = on_relays(45);
+        steps(&mut run, RELAY_HOLD_TICKS / 2);
+        place(&mut run, host, (-60.0, 0.0));
+        run.step();
+        assert_eq!(run.relay(), Relay::Idle);
+        // One ship alone holds at most one relay.
+        let (mut solo, ship) = quiet(45);
+        let [a, _] = solo.relays();
+        place(&mut solo, ship, a);
+        steps(&mut solo, 5);
+        assert_eq!(solo.relay(), Relay::Idle);
+    }
+
+    #[test]
+    fn the_relay_bonus_adds_half_the_contract_once_the_contract_is_earned() {
+        let (mut run, host, wing) = on_relays(46);
+        steps(&mut run, RELAY_HOLD_TICKS);
+        assert_eq!(run.relay(), Relay::Linked);
+        assert_eq!(run.pot().relay, 0, "no contract earned yet");
+        run.pilots[0].cargo = [12, 0, 0];
+        let dock = run.site.template.dock;
+        place(&mut run, host, dock);
+        run.step();
+        place(&mut run, wing, dock);
+        run.step();
+        let pot = settled(&events(&mut run)).expect("both docked");
+        assert_eq!((pot.contract, pot.relay), (160, 80));
+        assert_eq!(pot.total(), 240);
     }
 
     #[test]

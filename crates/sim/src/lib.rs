@@ -7,6 +7,7 @@
 
 pub mod collision;
 pub mod combat;
+pub mod crew;
 pub mod extraction;
 pub mod fitting;
 pub mod goods;

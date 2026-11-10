@@ -6,6 +6,7 @@ import type { DominantThreat } from "./DominantThreat";
 import type { ExtractRefusal } from "./ExtractRefusal";
 import type { Hazard } from "./Hazard";
 import type { ObstacleInfo } from "./ObstacleInfo";
+import type { PotInfo } from "./PotInfo";
 import type { RunSummary } from "./RunSummary";
 import type { SiteInfo } from "./SiteInfo";
 import type { TierOffer } from "./TierOffer";
@@ -63,4 +64,4 @@ relays: Array<number>,
 /**
  * The coming alert steps, as far as the instance can last.
  */
-waves: Array<WaveInfo>, } | { "type": "limitWarning", secondsLeft: number, } | { "type": "runOver", summary: RunSummary, };
+waves: Array<WaveInfo>, } | { "type": "limitWarning", secondsLeft: number, } | { "type": "runOver", summary: RunSummary, } | { "type": "potPaid", pot: PotInfo, share: number, };

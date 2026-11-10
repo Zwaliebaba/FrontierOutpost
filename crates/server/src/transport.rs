@@ -599,6 +599,7 @@ impl Pilot<'_> {
             },
             run,
             pilot: account,
+            share: 100,
             access: home::capabilities(&holdings),
             fitted: home::launch(&holdings)
                 .flown
