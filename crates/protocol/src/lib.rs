@@ -29,6 +29,9 @@ pub const PROTOCOL_VERSION: u32 = 3;
 pub enum ClientMessage {
     /// First message on a new connection.
     Hello { protocol_version: u32 },
+    /// Locks a hostile ship as the weapon target, or releases the lock with
+    /// `None`. The server ignores a lock on anything but an existing hostile.
+    Lock { target: Option<u16> },
 }
 
 /// A message sent from the server to the client.
@@ -139,6 +142,18 @@ mod tests {
         let json = serde_json::to_string(&trusted).unwrap();
         assert!(!json.contains("certificateSha256"));
         assert_eq!(serde_json::from_str::<ConnectInfo>(&json).unwrap(), trusted);
+    }
+
+    #[test]
+    fn lock_carries_a_target_or_null() {
+        let lock = ClientMessage::Lock { target: Some(7) };
+        assert_eq!(
+            serde_json::to_string(&lock).unwrap(),
+            r#"{"type":"lock","target":7}"#
+        );
+        let release: ClientMessage =
+            serde_json::from_str(r#"{"type":"lock","target":null}"#).unwrap();
+        assert_eq!(release, ClientMessage::Lock { target: None });
     }
 
     #[test]

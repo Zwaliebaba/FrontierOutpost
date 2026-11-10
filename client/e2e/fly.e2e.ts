@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, leave, test } from "./fixtures";
 
 test("the player's ship moves when they hold thrust", async ({ page }) => {
   await page.goto("/");
@@ -35,6 +35,6 @@ test("two players in one expedition see each other's ships", async ({ browser })
   const sees = (ship: string) => new RegExp(`(^| )${ship}( |$)`);
   await expect(first.locator("#hud")).toHaveAttribute("data-ships", sees(secondShip));
   await expect(second.locator("#hud")).toHaveAttribute("data-ships", sees(firstShip));
-  await first.close();
-  await second.close();
+  await leave(first);
+  await leave(second);
 });

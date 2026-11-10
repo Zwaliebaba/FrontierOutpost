@@ -62,6 +62,10 @@ enum Command {
     Leave {
         ship: ShipId,
     },
+    Lock {
+        ship: ShipId,
+        target: Option<ShipId>,
+    },
 }
 
 /// A handle to a running expedition. Cheap to clone.
@@ -102,6 +106,12 @@ impl Expedition {
     /// Hands over an input datagram from the pilot flying `ship`.
     pub fn input(&self, ship: ShipId, datagram: InputDatagram) {
         let _ = self.commands.send(Command::Input { ship, datagram });
+    }
+
+    /// Locks `target` for the pilot flying `ship`, or releases the lock. The
+    /// world accepts only an existing hostile.
+    pub fn lock(&self, ship: ShipId, target: Option<ShipId>) {
+        let _ = self.commands.send(Command::Lock { ship, target });
     }
 
     /// Removes a pilot's ship.
@@ -181,6 +191,11 @@ fn apply(command: Command, world: &mut World, pilots: &mut HashMap<ShipId, Pilot
             }
         }
         Command::Leave { ship } => leave(ship, world, pilots),
+        Command::Lock { ship, target } => {
+            if pilots.contains_key(&ship) {
+                world.set_lock(ship, target);
+            }
+        }
     }
 }
 

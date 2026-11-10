@@ -5,12 +5,16 @@
 //! client message must be `Hello`; the server answers with [`handshake`].
 
 use std::net::SocketAddr;
+use std::sync::Arc;
+use std::time::Duration;
 
 use frontier_protocol::input::InputDatagram;
 use frontier_protocol::{ClientMessage, ServerMessage, frame};
 use frontier_sim::TICKS_PER_SECOND;
+use frontier_sim::world::ShipId;
+use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
-use web_transport_quinn::{RecvStream, SendStream, Server, ServerBuilder, Session};
+use web_transport_quinn::{RecvStream, SendStream, Server, Session, crypto, quinn};
 
 use crate::cert::DevCertificate;
 use crate::expedition::Expedition;
@@ -29,6 +33,8 @@ pub enum SessionError {
     Frame(#[from] frame::FrameError),
     #[error("the control stream was closed")]
     Closed,
+    #[error("the client sent a message out of turn")]
+    Unexpected,
 }
 
 /// Session close code for a client that broke the protocol.
@@ -37,18 +43,61 @@ const PROTOCOL_VIOLATION: u32 = 1;
 const VERSION_REJECTED: u32 = 2;
 /// Session close code when the expedition has no room.
 const EXPEDITION_FULL: u32 = 3;
+/// How long the server waits for a turned-away client to close the session itself.
+const PARTING_GRACE: Duration = Duration::from_secs(2);
 
-/// Binds the WebTransport endpoint.
+/// How long a session may go silent before the server drops it. A pilot's
+/// client sends inputs 20 times a second, so only a client that has gone away
+/// is ever this quiet. Browsers do not always close a session when a page
+/// closes, and QUIC's usual 30 s would leave a ghost ship that long.
+pub const IDLE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Why the WebTransport endpoint could not be bound.
+#[derive(Debug, thiserror::Error)]
+pub enum BindError {
+    #[error("could not configure TLS: {0}")]
+    Tls(#[from] rustls::Error),
+    #[error("TLS configuration is unusable for QUIC: {0}")]
+    Quic(#[from] quinn::crypto::rustls::NoInitialCipherSuite),
+    #[error("idle timeout out of range: {0}")]
+    IdleTimeout(#[from] quinn::VarIntBoundsExceeded),
+    #[error("could not bind the WebTransport socket: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+/// Binds the WebTransport endpoint with [`IDLE_TIMEOUT`].
 ///
 /// # Errors
 /// Fails if the address cannot be bound or the certificate is unusable.
-pub fn bind(
+pub fn bind(addr: SocketAddr, cert: &DevCertificate) -> Result<Server, BindError> {
+    bind_with_idle_timeout(addr, cert, IDLE_TIMEOUT)
+}
+
+/// Binds the WebTransport endpoint, dropping sessions silent for `idle_timeout`.
+///
+/// This builds the QUIC endpoint itself, as `web_transport_quinn::ServerBuilder`
+/// does, because the builder offers no way to set the idle timeout.
+///
+/// # Errors
+/// Fails if the address cannot be bound or the certificate is unusable.
+pub fn bind_with_idle_timeout(
     addr: SocketAddr,
     cert: &DevCertificate,
-) -> Result<Server, web_transport_quinn::ServerError> {
-    ServerBuilder::new()
-        .with_addr(addr)
-        .with_certificate(cert.chain.clone(), cert.key.clone_key())
+    idle_timeout: Duration,
+) -> Result<Server, BindError> {
+    let mut tls = rustls::ServerConfig::builder_with_provider(crypto::default_provider())
+        .with_protocol_versions(&[&rustls::version::TLS13])?
+        .with_no_client_auth()
+        .with_single_cert(cert.chain.clone(), cert.key.clone_key())?;
+    tls.alpn_protocols = vec![web_transport_quinn::ALPN.as_bytes().to_vec()];
+
+    let mut transport = quinn::TransportConfig::default();
+    transport.max_idle_timeout(Some(idle_timeout.try_into()?));
+    let mut config = quinn::ServerConfig::with_crypto(Arc::new(
+        quinn::crypto::rustls::QuicServerConfig::try_from(tls)?,
+    ));
+    config.transport_config(Arc::new(transport));
+    Ok(Server::new(quinn::Endpoint::server(config, addr)?))
 }
 
 /// Accepts sessions until the endpoint is closed, running each on its own
@@ -89,6 +138,9 @@ async fn run_session(session: &Session, expedition: &Expedition) -> Result<(), S
     let Some(ship) = expedition.join(session.clone()).await else {
         write_frame(&mut send, &ServerMessage::ExpeditionFull).await?;
         let _ = send.finish();
+        // Closing at once can discard the message before it arrives, so give the
+        // client a moment to read it and close first.
+        let _ = tokio::time::timeout(PARTING_GRACE, session.closed()).await;
         session.close(EXPEDITION_FULL, b"expedition full");
         return Ok(());
     };
@@ -106,19 +158,34 @@ async fn run_session(session: &Session, expedition: &Expedition) -> Result<(), S
             .collect(),
     };
     let result = match write_frame(&mut send, &joined).await {
-        Ok(()) => receive_inputs(session, expedition, ship).await,
+        Ok(()) => fly(session, expedition, ship, recv).await,
         Err(error) => Err(error),
     };
     expedition.leave(ship);
     result
 }
 
-/// Hands every input datagram to the expedition until the session ends.
-async fn receive_inputs(
+/// Passes the pilot's datagrams and control messages to the expedition until
+/// the session ends.
+async fn fly(
     session: &Session,
     expedition: &Expedition,
-    ship: frontier_sim::world::ShipId,
+    ship: ShipId,
+    mut recv: RecvStream,
 ) -> Result<(), SessionError> {
+    // Frames are read on their own task: reading one is not cancel-safe, so it
+    // must not race other events in the select below.
+    let (frames_tx, mut frames) = mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        loop {
+            let frame = read_frame::<ClientMessage>(&mut recv).await;
+            let failed = frame.is_err();
+            if frames_tx.send(frame).is_err() || failed {
+                return;
+            }
+        }
+    });
+
     loop {
         tokio::select! {
             datagram = session.read_datagram() => match datagram {
@@ -129,6 +196,15 @@ async fn receive_inputs(
                 },
                 // The session closed while reading: the client left.
                 Err(_) => return Ok(()),
+            },
+            frame = frames.recv() => match frame {
+                Some(Ok(ClientMessage::Lock { target })) => {
+                    expedition.lock(ship, target.map(ShipId));
+                }
+                Some(Ok(ClientMessage::Hello { .. })) => return Err(SessionError::Unexpected),
+                // The client finished the control stream: it is leaving.
+                Some(Err(SessionError::Read(_))) | None => return Ok(()),
+                Some(Err(error)) => return Err(error),
             },
             _ = session.closed() => return Ok(()),
         }

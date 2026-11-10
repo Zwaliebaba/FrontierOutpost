@@ -9,7 +9,7 @@ mod common;
 
 use std::time::Duration;
 
-use common::{connect_to, hello, read, start_server};
+use common::{connect_to, hello, read, start_server, start_server_with_idle_timeout};
 use frontier_protocol::ServerMessage;
 use frontier_protocol::input::{Controls, InputDatagram, quantize_control};
 use frontier_protocol::snapshot::{EntityKind, EntityState, Snapshot};
@@ -133,4 +133,74 @@ async fn a_pilot_who_leaves_frees_their_place() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     let snapshot = last_snapshot(&stays, Duration::from_millis(200)).await;
     assert_eq!(pilots(&snapshot), [stays_ship]);
+}
+
+/// A UDP forwarder that can be cut, so a client vanishes without closing its
+/// session: what a closed browser tab can look like to the server.
+async fn cuttable_link(
+    server: std::net::SocketAddr,
+) -> (
+    std::net::SocketAddr,
+    std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use tokio::net::UdpSocket;
+    let front = Arc::new(UdpSocket::bind("127.0.0.1:0").await.unwrap());
+    let back = Arc::new(UdpSocket::bind("127.0.0.1:0").await.unwrap());
+    back.connect(server).await.unwrap();
+    let cut = Arc::new(AtomicBool::new(false));
+    let addr = front.local_addr().unwrap();
+    let client = Arc::new(tokio::sync::Mutex::new(None));
+    {
+        let (front, back, cut, client) = (front.clone(), back.clone(), cut.clone(), client.clone());
+        tokio::spawn(async move {
+            let mut buffer = vec![0; 65_536];
+            while let Ok((length, from)) = front.recv_from(&mut buffer).await {
+                *client.lock().await = Some(from);
+                if !cut.load(Ordering::Relaxed) {
+                    let _ = back.send(&buffer[..length]).await;
+                }
+            }
+        });
+    }
+    {
+        let cut = cut.clone();
+        tokio::spawn(async move {
+            let mut buffer = vec![0; 65_536];
+            while let Ok(length) = back.recv(&mut buffer).await {
+                let to = *client.lock().await;
+                if let (false, Some(to)) = (cut.load(Ordering::Relaxed), to) {
+                    let _ = front.send_to(&buffer[..length], to).await;
+                }
+            }
+        });
+    }
+    (addr, cut)
+}
+
+#[tokio::test]
+async fn a_pilot_who_vanishes_without_closing_is_dropped_after_the_idle_timeout() {
+    use std::sync::atomic::Ordering;
+    let idle = Duration::from_millis(600);
+    let (url, sha256) = start_server_with_idle_timeout(idle);
+    let (watcher, watcher_ship) = join(&url, sha256).await;
+
+    let server = format!("127.0.0.1:{}", url.port().unwrap())
+        .parse()
+        .unwrap();
+    let (link, cut) = cuttable_link(server).await;
+    let via_link: url::Url = format!("https://{link}/").parse().unwrap();
+    let (_ghost, ghost_ship) = join(&via_link, sha256).await;
+    let seen = last_snapshot(&watcher, Duration::from_millis(100)).await;
+    assert!(pilots(&seen).contains(&ghost_ship));
+
+    cut.store(true, Ordering::Relaxed);
+    tokio::time::sleep(idle * 3).await;
+    let seen = last_snapshot(&watcher, Duration::from_millis(100)).await;
+    assert_eq!(
+        pilots(&seen),
+        [watcher_ship],
+        "the vanished pilot's ship is gone"
+    );
 }

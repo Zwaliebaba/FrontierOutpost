@@ -4,8 +4,10 @@
  */
 import { Vector3 } from "three";
 import { connect, fetchConnectInfo } from "./net/connection";
+import type { Connection } from "./net/connection";
 import type { EntityPose } from "./net/interpolation";
 import { Predictor } from "./game/prediction";
+import { Selection } from "./game/selection";
 import { ExpeditionFullError, Session, waitForJoin } from "./game/session";
 import type { Controls } from "./game/session";
 import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
@@ -32,6 +34,7 @@ function line(id: string): HTMLParagraphElement {
 const status = line("status");
 const sim = line("sim");
 const hud = line("hud");
+const lock = line("lock");
 function showStatus(state: "connecting" | "connected" | "closed" | "offline", text: string) {
   status.dataset.state = state;
   status.textContent = text;
@@ -71,6 +74,11 @@ async function start(): Promise<void> {
   showStatus("connecting", "Connecting…");
   const connection = await connect(await fetchConnectInfo());
   showStatus("connected", `Connected · protocol ${String(connection.protocolVersion)}`);
+  // Browsers do not always close a WebTransport session with its page; without this, the
+  // server would keep a ghost ship until the session timed out.
+  window.addEventListener("pagehide", () => {
+    connection.close();
+  });
   void connection.closed.then((reason) => {
     showStatus("closed", reason ? `Disconnected: ${reason}` : "Disconnected");
   });
@@ -101,16 +109,38 @@ async function start(): Promise<void> {
   const view = new ExpeditionView(document.body, shipId, START_WIDTH);
   view.setObstacles(obstacles);
   hud.dataset.ship = String(shipId);
-  fly(session, view, predictor);
+  fly(connection, session, view, predictor);
 }
 
-function fly(session: Session, view: ExpeditionView, predictor: Predictor): void {
+const KIND_NAME = { playerShip: "Pilot", drone: "Drone", raider: "Raider", warden: "Warden" };
+
+function fly(
+  connection: Connection,
+  session: Session,
+  view: ExpeditionView,
+  predictor: Predictor,
+): void {
   const home: LookState = { yaw: 0, pitch: RESTING_ELEVATION };
   let look: LookState = { ...home };
   let viewWidth = START_WIDTH;
   let dragFrom: ScreenPoint | null = null;
-  let focusId: number | null = null;
   let poses: EntityPose[] = [];
+  const selection = new Selection((target) => {
+    void connection.send({ type: "lock", target }).catch(() => undefined);
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.code === "Tab") {
+      event.preventDefault();
+      const own = poses.find((pose) => pose.id === session.shipId);
+      if (own)
+        selection.cycle(
+          own,
+          poses.filter((pose) => pose.id !== session.shipId),
+        );
+    } else if (event.code === "Escape") {
+      selection.release();
+    }
+  });
   const target = new Vector3();
 
   const resize = () => {
@@ -130,15 +160,15 @@ function fly(session: Session, view: ExpeditionView, predictor: Predictor): void
       return;
     }
     if (event.button !== 0) return;
-    // Clicking a ship centres the view on it; clicking empty space returns to your own ship.
-    const candidates = poses
-      .filter((pose) => pose.id !== session.shipId)
-      .map((pose) => ({
-        id: String(pose.id),
-        screen: worldToScreen(new Vector3(pose.x, 0, pose.z), view.camera, view.viewport),
-      }));
+    // Clicking a hostile locks it and centres the view; an ally is only centred on; empty space
+    // returns the view to your own ship.
+    const others = poses.filter((pose) => pose.id !== session.shipId);
+    const candidates = others.map((pose) => ({
+      id: String(pose.id),
+      screen: worldToScreen(new Vector3(pose.x, 0, pose.z), view.camera, view.viewport),
+    }));
     const picked = pickNearest({ x: event.clientX, y: event.clientY }, candidates, PICK_RADIUS_PX);
-    focusId = picked === null ? null : Number(picked);
+    selection.click(others.find((pose) => String(pose.id) === picked) ?? null);
   });
   canvas.addEventListener("pointermove", (event) => {
     if (!dragFrom) return;
@@ -176,14 +206,14 @@ function fly(session: Session, view: ExpeditionView, predictor: Predictor): void
       const { sequence, sent } = session.sendControls(controls);
       predictor.advance(sequence, sent);
       // Steering takes the view back to your own ship, so it is never flown off screen.
-      if (controls.thrust !== 0 || controls.turn !== 0) focusId = null;
+      if (controls.thrust !== 0 || controls.turn !== 0) selection.steer();
     }
 
     // In flight the view springs back once the look control is released (design §5).
     if (held.has("KeyR")) {
       look = { ...home };
       viewWidth = START_WIDTH;
-      focusId = null;
+      selection.steer();
       resize();
     }
     const keyTurn = axis(["KeyE"], ["KeyQ"]);
@@ -196,11 +226,23 @@ function fly(session: Session, view: ExpeditionView, predictor: Predictor): void
       ? { id: session.shipId, kind: "playerShip", hull: 255, ...predicted }
       : undefined;
     poses = own ? [own, ...others] : others;
-    const focus = poses.find((pose) => pose.id === focusId);
-    if (focusId !== null && !focus) focusId = null;
+    selection.prune(new Set(others.map((pose) => pose.id)));
+    const focus = poses.find((pose) => pose.id === selection.focus);
     const centre = focus ?? own;
     if (centre) target.set(centre.x, 0, centre.z);
     view.render(poses, target, look.pitch, look.yaw);
+
+    const locked = poses.find((pose) => pose.id === selection.lock);
+    if (locked && own) {
+      lock.dataset.target = String(locked.id);
+      lock.textContent =
+        `Locked: ${KIND_NAME[locked.kind]} ${String(locked.id)} · ` +
+        `${Math.hypot(locked.x - own.x, locked.z - own.z).toFixed(0)} m · ` +
+        `hull ${String(Math.round((locked.hull / 255) * 100))}% · Tab next, Esc release`;
+    } else {
+      delete lock.dataset.target;
+      lock.textContent = "";
+    }
 
     if (own) {
       hud.dataset.ships = poses.map((pose) => pose.id).join(" ");

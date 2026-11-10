@@ -141,11 +141,33 @@ impl World {
         id
     }
 
-    /// Removes a ship. Returns whether it existed.
+    /// Removes a ship and releases every lock on it. Returns whether it existed.
     pub fn remove_ship(&mut self, id: ShipId) -> bool {
         let before = self.ships.len();
         self.ships.retain(|ship| ship.id != id);
+        for ship in &mut self.ships {
+            if ship.lock == Some(id) {
+                ship.lock = None;
+            }
+        }
         self.ships.len() != before
+    }
+
+    /// Locks `target` for the ship `id`, or releases its lock with `None`. A
+    /// ship can lock only an existing ship hostile to it; anything else
+    /// releases the lock. Returns whether the requested lock was taken.
+    pub fn set_lock(&mut self, id: ShipId, target: Option<ShipId>) -> bool {
+        let Some(kind) = self.ship(id).map(|ship| ship.kind) else {
+            return false;
+        };
+        let valid = target.filter(|target| {
+            self.ship(*target)
+                .is_some_and(|other| kind.is_hostile_to(other.kind))
+        });
+        if let Some(ship) = self.ships.iter_mut().find(|ship| ship.id == id) {
+            ship.lock = valid;
+        }
+        valid == target
     }
 
     /// Sets the input a ship flies with from the next step on. Returns whether
@@ -350,6 +372,34 @@ mod tests {
         let raider = world.ship(raider).unwrap();
         assert_eq!(raider.lock, None);
         assert!((raider.state.x - 100.0).hypot(raider.state.z - 100.0) < 25.0);
+    }
+
+    #[test]
+    fn a_pilot_can_lock_only_an_existing_hostile() {
+        let mut world = World::new();
+        let pilot = world.spawn_ship();
+        let ally = world.spawn_ship();
+        let drone = world.spawn_npc(ShipKind::Drone, (50.0, 0.0));
+        assert!(world.set_lock(pilot, Some(drone)));
+        assert_eq!(world.ship(pilot).unwrap().lock, Some(drone));
+        assert!(!world.set_lock(pilot, Some(ally)));
+        assert_eq!(
+            world.ship(pilot).unwrap().lock,
+            None,
+            "an invalid lock releases it"
+        );
+        assert!(!world.set_lock(pilot, Some(ShipId(999))));
+        assert!(world.set_lock(pilot, None));
+    }
+
+    #[test]
+    fn removing_a_ship_releases_locks_on_it() {
+        let mut world = World::new();
+        let pilot = world.spawn_ship();
+        let drone = world.spawn_npc(ShipKind::Drone, (50.0, 0.0));
+        world.set_lock(pilot, Some(drone));
+        world.remove_ship(drone);
+        assert_eq!(world.ship(pilot).unwrap().lock, None);
     }
 
     #[test]
