@@ -79,6 +79,9 @@ On Windows the Python launcher is `py`, not `python`.
    - Reliable messages travel as JSON on streams. Snapshots travel as compact binary datagrams
      and must fit the browser's datagram limit (1,024 bytes in Chromium). The transport is
      WebTransport, with no fallback (see §8).
+   - Binary types (`frontier_protocol::snapshot`) derive only `TS`, not serde: their layout is
+     written by hand, and `client/src/net/snapshot.ts` decodes it. Rust tests write test vectors
+     to `generated/snapshotVectors.ts`, so a layout change that misses the decoder fails CI.
 4. **The client imports wire types only through `client/src/protocol/index.ts`.**
 5. **One camera, one plane** (design §5, style guide §6). All activities share one orthographic
    tactical view that rests at 33° elevation (`client/src/camera.ts`). A player may orbit it while

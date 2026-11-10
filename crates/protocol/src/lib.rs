@@ -9,6 +9,7 @@
 //! TypeScript `number` without loss.
 
 pub mod frame;
+pub mod snapshot;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
