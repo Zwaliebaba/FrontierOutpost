@@ -8,7 +8,10 @@
     "node": ">=26"
   },
   "scripts": {
+    "build:sim": "cargo build --locked --release -p frontier-sim-wasm --target wasm32-unknown-unknown && wasm-bindgen --target web --out-dir src/sim/pkg ../target/wasm32-unknown-unknown/release/frontier_sim_wasm.wasm",
+    "predev": "npm run build:sim",
     "dev": "vite",
+    "prebuild": "npm run build:sim",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -16,13 +19,15 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build"
+    "check": "npm run build:sim && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "three": "^0.187.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.63.0",
     "@types/three": "^0.187.0",
     "eslint": "^10.14.0",
     "prettier": "^3.9.10",

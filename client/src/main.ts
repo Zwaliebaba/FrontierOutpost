@@ -10,6 +10,8 @@ import {
   WebGLRenderer,
 } from "three";
 import { createTacticalCamera } from "./camera";
+import { connect, fetchConnectInfo } from "./net/connection";
+import { loadSim } from "./sim";
 
 // Placeholder scene: a flat-shaded asteroid under the style guide's lighting, viewed from the
 // shared tactical camera. Colours are the Blender linear baselines from Visual Style Guide §5–6.
@@ -44,3 +46,38 @@ renderer.setAnimationLoop((time: number) => {
   asteroid.rotation.y = time / 8000;
   renderer.render(scene, camera);
 });
+
+// Connection status, until there is a game to show. `data-state` is for tests.
+const status = document.createElement("p");
+status.id = "status";
+document.body.append(status);
+function showStatus(state: "connecting" | "connected" | "closed" | "offline", text: string) {
+  status.dataset.state = state;
+  status.textContent = text;
+}
+showStatus("connecting", "Connecting…");
+void (async () => {
+  try {
+    const connection = await connect(await fetchConnectInfo());
+    showStatus("connected", `Connected · protocol ${String(connection.protocolVersion)}`);
+    const reason = await connection.closed;
+    showStatus("closed", reason ? `Disconnected: ${reason}` : "Disconnected");
+  } catch (error) {
+    showStatus("offline", `Offline: ${error instanceof Error ? error.message : String(error)}`);
+  }
+})();
+
+// The simulation rules, compiled from Rust to WebAssembly.
+const sim = document.createElement("p");
+sim.id = "sim";
+document.body.append(sim);
+loadSim().then(
+  (rules) => {
+    sim.dataset.state = "loaded";
+    sim.textContent = `Simulation · ${String(rules.ticksPerSecond())} ticks per second`;
+  },
+  (error: unknown) => {
+    sim.dataset.state = "failed";
+    sim.textContent = `Simulation failed to load: ${String(error)}`;
+  },
+);

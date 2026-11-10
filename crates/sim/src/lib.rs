@@ -1,8 +1,19 @@
-//! Deterministic Frontier Outpost simulation.
+//! Frontier Outpost simulation.
 //!
-//! This crate holds the authoritative game rules. It must stay free of I/O,
-//! wall-clock time, threads and unseeded randomness so the server can replay
-//! and validate any session from its inputs.
+//! This crate holds the authoritative game rules. It does no I/O and does not
+//! read the clock: it advances in fixed ticks and is handed its inputs. The
+//! server runs it, and the browser runs its movement rules through
+//! `frontier-sim-wasm` to predict the player's own ship.
+
+/// Simulation steps per second (design section 10).
+pub const TICKS_PER_SECOND: u32 = 20;
+
+/// Whole ticks that fit in `millis` milliseconds, rounded down.
+#[must_use]
+pub const fn ticks_for_millis(millis: u32) -> u32 {
+    // Widen first so the product cannot overflow.
+    ((millis as u64 * TICKS_PER_SECOND as u64) / 1_000) as u32
+}
 
 /// A fixed simulation step. The server advances the world one tick at a time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -34,6 +45,16 @@ impl Tick {
 #[cfg(test)]
 mod tests {
     use super::Tick;
+
+    #[test]
+    fn counts_whole_ticks_in_a_duration() {
+        use super::ticks_for_millis;
+        assert_eq!(ticks_for_millis(0), 0);
+        assert_eq!(ticks_for_millis(49), 0);
+        assert_eq!(ticks_for_millis(50), 1);
+        assert_eq!(ticks_for_millis(1_000), 20);
+        assert_eq!(ticks_for_millis(u32::MAX), 85_899_345);
+    }
 
     #[test]
     fn ticks_advance_in_order() {
