@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /client
+    schedule:
+      interval: weekly
+    groups:
+      # three and its type definitions are versioned together.
+      three:
+        patterns: ["three", "@types/three"]
+      tooling:
+        dependency-type: development
+        exclude-patterns: ["@types/three"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

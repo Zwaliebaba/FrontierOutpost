@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust · fmt, clippy, test, docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Installs the exact toolchain and components from rust-toolchain.toml.
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - name: Generated TypeScript protocol is committed
+        run: |
+          changes="$(git status --porcelain -- client/src/protocol/generated)"
+          if [ -n "$changes" ]; then
+            echo "::error::client/src/protocol/generated is stale. Run 'cargo test' and commit the result."
+            echo "$changes"
+            git diff -- client/src/protocol/generated
+            exit 1
+          fi
+      - run: cargo doc --workspace --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  rust-windows:
+    name: Rust · test (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --locked
+
+  client:
+    name: Client · format, lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: client/.nvmrc
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  repo:
+    name: Repository · LFS and line endings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Binary assets are Git LFS pointers
+        run: git lfs fsck --pointers
+      - name: No CRLF text in the index
+        run: |
+          crlf="$(git ls-files --eol | awk '$1 == "i/crlf" || $1 == "i/mixed" { print $NF }')"
+          if [ -n "$crlf" ]; then
+            echo "::error::These files are committed with CRLF line endings:"
+            echo "$crlf"
+            exit 1
+          fi
