@@ -3,8 +3,10 @@ import { defineConfig } from "vite";
 export default defineConfig({
   // wasm-bindgen loads the simulation with `new URL(..., import.meta.url)`, an asset URL, so the
   // module is an asset everywhere. That also lets tests import its bytes with `?inline`.
-  assetsInclude: ["**/*.wasm"],
+  assetsInclude: ["**/*.wasm", "**/*.glb"],
   server: {
+    // The outpost's models are imported from Design/, outside the client.
+    fs: { allow: [".."] },
     // `npm run dev` serves the client; the game server answers the API (`cargo run -p frontier-server`).
     proxy: { "/api": "http://127.0.0.1:8080" },
   },

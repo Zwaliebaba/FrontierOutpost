@@ -7,6 +7,9 @@
 !.cargo/
 !crates/
 !client/
+# The outpost models the client imports.
+!Design/FrontierOutpost/station.glb
+!Design/FrontierOutpost/facilities.glb
 
 **/target/
 client/node_modules/
