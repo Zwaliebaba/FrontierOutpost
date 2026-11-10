@@ -24,12 +24,14 @@ multiplayer isometric space game with an authoritative Rust server and an HTML5 
 ```
 Cargo.toml              Rust workspace (members: crates/*)
 crates/
-  sim/                  frontier-sim: deterministic game rules, no I/O
+  sim/                  frontier-sim: game rules, no I/O
+  sim-wasm/             frontier-sim-wasm: frontier-sim exported to the browser via wasm-bindgen
   protocol/             frontier-protocol: client/server wire types → TypeScript via ts-rs
   server/               frontier-server: authoritative server binary
 client/                 TypeScript + Vite + Three.js browser client
   src/protocol/         index.ts re-exports the wire types; generated/ is written by ts-rs
   src/greybox/          client-only readability test harness, served at /greybox.html
+  src/sim/              loads the WebAssembly simulation; pkg/ is written by wasm-bindgen
 spikes/                 Throwaway experiments, each its own Cargo workspace; not built by CI
 Design/                 Game design, style guide, Blender scenes (binaries in Git LFS)
 .github/workflows/      CI
@@ -49,6 +51,7 @@ cargo run -p frontier-server
 # Client
 cd client
 npm ci
+npm run build:sim               # frontier-sim to WebAssembly; run by dev, build and check
 npm run dev                     # Vite dev server
 npm run check                   # format:check, lint, typecheck, test, build (= CI)
 npm run e2e                     # browser tests against the real server; run `npm run build` first

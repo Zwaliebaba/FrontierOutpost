@@ -11,6 +11,7 @@ import {
 } from "three";
 import { createTacticalCamera } from "./camera";
 import { connect, fetchConnectInfo } from "./net/connection";
+import { loadSim } from "./sim";
 
 // Placeholder scene: a flat-shaded asteroid under the style guide's lighting, viewed from the
 // shared tactical camera. Colours are the Blender linear baselines from Visual Style Guide §5–6.
@@ -65,3 +66,18 @@ void (async () => {
     showStatus("offline", `Offline: ${error instanceof Error ? error.message : String(error)}`);
   }
 })();
+
+// The simulation rules, compiled from Rust to WebAssembly.
+const sim = document.createElement("p");
+sim.id = "sim";
+document.body.append(sim);
+loadSim().then(
+  (rules) => {
+    sim.dataset.state = "loaded";
+    sim.textContent = `Simulation · ${String(rules.ticksPerSecond())} ticks per second`;
+  },
+  (error: unknown) => {
+    sim.dataset.state = "failed";
+    sim.textContent = `Simulation failed to load: ${String(error)}`;
+  },
+);

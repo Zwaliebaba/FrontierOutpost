@@ -10,6 +10,7 @@ node_modules/
 client/dist/
 client/coverage/
 client/test-results/
+client/src/sim/pkg/
 client/playwright-report/
 *.tsbuildinfo
 .vite/

@@ -28,6 +28,8 @@ tower-http = { version = "0.7", features = ["fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
+# Pinned exactly: the wasm-bindgen command-line tool must be the same version.
+wasm-bindgen = "=0.2.130"
 web-transport-quinn = { version = "0.13", default-features = false, features = ["ring"] }
 
 [workspace.lints.rust]
