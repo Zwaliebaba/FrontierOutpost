@@ -1,0 +1,52 @@
+{
+  // Mirrors the Rust commands in AGENTS.md §3 so local runs match CI.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cargo: build",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["build", "--workspace", "--all-targets"],
+      "problemMatcher": ["$rustc"],
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "cargo: clippy",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "problemMatcher": ["$rustc"],
+      "group": "build"
+    },
+    {
+      "label": "cargo: fmt",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["fmt", "--all"],
+      "problemMatcher": []
+    },
+    {
+      // Also regenerates client/src/protocol/generated/ via ts-rs.
+      "label": "cargo: test",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["test", "--workspace"],
+      "problemMatcher": ["$rustc"],
+      "group": { "kind": "test", "isDefault": true }
+    },
+    {
+      "label": "cargo: run server",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["run", "-p", "frontier-server"],
+      "problemMatcher": ["$rustc"]
+    }
+  ]
+}

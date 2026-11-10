@@ -41,6 +41,186 @@ gap between arrivals of more than two snapshot periods (100 ms).
 
 ## Results
 
+### Microsoft Edge, direct loopback
+{
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+  "link": "direct loopback",
+  "supported": true,
+  "connect": {
+    "ok": true,
+    "ms": 701
+  },
+  "maxDatagramBytes": 1211,
+  "streamEchoSmall": {
+    "bytes": 200,
+    "repeats": 20,
+    "intact": true,
+    "roundTripMs": {
+      "median": 0.8,
+      "p95": 29.3,
+      "max": 29.3
+    }
+  },
+  "streamEchoSnapshot": {
+    "bytes": 6000,
+    "repeats": 20,
+    "intact": true,
+    "roundTripMs": {
+      "median": 1,
+      "p95": 1.3,
+      "max": 1.3
+    }
+  },
+  "streamEchoLarge": {
+    "bytes": 60000,
+    "repeats": 5,
+    "intact": true,
+    "roundTripMs": {
+      "median": 3.2,
+      "p95": 7.5,
+      "max": 7.5
+    }
+  },
+  "datagramEcho": {
+    "sent": 100,
+    "returned": 100,
+    "roundTripMs": {
+      "median": 1.1,
+      "p95": 1.6,
+      "max": 2
+    }
+  },
+  "oversizeDatagram": {
+    "bytes": 6000,
+    "outcome": "silently dropped"
+  },
+  "pushedDatagrams": {
+    "bytes": 1000,
+    "server": "sent 100",
+    "received": 100,
+    "inOrder": true,
+    "intervalMs": {
+      "median": 46.8,
+      "p95": 62.9,
+      "max": 64
+    },
+    "hitches": 0
+  },
+  "pushedStreams": {
+    "bytes": 6000,
+    "server": "sent 100",
+    "received": 100,
+    "complete": true,
+    "intervalMs": {
+      "median": 47.1,
+      "p95": 62.6,
+      "max": 63.1
+    },
+    "hitches": 0
+  },
+  "pushedOneStream": {
+    "bytes": 6000,
+    "server": "sent 100",
+    "received": 100,
+    "intervalMs": {
+      "median": 47.1,
+      "p95": 62.9,
+      "max": 64
+    },
+    "hitches": 0
+  }
+}
+
+### Microsoft Edge, impaired link
+{
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+  "link": "impaired: 40 ms each way, 3% loss each way",
+  "supported": true,
+  "connect": {
+    "ok": true,
+    "ms": 714
+  },
+  "maxDatagramBytes": 1211,
+  "streamEchoSmall": {
+    "bytes": 200,
+    "repeats": 20,
+    "intact": true,
+    "roundTripMs": {
+      "median": 92.8,
+      "p95": 108.1,
+      "max": 108.1
+    }
+  },
+  "streamEchoSnapshot": {
+    "bytes": 6000,
+    "repeats": 20,
+    "intact": true,
+    "roundTripMs": {
+      "median": 201.2,
+      "p95": 402.3,
+      "max": 402.3
+    }
+  },
+  "streamEchoLarge": {
+    "bytes": 60000,
+    "repeats": 5,
+    "intact": true,
+    "roundTripMs": {
+      "median": 1474.8,
+      "p95": 1695.1,
+      "max": 1695.1
+    }
+  },
+  "datagramEcho": {
+    "sent": 100,
+    "returned": 94,
+    "roundTripMs": {
+      "median": 93.7,
+      "p95": 96.3,
+      "max": 102.1
+    }
+  },
+  "oversizeDatagram": {
+    "bytes": 6000,
+    "outcome": "silently dropped"
+  },
+  "pushedDatagrams": {
+    "bytes": 1000,
+    "server": "sent 100",
+    "received": 97,
+    "inOrder": true,
+    "intervalMs": {
+      "median": 46.8,
+      "p95": 65.1,
+      "max": 110.6
+    },
+    "hitches": 3
+  },
+  "pushedStreams": {
+    "bytes": 6000,
+    "server": "sent 100",
+    "received": 100,
+    "complete": true,
+    "intervalMs": {
+      "median": 32.1,
+      "p95": 276,
+      "max": 469.4
+    },
+    "hitches": 23
+  },
+  "pushedOneStream": {
+    "bytes": 6000,
+    "server": "sent 100",
+    "received": 100,
+    "intervalMs": {
+      "median": 93,
+      "p95": 221.1,
+      "max": 466.9
+    },
+    "hitches": 28
+  }
+}
+
 ### Chromium 153 (headless, Linux), direct loopback
 
 Every check passes. Connecting takes about 10 ms, echoes take 2 to 5 ms, and all three push
@@ -98,3 +278,4 @@ Not yet run. They need a machine with those browsers; this one has only Chromium
 - A tablet on the local network cannot use this page as it stands: browsers only allow
   WebTransport from a secure context, and a plain `http://` address other than loopback is not
   one.
+
