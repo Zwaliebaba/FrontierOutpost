@@ -89,6 +89,8 @@ pub struct LaunchOrder {
     pub pilot: AccountId,
     /// What the pilot's powered layout grants: the pockets they may work.
     pub access: Vec<Capability>,
+    /// The rigs and modules the pilot flies, by fitting identifier.
+    pub fitted: Vec<String>,
     pub store: Store,
     pub runs: Runs,
 }
@@ -170,8 +172,9 @@ impl Expedition {
         events: mpsc::UnboundedSender<PilotEvent>,
     ) -> Launched {
         let site = Site::generate(order.template, order.seed, order.tier, 1, &order.access);
-        let (run, ships) = Run::launch(site, 1, order.options);
+        let (mut run, ships) = Run::launch(site, 1, order.options);
         let ship = ships[0];
+        run.fit(ship, &order.fitted);
         let joined = joined(&run, ship, order.tier);
         let (commands, receiver) = mpsc::unbounded_channel();
         let mut pilots = HashMap::new();
@@ -486,7 +489,12 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &Book
             RunEvent::Docked { pilot, summary }
             | RunEvent::Destroyed { pilot, summary }
             | RunEvent::Abandoned { pilot, summary } => {
-                let holdings = bank(books, pilot, &summary).await;
+                let lost = if summary.lost.upgraded_modules > 0 {
+                    run.fitted(pilot).to_vec()
+                } else {
+                    Vec::new()
+                };
+                let holdings = bank(books, pilot, &summary, lost).await;
                 if let Some(account) = books.accounts.get(&pilot) {
                     books.runs.remove(*account, &books.run);
                 }
@@ -509,7 +517,12 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &Book
 /// the ledger, and returns what the account holds afterwards. The instance
 /// does this itself, so cargo is banked even if the pilot's connection drops
 /// as they dock.
-async fn bank(books: &Books, pilot: ShipId, summary: &Summary) -> Option<AccountInfo> {
+async fn bank(
+    books: &Books,
+    pilot: ShipId,
+    summary: &Summary,
+    lost: Vec<String>,
+) -> Option<AccountInfo> {
     let account = *books.accounts.get(&pilot)?;
     let run = Some(books.run.clone());
     let mut batch: Vec<Transfer> = [Item::ORE, Item::SALVAGE, Item::VOLATILES]
@@ -546,6 +559,8 @@ async fn bank(books: &Books, pilot: ShipId, summary: &Summary) -> Option<Account
                 if completed {
                     batch.extend(home::finish_processing(account, holdings, &run));
                 }
+                // Rigs and modules destroyed with the ship (design section 6).
+                holdings.hangar.lose_kinds(&lost);
                 Ok(batch)
             })
         })
@@ -625,6 +640,9 @@ fn joined(run: &Run, ship: ShipId, tier: ThreatTier) -> ServerMessage {
         lock_range: run.lock_range(),
         scan_range: run.scan_range(),
         extract_range: EXTRACT_RANGE,
+        speed_factor: run.fitting(ship).map_or(1.0, |fitting| fitting.speed),
+        max_shield: run.fitting(ship).map_or(0.0, |fitting| fitting.shield),
+        fitted: run.fitted(ship).to_vec(),
     }
 }
 
@@ -676,6 +694,10 @@ pub fn snapshot(world: &World, input_ack: u16, own: OwnStatus, deposits: Vec<u8>
                 ship: ship.0,
                 by: by.map(|by| by.0),
                 kind: entity_kind(kind),
+            },
+            Event::Intercepted { shooter, target } => SnapshotEvent::Intercepted {
+                shooter: shooter.0,
+                target: target.0,
             },
         })
         .collect();
@@ -730,6 +752,8 @@ fn own_status(run: &Run, ship: ShipId) -> OwnStatus {
             Drive::Hunted => WireDrive::Hunted,
             Drive::Extracting => WireDrive::Extracting,
         },
+        // Tens of points, so `as` loses nothing.
+        shield: run.shield(ship).round().clamp(0.0, 255.0) as u8,
     }
 }
 
@@ -765,6 +789,7 @@ fn entity_kind(kind: ShipKind) -> EntityKind {
         ShipKind::Drone => EntityKind::Drone,
         ShipKind::Raider => EntityKind::Raider,
         ShipKind::Warden => EntityKind::Warden,
+        ShipKind::Core => EntityKind::Core,
     }
 }
 
@@ -808,6 +833,7 @@ mod tests {
             run: "test".into(),
             pilot,
             access: Vec::new(),
+            fitted: Vec::new(),
             store,
             runs: Runs::default(),
         }
@@ -933,7 +959,7 @@ mod tests {
             lost: Loadout::default(),
             phases: PhaseTimes::default(),
         };
-        let holdings = bank(&books, ShipId(0), &summary).await.unwrap();
+        let holdings = bank(&books, ShipId(0), &summary, Vec::new()).await.unwrap();
         assert_eq!(
             (holdings.credits, holdings.ore, holdings.volatiles),
             (200, 12, 2)
@@ -941,5 +967,54 @@ mod tests {
         let folded = store.ledger_balance(account).unwrap();
         assert!(folded.contains(&(crate::ledger::Item::ORE, 12)));
         assert!(folded.contains(&(crate::ledger::Item::Credits, 200)));
+    }
+
+    #[tokio::test]
+    async fn a_destroyed_pilot_loses_what_they_flew_and_processing_waits() {
+        use frontier_sim::outcome::{Ending, Loadout};
+        use frontier_sim::run::PhaseTimes;
+        let store = Store::in_memory().unwrap();
+        let account = store.create_account("Vega").unwrap();
+        store
+            .update(account, |holdings| {
+                for id in ["escort_rig", "point_defence", "cargo_frame"] {
+                    holdings
+                        .hangar
+                        .add(frontier_sim::fitting::fitting(id).unwrap());
+                }
+                holdings.processing.add("alloy", 1);
+                Ok(Vec::new())
+            })
+            .unwrap()
+            .unwrap();
+        let books = Books {
+            run: "run-2".into(),
+            store: store.clone(),
+            runs: Runs::default(),
+            accounts: HashMap::from([(ShipId(0), account)]),
+        };
+        let summary = Summary {
+            ending: Ending::Destroyed,
+            banked: [0; 3],
+            payout: 0,
+            launch_cost: 40,
+            lost: Loadout {
+                upgraded_modules: 2,
+                cargo: 5,
+            },
+            phases: PhaseTimes::default(),
+        };
+        let lost = vec!["escort_rig".to_owned(), "point_defence".to_owned()];
+        let holdings = bank(&books, ShipId(0), &summary, lost).await.unwrap();
+        assert_eq!(
+            holdings.hangar,
+            ["cargo_frame"],
+            "the spare in the hangar stays"
+        );
+        assert_eq!(
+            holdings.processing.len(),
+            1,
+            "only a completed run processes"
+        );
     }
 }

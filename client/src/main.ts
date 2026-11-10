@@ -317,7 +317,13 @@ function beginLife(connection: Connection, joined: Joined, loaded: Sim): Life {
   return life;
 }
 
-const KIND_NAME = { playerShip: "Pilot", drone: "Drone", raider: "Raider", warden: "Warden" };
+const KIND_NAME = {
+  playerShip: "Pilot",
+  drone: "Drone",
+  raider: "Raider",
+  warden: "Warden",
+  core: "Nest core",
+};
 const TIER_NAME = ["", "I", "II", "III"];
 
 function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
@@ -396,6 +402,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
 
   const beginRun = (joined: Joined) => {
     loaded.setObstacles(joined.obstacles);
+    loaded.setSpeedFactor(joined.speedFactor);
     view.beginRun(joined.shipId, joined.site, joined.obstacles, joined.deposits);
     life?.session.retire();
     life = beginLife(connection, joined, loaded);
@@ -641,6 +648,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         if (event.type === "fired") {
           const from = drawnAt(event.shooter);
           if (from) shots.fire(event.shooter, event.target, from, event.speed);
+        } else if (event.type === "intercepted") {
+          const at = drawnAt(event.target);
+          if (at) shots.intercept(event.shooter, event.target, at);
         } else {
           const at = drawnAt(event.ship);
           if (at) shots.blast(at);

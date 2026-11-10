@@ -600,6 +600,11 @@ impl Pilot<'_> {
             run,
             pilot: account,
             access: home::capabilities(&holdings),
+            fitted: home::launch(&holdings)
+                .flown
+                .into_iter()
+                .map(|piece| piece.fitting)
+                .collect(),
             store: self.identity.store.clone(),
             runs: self.identity.runs.clone(),
         };

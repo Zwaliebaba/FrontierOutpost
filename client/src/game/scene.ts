@@ -44,6 +44,7 @@ export const SIZE: Readonly<Record<EntityKind, number>> = {
   drone: 0.9 / 1.3,
   raider: 1,
   warden: 2.2 / 1.3,
+  core: 4 / 1.3,
 };
 
 const BLAST = linear(1, 0.6, 0.2);

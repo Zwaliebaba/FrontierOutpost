@@ -428,6 +428,19 @@ impl Hangar {
     pub fn lose(&mut self, lost: &[u32]) {
         self.pieces.retain(|piece| !lost.contains(&piece.id));
     }
+
+    /// Removes one piece of each fitting named in `kinds`: what a ship flew,
+    /// as a run records it. Returns how many were removed.
+    pub fn lose_kinds(&mut self, kinds: &[String]) -> usize {
+        let mut removed = 0;
+        for kind in kinds {
+            if let Some(index) = self.pieces.iter().position(|piece| piece.fitting == *kind) {
+                self.pieces.remove(index);
+                removed += 1;
+            }
+        }
+        removed
+    }
 }
 
 #[cfg(test)]
@@ -529,6 +542,18 @@ mod tests {
         let launch = hangar.launch(&EVERYTHING);
         assert_eq!(launch.missing, [(rule("escort_rig"), Missing::NotOwned)]);
         assert_eq!(hangar.add(rule("escort_rig")), rig + 1, "a new identity");
+    }
+
+    #[test]
+    fn losing_by_kind_takes_one_piece_of_each() {
+        let mut hangar = Hangar::default();
+        hangar.add(rule("heat_sink"));
+        hangar.add(rule("heat_sink"));
+        hangar.add(rule("extraction_rig"));
+        let lost = hangar.lose_kinds(&["heat_sink".into(), "extraction_rig".into(), "warp".into()]);
+        assert_eq!(lost, 2);
+        assert_eq!(hangar.count("heat_sink"), 1, "the spare stays");
+        assert_eq!(hangar.count("extraction_rig"), 0);
     }
 
     #[test]

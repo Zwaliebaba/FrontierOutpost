@@ -136,6 +136,7 @@ export function runLine(own: OwnStatus): string {
     clock(own.elapsedSeconds),
     `alert ${String(own.alert)}`,
     `hold ${String(own.cargo)}/${String(own.capacity)}`,
+    ...(own.shield > 0 ? [`shield ${String(own.shield)}`] : []),
     `heat ${bar(heat)} ${String(Math.round(heat * 100))}%`,
     `extractor ${extractorText(own.extractor, own.extractorSeconds)}`,
     DRIVE_TEXT[own.drive],

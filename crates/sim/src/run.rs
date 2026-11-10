@@ -12,14 +12,18 @@ use crate::extraction::{
     BASIC_CAPACITY, Conditions, EXTRACT_RANGE, Extractor, ExtractorState, MAX_EXTRACT_SPEED,
     Refusal, Stop,
 };
+use crate::fitting::Loadout as Fitting;
 use crate::outcome::{Ending, Loadout, losses};
 use crate::profile::ShipKind;
 use crate::rng::Rng;
 use crate::ship::ShipState;
 use crate::ship::{ARENA_HALF_WIDTH, ShipInput};
-use crate::site::{Hazard, Material, Site, ThreatTier, minutes, template_named};
+use crate::site::{
+    Capability, Hazard, Material, PocketKind, Site, ThreatTier, crew_scaling, minutes,
+    template_named,
+};
 use crate::skirmish::MAX_NPCS;
-use crate::world::{ShipId, World};
+use crate::world::{Kit, ShipId, World};
 use serde::{Deserialize, Serialize};
 
 /// The instance ends this long after launch (design section 10).
@@ -54,6 +58,10 @@ pub const GRACE_TICKS: u32 = minutes(5);
 /// A run is checkpointed this often, and whenever a pilot enters a pocket
 /// (design section 10).
 pub const CHECKPOINT_TICKS: u32 = minutes(1);
+/// What breaking the nest core adds to the contract pot (design section 10).
+pub const NEST_BOUNTY: u32 = 120;
+/// Salvage breaking the nest core puts in the hold (design section 10).
+pub const NEST_SALVAGE: u32 = 6;
 /// Impacts slower than this are scrapes and do no damage, m/s.
 const MIN_DEBRIS_IMPACT: f32 = 1.0;
 
@@ -215,6 +223,13 @@ pub enum RunEvent {
     },
     /// The run was restored from a checkpoint after a server restart.
     Restored,
+    /// The nest core broke: salvage to the pilot who broke it, a bounty to
+    /// the pot.
+    CoreBroken {
+        pilot: Option<ShipId>,
+        salvage: u32,
+        bounty: u32,
+    },
     Ended {
         reason: EndReason,
     },
@@ -285,6 +300,9 @@ struct PilotRun {
     inert: Option<(ShipState, f32)>,
     /// The last tick the ship fired, was hit, or was locked by a hostile.
     last_combat: Option<u32>,
+    /// The rigs and modules flown, by identifier, and what they add up to.
+    fitted: Vec<String>,
+    fitting: Fitting,
 }
 
 impl PilotRun {
@@ -328,6 +346,9 @@ pub struct PilotCheckpoint {
     pub first_pocket_at: Option<u32>,
     pub last_pocket_exit_at: Option<u32>,
     pub intercepted: bool,
+    /// The rigs and modules flown, by identifier.
+    #[serde(default)]
+    pub fitted: Vec<String>,
 }
 
 /// A run as a checkpoint keeps it: enough to restore it after a server
@@ -348,6 +369,15 @@ pub struct Checkpoint {
     pub launch_cost: u32,
     pub deposits: Vec<f32>,
     pub crew: Vec<PilotCheckpoint>,
+    /// The nest core's hull, while it stands.
+    #[serde(default)]
+    pub core_hull: Option<f32>,
+    /// Bounty earned and not yet paid.
+    #[serde(default)]
+    pub bounty: u32,
+    /// What the crew's outposts grant: a checkpoint from before plan M5 has none.
+    #[serde(default)]
+    pub access: Vec<Capability>,
 }
 
 /// One expedition instance from launch to its end.
@@ -369,6 +399,10 @@ pub struct Run {
     launch_cost: u32,
     /// A checkpoint is due at the end of this tick.
     checkpoint_due: bool,
+    /// The nest core, while it stands.
+    core: Option<ShipId>,
+    /// Bounty earned and not yet paid.
+    bounty: u32,
 }
 
 impl Run {
@@ -411,6 +445,8 @@ impl Run {
                     exposure_ends: 0,
                     inert: None,
                     last_combat: None,
+                    fitted: Vec::new(),
+                    fitting: Fitting::BASIC,
                 })
                 .collect(),
             site,
@@ -424,6 +460,8 @@ impl Run {
             events: Vec::new(),
             launch_cost: options.supplies_paid.unwrap_or(LAUNCH_COST),
             checkpoint_due: false,
+            core: None,
+            bounty: 0,
         };
         run.log(RunEvent::Launched { pilots });
         for &pilot in &ships {
@@ -436,6 +474,7 @@ impl Run {
             .opening_threat
             .unwrap_or_else(|| run.site.opening_threat());
         run.place_opening_threat(opening);
+        run.place_nest();
         (run, ships)
     }
 
@@ -504,14 +543,55 @@ impl Run {
             capacity: pilot.capacity,
             heat: pilot.extractor.heat,
             extractor: pilot.extractor.state,
-            scan: pilot.scan.map(|ticks| ticks as f32 / SCAN_TICKS as f32),
+            scan: pilot
+                .scan
+                .map(|ticks| ticks as f32 / scan_ticks(&pilot.fitting) as f32),
             alert: self.alert,
             elapsed: self.elapsed(),
             drive: pilot.drive,
         })
     }
 
-    /// Sets a pilot's controls for the next step.
+    /// Fits a pilot's ship with the rigs and modules called `fitted`, as the
+    /// pilot launches: its hold, rates, scan, speed, weapon, shield and point
+    /// defence follow them (design section 10).
+    pub fn fit(&mut self, ship: ShipId, fitted: &[String]) {
+        let Some(index) = self.index(ship) else {
+            return;
+        };
+        let fitting = Fitting::of_ids(fitted.iter().map(String::as_str));
+        let pilot = &mut self.pilots[index];
+        pilot.fitted = fitted.to_vec();
+        pilot.fitting = fitting;
+        pilot.capacity = fitting.capacity;
+        self.world.set_kit(ship, kit(&fitting));
+    }
+
+    /// The rigs and modules a pilot flies, by identifier.
+    #[must_use]
+    pub fn fitted(&self, ship: ShipId) -> &[String] {
+        self.pilot(ship)
+            .map_or(&[], |pilot| pilot.fitted.as_slice())
+    }
+
+    /// What a pilot flies with.
+    #[must_use]
+    pub fn fitting(&self, ship: ShipId) -> Option<&Fitting> {
+        self.pilot(ship).map(|pilot| &pilot.fitting)
+    }
+
+    /// A pilot's shield points left.
+    #[must_use]
+    pub fn shield(&self, ship: ShipId) -> f32 {
+        self.world.ship(ship).map_or(0.0, |ship| ship.shield)
+    }
+
+    /// The nest core, while it stands.
+    #[must_use]
+    pub fn core(&self) -> Option<ShipId> {
+        self.core
+    }
+
     /// Sets a pilot's controls for the next step. A cruise request takes
     /// effect only where the drive may engage ([`Drive`]).
     pub fn set_controls(&mut self, ship: ShipId, input: ShipInput, firing: bool) {
@@ -709,6 +789,7 @@ impl Run {
         if self.pilots[index].disconnected_at.take().is_some() {
             if let Some((state, hull)) = self.pilots[index].inert.take() {
                 self.world.restore_pilot(ship, state, hull);
+                self.world.set_kit(ship, kit(&self.pilots[index].fitting));
             }
             self.log(RunEvent::Reconnected { pilot: ship });
         }
@@ -770,9 +851,16 @@ impl Run {
                         first_pocket_at: pilot.first_pocket_at,
                         last_pocket_exit_at: pilot.last_pocket_exit_at,
                         intercepted: pilot.intercepted,
+                        fitted: pilot.fitted.clone(),
                     }
                 })
                 .collect(),
+            core_hull: self
+                .core
+                .and_then(|core| self.world.ship(core))
+                .map(|core| core.hull),
+            bounty: self.bounty,
+            access: self.site.access.clone(),
         }
     }
 
@@ -785,7 +873,13 @@ impl Run {
     pub fn restore(checkpoint: &Checkpoint) -> Option<Self> {
         let template = template_named(&checkpoint.template)?;
         let tier = ThreatTier::from_number(checkpoint.tier)?;
-        let mut site = Site::generate(template, checkpoint.seed, tier, checkpoint.pilots, &[]);
+        let mut site = Site::generate(
+            template,
+            checkpoint.seed,
+            tier,
+            checkpoint.pilots,
+            &checkpoint.access,
+        );
         for (deposit, remaining) in site.deposits.iter_mut().zip(&checkpoint.deposits) {
             deposit.remaining = *remaining;
         }
@@ -822,6 +916,8 @@ impl Run {
                     exposure_ends: now,
                     inert: away.then_some((state, saved.hull)),
                     last_combat: None,
+                    fitted: saved.fitted.clone(),
+                    fitting: Fitting::of_ids(saved.fitted.iter().map(String::as_str)),
                 }
             })
             .collect();
@@ -839,7 +935,31 @@ impl Run {
             events: Vec::new(),
             launch_cost: checkpoint.launch_cost,
             checkpoint_due: false,
+            core: None,
+            bounty: checkpoint.bounty,
         };
+        for pilot in &run.pilots {
+            run.world.reserve(pilot.ship);
+        }
+        // The core is a structure, not an NPC: it stands where it stood, as
+        // damaged as it was. Its wardens are NPCs and are not restored.
+        if let Some(hull) = checkpoint.core_hull {
+            let nest = run
+                .site
+                .pockets
+                .iter()
+                .find(|pocket| pocket.template.kind == PocketKind::NestCore)
+                .map(|pocket| pocket.template);
+            if let Some(nest) = nest {
+                let core = run
+                    .world
+                    .spawn_npc_at(ShipKind::Core, nest.centre, nest.centre);
+                run.world
+                    .set_vulnerable_from(core, Some((nest.centre.0, nest.centre.1, nest.radius)));
+                run.world.set_hull(core, hull);
+                run.core = Some(core);
+            }
+        }
         run.log(RunEvent::Restored);
         Some(run)
     }
@@ -855,6 +975,7 @@ impl Run {
                 crate::combat::Event::Fired {
                     shooter, target, ..
                 } => Some((shooter, target)),
+                crate::combat::Event::Intercepted { shooter, target } => Some((shooter, target)),
                 crate::combat::Event::Destroyed { .. } => None,
             })
             .collect();
@@ -907,6 +1028,7 @@ impl Run {
         self.world.step();
         self.note_combat();
         self.debris_damage();
+        self.break_core();
         self.record_destroyed();
         self.hold_disconnected();
         for index in 0..self.pilots.len() {
@@ -966,9 +1088,17 @@ impl Run {
         let Some(state) = self.world.ship(ship).map(|s| s.state) else {
             return false;
         };
+        let Some(pilot) = self.pilot(ship) else {
+            return false;
+        };
         let (cx, cz) = self.site.template.centre;
-        state.speed.abs() <= MAX_SCAN_SPEED
-            && (state.x - cx).hypot(state.z - cz) <= self.scan_range()
+        // The deep-scan array reaches the site from the approach leg.
+        let in_reach = if pilot.fitting.deep_scan {
+            pilot.phase != Phase::AtDock
+        } else {
+            (state.x - cx).hypot(state.z - cz) <= self.scan_range()
+        };
+        state.speed.abs() <= MAX_SCAN_SPEED && in_reach
     }
 
     fn conditions(&self, index: usize, deposit: usize) -> Conditions {
@@ -987,12 +1117,22 @@ impl Run {
         let at_deposit = state.is_some_and(|s| {
             (d.x - s.x).hypot(d.z - s.z) <= EXTRACT_RANGE && s.speed.abs() <= MAX_EXTRACT_SPEED
         });
+        // A rig sets its own rate for a material; the rich pocket still
+        // multiplies it.
+        let base = pocket.template.base_rate;
+        let rate = if base > 0.0 {
+            pocket.rate * pilot.fitting.rate(d.material, base) / base
+        } else {
+            pocket.rate
+        };
         Conditions {
             at_deposit,
             remaining: d.remaining,
             space: pilot.capacity.saturating_sub(pilot.total()),
-            rate: pocket.rate,
-            heat_factor: self.site.values.hazard.heat_factor() * pocket.template.heat_factor,
+            rate,
+            // A heat sink lets more extraction build the same heat.
+            heat_factor: self.site.values.hazard.heat_factor() * pocket.template.heat_factor
+                / pilot.fitting.heat_capacity,
         }
     }
 
@@ -1112,6 +1252,36 @@ impl Run {
         }
     }
 
+    /// Places the nest core and its wardens, if the crew may enter the nest
+    /// (design section 10: wardens hold the core).
+    fn place_nest(&mut self) {
+        let Some(nest) = self
+            .site
+            .pockets
+            .iter()
+            .find(|pocket| pocket.template.kind == PocketKind::NestCore && !pocket.locked)
+            .map(|pocket| pocket.template)
+        else {
+            return;
+        };
+        let (cx, cz) = nest.centre;
+        let core = self
+            .world
+            .spawn_npc_at(ShipKind::Core, nest.centre, nest.centre);
+        self.world
+            .set_vulnerable_from(core, Some((cx, cz, nest.radius)));
+        self.core = Some(core);
+        let threat = crew_scaling(self.site.pilots).threat;
+        // A handful, so `as` loses nothing.
+        let wardens = ((1 + self.site.tier.number()) as f32 * threat).round() as u32;
+        let room = MAX_NPCS.saturating_sub(self.npc_count()) as u32;
+        for i in 0..wardens.min(room) {
+            let angle = i as f32 * std::f32::consts::TAU / wardens as f32;
+            let post = (cx + angle.cos() * 10.0, cz + angle.sin() * 10.0);
+            self.world.spawn_npc_at(ShipKind::Warden, post, post);
+        }
+    }
+
     fn debris_damage(&mut self) {
         if self.site.values.hazard != Hazard::DebrisDrift {
             return;
@@ -1135,6 +1305,36 @@ impl Run {
             self.log(RunEvent::HazardDamage { pilot, amount });
             self.world.damage(pilot, amount);
         }
+    }
+
+    /// Pays for the nest core when it breaks: its salvage to the hold of the
+    /// pilot whose shot broke it, as far as there is space, and its bounty to
+    /// the pot.
+    fn break_core(&mut self) {
+        let broken = self.world.events().iter().find_map(|event| match *event {
+            crate::combat::Event::Destroyed {
+                kind: ShipKind::Core,
+                by,
+                ..
+            } => Some(by),
+            _ => None,
+        });
+        let Some(by) = broken else {
+            return;
+        };
+        self.core = None;
+        let mut salvage = 0;
+        if let Some(index) = by.and_then(|ship| self.index(ship)) {
+            let pilot = &mut self.pilots[index];
+            salvage = NEST_SALVAGE.min(pilot.capacity.saturating_sub(pilot.total()));
+            pilot.cargo[Material::Salvage.index()] += salvage;
+        }
+        self.bounty += NEST_BOUNTY;
+        self.log(RunEvent::CoreBroken {
+            pilot: by,
+            salvage,
+            bounty: NEST_BOUNTY,
+        });
     }
 
     /// Ends the run of every pilot whose ship is gone: destroyed in combat or
@@ -1290,7 +1490,7 @@ impl Run {
             self.log(RunEvent::ScanInterrupted { pilot: ship });
             return;
         }
-        if progress + 1 >= SCAN_TICKS {
+        if progress + 1 >= scan_ticks(&self.pilots[index].fitting) {
             self.pilots[index].scan = None;
             self.revealed = true;
             self.log(RunEvent::Scanned { pilot: ship });
@@ -1306,10 +1506,16 @@ impl Run {
         let ship = pilot.ship;
         let carried = pilot.total();
         let phases = pilot.times(now);
+        let modules = u32::try_from(pilot.fitted.len()).unwrap_or(u32::MAX);
         let mut payout = 0;
         if ending == Ending::Docked && carried >= CONTRACT_MIN_CARGO && !self.contract_paid {
             self.contract_paid = true;
             payout = self.site.payout() / self.site.pilots.max(1);
+        }
+        if ending == Ending::Docked && self.bounty > 0 {
+            // The bounty joins the pot and is paid on docking (plan M5); a
+            // crew's split is plan M6.
+            payout += std::mem::take(&mut self.bounty);
         }
         let banked = if ending == Ending::Docked {
             pilot.cargo
@@ -1324,7 +1530,7 @@ impl Run {
             lost: losses(
                 ending,
                 Loadout {
-                    upgraded_modules: 0,
+                    upgraded_modules: modules,
                     cargo: carried,
                 },
             ),
@@ -1367,6 +1573,22 @@ impl Run {
             self.ended = Some(reason);
             self.log(RunEvent::Ended { reason });
         }
+    }
+}
+
+/// How long a scan takes in `fitting`.
+fn scan_ticks(fitting: &Fitting) -> u32 {
+    // A few hundred ticks, so `as` loses nothing.
+    ((SCAN_TICKS as f32 * fitting.scan_time).round() as u32).max(1)
+}
+
+/// What a fitting changes in flight.
+fn kit(fitting: &Fitting) -> Kit {
+    Kit {
+        speed: fitting.speed,
+        weapon: fitting.weapon,
+        shield: fitting.shield,
+        point_defence: fitting.point_defence,
     }
 }
 
@@ -1882,6 +2104,311 @@ mod tests {
         let d = run.site.deposits[veins];
         place(&mut run, ships[0], (d.x, d.z));
         assert_eq!(run.extract(ships[0], true), Ok(()));
+    }
+
+    fn fitted(ids: &[&str]) -> Vec<String> {
+        ids.iter().map(|id| (*id).to_owned()).collect()
+    }
+
+    fn with_access(seed: u32, access: &[Capability]) -> (Run, ShipId) {
+        let site = Site::generate(COMPACT_SITE, seed, ThreatTier::I, 1, access);
+        let (run, ships) = Run::launch(
+            site,
+            1,
+            Options {
+                opening_threat: Some(0),
+                ..Options::default()
+            },
+        );
+        (run, ships[0])
+    }
+
+    /// Ore extracted in `seconds` at the first deposit, with `ids` fitted.
+    fn ore_in(seconds: u32, ids: &[&str]) -> u32 {
+        let (mut run, ship) = quiet(21);
+        run.fit(ship, &fitted(ids));
+        at_deposit(&mut run, ship);
+        run.extract(ship, true).unwrap();
+        steps(&mut run, seconds * TICKS_PER_SECOND);
+        run.status(ship).unwrap().cargo
+    }
+
+    #[test]
+    fn the_extraction_rig_holds_more_and_extracts_faster() {
+        let (mut run, ship) = quiet(21);
+        run.fit(ship, &fitted(&["extraction_rig", "cargo_frame"]));
+        assert_eq!(run.status(ship).unwrap().capacity, 38);
+        // Before the first cut-out: 2.0 a minute basic, 3.0 with the rig, or
+        // 1.5 times that in the rich pocket.
+        at_deposit(&mut run, ship);
+        let deposit = run.site.deposits[0];
+        assert_eq!(deposit.material, Material::Ore);
+        let pocket = &run.site.pockets[deposit.pocket];
+        let rigged = run.conditions(0, 0).rate;
+        // 3.0 a minute against the basic 2.0, times the rich factor if any.
+        assert!((rigged / pocket.rate - 1.5).abs() < 1e-6, "{rigged}");
+        assert!(ore_in(50, &["extraction_rig"]) > ore_in(50, &[]));
+    }
+
+    #[test]
+    fn a_heat_sink_extracts_a_quarter_longer_before_cutting_out() {
+        let cut_out_after = |ids: &[&str]| {
+            let (mut run, ship) = quiet(21);
+            run.fit(ship, &fitted(ids));
+            at_deposit(&mut run, ship);
+            run.extract(ship, true).unwrap();
+            let mut ticks = 0;
+            while !matches!(
+                run.status(ship).unwrap().extractor,
+                ExtractorState::CutOut { .. }
+            ) {
+                run.step();
+                ticks += 1;
+                assert!(ticks < minutes(5), "never cut out");
+            }
+            ticks
+        };
+        let (basic, sink) = (cut_out_after(&[]), cut_out_after(&["heat_sink"]));
+        let ratio = sink as f32 / basic as f32;
+        assert!((ratio - 1.25).abs() < 0.02, "{sink} against {basic}");
+    }
+
+    #[test]
+    fn the_scout_rig_scans_in_half_the_time_and_deep_scan_from_the_approach() {
+        let (mut run, ship) = quiet(22);
+        run.fit(ship, &fitted(&["scout_rig"]));
+        let centre = run.site.template.centre;
+        place(&mut run, ship, centre);
+        assert!(run.scan(ship));
+        steps(&mut run, SCAN_TICKS / 2);
+        assert!(run.revealed(), "half the basic time");
+
+        let (mut run, ship) = quiet(22);
+        run.fit(ship, &fitted(&["deep_scan"]));
+        assert!(!run.scan(ship), "not from the dock");
+        place(&mut run, ship, (-60.0, 0.0));
+        run.step();
+        assert!(run.scan(ship), "from the approach leg, far from the site");
+        steps(&mut run, SCAN_TICKS);
+        assert!(run.revealed());
+    }
+
+    #[test]
+    fn the_scout_rig_flies_faster() {
+        let top_speed = |ids: &[&str]| {
+            let (mut run, ship) = quiet(23);
+            run.fit(ship, &fitted(ids));
+            run.set_controls(
+                ship,
+                ShipInput {
+                    thrust: 1.0,
+                    ..ShipInput::default()
+                },
+                false,
+            );
+            steps(&mut run, 10 * TICKS_PER_SECOND);
+            run.world.ship(ship).unwrap().state.speed
+        };
+        let ratio = top_speed(&["scout_rig"]) / top_speed(&[]);
+        assert!((ratio - 1.2).abs() < 0.02, "{ratio}");
+    }
+
+    #[test]
+    fn a_destroyed_ship_loses_what_it_flew() {
+        let (mut run, ship) = quiet(23);
+        run.fit(ship, &fitted(&["escort_rig", "point_defence"]));
+        place(&mut run, ship, (-60.0, 0.0));
+        run.world.damage(ship, 10_000.0);
+        run.step();
+        let lost = events(&mut run).into_iter().find_map(|event| match event {
+            RunEvent::Destroyed { summary, .. } => Some(summary.lost),
+            _ => None,
+        });
+        assert_eq!(lost.map(|lost| lost.upgraded_modules), Some(2));
+    }
+
+    #[test]
+    fn the_nest_stands_only_for_a_crew_that_may_breach_it() {
+        let (run, _) = quiet(30);
+        assert_eq!(run.core(), None);
+        let (run, _) = with_access(30, &[Capability::BreachNest]);
+        let core = run.core().expect("the core stands");
+        assert_eq!(run.world.ship(core).unwrap().kind, ShipKind::Core);
+        let wardens = run
+            .world
+            .ships()
+            .iter()
+            .filter(|ship| ship.kind == ShipKind::Warden)
+            .count();
+        assert_eq!(wardens, 2, "tier I: two wardens hold the core");
+    }
+
+    /// Ticks to break the core with `ids` fitted, firing from inside its
+    /// pocket with the wardens gone.
+    fn ticks_to_break_core(ids: &[&str]) -> u32 {
+        let (mut run, ship) = with_access(31, &[Capability::BreachNest]);
+        run.fit(ship, &fitted(ids));
+        let wardens: Vec<ShipId> = run
+            .world
+            .ships()
+            .iter()
+            .filter(|s| s.kind == ShipKind::Warden)
+            .map(|s| s.id)
+            .collect();
+        for warden in wardens {
+            run.world.remove_ship(warden);
+        }
+        let core = run.core().unwrap();
+        let (cx, cz) = run.world.ship(core).unwrap().state.into_xz();
+        place(&mut run, ship, (cx - 12.0, cz));
+        assert!(run.set_lock(ship, Some(core)));
+        run.set_controls(ship, ShipInput::default(), true);
+        let mut ticks = 0;
+        while run.core().is_some() {
+            run.step();
+            ticks += 1;
+            // The alert's waves would come for the pilot; this measures the core.
+            let npcs: Vec<ShipId> = run
+                .world
+                .ships()
+                .iter()
+                .filter(|s| s.kind.thinks())
+                .map(|s| s.id)
+                .collect();
+            for npc in npcs {
+                run.world.remove_ship(npc);
+            }
+            assert!(ticks < minutes(20), "the core never broke");
+        }
+        ticks
+    }
+
+    #[test]
+    fn the_core_takes_twelve_minutes_basic_and_six_with_an_escort_rig() {
+        let basic = ticks_to_break_core(&[]);
+        let escort = ticks_to_break_core(&["escort_rig"]);
+        assert!((minutes(11)..=minutes(13)).contains(&basic), "{basic}");
+        assert!((minutes(5)..=minutes(7)).contains(&escort), "{escort}");
+    }
+
+    #[test]
+    fn the_core_shrugs_off_shots_from_outside_its_pocket() {
+        let (mut run, ship) = with_access(32, &[Capability::BreachNest]);
+        let core = run.core().unwrap();
+        let nest = run
+            .site
+            .pockets
+            .iter()
+            .find(|p| p.template.kind == PocketKind::NestCore)
+            .unwrap()
+            .template;
+        let (cx, cz) = nest.centre;
+        // Just outside the pocket, but within weapon range of the core.
+        let (dx, dz) = (
+            cx - run.site.template.centre.0,
+            cz - run.site.template.centre.1,
+        );
+        let away = dx.hypot(dz);
+        let at = nest.radius + 1.0;
+        place(&mut run, ship, (cx - dx / away * at, cz - dz / away * at));
+        let wardens: Vec<ShipId> = run
+            .world
+            .ships()
+            .iter()
+            .filter(|s| s.kind == ShipKind::Warden)
+            .map(|s| s.id)
+            .collect();
+        for warden in wardens {
+            run.world.remove_ship(warden);
+        }
+        run.world.ship_mut(core).unwrap().state.x = cx;
+        assert!(run.set_lock(ship, Some(core)));
+        run.set_controls(ship, ShipInput::default(), true);
+        steps(&mut run, 5 * TICKS_PER_SECOND);
+        let core_hull = run.world.ship(core).unwrap().hull;
+        assert!(
+            (core_hull - crate::profile::CORE_HULL).abs() < f32::EPSILON,
+            "{core_hull}"
+        );
+    }
+
+    #[test]
+    fn breaking_the_core_fills_the_hold_and_pays_the_bounty_on_docking() {
+        let (mut run, ship) = with_access(33, &[Capability::BreachNest]);
+        let core = run.core().unwrap();
+        let (cx, cz) = run.world.ship(core).unwrap().state.into_xz();
+        place(&mut run, ship, (cx - 12.0, cz));
+        run.step();
+        run.world.ship_mut(core).unwrap().hull = 5.0;
+        assert!(run.set_lock(ship, Some(core)));
+        run.set_controls(ship, ShipInput::default(), true);
+        steps(&mut run, 2 * TICKS_PER_SECOND);
+        assert_eq!(run.core(), None);
+        assert!(events(&mut run).iter().any(|event| matches!(
+            event,
+            RunEvent::CoreBroken {
+                salvage: NEST_SALVAGE,
+                bounty: NEST_BOUNTY,
+                ..
+            }
+        )));
+        assert_eq!(run.status(ship).unwrap().cargo, NEST_SALVAGE);
+        // Home: six salvage is short of the contract's ten, but the bounty pays.
+        let wardens: Vec<ShipId> = run
+            .world
+            .ships()
+            .iter()
+            .filter(|s| s.kind == ShipKind::Warden)
+            .map(|s| s.id)
+            .collect();
+        for warden in wardens {
+            run.world.remove_ship(warden);
+        }
+        run.set_controls(ship, ShipInput::default(), false);
+        place(&mut run, ship, (cx + 200.0, cz));
+        run.step();
+        let dock = run.site.template.dock;
+        place(&mut run, ship, dock);
+        run.step();
+        let summary = events(&mut run).into_iter().find_map(|event| match event {
+            RunEvent::Docked { summary, .. } => Some(summary),
+            _ => None,
+        });
+        let summary = summary.expect("docked");
+        assert_eq!(summary.payout, NEST_BOUNTY);
+        assert_eq!(summary.banked[Material::Salvage.index()], NEST_SALVAGE);
+    }
+
+    #[test]
+    fn a_checkpoint_keeps_fittings_access_and_the_damaged_core() {
+        let (mut run, ship) = with_access(34, &[Capability::BreachNest]);
+        run.fit(ship, &fitted(&["escort_rig"]));
+        let core = run.core().unwrap();
+        run.world.ship_mut(core).unwrap().hull = 1_000.0;
+        let checkpoint = run.checkpoint();
+        let json = serde_json::to_string(&checkpoint).unwrap();
+        let restored = Run::restore(&serde_json::from_str(&json).unwrap()).unwrap();
+        assert_eq!(restored.site.access, [Capability::BreachNest]);
+        let core = restored.core().expect("the core stands again");
+        assert!((restored.world.ship(core).unwrap().hull - 1_000.0).abs() < f32::EPSILON);
+        assert_ne!(core, ship, "the pilot's id stays theirs");
+        assert_eq!(restored.status(ship).unwrap().capacity, 12);
+        assert!((restored.fitting(ship).unwrap().weapon - 2.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn a_checkpoint_written_before_the_outpost_still_restores() {
+        let (run, _) = quiet(35);
+        let mut json: serde_json::Value = serde_json::to_value(run.checkpoint()).unwrap();
+        let object = json.as_object_mut().unwrap();
+        object.remove("access");
+        object.remove("core_hull");
+        object.remove("bounty");
+        for pilot in object["crew"].as_array_mut().unwrap() {
+            pilot.as_object_mut().unwrap().remove("fitted");
+        }
+        let checkpoint: Checkpoint = serde_json::from_value(json).unwrap();
+        assert!(Run::restore(&checkpoint).is_some());
     }
 
     #[test]

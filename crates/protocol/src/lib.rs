@@ -144,6 +144,13 @@ pub enum ServerMessage {
         scan_range: f32,
         /// How far from a deposit's centre the extractor reaches, m.
         extract_range: f32,
+        /// Multiplies the starter hull's speed and acceleration: the scout
+        /// rig's 20%. Prediction must use it.
+        speed_factor: f32,
+        /// Shield points when full; 0 without an escort rig.
+        max_shield: f32,
+        /// The rigs and modules flown, by fitting identifier.
+        fitted: Vec<String>,
     },
     /// The launch was refused, for `reason`.
     LaunchRefused { reason: String },

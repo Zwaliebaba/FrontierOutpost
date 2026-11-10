@@ -38,7 +38,20 @@ scanRange: number,
 /**
  * How far from a deposit's centre the extractor reaches, m.
  */
-extractRange: number, } | { "type": "launchRefused", reason: string, } | { "type": "extractRefused", reason: ExtractRefusal, } | { "type": "scanned", 
+extractRange: number, 
+/**
+ * Multiplies the starter hull's speed and acceleration: the scout
+ * rig's 20%. Prediction must use it.
+ */
+speedFactor: number, 
+/**
+ * Shield points when full; 0 without an escort rig.
+ */
+maxShield: number, 
+/**
+ * The rigs and modules flown, by fitting identifier.
+ */
+fitted: Array<string>, } | { "type": "launchRefused", reason: string, } | { "type": "extractRefused", reason: ExtractRefusal, } | { "type": "scanned", 
 /**
  * Index into the contract's pockets.
  */

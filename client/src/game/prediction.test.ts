@@ -187,3 +187,18 @@ describe("predictor", () => {
     expect(predictor.visual(1, 0.016)?.x).toBeCloseTo(10, 5);
   });
 });
+
+describe("the scout rig's speed", () => {
+  it("is predicted with the factor the server sends on joining", () => {
+    const fly = () => {
+      let state: ShipState = { x: 0, z: 0, heading: 0, speed: 0 };
+      for (let i = 0; i < 200; i += 1) state = step(state, { thrust: 1, turn: 0 });
+      return state.speed;
+    };
+    const basic = fly();
+    sim.setSpeedFactor(1.2);
+    const scout = fly();
+    sim.setSpeedFactor(1);
+    expect(scout / basic).toBeCloseTo(1.2, 3);
+  });
+});

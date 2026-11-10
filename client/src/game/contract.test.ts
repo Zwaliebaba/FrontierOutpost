@@ -14,6 +14,7 @@ const working: OwnStatus = {
   alert: 2,
   elapsedSeconds: 187,
   drive: "inSite",
+  shield: 0,
 };
 
 describe("clock", () => {
@@ -94,5 +95,12 @@ describe("summaryLines", () => {
     const lines = summaryLines({ ...docked, ending: "destroyed", ore: 0, payout: 0, cargoLost: 9 });
     expect(lines[1]).toBe("Lost: 9 cargo, 0 upgraded modules");
     expect(lines[2]).toContain("net −40 cr");
+  });
+});
+
+describe("runLine with a shield", () => {
+  it("shows the shield only when the ship has one", () => {
+    expect(runLine(working)).not.toContain("shield");
+    expect(runLine({ ...working, shield: 33 })).toContain("shield 33");
   });
 });

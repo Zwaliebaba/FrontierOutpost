@@ -11,7 +11,9 @@ use crate::{TICKS_PER_SECOND, ticks_for_millis};
 
 /// What an outpost's powered layout grants an expedition (design section 10).
 /// Expedition options are keyed to these tags, never to facility identifiers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub enum Capability {
     /// Locates the derelict's signal: from a sensor array.
     LocateSignal,
@@ -459,6 +461,8 @@ pub struct Site {
     pub seed: u32,
     pub tier: ThreatTier,
     pub pilots: u32,
+    /// What the crew's outposts grant between them.
+    pub access: Vec<Capability>,
     pub values: SeedValues,
     pub pockets: Vec<Pocket>,
     pub deposits: Vec<Deposit>,
@@ -529,6 +533,7 @@ impl Site {
             seed,
             tier,
             pilots,
+            access: access.to_vec(),
             values,
             pockets,
             deposits,

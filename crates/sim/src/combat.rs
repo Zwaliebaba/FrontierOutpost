@@ -37,4 +37,6 @@ pub enum Event {
         /// The ship whose shot destroyed it.
         by: Option<ShipId>,
     },
+    /// Point defence on `target` destroyed a shot from `shooter`.
+    Intercepted { shooter: ShipId, target: ShipId },
 }

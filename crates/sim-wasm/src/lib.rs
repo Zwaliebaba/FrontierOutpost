@@ -13,6 +13,15 @@ use wasm_bindgen::prelude::wasm_bindgen;
 thread_local! {
     /// The expedition's fixed obstacles, set once on joining.
     static OBSTACLES: RefCell<Vec<Obstacle>> = const { RefCell::new(Vec::new()) };
+    /// What the pilot's fittings do to the hull's speed, set once on joining.
+    static SPEED_FACTOR: RefCell<f32> = const { RefCell::new(1.0) };
+}
+
+/// Sets the factor the pilot's fittings apply to the hull's speed and
+/// acceleration (the scout rig's 20%), from `Joined`.
+#[wasm_bindgen(js_name = setSpeedFactor)]
+pub fn set_speed_factor(factor: f32) {
+    SPEED_FACTOR.with(|cell| *cell.borrow_mut() = factor);
 }
 
 /// Sets the fixed obstacles that predicted ships collide with, as flat
@@ -59,7 +68,9 @@ pub fn step_ship(
     turn: f32,
     cruise: bool,
 ) -> Vec<f32> {
-    use frontier_sim::ship::{STARTER_HANDLING, ShipInput, ShipState, step};
+    use frontier_sim::profile::ShipKind;
+    use frontier_sim::ship::{ShipInput, ShipState, step};
+    use frontier_sim::world::{Kit, handling};
     let state = ShipState {
         x,
         z,
@@ -73,7 +84,13 @@ pub fn step_ship(
             turn,
             cruise,
         },
-        &STARTER_HANDLING,
+        &handling(
+            ShipKind::Pilot,
+            &Kit {
+                speed: SPEED_FACTOR.with(|cell| *cell.borrow()),
+                ..Kit::BASIC
+            },
+        ),
     );
     let next = OBSTACLES.with(|cell| resolve_obstacles(moved, SHIP_RADIUS, &cell.borrow()));
     vec![next.x, next.z, next.heading, next.speed]

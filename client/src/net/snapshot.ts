@@ -15,7 +15,7 @@ import type {
 
 export const SNAPSHOT_KIND = 1;
 const HEADER_BYTES = 7;
-const OWN_STATUS_BYTES = 11;
+const OWN_STATUS_BYTES = 12;
 const ENTITY_BYTES = 14;
 const NO_SCAN = 0xff;
 const PHASES: readonly RunPhase[] = [
@@ -32,8 +32,9 @@ const DRIVES: readonly Drive[] = ["ready", "inSite", "hunted", "extracting"];
 const EVENT_BYTES = 6;
 const FIRED = 1;
 const DESTROYED = 2;
+const INTERCEPTED = 3;
 const NO_SHIP = 0xffff;
-const ENTITY_KINDS: readonly EntityKind[] = ["playerShip", "drone", "raider", "warden"];
+const ENTITY_KINDS: readonly EntityKind[] = ["playerShip", "drone", "raider", "warden", "core"];
 
 export const POSITION_UNITS_PER_METRE = 32;
 export const VELOCITY_UNITS_PER_METRE_PER_SECOND = 64;
@@ -108,6 +109,9 @@ export function decodeSnapshot(bytes: Uint8Array): Snapshot {
         events.push({ type: "destroyed", ship: a, by: b === NO_SHIP ? null : b, kind });
         break;
       }
+      case INTERCEPTED:
+        events.push({ type: "intercepted", shooter: a, target: b });
+        break;
       default:
         throw new SnapshotError(`unknown event kind ${String(view.getUint8(at))}`);
     }
@@ -147,6 +151,7 @@ function decodeOwn(view: DataView): OwnStatus {
     alert: view.getUint8(at + 7),
     elapsedSeconds: view.getUint16(at + 8, true),
     drive,
+    shield: view.getUint8(at + 11),
   };
 }
 

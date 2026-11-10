@@ -5,6 +5,7 @@
 import init, {
   initSync,
   setObstacles,
+  setSpeedFactor,
   stepShip,
   ticksForMillis,
   ticksPerSecond,
@@ -36,6 +37,8 @@ export interface Sim {
   stepShip(state: ShipState, controls: ShipControls): ShipState;
   /** Sets the fixed obstacles that `stepShip` collides with. */
   setObstacles(obstacles: readonly { x: number; z: number; radius: number }[]): void;
+  /** Sets the factor the pilot's fittings apply to speed and acceleration (`Joined`). */
+  setSpeedFactor(factor: number): void;
 }
 
 const sim: Sim = {
@@ -56,6 +59,7 @@ const sim: Sim = {
   setObstacles(obstacles) {
     setObstacles(Float32Array.from(obstacles.flatMap((o) => [o.x, o.z, o.radius])));
   },
+  setSpeedFactor,
 };
 
 let loading: Promise<Sim> | null = null;

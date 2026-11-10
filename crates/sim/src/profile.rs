@@ -14,6 +14,9 @@ pub enum ShipKind {
     Raider,
     /// Guards a post; slow, heavy, long range; never leaves it (design §10).
     Warden,
+    /// The nest core: a structure that never moves or fires, and can be
+    /// harmed only from inside its pocket (plan M5, the owner's decision).
+    Core,
 }
 
 impl ShipKind {
@@ -29,7 +32,14 @@ impl ShipKind {
             Self::Drone => &DRONE,
             Self::Raider => &RAIDER,
             Self::Warden => &WARDEN,
+            Self::Core => &CORE,
         }
+    }
+
+    /// Whether it chooses targets and steers: every NPC but a structure.
+    #[must_use]
+    pub const fn thinks(self) -> bool {
+        matches!(self, Self::Drone | Self::Raider | Self::Warden)
     }
 }
 
@@ -125,6 +135,30 @@ const WARDEN: Profile = Profile {
     },
     // Notices pilots near its post: its leash plus its weapon's reach.
     awareness: crate::npc::WARDEN_LEASH + 35.0,
+};
+
+/// The nest core's hull: the basic weapon, 10 damage every 11 steps, takes
+/// about 12 minutes to break it and the escort rig's double output about 6,
+/// which with its wardens comes to design section 10's "about 14 minutes; 8
+/// with an escort rig".
+pub const CORE_HULL: f32 = 13_000.0;
+
+const CORE: Profile = Profile {
+    handling: Handling {
+        max_speed: 0.0,
+        acceleration: 0.0,
+        turn_rate: 0.0,
+        drag: 0.5,
+    },
+    radius: 4.0,
+    max_hull: CORE_HULL,
+    weapon: Weapon {
+        range: 0.0,
+        cooldown_ticks: u32::MAX,
+        damage: 0.0,
+        projectile_speed: 1.0,
+    },
+    awareness: 0.0,
 };
 
 #[cfg(test)]

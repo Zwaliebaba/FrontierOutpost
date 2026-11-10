@@ -47,4 +47,14 @@ describe("shots", () => {
     shots.advance(0.3, at);
     expect(shots.blasts).toEqual([]);
   });
+  it("drops a bolt that point defence intercepts, with a flash where it was", () => {
+    const shots = new Shots();
+    shots.fire(3, 7, { x: 0, z: 0 }, 20);
+    shots.fire(4, 7, { x: 0, z: 0 }, 20);
+    shots.advance(0.1, () => ({ x: 10, z: 0 }));
+    expect(shots.intercept(3, 7, { x: 10, z: 0 })).toBe(true);
+    expect(shots.bolts.map((bolt) => bolt.shooter)).toEqual([4]);
+    expect(shots.blasts).toHaveLength(1);
+    expect(shots.intercept(3, 7, { x: 10, z: 0 }), "already gone").toBe(false);
+  });
 });
