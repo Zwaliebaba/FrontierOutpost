@@ -18,6 +18,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  PerspectiveCamera,
   Points,
   PointsMaterial,
   ReplaceStencilOp,
@@ -45,6 +46,7 @@ import type { Occluder } from "./occlusion";
 import { pickNearest, screenToPlane, worldToScreen } from "./picking";
 import type { PickCandidate, ScreenPoint } from "./picking";
 import { createRng } from "./rng";
+import { createStarField } from "./sky";
 import { MAX_BOLTS, SCENE_IDS, SCENE_LABELS, createWorld, stepWorld } from "./scenarios";
 import type { Allegiance, Ship } from "./scenarios";
 import {
@@ -133,8 +135,10 @@ renderer.domElement.style.filter = {
 }[config.vision];
 
 const scene = new Scene();
-scene.background =
-  config.backdrop === "bright" ? linear(0.42, 0.5, 0.6) : linear(0.035, 0.06, 0.11);
+if (config.backdrop !== "stars") {
+  scene.background =
+    config.backdrop === "bright" ? linear(0.42, 0.5, 0.6) : linear(0.035, 0.06, 0.11);
+}
 scene.add(new HemisphereLight(linear(0.3, 0.48, 1), linear(0.025, 0.038, 0.055), 0.6));
 const starlight = new DirectionalLight(linear(0.67, 0.77, 1), 2.4);
 starlight.position.set(-4, 10, 6);
@@ -151,20 +155,38 @@ const homeLook: LookState = { yaw: 0, pitch: config.elevation };
 let look: LookState = { ...homeLook };
 aimRig(rig, cameraTarget, look.pitch, look.yaw);
 
-// A sparse, dim starfield, so that turning the camera reads as turning.
-const starRng = createRng(config.seed + 3000);
-const starPositions = new Float32Array(700 * 3);
-for (let i = 0; i < starPositions.length; i += 3) {
-  const around = starRng() * 2 * Math.PI;
-  const up = starRng() * 2 - 1;
-  const flat = Math.sqrt(1 - up * up);
-  starPositions.set([Math.cos(around) * flat * 900, up * 900, Math.sin(around) * flat * 900], i);
+// The star backdrop is at infinity: it is drawn first, through its own perspective camera that
+// only copies the main camera's orientation. That keeps it behaving like a sky in both the
+// orthographic and the perspective view, and unaffected by zoom.
+const SKY_FOV = 50;
+const sky = config.backdrop === "stars" ? new Scene() : null;
+const skyCamera = new PerspectiveCamera(SKY_FOV, 1, 0.1, 10);
+if (sky) {
+  const layers = [
+    { count: 3200, size: 1.3, dim: 0.75 },
+    { count: 700, size: 2.2, dim: 1 },
+    { count: 130, size: 3.4, dim: 1.5 },
+  ];
+  layers.forEach(({ count, size, dim }, layer) => {
+    const field = createStarField(config.seed * 10 + layer + 3000, count);
+    sky.add(
+      new Points(
+        new BufferGeometry()
+          .setAttribute("position", new BufferAttribute(field.directions, 3))
+          .setAttribute(
+            "color",
+            new BufferAttribute(
+              field.colours.map((c) => c * dim),
+              3,
+            ),
+          ),
+        new PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, depthTest: false }),
+      ),
+    );
+  });
+  renderer.autoClear = false;
+  renderer.setClearColor(linear(0.006, 0.009, 0.02));
 }
-const stars = new Points(
-  new BufferGeometry().setAttribute("position", new BufferAttribute(starPositions, 3)),
-  new PointsMaterial({ color: linear(0.35, 0.42, 0.55), size: 1.5, sizeAttenuation: false }),
-);
-scene.add(stars);
 
 function occluderMesh(occluder: Occluder): Mesh<BufferGeometry, MeshStandardMaterial> {
   const material = new MeshStandardMaterial({
@@ -742,6 +764,8 @@ function renderResults(): void {
 function resize(): void {
   viewport = { width: stage.clientWidth, height: stage.clientHeight };
   renderer.setSize(viewport.width, viewport.height);
+  skyCamera.aspect = viewport.width / viewport.height;
+  skyCamera.updateProjectionMatrix();
   rig = createRig(viewport.width / viewport.height, viewWidth, config.projection);
   aimRig(rig, cameraTarget, look.pitch, look.yaw);
   renderReadout();
@@ -783,7 +807,6 @@ function syncViews(): void {
 
   cameraTarget.set(player.ship.state.x, 0, player.ship.state.z);
   aimRig(rig, cameraTarget, look.pitch, look.yaw);
-  stars.position.copy(rig.camera.position);
 
   if (config.occlusion === "fade") {
     const inFront = new Set(hiding(player.ship));
@@ -906,5 +929,11 @@ renderer.setAnimationLoop((now: number) => {
   }
   syncViews();
   updateTrial(now);
+  if (sky) {
+    renderer.clear();
+    skyCamera.quaternion.copy(rig.camera.quaternion);
+    renderer.render(sky, skyCamera);
+    renderer.clearDepth();
+  }
   renderer.render(scene, rig.camera);
 });

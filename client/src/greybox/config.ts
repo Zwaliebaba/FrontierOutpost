@@ -8,7 +8,8 @@ import type { Projection } from "./view";
 export const VIEW_WIDTHS = [40, 55, 73] as const;
 export const OCCLUSION_MODES = ["none", "silhouette", "fade"] as const;
 export const VISION_MODES = ["normal", "grey", "protan", "deutan"] as const;
-export const BACKDROPS = ["dark", "bright"] as const;
+/** `stars` is deep space with a star field; `dark` and `bright` are flat colours. */
+export const BACKDROPS = ["stars", "dark", "bright"] as const;
 export const HEIGHT_MODES = ["flat", "varied"] as const;
 
 export interface Config {
@@ -41,7 +42,7 @@ export const DEFAULT_CONFIG: Config = {
   occlusion: "silhouette",
   heights: "flat",
   vision: "normal",
-  backdrop: "dark",
+  backdrop: "stars",
   seed: 1,
   trials: 8,
 };

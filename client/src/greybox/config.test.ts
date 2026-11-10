@@ -7,6 +7,8 @@ describe("greybox config", () => {
     expect(DEFAULT_CONFIG.elevation).toBe(33);
     expect(DEFAULT_CONFIG.scene).toBe("station");
     expect(DEFAULT_CONFIG.projection).toBe("ortho");
+    expect(DEFAULT_CONFIG.backdrop).toBe("stars");
+    expect(parseConfig("?backdrop=dark").backdrop).toBe("dark");
   });
 
   it("lets the tester look around by default without moving the resting view", () => {

@@ -18,17 +18,17 @@ camera. The tester steers one ship with W A S D or the arrow keys.
 The panel changes one variable at a time; every setting is also a URL parameter, so a
 configuration can be shared as a link.
 
-| Setting           | Values                                                         | Tests                                                                |
-| ----------------- | -------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Camera elevation  | 33°, 40°, 45°, 50°                                             | Whether the current 33° view should stand                            |
-| Projection        | orthographic, narrow perspective (20°), wide perspective (45°) | Whether the view needs depth cues that orthographic cannot give      |
-| Look around       | off, hold, free                                                | Whether the tester may orbit the camera, and whether it springs back |
-| View width        | 40, 55, 73 m                                                   | How small a ship may get before it stops being selectable            |
-| Plane cues        | on, off                                                        | Markers under ships, range rings and drop lines                      |
-| Behind structures | none, silhouette, fade                                         | The two occlusion rules the design considered                        |
-| Ship heights      | flat, varied                                                   | Design §5's rule that combat ships render at one height              |
-| Colour vision     | normal, grey, protan, deutan                                   | Whether allegiance survives without colour                           |
-| Backdrop          | dark, bright                                                   | Projectile contrast                                                  |
+| Setting           | Values                                                         | Tests                                                                         |
+| ----------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Camera elevation  | 33°, 40°, 45°, 50°                                             | Whether the current 33° view should stand                                     |
+| Projection        | orthographic, narrow perspective (20°), wide perspective (45°) | Whether the view needs depth cues that orthographic cannot give               |
+| Look around       | off, hold, free                                                | Whether the tester may orbit the camera, and whether it springs back          |
+| View width        | 40, 55, 73 m                                                   | How small a ship may get before it stops being selectable                     |
+| Plane cues        | on, off                                                        | Markers under ships, range rings and drop lines                               |
+| Behind structures | none, silhouette, fade                                         | The two occlusion rules the design considered                                 |
+| Ship heights      | flat, varied                                                   | Design §5's rule that combat ships render at one height                       |
+| Colour vision     | normal, grey, protan, deutan                                   | Whether allegiance survives without colour                                    |
+| Backdrop          | stars, dark, bright                                            | Sense of space when the camera turns; projectile contrast on the flat colours |
 
 ## Looking around
 
@@ -46,6 +46,10 @@ was answered at.
 
 All three projections show the same width at the tester's ship, so on-screen ship size there is
 comparable between them.
+
+The default backdrop is a seeded star field on near-black, drawn at infinity so that it turns
+with the camera and ignores zoom. It is darker than the style guide's background baseline, which
+the `dark` backdrop still shows as a flat colour.
 
 ## What it measures
 
