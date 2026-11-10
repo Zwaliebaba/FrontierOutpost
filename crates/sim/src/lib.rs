@@ -12,6 +12,7 @@ pub mod outcome;
 pub mod profile;
 pub mod rng;
 pub mod ship;
+pub mod site;
 pub mod skirmish;
 pub mod world;
 
