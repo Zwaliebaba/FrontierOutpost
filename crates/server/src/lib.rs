@@ -11,6 +11,7 @@ pub mod http;
 pub mod input_queue;
 pub mod relay;
 pub mod transport;
+pub mod wire;
 
 use frontier_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage};
 
@@ -18,7 +19,11 @@ use frontier_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage};
 #[must_use]
 pub fn handshake(message: &ClientMessage) -> ServerMessage {
     match *message {
-        ClientMessage::Lock { .. } | ClientMessage::Launch => ServerMessage::Rejected {
+        ClientMessage::Lock { .. }
+        | ClientMessage::Launch { .. }
+        | ClientMessage::Extract { .. }
+        | ClientMessage::Vent
+        | ClientMessage::Scan => ServerMessage::Rejected {
             protocol_version: PROTOCOL_VERSION,
             reason: "the first message must be hello".into(),
         },

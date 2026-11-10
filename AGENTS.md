@@ -48,7 +48,10 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace          # also regenerates client/src/protocol/generated/
 cargo run -p frontier-server
 FRONTIER_IMPAIR_DELAY_MS=75 cargo run -p frontier-server   # add delay (and _JITTER_MS, _LOSS_PERCENT)
-FRONTIER_NPCS=24 cargo run -p frontier-server             # skirmish at the NPC cap (frame time shows in the client)
+FRONTIER_SITE=compact cargo run -p frontier-server        # short legs for trying the loop (default: frontier)
+FRONTIER_TIERS=3 cargo run -p frontier-server             # open tiers II and III before facilities exist
+FRONTIER_SEED=29 cargo run -p frontier-server             # every contract on one seed (the e2e tests use 29)
+FRONTIER_NPCS=24 cargo run -p frontier-server             # opening threat at the NPC cap (frame time shows in the client)
 cargo run --release -p frontier-server --example caps     # server tick cost and snapshot size at the caps
 
 # Client

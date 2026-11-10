@@ -12,7 +12,7 @@ import {
   WebGLRenderer,
 } from "three";
 import type { Vector3 } from "three";
-import type { ObstacleInfo } from "../protocol";
+import type { DepositInfo, ObstacleInfo, SiteInfo } from "../protocol";
 import type { EntityPose } from "../net/interpolation";
 import type { Shots } from "./shots";
 import { ExpeditionScene } from "./scene";
@@ -56,8 +56,15 @@ export class ExpeditionView {
     this.world.setOwnShip(id);
   }
 
-  setObstacles(obstacles: readonly ObstacleInfo[]): void {
-    this.world.setObstacles(obstacles);
+  /** Draws a new run's site, dropping the last run's ships. */
+  beginRun(
+    ownShipId: number,
+    site: SiteInfo,
+    obstacles: readonly ObstacleInfo[],
+    deposits: readonly DepositInfo[],
+  ): void {
+    this.world.reset(ownShipId);
+    this.world.setSite(site, obstacles, deposits);
   }
 
   get camera(): CameraRig["camera"] {

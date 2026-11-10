@@ -9,8 +9,8 @@ mod common;
 
 use std::time::{Duration, Instant};
 
-use common::{connect_to, hello, read, start_server};
-use frontier_protocol::ServerMessage;
+use common::{connect_to, hello, read, start_server, write};
+use frontier_protocol::{ClientMessage, ServerMessage};
 use frontier_server::relay::{self, Impairment};
 
 async fn through_relay(impairment: Impairment) -> (url::Url, [u8; 32]) {
@@ -55,6 +55,11 @@ async fn a_session_survives_loss_and_jitter() {
         hello(&mut send, &mut recv).await,
         ServerMessage::Welcome { .. }
     ));
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::Contract { .. }
+    ));
+    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Joined { .. }

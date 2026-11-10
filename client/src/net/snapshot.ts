@@ -2,11 +2,31 @@
  * Decoder for snapshot datagrams. The layout is defined by `frontier_protocol::snapshot`;
  * the tests check this decoder against vectors written by the Rust encoder.
  */
-import type { EntityKind, EntityState, Snapshot, SnapshotEvent } from "../protocol";
+import type {
+  EntityKind,
+  EntityState,
+  ExtractorMode,
+  OwnStatus,
+  RunPhase,
+  Snapshot,
+  SnapshotEvent,
+} from "../protocol";
 
 export const SNAPSHOT_KIND = 1;
-const HEADER_BYTES = 8;
+const HEADER_BYTES = 7;
+const OWN_STATUS_BYTES = 10;
 const ENTITY_BYTES = 14;
+const NO_SCAN = 0xff;
+const PHASES: readonly RunPhase[] = [
+  "atDock",
+  "approach",
+  "objective",
+  "return",
+  "docked",
+  "destroyed",
+  "abandoned",
+];
+const EXTRACTOR_MODES: readonly ExtractorMode[] = ["off", "on", "venting", "cutOut"];
 const EVENT_BYTES = 6;
 const FIRED = 1;
 const DESTROYED = 2;
@@ -27,11 +47,20 @@ export function decodeSnapshot(bytes: Uint8Array): Snapshot {
   if (bytes.length < 1 || view.getUint8(0) !== SNAPSHOT_KIND) {
     throw new SnapshotError("not a snapshot datagram");
   }
-  if (bytes.length < HEADER_BYTES) {
+  if (bytes.length < HEADER_BYTES + OWN_STATUS_BYTES + 1) {
     throw new SnapshotError(`snapshot header is ${String(bytes.length)} bytes`);
   }
-  const count = view.getUint8(7);
-  const eventsAt = HEADER_BYTES + ENTITY_BYTES * count;
+  const own = decodeOwn(view);
+  const depositCount = view.getUint8(HEADER_BYTES + OWN_STATUS_BYTES);
+  const depositsAt = HEADER_BYTES + OWN_STATUS_BYTES + 1;
+  const countAt = depositsAt + depositCount;
+  if (bytes.length <= countAt) {
+    throw new SnapshotError(`snapshot ends in its deposits, at ${String(bytes.length)} bytes`);
+  }
+  const deposits = Array.from(bytes.subarray(depositsAt, countAt));
+  const entitiesAt = countAt + 1;
+  const count = view.getUint8(countAt);
+  const eventsAt = entitiesAt + ENTITY_BYTES * count;
   if (bytes.length <= eventsAt) {
     throw new SnapshotError(
       `snapshot ends before its event count, at ${String(bytes.length)} bytes`,
@@ -46,7 +75,7 @@ export function decodeSnapshot(bytes: Uint8Array): Snapshot {
   }
   const entities: EntityState[] = [];
   for (let i = 0; i < count; i += 1) {
-    const at = HEADER_BYTES + ENTITY_BYTES * i;
+    const at = entitiesAt + ENTITY_BYTES * i;
     const code = view.getUint8(at + 2);
     const kind = ENTITY_KINDS[code];
     if (kind === undefined) throw new SnapshotError(`unknown entity kind ${String(code)}`);
@@ -81,7 +110,37 @@ export function decodeSnapshot(bytes: Uint8Array): Snapshot {
         throw new SnapshotError(`unknown event kind ${String(view.getUint8(at))}`);
     }
   }
-  return { tick: view.getUint32(1, true), inputAck: view.getUint16(5, true), entities, events };
+  return {
+    tick: view.getUint32(1, true),
+    inputAck: view.getUint16(5, true),
+    own,
+    deposits,
+    entities,
+    events,
+  };
+}
+
+function decodeOwn(view: DataView): OwnStatus {
+  const at = HEADER_BYTES;
+  const phase = PHASES[view.getUint8(at)];
+  if (phase === undefined)
+    throw new SnapshotError(`unknown run phase ${String(view.getUint8(at))}`);
+  const extractor = EXTRACTOR_MODES[view.getUint8(at + 4)];
+  if (extractor === undefined) {
+    throw new SnapshotError(`unknown extractor mode ${String(view.getUint8(at + 4))}`);
+  }
+  const scan = view.getUint8(at + 6);
+  return {
+    phase,
+    cargo: view.getUint8(at + 1),
+    capacity: view.getUint8(at + 2),
+    heat: view.getUint8(at + 3),
+    extractor,
+    extractorSeconds: view.getUint8(at + 5),
+    scan: scan === NO_SCAN ? null : scan,
+    alert: view.getUint8(at + 7),
+    elapsedSeconds: view.getUint16(at + 8, true),
+  };
 }
 
 /** Position on the plane in metres. */

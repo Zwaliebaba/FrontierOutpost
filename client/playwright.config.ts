@@ -1,15 +1,35 @@
 import { defineConfig } from "@playwright/test";
 
-// End-to-end tests run the built client (`npm run build`) against the real game server.
+// End-to-end tests run the built client (`npm run build`) against the real game server, on the
+// compact site with a fixed seed: a clear line from the dock to an ore deposit at (64, 1).
 const HTTP_PORT = 8181;
+/** A second server whose runs open with no NPCs, for extraction and docking. */
+const QUIET_PORT = 8182;
+const SEED = "29";
+
+const server = (port: number, extra: Record<string, string>) => ({
+  command: "cargo run --locked -p frontier-server",
+  cwd: "..",
+  url: `http://127.0.0.1:${String(port)}/api/connect`,
+  env: {
+    FRONTIER_HTTP_ADDR: `127.0.0.1:${String(port)}`,
+    FRONTIER_WEBTRANSPORT_ADDR: "127.0.0.1:0",
+    FRONTIER_CLIENT_DIR: "client/dist",
+    FRONTIER_SITE: "compact",
+    FRONTIER_SEED: SEED,
+    ...extra,
+  },
+  reuseExistingServer: false,
+  // The first run compiles the server.
+  timeout: 600_000,
+});
 
 export default defineConfig({
   testDir: "e2e",
   testMatch: "**/*.e2e.ts",
   timeout: 30_000,
-  // Every test joins the one expedition on the shared server, which holds four pilots. Files run
-  // one at a time in name order, and the skirmish's NPCs carry over between them: weapons.e2e.ts
-  // runs last because it draws the drones to the spawn point, where they would pin the next ship.
+  // Each launch is its own instance, so tests do not share NPCs; one worker keeps the load of
+  // software-rendered pages predictable.
   workers: 1,
   reporter: "list",
   use: {
@@ -19,17 +39,5 @@ export default defineConfig({
     launchOptions: { args: ["--no-proxy-server"] },
   },
   projects: [{ name: "chromium", use: { browserName: "chromium" } }],
-  webServer: {
-    command: "cargo run --locked -p frontier-server",
-    cwd: "..",
-    url: `http://127.0.0.1:${String(HTTP_PORT)}/api/connect`,
-    env: {
-      FRONTIER_HTTP_ADDR: `127.0.0.1:${String(HTTP_PORT)}`,
-      FRONTIER_WEBTRANSPORT_ADDR: "127.0.0.1:0",
-      FRONTIER_CLIENT_DIR: "client/dist",
-    },
-    reuseExistingServer: false,
-    // The first run compiles the server.
-    timeout: 600_000,
-  },
+  webServer: [server(HTTP_PORT, {}), server(QUIET_PORT, { FRONTIER_NPCS: "0" })],
 });

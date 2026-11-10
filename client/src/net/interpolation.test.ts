@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { EntityState, Snapshot } from "../protocol";
 import { SnapshotBuffer } from "./interpolation";
+import type { OwnStatus } from "../protocol";
+
+const IDLE: OwnStatus = {
+  phase: "atDock",
+  cargo: 0,
+  capacity: 0,
+  heat: 0,
+  extractor: "off",
+  extractorSeconds: 0,
+  scan: null,
+  alert: 0,
+  elapsedSeconds: 0,
+};
 
 const TICK_RATE = 20;
 
@@ -16,7 +29,7 @@ function snapshot(tick: number, x: number, vx = 0, heading = 0): Snapshot {
     vz: 0,
     hull: 255,
   };
-  return { tick, inputAck: 0, entities: [ship], events: [] };
+  return { tick, inputAck: 0, own: IDLE, deposits: [], entities: [ship], events: [] };
 }
 
 /** Pushes ticks 100.. with the ship at 0, 1, 2, ... m, each arriving `latency` ms late. */

@@ -4,16 +4,23 @@
  */
 import {
   BoxGeometry,
+  CylinderGeometry,
   DirectionalLight,
+  EdgesGeometry,
+  Group,
   HemisphereLight,
   IcosahedronGeometry,
+  LineBasicMaterial,
+  LineSegments,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  OctahedronGeometry,
   Scene,
+  TorusGeometry,
 } from "three";
-import type { Group } from "three";
-import type { EntityKind, ObstacleInfo } from "../protocol";
+import type { Material as ThreeMaterial, Object3D } from "three";
+import type { DepositInfo, EntityKind, Material, ObstacleInfo, SiteInfo } from "../protocol";
 import type { EntityPose } from "../net/interpolation";
 import type { Shots } from "./shots";
 import { SHIP_HEIGHT } from "../view/hulls";
@@ -42,6 +49,25 @@ export const SIZE: Readonly<Record<EntityKind, number>> = {
 const BLAST = linear(1, 0.6, 0.2);
 const LANDMARK_SEED = 2266;
 
+/**
+ * Deposit crystals by material. None is orange or cyan, the signal colours, and each also has
+ * its own shape count, so material never rests on colour alone.
+ */
+const DEPOSIT: Readonly<Record<Material, { colour: ReturnType<typeof linear>; crystals: number }>> =
+  {
+    ore: { colour: linear(0.62, 0.5, 0.26), crystals: 3 },
+    salvage: { colour: linear(0.42, 0.44, 0.46), crystals: 2 },
+    volatiles: { colour: linear(0.45, 0.22, 0.62), crystals: 4 },
+  };
+const BEACON = linear(0.55, 0.62, 0.7);
+const STATION = linear(0.095, 0.135, 0.19);
+
+interface DrawnDeposit {
+  group: Group;
+  units: number;
+  material: MeshStandardMaterial;
+}
+
 /** Other pilots are allies; every NPC is hostile in Stage 1. */
 export function allegianceOf(kind: EntityKind, own: boolean): Allegiance {
   if (kind !== "playerShip") return "hostile";
@@ -60,6 +86,9 @@ export class ExpeditionScene {
   readonly #bolts: Mesh<BoxGeometry, MeshBasicMaterial>[] = [];
   readonly #blasts: Mesh<IcosahedronGeometry, MeshBasicMaterial>[] = [];
   readonly #obstacles: Mesh[] = [];
+  readonly #site = new Group();
+  readonly #pockets: Group[] = [];
+  readonly #deposits: DrawnDeposit[] = [];
   #ownShipId: number;
 
   constructor(ownShipId: number) {
@@ -69,7 +98,14 @@ export class ExpeditionScene {
     starlight.position.set(-4, 10, 6);
     this.scene.add(starlight);
     this.#bracket.visible = false;
-    this.scene.add(this.#bracket);
+    this.scene.add(this.#bracket, this.#site);
+  }
+
+  /** Drops every ship: a new run's instance numbers its ships afresh. */
+  reset(ownShipId: number): void {
+    for (const [id, drawn] of this.#ships) this.#remove(id, drawn);
+    this.#ownShipId = ownShipId;
+    this.#bracket.visible = false;
   }
 
   /** The player's ship after a relaunch; ships are redrawn if their allegiance changed. */
@@ -97,7 +133,7 @@ export class ExpeditionScene {
       seen.add(pose.id);
       const allegiance = allegianceOf(pose.kind, pose.id === this.#ownShipId);
       let drawn = this.#ships.get(pose.id);
-      if (drawn && drawn.allegiance !== allegiance) {
+      if (drawn && (drawn.allegiance !== allegiance || drawn.kind !== pose.kind)) {
         this.#remove(pose.id, drawn);
         drawn = undefined;
       }
@@ -173,25 +209,138 @@ export class ExpeditionScene {
     });
   }
 
+  get pockets(): readonly Group[] {
+    return this.#pockets;
+  }
+
+  /** Scale of each deposit's crystals, for tests. */
+  get depositScales(): number[] {
+    return this.#deposits.map((deposit) => deposit.group.scale.x);
+  }
+
   /**
-   * Draws the expedition's obstacles. They come from the server, which collides ships with them;
-   * only their tilt and depth below the plane are decoration. They are structures: a ship behind
+   * Draws a run's site in place of the last one: its obstacles, dock, pocket beacons and
+   * deposits. Obstacles come from the server, which collides ships with them; only their tilt
+   * and depth below the plane are decoration. They and the dock are structures: a ship behind
    * one shows as a silhouette.
    */
-  setObstacles(obstacles: readonly ObstacleInfo[]): void {
+  setSite(site: SiteInfo, obstacles: readonly ObstacleInfo[], deposits: readonly DepositInfo[]) {
+    this.#clearSite();
     const rng = createRng(LANDMARK_SEED);
-    const material = new MeshStandardMaterial({
+    const rockMaterial = new MeshStandardMaterial({
       color: linear(0.1, 0.12, 0.15),
       roughness: 0.95,
       flatShading: true,
       ...STRUCTURE_STENCIL,
     });
     for (const obstacle of obstacles) {
-      const rock = new Mesh(new IcosahedronGeometry(obstacle.radius, 1), material);
+      const rock = new Mesh(new IcosahedronGeometry(obstacle.radius, 1), rockMaterial);
       rock.position.set(obstacle.x, between(rng, -obstacle.radius, 0) * 0.5, obstacle.z);
       rock.rotation.set(between(rng, 0, 6), between(rng, 0, 6), 0);
-      this.scene.add(rock);
+      this.#site.add(rock);
       this.#obstacles.push(rock);
     }
+    this.#site.add(station(site.dockX, site.dockZ));
+    for (const pocket of site.pockets) {
+      const beacon = pocketBeacon(pocket.locked);
+      beacon.position.set(pocket.x, 0, pocket.z);
+      beacon.name = pocket.kind;
+      this.#site.add(beacon);
+      this.#pockets.push(beacon);
+    }
+    for (const deposit of deposits) {
+      const look = DEPOSIT[deposit.material];
+      const material = new MeshStandardMaterial({
+        color: look.colour,
+        emissive: look.colour,
+        emissiveIntensity: 0.35,
+        roughness: 0.4,
+        flatShading: true,
+      });
+      const group = new Group();
+      for (let i = 0; i < look.crystals; i += 1) {
+        const crystal = new Mesh(new OctahedronGeometry(0.9 - i * 0.12), material);
+        const angle = (i / look.crystals) * Math.PI * 2;
+        crystal.position.set(Math.cos(angle) * 0.9, 0.2 + i * 0.25, Math.sin(angle) * 0.9);
+        crystal.scale.set(0.7, 1.6, 0.7);
+        group.add(crystal);
+      }
+      group.position.set(deposit.x, 0, deposit.z);
+      this.#site.add(group);
+      this.#deposits.push({ group, units: deposit.units, material });
+    }
   }
+
+  /** Shrinks each deposit's crystals with what is left in it; an empty one goes dark. */
+  setDeposits(units: readonly number[]): void {
+    this.#deposits.forEach((deposit, index) => {
+      const left = units[index] ?? deposit.units;
+      const share = deposit.units > 0 ? Math.min(1, left / deposit.units) : 0;
+      deposit.group.scale.setScalar(left > 0 ? 0.45 + 0.55 * share : 0.35);
+      deposit.material.emissiveIntensity = left > 0 ? 0.35 : 0;
+    });
+  }
+
+  #clearSite(): void {
+    const materials = new Set<ThreeMaterial>();
+    this.#site.traverse((node: Object3D) => {
+      if (node instanceof Mesh || node instanceof LineSegments) {
+        (node.geometry as { dispose(): void }).dispose();
+        const material = node.material as ThreeMaterial | ThreeMaterial[];
+        for (const m of Array.isArray(material) ? material : [material]) materials.add(m);
+      }
+    });
+    for (const material of materials) material.dispose();
+    this.#site.clear();
+    this.#obstacles.length = 0;
+    this.#pockets.length = 0;
+    this.#deposits.length = 0;
+  }
+}
+
+/** The pilots' home berth: a hub and a docking ring, drawn as a structure. */
+function station(x: number, z: number): Group {
+  const material = new MeshStandardMaterial({
+    color: STATION,
+    roughness: 0.5,
+    metalness: 0.6,
+    flatShading: true,
+    ...STRUCTURE_STENCIL,
+  });
+  const group = new Group();
+  const hub = new Mesh(new CylinderGeometry(4, 5, 6, 12), material);
+  hub.position.y = -3.5;
+  const ring = new Mesh(new TorusGeometry(10, 0.8, 8, 32).rotateX(Math.PI / 2), material);
+  ring.position.y = -1.5;
+  group.add(hub, ring);
+  group.position.set(x, 0, z);
+  group.name = "dock";
+  return group;
+}
+
+/**
+ * A pocket's beacon: a mast topped with a crystal when the pocket is open, and with a cage when
+ * it is locked, so its state reads by shape as well as by its label.
+ */
+function pocketBeacon(locked: boolean): Group {
+  const material = new MeshBasicMaterial({ color: BEACON });
+  const group = new Group();
+  const mast = new Mesh(new CylinderGeometry(0.25, 0.35, 8, 6), material);
+  mast.position.y = 4;
+  group.add(mast);
+  if (locked) {
+    const cage = new LineSegments(
+      new EdgesGeometry(new BoxGeometry(2.6, 2.6, 2.6)),
+      new LineBasicMaterial({ color: BEACON }),
+    );
+    cage.position.y = 9.3;
+    cage.name = "locked";
+    group.add(cage);
+  } else {
+    const top = new Mesh(new OctahedronGeometry(1.4), material);
+    top.position.y = 9.4;
+    top.name = "open";
+    group.add(top);
+  }
+  return group;
 }

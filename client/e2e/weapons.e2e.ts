@@ -1,11 +1,12 @@
-import { expect, test } from "./fixtures";
+import { expect, flyUntilLocked, launch, test } from "./fixtures";
 
 test("holding Space damages the locked hostile", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.locator("#hud")).toHaveAttribute("data-x", /.+/);
+  test.setTimeout(60_000);
+  await launch(page);
+  await flyUntilLocked(page);
   const lock = page.locator("#lock");
 
-  // The skirmish's drones notice the pilot and close in; wait until one is in range.
+  // The ore field's NPCs notice the pilot and close in; wait until one is in range.
   await expect(async () => {
     await page.keyboard.press("Tab");
     await expect(lock).toContainText("in range", { timeout: 500 });
@@ -23,19 +24,22 @@ test("holding Space damages the locked hostile", async ({ page }) => {
   await page.keyboard.up("Space");
 });
 
-test("a destroyed pilot is sent home and can launch again", async ({ page }) => {
-  // The skirmish has to find and destroy an idle pilot.
-  test.setTimeout(90_000);
-  await page.goto("/");
-  const hud = page.locator("#hud");
-  await expect(hud).toHaveAttribute("data-ship", /\d+/);
-  const first = await hud.getAttribute("data-ship");
+test("a destroyed pilot sees what was lost and can take the next contract", async ({ page }) => {
+  // The ore field's NPCs have to find and destroy an idle pilot.
+  test.setTimeout(120_000);
+  await launch(page);
+  // Toward the ore field, then idle among its NPCs.
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(12_000);
+  await page.keyboard.up("KeyW");
 
-  const destroyed = page.locator("#destroyed");
-  await expect(destroyed).toHaveAttribute("data-state", "home", { timeout: 75_000 });
-  await expect(destroyed).toContainText("Destroyed, returned home");
+  const summary = page.locator("#summary");
+  await expect(summary).toHaveAttribute("data-ending", "destroyed", { timeout: 90_000 });
+  await expect(summary).toContainText("Destroyed. Returned home");
+  await expect(summary).toContainText("net −40 cr");
 
-  await destroyed.getByRole("button", { name: "Launch" }).click();
-  await expect(destroyed).not.toHaveAttribute("data-state", "home");
-  await expect(hud).not.toHaveAttribute("data-ship", first ?? "");
+  await summary.getByRole("button", { name: "Next contract" }).click();
+  await expect(summary).not.toHaveAttribute("data-ending");
+  await page.locator('#briefing[data-state="open"] button[data-tier="1"]').click();
+  await expect(page.locator("#run")).toHaveAttribute("data-phase", "atDock");
 });

@@ -1,18 +1,21 @@
-import { expect, test } from "./fixtures";
+import { expect, flyUntilLocked, launch, test } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 test("Tab locks the nearest hostile and Escape releases it", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.locator("#hud")).toHaveAttribute("data-x", /.+/);
+  test.setTimeout(60_000);
+  await launch(page);
+  await flyUntilLocked(page);
+  await page.keyboard.press("Escape");
   const lock = page.locator("#lock");
 
   await page.keyboard.press("Tab");
   await expect(lock).toHaveAttribute("data-target", /\d+/);
   await expect(lock).toContainText(/Locked: (Drone|Raider|Warden) \d+/);
-  const first = await lock.getAttribute("data-target");
 
+  // Tab again moves to the next hostile in range, or keeps the only one (cycling order is
+  // covered by selection.test.ts).
   await page.keyboard.press("Tab");
-  await expect(lock).not.toHaveAttribute("data-target", first ?? "");
+  await expect(lock).toHaveAttribute("data-target", /\d+/);
 
   await page.keyboard.press("Escape");
   await expect(lock).toBeEmpty();
@@ -56,8 +59,11 @@ async function bracketPixels(page: Page): Promise<number> {
 }
 
 test("the real renderer has a stencil for silhouettes and brackets the lock", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.locator("#hud")).toHaveAttribute("data-x", /.+/);
+  test.setTimeout(60_000);
+  await launch(page);
+  await flyUntilLocked(page);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
   // Silhouettes behind structures need a stencil buffer in the real renderer.
   const stencil = await page.evaluate(
     () => document.querySelector("canvas")?.getContext("webgl2")?.getContextAttributes()?.stencil,

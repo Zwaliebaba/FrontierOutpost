@@ -4,21 +4,60 @@
 //! carries framed JSON messages ([`frontier_protocol::frame`]). The first
 //! client message must be `Hello`; the server answers with [`handshake`].
 
+use std::hash::{BuildHasher, RandomState};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use frontier_protocol::input::InputDatagram;
 use frontier_protocol::{ClientMessage, ServerMessage, frame};
-use frontier_sim::TICKS_PER_SECOND;
+use frontier_sim::run::Options;
+use frontier_sim::site::{FRONTIER_SITE, SiteTemplate, ThreatTier};
 use frontier_sim::world::ShipId;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 use web_transport_quinn::{RecvStream, SendStream, Server, Session, crypto, quinn};
 
 use crate::cert::DevCertificate;
-use crate::expedition::{Expedition, PilotEvent};
-use crate::handshake;
+use crate::expedition::{Expedition, LaunchOrder, PilotEvent};
+use crate::{handshake, wire};
+
+/// What the server offers every pilot, and how runs launch.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Settings {
+    /// The site every contract offers.
+    pub template: SiteTemplate,
+    /// Tiers a pilot may choose, up to 3. Tiers open with facilities (design
+    /// section 10), which arrive in plan M5; until then this is a switch.
+    pub open_tiers: u32,
+    /// A fixed seed for every contract, for tests; random otherwise.
+    pub seed: Option<u32>,
+    /// Replaces the opening threat, for benchmarks.
+    pub opening_threat: Option<u32>,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            template: FRONTIER_SITE,
+            open_tiers: 1,
+            seed: None,
+            opening_threat: None,
+        }
+    }
+}
+
+impl Settings {
+    fn next_seed(&self) -> u32 {
+        // A per-process random hasher of a varying value: a seed nobody can guess.
+        self.seed.unwrap_or_else(|| {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |since| since.as_nanos());
+            RandomState::new().hash_one(nanos) as u32
+        })
+    }
+}
 
 /// Why a session ended other than by the client leaving normally.
 #[derive(Debug, thiserror::Error)]
@@ -41,10 +80,6 @@ pub enum SessionError {
 const PROTOCOL_VIOLATION: u32 = 1;
 /// Session close code for a client whose protocol version is not supported.
 const VERSION_REJECTED: u32 = 2;
-/// Session close code when the expedition has no room.
-const EXPEDITION_FULL: u32 = 3;
-/// How long the server waits for a turned-away client to close the session itself.
-const PARTING_GRACE: Duration = Duration::from_secs(2);
 
 /// How long a session may go silent before the server drops it. A pilot's
 /// client sends inputs 20 times a second, so only a client that has gone away
@@ -100,17 +135,15 @@ pub fn bind_with_idle_timeout(
     Ok(Server::new(quinn::Endpoint::server(config, addr)?))
 }
 
-/// Accepts sessions until the endpoint is closed, running each on its own
-/// task and joining it to `expedition`.
-pub async fn serve(mut server: Server, expedition: Expedition) {
+/// Accepts sessions until the endpoint is closed, running each on its own task.
+pub async fn serve(mut server: Server, settings: Settings) {
     while let Some(request) = server.accept().await {
         let peer = request.conn().remote_address();
-        let expedition = expedition.clone();
         tokio::spawn(async move {
             match request.ok().await {
                 Ok(session) => {
                     info!(%peer, "session opened");
-                    match run_session(&session, &expedition).await {
+                    match run_session(&session, settings).await {
                         Ok(()) => info!(%peer, "session closed"),
                         Err(error) => {
                             warn!(%peer, %error, "session ended");
@@ -124,7 +157,7 @@ pub async fn serve(mut server: Server, expedition: Expedition) {
     }
 }
 
-async fn run_session(session: &Session, expedition: &Expedition) -> Result<(), SessionError> {
+async fn run_session(session: &Session, settings: Settings) -> Result<(), SessionError> {
     let (mut send, mut recv) = session.accept_bi().await?;
     let hello: ClientMessage = read_frame(&mut recv).await?;
     let reply = handshake(&hello);
@@ -136,63 +169,60 @@ async fn run_session(session: &Session, expedition: &Expedition) -> Result<(), S
     }
 
     let (events_tx, events) = mpsc::unbounded_channel();
-    let Some(ship) = expedition.join(session.clone(), events_tx.clone()).await else {
-        write_frame(&mut send, &ServerMessage::ExpeditionFull).await?;
-        let _ = send.finish();
-        // Closing at once can discard the message before it arrives, so give the
-        // client a moment to read it and close first.
-        let _ = tokio::time::timeout(PARTING_GRACE, session.closed()).await;
-        session.close(EXPEDITION_FULL, b"expedition full");
-        return Ok(());
-    };
-    write_frame(&mut send, &joined(expedition, ship)).await?;
     let mut pilot = Pilot {
         session,
-        expedition,
+        settings,
         send,
-        ship: Some(ship),
         events_tx,
+        flying: None,
+        seed: 0,
+        offered_at: Instant::now(),
+        home_since: None,
     };
+    pilot.offer().await?;
     let result = pilot.fly(recv, events).await;
-    if let Some(ship) = pilot.ship {
-        expedition.leave(ship);
+    match &pilot.flying {
+        Some((expedition, ship)) => expedition.leave(*ship),
+        None => pilot.log_unloading(),
     }
     result
 }
 
-fn joined(expedition: &Expedition, ship: ShipId) -> ServerMessage {
-    ServerMessage::Joined {
-        ship_id: ship.0,
-        tick_rate: TICKS_PER_SECOND,
-        obstacles: expedition
-            .obstacles()
-            .iter()
-            .map(|o| frontier_protocol::ObstacleInfo {
-                x: o.x,
-                z: o.z,
-                radius: o.radius,
-            })
-            .collect(),
-        weapon_range: frontier_sim::profile::ShipKind::Pilot
-            .profile()
-            .weapon
-            .range,
-    }
-}
-
-/// One connected pilot, in the expedition or at home after being destroyed.
+/// One connected pilot: at home with a contract on offer, or flying a run.
 struct Pilot<'a> {
     session: &'a Session,
-    expedition: &'a Expedition,
+    settings: Settings,
     send: SendStream,
-    /// The ship being flown, or `None` while the pilot is home.
-    ship: Option<ShipId>,
     events_tx: mpsc::UnboundedSender<PilotEvent>,
+    /// The run being flown and the pilot's ship in it.
+    flying: Option<(Expedition, ShipId)>,
+    /// The seed of the contract on offer.
+    seed: u32,
+    /// When the contract was offered: preparation starts here.
+    offered_at: Instant,
+    /// When the pilot's last run ended: unloading starts here.
+    home_since: Option<Instant>,
 }
 
 impl Pilot<'_> {
-    /// Passes the pilot's datagrams and control messages to the expedition,
-    /// and the expedition's news to the pilot, until the session ends.
+    /// Offers a new contract.
+    async fn offer(&mut self) -> Result<(), SessionError> {
+        self.seed = self.settings.next_seed();
+        self.offered_at = Instant::now();
+        let contract = wire::contract(self.settings.template, self.seed, self.settings.open_tiers);
+        write_frame(&mut self.send, &contract).await
+    }
+
+    /// Logs the time since the last run ended: design section 2's unloading
+    /// and decisions, which in Stage 1's first build runs into preparation.
+    fn log_unloading(&mut self) {
+        if let Some(since) = self.home_since.take() {
+            info!(target: "frontier::run", seconds = since.elapsed().as_secs(), "unloading");
+        }
+    }
+
+    /// Passes the pilot's datagrams and control messages to their run, and the
+    /// run's news to the pilot, until the session ends.
     async fn fly(
         &mut self,
         mut recv: RecvStream,
@@ -214,9 +244,9 @@ impl Pilot<'_> {
         loop {
             tokio::select! {
                 datagram = self.session.read_datagram() => match datagram {
-                    Ok(bytes) => match (InputDatagram::decode(&bytes), self.ship) {
-                        (Ok(input), Some(ship)) => self.expedition.input(ship, input),
-                        // Inputs sent while at home, after destruction, go nowhere.
+                    Ok(bytes) => match (InputDatagram::decode(&bytes), &self.flying) {
+                        (Ok(input), Some((expedition, ship))) => expedition.input(*ship, input),
+                        // Inputs sent from home go nowhere.
                         (Ok(_), None) => {}
                         // A malformed datagram is dropped, as a lost one would be.
                         (Err(error), _) => debug!(%error, "datagram ignored"),
@@ -231,13 +261,12 @@ impl Pilot<'_> {
                     Some(Err(error)) => return Err(error),
                 },
                 Some(event) = events.recv() => match event {
-                    PilotEvent::Destroyed { lost } => {
-                        self.ship = None;
-                        let message = ServerMessage::Destroyed {
-                            modules_lost: lost.upgraded_modules,
-                            cargo_lost: lost.cargo,
-                        };
-                        write_frame(&mut self.send, &message).await?;
+                    PilotEvent::Message(message) => write_frame(&mut self.send, &message).await?,
+                    PilotEvent::RunOver(summary) => {
+                        self.flying = None;
+                        self.home_since = Some(Instant::now());
+                        write_frame(&mut self.send, &ServerMessage::RunOver { summary }).await?;
+                        self.offer().await?;
                     }
                 },
                 _ = self.session.closed() => return Ok(()),
@@ -246,30 +275,57 @@ impl Pilot<'_> {
     }
 
     async fn handle(&mut self, message: ClientMessage) -> Result<(), SessionError> {
-        match (message, self.ship) {
-            (ClientMessage::Lock { target }, Some(ship)) => {
-                self.expedition.lock(ship, target.map(ShipId));
+        let flying = self.flying.as_ref().map(|(e, s)| (e.clone(), *s));
+        match (message, flying) {
+            (ClientMessage::Launch { tier }, None) => self.launch(tier).await?,
+            (ClientMessage::Lock { target }, Some((expedition, ship))) => {
+                expedition.lock(ship, target.map(ShipId));
             }
-            // A lock sent just before destruction arrives too late to matter.
-            (ClientMessage::Lock { .. }, None) => {}
-            (ClientMessage::Launch, None) => {
-                let rejoined = self
-                    .expedition
-                    .join(self.session.clone(), self.events_tx.clone())
-                    .await;
-                match rejoined {
-                    Some(ship) => {
-                        self.ship = Some(ship);
-                        write_frame(&mut self.send, &joined(self.expedition, ship)).await?;
-                    }
-                    // Someone took the place while this pilot was home.
-                    None => write_frame(&mut self.send, &ServerMessage::ExpeditionFull).await?,
-                }
+            (ClientMessage::Extract { on }, Some((expedition, ship))) => {
+                expedition.extract(ship, on);
             }
-            (ClientMessage::Launch, Some(_)) | (ClientMessage::Hello { .. }, _) => {
+            (ClientMessage::Vent, Some((expedition, ship))) => expedition.vent(ship),
+            (ClientMessage::Scan, Some((expedition, ship))) => expedition.scan(ship),
+            // Actions sent just as a run ends arrive too late to matter.
+            (
+                ClientMessage::Lock { .. }
+                | ClientMessage::Extract { .. }
+                | ClientMessage::Vent
+                | ClientMessage::Scan,
+                None,
+            ) => {}
+            (ClientMessage::Launch { .. }, Some(_)) | (ClientMessage::Hello { .. }, _) => {
                 return Err(SessionError::Unexpected);
             }
         }
+        Ok(())
+    }
+
+    async fn launch(&mut self, tier: u32) -> Result<(), SessionError> {
+        let Some(tier) =
+            ThreatTier::from_number(tier).filter(|tier| tier.number() <= self.settings.open_tiers)
+        else {
+            let reason = format!("tier {tier} is not open");
+            return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
+        };
+        self.log_unloading();
+        info!(
+            target: "frontier::run",
+            run = self.seed,
+            seconds = self.offered_at.elapsed().as_secs(),
+            "preparation"
+        );
+        let order = LaunchOrder {
+            template: self.settings.template,
+            seed: self.seed,
+            tier,
+            options: Options {
+                opening_threat: self.settings.opening_threat,
+            },
+        };
+        let launched = Expedition::launch(order, self.session.clone(), self.events_tx.clone());
+        write_frame(&mut self.send, &launched.joined).await?;
+        self.flying = Some((launched.expedition, launched.ship));
         Ok(())
     }
 }

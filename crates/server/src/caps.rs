@@ -2,13 +2,18 @@
 //! 2.6): four pilots, 24 NPCs and enough fire to keep 64 projectiles in
 //! flight. The snapshot-size test and the `caps` benchmark both run it.
 
-use frontier_protocol::snapshot::SnapshotError;
+use frontier_protocol::snapshot::{OwnStatus, SnapshotError};
 use frontier_sim::collision::asteroid_field;
 use frontier_sim::profile::ShipKind;
 use frontier_sim::skirmish::{MAX_NPCS, Skirmish};
 use frontier_sim::world::{ShipId, World};
 
-use crate::expedition::{ASTEROID_SEED, MAX_PILOTS, snapshot};
+use crate::expedition::{MAX_PILOTS, snapshot};
+
+/// Seed of the benchmark's asteroid field.
+const ASTEROID_SEED: u32 = 2266;
+/// Deposits a snapshot reports when every pocket is open: 5 + 3 + 3.
+const DEPOSITS: usize = 11;
 
 /// A full expedition in which every pilot keeps firing at the nearest hostile.
 /// Destroyed pilots and NPCs are replaced at once, so it stays full.
@@ -66,7 +71,7 @@ impl Caps {
         }
         self.skirmish.step(world);
         world.step();
-        snapshot(world, 0).encode()
+        snapshot(world, 0, OwnStatus::IDLE, vec![20; DEPOSITS]).encode()
     }
 }
 
