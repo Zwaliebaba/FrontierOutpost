@@ -169,7 +169,7 @@ Stage 1 requires persistent home/account saves and authoritative cooperative ses
 | Loss of cargo and upgraded modules; reconnect within a grace window | Cross-session suspend and checkpoints, PvP, territory |
 | Mouse and keyboard on desktop | Touch controls and tablet layout; gamepad is not planned at any stage |
 
-**Stage 1 gate measures.** Playtests use about eight invited testers who have not seen the game, in person or on the owner's network. The thresholds below are provisional starting figures from the Revision 3 review and are confirmed before the first playtest.
+**Stage 1 gate measures.** Playtests use about eight invited testers who have not seen the game, on machines the owner provides. The thresholds below are provisional starting figures from the Revision 3 review and are confirmed before the first playtest.
 
 1. *Outpost enhancements change expedition decisions.* Among players with the same unlocks, active layouts differ; on the same seed, layout predicts pocket and rig choice; reconfigurations per ten runs are neither zero nor one per run. Testers shown before-and-after overview images can say what changed and what it lets them do. Provisionally, at least half of testers reconfigure at least once in three sessions.
 2. *Angled-view targeting stays readable.* In greybox scenes that include the real station silhouette: time to select a named hostile, wrong-target rate, and judgement of heading and of which target is nearer, repeated in greyscale and under simulated colour-vision deficiency. Provisionally: a median of at most 1 second to select, at most 5% selection errors, heading judged within 22.5° at least 90% of the time, and the nearer target chosen at least 85% of the time.

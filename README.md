@@ -16,6 +16,7 @@ scene, and a minimal code skeleton with CI. No gameplay is implemented yet.
 ## Documents
 
 - [Game design](Design/FrontierOutpost.md)
+- [Stage 1 implementation plan](Design/Stage1-Plan.md)
 - [Visual style guide](Design/Visual-Style-Guide.md)
 - [Outpost scene](Design/FrontierOutpost/README.md)
 - [Contributor and agent guide](AGENTS.md): layout, commands, architecture rules, code standards
@@ -37,3 +38,7 @@ cd client
 npm ci
 npm run dev
 ```
+
+## Licence
+
+All rights reserved. See [LICENSE](LICENSE).

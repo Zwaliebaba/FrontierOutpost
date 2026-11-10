@@ -9,6 +9,7 @@ multiplayer isometric space game with an authoritative Rust server and an HTML5 
 | Document | Governs |
 | --- | --- |
 | [Design/FrontierOutpost.md](Design/FrontierOutpost.md) | Game design: scope, rules, delivery gates. |
+| [Design/Stage1-Plan.md](Design/Stage1-Plan.md) | Build order, work items and checkpoints for Stage 1. |
 | [Design/Visual-Style-Guide.md](Design/Visual-Style-Guide.md) | Art direction, material baselines, camera, scene structure. |
 | [Design/FrontierOutpost/](Design/FrontierOutpost/README.md) | The reference Blender scene, its generator, GLB exports and manifest. |
 
@@ -134,13 +135,12 @@ change ships with a test. Keep comments for the *why*.
 
 ## 8. Open decisions — ask, don't assume
 
-- HTTP framework for serving the client and anything else that needs plain HTTPS (none chosen
-  yet).
-- Project license (none yet). Needed before invited testers see a build.
+None at present. New ones are added here.
 
 Decided:
 
-- Server async runtime: Tokio.
+- Server async runtime: Tokio. HTTP framework: axum, inside the game server, serving the built
+  client.
 - Network transport: WebTransport, served by quinn and `web-transport-quinn`, with no fallback.
   `spikes/webtransport` confirms it in Chromium; Firefox and Safari have not been run.
 - Wire format: JSON on reliable streams for everything except snapshots, which are compact binary
@@ -148,5 +148,7 @@ Decided:
 - Identity: passkeys (WebAuthn).
 - Persistence: embedded SQLite, with an append-only ledger beside the saves. Stage 1 data may be
   wiped; saves are still versioned.
-- Hosting for Stage 1: the owner's machine. Testers play in person or on the same network.
+- Prediction: the browser runs `frontier-sim`'s movement rules compiled to WebAssembly.
+- Hosting for Stage 1: the owner's machine. Testers play on machines the owner provides.
+- Licence: all rights reserved for now (`LICENSE`).
 - Art for Stage 1: sockets and facility modules come from `create_scene.py`, not primitives.
