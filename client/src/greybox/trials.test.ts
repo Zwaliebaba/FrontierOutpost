@@ -8,7 +8,16 @@ const record = (
   outcome: TrialRecord["outcome"],
   ms = 800,
   value: number | null = null,
-): TrialRecord => ({ kind, outcome, ms, value, occluded: false });
+): TrialRecord => ({
+  kind,
+  outcome,
+  ms,
+  value,
+  occluded: false,
+  cameraYawDeg: 0,
+  cameraPitchDeg: 33,
+  viewWidth: 40,
+});
 
 describe("greybox trials", () => {
   it("measures heading error on the plane, in either direction", () => {

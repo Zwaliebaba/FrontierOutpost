@@ -1,6 +1,8 @@
 import {
   AlwaysStencilFunc,
   BoxGeometry,
+  BufferAttribute,
+  BufferGeometry,
   Color,
   CylinderGeometry,
   DirectionalLight,
@@ -16,6 +18,9 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  PerspectiveCamera,
+  Points,
+  PointsMaterial,
   ReplaceStencilOp,
   RingGeometry,
   Scene,
@@ -23,7 +28,6 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import type { BufferGeometry } from "three";
 import {
   BACKDROPS,
   HEIGHT_MODES,
@@ -35,11 +39,14 @@ import {
 } from "./config";
 import type { Config } from "./config";
 import type { ShipInput } from "./kinematics";
-import { occludersHiding } from "./occlusion";
+import { LOOK_MODES, dragLook, isHome, settleLook, turnLook, zoomWidth } from "./look";
+import type { LookState } from "./look";
+import { centreOf, firstHit, occludersHiding } from "./occlusion";
 import type { Occluder } from "./occlusion";
-import { pickNearest, screenToPlane, worldToScreen } from "./picking";
+import { pickNearest, screenRay, screenToPlane, worldToScreen } from "./picking";
 import type { PickCandidate, ScreenPoint } from "./picking";
 import { createRng } from "./rng";
+import { createStarField } from "./sky";
 import { MAX_BOLTS, SCENE_IDS, SCENE_LABELS, createWorld, stepWorld } from "./scenarios";
 import type { Allegiance, Ship } from "./scenarios";
 import {
@@ -53,11 +60,13 @@ import {
 import type { TrialKind, TrialRecord } from "./trials";
 import {
   ELEVATIONS,
-  createGreyboxCamera,
+  PROJECTIONS,
+  aimRig,
+  createRig,
   hiddenDepthBehind,
   pixelsPerMetre,
   planeDepthScale,
-  viewDirectionAtElevation,
+  towardCamera,
 } from "./view";
 
 // Starter frigate bounds from `scene_manifest.json` (docking_validation), in metres.
@@ -126,18 +135,58 @@ renderer.domElement.style.filter = {
 }[config.vision];
 
 const scene = new Scene();
-scene.background =
-  config.backdrop === "bright" ? linear(0.42, 0.5, 0.6) : linear(0.035, 0.06, 0.11);
+if (config.backdrop !== "stars") {
+  scene.background =
+    config.backdrop === "bright" ? linear(0.42, 0.5, 0.6) : linear(0.035, 0.06, 0.11);
+}
 scene.add(new HemisphereLight(linear(0.3, 0.48, 1), linear(0.025, 0.038, 0.055), 0.6));
 const starlight = new DirectionalLight(linear(0.67, 0.77, 1), 2.4);
 starlight.position.set(-4, 10, 6);
 scene.add(starlight);
 
 const world = createWorld(config.scene, config.seed, config.heights);
-const viewDirection = viewDirectionAtElevation(config.elevation);
 const cameraTarget = new Vector3();
 let viewport = { width: 1, height: 1 };
-let camera = createGreyboxCamera(1, config.width, config.elevation, cameraTarget);
+// The configured width is where the view starts; the wheel zooms from there.
+let viewWidth: number = config.width;
+let rig = createRig(1, viewWidth, config.projection);
+// The tactical view is where the camera rests; `look` is where the tester has turned it.
+const homeLook: LookState = { yaw: 0, pitch: config.elevation };
+let look: LookState = { ...homeLook };
+aimRig(rig, cameraTarget, look.pitch, look.yaw);
+
+// The star backdrop is at infinity: it is drawn first, through its own perspective camera that
+// only copies the main camera's orientation. That keeps it behaving like a sky in both the
+// orthographic and the perspective view, and unaffected by zoom.
+const SKY_FOV = 50;
+const sky = config.backdrop === "stars" ? new Scene() : null;
+const skyCamera = new PerspectiveCamera(SKY_FOV, 1, 0.1, 10);
+if (sky) {
+  const layers = [
+    { count: 3200, size: 1.3, dim: 0.75 },
+    { count: 700, size: 2.2, dim: 1 },
+    { count: 130, size: 3.4, dim: 1.5 },
+  ];
+  layers.forEach(({ count, size, dim }, layer) => {
+    const field = createStarField(config.seed * 10 + layer + 3000, count);
+    sky.add(
+      new Points(
+        new BufferGeometry()
+          .setAttribute("position", new BufferAttribute(field.directions, 3))
+          .setAttribute(
+            "color",
+            new BufferAttribute(
+              field.colours.map((c) => c * dim),
+              3,
+            ),
+          ),
+        new PointsMaterial({ size, sizeAttenuation: false, vertexColors: true, depthTest: false }),
+      ),
+    );
+  });
+  renderer.autoClear = false;
+  renderer.setClearColor(linear(0.006, 0.009, 0.02));
+}
 
 function occluderMesh(occluder: Occluder): Mesh<BufferGeometry, MeshStandardMaterial> {
   const material = new MeshStandardMaterial({
@@ -355,9 +404,13 @@ let hiddenSeconds = 0;
 const brackets = new Map<string, HTMLElement>();
 
 const shipPosition = (ship: Ship) => new Vector3(ship.state.x, ship.height, ship.state.z);
-const screenOf = (ship: Ship): ScreenPoint => worldToScreen(shipPosition(ship), camera, viewport);
-const isHidden = (ship: Ship) =>
-  occludersHiding(shipPosition(ship), viewDirection, world.occluders).length > 0;
+const screenOf = (ship: Ship): ScreenPoint =>
+  worldToScreen(shipPosition(ship), rig.camera, viewport);
+const hiding = (ship: Ship) => {
+  const position = shipPosition(ship);
+  return occludersHiding(position, towardCamera(rig.camera, position), world.occluders);
+};
+const isHidden = (ship: Ship) => hiding(ship).length > 0;
 
 function onScreen(allegiance?: Allegiance): Ship[] {
   const margin = 30;
@@ -450,6 +503,9 @@ function finishTrial(now: number, outcome: TrialRecord["outcome"], value: number
     outcome,
     value,
     occluded: active.kind === "range" ? false : active.occluded,
+    cameraYawDeg: Math.round((look.yaw * 180) / Math.PI),
+    cameraPitchDeg: Math.round(look.pitch),
+    viewWidth: Math.round(viewWidth * 10) / 10,
   });
   active = null;
   paused = false;
@@ -465,10 +521,54 @@ function answerRange(now: number, chosenId: string): void {
   finishTrial(now, chosenId === active.nearId ? "correct" : "wrong", active.ratio);
 }
 
+const candidates = (ships: readonly Ship[]): PickCandidate[] =>
+  ships.map((ship) => ({ id: ship.id, screen: screenOf(ship) }));
+
+// Outside a measured run, clicking a ship or a structure makes the camera centre on it and
+// orbit it. The tester's own ship keeps flying, so any steering input takes the camera back:
+// otherwise the ship could be steered while it is off screen.
+interface Focus {
+  label: string;
+  position: () => Vector3;
+}
+let focus: Focus | null = null;
+let focusBlend = 0;
+const focusPoint = new Vector3();
+
+function focusOn(point: ScreenPoint): void {
+  const picked = pickNearest(point, candidates(others.map((view) => view.ship)), PICK_RADIUS_PX);
+  const ship = others.find((view) => view.ship.id === picked)?.ship;
+  if (ship) {
+    focus = { label: ship.id, position: () => shipPosition(ship) };
+    return;
+  }
+  const ray = screenRay(point, rig.camera, viewport);
+  const structure = world.occluders[firstHit(ray.origin, ray.direction, world.occluders)];
+  if (structure) {
+    const centre = centreOf(structure);
+    const position = new Vector3(centre.x, Math.max(0, centre.y), centre.z);
+    focus = { label: "a structure", position: () => position };
+  } else {
+    focus = null;
+  }
+}
+
+function updateFocus(dt: number): void {
+  const input = readInput();
+  const steering = input.thrust !== 0 || input.turn !== 0;
+  if (steering || held.has("KeyR") || phase === "trial" || phase === "gap") focus = null;
+  if (focus) focusPoint.copy(focus.position());
+  const goal = focus ? 1 : 0;
+  focusBlend += (goal - focusBlend) * (1 - Math.exp(-7 * dt));
+  if (Math.abs(goal - focusBlend) < 0.001) focusBlend = goal;
+}
+
 function handleClick(point: ScreenPoint, now: number): void {
+  if (phase === "idle" || phase === "done") {
+    if (config.look !== "fixed") focusOn(point);
+    return;
+  }
   if (phase !== "trial" || !active) return;
-  const candidates = (ships: readonly Ship[]): PickCandidate[] =>
-    ships.map((ship) => ({ id: ship.id, screen: screenOf(ship) }));
 
   if (active.kind === "range") {
     const { nearId, farId } = active;
@@ -485,7 +585,7 @@ function handleClick(point: ScreenPoint, now: number): void {
     if (!target) return;
     const centre = screenOf(target);
     if (Math.hypot(point.x - centre.x, point.y - centre.y) < 15) return;
-    const pointed = screenToPlane(point, camera, viewport, target.height);
+    const pointed = screenToPlane(point, rig.camera, viewport, target.height);
     if (!pointed) return;
     const error = headingErrorDeg(
       target.state.heading,
@@ -542,6 +642,22 @@ const controls: { key: keyof Config; label: string; choices: Choice[] }[] = [
     choices: SCENE_IDS.map((id): Choice => [id, SCENE_LABELS[id]]),
   },
   { key: "elevation", label: "Camera elevation", choices: same(ELEVATIONS, "°") },
+  {
+    key: "projection",
+    label: "Projection",
+    choices: PROJECTIONS.map((id): Choice => [
+      id,
+      { ortho: "Orthographic", narrow: "Perspective, narrow", wide: "Perspective, wide" }[id],
+    ]),
+  },
+  {
+    key: "look",
+    label: "Look around",
+    choices: LOOK_MODES.map((id): Choice => [
+      id,
+      { fixed: "Off (fixed view)", hold: "Hold, springs back", free: "Free, stays put" }[id],
+    ]),
+  },
   { key: "width", label: "View width", choices: same(VIEW_WIDTHS, " m") },
   {
     key: "cues",
@@ -582,20 +698,22 @@ startButton.addEventListener("click", startRun);
 panel.append(startButton);
 
 const readout = element("dl");
+const cameraReadout = element("dl");
 const results = element("div", "results");
-panel.append(readout, results);
+panel.append(readout, cameraReadout, results);
 
 function row(list: HTMLElement, term: string, value: string, className?: string): void {
   list.append(element("dt", undefined, term), element("dd", className, value));
 }
 
 function renderReadout(): void {
-  const scale = pixelsPerMetre(config.width, viewport.width);
+  const scale = pixelsPerMetre(viewWidth, viewport.width);
   const tallest = Math.max(
     0,
     ...world.occluders.map((o) => (o.kind === "sphere" ? o.radius : o.yMax)),
   );
   readout.replaceChildren();
+  row(readout, "Visible width", `${viewWidth.toFixed(0)} m`);
   row(readout, "Scale", `${scale.toFixed(1)} px/m`);
   row(readout, "Ship beam on screen", `${(SHIP_BEAM * scale).toFixed(0)} px`);
   row(readout, "Ship length on screen", `${(SHIP_LENGTH * scale).toFixed(0)} px`);
@@ -690,12 +808,10 @@ function renderResults(): void {
 function resize(): void {
   viewport = { width: stage.clientWidth, height: stage.clientHeight };
   renderer.setSize(viewport.width, viewport.height);
-  camera = createGreyboxCamera(
-    viewport.width / viewport.height,
-    config.width,
-    config.elevation,
-    cameraTarget,
-  );
+  skyCamera.aspect = viewport.width / viewport.height;
+  skyCamera.updateProjectionMatrix();
+  rig = createRig(viewport.width / viewport.height, viewWidth, config.projection);
+  aimRig(rig, cameraTarget, look.pitch, look.yaw);
   renderReadout();
 }
 
@@ -733,19 +849,15 @@ function syncViews(): void {
     edge.material.color.copy(bolt.allegiance === "hostile" ? linear(1, 0.25, 0.05) : SIGNAL.ally);
   });
 
+  cameraTarget.set(player.ship.state.x, 0, player.ship.state.z).lerp(focusPoint, focusBlend);
+  aimRig(rig, cameraTarget, look.pitch, look.yaw);
+
   if (config.occlusion === "fade") {
-    const hiding = new Set(
-      occludersHiding(shipPosition(player.ship), viewDirection, world.occluders),
-    );
+    const inFront = new Set(hiding(player.ship));
     occluderMeshes.forEach((mesh, index) => {
-      mesh.material.opacity = hiding.has(index) ? 0.22 : 1;
+      mesh.material.opacity = inFront.has(index) ? 0.22 : 1;
     });
   }
-
-  cameraTarget.set(player.ship.state.x, 0, player.ship.state.z);
-  camera.position.copy(cameraTarget).addScaledVector(viewDirection, 200);
-  camera.lookAt(cameraTarget);
-  camera.updateMatrixWorld();
 
   for (const [id, bracket] of brackets) {
     const ship = others.find((view) => view.ship.id === id)?.ship;
@@ -770,19 +882,97 @@ window.addEventListener("keydown", (event) => {
   }
 });
 window.addEventListener("keyup", (event) => held.delete(event.code));
-renderer.domElement.addEventListener("pointerdown", (event) => {
-  const bounds = renderer.domElement.getBoundingClientRect();
-  handleClick({ x: event.clientX - bounds.left, y: event.clientY - bounds.top }, performance.now());
+
+// Left button answers trials. Right button, or Q and E, turns the camera when looking is allowed.
+const canvas = renderer.domElement;
+let dragFrom: ScreenPoint | null = null;
+canvas.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
 });
+canvas.addEventListener("pointerdown", (event) => {
+  if (event.button === 0) {
+    const bounds = canvas.getBoundingClientRect();
+    handleClick(
+      { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+      performance.now(),
+    );
+  } else if (event.button === 2 && config.look !== "fixed") {
+    dragFrom = { x: event.clientX, y: event.clientY };
+    canvas.setPointerCapture(event.pointerId);
+  }
+});
+canvas.addEventListener("pointermove", (event) => {
+  if (!dragFrom) return;
+  look = dragLook(look, event.clientX - dragFrom.x, event.clientY - dragFrom.y);
+  dragFrom = { x: event.clientX, y: event.clientY };
+});
+const endDrag = () => {
+  dragFrom = null;
+};
+canvas.addEventListener("pointerup", endDrag);
+canvas.addEventListener("pointercancel", endDrag);
+
+// The wheel zooms in every look mode: the design already allows zoom within the fixed view (§5).
+canvas.addEventListener(
+  "wheel",
+  (event) => {
+    event.preventDefault();
+    viewWidth = zoomWidth(viewWidth, event.deltaY, event.deltaMode);
+    resize();
+  },
+  { passive: false },
+);
+
+const KEY_TURN_RATE = 1.6;
+function updateLook(dt: number): void {
+  if (held.has("KeyR") && viewWidth !== config.width) {
+    viewWidth = config.width;
+    resize();
+  }
+  if (config.look !== "fixed") {
+    if (held.has("KeyR")) look = { ...homeLook };
+    const keyTurn = axis(["KeyE"], ["KeyQ"]);
+    if (keyTurn !== 0) look = turnLook(look, keyTurn * KEY_TURN_RATE * dt);
+    else if (config.look === "hold" && !dragFrom) look = settleLook(look, homeLook, dt);
+  }
+
+  const angle = isHome(look, homeLook)
+    ? "Tactical view"
+    : `Turned ${((look.yaw * 180) / Math.PI).toFixed(0)}°, elevation ${look.pitch.toFixed(0)}°`;
+  const text = focus ? `${angle}, centred on ${focus.label}` : angle;
+  if (cameraReadout.dataset.text !== text) {
+    cameraReadout.dataset.text = text;
+    cameraReadout.replaceChildren();
+    row(cameraReadout, "Camera", text);
+  }
+}
+
+const IDLE_PROMPT = [
+  "W A S D or arrows to fly",
+  ...(config.look === "fixed"
+    ? []
+    : [
+        config.look === "hold"
+          ? "hold right mouse or Q / E to look"
+          : "right-drag or Q / E to turn",
+        "click a ship or structure to centre on it",
+      ]),
+  "scroll to zoom",
+  "R to reset the view",
+  "Space to start a run",
+].join(" · ");
 
 resize();
-prompt.textContent = "Fly with W A S D or the arrow keys. Press Space to start a measured run.";
+prompt.textContent = IDLE_PROMPT;
 
 let last = performance.now();
 let accumulator = 0;
 renderer.setAnimationLoop((now: number) => {
-  accumulator += Math.min(0.1, (now - last) / 1000);
+  const frame = Math.min(0.1, (now - last) / 1000);
+  accumulator += frame;
   last = now;
+  updateLook(frame);
+  updateFocus(frame);
   while (accumulator >= STEP) {
     accumulator -= STEP;
     if (paused) continue;
@@ -791,5 +981,11 @@ renderer.setAnimationLoop((now: number) => {
   }
   syncViews();
   updateTrial(now);
-  renderer.render(scene, camera);
+  if (sky) {
+    renderer.clear();
+    skyCamera.quaternion.copy(rig.camera.quaternion);
+    renderer.render(sky, skyCamera);
+    renderer.clearDepth();
+  }
+  renderer.render(scene, rig.camera);
 });

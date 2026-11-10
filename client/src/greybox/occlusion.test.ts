@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { occludersHiding, rayHits } from "./occlusion";
+import { centreOf, firstHit, occludersHiding, rayEntry, rayHits } from "./occlusion";
 import type { Occluder } from "./occlusion";
 import { stationOccluders } from "./stationProxy";
 import { hiddenDepthBehind, viewDirectionAtElevation } from "./view";
@@ -61,6 +61,33 @@ describe("greybox occlusion", () => {
     };
     expect(hiddenAt(33)).toBe(true);
     expect(hiddenAt(50)).toBe(false);
+  });
+
+  it("measures the distance to where a ray enters each kind of structure", () => {
+    const along = { x: 1, y: 0, z: 0 };
+    const from = { x: -10, y: 1, z: 0 };
+    expect(rayEntry(from, along, box)).toBeCloseTo(8);
+    expect(rayEntry(from, along, cylinder)).toBeCloseTo(8);
+    expect(rayEntry({ x: -10, y: 0, z: 0 }, along, sphere)).toBeCloseTo(5.4);
+    expect(rayEntry(from, { x: -1, y: 0, z: 0 }, box)).toBeNull();
+    expect(rayEntry({ x: -10, y: 9, z: 0 }, along, box)).toBeNull();
+    // A ray that starts inside is already in the structure.
+    expect(rayEntry({ x: 0, y: 1, z: 0 }, along, box)).toBeCloseTo(0, 5);
+  });
+
+  it("picks the structure a ray meets first", () => {
+    const near: Occluder = { kind: "box", x: -6, z: 0, halfX: 1, halfZ: 1, yMin: 0, yMax: 2 };
+    const along = { x: 1, y: 0, z: 0 };
+    const from = { x: -20, y: 1, z: 0 };
+    expect(firstHit(from, along, [box, near, cylinder])).toBe(1);
+    expect(firstHit(from, along, [box, cylinder])).toBe(0);
+    expect(firstHit(from, { x: 0, y: 1, z: 0 }, [box, near])).toBe(-1);
+    expect(firstHit(from, along, [])).toBe(-1);
+  });
+
+  it("gives the middle of a structure as its point to look at", () => {
+    expect(centreOf(box)).toEqual({ x: 0, y: 2, z: 0 });
+    expect(centreOf(sphere)).toEqual({ x: 0, y: 0, z: 0 });
   });
 
   it("reports which station parts hide a ship behind the hub", () => {
