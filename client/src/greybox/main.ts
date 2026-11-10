@@ -41,9 +41,9 @@ import type { Config } from "./config";
 import type { ShipInput } from "./kinematics";
 import { LOOK_MODES, dragLook, isHome, settleLook, turnLook, zoomWidth } from "./look";
 import type { LookState } from "./look";
-import { occludersHiding } from "./occlusion";
+import { centreOf, firstHit, occludersHiding } from "./occlusion";
 import type { Occluder } from "./occlusion";
-import { pickNearest, screenToPlane, worldToScreen } from "./picking";
+import { pickNearest, screenRay, screenToPlane, worldToScreen } from "./picking";
 import type { PickCandidate, ScreenPoint } from "./picking";
 import { createRng } from "./rng";
 import { createStarField } from "./sky";
@@ -521,10 +521,54 @@ function answerRange(now: number, chosenId: string): void {
   finishTrial(now, chosenId === active.nearId ? "correct" : "wrong", active.ratio);
 }
 
+const candidates = (ships: readonly Ship[]): PickCandidate[] =>
+  ships.map((ship) => ({ id: ship.id, screen: screenOf(ship) }));
+
+// Outside a measured run, clicking a ship or a structure makes the camera centre on it and
+// orbit it. The tester's own ship keeps flying, so any steering input takes the camera back:
+// otherwise the ship could be steered while it is off screen.
+interface Focus {
+  label: string;
+  position: () => Vector3;
+}
+let focus: Focus | null = null;
+let focusBlend = 0;
+const focusPoint = new Vector3();
+
+function focusOn(point: ScreenPoint): void {
+  const picked = pickNearest(point, candidates(others.map((view) => view.ship)), PICK_RADIUS_PX);
+  const ship = others.find((view) => view.ship.id === picked)?.ship;
+  if (ship) {
+    focus = { label: ship.id, position: () => shipPosition(ship) };
+    return;
+  }
+  const ray = screenRay(point, rig.camera, viewport);
+  const structure = world.occluders[firstHit(ray.origin, ray.direction, world.occluders)];
+  if (structure) {
+    const centre = centreOf(structure);
+    const position = new Vector3(centre.x, Math.max(0, centre.y), centre.z);
+    focus = { label: "a structure", position: () => position };
+  } else {
+    focus = null;
+  }
+}
+
+function updateFocus(dt: number): void {
+  const input = readInput();
+  const steering = input.thrust !== 0 || input.turn !== 0;
+  if (steering || held.has("KeyR") || phase === "trial" || phase === "gap") focus = null;
+  if (focus) focusPoint.copy(focus.position());
+  const goal = focus ? 1 : 0;
+  focusBlend += (goal - focusBlend) * (1 - Math.exp(-7 * dt));
+  if (Math.abs(goal - focusBlend) < 0.001) focusBlend = goal;
+}
+
 function handleClick(point: ScreenPoint, now: number): void {
+  if (phase === "idle" || phase === "done") {
+    if (config.look !== "fixed") focusOn(point);
+    return;
+  }
   if (phase !== "trial" || !active) return;
-  const candidates = (ships: readonly Ship[]): PickCandidate[] =>
-    ships.map((ship) => ({ id: ship.id, screen: screenOf(ship) }));
 
   if (active.kind === "range") {
     const { nearId, farId } = active;
@@ -805,7 +849,7 @@ function syncViews(): void {
     edge.material.color.copy(bolt.allegiance === "hostile" ? linear(1, 0.25, 0.05) : SIGNAL.ally);
   });
 
-  cameraTarget.set(player.ship.state.x, 0, player.ship.state.z);
+  cameraTarget.set(player.ship.state.x, 0, player.ship.state.z).lerp(focusPoint, focusBlend);
   aimRig(rig, cameraTarget, look.pitch, look.yaw);
 
   if (config.occlusion === "fade") {
@@ -892,9 +936,10 @@ function updateLook(dt: number): void {
     else if (config.look === "hold" && !dragFrom) look = settleLook(look, homeLook, dt);
   }
 
-  const text = isHome(look, homeLook)
+  const angle = isHome(look, homeLook)
     ? "Tactical view"
     : `Turned ${((look.yaw * 180) / Math.PI).toFixed(0)}°, elevation ${look.pitch.toFixed(0)}°`;
+  const text = focus ? `${angle}, centred on ${focus.label}` : angle;
   if (cameraReadout.dataset.text !== text) {
     cameraReadout.dataset.text = text;
     cameraReadout.replaceChildren();
@@ -902,14 +947,20 @@ function updateLook(dt: number): void {
   }
 }
 
-const IDLE_PROMPT =
-  "Fly with W A S D or the arrow keys. " +
-  {
-    fixed: "",
-    hold: "Hold the right mouse button, or Q and E, to look around. ",
-    free: "Drag with the right mouse button, or use Q and E, to turn the view. ",
-  }[config.look] +
-  "Scroll to zoom; R resets the view. Press Space to start a measured run.";
+const IDLE_PROMPT = [
+  "W A S D or arrows to fly",
+  ...(config.look === "fixed"
+    ? []
+    : [
+        config.look === "hold"
+          ? "hold right mouse or Q / E to look"
+          : "right-drag or Q / E to turn",
+        "click a ship or structure to centre on it",
+      ]),
+  "scroll to zoom",
+  "R to reset the view",
+  "Space to start a run",
+].join(" · ");
 
 resize();
 prompt.textContent = IDLE_PROMPT;
@@ -921,6 +972,7 @@ renderer.setAnimationLoop((now: number) => {
   accumulator += frame;
   last = now;
   updateLook(frame);
+  updateFocus(frame);
   while (accumulator >= STEP) {
     accumulator -= STEP;
     if (paused) continue;

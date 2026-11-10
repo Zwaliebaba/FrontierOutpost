@@ -22,19 +22,23 @@ function slab(origin: number, dir: number, min: number, max: number): [number, n
   return a < b ? [a, b] : [b, a];
 }
 
-function overlapsAhead(intervals: ([number, number] | null)[]): boolean {
+/** Where a ray enters the overlap of `intervals`, or null if they do not overlap ahead of it. */
+function entryAhead(intervals: ([number, number] | null)[]): number | null {
   let enter = EPSILON;
   let exit = Infinity;
   for (const interval of intervals) {
-    if (interval === null) return false;
+    if (interval === null) return null;
     enter = Math.max(enter, interval[0]);
     exit = Math.min(exit, interval[1]);
   }
-  return enter <= exit;
+  return enter <= exit ? enter : null;
 }
 
-/** Whether a ray from `origin` along unit vector `dir` passes through `occluder`. */
-export function rayHits(origin: Point3, dir: Point3, occluder: Occluder): boolean {
+/**
+ * Distance along a ray from `origin`, in unit direction `dir`, to where it enters `occluder`.
+ * Null if it misses; close to zero if the ray starts inside.
+ */
+export function rayEntry(origin: Point3, dir: Point3, occluder: Occluder): number | null {
   switch (occluder.kind) {
     case "sphere": {
       const ox = origin.x - occluder.x;
@@ -43,7 +47,9 @@ export function rayHits(origin: Point3, dir: Point3, occluder: Occluder): boolea
       const b = ox * dir.x + oy * dir.y + oz * dir.z;
       const c = ox * ox + oy * oy + oz * oz - occluder.radius * occluder.radius;
       const discriminant = b * b - c;
-      return discriminant >= 0 && -b + Math.sqrt(discriminant) > EPSILON;
+      if (discriminant < 0) return null;
+      const root = Math.sqrt(discriminant);
+      return entryAhead([[-b - root, -b + root]]);
     }
     case "cylinder": {
       const ox = origin.x - occluder.x;
@@ -56,19 +62,45 @@ export function rayHits(origin: Point3, dir: Point3, occluder: Occluder): boolea
       } else {
         const b = ox * dir.x + oz * dir.z;
         const discriminant = b * b - a * c;
-        if (discriminant < 0) return false;
+        if (discriminant < 0) return null;
         const root = Math.sqrt(discriminant);
         side = [(-b - root) / a, (-b + root) / a];
       }
-      return overlapsAhead([side, slab(origin.y, dir.y, occluder.yMin, occluder.yMax)]);
+      return entryAhead([side, slab(origin.y, dir.y, occluder.yMin, occluder.yMax)]);
     }
     case "box":
-      return overlapsAhead([
+      return entryAhead([
         slab(origin.x, dir.x, occluder.x - occluder.halfX, occluder.x + occluder.halfX),
         slab(origin.y, dir.y, occluder.yMin, occluder.yMax),
         slab(origin.z, dir.z, occluder.z - occluder.halfZ, occluder.z + occluder.halfZ),
       ]);
   }
+}
+
+/** Whether a ray from `origin` along unit vector `dir` passes through `occluder`. */
+export function rayHits(origin: Point3, dir: Point3, occluder: Occluder): boolean {
+  return rayEntry(origin, dir, occluder) !== null;
+}
+
+/** Index of the occluder a ray meets first, or -1 if it meets none. */
+export function firstHit(origin: Point3, dir: Point3, occluders: readonly Occluder[]): number {
+  let best = -1;
+  let bestDistance = Infinity;
+  occluders.forEach((occluder, index) => {
+    const distance = rayEntry(origin, dir, occluder);
+    if (distance !== null && distance < bestDistance) {
+      best = index;
+      bestDistance = distance;
+    }
+  });
+  return best;
+}
+
+/** The middle of an occluder, as a point for the camera to look at. */
+export function centreOf(occluder: Occluder): Point3 {
+  return occluder.kind === "sphere"
+    ? { x: occluder.x, y: occluder.y, z: occluder.z }
+    : { x: occluder.x, y: (occluder.yMin + occluder.yMax) / 2, z: occluder.z };
 }
 
 /** Indexes of the occluders between `point` and a camera in direction `towardCamera`. */

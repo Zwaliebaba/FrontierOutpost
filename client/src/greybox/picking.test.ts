@@ -1,6 +1,6 @@
 import { Vector3 } from "three";
 import { describe, expect, it } from "vitest";
-import { pickNearest, screenToPlane, worldToScreen } from "./picking";
+import { pickNearest, screenRay, screenToPlane, worldToScreen } from "./picking";
 import { aimRig, createRig } from "./view";
 import type { Projection } from "./view";
 
@@ -58,6 +58,20 @@ describe("greybox picking", () => {
       expect(edge.x).toBeCloseTo(viewport.width, 3);
     }
   });
+
+  it.each(["ortho", "wide"] as const)(
+    "casts a %s view ray through the point clicked",
+    (projection) => {
+      const view = cameraFor(projection, 40, 0.6);
+      const point = new Vector3(7, 1, -5);
+      const { origin, direction } = screenRay(worldToScreen(point, view, viewport), view, viewport);
+      expect(direction.length()).toBeCloseTo(1, 9);
+      // The clicked point lies on the ray, ahead of its origin.
+      const toPoint = point.clone().sub(origin);
+      expect(toPoint.dot(direction)).toBeGreaterThan(0);
+      expect(toPoint.clone().cross(direction).length()).toBeLessThan(1e-4);
+    },
+  );
 
   it("finds no plane point for a ray that points at the sky", () => {
     const low = cameraFor("wide", 8);
