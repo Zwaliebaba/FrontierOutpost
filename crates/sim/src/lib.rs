@@ -7,6 +7,7 @@
 
 pub mod collision;
 pub mod combat;
+pub mod extraction;
 pub mod npc;
 pub mod outcome;
 pub mod profile;

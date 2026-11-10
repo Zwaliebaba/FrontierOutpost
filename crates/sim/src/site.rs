@@ -308,7 +308,13 @@ pub const FRONTIER_SITE: SiteTemplate = SiteTemplate {
     dock: (-900.0, 0.0),
     centre: (620.0, 0.0),
     radius: 360.0,
-    pockets: &pockets((560.0, -60.0), (720.0, 170.0), (820.0, -210.0), (420.0, 220.0), 1.0),
+    pockets: &pockets(
+        (560.0, -60.0),
+        (720.0, 170.0),
+        (820.0, -210.0),
+        (420.0, 220.0),
+        1.0,
+    ),
     asteroids: 220,
     intercept_distance: 220.0,
     scan_range: 480.0,
@@ -320,7 +326,13 @@ pub const COMPACT_SITE: SiteTemplate = SiteTemplate {
     dock: (-120.0, 0.0),
     centre: (70.0, 0.0),
     radius: 125.0,
-    pockets: &pockets((45.0, -10.0), (115.0, 65.0), (125.0, -65.0), (20.0, 80.0), 0.8),
+    pockets: &pockets(
+        (45.0, -10.0),
+        (115.0, 65.0),
+        (125.0, -65.0),
+        (20.0, 80.0),
+        0.8,
+    ),
     asteroids: 40,
     intercept_distance: 60.0,
     scan_range: 180.0,
@@ -440,15 +452,19 @@ impl Site {
                 let offsets = pocket.template.deposits;
                 let share = pocket.pool / offsets.len().max(1) as f32;
                 let (cx, cz) = pocket.template.centre;
-                pocket.template.material.into_iter().flat_map(move |material| {
-                    offsets.iter().map(move |&(dx, dz)| Deposit {
-                        pocket: index,
-                        material,
-                        x: cx + dx * pocket.template.radius / 45.0,
-                        z: cz + dz * pocket.template.radius / 45.0,
-                        remaining: share,
+                pocket
+                    .template
+                    .material
+                    .into_iter()
+                    .flat_map(move |material| {
+                        offsets.iter().map(move |&(dx, dz)| Deposit {
+                            pocket: index,
+                            material,
+                            x: cx + dx * pocket.template.radius / 45.0,
+                            z: cz + dz * pocket.template.radius / 45.0,
+                            remaining: share,
+                        })
                     })
-                })
             })
             .collect::<Vec<_>>();
         let obstacles = asteroids(&template, seed, &deposits);
@@ -526,7 +542,11 @@ fn seed_values(template: &SiteTemplate, seed: u32, tier: ThreatTier) -> SeedValu
     let indices: Vec<usize> = (0..template.pockets.len()).collect();
     let rich_pocket = pick(&mut rng, &indices);
     let first_relay = pick(&mut rng, &indices);
-    let others: Vec<usize> = indices.iter().copied().filter(|&i| i != first_relay).collect();
+    let others: Vec<usize> = indices
+        .iter()
+        .copied()
+        .filter(|&i| i != first_relay)
+        .collect();
     let relays = [first_relay, pick(&mut rng, &others)];
 
     let interval = tier.rules().alert_interval_ticks;
@@ -616,15 +636,25 @@ mod tests {
     fn every_seed_value_occurs_across_seeds() {
         let sites: Vec<Site> = (0..200).map(tier_i).collect();
         for hazard in Hazard::ALL {
-            assert!(sites.iter().any(|s| s.values.hazard == hazard), "{hazard:?}");
+            assert!(
+                sites.iter().any(|s| s.values.hazard == hazard),
+                "{hazard:?}"
+            );
         }
         for dominant in DominantThreat::ALL {
-            assert!(sites.iter().any(|s| s.values.dominant == dominant), "{dominant:?}");
+            assert!(
+                sites.iter().any(|s| s.values.dominant == dominant),
+                "{dominant:?}"
+            );
         }
         for pocket in 0..4 {
             assert!(sites.iter().any(|s| s.values.rich_pocket == pocket));
         }
-        assert!(sites.iter().all(|s| s.values.relays[0] != s.values.relays[1]));
+        assert!(
+            sites
+                .iter()
+                .all(|s| s.values.relays[0] != s.values.relays[1])
+        );
     }
 
     #[test]
