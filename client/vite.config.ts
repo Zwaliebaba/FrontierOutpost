@@ -14,6 +14,14 @@ export default defineConfig({
     rolldownOptions: {
       // greybox.html is the client-only readability test harness (design §5, §9).
       input: { main: "index.html", greybox: "greybox.html" },
+      output: {
+        // three.js is most of the bundle and changes far less often than the game, so it gets a
+        // chunk of its own that browsers keep cached across game updates.
+        codeSplitting: { groups: [{ name: "three", test: /[\\/]node_modules[\\/]three[\\/]/ }] },
+      },
     },
+    // three.js alone is about 570 kB minified (145 kB gzipped) and has to load before anything
+    // can be drawn, so splitting it further would not make the game start sooner.
+    chunkSizeWarningLimit: 650,
   },
 });
