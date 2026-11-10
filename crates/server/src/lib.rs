@@ -3,6 +3,11 @@
 //! The server owns all game state and validates every client request. It never
 //! trusts client-reported positions, hits, inventory or access.
 
+pub mod cert;
+pub mod config;
+pub mod http;
+pub mod transport;
+
 use frontier_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage};
 
 /// Answers a client's opening message.
