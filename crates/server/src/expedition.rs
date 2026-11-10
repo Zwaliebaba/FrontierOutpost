@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use frontier_protocol::input::{InputDatagram, is_newer};
+use frontier_protocol::input::InputDatagram;
 use frontier_protocol::snapshot::{
     EntityKind, EntityState, Snapshot, quantize_heading, quantize_position, quantize_velocity,
 };
@@ -18,6 +18,8 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::time::{MissedTickBehavior, interval};
 use tracing::{debug, warn};
 use web_transport_quinn::Session;
+
+use crate::input_queue::InputQueue;
 
 /// Pilots per expedition (design section 2).
 pub const MAX_PILOTS: usize = 4;
@@ -93,7 +95,8 @@ impl Expedition {
 
 struct Pilot {
     sink: Box<dyn SnapshotSink>,
-    /// The newest input applied, if any has arrived.
+    inputs: InputQueue,
+    /// The input applied on the latest tick, if any has arrived.
     last_input: Option<u16>,
 }
 
@@ -112,6 +115,19 @@ async fn run(mut commands: mpsc::UnboundedReceiver<Command>) {
                 None => return,
             },
             _ = ticker.tick() => {
+                // One input per pilot per tick, in order, as the client predicts.
+                for (ship, pilot) in &mut pilots {
+                    if let Some((sequence, controls)) = pilot.inputs.take_for_tick() {
+                        pilot.last_input = Some(sequence);
+                        world.set_input(
+                            *ship,
+                            ShipInput {
+                                thrust: controls.thrust_unit(),
+                                turn: controls.turn_unit(),
+                            },
+                        );
+                    }
+                }
                 world.step();
                 broadcast(&world, &mut pilots);
             }
@@ -128,6 +144,7 @@ fn apply(command: Command, world: &mut World, pilots: &mut HashMap<ShipId, Pilot
                     ship,
                     Pilot {
                         sink,
+                        inputs: InputQueue::default(),
                         last_input: None,
                     },
                 );
@@ -140,24 +157,9 @@ fn apply(command: Command, world: &mut World, pilots: &mut HashMap<ShipId, Pilot
             }
         }
         Command::Input { ship, datagram } => {
-            let Some(pilot) = pilots.get_mut(&ship) else {
-                return;
-            };
-            // Datagrams can arrive late or out of order; keep only the newest.
-            if pilot
-                .last_input
-                .is_some_and(|last| !is_newer(datagram.sequence, last))
-            {
-                return;
+            if let Some(pilot) = pilots.get_mut(&ship) {
+                pilot.inputs.receive(&datagram);
             }
-            pilot.last_input = Some(datagram.sequence);
-            world.set_input(
-                ship,
-                ShipInput {
-                    thrust: datagram.thrust_unit(),
-                    turn: datagram.turn_unit(),
-                },
-            );
         }
         Command::Leave { ship } => leave(ship, world, pilots),
     }
@@ -251,18 +253,22 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn applies_the_newest_input_and_acknowledges_it() {
+    async fn applies_inputs_and_acknowledges_the_last_applied() {
+        use frontier_protocol::input::Controls;
         let expedition = Expedition::start();
         let (sink, snapshots) = channel();
         let ship = expedition.join(sink).await.unwrap();
-        let input = |sequence, thrust| InputDatagram {
-            sequence,
-            thrust,
+        let thrust = Controls {
+            thrust: 127,
             turn: 0,
         };
-        expedition.input(ship, input(5, 127));
-        // A late, older datagram must not undo the newer one.
-        expedition.input(ship, input(4, 0));
+        expedition.input(
+            ship,
+            InputDatagram {
+                sequence: 5,
+                controls: vec![thrust; 4],
+            },
+        );
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         let snapshot = latest(&snapshots).unwrap();

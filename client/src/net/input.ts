@@ -4,7 +4,6 @@
  */
 
 export const INPUT_KIND = 2;
-export const INPUT_BYTES = 5;
 
 /** Scales -1..1 to -127..127, clamping and treating NaN as 0, exactly as Rust does. */
 export function quantizeControl(value: number): number {
@@ -17,14 +16,29 @@ function roundHalfAwayFromZero(value: number): number {
   return Math.sign(value) * Math.round(Math.abs(value));
 }
 
-/** One tick of controls. `sequence` wraps at 65,536. */
-export function encodeInput(sequence: number, thrust: number, turn: number): Uint8Array {
-  const bytes = new Uint8Array(INPUT_BYTES);
+/** Inputs per datagram: the newest and three before it, so a lost datagram is recovered. */
+export const MAX_INPUTS = 4;
+
+/**
+ * Encodes the input numbered `sequence` (wrapping at 65,536) and the ones before it: `inputs`
+ * is newest first, 1 to `MAX_INPUTS` entries.
+ */
+export function encodeInput(
+  sequence: number,
+  inputs: readonly { thrust: number; turn: number }[],
+): Uint8Array {
+  if (inputs.length < 1 || inputs.length > MAX_INPUTS) {
+    throw new RangeError(`an input datagram carries 1 to ${String(MAX_INPUTS)} inputs`);
+  }
+  const bytes = new Uint8Array(4 + 2 * inputs.length);
   const view = new DataView(bytes.buffer);
   view.setUint8(0, INPUT_KIND);
   view.setUint16(1, sequence & 0xffff, true);
-  view.setInt8(3, quantizeControl(thrust));
-  view.setInt8(4, quantizeControl(turn));
+  view.setUint8(3, inputs.length);
+  inputs.forEach((input, index) => {
+    view.setInt8(4 + 2 * index, quantizeControl(input.thrust));
+    view.setInt8(5 + 2 * index, quantizeControl(input.turn));
+  });
   return bytes;
 }
 

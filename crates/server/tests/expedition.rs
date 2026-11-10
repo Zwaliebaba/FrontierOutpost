@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use common::{connect_to, hello, read, start_server};
 use frontier_protocol::ServerMessage;
-use frontier_protocol::input::{InputDatagram, quantize_control};
+use frontier_protocol::input::{Controls, InputDatagram, quantize_control};
 use frontier_protocol::snapshot::{EntityState, Snapshot};
 use web_transport_quinn::Session;
 
@@ -58,13 +58,16 @@ async fn two_pilots_see_each_other_and_one_moves() {
     );
 
     // Full thrust for one second, one input per tick, as the client sends them.
+    let thrust = Controls {
+        thrust: quantize_control(1.0),
+        turn: 0,
+    };
     for sequence in 0..20_u16 {
         let input = InputDatagram {
             sequence,
-            thrust: quantize_control(1.0),
-            turn: 0,
+            controls: vec![thrust; usize::from(sequence.min(3)) + 1],
         };
-        pilot.send_datagram(input.encode().to_vec().into()).unwrap();
+        pilot.send_datagram(input.encode().unwrap().into()).unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 

@@ -7,6 +7,7 @@ pub mod cert;
 pub mod config;
 pub mod expedition;
 pub mod http;
+pub mod input_queue;
 pub mod transport;
 
 use frontier_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage};

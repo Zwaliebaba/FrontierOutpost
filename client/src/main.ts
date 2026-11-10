@@ -5,10 +5,12 @@
 import { Vector3 } from "three";
 import { connect, fetchConnectInfo } from "./net/connection";
 import type { EntityPose } from "./net/interpolation";
+import { Predictor } from "./game/prediction";
 import { ExpeditionFullError, Session, waitForJoin } from "./game/session";
 import type { Controls } from "./game/session";
 import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
 import { loadSim } from "./sim";
+import { headingRadians, positionMetres, velocityMetresPerSecond } from "./net/snapshot";
 import { dragLook, isHome, settleLook, turnLook, zoomWidth } from "./view/look";
 import type { LookState } from "./view/look";
 import { pickNearest, worldToScreen } from "./view/picking";
@@ -35,14 +37,16 @@ function showStatus(state: "connecting" | "connected" | "closed" | "offline", te
   status.textContent = text;
 }
 
-loadSim().then(
-  (rules) => {
+const rules = loadSim().then(
+  (loaded) => {
     sim.dataset.state = "loaded";
-    sim.textContent = `Simulation · ${String(rules.ticksPerSecond())} ticks per second`;
+    sim.textContent = `Simulation · ${String(loaded.ticksPerSecond())} ticks per second`;
+    return loaded;
   },
   (error: unknown) => {
     sim.dataset.state = "failed";
     sim.textContent = `Simulation failed to load: ${String(error)}`;
+    throw error;
   },
 );
 
@@ -71,14 +75,31 @@ async function start(): Promise<void> {
     showStatus("closed", reason ? `Disconnected: ${reason}` : "Disconnected");
   });
 
-  const { shipId, tickRate } = await waitForJoin(connection);
-  const session = new Session(connection, shipId, tickRate, () => performance.now());
+  const [{ shipId, tickRate }, loaded] = await Promise.all([waitForJoin(connection), rules]);
+  // Your own ship is predicted with the server's rules; others are drawn from snapshots.
+  const predictor = new Predictor((state, controls) => loaded.stepShip(state, controls));
+  const session = new Session(
+    connection,
+    shipId,
+    tickRate,
+    () => performance.now(),
+    (snapshot) => {
+      const own = snapshot.entities.find((entity) => entity.id === shipId);
+      if (!own) return;
+      const { x, z } = positionMetres(own);
+      const velocity = velocityMetresPerSecond(own);
+      predictor.reconcile(
+        { x, z, heading: headingRadians(own), speed: Math.hypot(velocity.x, velocity.z) },
+        snapshot.inputAck,
+      );
+    },
+  );
   const view = new ExpeditionView(document.body, shipId, START_WIDTH);
   hud.dataset.ship = String(shipId);
-  fly(session, view);
+  fly(session, view, predictor);
 }
 
-function fly(session: Session, view: ExpeditionView): void {
+function fly(session: Session, view: ExpeditionView, predictor: Predictor): void {
   const home: LookState = { yaw: 0, pitch: RESTING_ELEVATION };
   let look: LookState = { ...home };
   let viewWidth = START_WIDTH;
@@ -147,7 +168,8 @@ function fly(session: Session, view: ExpeditionView): void {
       untilTick += tickMs;
       if (untilTick < 0) untilTick = tickMs;
       const controls = readControls();
-      session.sendControls(controls);
+      const { sequence, sent } = session.sendControls(controls);
+      predictor.advance(sequence, sent);
       // Steering takes the view back to your own ship, so it is never flown off screen.
       if (controls.thrust !== 0 || controls.turn !== 0) focusId = null;
     }
@@ -163,8 +185,12 @@ function fly(session: Session, view: ExpeditionView): void {
     if (keyTurn !== 0) look = turnLook(look, keyTurn * KEY_TURN_RATE * dt);
     else if (!dragFrom && !isHome(look, home)) look = settleLook(look, home, dt);
 
-    poses = session.snapshots.sample(now);
-    const own = poses.find((pose) => pose.id === session.shipId);
+    const others = session.snapshots.sample(now).filter((pose) => pose.id !== session.shipId);
+    const predicted = predictor.visual(1 - Math.max(0, untilTick) / tickMs, dt);
+    const own: EntityPose | undefined = predicted
+      ? { id: session.shipId, kind: "playerShip", hull: 255, ...predicted }
+      : undefined;
+    poses = own ? [own, ...others] : others;
     const focus = poses.find((pose) => pose.id === focusId);
     if (focusId !== null && !focus) focusId = null;
     const centre = focus ?? own;
@@ -177,7 +203,8 @@ function fly(session: Session, view: ExpeditionView): void {
       hud.dataset.z = own.z.toFixed(2);
       hud.textContent =
         `Ship ${String(session.shipId)} · ${String(poses.length)} in flight · ` +
-        `x ${own.x.toFixed(1)} z ${own.z.toFixed(1)} · W A S D to fly`;
+        `x ${own.x.toFixed(1)} z ${own.z.toFixed(1)} · ` +
+        `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm · W A S D to fly`;
     }
     requestAnimationFrame(frame);
   };
