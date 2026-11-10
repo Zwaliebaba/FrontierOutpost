@@ -9,6 +9,8 @@ rustc-ice-*.txt
 node_modules/
 client/dist/
 client/coverage/
+client/test-results/
+client/playwright-report/
 *.tsbuildinfo
 .vite/
 

@@ -51,6 +51,7 @@ cd client
 npm ci
 npm run dev                     # Vite dev server
 npm run check                   # format:check, lint, typecheck, test, build (= CI)
+npm run e2e                     # browser tests against the real server; run `npm run build` first
 npm run format                  # apply Prettier
 
 # Scene generator (Blender 4.3+ or 5.x); write output outside the repo to verify it
@@ -107,7 +108,8 @@ change ships with a test. Keep comments for the *why*.
 - `tsc` runs in strict mode with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`.
   ESLint uses `typescript-eslint` `strictTypeChecked`. Prettier uses `printWidth` 100.
 - TypeScript is held at 6.0.x until `typescript-eslint` supports 7.x.
-- Tests use Vitest and sit next to the source as `*.test.ts`. Keep rendering-free logic (camera,
+- Tests use Vitest and sit next to the source as `*.test.ts`. Browser tests against the real
+  server use Playwright and live in `client/e2e/` as `*.e2e.ts`. Keep rendering-free logic (camera,
   math, state) in plain modules so it can be tested without WebGL.
 
 ## 6. Assets
@@ -128,7 +130,7 @@ change ships with a test. Keep comments for the *why*.
 ## 7. Workflow
 
 - Branch from `main`; merge through pull requests. Every CI job blocks: `rust`, `rust-windows`,
-  `client` and `repo`. Check the CI run after pushing; a red `main` is a stop-everything event.
+  `client`, `e2e` and `repo`. Check the CI run after pushing; a red `main` is a stop-everything event.
 - Make small commits, one logical change each, and make sure each one builds and passes tests.
 - Bump toolchains (`rust-toolchain.toml`, `client/.nvmrc`) in their own PR.
 - Never commit `target/`, `node_modules/`, `client/dist/`, `.env*` or Blender backups (`*.blend1`).

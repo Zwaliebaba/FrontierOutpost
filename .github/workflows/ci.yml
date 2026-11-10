@@ -70,6 +70,28 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  e2e:
+    name: End to end · browser against the server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: client/.nvmrc
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+        working-directory: client
+      - run: npm run build
+        working-directory: client
+      - run: cargo build --locked -p frontier-server
+      - run: npx playwright install --with-deps chromium
+        working-directory: client
+      - run: npm run e2e
+        working-directory: client
+
   repo:
     name: Repository · LFS and line endings
     runs-on: ubuntu-latest
