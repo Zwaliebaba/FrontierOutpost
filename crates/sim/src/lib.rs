@@ -9,6 +9,7 @@ pub mod collision;
 pub mod combat;
 pub mod extraction;
 pub mod goods;
+pub mod market;
 pub mod npc;
 pub mod outcome;
 pub mod outpost;
