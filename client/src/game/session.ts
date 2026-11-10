@@ -45,6 +45,11 @@ export class Session {
   #sequence = 0;
   /** The controls most recently sent, newest first, resent with each datagram. */
   #recent: Controls[] = [];
+  /** When each recent input was sent, by sequence, to measure the round trip. */
+  #sentAt = new Map<number, number>();
+  #lastAck: number | null = null;
+  #roundTripMs: number | null = null;
+  readonly #now: () => number;
 
   /**
    * `onSnapshot` is called for each snapshot newer than any before it, after it is buffered.
@@ -57,6 +62,7 @@ export class Session {
     onSnapshot: (snapshot: Snapshot) => void = () => undefined,
   ) {
     this.#connection = connection;
+    this.#now = now;
     this.shipId = shipId;
     this.tickRate = tickRate;
     this.snapshots = new SnapshotBuffer(tickRate);
@@ -70,8 +76,27 @@ export class Session {
       }
       const before = this.snapshots.newest?.tick;
       this.snapshots.push(snapshot, now());
+      this.#measure(snapshot.inputAck);
       if (before === undefined || snapshot.tick > before) onSnapshot(snapshot);
     });
+  }
+
+  /**
+   * Time from sending an input to a snapshot that shows it applied, smoothed, in milliseconds.
+   * It includes up to one tick waiting for the server's step. Null until measured.
+   */
+  get roundTripMs(): number | null {
+    return this.#roundTripMs;
+  }
+
+  #measure(ack: number): void {
+    if (ack === this.#lastAck) return;
+    this.#lastAck = ack;
+    const sentAt = this.#sentAt.get(ack);
+    if (sentAt === undefined) return;
+    const sample = this.#now() - sentAt;
+    this.#roundTripMs =
+      this.#roundTripMs === null ? sample : this.#roundTripMs + (sample - this.#roundTripMs) * 0.1;
   }
 
   /**
@@ -81,6 +106,8 @@ export class Session {
   sendControls(controls: Controls): { sequence: number; sent: Controls } {
     this.#sequence = (this.#sequence + 1) & 0xffff;
     this.#recent = [controls, ...this.#recent].slice(0, MAX_INPUTS);
+    this.#sentAt.set(this.#sequence, this.#now());
+    this.#sentAt.delete((this.#sequence - 64) & 0xffff);
     const datagram = encodeInput(this.#sequence, this.#recent);
     // A send can fail while the session closes; the closed promise reports that.
     this.#connection.sendDatagram(datagram).catch(() => undefined);

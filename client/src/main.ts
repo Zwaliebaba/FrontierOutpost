@@ -199,11 +199,13 @@ function fly(session: Session, view: ExpeditionView, predictor: Predictor): void
 
     if (own) {
       hud.dataset.ships = poses.map((pose) => pose.id).join(" ");
+      if (session.roundTripMs !== null) hud.dataset.roundTrip = session.roundTripMs.toFixed(0);
       hud.dataset.x = own.x.toFixed(2);
       hud.dataset.z = own.z.toFixed(2);
       hud.textContent =
         `Ship ${String(session.shipId)} · ${String(poses.length)} in flight · ` +
         `x ${own.x.toFixed(1)} z ${own.z.toFixed(1)} · ` +
+        `round trip ${session.roundTripMs === null ? "–" : `${session.roundTripMs.toFixed(0)} ms`} · ` +
         `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm · W A S D to fly`;
     }
     requestAnimationFrame(frame);

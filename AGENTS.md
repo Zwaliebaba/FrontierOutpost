@@ -47,6 +47,7 @@ cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace          # also regenerates client/src/protocol/generated/
 cargo run -p frontier-server
+FRONTIER_IMPAIR_DELAY_MS=75 cargo run -p frontier-server   # add delay (and _JITTER_MS, _LOSS_PERCENT)
 
 # Client
 cd client

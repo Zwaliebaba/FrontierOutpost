@@ -2,9 +2,12 @@
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::time::Duration;
+
+use crate::relay::Impairment;
 
 /// Where the server listens and what it serves.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     /// Plain HTTP for the client files and connection details.
     pub http_addr: SocketAddr,
@@ -12,19 +15,26 @@ pub struct Config {
     pub web_transport_addr: SocketAddr,
     /// The built client, normally `client/dist`.
     pub client_dir: PathBuf,
+    /// Delay and loss to add for trying the game under latency. Inactive unless
+    /// one of the `FRONTIER_IMPAIR_*` variables is set.
+    pub impairment: Impairment,
 }
 
 /// Why the configuration could not be read.
 #[derive(Debug, thiserror::Error)]
-#[error("{name} is not a valid socket address: {value:?}")]
+#[error("{name} is not {expected}: {value:?}")]
 pub struct ConfigError {
     name: &'static str,
+    expected: &'static str,
     value: String,
 }
 
 const HTTP_ADDR: &str = "FRONTIER_HTTP_ADDR";
 const WEB_TRANSPORT_ADDR: &str = "FRONTIER_WEBTRANSPORT_ADDR";
 const CLIENT_DIR: &str = "FRONTIER_CLIENT_DIR";
+const IMPAIR_DELAY_MS: &str = "FRONTIER_IMPAIR_DELAY_MS";
+const IMPAIR_JITTER_MS: &str = "FRONTIER_IMPAIR_JITTER_MS";
+const IMPAIR_LOSS_PERCENT: &str = "FRONTIER_IMPAIR_LOSS_PERCENT";
 
 impl Config {
     /// Reads the configuration through `lookup`, which returns a variable's
@@ -36,13 +46,34 @@ impl Config {
     pub fn from_lookup(lookup: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
         let addr = |name: &'static str, default: &str| {
             let value = lookup(name).unwrap_or_else(|| default.to_owned());
-            value.parse().map_err(|_| ConfigError { name, value })
+            value.parse().map_err(|_| ConfigError {
+                name,
+                expected: "a socket address",
+                value,
+            })
+        };
+        let number = |name: &'static str, max: f64| match lookup(name) {
+            None => Ok(0.0),
+            Some(value) => value
+                .parse::<f64>()
+                .ok()
+                .filter(|number| (0.0..=max).contains(number))
+                .ok_or(ConfigError {
+                    name,
+                    expected: "a number in range",
+                    value,
+                }),
         };
         Ok(Self {
             http_addr: addr(HTTP_ADDR, "127.0.0.1:8080")?,
             web_transport_addr: addr(WEB_TRANSPORT_ADDR, "127.0.0.1:4443")?,
             client_dir: lookup(CLIENT_DIR)
                 .map_or_else(|| PathBuf::from("client/dist"), PathBuf::from),
+            impairment: Impairment {
+                delay: Duration::from_secs_f64(number(IMPAIR_DELAY_MS, 10_000.0)? / 1_000.0),
+                jitter: Duration::from_secs_f64(number(IMPAIR_JITTER_MS, 10_000.0)? / 1_000.0),
+                loss: number(IMPAIR_LOSS_PERCENT, 100.0)? / 100.0,
+            },
         })
     }
 
@@ -79,6 +110,38 @@ mod tests {
         assert_eq!(config.http_addr, "0.0.0.0:9000".parse().unwrap());
         assert_eq!(config.web_transport_addr, "[::1]:5000".parse().unwrap());
         assert_eq!(config.client_dir, PathBuf::from("/srv/client"));
+    }
+
+    #[test]
+    fn reads_the_impairment_as_one_way_milliseconds_and_percent() {
+        let config = Config::from_lookup(|name| match name {
+            IMPAIR_DELAY_MS => Some("75".into()),
+            IMPAIR_JITTER_MS => Some("10".into()),
+            IMPAIR_LOSS_PERCENT => Some("2.5".into()),
+            _ => None,
+        })
+        .unwrap();
+        assert_eq!(config.impairment.delay, Duration::from_millis(75));
+        assert_eq!(config.impairment.jitter, Duration::from_millis(10));
+        assert!((config.impairment.loss - 0.025).abs() < 1e-12);
+        assert!(
+            !Config::from_lookup(|_| None)
+                .unwrap()
+                .impairment
+                .is_active()
+        );
+    }
+
+    #[test]
+    fn refuses_an_impairment_out_of_range() {
+        for (name, value) in [
+            (IMPAIR_LOSS_PERCENT, "101"),
+            (IMPAIR_DELAY_MS, "-5"),
+            (IMPAIR_JITTER_MS, "lots"),
+        ] {
+            let error = Config::from_lookup(|asked| (asked == name).then(|| value.into()));
+            assert!(error.is_err(), "{name}={value} should be refused");
+        }
     }
 
     #[test]
