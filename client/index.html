@@ -37,8 +37,94 @@
       #hud {
         top: 76px;
       }
-      #hud:empty {
+      #lock {
+        top: 108px;
+      }
+      #run {
+        top: auto;
+        bottom: 76px;
+      }
+      #scan {
+        top: auto;
+        bottom: 44px;
+      }
+      #notice {
+        top: auto;
+        bottom: 12px;
+        border-color: #b07a2a;
+      }
+      #hud:empty,
+      #lock:empty,
+      #run:empty,
+      #scan:empty,
+      #notice:empty {
         display: none;
+      }
+      #nav {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+      .nav-marker {
+        position: absolute;
+        left: 0;
+        top: 0;
+        padding: 2px 8px;
+        color: #d7deea;
+        background: rgb(11 18 32 / 65%);
+        border: 1px solid #34486b;
+        border-radius: 10px;
+        font:
+          12px/1.4 system-ui,
+          sans-serif;
+        white-space: nowrap;
+      }
+      .nav-arrow {
+        display: inline-block;
+      }
+      .panel {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: none;
+        max-width: 560px;
+        padding: 18px 24px;
+        color: #d7deea;
+        background: rgb(11 18 32 / 92%);
+        border: 1px solid #34486b;
+        border-radius: 6px;
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+      }
+      .panel h2 {
+        margin: 0 0 8px;
+        font-size: 18px;
+      }
+      .panel ul {
+        margin: 0 0 8px;
+        padding-left: 20px;
+      }
+      #briefing[data-state="open"],
+      #summary[data-ending] {
+        display: block;
+      }
+      .panel button {
+        margin: 10px 8px 0 0;
+        padding: 6px 16px;
+        color: inherit;
+        background: #12304f;
+        border: 1px solid #4a7ab0;
+        border-radius: 4px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .panel button:disabled {
+        color: #6c778a;
+        background: #141c2a;
+        border-color: #2a3446;
+        cursor: not-allowed;
       }
     </style>
   </head>

@@ -1,8 +1,8 @@
 /**
- * A pilot's part of an expedition: joins, sends controls every tick and keeps the snapshots
- * the server sends back.
+ * A pilot's part of a run: sends controls every tick and keeps the snapshots the server sends
+ * back.
  */
-import type { ServerMessage, Snapshot } from "../protocol";
+import type { Snapshot } from "../protocol";
 import type { Connection } from "../net/connection";
 import { MAX_INPUTS, encodeInput, quantizeControl } from "../net/input";
 import { SnapshotBuffer } from "../net/interpolation";
@@ -11,30 +11,8 @@ import { decodeSnapshot } from "../net/snapshot";
 export interface Controls {
   thrust: number;
   turn: number;
-}
-
-export class ExpeditionFullError extends Error {
-  override name = "ExpeditionFullError";
-}
-
-/** Waits for the server to place this connection in the expedition. */
-export function waitForJoin(connection: Connection): Promise<{ shipId: number; tickRate: number }> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    connection.onMessage((message: ServerMessage) => {
-      if (settled) return;
-      if (message.type === "joined") {
-        settled = true;
-        resolve({ shipId: message.shipId, tickRate: message.tickRate });
-      } else if (message.type === "expeditionFull") {
-        settled = true;
-        reject(new ExpeditionFullError("The expedition already has four pilots."));
-      }
-    });
-    void connection.closed.then((reason) => {
-      if (!settled) reject(new Error(`disconnected before joining: ${reason}`));
-    });
-  });
+  /** The trigger is held: fire at the locked target when ready and in range. */
+  fire: boolean;
 }
 
 export class Session {
@@ -50,6 +28,8 @@ export class Session {
   #lastAck: number | null = null;
   #roundTripMs: number | null = null;
   readonly #now: () => number;
+  /** Set when this ship's flight ends; its snapshots and controls are then ignored. */
+  #retired = false;
 
   /**
    * `onSnapshot` is called for each snapshot newer than any before it, after it is buffered.
@@ -67,6 +47,7 @@ export class Session {
     this.tickRate = tickRate;
     this.snapshots = new SnapshotBuffer(tickRate);
     connection.onDatagram((bytes) => {
+      if (this.#retired) return;
       let snapshot: Snapshot;
       try {
         snapshot = decodeSnapshot(bytes);
@@ -79,6 +60,11 @@ export class Session {
       this.#measure(snapshot.inputAck);
       if (before === undefined || snapshot.tick > before) onSnapshot(snapshot);
     });
+  }
+
+  /** Ends this ship's flight: later snapshots and controls belong to the next one. */
+  retire(): void {
+    this.#retired = true;
   }
 
   /**
@@ -120,5 +106,6 @@ export function asServerReads(controls: Controls): Controls {
   return {
     thrust: Math.max(-1, quantizeControl(controls.thrust) / 127),
     turn: Math.max(-1, quantizeControl(controls.turn) / 127),
+    fire: controls.fire,
   };
 }

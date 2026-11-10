@@ -1,9 +1,9 @@
 import { defineConfig } from "@playwright/test";
 import { shared } from "./playwright.config";
 
-// The same tests against the server running in a container (`docker compose up --build` at the
-// repository root), which serves the client it was built with. Nothing is started here.
-export default defineConfig({
-  ...shared,
-  use: { ...shared.use, baseURL: "http://127.0.0.1:8080" },
-});
+// The same tests against the servers running in containers (`docker compose -f compose.e2e.yaml
+// up --build --wait` at the repository root), which serve the client they were built with.
+// compose.e2e.yaml publishes the ports and settings the local run uses (playwright.config.ts):
+// the compact site on seed 29 at 8181, and the server with no opening threat at 8182. Nothing is
+// started here.
+export default defineConfig(shared);

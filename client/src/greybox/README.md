@@ -72,6 +72,10 @@ Space starts a run of three kinds of trial, shuffled:
 It also records, without the tester, how long any ship's centre stays behind a structure. Results
 appear in the panel and download as JSON, including the configuration and every trial.
 
+Hull shapes and tones, signal colours and the silhouette rule come from
+`src/view/readability.ts`, which the game's expedition view draws with too. A run here measures
+the rules the game uses, not a copy of them.
+
 ## Limits
 
 - The limits shown beside results are the review's starting hypotheses. The design leaves gate

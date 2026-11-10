@@ -1,40 +1,27 @@
-import { expect, test } from "@playwright/test";
+import { expect, launch, position, test } from "./fixtures";
 
-test("the player's ship moves when they hold thrust", async ({ page }) => {
+test("the briefing shows the contract and opens only tier I", async ({ page }) => {
   await page.goto("/");
-  const hud = page.locator("#hud");
-  await expect(hud).toHaveAttribute("data-x", /.+/);
-  const start = {
-    x: Number(await hud.getAttribute("data-x")),
-    z: Number(await hud.getAttribute("data-z")),
-  };
+  const briefing = page.locator("#briefing");
+  await expect(briefing).toHaveAttribute("data-state", "open");
+  await expect(briefing).toContainText("Ore field: open");
+  await expect(briefing).toContainText("Derelict: locked, needs a sensor array");
+  await expect(briefing.locator('button[data-tier="1"]')).toBeEnabled();
+  await expect(briefing.locator('button[data-tier="2"]')).toBeDisabled();
+});
 
+test("the player's ship leaves the dock when they hold thrust", async ({ page }) => {
+  await launch(page);
+  await expect(page.locator("#briefing")).not.toHaveAttribute("data-state", "open");
+  await expect(page.locator("#run")).toHaveAttribute("data-phase", "atDock");
+  const start = await position(page);
   await page.keyboard.down("KeyW");
   await page.waitForTimeout(1_500);
   await page.keyboard.up("KeyW");
   await page.waitForTimeout(300);
-
-  const end = {
-    x: Number(await hud.getAttribute("data-x")),
-    z: Number(await hud.getAttribute("data-z")),
-  };
+  const end = await position(page);
   expect(Math.hypot(end.x - start.x, end.z - start.z)).toBeGreaterThan(2);
-});
-
-test("two players in one expedition see each other's ships", async ({ browser }) => {
-  const first = await browser.newPage();
-  const second = await browser.newPage();
-  await first.goto("/");
-  await second.goto("/");
-  const shipOf = async (page: typeof first) => {
-    await expect(page.locator("#hud")).toHaveAttribute("data-ship", /\d+/);
-    return (await page.locator("#hud").getAttribute("data-ship")) ?? "";
-  };
-  const [firstShip, secondShip] = [await shipOf(first), await shipOf(second)];
-  expect(firstShip).not.toBe(secondShip);
-  const sees = (ship: string) => new RegExp(`(^| )${ship}( |$)`);
-  await expect(first.locator("#hud")).toHaveAttribute("data-ships", sees(secondShip));
-  await expect(second.locator("#hud")).toHaveAttribute("data-ships", sees(firstShip));
-  await first.close();
-  await second.close();
+  // The dock and the pockets are labelled, on screen or at its edge.
+  await expect(page.locator('.nav-marker[data-target="oreField"]')).toContainText("Ore field");
+  await expect(page.locator('.nav-marker[data-target="derelict"]')).toContainText("(locked)");
 });

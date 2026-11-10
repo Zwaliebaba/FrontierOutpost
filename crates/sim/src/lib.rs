@@ -5,7 +5,17 @@
 //! server runs it, and the browser runs its movement rules through
 //! `frontier-sim-wasm` to predict the player's own ship.
 
+pub mod collision;
+pub mod combat;
+pub mod extraction;
+pub mod npc;
+pub mod outcome;
+pub mod profile;
+pub mod rng;
+pub mod run;
 pub mod ship;
+pub mod site;
+pub mod skirmish;
 pub mod world;
 
 /// Simulation steps per second (design section 10).

@@ -4,7 +4,11 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use frontier_sim::site::{COMPACT_SITE, FRONTIER_SITE};
+use frontier_sim::skirmish::MAX_NPCS;
+
 use crate::relay::Impairment;
+use crate::transport::Settings;
 
 /// Where the server listens and what it serves.
 #[derive(Debug, Clone, PartialEq)]
@@ -22,6 +26,8 @@ pub struct Config {
     /// Delay and loss to add for trying the game under latency. Inactive unless
     /// one of the `FRONTIER_IMPAIR_*` variables is set.
     pub impairment: Impairment,
+    /// What every launch offers and how.
+    pub settings: Settings,
 }
 
 /// Why the configuration could not be read.
@@ -46,6 +52,32 @@ const CLIENT_DIR: &str = "FRONTIER_CLIENT_DIR";
 const IMPAIR_DELAY_MS: &str = "FRONTIER_IMPAIR_DELAY_MS";
 const IMPAIR_JITTER_MS: &str = "FRONTIER_IMPAIR_JITTER_MS";
 const IMPAIR_LOSS_PERCENT: &str = "FRONTIER_IMPAIR_LOSS_PERCENT";
+const SITE: &str = "FRONTIER_SITE";
+const TIERS: &str = "FRONTIER_TIERS";
+const SEED: &str = "FRONTIER_SEED";
+const NPCS: &str = "FRONTIER_NPCS";
+
+/// Reads a whole number from `min` to `max`, if the variable is set.
+fn whole(
+    lookup: &impl Fn(&str) -> Option<String>,
+    name: &'static str,
+    min: u32,
+    max: u32,
+) -> Result<Option<u32>, ConfigError> {
+    lookup(name)
+        .map(|value| {
+            value
+                .parse::<u32>()
+                .ok()
+                .filter(|number| (min..=max).contains(number))
+                .ok_or(ConfigError::Invalid {
+                    name,
+                    expected: "a whole number in range",
+                    value,
+                })
+        })
+        .transpose()
+}
 
 impl Config {
     /// Reads the configuration through `lookup`, which returns a variable's
@@ -90,6 +122,22 @@ impl Config {
                 delay: Duration::from_secs_f64(number(IMPAIR_DELAY_MS, 10_000.0)? / 1_000.0),
                 jitter: Duration::from_secs_f64(number(IMPAIR_JITTER_MS, 10_000.0)? / 1_000.0),
                 loss: number(IMPAIR_LOSS_PERCENT, 100.0)? / 100.0,
+            },
+            settings: Settings {
+                template: match lookup(SITE).as_deref() {
+                    None | Some("frontier") => FRONTIER_SITE,
+                    Some("compact") => COMPACT_SITE,
+                    Some(other) => {
+                        return Err(ConfigError::Invalid {
+                            name: SITE,
+                            expected: "frontier or compact",
+                            value: other.to_owned(),
+                        });
+                    }
+                },
+                open_tiers: whole(&lookup, TIERS, 1, 3)?.unwrap_or(1),
+                seed: whole(&lookup, SEED, 0, u32::MAX)?,
+                opening_threat: whole(&lookup, NPCS, 0, MAX_NPCS as u32)?,
             },
         };
         if config.public_web_transport_addr.is_some() && config.impairment.is_active() {
@@ -218,5 +266,32 @@ mod tests {
         let error = Config::from_lookup(|name| (name == WEB_TRANSPORT_ADDR).then(|| "nope".into()))
             .unwrap_err();
         assert!(error.to_string().contains(WEB_TRANSPORT_ADDR));
+    }
+
+    #[test]
+    fn reads_the_launch_settings() {
+        let defaults = Config::from_lookup(|_| None).unwrap().settings;
+        assert_eq!(defaults.template, FRONTIER_SITE);
+        assert_eq!(defaults.open_tiers, 1);
+        assert_eq!(defaults.seed, None);
+        assert_eq!(defaults.opening_threat, None);
+        let set = Config::from_lookup(|name| match name {
+            SITE => Some("compact".into()),
+            TIERS => Some("3".into()),
+            SEED => Some("42".into()),
+            NPCS => Some("24".into()),
+            _ => None,
+        })
+        .unwrap()
+        .settings;
+        assert_eq!(set.template, COMPACT_SITE);
+        assert_eq!(set.open_tiers, 3);
+        assert_eq!(set.seed, Some(42));
+        assert_eq!(set.opening_threat, Some(24));
+        for (name, value) in [(SITE, "huge"), (TIERS, "4"), (TIERS, "0"), (NPCS, "25")] {
+            let value = value.to_owned();
+            let result = Config::from_lookup(move |n| (n == name).then(|| value.clone()));
+            assert!(result.is_err(), "{name}");
+        }
     }
 }

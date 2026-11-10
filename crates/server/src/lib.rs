@@ -3,6 +3,7 @@
 //! The server owns all game state and validates every client request. It never
 //! trusts client-reported positions, hits, inventory or access.
 
+pub mod caps;
 pub mod cert;
 pub mod config;
 pub mod expedition;
@@ -10,6 +11,7 @@ pub mod http;
 pub mod input_queue;
 pub mod relay;
 pub mod transport;
+pub mod wire;
 
 use frontier_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage};
 
@@ -17,6 +19,14 @@ use frontier_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage};
 #[must_use]
 pub fn handshake(message: &ClientMessage) -> ServerMessage {
     match *message {
+        ClientMessage::Lock { .. }
+        | ClientMessage::Launch { .. }
+        | ClientMessage::Extract { .. }
+        | ClientMessage::Vent
+        | ClientMessage::Scan => ServerMessage::Rejected {
+            protocol_version: PROTOCOL_VERSION,
+            reason: "the first message must be hello".into(),
+        },
         ClientMessage::Hello { protocol_version } if protocol_version == PROTOCOL_VERSION => {
             ServerMessage::Welcome {
                 protocol_version: PROTOCOL_VERSION,

@@ -5,11 +5,11 @@ export const MAX_INPUTS = 4;
 /** Controls, newest first, and the input datagrams the Rust decoder expects for them. */
 export const INPUT_VECTORS: {
   sequence: number;
-  inputs: { thrust: number; turn: number }[];
+  inputs: { thrust: number; turn: number; fire: boolean }[];
   hex: string;
 }[] = [
-  { sequence: 0, inputs: [{ thrust: 0.0, turn: 0.0 }], hex: "020000010000" },
-  { sequence: 1, inputs: [{ thrust: 1.0, turn: -1.0 }, { thrust: 0.5, turn: -0.25 }], hex: "020100027f8140e0" },
-  { sequence: 65535, inputs: [{ thrust: -1.0, turn: 1.0 }, { thrust: 2.0, turn: -2.0 }, { thrust: 0.0, turn: 1.0 }, { thrust: 1.0, turn: 0.0 }], hex: "02ffff04817f7f81007f7f00" },
-  { sequence: 300, inputs: [{ thrust: 0.3, turn: -0.7 }, { thrust: 0.0, turn: 0.0 }, { thrust: 1.0, turn: 1.0 }], hex: "022c010326a700007f7f" },
+  { sequence: 0, inputs: [{ thrust: 0.0, turn: 0.0, fire: false }], hex: "02000001000000" },
+  { sequence: 1, inputs: [{ thrust: 1.0, turn: -1.0, fire: true }, { thrust: 0.5, turn: -0.25, fire: false }], hex: "020100027f810140e000" },
+  { sequence: 65535, inputs: [{ thrust: -1.0, turn: 1.0, fire: false }, { thrust: 2.0, turn: -2.0, fire: true }, { thrust: 0.0, turn: 1.0, fire: true }, { thrust: 1.0, turn: 0.0, fire: false }], hex: "02ffff04817f007f8101007f017f0000" },
+  { sequence: 300, inputs: [{ thrust: 0.3, turn: -0.7, fire: true }, { thrust: 0.0, turn: 0.0, fire: false }, { thrust: 1.0, turn: 1.0, fire: false }], hex: "022c010326a7010000007f7f00" },
 ];

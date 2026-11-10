@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 4;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -29,10 +29,21 @@ pub const PROTOCOL_VERSION: u32 = 2;
 pub enum ClientMessage {
     /// First message on a new connection.
     Hello { protocol_version: u32 },
+    /// Locks a hostile ship as the weapon target, or releases the lock with
+    /// `None`. The server ignores a lock on anything but a hostile in range.
+    Lock { target: Option<u16> },
+    /// Accepts the offered contract at threat tier `tier` (1 to 3) and launches.
+    Launch { tier: u32 },
+    /// Starts the extractor at the nearest deposit in reach, or stops it.
+    Extract { on: bool },
+    /// Vents the extractor: a 5-second pause that clears its heat.
+    Vent,
+    /// Starts a scan of the site; the ship must hold still in scan range.
+    Scan,
 }
 
 /// A message sent from the server to the client.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(
     tag = "type",
     rename_all = "camelCase",
@@ -47,11 +58,210 @@ pub enum ServerMessage {
         protocol_version: u32,
         reason: String,
     },
-    /// The client joined the expedition and flies the ship `ship_id`. Snapshots
-    /// follow as datagrams, `tick_rate` per second.
-    Joined { ship_id: u16, tick_rate: u32 },
-    /// The expedition already has its four pilots.
-    ExpeditionFull,
+    /// The discovery contract on offer (design section 4): the site and what
+    /// preparation shows of its seed. Sent after `Welcome` and after each run.
+    Contract {
+        site: SiteInfo,
+        hazard: Hazard,
+        dominant_threat: DominantThreat,
+        tiers: Vec<TierOffer>,
+    },
+    /// The pilot launched and flies the ship `ship_id`. Snapshots follow as
+    /// datagrams, `tick_rate` per second. Everything here is fixed for the run.
+    Joined {
+        ship_id: u16,
+        tick_rate: u32,
+        tier: u32,
+        obstacles: Vec<ObstacleInfo>,
+        /// The deposits the pilot can work, in the order snapshots report them.
+        deposits: Vec<DepositInfo>,
+        /// How close a locked target must be for the pilot's weapon to fire, m.
+        weapon_range: f32,
+        /// How far the pilot can lock a target, m.
+        lock_range: f32,
+        /// How far from the site's centre a scan reaches, m.
+        scan_range: f32,
+        /// How far from a deposit's centre the extractor reaches, m.
+        extract_range: f32,
+    },
+    /// The launch was refused, for `reason`.
+    LaunchRefused { reason: String },
+    /// The extractor did not start.
+    ExtractRefused { reason: ExtractRefusal },
+    /// A scan revealed the site's hidden seed values (design section 10).
+    Scanned {
+        /// Index into the contract's pockets.
+        rich_pocket: u32,
+        /// The two pockets holding the relays.
+        relays: Vec<u32>,
+        /// The coming alert steps, as far as the instance can last.
+        waves: Vec<WaveInfo>,
+    },
+    /// The instance ends in `seconds_left` seconds (design section 10).
+    LimitWarning { seconds_left: u32 },
+    /// The pilot's run is over. A new `Contract` follows.
+    RunOver { summary: RunSummary },
+}
+
+/// A pocket of the site, as a contract shows it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PocketInfo {
+    pub kind: PocketKind,
+    pub x: f32,
+    pub z: f32,
+    pub radius: f32,
+    /// Whether the crew lacks the facility it needs.
+    pub locked: bool,
+    /// What its hidden seed values cannot change: what it yields.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<Material>,
+}
+
+/// The site a contract offers.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SiteInfo {
+    pub name: String,
+    pub dock_x: f32,
+    pub dock_z: f32,
+    /// Leaving this circle after working a pocket starts the return leg.
+    pub centre_x: f32,
+    pub centre_z: f32,
+    pub radius: f32,
+    pub pockets: Vec<PocketInfo>,
+    /// Entering this circle around the dock after undocking docks the ship.
+    pub dock_radius: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum PocketKind {
+    OreField,
+    Derelict,
+    VolatileVeins,
+    NestCore,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Material {
+    Ore,
+    Salvage,
+    Volatiles,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Hazard {
+    ThermalFlare,
+    DebrisDrift,
+    IonFog,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum DominantThreat {
+    Drones,
+    Raiders,
+    Balanced,
+}
+
+/// One threat tier of a contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TierOffer {
+    pub tier: u32,
+    /// Credits for the whole expedition.
+    pub payout: u32,
+    /// Whether the pilot has opened it (design section 10: tiers open with facilities).
+    pub open: bool,
+}
+
+/// A deposit the pilot can work.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DepositInfo {
+    pub x: f32,
+    pub z: f32,
+    /// Index into the contract's pockets.
+    pub pocket: u32,
+    pub material: Material,
+    /// Units it holds at launch.
+    pub units: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ExtractRefusal {
+    /// Too far from a deposit, or moving too fast.
+    NotAtDeposit,
+    Depleted,
+    CargoFull,
+    /// Cutting out or venting.
+    Busy,
+}
+
+/// One coming alert step, revealed by a scan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct WaveInfo {
+    /// The alert level it brings.
+    pub level: u32,
+    /// Seconds since launch when time raises the alert to this level; cut-outs
+    /// can bring it sooner.
+    pub at_seconds: u32,
+    pub drones: u32,
+    pub raiders: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Ending {
+    Docked,
+    Destroyed,
+    Abandoned,
+}
+
+/// How a pilot's run ended and what it brought home (design section 6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RunSummary {
+    pub ending: Ending,
+    pub ore: u32,
+    pub salvage: u32,
+    pub volatiles: u32,
+    /// The pilot's share of the contract pot, credits.
+    pub payout: u32,
+    pub launch_cost: u32,
+    pub cargo_lost: u32,
+    pub modules_lost: u32,
+    pub approach_seconds: u32,
+    pub objective_seconds: u32,
+    pub return_seconds: u32,
+}
+
+/// A fixed circular obstacle on the gameplay plane, in metres.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ObstacleInfo {
+    pub x: f32,
+    pub z: f32,
+    pub radius: f32,
 }
 
 /// How a browser reaches the game server's WebTransport endpoint. Served as
@@ -127,18 +337,93 @@ mod tests {
     }
 
     #[test]
-    fn joined_and_full_use_the_tagged_shape() {
-        let joined = ServerMessage::Joined {
-            ship_id: 3,
-            tick_rate: 20,
-        };
+    fn lock_carries_a_target_or_null() {
+        let lock = ClientMessage::Lock { target: Some(7) };
         assert_eq!(
-            serde_json::to_string(&joined).unwrap(),
-            r#"{"type":"joined","shipId":3,"tickRate":20}"#
+            serde_json::to_string(&lock).unwrap(),
+            r#"{"type":"lock","target":7}"#
+        );
+        let release: ClientMessage =
+            serde_json::from_str(r#"{"type":"lock","target":null}"#).unwrap();
+        assert_eq!(release, ClientMessage::Lock { target: None });
+    }
+
+    #[test]
+    fn launch_and_actions_use_the_tagged_shape() {
+        assert_eq!(
+            serde_json::to_string(&ClientMessage::Launch { tier: 1 }).unwrap(),
+            r#"{"type":"launch","tier":1}"#
         );
         assert_eq!(
-            serde_json::to_string(&ServerMessage::ExpeditionFull).unwrap(),
-            r#"{"type":"expeditionFull"}"#
+            serde_json::to_string(&ClientMessage::Extract { on: true }).unwrap(),
+            r#"{"type":"extract","on":true}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ClientMessage::Vent).unwrap(),
+            r#"{"type":"vent"}"#
+        );
+    }
+
+    #[test]
+    fn a_run_summary_uses_camel_case() {
+        let message = ServerMessage::RunOver {
+            summary: RunSummary {
+                ending: Ending::Docked,
+                ore: 20,
+                salvage: 0,
+                volatiles: 0,
+                payout: 100,
+                launch_cost: 40,
+                cargo_lost: 0,
+                modules_lost: 0,
+                approach_seconds: 170,
+                objective_seconds: 900,
+                return_seconds: 180,
+            },
+        };
+        let json = serde_json::to_string(&message).unwrap();
+        assert!(json.starts_with(r#"{"type":"runOver","summary":{"ending":"docked","ore":20"#));
+        assert!(json.contains(r#""approachSeconds":170"#));
+        assert_eq!(
+            serde_json::from_str::<ServerMessage>(&json).unwrap(),
+            message
+        );
+    }
+
+    #[test]
+    fn a_contract_round_trips() {
+        let message = ServerMessage::Contract {
+            site: SiteInfo {
+                name: "Kessler Drift".into(),
+                dock_x: -900.0,
+                dock_z: 0.0,
+                centre_x: 620.0,
+                centre_z: 0.0,
+                radius: 360.0,
+                pockets: vec![PocketInfo {
+                    kind: PocketKind::VolatileVeins,
+                    x: 820.0,
+                    z: -210.0,
+                    radius: 32.0,
+                    locked: true,
+                    material: Some(Material::Volatiles),
+                }],
+                dock_radius: 15.0,
+            },
+            hazard: Hazard::IonFog,
+            dominant_threat: DominantThreat::Balanced,
+            tiers: vec![TierOffer {
+                tier: 1,
+                payout: 100,
+                open: true,
+            }],
+        };
+        let json = serde_json::to_string(&message).unwrap();
+        assert!(json.contains(r#""kind":"volatileVeins""#));
+        assert!(json.contains(r#""hazard":"ionFog""#));
+        assert_eq!(
+            serde_json::from_str::<ServerMessage>(&json).unwrap(),
+            message
         );
     }
 

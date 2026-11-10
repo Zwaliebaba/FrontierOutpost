@@ -1,8 +1,25 @@
 // Wire types generated from crates/protocol by ts-rs. Edit the Rust, then run `cargo test`.
 export type { ClientMessage } from "./generated/ClientMessage";
 export type { ConnectInfo } from "./generated/ConnectInfo";
+export type { DepositInfo } from "./generated/DepositInfo";
+export type { DominantThreat } from "./generated/DominantThreat";
+export type { Ending } from "./generated/Ending";
+export type { ExtractRefusal } from "./generated/ExtractRefusal";
+export type { ExtractorMode } from "./generated/ExtractorMode";
+export type { Hazard } from "./generated/Hazard";
+export type { Material } from "./generated/Material";
+export type { OwnStatus } from "./generated/OwnStatus";
+export type { PocketInfo } from "./generated/PocketInfo";
+export type { PocketKind } from "./generated/PocketKind";
+export type { RunPhase } from "./generated/RunPhase";
+export type { RunSummary } from "./generated/RunSummary";
+export type { SiteInfo } from "./generated/SiteInfo";
+export type { TierOffer } from "./generated/TierOffer";
+export type { WaveInfo } from "./generated/WaveInfo";
 export type { EntityKind } from "./generated/EntityKind";
 export type { EntityState } from "./generated/EntityState";
+export type { ObstacleInfo } from "./generated/ObstacleInfo";
 export type { ServerMessage } from "./generated/ServerMessage";
 export type { Snapshot } from "./generated/Snapshot";
+export type { SnapshotEvent } from "./generated/SnapshotEvent";
 export { PROTOCOL_VERSION } from "./generated/version";

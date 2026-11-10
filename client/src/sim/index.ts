@@ -2,7 +2,13 @@
  * The simulation rules compiled from Rust (`crates/sim-wasm`). `npm run build:sim` writes the
  * WebAssembly module and its bindings to `./pkg`; it runs before `npm run dev` and `npm run build`.
  */
-import init, { initSync, stepShip, ticksForMillis, ticksPerSecond } from "./pkg/frontier_sim_wasm";
+import init, {
+  initSync,
+  setObstacles,
+  stepShip,
+  ticksForMillis,
+  ticksPerSecond,
+} from "./pkg/frontier_sim_wasm";
 import type { SyncInitInput } from "./pkg/frontier_sim_wasm";
 
 /** A ship on the gameplay plane, as `frontier_sim::ship::ShipState`. */
@@ -26,6 +32,8 @@ export interface Sim {
   ticksForMillis(millis: number): number;
   /** One step of the starter hull, computed by the same Rust code the server runs. */
   stepShip(state: ShipState, controls: ShipControls): ShipState;
+  /** Sets the fixed obstacles that `stepShip` collides with. */
+  setObstacles(obstacles: readonly { x: number; z: number; radius: number }[]): void;
 }
 
 const sim: Sim = {
@@ -41,6 +49,9 @@ const sim: Sim = {
       controls.turn,
     );
     return { x, z, heading, speed };
+  },
+  setObstacles(obstacles) {
+    setObstacles(Float32Array.from(obstacles.flatMap((o) => [o.x, o.z, o.radius])));
   },
 };
 

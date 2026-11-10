@@ -8,15 +8,17 @@
 //! reconcile its prediction.
 //!
 //! Layout, little-endian: kind [`INPUT_KIND`] `u8`, sequence of the newest
-//! input `u16`, count `u8` (1 to [`MAX_INPUTS`]), then `count` pairs of thrust
-//! `i8` and turn `i8`, newest first. Thrust and turn are -1..=1 scaled to
-//! -127..=127.
+//! input `u16`, count `u8` (1 to [`MAX_INPUTS`]), then `count` inputs of thrust
+//! `i8`, turn `i8` and flags `u8`, newest first. Thrust and turn are -1..=1
+//! scaled to -127..=127; flag bit 0 is the trigger.
 
 /// First byte of every input datagram.
 pub const INPUT_KIND: u8 = 2;
 /// Inputs per datagram: the newest and three before it.
 pub const MAX_INPUTS: usize = 4;
 const HEADER_BYTES: usize = 4;
+const INPUT_BYTES: usize = 3;
+const FIRE: u8 = 1;
 const SCALE: f32 = 127.0;
 
 /// One tick of controls, quantised.
@@ -24,6 +26,8 @@ const SCALE: f32 = 127.0;
 pub struct Controls {
     pub thrust: i8,
     pub turn: i8,
+    /// The trigger is held: fire at the locked target when ready and in range.
+    pub fire: bool,
 }
 
 impl Controls {
@@ -76,7 +80,7 @@ impl InputDatagram {
         if !(1..=MAX_INPUTS).contains(&count) {
             return Err(InputError::WrongCount(count));
         }
-        let mut bytes = Vec::with_capacity(HEADER_BYTES + 2 * count);
+        let mut bytes = Vec::with_capacity(HEADER_BYTES + INPUT_BYTES * count);
         bytes.push(INPUT_KIND);
         bytes.extend_from_slice(&self.sequence.to_le_bytes());
         // `count` is at most MAX_INPUTS, checked above.
@@ -84,6 +88,7 @@ impl InputDatagram {
         for controls in &self.controls {
             bytes.extend_from_slice(&controls.thrust.to_le_bytes());
             bytes.extend_from_slice(&controls.turn.to_le_bytes());
+            bytes.push(if controls.fire { FIRE } else { 0 });
         }
         Ok(bytes)
     }
@@ -105,19 +110,20 @@ impl InputDatagram {
         if !(1..=MAX_INPUTS).contains(&count) {
             return Err(InputError::WrongCount(count));
         }
-        if rest.len() != 2 * count {
+        if rest.len() != INPUT_BYTES * count {
             return Err(InputError::WrongLength {
-                expected: HEADER_BYTES + 2 * count,
+                expected: HEADER_BYTES + INPUT_BYTES * count,
                 actual: bytes.len(),
             });
         }
         let controls = rest
-            .as_chunks::<2>()
+            .as_chunks::<INPUT_BYTES>()
             .0
             .iter()
-            .map(|&[thrust, turn]| Controls {
+            .map(|&[thrust, turn, flags]| Controls {
                 thrust: i8::from_le_bytes([thrust]),
                 turn: i8::from_le_bytes([turn]),
+                fire: flags & FIRE != 0,
             })
             .collect();
         Ok(Self {
@@ -153,17 +159,25 @@ mod tests {
     use super::*;
 
     fn controls(thrust: i8, turn: i8) -> Controls {
-        Controls { thrust, turn }
+        Controls {
+            thrust,
+            turn,
+            fire: false,
+        }
     }
 
     #[test]
     fn round_trips_and_numbers_inputs_newest_first() {
+        let firing = Controls {
+            fire: true,
+            ..controls(0, 5)
+        };
         let input = InputDatagram {
             sequence: 1,
-            controls: vec![controls(127, -127), controls(0, 5), controls(-127, 0)],
+            controls: vec![controls(127, -127), firing, controls(-127, 0)],
         };
         let bytes = input.encode().unwrap();
-        assert_eq!(bytes, [2, 1, 0, 3, 127, 129, 0, 5, 129, 0]);
+        assert_eq!(bytes, [2, 1, 0, 3, 127, 129, 0, 0, 5, 1, 129, 0, 0]);
         assert_eq!(InputDatagram::decode(&bytes).unwrap(), input);
         let numbered: Vec<u16> = input.numbered().map(|(sequence, _)| sequence).collect();
         assert_eq!(numbered, [1, 0, u16::MAX]);
@@ -199,11 +213,11 @@ mod tests {
             Err(InputError::WrongCount(0))
         );
         assert_eq!(
-            InputDatagram::decode(&[2, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            InputDatagram::decode(&[2, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
             Err(InputError::WrongCount(5))
         );
         assert!(matches!(
-            InputDatagram::decode(&[2, 0, 0, 2, 0, 0, 0]),
+            InputDatagram::decode(&[2, 0, 0, 2, 0, 0, 0, 0, 0]),
             Err(InputError::WrongLength { .. })
         ));
     }
@@ -237,11 +251,24 @@ mod tests {
         let Ok(dir) = std::env::var("TS_RS_EXPORT_DIR") else {
             return;
         };
-        let cases: [(u16, &[(f32, f32)]); 4] = [
-            (0, &[(0.0, 0.0)]),
-            (1, &[(1.0, -1.0), (0.5, -0.25)]),
-            (65_535, &[(-1.0, 1.0), (2.0, -2.0), (0.0, 1.0), (1.0, 0.0)]),
-            (300, &[(0.3, -0.7), (0.0, 0.0), (1.0, 1.0)]),
+        /// A sequence and its inputs, newest first: thrust, turn, trigger.
+        type Case = (u16, &'static [(f32, f32, bool)]);
+        let cases: [Case; 4] = [
+            (0, &[(0.0, 0.0, false)]),
+            (1, &[(1.0, -1.0, true), (0.5, -0.25, false)]),
+            (
+                65_535,
+                &[
+                    (-1.0, 1.0, false),
+                    (2.0, -2.0, true),
+                    (0.0, 1.0, true),
+                    (1.0, 0.0, false),
+                ],
+            ),
+            (
+                300,
+                &[(0.3, -0.7, true), (0.0, 0.0, false), (1.0, 1.0, false)],
+            ),
         ];
         let rows = cases
             .iter()
@@ -250,8 +277,9 @@ mod tests {
                     sequence,
                     controls: inputs
                         .iter()
-                        .map(|&(thrust, turn)| {
-                            controls(quantize_control(thrust), quantize_control(turn))
+                        .map(|&(thrust, turn, fire)| Controls {
+                            fire,
+                            ..controls(quantize_control(thrust), quantize_control(turn))
                         })
                         .collect(),
                 };
@@ -263,7 +291,9 @@ mod tests {
                     .collect();
                 let list = inputs
                     .iter()
-                    .map(|(thrust, turn)| format!("{{ thrust: {thrust:?}, turn: {turn:?} }}"))
+                    .map(|(thrust, turn, fire)| {
+                        format!("{{ thrust: {thrust:?}, turn: {turn:?}, fire: {fire} }}")
+                    })
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("  {{ sequence: {sequence}, inputs: [{list}], hex: \"{hex}\" }},\n")
@@ -273,7 +303,7 @@ mod tests {
             "// This file was generated by frontier-protocol's tests. Do not edit this file manually.\n\n\
              export const MAX_INPUTS = {MAX_INPUTS};\n\n\
              /** Controls, newest first, and the input datagrams the Rust decoder expects for them. */\n\
-             export const INPUT_VECTORS: {{\n  sequence: number;\n  inputs: {{ thrust: number; turn: number }}[];\n  hex: string;\n}}[] = [\n{rows}];\n"
+             export const INPUT_VECTORS: {{\n  sequence: number;\n  inputs: {{ thrust: number; turn: number; fire: boolean }}[];\n  hex: string;\n}}[] = [\n{rows}];\n"
         );
         let path = std::path::Path::new(&dir).join("inputVectors.ts");
         if std::fs::read_to_string(&path).ok().as_deref() != Some(contents.as_str()) {

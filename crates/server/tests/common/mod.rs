@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use frontier_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage, frame};
 use frontier_server::cert::DevCertificate;
-use frontier_server::expedition::Expedition;
 use frontier_server::transport;
+use frontier_server::transport::Settings;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{CryptoProvider, verify_tls13_signature};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
@@ -20,14 +20,39 @@ use web_transport_quinn::proto::ConnectRequest;
 use web_transport_quinn::quinn;
 use web_transport_quinn::{Client, RecvStream, SendStream, Session, crypto};
 
+/// What tests launch: the compact site with a fixed seed.
+pub fn test_settings() -> Settings {
+    Settings {
+        template: frontier_sim::site::COMPACT_SITE,
+        open_tiers: 1,
+        seed: Some(7),
+        opening_threat: None,
+    }
+}
+
 /// Starts a server on an ephemeral loopback port and returns its URL and the
 /// hash of its certificate.
 pub fn start_server() -> (url::Url, [u8; 32]) {
+    start_server_with(test_settings(), transport::IDLE_TIMEOUT)
+}
+
+/// As [`start_server`], dropping sessions that go silent for `idle_timeout`.
+pub fn start_server_with_idle_timeout(idle_timeout: std::time::Duration) -> (url::Url, [u8; 32]) {
+    start_server_with(test_settings(), idle_timeout)
+}
+
+/// As [`start_server`], with these settings and idle timeout.
+pub fn start_server_with(
+    settings: Settings,
+    idle_timeout: std::time::Duration,
+) -> (url::Url, [u8; 32]) {
     let cert =
         DevCertificate::generate(&["localhost", "127.0.0.1"], OffsetDateTime::now_utc()).unwrap();
-    let server = transport::bind("127.0.0.1:0".parse().unwrap(), &cert).unwrap();
+    let server =
+        transport::bind_with_idle_timeout("127.0.0.1:0".parse().unwrap(), &cert, idle_timeout)
+            .unwrap();
     let addr = server.local_addr().unwrap();
-    tokio::spawn(transport::serve(server, Expedition::start()));
+    tokio::spawn(transport::serve(server, settings));
     (format!("https://{addr}/").parse().unwrap(), cert.sha256)
 }
 

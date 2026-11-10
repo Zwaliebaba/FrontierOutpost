@@ -48,6 +48,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace          # also regenerates client/src/protocol/generated/
 cargo run -p frontier-server
 FRONTIER_IMPAIR_DELAY_MS=75 cargo run -p frontier-server   # add delay (and _JITTER_MS, _LOSS_PERCENT)
+FRONTIER_SITE=compact cargo run -p frontier-server        # short legs for trying the loop (default: frontier)
+FRONTIER_TIERS=3 cargo run -p frontier-server             # open tiers II and III before facilities exist
+FRONTIER_SEED=29 cargo run -p frontier-server             # every contract on one seed (the e2e tests use 29)
+FRONTIER_NPCS=24 cargo run -p frontier-server             # opening threat at the NPC cap (frame time shows in the client)
+cargo run --release -p frontier-server --example caps     # server tick cost and snapshot size at the caps
 docker compose up --build       # server and built client in a Linux container, http://localhost:8080/
 
 # Client
@@ -57,7 +62,7 @@ npm run build:sim               # frontier-sim to WebAssembly; run by dev, build
 npm run dev                     # Vite dev server
 npm run check                   # format:check, lint, typecheck, test, build (= CI)
 npm run e2e                     # browser tests against the real server; run `npm run build` first
-npm run e2e:container           # the same tests against `docker compose up`
+npm run e2e:container           # the same tests against `docker compose -f compose.e2e.yaml up --build --wait`
 npm run format                  # apply Prettier
 
 # Scene generator (Blender 4.3+ or 5.x); write output outside the repo to verify it
