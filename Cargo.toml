@@ -13,7 +13,21 @@ frontier-protocol = { path = "crates/protocol" }
 frontier-sim = { path = "crates/sim" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+thiserror = "2"
 ts-rs = "12"
+
+# Server runtime and networking (AGENTS.md section 8). The `ring` crypto backend builds on
+# Windows without extra tools; aws-lc-rs, the crates' default, does not.
+axum = "0.8"
+rcgen = "0.14"
+rustls = { version = "0.23", default-features = false, features = ["std"] }
+time = "0.3"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.7", features = ["fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+web-transport-quinn = { version = "0.13", default-features = false, features = ["ring"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
