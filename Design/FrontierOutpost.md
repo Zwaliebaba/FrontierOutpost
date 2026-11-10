@@ -30,7 +30,7 @@ Unlocks are permanent. The active layout is bounded by power and sockets, and th
 
 Enhancements change the outpost's silhouette, visible equipment, and operational capabilities. Each facility shows its state in the overview (empty socket, building, powered, unpowered, producing, blocked), and each tier changes the outline enough to read at the zoom where the whole outpost fits. Upgrade previews show resource costs, power demand, and the capability gained, naming the pocket, scan or rig it enables. Specialization branches offer alternatives rather than an endless ladder of larger numbers. Facility selection opens concise management panels; there is no avatar movement or explorable interior. Docked ships and visible production activity give the home presence. **[S2]** Visiting crews add social presence; in Stage 1, crewmates' ships appear docked from roster data.
 
-Everyone receives a starter outpost: a starter ship with a saved basic fitting, and one empty socket. The first completed run should fund one facility, installed at once, that visibly changes the outpost and opens one new option on the next run. Deep customization is optional. **Open:** whether production advances per completed run or by elapsed time.
+Everyone receives a starter outpost: a starter ship with a saved basic fitting, and one empty socket. The first completed run should fund one facility, installed at once, that visibly changes the outpost and opens one new option on the next run. Deep customization is optional. Production advances once per completed run; nothing accrues with elapsed time, online or offline.
 
 **The Stage 1 expedition** is one authored site, offered through an NPC discovery contract (§4). The site has three or four pockets, such as an extraction field, a wreck, a hostile nest and a hazard pocket. Cargo, heat and time prevent clearing them all in one run, and some pockets need a facility or a rig. A seed varies the hazard type, where the best yield sits and the threat mix. Preparation shows part of this; scanning in the site reveals the rest. The contract offers the site at two or three threat tiers, and the lowest is completable in the basic fitting. Per-run yield is finite and threat escalates with time and heat, so when to leave is a decision with a cost. Cargo counts only when it is docked at home.
 
@@ -90,7 +90,7 @@ The first build supports 1–4 players against NPC threats, with provisional NPC
 | Carried cargo | Banked | Lost | Lost |
 | Launch supplies | Spent | Spent | Spent |
 
-A run is abandoned when a pilot disconnects and the instance ends before they return. A disconnected ship stays exposed for the published server timer; reconnecting within the grace window resumes in the live instance. After a server failure, each ship is restored with its fitting and cargo at its last pocket checkpoint. The launch screen shows each pilot's stake, upgraded modules and launch supplies, at NPC replacement price. **Open:** whether a destroyed pilot may relaunch once in the basic fitting into the live instance; it keeps a crew session alive, but it softens the loss and needs a mid-instance join path.
+A run is abandoned when a pilot disconnects and the instance ends before they return. A disconnected ship stays exposed for the published server timer; reconnecting within the grace window resumes in the live instance. After a server failure, each ship is restored with its fitting and cargo at its last pocket checkpoint. The launch screen shows each pilot's stake, upgraded modules and launch supplies, at NPC replacement price. A destroyed pilot returns home and may manage their outpost while the crew continues. There is no relaunch into the live instance in Stage 1.
 
 **[S3]** Separate permanent home investment from frontier exposure:
 
@@ -179,10 +179,130 @@ Stage 1 also gathers early evidence for the Stage 2 crew gate, without making it
 
 These questions determine product viability. Resolve them through prototypes and measured tests before committing to MMO production, rather than deferring them as balance tuning.
 
-## 10. Stage 1 specification (to be written)
+## 10. Stage 1 specification
 
-The sections above state rules, not values. Building Stage 1 needs an appendix of data tables with placeholder numbers marked as tunable: facilities (socket, power, cost, tier, capability), rigs and modules, NPC types and behaviours, materials and currency, NPC prices and recipes, site layout and seed parameters, threat tiers and crew scaling, tick rate, and NPC and projectile caps.
+The sections above state rules; this section gives values. **Every number here is a placeholder and a tunable test parameter**, chosen so that the rules above hold together, not because it has been played. The values are sized for a content horizon of about five hours: roughly ten 30-minute runs to buy three facilities at two tiers each. The checks at the end of this section should travel with the data as an automated test.
 
 The data model is fixed now so that later stages do not need a rewrite. Facilities are data with capability tags. Expedition options are keyed to capability tags, not to facility identifiers. A site is a template plus a seed plus parameters. Saves are versioned, carry a world identifier, and store unlocks separately from the active layout. Items have identities, so that trade and keys can refer to them later. Ships and fittings are instances with a wear field.
 
 A client-only readability greybox comes before server work and before further station art.
+
+**Materials and currency (placeholders).** One currency, credits (cr). Three raw materials come from the site and two goods are processed at the outpost.
+
+| Item | Source | Used for |
+|---|---|---|
+| Ore | Ore field | Tier 1 facilities; alloy |
+| Salvage | Derelict, nest core | Components |
+| Volatiles | Volatile veins | Sale |
+| Alloy | 2 ore | Tier 2 facilities; reinstallation |
+| Components | 2 salvage | Tier 2 facilities |
+
+**Outpost and facilities (placeholders).** The starter outpost has a fixed core (berth, cargo bay, a processor with 4 batches per run) and two construction sockets. Socket A, beside the cargo bay, is open and empty at the start. Socket B, beside the berth, opens when the first facility is installed. Any facility fits either socket. The power cap is 5; a tier 1 facility draws 2 and a tier 2 facility draws 3. Three facilities cannot all be installed, two cannot both run at tier 2, and a tier 2 facility may be run at tier 1 draw with tier 1 capabilities. An unpowered facility grants nothing. Construction is instant.
+
+| Facility | Tier | Cost | Opens on the expedition | Home side |
+|---|---|---|---|---|
+| Sensor array | 1 | 150 cr + 10 ore | Derelict pocket; scout rig | None |
+| | 2 | 550 cr + 12 alloy + 5 components | Deep-scan array module | None |
+| Refinery | 1 | 150 cr + 10 ore | Volatile veins pocket; extraction rig; cargo frame module | Processor 8 batches per run |
+| | 2 | 550 cr + 12 alloy + 5 components | Heat sink module | Processor 14 batches per run |
+| Fabrication bay | 1 | 150 cr + 10 ore | Nest core pocket; escort rig | None |
+| | 2 | 550 cr + 12 alloy + 5 components | Point-defence module | None |
+
+Adjacency: a refinery in socket A processes 2 more batches per run; a fabrication bay in socket B cuts rig and module replacement prices by 20%. The purchase price includes the first installation. Installing a facility again after removing it costs 40 cr and 6 alloy; removal is free. Capabilities come from the active, powered layout, not from the list of unlocks.
+
+**Ship, rigs and modules (placeholders).** One hull carries one rig and up to two modules. The first rig comes with its facility. A rig or module can be fitted only while its facility is installed and powered at the required tier.
+
+| Fitting | From | Cargo | Effect | NPC replacement |
+|---|---|---|---|---|
+| Basic fitting | Starter; always available; cannot be sold or lost | 20 | Scans, extracts and fights at basic rates | None |
+| Scout rig | Sensor array 1 | 16 | Fast scan; salvage at 1.6 per minute; 20% faster | 60 cr |
+| Extraction rig | Refinery 1 | 32 | Ore at 3.0 and volatiles at 1.4 per minute | 60 cr |
+| Escort rig | Fabrication bay 1 | 12 | Double weapon output; shield | 60 cr |
+| Cargo frame | Refinery 1 | +6 | None | 30 cr |
+| Deep-scan array | Sensor array 2 | No change | Reveals the hidden seed values from the approach leg | 90 cr |
+| Heat sink | Refinery 2 | No change | 25% more extraction before cut-out | 90 cr |
+| Point defence | Fabrication bay 2 | No change | Intercepts projectiles near the ship | 90 cr |
+
+**The site (placeholders).** Four pockets are visible from the first run; three are locked until some crew member's outpost opens them. Yields are per run at tier I for a solo pilot. The basic fitting can work any pocket the crew can enter.
+
+| Pocket | Needs | Yield | Basic rate | Hazard |
+|---|---|---|---|---|
+| Ore field | Nothing | 40 ore | 2.0 per minute | Drones gather on extracting ships |
+| Derelict | Sensor array, which locates its signal | 18 salvage | 1.2 per minute | Tight interior; raiders arrive from alert 2 |
+| Volatile veins | Refinery | 16 volatiles | 0.8 per minute | Heat builds twice as fast; the seed hazard is at full strength |
+| Nest core | Fabrication bay | 120 cr bounty + 6 salvage | Cleared in about 14 minutes; 8 with an escort rig | Wardens hold the core |
+
+Extraction builds heat. At full heat the extractor cuts out for 20 seconds; venting is a manual action that pauses extraction for 5 seconds. The contract pays when a ship docks with at least 10 units of site cargo.
+
+| Seed parameter | Values | Known |
+|---|---|---|
+| Hazard type | Thermal flare (heat builds 30% faster), debris drift (collision damage between pockets), ion fog (scan and lock range down 40%) | Shown in preparation |
+| Dominant threat | Drones, raiders or balanced | Shown in preparation |
+| Rich pocket | One pocket has 1.5 times its yield and rate | Revealed by scanning in the site |
+| Wave composition and timing | Drawn from the threat mix | Revealed by scanning in the site |
+| Relay positions | Two different pockets | Revealed by scanning in the site |
+
+| Threat tier | Contract payout | Yield pools | Opening threat | Alert rises every |
+|---|---|---|---|---|
+| I | 100 cr | ×1.0 | 3 NPCs | 4 minutes |
+| II | 160 cr | ×1.25 | 5 NPCs | 3 minutes |
+| III | 240 cr | ×1.5 | 8 NPCs | 2 minutes |
+
+Alert also rises by one each time any extractor cuts out on heat. Each alert step adds a wave of one NPC plus one per tier number. On the return leg, one raider intercepts for each full third of cargo capacity carried. Tier I is completable in the basic fitting. **Open:** whether tiers II and III are offered from the first run or open with facilities.
+
+The optional two-place objective is a relay link: two relays in different pockets must each be held by a ship for the same 30 seconds. It adds 50% to the contract payout.
+
+**Threats and crew scaling (placeholders).** Provisional caps are 24 NPCs and 64 projectiles alive in one instance; these are the benchmark targets of §5.
+
+| NPC | Behaviour |
+|---|---|
+| Drone | Swarms the nearest extracting ship; fragile, short range |
+| Raider | Hunts the ship carrying the most cargo; intercepts on the return leg |
+| Warden | Guards the nest core; slow, heavy, long range; never leaves the core |
+
+| Pilots | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|
+| Threat (opening and wave size) | ×1.0 | ×1.5 | ×1.9 | ×2.2 |
+| Yield pools | ×1.0 | ×1.8 | ×2.5 | ×3.1 |
+| Contract payout, whole expedition | ×1.0 | ×1.6 | ×2.2 | ×2.8 |
+
+Threat never scales with experience or fittings. The contract payout, the nest bounty and the relay bonus form one pot, split equally unless the host changes the split before launch. Cargo belongs to the ship that docks with it.
+
+**Prices, recipes and costs (placeholders).** Prices are fixed and posted. The starting balance is 100 cr and each launch costs each pilot 40 cr in supplies.
+
+| Good | NPC buys at | NPC sells at |
+|---|---|---|
+| Ore | 10 | 16 |
+| Salvage | 18 | 28 |
+| Volatiles | 22 | 36 |
+| Alloy | 26 | 40 |
+| Components | 46 | 70 |
+
+Recipes: 2 ore make 1 alloy; 2 salvage make 1 components. Batches are queued at the dock and finish when the pilot next docks from a completed run, up to the processor's capacity. Rigs, modules and facilities cannot be sold.
+
+**Timing (placeholders).**
+
+| Parameter | Value |
+|---|---|
+| Simulation tick and state snapshots | 20 per second; clients interpolate 100 ms behind |
+| Preparation | 4 minutes |
+| Approach leg | 3 minutes; first decision within 2 minutes of launch |
+| Objective | 16 minutes |
+| Return leg | 3 minutes |
+| Unloading and decisions | 4 minutes |
+| Instance limit | 45 minutes, with a warning at 40 |
+| Disconnect exposure timer | 30 seconds in combat, 10 seconds otherwise; the ship is then held inert and cannot be targeted |
+| Reconnect grace window | 5 minutes, or until the instance ends if sooner |
+| Pocket checkpoint | On entering a pocket and every 60 seconds |
+
+The instance ends when every connected pilot has docked or been destroyed, or at the limit.
+
+**Loss and recovery (placeholders).** The launch screen prices the stake from the tables above: an extraction rig, heat sink and cargo frame show 180 cr of modules and 40 cr of supplies. The 15-minute recovery of §7 is budgeted as 1.5 minutes of preparation, 3 of approach, 6.5 of extraction in the ore field, 3 of return and 1 to buy and refit. At basic rates that is 13 ore and the tier I payout, 190 cr after supplies, against 180 cr for the most expensive fitting.
+
+**Checks on these values.** Each holds for the numbers above.
+
+- A completed tier I run in the basic fitting returns 20 ore and nets 260 cr after supplies.
+- After the first run a new player holds 260 cr and 10 ore, enough for one tier 1 facility.
+- For every good the NPC sells above the price it buys at, and each recipe's inputs bought from NPCs cost more than NPCs pay for the output (32 against 26; 56 against 46). Processing a pilot's own haul still gains (20 becomes 26; 36 becomes 46).
+- Three tier 1 facilities draw 6 and two tier 2 facilities draw 6, both over the cap of 5; one tier 2 and one tier 1 draw exactly 5.
+- A solo pilot with no losses buys all six tiers in nine completed runs, valuing materials at NPC buy prices. One loss or a few reinstallations makes it about ten.
