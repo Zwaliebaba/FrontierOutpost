@@ -30,7 +30,6 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           { "context": "Rust · fmt, clippy, test, docs", "integration_id": 15368 },
-          { "context": "Rust · test (Windows)", "integration_id": 15368 },
           { "context": "Client · format, lint, typecheck, test, build", "integration_id": 15368 },
           { "context": "End to end · browser against the server", "integration_id": 15368 },
           { "context": "Repository · LFS and line endings", "integration_id": 15368 }

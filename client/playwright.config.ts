@@ -3,7 +3,8 @@ import { defineConfig } from "@playwright/test";
 // End-to-end tests run the built client (`npm run build`) against the real game server.
 const HTTP_PORT = 8181;
 
-export default defineConfig({
+/** Settings for every run, whichever server the tests talk to. */
+export const shared = defineConfig({
   testDir: "e2e",
   testMatch: "**/*.e2e.ts",
   timeout: 30_000,
@@ -17,6 +18,10 @@ export default defineConfig({
     launchOptions: { args: ["--no-proxy-server"] },
   },
   projects: [{ name: "chromium", use: { browserName: "chromium" } }],
+});
+
+export default defineConfig({
+  ...shared,
   webServer: {
     command: "cargo run --locked -p frontier-server",
     cwd: "..",

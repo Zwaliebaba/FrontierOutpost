@@ -1,0 +1,17 @@
+# The game server in a Linux container, for Docker Desktop on the owner's machine.
+#   docker compose up --build        then open http://localhost:8080/
+services:
+  server:
+    build: .
+    image: frontier-outpost-server
+    ports:
+      # Loopback only: browsers allow WebTransport only from a secure context, and a page served
+      # over plain HTTP is one only on localhost.
+      - "127.0.0.1:8080:8080/tcp"
+      # WebTransport runs over QUIC, which is UDP. Docker publishes TCP unless told otherwise.
+      - "127.0.0.1:4443:4443/udp"
+    environment:
+      # The address browsers dial: the host side of the UDP mapping above. An IP address, not
+      # `localhost`, so that the browser does not try IPv6 first.
+      FRONTIER_PUBLIC_WEBTRANSPORT_ADDR: "127.0.0.1:4443"
+      RUST_LOG: info
