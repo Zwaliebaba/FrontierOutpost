@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import type { OrthographicCamera } from "three";
+import type { Camera } from "three";
 
 export interface ScreenPoint {
   x: number;
@@ -12,30 +12,29 @@ export interface Viewport {
 }
 
 /** Projects a world position to CSS pixels, origin at the top-left of the viewport. */
-export function worldToScreen(
-  position: Vector3,
-  camera: OrthographicCamera,
-  viewport: Viewport,
-): ScreenPoint {
+export function worldToScreen(position: Vector3, camera: Camera, viewport: Viewport): ScreenPoint {
   const ndc = position.clone().project(camera);
   return { x: ((ndc.x + 1) / 2) * viewport.width, y: ((1 - ndc.y) / 2) * viewport.height };
 }
 
-/** Where a screen point meets the horizontal plane at `planeY`, or null for a level camera. */
+/**
+ * Where the view ray through a screen point meets the horizontal plane at `planeY`. Null when
+ * the ray runs level with the plane or meets it behind the camera.
+ */
 export function screenToPlane(
   point: ScreenPoint,
-  camera: OrthographicCamera,
+  camera: Camera,
   viewport: Viewport,
   planeY = 0,
 ): Vector3 | null {
-  const origin = new Vector3(
-    (point.x / viewport.width) * 2 - 1,
-    1 - (point.y / viewport.height) * 2,
-    -1,
-  ).unproject(camera);
-  const forward = camera.getWorldDirection(new Vector3());
-  if (Math.abs(forward.y) < 1e-6) return null;
-  return origin.addScaledVector(forward, (planeY - origin.y) / forward.y);
+  const x = (point.x / viewport.width) * 2 - 1;
+  const y = 1 - (point.y / viewport.height) * 2;
+  // Two points on the ray, so the same code serves orthographic and perspective cameras.
+  const near = new Vector3(x, y, -1).unproject(camera);
+  const ray = new Vector3(x, y, 1).unproject(camera).sub(near);
+  if (Math.abs(ray.y) < 1e-9) return null;
+  const along = (planeY - near.y) / ray.y;
+  return along < 0 ? null : near.addScaledVector(ray, along);
 }
 
 export interface PickCandidate {

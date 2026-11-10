@@ -1,6 +1,8 @@
 import {
   AlwaysStencilFunc,
   BoxGeometry,
+  BufferAttribute,
+  BufferGeometry,
   Color,
   CylinderGeometry,
   DirectionalLight,
@@ -16,6 +18,8 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  Points,
+  PointsMaterial,
   ReplaceStencilOp,
   RingGeometry,
   Scene,
@@ -23,7 +27,6 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import type { BufferGeometry } from "three";
 import {
   BACKDROPS,
   HEIGHT_MODES,
@@ -35,6 +38,8 @@ import {
 } from "./config";
 import type { Config } from "./config";
 import type { ShipInput } from "./kinematics";
+import { LOOK_MODES, dragLook, isHome, settleLook, turnLook } from "./look";
+import type { LookState } from "./look";
 import { occludersHiding } from "./occlusion";
 import type { Occluder } from "./occlusion";
 import { pickNearest, screenToPlane, worldToScreen } from "./picking";
@@ -53,11 +58,13 @@ import {
 import type { TrialKind, TrialRecord } from "./trials";
 import {
   ELEVATIONS,
-  createGreyboxCamera,
+  PROJECTIONS,
+  aimRig,
+  createRig,
   hiddenDepthBehind,
   pixelsPerMetre,
   planeDepthScale,
-  viewDirectionAtElevation,
+  towardCamera,
 } from "./view";
 
 // Starter frigate bounds from `scene_manifest.json` (docking_validation), in metres.
@@ -134,10 +141,28 @@ starlight.position.set(-4, 10, 6);
 scene.add(starlight);
 
 const world = createWorld(config.scene, config.seed, config.heights);
-const viewDirection = viewDirectionAtElevation(config.elevation);
 const cameraTarget = new Vector3();
 let viewport = { width: 1, height: 1 };
-let camera = createGreyboxCamera(1, config.width, config.elevation, cameraTarget);
+let rig = createRig(1, config.width, config.projection);
+// The tactical view is where the camera rests; `look` is where the tester has turned it.
+const homeLook: LookState = { yaw: 0, pitch: config.elevation };
+let look: LookState = { ...homeLook };
+aimRig(rig, cameraTarget, look.pitch, look.yaw);
+
+// A sparse, dim starfield, so that turning the camera reads as turning.
+const starRng = createRng(config.seed + 3000);
+const starPositions = new Float32Array(700 * 3);
+for (let i = 0; i < starPositions.length; i += 3) {
+  const around = starRng() * 2 * Math.PI;
+  const up = starRng() * 2 - 1;
+  const flat = Math.sqrt(1 - up * up);
+  starPositions.set([Math.cos(around) * flat * 900, up * 900, Math.sin(around) * flat * 900], i);
+}
+const stars = new Points(
+  new BufferGeometry().setAttribute("position", new BufferAttribute(starPositions, 3)),
+  new PointsMaterial({ color: linear(0.35, 0.42, 0.55), size: 1.5, sizeAttenuation: false }),
+);
+scene.add(stars);
 
 function occluderMesh(occluder: Occluder): Mesh<BufferGeometry, MeshStandardMaterial> {
   const material = new MeshStandardMaterial({
@@ -355,9 +380,13 @@ let hiddenSeconds = 0;
 const brackets = new Map<string, HTMLElement>();
 
 const shipPosition = (ship: Ship) => new Vector3(ship.state.x, ship.height, ship.state.z);
-const screenOf = (ship: Ship): ScreenPoint => worldToScreen(shipPosition(ship), camera, viewport);
-const isHidden = (ship: Ship) =>
-  occludersHiding(shipPosition(ship), viewDirection, world.occluders).length > 0;
+const screenOf = (ship: Ship): ScreenPoint =>
+  worldToScreen(shipPosition(ship), rig.camera, viewport);
+const hiding = (ship: Ship) => {
+  const position = shipPosition(ship);
+  return occludersHiding(position, towardCamera(rig.camera, position), world.occluders);
+};
+const isHidden = (ship: Ship) => hiding(ship).length > 0;
 
 function onScreen(allegiance?: Allegiance): Ship[] {
   const margin = 30;
@@ -450,6 +479,8 @@ function finishTrial(now: number, outcome: TrialRecord["outcome"], value: number
     outcome,
     value,
     occluded: active.kind === "range" ? false : active.occluded,
+    cameraYawDeg: Math.round((look.yaw * 180) / Math.PI),
+    cameraPitchDeg: Math.round(look.pitch),
   });
   active = null;
   paused = false;
@@ -485,7 +516,7 @@ function handleClick(point: ScreenPoint, now: number): void {
     if (!target) return;
     const centre = screenOf(target);
     if (Math.hypot(point.x - centre.x, point.y - centre.y) < 15) return;
-    const pointed = screenToPlane(point, camera, viewport, target.height);
+    const pointed = screenToPlane(point, rig.camera, viewport, target.height);
     if (!pointed) return;
     const error = headingErrorDeg(
       target.state.heading,
@@ -542,6 +573,22 @@ const controls: { key: keyof Config; label: string; choices: Choice[] }[] = [
     choices: SCENE_IDS.map((id): Choice => [id, SCENE_LABELS[id]]),
   },
   { key: "elevation", label: "Camera elevation", choices: same(ELEVATIONS, "°") },
+  {
+    key: "projection",
+    label: "Projection",
+    choices: PROJECTIONS.map((id): Choice => [
+      id,
+      { ortho: "Orthographic", narrow: "Perspective, narrow", wide: "Perspective, wide" }[id],
+    ]),
+  },
+  {
+    key: "look",
+    label: "Look around",
+    choices: LOOK_MODES.map((id): Choice => [
+      id,
+      { fixed: "Off (fixed view)", hold: "Hold, springs back", free: "Free, stays put" }[id],
+    ]),
+  },
   { key: "width", label: "View width", choices: same(VIEW_WIDTHS, " m") },
   {
     key: "cues",
@@ -582,8 +629,9 @@ startButton.addEventListener("click", startRun);
 panel.append(startButton);
 
 const readout = element("dl");
+const cameraReadout = element("dl");
 const results = element("div", "results");
-panel.append(readout, results);
+panel.append(readout, cameraReadout, results);
 
 function row(list: HTMLElement, term: string, value: string, className?: string): void {
   list.append(element("dt", undefined, term), element("dd", className, value));
@@ -690,12 +738,8 @@ function renderResults(): void {
 function resize(): void {
   viewport = { width: stage.clientWidth, height: stage.clientHeight };
   renderer.setSize(viewport.width, viewport.height);
-  camera = createGreyboxCamera(
-    viewport.width / viewport.height,
-    config.width,
-    config.elevation,
-    cameraTarget,
-  );
+  rig = createRig(viewport.width / viewport.height, config.width, config.projection);
+  aimRig(rig, cameraTarget, look.pitch, look.yaw);
   renderReadout();
 }
 
@@ -733,19 +777,16 @@ function syncViews(): void {
     edge.material.color.copy(bolt.allegiance === "hostile" ? linear(1, 0.25, 0.05) : SIGNAL.ally);
   });
 
+  cameraTarget.set(player.ship.state.x, 0, player.ship.state.z);
+  aimRig(rig, cameraTarget, look.pitch, look.yaw);
+  stars.position.copy(rig.camera.position);
+
   if (config.occlusion === "fade") {
-    const hiding = new Set(
-      occludersHiding(shipPosition(player.ship), viewDirection, world.occluders),
-    );
+    const inFront = new Set(hiding(player.ship));
     occluderMeshes.forEach((mesh, index) => {
-      mesh.material.opacity = hiding.has(index) ? 0.22 : 1;
+      mesh.material.opacity = inFront.has(index) ? 0.22 : 1;
     });
   }
-
-  cameraTarget.set(player.ship.state.x, 0, player.ship.state.z);
-  camera.position.copy(cameraTarget).addScaledVector(viewDirection, 200);
-  camera.lookAt(cameraTarget);
-  camera.updateMatrixWorld();
 
   for (const [id, bracket] of brackets) {
     const ship = others.find((view) => view.ship.id === id)?.ship;
@@ -770,19 +811,74 @@ window.addEventListener("keydown", (event) => {
   }
 });
 window.addEventListener("keyup", (event) => held.delete(event.code));
-renderer.domElement.addEventListener("pointerdown", (event) => {
-  const bounds = renderer.domElement.getBoundingClientRect();
-  handleClick({ x: event.clientX - bounds.left, y: event.clientY - bounds.top }, performance.now());
+
+// Left button answers trials. Right button, or Q and E, turns the camera when looking is allowed.
+const canvas = renderer.domElement;
+let dragFrom: ScreenPoint | null = null;
+canvas.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
 });
+canvas.addEventListener("pointerdown", (event) => {
+  if (event.button === 0) {
+    const bounds = canvas.getBoundingClientRect();
+    handleClick(
+      { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+      performance.now(),
+    );
+  } else if (event.button === 2 && config.look !== "fixed") {
+    dragFrom = { x: event.clientX, y: event.clientY };
+    canvas.setPointerCapture(event.pointerId);
+  }
+});
+canvas.addEventListener("pointermove", (event) => {
+  if (!dragFrom) return;
+  look = dragLook(look, event.clientX - dragFrom.x, event.clientY - dragFrom.y);
+  dragFrom = { x: event.clientX, y: event.clientY };
+});
+const endDrag = () => {
+  dragFrom = null;
+};
+canvas.addEventListener("pointerup", endDrag);
+canvas.addEventListener("pointercancel", endDrag);
+
+const KEY_TURN_RATE = 1.6;
+function updateLook(dt: number): void {
+  if (config.look !== "fixed") {
+    if (held.has("KeyR")) look = { ...homeLook };
+    const keyTurn = axis(["KeyE"], ["KeyQ"]);
+    if (keyTurn !== 0) look = turnLook(look, keyTurn * KEY_TURN_RATE * dt);
+    else if (config.look === "hold" && !dragFrom) look = settleLook(look, homeLook, dt);
+  }
+
+  const text = isHome(look, homeLook)
+    ? "Tactical view"
+    : `Turned ${((look.yaw * 180) / Math.PI).toFixed(0)}°, elevation ${look.pitch.toFixed(0)}°`;
+  if (cameraReadout.dataset.text !== text) {
+    cameraReadout.dataset.text = text;
+    cameraReadout.replaceChildren();
+    row(cameraReadout, "Camera", text);
+  }
+}
+
+const IDLE_PROMPT =
+  "Fly with W A S D or the arrow keys. " +
+  {
+    fixed: "",
+    hold: "Hold the right mouse button, or Q and E, to look around. ",
+    free: "Drag with the right mouse button, or use Q and E, to turn the view; R resets it. ",
+  }[config.look] +
+  "Press Space to start a measured run.";
 
 resize();
-prompt.textContent = "Fly with W A S D or the arrow keys. Press Space to start a measured run.";
+prompt.textContent = IDLE_PROMPT;
 
 let last = performance.now();
 let accumulator = 0;
 renderer.setAnimationLoop((now: number) => {
-  accumulator += Math.min(0.1, (now - last) / 1000);
+  const frame = Math.min(0.1, (now - last) / 1000);
+  accumulator += frame;
   last = now;
+  updateLook(frame);
   while (accumulator >= STEP) {
     accumulator -= STEP;
     if (paused) continue;
@@ -791,5 +887,5 @@ renderer.setAnimationLoop((now: number) => {
   }
   syncViews();
   updateTrial(now);
-  renderer.render(scene, camera);
+  renderer.render(scene, rig.camera);
 });

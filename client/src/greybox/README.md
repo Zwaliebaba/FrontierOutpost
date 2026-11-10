@@ -18,15 +18,29 @@ camera. The tester steers one ship with W A S D or the arrow keys.
 The panel changes one variable at a time; every setting is also a URL parameter, so a
 configuration can be shared as a link.
 
-| Setting           | Values                       | Tests                                                     |
-| ----------------- | ---------------------------- | --------------------------------------------------------- |
-| Camera elevation  | 33°, 40°, 45°, 50°           | Whether the current 33° view should stand                 |
-| View width        | 40, 55, 73 m                 | How small a ship may get before it stops being selectable |
-| Plane cues        | on, off                      | Markers under ships, range rings and drop lines           |
-| Behind structures | none, silhouette, fade       | The two occlusion rules the design considered             |
-| Ship heights      | flat, varied                 | Design §5's rule that combat ships render at one height   |
-| Colour vision     | normal, grey, protan, deutan | Whether allegiance survives without colour                |
-| Backdrop          | dark, bright                 | Projectile contrast                                       |
+| Setting           | Values                                                         | Tests                                                                |
+| ----------------- | -------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Camera elevation  | 33°, 40°, 45°, 50°                                             | Whether the current 33° view should stand                            |
+| Projection        | orthographic, narrow perspective (20°), wide perspective (45°) | Whether the view needs depth cues that orthographic cannot give      |
+| Look around       | off, hold, free                                                | Whether the tester may orbit the camera, and whether it springs back |
+| View width        | 40, 55, 73 m                                                   | How small a ship may get before it stops being selectable            |
+| Plane cues        | on, off                                                        | Markers under ships, range rings and drop lines                      |
+| Behind structures | none, silhouette, fade                                         | The two occlusion rules the design considered                        |
+| Ship heights      | flat, varied                                                   | Design §5's rule that combat ships render at one height              |
+| Colour vision     | normal, grey, protan, deutan                                   | Whether allegiance survives without colour                           |
+| Backdrop          | dark, bright                                                   | Projectile contrast                                                  |
+
+## Looking around
+
+The design fixes one view direction (§5). The look-around setting tests relaxing that. With
+**hold**, the right mouse button, or Q and E, orbits the camera around the tester's ship, and the
+view springs back to the tactical view on release. With **free** the view stays where it is left
+and R resets it. Each trial records the camera's yaw and elevation when it was answered, so a run
+can show whether a turned view costs heading or range judgement. Steering is relative to the
+ship, so it is unaffected by where the camera points.
+
+All three projections show the same width at the tester's ship, so on-screen ship size there is
+comparable between them.
 
 ## What it measures
 

@@ -1,6 +1,9 @@
 import { SCENE_IDS } from "./scenarios";
 import type { HeightMode, SceneId } from "./scenarios";
-import { ELEVATIONS } from "./view";
+import { LOOK_MODES } from "./look";
+import type { LookMode } from "./look";
+import { ELEVATIONS, PROJECTIONS } from "./view";
+import type { Projection } from "./view";
 
 export const VIEW_WIDTHS = [40, 55, 73] as const;
 export const OCCLUSION_MODES = ["none", "silhouette", "fade"] as const;
@@ -12,6 +15,9 @@ export interface Config {
   scene: SceneId;
   /** Camera elevation above the gameplay plane, in degrees. */
   elevation: number;
+  projection: Projection;
+  /** Whether the tester may orbit the camera away from the tactical view. */
+  look: LookMode;
   /** Visible width in metres. */
   width: number;
   /** Draw plane cues: markers under ships, range rings, drop lines. */
@@ -28,6 +34,8 @@ export interface Config {
 export const DEFAULT_CONFIG: Config = {
   scene: "station",
   elevation: 33,
+  projection: "ortho",
+  look: "hold",
   width: 40,
   cues: true,
   occlusion: "silhouette",
@@ -58,6 +66,8 @@ export function parseConfig(search: string): Config {
   return {
     scene: oneOf(SCENE_IDS, params.get("scene"), d.scene),
     elevation: oneOf(ELEVATIONS, params.get("elevation"), d.elevation),
+    projection: oneOf(PROJECTIONS, params.get("projection"), d.projection),
+    look: oneOf(LOOK_MODES, params.get("look"), d.look),
     width: oneOf(VIEW_WIDTHS, params.get("width"), d.width),
     cues: oneOf(["1", "0"], params.get("cues"), d.cues ? "1" : "0") === "1",
     occlusion: oneOf(OCCLUSION_MODES, params.get("occlusion"), d.occlusion),

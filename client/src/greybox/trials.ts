@@ -13,6 +13,10 @@ export interface TrialRecord {
   value: number | null;
   /** Whether the prompted ship's centre was behind a structure when the prompt appeared. */
   occluded: boolean;
+  /** Camera yaw away from the tactical bearing when the tester answered, in degrees. */
+  cameraYawDeg: number;
+  /** Camera elevation when the tester answered, in degrees. */
+  cameraPitchDeg: number;
 }
 
 export interface PlanePoint {

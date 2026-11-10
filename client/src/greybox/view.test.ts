@@ -3,11 +3,15 @@ import { describe, expect, it } from "vitest";
 import { elevationDegrees, tacticalViewDirection } from "../camera";
 import {
   ELEVATIONS,
-  createGreyboxCamera,
+  aimRig,
+  createRig,
   hiddenDepthBehind,
   maxViewWidthForSize,
+  orbitDirection,
+  perspectiveDistance,
   pixelsPerMetre,
   planeDepthScale,
+  towardCamera,
   viewDirectionAtElevation,
 } from "./view";
 
@@ -28,10 +32,49 @@ describe("greybox view", () => {
 
   it("aims the camera at its target from the requested elevation", () => {
     const target = new Vector3(4, 0, -7);
-    const camera = createGreyboxCamera(16 / 9, 55, 45, target);
-    const forward = camera.getWorldDirection(new Vector3());
-    expect(forward.dot(viewDirectionAtElevation(45))).toBeCloseTo(-1, 6);
-    expect(camera.right - camera.left).toBeCloseTo(55);
+    for (const projection of ["ortho", "narrow", "wide"] as const) {
+      const rig = createRig(16 / 9, 55, projection);
+      aimRig(rig, target, 45);
+      const forward = rig.camera.getWorldDirection(new Vector3());
+      expect(forward.dot(viewDirectionAtElevation(45))).toBeCloseTo(-1, 6);
+      expect(rig.camera.position.distanceTo(target)).toBeCloseTo(rig.distance, 6);
+    }
+  });
+
+  it("orbits about the vertical axis without changing elevation", () => {
+    const quarter = orbitDirection(33, Math.PI / 2);
+    expect(quarter.y).toBeCloseTo(viewDirectionAtElevation(33).y, 9);
+    expect(quarter.dot(viewDirectionAtElevation(33))).toBeCloseTo(Math.sin(0.576) ** 2, 2);
+    expect(orbitDirection(33, 2 * Math.PI).distanceTo(orbitDirection(33))).toBeLessThan(1e-9);
+    // Positive yaw is clockwise seen from above: the bearing moves from +x toward +z.
+    const base = viewDirectionAtElevation(33);
+    const turned = orbitDirection(33, 0.2);
+    expect(Math.atan2(turned.z, turned.x)).toBeGreaterThan(Math.atan2(base.z, base.x));
+  });
+
+  it("puts a perspective camera where it sees the requested width at its target", () => {
+    const distance = perspectiveDistance(40, 16 / 9, 20);
+    const visibleHeight = 2 * distance * Math.tan((20 * Math.PI) / 360);
+    expect(visibleHeight * (16 / 9)).toBeCloseTo(40, 9);
+    expect(perspectiveDistance(40, 16 / 9, 45)).toBeLessThan(distance);
+  });
+
+  it("points toward the camera: one direction for orthographic, per point for perspective", () => {
+    const ortho = createRig(16 / 9, 40, "ortho");
+    aimRig(ortho, new Vector3(), 33, 0.7);
+    const a = towardCamera(ortho.camera, new Vector3(-10, 0, 3));
+    const b = towardCamera(ortho.camera, new Vector3(12, 2, -8));
+    expect(a.distanceTo(b)).toBeLessThan(1e-9);
+    expect(a.distanceTo(orbitDirection(33, 0.7))).toBeLessThan(1e-6);
+
+    const wide = createRig(16 / 9, 40, "wide");
+    aimRig(wide, new Vector3(), 33);
+    const near = towardCamera(wide.camera, new Vector3(-10, 0, 3));
+    const far = towardCamera(wide.camera, new Vector3(12, 0, -8));
+    expect(near.distanceTo(far)).toBeGreaterThan(0.1);
+    expect(towardCamera(wide.camera, new Vector3()).distanceTo(orbitDirection(33))).toBeLessThan(
+      1e-6,
+    );
   });
 
   it("matches the review's figures for the 33 degree view", () => {

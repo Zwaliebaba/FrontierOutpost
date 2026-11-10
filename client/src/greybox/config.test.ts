@@ -6,12 +6,21 @@ describe("greybox config", () => {
     expect(parseConfig("")).toEqual(DEFAULT_CONFIG);
     expect(DEFAULT_CONFIG.elevation).toBe(33);
     expect(DEFAULT_CONFIG.scene).toBe("station");
+    expect(DEFAULT_CONFIG.projection).toBe("ortho");
+  });
+
+  it("lets the tester look around by default without moving the resting view", () => {
+    expect(DEFAULT_CONFIG.look).toBe("hold");
+    expect(parseConfig("?look=fixed").look).toBe("fixed");
+    expect(parseConfig("?look=sideways&projection=fisheye")).toEqual(DEFAULT_CONFIG);
   });
 
   it("round-trips every field through the query string", () => {
     const config = {
       scene: "rock",
       elevation: 45,
+      projection: "wide",
+      look: "free",
       width: 73,
       cues: false,
       occlusion: "fade",
