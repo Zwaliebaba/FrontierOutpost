@@ -1,5 +1,5 @@
-# Send the image build only what it compiles. Everything else, above all target/ and the Git LFS
-# assets under Design/, stays out of the build context.
+# Send the image build only what it compiles. Everything else, above all target/ and the scene
+# sources under Design/, stays out of the build context.
 *
 !Cargo.toml
 !Cargo.lock

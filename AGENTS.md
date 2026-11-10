@@ -33,7 +33,7 @@ client/                 TypeScript + Vite + Three.js browser client
   src/greybox/          client-only readability test harness, served at /greybox.html
   src/sim/              loads the WebAssembly simulation; pkg/ is written by wasm-bindgen
 spikes/                 Throwaway experiments, each its own Cargo workspace; not built by CI
-Design/                 Game design, style guide, Blender scenes (binaries in Git LFS)
+Design/                 Game design, style guide, Blender scenes and their exports
 .github/workflows/      CI
 ```
 
@@ -131,8 +131,9 @@ change ships with a test. Keep comments for the *why*.
 
 ## 6. Assets
 
-- **Binary files are stored in Git LFS** (patterns are in `.gitattributes`). Add the pattern
-  *before* committing a new binary type. CI runs `git lfs fsck --pointers`.
+- **Binary files are committed to Git directly**, not to Git LFS. `.gitattributes` marks them
+  `binary`; add the pattern *before* committing a new binary type. CI fails if a Git LFS pointer
+  is committed. Keep them small: every regenerated binary stays in the history for good.
 - Do not hand-edit `.glb`, `.blend`, `scene_manifest.json` or preview PNGs: change
   `create_scene.py` and regenerate. Regenerating on a different Blender version changes bytes
   without changing geometry, so commit regenerated binaries only on purpose.
@@ -141,8 +142,6 @@ change ships with a test. Keep comments for the *why*.
   committed one.
 - A new scene goes in `Design/<SceneName>/` with the files listed in style guide §8. Record any
   new visual convention in the style guide.
-- CI checks out LFS *pointers* only. If the client build starts loading real asset files, enable
-  `lfs: true` in the client job.
 
 ## 7. Workflow
 

@@ -81,8 +81,7 @@ the rules the game uses, not a copy of them.
 - The limits shown beside results are the review's starting hypotheses. The design leaves gate
   thresholds and cohort sizes open.
 - Ships are extruded outlines at the starter frigate's dimensions, and the station is a dozen
-  boxes and cylinders taken from `create_scene.py`. Binary assets are Git LFS pointers in a normal
-  checkout, so no GLB is loaded.
+  boxes and cylinders taken from `create_scene.py`. The harness loads no GLB.
 - The station's landing deck is assumed to lie on the gameplay plane. Neither design document
   defines that datum yet.
 - Steering, weapons and NPC routes are placeholders written for this harness. The real rules
