@@ -271,3 +271,45 @@ async fn a_run_survives_the_server_being_killed_and_restarted() {
     );
     let _ = std::fs::remove_file(&data);
 }
+
+/// Plan work item 4.5: `frontier-server wipe` leaves an empty world.
+#[test]
+fn the_wipe_command_leaves_an_empty_world() {
+    use frontier_server::store::Store;
+    let data = data_path();
+    let store = Store::open(&data).unwrap();
+    let pilot = store.create_account("Vega").unwrap();
+    store.issue_token(pilot).unwrap();
+    store.save_checkpoint("run", &[(pilot, 0)], "{}").unwrap();
+    let world = store.world().to_owned();
+    drop(store);
+
+    let status = Command::new(env!("CARGO_BIN_EXE_frontier-server"))
+        .arg("wipe")
+        .env("FRONTIER_DATA", &data)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let store = Store::open(&data).unwrap();
+    assert!(
+        store.is_empty().unwrap(),
+        "no pilots, ledger, sessions or runs"
+    );
+    assert_ne!(store.world(), world, "a new world");
+    let _ = std::fs::remove_file(&data);
+}
+
+#[test]
+fn refuses_an_unknown_command() {
+    let status = Command::new(env!("CARGO_BIN_EXE_frontier-server"))
+        .arg("wiep")
+        .env("FRONTIER_DATA", data_path())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .unwrap();
+    assert!(!status.success());
+}

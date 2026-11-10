@@ -110,6 +110,50 @@ impl Store {
         Self::init(Connection::open(path)?)
     }
 
+    /// Wipes the world saved at `path` and starts an empty one there, with a
+    /// new world identifier: Stage 1 data may be wiped between builds (design
+    /// section 9). Stop the server first. Returns the new world.
+    ///
+    /// # Errors
+    /// Fails if the files cannot be removed or the new world cannot be made.
+    pub fn wipe(path: &Path) -> Result<Self, StoreError> {
+        // SQLite keeps a write-ahead log and an index beside the database.
+        for suffix in ["", "-wal", "-shm"] {
+            let mut file = path.as_os_str().to_owned();
+            file.push(suffix);
+            match std::fs::remove_file(&file) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(StoreError::Sqlite(rusqlite::Error::InvalidPath(
+                        format!("{}: {error}", std::path::Path::new(&file).display()).into(),
+                    )));
+                }
+            }
+        }
+        Self::open(path)
+    }
+
+    /// Whether the world holds nothing: no pilots, ledger or runs.
+    ///
+    /// # Errors
+    /// Fails only if the database does.
+    pub fn is_empty(&self) -> Result<bool, StoreError> {
+        let connection = self.lock()?;
+        let count = |table: &str| -> Result<i64, StoreError> {
+            Ok(
+                connection.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })?,
+            )
+        };
+        Ok(count("accounts")? == 0
+            && count("ledger")? == 0
+            && count("passkeys")? == 0
+            && count("sessions")? == 0
+            && count("checkpoints")? == 0)
+    }
+
     /// A world held in memory, for tests.
     ///
     /// # Errors
@@ -808,5 +852,24 @@ mod tests {
         assert_eq!(saved[0].crew, [(id, 0)]);
         store.delete_checkpoint("run-a").unwrap();
         assert_eq!(store.checkpoints().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_wipe_leaves_an_empty_world_with_a_new_identity() {
+        let dir = std::env::temp_dir().join(format!("frontier-wipe-{}", random_hex(6).unwrap()));
+        let path = dir.join("world.db");
+        let store = Store::open(&path).unwrap();
+        let id = store.create_account("Vega").unwrap();
+        store.issue_token(id).unwrap();
+        store.save_checkpoint("run", &[(id, 0)], "{}").unwrap();
+        let old_world = store.world().to_owned();
+        assert!(!store.is_empty().unwrap());
+        drop(store);
+
+        let wiped = Store::wipe(&path).unwrap();
+        assert!(wiped.is_empty().unwrap());
+        assert_ne!(wiped.world(), old_world);
+        assert_eq!(wiped.find("Vega").unwrap(), None);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

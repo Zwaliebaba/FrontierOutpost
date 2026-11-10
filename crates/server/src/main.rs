@@ -18,6 +18,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let config = Config::from_env()?;
+    // `frontier-server wipe`: Stage 1 data may be wiped between builds.
+    match std::env::args().nth(1).as_deref() {
+        None => {}
+        Some("wipe") => {
+            let store = Store::wipe(&config.data_path)?;
+            info!(data = %config.data_path.display(), world = store.world(), "wiped: an empty world");
+            return Ok(());
+        }
+        Some(other) => {
+            return Err(format!("unknown command {other:?}; the only one is wipe").into());
+        }
+    }
     let host = config.web_transport_addr.ip().to_string();
     let public_host = config
         .public_web_transport_addr
