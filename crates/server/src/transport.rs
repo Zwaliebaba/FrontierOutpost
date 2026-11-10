@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use frontier_protocol::input::InputDatagram;
 use frontier_protocol::{ClientMessage, ServerMessage, frame};
 use frontier_sim::run::Options;
-use frontier_sim::site::{FRONTIER_SITE, SiteTemplate, ThreatTier};
+use frontier_sim::site::{Capability, FRONTIER_SITE, SiteTemplate, ThreatTier};
 use frontier_sim::world::ShipId;
 use tokio::sync::{Notify, mpsc};
 use tracing::{debug, info, warn};
@@ -20,11 +20,12 @@ use web_transport_quinn::{RecvStream, SendStream, Server, Session, crypto, quinn
 
 use crate::auth::{Auth, AuthError, Ceremony};
 use crate::cert::DevCertificate;
+use crate::crews::{self, Crews};
 use crate::expedition::{Expedition, LaunchOrder, PilotEvent};
 use crate::home::{self, Action};
 use crate::ledger::{Item, Npc, Party, Reason, Transfer};
-use crate::runs::Runs;
-use crate::store::{AccountId, Store, StoreError, random_hex};
+use crate::runs::{Flying, Runs};
+use crate::store::{AccountId, Store, StoreError, random_bytes, random_hex};
 use crate::{handshake, wire};
 
 /// What the server offers every pilot, and how runs launch.
@@ -162,6 +163,8 @@ pub struct Identity {
     pub auth: Auth,
     /// Live runs and signed-in sessions, shared by every session.
     pub runs: Runs,
+    /// Crews formed by invite code, shared by every session.
+    pub crews: Crews,
 }
 
 /// Accepts sessions until the endpoint is closed, running each on its own task.
@@ -210,6 +213,7 @@ async fn run_session(
         send,
         events_tx,
         account: None,
+        callsign: String::new(),
         ceremony: None,
         flying: None,
         seed: 0,
@@ -239,6 +243,8 @@ struct Pilot<'a> {
     events_tx: mpsc::UnboundedSender<PilotEvent>,
     /// The signed-in pilot's account; `None` until they sign in.
     account: Option<AccountId>,
+    /// Their callsign, for their crew.
+    callsign: String,
     /// A passkey ceremony waiting for the browser's credential.
     ceremony: Option<Ceremony>,
     /// The run being flown and the pilot's ship in it.
@@ -254,31 +260,135 @@ struct Pilot<'a> {
 }
 
 impl Pilot<'_> {
-    /// Offers a new contract.
+    /// Offers a new contract: a crew member is offered the host's.
     async fn offer(&mut self) -> Result<(), SessionError> {
-        self.seed = self.settings.next_seed();
         self.offered_at = Instant::now();
+        let crew = self
+            .account
+            .and_then(|account| self.identity.crews.view(account));
+        match crew {
+            Some(view) if !view.is_host() => self.seed = view.seed,
+            Some(view) => {
+                self.seed = self.settings.next_seed();
+                self.identity.crews.set_seed(view.you, self.seed);
+                let others: Vec<AccountId> = view
+                    .accounts()
+                    .into_iter()
+                    .filter(|&a| a != view.you)
+                    .collect();
+                self.identity.crews.notify(&others);
+            }
+            None => self.seed = self.settings.next_seed(),
+        }
         self.show_contract().await
     }
 
-    /// Sends the contract on offer as this pilot's home opens it: the tiers
-    /// their unlocks open and the pockets their powered layout opens.
+    /// What the pilot's crew opens between them, or the pilot alone: the
+    /// pockets any member's powered layout opens (design section 2: access is
+    /// shared) and the highest tier any member has opened.
+    async fn crew_home(&self, account: AccountId) -> Result<(Vec<Capability>, u32), SessionError> {
+        let members = self
+            .identity
+            .crews
+            .view(account)
+            .map_or_else(|| vec![account], |view| view.accounts());
+        let floor = self.settings.open_tiers;
+        let opened = self
+            .identity
+            .store
+            .call(move |s| {
+                let mut access: Vec<Capability> = Vec::new();
+                let mut tiers = floor;
+                for member in members {
+                    let holdings = s.load(member)?;
+                    access.extend(home::capabilities(&holdings));
+                    tiers = tiers.max(home::open_tiers(&holdings));
+                }
+                access.sort_unstable();
+                access.dedup();
+                Ok((access, tiers))
+            })
+            .await?;
+        Ok(opened)
+    }
+
+    /// Sends the contract on offer as the pilot's crew (or the pilot alone)
+    /// opens it: the tiers and the pockets.
     async fn show_contract(&mut self) -> Result<(), SessionError> {
         let Some(account) = self.account else {
             return Ok(());
         };
-        let holdings = self.identity.store.call(move |s| s.load(account)).await?;
-        let contract = wire::contract(
-            self.settings.template,
-            self.seed,
-            self.open_tiers(&holdings),
-            &home::capabilities(&holdings),
-        );
+        let (access, tiers) = self.crew_home(account).await?;
+        let contract = wire::contract(self.settings.template, self.seed, tiers, &access);
         write_frame(&mut self.send, &contract).await
     }
 
-    fn open_tiers(&self, holdings: &crate::account::Account) -> u32 {
-        self.settings.open_tiers.max(home::open_tiers(holdings))
+    /// Shows the pilot their crew as it stands, and the crew's contract.
+    async fn crew_changed(&mut self) -> Result<(), SessionError> {
+        let Some(account) = self.account else {
+            return Ok(());
+        };
+        let view = self.identity.crews.view(account);
+        let message = ServerMessage::Crew {
+            crew: view.as_ref().map(wire::crew),
+        };
+        write_frame(&mut self.send, &message).await?;
+        if self.flying.is_some() {
+            return Ok(());
+        }
+        if let Some(view) = view.filter(|view| !view.is_host()) {
+            self.seed = view.seed;
+        }
+        self.show_contract().await
+    }
+
+    /// Forms, joins or leaves a crew, or sets its split.
+    async fn crew(
+        &mut self,
+        account: AccountId,
+        message: ClientMessage,
+    ) -> Result<(), SessionError> {
+        if self.flying.is_some() {
+            let reason = "That waits until you are home.".to_owned();
+            return write_frame(&mut self.send, &ServerMessage::CrewRefused { reason }).await;
+        }
+        let crews = self.identity.crews.clone();
+        let outcome = match message {
+            ClientMessage::CreateCrew => {
+                crews.create(
+                    account,
+                    &self.callsign,
+                    self.events_tx.clone(),
+                    self.seed,
+                    || random_bytes::<1>().map_or(0, |[byte]| byte),
+                );
+                Ok(Vec::new())
+            }
+            ClientMessage::JoinCrew { code } => crews
+                .join(&code, account, &self.callsign, self.events_tx.clone())
+                .map(|()| Vec::new()),
+            ClientMessage::LeaveCrew => Ok(crews.leave(account)),
+            ClientMessage::SetSplit { shares } => {
+                crews.set_split(account, &shares).map(|()| Vec::new())
+            }
+            _ => return Err(SessionError::Unexpected),
+        };
+        match outcome {
+            Ok(left_behind) => {
+                // Everyone in the crew now, and anyone it left behind, hears.
+                let mut tell = crews
+                    .view(account)
+                    .map(|view| view.accounts())
+                    .unwrap_or_default();
+                tell.extend(left_behind);
+                tell.retain(|&member| member != account);
+                crews.notify(&tell);
+                self.crew_changed().await
+            }
+            Err(reason) => {
+                write_frame(&mut self.send, &ServerMessage::CrewRefused { reason }).await
+            }
+        }
     }
 
     /// Does what the pilot asked at home, and shows them the outcome.
@@ -363,6 +473,7 @@ impl Pilot<'_> {
                 },
                 Some(event) = events.recv() => match event {
                     PilotEvent::Message(message) => write_frame(&mut self.send, &message).await?,
+                    PilotEvent::CrewChanged => self.crew_changed().await?,
                     PilotEvent::RunOver(summary) => {
                         self.flying = None;
                         self.home_since = Some(Instant::now());
@@ -398,6 +509,15 @@ impl Pilot<'_> {
             }
             return self.at_home(account, action).await;
         }
+        if matches!(
+            message,
+            ClientMessage::CreateCrew
+                | ClientMessage::JoinCrew { .. }
+                | ClientMessage::LeaveCrew
+                | ClientMessage::SetSplit { .. }
+        ) {
+            return self.crew(account, message).await;
+        }
         match (message, flying) {
             (ClientMessage::Launch { tier }, None) => self.launch(account, tier).await?,
             (ClientMessage::Lock { target }, Some((expedition, ship))) => {
@@ -426,9 +546,13 @@ impl Pilot<'_> {
                 | ClientMessage::Process { .. }
                 | ClientMessage::Unqueue { .. }
                 | ClientMessage::BuyFitting { .. }
-                | ClientMessage::SaveFitting { .. },
+                | ClientMessage::SaveFitting { .. }
+                | ClientMessage::CreateCrew
+                | ClientMessage::JoinCrew { .. }
+                | ClientMessage::LeaveCrew
+                | ClientMessage::SetSplit { .. },
                 _,
-            ) => unreachable!("home actions are handled above"),
+            ) => unreachable!("home and crew actions are handled above"),
             (
                 ClientMessage::Launch { .. }
                 | ClientMessage::Hello { .. }
@@ -518,6 +642,11 @@ impl Pilot<'_> {
         );
         self.account = Some(account);
         self.leave = Some(self.identity.runs.sign_in(account));
+        self.callsign.clone_from(&holdings.callsign);
+        // A member whose page reloaded is still in their crew.
+        self.identity
+            .crews
+            .reattach(account, self.events_tx.clone());
         let message = ServerMessage::SignedIn {
             callsign: holdings.callsign.clone(),
             token,
@@ -528,6 +657,12 @@ impl Pilot<'_> {
             catalog: wire::catalog(),
         };
         write_frame(&mut self.send, &catalog).await?;
+        if let Some(view) = self.identity.crews.view(account) {
+            let message = ServerMessage::Crew {
+                crew: Some(wire::crew(&view)),
+            };
+            write_frame(&mut self.send, &message).await?;
+        }
         // A pilot whose run is still going rejoins it (design section 6).
         if let Some(flying) = self.identity.runs.get(account) {
             let rejoined = flying
@@ -544,21 +679,24 @@ impl Pilot<'_> {
         self.offer().await
     }
 
-    async fn launch(&mut self, account: AccountId, tier: u32) -> Result<(), SessionError> {
-        let run = random_hex(8)?;
-        let paid_for = run.clone();
-        let open_tiers = self.settings.open_tiers;
-        // Supplies are paid before launching (design section 10).
-        let outcome = self
+    /// Pays the pilot's launch supplies for the run `run`, if `tier` is open
+    /// to them (`open_tiers`). Returns what they paid and their holdings
+    /// after, or the reason to refuse.
+    async fn pay_supplies(
+        &self,
+        account: AccountId,
+        run: &str,
+        tier: Option<ThreatTier>,
+    ) -> Result<Result<(u32, crate::account::Account), String>, SessionError> {
+        let paid_for = run.to_owned();
+        Ok(self
             .identity
             .store
             .call(move |s| {
+                if tier.is_none() {
+                    return Ok(Err("That tier is not open.".to_owned()));
+                }
                 let holdings = s.load(account)?;
-                let open = open_tiers.max(home::open_tiers(&holdings));
-                let Some(tier) = ThreatTier::from_number(tier).filter(|t| t.number() <= open)
-                else {
-                    return Ok(Err(format!("Tier {tier} is not open.")));
-                };
                 let due = match home::supplies_due(&holdings) {
                     Ok(due) => due,
                     Err(reason) => return Ok(Err(reason)),
@@ -573,14 +711,30 @@ impl Pilot<'_> {
                         run: Some(paid_for),
                     }])?;
                 }
-                Ok(Ok((tier, due, s.load(account)?)))
+                Ok(Ok((due, s.load(account)?)))
             })
-            .await?;
-        let (tier, paid, holdings) = match outcome {
-            Ok(launched) => launched,
+            .await?)
+    }
+
+    /// Launches the pilot: solo, as a crew's host, or following their host
+    /// into the instance they launched (the owner's choice for plan M6).
+    async fn launch(&mut self, account: AccountId, tier: u32) -> Result<(), SessionError> {
+        let crew = self.identity.crews.view(account);
+        if let Some(view) = crew.as_ref().filter(|view| !view.is_host()) {
+            let share = view.share(account).unwrap_or(0);
+            return self.follow(account, share).await;
+        }
+        let (access, open) = self.crew_home(account).await?;
+        let tier = ThreatTier::from_number(tier).filter(|t| t.number() <= open);
+        let run = random_hex(8)?;
+        let (paid, holdings) = match self.pay_supplies(account, &run, tier).await? {
+            Ok(paid) => paid,
             Err(reason) => {
                 return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
             }
+        };
+        let Some(tier) = tier else {
+            return Err(SessionError::Unexpected);
         };
         self.log_unloading();
         info!(
@@ -589,6 +743,8 @@ impl Pilot<'_> {
             seconds = self.offered_at.elapsed().as_secs(),
             "preparation"
         );
+        let crew_size = crew.as_ref().map_or(1, |view| view.members.len());
+        let run_id = run.clone();
         let order = LaunchOrder {
             template: self.settings.template,
             seed: self.seed,
@@ -599,17 +755,34 @@ impl Pilot<'_> {
             },
             run,
             pilot: account,
-            share: 100,
-            access: home::capabilities(&holdings),
-            fitted: home::launch(&holdings)
-                .flown
-                .into_iter()
-                .map(|piece| piece.fitting)
-                .collect(),
+            share: crew
+                .as_ref()
+                .and_then(|view| view.share(account))
+                .unwrap_or(100),
+            crew_size: u32::try_from(crew_size).unwrap_or(1),
+            access,
+            fitted: fitted(&holdings),
             store: self.identity.store.clone(),
             runs: self.identity.runs.clone(),
         };
         let launched = Expedition::launch(order, self.session.clone(), self.events_tx.clone());
+        if let Some(view) = crew.filter(|view| view.members.len() > 1) {
+            self.identity.crews.launched(
+                account,
+                crews::Launch {
+                    run: run_id,
+                    expedition: launched.expedition.clone(),
+                    tier,
+                    opened: Instant::now(),
+                },
+            );
+            let others: Vec<AccountId> = view
+                .accounts()
+                .into_iter()
+                .filter(|&a| a != account)
+                .collect();
+            self.identity.crews.notify(&others);
+        }
         let message = ServerMessage::Account {
             account: wire::account(&holdings),
         };
@@ -618,6 +791,62 @@ impl Pilot<'_> {
         self.flying = Some((launched.expedition, launched.ship));
         Ok(())
     }
+
+    /// Follows the crew's host into the instance they launched, for `share`
+    /// percent of the pot.
+    async fn follow(&mut self, account: AccountId, share: u32) -> Result<(), SessionError> {
+        let Some(launch) = self.identity.crews.open_launch(account) else {
+            let reason = "The host launches the crew; follow within a minute of them.".to_owned();
+            return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
+        };
+        let run = launch.run.clone();
+        let (_, holdings) = match self.pay_supplies(account, &run, Some(launch.tier)).await? {
+            Ok(paid) => paid,
+            Err(reason) => {
+                return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
+            }
+        };
+        let joined = launch
+            .expedition
+            .join(
+                account,
+                fitted(&holdings),
+                share,
+                self.session.clone(),
+                self.events_tx.clone(),
+            )
+            .await;
+        let Some((ship, joined)) = joined else {
+            let reason = "The crew's launch window has closed.".to_owned();
+            return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
+        };
+        info!(target: "frontier::run", account = account.0, ship = ship.0, "followed the host");
+        self.log_unloading();
+        self.identity.runs.insert(
+            account,
+            Flying {
+                run,
+                expedition: launch.expedition.clone(),
+                ship,
+            },
+        );
+        let message = ServerMessage::Account {
+            account: wire::account(&holdings),
+        };
+        write_frame(&mut self.send, &message).await?;
+        write_frame(&mut self.send, &joined).await?;
+        self.flying = Some((launch.expedition, ship));
+        Ok(())
+    }
+}
+
+/// The rigs and modules a pilot's launch carries, by identifier.
+fn fitted(holdings: &crate::account::Account) -> Vec<String> {
+    home::launch(holdings)
+        .flown
+        .into_iter()
+        .map(|piece| piece.fitting)
+        .collect()
 }
 
 /// The home action a message asks for, if it is one.

@@ -76,6 +76,7 @@ fn serve_store(
         store,
         auth: Auth::new(&origin()).unwrap(),
         runs: frontier_server::runs::Runs::default(),
+        crews: frontier_server::crews::Crews::default(),
     };
     tokio::spawn(transport::serve(server, settings, identity));
     (format!("https://{addr}/").parse().unwrap(), cert.sha256)

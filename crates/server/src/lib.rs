@@ -8,6 +8,7 @@ pub mod auth;
 pub mod caps;
 pub mod cert;
 pub mod config;
+pub mod crews;
 pub mod expedition;
 pub mod home;
 pub mod http;
@@ -43,7 +44,11 @@ pub fn handshake(message: &ClientMessage) -> ServerMessage {
         | ClientMessage::Process { .. }
         | ClientMessage::Unqueue { .. }
         | ClientMessage::BuyFitting { .. }
-        | ClientMessage::SaveFitting { .. } => ServerMessage::Rejected {
+        | ClientMessage::SaveFitting { .. }
+        | ClientMessage::CreateCrew
+        | ClientMessage::JoinCrew { .. }
+        | ClientMessage::LeaveCrew
+        | ClientMessage::SetSplit { .. } => ServerMessage::Rejected {
             protocol_version: PROTOCOL_VERSION,
             reason: "the first message must be hello".into(),
         },

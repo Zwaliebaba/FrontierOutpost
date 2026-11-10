@@ -15,7 +15,32 @@ use frontier_sim::site::{self, Capability, Site, SiteTemplate, ThreatTier};
 use frontier_sim::{goods, outcome};
 
 use crate::account::Account;
+use crate::crews;
 use crate::home;
+
+/// A crew as one member sees it.
+#[must_use]
+pub fn crew(view: &crews::View) -> frontier_protocol::CrewInfo {
+    frontier_protocol::CrewInfo {
+        code: view.code.clone(),
+        members: view
+            .members
+            .iter()
+            .map(|(account, callsign, share)| frontier_protocol::CrewMember {
+                callsign: callsign.clone(),
+                share: *share,
+                you: *account == view.you,
+            })
+            .collect(),
+        hosting: view.is_host(),
+        launch: view
+            .launch
+            .map(|(tier, seconds_left)| frontier_protocol::CrewLaunch {
+                tier: tier.number(),
+                seconds_left,
+            }),
+    }
+}
 
 #[must_use]
 pub const fn good(good: goods::Good) -> Good {

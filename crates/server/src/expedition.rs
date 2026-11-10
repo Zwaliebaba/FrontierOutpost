@@ -75,6 +75,8 @@ pub enum PilotEvent {
     Message(Box<ServerMessage>),
     /// The pilot's run is over; they are home. The session offers a new contract.
     RunOver(RunSummary),
+    /// The pilot's crew changed: members, split, contract or launch.
+    CrewChanged,
 }
 
 /// What a launch needs: the contract the pilot accepted, and where to bank
@@ -95,6 +97,9 @@ pub struct LaunchOrder {
     pub fitted: Vec<String>,
     /// The pilot's share of the pot, in whole percent: 100 flying solo.
     pub share: u32,
+    /// The crew the site is scaled for: 1 solo, or every member of the
+    /// host's crew, who may follow within the join window.
+    pub crew_size: u32,
     pub store: Store,
     pub runs: Runs,
 }
@@ -158,6 +163,14 @@ enum Command {
         events: mpsc::UnboundedSender<PilotEvent>,
         reply: oneshot::Sender<Option<ServerMessage>>,
     },
+    Join {
+        account: AccountId,
+        fitted: Vec<String>,
+        share: u32,
+        sink: Box<dyn SnapshotSink>,
+        events: mpsc::UnboundedSender<PilotEvent>,
+        reply: oneshot::Sender<Option<(ShipId, ServerMessage)>>,
+    },
 }
 
 /// A handle to a running expedition. Cheap to clone; the instance stops once
@@ -183,7 +196,13 @@ impl Expedition {
         sink: impl SnapshotSink,
         events: mpsc::UnboundedSender<PilotEvent>,
     ) -> Launched {
-        let site = Site::generate(order.template, order.seed, order.tier, 1, &order.access);
+        let site = Site::generate(
+            order.template,
+            order.seed,
+            order.tier,
+            order.crew_size.max(1),
+            &order.access,
+        );
         let (mut run, ships) = Run::launch(site, 1, order.options);
         let ship = ships[0];
         run.fit(ship, &order.fitted);
@@ -307,6 +326,31 @@ impl Expedition {
         answer.await.ok().flatten()
     }
 
+    /// Launches a crew member into the host's instance, flying `fitted` for
+    /// `share` percent of the pot. Returns their ship and `Joined`, or `None`
+    /// once the join window has closed or the crew is all here.
+    pub async fn join(
+        &self,
+        account: AccountId,
+        fitted: Vec<String>,
+        share: u32,
+        sink: impl SnapshotSink,
+        events: mpsc::UnboundedSender<PilotEvent>,
+    ) -> Option<(ShipId, ServerMessage)> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(Command::Join {
+                account,
+                fitted,
+                share,
+                sink: Box::new(sink),
+                events,
+                reply,
+            })
+            .ok()?;
+        answer.await.ok().flatten()
+    }
+
     /// Hands over an input datagram from the pilot flying `ship`.
     pub fn input(&self, ship: ShipId, datagram: InputDatagram) {
         let _ = self.commands.send(Command::Input { ship, datagram });
@@ -361,6 +405,24 @@ async fn fly(
     loop {
         tokio::select! {
             command = commands.recv() => match command {
+                Some(Command::Join { account, fitted, share, sink, events, reply }) => {
+                    let joined = run.join().map(|ship| {
+                        run.fit(ship, &fitted);
+                        pilots.insert(
+                            ship,
+                            Pilot {
+                                sink,
+                                events,
+                                inputs: InputQueue::default(),
+                                last_input: None,
+                            },
+                        );
+                        books.accounts.insert(ship, account);
+                        books.shares.insert(ship, share);
+                        (ship, joined(&run, ship, run.site().tier))
+                    });
+                    let _ = reply.send(joined);
+                }
                 Some(command) => apply(command, &mut run, &mut pilots),
                 // Every handle is gone: the server is shutting down.
                 None => return,
@@ -437,6 +499,10 @@ fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
         Command::Disconnect { ship } => {
             pilots.remove(&ship);
             run.disconnect(ship);
+        }
+        // Joining needs the books, so the instance loop handles it first.
+        Command::Join { reply, .. } => {
+            let _ = reply.send(None);
         }
         Command::Reconnect {
             ship,
@@ -941,6 +1007,7 @@ mod tests {
             access: Vec::new(),
             fitted: Vec::new(),
             share: 100,
+            crew_size: 1,
             store,
             runs: Runs::default(),
         }

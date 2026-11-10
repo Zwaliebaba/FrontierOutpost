@@ -98,7 +98,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(transport::serve(
         server,
         config.settings,
-        Identity { store, auth, runs },
+        Identity {
+            store,
+            auth,
+            runs,
+            crews: frontier_server::crews::Crews::default(),
+        },
     ));
     axum::serve(listener, http::router(connect, &config.client_dir))
         .with_graceful_shutdown(shutdown_signal())

@@ -80,6 +80,16 @@ pub enum ClientMessage {
         rig: Option<String>,
         modules: Vec<String>,
     },
+    /// Forms a crew with this pilot as host; the server answers with `Crew`
+    /// carrying the invite code.
+    CreateCrew,
+    /// Joins the crew with this invite code.
+    JoinCrew { code: String },
+    /// Leaves the crew.
+    LeaveCrew,
+    /// The host sets the split: one whole percentage per member, in the
+    /// order `Crew` lists them, summing to 100.
+    SetSplit { shares: Vec<u32> },
 }
 
 /// A message sent from the server to the client.
@@ -117,6 +127,10 @@ pub enum ServerMessage {
     Catalog { catalog: Catalog },
     /// An action at home was refused, for `reason`; nothing changed.
     HomeRefused { reason: String },
+    /// The pilot's crew as it stands, or `None` once they are in none.
+    Crew { crew: Option<CrewInfo> },
+    /// A crew action was refused, for `reason`.
+    CrewRefused { reason: String },
     /// The discovery contract on offer (design section 4): the site and what
     /// preparation shows of its seed. Sent after `Welcome` and after each run.
     Contract {
@@ -173,6 +187,42 @@ pub enum ServerMessage {
     /// pilot, by the host's split. A pilot who docked last also sees their
     /// share in `RunOver`.
     PotPaid { pot: PotInfo, share: u32 },
+}
+
+/// A crew as one member sees it (design section 2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CrewInfo {
+    /// The invite code others join with.
+    pub code: String,
+    /// The host first.
+    pub members: Vec<CrewMember>,
+    /// Whether this pilot hosts: only the host launches and sets the split.
+    pub hosting: bool,
+    /// The host has launched: the tier, and the seconds left to follow.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch: Option<CrewLaunch>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CrewMember {
+    pub callsign: String,
+    /// Their share of the pot, a whole percentage.
+    pub share: u32,
+    /// Whether this is the pilot reading it.
+    pub you: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CrewLaunch {
+    pub tier: u32,
+    pub seconds_left: u32,
 }
 
 /// What a crew earned between them (design section 10).
