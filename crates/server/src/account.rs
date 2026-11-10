@@ -87,13 +87,14 @@ struct Versioned {
 }
 
 impl Account {
-    /// A new pilot's home in `world`.
+    /// A new pilot's home in `world`, empty: the starting balance arrives
+    /// through the ledger (crate::store::Store::create_account).
     #[must_use]
     pub fn new(world: &str, callsign: &str) -> Self {
         Self {
             world: world.to_owned(),
             callsign: callsign.to_owned(),
-            credits: STARTING_CREDITS,
+            credits: 0,
             stock: Stock::default(),
             unlocks: Vec::new(),
             layout: Vec::new(),
@@ -162,9 +163,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_new_pilot_starts_with_the_starting_balance_and_nothing_else() {
+    fn a_new_document_is_empty_until_the_ledger_grants_the_balance() {
         let account = Account::new("w", "Vega");
-        assert_eq!(account.credits, 100);
+        assert_eq!(account.credits, 0);
         assert_eq!(account.stock, Stock::default());
     }
 

@@ -10,6 +10,7 @@ pub mod config;
 pub mod expedition;
 pub mod http;
 pub mod input_queue;
+pub mod ledger;
 pub mod relay;
 pub mod store;
 pub mod transport;

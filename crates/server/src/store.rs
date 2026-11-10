@@ -8,8 +8,10 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use rusqlite::{Connection, OptionalExtension, params};
+use tracing::info;
 
-use crate::account::{Account, DocumentError, valid_callsign};
+use crate::account::{Account, DocumentError, STARTING_CREDITS, valid_callsign};
+use crate::ledger::{Item, Npc, Party, Reason, Transfer, TransferError};
 
 /// The database layout this server writes. Unrelated to the document version.
 const SCHEMA_VERSION: u32 = 1;
@@ -36,6 +38,8 @@ pub enum StoreError {
     BadCallsign(String),
     #[error("no account {0:?}")]
     NoSuchAccount(AccountId),
+    #[error(transparent)]
+    Transfer(#[from] TransferError),
     #[error("the database lock was poisoned by a panic")]
     Poisoned,
 }
@@ -90,7 +94,21 @@ impl Store {
                  id INTEGER PRIMARY KEY,
                  callsign TEXT NOT NULL UNIQUE COLLATE NOCASE,
                  document TEXT NOT NULL
-             );",
+             );
+             CREATE TABLE IF NOT EXISTS ledger (
+                 id INTEGER PRIMARY KEY,
+                 at INTEGER NOT NULL,
+                 item TEXT NOT NULL,
+                 amount INTEGER NOT NULL CHECK (amount > 0),
+                 source TEXT NOT NULL,
+                 sink TEXT NOT NULL,
+                 reason TEXT NOT NULL,
+                 run TEXT
+             );
+             CREATE TRIGGER IF NOT EXISTS ledger_no_update BEFORE UPDATE ON ledger
+                 BEGIN SELECT RAISE(ABORT, 'the ledger is append-only'); END;
+             CREATE TRIGGER IF NOT EXISTS ledger_no_delete BEFORE DELETE ON ledger
+                 BEGIN SELECT RAISE(ABORT, 'the ledger is append-only'); END;",
         )?;
         let schema: Option<String> = connection
             .query_row("SELECT value FROM meta WHERE key = 'schema'", [], |row| {
@@ -146,7 +164,8 @@ impl Store {
             .map_err(|_| StoreError::Poisoned)?
     }
 
-    /// Creates a pilot's account with the starting balance.
+    /// Creates a pilot's account and grants the starting balance through the
+    /// ledger, in one transaction.
     ///
     /// # Errors
     /// Fails if the callsign is malformed or taken.
@@ -155,19 +174,68 @@ impl Store {
             return Err(StoreError::BadCallsign(callsign.to_owned()));
         }
         let document = Account::new(&self.world, callsign).to_json()?;
-        let connection = self.lock()?;
-        match connection.execute(
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()?;
+        let id = match transaction.execute(
             "INSERT INTO accounts (callsign, document) VALUES (?1, ?2)",
             params![callsign, document],
         ) {
-            Ok(_) => Ok(AccountId(connection.last_insert_rowid())),
+            Ok(_) => AccountId(transaction.last_insert_rowid()),
             Err(rusqlite::Error::SqliteFailure(error, _))
                 if error.code == rusqlite::ErrorCode::ConstraintViolation =>
             {
-                Err(StoreError::CallsignTaken(callsign.to_owned()))
+                return Err(StoreError::CallsignTaken(callsign.to_owned()));
             }
-            Err(error) => Err(error.into()),
-        }
+            Err(error) => return Err(error.into()),
+        };
+        let grant = Transfer {
+            item: Item::Credits,
+            amount: STARTING_CREDITS,
+            from: Party::Npc(Npc::Grant),
+            to: Party::Account(id),
+            reason: Reason::StartingBalance,
+            run: None,
+        };
+        apply(&transaction, &self.world, &[grant])?;
+        transaction.commit()?;
+        Ok(id)
+    }
+
+    /// Applies `transfers` to the accounts they name and appends them to the
+    /// ledger, all in one transaction: the only way stock changes. If any
+    /// transfer fails, none is applied.
+    ///
+    /// # Errors
+    /// Fails if an account is missing or cannot cover a transfer.
+    pub fn transfer(&self, transfers: &[Transfer]) -> Result<(), StoreError> {
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()?;
+        apply(&transaction, &self.world, transfers)?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// The ledger folded for one account: what every transfer in and out of it
+    /// adds up to, by item. Equals the account's stock.
+    ///
+    /// # Errors
+    /// Fails only if the database does.
+    pub fn ledger_balance(&self, id: AccountId) -> Result<Vec<(Item, i64)>, StoreError> {
+        let connection = self.lock()?;
+        let party = Party::Account(id).to_string();
+        Item::ALL
+            .iter()
+            .map(|&item| {
+                let total: i64 = connection.query_row(
+                    "SELECT COALESCE(SUM(CASE WHEN sink = ?1 THEN amount ELSE 0 END), 0)
+                          - COALESCE(SUM(CASE WHEN source = ?1 THEN amount ELSE 0 END), 0)
+                     FROM ledger WHERE item = ?2",
+                    params![party, item.name()],
+                    |row| row.get(0),
+                )?;
+                Ok((item, total))
+            })
+            .collect()
     }
 
     /// The account with this callsign, ignoring case.
@@ -193,15 +261,6 @@ impl Store {
     pub fn load(&self, id: AccountId) -> Result<Account, StoreError> {
         let connection = self.lock()?;
         load(&connection, id, &self.world)
-    }
-
-    /// Saves an account's document at the current version.
-    ///
-    /// # Errors
-    /// Fails if there is no such account.
-    pub fn save(&self, id: AccountId, account: &Account) -> Result<(), StoreError> {
-        let connection = self.lock()?;
-        save(&connection, id, account)
     }
 }
 
@@ -236,6 +295,55 @@ pub(crate) fn save(
     Ok(())
 }
 
+/// Applies transfers within an open transaction: loads each account once,
+/// changes it, saves it, and appends every transfer to the ledger.
+fn apply(connection: &Connection, world: &str, transfers: &[Transfer]) -> Result<(), StoreError> {
+    let mut accounts: Vec<(AccountId, Account)> = Vec::new();
+    for transfer in transfers {
+        for id in transfer.accounts() {
+            if !accounts.iter().any(|(held, _)| *held == id) {
+                accounts.push((id, load(connection, id, world)?));
+            }
+        }
+        for (id, account) in &mut accounts {
+            transfer.apply(*id, account)?;
+        }
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs());
+    for transfer in transfers {
+        connection.execute(
+            "INSERT INTO ledger (at, item, amount, source, sink, reason, run)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                i64::try_from(now).unwrap_or(i64::MAX),
+                transfer.item.name(),
+                transfer.amount,
+                transfer.from.to_string(),
+                transfer.to.to_string(),
+                transfer.reason.name(),
+                transfer.run,
+            ],
+        )?;
+        // The economy's instrumentation (AGENTS.md section 4.7).
+        info!(
+            target: "frontier::ledger",
+            item = transfer.item.name(),
+            amount = transfer.amount,
+            source = %transfer.from,
+            sink = %transfer.to,
+            reason = transfer.reason.name(),
+            run = transfer.run.as_deref().unwrap_or(""),
+            "transfer"
+        );
+    }
+    for (id, account) in &accounts {
+        save(connection, *id, account)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,11 +370,9 @@ mod tests {
             Some(id),
             "callsigns ignore case"
         );
-        let mut account = store.load(id).unwrap();
+        let account = store.load(id).unwrap();
         assert_eq!(account.world, store.world());
-        account.stock.ore = 7;
-        store.save(id, &account).unwrap();
-        assert_eq!(store.load(id).unwrap().stock.ore, 7);
+        assert_eq!(account.credits, 100, "the starting balance");
     }
 
     #[test]
@@ -300,5 +406,152 @@ mod tests {
             store.load(id),
             Err(StoreError::Document(DocumentError::WrongWorld { .. }))
         ));
+    }
+
+    fn stock_of(account: &Account) -> Vec<(Item, i64)> {
+        Item::ALL
+            .iter()
+            .map(|&item| (item, i64::from(item.held(account))))
+            .collect()
+    }
+
+    #[test]
+    fn the_ledger_folded_equals_the_stock_saved() {
+        use crate::ledger::supplies_due;
+        let store = Store::in_memory().unwrap();
+        let pilots: Vec<AccountId> = ["Vega", "Rigel", "Deneb"]
+            .iter()
+            .map(|callsign| store.create_account(callsign).unwrap())
+            .collect();
+        // A seeded walk through launches, banked cargo, payouts and refused
+        // overdrafts, checking conservation after every batch.
+        let mut seed: u32 = 2_266;
+        let mut next = |below: u32| {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (seed >> 8) % below
+        };
+        for round in 0..300 {
+            let pilot = pilots[next(3) as usize];
+            let run = Some(format!("run-{round}"));
+            let account = store.load(pilot).unwrap();
+            let batch = match next(4) {
+                0 => {
+                    let due = supplies_due(account.credits);
+                    if due == 0 {
+                        continue;
+                    }
+                    vec![Transfer {
+                        item: Item::Credits,
+                        amount: due,
+                        from: Party::Account(pilot),
+                        to: Party::Npc(Npc::Supplies),
+                        reason: Reason::LaunchSupplies,
+                        run,
+                    }]
+                }
+                1 => vec![
+                    Transfer {
+                        item: Item::Ore,
+                        amount: 1 + next(20),
+                        from: Party::Site,
+                        to: Party::Account(pilot),
+                        reason: Reason::Banked,
+                        run: run.clone(),
+                    },
+                    Transfer {
+                        item: Item::Credits,
+                        amount: 100,
+                        from: Party::Npc(Npc::Contract),
+                        to: Party::Account(pilot),
+                        reason: Reason::ContractPayout,
+                        run,
+                    },
+                ],
+                2 => vec![Transfer {
+                    item: Item::Volatiles,
+                    amount: 1 + next(5),
+                    from: Party::Site,
+                    to: Party::Account(pilot),
+                    reason: Reason::Banked,
+                    run,
+                }],
+                _ => vec![
+                    // A batch that cannot be covered: none of it may apply.
+                    Transfer {
+                        item: Item::Ore,
+                        amount: 1,
+                        from: Party::Site,
+                        to: Party::Account(pilot),
+                        reason: Reason::Banked,
+                        run: run.clone(),
+                    },
+                    Transfer {
+                        item: Item::Salvage,
+                        amount: account.stock.salvage + 1,
+                        from: Party::Account(pilot),
+                        to: Party::Npc(Npc::Supplies),
+                        reason: Reason::LaunchSupplies,
+                        run,
+                    },
+                ],
+            };
+            let _ = store.transfer(&batch);
+            for &id in &pilots {
+                assert_eq!(
+                    store.ledger_balance(id).unwrap(),
+                    stock_of(&store.load(id).unwrap()),
+                    "account {id:?} after round {round}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_batch_that_cannot_be_covered_changes_nothing() {
+        let store = Store::in_memory().unwrap();
+        let id = store.create_account("Vega").unwrap();
+        let before = store.load(id).unwrap();
+        let result = store.transfer(&[
+            Transfer {
+                item: Item::Ore,
+                amount: 5,
+                from: Party::Site,
+                to: Party::Account(id),
+                reason: Reason::Banked,
+                run: None,
+            },
+            Transfer {
+                item: Item::Credits,
+                amount: 500,
+                from: Party::Account(id),
+                to: Party::Npc(Npc::Supplies),
+                reason: Reason::LaunchSupplies,
+                run: None,
+            },
+        ]);
+        assert!(matches!(
+            result,
+            Err(StoreError::Transfer(TransferError::Insufficient { .. }))
+        ));
+        assert_eq!(store.load(id).unwrap(), before);
+        let rows: i64 = store
+            .lock()
+            .unwrap()
+            .query_row("SELECT COUNT(*) FROM ledger", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 1, "only the starting balance");
+    }
+
+    #[test]
+    fn the_ledger_refuses_to_be_edited() {
+        let store = Store::in_memory().unwrap();
+        store.create_account("Vega").unwrap();
+        let connection = store.lock().unwrap();
+        assert!(
+            connection
+                .execute("UPDATE ledger SET amount = 1", [])
+                .is_err()
+        );
+        assert!(connection.execute("DELETE FROM ledger", []).is_err());
     }
 }
