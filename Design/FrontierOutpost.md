@@ -1,6 +1,8 @@
-# Frontier Outpost 
+# Frontier Outpost
 
-**Game design · Revision 3 · 9 November 2026 · Proposal for expert review**
+**Game design · Revision 4 draft · 10 November 2026 · Proposal for owner review**
+
+Revision 4 responds to the review in [reviews/2026-11-10-revision-3-review.md](reviews/2026-11-10-revision-3-review.md). Text applies from Stage 1 unless it is tagged **[S2]**, **[S3]** or **[S4]**, the stage in §9 at which it first applies. **Open:** marks a decision that has not been taken.
 
 ## 1. Identity and scope
 
@@ -8,9 +10,9 @@
 
 Frontier Outpost is an isometric space game. Its signature is a visibly evolving outpost whose layout, upgrades, and specialization determine expedition capabilities. A trailer should show ships returning with salvage, a new facility transforming the outpost, and the launch of a newly possible mission. Exploration, combat, and trade support this experience.
 
-Players choose outpost development, exploration, fighting, or a mixture each session. Trade allows specialization; nobody must personally gather, manufacture, and fight to progress. Solo players and crews of 1–4 are the initial audience.
+**Freedom is choice with consequences, not a seamless open world.** Players decide what the outpost becomes, what to fly, which opportunities to pursue on each expedition, and when to leave. In Stage 1 every session includes an expedition: the outpost decides what is possible there, and each run offers more than one ship can take. **[S2]** Trade allows specialization; nobody must personally gather, manufacture, and fight to progress. Solo players and crews of 1–4 are the initial audience.
 
-**Build an expedition game with persistent homes first.** Shared regions are a gated expansion. A full MMO depends on demonstrated population density, technical capacity, and sustainable operations. If those gates fail, the smaller game remains a complete product. Familiar space-economy features alone do not differentiate it from EVE Online.
+**Build an expedition game with persistent homes first.** Shared regions are a gated expansion. A full MMO depends on demonstrated population density, technical capacity, and sustainable operations. If those gates fail, the smaller game remains a complete product. A continuously populated shared world is a Stage 4 possibility, not a commitment. Familiar space-economy features alone do not differentiate it from EVE Online.
 
 ## 2. The home and the expedition
 
@@ -18,83 +20,119 @@ Players choose outpost development, exploration, fighting, or a mixture each ses
 
 | Activity | Meaningful decisions | Contribution |
 |---|---|---|
-| Outpost development | Facility placement and upgrades, power allocation, production, storage, contracts | Expedition preparation, processing, services |
-| Exploration | Route, scanning, hazard interpretation, access-key use, when to leave | Access to finite opportunities, salvage, resources |
+| Outpost development | Which facilities to build and power, upgrades, reconfiguration, what to process, sell or keep; **[S2]** contracts | Expedition preparation, processing, services |
+| Exploration | Which pockets to enter, scanning, hazard interpretation, when to leave; **[S2]** access-key use | Access to finite opportunities, salvage, resources |
 | Combat | Piloting, positioning, targeting, module timing, retreat | Protects extraction and transport, contests opportunities |
 
-Players manage the outpost from an isometric overview, selecting facilities to build, upgrade, specialize, or reconfigure. Authored external modules attach to defined construction sockets. Limited power, attachment points, and functional adjacency create choices. A sensor facility enables particular scans; a cargo/refinery connection improves processing; allocating a bay to repair reduces fabrication capacity. Expansion adds options without eliminating constraints.
+Players manage the outpost from an isometric overview, selecting facilities to build, upgrade, specialize, or reconfigure. Authored external modules attach to defined construction sockets; Stage 1 uses a fixed set of sockets with no free placement. Limited power, attachment points, and functional adjacency create choices. **Every facility opens or changes an expedition option:** a pocket it admits the crew to, a scan, a rig or a module. It may also change a home-side rate, but none is only a rate. For illustration: a sensor array reveals a signal pocket; a refinery lets a crew work volatile veins as well as improving processing; allocating a bay to repair reduces fabrication capacity. Expansion adds options without eliminating constraints.
 
-Enhancements change the outpost's silhouette, visible equipment, and operational capabilities. Upgrade previews show resource costs, power demand, and the capability gained. Specialization branches offer alternatives rather than an endless ladder of larger numbers. Facility selection opens concise management panels; there is no avatar movement or explorable interior. Docked ships, visiting crews, and visible production activity give the home social presence. Everyone receives a starter outpost; deep customization is optional.
+Unlocks are permanent. The active layout is bounded by power and sockets, and there are always more facility options than sockets. Reconfiguring consumes installation materials, so a layout is a commitment for several runs, not a loadout screen.
 
-**Session budget:** target 30–60 minutes, with ordinary outbound and return travel together at most 20% of session time. A 30-minute example allocates 4 minutes to preparation, 6 to travel, 16 to the objective, and 4 to unloading and decisions. Longer expeditions are explicit commitments. Frontier staging reduces travel while exposing supplies and position.
+Enhancements change the outpost's silhouette, visible equipment, and operational capabilities. Each facility shows its state in the overview (empty socket, building, powered, unpowered, producing, blocked), and each tier changes the outline enough to read at the zoom where the whole outpost fits. Upgrade previews show resource costs, power demand, and the capability gained, naming the pocket, scan or rig it enables. Specialization branches offer alternatives rather than an endless ladder of larger numbers. Facility selection opens concise management panels; there is no avatar movement or explorable interior. Docked ships and visible production activity give the home presence. **[S2]** Visiting crews add social presence; in Stage 1, crewmates' ships appear docked from roster data.
+
+Everyone receives a starter outpost: a starter ship with a saved basic fitting, and one empty socket. The first completed run should fund one facility, installed at once, that visibly changes the outpost and opens one new option on the next run. Deep customization is optional. **Open:** whether production advances per completed run or by elapsed time.
+
+**The Stage 1 expedition** is one authored site, offered through an NPC discovery contract (§4). The site has three or four pockets, such as an extraction field, a wreck, a hostile nest and a hazard pocket. Cargo, heat and time prevent clearing them all in one run, and some pockets need a facility or a rig. A seed varies the hazard type, where the best yield sits and the threat mix. Preparation shows part of this; scanning in the site reveals the rest. The contract offers the site at two or three threat tiers, and the lowest is completable in the basic fitting. Per-run yield is finite and threat escalates with time and heat, so when to leave is a decision with a cost. Cargo counts only when it is docked at home.
+
+**Travel** consists of approach and return legs flown inside the expedition instance. There is no separate transit scene. Return risk rises with cargo carried. Travel time is measured from undock to the first pocket and from the last pocket to dock.
+
+**Session budget:** target 30–60 minutes, with ordinary outbound and return travel together at most 20% of session time. A 30-minute example allocates 4 minutes to preparation, 6 to travel, 16 to the objective, and 4 to unloading and decisions. A first expedition should reach its first decision within about two minutes of launch. Longer expeditions are explicit commitments. **[S3]** Frontier staging reduces travel while exposing supplies and position.
+
+**Crews.** A crew of 1–4 forms by invite code. The host chooses the contract and the threat tier. Each pilot launches from, and returns to, their own home in their own ship. Access is shared: if any crew member's outpost opens a pocket, the whole crew may enter. Rigs and modules stay tied to each pilot's own outpost. Cargo belongs to the ship that docks with it. Contract payouts are per expedition, split equally by default; the host may change the split before launch and every pilot sees it. Players cannot transfer items or currency to each other in Stage 1. Threat scales less than proportionally with crew size and never with experience. The site includes at least one optional objective that rewards two ships acting in different places at once; nothing essential requires it.
 
 ## 3. Progression and useful newcomers
 
-Players develop a hangar of specialized ships rather than one indefinitely superior vessel. Initial roles are scout/frigate, extraction ship, and escort. Basic solo fittings combine functions less efficiently, so essential activities never require a full crew.
+Stage 1 has one starter hull with three role rigs: scout, extraction and escort. A basic solo fitting combines functions less efficiently, so essential activities never require a full crew. **[S2]** Players develop a hangar of specialized ships rather than one indefinitely superior vessel.
 
-Small hulls have intrinsic capabilities that skill progression cannot buy for large hulls: low signatures, narrow wreck access, and entry into mass-limited hazard pockets. Larger ships gain capacity or endurance but retain weaknesses. Veterans still have reasons to fly inexpensive ships.
+**[S2]** Small hulls have intrinsic capabilities that skill progression cannot buy for large hulls: low signatures, narrow wreck access, and entry into mass-limited hazard pockets. Larger ships gain capacity or endurance but retain weaknesses. Veterans still have reasons to fly inexpensive ships. This claim is untested until a second hull size exists.
 
-Pilot progression primarily unlocks fittings and specialization. Numerical proficiency bonuses have explicit ceilings and cannot replace role choice or piloting. New players should reach one useful role in their first session. Veterans pursue difficult sites, outpost configurations, production businesses, and collective objectives.
+In Stage 1, progression comes from facilities, which unlock rigs, modules and pockets; there is no separate pilot progression. **[S2]** Pilot progression primarily unlocks fittings and specialization. Numerical proficiency bonuses have explicit ceilings and cannot replace role choice or piloting. New players should reach one useful role in their first session: solo, that means returning with cargo from the primary objective; in a crew, it means doing something the crew would otherwise have gone without. **[S2]** Veterans pursue difficult sites, outpost configurations, production businesses, and collective objectives; in Stage 1 they pursue higher threat tiers and outpost configurations.
 
-Support is active play. Extraction balances heat, yield, and changing hazards; scanning requires interpreting signals; escorts manage interception and retreat. Group contracts divide proceeds by agreement rather than damage alone. Beginners may choose combat or exploration instead of support work.
+**A newcomer's first contribution is a second attentive pilot.** A veteran can own every rig, so newcomer value cannot rest on equipment. It rests on being in a second place at the same moment, and, after the newcomer's first facility, on an outpost that may open something the crew's other outposts currently do not.
 
-An attentive beginner should outperform an unattended secondary account. This does not eliminate multiboxing: test whether one person operating several accounts outperforms a cooperating crew without meaningful trade-offs.
+Support is active play. Extraction balances heat, yield, and changing hazards; scanning requires interpreting signals; escorts manage interception and retreat. No role yields without input: unattended extraction cuts out on heat instead of running slowly. Beginners may choose combat or exploration instead of support work. **[S2]** Group contracts divide proceeds by agreement rather than damage alone.
+
+An attentive beginner should outperform an unattended secondary account. This does not eliminate multiboxing: test whether one person operating several accounts outperforms a cooperating crew without meaningful trade-offs. Stage 1 runs this test with a veteran flying solo, with a newcomer, and with two clients.
 
 ## 4. Discoveries provide scarce access
 
-A successful scan creates a server-recorded site and a fixed, small supply of transferable **access keys**. Coordinates may be shared, but entry consumes a valid key bound to that site's signature. One key admits a declared expedition group up to its size limit. Each account occupies a roster slot; reconnection restores admission without creating another key.
+Stage 1 uses NPC discovery contracts. The contract supplies the site and the player never handles keys. The site is a server record with its own seed and yield, so that keys can later attach to the same record. Repeat player demand must be demonstrated before relying on a discovery marketplace.
 
-Keys resolve to the same site record and finite resource pool, never independent copies of its rewards. Listings display expiry, remaining admissions, existing admissions, and current depletion. Explorers can use keys, sell individual admissions, or sell the complete remaining bundle. Exclusivity is promised only when no other admissions exist.
+**[S2]** A successful scan creates a server-recorded site and a fixed, small supply of transferable **access keys**. Coordinates may be shared, but entry consumes a valid key bound to that site's signature. One key admits a declared expedition group up to its size limit. Each account occupies a roster slot; reconnection restores admission without creating another key.
 
-This prevents unauthorized copying, not resale, betrayal, or competition between authorized crews. Cooperative and contested sites have clearly disclosed rules. The first prototype uses NPC discovery contracts; repeat player demand must be demonstrated before relying on a discovery marketplace.
+**[S2]** Keys resolve to the same site record and finite resource pool, never independent copies of its rewards. Listings display expiry, remaining admissions, existing admissions, and current depletion. Explorers can use keys, sell individual admissions, or sell the complete remaining bundle. Exclusivity is promised only when no other admissions exist.
+
+**[S2]** This prevents unauthorized copying, not resale, betrayal, or competition between authorized crews. Cooperative and contested sites have clearly disclosed rules.
 
 ## 5. Bounded combat and simulation
 
-Use a consistent fixed-angle isometric camera for outpost management, exploration, and combat, with zoom and pan appropriate to each activity. Ships move and fight on a single gameplay plane under direct player control. Apparent height is visual presentation, not a separate targeting or movement layer. Projectiles, targeting, and module cooldowns must remain readable at the angled view. Foreground structures fade or provide outlines when they obscure ships or interactable objects. The server authoritatively validates movement, hits, inventory, and access.
+Use a consistent fixed-angle isometric camera for outpost management, exploration, and combat, with zoom and pan appropriate to each activity. Ships move and fight on a single gameplay plane under direct player control. Apparent height is visual presentation, not a separate targeting or movement layer. Projectiles, targeting, and module cooldowns must remain readable at the angled view.
 
-The first build supports 1–4 players against NPC threats. Later contested sites have a **20-ship-per-side ceiling: two sides, 40 player ships total**. NPC and projectile budgets are separately capped and benchmarked. Early PvP tests begin smaller. Uncapped open-world fleet battles are outside the product commitment.
+**Control.** Ships are steered directly, by thrust and turn, with client-side prediction. Weapons fire at a locked target and the server resolves hits; Stage 1 has no manually aimed shots. Clients send intents. The server simulates and is authoritative for movement, hits, inventory, and access. The initial latency target is full playability at 150 ms round trip and usable play at 250 ms; both are test parameters.
 
-Admission, sides, and reinforcement slots are server-controlled. Unrelated attackers cannot occupy an existing side without roster authorization. Collusion and slot-denial require testing; a player cap alone does not solve them. Travel PvP, if introduced, must use bounded encounters rather than bypass these limits.
+**Readability.** All combat ships render at one height, and range and aim indicators are drawn on the plane. Ships and interactable objects always show an allegiance-specific silhouette through anything that hides them. Structures fade only when they hide the player's own ship or cursor. Allegiance and state are never carried by colour alone. Engagement ranges fit within the combat zoom at which a ship remains comfortably selectable. **Open:** the view elevation is confirmed by a client-only readability greybox, using the real station silhouette, before more art is authored to it.
 
-Territorial pressure comes from multiple bounded objectives. Large organizations still gain strategic breadth; the ceiling limits local concentration and simulation cost, not all political advantage. Worst-case load, latency tolerance, and combat readability are go/no-go gates before territorial play.
+The first build supports 1–4 players against NPC threats, with provisional NPC and projectile caps published in the Stage 1 specification (§10). **[S2]** Later contested sites have a **20-ship-per-side ceiling: two sides, 40 player ships total**. NPC and projectile budgets are separately capped and benchmarked. Early PvP tests begin smaller. Uncapped open-world fleet battles are outside the product commitment.
+
+**[S2]** Admission, sides, and reinforcement slots are server-controlled. Unrelated attackers cannot occupy an existing side without roster authorization. Collusion and slot-denial require testing; a player cap alone does not solve them. Travel PvP, if introduced, must use bounded encounters rather than bypass these limits.
+
+**[S3]** Territorial pressure comes from multiple bounded objectives. Large organizations still gain strategic breadth; the ceiling limits local concentration and simulation cost, not all political advantage. Worst-case load, latency tolerance, and combat readability are go/no-go gates before territorial play.
 
 ## 6. Ownership, loss, and offline life
 
-Separate permanent home investment from frontier exposure:
+**Stage 1 loss.** The home, its facilities, its stock and all unlocks are never at risk. An expedition risks what the ship carries:
+
+| | Docked at home | Destroyed | Abandoned |
+|---|---|---|---|
+| Hull | Kept | Reissued at home | Returned home |
+| Basic fitting | Kept | Always available | Kept |
+| Upgraded modules | Kept | Lost | Kept |
+| Carried cargo | Banked | Lost | Lost |
+| Launch supplies | Spent | Spent | Spent |
+
+A run is abandoned when a pilot disconnects and the instance ends before they return. A disconnected ship stays exposed for the published server timer; reconnecting within the grace window resumes in the live instance. After a server failure, each ship is restored with its fitting and cargo at its last pocket checkpoint. The launch screen shows each pilot's stake, upgraded modules and launch supplies, at NPC replacement price. **Open:** whether a destroyed pilot may relaunch once in the basic fitting into the live instance; it keeps a crew session alive, but it softens the loss and needs a mid-instance join path.
+
+**[S3]** Separate permanent home investment from frontier exposure:
 
 | Asset | Rule |
 |---|---|
-| Personal core outpost | Secure, persistent, enhanceable through the isometric management view; cannot be conquered |
+| Personal core outpost | Secure, persistent, enhanceable through the isometric management view; cannot be conquered (Stage 1) |
 | Frontier deployment | Optional forward services and claim; position can be captured |
 | Protected storage | Capacity-limited, explicitly marked; recoverable after eviction |
 | Operational storage | Local output, cargo, fuel, and staged fleet supplies; exposed |
 | Deployed structure | Returns as a dismantled kit; installation materials and relocation costs are lost |
 
-Attacks take position and operational stock. Protected assets return after a recovery delay and fee. Frontier-produced or imported cargo must be physically extracted before qualifying for protection. Recovery must not become a cheap transport service. The interface shows storage categories and maximum exposure before deployment.
+**[S3]** Attacks take position and operational stock. Protected assets return after a recovery delay and fee. Frontier-produced or imported cargo must be physically extracted before qualifying for protection. Recovery must not become a cheap transport service. The interface shows storage categories and maximum exposure before deployment.
 
-Claims have published attack windows and advance notice, but owner attendance is optional. Prepaid NPC defense contracts provide baseline resistance, with a capped reserve response growing during continuous absence. Strength is bounded by contract tier. Absence is measured across authorized claim operators; logging out during an announced attack gives no increase. Ownership transfers cannot reset these restrictions.
+**[S3]** Claims have published attack windows and advance notice, but owner attendance is optional. Prepaid NPC defense contracts provide baseline resistance, with a capped reserve response growing during continuous absence. Strength is bounded by contract tier. Absence is measured across authorized claim operators; logging out during an announced attack gives no increase. Ownership transfers cannot reset these restrictions.
 
-Defenders can lose. Casual owners buy resistance and time, not immunity. An exhausted contract has a visible grace period before returning to minimum defense. Production pauses without supplies. The secure home never decays because its owner takes a break. Exact windows, reserves, and fees are test parameters; credible conflict necessarily leaves frontier owners exposed to involuntary loss.
+**[S3]** Defenders can lose. Casual owners buy resistance and time, not immunity. An exhausted contract has a visible grace period before returning to minimum defense. Production pauses without supplies. Exact windows, reserves, and fees are test parameters; credible conflict necessarily leaves frontier owners exposed to involuntary loss.
 
-**Logout:** docking at home is safe. Expeditions provide safe pockets where a noncombat countdown suspends the ship and cargo. Login resumes the journey; it never delivers loot home. During combat, the ship remains exposed for the published server timer, including disconnects.
+The secure home never decays because its owner takes a break.
 
-Suspended runs retain a bounded checkpoint. After site expiry, a returning pilot resumes in a designated entry pocket on the same side of the return route, with cargo but no remaining site yield. This must not bypass transport hazards. Re-entry cannot occur directly inside active combat. Checkpoint retention and logout timers require testing.
+**Logout:** docking at home is safe. **[S2]** Expeditions provide safe pockets where a noncombat countdown suspends the ship and cargo. Login resumes the journey; it never delivers loot home. During combat, the ship remains exposed for the published server timer, including disconnects.
 
-Core activities offer sustainable low-risk progression, repairs, and mission setbacks. Frontier missions expose ships and cargo. Limited-loss contested missions may bridge these experiences without creating a third permanent population pool at launch.
+**[S2]** Suspended runs retain a bounded checkpoint. After site expiry, a returning pilot resumes in a designated entry pocket on the same side of the return route, with cargo but no remaining site yield. This must not bypass transport hazards. Re-entry cannot occur directly inside active combat. Checkpoint retention and logout timers require testing.
+
+Core activities offer sustainable low-risk progression, repairs, and mission setbacks; the Stage 1 expedition is a core activity under the loss rules above. **[S3]** Frontier missions expose ships and cargo. Limited-loss contested missions may bridge these experiences without creating a third permanent population pool at launch.
 
 ## 7. Economy and recovery without constant war
 
-Basic materials remain inputs to advanced production. Manufacturing, fuel, module wear and replacement, facility supplies, and frontier deployment consume materials even during PvE. Wear accrues through use, not absence, and is visible before departure. It cannot erase permanent facility unlocks.
+**Stage 1 economy.** Extraction, salvage, NPC contract payouts and NPC buy orders are the sources. Facility construction and reconfiguration, a flat supply cost per launch, replacement of lost modules and the NPC buy/sell spread are the sinks. NPC prices are fixed and posted. Each haul offers a choice: sell raw, process at the outpost and sell, or keep for a facility. A completed lowest-tier run in the basic fitting is net positive after the launch cost. No recipe may turn inputs bought from NPCs into outputs that NPCs buy for more. Stage 1 does not evidence a steady-state economy: once the last facility is bought, the material sink is thin.
 
-Currency sinks include service fees, market fees, defense contracts, and asset recovery. NPC rewards and buy orders create currency. Track these separately: destroying a ship removes goods, not credits.
+Basic materials remain inputs to advanced production. **[S2]** Manufacturing, fuel, module wear and replacement, facility supplies, and frontier deployment consume materials even during PvE. Wear accrues through use, not absence, and is visible before departure. It cannot erase permanent facility unlocks. Wear and fuel exist in the Stage 1 data model but are switched off.
 
-**NPC market makers are permanent infrastructure.** Clearly labeled standing offers guarantee basic supplies and baseline buyers for supported goods. Wide buy/sell spreads leave room for player competition; volumes and price adjustments are bounded. NPCs do not guarantee profitable resale of every manufactured item. Test crafting arbitrage, hauling exploits, and suppression of player trade.
+**[S2]** Currency sinks include service fees, market fees, defense contracts, and asset recovery. NPC rewards and buy orders create currency. Track these separately: destroying a ship removes goods, not credits.
 
-Recovery time includes earning, purchasing, fitting, and returning to useful play. The initial target is replacement of a basic expedition fitting within 15 minutes of dependable play. Advanced ships carry greater explicitly chosen stakes. Saved fittings and protected basic reserves prevent repeated defeats from making participation impossible.
+**NPC market makers are permanent infrastructure.** Clearly labeled standing offers guarantee basic supplies and baseline buyers for supported goods. **[S2]** Wide buy/sell spreads leave room for player competition; volumes and price adjustments are bounded. NPCs do not guarantee profitable resale of every manufactured item. Test crafting arbitrage, hauling exploits, and suppression of player trade.
 
-Instrument every currency and material source, sink, transfer, and stock from the first build. Track wealth concentration, inventories, wear burden, NPC trade share, player order fill times, and recovery time by experience level.
+Recovery time includes earning, purchasing, fitting, and returning to useful play. The basic fitting is always available and cannot be sold. The initial target is replacement of a lost upgraded fitting within 15 minutes of wall-clock play, measured from the loss, flying the lowest threat tier in the basic fitting. Advanced ships carry greater explicitly chosen stakes. Saved fittings prevent repeated defeats from making participation impossible.
+
+Instrument every currency and material source, sink, transfer, and stock from the first build. Every change to stock goes through one ledger transfer that names its source, sink and reason. Stage 1 tracks value lost per defeat, net value per session-hour by experience, launch costs as a share of gross, the sell/process/keep choice, and per-head reward by crew size. **[S2]** Track wealth concentration, inventories, wear burden, NPC trade share, player order fill times, and recovery time by experience level.
 
 ## 8. Population and service viability
+
+This section applies from **[S2]** unless stated.
 
 Start shared play with one compact region and one pooled market order book. Delivery costs can preserve logistics without splitting price discovery across empty markets. PvE and NPC contracts remain available without human opponents or buyers; PvP queues never block essential progression.
 
@@ -102,7 +140,7 @@ Use **150 simultaneous players per shared region as an initial density hypothesi
 
 During consolidation, structures and already protected inventory relocate safely. Exposed cargo still requires extraction, with advance notice and a clear deadline. Administrative relocation must not become an exploitable logistics shortcut. If demand cannot sustain density, retain the compact hub and session expeditions instead of expanding empty territory.
 
-Plan an exportable authoritative server package, versioned world saves, and configurable NPC economics for private/community hosting. Community worlds have separate economies and characters; official competitive inventories cannot import untrusted saves. Test hosting and restoration before promising continuity after official service ends.
+Plan an exportable authoritative server package, versioned world saves, and configurable NPC economics for private/community hosting. Community worlds have separate economies and characters; official competitive inventories cannot import untrusted saves. Test hosting and restoration before promising continuity after official service ends. Stage 1 saves are versioned and carry a world identifier from the first build (§10).
 
 Public expansion requires funded operations, moderation, support, anti-cheat, backups, and incident recovery. Engagement caps bound simulation, not all service costs. A business model is a release gate; paid power or loss insurance must not undermine progression and risk rules.
 
@@ -110,13 +148,41 @@ Public expansion requires funded operations, moderation, support, anti-cheat, ba
 
 | Stage | Build | Gate before expansion |
 |---|---|---|
-| 1: Prove the signature | Isometric outpost with visible facility upgrades; one 1–4-player expedition; extraction, combat, NPC trading, loss and recovery | Outpost enhancements change expedition decisions; angled-view targeting stays readable; players voluntarily repeat after loss; travel and recovery meet targets |
+| 1: Prove the signature | Isometric outpost with visible facility upgrades on fixed sockets; one authored expedition site with several pockets and seeded variation, for 1–4 players; one hull with three rigs; extraction, combat, NPC contracts and fixed-price trading, loss and recovery | Outpost enhancements change expedition decisions; angled-view targeting stays readable; players voluntarily repeat after loss; travel and recovery meet targets |
 | 2: Prove shared value | Compact shared hub, contracts and trade, scarce access keys, small bounded PvP tests | Mixed-experience crews choose to regroup; keys attract repeat buyers; sparse-population economy remains usable |
 | 3: Prove frontier ownership | Deployable outposts, NPC defense, capture/recovery, tested 20v20 ceiling | Offline loss is consequential but recoverable; no cheap asset evacuation; acceptable latency and operating cost |
 | 4: Consider MMO scale | Adaptive regions, broader politics, live operations, hosting distribution | Sustainable density, retention, funding, security, and moderation capacity |
 
 Stage 1 requires persistent home/account saves and authoritative cooperative sessions, not a continuously simulated galaxy, player market, or territorial server. Later gates may stop expansion without invalidating the smaller game.
 
-**Expert challenges:** Does visibly enhancing and specializing the outpost sell the game? Do upgrades change expedition choices rather than only production rates? Is isometric combat readable around large structures and overlapping ships? Is active extraction engaging rather than repetitive labor? Are access keys understandable and resistant to admission exploits? Do NPC defenders encourage absence or alternate ownership accounts? Can intentional eviction exploit recovery? Can 40-ship battles meet readability and network budgets? Does measured retention support the population assumption?
+| In Stage 1 | Not in Stage 1 |
+|---|---|
+| Starter outpost, fixed sockets, about three facilities with two tiers each | Free placement, frontier deployments, claims |
+| One site with several pockets, seeded variation, two or three threat tiers | Additional sites, a site map, player-discovered sites, access keys |
+| One hull, three rigs; progression through facilities | Further hulls, pilot progression |
+| Crews by invite code, shared access, visible payout split | Shared hub, matchmaking, visiting crews, player-to-player transfers |
+| NPC contracts, fixed posted prices, flat launch cost | Player market, dynamic prices, wear, fuel |
+| Loss of cargo and upgraded modules; reconnect within a grace window | Cross-session suspend and checkpoints, PvP, territory |
+
+**Stage 1 gate measures.** Thresholds and cohort sizes are **Open** and are set before playtests begin.
+
+1. *Outpost enhancements change expedition decisions.* Among players with the same unlocks, active layouts differ; on the same seed, layout predicts pocket and rig choice; reconfigurations per ten runs are neither zero nor one per run. Testers shown before-and-after overview images can say what changed and what it lets them do.
+2. *Angled-view targeting stays readable.* In greybox scenes that include the real station silhouette: time to select a named hostile, wrong-target rate, and judgement of heading and of which target is nearer, repeated in greyscale and under simulated colour-vision deficiency.
+3. *Players voluntarily repeat after loss.* Unprompted next-day return after a session that ended in defeat, compared with one that ended in success; the stake chosen on the launch after a defeat; the spread of choices across players on the same seed at run 10 compared with run 3.
+4. *Travel and recovery meet targets.* Undock to first pocket plus last pocket to dock, as a share of session time; minutes from loss to an equivalent fitting; time from launch to first decision.
+
+Stage 1 also gathers early evidence for the Stage 2 crew gate, without making it a Stage 1 gate: paired playtests of a veteran and a first-session newcomer, comparing the veteran's take per hour solo, with the newcomer and with two clients, and recording whether both choose another joint run.
+
+**What Stage 1 does not show.** It evidences the link between outpost and expedition, repeat play over roughly ten runs, and whether a second pilot helps. It does not evidence long-term retention, an open-world feel, mutual gain between newcomers and veterans, or a player economy. Those remain later gates.
+
+**Expert challenges:** Does visibly enhancing and specializing the outpost sell the game? Do upgrades change expedition choices rather than only production rates? Is the freedom to choose pockets and to leave enough to feel free without a world map? Is isometric combat readable around large structures and overlapping ships? Is active extraction engaging rather than repetitive labor? Does a newcomer add anything a veteran's second client would not? **[S2]** Are access keys understandable and resistant to admission exploits? **[S3]** Do NPC defenders encourage absence or alternate ownership accounts? Can intentional eviction exploit recovery? Can 40-ship battles meet readability and network budgets? **[S4]** Does measured retention support the population assumption?
 
 These questions determine product viability. Resolve them through prototypes and measured tests before committing to MMO production, rather than deferring them as balance tuning.
+
+## 10. Stage 1 specification (to be written)
+
+The sections above state rules, not values. Building Stage 1 needs an appendix of data tables with placeholder numbers marked as tunable: facilities (socket, power, cost, tier, capability), rigs and modules, NPC types and behaviours, materials and currency, NPC prices and recipes, site layout and seed parameters, threat tiers and crew scaling, tick rate, and NPC and projectile caps.
+
+The data model is fixed now so that later stages do not need a rewrite. Facilities are data with capability tags. Expedition options are keyed to capability tags, not to facility identifiers. A site is a template plus a seed plus parameters. Saves are versioned, carry a world identifier, and store unlocks separately from the active layout. Items have identities, so that trade and keys can refer to them later. Ships and fittings are instances with a wear field.
+
+A client-only readability greybox comes before server work and before further station art.
