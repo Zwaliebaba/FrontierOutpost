@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 /// The version [`Account::to_json`] writes.
-pub const DOCUMENT_VERSION: u32 = 1;
+pub const DOCUMENT_VERSION: u32 = 2;
 
 /// Credits a new pilot starts with (design section 10).
 pub const STARTING_CREDITS: u32 = 100;
@@ -22,12 +22,33 @@ pub struct Stock {
     pub volatiles: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A facility tier the pilot has bought: theirs for good (design section 2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Unlock {
+    pub facility: String,
+    pub tier: u32,
+}
+
+/// A facility installed in a socket of the outpost.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Installed {
+    pub socket: String,
+    pub facility: String,
+    pub tier: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Account {
     pub world: String,
     pub callsign: String,
     pub credits: u32,
     pub stock: Stock,
+    /// Everything ever bought, kept apart from the layout (design section 10):
+    /// capabilities come from what is installed and powered, not from this.
+    /// Empty until the outpost exists (plan M5).
+    pub unlocks: Vec<Unlock>,
+    /// What is installed in each socket. Empty until plan M5.
+    pub layout: Vec<Installed>,
 }
 
 /// Why a document could not be read.
@@ -41,10 +62,17 @@ pub enum DocumentError {
     WrongWorld { expected: String, found: String },
 }
 
-/// Version 1: credits and stock side by side.
+/// Version 2: the account as it is.
 #[derive(Serialize, Deserialize)]
-struct V1 {
+struct V2 {
     version: u32,
+    #[serde(flatten)]
+    account: Account,
+}
+
+/// Version 1: credits and stock side by side, with no unlocks or layout.
+#[derive(Deserialize)]
+struct V1 {
     world: String,
     callsign: String,
     credits: u32,
@@ -67,6 +95,8 @@ impl Account {
             callsign: callsign.to_owned(),
             credits: STARTING_CREDITS,
             stock: Stock::default(),
+            unlocks: Vec::new(),
+            layout: Vec::new(),
         }
     }
 
@@ -90,8 +120,11 @@ impl Account {
                         salvage: v1.salvage,
                         volatiles: v1.volatiles,
                     },
+                    unlocks: Vec::new(),
+                    layout: Vec::new(),
                 }
             }
+            2 => serde_json::from_str::<V2>(json)?.account,
             newer => return Err(DocumentError::TooNew(newer)),
         };
         if account.world != world {
@@ -108,14 +141,9 @@ impl Account {
     /// # Errors
     /// Cannot fail for these types; the error is serde's.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(&V1 {
+        serde_json::to_string(&V2 {
             version: DOCUMENT_VERSION,
-            world: self.world.clone(),
-            callsign: self.callsign.clone(),
-            credits: self.credits,
-            ore: self.stock.ore,
-            salvage: self.stock.salvage,
-            volatiles: self.stock.volatiles,
+            account: self.clone(),
         })
     }
 }
@@ -146,6 +174,43 @@ mod tests {
         account.stock.ore = 12;
         let json = account.to_json().unwrap();
         assert!(json.contains(&format!(r#""version":{DOCUMENT_VERSION}"#)));
+        assert_eq!(Account::from_json(&json, "w").unwrap(), account);
+    }
+
+    #[test]
+    fn loads_a_version_1_document_as_the_previous_build_wrote_it() {
+        // Written by commit 4f88154, the first build with accounts.
+        let v1 = r#"{"version":1,"world":"w","callsign":"Vega","credits":60,"ore":12,"salvage":0,"volatiles":3}"#;
+        let account = Account::from_json(v1, "w").unwrap();
+        assert_eq!(account.callsign, "Vega");
+        assert_eq!(account.credits, 60);
+        assert_eq!(
+            account.stock,
+            Stock {
+                ore: 12,
+                salvage: 0,
+                volatiles: 3
+            }
+        );
+        assert!(account.unlocks.is_empty() && account.layout.is_empty());
+        // Saved again, it is written at the current version.
+        assert!(account.to_json().unwrap().contains(r#""version":2"#));
+    }
+
+    #[test]
+    fn keeps_unlocks_apart_from_the_layout() {
+        let mut account = Account::new("w", "Vega");
+        account.unlocks.push(Unlock {
+            facility: "refinery".into(),
+            tier: 2,
+        });
+        account.layout.push(Installed {
+            socket: "a".into(),
+            facility: "refinery".into(),
+            tier: 1,
+        });
+        let json = account.to_json().unwrap();
+        assert!(json.contains(r#""unlocks":[{"facility":"refinery","tier":2}]"#));
         assert_eq!(Account::from_json(&json, "w").unwrap(), account);
     }
 
