@@ -70,6 +70,8 @@ Use a consistent fixed-angle isometric camera for outpost management, exploratio
 
 **Control.** Ships are steered directly, by thrust and turn, with client-side prediction. Weapons fire at a locked target and the server resolves hits; Stage 1 has no manually aimed shots. Clients send intents. The server simulates and is authoritative for movement, hits, inventory, and access. The initial latency target is full playability at 150 ms round trip and usable play at 250 ms; both are test parameters.
 
+**Input.** Stage 1 is built and playtested with mouse and keyboard on desktop. Touch is in scope and is built after the Stage 1 gates, for tablets in landscape first; phones follow once that layout is proven. Gamepad support is not planned. So that touch does not force a redesign, three rules apply from Stage 1: no action is available only through hover or a right click; anything a player must select is at least a finger-sized target, provisionally 44 CSS pixels, whatever its drawn size; and every input reaches the game through one mapping layer that produces the same intents on every device. When the touch build is made, the readability measures of §9 are repeated with touch input. **Open:** the stage at which the touch build ships.
+
 **Readability.** All combat ships render at one height, and range and aim indicators are drawn on the plane. Ships and interactable objects always show an allegiance-specific silhouette through anything that hides them. Structures fade only when they hide the player's own ship or cursor. Allegiance and state are never carried by colour alone. Engagement ranges fit within the combat zoom at which a ship remains comfortably selectable. **Open:** the view elevation is confirmed by a client-only readability greybox, using the real station silhouette, before more art is authored to it.
 
 The first build supports 1–4 players against NPC threats, with provisional NPC and projectile caps published in the Stage 1 specification (§10). **[S2]** Later contested sites have a **20-ship-per-side ceiling: two sides, 40 player ships total**. NPC and projectile budgets are separately capped and benchmarked. Early PvP tests begin smaller. Uncapped open-world fleet battles are outside the product commitment.
@@ -163,6 +165,7 @@ Stage 1 requires persistent home/account saves and authoritative cooperative ses
 | Crews by invite code, shared access, visible payout split | Shared hub, matchmaking, visiting crews, player-to-player transfers |
 | NPC contracts, fixed posted prices, flat launch cost | Player market, dynamic prices, wear, fuel |
 | Loss of cargo and upgraded modules; reconnect within a grace window | Cross-session suspend and checkpoints, PvP, territory |
+| Mouse and keyboard on desktop | Touch controls and tablet layout; gamepad is not planned at any stage |
 
 **Stage 1 gate measures.** Thresholds and cohort sizes are **Open** and are set before playtests begin.
 
