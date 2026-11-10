@@ -1,5 +1,6 @@
 # The game server in a Linux container, for Docker Desktop on the owner's machine.
-#   docker compose up --build        then open http://localhost:8080/
+#   docker compose up --build        then open http://localhost:8080/ (not 127.0.0.1: passkeys
+#                                    need a domain name)
 services:
   server:
     build: .
@@ -15,3 +16,9 @@ services:
       # `localhost`, so that the browser does not try IPv6 first.
       FRONTIER_PUBLIC_WEBTRANSPORT_ADDR: "127.0.0.1:4443"
       RUST_LOG: info
+    volumes:
+      # The world's saves, kept across rebuilds. `docker compose down -v` deletes them.
+      - saves:/var/lib/frontier
+
+volumes:
+  saves:

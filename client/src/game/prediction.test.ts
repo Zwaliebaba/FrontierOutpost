@@ -95,7 +95,7 @@ function fly(ticks: number, link: Link, controlsAt: (tick: number) => ShipContro
     for (const snapshot of toClient.filter((message) => message.at === tick)) {
       corrections.push(predictor.reconcile(snapshot.state, snapshot.ack));
     }
-    const sent = asServerReads({ ...controlsAt(tick), fire: false });
+    const sent = asServerReads({ ...controlsAt(tick), fire: false, cruise: false });
     sentInputs.push(sent);
     const inputs = [];
     for (let back = 0; back < 4 && tick - back >= 1; back += 1) {

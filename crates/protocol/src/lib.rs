@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 4;
+pub const PROTOCOL_VERSION: u32 = 6;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -29,6 +29,16 @@ pub const PROTOCOL_VERSION: u32 = 4;
 pub enum ClientMessage {
     /// First message on a new connection.
     Hello { protocol_version: u32 },
+    /// Starts registering a new pilot with a passkey. The server answers with
+    /// `PasskeyOptions` or `SignInRefused`.
+    Register { callsign: String },
+    /// Starts signing in the pilot called `callsign` with their passkey.
+    SignIn { callsign: String },
+    /// Finishes a registration or sign-in: `credential` is the browser's
+    /// `PublicKeyCredential.toJSON()`, as JSON text.
+    PasskeyCredential { credential: String },
+    /// Signs in again with the token from `SignedIn`, without a passkey.
+    Resume { token: String },
     /// Locks a hostile ship as the weapon target, or releases the lock with
     /// `None`. The server ignores a lock on anything but a hostile in range.
     Lock { target: Option<u16> },
@@ -58,6 +68,21 @@ pub enum ServerMessage {
         protocol_version: u32,
         reason: String,
     },
+    /// Options for the browser's WebAuthn call, as JSON text: for a
+    /// registration, `{ "publicKey": PublicKeyCredentialCreationOptionsJSON }`;
+    /// for a sign-in, `{ "publicKey": PublicKeyCredentialRequestOptionsJSON }`.
+    PasskeyOptions { options: String },
+    /// The pilot is signed in. `token` signs them in again with `Resume`.
+    /// A contract follows.
+    SignedIn {
+        callsign: String,
+        token: String,
+        account: AccountInfo,
+    },
+    /// Registration, sign-in or resumption failed, for `reason`.
+    SignInRefused { reason: String },
+    /// The pilot's home holdings changed.
+    Account { account: AccountInfo },
     /// The discovery contract on offer (design section 4): the site and what
     /// preparation shows of its seed. Sent after `Welcome` and after each run.
     Contract {
@@ -69,6 +94,8 @@ pub enum ServerMessage {
     /// The pilot launched and flies the ship `ship_id`. Snapshots follow as
     /// datagrams, `tick_rate` per second. Everything here is fixed for the run.
     Joined {
+        /// The run's site: a page that rejoins a run has no contract for it.
+        site: SiteInfo,
         ship_id: u16,
         tick_rate: u32,
         tier: u32,
@@ -101,6 +128,17 @@ pub enum ServerMessage {
     LimitWarning { seconds_left: u32 },
     /// The pilot's run is over. A new `Contract` follows.
     RunOver { summary: RunSummary },
+}
+
+/// What a pilot's home holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AccountInfo {
+    pub credits: u32,
+    pub ore: u32,
+    pub salvage: u32,
+    pub volatiles: u32,
 }
 
 /// A pocket of the site, as a contract shows it.
@@ -361,6 +399,35 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&ClientMessage::Vent).unwrap(),
             r#"{"type":"vent"}"#
+        );
+    }
+
+    #[test]
+    fn identity_messages_use_the_tagged_shape() {
+        assert_eq!(
+            serde_json::to_string(&ClientMessage::Register {
+                callsign: "Vega".into()
+            })
+            .unwrap(),
+            r#"{"type":"register","callsign":"Vega"}"#
+        );
+        let signed_in = ServerMessage::SignedIn {
+            callsign: "Vega".into(),
+            token: "ab".into(),
+            account: AccountInfo {
+                credits: 100,
+                ore: 0,
+                salvage: 0,
+                volatiles: 0,
+            },
+        };
+        let json = serde_json::to_string(&signed_in).unwrap();
+        assert!(json.starts_with(
+            r#"{"type":"signedIn","callsign":"Vega","token":"ab","account":{"credits":100"#
+        ));
+        assert_eq!(
+            serde_json::from_str::<ServerMessage>(&json).unwrap(),
+            signed_in
         );
     }
 

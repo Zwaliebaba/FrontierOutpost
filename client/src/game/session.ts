@@ -13,6 +13,8 @@ export interface Controls {
   turn: number;
   /** The trigger is held: fire at the locked target when ready and in range. */
   fire: boolean;
+  /** The cruise drive is asked for. */
+  cruise: boolean;
 }
 
 export class Session {
@@ -107,5 +109,6 @@ export function asServerReads(controls: Controls): Controls {
     thrust: Math.max(-1, quantizeControl(controls.thrust) / 127),
     turn: Math.max(-1, quantizeControl(controls.turn) / 127),
     fire: controls.fire,
+    cruise: controls.cruise,
   };
 }

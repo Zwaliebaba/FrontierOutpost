@@ -82,6 +82,7 @@ mod tests {
             thrust,
             turn: 0,
             fire: false,
+            cruise: false,
         }
     }
 

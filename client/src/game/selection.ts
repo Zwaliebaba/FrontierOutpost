@@ -26,33 +26,55 @@ export class Selection {
     this.#onLock = onLock;
   }
 
-  /** A click on a ship, or on empty space with `null`. */
-  click(picked: Candidate | null): void {
+  /**
+   * A click on a ship, or on empty space with `null`. A hostile within `lockRange` of `from` is
+   * locked; one beyond it is only centred on, because the server would refuse the lock and the
+   * player would see a lock their weapon cannot use. Returns `"beyond"` in that case.
+   */
+  click(
+    picked: Candidate | null,
+    from?: { x: number; z: number },
+    lockRange = Infinity,
+  ): "locked" | "centred" | "beyond" {
     if (!picked) {
       // Empty space returns the view to your own ship; the lock stays.
       this.focus = null;
-      return;
+      return "centred";
     }
     this.focus = picked.id;
-    if (isHostile(picked.kind)) this.#setLock(picked.id);
+    if (!isHostile(picked.kind)) return "centred";
+    const distance = from ? Math.hypot(picked.x - from.x, picked.z - from.z) : 0;
+    if (distance > lockRange) return "beyond";
+    this.#setLock(picked.id);
+    return "locked";
   }
 
   /**
-   * Locks the nearest hostile to `from`, or on a repeated press the next nearest after the
-   * current lock, wrapping round. The view centres on it.
+   * Locks the nearest hostile to `from` within `lockRange`, or on a repeated press the next
+   * nearest after the current lock, wrapping round. The view centres on it. Returns whether
+   * anything could be locked.
    */
-  cycle(from: { x: number; z: number }, candidates: readonly Candidate[]): void {
+  cycle(
+    from: { x: number; z: number },
+    candidates: readonly Candidate[],
+    lockRange = Infinity,
+  ): boolean {
     const hostiles = candidates
-      .filter((candidate) => isHostile(candidate.kind))
+      .filter(
+        (candidate) =>
+          isHostile(candidate.kind) &&
+          Math.hypot(candidate.x - from.x, candidate.z - from.z) <= lockRange,
+      )
       .sort(
         (a, b) => Math.hypot(a.x - from.x, a.z - from.z) - Math.hypot(b.x - from.x, b.z - from.z),
       );
-    if (hostiles.length === 0) return;
+    if (hostiles.length === 0) return false;
     const current = hostiles.findIndex((candidate) => candidate.id === this.lock);
     const next = hostiles[(current + 1) % hostiles.length] ?? hostiles[0];
-    if (!next) return;
+    if (!next) return false;
     this.focus = next.id;
     this.#setLock(next.id);
+    return true;
   }
 
   /** Releases the lock and returns the view to your own ship. */

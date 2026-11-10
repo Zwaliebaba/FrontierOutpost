@@ -33,6 +33,8 @@ services:
       <<: *test-site
       # The host side of the UDP mapping above, as browsers must dial it.
       FRONTIER_PUBLIC_WEBTRANSPORT_ADDR: "127.0.0.1:4451"
+      # Passkeys are bound to the page's origin: the host port, not the container's 8080.
+      FRONTIER_ORIGIN: "http://localhost:8181"
 
   quiet:
     <<: *server
@@ -43,3 +45,4 @@ services:
       <<: *test-site
       FRONTIER_NPCS: "0"
       FRONTIER_PUBLIC_WEBTRANSPORT_ADDR: "127.0.0.1:4452"
+      FRONTIER_ORIGIN: "http://localhost:8182"

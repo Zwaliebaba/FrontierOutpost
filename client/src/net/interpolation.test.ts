@@ -13,6 +13,7 @@ const IDLE: OwnStatus = {
   scan: null,
   alert: 0,
   elapsedSeconds: 0,
+  drive: "ready",
 };
 
 const TICK_RATE = 20;

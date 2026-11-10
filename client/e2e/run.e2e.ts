@@ -52,7 +52,7 @@ test("a scan held still in the site reveals the rich pocket and the waves", asyn
 test("flying out and back docks, shows the summary and offers the next contract", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   await launch(page, QUIET);
   // Out past the undock radius, stop, turn about, and fly straight back.
   await page.keyboard.down("KeyW");
@@ -73,6 +73,42 @@ test("flying out and back docks, shows the summary and offers the next contract"
   await expect(summary).toContainText("Banked: nothing");
   await expect(summary).toContainText("Contract: 0 cr");
 
+  // At home the client sends nothing; the server's keep-alive must hold the connection past
+  // its 10-second idle timeout, which used to disconnect a pilot reading the summary.
+  await page.waitForTimeout(12_000);
   await summary.getByRole("button", { name: "Next contract" }).click();
   await expect(page.locator("#briefing")).toHaveAttribute("data-state", "open");
+  await page.locator('#briefing button[data-tier="1"]').click();
+  await expect(page.locator("#run")).toHaveAttribute("data-phase", "atDock");
+  await expect(page.locator("#status")).toHaveAttribute("data-state", "connected");
+});
+
+test("holding Shift engages the cruise drive on the legs", async ({ page }) => {
+  await launch(page, QUIET);
+  const run = page.locator("#run");
+  await expect(run).toContainText("drive ready (Shift)");
+  const start = await position(page);
+  await page.keyboard.down("ShiftLeft");
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(2_000);
+  const cruised = await position(page);
+  await page.keyboard.up("KeyW");
+  await page.keyboard.up("ShiftLeft");
+  // Two seconds from rest: about 10 m at normal speed, three times the acceleration on the drive.
+  expect(cruised.x - start.x).toBeGreaterThan(20);
+  // Prediction ran the drive too, so the server barely corrected it.
+  const correction = Number(
+    /correction (\d+) cm/.exec((await page.textContent("#hud")) ?? "")?.[1],
+  );
+  expect(correction).toBeLessThan(150);
+});
+
+test("without Shift the ship keeps normal speed", async ({ page }) => {
+  await launch(page, QUIET);
+  const start = await position(page);
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(2_000);
+  const flown = await position(page);
+  await page.keyboard.up("KeyW");
+  expect(flown.x - start.x).toBeLessThan(15);
 });

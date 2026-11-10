@@ -3,13 +3,18 @@
 //! The server owns all game state and validates every client request. It never
 //! trusts client-reported positions, hits, inventory or access.
 
+pub mod account;
+pub mod auth;
 pub mod caps;
 pub mod cert;
 pub mod config;
 pub mod expedition;
 pub mod http;
 pub mod input_queue;
+pub mod ledger;
 pub mod relay;
+pub mod runs;
+pub mod store;
 pub mod transport;
 pub mod wire;
 
@@ -20,6 +25,10 @@ use frontier_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage};
 pub fn handshake(message: &ClientMessage) -> ServerMessage {
     match *message {
         ClientMessage::Lock { .. }
+        | ClientMessage::Register { .. }
+        | ClientMessage::SignIn { .. }
+        | ClientMessage::PasskeyCredential { .. }
+        | ClientMessage::Resume { .. }
         | ClientMessage::Launch { .. }
         | ClientMessage::Extract { .. }
         | ClientMessage::Vent

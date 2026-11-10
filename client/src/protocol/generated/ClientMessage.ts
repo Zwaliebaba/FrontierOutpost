@@ -3,4 +3,4 @@
 /**
  * A message sent from the client to the server.
  */
-export type ClientMessage = { "type": "hello", protocolVersion: number, } | { "type": "lock", target: number | null, } | { "type": "launch", tier: number, } | { "type": "extract", on: boolean, } | { "type": "vent" } | { "type": "scan" };
+export type ClientMessage = { "type": "hello", protocolVersion: number, } | { "type": "register", callsign: string, } | { "type": "signIn", callsign: string, } | { "type": "passkeyCredential", credential: string, } | { "type": "resume", token: string, } | { "type": "lock", target: number | null, } | { "type": "launch", tier: number, } | { "type": "extract", on: boolean, } | { "type": "vent" } | { "type": "scan" };

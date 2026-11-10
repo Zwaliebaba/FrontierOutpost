@@ -48,7 +48,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     && cp -r /src/client/dist /out/client
 
 FROM debian:${DEBIAN_RELEASE}-slim
-RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin frontier
+RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin frontier \
+    && mkdir -p /var/lib/frontier && chown frontier:frontier /var/lib/frontier
 COPY --from=build /out/frontier-server /usr/local/bin/frontier-server
 COPY --from=build /out/client /srv/frontier/client
 
@@ -56,7 +57,10 @@ COPY --from=build /out/client /srv/frontier/client
 # FRONTIER_PUBLIC_WEBTRANSPORT_ADDR to the address the host publishes UDP 4443 on (compose.yaml).
 ENV FRONTIER_HTTP_ADDR=0.0.0.0:8080 \
     FRONTIER_WEBTRANSPORT_ADDR=0.0.0.0:4443 \
-    FRONTIER_CLIENT_DIR=/srv/frontier/client
+    FRONTIER_CLIENT_DIR=/srv/frontier/client \
+    FRONTIER_DATA=/var/lib/frontier/frontier.db
+# The world's saves. compose.yaml mounts a named volume here so they outlive the container.
+VOLUME /var/lib/frontier
 EXPOSE 8080/tcp 4443/udp
 
 USER frontier

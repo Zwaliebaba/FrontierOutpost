@@ -10,7 +10,7 @@
 //! Layout, little-endian: kind [`INPUT_KIND`] `u8`, sequence of the newest
 //! input `u16`, count `u8` (1 to [`MAX_INPUTS`]), then `count` inputs of thrust
 //! `i8`, turn `i8` and flags `u8`, newest first. Thrust and turn are -1..=1
-//! scaled to -127..=127; flag bit 0 is the trigger.
+//! scaled to -127..=127; flag bit 0 is the trigger and bit 1 the cruise drive.
 
 /// First byte of every input datagram.
 pub const INPUT_KIND: u8 = 2;
@@ -19,6 +19,7 @@ pub const MAX_INPUTS: usize = 4;
 const HEADER_BYTES: usize = 4;
 const INPUT_BYTES: usize = 3;
 const FIRE: u8 = 1;
+const CRUISE: u8 = 2;
 const SCALE: f32 = 127.0;
 
 /// One tick of controls, quantised.
@@ -28,6 +29,8 @@ pub struct Controls {
     pub turn: i8,
     /// The trigger is held: fire at the locked target when ready and in range.
     pub fire: bool,
+    /// The cruise drive is asked for; the server engages it only where it may.
+    pub cruise: bool,
 }
 
 impl Controls {
@@ -88,7 +91,9 @@ impl InputDatagram {
         for controls in &self.controls {
             bytes.extend_from_slice(&controls.thrust.to_le_bytes());
             bytes.extend_from_slice(&controls.turn.to_le_bytes());
-            bytes.push(if controls.fire { FIRE } else { 0 });
+            bytes.push(
+                (if controls.fire { FIRE } else { 0 }) | (if controls.cruise { CRUISE } else { 0 }),
+            );
         }
         Ok(bytes)
     }
@@ -124,6 +129,7 @@ impl InputDatagram {
                 thrust: i8::from_le_bytes([thrust]),
                 turn: i8::from_le_bytes([turn]),
                 fire: flags & FIRE != 0,
+                cruise: flags & CRUISE != 0,
             })
             .collect();
         Ok(Self {
@@ -163,6 +169,7 @@ mod tests {
             thrust,
             turn,
             fire: false,
+            cruise: false,
         }
     }
 
@@ -172,12 +179,17 @@ mod tests {
             fire: true,
             ..controls(0, 5)
         };
+        let cruising = Controls {
+            fire: true,
+            cruise: true,
+            ..controls(-127, 0)
+        };
         let input = InputDatagram {
             sequence: 1,
-            controls: vec![controls(127, -127), firing, controls(-127, 0)],
+            controls: vec![controls(127, -127), firing, cruising],
         };
         let bytes = input.encode().unwrap();
-        assert_eq!(bytes, [2, 1, 0, 3, 127, 129, 0, 0, 5, 1, 129, 0, 0]);
+        assert_eq!(bytes, [2, 1, 0, 3, 127, 129, 0, 0, 5, 1, 129, 0, 3]);
         assert_eq!(InputDatagram::decode(&bytes).unwrap(), input);
         let numbered: Vec<u16> = input.numbered().map(|(sequence, _)| sequence).collect();
         assert_eq!(numbered, [1, 0, u16::MAX]);
@@ -251,23 +263,27 @@ mod tests {
         let Ok(dir) = std::env::var("TS_RS_EXPORT_DIR") else {
             return;
         };
-        /// A sequence and its inputs, newest first: thrust, turn, trigger.
-        type Case = (u16, &'static [(f32, f32, bool)]);
+        /// A sequence and its inputs, newest first: thrust, turn, trigger, cruise.
+        type Case = (u16, &'static [(f32, f32, bool, bool)]);
         let cases: [Case; 4] = [
-            (0, &[(0.0, 0.0, false)]),
-            (1, &[(1.0, -1.0, true), (0.5, -0.25, false)]),
+            (0, &[(0.0, 0.0, false, false)]),
+            (1, &[(1.0, -1.0, true, false), (0.5, -0.25, false, true)]),
             (
                 65_535,
                 &[
-                    (-1.0, 1.0, false),
-                    (2.0, -2.0, true),
-                    (0.0, 1.0, true),
-                    (1.0, 0.0, false),
+                    (-1.0, 1.0, false, true),
+                    (2.0, -2.0, true, true),
+                    (0.0, 1.0, true, false),
+                    (1.0, 0.0, false, false),
                 ],
             ),
             (
                 300,
-                &[(0.3, -0.7, true), (0.0, 0.0, false), (1.0, 1.0, false)],
+                &[
+                    (0.3, -0.7, true, false),
+                    (0.0, 0.0, false, false),
+                    (1.0, 1.0, false, true),
+                ],
             ),
         ];
         let rows = cases
@@ -277,8 +293,9 @@ mod tests {
                     sequence,
                     controls: inputs
                         .iter()
-                        .map(|&(thrust, turn, fire)| Controls {
+                        .map(|&(thrust, turn, fire, cruise)| Controls {
                             fire,
+                            cruise,
                             ..controls(quantize_control(thrust), quantize_control(turn))
                         })
                         .collect(),
@@ -291,8 +308,10 @@ mod tests {
                     .collect();
                 let list = inputs
                     .iter()
-                    .map(|(thrust, turn, fire)| {
-                        format!("{{ thrust: {thrust:?}, turn: {turn:?}, fire: {fire} }}")
+                    .map(|(thrust, turn, fire, cruise)| {
+                        format!(
+                            "{{ thrust: {thrust:?}, turn: {turn:?}, fire: {fire}, cruise: {cruise} }}"
+                        )
                     })
                     .collect::<Vec<_>>()
                     .join(", ");
@@ -303,7 +322,7 @@ mod tests {
             "// This file was generated by frontier-protocol's tests. Do not edit this file manually.\n\n\
              export const MAX_INPUTS = {MAX_INPUTS};\n\n\
              /** Controls, newest first, and the input datagrams the Rust decoder expects for them. */\n\
-             export const INPUT_VECTORS: {{\n  sequence: number;\n  inputs: {{ thrust: number; turn: number; fire: boolean }}[];\n  hex: string;\n}}[] = [\n{rows}];\n"
+             export const INPUT_VECTORS: {{\n  sequence: number;\n  inputs: {{ thrust: number; turn: number; fire: boolean; cruise: boolean }}[];\n  hex: string;\n}}[] = [\n{rows}];\n"
         );
         let path = std::path::Path::new(&dir).join("inputVectors.ts");
         if std::fs::read_to_string(&path).ok().as_deref() != Some(contents.as_str()) {

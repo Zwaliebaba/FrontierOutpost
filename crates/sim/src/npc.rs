@@ -98,6 +98,7 @@ fn seek(npc: &Ship, x: f32, z: f32, stop_at: f32) -> ShipInput {
     ShipInput {
         thrust,
         turn: (off * 2.0).clamp(-1.0, 1.0),
+        cruise: false,
     }
 }
 

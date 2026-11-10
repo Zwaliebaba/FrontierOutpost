@@ -10,8 +10,8 @@ mod common;
 use std::time::Duration;
 
 use common::{
-    connect_to, hello, read, start_server, start_server_with, start_server_with_idle_timeout,
-    test_settings, write,
+    connect_to, hello, read, sign_up, start_server, start_server_with,
+    start_server_with_idle_timeout, test_settings, write,
 };
 use frontier_protocol::input::{Controls, InputDatagram, quantize_control};
 use frontier_protocol::snapshot::{EntityKind, RunPhase, Snapshot, SnapshotEvent};
@@ -27,18 +27,23 @@ struct Pilot {
     sequence: u16,
 }
 
-/// Connects, reads the contract and launches at tier I.
+/// Connects, signs up a new pilot, reads the contract and launches at tier I.
 async fn launch(url: &url::Url, sha256: [u8; 32]) -> Pilot {
     let (session, mut send, mut recv) = connect_to(url, sha256).await;
     assert!(matches!(
         hello(&mut send, &mut recv).await,
         ServerMessage::Welcome { .. }
     ));
+    sign_up(&mut send, &mut recv).await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Contract { .. }
     ));
     write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::Account { .. }
+    ));
     let ServerMessage::Joined { ship_id, .. } = read(&mut recv).await else {
         panic!("expected Joined");
     };
@@ -55,16 +60,19 @@ const FORWARD: Controls = Controls {
     thrust: 127,
     turn: 0,
     fire: false,
+    cruise: false,
 };
 const BRAKE: Controls = Controls {
     thrust: -127,
     turn: 0,
     fire: false,
+    cruise: false,
 };
 const IDLE: Controls = Controls {
     thrust: 0,
     turn: 0,
     fire: false,
+    cruise: false,
 };
 
 impl Pilot {
@@ -96,6 +104,7 @@ async fn the_contract_shows_the_site_and_only_opened_tiers_launch() {
     let (url, sha256) = start_server();
     let (_session, mut send, mut recv) = connect_to(&url, sha256).await;
     hello(&mut send, &mut recv).await;
+    sign_up(&mut send, &mut recv).await;
     let ServerMessage::Contract { site, tiers, .. } = read(&mut recv).await else {
         panic!("expected a contract");
     };
@@ -109,6 +118,10 @@ async fn the_contract_shows_the_site_and_only_opened_tiers_launch() {
         ServerMessage::LaunchRefused { .. }
     ));
     write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    let ServerMessage::Account { account } = read(&mut recv).await else {
+        panic!("expected the account after paying for supplies");
+    };
+    assert_eq!(account.credits, 60, "100 cr less 40 cr of supplies");
     let ServerMessage::Joined {
         deposits,
         obstacles,
@@ -163,16 +176,21 @@ async fn flying_out_and_back_docks_and_a_new_contract_follows() {
         thrust: 0,
         turn: quantize_control(1.0),
         fire: false,
+        cruise: false,
     };
     // 2.4 rad/s: half a turn in about 26 ticks.
     pilot.fly(about, 26).await;
     pilot.fly(FORWARD, 200).await;
 
-    let ServerMessage::RunOver { summary } =
+    let ServerMessage::Account { account } =
         tokio::time::timeout(Duration::from_secs(5), read(&mut pilot.recv))
             .await
             .unwrap()
     else {
+        panic!("expected the account, then RunOver");
+    };
+    assert_eq!(account.credits, 60, "supplies paid, nothing banked");
+    let ServerMessage::RunOver { summary } = read(&mut pilot.recv).await else {
         panic!("expected RunOver");
     };
     assert_eq!(summary.ending, Ending::Docked);
@@ -183,6 +201,10 @@ async fn flying_out_and_back_docks_and_a_new_contract_follows() {
         ServerMessage::Contract { .. }
     ));
     write(&mut pilot.send, &ClientMessage::Launch { tier: 1 }).await;
+    assert!(matches!(
+        read(&mut pilot.recv).await,
+        ServerMessage::Account { .. }
+    ));
     assert!(matches!(
         read(&mut pilot.recv).await,
         ServerMessage::Joined { .. }
@@ -250,24 +272,43 @@ async fn a_pilot_in_the_ore_field_can_lock_and_fire_at_a_drone_and_be_destroyed(
     }
     assert!(fired, "the pilot fired at the locked drone");
     assert!(destroyed, "ten NPCs destroy a pilot who stays among them");
-    let ServerMessage::RunOver { summary } =
+    let ServerMessage::Account { account } =
         tokio::time::timeout(Duration::from_secs(5), read(&mut pilot.recv))
             .await
             .unwrap()
     else {
+        panic!("expected the account, then RunOver");
+    };
+    assert_eq!(account.credits, 60, "supplies paid, nothing banked");
+    let ServerMessage::RunOver { summary } = read(&mut pilot.recv).await else {
         panic!("expected RunOver");
     };
     assert_eq!(summary.ending, Ending::Destroyed);
 }
 
 #[tokio::test]
-async fn a_silent_session_is_dropped_after_the_idle_timeout() {
+async fn a_pilot_at_home_stays_connected_past_the_idle_timeout() {
+    // Between runs the client sends nothing. The server's keep-alive pings,
+    // which the client acknowledges, must keep the connection open: the owner
+    // was disconnected about ten seconds after docking before this.
     let idle = Duration::from_millis(600);
     let (url, sha256) = start_server_with_idle_timeout(idle);
     let (session, mut send, mut recv) = connect_to(&url, sha256).await;
     hello(&mut send, &mut recv).await;
-    // At home nobody sends datagrams, so the connection goes quiet.
-    tokio::time::timeout(idle * 4, session.closed())
-        .await
-        .expect("the session should time out");
+    sign_up(&mut send, &mut recv).await;
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::Contract { .. }
+    ));
+    let closed = tokio::time::timeout(idle * 5, session.closed()).await;
+    assert!(closed.is_err(), "the session closed: {closed:?}");
+    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::Account { .. }
+    ));
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::Joined { .. }
+    ));
 }
