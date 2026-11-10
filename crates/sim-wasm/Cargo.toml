@@ -1,0 +1,18 @@
+[package]
+name = "frontier-sim-wasm"
+description = "frontier-sim compiled to WebAssembly for the browser client."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+# cdylib for the browser; rlib so native builds and tests still work.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+frontier-sim.workspace = true
+wasm-bindgen.workspace = true
+
+[lints]
+workspace = true

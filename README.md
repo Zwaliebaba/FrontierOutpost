@@ -23,8 +23,10 @@ scene, and a minimal code skeleton with CI. No gameplay is implemented yet.
 
 ## Getting started
 
-Prerequisites: [rustup](https://rustup.rs/) (it installs the pinned toolchain), Node.js 26
-(see `client/.nvmrc`), [Git LFS](https://git-lfs.com/), and Blender 4.3+ for scene work.
+Prerequisites: [rustup](https://rustup.rs/) (it installs the pinned toolchain and the
+WebAssembly target), the wasm-bindgen tool at the version pinned in `Cargo.toml`
+(`cargo install wasm-bindgen-cli --version 0.2.130 --locked`), Node.js 26 (see `client/.nvmrc`),
+[Git LFS](https://git-lfs.com/), and Blender 4.3+ for scene work.
 
 ```sh
 git lfs install
