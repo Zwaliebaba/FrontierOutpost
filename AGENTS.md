@@ -48,6 +48,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace          # also regenerates client/src/protocol/generated/
 cargo run -p frontier-server
 FRONTIER_IMPAIR_DELAY_MS=75 cargo run -p frontier-server   # add delay (and _JITTER_MS, _LOSS_PERCENT)
+docker compose up --build       # server and built client in a Linux container, http://localhost:8080/
 
 # Client
 cd client
@@ -56,6 +57,7 @@ npm run build:sim               # frontier-sim to WebAssembly; run by dev, build
 npm run dev                     # Vite dev server
 npm run check                   # format:check, lint, typecheck, test, build (= CI)
 npm run e2e                     # browser tests against the real server; run `npm run build` first
+npm run e2e:container           # the same tests against `docker compose up`
 npm run format                  # apply Prettier
 
 # Scene generator (Blender 4.3+ or 5.x); write output outside the repo to verify it
