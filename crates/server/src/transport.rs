@@ -6,11 +6,14 @@
 
 use std::net::SocketAddr;
 
+use frontier_protocol::input::InputDatagram;
 use frontier_protocol::{ClientMessage, ServerMessage, frame};
+use frontier_sim::TICKS_PER_SECOND;
 use tracing::{debug, info, warn};
 use web_transport_quinn::{RecvStream, SendStream, Server, ServerBuilder, Session};
 
 use crate::cert::DevCertificate;
+use crate::expedition::Expedition;
 use crate::handshake;
 
 /// Why a session ended other than by the client leaving normally.
@@ -32,6 +35,8 @@ pub enum SessionError {
 const PROTOCOL_VIOLATION: u32 = 1;
 /// Session close code for a client whose protocol version is not supported.
 const VERSION_REJECTED: u32 = 2;
+/// Session close code when the expedition has no room.
+const EXPEDITION_FULL: u32 = 3;
 
 /// Binds the WebTransport endpoint.
 ///
@@ -46,15 +51,17 @@ pub fn bind(
         .with_certificate(cert.chain.clone(), cert.key.clone_key())
 }
 
-/// Accepts sessions until the endpoint is closed, running each on its own task.
-pub async fn serve(mut server: Server) {
+/// Accepts sessions until the endpoint is closed, running each on its own
+/// task and joining it to `expedition`.
+pub async fn serve(mut server: Server, expedition: Expedition) {
     while let Some(request) = server.accept().await {
         let peer = request.conn().remote_address();
+        let expedition = expedition.clone();
         tokio::spawn(async move {
             match request.ok().await {
                 Ok(session) => {
                     info!(%peer, "session opened");
-                    match run_session(&session).await {
+                    match run_session(&session, &expedition).await {
                         Ok(()) => info!(%peer, "session closed"),
                         Err(error) => {
                             warn!(%peer, %error, "session ended");
@@ -68,7 +75,7 @@ pub async fn serve(mut server: Server) {
     }
 }
 
-async fn run_session(session: &Session) -> Result<(), SessionError> {
+async fn run_session(session: &Session, expedition: &Expedition) -> Result<(), SessionError> {
     let (mut send, mut recv) = session.accept_bi().await?;
     let hello: ClientMessage = read_frame(&mut recv).await?;
     let reply = handshake(&hello);
@@ -78,9 +85,45 @@ async fn run_session(session: &Session) -> Result<(), SessionError> {
         session.close(VERSION_REJECTED, b"protocol version not supported");
         return Ok(());
     }
-    // Nothing follows the handshake yet; hold the session until the client leaves.
-    session.closed().await;
-    Ok(())
+
+    let Some(ship) = expedition.join(session.clone()).await else {
+        write_frame(&mut send, &ServerMessage::ExpeditionFull).await?;
+        let _ = send.finish();
+        session.close(EXPEDITION_FULL, b"expedition full");
+        return Ok(());
+    };
+    let joined = ServerMessage::Joined {
+        ship_id: ship.0,
+        tick_rate: TICKS_PER_SECOND,
+    };
+    let result = match write_frame(&mut send, &joined).await {
+        Ok(()) => receive_inputs(session, expedition, ship).await,
+        Err(error) => Err(error),
+    };
+    expedition.leave(ship);
+    result
+}
+
+/// Hands every input datagram to the expedition until the session ends.
+async fn receive_inputs(
+    session: &Session,
+    expedition: &Expedition,
+    ship: frontier_sim::world::ShipId,
+) -> Result<(), SessionError> {
+    loop {
+        tokio::select! {
+            datagram = session.read_datagram() => match datagram {
+                Ok(bytes) => match InputDatagram::decode(&bytes) {
+                    Ok(input) => expedition.input(ship, input),
+                    // A malformed datagram is dropped, as a lost one would be.
+                    Err(error) => debug!(%error, "datagram ignored"),
+                },
+                // The session closed while reading: the client left.
+                Err(_) => return Ok(()),
+            },
+            _ = session.closed() => return Ok(()),
+        }
+    }
 }
 
 /// Reads one framed message from a stream.

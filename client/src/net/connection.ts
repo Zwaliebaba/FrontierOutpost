@@ -15,7 +15,10 @@ export interface Connection {
   readonly protocolVersion: number;
   /** Sends a reliable message on the control stream. */
   send(message: ClientMessage): Promise<void>;
-  /** Calls `listener` for every later message on the control stream. */
+  /**
+   * Calls `listener` for every later message on the control stream. Messages that arrived
+   * before the first listener was added are delivered to it at once.
+   */
   onMessage(listener: (message: ServerMessage) => void): void;
   /**
    * Sends an unreliable datagram. It may be lost and must fit the browser's limit,
@@ -74,7 +77,9 @@ export async function connect(info: ConnectInfo): Promise<Connection> {
   const messageListeners: ((message: ServerMessage) => void)[] = [];
   const datagramListeners: ((bytes: Uint8Array) => void)[] = [];
 
-  // The first message from the server answers the handshake; later ones go to listeners.
+  // The first message from the server answers the handshake; later ones go to listeners,
+  // or wait for one: `joined` can arrive in the same chunk as `welcome`.
+  const early: ServerMessage[] = [];
   let answer: ((message: ServerMessage) => void) | null = null;
   const handshake = new Promise<ServerMessage>((resolve) => {
     answer = resolve;
@@ -85,6 +90,8 @@ export async function connect(info: ConnectInfo): Promise<Connection> {
       if (answer) {
         answer(message);
         answer = null;
+      } else if (messageListeners.length === 0) {
+        early.push(message);
       } else {
         for (const listener of messageListeners) listener(message);
       }
@@ -113,12 +120,19 @@ export async function connect(info: ConnectInfo): Promise<Connection> {
     transport.close();
     throw new ConnectionError(reply.reason);
   }
+  if (reply.type !== "welcome") {
+    transport.close();
+    throw new ConnectionError(`the server answered the handshake with '${reply.type}'`);
+  }
 
   const datagrams = transport.datagrams.writable.getWriter();
   return {
     protocolVersion: reply.protocolVersion,
     send: (message) => writer.write(encodeFrame(message)),
-    onMessage: (listener) => messageListeners.push(listener),
+    onMessage: (listener) => {
+      messageListeners.push(listener);
+      for (const message of early.splice(0)) listener(message);
+    },
     sendDatagram: (bytes) => datagrams.write(bytes),
     onDatagram: (listener) => datagramListeners.push(listener),
     maxDatagramBytes: transport.datagrams.maxDatagramSize,

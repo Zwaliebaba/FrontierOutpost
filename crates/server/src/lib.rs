@@ -5,6 +5,7 @@
 
 pub mod cert;
 pub mod config;
+pub mod expedition;
 pub mod http;
 pub mod transport;
 

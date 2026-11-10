@@ -1,6 +1,7 @@
 use frontier_protocol::{ConnectInfo, PROTOCOL_VERSION};
 use frontier_server::cert::DevCertificate;
 use frontier_server::config::Config;
+use frontier_server::expedition::Expedition;
 use frontier_server::{http, transport};
 use time::OffsetDateTime;
 use tracing::info;
@@ -28,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!(protocol = PROTOCOL_VERSION, %web_transport_addr, "WebTransport listening");
     info!(client = %config.client_dir.display(), "open http://{http_addr}/");
 
-    tokio::spawn(transport::serve(server));
+    tokio::spawn(transport::serve(server, Expedition::start()));
     axum::serve(listener, http::router(connect, &config.client_dir))
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;

@@ -9,13 +9,14 @@
 //! TypeScript `number` without loss.
 
 pub mod frame;
+pub mod input;
 pub mod snapshot;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -46,6 +47,11 @@ pub enum ServerMessage {
         protocol_version: u32,
         reason: String,
     },
+    /// The client joined the expedition and flies the ship `ship_id`. Snapshots
+    /// follow as datagrams, `tick_rate` per second.
+    Joined { ship_id: u16, tick_rate: u32 },
+    /// The expedition already has its four pilots.
+    ExpeditionFull,
 }
 
 /// How a browser reaches the game server's WebTransport endpoint. Served as
@@ -95,7 +101,10 @@ mod tests {
             protocol_version: PROTOCOL_VERSION,
         })
         .unwrap();
-        assert_eq!(json, r#"{"type":"hello","protocolVersion":1}"#);
+        assert_eq!(
+            json,
+            format!(r#"{{"type":"hello","protocolVersion":{PROTOCOL_VERSION}}}"#)
+        );
     }
 
     #[test]
@@ -115,6 +124,22 @@ mod tests {
         let json = serde_json::to_string(&trusted).unwrap();
         assert!(!json.contains("certificateSha256"));
         assert_eq!(serde_json::from_str::<ConnectInfo>(&json).unwrap(), trusted);
+    }
+
+    #[test]
+    fn joined_and_full_use_the_tagged_shape() {
+        let joined = ServerMessage::Joined {
+            ship_id: 3,
+            tick_rate: 20,
+        };
+        assert_eq!(
+            serde_json::to_string(&joined).unwrap(),
+            r#"{"type":"joined","shipId":3,"tickRate":20}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ServerMessage::ExpeditionFull).unwrap(),
+            r#"{"type":"expeditionFull"}"#
+        );
     }
 
     #[test]
