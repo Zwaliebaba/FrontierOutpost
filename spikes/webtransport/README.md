@@ -42,6 +42,7 @@ gap between arrivals of more than two snapshot periods (100 ms).
 ## Results
 
 ### Microsoft Edge, direct loopback
+```json
 {
   "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
   "link": "direct loopback",
@@ -130,8 +131,10 @@ gap between arrivals of more than two snapshot periods (100 ms).
     "hitches": 0
   }
 }
+```
 
 ### Microsoft Edge, impaired link
+```json
 {
   "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
   "link": "impaired: 40 ms each way, 3% loss each way",
@@ -220,6 +223,7 @@ gap between arrivals of more than two snapshot periods (100 ms).
     "hitches": 28
   }
 }
+```
 
 ### Chromium 153 (headless, Linux), direct loopback
 
