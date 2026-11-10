@@ -153,9 +153,11 @@ Decided:
 - Server async runtime: Tokio. HTTP framework: axum, inside the game server, serving the built
   client.
 - Network transport: WebTransport, served by quinn and `web-transport-quinn`, with no fallback.
-  `spikes/webtransport` confirms it in Chromium; Firefox and Safari have not been run.
+  Tested in Chromium only. The owner decided not to test Firefox or Safari, accepting that a
+  failure there would surface in play and reopen this decision.
 - Wire format: JSON on reliable streams for everything except snapshots, which are compact binary
-  datagrams. The spike shows why: on a lossy link, large reliable messages hitch.
+  datagrams. A transport spike (removed; in Git history at commit 3d37c06) showed why: on a
+  lossy link, large reliable messages hitch whether or not each has its own stream.
 - Identity: passkeys (WebAuthn).
 - Persistence: embedded SQLite, with an append-only ledger beside the saves. Stage 1 data may be
   wiped; saves are still versioned.
