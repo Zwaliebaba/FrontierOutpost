@@ -3,6 +3,7 @@
 //! The server owns all game state and validates every client request. It never
 //! trusts client-reported positions, hits, inventory or access.
 
+pub mod account;
 pub mod caps;
 pub mod cert;
 pub mod config;
@@ -10,6 +11,7 @@ pub mod expedition;
 pub mod http;
 pub mod input_queue;
 pub mod relay;
+pub mod store;
 pub mod transport;
 pub mod wire;
 
