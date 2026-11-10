@@ -8,6 +8,7 @@
 pub mod collision;
 pub mod combat;
 pub mod extraction;
+pub mod fitting;
 pub mod goods;
 pub mod market;
 pub mod npc;
