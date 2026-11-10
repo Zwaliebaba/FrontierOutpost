@@ -15,7 +15,7 @@ import type {
 
 export const SNAPSHOT_KIND = 1;
 const HEADER_BYTES = 7;
-const OWN_STATUS_BYTES = 12;
+const OWN_STATUS_BYTES = 13;
 const ENTITY_BYTES = 14;
 const NO_SCAN = 0xff;
 const PHASES: readonly RunPhase[] = [
@@ -152,6 +152,7 @@ function decodeOwn(view: DataView): OwnStatus {
     elapsedSeconds: view.getUint16(at + 8, true),
     drive,
     shield: view.getUint8(at + 11),
+    relay: view.getUint8(at + 12),
   };
 }
 

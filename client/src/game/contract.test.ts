@@ -15,6 +15,7 @@ const working: OwnStatus = {
   elapsedSeconds: 187,
   drive: "inSite",
   shield: 0,
+  relay: 0,
 };
 
 describe("clock", () => {
@@ -102,5 +103,13 @@ describe("runLine with a shield", () => {
   it("shows the shield only when the ship has one", () => {
     expect(runLine(working)).not.toContain("shield");
     expect(runLine({ ...working, shield: 33 })).toContain("shield 33");
+  });
+});
+
+describe("runLine with the relays", () => {
+  it("shows the crew's relay link while it is held and once linked", () => {
+    expect(runLine(working)).not.toContain("relays");
+    expect(runLine({ ...working, relay: 12 })).toContain("relays held 12/30 s");
+    expect(runLine({ ...working, relay: 255 })).toContain("relays linked");
   });
 });

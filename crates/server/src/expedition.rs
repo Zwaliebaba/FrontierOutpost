@@ -12,8 +12,8 @@ use std::time::Duration;
 use frontier_protocol::input::InputDatagram;
 use frontier_protocol::snapshot::{
     Drive as WireDrive, EntityKind, EntityState, ExtractorMode, MAX_DEPOSITS, MAX_EVENTS,
-    OwnStatus, RunPhase, Snapshot, SnapshotEvent, quantize_heading, quantize_position,
-    quantize_velocity,
+    OwnStatus, RELAY_LINKED, RunPhase, Snapshot, SnapshotEvent, quantize_heading,
+    quantize_position, quantize_velocity,
 };
 use frontier_protocol::{
     AccountInfo, DepositInfo, ExtractRefusal, ObstacleInfo, PotInfo, RunSummary, ServerMessage,
@@ -26,7 +26,7 @@ use frontier_sim::extraction::{EXTRACT_RANGE, ExtractorState, Refusal};
 use frontier_sim::outcome;
 use frontier_sim::profile::ShipKind;
 use frontier_sim::run::{
-    Checkpoint, Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Pot, Run,
+    Checkpoint, Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Pot, Relay, Run,
     RunEvent, Summary, seconds,
 };
 use frontier_sim::ship::ShipInput;
@@ -926,6 +926,11 @@ fn own_status(run: &Run, ship: ShipId) -> OwnStatus {
         },
         // Tens of points, so `as` loses nothing.
         shield: run.shield(ship).round().clamp(0.0, 255.0) as u8,
+        relay: match status.relay {
+            Relay::Idle => 0,
+            Relay::Holding(ticks) => byte(ticks / TICKS_PER_SECOND).min(RELAY_LINKED - 1),
+            Relay::Linked => RELAY_LINKED,
+        },
     }
 }
 

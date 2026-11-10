@@ -5,7 +5,15 @@
 import { Raycaster, Vector2, Vector3 } from "three";
 import { connect, fetchConnectInfo } from "./net/connection";
 import type { Connection } from "./net/connection";
-import type { AccountInfo, Catalog, OwnStatus, RunSummary, SnapshotEvent } from "./protocol";
+import type {
+  AccountInfo,
+  Catalog,
+  CrewInfo,
+  OwnStatus,
+  RunSummary,
+  SnapshotEvent,
+} from "./protocol";
+import { launchRole, renderCrew } from "./outpost/crew";
 import { loadOutpostModels } from "./outpost/models";
 import { fittingName, launchLines } from "./outpost/options";
 import { OutpostScene } from "./outpost/scene";
@@ -200,6 +208,8 @@ let holdings: AccountInfo | null = null;
 let catalog: Catalog | null = null;
 let outpost: OutpostScene | null = null;
 let selectedSocket = "a";
+/** The pilot's crew, if they are in one. */
+let crew: CrewInfo | null = null;
 /** Redraws what depends on the home: set by `play`. */
 let homeChanged = (): void => undefined;
 
@@ -403,13 +413,27 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       }
       stake.dataset.stake = String(holdings.launch.stake);
     }
+    const crewSection = element("div");
+    renderCrew(crewSection, crew, send);
+    const role = launchRole(crew);
+    if (role.note) {
+      const p = element("p");
+      p.className = "crew-note";
+      p.textContent = role.note;
+      crewSection.append(p);
+    }
     const tiers = element("div", undefined, "tiers");
     for (const tier of offer.tiers) {
       const button = element("button");
       button.dataset.tier = String(tier.tier);
-      button.textContent = `Launch · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} · ${String(tier.payout)} cr`;
-      button.disabled = !tier.open;
+      const following = role.follow === tier.tier;
+      button.textContent = following
+        ? `Follow the host · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)}`
+        : `Launch · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} · ${String(tier.payout)} cr`;
+      if (following) button.dataset.action = "follow";
+      button.disabled = role.launches ? !tier.open : !following;
       if (!tier.open) button.title = "Opens with a tier 2 facility";
+      else if (button.disabled && role.note) button.title = role.note;
       button.addEventListener("click", () => {
         for (const other of tiers.querySelectorAll("button")) other.disabled = true;
         // The run begins when `joined` arrives (handled below, as for a rejoined run).
@@ -423,7 +447,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       });
       tiers.append(button);
     }
-    briefing.append(title, facts, note, stake, tiers);
+    briefing.append(title, facts, note, stake, crewSection, tiers);
   };
 
   const showSummary = (summary: RunSummary) => {
@@ -510,8 +534,22 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         homeChanged();
         break;
       case "homeRefused":
+      case "crewRefused":
         showNotice(message.reason);
         break;
+      case "crew":
+        crew = message.crew ?? null;
+        if (briefing.dataset.state === "open" && contract) showBriefing(contract);
+        break;
+      case "potPaid": {
+        const { pot, share } = message;
+        showNotice(
+          `The crew's pot is paid: ${String(pot.contract + pot.bounty + pot.relay)} cr ` +
+            `(contract ${String(pot.contract)}, bounty ${String(pot.bounty)}, relays ` +
+            `${String(pot.relay)}). Your share: ${String(share)} cr`,
+        );
+        break;
+      }
       case "extractRefused":
         showNotice(refusalText(message.reason));
         break;
@@ -657,7 +695,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         label:
           POCKET_NAME[pocket.kind] +
           (pocket.locked ? " (locked)" : "") +
-          (reveal?.richPocket === index ? " (rich)" : ""),
+          (reveal?.richPocket === index ? " (rich)" : "") +
+          (reveal?.relays.includes(index) ? " (relay)" : ""),
         x: pocket.x,
         z: pocket.z,
       })),

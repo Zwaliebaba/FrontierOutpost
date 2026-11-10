@@ -14,7 +14,7 @@
 //! | 1 | message kind, [`SNAPSHOT_KIND`] |
 //! | 4 | tick, `u32` |
 //! | 2 | last input the server applied for this client, `u16` |
-//! | 12 | the receiving pilot's own status, [`OwnStatus`]: phase `u8`, cargo `u8`, capacity `u8`, heat `u8`, extractor `u8`, extractor seconds `u8`, scan `u8` (`0xFF` for none), alert `u8`, elapsed seconds `u16`, drive `u8`, shield `u8` |
+//! | 13 | the receiving pilot's own status, [`OwnStatus`]: phase `u8`, cargo `u8`, capacity `u8`, heat `u8`, extractor `u8`, extractor seconds `u8`, scan `u8` (`0xFF` for none), alert `u8`, elapsed seconds `u16`, drive `u8`, shield `u8`, relay `u8` |
 //! | 1 | deposit count |
 //! | 1 each | units left in each deposit, in the order the client was sent them |
 //! | 1 | entity count |
@@ -40,7 +40,7 @@ pub const MAX_DATAGRAM_BYTES: usize = 1_000;
 
 /// Kind, tick and input ack.
 pub const HEADER_BYTES: usize = 7;
-pub const OWN_STATUS_BYTES: usize = 12;
+pub const OWN_STATUS_BYTES: usize = 13;
 pub const ENTITY_BYTES: usize = 14;
 /// Most deposits a snapshot reports.
 pub const MAX_DEPOSITS: usize = 16;
@@ -207,7 +207,13 @@ pub struct OwnStatus {
     pub drive: Drive,
     /// Shield points left, rounded; 0 without an escort rig.
     pub shield: u8,
+    /// The crew's relay link (design section 10): whole seconds both relays
+    /// have been held together, or [`RELAY_LINKED`] once linked.
+    pub relay: u8,
 }
+
+/// [`OwnStatus::relay`] once the relays are linked.
+pub const RELAY_LINKED: u8 = u8::MAX;
 
 impl OwnStatus {
     /// A pilot at the dock at launch, with nothing to report.
@@ -223,6 +229,7 @@ impl OwnStatus {
         elapsed_seconds: 0,
         drive: Drive::Ready,
         shield: 0,
+        relay: 0,
     };
 }
 
@@ -334,6 +341,7 @@ impl Snapshot {
         bytes.extend_from_slice(&own.elapsed_seconds.to_le_bytes());
         bytes.push(own.drive as u8);
         bytes.push(own.shield);
+        bytes.push(own.relay);
         bytes.push(deposit_count);
         bytes.extend_from_slice(&self.deposits);
         bytes.push(count);
@@ -402,6 +410,7 @@ impl Snapshot {
             e1,
             drive,
             shield,
+            relay,
         ] = own_bytes;
         let own = OwnStatus {
             phase: RunPhase::ALL
@@ -424,6 +433,7 @@ impl Snapshot {
                 .copied()
                 .ok_or(SnapshotError::UnknownDrive(drive))?,
             shield,
+            relay,
         };
         let deposit_count = reader
             .u8()
@@ -583,6 +593,7 @@ mod tests {
             elapsed_seconds: 1_234,
             drive: Drive::Hunted,
             shield: 27,
+            relay: 12,
         }
     }
 
@@ -684,6 +695,7 @@ mod tests {
                 elapsed_seconds: u16::MAX,
                 drive: Drive::Extracting,
                 shield: u8::MAX,
+                relay: RELAY_LINKED,
             },
             deposits: vec![u8::MAX; MAX_DEPOSITS],
             entities: vec![
@@ -886,7 +898,7 @@ mod tests {
                 })
             };
             let own = format!(
-                "{{ phase: \"{}\", cargo: {}, capacity: {}, heat: {}, extractor: \"{}\", extractorSeconds: {}, scan: {}, alert: {}, elapsedSeconds: {}, drive: \"{}\", shield: {} }}",
+                "{{ phase: \"{}\", cargo: {}, capacity: {}, heat: {}, extractor: \"{}\", extractorSeconds: {}, scan: {}, alert: {}, elapsedSeconds: {}, drive: \"{}\", shield: {}, relay: {} }}",
                 camel(format!("{:?}", own.phase)),
                 own.cargo,
                 own.capacity,
@@ -898,7 +910,8 @@ mod tests {
                 own.alert,
                 own.elapsed_seconds,
                 camel(format!("{:?}", own.drive)),
-                own.shield
+                own.shield,
+                own.relay
             );
             let deposits = snapshot
                 .deposits
@@ -935,6 +948,7 @@ mod tests {
                 elapsed_seconds: u16::MAX,
                 drive: Drive::Extracting,
                 shield: u8::MAX,
+                relay: RELAY_LINKED,
             },
             deposits: vec![u8::MAX; MAX_DEPOSITS],
             entities: vec![EntityState {
