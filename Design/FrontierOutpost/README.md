@@ -1,14 +1,14 @@
 # Frontier Outpost — game scene foundation
 
-Art direction: [Frontier Outpost Visual Style Guide](../Design/Visual-Style-Guide.md). 
+Art direction: [Frontier Outpost Visual Style Guide](../Visual-Style-Guide.md). Game design: [Frontier Outpost](../FrontierOutpost.md).
 
-A HUD-free interpretation of the supplied reference: an octagonal orbital depot with two circular side pods, a numbered forward landing deck, a service spine, antenna mast and red pennant; the original Aurora ship preserved as a cruiser in the background; a new starter frigate landed on berth 07; faceted asteroids; a distant blue planet and procedural starfield.
+A HUD-free outpost scene: an octagonal orbital depot with two circular side pods, a numbered forward landing deck, a service spine, antenna mast and red pennant; the original Aurora ship preserved as a cruiser in the background; a new starter frigate landed on berth 07; faceted asteroids; a distant blue planet and procedural starfield.
 
 ![Rendered overview](FrontierOutpostPreview.png)
 
 ## Files
 
-- `FrontierOutpost.blend`: editable Blender 4.3+ scene, overview camera and lighting.
+- `FrontierOutpost.blend`: editable scene (saved by Blender 4.3; opens in 5.x), overview camera and lighting.
 - `FrontierOutpostPreview.png`: rendered overview.
 - `starter_frigate_detail.png`: close-up of the starter frigate on its landing gear.
 - `station.glb`, `cruiser.glb`, `frigate.glb`, `asteroids.glb`: separate gameplay asset exports. `cruiser.glb` preserves the original Aurora hull at its original scale; `frigate.glb` is the new starter ship.
@@ -21,7 +21,7 @@ A HUD-free interpretation of the supplied reference: an octagonal orbital depot 
 blender -b -t 8 --python create_scene.py
 ```
 
-The script writes files alongside itself by default. Use `SCENE_OUTPUT` to choose a different directory, `RENDER_SAMPLES` to adjust quality, `RENDER_SCALE` for resolution percentage, or `SKIP_RENDER=1` to generate assets without rendering. No external textures, downloads or add-ons are required. Rendering uses Cycles, with denoising enabled only when the Blender build supports OpenImageDenoise.
+The script runs on Blender 4.3+ and 5.x (verified on 5.2.3 LTS, which reproduces the committed manifest exactly). The committed `.blend` and GLBs were generated with Blender 4.3; regenerating them on a newer Blender changes their bytes, not their geometry, so only commit regenerated binaries together with a reason. The script writes files alongside itself by default. Use `SCENE_OUTPUT` to choose a different directory, `RENDER_SAMPLES` to adjust quality, `RENDER_SCALE` for resolution percentage, or `SKIP_RENDER=1` to generate assets without rendering. No external textures, downloads or add-ons are required. Rendering uses Cycles, with denoising enabled only when the Blender build supports OpenImageDenoise.
 
 ## Game import
 

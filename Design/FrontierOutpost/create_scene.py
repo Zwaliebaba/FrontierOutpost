@@ -1,4 +1,4 @@
-"""FrontierOutpost game scene. Blender 4.3+: blender -b --python create_scene.py
+"""FrontierOutpost game scene. Blender 4.3+ or 5.x: blender -b --python create_scene.py
 
 All dimensions are metres. +Z is up, ship forward is +Y.
 Optional environment: SCENE_OUTPUT, RENDER_SAMPLES, RENDER_SCALE, SKIP_RENDER.
@@ -347,23 +347,34 @@ for obj in groups['Station'].objects:
 docking={'berth':'07','landed':True,'ship_bounds_station_space':{'min':lo,'max':hi},'safety_boundary_xy':[-2.04,2.04,-5.83,-2.77],'minimum_edge_clearance':clearance,'landing_foot_height':lo[2],'structural_obstacles_checked':structural_checks,'connector_top_height':.83}
 scene['starter_frigate_pad_clearance']=clearance
 print('DOCK_FIT_OK',json.dumps(docking),flush=True)
-scene['description']='Orion Fringe / Frontier Depot — HUD-free game environment blockout'
+scene['description']='Frontier Outpost — HUD-free game environment blockout'
 scene['seed']=2266
 scene.render.engine='CYCLES';scene.cycles.samples=int(os.environ.get('RENDER_SAMPLES','128'));scene.cycles.use_denoising=bool(getattr(bpy.app.build_options, 'openimagedenoise', False))
 scene.render.resolution_x=1600;scene.render.resolution_y=900;scene.render.resolution_percentage=int(os.environ.get('RENDER_SCALE','100'))
 scene.render.image_settings.file_format='PNG';scene.render.film_transparent=False
 scene.view_settings.view_transform='AgX'
-scene.use_nodes=True;n=scene.node_tree.nodes;n.clear();l=scene.node_tree.links
-rl=n.new('CompositorNodeRLayers');gl=n.new('CompositorNodeGlare');gl.glare_type='FOG_GLOW';gl.quality='HIGH';gl.threshold=1.4;gl.size=7
-out=n.new('CompositorNodeComposite');l.new(rl.outputs['Image'],gl.inputs[0]);l.new(gl.outputs[0],out.inputs[0])
+if hasattr(scene,'node_tree'):
+    # Blender 4.x: the scene owns its compositor tree; glare options are node properties.
+    scene.use_nodes=True;n=scene.node_tree.nodes;n.clear();l=scene.node_tree.links
+    rl=n.new('CompositorNodeRLayers');gl=n.new('CompositorNodeGlare');gl.glare_type='FOG_GLOW';gl.quality='HIGH';gl.threshold=1.4;gl.size=7
+    out=n.new('CompositorNodeComposite');l.new(rl.outputs['Image'],gl.inputs[0]);l.new(gl.outputs[0],out.inputs[0])
+else:
+    # Blender 5.x: the compositor is a node group with a Group Output, and glare options are inputs.
+    # Size 0.080625 and Clamp are what 5.x versioning produces from the 4.x size=7 above.
+    tree=bpy.data.node_groups.new('Compositing Nodetree','CompositorNodeTree');scene.compositing_node_group=tree
+    tree.interface.new_socket(name='Image',in_out='OUTPUT',socket_type='NodeSocketColor')
+    n=tree.nodes;l=tree.links
+    rl=n.new('CompositorNodeRLayers');gl=n.new('CompositorNodeGlare')
+    for k,v in {'Type':'Fog Glow','Quality':'High','Threshold':1.4,'Size':.080625,'Clamp':True}.items():gl.inputs[k].default_value=v
+    out=n.new('NodeGroupOutput');l.new(rl.outputs['Image'],gl.inputs['Image']);l.new(gl.outputs['Image'],out.inputs[0])
 # Select overview defaults and store a camera view for opening the blend interactively.
 bpy.ops.object.select_all(action='DESELECT')
 for screen in bpy.data.screens:
     for a in screen.areas:
         if a.type=='VIEW_3D':
             a.spaces.active.region_3d.view_perspective='CAMERA';a.spaces.active.overlay.show_overlays=False
-scene.render.filepath=os.path.join(OUT,'orion_fringe_preview.png')
-bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT,'orion_fringe.blend'), compress=True)
+scene.render.filepath=os.path.join(OUT,'FrontierOutpostPreview.png')
+bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT,'FrontierOutpost.blend'), compress=True)
 # GLB excludes backdrop, cameras, lights, and effect geometry for engine portability.
 for name in ['Station','Cruiser','Frigate','Asteroids']:
     bpy.ops.object.select_all(action='DESELECT')
