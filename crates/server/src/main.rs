@@ -45,7 +45,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!(protocol = PROTOCOL_VERSION, %web_transport_addr, "WebTransport listening");
     info!(client = %config.client_dir.display(), "open http://{http_addr}/");
 
-    tokio::spawn(transport::serve(server, Expedition::start()));
+    tokio::spawn(transport::serve(
+        server,
+        Expedition::start_with(config.npcs),
+    ));
     axum::serve(listener, http::router(connect, &config.client_dir))
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;

@@ -8,6 +8,7 @@ import type { Connection } from "./net/connection";
 import type { SnapshotEvent } from "./protocol";
 import type { EntityPose } from "./net/interpolation";
 import { Predictor } from "./game/prediction";
+import { FrameTimer } from "./game/frameTimer";
 import { Selection } from "./game/selection";
 import { Shots } from "./game/shots";
 import { ExpeditionFullError, Session, waitForJoin } from "./game/session";
@@ -52,10 +53,12 @@ function showStatus(state: "connecting" | "connected" | "closed" | "offline", te
   status.textContent = text;
 }
 
+let simLine = "Simulation";
 const rules = loadSim().then(
   (loaded) => {
     sim.dataset.state = "loaded";
-    sim.textContent = `Simulation · ${String(loaded.ticksPerSecond())} ticks per second`;
+    simLine = `Simulation · ${String(loaded.ticksPerSecond())} ticks per second`;
+    sim.textContent = simLine;
     return loaded;
   },
   (error: unknown) => {
@@ -260,7 +263,9 @@ function fly(
   const tickMs = 1_000 / life.session.tickRate;
   let last = performance.now();
   let untilTick = 0;
+  const frames = new FrameTimer();
   const frame = (now: number) => {
+    const workStart = performance.now();
     const dt = Math.min(0.1, (now - last) / 1_000);
     last = now;
 
@@ -339,6 +344,16 @@ function fly(
         `round trip ${session.roundTripMs === null ? "–" : `${session.roundTripMs.toFixed(0)} ms`} · ` +
         `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm · ` +
         `W A S D fly, Tab lock, Space fire`;
+    }
+
+    const cost = frames.record(workStart, performance.now());
+    if (cost) {
+      sim.dataset.frameMs = cost.meanMs.toFixed(2);
+      sim.dataset.worstFrameMs = cost.worstMs.toFixed(2);
+      sim.dataset.fps = cost.fps.toFixed(0);
+      sim.textContent =
+        `${simLine} · frame ${cost.meanMs.toFixed(1)} ms, ` +
+        `worst ${cost.worstMs.toFixed(1)} ms · ${cost.fps.toFixed(0)} fps`;
     }
     requestAnimationFrame(frame);
   };

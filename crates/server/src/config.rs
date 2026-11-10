@@ -4,6 +4,8 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use frontier_sim::skirmish::{MAX_NPCS, Skirmish};
+
 use crate::relay::Impairment;
 
 /// Where the server listens and what it serves.
@@ -18,6 +20,9 @@ pub struct Config {
     /// Delay and loss to add for trying the game under latency. Inactive unless
     /// one of the `FRONTIER_IMPAIR_*` variables is set.
     pub impairment: Impairment,
+    /// NPCs in the skirmish: the standard layout unless `FRONTIER_NPCS` asks
+    /// for more, up to the cap, for measuring a full expedition.
+    pub npcs: usize,
 }
 
 /// Why the configuration could not be read.
@@ -35,6 +40,7 @@ const CLIENT_DIR: &str = "FRONTIER_CLIENT_DIR";
 const IMPAIR_DELAY_MS: &str = "FRONTIER_IMPAIR_DELAY_MS";
 const IMPAIR_JITTER_MS: &str = "FRONTIER_IMPAIR_JITTER_MS";
 const IMPAIR_LOSS_PERCENT: &str = "FRONTIER_IMPAIR_LOSS_PERCENT";
+const NPCS: &str = "FRONTIER_NPCS";
 
 impl Config {
     /// Reads the configuration through `lookup`, which returns a variable's
@@ -73,6 +79,20 @@ impl Config {
                 delay: Duration::from_secs_f64(number(IMPAIR_DELAY_MS, 10_000.0)? / 1_000.0),
                 jitter: Duration::from_secs_f64(number(IMPAIR_JITTER_MS, 10_000.0)? / 1_000.0),
                 loss: number(IMPAIR_LOSS_PERCENT, 100.0)? / 100.0,
+            },
+            npcs: match lookup(NPCS) {
+                None => Skirmish::size(),
+                Some(value) => {
+                    value
+                        .parse()
+                        .ok()
+                        .filter(|npcs| *npcs <= MAX_NPCS)
+                        .ok_or(ConfigError {
+                            name: NPCS,
+                            expected: "a whole number from 0 to 24",
+                            value,
+                        })?
+                }
             },
         })
     }
@@ -149,5 +169,21 @@ mod tests {
         let error = Config::from_lookup(|name| (name == WEB_TRANSPORT_ADDR).then(|| "nope".into()))
             .unwrap_err();
         assert!(error.to_string().contains(WEB_TRANSPORT_ADDR));
+    }
+
+    #[test]
+    fn reads_the_npc_count_up_to_the_cap() {
+        assert_eq!(
+            Config::from_lookup(|_| None).unwrap().npcs,
+            Skirmish::size()
+        );
+        let at = |value: &str| {
+            let value = value.to_owned();
+            Config::from_lookup(move |name| (name == NPCS).then(|| value.clone()))
+        };
+        assert_eq!(at("24").unwrap().npcs, MAX_NPCS);
+        assert_eq!(at("0").unwrap().npcs, 0);
+        assert!(at("25").is_err());
+        assert!(at("many").is_err());
     }
 }

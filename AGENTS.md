@@ -48,6 +48,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace          # also regenerates client/src/protocol/generated/
 cargo run -p frontier-server
 FRONTIER_IMPAIR_DELAY_MS=75 cargo run -p frontier-server   # add delay (and _JITTER_MS, _LOSS_PERCENT)
+FRONTIER_NPCS=24 cargo run -p frontier-server             # skirmish at the NPC cap (frame time shows in the client)
+cargo run --release -p frontier-server --example caps     # server tick cost and snapshot size at the caps
 
 # Client
 cd client

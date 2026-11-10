@@ -31,7 +31,7 @@ use crate::input_queue::InputQueue;
 pub const MAX_PILOTS: usize = 4;
 
 /// Seed of the asteroid field, until sites are generated from their own seeds (plan M3).
-const ASTEROID_SEED: u32 = 2266;
+pub(crate) const ASTEROID_SEED: u32 = 2266;
 
 /// Sends a snapshot datagram to one pilot. A WebTransport session in the
 /// server; a channel in tests.
@@ -88,12 +88,24 @@ pub struct Expedition {
 }
 
 impl Expedition {
-    /// Starts an expedition on the current Tokio runtime.
+    /// Starts an expedition with the standard skirmish on the current Tokio
+    /// runtime.
     #[must_use]
     pub fn start() -> Self {
+        Self::start_with(Skirmish::size())
+    }
+
+    /// Starts an expedition whose skirmish keeps `npcs` NPCs, at most
+    /// [`frontier_sim::skirmish::MAX_NPCS`].
+    #[must_use]
+    pub fn start_with(npcs: usize) -> Self {
         let obstacles: std::sync::Arc<[Obstacle]> = asteroid_field(ASTEROID_SEED).into();
         let (commands, receiver) = mpsc::unbounded_channel();
-        tokio::spawn(run(receiver, World::with_obstacles(obstacles.to_vec())));
+        tokio::spawn(run(
+            receiver,
+            World::with_obstacles(obstacles.to_vec()),
+            npcs,
+        ));
         Self {
             commands,
             obstacles,
@@ -151,9 +163,9 @@ struct Pilot {
     last_input: Option<u16>,
 }
 
-async fn run(mut commands: mpsc::UnboundedReceiver<Command>, mut world: World) {
+async fn run(mut commands: mpsc::UnboundedReceiver<Command>, mut world: World, npcs: usize) {
     // NPCs to fight until sites exist (plan M3).
-    let mut skirmish = Skirmish::populate(&mut world);
+    let mut skirmish = Skirmish::populate_with(&mut world, npcs);
     let mut pilots: HashMap<ShipId, Pilot> = HashMap::new();
     let mut ticker = interval(Duration::from_secs(1) / TICKS_PER_SECOND);
     // After a stall, carry on at the normal rate rather than racing to catch up.
@@ -259,9 +271,10 @@ fn entity_kind(kind: ShipKind) -> EntityKind {
     }
 }
 
-/// Sends every pilot the same entities, each with their own input ack.
-fn broadcast(world: &World, pilots: &mut HashMap<ShipId, Pilot>) {
-    let entities: Vec<EntityState> = world
+/// The snapshot of `world` as it stands, acknowledging input `input_ack`.
+#[must_use]
+pub fn snapshot(world: &World, input_ack: u16) -> Snapshot {
+    let entities = world
         .ships()
         .iter()
         .map(|ship| {
@@ -281,7 +294,7 @@ fn broadcast(world: &World, pilots: &mut HashMap<ShipId, Pilot>) {
         })
         .collect();
     // Events only drive visuals, so beyond what one snapshot carries they are dropped.
-    let events: Vec<SnapshotEvent> = world
+    let events = world
         .events()
         .iter()
         .take(MAX_EVENTS)
@@ -303,15 +316,22 @@ fn broadcast(world: &World, pilots: &mut HashMap<ShipId, Pilot>) {
             },
         })
         .collect();
-    // Snapshots carry the tick modulo 2^32: about 6.8 years at 20 per second.
-    let tick = (world.tick().get() % (1 << 32)) as u32;
+    Snapshot {
+        // Snapshots carry the tick modulo 2^32: about 6.8 years at 20 per second.
+        tick: (world.tick().get() % (1 << 32)) as u32,
+        input_ack,
+        entities,
+        events,
+    }
+}
 
+/// Sends every pilot the same entities, each with their own input ack.
+fn broadcast(world: &World, pilots: &mut HashMap<ShipId, Pilot>) {
+    let shared = snapshot(world, 0);
     pilots.retain(|ship, pilot| {
         let snapshot = Snapshot {
-            tick,
             input_ack: pilot.last_input.unwrap_or(0),
-            entities: entities.clone(),
-            events: events.clone(),
+            ..shared.clone()
         };
         match snapshot.encode() {
             Ok(datagram) => pilot.sink.send(datagram),
