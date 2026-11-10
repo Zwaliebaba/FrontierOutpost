@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRng } from "./rng";
+import { createRng } from "../view/rng";
 import { chooseRangePair, headingErrorDeg, median, planRun, summarise } from "./trials";
 import type { TrialRecord } from "./trials";
 

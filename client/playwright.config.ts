@@ -7,6 +7,8 @@ export default defineConfig({
   testDir: "e2e",
   testMatch: "**/*.e2e.ts",
   timeout: 30_000,
+  // Every test joins the one expedition on the shared server, which holds four pilots.
+  workers: 1,
   reporter: "list",
   use: {
     baseURL: `http://127.0.0.1:${String(HTTP_PORT)}`,

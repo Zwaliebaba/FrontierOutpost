@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { centreOf, firstHit, occludersHiding, rayEntry, rayHits } from "./occlusion";
 import type { Occluder } from "./occlusion";
 import { stationOccluders } from "./stationProxy";
-import { hiddenDepthBehind, viewDirectionAtElevation } from "./view";
+import { hiddenDepthBehind, viewDirectionAtElevation } from "../view/view";
 
 const toward = (elevation: number) => viewDirectionAtElevation(elevation);
 const onPlane = (x: number, z: number) => ({ x, y: 0, z });

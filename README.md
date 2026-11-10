@@ -41,6 +41,22 @@ npm ci
 npm run dev
 ```
 
+## Trying the game under latency
+
+The server can route WebTransport through a relay that delays and drops packets, so a local
+game feels like a distant one. Each setting applies in each direction, so a one-way delay of
+75 ms gives about 150 ms round trip.
+
+```sh
+cd client && npm run build && cd ..
+FRONTIER_IMPAIR_DELAY_MS=75 FRONTIER_CLIENT_DIR=client/dist cargo run -p frontier-server
+```
+
+Optional: `FRONTIER_IMPAIR_JITTER_MS` adds up to that much random extra delay per packet, and
+`FRONTIER_IMPAIR_LOSS_PERCENT` drops that share of packets. Open the printed address. The status
+line shows the measured round trip, which includes up to one 50 ms server tick, and the last
+prediction correction.
+
 ## Licence
 
 All rights reserved. See [LICENSE](LICENSE).

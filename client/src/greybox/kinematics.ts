@@ -1,3 +1,7 @@
+import { angleDifference } from "../view/angles";
+
+export { angleDifference };
+
 /**
  * Direct-steering ship motion on the gameplay plane (XZ), for the greybox only.
  *
@@ -40,14 +44,6 @@ export const NPC_HANDLING: ShipHandling = {
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
-/** Smallest signed angle from `from` to `to`, in (-PI, PI]. */
-export function angleDifference(to: number, from: number): number {
-  let diff = (to - from) % (2 * Math.PI);
-  if (diff > Math.PI) diff -= 2 * Math.PI;
-  if (diff <= -Math.PI) diff += 2 * Math.PI;
-  return diff;
-}
 
 export function stepShip(
   state: ShipState,

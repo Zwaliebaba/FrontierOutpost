@@ -45,7 +45,7 @@ puts the riskiest questions first where the owner's decisions allow it.
 | 0.3 | Client: a `net` module that connects, sends and receives JSON messages on streams, and exposes a datagram channel | A browser test in CI completes the handshake against the real server |
 | 0.4 | Snapshot codec in `frontier-protocol`: binary encode and decode in Rust, decode in TypeScript, from shared test vectors | Round-trip tests in both languages; a test fails if 4 ships and 24 NPCs exceed 1,000 bytes |
 | 0.5 | WebAssembly build of `frontier-sim`, loaded by the client, in CI | The client calls a `frontier-sim` function in a browser test |
-| 0.6 | Run the transport spike in Firefox and Safari, record the results, delete `spikes/webtransport` | The results table is complete; the directory is gone |
+| 0.6 | ~~Run the transport spike in Firefox and Safari~~ Dropped by the owner; the spike is deleted | Firefox and Safari stay untested, an accepted risk |
 
 ### M1 · Fly
 
@@ -58,7 +58,7 @@ injected.*
 | 1.2 | Server: an expedition instance that takes intents and sends snapshots; any number of clients up to four from the start | An integration test with two clients sees both ships move |
 | 1.3 | Client: draw ships from snapshots, interpolated 100 ms behind, with the greybox camera, look, zoom and picking promoted into the client | Vitest for interpolation; the greybox still passes its tests |
 | 1.4 | Client: predict the player's own ship with the WebAssembly rules and reconcile against snapshots | A test replays recorded snapshots with delay and asserts a bounded correction |
-| 1.5 | A development switch that routes traffic through the spike's delay-and-loss relay | The owner flies at 150 ms and 250 ms round trip and records the result |
+| 1.5 | A development switch that routes traffic through a delay-and-loss relay | The owner flies at 150 ms and 250 ms round trip and records the result |
 
 ### M2 · Fight
 
@@ -156,7 +156,7 @@ for the rest.
 | Extraction is not fun | M3 | A hard checkpoint before anything is built on the loop |
 | Snapshots do not fit 1,000 bytes | M0.4, M2.6 | A size test from the first codec; projectiles travel as events, not in snapshots |
 | Prediction feels wrong under latency | M1.4, M1.5 | Measured with injected delay and loss before combat is built on it |
-| Firefox or Safari fail the transport | M0.6 | Run early; with no fallback, a failure reopens the transport decision |
+| Firefox or Safari fail the transport | In play | Not tested, by the owner's decision; with no fallback, a failure reopens the transport decision |
 | `web-transport-quinn` is pre-1.0 and changing | Throughout | Keep it behind the transport interface and pin its version |
 | Windows builds | M0.1 | Proven in CI before anything depends on it |
 | Facility art waits on Blender | M5.1 | It has no code dependency and can start any time after M0 |

@@ -72,9 +72,9 @@ mod tests {
             protocol_version: PROTOCOL_VERSION,
         })
         .unwrap();
-        let body = br#"{"type":"hello","protocolVersion":1}"#;
+        let body = format!(r#"{{"type":"hello","protocolVersion":{PROTOCOL_VERSION}}}"#);
         assert_eq!(frame[..HEADER_BYTES], (body.len() as u32).to_be_bytes());
-        assert_eq!(&frame[HEADER_BYTES..], body);
+        assert_eq!(&frame[HEADER_BYTES..], body.as_bytes());
     }
 
     #[test]

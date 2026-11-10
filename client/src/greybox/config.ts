@@ -1,9 +1,9 @@
 import { SCENE_IDS } from "./scenarios";
 import type { HeightMode, SceneId } from "./scenarios";
-import { LOOK_MODES } from "./look";
-import type { LookMode } from "./look";
-import { ELEVATIONS, PROJECTIONS } from "./view";
-import type { Projection } from "./view";
+import { LOOK_MODES } from "../view/look";
+import type { LookMode } from "../view/look";
+import { ELEVATIONS, PROJECTIONS } from "../view/view";
+import type { Projection } from "../view/view";
 
 export const VIEW_WIDTHS = [40, 55, 73] as const;
 export const OCCLUSION_MODES = ["none", "silhouette", "fade"] as const;

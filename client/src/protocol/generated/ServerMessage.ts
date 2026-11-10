@@ -3,4 +3,4 @@
 /**
  * A message sent from the server to the client.
  */
-export type ServerMessage = { "type": "welcome", protocolVersion: number, } | { "type": "rejected", protocolVersion: number, reason: string, };
+export type ServerMessage = { "type": "welcome", protocolVersion: number, } | { "type": "rejected", protocolVersion: number, reason: string, } | { "type": "joined", shipId: number, tickRate: number, } | { "type": "expeditionFull" };

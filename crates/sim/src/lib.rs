@@ -5,6 +5,9 @@
 //! server runs it, and the browser runs its movement rules through
 //! `frontier-sim-wasm` to predict the player's own ship.
 
+pub mod ship;
+pub mod world;
+
 /// Simulation steps per second (design section 10).
 pub const TICKS_PER_SECOND: u32 = 20;
 

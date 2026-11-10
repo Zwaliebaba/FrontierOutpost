@@ -1,7 +1,7 @@
 import { NPC_HANDLING, PLAYER_HANDLING, seek, stepShip } from "./kinematics";
 import type { ShipInput, ShipState } from "./kinematics";
 import type { Occluder } from "./occlusion";
-import { between, createRng } from "./rng";
+import { between, createRng } from "../view/rng";
 import { LARGE_ASTEROID_RADIUS, stationOccluders } from "./stationProxy";
 
 export const SCENE_IDS = ["crossing", "rock", "station", "headon"] as const;
