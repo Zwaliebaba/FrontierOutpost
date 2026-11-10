@@ -2,7 +2,7 @@
  * A pilot's part of an expedition: joins, sends controls every tick and keeps the snapshots
  * the server sends back.
  */
-import type { ServerMessage, Snapshot } from "../protocol";
+import type { ObstacleInfo, ServerMessage, Snapshot } from "../protocol";
 import type { Connection } from "../net/connection";
 import { MAX_INPUTS, encodeInput, quantizeControl } from "../net/input";
 import { SnapshotBuffer } from "../net/interpolation";
@@ -18,14 +18,20 @@ export class ExpeditionFullError extends Error {
 }
 
 /** Waits for the server to place this connection in the expedition. */
-export function waitForJoin(connection: Connection): Promise<{ shipId: number; tickRate: number }> {
+export function waitForJoin(
+  connection: Connection,
+): Promise<{ shipId: number; tickRate: number; obstacles: ObstacleInfo[] }> {
   return new Promise((resolve, reject) => {
     let settled = false;
     connection.onMessage((message: ServerMessage) => {
       if (settled) return;
       if (message.type === "joined") {
         settled = true;
-        resolve({ shipId: message.shipId, tickRate: message.tickRate });
+        resolve({
+          shipId: message.shipId,
+          tickRate: message.tickRate,
+          obstacles: message.obstacles,
+        });
       } else if (message.type === "expeditionFull") {
         settled = true;
         reject(new ExpeditionFullError("The expedition already has four pilots."));

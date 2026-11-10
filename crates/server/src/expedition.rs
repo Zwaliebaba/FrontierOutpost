@@ -12,6 +12,7 @@ use frontier_protocol::snapshot::{
     EntityKind, EntityState, Snapshot, quantize_heading, quantize_position, quantize_velocity,
 };
 use frontier_sim::TICKS_PER_SECOND;
+use frontier_sim::collision::{Obstacle, asteroid_field};
 use frontier_sim::ship::ShipInput;
 use frontier_sim::world::{ShipId, World};
 use tokio::sync::{mpsc, oneshot};
@@ -23,6 +24,9 @@ use crate::input_queue::InputQueue;
 
 /// Pilots per expedition (design section 2).
 pub const MAX_PILOTS: usize = 4;
+
+/// Seed of the asteroid field, until sites are generated from their own seeds (plan M3).
+const ASTEROID_SEED: u32 = 2266;
 
 /// Sends a snapshot datagram to one pilot. A WebTransport session in the
 /// server; a channel in tests.
@@ -62,15 +66,26 @@ enum Command {
 #[derive(Clone)]
 pub struct Expedition {
     commands: mpsc::UnboundedSender<Command>,
+    obstacles: std::sync::Arc<[Obstacle]>,
 }
 
 impl Expedition {
     /// Starts an expedition on the current Tokio runtime.
     #[must_use]
     pub fn start() -> Self {
+        let obstacles: std::sync::Arc<[Obstacle]> = asteroid_field(ASTEROID_SEED).into();
         let (commands, receiver) = mpsc::unbounded_channel();
-        tokio::spawn(run(receiver));
-        Self { commands }
+        tokio::spawn(run(receiver, World::with_obstacles(obstacles.to_vec())));
+        Self {
+            commands,
+            obstacles,
+        }
+    }
+
+    /// The fixed obstacles, which every pilot is sent when they join.
+    #[must_use]
+    pub fn obstacles(&self) -> &[Obstacle] {
+        &self.obstacles
     }
 
     /// Adds a pilot. Returns their ship, or `None` if the expedition is full
@@ -100,8 +115,7 @@ struct Pilot {
     last_input: Option<u16>,
 }
 
-async fn run(mut commands: mpsc::UnboundedReceiver<Command>) {
-    let mut world = World::new();
+async fn run(mut commands: mpsc::UnboundedReceiver<Command>, mut world: World) {
     let mut pilots: HashMap<ShipId, Pilot> = HashMap::new();
     let mut ticker = interval(Duration::from_secs(1) / TICKS_PER_SECOND);
     // After a stall, carry on at the normal rate rather than racing to catch up.

@@ -22,10 +22,19 @@ async fn join(url: &url::Url, sha256: [u8; 32]) -> (Session, u16) {
         hello(&mut send, &mut recv).await,
         ServerMessage::Welcome { .. }
     ));
-    let ServerMessage::Joined { ship_id, tick_rate } = read(&mut recv).await else {
+    let ServerMessage::Joined {
+        ship_id,
+        tick_rate,
+        obstacles,
+    } = read(&mut recv).await
+    else {
         panic!("expected Joined");
     };
     assert_eq!(tick_rate, frontier_sim::TICKS_PER_SECOND);
+    assert!(
+        !obstacles.is_empty(),
+        "the asteroid field is sent on joining"
+    );
     // Keep the control stream open for the life of the session.
     std::mem::forget((send, recv));
     (session, ship_id)

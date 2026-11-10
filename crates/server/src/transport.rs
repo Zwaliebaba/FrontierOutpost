@@ -95,6 +95,15 @@ async fn run_session(session: &Session, expedition: &Expedition) -> Result<(), S
     let joined = ServerMessage::Joined {
         ship_id: ship.0,
         tick_rate: TICKS_PER_SECOND,
+        obstacles: expedition
+            .obstacles()
+            .iter()
+            .map(|o| frontier_protocol::ObstacleInfo {
+                x: o.x,
+                z: o.z,
+                radius: o.radius,
+            })
+            .collect(),
     };
     let result = match write_frame(&mut send, &joined).await {
         Ok(()) => receive_inputs(session, expedition, ship).await,

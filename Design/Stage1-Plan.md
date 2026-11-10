@@ -72,6 +72,7 @@ injected.*
 | 2.4 | Destruction and its outcome: cargo and upgraded modules lost, hull reissued, pilot returned home | Sim test of the §6 outcome table |
 | 2.5 | Readability rules in the real client: one render height, allegiance by shape and colour, silhouettes through structures | The greybox's measures run against the real renderer |
 | 2.6 | Benchmark at the provisional caps of 24 NPCs and 64 projectiles | A recorded frame-time and snapshot-size result |
+| 2.7 | Collision, added by the owner: ships push each other apart and slide off asteroids, with no damage; asteroids move from client decoration into the server's world, sent on joining; prediction collides with them | Sim tests that ships never overlap each other or an obstacle |
 
 ### M3 · Extract
 

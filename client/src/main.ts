@@ -75,7 +75,11 @@ async function start(): Promise<void> {
     showStatus("closed", reason ? `Disconnected: ${reason}` : "Disconnected");
   });
 
-  const [{ shipId, tickRate }, loaded] = await Promise.all([waitForJoin(connection), rules]);
+  const [{ shipId, tickRate, obstacles }, loaded] = await Promise.all([
+    waitForJoin(connection),
+    rules,
+  ]);
+  loaded.setObstacles(obstacles);
   // Your own ship is predicted with the server's rules; others are drawn from snapshots.
   const predictor = new Predictor((state, controls) => loaded.stepShip(state, controls));
   const session = new Session(
@@ -95,6 +99,7 @@ async function start(): Promise<void> {
     },
   );
   const view = new ExpeditionView(document.body, shipId, START_WIDTH);
+  view.setObstacles(obstacles);
   hud.dataset.ship = String(shipId);
   fly(session, view, predictor);
 }

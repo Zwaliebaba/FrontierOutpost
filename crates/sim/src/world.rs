@@ -1,6 +1,7 @@
 //! The state of one expedition instance.
 
 use crate::Tick;
+use crate::collision::{self, Obstacle, SHIP_RADIUS};
 use crate::ship::{self, STARTER_HANDLING, ShipInput, ShipState};
 
 /// Identifies a ship within one instance. Small, because it crosses the wire.
@@ -20,6 +21,7 @@ pub struct Ship {
 pub struct World {
     tick: Tick,
     ships: Vec<Ship>,
+    obstacles: Vec<Obstacle>,
     next_id: u16,
 }
 
@@ -32,6 +34,20 @@ impl World {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A world with these fixed obstacles.
+    #[must_use]
+    pub fn with_obstacles(obstacles: Vec<Obstacle>) -> Self {
+        Self {
+            obstacles,
+            ..Self::default()
+        }
+    }
+
+    #[must_use]
+    pub fn obstacles(&self) -> &[Obstacle] {
+        &self.obstacles
     }
 
     #[must_use]
@@ -87,10 +103,21 @@ impl World {
         }
     }
 
-    /// Advances every ship by one step.
+    /// Advances every ship by one step, then resolves collisions: ships push
+    /// one another apart, and obstacles last, so no ship ends a step inside one.
     pub fn step(&mut self) {
         for ship in &mut self.ships {
             ship.state = ship::step(ship.state, ship.input, &STARTER_HANDLING);
+        }
+        for i in 0..self.ships.len() {
+            let (done, rest) = self.ships.split_at_mut(i + 1);
+            let Some(a) = done.last_mut() else { continue };
+            for b in rest {
+                collision::separate(&mut a.state, SHIP_RADIUS, &mut b.state, SHIP_RADIUS);
+            }
+        }
+        for ship in &mut self.ships {
+            ship.state = collision::resolve_obstacles(ship.state, SHIP_RADIUS, &self.obstacles);
         }
         self.tick = self.tick.next();
     }
@@ -142,6 +169,62 @@ mod tests {
         assert!(!world.remove_ship(id));
         assert!(world.ship(id).is_none());
         assert!(!world.set_input(id, ShipInput::default()));
+    }
+
+    #[test]
+    fn ships_flying_into_each_other_do_not_overlap() {
+        let mut world = World::new();
+        let a = world.spawn_ship();
+        let b = world.spawn_ship();
+        // Put them nose to nose and thrust into each other.
+        world.ships[0].state = ShipState {
+            x: -3.0,
+            z: 0.0,
+            heading: 0.0,
+            speed: 9.0,
+        };
+        world.ships[1].state = ShipState {
+            x: 3.0,
+            z: 0.0,
+            heading: std::f32::consts::PI,
+            speed: 9.0,
+        };
+        let thrust = ShipInput {
+            thrust: 1.0,
+            turn: 0.0,
+        };
+        world.set_input(a, thrust);
+        world.set_input(b, thrust);
+        for _ in 0..40 {
+            world.step();
+            let (sa, sb) = (world.ship(a).unwrap().state, world.ship(b).unwrap().state);
+            assert!((sa.x - sb.x).hypot(sa.z - sb.z) >= 2.0 * SHIP_RADIUS - 1e-3);
+        }
+    }
+
+    #[test]
+    fn a_ship_cannot_fly_through_an_obstacle() {
+        let rock = Obstacle {
+            x: 10.0,
+            z: 0.0,
+            radius: 3.0,
+        };
+        let mut world = World::with_obstacles(vec![rock]);
+        let id = world.spawn_ship();
+        world.ships[0].state = ShipState::default();
+        world.set_input(
+            id,
+            ShipInput {
+                thrust: 1.0,
+                turn: 0.0,
+            },
+        );
+        for _ in 0..200 {
+            world.step();
+            let state = world.ship(id).unwrap().state;
+            assert!((state.x - rock.x).hypot(state.z) >= rock.radius + SHIP_RADIUS - 1e-3);
+        }
+        assert!(world.ship(id).unwrap().state.x < rock.x);
     }
 
     #[test]

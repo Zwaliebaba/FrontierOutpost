@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -32,7 +32,7 @@ pub enum ClientMessage {
 }
 
 /// A message sent from the server to the client.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(
     tag = "type",
     rename_all = "camelCase",
@@ -48,10 +48,25 @@ pub enum ServerMessage {
         reason: String,
     },
     /// The client joined the expedition and flies the ship `ship_id`. Snapshots
-    /// follow as datagrams, `tick_rate` per second.
-    Joined { ship_id: u16, tick_rate: u32 },
+    /// follow as datagrams, `tick_rate` per second. `obstacles` are fixed for the
+    /// life of the expedition.
+    Joined {
+        ship_id: u16,
+        tick_rate: u32,
+        obstacles: Vec<ObstacleInfo>,
+    },
     /// The expedition already has its four pilots.
     ExpeditionFull,
+}
+
+/// A fixed circular obstacle on the gameplay plane, in metres.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ObstacleInfo {
+    pub x: f32,
+    pub z: f32,
+    pub radius: f32,
 }
 
 /// How a browser reaches the game server's WebTransport endpoint. Served as
@@ -131,10 +146,15 @@ mod tests {
         let joined = ServerMessage::Joined {
             ship_id: 3,
             tick_rate: 20,
+            obstacles: vec![ObstacleInfo {
+                x: 1.5,
+                z: -2.0,
+                radius: 0.75,
+            }],
         };
         assert_eq!(
             serde_json::to_string(&joined).unwrap(),
-            r#"{"type":"joined","shipId":3,"tickRate":20}"#
+            r#"{"type":"joined","shipId":3,"tickRate":20,"obstacles":[{"x":1.5,"z":-2.0,"radius":0.75}]}"#
         );
         assert_eq!(
             serde_json::to_string(&ServerMessage::ExpeditionFull).unwrap(),

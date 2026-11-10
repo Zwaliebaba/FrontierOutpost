@@ -5,6 +5,8 @@
 //! server runs it, and the browser runs its movement rules through
 //! `frontier-sim-wasm` to predict the player's own ship.
 
+pub mod collision;
+pub mod rng;
 pub mod ship;
 pub mod world;
 

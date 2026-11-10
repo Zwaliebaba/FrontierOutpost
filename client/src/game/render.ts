@@ -19,7 +19,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import type { EntityKind } from "../protocol";
+import type { EntityKind, ObstacleInfo } from "../protocol";
 import type { EntityPose } from "../net/interpolation";
 import { forkedHull, wedgeHull } from "../view/hulls";
 import { between, createRng } from "../view/rng";
@@ -70,7 +70,6 @@ export class ExpeditionView {
     starlight.position.set(-4, 10, 6);
     this.#scene.add(starlight);
     this.#addStars();
-    this.#addLandmarks();
   }
 
   get camera(): CameraRig["camera"] {
@@ -161,26 +160,21 @@ export class ExpeditionView {
   }
 
   /**
-   * Asteroids scattered around the spawn, so that flying past them shows motion: stars at
-   * infinity do not move when the ship does. Presentation only; they do not collide.
+   * Draws the expedition's obstacles. They come from the server, which collides ships with them;
+   * only their tilt and depth below the plane are decoration.
    */
-  #addLandmarks(): void {
+  setObstacles(obstacles: readonly ObstacleInfo[]): void {
     const rng = createRng(LANDMARK_SEED);
     const material = new MeshStandardMaterial({
       color: linear(0.1, 0.12, 0.15),
       roughness: 0.95,
       flatShading: true,
     });
-    for (let placed = 0; placed < 60;) {
-      const x = between(rng, -220, 220);
-      const z = between(rng, -220, 220);
-      const radius = between(rng, 0.6, 4);
-      if (Math.hypot(x, z) < 18) continue;
-      const rock = new Mesh(new IcosahedronGeometry(radius, 1), material);
-      rock.position.set(x, between(rng, -radius, 0), z);
+    for (const obstacle of obstacles) {
+      const rock = new Mesh(new IcosahedronGeometry(obstacle.radius, 1), material);
+      rock.position.set(obstacle.x, between(rng, -obstacle.radius, 0) * 0.5, obstacle.z);
       rock.rotation.set(between(rng, 0, 6), between(rng, 0, 6), 0);
       this.#scene.add(rock);
-      placed += 1;
     }
   }
 }
