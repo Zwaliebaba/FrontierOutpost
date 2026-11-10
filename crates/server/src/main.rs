@@ -75,7 +75,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // game is opened at localhost (or the configured origin), not 127.0.0.1.
     let origin = config.origin(http_addr);
     let auth = Auth::new(&origin)?;
-    let store = Store::open(&config.data_path)?;
+    let store = Store::open(&config.data_path)?.with_grant(&config.grant);
+    if !config.grant.is_empty() {
+        warn!(grant = ?config.grant, "every new pilot starts with extra stock");
+    }
     info!(data = %config.data_path.display(), world = store.world(), "saves");
 
     info!(protocol = PROTOCOL_VERSION, %web_transport_addr, %browser_addr, "WebTransport listening");

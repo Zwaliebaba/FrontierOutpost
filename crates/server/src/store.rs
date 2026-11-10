@@ -92,6 +92,8 @@ pub struct SavedRun {
 pub struct Store {
     connection: Arc<Mutex<Connection>>,
     world: Arc<str>,
+    /// Stock granted to every new pilot on top of the starting balance.
+    grant: Arc<[(Item, u32)]>,
 }
 
 impl Store {
@@ -232,6 +234,7 @@ impl Store {
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
             world: world.into(),
+            grant: Arc::new([]),
         })
     }
 
@@ -258,6 +261,14 @@ impl Store {
         tokio::task::spawn_blocking(move || work(&store))
             .await
             .map_err(|_| StoreError::Poisoned)?
+    }
+
+    /// The same store, granting `grant` to every new pilot on top of the
+    /// starting balance.
+    #[must_use]
+    pub fn with_grant(mut self, grant: &[(Item, u32)]) -> Self {
+        self.grant = grant.into();
+        self
     }
 
     /// Creates a pilot's account and grants the starting balance through the
@@ -303,15 +314,18 @@ impl Store {
                 params![id.0, passkey],
             )?;
         }
-        let grant = Transfer {
-            item: Item::Credits,
-            amount: STARTING_CREDITS,
-            from: Party::Npc(Npc::Grant),
-            to: Party::Account(id),
-            reason: Reason::StartingBalance,
-            run: None,
-        };
-        apply(&transaction, &self.world, &[grant])?;
+        let grants: Vec<Transfer> = std::iter::once((Item::Credits, STARTING_CREDITS))
+            .chain(self.grant.iter().copied())
+            .map(|(item, amount)| Transfer {
+                item,
+                amount,
+                from: Party::Npc(Npc::Grant),
+                to: Party::Account(id),
+                reason: Reason::StartingBalance,
+                run: None,
+            })
+            .collect();
+        apply(&transaction, &self.world, &grants)?;
         transaction.commit()?;
         Ok(id)
     }
@@ -652,6 +666,17 @@ mod tests {
         let account = store.load(id).unwrap();
         assert_eq!(account.world, store.world());
         assert_eq!(account.credits, 100, "the starting balance");
+    }
+
+    #[test]
+    fn a_grant_reaches_new_pilots_through_the_ledger() {
+        let store = Store::in_memory()
+            .unwrap()
+            .with_grant(&[(Item::Credits, 900), (Item::ORE, 40)]);
+        let id = store.create_account("Vega").unwrap();
+        let account = store.load(id).unwrap();
+        assert_eq!((account.credits, account.stock.ore), (1_000, 40));
+        assert!(store.ledger_balance(id).unwrap().contains(&(Item::ORE, 40)));
     }
 
     #[test]
