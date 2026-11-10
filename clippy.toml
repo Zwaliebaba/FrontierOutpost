@@ -1,0 +1,3 @@
+# `clippy::unwrap_used` is on for the workspace; tests may still unwrap.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true

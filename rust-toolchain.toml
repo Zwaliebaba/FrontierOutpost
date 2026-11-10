@@ -1,0 +1,6 @@
+# CI and every developer use exactly this toolchain, so a green local
+# `cargo clippy` / `cargo fmt` means a green CI. Bump it in its own PR.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
