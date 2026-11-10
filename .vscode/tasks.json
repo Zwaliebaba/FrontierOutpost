@@ -22,6 +22,43 @@
       }
     },
     {
+      // Rebuilds the image and starts a fresh server in the background, ports published as in
+      // compose.yaml, so it keeps running for play at http://localhost:8080/ after the task ends.
+      "label": "container: rebuild and start",
+      "type": "shell",
+      "command": "docker compose up --detach --build --force-recreate",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      // Frees the disk that rebuilds leave behind. With Docker Desktop's containerd image store a
+      // rebuild leaves little as untagged images and most as build cache, so this prunes both.
+      "label": "container: prune old images",
+      "dependsOn": ["container: prune untagged images", "container: prune build cache"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      // Untagged images only; images in use or with a tag stay.
+      "label": "container: prune untagged images",
+      "hide": true,
+      "type": "shell",
+      "command": "docker image prune --force",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      // Build cache not used for three days. Recent layers and the cargo and npm caches stay, so
+      // the next rebuild is still quick.
+      "label": "container: prune build cache",
+      "hide": true,
+      "type": "shell",
+      "command": "docker builder prune --force --filter until=72h",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
       "label": "container: down",
       "type": "shell",
       "command": "docker compose down",
