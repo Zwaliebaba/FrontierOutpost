@@ -16,6 +16,25 @@ use crate::ledger::{Item, Npc, Party, Reason, Transfer, TransferError};
 /// The database layout this server writes. Unrelated to the document version.
 const SCHEMA_VERSION: u32 = 1;
 
+/// How long a session token signs a pilot in again: a week.
+const SESSION_SECONDS: i64 = 7 * 24 * 60 * 60;
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| {
+            i64::try_from(since.as_secs()).unwrap_or(i64::MAX)
+        })
+}
+
+fn hash(token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(token.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 /// A pilot's account, as the store numbers them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AccountId(pub i64);
@@ -42,6 +61,13 @@ pub enum StoreError {
     Transfer(#[from] TransferError),
     #[error("the database lock was poisoned by a panic")]
     Poisoned,
+}
+
+/// Random bytes from the operating system.
+pub(crate) fn random_bytes<const N: usize>() -> Result<[u8; N], StoreError> {
+    let mut buffer = [0_u8; N];
+    getrandom::fill(&mut buffer).map_err(|error| StoreError::Random(error.to_string()))?;
+    Ok(buffer)
 }
 
 /// Random bytes from the operating system, as lowercase hex.
@@ -108,7 +134,17 @@ impl Store {
              CREATE TRIGGER IF NOT EXISTS ledger_no_update BEFORE UPDATE ON ledger
                  BEGIN SELECT RAISE(ABORT, 'the ledger is append-only'); END;
              CREATE TRIGGER IF NOT EXISTS ledger_no_delete BEFORE DELETE ON ledger
-                 BEGIN SELECT RAISE(ABORT, 'the ledger is append-only'); END;",
+                 BEGIN SELECT RAISE(ABORT, 'the ledger is append-only'); END;
+             CREATE TABLE IF NOT EXISTS passkeys (
+                 id INTEGER PRIMARY KEY,
+                 account INTEGER NOT NULL REFERENCES accounts(id),
+                 credential TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS sessions (
+                 token_hash TEXT PRIMARY KEY,
+                 account INTEGER NOT NULL REFERENCES accounts(id),
+                 expires INTEGER NOT NULL
+             );",
         )?;
         let schema: Option<String> = connection
             .query_row("SELECT value FROM meta WHERE key = 'schema'", [], |row| {
@@ -170,6 +206,19 @@ impl Store {
     /// # Errors
     /// Fails if the callsign is malformed or taken.
     pub fn create_account(&self, callsign: &str) -> Result<AccountId, StoreError> {
+        self.create_pilot(callsign, None)
+    }
+
+    /// Creates a pilot's account, with the passkey they registered if any, and
+    /// grants the starting balance through the ledger, all in one transaction.
+    ///
+    /// # Errors
+    /// Fails if the callsign is malformed or taken.
+    pub fn create_pilot(
+        &self,
+        callsign: &str,
+        passkey: Option<&str>,
+    ) -> Result<AccountId, StoreError> {
         if !valid_callsign(callsign) {
             return Err(StoreError::BadCallsign(callsign.to_owned()));
         }
@@ -188,6 +237,12 @@ impl Store {
             }
             Err(error) => return Err(error.into()),
         };
+        if let Some(passkey) = passkey {
+            transaction.execute(
+                "INSERT INTO passkeys (account, credential) VALUES (?1, ?2)",
+                params![id.0, passkey],
+            )?;
+        }
         let grant = Transfer {
             item: Item::Credits,
             amount: STARTING_CREDITS,
@@ -199,6 +254,73 @@ impl Store {
         apply(&transaction, &self.world, &[grant])?;
         transaction.commit()?;
         Ok(id)
+    }
+
+    /// The passkeys an account registered, as webauthn-rs serialises them.
+    ///
+    /// # Errors
+    /// Fails only if the database does.
+    pub fn passkeys(&self, id: AccountId) -> Result<Vec<String>, StoreError> {
+        let connection = self.lock()?;
+        let mut statement =
+            connection.prepare("SELECT credential FROM passkeys WHERE account = ?1 ORDER BY id")?;
+        let rows = statement.query_map(params![id.0], |row| row.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Replaces an account's passkeys, after a sign-in updated their counters.
+    ///
+    /// # Errors
+    /// Fails only if the database does.
+    pub fn set_passkeys(&self, id: AccountId, passkeys: &[String]) -> Result<(), StoreError> {
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()?;
+        transaction.execute("DELETE FROM passkeys WHERE account = ?1", params![id.0])?;
+        for passkey in passkeys {
+            transaction.execute(
+                "INSERT INTO passkeys (account, credential) VALUES (?1, ?2)",
+                params![id.0, passkey],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Issues a session token that signs the account in again without a passkey
+    /// until it expires, so a reconnecting pilot is not asked again. Only its
+    /// hash is stored, so a copy of the database cannot be used to sign in.
+    ///
+    /// # Errors
+    /// Fails if no random bytes can be drawn or the database fails.
+    pub fn issue_token(&self, id: AccountId) -> Result<String, StoreError> {
+        let token = random_hex(32)?;
+        let expires = unix_now() + SESSION_SECONDS;
+        let connection = self.lock()?;
+        connection.execute(
+            "DELETE FROM sessions WHERE expires < ?1",
+            params![unix_now()],
+        )?;
+        connection.execute(
+            "INSERT INTO sessions (token_hash, account, expires) VALUES (?1, ?2, ?3)",
+            params![hash(&token), id.0, expires],
+        )?;
+        Ok(token)
+    }
+
+    /// The account a session token signs in, if it is known and unexpired.
+    ///
+    /// # Errors
+    /// Fails only if the database does.
+    pub fn resume(&self, token: &str) -> Result<Option<AccountId>, StoreError> {
+        Ok(self
+            .lock()?
+            .query_row(
+                "SELECT account FROM sessions WHERE token_hash = ?1 AND expires >= ?2",
+                params![hash(token), unix_now()],
+                |row| row.get(0),
+            )
+            .optional()?
+            .map(AccountId))
     }
 
     /// Applies `transfers` to the accounts they name and appends them to the
@@ -309,15 +431,13 @@ fn apply(connection: &Connection, world: &str, transfers: &[Transfer]) -> Result
             transfer.apply(*id, account)?;
         }
     }
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |since| since.as_secs());
+    let now = unix_now();
     for transfer in transfers {
         connection.execute(
             "INSERT INTO ledger (at, item, amount, source, sink, reason, run)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
-                i64::try_from(now).unwrap_or(i64::MAX),
+                now,
                 transfer.item.name(),
                 transfer.amount,
                 transfer.from.to_string(),
@@ -553,5 +673,40 @@ mod tests {
                 .is_err()
         );
         assert!(connection.execute("DELETE FROM ledger", []).is_err());
+    }
+
+    #[test]
+    fn a_pilot_is_created_with_their_passkey_and_signs_in_again_by_token() {
+        let store = Store::in_memory().unwrap();
+        let id = store.create_pilot("Vega", Some("{\"cred\":1}")).unwrap();
+        assert_eq!(store.passkeys(id).unwrap(), ["{\"cred\":1}"]);
+        store
+            .set_passkeys(id, &["{\"cred\":2}".to_owned()])
+            .unwrap();
+        assert_eq!(store.passkeys(id).unwrap(), ["{\"cred\":2}"]);
+
+        let token = store.issue_token(id).unwrap();
+        assert_eq!(token.len(), 64);
+        assert_eq!(store.resume(&token).unwrap(), Some(id));
+        assert_eq!(store.resume("not a token").unwrap(), None);
+        let stored: String = store
+            .lock()
+            .unwrap()
+            .query_row("SELECT token_hash FROM sessions", [], |row| row.get(0))
+            .unwrap();
+        assert_ne!(stored, token, "only the hash is kept");
+    }
+
+    #[test]
+    fn an_expired_token_signs_nobody_in() {
+        let store = Store::in_memory().unwrap();
+        let id = store.create_account("Vega").unwrap();
+        let token = store.issue_token(id).unwrap();
+        store
+            .lock()
+            .unwrap()
+            .execute("UPDATE sessions SET expires = 0", [])
+            .unwrap();
+        assert_eq!(store.resume(&token).unwrap(), None);
     }
 }

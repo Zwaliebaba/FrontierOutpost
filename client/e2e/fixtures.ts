@@ -15,9 +15,30 @@ export async function leave(page: Page): Promise<void> {
   await page.close();
 }
 
-/** Playwright's `test`, with each test's page left like a closing tab. */
+/**
+ * Gives a page a virtual authenticator that verifies its user, as a laptop's platform
+ * authenticator does, so passkeys can be made and used without a person.
+ */
+export async function addAuthenticator(page: Page): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("WebAuthn.enable");
+  await cdp.send("WebAuthn.addVirtualAuthenticator", {
+    options: {
+      protocol: "ctap2",
+      transport: "internal",
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  });
+}
+
+/** Playwright's `test`, with a passkey authenticator on each page and the page left like a
+ * closing tab. */
 export const test = base.extend({
   page: async ({ page }, use) => {
+    await addAuthenticator(page);
     await use(page);
     if (!page.isClosed()) await leave(page);
   },
@@ -25,12 +46,31 @@ export const test = base.extend({
 
 export { expect } from "@playwright/test";
 
-/** The server whose runs open with no NPCs (playwright.config.ts). */
-export const QUIET = "http://127.0.0.1:8182/";
+/** The server whose runs open with no NPCs (playwright.config.ts). Passkeys need a domain
+ * name, so pages are opened at localhost, never 127.0.0.1. */
+export const QUIET = "http://localhost:8182/";
 
-/** Opens the game, takes the contract at tier I and waits to be flying. */
-export async function launch(page: Page, url = "/"): Promise<void> {
+let pilots = 0;
+
+/** A callsign no other test has used against this server. */
+export function newCallsign(): string {
+  pilots += 1;
+  return `T${Date.now().toString(36).slice(-6)}${String(pilots)}`;
+}
+
+/** Opens the game and registers a new pilot with a passkey. Returns their callsign. */
+export async function signUp(page: Page, url = "/"): Promise<string> {
   await page.goto(url);
+  const callsign = newCallsign();
+  await page.locator("#callsign").fill(callsign);
+  await page.locator('#signin button[data-action="register"]').click();
+  await page.locator("#account[data-credits]").waitFor();
+  return callsign;
+}
+
+/** Signs up a new pilot, takes the contract at tier I and waits to be flying. */
+export async function launch(page: Page, url = "/"): Promise<void> {
+  await signUp(page, url);
   await page.locator('#briefing[data-state="open"] button[data-tier="1"]').click();
   await page.locator("#hud[data-x]").waitFor();
 }

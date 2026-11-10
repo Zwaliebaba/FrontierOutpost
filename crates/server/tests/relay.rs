@@ -55,11 +55,16 @@ async fn a_session_survives_loss_and_jitter() {
         hello(&mut send, &mut recv).await,
         ServerMessage::Welcome { .. }
     ));
+    common::sign_up(&mut send, &mut recv).await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Contract { .. }
     ));
     write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::Account { .. }
+    ));
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Joined { .. }

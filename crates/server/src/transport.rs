@@ -18,8 +18,11 @@ use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 use web_transport_quinn::{RecvStream, SendStream, Server, Session, crypto, quinn};
 
+use crate::auth::{Auth, AuthError, Ceremony};
 use crate::cert::DevCertificate;
 use crate::expedition::{Expedition, LaunchOrder, PilotEvent};
+use crate::ledger::{Item, Npc, Party, Reason, Transfer, supplies_due};
+use crate::store::{AccountId, Store, StoreError, random_hex};
 use crate::{handshake, wire};
 
 /// What the server offers every pilot, and how runs launch.
@@ -74,6 +77,8 @@ pub enum SessionError {
     Closed,
     #[error("the client sent a message out of turn")]
     Unexpected,
+    #[error(transparent)]
+    Store(#[from] StoreError),
 }
 
 /// Session close code for a client that broke the protocol.
@@ -143,15 +148,23 @@ pub fn bind_with_idle_timeout(
     Ok(Server::new(quinn::Endpoint::server(config, addr)?))
 }
 
+/// The world's saves and the relying party that signs pilots in. Cheap to clone.
+#[derive(Clone)]
+pub struct Identity {
+    pub store: Store,
+    pub auth: Auth,
+}
+
 /// Accepts sessions until the endpoint is closed, running each on its own task.
-pub async fn serve(mut server: Server, settings: Settings) {
+pub async fn serve(mut server: Server, settings: Settings, identity: Identity) {
     while let Some(request) = server.accept().await {
         let peer = request.conn().remote_address();
+        let identity = identity.clone();
         tokio::spawn(async move {
             match request.ok().await {
                 Ok(session) => {
                     info!(%peer, "session opened");
-                    match run_session(&session, settings).await {
+                    match run_session(&session, settings, identity).await {
                         Ok(()) => info!(%peer, "session closed"),
                         Err(error) => {
                             warn!(%peer, %error, "session ended");
@@ -165,7 +178,11 @@ pub async fn serve(mut server: Server, settings: Settings) {
     }
 }
 
-async fn run_session(session: &Session, settings: Settings) -> Result<(), SessionError> {
+async fn run_session(
+    session: &Session,
+    settings: Settings,
+    identity: Identity,
+) -> Result<(), SessionError> {
     let (mut send, mut recv) = session.accept_bi().await?;
     let hello: ClientMessage = read_frame(&mut recv).await?;
     let reply = handshake(&hello);
@@ -180,14 +197,16 @@ async fn run_session(session: &Session, settings: Settings) -> Result<(), Sessio
     let mut pilot = Pilot {
         session,
         settings,
+        identity,
         send,
         events_tx,
+        account: None,
+        ceremony: None,
         flying: None,
         seed: 0,
         offered_at: Instant::now(),
         home_since: None,
     };
-    pilot.offer().await?;
     let result = pilot.fly(recv, events).await;
     match &pilot.flying {
         Some((expedition, ship)) => expedition.leave(*ship),
@@ -196,12 +215,18 @@ async fn run_session(session: &Session, settings: Settings) -> Result<(), Sessio
     result
 }
 
-/// One connected pilot: at home with a contract on offer, or flying a run.
+/// One connected pilot: signing in, at home with a contract on offer, or
+/// flying a run.
 struct Pilot<'a> {
     session: &'a Session,
     settings: Settings,
+    identity: Identity,
     send: SendStream,
     events_tx: mpsc::UnboundedSender<PilotEvent>,
+    /// The signed-in pilot's account; `None` until they sign in.
+    account: Option<AccountId>,
+    /// A passkey ceremony waiting for the browser's credential.
+    ceremony: Option<Ceremony>,
     /// The run being flown and the pilot's ship in it.
     flying: Option<(Expedition, ShipId)>,
     /// The seed of the contract on offer.
@@ -283,9 +308,12 @@ impl Pilot<'_> {
     }
 
     async fn handle(&mut self, message: ClientMessage) -> Result<(), SessionError> {
+        let Some(account) = self.account else {
+            return self.sign_in(message).await;
+        };
         let flying = self.flying.as_ref().map(|(e, s)| (e.clone(), *s));
         match (message, flying) {
-            (ClientMessage::Launch { tier }, None) => self.launch(tier).await?,
+            (ClientMessage::Launch { tier }, None) => self.launch(account, tier).await?,
             (ClientMessage::Lock { target }, Some((expedition, ship))) => {
                 expedition.lock(ship, target.map(ShipId));
             }
@@ -302,24 +330,136 @@ impl Pilot<'_> {
                 | ClientMessage::Scan,
                 None,
             ) => {}
-            (ClientMessage::Launch { .. }, Some(_)) | (ClientMessage::Hello { .. }, _) => {
-                return Err(SessionError::Unexpected);
-            }
+            (
+                ClientMessage::Launch { .. }
+                | ClientMessage::Hello { .. }
+                | ClientMessage::Register { .. }
+                | ClientMessage::SignIn { .. }
+                | ClientMessage::PasskeyCredential { .. }
+                | ClientMessage::Resume { .. },
+                _,
+            ) => return Err(SessionError::Unexpected),
         }
         Ok(())
     }
 
-    async fn launch(&mut self, tier: u32) -> Result<(), SessionError> {
+    /// Handles a message before the pilot has signed in: only the passkey
+    /// ceremonies and resumption are allowed.
+    async fn sign_in(&mut self, message: ClientMessage) -> Result<(), SessionError> {
+        let (store, auth) = (self.identity.store.clone(), self.identity.auth.clone());
+        let outcome = match message {
+            ClientMessage::Register { callsign } => {
+                let begun = store
+                    .call(move |s| Ok(auth.begin_registration(s, &callsign)))
+                    .await?;
+                return self.begun(begun).await;
+            }
+            ClientMessage::SignIn { callsign } => {
+                let begun = store
+                    .call(move |s| Ok(auth.begin_sign_in(s, &callsign)))
+                    .await?;
+                return self.begun(begun).await;
+            }
+            ClientMessage::PasskeyCredential { credential } => {
+                let Some(ceremony) = self.ceremony.take() else {
+                    return Err(SessionError::Unexpected);
+                };
+                store
+                    .call(move |s| Ok(auth.finish(s, ceremony, &credential)))
+                    .await?
+            }
+            ClientMessage::Resume { token } => store
+                .call(move |s| s.resume(&token))
+                .await?
+                .ok_or(AuthError::NoSuchPilot(String::new())),
+            _ => return Err(SessionError::Unexpected),
+        };
+        match outcome {
+            Ok(account) => self.signed_in(account).await,
+            Err(error) => {
+                debug!(%error, "sign-in refused");
+                let reason = match error {
+                    AuthError::NoSuchPilot(callsign) if callsign.is_empty() => {
+                        "Your session has expired. Sign in with your passkey.".to_owned()
+                    }
+                    other => other.reason(),
+                };
+                write_frame(&mut self.send, &ServerMessage::SignInRefused { reason }).await
+            }
+        }
+    }
+
+    async fn begun(
+        &mut self,
+        begun: Result<(String, Ceremony), AuthError>,
+    ) -> Result<(), SessionError> {
+        match begun {
+            Ok((options, ceremony)) => {
+                self.ceremony = Some(ceremony);
+                write_frame(&mut self.send, &ServerMessage::PasskeyOptions { options }).await
+            }
+            Err(error) => {
+                debug!(%error, "ceremony not started");
+                let reason = error.reason();
+                write_frame(&mut self.send, &ServerMessage::SignInRefused { reason }).await
+            }
+        }
+    }
+
+    async fn signed_in(&mut self, account: AccountId) -> Result<(), SessionError> {
+        let (token, holdings) = self
+            .identity
+            .store
+            .call(move |s| Ok((s.issue_token(account)?, s.load(account)?)))
+            .await?;
+        info!(
+            account = account.0,
+            callsign = holdings.callsign,
+            "signed in"
+        );
+        self.account = Some(account);
+        let message = ServerMessage::SignedIn {
+            callsign: holdings.callsign.clone(),
+            token,
+            account: wire::account(&holdings),
+        };
+        write_frame(&mut self.send, &message).await?;
+        self.offer().await
+    }
+
+    async fn launch(&mut self, account: AccountId, tier: u32) -> Result<(), SessionError> {
         let Some(tier) =
             ThreatTier::from_number(tier).filter(|tier| tier.number() <= self.settings.open_tiers)
         else {
             let reason = format!("tier {tier} is not open");
             return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
         };
+        let run = random_hex(8)?;
+        let paid_for = run.clone();
+        // Supplies are paid before launching: the posted price, or all the pilot
+        // has if that is less.
+        let (paid, holdings) = self
+            .identity
+            .store
+            .call(move |s| {
+                let due = supplies_due(s.load(account)?.credits);
+                if due > 0 {
+                    s.transfer(&[Transfer {
+                        item: Item::Credits,
+                        amount: due,
+                        from: Party::Account(account),
+                        to: Party::Npc(Npc::Supplies),
+                        reason: Reason::LaunchSupplies,
+                        run: Some(paid_for),
+                    }])?;
+                }
+                Ok((due, s.load(account)?))
+            })
+            .await?;
         self.log_unloading();
         info!(
             target: "frontier::run",
-            run = self.seed,
+            run,
             seconds = self.offered_at.elapsed().as_secs(),
             "preparation"
         );
@@ -329,9 +469,17 @@ impl Pilot<'_> {
             tier,
             options: Options {
                 opening_threat: self.settings.opening_threat,
+                supplies_paid: Some(paid),
             },
+            run,
+            pilot: account,
+            store: self.identity.store.clone(),
         };
         let launched = Expedition::launch(order, self.session.clone(), self.events_tx.clone());
+        let message = ServerMessage::Account {
+            account: wire::account(&holdings),
+        };
+        write_frame(&mut self.send, &message).await?;
         write_frame(&mut self.send, &launched.joined).await?;
         self.flying = Some((launched.expedition, launched.ship));
         Ok(())

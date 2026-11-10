@@ -52,6 +52,8 @@ FRONTIER_SITE=compact cargo run -p frontier-server        # short legs for tryin
 FRONTIER_TIERS=3 cargo run -p frontier-server             # open tiers II and III before facilities exist
 FRONTIER_SEED=29 cargo run -p frontier-server             # every contract on one seed (the e2e tests use 29)
 FRONTIER_NPCS=24 cargo run -p frontier-server             # opening threat at the NPC cap (frame time shows in the client)
+FRONTIER_DATA=/tmp/w.db cargo run -p frontier-server     # where saves go (default data/frontier.db)
+FRONTIER_ORIGIN=https://host cargo run -p frontier-server # the page origin passkeys bind to (default http://localhost:<port>)
 cargo run --release -p frontier-server --example caps     # server tick cost and snapshot size at the caps
 docker compose up --build       # server and built client in a Linux container, http://localhost:8080/
 
@@ -165,7 +167,9 @@ Decided:
 - Wire format: JSON on reliable streams for everything except snapshots, which are compact binary
   datagrams. A transport spike (removed; in Git history at commit 3d37c06) showed why: on a
   lossy link, large reliable messages hitch whether or not each has its own stream.
-- Identity: passkeys (WebAuthn).
+- Identity: passkeys (WebAuthn), through webauthn-rs. On the playtest machines the owner
+  provides, each tester has their own operating-system account, which holds their passkey.
+  Passkeys need a domain name, so the game is opened at `localhost`, never `127.0.0.1`.
 - Persistence: embedded SQLite, with an append-only ledger beside the saves. Stage 1 data may be
   wiped; saves are still versioned.
 - Prediction: the browser runs `frontier-sim`'s movement rules compiled to WebAssembly.

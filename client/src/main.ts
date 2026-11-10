@@ -5,7 +5,7 @@
 import { Vector3 } from "three";
 import { connect, fetchConnectInfo } from "./net/connection";
 import type { Connection } from "./net/connection";
-import type { OwnStatus, RunSummary, SnapshotEvent } from "./protocol";
+import type { AccountInfo, OwnStatus, RunSummary, SnapshotEvent } from "./protocol";
 import type { EntityPose } from "./net/interpolation";
 import { Predictor } from "./game/prediction";
 import { FrameTimer } from "./game/frameTimer";
@@ -25,6 +25,15 @@ import {
   summaryLines,
 } from "./game/contract";
 import type { Contract, Joined, Scanned } from "./game/contract";
+import {
+  SignInRefusedError,
+  register,
+  resume,
+  signIn,
+  storeToken,
+  storedToken,
+} from "./game/identity";
+import type { SignedIn } from "./game/identity";
 import { distanceText, placeMarkers } from "./game/navigation";
 import type { NavTarget } from "./game/navigation";
 import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
@@ -70,10 +79,12 @@ const run = line("run");
 const scan = line("scan");
 const lock = line("lock");
 const notice = line("notice");
+const accountLine = line("account");
 const nav = element("div", "nav");
+const signInPanel = element("div", "signin", "panel");
 const briefing = element("div", "briefing", "panel");
 const summaryPanel = element("div", "summary", "panel");
-document.body.append(nav, briefing, summaryPanel);
+document.body.append(nav, signInPanel, briefing, summaryPanel);
 
 function showStatus(state: "connecting" | "connected" | "closed" | "offline", text: string) {
   status.dataset.state = state;
@@ -142,6 +153,95 @@ async function start(): Promise<void> {
   const loaded = await rules;
   const view = new ExpeditionView(document.body, -1, START_WIDTH);
   play(connection, view, loaded);
+  await identify(connection);
+}
+
+/** Shows what the pilot's home holds. */
+function showAccount(callsign: string, account: AccountInfo): void {
+  accountLine.dataset.credits = String(account.credits);
+  accountLine.textContent =
+    `${callsign} · ${String(account.credits)} cr · ${String(account.ore)} ore · ` +
+    `${String(account.salvage)} salvage · ${String(account.volatiles)} volatiles`;
+}
+
+let callsign = "";
+
+/**
+ * Signs the pilot in: with the tab's session token if it still works, else through the sign-in
+ * panel, where they register a new pilot or sign in with their passkey.
+ */
+async function identify(connection: Connection): Promise<void> {
+  const token = storedToken();
+  if (token !== null) {
+    try {
+      signedIn(await resume(connection, token));
+      return;
+    } catch {
+      storeToken(null);
+    }
+  }
+  await new Promise<void>((done) => {
+    showSignIn(connection, done);
+  });
+}
+
+function signedIn(message: SignedIn): void {
+  storeToken(message.token);
+  callsign = message.callsign;
+  showAccount(callsign, message.account);
+  delete signInPanel.dataset.state;
+  signInPanel.replaceChildren();
+}
+
+function showSignIn(connection: Connection, done: () => void): void {
+  signInPanel.replaceChildren();
+  signInPanel.dataset.state = "open";
+  const title = element("h2");
+  title.textContent = "Frontier Outpost";
+  const label = element("label");
+  label.textContent = "Callsign ";
+  const input = element("input", "callsign");
+  input.autocomplete = "username webauthn";
+  input.maxLength = 16;
+  label.append(input);
+  const note = element("p");
+  note.textContent = "Sign in with your passkey, or make a new pilot.";
+  const signInButton = element("button");
+  signInButton.dataset.action = "sign-in";
+  signInButton.textContent = "Sign in with passkey";
+  const registerButton = element("button");
+  registerButton.dataset.action = "register";
+  registerButton.textContent = "New pilot";
+  const attempt = (how: typeof signIn) => {
+    const name = input.value.trim();
+    if (!name) {
+      note.textContent = "Enter your callsign first.";
+      return;
+    }
+    signInButton.disabled = true;
+    registerButton.disabled = true;
+    how(connection, name)
+      .then((message) => {
+        signedIn(message);
+        done();
+      })
+      .catch((error: unknown) => {
+        note.textContent =
+          error instanceof SignInRefusedError
+            ? error.message
+            : `Not signed in: ${error instanceof Error ? error.message : String(error)}`;
+        signInButton.disabled = false;
+        registerButton.disabled = false;
+      });
+  };
+  signInButton.addEventListener("click", () => {
+    attempt(signIn);
+  });
+  registerButton.addEventListener("click", () => {
+    attempt(register);
+  });
+  signInPanel.append(title, label, note, signInButton, registerButton);
+  input.focus();
 }
 
 /** One run's flight, from launch until the run is over. */
@@ -223,7 +323,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const note = element("p");
     note.textContent =
       "Fly out, extract, and dock with at least 10 units to collect the contract. " +
-      "Supplies cost 40 cr a launch. Scanning in the site reveals the rest.";
+      "Supplies cost 40 cr a launch, or what you have if less. " +
+      "Scanning in the site reveals the rest.";
     const tiers = element("div", undefined, "tiers");
     for (const tier of offer.tiers) {
       const button = element("button");
@@ -299,6 +400,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         break;
       case "scanned":
         reveal = message;
+        break;
+      case "account":
+        showAccount(callsign, message.account);
         break;
       case "extractRefused":
         showNotice(refusalText(message.reason));

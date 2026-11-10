@@ -106,9 +106,30 @@
         margin: 0 0 8px;
         padding-left: 20px;
       }
+      #signin[data-state="open"],
       #briefing[data-state="open"],
       #summary[data-ending] {
         display: block;
+      }
+      .panel label {
+        display: block;
+        margin: 8px 0;
+      }
+      .panel input {
+        padding: 5px 8px;
+        color: inherit;
+        background: #0b1220;
+        border: 1px solid #4a7ab0;
+        border-radius: 4px;
+        font: inherit;
+      }
+      #account {
+        top: 12px;
+        left: auto;
+        right: 12px;
+      }
+      #account:empty {
+        display: none;
       }
       .panel button {
         margin: 10px 8px 0 0;

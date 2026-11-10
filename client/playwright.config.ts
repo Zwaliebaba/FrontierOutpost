@@ -17,6 +17,8 @@ const server = (port: number, extra: Record<string, string>) => ({
     FRONTIER_CLIENT_DIR: "client/dist",
     FRONTIER_SITE: "compact",
     FRONTIER_SEED: SEED,
+    // Each server its own saves; tests use fresh callsigns, so old saves do no harm.
+    FRONTIER_DATA: `target/e2e/${String(port)}.db`,
     ...extra,
   },
   reuseExistingServer: false,
@@ -34,7 +36,8 @@ export const shared = defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: `http://127.0.0.1:${String(HTTP_PORT)}`,
+    // Passkeys need a domain name: localhost, never 127.0.0.1.
+    baseURL: `http://localhost:${String(HTTP_PORT)}`,
     trace: "off",
     // A configured HTTP proxy cannot carry WebTransport, which runs over UDP.
     launchOptions: { args: ["--no-proxy-server"] },

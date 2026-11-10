@@ -2,12 +2,22 @@
 //! knows nothing of the protocol, so the server maps one to the other.
 
 use frontier_protocol::{
-    DominantThreat, Ending, Hazard, Material, PocketInfo, PocketKind, RunSummary, ServerMessage,
-    SiteInfo, TierOffer,
+    AccountInfo, DominantThreat, Ending, Hazard, Material, PocketInfo, PocketKind, RunSummary,
+    ServerMessage, SiteInfo, TierOffer,
 };
 use frontier_sim::outcome;
 use frontier_sim::run::{self, DOCK_RADIUS, seconds};
 use frontier_sim::site::{self, Site, SiteTemplate, ThreatTier};
+
+#[must_use]
+pub fn account(account: &crate::account::Account) -> AccountInfo {
+    AccountInfo {
+        credits: account.credits,
+        ore: account.stock.ore,
+        salvage: account.stock.salvage,
+        volatiles: account.stock.volatiles,
+    }
+}
 
 #[must_use]
 pub fn material(material: site::Material) -> Material {

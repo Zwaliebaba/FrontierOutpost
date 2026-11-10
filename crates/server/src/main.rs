@@ -1,6 +1,9 @@
 use frontier_protocol::{ConnectInfo, PROTOCOL_VERSION};
+use frontier_server::auth::Auth;
 use frontier_server::cert::DevCertificate;
 use frontier_server::config::Config;
+use frontier_server::store::Store;
+use frontier_server::transport::Identity;
 use frontier_server::{http, relay, transport};
 use time::OffsetDateTime;
 use tracing::{info, warn};
@@ -54,15 +57,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(config.http_addr).await?;
     let http_addr = listener.local_addr()?;
 
+    // Passkeys are bound to the origin, and an IP address cannot be one, so the
+    // game is opened at localhost (or the configured origin), not 127.0.0.1.
+    let origin = config.origin(http_addr);
+    let auth = Auth::new(&origin)?;
+    let store = Store::open(&config.data_path)?;
+    info!(data = %config.data_path.display(), world = store.world(), "saves");
+
     info!(protocol = PROTOCOL_VERSION, %web_transport_addr, %browser_addr, "WebTransport listening");
-    info!(client = %config.client_dir.display(), "open http://{http_addr}/");
+    info!(client = %config.client_dir.display(), %http_addr, "open {origin}");
 
     info!(
         site = config.settings.template.name,
         tiers = config.settings.open_tiers,
         "contracts"
     );
-    tokio::spawn(transport::serve(server, config.settings));
+    tokio::spawn(transport::serve(
+        server,
+        config.settings,
+        Identity { store, auth },
+    ));
     axum::serve(listener, http::router(connect, &config.client_dir))
         .with_graceful_shutdown(shutdown_signal())
         .await?;

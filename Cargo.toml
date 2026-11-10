@@ -31,6 +31,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Persistence and identity (AGENTS.md section 8). SQLite is compiled in, so no system library.
 getrandom = "0.4"
 rusqlite = { version = "0.41", features = ["bundled"] }
+sha2 = "0.11"
+# Pure Rust from 0.6: no OpenSSL to install in CI or the container.
+webauthn-rs = "0.6"
+# Tests only: a software passkey to register and sign in with.
+webauthn-authenticator-rs = { version = "0.6", features = ["softpasskey"] }
 url = "2"
 # Pinned exactly: the wasm-bindgen command-line tool must be the same version.
 wasm-bindgen = "=0.2.130"

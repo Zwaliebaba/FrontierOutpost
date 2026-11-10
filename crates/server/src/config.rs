@@ -7,6 +7,8 @@ use std::time::Duration;
 use frontier_sim::site::{COMPACT_SITE, FRONTIER_SITE};
 use frontier_sim::skirmish::MAX_NPCS;
 
+use webauthn_rs::prelude::Url;
+
 use crate::relay::Impairment;
 use crate::transport::Settings;
 
@@ -28,6 +30,12 @@ pub struct Config {
     pub impairment: Impairment,
     /// What every launch offers and how.
     pub settings: Settings,
+    /// The SQLite file that holds the world's saves.
+    pub data_path: PathBuf,
+    /// The origin pages are served from, as browsers see it, when it is not
+    /// `http://localhost` on the HTTP port. Passkeys are bound to it, and need
+    /// a domain name: an IP address cannot be a relying party.
+    pub origin: Option<Url>,
 }
 
 /// Why the configuration could not be read.
@@ -56,6 +64,8 @@ const SITE: &str = "FRONTIER_SITE";
 const TIERS: &str = "FRONTIER_TIERS";
 const SEED: &str = "FRONTIER_SEED";
 const NPCS: &str = "FRONTIER_NPCS";
+const DATA: &str = "FRONTIER_DATA";
+const ORIGIN: &str = "FRONTIER_ORIGIN";
 
 /// Reads a whole number from `min` to `max`, if the variable is set.
 fn whole(
@@ -139,6 +149,20 @@ impl Config {
                 seed: whole(&lookup, SEED, 0, u32::MAX)?,
                 opening_threat: whole(&lookup, NPCS, 0, MAX_NPCS as u32)?,
             },
+            data_path: lookup(DATA)
+                .map_or_else(|| PathBuf::from("data/frontier.db"), PathBuf::from),
+            origin: lookup(ORIGIN)
+                .map(|value| {
+                    Url::parse(&value)
+                        .ok()
+                        .filter(|url| url.domain().is_some())
+                        .ok_or(ConfigError::Invalid {
+                            name: ORIGIN,
+                            expected: "a URL with a domain name, such as http://localhost:8080",
+                            value,
+                        })
+                })
+                .transpose()?,
         };
         if config.public_web_transport_addr.is_some() && config.impairment.is_active() {
             return Err(ConfigError::PublicAddressWithImpairment);
@@ -151,6 +175,17 @@ impl Config {
     #[must_use]
     pub fn browser_addr(&self, listening: SocketAddr) -> SocketAddr {
         self.public_web_transport_addr.unwrap_or(listening)
+    }
+
+    /// The origin browsers load the game from, given the HTTP address the
+    /// server actually listens on: the configured one, or `http://localhost`
+    /// on that port.
+    #[must_use]
+    pub fn origin(&self, http: SocketAddr) -> Url {
+        self.origin.clone().unwrap_or_else(|| {
+            Url::parse(&format!("http://localhost:{}", http.port()))
+                .expect("localhost with a port is a valid URL")
+        })
     }
 
     /// Reads the configuration from the process environment.
@@ -293,5 +328,32 @@ mod tests {
             let result = Config::from_lookup(move |n| (n == name).then(|| value.clone()));
             assert!(result.is_err(), "{name}");
         }
+    }
+
+    #[test]
+    fn reads_the_data_path_and_origin() {
+        let defaults = Config::from_lookup(|_| None).unwrap();
+        assert_eq!(defaults.data_path, PathBuf::from("data/frontier.db"));
+        assert_eq!(
+            defaults.origin("127.0.0.1:43123".parse().unwrap()).as_str(),
+            "http://localhost:43123/",
+            "localhost on the port actually bound"
+        );
+        let set = Config::from_lookup(|name| match name {
+            DATA => Some("/var/lib/frontier/world.db".into()),
+            ORIGIN => Some("https://outpost.example".into()),
+            _ => None,
+        })
+        .unwrap();
+        assert_eq!(set.data_path, PathBuf::from("/var/lib/frontier/world.db"));
+        assert_eq!(
+            set.origin("0.0.0.0:8080".parse().unwrap()).as_str(),
+            "https://outpost.example/"
+        );
+        assert!(
+            Config::from_lookup(|name| (name == ORIGIN).then(|| "http://127.0.0.1:8080".into()))
+                .is_err(),
+            "passkeys cannot use an IP address"
+        );
     }
 }

@@ -226,6 +226,9 @@ pub enum Drive {
 pub struct Options {
     /// Replaces the site's opening threat, up to the NPC cap; for benchmarks.
     pub opening_threat: Option<u32>,
+    /// What each pilot actually paid for supplies, when it was less than
+    /// [`LAUNCH_COST`]: a pilot short of credits pays what they have.
+    pub supplies_paid: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -288,6 +291,8 @@ pub struct Run {
     warned: bool,
     ended: Option<EndReason>,
     events: Vec<(u32, RunEvent)>,
+    /// What each pilot paid for supplies.
+    launch_cost: u32,
 }
 
 impl Run {
@@ -337,12 +342,13 @@ impl Run {
             warned: false,
             ended: None,
             events: Vec::new(),
+            launch_cost: options.supplies_paid.unwrap_or(LAUNCH_COST),
         };
         run.log(RunEvent::Launched { pilots });
         for &pilot in &ships {
             run.log(RunEvent::SuppliesSpent {
                 pilot,
-                credits: LAUNCH_COST,
+                credits: run.launch_cost,
             });
         }
         let opening = options
@@ -990,7 +996,7 @@ impl Run {
             ending,
             banked,
             payout,
-            launch_cost: LAUNCH_COST,
+            launch_cost: self.launch_cost,
             lost: losses(
                 ending,
                 Loadout {
@@ -1063,6 +1069,7 @@ mod tests {
             1,
             Options {
                 opening_threat: Some(0),
+                ..Options::default()
             },
         );
         (run, ships[0])
@@ -1121,6 +1128,26 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn a_pilot_short_of_credits_launches_on_what_they_paid() {
+        let site = Site::generate(COMPACT_SITE, 4, ThreatTier::I, 1, &[]);
+        let options = Options {
+            opening_threat: Some(0),
+            supplies_paid: Some(25),
+        };
+        let (mut run, ships) = Run::launch(site, 1, options);
+        assert!(events(&mut run).contains(&RunEvent::SuppliesSpent {
+            pilot: ships[0],
+            credits: 25
+        }));
+        run.leave(ships[0]);
+        let summary = events(&mut run).into_iter().find_map(|event| match event {
+            RunEvent::Abandoned { summary, .. } => Some(summary),
+            _ => None,
+        });
+        assert_eq!(summary.map(|s| s.launch_cost), Some(25));
     }
 
     #[test]
@@ -1452,6 +1479,7 @@ mod tests {
             1,
             Options {
                 opening_threat: Some(0),
+                ..Options::default()
             },
         );
         let ship = ships[0];
@@ -1524,6 +1552,7 @@ mod tests {
             1,
             Options {
                 opening_threat: Some(0),
+                ..Options::default()
             },
         );
         let d = run.site.deposits[veins];

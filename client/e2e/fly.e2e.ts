@@ -1,7 +1,7 @@
-import { expect, launch, position, test } from "./fixtures";
+import { expect, launch, position, signUp, test } from "./fixtures";
 
 test("the briefing shows the contract and opens only tier I", async ({ page }) => {
-  await page.goto("/");
+  await signUp(page);
   const briefing = page.locator("#briefing");
   await expect(briefing).toHaveAttribute("data-state", "open");
   await expect(briefing).toContainText("Ore field: open");

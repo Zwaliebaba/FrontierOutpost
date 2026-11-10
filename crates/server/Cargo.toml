@@ -16,6 +16,7 @@ rusqlite.workspace = true
 rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 time.workspace = true
 tokio.workspace = true
@@ -23,12 +24,14 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 web-transport-quinn.workspace = true
+webauthn-rs.workspace = true
 
 [dev-dependencies]
 # Paused time lets expedition tests run seconds of ticks instantly.
 tokio = { workspace = true, features = ["test-util"] }
 tower.workspace = true
 url.workspace = true
+webauthn-authenticator-rs.workspace = true
 
 [lints]
 workspace = true

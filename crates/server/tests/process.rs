@@ -14,6 +14,17 @@ use std::time::Duration;
 
 use frontier_protocol::{CONNECT_INFO_PATH, ConnectInfo};
 
+/// A fresh save file for one server.
+fn data_path() -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    std::env::temp_dir().join(format!(
+        "frontier-process-{}-{}.db",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ))
+}
+
 /// A running server binary, killed when dropped.
 struct Server {
     child: Child,
@@ -27,6 +38,7 @@ impl Server {
         let mut child = Command::new(env!("CARGO_BIN_EXE_frontier-server"))
             .env("FRONTIER_HTTP_ADDR", "127.0.0.1:0")
             .env("FRONTIER_WEBTRANSPORT_ADDR", "127.0.0.1:0")
+            .env("FRONTIER_DATA", data_path())
             .env("NO_COLOR", "1")
             .envs(env.iter().copied())
             .stdout(Stdio::piped())
@@ -88,6 +100,7 @@ fn refuses_to_start_with_a_public_address_and_an_impairment() {
         .env("FRONTIER_WEBTRANSPORT_ADDR", "127.0.0.1:0")
         .env("FRONTIER_PUBLIC_WEBTRANSPORT_ADDR", "127.0.0.1:4443")
         .env("FRONTIER_IMPAIR_DELAY_MS", "75")
+        .env("FRONTIER_DATA", data_path())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()

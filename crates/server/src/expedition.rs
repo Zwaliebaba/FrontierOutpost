@@ -16,14 +16,15 @@ use frontier_protocol::snapshot::{
     quantize_velocity,
 };
 use frontier_protocol::{
-    DepositInfo, ExtractRefusal, ObstacleInfo, RunSummary, ServerMessage, WaveInfo,
+    AccountInfo, DepositInfo, ExtractRefusal, ObstacleInfo, RunSummary, ServerMessage, WaveInfo,
 };
 use frontier_sim::TICKS_PER_SECOND;
 use frontier_sim::combat::Event;
 use frontier_sim::extraction::{EXTRACT_RANGE, ExtractorState, Refusal};
 use frontier_sim::profile::ShipKind;
 use frontier_sim::run::{
-    Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Run, RunEvent, seconds,
+    Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Run, RunEvent, Summary,
+    seconds,
 };
 use frontier_sim::ship::ShipInput;
 use frontier_sim::site::{Site, SiteTemplate, ThreatTier, crew_scaling};
@@ -34,6 +35,8 @@ use tracing::{debug, info, warn};
 use web_transport_quinn::Session;
 
 use crate::input_queue::InputQueue;
+use crate::ledger::{Item, Npc, Party, Reason, Transfer};
+use crate::store::{AccountId, Store};
 use crate::wire;
 
 /// Pilots per expedition (design section 2).
@@ -68,13 +71,26 @@ pub enum PilotEvent {
     RunOver(RunSummary),
 }
 
-/// What a launch needs: the contract the pilot accepted.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// What a launch needs: the contract the pilot accepted, and where to bank
+/// what they bring home.
+#[derive(Clone)]
 pub struct LaunchOrder {
     pub template: SiteTemplate,
     pub seed: u32,
     pub tier: ThreatTier,
     pub options: Options,
+    /// Names the run in the log and the ledger.
+    pub run: String,
+    /// The account the pilot flies for.
+    pub pilot: AccountId,
+    pub store: Store,
+}
+
+/// What an instance needs besides its run to report outcomes.
+struct Books {
+    run: String,
+    store: Store,
+    accounts: HashMap<ShipId, AccountId>,
 }
 
 enum Command {
@@ -139,9 +155,20 @@ impl Expedition {
                 last_input: None,
             },
         );
-        let id = order.seed;
-        info!(target: "frontier::run", run = id, tier = order.tier.number(), site = order.template.name, "launched");
-        tokio::spawn(fly(receiver, run, pilots, id));
+        info!(
+            target: "frontier::run",
+            run = order.run,
+            seed = order.seed,
+            tier = order.tier.number(),
+            site = order.template.name,
+            "launched"
+        );
+        let books = Books {
+            run: order.run,
+            store: order.store,
+            accounts: HashMap::from([(ship, order.pilot)]),
+        };
+        tokio::spawn(fly(receiver, run, pilots, books));
         Launched {
             expedition: Self { commands },
             ship,
@@ -195,36 +222,36 @@ async fn fly(
     mut commands: mpsc::UnboundedReceiver<Command>,
     mut run: Run,
     mut pilots: HashMap<ShipId, Pilot>,
-    id: u32,
+    books: Books,
 ) {
     let mut ticker = interval(Duration::from_secs(1) / TICKS_PER_SECOND);
     // After a stall, carry on at the normal rate rather than racing to catch up.
     ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
     loop {
         tokio::select! {
-                    command = commands.recv() => match command {
-                        Some(command) => apply(command, &mut run, &mut pilots),
-                        // Every handle is gone: the server is shutting down.
-                        None => return,
-                    },
-                    _ = ticker.tick() => {
-                        // One input per pilot per tick, in order, as the client predicts.
-                        for (ship, pilot) in &mut pilots {
-                            if let Some((sequence, controls)) = pilot.inputs.take_for_tick() {
-                                pilot.last_input = Some(sequence);
-                                let input = ShipInput {
-                                    thrust: controls.thrust_unit(),
-                                    turn: controls.turn_unit(),
-                                    cruise: controls.cruise,
-        };
-                                run.set_controls(*ship, input, controls.fire);
-                            }
-                        }
-                        run.step();
-                        broadcast(&run, &mut pilots);
+            command = commands.recv() => match command {
+                Some(command) => apply(command, &mut run, &mut pilots),
+                // Every handle is gone: the server is shutting down.
+                None => return,
+            },
+            _ = ticker.tick() => {
+                // One input per pilot per tick, in order, as the client predicts.
+                for (ship, pilot) in &mut pilots {
+                    if let Some((sequence, controls)) = pilot.inputs.take_for_tick() {
+                        pilot.last_input = Some(sequence);
+                        let input = ShipInput {
+                            thrust: controls.thrust_unit(),
+                            turn: controls.turn_unit(),
+                            cruise: controls.cruise,
+                        };
+                        run.set_controls(*ship, input, controls.fire);
                     }
                 }
-        report(&mut run, &mut pilots, id);
+                run.step();
+                broadcast(&run, &mut pilots);
+            }
+        }
+        report(&mut run, &mut pilots, &books).await;
         if run.ended().is_some() {
             return;
         }
@@ -272,9 +299,11 @@ fn tell(pilots: &HashMap<ShipId, Pilot>, ship: ShipId, message: ServerMessage) {
 }
 
 /// Writes the run's new events to the log and tells pilots what concerns them.
-fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, id: u32) {
+/// Writes the run's new events to the log, banks what docked pilots brought
+/// home, and tells pilots what concerns them.
+async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &Books) {
     for (tick, event) in run.take_events() {
-        info!(target: "frontier::run", run = id, tick, event = ?event);
+        info!(target: "frontier::run", run = books.run, tick, event = ?event);
         match event {
             RunEvent::Scanned { .. } => {
                 let message = scanned(run);
@@ -292,13 +321,66 @@ fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, id: u32) {
             RunEvent::Docked { pilot, summary }
             | RunEvent::Destroyed { pilot, summary }
             | RunEvent::Abandoned { pilot, summary } => {
+                let holdings = bank(books, pilot, &summary).await;
                 if let Some(home) = pilots.remove(&pilot) {
+                    if let Some(holdings) = holdings {
+                        let message = ServerMessage::Account { account: holdings };
+                        let _ = home.events.send(PilotEvent::Message(message));
+                    }
                     let _ = home
                         .events
                         .send(PilotEvent::RunOver(wire::summary(&summary)));
                 }
             }
             _ => {}
+        }
+    }
+}
+
+/// Moves a docked pilot's cargo and contract payout into their account through
+/// the ledger, and returns what the account holds afterwards. The instance
+/// does this itself, so cargo is banked even if the pilot's connection drops
+/// as they dock.
+async fn bank(books: &Books, pilot: ShipId, summary: &Summary) -> Option<AccountInfo> {
+    let account = *books.accounts.get(&pilot)?;
+    let run = Some(books.run.clone());
+    let mut batch: Vec<Transfer> = [Item::Ore, Item::Salvage, Item::Volatiles]
+        .into_iter()
+        .zip(summary.banked)
+        .filter(|&(_, units)| units > 0)
+        .map(|(item, units)| Transfer {
+            item,
+            amount: units,
+            from: Party::Site,
+            to: Party::Account(account),
+            reason: Reason::Banked,
+            run: run.clone(),
+        })
+        .collect();
+    if summary.payout > 0 {
+        batch.push(Transfer {
+            item: Item::Credits,
+            amount: summary.payout,
+            from: Party::Npc(Npc::Contract),
+            to: Party::Account(account),
+            reason: Reason::ContractPayout,
+            run,
+        });
+    }
+    let result = books
+        .store
+        .call(move |store| {
+            if !batch.is_empty() {
+                store.transfer(&batch)?;
+            }
+            store.load(account)
+        })
+        .await;
+    match result {
+        Ok(holdings) => Some(wire::account(&holdings)),
+        Err(error) => {
+            warn!(%error, account = account.0, "could not bank the run");
+            None
         }
     }
 }
@@ -534,11 +616,19 @@ mod tests {
     }
 
     fn order(opening_threat: Option<u32>) -> LaunchOrder {
+        let store = Store::in_memory().unwrap();
+        let pilot = store.create_account("Vega").unwrap();
         LaunchOrder {
             template: COMPACT_SITE,
             seed: 11,
             tier: ThreatTier::I,
-            options: Options { opening_threat },
+            options: Options {
+                opening_threat,
+                ..Options::default()
+            },
+            run: "test".into(),
+            pilot,
+            store,
         }
     }
 
@@ -640,5 +730,34 @@ mod tests {
             .find(|e| e.id == launched.ship.0)
             .unwrap();
         assert_eq!(me.hull, u8::MAX);
+    }
+
+    #[tokio::test]
+    async fn docked_cargo_and_the_payout_reach_the_account_through_the_ledger() {
+        use frontier_sim::outcome::{Ending, Loadout};
+        use frontier_sim::run::PhaseTimes;
+        let store = Store::in_memory().unwrap();
+        let account = store.create_account("Vega").unwrap();
+        let books = Books {
+            run: "run-1".into(),
+            store: store.clone(),
+            accounts: HashMap::from([(ShipId(0), account)]),
+        };
+        let summary = Summary {
+            ending: Ending::Docked,
+            banked: [12, 0, 2],
+            payout: 100,
+            launch_cost: 40,
+            lost: Loadout::default(),
+            phases: PhaseTimes::default(),
+        };
+        let holdings = bank(&books, ShipId(0), &summary).await.unwrap();
+        assert_eq!(
+            (holdings.credits, holdings.ore, holdings.volatiles),
+            (200, 12, 2)
+        );
+        let folded = store.ledger_balance(account).unwrap();
+        assert!(folded.contains(&(crate::ledger::Item::Ore, 12)));
+        assert!(folded.contains(&(crate::ledger::Item::Credits, 200)));
     }
 }

@@ -8,9 +8,11 @@
 use std::sync::Arc;
 
 use frontier_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage, frame};
+use frontier_server::auth::Auth;
 use frontier_server::cert::DevCertificate;
+use frontier_server::store::Store;
 use frontier_server::transport;
-use frontier_server::transport::Settings;
+use frontier_server::transport::{Identity, Settings};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{CryptoProvider, verify_tls13_signature};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
@@ -19,6 +21,8 @@ use time::OffsetDateTime;
 use web_transport_quinn::proto::ConnectRequest;
 use web_transport_quinn::quinn;
 use web_transport_quinn::{Client, RecvStream, SendStream, Session, crypto};
+pub use webauthn_authenticator_rs::WebauthnAuthenticator;
+pub use webauthn_authenticator_rs::softpasskey::SoftPasskey;
 
 /// What tests launch: the compact site with a fixed seed.
 pub fn test_settings() -> Settings {
@@ -52,8 +56,59 @@ pub fn start_server_with(
         transport::bind_with_idle_timeout("127.0.0.1:0".parse().unwrap(), &cert, idle_timeout)
             .unwrap();
     let addr = server.local_addr().unwrap();
-    tokio::spawn(transport::serve(server, settings));
+    let identity = Identity {
+        store: Store::in_memory().unwrap(),
+        auth: Auth::new(&origin()).unwrap(),
+    };
+    tokio::spawn(transport::serve(server, settings, identity));
     (format!("https://{addr}/").parse().unwrap(), cert.sha256)
+}
+
+/// The origin test servers bind passkeys to: where a browser would load the game.
+pub fn origin() -> url::Url {
+    "http://localhost:8080".parse().unwrap()
+}
+
+/// Registers a new pilot with a software passkey after the handshake, and
+/// returns their callsign and session token. The server's contract follows.
+pub async fn sign_up(send: &mut SendStream, recv: &mut RecvStream) -> (String, String) {
+    sign_up_with(send, recv, &mut SoftPasskey::new(true)).await
+}
+
+/// As [`sign_up`], registering the passkey on `key`.
+pub async fn sign_up_with(
+    send: &mut SendStream,
+    recv: &mut RecvStream,
+    key: &mut SoftPasskey,
+) -> (String, String) {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let callsign = format!("Pilot-{}", NEXT.fetch_add(1, Ordering::Relaxed));
+    write(
+        send,
+        &ClientMessage::Register {
+            callsign: callsign.clone(),
+        },
+    )
+    .await;
+    let ServerMessage::PasskeyOptions { options } = read(recv).await else {
+        panic!("expected passkey options");
+    };
+    let credential = key
+        .do_registration(origin(), serde_json::from_str(&options).unwrap())
+        .unwrap();
+    write(
+        send,
+        &ClientMessage::PasskeyCredential {
+            credential: serde_json::to_string(&credential).unwrap(),
+        },
+    )
+    .await;
+    let ServerMessage::SignedIn { token, account, .. } = read(recv).await else {
+        panic!("expected SignedIn");
+    };
+    assert_eq!(account.credits, 100);
+    (callsign, token)
 }
 
 /// Connects to a fresh server the way a browser would: by pinning the

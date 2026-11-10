@@ -4,6 +4,7 @@
 //! trusts client-reported positions, hits, inventory or access.
 
 pub mod account;
+pub mod auth;
 pub mod caps;
 pub mod cert;
 pub mod config;
@@ -23,6 +24,10 @@ use frontier_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage};
 pub fn handshake(message: &ClientMessage) -> ServerMessage {
     match *message {
         ClientMessage::Lock { .. }
+        | ClientMessage::Register { .. }
+        | ClientMessage::SignIn { .. }
+        | ClientMessage::PasskeyCredential { .. }
+        | ClientMessage::Resume { .. }
         | ClientMessage::Launch { .. }
         | ClientMessage::Extract { .. }
         | ClientMessage::Vent
