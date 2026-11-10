@@ -111,11 +111,18 @@ window.addEventListener("blur", () => {
 });
 const axis = (positive: string[], negative: string[]) =>
   Number(positive.some((key) => held.has(key))) - Number(negative.some((key) => held.has(key)));
-const readControls = (): Controls => ({
+/**
+ * This tick's controls. `driveReady` is whether the cruise drive may engage, as the client
+ * judges it: the server last said so and the predicted ship is outside the site. The server
+ * judges again; asking only when it will agree keeps prediction close.
+ */
+const readControls = (driveReady: boolean): Controls => ({
   thrust: axis(["KeyW", "ArrowUp"], ["KeyS", "ArrowDown"]),
   turn: axis(["KeyD", "ArrowRight"], ["KeyA", "ArrowLeft"]),
   // Hold to fire at the locked target (the owner's choice for M2).
   fire: held.has("Space"),
+  // Hold Shift for the cruise drive on the legs (the owner's choice after playing M3).
+  cruise: driveReady && (held.has("ShiftLeft") || held.has("ShiftRight")),
 });
 
 // --- Game --------------------------------------------------------------------------------------
@@ -468,7 +475,13 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       untilTick += tickMs;
       if (untilTick < 0) untilTick = tickMs;
       if (current) {
-        const controls = readControls();
+        const site = contract?.site;
+        const at = current.predictor.state;
+        const outside =
+          site !== undefined &&
+          at !== null &&
+          Math.hypot(at.x - site.centreX, at.z - site.centreZ) > site.radius;
+        const controls = readControls(current.own?.drive === "ready" && outside);
         const { sequence, sent } = current.session.sendControls(controls);
         current.predictor.advance(sequence, sent);
         // Steering takes the view back to your own ship, so it is never flown off screen.
@@ -540,7 +553,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         `Ship ${String(session.shipId)} · hull ${String(Math.round((current.hull / 255) * 100))}% · ` +
         `round trip ${session.roundTripMs === null ? "–" : `${session.roundTripMs.toFixed(0)} ms`} · ` +
         `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm · ` +
-        `W A S D fly · Tab lock · Space fire · X extract · V vent · C scan`;
+        `W A S D fly · Shift cruise · Tab lock · Space fire · X extract · V vent · C scan`;
       const status = current.own;
       if (status) {
         const nearest = current.joined.deposits

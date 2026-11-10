@@ -3,6 +3,7 @@ export type { ClientMessage } from "./generated/ClientMessage";
 export type { ConnectInfo } from "./generated/ConnectInfo";
 export type { DepositInfo } from "./generated/DepositInfo";
 export type { DominantThreat } from "./generated/DominantThreat";
+export type { Drive } from "./generated/Drive";
 export type { Ending } from "./generated/Ending";
 export type { ExtractRefusal } from "./generated/ExtractRefusal";
 export type { ExtractorMode } from "./generated/ExtractorMode";

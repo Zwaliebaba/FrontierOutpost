@@ -82,3 +82,33 @@ test("flying out and back docks, shows the summary and offers the next contract"
   await expect(page.locator("#run")).toHaveAttribute("data-phase", "atDock");
   await expect(page.locator("#status")).toHaveAttribute("data-state", "connected");
 });
+
+test("holding Shift engages the cruise drive on the legs", async ({ page }) => {
+  await launch(page, QUIET);
+  const run = page.locator("#run");
+  await expect(run).toContainText("drive ready (Shift)");
+  const start = await position(page);
+  await page.keyboard.down("ShiftLeft");
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(2_000);
+  const cruised = await position(page);
+  await page.keyboard.up("KeyW");
+  await page.keyboard.up("ShiftLeft");
+  // Two seconds from rest: about 10 m at normal speed, three times the acceleration on the drive.
+  expect(cruised.x - start.x).toBeGreaterThan(20);
+  // Prediction ran the drive too, so the server barely corrected it.
+  const correction = Number(
+    /correction (\d+) cm/.exec((await page.textContent("#hud")) ?? "")?.[1],
+  );
+  expect(correction).toBeLessThan(150);
+});
+
+test("without Shift the ship keeps normal speed", async ({ page }) => {
+  await launch(page, QUIET);
+  const start = await position(page);
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(2_000);
+  const flown = await position(page);
+  await page.keyboard.up("KeyW");
+  expect(flown.x - start.x).toBeLessThan(15);
+});

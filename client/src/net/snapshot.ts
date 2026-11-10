@@ -3,6 +3,7 @@
  * the tests check this decoder against vectors written by the Rust encoder.
  */
 import type {
+  Drive,
   EntityKind,
   EntityState,
   ExtractorMode,
@@ -14,7 +15,7 @@ import type {
 
 export const SNAPSHOT_KIND = 1;
 const HEADER_BYTES = 7;
-const OWN_STATUS_BYTES = 10;
+const OWN_STATUS_BYTES = 11;
 const ENTITY_BYTES = 14;
 const NO_SCAN = 0xff;
 const PHASES: readonly RunPhase[] = [
@@ -27,6 +28,7 @@ const PHASES: readonly RunPhase[] = [
   "abandoned",
 ];
 const EXTRACTOR_MODES: readonly ExtractorMode[] = ["off", "on", "venting", "cutOut"];
+const DRIVES: readonly Drive[] = ["ready", "inSite", "hunted", "extracting"];
 const EVENT_BYTES = 6;
 const FIRED = 1;
 const DESTROYED = 2;
@@ -130,6 +132,10 @@ function decodeOwn(view: DataView): OwnStatus {
     throw new SnapshotError(`unknown extractor mode ${String(view.getUint8(at + 4))}`);
   }
   const scan = view.getUint8(at + 6);
+  const drive = DRIVES[view.getUint8(at + 10)];
+  if (drive === undefined) {
+    throw new SnapshotError(`unknown drive state ${String(view.getUint8(at + 10))}`);
+  }
   return {
     phase,
     cargo: view.getUint8(at + 1),
@@ -140,6 +146,7 @@ function decodeOwn(view: DataView): OwnStatus {
     scan: scan === NO_SCAN ? null : scan,
     alert: view.getUint8(at + 7),
     elapsedSeconds: view.getUint16(at + 8, true),
+    drive,
   };
 }
 

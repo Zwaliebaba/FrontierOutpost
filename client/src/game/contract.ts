@@ -4,6 +4,7 @@
  */
 import type {
   DominantThreat,
+  Drive,
   ExtractRefusal,
   ExtractorMode,
   Hazard,
@@ -120,7 +121,14 @@ function extractorText(mode: ExtractorMode, seconds: number): string {
   }
 }
 
-/** The run line: where the pilot is, the clock, the alert, the hold and the extractor. */
+const DRIVE_TEXT: Readonly<Record<Drive, string>> = {
+  ready: "drive ready (Shift)",
+  inSite: "drive off in the site",
+  hunted: "drive jammed: locked by a hostile",
+  extracting: "drive off while extracting",
+};
+
+/** The run line: where the pilot is, the clock, the alert, the hold, the extractor, the drive. */
 export function runLine(own: OwnStatus): string {
   const heat = own.heat / 255;
   return [
@@ -130,6 +138,7 @@ export function runLine(own: OwnStatus): string {
     `hold ${String(own.cargo)}/${String(own.capacity)}`,
     `heat ${bar(heat)} ${String(Math.round(heat * 100))}%`,
     `extractor ${extractorText(own.extractor, own.extractorSeconds)}`,
+    DRIVE_TEXT[own.drive],
   ].join(" · ");
 }
 

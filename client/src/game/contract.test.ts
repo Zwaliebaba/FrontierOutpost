@@ -13,6 +13,7 @@ const working: OwnStatus = {
   scan: null,
   alert: 2,
   elapsedSeconds: 187,
+  drive: "inSite",
 };
 
 describe("clock", () => {
@@ -34,11 +35,13 @@ describe("bar", () => {
 describe("runLine", () => {
   it("names the phase, clock, alert, hold, heat and extractor", () => {
     expect(runLine(working)).toBe(
-      "In the site · 3:07 · alert 2 · hold 7/20 · heat [#######...] 75% · extractor working",
+      "In the site · 3:07 · alert 2 · hold 7/20 · heat [#######...] 75% · extractor working · " +
+        "drive off in the site",
     );
     expect(runLine({ ...working, extractor: "cutOut", extractorSeconds: 14 })).toContain(
       "extractor CUT OUT 14 s",
     );
+    expect(runLine({ ...working, drive: "hunted" })).toContain("drive jammed");
   });
 });
 

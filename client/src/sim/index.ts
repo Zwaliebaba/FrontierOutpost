@@ -25,6 +25,8 @@ export interface ShipState {
 export interface ShipControls {
   thrust: number;
   turn: number;
+  /** The cruise drive is engaged (frontier_sim::ship::CRUISE_FACTOR times speed). */
+  cruise?: boolean;
 }
 
 export interface Sim {
@@ -47,6 +49,7 @@ const sim: Sim = {
       state.speed,
       controls.thrust,
       controls.turn,
+      controls.cruise === true,
     );
     return { x, z, heading, speed };
   },

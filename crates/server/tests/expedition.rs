@@ -55,16 +55,19 @@ const FORWARD: Controls = Controls {
     thrust: 127,
     turn: 0,
     fire: false,
+    cruise: false,
 };
 const BRAKE: Controls = Controls {
     thrust: -127,
     turn: 0,
     fire: false,
+    cruise: false,
 };
 const IDLE: Controls = Controls {
     thrust: 0,
     turn: 0,
     fire: false,
+    cruise: false,
 };
 
 impl Pilot {
@@ -163,6 +166,7 @@ async fn flying_out_and_back_docks_and_a_new_contract_follows() {
         thrust: 0,
         turn: quantize_control(1.0),
         fire: false,
+        cruise: false,
     };
     // 2.4 rad/s: half a turn in about 26 ticks.
     pilot.fly(about, 26).await;

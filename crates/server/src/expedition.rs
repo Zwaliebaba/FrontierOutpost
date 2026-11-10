@@ -11,8 +11,9 @@ use std::time::Duration;
 
 use frontier_protocol::input::InputDatagram;
 use frontier_protocol::snapshot::{
-    EntityKind, EntityState, ExtractorMode, MAX_DEPOSITS, MAX_EVENTS, OwnStatus, RunPhase,
-    Snapshot, SnapshotEvent, quantize_heading, quantize_position, quantize_velocity,
+    Drive as WireDrive, EntityKind, EntityState, ExtractorMode, MAX_DEPOSITS, MAX_EVENTS,
+    OwnStatus, RunPhase, Snapshot, SnapshotEvent, quantize_heading, quantize_position,
+    quantize_velocity,
 };
 use frontier_protocol::{
     DepositInfo, ExtractRefusal, ObstacleInfo, RunSummary, ServerMessage, WaveInfo,
@@ -22,7 +23,7 @@ use frontier_sim::combat::Event;
 use frontier_sim::extraction::{EXTRACT_RANGE, ExtractorState, Refusal};
 use frontier_sim::profile::ShipKind;
 use frontier_sim::run::{
-    INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Run, RunEvent, seconds,
+    Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Run, RunEvent, seconds,
 };
 use frontier_sim::ship::ShipInput;
 use frontier_sim::site::{Site, SiteTemplate, ThreatTier, crew_scaling};
@@ -201,27 +202,28 @@ async fn fly(
     ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
     loop {
         tokio::select! {
-            command = commands.recv() => match command {
-                Some(command) => apply(command, &mut run, &mut pilots),
-                // Every handle is gone: the server is shutting down.
-                None => return,
-            },
-            _ = ticker.tick() => {
-                // One input per pilot per tick, in order, as the client predicts.
-                for (ship, pilot) in &mut pilots {
-                    if let Some((sequence, controls)) = pilot.inputs.take_for_tick() {
-                        pilot.last_input = Some(sequence);
-                        let input = ShipInput {
-                            thrust: controls.thrust_unit(),
-                            turn: controls.turn_unit(),
-                        };
-                        run.set_controls(*ship, input, controls.fire);
+                    command = commands.recv() => match command {
+                        Some(command) => apply(command, &mut run, &mut pilots),
+                        // Every handle is gone: the server is shutting down.
+                        None => return,
+                    },
+                    _ = ticker.tick() => {
+                        // One input per pilot per tick, in order, as the client predicts.
+                        for (ship, pilot) in &mut pilots {
+                            if let Some((sequence, controls)) = pilot.inputs.take_for_tick() {
+                                pilot.last_input = Some(sequence);
+                                let input = ShipInput {
+                                    thrust: controls.thrust_unit(),
+                                    turn: controls.turn_unit(),
+                                    cruise: controls.cruise,
+        };
+                                run.set_controls(*ship, input, controls.fire);
+                            }
+                        }
+                        run.step();
+                        broadcast(&run, &mut pilots);
                     }
                 }
-                run.step();
-                broadcast(&run, &mut pilots);
-            }
-        }
         report(&mut run, &mut pilots, id);
         if run.ended().is_some() {
             return;
@@ -461,6 +463,12 @@ fn own_status(run: &Run, ship: ShipId) -> OwnStatus {
             .map(|p| (p.clamp(0.0, 1.0) * 254.0).round() as u8),
         alert: byte(status.alert),
         elapsed_seconds: u16::try_from(seconds(status.elapsed)).unwrap_or(u16::MAX),
+        drive: match status.drive {
+            Drive::Ready => WireDrive::Ready,
+            Drive::InSite => WireDrive::InSite,
+            Drive::Hunted => WireDrive::Hunted,
+            Drive::Extracting => WireDrive::Extracting,
+        },
     }
 }
 
@@ -570,6 +578,7 @@ mod tests {
             thrust: 127,
             turn: 0,
             fire: false,
+            cruise: false,
         };
         launched.expedition.input(
             launched.ship,

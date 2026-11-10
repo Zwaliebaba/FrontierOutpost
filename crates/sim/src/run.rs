@@ -195,6 +195,8 @@ pub enum RunEvent {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PilotStatus {
     pub phase: Phase,
+    /// Whether the cruise drive may engage, and if not, why.
+    pub drive: Drive,
     pub cargo: u32,
     pub capacity: u32,
     pub heat: f32,
@@ -204,6 +206,19 @@ pub struct PilotStatus {
     pub alert: u32,
     /// Ticks since launch.
     pub elapsed: u32,
+}
+
+/// Whether a pilot's cruise drive may engage this tick, and if not, why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Drive {
+    #[default]
+    Ready,
+    /// Inside the site's circle: pockets are flown at normal speed.
+    InSite,
+    /// A hostile has the ship locked: so return-leg raiders still catch it.
+    Hunted,
+    /// The extractor is working.
+    Extracting,
 }
 
 /// Settings a run is launched with besides its site.
@@ -227,6 +242,9 @@ struct PilotRun {
     first_pocket_at: Option<u32>,
     last_pocket_exit_at: Option<u32>,
     payout: u32,
+    /// The pilot holds the cruise control.
+    cruise_requested: bool,
+    drive: Drive,
 }
 
 impl PilotRun {
@@ -306,6 +324,8 @@ impl Run {
                     first_pocket_at: None,
                     last_pocket_exit_at: None,
                     payout: 0,
+                    cruise_requested: false,
+                    drive: Drive::Ready,
                 })
                 .collect(),
             site,
@@ -400,14 +420,62 @@ impl Run {
             scan: pilot.scan.map(|ticks| ticks as f32 / SCAN_TICKS as f32),
             alert: self.alert,
             elapsed: self.elapsed(),
+            drive: pilot.drive,
         })
     }
 
     /// Sets a pilot's controls for the next step.
+    /// Sets a pilot's controls for the next step. A cruise request takes
+    /// effect only where the drive may engage ([`Drive`]).
     pub fn set_controls(&mut self, ship: ShipId, input: ShipInput, firing: bool) {
-        if self.flying(ship) {
-            self.world.set_input(ship, input);
-            self.world.set_firing(ship, firing);
+        if !self.flying(ship) {
+            return;
+        }
+        if let Some(index) = self.index(ship) {
+            self.pilots[index].cruise_requested = input.cruise;
+            let allowed = self.pilots[index].drive == Drive::Ready;
+            self.world.set_input(
+                ship,
+                ShipInput {
+                    cruise: input.cruise && allowed,
+                    ..input
+                },
+            );
+        }
+        self.world.set_firing(ship, firing);
+    }
+
+    /// Decides each pilot's drive for the coming step, and drops the cruise of
+    /// any pilot who may no longer use it.
+    fn gate_drives(&mut self) {
+        for index in 0..self.pilots.len() {
+            let pilot = &self.pilots[index];
+            if pilot.phase.is_over() {
+                continue;
+            }
+            let ship = pilot.ship;
+            let Some(state) = self.world.ship(ship).map(|s| s.state) else {
+                continue;
+            };
+            let hunted = self
+                .world
+                .ships()
+                .iter()
+                .any(|other| other.kind != ShipKind::Pilot && other.lock == Some(ship));
+            let drive = if self.site.contains(state.x, state.z) {
+                Drive::InSite
+            } else if pilot.extractor.is_on() {
+                Drive::Extracting
+            } else if hunted {
+                Drive::Hunted
+            } else {
+                Drive::Ready
+            };
+            let cruise = pilot.cruise_requested && drive == Drive::Ready;
+            self.pilots[index].drive = drive;
+            if let Some(input) = self.world.ship(ship).map(|s| s.input) {
+                self.world.set_input(ship, ShipInput { cruise, ..input });
+            }
         }
     }
 
@@ -515,6 +583,7 @@ impl Run {
             return;
         }
         self.rise_with_time();
+        self.gate_drives();
         self.world.step();
         self.debris_damage();
         self.record_destroyed();
@@ -1288,6 +1357,60 @@ mod tests {
     }
 
     #[test]
+    fn the_cruise_drive_triples_speed_on_the_legs_but_not_in_the_site() {
+        let (mut run, ship) = quiet(16);
+        let cruise = ShipInput {
+            thrust: 1.0,
+            turn: 0.0,
+            cruise: true,
+        };
+        run.set_controls(ship, cruise, false);
+        // The compact site's edge is 65 m out: the top speed comes before it.
+        let mut speed: f32 = 0.0;
+        for _ in 0..60 {
+            run.step();
+            if run.status(ship).unwrap().drive == Drive::Ready {
+                speed = speed.max(run.world.ship(ship).unwrap().state.speed);
+            }
+        }
+        let top = crate::ship::STARTER_HANDLING.max_speed;
+        assert!(speed > top * 2.0, "{speed} m/s on the drive");
+
+        // In the site the drive drops out, and the ship slows to normal speed.
+        at_deposit(&mut run, ship);
+        run.world.ship_mut(ship).unwrap().state.speed = speed;
+        run.set_controls(ship, cruise, false);
+        steps(&mut run, 40);
+        assert_eq!(run.status(ship).unwrap().drive, Drive::InSite);
+        assert!(run.world.ship(ship).unwrap().state.speed <= top + 1e-3);
+    }
+
+    #[test]
+    fn a_hostile_lock_cuts_the_drive() {
+        let (mut run, ship) = quiet(17);
+        place(&mut run, ship, (-60.0, 0.0));
+        let raider = run.world.spawn_npc(ShipKind::Raider, (-40.0, 0.0));
+        run.set_controls(
+            ship,
+            ShipInput {
+                thrust: 1.0,
+                turn: 0.0,
+                cruise: true,
+            },
+            false,
+        );
+        steps(&mut run, 3);
+        assert_eq!(run.world.ship(raider).unwrap().lock, Some(ship));
+        assert_eq!(run.status(ship).unwrap().drive, Drive::Hunted);
+        steps(&mut run, 60);
+        let speed = run.world.ship(ship).map_or(0.0, |s| s.state.speed);
+        assert!(
+            speed <= crate::ship::STARTER_HANDLING.max_speed + 1e-3,
+            "{speed}"
+        );
+    }
+
+    #[test]
     fn hazards_change_heat_and_ranges() {
         let site_with = |hazard| {
             (0..100)
@@ -1342,6 +1465,7 @@ mod tests {
             ShipInput {
                 thrust: 1.0,
                 turn: 0.0,
+                cruise: false,
             },
             false,
         );

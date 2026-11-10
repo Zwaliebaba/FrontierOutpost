@@ -19,7 +19,18 @@ pub struct ShipInput {
     pub thrust: f32,
     /// 1 turns clockwise seen from above (from +x toward +z), -1 the other way.
     pub turn: f32,
+    /// The cruise drive is engaged: [`CRUISE_FACTOR`] times the speed and
+    /// acceleration. Only the run decides whether a ship may engage it.
+    pub cruise: bool,
 }
+
+/// How much faster a ship flies on its cruise drive, a placeholder: the owner
+/// found the three-minute legs of design section 10 too long to fly at normal
+/// speed, and chose a drive over a smaller site.
+pub const CRUISE_FACTOR: f32 = 3.0;
+/// How quickly a ship sheds speed above its cap when the drive drops out,
+/// metres per second squared: a second or so from cruise to normal speed.
+pub const CRUISE_BRAKING: f32 = 12.0;
 
 /// Where a ship is and how it moves.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -69,9 +80,18 @@ pub fn step(state: ShipState, input: ShipInput, handling: &Handling) -> ShipStat
 
     let heading =
         (state.heading + turn * handling.turn_rate * DT).rem_euclid(std::f32::consts::TAU);
-    let speed = (state.speed + thrust * handling.acceleration * DT
-        - handling.drag * state.speed * DT)
-        .clamp(0.0, handling.max_speed);
+    let factor = if input.cruise { CRUISE_FACTOR } else { 1.0 };
+    let cap = handling.max_speed * factor;
+    let next = state.speed + thrust * handling.acceleration * factor * DT
+        - handling.drag * state.speed * DT;
+    // Above the cap, as when the drive drops out, the ship slows at a fixed
+    // rate rather than snapping to normal speed.
+    let speed = if next > cap {
+        (state.speed - CRUISE_BRAKING * DT).max(cap)
+    } else {
+        next
+    }
+    .max(0.0);
     let (sin, cos) = heading.sin_cos();
     ShipState {
         x: (state.x + cos * speed * DT).clamp(-ARENA_HALF_WIDTH, ARENA_HALF_WIDTH),
@@ -99,6 +119,7 @@ mod tests {
     const FULL: ShipInput = ShipInput {
         thrust: 1.0,
         turn: 0.0,
+        cruise: false,
     };
 
     fn run(mut state: ShipState, input: ShipInput, steps: usize) -> ShipState {
@@ -133,6 +154,7 @@ mod tests {
         let input = ShipInput {
             thrust: 0.0,
             turn: 1.0,
+            cruise: false,
         };
         let state = run(ShipState::default(), input, 1);
         assert!((state.heading - STARTER_HANDLING.turn_rate * DT).abs() < 1e-6);
@@ -143,12 +165,14 @@ mod tests {
         let left = ShipInput {
             thrust: 0.0,
             turn: -1.0,
+            cruise: false,
         };
         let state = run(ShipState::default(), left, 1);
         assert!((0.0..TAU).contains(&state.heading));
         let right = ShipInput {
             thrust: 0.0,
             turn: 1.0,
+            cruise: false,
         };
         let state = run(ShipState::default(), right, 1_000);
         assert!((0.0..TAU).contains(&state.heading));
@@ -163,6 +187,7 @@ mod tests {
         let brake = ShipInput {
             thrust: -1.0,
             turn: 0.0,
+            cruise: false,
         };
         let state = run(moving, brake, 100);
         assert_eq!(state.speed, 0.0);
@@ -183,10 +208,12 @@ mod tests {
         let wild = ShipInput {
             thrust: 50.0,
             turn: -50.0,
+            cruise: false,
         };
         let full = ShipInput {
             thrust: 1.0,
             turn: -1.0,
+            cruise: false,
         };
         assert_eq!(
             step(ShipState::default(), wild, &STARTER_HANDLING),
@@ -195,6 +222,7 @@ mod tests {
         let nan = ShipInput {
             thrust: f32::NAN,
             turn: f32::NAN,
+            cruise: false,
         };
         assert_eq!(
             step(ShipState::default(), nan, &STARTER_HANDLING),
@@ -223,5 +251,42 @@ mod tests {
         let (vx, vz) = state.velocity();
         assert!(vx.abs() < 1e-5);
         assert!((vz - 4.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn the_cruise_drive_raises_the_cap_and_sheds_speed_gradually_after() {
+        let mut state = ShipState::default();
+        let cruise = ShipInput {
+            thrust: 1.0,
+            turn: 0.0,
+            cruise: true,
+        };
+        for _ in 0..200 {
+            state = step(state, cruise, &STARTER_HANDLING);
+        }
+        let top = STARTER_HANDLING.max_speed * CRUISE_FACTOR;
+        assert!((state.speed - top).abs() < 1e-3, "{}", state.speed);
+        // The drive drops out: one step sheds CRUISE_BRAKING, not everything.
+        let after = step(
+            state,
+            ShipInput {
+                cruise: false,
+                ..cruise
+            },
+            &STARTER_HANDLING,
+        );
+        assert!((after.speed - (top - CRUISE_BRAKING * DT)).abs() < 1e-3);
+        let mut slowing = after;
+        for _ in 0..100 {
+            slowing = step(
+                slowing,
+                ShipInput {
+                    cruise: false,
+                    ..cruise
+                },
+                &STARTER_HANDLING,
+            );
+        }
+        assert!((slowing.speed - STARTER_HANDLING.max_speed).abs() < 1e-3);
     }
 }

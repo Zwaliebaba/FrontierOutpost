@@ -45,10 +45,20 @@ pub fn ticks_for_millis(millis: u32) -> u32 {
 /// Advances the starter hull by one simulation step, exactly as the server
 /// does for a ship clear of other ships, so the client can predict the
 /// player's own ship. Includes collisions with the obstacles from
-/// [`set_obstacles`]. Returns `[x, z, heading, speed]`.
+/// [`set_obstacles`]. `cruise` engages the cruise drive, which the server
+/// allows only outside the site and while no hostile has the ship locked.
+/// Returns `[x, z, heading, speed]`.
 #[wasm_bindgen(js_name = stepShip)]
 #[must_use]
-pub fn step_ship(x: f32, z: f32, heading: f32, speed: f32, thrust: f32, turn: f32) -> Vec<f32> {
+pub fn step_ship(
+    x: f32,
+    z: f32,
+    heading: f32,
+    speed: f32,
+    thrust: f32,
+    turn: f32,
+    cruise: bool,
+) -> Vec<f32> {
     use frontier_sim::ship::{STARTER_HANDLING, ShipInput, ShipState, step};
     let state = ShipState {
         x,
@@ -56,7 +66,15 @@ pub fn step_ship(x: f32, z: f32, heading: f32, speed: f32, thrust: f32, turn: f3
         heading,
         speed,
     };
-    let moved = step(state, ShipInput { thrust, turn }, &STARTER_HANDLING);
+    let moved = step(
+        state,
+        ShipInput {
+            thrust,
+            turn,
+            cruise,
+        },
+        &STARTER_HANDLING,
+    );
     let next = OBSTACLES.with(|cell| resolve_obstacles(moved, SHIP_RADIUS, &cell.borrow()));
     vec![next.x, next.z, next.heading, next.speed]
 }
@@ -77,7 +95,7 @@ mod tests {
     #[test]
     fn predicted_ships_collide_with_the_obstacles_set() {
         set_obstacles(vec![2.0, 0.0, 1.0, 99.0]);
-        let next = step_ship(1.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        let next = step_ship(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, false);
         assert!(next[0] <= 2.0 - 1.0 - SHIP_RADIUS + 1e-5, "{next:?}");
         set_obstacles(vec![]);
     }
@@ -94,10 +112,11 @@ mod tests {
         let input = ShipInput {
             thrust: 1.0,
             turn: -0.5,
+            cruise: false,
         };
         let expected = step(state, input, &STARTER_HANDLING);
         assert_eq!(
-            step_ship(1.0, -2.0, 0.5, 3.0, 1.0, -0.5),
+            step_ship(1.0, -2.0, 0.5, 3.0, 1.0, -0.5, false),
             vec![expected.x, expected.z, expected.heading, expected.speed]
         );
     }

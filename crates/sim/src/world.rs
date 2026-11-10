@@ -478,7 +478,8 @@ mod tests {
             moving,
             ShipInput {
                 thrust: 1.0,
-                turn: 0.0
+                turn: 0.0,
+                cruise: false,
             }
         ));
         let before = (
@@ -524,6 +525,7 @@ mod tests {
         let thrust = ShipInput {
             thrust: 1.0,
             turn: 0.0,
+            cruise: false,
         };
         world.set_input(a, thrust);
         world.set_input(b, thrust);
@@ -549,6 +551,7 @@ mod tests {
             ShipInput {
                 thrust: 1.0,
                 turn: 0.0,
+                cruise: false,
             },
         );
         for _ in 0..200 {
@@ -823,6 +826,7 @@ mod tests {
             ShipInput {
                 thrust: 1.0,
                 turn: 0.0,
+                cruise: false,
             },
         );
         let mut hit = false;

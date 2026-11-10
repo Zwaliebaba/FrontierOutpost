@@ -14,7 +14,7 @@
 //! | 1 | message kind, [`SNAPSHOT_KIND`] |
 //! | 4 | tick, `u32` |
 //! | 2 | last input the server applied for this client, `u16` |
-//! | 10 | the receiving pilot's own status, [`OwnStatus`]: phase `u8`, cargo `u8`, capacity `u8`, heat `u8`, extractor `u8`, extractor seconds `u8`, scan `u8` (`0xFF` for none), alert `u8`, elapsed seconds `u16` |
+//! | 11 | the receiving pilot's own status, [`OwnStatus`]: phase `u8`, cargo `u8`, capacity `u8`, heat `u8`, extractor `u8`, extractor seconds `u8`, scan `u8` (`0xFF` for none), alert `u8`, elapsed seconds `u16`, drive `u8` |
 //! | 1 | deposit count |
 //! | 1 each | units left in each deposit, in the order the client was sent them |
 //! | 1 | entity count |
@@ -38,7 +38,7 @@ pub const MAX_DATAGRAM_BYTES: usize = 1_000;
 
 /// Kind, tick and input ack.
 pub const HEADER_BYTES: usize = 7;
-pub const OWN_STATUS_BYTES: usize = 10;
+pub const OWN_STATUS_BYTES: usize = 11;
 pub const ENTITY_BYTES: usize = 14;
 /// Most deposits a snapshot reports.
 pub const MAX_DEPOSITS: usize = 16;
@@ -159,6 +159,23 @@ impl ExtractorMode {
     const ALL: [Self; 4] = [Self::Off, Self::On, Self::Venting, Self::CutOut];
 }
 
+/// Whether the receiving pilot's cruise drive may engage, and if not, why.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
+#[ts(export, rename_all = "camelCase")]
+pub enum Drive {
+    Ready,
+    /// Inside the site's circle: pockets are flown at normal speed.
+    InSite,
+    /// A hostile has the ship locked.
+    Hunted,
+    /// The extractor is working.
+    Extracting,
+}
+
+impl Drive {
+    const ALL: [Self; 4] = [Self::Ready, Self::InSite, Self::Hunted, Self::Extracting];
+}
+
 /// The receiving pilot's own ship and run, which only they are sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
 #[ts(export, rename_all = "camelCase")]
@@ -176,6 +193,7 @@ pub struct OwnStatus {
     pub alert: u8,
     /// Seconds since launch.
     pub elapsed_seconds: u16,
+    pub drive: Drive,
 }
 
 impl OwnStatus {
@@ -190,6 +208,7 @@ impl OwnStatus {
         scan: None,
         alert: 0,
         elapsed_seconds: 0,
+        drive: Drive::Ready,
     };
 }
 
@@ -252,6 +271,8 @@ pub enum SnapshotError {
     UnknownPhase(u8),
     #[error("unknown extractor mode {0}")]
     UnknownExtractorMode(u8),
+    #[error("unknown drive state {0}")]
+    UnknownDrive(u8),
 }
 
 impl Snapshot {
@@ -295,6 +316,7 @@ impl Snapshot {
             own.alert,
         ]);
         bytes.extend_from_slice(&own.elapsed_seconds.to_le_bytes());
+        bytes.push(own.drive as u8);
         bytes.push(deposit_count);
         bytes.extend_from_slice(&self.deposits);
         bytes.push(count);
@@ -360,6 +382,7 @@ impl Snapshot {
             alert,
             e0,
             e1,
+            drive,
         ] = own_bytes;
         let own = OwnStatus {
             phase: RunPhase::ALL
@@ -377,6 +400,10 @@ impl Snapshot {
             scan: (scan != NO_SCAN).then_some(scan),
             alert,
             elapsed_seconds: u16::from_le_bytes([e0, e1]),
+            drive: Drive::ALL
+                .get(usize::from(drive))
+                .copied()
+                .ok_or(SnapshotError::UnknownDrive(drive))?,
         };
         let deposit_count = reader
             .u8()
@@ -530,6 +557,7 @@ mod tests {
             scan: Some(77),
             alert: 2,
             elapsed_seconds: 1_234,
+            drive: Drive::Hunted,
         }
     }
 
@@ -620,6 +648,7 @@ mod tests {
                 scan: Some(254),
                 alert: u8::MAX,
                 elapsed_seconds: u16::MAX,
+                drive: Drive::Extracting,
             },
             deposits: vec![u8::MAX; MAX_DEPOSITS],
             entities: vec![
@@ -818,7 +847,7 @@ mod tests {
                 })
             };
             let own = format!(
-                "{{ phase: \"{}\", cargo: {}, capacity: {}, heat: {}, extractor: \"{}\", extractorSeconds: {}, scan: {}, alert: {}, elapsedSeconds: {} }}",
+                "{{ phase: \"{}\", cargo: {}, capacity: {}, heat: {}, extractor: \"{}\", extractorSeconds: {}, scan: {}, alert: {}, elapsedSeconds: {}, drive: \"{}\" }}",
                 camel(format!("{:?}", own.phase)),
                 own.cargo,
                 own.capacity,
@@ -828,7 +857,8 @@ mod tests {
                 own.scan
                     .map_or_else(|| "null".to_owned(), |scan| scan.to_string()),
                 own.alert,
-                own.elapsed_seconds
+                own.elapsed_seconds,
+                camel(format!("{:?}", own.drive))
             );
             let deposits = snapshot
                 .deposits
@@ -863,6 +893,7 @@ mod tests {
                 scan: Some(254),
                 alert: u8::MAX,
                 elapsed_seconds: u16::MAX,
+                drive: Drive::Extracting,
             },
             deposits: vec![u8::MAX; MAX_DEPOSITS],
             entities: vec![EntityState {
@@ -905,6 +936,8 @@ mod tests {
         unknown_phase[HEADER_BYTES] = 9;
         let mut unknown_mode = good.clone();
         unknown_mode[HEADER_BYTES + 4] = 9;
+        let mut unknown_drive = good.clone();
+        unknown_drive[HEADER_BYTES + 10] = 9;
         let first_event = entities_at(DEPOSITS) + 28 * ENTITY_BYTES + 1;
         let mut unknown_event = good.clone();
         unknown_event[first_event] = 7;
@@ -932,6 +965,7 @@ mod tests {
             ("unknown entity kind", unknown_entity),
             ("unknown run phase", unknown_phase),
             ("unknown extractor mode", unknown_mode),
+            ("unknown drive state", unknown_drive),
             ("unknown event kind", unknown_event),
             ("unknown destroyed kind", unknown_destroyed_kind),
         ]

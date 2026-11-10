@@ -8,6 +8,8 @@ export const INPUT_KIND = 2;
 const INPUT_BYTES = 3;
 /** Flag bit: the trigger is held. */
 const FIRE = 1;
+/** Flag bit: the cruise drive is asked for. */
+const CRUISE = 2;
 
 /** Scales -1..1 to -127..127, clamping and treating NaN as 0, exactly as Rust does. */
 export function quantizeControl(value: number): number {
@@ -29,7 +31,7 @@ export const MAX_INPUTS = 4;
  */
 export function encodeInput(
   sequence: number,
-  inputs: readonly { thrust: number; turn: number; fire?: boolean }[],
+  inputs: readonly { thrust: number; turn: number; fire?: boolean; cruise?: boolean }[],
 ): Uint8Array {
   if (inputs.length < 1 || inputs.length > MAX_INPUTS) {
     throw new RangeError(`an input datagram carries 1 to ${String(MAX_INPUTS)} inputs`);
@@ -43,7 +45,7 @@ export function encodeInput(
     const at = 4 + INPUT_BYTES * index;
     view.setInt8(at, quantizeControl(input.thrust));
     view.setInt8(at + 1, quantizeControl(input.turn));
-    view.setUint8(at + 2, input.fire === true ? FIRE : 0);
+    view.setUint8(at + 2, (input.fire === true ? FIRE : 0) | (input.cruise === true ? CRUISE : 0));
   });
   return bytes;
 }
