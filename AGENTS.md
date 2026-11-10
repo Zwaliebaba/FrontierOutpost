@@ -9,6 +9,7 @@ multiplayer isometric space game with an authoritative Rust server and an HTML5 
 | Document | Governs |
 | --- | --- |
 | [Design/FrontierOutpost.md](Design/FrontierOutpost.md) | Game design: scope, rules, delivery gates. |
+| [Design/Stage1-Plan.md](Design/Stage1-Plan.md) | Build order, work items and checkpoints for Stage 1. |
 | [Design/Visual-Style-Guide.md](Design/Visual-Style-Guide.md) | Art direction, material baselines, camera, scene structure. |
 | [Design/FrontierOutpost/](Design/FrontierOutpost/README.md) | The reference Blender scene, its generator, GLB exports and manifest. |
 
@@ -29,6 +30,7 @@ crates/
 client/                 TypeScript + Vite + Three.js browser client
   src/protocol/         index.ts re-exports the wire types; generated/ is written by ts-rs
   src/greybox/          client-only readability test harness, served at /greybox.html
+spikes/                 Throwaway experiments, each its own Cargo workspace; not built by CI
 Design/                 Game design, style guide, Blender scenes (binaries in Git LFS)
 .github/workflows/      CI
 ```
@@ -61,9 +63,10 @@ On Windows the Python launcher is `py`, not `python`.
 
 1. **The server is authoritative** (design §5). It validates movement, hits, inventory and
    access. The client sends intents and renders server state; it never decides outcomes.
-2. **`frontier-sim` is deterministic.** No I/O, wall-clock time, threads, or unseeded randomness.
-   Pass seeds and inputs in, and advance in fixed `Tick`s. The server must be able to replay a
-   session from its inputs.
+2. **`frontier-sim` holds the game rules and does no I/O.** It advances in fixed `Tick`s and is
+   handed its inputs; it does not read the clock or the network. A site is generated from its
+   seed, and the same seed must give the same site (design §10). Replaying a whole session from
+   its inputs is not required.
 3. **`frontier-protocol` is the only contract between server and client.**
    - Every wire type derives `TS` with `#[ts(export)]` and uses
      `#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]` for enums.
@@ -72,11 +75,15 @@ On Windows the Python launcher is `py`, not `python`.
    - Bump `PROTOCOL_VERSION` on any incompatible change.
    - Run `cargo test` and commit the regenerated `client/src/protocol/generated/` together with the
      Rust change. CI fails if they differ. Never edit generated files by hand.
-   - The wire encoding is JSON for now; the transport is not chosen yet (see §8).
+   - Reliable messages travel as JSON on streams. Snapshots travel as compact binary datagrams
+     and must fit the browser's datagram limit (1,024 bytes in Chromium). The transport is
+     WebTransport, with no fallback (see §8).
 4. **The client imports wire types only through `client/src/protocol/index.ts`.**
 5. **One camera, one plane** (design §5, style guide §6). All activities share one orthographic
-   tactical view direction, about 33° elevation (`client/src/camera.ts`). Ships move on a single
-   gameplay plane: XZ in Three.js/glTF (Y-up), XY in Blender (Z-up). Height is presentation only.
+   tactical view that rests at 33° elevation (`client/src/camera.ts`). A player may orbit it while
+   a control is held, zoom it, and centre it on a selected object; it returns to rest. The
+   greybox's default settings are the reference. Ships move on a single gameplay plane: XZ in
+   Three.js/glTF (Y-up), XY in Blender (Z-up). Height is presentation only.
 6. **Units and axes:** metres; Blender Z-up with ships facing +Y; glTF/Three.js Y-up. Convert
    only at the asset-import boundary.
 7. **Instrument the economy from the first build** (design §7). Any code that creates, destroys or
@@ -128,7 +135,20 @@ change ships with a test. Keep comments for the *why*.
 
 ## 8. Open decisions — ask, don't assume
 
-- Network transport (WebSocket or WebTransport) and whether the wire format stays JSON.
-- Server async runtime and HTTP framework (none chosen yet).
-- Persistence for home and account saves (required for Stage 1).
-- Project license (none yet).
+None at present. New ones are added here.
+
+Decided:
+
+- Server async runtime: Tokio. HTTP framework: axum, inside the game server, serving the built
+  client.
+- Network transport: WebTransport, served by quinn and `web-transport-quinn`, with no fallback.
+  `spikes/webtransport` confirms it in Chromium; Firefox and Safari have not been run.
+- Wire format: JSON on reliable streams for everything except snapshots, which are compact binary
+  datagrams. The spike shows why: on a lossy link, large reliable messages hitch.
+- Identity: passkeys (WebAuthn).
+- Persistence: embedded SQLite, with an append-only ledger beside the saves. Stage 1 data may be
+  wiped; saves are still versioned.
+- Prediction: the browser runs `frontier-sim`'s movement rules compiled to WebAssembly.
+- Hosting for Stage 1: the owner's machine. Testers play on machines the owner provides.
+- Licence: all rights reserved for now (`LICENSE`).
+- Art for Stage 1: sockets and facility modules come from `create_scene.py`, not primitives.

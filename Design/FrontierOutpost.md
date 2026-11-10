@@ -66,13 +66,15 @@ Stage 1 uses NPC discovery contracts. The contract supplies the site and the pla
 
 ## 5. Bounded combat and simulation
 
-Use a consistent fixed-angle isometric camera for outpost management, exploration, and combat, with zoom and pan appropriate to each activity. Ships move and fight on a single gameplay plane under direct player control. Apparent height is visual presentation, not a separate targeting or movement layer. Projectiles, targeting, and module cooldowns must remain readable at the angled view.
+Outpost management, exploration, and combat share one orthographic tactical view that rests at 33° of elevation. Ships move and fight on a single gameplay plane under direct player control. Apparent height is visual presentation, not a separate targeting or movement layer. Projectiles, targeting, and module cooldowns must remain readable at the angled view.
 
-**Control.** Ships are steered directly, by thrust and turn, with client-side prediction. Weapons fire at a locked target and the server resolves hits; Stage 1 has no manually aimed shots. Clients send intents. The server simulates and is authoritative for movement, hits, inventory, and access. The initial latency target is full playability at 150 ms round trip and usable play at 250 ms; both are test parameters.
+**Camera.** In flight the view rests on the player's ship. A player may orbit it, in bearing and elevation, for as long as the look control is held; on release it springs back to the resting view. At the outpost the view stays where it is turned, so facilities may sit on every side of the station. Zoom is continuous and stays where it is left. Selecting a ship or a structure centres the view on it, so that the orbit turns around that object; any steering input returns the view to the player's own ship, so a ship is never flown while it is off screen. A reset restores the resting direction and zoom. The backdrop is a star field at infinity: it turns with the view and ignores zoom. The readability greybox at its default settings is the reference for this behaviour, and the Visual Style Guide is not yet aligned with it.
 
-**Input.** Stage 1 is built and playtested with mouse and keyboard on desktop. Touch is in scope and is built after the Stage 1 gates, for tablets in landscape first; phones follow once that layout is proven. Gamepad support is not planned. So that touch does not force a redesign, three rules apply from Stage 1: no action is available only through hover or a right click; anything a player must select is at least a finger-sized target, provisionally 44 CSS pixels, whatever its drawn size; and every input reaches the game through one mapping layer that produces the same intents on every device. When the touch build is made, the readability measures of §9 are repeated with touch input. **Open:** the stage at which the touch build ships.
+**Control.** Ships are steered directly, by thrust and turn, with client-side prediction. Weapons fire at a locked target and the server resolves hits; Stage 1 has no manually aimed shots. Selecting a hostile ship locks it: one selection serves targeting and the camera, and a control cycles to the nearest hostile. Clients send intents. The server simulates and is authoritative for movement, hits, inventory, and access. The initial latency target is full playability at 150 ms round trip and usable play at 250 ms; both are test parameters. The game requires a browser with WebTransport and a network that carries UDP; there is no fallback transport.
 
-**Readability.** All combat ships render at one height, and range and aim indicators are drawn on the plane. Ships and interactable objects always show an allegiance-specific silhouette through anything that hides them. Structures fade only when they hide the player's own ship or cursor. Allegiance and state are never carried by colour alone. Engagement ranges fit within the combat zoom at which a ship remains comfortably selectable. **Open:** the view elevation is confirmed by a client-only readability greybox, using the real station silhouette, before more art is authored to it.
+**Input.** Stage 1 is built and playtested with mouse and keyboard on desktop. Touch is in scope and is built after the Stage 1 gates, for tablets in landscape first; phones follow once that layout is proven. Because there is no fallback transport, a tablet needs iPadOS 26.4 or later. Gamepad support is not planned. So that touch does not force a redesign, three rules apply from Stage 1: no action is available only through hover or a right click; anything a player must select is at least a finger-sized target, provisionally 44 CSS pixels, whatever its drawn size; and every input reaches the game through one mapping layer that produces the same intents on every device. When the touch build is made, the readability measures of §9 are repeated with touch input. **Open:** the stage at which the touch build ships.
+
+**Readability.** All combat ships render at one height. No grid, range rings or markers are drawn on the plane by default. Ships and interactable objects always show an allegiance-specific silhouette through any structure that hides them; structures do not fade. Allegiance and state are never carried by colour alone. Engagement ranges fit within the zoom at which a ship remains comfortably selectable. The resting elevation and these defaults are the owner's choice from the greybox; the Stage 1 readability gate (§9) still has to confirm them with testers who have not seen it.
 
 The first build supports 1–4 players against NPC threats, with provisional NPC and projectile caps published in the Stage 1 specification (§10). **[S2]** Later contested sites have a **20-ship-per-side ceiling: two sides, 40 player ships total**. NPC and projectile budgets are separately capped and benchmarked. Early PvP tests begin smaller. Uncapped open-world fleet battles are outside the product commitment.
 
@@ -155,7 +157,7 @@ Public expansion requires funded operations, moderation, support, anti-cheat, ba
 | 3: Prove frontier ownership | Deployable outposts, NPC defense, capture/recovery, tested 20v20 ceiling | Offline loss is consequential but recoverable; no cheap asset evacuation; acceptable latency and operating cost |
 | 4: Consider MMO scale | Adaptive regions, broader politics, live operations, hosting distribution | Sustainable density, retention, funding, security, and moderation capacity |
 
-Stage 1 requires persistent home/account saves and authoritative cooperative sessions, not a continuously simulated galaxy, player market, or territorial server. Later gates may stop expansion without invalidating the smaller game.
+Stage 1 requires persistent home/account saves and authoritative cooperative sessions, not a continuously simulated galaxy, player market, or territorial server. Players sign in with a passkey. Stage 1 accounts and saves may be wiped between builds; no migration is owed to testers. Later gates may stop expansion without invalidating the smaller game.
 
 | In Stage 1 | Not in Stage 1 |
 |---|---|
@@ -167,12 +169,12 @@ Stage 1 requires persistent home/account saves and authoritative cooperative ses
 | Loss of cargo and upgraded modules; reconnect within a grace window | Cross-session suspend and checkpoints, PvP, territory |
 | Mouse and keyboard on desktop | Touch controls and tablet layout; gamepad is not planned at any stage |
 
-**Stage 1 gate measures.** Thresholds and cohort sizes are **Open** and are set before playtests begin.
+**Stage 1 gate measures.** Playtests use about eight invited testers who have not seen the game, on machines the owner provides. The thresholds below are provisional starting figures from the Revision 3 review and are confirmed before the first playtest.
 
-1. *Outpost enhancements change expedition decisions.* Among players with the same unlocks, active layouts differ; on the same seed, layout predicts pocket and rig choice; reconfigurations per ten runs are neither zero nor one per run. Testers shown before-and-after overview images can say what changed and what it lets them do.
-2. *Angled-view targeting stays readable.* In greybox scenes that include the real station silhouette: time to select a named hostile, wrong-target rate, and judgement of heading and of which target is nearer, repeated in greyscale and under simulated colour-vision deficiency.
-3. *Players voluntarily repeat after loss.* Unprompted next-day return after a session that ended in defeat, compared with one that ended in success; the stake chosen on the launch after a defeat; the spread of choices across players on the same seed at run 10 compared with run 3.
-4. *Travel and recovery meet targets.* Undock to first pocket plus last pocket to dock, as a share of session time; minutes from loss to an equivalent fitting; time from launch to first decision.
+1. *Outpost enhancements change expedition decisions.* Among players with the same unlocks, active layouts differ; on the same seed, layout predicts pocket and rig choice; reconfigurations per ten runs are neither zero nor one per run. Testers shown before-and-after overview images can say what changed and what it lets them do. Provisionally, at least half of testers reconfigure at least once in three sessions.
+2. *Angled-view targeting stays readable.* In greybox scenes that include the real station silhouette: time to select a named hostile, wrong-target rate, and judgement of heading and of which target is nearer, repeated in greyscale and under simulated colour-vision deficiency. Provisionally: a median of at most 1 second to select, at most 5% selection errors, heading judged within 22.5° at least 90% of the time, and the nearer target chosen at least 85% of the time.
+3. *Players voluntarily repeat after loss.* Unprompted next-day return after a session that ended in defeat, compared with one that ended in success; the stake chosen on the launch after a defeat; the spread of choices across players on the same seed at run 10 compared with run 3. Provisionally, at least 60% of defeats are followed by another launch in the same or the next session without prompting.
+4. *Travel and recovery meet targets.* Undock to first pocket plus last pocket to dock, as a share of session time; minutes from loss to an equivalent fitting; time from launch to first decision. The targets are those of §2 and §7: at most 20% of session time in travel, 15 minutes to recover, and a first decision within about two minutes.
 
 Stage 1 also gathers early evidence for the Stage 2 crew gate, without making it a Stage 1 gate: paired playtests of a veteran and a first-session newcomer, comparing the veteran's take per hour solo, with the newcomer and with two clients, and recording whether both choose another joint run.
 
@@ -188,7 +190,7 @@ The sections above state rules; this section gives values. **Every number here i
 
 The data model is fixed now so that later stages do not need a rewrite. Facilities are data with capability tags. Expedition options are keyed to capability tags, not to facility identifiers. A site is a template plus a seed plus parameters. Saves are versioned, carry a world identifier, and store unlocks separately from the active layout. Items have identities, so that trade and keys can refer to them later. Ships and fittings are instances with a wear field.
 
-A client-only readability greybox comes before server work and before further station art.
+A client-only readability greybox comes before server work and before further station art. Construction sockets and facility modules are authored through the scene generator in Stage 1; primitive stand-ins are not the plan.
 
 **Materials and currency (placeholders).** One currency, credits (cr). Three raw materials come from the site and two goods are processed at the outpost.
 
@@ -251,7 +253,7 @@ Extraction builds heat. At full heat the extractor cuts out for 20 seconds; vent
 | II | 160 cr | ×1.25 | 5 NPCs | 3 minutes |
 | III | 240 cr | ×1.5 | 8 NPCs | 2 minutes |
 
-Alert also rises by one each time any extractor cuts out on heat. Each alert step adds a wave of one NPC plus one per tier number. On the return leg, one raider intercepts for each full third of cargo capacity carried. Tier I is completable in the basic fitting. **Open:** whether tiers II and III are offered from the first run or open with facilities.
+Alert also rises by one each time any extractor cuts out on heat. Each alert step adds a wave of one NPC plus one per tier number. On the return leg, one raider intercepts for each full third of cargo capacity carried. Tier I is completable in the basic fitting. Tiers open with facilities: tier II when a player first owns a tier 2 facility, tier III when they own a second. They follow unlocks, not the active layout. The host may choose any tier that a crew member has opened.
 
 The optional two-place objective is a relay link: two relays in different pockets must each be held by a ship for the same 30 seconds. It adds 50% to the contract payout.
 
@@ -282,6 +284,8 @@ Threat never scales with experience or fittings. The contract payout, the nest b
 | Components | 46 | 70 |
 
 Recipes: 2 ore make 1 alloy; 2 salvage make 1 components. Batches are queued at the dock and finish when the pilot next docks from a completed run, up to the processor's capacity. Rigs, modules and facilities cannot be sold.
+
+**View (placeholders).** The view starts 40 metres wide and zooms between 12 and 140 metres. While the look control is held the elevation can range from 8° to 88°. The resting elevation of 33° and the orthographic projection are decisions, not placeholders.
 
 **Timing (placeholders).**
 
