@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Builds the image if anything changed and starts a fresh server. --force-recreate makes the
+      // server start (and log its ready line) even when the container is already up.
+      "label": "container: up",
+      "type": "shell",
+      "command": "docker compose up --build --force-recreate",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": {
+        "owner": "frontier-container",
+        "pattern": { "regexp": "^__no_problems_reported__$" },
+        "background": {
+          "activeBegins": true,
+          "beginsPattern": "docker compose up|Building|Recreat",
+          // Logged by frontier-server once WebTransport and HTTP are both listening.
+          "endsPattern": "WebTransport listening"
+        }
+      }
+    },
+    {
+      "label": "container: down",
+      "type": "shell",
+      "command": "docker compose down",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "panel": "shared" },
+      "problemMatcher": []
+    }
+  ]
+}

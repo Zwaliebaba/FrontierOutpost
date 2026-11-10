@@ -66,7 +66,9 @@ Nothing else needs installing; the image builds both.
 docker compose up --build
 ```
 
-Open <http://localhost:8080/>. `docker compose down` stops it. To run the end-to-end tests against
+Open <http://localhost:8080/>. `docker compose down` stops it. In VS Code, the **Game in container
+(Edge)** launch configuration does all of this in one step: it starts the container, opens the
+game in Edge with the debugger attached, and stops the container when Edge closes. To run the end-to-end tests against
 the container, start it, then run `npx playwright install chromium` once and
 `npm run e2e:container` in `client/`.
 

@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // F5: build and start the server container, then open the game in Edge with the debugger
+      // attached. Closing Edge (or stopping the debugger) stops the container.
+      "name": "Game in container (Edge)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:8080/",
+      // The image builds the client with source maps, so breakpoints in client/src work.
+      "webRoot": "${workspaceFolder}/client",
+      "preLaunchTask": "container: up",
+      "postDebugTask": "container: down"
+    }
+  ]
+}
