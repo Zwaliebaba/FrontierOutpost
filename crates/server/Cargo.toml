@@ -12,6 +12,7 @@ frontier-protocol.workspace = true
 frontier-sim.workspace = true
 rcgen.workspace = true
 rustls.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 time.workspace = true
@@ -23,6 +24,7 @@ web-transport-quinn.workspace = true
 
 [dev-dependencies]
 tower.workspace = true
+url.workspace = true
 
 [lints]
 workspace = true

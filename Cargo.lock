@@ -313,6 +313,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "thiserror",
  "ts-rs",
 ]
 
@@ -325,6 +326,7 @@ dependencies = [
  "frontier-sim",
  "rcgen",
  "rustls",
+ "serde",
  "serde_json",
  "thiserror",
  "time",
@@ -333,6 +335,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "url",
  "web-transport-quinn",
 ]
 

@@ -4,8 +4,11 @@
 //! TypeScript in `client/src/protocol/generated/`. Commit the regenerated
 //! files with the Rust change. CI fails if they are stale.
 //!
-//! The wire encoding is JSON for now. Integers that cross the wire are at most
-//! 32 bits so they map to a TypeScript `number` without loss.
+//! Reliable messages are JSON, framed by [`frame`] on WebTransport streams.
+//! Integers that cross the wire are at most 32 bits so they map to a
+//! TypeScript `number` without loss.
+
+pub mod frame;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -44,6 +47,25 @@ pub enum ServerMessage {
     },
 }
 
+/// How a browser reaches the game server's WebTransport endpoint. Served as
+/// JSON over HTTP at [`CONNECT_INFO_PATH`] by the server that serves the client.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ConnectInfo {
+    /// The WebTransport URL, such as `https://127.0.0.1:4443/`.
+    pub web_transport_url: String,
+    /// Hex SHA-256 of the server's self-signed certificate, for browsers to
+    /// pin with `serverCertificateHashes`. Absent when the certificate is
+    /// signed by an authority the browser already trusts.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub certificate_sha256: Option<String>,
+}
+
+/// Where the server publishes [`ConnectInfo`].
+pub const CONNECT_INFO_PATH: &str = "/api/connect";
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -55,6 +77,25 @@ mod tests {
         })
         .unwrap();
         assert_eq!(json, r#"{"type":"hello","protocolVersion":1}"#);
+    }
+
+    #[test]
+    fn connect_info_uses_camel_case_and_omits_a_missing_hash() {
+        let pinned = ConnectInfo {
+            web_transport_url: "https://127.0.0.1:4443/".into(),
+            certificate_sha256: Some("ab".repeat(32)),
+        };
+        let json = serde_json::to_string(&pinned).unwrap();
+        assert!(json.contains(r#""webTransportUrl":"https://127.0.0.1:4443/""#));
+        assert!(json.contains(r#""certificateSha256":"#));
+
+        let trusted = ConnectInfo {
+            certificate_sha256: None,
+            ..pinned
+        };
+        let json = serde_json::to_string(&trusted).unwrap();
+        assert!(!json.contains("certificateSha256"));
+        assert_eq!(serde_json::from_str::<ConnectInfo>(&json).unwrap(), trusted);
     }
 
     #[test]
