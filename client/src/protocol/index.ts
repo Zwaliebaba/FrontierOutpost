@@ -2,3 +2,4 @@
 export type { ClientMessage } from "./generated/ClientMessage";
 export type { ConnectInfo } from "./generated/ConnectInfo";
 export type { ServerMessage } from "./generated/ServerMessage";
+export { PROTOCOL_VERSION } from "./generated/version";
