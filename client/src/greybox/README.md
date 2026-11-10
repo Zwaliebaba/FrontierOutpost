@@ -39,6 +39,11 @@ and R resets it. Each trial records the camera's yaw and elevation when it was a
 can show whether a turned view costs heading or range judgement. Steering is relative to the
 ship, so it is unaffected by where the camera points.
 
+The mouse wheel zooms in every look mode, between 12 and 140 metres of visible width, starting
+from the configured view width; the design already allows zoom within the fixed view. Zoom stays
+where it is left, R resets it along with the view direction, and each trial records the width it
+was answered at.
+
 All three projections show the same width at the tester's ship, so on-screen ship size there is
 comparable between them.
 

@@ -17,6 +17,8 @@ export interface TrialRecord {
   cameraYawDeg: number;
   /** Camera elevation when the tester answered, in degrees. */
   cameraPitchDeg: number;
+  /** Visible width when the tester answered, in metres; differs from the config after zooming. */
+  viewWidth: number;
 }
 
 export interface PlanePoint {

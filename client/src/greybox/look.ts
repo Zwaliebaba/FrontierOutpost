@@ -47,6 +47,24 @@ export function settleLook(state: LookState, home: LookState, dt: number, rate =
   return { yaw: state.yaw + yawError * blend, pitch: state.pitch + pitchError * blend };
 }
 
+/** Narrowest and widest view the wheel can reach, in metres across. */
+export const ZOOM_MIN = 12;
+export const ZOOM_MAX = 140;
+const ZOOM_PER_PIXEL = 0.0015;
+const PIXELS_PER_LINE = 16;
+const PIXELS_PER_PAGE = 400;
+
+/**
+ * View width after a wheel event. Scrolling up (negative delta) zooms in. The change is
+ * proportional, so each notch feels the same at any zoom. `deltaMode` is the WheelEvent's unit:
+ * 0 pixels, 1 lines, 2 pages.
+ */
+export function zoomWidth(width: number, deltaY: number, deltaMode = 0): number {
+  const pixels =
+    deltaY * (deltaMode === 1 ? PIXELS_PER_LINE : deltaMode === 2 ? PIXELS_PER_PAGE : 1);
+  return clamp(width * Math.exp(pixels * ZOOM_PER_PIXEL), ZOOM_MIN, ZOOM_MAX);
+}
+
 export function isHome(state: LookState, home: LookState): boolean {
   return state.yaw === home.yaw && state.pitch === home.pitch;
 }

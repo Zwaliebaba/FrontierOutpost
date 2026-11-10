@@ -16,6 +16,7 @@ const record = (
   occluded: false,
   cameraYawDeg: 0,
   cameraPitchDeg: 33,
+  viewWidth: 40,
 });
 
 describe("greybox trials", () => {

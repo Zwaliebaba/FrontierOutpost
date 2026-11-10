@@ -38,7 +38,7 @@ import {
 } from "./config";
 import type { Config } from "./config";
 import type { ShipInput } from "./kinematics";
-import { LOOK_MODES, dragLook, isHome, settleLook, turnLook } from "./look";
+import { LOOK_MODES, dragLook, isHome, settleLook, turnLook, zoomWidth } from "./look";
 import type { LookState } from "./look";
 import { occludersHiding } from "./occlusion";
 import type { Occluder } from "./occlusion";
@@ -143,7 +143,9 @@ scene.add(starlight);
 const world = createWorld(config.scene, config.seed, config.heights);
 const cameraTarget = new Vector3();
 let viewport = { width: 1, height: 1 };
-let rig = createRig(1, config.width, config.projection);
+// The configured width is where the view starts; the wheel zooms from there.
+let viewWidth: number = config.width;
+let rig = createRig(1, viewWidth, config.projection);
 // The tactical view is where the camera rests; `look` is where the tester has turned it.
 const homeLook: LookState = { yaw: 0, pitch: config.elevation };
 let look: LookState = { ...homeLook };
@@ -481,6 +483,7 @@ function finishTrial(now: number, outcome: TrialRecord["outcome"], value: number
     occluded: active.kind === "range" ? false : active.occluded,
     cameraYawDeg: Math.round((look.yaw * 180) / Math.PI),
     cameraPitchDeg: Math.round(look.pitch),
+    viewWidth: Math.round(viewWidth * 10) / 10,
   });
   active = null;
   paused = false;
@@ -638,12 +641,13 @@ function row(list: HTMLElement, term: string, value: string, className?: string)
 }
 
 function renderReadout(): void {
-  const scale = pixelsPerMetre(config.width, viewport.width);
+  const scale = pixelsPerMetre(viewWidth, viewport.width);
   const tallest = Math.max(
     0,
     ...world.occluders.map((o) => (o.kind === "sphere" ? o.radius : o.yMax)),
   );
   readout.replaceChildren();
+  row(readout, "Visible width", `${viewWidth.toFixed(0)} m`);
   row(readout, "Scale", `${scale.toFixed(1)} px/m`);
   row(readout, "Ship beam on screen", `${(SHIP_BEAM * scale).toFixed(0)} px`);
   row(readout, "Ship length on screen", `${(SHIP_LENGTH * scale).toFixed(0)} px`);
@@ -738,7 +742,7 @@ function renderResults(): void {
 function resize(): void {
   viewport = { width: stage.clientWidth, height: stage.clientHeight };
   renderer.setSize(viewport.width, viewport.height);
-  rig = createRig(viewport.width / viewport.height, config.width, config.projection);
+  rig = createRig(viewport.width / viewport.height, viewWidth, config.projection);
   aimRig(rig, cameraTarget, look.pitch, look.yaw);
   renderReadout();
 }
@@ -841,8 +845,23 @@ const endDrag = () => {
 canvas.addEventListener("pointerup", endDrag);
 canvas.addEventListener("pointercancel", endDrag);
 
+// The wheel zooms in every look mode: the design already allows zoom within the fixed view (§5).
+canvas.addEventListener(
+  "wheel",
+  (event) => {
+    event.preventDefault();
+    viewWidth = zoomWidth(viewWidth, event.deltaY, event.deltaMode);
+    resize();
+  },
+  { passive: false },
+);
+
 const KEY_TURN_RATE = 1.6;
 function updateLook(dt: number): void {
+  if (held.has("KeyR") && viewWidth !== config.width) {
+    viewWidth = config.width;
+    resize();
+  }
   if (config.look !== "fixed") {
     if (held.has("KeyR")) look = { ...homeLook };
     const keyTurn = axis(["KeyE"], ["KeyQ"]);
@@ -865,9 +884,9 @@ const IDLE_PROMPT =
   {
     fixed: "",
     hold: "Hold the right mouse button, or Q and E, to look around. ",
-    free: "Drag with the right mouse button, or use Q and E, to turn the view; R resets it. ",
+    free: "Drag with the right mouse button, or use Q and E, to turn the view. ",
   }[config.look] +
-  "Press Space to start a measured run.";
+  "Scroll to zoom; R resets the view. Press Space to start a measured run.";
 
 resize();
 prompt.textContent = IDLE_PROMPT;

@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { PITCH_MAX, PITCH_MIN, dragLook, isHome, settleLook, turnLook } from "./look";
+import {
+  PITCH_MAX,
+  PITCH_MIN,
+  ZOOM_MAX,
+  ZOOM_MIN,
+  dragLook,
+  isHome,
+  settleLook,
+  turnLook,
+  zoomWidth,
+} from "./look";
 import type { LookState } from "./look";
 
 const home: LookState = { yaw: 0, pitch: 33 };
@@ -28,6 +38,27 @@ describe("greybox look", () => {
   it("returns the short way round after more than half a turn", () => {
     const state = settleLook({ yaw: 1.5 * Math.PI, pitch: 33 }, home, 1 / 60);
     expect(state.yaw).toBeGreaterThan(1.5 * Math.PI);
+  });
+
+  it("zooms in when the wheel scrolls up and out when it scrolls down", () => {
+    expect(zoomWidth(40, -100)).toBeLessThan(40);
+    expect(zoomWidth(40, 100)).toBeGreaterThan(40);
+    expect(zoomWidth(40, 0)).toBe(40);
+  });
+
+  it("zooms proportionally, so a notch in and a notch out cancel", () => {
+    expect(zoomWidth(zoomWidth(40, -120), 120)).toBeCloseTo(40, 9);
+    expect(zoomWidth(80, -120) / 80).toBeCloseTo(zoomWidth(20, -120) / 20, 9);
+  });
+
+  it("treats line and page wheel units as larger steps", () => {
+    expect(zoomWidth(40, 3, 1)).toBeCloseTo(zoomWidth(40, 48), 9);
+    expect(zoomWidth(40, 1, 2)).toBeGreaterThan(zoomWidth(40, 3, 1));
+  });
+
+  it("stops at the zoom limits", () => {
+    expect(zoomWidth(40, -100_000)).toBe(ZOOM_MIN);
+    expect(zoomWidth(40, 100_000)).toBe(ZOOM_MAX);
   });
 
   it("moves closer every step without overshooting", () => {
