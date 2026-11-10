@@ -1,5 +1,5 @@
 import { angleDifference } from "./kinematics";
-import type { Rng } from "./rng";
+import type { Rng } from "../view/rng";
 
 export const TRIAL_KINDS = ["acquire", "heading", "range"] as const;
 export type TrialKind = (typeof TRIAL_KINDS)[number];

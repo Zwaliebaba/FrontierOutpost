@@ -1,4 +1,4 @@
-import { angleDifference } from "./kinematics";
+import { angleDifference } from "./angles";
 
 /**
  * How far the tester may move the camera away from the tactical view.

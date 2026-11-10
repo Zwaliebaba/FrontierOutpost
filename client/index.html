@@ -10,15 +10,13 @@
         margin: 0;
         height: 100%;
         overflow: hidden;
-        background: #0b1220;
+        background: #020306;
       }
       canvas {
         display: block;
       }
-      #status,
-      #sim {
+      .hud-line {
         position: fixed;
-        top: 12px;
         left: 12px;
         margin: 0;
         padding: 4px 10px;
@@ -30,8 +28,17 @@
           13px/1.4 system-ui,
           sans-serif;
       }
+      #status {
+        top: 12px;
+      }
       #sim {
         top: 44px;
+      }
+      #hud {
+        top: 76px;
+      }
+      #hud:empty {
+        display: none;
       }
     </style>
   </head>

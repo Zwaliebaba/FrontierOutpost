@@ -8,7 +8,6 @@ import {
   DirectionalLight,
   DoubleSide,
   EqualStencilFunc,
-  ExtrudeGeometry,
   GreaterDepth,
   GridHelper,
   Group,
@@ -24,7 +23,6 @@ import {
   ReplaceStencilOp,
   RingGeometry,
   Scene,
-  Shape,
   Vector3,
   WebGLRenderer,
 } from "three";
@@ -39,14 +37,14 @@ import {
 } from "./config";
 import type { Config } from "./config";
 import type { ShipInput } from "./kinematics";
-import { LOOK_MODES, dragLook, isHome, settleLook, turnLook, zoomWidth } from "./look";
-import type { LookState } from "./look";
+import { LOOK_MODES, dragLook, isHome, settleLook, turnLook, zoomWidth } from "../view/look";
+import type { LookState } from "../view/look";
 import { centreOf, firstHit, occludersHiding } from "./occlusion";
 import type { Occluder } from "./occlusion";
-import { pickNearest, screenRay, screenToPlane, worldToScreen } from "./picking";
-import type { PickCandidate, ScreenPoint } from "./picking";
-import { createRng } from "./rng";
-import { createStarField } from "./sky";
+import { pickNearest, screenRay, screenToPlane, worldToScreen } from "../view/picking";
+import type { PickCandidate, ScreenPoint } from "../view/picking";
+import { createRng } from "../view/rng";
+import { createStarField } from "../view/sky";
 import { MAX_BOLTS, SCENE_IDS, SCENE_LABELS, createWorld, stepWorld } from "./scenarios";
 import type { Allegiance, Ship } from "./scenarios";
 import {
@@ -67,12 +65,8 @@ import {
   pixelsPerMetre,
   planeDepthScale,
   towardCamera,
-} from "./view";
-
-// Starter frigate bounds from `scene_manifest.json` (docking_validation), in metres.
-const SHIP_LENGTH = 2.67;
-const SHIP_BEAM = 1.29;
-const SHIP_HEIGHT = 1.14;
+} from "../view/view";
+import { SHIP_BEAM, SHIP_LENGTH, forkedHull, wedgeHull } from "../view/hulls";
 
 const STEP = 1 / 60;
 const PICK_RADIUS_PX = 20;
@@ -230,39 +224,8 @@ function occluderMesh(occluder: Occluder): Mesh<BufferGeometry, MeshStandardMate
 const occluderMeshes = world.occluders.map(occluderMesh);
 for (const mesh of occluderMeshes) scene.add(mesh);
 
-/** Extrudes a footprint given as (forward, lateral) pairs into a hull centred on its height. */
-function hullGeometry(footprint: readonly (readonly [number, number])[]): BufferGeometry {
-  const shape = new Shape();
-  footprint.forEach(([forward, lateral], index) => {
-    if (index === 0) shape.moveTo(forward, lateral);
-    else shape.lineTo(forward, lateral);
-  });
-  return new ExtrudeGeometry(shape, { depth: SHIP_HEIGHT, bevelEnabled: false })
-    .rotateX(Math.PI / 2)
-    .translate(0, SHIP_HEIGHT / 2, 0);
-}
-const L = SHIP_LENGTH / 2;
-const B = SHIP_BEAM / 2;
-// Player-side ships are a wedge; hostiles are forked. Both fill the frigate's bounds.
-const wedge = hullGeometry([
-  [L, 0],
-  [0.3, B],
-  [-L, B],
-  [-L, -B],
-  [0.3, -B],
-]);
-const forked = hullGeometry([
-  [L, B * 0.95],
-  [L, B * 0.45],
-  [0.1, B * 0.25],
-  [0.1, -B * 0.25],
-  [L, -B * 0.45],
-  [L, -B * 0.95],
-  [-0.6, -B],
-  [-L, -B * 0.45],
-  [-L, B * 0.45],
-  [-0.6, B],
-]);
+const wedge = wedgeHull();
+const forked = forkedHull();
 
 function planeMarker(allegiance: Allegiance): Group {
   const material = new MeshBasicMaterial({ color: SIGNAL[allegiance], side: DoubleSide });
