@@ -1,0 +1,45 @@
+# The game servers the end-to-end tests expect, in Linux containers. They match the two servers
+# client/playwright.config.ts starts locally: the compact site on seed 29, and a second one whose
+# runs open with no NPCs, for extraction and docking.
+#   docker compose -f compose.e2e.yaml up --build --wait     then, in client/: npm run e2e:container
+#   docker compose -f compose.e2e.yaml down
+#
+# Its own project, host ports and UDP ports, so it can run beside compose.yaml's game.
+name: frontier-outpost-e2e
+
+x-server: &server
+  # Both services build the same image; the second build is a cache hit.
+  build: .
+  image: frontier-outpost-server
+  healthcheck:
+    # The image has no curl; bash's /dev/tcp is enough to see the HTTP port is up.
+    test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+    interval: 2s
+    retries: 30
+
+x-test-site: &test-site
+  FRONTIER_SITE: compact
+  FRONTIER_SEED: "29"
+  RUST_LOG: info
+
+services:
+  server:
+    <<: *server
+    ports:
+      # Loopback only, as in compose.yaml: WebTransport needs a secure context.
+      - "127.0.0.1:8181:8080/tcp"
+      - "127.0.0.1:4451:4443/udp"
+    environment:
+      <<: *test-site
+      # The host side of the UDP mapping above, as browsers must dial it.
+      FRONTIER_PUBLIC_WEBTRANSPORT_ADDR: "127.0.0.1:4451"
+
+  quiet:
+    <<: *server
+    ports:
+      - "127.0.0.1:8182:8080/tcp"
+      - "127.0.0.1:4452:4443/udp"
+    environment:
+      <<: *test-site
+      FRONTIER_NPCS: "0"
+      FRONTIER_PUBLIC_WEBTRANSPORT_ADDR: "127.0.0.1:4452"

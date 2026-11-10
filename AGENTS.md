@@ -62,7 +62,7 @@ npm run build:sim               # frontier-sim to WebAssembly; run by dev, build
 npm run dev                     # Vite dev server
 npm run check                   # format:check, lint, typecheck, test, build (= CI)
 npm run e2e                     # browser tests against the real server; run `npm run build` first
-npm run e2e:container           # the same tests against `docker compose up`
+npm run e2e:container           # the same tests against `docker compose -f compose.e2e.yaml up --build --wait`
 npm run format                  # apply Prettier
 
 # Scene generator (Blender 4.3+ or 5.x); write output outside the repo to verify it

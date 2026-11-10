@@ -68,9 +68,17 @@ docker compose up --build
 
 Open <http://localhost:8080/>. `docker compose down` stops it. In VS Code, the **Game in container
 (Edge)** launch configuration does all of this in one step: it starts the container, opens the
-game in Edge with the debugger attached, and stops the container when Edge closes. To run the end-to-end tests against
-the container, start it, then run `npx playwright install chromium` once and
-`npm run e2e:container` in `client/`.
+game in Edge with the debugger attached, and stops the container when Edge closes.
+
+The end-to-end tests need servers set up for them: the compact site on a fixed seed, and a second
+server whose runs open with no NPCs. [compose.e2e.yaml](compose.e2e.yaml) runs both, beside the
+game if it is up. Run `npx playwright install chromium` once in `client/`, then:
+
+```sh
+docker compose -f compose.e2e.yaml up --build --wait
+cd client && npm run e2e:container
+docker compose -f compose.e2e.yaml down
+```
 
 [compose.yaml](compose.yaml) publishes HTTP on TCP 8080 and WebTransport on **UDP** 4443, both on
 loopback only, because WebTransport needs a secure context and plain HTTP is one only on
