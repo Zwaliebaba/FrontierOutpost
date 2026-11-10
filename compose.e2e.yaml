@@ -1,6 +1,7 @@
-# The game servers the end-to-end tests expect, in Linux containers. They match the two servers
-# client/playwright.config.ts starts locally: the compact site on seed 29, and a second one whose
-# runs open with no NPCs, for extraction and docking.
+# The game servers the end-to-end tests expect, in Linux containers. They match the three servers
+# client/playwright.config.ts starts locally: the compact site on seed 29, a second one whose runs
+# open with no NPCs, for extraction and docking, and a third whose new pilots start rich enough to
+# build, for the outpost.
 #   docker compose -f compose.e2e.yaml up --build --wait     then, in client/: npm run e2e:container
 #   docker compose -f compose.e2e.yaml down
 #
@@ -46,3 +47,16 @@ services:
       FRONTIER_NPCS: "0"
       FRONTIER_PUBLIC_WEBTRANSPORT_ADDR: "127.0.0.1:4452"
       FRONTIER_ORIGIN: "http://localhost:8182"
+
+  rich:
+    <<: *server
+    ports:
+      - "127.0.0.1:8183:8080/tcp"
+      - "127.0.0.1:4453:4443/udp"
+    environment:
+      <<: *test-site
+      FRONTIER_NPCS: "0"
+      # Keep in step with RICH_GRANT in client/playwright.config.ts.
+      FRONTIER_GRANT: "1000cr,40ore,30alloy,10components"
+      FRONTIER_PUBLIC_WEBTRANSPORT_ADDR: "127.0.0.1:4453"
+      FRONTIER_ORIGIN: "http://localhost:8183"

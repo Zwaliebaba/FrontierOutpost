@@ -106,6 +106,16 @@ export class ExpeditionView {
     this.#renderer.render(this.world.scene, this.#rig.camera);
   }
 
+  /** Draws another scene, the outpost, with the same camera rules and star backdrop. */
+  renderScene(scene: Scene, target: Vector3, pitch: number, yaw: number): void {
+    aimRig(this.#rig, target, pitch, yaw);
+    this.#renderer.clear();
+    this.#skyCamera.quaternion.copy(this.#rig.camera.quaternion);
+    this.#renderer.render(this.#sky, this.#skyCamera);
+    this.#renderer.clearDepth();
+    this.#renderer.render(scene, this.#rig.camera);
+  }
+
   #addStars(): void {
     const layers = [
       { count: 3200, size: 1.3, dim: 0.75 },

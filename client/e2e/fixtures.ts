@@ -50,6 +50,10 @@ export { expect } from "@playwright/test";
  * name, so pages are opened at localhost, never 127.0.0.1. */
 export const QUIET = "http://localhost:8182/";
 
+/** The server whose new pilots start with 1,100 cr, 40 ore, 30 alloy and 10 components
+ * (playwright.config.ts), enough to build. */
+export const RICH = "http://localhost:8183/";
+
 let pilots = 0;
 
 /** A callsign no other test has used against this server. */
