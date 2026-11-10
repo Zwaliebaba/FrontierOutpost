@@ -20,7 +20,19 @@ pub struct Obstacle {
 
 /// Pushes a ship out of every obstacle it overlaps.
 #[must_use]
-pub fn resolve_obstacles(mut state: ShipState, radius: f32, obstacles: &[Obstacle]) -> ShipState {
+pub fn resolve_obstacles(state: ShipState, radius: f32, obstacles: &[Obstacle]) -> ShipState {
+    resolve_obstacles_with_impact(state, radius, obstacles).0
+}
+
+/// Pushes a ship out of every obstacle it overlaps, and returns the hardest
+/// impact: the speed it drove into a surface at, m/s, or 0.
+#[must_use]
+pub fn resolve_obstacles_with_impact(
+    mut state: ShipState,
+    radius: f32,
+    obstacles: &[Obstacle],
+) -> (ShipState, f32) {
+    let mut impact: f32 = 0.0;
     for obstacle in obstacles {
         let (dx, dz) = (state.x - obstacle.x, state.z - obstacle.z);
         let distance = dx.hypot(dz);
@@ -31,9 +43,11 @@ pub fn resolve_obstacles(mut state: ShipState, radius: f32, obstacles: &[Obstacl
         let (nx, nz) = normal(dx, dz, distance);
         state.x += nx * overlap;
         state.z += nz * overlap;
-        state.speed = slide(&state, nx, nz);
+        let slid = slide(&state, nx, nz);
+        impact = impact.max(state.speed - slid);
+        state.speed = slid;
     }
-    state
+    (state, impact)
 }
 
 /// Pushes two overlapping ships apart, the larger moving less.
@@ -115,6 +129,19 @@ mod tests {
         z: 0.0,
         radius: 2.0,
     };
+
+    #[test]
+    fn reports_how_hard_a_ship_hit() {
+        // Head-on at 8 m/s: all of it drives into the rock.
+        let head_on = ship(-2.5, 0.0, 0.0, 8.0);
+        let (_, impact) = resolve_obstacles_with_impact(head_on, SHIP_RADIUS, &[ROCK]);
+        assert!((impact - 8.0).abs() < 1e-4, "{impact}");
+        let clear = ship(-10.0, 0.0, 0.0, 8.0);
+        assert_eq!(
+            resolve_obstacles_with_impact(clear, SHIP_RADIUS, &[ROCK]).1,
+            0.0
+        );
+    }
 
     #[test]
     fn pushes_a_ship_out_of_an_obstacle() {

@@ -11,8 +11,8 @@ const PATROL_RADIUS: f32 = 10.0;
 
 /// The pilot an NPC should engage, if any.
 ///
-/// - A drone takes the nearest pilot it is aware of. Design §10 says drones
-///   prefer extracting ships; extraction arrives in plan M3.
+/// - A drone takes the nearest extracting pilot it is aware of, else the
+///   nearest pilot (design §10: drones swarm extracting ships).
 /// - A raider takes the pilot carrying the most cargo, the nearest on a tie.
 /// - A warden takes the nearest pilot it is aware of, measured from its post.
 #[must_use]
@@ -34,7 +34,14 @@ pub fn choose_target(npc: &Ship, ships: &[Ship]) -> Option<ShipId> {
                     .then_with(|| distance(b).total_cmp(&distance(a)))
             })
             .map(|ship| ship.id),
-        ShipKind::Drone | ShipKind::Warden => candidates
+        ShipKind::Drone => candidates
+            .min_by(|a, b| {
+                b.extracting
+                    .cmp(&a.extracting)
+                    .then_with(|| distance(a).total_cmp(&distance(b)))
+            })
+            .map(|ship| ship.id),
+        ShipKind::Warden => candidates
             .min_by(|a, b| distance(a).total_cmp(&distance(b)))
             .map(|ship| ship.id),
         ShipKind::Pilot => None,
@@ -123,6 +130,19 @@ mod tests {
         ];
         assert_eq!(choose_target(&drone, &ships), Some(ShipId(3)));
         assert_eq!(choose_target(&drone, &ships[3..]), None, "out of sight");
+    }
+
+    #[test]
+    fn a_drone_prefers_an_extracting_pilot_to_a_nearer_one() {
+        let drone = ship(1, ShipKind::Drone, 0.0, 0.0);
+        let near = ship(2, ShipKind::Pilot, 5.0, 0.0);
+        let mut working = ship(3, ShipKind::Pilot, 40.0, 0.0);
+        working.extracting = true;
+        assert_eq!(
+            choose_target(&drone, &[near.clone(), working]),
+            Some(ShipId(3))
+        );
+        assert_eq!(choose_target(&drone, &[near]), Some(ShipId(2)));
     }
 
     #[test]

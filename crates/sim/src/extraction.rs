@@ -16,7 +16,9 @@ pub const MAX_EXTRACT_SPEED: f32 = 1.5;
 /// Cargo the basic fitting carries (design section 10).
 pub const BASIC_CAPACITY: u32 = 20;
 /// Ticks of extraction from cold to full heat, before hazards and pockets.
-pub const HEAT_TICKS: u32 = 30 * TICKS_PER_SECOND;
+/// A minute, so a vent a minute costs about 8% of the rate: design section 10
+/// budgets 13 ore from 6.5 minutes at the basic 2 per minute.
+pub const HEAT_TICKS: u32 = 60 * TICKS_PER_SECOND;
 /// Ticks an extractor stays out after cutting out (design section 10).
 pub const CUT_OUT_TICKS: u32 = 20 * TICKS_PER_SECOND;
 /// Ticks a vent pauses extraction (design section 10).
@@ -302,7 +304,8 @@ mod tests {
                 cut_out_at = Some(tick);
             }
         }
-        assert_eq!(cut_out_at, Some(HEAT_TICKS - 1));
+        // Within a tick: per-tick heat does not sum exactly in floating point.
+        assert!(cut_out_at.is_some_and(|tick| tick.abs_diff(HEAT_TICKS - 1) <= 1));
         // Through the cut-out and long after, it yields nothing.
         let units = run(&mut extractor, &mut conditions, CUT_OUT_TICKS * 10);
         assert_eq!(units, 0);
@@ -315,7 +318,7 @@ mod tests {
         let mut extractor = Extractor::default();
         let mut conditions = at(100.0);
         extractor.start(0, &conditions).unwrap();
-        run(&mut extractor, &mut conditions, 20 * TICKS_PER_SECOND);
+        run(&mut extractor, &mut conditions, 40 * TICKS_PER_SECOND);
         assert!(extractor.heat > 0.6);
         assert!(extractor.vent());
         assert!(!extractor.vent(), "already venting");

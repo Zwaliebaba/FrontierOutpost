@@ -401,6 +401,7 @@ impl Pocket {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Site {
     pub template: SiteTemplate,
+    pub seed: u32,
     pub tier: ThreatTier,
     pub pilots: u32,
     pub values: SeedValues,
@@ -470,6 +471,7 @@ impl Site {
         let obstacles = asteroids(&template, seed, &deposits);
         Self {
             template,
+            seed,
             tier,
             pilots,
             values,

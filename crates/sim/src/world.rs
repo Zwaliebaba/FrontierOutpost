@@ -31,6 +31,8 @@ pub struct Ship {
     pub firing: bool,
     /// Steps until its weapon can fire again.
     pub cooldown: u32,
+    /// Whether its extractor is working; drones gather on extracting ships.
+    pub extracting: bool,
 }
 
 impl Ship {
@@ -47,6 +49,7 @@ impl Ship {
             lock: None,
             firing: false,
             cooldown: 0,
+            extracting: false,
         }
     }
 }
@@ -60,6 +63,8 @@ pub struct World {
     projectiles: Vec<Projectile>,
     /// What happened during the latest step.
     events: Vec<Event>,
+    /// Ships that hit an obstacle during the latest step, and how hard, m/s.
+    impacts: Vec<(ShipId, f32)>,
     next_id: u16,
 }
 
@@ -161,6 +166,84 @@ impl World {
         id
     }
 
+    /// Adds a pilot's ship at `home`, facing `heading`, and returns its id.
+    pub fn spawn_pilot_at(&mut self, home: (f32, f32), heading: f32) -> ShipId {
+        let id = self.next_id();
+        let state = ShipState {
+            x: home.0,
+            z: home.1,
+            heading,
+            speed: 0.0,
+        };
+        self.ships.push(Ship::new(id, ShipKind::Pilot, state));
+        id
+    }
+
+    /// Adds an NPC at `at` that patrols or guards `home`, and returns its id.
+    pub fn spawn_npc_at(&mut self, kind: ShipKind, at: (f32, f32), home: (f32, f32)) -> ShipId {
+        let id = self.spawn_npc(kind, home);
+        if let Some(ship) = self.ships.iter_mut().find(|ship| ship.id == id) {
+            ship.state.x = at.0;
+            ship.state.z = at.1;
+        }
+        id
+    }
+
+    /// A ship to change directly, for tests that place ships.
+    #[cfg(test)]
+    pub(crate) fn ship_mut(&mut self, id: ShipId) -> Option<&mut Ship> {
+        self.ships.iter_mut().find(|ship| ship.id == id)
+    }
+
+    /// Sets the cargo a ship carries. Returns whether it exists.
+    pub fn set_cargo(&mut self, id: ShipId, cargo: u32) -> bool {
+        match self.ships.iter_mut().find(|ship| ship.id == id) {
+            Some(ship) => {
+                ship.cargo = cargo;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Marks whether a ship's extractor is working. Returns whether it exists.
+    pub fn set_extracting(&mut self, id: ShipId, extracting: bool) -> bool {
+        match self.ships.iter_mut().find(|ship| ship.id == id) {
+            Some(ship) => {
+                ship.extracting = extracting;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Damages a ship from outside combat, such as a hazard, destroying it if
+    /// its hull runs out. Returns whether it was destroyed.
+    pub fn damage(&mut self, id: ShipId, amount: f32) -> bool {
+        let Some(ship) = self.ships.iter_mut().find(|ship| ship.id == id) else {
+            return false;
+        };
+        let was_alive = ship.hull > 0.0;
+        ship.hull -= amount;
+        if !(was_alive && ship.hull <= 0.0) {
+            return false;
+        }
+        let kind = ship.kind;
+        self.remove_ship(id);
+        self.events.push(Event::Destroyed {
+            ship: id,
+            kind,
+            by: None,
+        });
+        true
+    }
+
+    /// Ships that hit an obstacle during the latest step, and how hard, m/s.
+    #[must_use]
+    pub fn impacts(&self) -> &[(ShipId, f32)] {
+        &self.impacts
+    }
+
     /// Adds an NPC at `home` and returns its id.
     pub fn spawn_npc(&mut self, kind: ShipKind, home: (f32, f32)) -> ShipId {
         let id = self.next_id();
@@ -233,9 +316,15 @@ impl World {
                 collision::separate(&mut a.state, ra, &mut b.state, rb);
             }
         }
+        self.impacts.clear();
         for ship in &mut self.ships {
             let radius = ship.kind.profile().radius;
-            ship.state = collision::resolve_obstacles(ship.state, radius, &self.obstacles);
+            let (state, impact) =
+                collision::resolve_obstacles_with_impact(ship.state, radius, &self.obstacles);
+            ship.state = state;
+            if impact > 0.0 {
+                self.impacts.push((ship.id, impact));
+            }
         }
         self.fire();
         self.fly_projectiles();
@@ -700,5 +789,59 @@ mod tests {
         let first = world.spawn_ship();
         world.remove_ship(first);
         assert_ne!(world.spawn_ship(), first);
+    }
+
+    #[test]
+    fn damage_from_outside_combat_destroys_and_reports() {
+        let mut world = World::new();
+        let pilot = world.spawn_pilot_at((5.0, 5.0), 1.0);
+        assert_eq!(world.ship(pilot).unwrap().state.heading, 1.0);
+        assert!(!world.damage(pilot, 40.0));
+        assert!(world.damage(pilot, 70.0));
+        assert!(world.ship(pilot).is_none());
+        assert!(matches!(
+            world.events(),
+            [Event::Destroyed {
+                by: None,
+                kind: ShipKind::Pilot,
+                ..
+            }]
+        ));
+        assert!(!world.damage(pilot, 1.0), "already gone");
+    }
+
+    #[test]
+    fn records_impacts_with_obstacles() {
+        let mut world = World::with_obstacles(vec![Obstacle {
+            x: 4.0,
+            z: 0.0,
+            radius: 1.0,
+        }]);
+        let pilot = world.spawn_pilot_at((0.0, 0.0), 0.0);
+        world.set_input(
+            pilot,
+            ShipInput {
+                thrust: 1.0,
+                turn: 0.0,
+            },
+        );
+        let mut hit = false;
+        for _ in 0..40 {
+            world.step();
+            hit |= world
+                .impacts()
+                .iter()
+                .any(|(id, speed)| *id == pilot && *speed > 0.0);
+        }
+        assert!(hit);
+    }
+
+    #[test]
+    fn spawns_an_npc_away_from_the_home_it_patrols() {
+        let mut world = World::new();
+        let drone = world.spawn_npc_at(ShipKind::Drone, (50.0, 0.0), (0.0, 0.0));
+        let ship = world.ship(drone).unwrap();
+        assert_eq!((ship.state.x, ship.state.z), (50.0, 0.0));
+        assert_eq!(ship.home, (0.0, 0.0));
     }
 }
