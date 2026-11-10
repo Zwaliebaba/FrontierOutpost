@@ -136,7 +136,9 @@ change ships with a test. Keep comments for the *why*.
 ## 7. Workflow
 
 - Branch from `main`; merge through pull requests. Every CI job blocks: `rust`, `rust-windows`,
-  `client`, `e2e` and `repo`. Check the CI run after pushing; a red `main` is a stop-everything event.
+  `client`, `e2e` and `repo`. The protection is defined in `.github/rulesets/main.json` and
+  imported by hand under Settings → Rules → Rulesets. When a CI job is added or renamed, update
+  the ruleset and re-import it; the `repo` job fails until they match. Check the CI run after pushing; a red `main` is a stop-everything event.
 - Make small commits, one logical change each, and make sure each one builds and passes tests.
 - Bump toolchains (`rust-toolchain.toml`, `client/.nvmrc`) in their own PR.
 - Never commit `target/`, `node_modules/`, `client/dist/`, `.env*` or Blender backups (`*.blend1`).
