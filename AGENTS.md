@@ -29,6 +29,7 @@ crates/
 client/                 TypeScript + Vite + Three.js browser client
   src/protocol/         index.ts re-exports the wire types; generated/ is written by ts-rs
   src/greybox/          client-only readability test harness, served at /greybox.html
+spikes/                 Throwaway experiments, each its own Cargo workspace; not built by CI
 Design/                 Game design, style guide, Blender scenes (binaries in Git LFS)
 .github/workflows/      CI
 ```
