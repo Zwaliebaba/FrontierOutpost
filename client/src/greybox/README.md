@@ -3,6 +3,10 @@
 A client-only harness for the Stage 1 gate "angled-view targeting stays readable" (design §5 and
 §9). It needs no server and no asset files. It exists to be thrown away once the gate is decided.
 
+Its default settings are the design basis for the camera (design §5): orthographic at 33°, look
+around while held, wheel zoom, centring on a clicked object, a star backdrop and no plane cues.
+The other settings remain for comparison.
+
 ```sh
 cd client
 npm run dev        # then open http://localhost:5173/greybox.html

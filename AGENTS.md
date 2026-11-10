@@ -75,8 +75,10 @@ On Windows the Python launcher is `py`, not `python`.
    - The wire encoding is JSON for now; the transport is not chosen yet (see §8).
 4. **The client imports wire types only through `client/src/protocol/index.ts`.**
 5. **One camera, one plane** (design §5, style guide §6). All activities share one orthographic
-   tactical view direction, about 33° elevation (`client/src/camera.ts`). Ships move on a single
-   gameplay plane: XZ in Three.js/glTF (Y-up), XY in Blender (Z-up). Height is presentation only.
+   tactical view that rests at 33° elevation (`client/src/camera.ts`). A player may orbit it while
+   a control is held, zoom it, and centre it on a selected object; it returns to rest. The
+   greybox's default settings are the reference. Ships move on a single gameplay plane: XZ in
+   Three.js/glTF (Y-up), XY in Blender (Z-up). Height is presentation only.
 6. **Units and axes:** metres; Blender Z-up with ships facing +Y; glTF/Three.js Y-up. Convert
    only at the asset-import boundary.
 7. **Instrument the economy from the first build** (design §7). Any code that creates, destroys or

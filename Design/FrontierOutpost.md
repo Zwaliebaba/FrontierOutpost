@@ -66,13 +66,15 @@ Stage 1 uses NPC discovery contracts. The contract supplies the site and the pla
 
 ## 5. Bounded combat and simulation
 
-Use a consistent fixed-angle isometric camera for outpost management, exploration, and combat, with zoom and pan appropriate to each activity. Ships move and fight on a single gameplay plane under direct player control. Apparent height is visual presentation, not a separate targeting or movement layer. Projectiles, targeting, and module cooldowns must remain readable at the angled view.
+Outpost management, exploration, and combat share one orthographic tactical view that rests at 33° of elevation. Ships move and fight on a single gameplay plane under direct player control. Apparent height is visual presentation, not a separate targeting or movement layer. Projectiles, targeting, and module cooldowns must remain readable at the angled view.
+
+**Camera.** The view rests on the player's ship. A player may orbit it, in bearing and elevation, for as long as the look control is held; on release it springs back to the resting view. Zoom is continuous and stays where it is left. Selecting a ship or a structure centres the view on it, so that the orbit turns around that object; any steering input returns the view to the player's own ship, so a ship is never flown while it is off screen. A reset restores the resting direction and zoom. The backdrop is a star field at infinity: it turns with the view and ignores zoom. The readability greybox at its default settings is the reference for this behaviour, and the Visual Style Guide is not yet aligned with it. **Open:** whether the outpost view also springs back, which would keep every facility socket on the side that faces the resting view. **Open:** whether selecting a ship also locks it as the weapon target.
 
 **Control.** Ships are steered directly, by thrust and turn, with client-side prediction. Weapons fire at a locked target and the server resolves hits; Stage 1 has no manually aimed shots. Clients send intents. The server simulates and is authoritative for movement, hits, inventory, and access. The initial latency target is full playability at 150 ms round trip and usable play at 250 ms; both are test parameters.
 
 **Input.** Stage 1 is built and playtested with mouse and keyboard on desktop. Touch is in scope and is built after the Stage 1 gates, for tablets in landscape first; phones follow once that layout is proven. Gamepad support is not planned. So that touch does not force a redesign, three rules apply from Stage 1: no action is available only through hover or a right click; anything a player must select is at least a finger-sized target, provisionally 44 CSS pixels, whatever its drawn size; and every input reaches the game through one mapping layer that produces the same intents on every device. When the touch build is made, the readability measures of §9 are repeated with touch input. **Open:** the stage at which the touch build ships.
 
-**Readability.** All combat ships render at one height, and range and aim indicators are drawn on the plane. Ships and interactable objects always show an allegiance-specific silhouette through anything that hides them. Structures fade only when they hide the player's own ship or cursor. Allegiance and state are never carried by colour alone. Engagement ranges fit within the combat zoom at which a ship remains comfortably selectable. **Open:** the view elevation is confirmed by a client-only readability greybox, using the real station silhouette, before more art is authored to it.
+**Readability.** All combat ships render at one height. No grid, range rings or markers are drawn on the plane by default. Ships and interactable objects always show an allegiance-specific silhouette through any structure that hides them; structures do not fade. Allegiance and state are never carried by colour alone. Engagement ranges fit within the zoom at which a ship remains comfortably selectable. The resting elevation and these defaults are the owner's choice from the greybox; the Stage 1 readability gate (§9) still has to confirm them with testers who have not seen it.
 
 The first build supports 1–4 players against NPC threats, with provisional NPC and projectile caps published in the Stage 1 specification (§10). **[S2]** Later contested sites have a **20-ship-per-side ceiling: two sides, 40 player ships total**. NPC and projectile budgets are separately capped and benchmarked. Early PvP tests begin smaller. Uncapped open-world fleet battles are outside the product commitment.
 
@@ -282,6 +284,8 @@ Threat never scales with experience or fittings. The contract payout, the nest b
 | Components | 46 | 70 |
 
 Recipes: 2 ore make 1 alloy; 2 salvage make 1 components. Batches are queued at the dock and finish when the pilot next docks from a completed run, up to the processor's capacity. Rigs, modules and facilities cannot be sold.
+
+**View (placeholders).** The view starts 40 metres wide and zooms between 12 and 140 metres. While the look control is held the elevation can range from 8° to 88°. The resting elevation of 33° and the orthographic projection are decisions, not placeholders.
 
 **Timing (placeholders).**
 
