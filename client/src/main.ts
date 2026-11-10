@@ -14,6 +14,7 @@ import { ExpeditionFullError, Session, waitForJoin } from "./game/session";
 import type { Controls } from "./game/session";
 import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
 import { loadSim } from "./sim";
+import type { Sim } from "./sim";
 import { headingRadians, positionMetres, velocityMetresPerSecond } from "./net/snapshot";
 import { dragLook, isHome, settleLook, turnLook, zoomWidth } from "./view/look";
 import type { LookState } from "./view/look";
@@ -37,6 +38,15 @@ const status = line("status");
 const sim = line("sim");
 const hud = line("hud");
 const lock = line("lock");
+
+// Shown while the pilot is home after being destroyed.
+const destroyed = document.createElement("div");
+destroyed.id = "destroyed";
+const destroyedText = document.createElement("p");
+const launchButton = document.createElement("button");
+launchButton.textContent = "Launch";
+destroyed.append(destroyedText, launchButton);
+document.body.append(destroyed);
 function showStatus(state: "connecting" | "connected" | "closed" | "offline", text: string) {
   status.dataset.state = state;
   status.textContent = text;
@@ -87,14 +97,30 @@ async function start(): Promise<void> {
     showStatus("closed", reason ? `Disconnected: ${reason}` : "Disconnected");
   });
 
-  const [{ shipId, tickRate, obstacles, weaponRange }, loaded] = await Promise.all([
-    waitForJoin(connection),
-    rules,
-  ]);
-  loaded.setObstacles(obstacles);
+  const [joined, loaded] = await Promise.all([waitForJoin(connection), rules]);
+  loaded.setObstacles(joined.obstacles);
+  const view = new ExpeditionView(document.body, joined.shipId, START_WIDTH);
+  view.setObstacles(joined.obstacles);
+  fly(connection, view, joined.weaponRange, () => beginLife(connection, joined, loaded));
+}
+
+/** One ship's flight, from launch until it is destroyed or the session ends. */
+interface Life {
+  session: Session;
+  predictor: Predictor;
+  /** Snapshot events not yet drawn: they are drawn where each ship is drawn. */
+  events: SnapshotEvent[];
+  /** The player's own hull, 0 to 255, from the latest snapshot. */
+  hull: { own: number };
+}
+
+function beginLife(
+  connection: Connection,
+  { shipId, tickRate }: { shipId: number; tickRate: number },
+  loaded: Sim,
+): Life {
   // Your own ship is predicted with the server's rules; others are drawn from snapshots.
   const predictor = new Predictor((state, controls) => loaded.stepShip(state, controls));
-  // Events are drawn on the next frame, where every ship's drawn position is known.
   const events: SnapshotEvent[] = [];
   const hull = { own: 255 };
   const session = new Session(
@@ -115,28 +141,52 @@ async function start(): Promise<void> {
       );
     },
   );
-  const view = new ExpeditionView(document.body, shipId, START_WIDTH);
-  view.setObstacles(obstacles);
   hud.dataset.ship = String(shipId);
-  fly({ connection, session, view, predictor, events, hull, weaponRange });
+  return { session, predictor, events, hull };
 }
 
 const KIND_NAME = { playerShip: "Pilot", drone: "Drone", raider: "Raider", warden: "Warden" };
 
-interface Flight {
-  connection: Connection;
-  session: Session;
-  view: ExpeditionView;
-  predictor: Predictor;
-  /** Snapshot events not yet drawn. */
-  events: SnapshotEvent[];
-  /** The player's own hull, 0 to 255, from the latest snapshot. */
-  hull: { own: number };
-  weaponRange: number;
-}
-
-function fly({ connection, session, view, predictor, events, hull, weaponRange }: Flight): void {
+function fly(
+  connection: Connection,
+  view: ExpeditionView,
+  weaponRange: number,
+  firstLife: () => Life,
+): void {
+  let life = firstLife();
+  /** False while the pilot is home after being destroyed. */
+  let flying = true;
   const shots = new Shots();
+
+  // Destroyed: the pilot is home (design §6) until they launch again in a reissued hull.
+  connection.onMessage((message) => {
+    if (message.type !== "destroyed") return;
+    flying = false;
+    life.session.retire();
+    selection.release();
+    destroyed.dataset.state = "home";
+    destroyedText.textContent =
+      `Destroyed, returned home. Hull reissued; lost ${String(message.modulesLost)} ` +
+      `upgraded modules and ${String(message.cargoLost)} cargo.`;
+  });
+  launchButton.addEventListener("click", () => {
+    launchButton.disabled = true;
+    void (async () => {
+      const rejoin = waitForJoin(connection);
+      await connection.send({ type: "launch" });
+      const [joined, loaded] = await Promise.all([rejoin, rules]);
+      life = beginLife(connection, joined, loaded);
+      view.setOwnShip(joined.shipId);
+      flying = true;
+      delete destroyed.dataset.state;
+    })()
+      .catch((error: unknown) => {
+        destroyedText.textContent = `Could not launch: ${String(error)}`;
+      })
+      .finally(() => {
+        launchButton.disabled = false;
+      });
+  });
   const home: LookState = { yaw: 0, pitch: RESTING_ELEVATION };
   let look: LookState = { ...home };
   let viewWidth = START_WIDTH;
@@ -148,11 +198,11 @@ function fly({ connection, session, view, predictor, events, hull, weaponRange }
   window.addEventListener("keydown", (event) => {
     if (event.code === "Tab") {
       event.preventDefault();
-      const own = poses.find((pose) => pose.id === session.shipId);
+      const own = poses.find((pose) => pose.id === life.session.shipId);
       if (own)
         selection.cycle(
           own,
-          poses.filter((pose) => pose.id !== session.shipId),
+          poses.filter((pose) => pose.id !== life.session.shipId),
         );
     } else if (event.code === "Escape") {
       selection.release();
@@ -179,7 +229,7 @@ function fly({ connection, session, view, predictor, events, hull, weaponRange }
     if (event.button !== 0) return;
     // Clicking a hostile locks it and centres the view; an ally is only centred on; empty space
     // returns the view to your own ship.
-    const others = poses.filter((pose) => pose.id !== session.shipId);
+    const others = poses.filter((pose) => pose.id !== life.session.shipId);
     const candidates = others.map((pose) => ({
       id: String(pose.id),
       screen: worldToScreen(new Vector3(pose.x, 0, pose.z), view.camera, view.viewport),
@@ -207,7 +257,7 @@ function fly({ connection, session, view, predictor, events, hull, weaponRange }
     { passive: false },
   );
 
-  const tickMs = 1_000 / session.tickRate;
+  const tickMs = 1_000 / life.session.tickRate;
   let last = performance.now();
   let untilTick = 0;
   const frame = (now: number) => {
@@ -219,11 +269,13 @@ function fly({ connection, session, view, predictor, events, hull, weaponRange }
     if (untilTick <= 0) {
       untilTick += tickMs;
       if (untilTick < 0) untilTick = tickMs;
-      const controls = readControls();
-      const { sequence, sent } = session.sendControls(controls);
-      predictor.advance(sequence, sent);
-      // Steering takes the view back to your own ship, so it is never flown off screen.
-      if (controls.thrust !== 0 || controls.turn !== 0) selection.steer();
+      if (flying) {
+        const controls = readControls();
+        const { sequence, sent } = life.session.sendControls(controls);
+        life.predictor.advance(sequence, sent);
+        // Steering takes the view back to your own ship, so it is never flown off screen.
+        if (controls.thrust !== 0 || controls.turn !== 0) selection.steer();
+      }
     }
 
     // In flight the view springs back once the look control is released (design §5).
@@ -237,8 +289,9 @@ function fly({ connection, session, view, predictor, events, hull, weaponRange }
     if (keyTurn !== 0) look = turnLook(look, keyTurn * KEY_TURN_RATE * dt);
     else if (!dragFrom && !isHome(look, home)) look = settleLook(look, home, dt);
 
+    const { session, predictor, events, hull } = life;
     const others = session.snapshots.sample(now).filter((pose) => pose.id !== session.shipId);
-    const predicted = predictor.visual(1 - Math.max(0, untilTick) / tickMs, dt);
+    const predicted = flying ? predictor.visual(1 - Math.max(0, untilTick) / tickMs, dt) : null;
     const own: EntityPose | undefined = predicted
       ? { id: session.shipId, kind: "playerShip", hull: hull.own, ...predicted }
       : undefined;

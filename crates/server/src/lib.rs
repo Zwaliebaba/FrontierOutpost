@@ -17,7 +17,7 @@ use frontier_protocol::{ClientMessage, PROTOCOL_VERSION, ServerMessage};
 #[must_use]
 pub fn handshake(message: &ClientMessage) -> ServerMessage {
     match *message {
-        ClientMessage::Lock { .. } => ServerMessage::Rejected {
+        ClientMessage::Lock { .. } | ClientMessage::Launch => ServerMessage::Rejected {
             protocol_version: PROTOCOL_VERSION,
             reason: "the first message must be hello".into(),
         },

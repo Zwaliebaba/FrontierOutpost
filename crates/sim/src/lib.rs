@@ -8,6 +8,7 @@
 pub mod collision;
 pub mod combat;
 pub mod npc;
+pub mod outcome;
 pub mod profile;
 pub mod rng;
 pub mod ship;

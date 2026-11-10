@@ -32,6 +32,8 @@ pub enum ClientMessage {
     /// Locks a hostile ship as the weapon target, or releases the lock with
     /// `None`. The server ignores a lock on anything but an existing hostile.
     Lock { target: Option<u16> },
+    /// After `Destroyed`: launch again in a reissued hull.
+    Launch,
 }
 
 /// A message sent from the server to the client.
@@ -62,6 +64,9 @@ pub enum ServerMessage {
     },
     /// The expedition already has its four pilots.
     ExpeditionFull,
+    /// The pilot's ship was destroyed. They are home and out of the expedition
+    /// until they send `Launch`; the hull is reissued (design section 6).
+    Destroyed { modules_lost: u32, cargo_lost: u32 },
 }
 
 /// A fixed circular obstacle on the gameplay plane, in metres.

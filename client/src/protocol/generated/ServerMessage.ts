@@ -8,4 +8,4 @@ export type ServerMessage = { "type": "welcome", protocolVersion: number, } | { 
 /**
  * How close a locked target must be for the pilot's weapon to fire, m.
  */
-weaponRange: number, } | { "type": "expeditionFull" };
+weaponRange: number, } | { "type": "expeditionFull" } | { "type": "destroyed", modulesLost: number, cargoLost: number, };

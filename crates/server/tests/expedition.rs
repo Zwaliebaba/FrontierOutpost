@@ -266,3 +266,40 @@ async fn a_pilot_who_locks_a_drone_and_holds_the_trigger_fires_at_it() {
     }
     assert!(fired_at_drone, "no shot at the locked drone within 8 s");
 }
+
+#[tokio::test]
+async fn a_destroyed_pilot_is_told_and_can_launch_again() {
+    use frontier_protocol::ClientMessage;
+    let (url, sha256) = start_server();
+    let (session, mut send, mut recv) = connect_to(&url, sha256).await;
+    assert!(matches!(
+        hello(&mut send, &mut recv).await,
+        ServerMessage::Welcome { .. }
+    ));
+    let ServerMessage::Joined { ship_id: first, .. } = read(&mut recv).await else {
+        panic!("expected Joined");
+    };
+
+    // An idle pilot at the spawn is found and destroyed by the skirmish.
+    let message = tokio::time::timeout(Duration::from_secs(60), read(&mut recv))
+        .await
+        .expect("the skirmish should destroy an idle pilot within a minute");
+    assert_eq!(
+        message,
+        ServerMessage::Destroyed {
+            modules_lost: 0,
+            cargo_lost: 0
+        }
+    );
+
+    common::write(&mut send, &ClientMessage::Launch).await;
+    let ServerMessage::Joined {
+        ship_id: second, ..
+    } = read(&mut recv).await
+    else {
+        panic!("expected Joined after Launch");
+    };
+    assert_ne!(first, second, "a reissued hull is a new ship");
+    let snapshot = last_snapshot(&session, Duration::from_millis(200)).await;
+    assert!(pilots(&snapshot).contains(&second));
+}

@@ -15,6 +15,7 @@ use frontier_protocol::snapshot::{
 use frontier_sim::TICKS_PER_SECOND;
 use frontier_sim::collision::{Obstacle, asteroid_field};
 use frontier_sim::combat::Event;
+use frontier_sim::outcome::{Ending, Loadout, losses};
 use frontier_sim::profile::ShipKind;
 use frontier_sim::ship::ShipInput;
 use frontier_sim::skirmish::Skirmish;
@@ -52,9 +53,18 @@ impl SnapshotSink for Session {
     }
 }
 
+/// What the expedition tells one pilot's session, besides snapshots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PilotEvent {
+    /// The pilot's ship was destroyed. They have left the expedition and are
+    /// sent no more snapshots; `lost` is what the ending cost them.
+    Destroyed { lost: Loadout },
+}
+
 enum Command {
     Join {
         sink: Box<dyn SnapshotSink>,
+        events: mpsc::UnboundedSender<PilotEvent>,
         reply: oneshot::Sender<Option<ShipId>>,
     },
     Input {
@@ -96,12 +106,23 @@ impl Expedition {
         &self.obstacles
     }
 
-    /// Adds a pilot. Returns their ship, or `None` if the expedition is full
-    /// or has stopped.
-    pub async fn join(&self, sink: impl SnapshotSink) -> Option<ShipId> {
+    /// Adds a pilot, who is sent snapshots through `sink` and everything else
+    /// through `events`. Returns their ship, or `None` if the expedition is
+    /// full or has stopped.
+    pub async fn join(
+        &self,
+        sink: impl SnapshotSink,
+        events: mpsc::UnboundedSender<PilotEvent>,
+    ) -> Option<ShipId> {
         let (reply, answer) = oneshot::channel();
         let sink = Box::new(sink);
-        self.commands.send(Command::Join { sink, reply }).ok()?;
+        self.commands
+            .send(Command::Join {
+                sink,
+                events,
+                reply,
+            })
+            .ok()?;
         answer.await.ok().flatten()
     }
 
@@ -124,6 +145,7 @@ impl Expedition {
 
 struct Pilot {
     sink: Box<dyn SnapshotSink>,
+    events: mpsc::UnboundedSender<PilotEvent>,
     inputs: InputQueue,
     /// The input applied on the latest tick, if any has arrived.
     last_input: Option<u16>,
@@ -162,6 +184,7 @@ async fn run(mut commands: mpsc::UnboundedReceiver<Command>, mut world: World) {
                 skirmish.step(&mut world);
                 world.step();
                 broadcast(&world, &mut pilots);
+                send_home_destroyed(&world, &mut pilots);
             }
         }
     }
@@ -169,13 +192,18 @@ async fn run(mut commands: mpsc::UnboundedReceiver<Command>, mut world: World) {
 
 fn apply(command: Command, world: &mut World, pilots: &mut HashMap<ShipId, Pilot>) {
     match command {
-        Command::Join { sink, reply } => {
+        Command::Join {
+            sink,
+            events,
+            reply,
+        } => {
             let ship = (pilots.len() < MAX_PILOTS).then(|| world.spawn_ship());
             if let Some(ship) = ship {
                 pilots.insert(
                     ship,
                     Pilot {
                         sink,
+                        events,
                         inputs: InputQueue::default(),
                         last_input: None,
                     },
@@ -205,6 +233,21 @@ fn apply(command: Command, world: &mut World, pilots: &mut HashMap<ShipId, Pilot
 fn leave(ship: ShipId, world: &mut World, pilots: &mut HashMap<ShipId, Pilot>) {
     pilots.remove(&ship);
     world.remove_ship(ship);
+}
+
+/// Removes every pilot whose ship was destroyed this tick and tells them what
+/// they lost. They have just been sent the snapshot reporting it.
+fn send_home_destroyed(world: &World, pilots: &mut HashMap<ShipId, Pilot>) {
+    for event in world.events() {
+        let Event::Destroyed { ship, .. } = *event else {
+            continue;
+        };
+        if let Some(pilot) = pilots.remove(&ship) {
+            // Nothing is carried yet: cargo and upgraded modules arrive in M3 and M5.
+            let lost = losses(Ending::Destroyed, Loadout::default());
+            let _ = pilot.events.send(PilotEvent::Destroyed { lost });
+        }
+    }
 }
 
 fn entity_kind(kind: ShipKind) -> EntityKind {
@@ -293,6 +336,10 @@ mod tests {
         }
     }
 
+    fn events() -> mpsc::UnboundedSender<PilotEvent> {
+        mpsc::unbounded_channel().0
+    }
+
     fn channel() -> (Channel, std_mpsc::Receiver<Vec<u8>>) {
         let (send, receive) = std_mpsc::channel();
         (Channel(send), receive)
@@ -309,7 +356,7 @@ mod tests {
     async fn sends_twenty_snapshots_a_second_to_each_pilot() {
         let expedition = Expedition::start();
         let (sink, snapshots) = channel();
-        expedition.join(sink).await.unwrap();
+        expedition.join(sink, events()).await.unwrap();
         tokio::time::sleep(Duration::from_millis(1_025)).await;
         let count = snapshots.try_iter().count();
         assert!((20..=22).contains(&count), "{count} snapshots");
@@ -319,9 +366,9 @@ mod tests {
     async fn turns_away_a_fifth_pilot() {
         let expedition = Expedition::start();
         for _ in 0..MAX_PILOTS {
-            assert!(expedition.join(channel().0).await.is_some());
+            assert!(expedition.join(channel().0, events()).await.is_some());
         }
-        assert!(expedition.join(channel().0).await.is_none());
+        assert!(expedition.join(channel().0, events()).await.is_none());
     }
 
     #[tokio::test(start_paused = true)]
@@ -329,7 +376,7 @@ mod tests {
         use frontier_protocol::input::Controls;
         let expedition = Expedition::start();
         let (sink, snapshots) = channel();
-        let ship = expedition.join(sink).await.unwrap();
+        let ship = expedition.join(sink, events()).await.unwrap();
         let thrust = Controls {
             thrust: 127,
             turn: 0,
@@ -354,8 +401,8 @@ mod tests {
     async fn a_departed_pilot_disappears_from_snapshots() {
         let expedition = Expedition::start();
         let (sink, snapshots) = channel();
-        let stays = expedition.join(sink).await.unwrap();
-        let goes = expedition.join(channel().0).await.unwrap();
+        let stays = expedition.join(sink, events()).await.unwrap();
+        let goes = expedition.join(channel().0, events()).await.unwrap();
         expedition.leave(goes);
         tokio::time::sleep(Duration::from_millis(200)).await;
         let ids: Vec<u16> = latest(&snapshots)
@@ -372,7 +419,7 @@ mod tests {
     async fn snapshots_carry_the_skirmish_npcs_at_full_hull() {
         let expedition = Expedition::start();
         let (sink, snapshots) = channel();
-        expedition.join(sink).await.unwrap();
+        expedition.join(sink, events()).await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         let snapshot = latest(&snapshots).unwrap();
         let npcs: Vec<&EntityState> = snapshot
@@ -388,15 +435,46 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
+    async fn a_pilot_whose_ship_is_destroyed_is_told_and_sent_no_more_snapshots() {
+        let expedition = Expedition::start();
+        let (sink, snapshots) = channel();
+        let (events, mut told) = mpsc::unbounded_channel();
+        let ship = expedition.join(sink, events).await.unwrap();
+        // The skirmish's NPCs notice an idle pilot at the spawn and destroy it.
+        let event = tokio::time::timeout(Duration::from_secs(120), told.recv())
+            .await
+            .expect("the skirmish should destroy an idle pilot")
+            .unwrap();
+        assert_eq!(
+            event,
+            PilotEvent::Destroyed {
+                lost: Loadout::default()
+            }
+        );
+        let last = snapshots.try_iter().last().unwrap();
+        let last = Snapshot::decode(&last).unwrap();
+        assert!(last.events.iter().any(|event| matches!(
+            event,
+            SnapshotEvent::Destroyed { ship: s, .. } if *s == ship.0
+        )));
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        assert_eq!(
+            snapshots.try_iter().count(),
+            0,
+            "no snapshots after destruction"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
     async fn stops_sending_to_a_pilot_who_cannot_be_reached() {
         let expedition = Expedition::start();
         let (sink, snapshots) = channel();
-        expedition.join(sink).await.unwrap();
+        expedition.join(sink, events()).await.unwrap();
         drop(snapshots);
         // The next join only succeeds if the unreachable pilot was dropped.
         tokio::time::sleep(Duration::from_millis(100)).await;
         for _ in 0..MAX_PILOTS {
-            assert!(expedition.join(channel().0).await.is_some());
+            assert!(expedition.join(channel().0, events()).await.is_some());
         }
     }
 }

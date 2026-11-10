@@ -22,3 +22,20 @@ test("holding Space damages the locked hostile", async ({ page }) => {
   }).toPass({ timeout: 6_000 });
   await page.keyboard.up("Space");
 });
+
+test("a destroyed pilot is sent home and can launch again", async ({ page }) => {
+  // The skirmish has to find and destroy an idle pilot.
+  test.setTimeout(90_000);
+  await page.goto("/");
+  const hud = page.locator("#hud");
+  await expect(hud).toHaveAttribute("data-ship", /\d+/);
+  const first = await hud.getAttribute("data-ship");
+
+  const destroyed = page.locator("#destroyed");
+  await expect(destroyed).toHaveAttribute("data-state", "home", { timeout: 75_000 });
+  await expect(destroyed).toContainText("Destroyed, returned home");
+
+  await destroyed.getByRole("button", { name: "Launch" }).click();
+  await expect(destroyed).not.toHaveAttribute("data-state", "home");
+  await expect(hud).not.toHaveAttribute("data-ship", first ?? "");
+});

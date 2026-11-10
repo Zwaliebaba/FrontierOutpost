@@ -17,7 +17,7 @@ use tracing::{debug, info, warn};
 use web_transport_quinn::{RecvStream, SendStream, Server, Session, crypto, quinn};
 
 use crate::cert::DevCertificate;
-use crate::expedition::Expedition;
+use crate::expedition::{Expedition, PilotEvent};
 use crate::handshake;
 
 /// Why a session ended other than by the client leaving normally.
@@ -135,7 +135,8 @@ async fn run_session(session: &Session, expedition: &Expedition) -> Result<(), S
         return Ok(());
     }
 
-    let Some(ship) = expedition.join(session.clone()).await else {
+    let (events_tx, events) = mpsc::unbounded_channel();
+    let Some(ship) = expedition.join(session.clone(), events_tx.clone()).await else {
         write_frame(&mut send, &ServerMessage::ExpeditionFull).await?;
         let _ = send.finish();
         // Closing at once can discard the message before it arrives, so give the
@@ -144,7 +145,23 @@ async fn run_session(session: &Session, expedition: &Expedition) -> Result<(), S
         session.close(EXPEDITION_FULL, b"expedition full");
         return Ok(());
     };
-    let joined = ServerMessage::Joined {
+    write_frame(&mut send, &joined(expedition, ship)).await?;
+    let mut pilot = Pilot {
+        session,
+        expedition,
+        send,
+        ship: Some(ship),
+        events_tx,
+    };
+    let result = pilot.fly(recv, events).await;
+    if let Some(ship) = pilot.ship {
+        expedition.leave(ship);
+    }
+    result
+}
+
+fn joined(expedition: &Expedition, ship: ShipId) -> ServerMessage {
+    ServerMessage::Joined {
         ship_id: ship.0,
         tick_rate: TICKS_PER_SECOND,
         obstacles: expedition
@@ -160,58 +177,100 @@ async fn run_session(session: &Session, expedition: &Expedition) -> Result<(), S
             .profile()
             .weapon
             .range,
-    };
-    let result = match write_frame(&mut send, &joined).await {
-        Ok(()) => fly(session, expedition, ship, recv).await,
-        Err(error) => Err(error),
-    };
-    expedition.leave(ship);
-    result
+    }
 }
 
-/// Passes the pilot's datagrams and control messages to the expedition until
-/// the session ends.
-async fn fly(
-    session: &Session,
-    expedition: &Expedition,
-    ship: ShipId,
-    mut recv: RecvStream,
-) -> Result<(), SessionError> {
-    // Frames are read on their own task: reading one is not cancel-safe, so it
-    // must not race other events in the select below.
-    let (frames_tx, mut frames) = mpsc::unbounded_channel();
-    tokio::spawn(async move {
+/// One connected pilot, in the expedition or at home after being destroyed.
+struct Pilot<'a> {
+    session: &'a Session,
+    expedition: &'a Expedition,
+    send: SendStream,
+    /// The ship being flown, or `None` while the pilot is home.
+    ship: Option<ShipId>,
+    events_tx: mpsc::UnboundedSender<PilotEvent>,
+}
+
+impl Pilot<'_> {
+    /// Passes the pilot's datagrams and control messages to the expedition,
+    /// and the expedition's news to the pilot, until the session ends.
+    async fn fly(
+        &mut self,
+        mut recv: RecvStream,
+        mut events: mpsc::UnboundedReceiver<PilotEvent>,
+    ) -> Result<(), SessionError> {
+        // Frames are read on their own task: reading one is not cancel-safe, so
+        // it must not race other events in the select below.
+        let (frames_tx, mut frames) = mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            loop {
+                let frame = read_frame::<ClientMessage>(&mut recv).await;
+                let failed = frame.is_err();
+                if frames_tx.send(frame).is_err() || failed {
+                    return;
+                }
+            }
+        });
+
         loop {
-            let frame = read_frame::<ClientMessage>(&mut recv).await;
-            let failed = frame.is_err();
-            if frames_tx.send(frame).is_err() || failed {
-                return;
+            tokio::select! {
+                datagram = self.session.read_datagram() => match datagram {
+                    Ok(bytes) => match (InputDatagram::decode(&bytes), self.ship) {
+                        (Ok(input), Some(ship)) => self.expedition.input(ship, input),
+                        // Inputs sent while at home, after destruction, go nowhere.
+                        (Ok(_), None) => {}
+                        // A malformed datagram is dropped, as a lost one would be.
+                        (Err(error), _) => debug!(%error, "datagram ignored"),
+                    },
+                    // The session closed while reading: the client left.
+                    Err(_) => return Ok(()),
+                },
+                frame = frames.recv() => match frame {
+                    Some(Ok(message)) => self.handle(message).await?,
+                    // The client finished the control stream: it is leaving.
+                    Some(Err(SessionError::Read(_))) | None => return Ok(()),
+                    Some(Err(error)) => return Err(error),
+                },
+                Some(event) = events.recv() => match event {
+                    PilotEvent::Destroyed { lost } => {
+                        self.ship = None;
+                        let message = ServerMessage::Destroyed {
+                            modules_lost: lost.upgraded_modules,
+                            cargo_lost: lost.cargo,
+                        };
+                        write_frame(&mut self.send, &message).await?;
+                    }
+                },
+                _ = self.session.closed() => return Ok(()),
             }
         }
-    });
+    }
 
-    loop {
-        tokio::select! {
-            datagram = session.read_datagram() => match datagram {
-                Ok(bytes) => match InputDatagram::decode(&bytes) {
-                    Ok(input) => expedition.input(ship, input),
-                    // A malformed datagram is dropped, as a lost one would be.
-                    Err(error) => debug!(%error, "datagram ignored"),
-                },
-                // The session closed while reading: the client left.
-                Err(_) => return Ok(()),
-            },
-            frame = frames.recv() => match frame {
-                Some(Ok(ClientMessage::Lock { target })) => {
-                    expedition.lock(ship, target.map(ShipId));
+    async fn handle(&mut self, message: ClientMessage) -> Result<(), SessionError> {
+        match (message, self.ship) {
+            (ClientMessage::Lock { target }, Some(ship)) => {
+                self.expedition.lock(ship, target.map(ShipId));
+            }
+            // A lock sent just before destruction arrives too late to matter.
+            (ClientMessage::Lock { .. }, None) => {}
+            (ClientMessage::Launch, None) => {
+                let rejoined = self
+                    .expedition
+                    .join(self.session.clone(), self.events_tx.clone())
+                    .await;
+                match rejoined {
+                    Some(ship) => {
+                        self.ship = Some(ship);
+                        write_frame(&mut self.send, &joined(self.expedition, ship)).await?;
+                    }
+                    // Someone took the place while this pilot was home.
+                    None => write_frame(&mut self.send, &ServerMessage::ExpeditionFull).await?,
                 }
-                Some(Ok(ClientMessage::Hello { .. })) => return Err(SessionError::Unexpected),
-                // The client finished the control stream: it is leaving.
-                Some(Err(SessionError::Read(_))) | None => return Ok(()),
-                Some(Err(error)) => return Err(error),
-            },
-            _ = session.closed() => return Ok(()),
+            }
+            (ClientMessage::Launch, Some(_)) | (ClientMessage::Hello { .. }, _) => {
+                return Err(SessionError::Unexpected);
+            }
         }
+        Ok(())
     }
 }
 

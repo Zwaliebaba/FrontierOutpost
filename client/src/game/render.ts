@@ -72,7 +72,7 @@ export class ExpeditionView {
   readonly #bolts: Mesh<BoxGeometry, MeshBasicMaterial>[] = [];
   readonly #blasts: Mesh<IcosahedronGeometry, MeshBasicMaterial>[] = [];
   readonly #kinds = new Map<number, EntityKind>();
-  readonly #ownShipId: number;
+  #ownShipId: number;
   #rig: CameraRig;
   #width = 1;
   #height = 1;
@@ -94,6 +94,11 @@ export class ExpeditionView {
     starlight.position.set(-4, 10, 6);
     this.#scene.add(starlight);
     this.#addStars();
+  }
+
+  /** The player's ship after a relaunch, drawn as their own. */
+  setOwnShip(id: number): void {
+    this.#ownShipId = id;
   }
 
   get camera(): CameraRig["camera"] {

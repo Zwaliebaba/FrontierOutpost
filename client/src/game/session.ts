@@ -59,6 +59,8 @@ export class Session {
   #lastAck: number | null = null;
   #roundTripMs: number | null = null;
   readonly #now: () => number;
+  /** Set when this ship's flight ends; its snapshots and controls are then ignored. */
+  #retired = false;
 
   /**
    * `onSnapshot` is called for each snapshot newer than any before it, after it is buffered.
@@ -76,6 +78,7 @@ export class Session {
     this.tickRate = tickRate;
     this.snapshots = new SnapshotBuffer(tickRate);
     connection.onDatagram((bytes) => {
+      if (this.#retired) return;
       let snapshot: Snapshot;
       try {
         snapshot = decodeSnapshot(bytes);
@@ -88,6 +91,11 @@ export class Session {
       this.#measure(snapshot.inputAck);
       if (before === undefined || snapshot.tick > before) onSnapshot(snapshot);
     });
+  }
+
+  /** Ends this ship's flight: later snapshots and controls belong to the next one. */
+  retire(): void {
+    this.#retired = true;
   }
 
   /**

@@ -3,4 +3,4 @@
 /**
  * A message sent from the client to the server.
  */
-export type ClientMessage = { "type": "hello", protocolVersion: number, } | { "type": "lock", target: number | null, };
+export type ClientMessage = { "type": "hello", protocolVersion: number, } | { "type": "lock", target: number | null, } | { "type": "launch" };

@@ -44,6 +44,35 @@
       #lock:empty {
         display: none;
       }
+      #destroyed {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: none;
+        padding: 18px 24px;
+        color: #d7deea;
+        background: rgb(11 18 32 / 92%);
+        border: 1px solid #34486b;
+        border-radius: 6px;
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+        text-align: center;
+      }
+      #destroyed[data-state="home"] {
+        display: block;
+      }
+      #destroyed button {
+        margin-top: 10px;
+        padding: 6px 22px;
+        color: inherit;
+        background: #12304f;
+        border: 1px solid #4a7ab0;
+        border-radius: 4px;
+        font: inherit;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
