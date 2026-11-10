@@ -11,7 +11,7 @@ use crate::{TICKS_PER_SECOND, ticks_for_millis};
 
 /// What an outpost's powered layout grants an expedition (design section 10).
 /// Expedition options are keyed to these tags, never to facility identifiers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Capability {
     /// Locates the derelict's signal: from a sensor array.
     LocateSignal,
@@ -19,6 +19,53 @@ pub enum Capability {
     WorkVolatiles,
     /// Breaches the nest core: from a fabrication bay.
     BreachNest,
+    /// Fits the scout rig.
+    ScoutRig,
+    /// Fits the extraction rig.
+    ExtractionRig,
+    /// Fits the escort rig.
+    EscortRig,
+    /// Fits the cargo frame module.
+    CargoFrame,
+    /// Fits the deep-scan array module.
+    DeepScan,
+    /// Fits the heat sink module.
+    HeatSink,
+    /// Fits the point-defence module.
+    PointDefence,
+}
+
+impl Capability {
+    pub const ALL: [Self; 10] = [
+        Self::LocateSignal,
+        Self::WorkVolatiles,
+        Self::BreachNest,
+        Self::ScoutRig,
+        Self::ExtractionRig,
+        Self::EscortRig,
+        Self::CargoFrame,
+        Self::DeepScan,
+        Self::HeatSink,
+        Self::PointDefence,
+    ];
+
+    /// What a preview names: the pocket, rig or module this opens (design
+    /// section 2).
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::LocateSignal => "Derelict pocket",
+            Self::WorkVolatiles => "Volatile veins pocket",
+            Self::BreachNest => "Nest core pocket",
+            Self::ScoutRig => "Scout rig",
+            Self::ExtractionRig => "Extraction rig",
+            Self::EscortRig => "Escort rig",
+            Self::CargoFrame => "Cargo frame module",
+            Self::DeepScan => "Deep-scan array module",
+            Self::HeatSink => "Heat sink module",
+            Self::PointDefence => "Point-defence module",
+        }
+    }
 }
 
 /// The kinds of pocket in the Stage 1 site.
