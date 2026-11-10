@@ -37,6 +37,14 @@ export function storeToken(token: string | null): void {
   }
 }
 
+/**
+ * Whether a failed resumption means the token is no good. Only the server's refusal says so; a
+ * connection that drops mid-way (a reload, a lost network) leaves the token to try again.
+ */
+export function tokenRefused(error: unknown): boolean {
+  return error instanceof SignInRefusedError;
+}
+
 /** Registers a new pilot called `callsign` with a new passkey. */
 export function register(connection: Connection, callsign: string): Promise<SignedIn> {
   return exchange(connection, { type: "register", callsign }, "create");

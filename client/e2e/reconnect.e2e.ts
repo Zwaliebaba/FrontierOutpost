@@ -29,6 +29,9 @@ test("signing in on another page takes the run over, and the first page stays ou
   const other = await browser.newPage();
   await addAuthenticator(other);
   await other.goto(QUIET);
+  // Only once this first load has found no token and asks to sign in: a token set while it is
+  // still starting would be resumed by it, and the reload below would cut that short.
+  await expect(other.locator("#signin")).toHaveAttribute("data-state", "open");
   await other.evaluate((value) => {
     sessionStorage.setItem("frontier.session", value ?? "");
   }, token);

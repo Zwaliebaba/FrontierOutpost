@@ -40,6 +40,7 @@ import type { Contract, Joined, Scanned } from "./game/contract";
 import {
   SignInRefusedError,
   register,
+  tokenRefused,
   resume,
   signIn,
   storeToken,
@@ -238,7 +239,10 @@ async function identify(connection: Connection): Promise<void> {
     try {
       signedIn(await resume(connection, token));
       return;
-    } catch {
+    } catch (error) {
+      // Only the server's refusal makes the token worthless. A connection that drops mid-way
+      // keeps it, and the reconnect signs straight back in with it.
+      if (!tokenRefused(error)) throw error;
       storeToken(null);
     }
   }
