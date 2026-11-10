@@ -73,7 +73,9 @@ On Windows the Python launcher is `py`, not `python`.
    - Bump `PROTOCOL_VERSION` on any incompatible change.
    - Run `cargo test` and commit the regenerated `client/src/protocol/generated/` together with the
      Rust change. CI fails if they differ. Never edit generated files by hand.
-   - The wire encoding is JSON for now; the transport is not chosen yet (see §8).
+   - Reliable messages travel as JSON on streams. Snapshots travel as compact binary datagrams
+     and must fit the browser's datagram limit (1,024 bytes in Chromium). The transport is
+     WebTransport, provisionally (see §8).
 4. **The client imports wire types only through `client/src/protocol/index.ts`.**
 5. **One camera, one plane** (design §5, style guide §6). All activities share one orthographic
    tactical view that rests at 33° elevation (`client/src/camera.ts`). A player may orbit it while
@@ -131,7 +133,19 @@ change ships with a test. Keep comments for the *why*.
 
 ## 8. Open decisions — ask, don't assume
 
-- Network transport (WebSocket or WebTransport) and whether the wire format stays JSON.
-- Server async runtime and HTTP framework (none chosen yet).
+- Whether a fallback transport is needed for browsers and networks without WebTransport or UDP.
+- HTTP framework, if one is needed beside WebTransport (none chosen yet).
+- How a player is identified (required for Stage 1 saves and reconnection).
 - Persistence for home and account saves (required for Stage 1).
 - Project license (none yet).
+
+Decided:
+
+- Server async runtime: Tokio.
+- Wire format: JSON on reliable streams for everything except snapshots, which are compact binary
+  datagrams. `spikes/webtransport` shows why: on a lossy link, large reliable messages hitch.
+
+Provisional:
+
+- Network transport: WebTransport, served by quinn and `web-transport-quinn`. The spike confirms
+  it in Chromium; Firefox and Safari have not been run.
