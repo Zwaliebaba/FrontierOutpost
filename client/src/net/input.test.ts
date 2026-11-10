@@ -15,7 +15,7 @@ describe("input encoder", () => {
 
   it("carries as many inputs as the server accepts", () => {
     expect(MAX_INPUTS).toBe(RUST_MAX_INPUTS);
-    const none: { thrust: number; turn: number }[] = [];
+    const none: { thrust: number; turn: number; fire: boolean }[] = [];
     expect(() => encodeInput(0, none)).toThrow(RangeError);
     const many = Array.from({ length: MAX_INPUTS + 1 }, () => ({ thrust: 0, turn: 0 }));
     expect(() => encodeInput(0, many)).toThrow(RangeError);

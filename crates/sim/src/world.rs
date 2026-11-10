@@ -2,6 +2,7 @@
 
 use crate::Tick;
 use crate::collision::{self, Obstacle};
+use crate::combat::{Event, MAX_PROJECTILES, Projectile};
 use crate::npc;
 use crate::profile::ShipKind;
 use crate::ship::{self, ShipInput, ShipState};
@@ -25,6 +26,11 @@ pub struct Ship {
     pub home: (f32, f32),
     /// The ship this one has locked: chosen by its pilot, or by its NPC logic.
     pub lock: Option<ShipId>,
+    /// Whether it is trying to fire at its lock: its pilot holds the trigger,
+    /// or its NPC logic has the lock in range.
+    pub firing: bool,
+    /// Steps until its weapon can fire again.
+    pub cooldown: u32,
 }
 
 impl Ship {
@@ -39,6 +45,8 @@ impl Ship {
             cargo: 0,
             home: (state.x, state.z),
             lock: None,
+            firing: false,
+            cooldown: 0,
         }
     }
 }
@@ -49,6 +57,9 @@ pub struct World {
     tick: Tick,
     ships: Vec<Ship>,
     obstacles: Vec<Obstacle>,
+    projectiles: Vec<Projectile>,
+    /// What happened during the latest step.
+    events: Vec<Event>,
     next_id: u16,
 }
 
@@ -98,6 +109,28 @@ impl World {
     #[must_use]
     pub fn ship(&self, id: ShipId) -> Option<&Ship> {
         self.ships.iter().find(|ship| ship.id == id)
+    }
+
+    #[must_use]
+    pub fn projectiles(&self) -> &[Projectile] {
+        &self.projectiles
+    }
+
+    /// What happened during the latest step.
+    #[must_use]
+    pub fn events(&self) -> &[Event] {
+        &self.events
+    }
+
+    /// Holds or releases a pilot's trigger. Returns whether the ship exists.
+    pub fn set_firing(&mut self, id: ShipId, firing: bool) -> bool {
+        match self.ships.iter_mut().find(|ship| ship.id == id) {
+            Some(ship) => {
+                ship.firing = firing;
+                true
+            }
+            None => false,
+        }
     }
 
     fn next_id(&mut self) -> ShipId {
@@ -186,6 +219,7 @@ impl World {
     /// collisions resolve. Ships push one another apart, and obstacles go last,
     /// so no ship ends a step inside one.
     pub fn step(&mut self) {
+        self.events.clear();
         self.think();
         for ship in &mut self.ships {
             let handling = ship.kind.profile().handling;
@@ -203,7 +237,101 @@ impl World {
             let radius = ship.kind.profile().radius;
             ship.state = collision::resolve_obstacles(ship.state, radius, &self.obstacles);
         }
+        self.fire();
+        self.fly_projectiles();
         self.tick = self.tick.next();
+    }
+
+    /// Fires every weapon that is ready, held and has a hostile lock in range.
+    fn fire(&mut self) {
+        let mut shots = Vec::new();
+        for ship in &self.ships {
+            let weapon = ship.kind.profile().weapon;
+            let Some(target) = ship.lock.and_then(|id| self.ship(id)) else {
+                continue;
+            };
+            let distance = (target.state.x - ship.state.x).hypot(target.state.z - ship.state.z);
+            if ship.firing
+                && ship.cooldown == 0
+                && ship.kind.is_hostile_to(target.kind)
+                && distance <= weapon.range
+            {
+                shots.push((ship.id, target.id));
+            }
+        }
+        for ship in &mut self.ships {
+            ship.cooldown = ship.cooldown.saturating_sub(1);
+        }
+        for (shooter_id, target) in shots {
+            if self.projectiles.len() >= MAX_PROJECTILES {
+                break;
+            }
+            let Some(shooter) = self.ships.iter_mut().find(|ship| ship.id == shooter_id) else {
+                continue;
+            };
+            let weapon = shooter.kind.profile().weapon;
+            shooter.cooldown = weapon.cooldown_ticks;
+            // Long enough to cross twice the weapon's range, then it gives up.
+            let flight = 2.0 * weapon.range / (weapon.projectile_speed * ship::DT);
+            self.projectiles.push(Projectile {
+                shooter: shooter_id,
+                target,
+                x: shooter.state.x,
+                z: shooter.state.z,
+                speed: weapon.projectile_speed,
+                damage: weapon.damage,
+                // A small positive float, so `as` cannot lose anything that matters.
+                ticks_left: flight.ceil() as u32 + 1,
+            });
+            self.events.push(Event::Fired {
+                shooter: shooter_id,
+                target,
+                speed: weapon.projectile_speed,
+            });
+        }
+    }
+
+    /// Moves every projectile toward its target, applying hits and removing
+    /// ships whose hull runs out.
+    fn fly_projectiles(&mut self) {
+        let mut hits = Vec::new();
+        self.projectiles.retain_mut(|projectile| {
+            let Some(target) = self.ships.iter().find(|ship| ship.id == projectile.target) else {
+                // Its target is gone: the shot is wasted.
+                return false;
+            };
+            let (dx, dz) = (target.state.x - projectile.x, target.state.z - projectile.z);
+            let distance = dx.hypot(dz);
+            let travel = projectile.speed * ship::DT;
+            if distance <= travel + target.kind.profile().radius {
+                hits.push((projectile.target, projectile.shooter, projectile.damage));
+                return false;
+            }
+            projectile.x += dx / distance * travel;
+            projectile.z += dz / distance * travel;
+            projectile.ticks_left = projectile.ticks_left.saturating_sub(1);
+            projectile.ticks_left > 0
+        });
+
+        let mut destroyed = Vec::new();
+        for (target, shooter, damage) in hits {
+            let Some(ship) = self.ships.iter_mut().find(|ship| ship.id == target) else {
+                continue;
+            };
+            let was_alive = ship.hull > 0.0;
+            ship.hull -= damage;
+            if was_alive && ship.hull <= 0.0 {
+                destroyed.push((ship.id, ship.kind, shooter));
+            }
+        }
+        for (ship, kind, by) in destroyed {
+            self.remove_ship(ship);
+            self.events.push(Event::Destroyed {
+                ship,
+                kind,
+                by: Some(by),
+            });
+        }
     }
 
     /// Lets every NPC choose a target and how to steer.
@@ -221,9 +349,18 @@ impl World {
             })
             .collect();
         for (index, target, input) in decisions {
+            let in_range = target
+                .and_then(|id| self.ship(id))
+                .zip(self.ships.get(index))
+                .is_some_and(|(target, npc)| {
+                    let distance =
+                        (target.state.x - npc.state.x).hypot(target.state.z - npc.state.z);
+                    distance <= npc.kind.profile().weapon.range
+                });
             if let Some(npc) = self.ships.get_mut(index) {
                 npc.lock = target;
                 npc.input = input;
+                npc.firing = in_range;
             }
         }
     }
@@ -400,6 +537,161 @@ mod tests {
         world.set_lock(pilot, Some(drone));
         world.remove_ship(drone);
         assert_eq!(world.ship(pilot).unwrap().lock, None);
+    }
+
+    /// A pilot at the origin facing a stationary `kind` at `distance` along +x,
+    /// locked and holding the trigger.
+    fn duel(kind: ShipKind, distance: f32) -> (World, ShipId, ShipId) {
+        let mut world = World::new();
+        let pilot = world.spawn_ship();
+        let target = world.spawn_npc(kind, (distance, 0.0));
+        world.ships[0].state = ShipState::default();
+        world.set_lock(pilot, Some(target));
+        world.set_firing(pilot, true);
+        (world, pilot, target)
+    }
+
+    fn fired(world: &World, shooter: ShipId) -> bool {
+        world
+            .events()
+            .iter()
+            .any(|event| matches!(event, Event::Fired { shooter: s, .. } if *s == shooter))
+    }
+
+    #[test]
+    fn fires_only_within_range() {
+        let range = ShipKind::Pilot.profile().weapon.range;
+        let (mut world, pilot, _) = duel(ShipKind::Warden, range + 30.0);
+        // Hold the warden still and out of reach of its own leash logic.
+        world.step();
+        assert!(!fired(&world, pilot), "out of range");
+        let (mut world, pilot, _) = duel(ShipKind::Warden, range - 1.0);
+        world.step();
+        assert!(fired(&world, pilot), "in range");
+    }
+
+    #[test]
+    fn fires_once_per_cooldown_while_the_trigger_is_held() {
+        let (mut world, pilot, _) = duel(ShipKind::Warden, 10.0);
+        let cooldown = ShipKind::Pilot.profile().weapon.cooldown_ticks as usize;
+        let mut shots = 0;
+        for _ in 0..cooldown * 3 {
+            world.step();
+            shots += usize::from(fired(&world, pilot));
+        }
+        assert_eq!(shots, 3);
+    }
+
+    #[test]
+    fn needs_the_trigger_and_a_hostile_lock() {
+        let (mut world, pilot, _) = duel(ShipKind::Warden, 10.0);
+        world.set_firing(pilot, false);
+        world.step();
+        assert!(!fired(&world, pilot), "trigger released");
+        world.set_firing(pilot, true);
+        world.set_lock(pilot, None);
+        world.step();
+        assert!(!fired(&world, pilot), "nothing locked");
+    }
+
+    #[test]
+    fn a_hit_removes_the_weapon_damage_from_the_target() {
+        let (mut world, pilot, warden) = duel(ShipKind::Warden, 10.0);
+        let full = ShipKind::Warden.profile().max_hull;
+        world.step();
+        world.set_firing(pilot, false);
+        for _ in 0..20 {
+            world.step();
+        }
+        let damage = ShipKind::Pilot.profile().weapon.damage;
+        assert!((world.ship(warden).unwrap().hull - (full - damage)).abs() < 1e-4);
+        assert!(world.projectiles().is_empty());
+    }
+
+    #[test]
+    fn a_ship_whose_hull_runs_out_is_destroyed_and_reported() {
+        let (mut world, pilot, drone) = duel(ShipKind::Drone, 6.0);
+        let shots = (ShipKind::Drone.profile().max_hull / ShipKind::Pilot.profile().weapon.damage)
+            .ceil() as usize;
+        let cooldown = ShipKind::Pilot.profile().weapon.cooldown_ticks as usize;
+        let mut destroyed = None;
+        for _ in 0..(shots + 1) * cooldown + 20 {
+            // Keep the pilot alive and in place for the test.
+            world.ships[0].hull = 100.0;
+            world.step();
+            for event in world.events() {
+                if let Event::Destroyed { ship, by, .. } = event {
+                    destroyed = Some((*ship, *by));
+                }
+            }
+            if destroyed.is_some() {
+                break;
+            }
+        }
+        assert_eq!(destroyed, Some((drone, Some(pilot))));
+        assert!(world.ship(drone).is_none());
+        assert_eq!(
+            world.ship(pilot).unwrap().lock,
+            None,
+            "the lock is released"
+        );
+    }
+
+    #[test]
+    fn a_shot_at_a_ship_that_is_gone_is_wasted() {
+        let (mut world, pilot, warden) = duel(ShipKind::Warden, 15.0);
+        let pilots_shots = |world: &World| {
+            world
+                .projectiles()
+                .iter()
+                .filter(|p| p.shooter == pilot)
+                .count()
+        };
+        world.step();
+        assert_eq!(pilots_shots(&world), 1);
+        world.remove_ship(warden);
+        world.step();
+        assert_eq!(pilots_shots(&world), 0);
+    }
+
+    #[test]
+    fn never_more_than_the_projectile_cap_in_flight() {
+        let mut world = World::new();
+        let target = world.spawn_npc(ShipKind::Warden, (0.0, 0.0));
+        world.ships[0].hull = f32::MAX;
+        for i in 0..100 {
+            let pilot = world.spawn_ship();
+            let angle = i as f32 * 0.0628;
+            world.ships.last_mut().unwrap().state = ShipState {
+                x: angle.cos() * 20.0,
+                z: angle.sin() * 20.0,
+                heading: 0.0,
+                speed: 0.0,
+            };
+            world.set_lock(pilot, Some(target));
+            world.set_firing(pilot, true);
+        }
+        for _ in 0..3 {
+            world.step();
+            assert!(world.projectiles().len() <= MAX_PROJECTILES);
+        }
+        assert_eq!(world.projectiles().len(), MAX_PROJECTILES);
+    }
+
+    #[test]
+    fn an_npc_fires_at_a_pilot_in_its_range() {
+        let mut world = World::new();
+        let pilot = world.spawn_ship();
+        let drone = world.spawn_npc(ShipKind::Drone, (8.0, 0.0));
+        let mut shot_at = false;
+        for _ in 0..40 {
+            world.step();
+            shot_at |= world.events().iter().any(|event| {
+                matches!(event, Event::Fired { shooter, target, .. } if *shooter == drone && *target == pilot)
+            });
+        }
+        assert!(shot_at);
+        assert!(world.ship(pilot).unwrap().hull < ShipKind::Pilot.profile().max_hull);
     }
 
     #[test]

@@ -11,6 +11,8 @@ import { decodeSnapshot } from "../net/snapshot";
 export interface Controls {
   thrust: number;
   turn: number;
+  /** The trigger is held: fire at the locked target when ready and in range. */
+  fire: boolean;
 }
 
 export class ExpeditionFullError extends Error {
@@ -20,7 +22,7 @@ export class ExpeditionFullError extends Error {
 /** Waits for the server to place this connection in the expedition. */
 export function waitForJoin(
   connection: Connection,
-): Promise<{ shipId: number; tickRate: number; obstacles: ObstacleInfo[] }> {
+): Promise<{ shipId: number; tickRate: number; obstacles: ObstacleInfo[]; weaponRange: number }> {
   return new Promise((resolve, reject) => {
     let settled = false;
     connection.onMessage((message: ServerMessage) => {
@@ -31,6 +33,7 @@ export function waitForJoin(
           shipId: message.shipId,
           tickRate: message.tickRate,
           obstacles: message.obstacles,
+          weaponRange: message.weaponRange,
         });
       } else if (message.type === "expeditionFull") {
         settled = true;
@@ -126,5 +129,6 @@ export function asServerReads(controls: Controls): Controls {
   return {
     thrust: Math.max(-1, quantizeControl(controls.thrust) / 127),
     turn: Math.max(-1, quantizeControl(controls.turn) / 127),
+    fire: controls.fire,
   };
 }

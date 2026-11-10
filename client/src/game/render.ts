@@ -3,6 +3,7 @@
  * camera with the greybox's defaults (design §5).
  */
 import {
+  BoxGeometry,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -11,6 +12,7 @@ import {
   IcosahedronGeometry,
   LinearSRGBColorSpace,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   PerspectiveCamera,
   Points,
@@ -21,7 +23,8 @@ import {
 } from "three";
 import type { EntityKind, ObstacleInfo } from "../protocol";
 import type { EntityPose } from "../net/interpolation";
-import { forkedHull, wedgeHull } from "../view/hulls";
+import type { Shots } from "./shots";
+import { SHIP_HEIGHT, forkedHull, wedgeHull } from "../view/hulls";
 import { between, createRng } from "../view/rng";
 import { createStarField } from "../view/sky";
 import { aimRig, createRig } from "../view/view";
@@ -38,6 +41,13 @@ const HULL = {
 };
 
 export const RESTING_ELEVATION = 33;
+
+/** Effect colours: player-side shots cyan, hostile shots orange, as in the greybox. */
+const SIGNAL = {
+  pilot: linear(0.04, 0.65, 1),
+  hostile: linear(1, 0.25, 0.05),
+  blast: linear(1, 0.6, 0.2),
+};
 
 /**
  * Each kind's collision radius over the starter hull's (frontier_sim::profile), so a drawn
@@ -59,6 +69,9 @@ export class ExpeditionView {
   readonly #sky = new Scene();
   readonly #skyCamera = new PerspectiveCamera(SKY_FOV, 1, 0.1, 10);
   readonly #ships = new Map<number, Mesh>();
+  readonly #bolts: Mesh<BoxGeometry, MeshBasicMaterial>[] = [];
+  readonly #blasts: Mesh<IcosahedronGeometry, MeshBasicMaterial>[] = [];
+  readonly #kinds = new Map<number, EntityKind>();
   readonly #ownShipId: number;
   #rig: CameraRig;
   #width = 1;
@@ -101,11 +114,21 @@ export class ExpeditionView {
     this.#skyCamera.updateProjectionMatrix();
   }
 
-  /** Draws `poses` with the camera centred on `target`, turned by `yaw` and raised to `pitch`. */
-  render(poses: readonly EntityPose[], target: Vector3, pitch: number, yaw: number): void {
+  /**
+   * Draws `poses`, and the bolts and blasts in `shots`, with the camera centred on `target`,
+   * turned by `yaw` and raised to `pitch`.
+   */
+  render(
+    poses: readonly EntityPose[],
+    target: Vector3,
+    pitch: number,
+    yaw: number,
+    shots?: Shots,
+  ): void {
     const seen = new Set<number>();
     for (const pose of poses) {
       seen.add(pose.id);
+      this.#kinds.set(pose.id, pose.kind);
       let mesh = this.#ships.get(pose.id);
       if (!mesh) {
         mesh = this.#shipMesh(pose.kind, pose.id === this.#ownShipId);
@@ -122,6 +145,7 @@ export class ExpeditionView {
       mesh.geometry.dispose();
       this.#ships.delete(id);
     }
+    if (shots) this.#drawShots(shots);
 
     aimRig(this.#rig, target, pitch, yaw);
     this.#renderer.clear();
@@ -129,6 +153,47 @@ export class ExpeditionView {
     this.#renderer.render(this.#sky, this.#skyCamera);
     this.#renderer.clearDepth();
     this.#renderer.render(this.#scene, this.#rig.camera);
+  }
+
+  /** Bolts keep the style guide's rule for effects: a bright core in a coloured edge. */
+  #drawShots(shots: Shots): void {
+    const bolts = shots.bolts;
+    while (this.#bolts.length < bolts.length) {
+      const edge = new Mesh(
+        new BoxGeometry(1.1, 0.26, 0.26),
+        new MeshBasicMaterial({ transparent: true, opacity: 0.6 }),
+      );
+      edge.add(new Mesh(new BoxGeometry(0.9, 0.1, 0.1), new MeshBasicMaterial()));
+      this.#scene.add(edge);
+      this.#bolts.push(edge);
+    }
+    this.#bolts.forEach((mesh, index) => {
+      const bolt = bolts[index];
+      mesh.visible = bolt !== undefined;
+      if (!bolt) return;
+      const hostile = (this.#kinds.get(bolt.shooter) ?? "playerShip") !== "playerShip";
+      mesh.material.color.copy(hostile ? SIGNAL.hostile : SIGNAL.pilot);
+      mesh.position.set(bolt.x, SHIP_HEIGHT / 2, bolt.z);
+      mesh.rotation.set(0, -bolt.heading, 0);
+    });
+
+    const blasts = shots.blasts;
+    while (this.#blasts.length < blasts.length) {
+      const mesh = new Mesh(
+        new IcosahedronGeometry(1, 1),
+        new MeshBasicMaterial({ color: SIGNAL.blast, transparent: true }),
+      );
+      this.#scene.add(mesh);
+      this.#blasts.push(mesh);
+    }
+    this.#blasts.forEach((mesh, index) => {
+      const blast = blasts[index];
+      mesh.visible = blast !== undefined;
+      if (!blast) return;
+      mesh.position.set(blast.x, SHIP_HEIGHT / 2, blast.z);
+      mesh.scale.setScalar(1 + blast.age * 3);
+      mesh.material.opacity = 1 - blast.age;
+    });
   }
 
   #shipMesh(kind: EntityKind, own: boolean): Mesh {

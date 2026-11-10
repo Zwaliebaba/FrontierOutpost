@@ -16,7 +16,7 @@ function snapshot(tick: number, x: number, vx = 0, heading = 0): Snapshot {
     vz: 0,
     hull: 255,
   };
-  return { tick, inputAck: 0, entities: [ship] };
+  return { tick, inputAck: 0, entities: [ship], events: [] };
 }
 
 /** Pushes ticks 100.. with the ship at 0, 1, 2, ... m, each arriving `latency` ms late. */

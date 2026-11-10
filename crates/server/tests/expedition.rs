@@ -17,6 +17,17 @@ use web_transport_quinn::Session;
 
 /// Joins a pilot and returns the session and the ship it flies.
 async fn join(url: &url::Url, sha256: [u8; 32]) -> (Session, u16) {
+    let (session, ship, send) = join_with_control(url, sha256).await;
+    // Keep the control stream open for the life of the session.
+    std::mem::forget(send);
+    (session, ship)
+}
+
+/// Joins a pilot and also returns the control stream, to send messages on.
+async fn join_with_control(
+    url: &url::Url,
+    sha256: [u8; 32],
+) -> (Session, u16, web_transport_quinn::SendStream) {
     let (session, mut send, mut recv) = connect_to(url, sha256).await;
     assert!(matches!(
         hello(&mut send, &mut recv).await,
@@ -26,6 +37,7 @@ async fn join(url: &url::Url, sha256: [u8; 32]) -> (Session, u16) {
         ship_id,
         tick_rate,
         obstacles,
+        ..
     } = read(&mut recv).await
     else {
         panic!("expected Joined");
@@ -35,9 +47,8 @@ async fn join(url: &url::Url, sha256: [u8; 32]) -> (Session, u16) {
         !obstacles.is_empty(),
         "the asteroid field is sent on joining"
     );
-    // Keep the control stream open for the life of the session.
-    std::mem::forget((send, recv));
-    (session, ship_id)
+    std::mem::forget(recv);
+    (session, ship_id, send)
 }
 
 /// Reads snapshot datagrams for `duration` and returns the last one.
@@ -80,6 +91,7 @@ async fn two_pilots_see_each_other_and_one_moves() {
     let thrust = Controls {
         thrust: quantize_control(1.0),
         turn: 0,
+        fire: false,
     };
     for sequence in 0..20_u16 {
         let input = InputDatagram {
@@ -203,4 +215,54 @@ async fn a_pilot_who_vanishes_without_closing_is_dropped_after_the_idle_timeout(
         [watcher_ship],
         "the vanished pilot's ship is gone"
     );
+}
+
+#[tokio::test]
+async fn a_pilot_who_locks_a_drone_and_holds_the_trigger_fires_at_it() {
+    use frontier_protocol::ClientMessage;
+    use frontier_protocol::snapshot::SnapshotEvent;
+    let (url, sha256) = start_server();
+    let (pilot, ship, mut control) = join_with_control(&url, sha256).await;
+
+    // The skirmish's drones notice the pilot and close in.
+    let start = last_snapshot(&pilot, Duration::from_millis(100)).await;
+    let drone = start
+        .entities
+        .iter()
+        .find(|e| e.kind == EntityKind::Drone)
+        .unwrap()
+        .id;
+    common::write(
+        &mut control,
+        &ClientMessage::Lock {
+            target: Some(drone),
+        },
+    )
+    .await;
+
+    let trigger = Controls {
+        thrust: 0,
+        turn: 0,
+        fire: true,
+    };
+    let mut fired_at_drone = false;
+    for sequence in 0..160_u16 {
+        let input = InputDatagram {
+            sequence,
+            controls: vec![trigger; usize::from(sequence.min(3)) + 1],
+        };
+        pilot.send_datagram(input.encode().unwrap().into()).unwrap();
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(50);
+        while let Ok(Ok(bytes)) = tokio::time::timeout_at(deadline, pilot.read_datagram()).await {
+            let snapshot = Snapshot::decode(&bytes).unwrap();
+            fired_at_drone |= snapshot.events.iter().any(|event| {
+                matches!(event, SnapshotEvent::Fired { shooter, target, .. }
+                    if *shooter == ship && *target == drone)
+            });
+        }
+        if fired_at_drone {
+            break;
+        }
+    }
+    assert!(fired_at_drone, "no shot at the locked drone within 8 s");
 }

@@ -7,7 +7,9 @@ export default defineConfig({
   testDir: "e2e",
   testMatch: "**/*.e2e.ts",
   timeout: 30_000,
-  // Every test joins the one expedition on the shared server, which holds four pilots.
+  // Every test joins the one expedition on the shared server, which holds four pilots. Files run
+  // one at a time in name order, and the skirmish's NPCs carry over between them: weapons.e2e.ts
+  // runs last because it draws the drones to the spawn point, where they would pin the next ship.
   workers: 1,
   reporter: "list",
   use: {

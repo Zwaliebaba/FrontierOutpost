@@ -57,6 +57,8 @@ pub enum ServerMessage {
         ship_id: u16,
         tick_rate: u32,
         obstacles: Vec<ObstacleInfo>,
+        /// How close a locked target must be for the pilot's weapon to fire, m.
+        weapon_range: f32,
     },
     /// The expedition already has its four pilots.
     ExpeditionFull,
@@ -166,10 +168,11 @@ mod tests {
                 z: -2.0,
                 radius: 0.75,
             }],
+            weapon_range: 22.0,
         };
         assert_eq!(
             serde_json::to_string(&joined).unwrap(),
-            r#"{"type":"joined","shipId":3,"tickRate":20,"obstacles":[{"x":1.5,"z":-2.0,"radius":0.75}]}"#
+            r#"{"type":"joined","shipId":3,"tickRate":20,"obstacles":[{"x":1.5,"z":-2.0,"radius":0.75}],"weaponRange":22.0}"#
         );
         assert_eq!(
             serde_json::to_string(&ServerMessage::ExpeditionFull).unwrap(),

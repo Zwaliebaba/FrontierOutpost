@@ -6,6 +6,7 @@
 //! `frontier-sim-wasm` to predict the player's own ship.
 
 pub mod collision;
+pub mod combat;
 pub mod npc;
 pub mod profile;
 pub mod rng;

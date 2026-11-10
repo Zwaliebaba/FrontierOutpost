@@ -16,6 +16,13 @@
 //! | 2 | last input the server applied for this client, `u16` |
 //! | 1 | entity count |
 //! | 14 each | entities: id `u16`, kind `u8`, x `i16`, z `i16`, heading `u16`, vx `i16`, vz `i16`, hull `u8` |
+//! | 1 | event count |
+//! | 6 each | events: kind `u8`, then two `u16` and a `u8` that depend on the kind |
+//!
+//! Events report what happened during the tick, so the client can draw it. They
+//! are not repeated: a lost snapshot loses its events, which only costs a
+//! visual. A fired event is kind 1: shooter, target, projectile speed in m/s.
+//! A destroyed event is kind 2: ship, destroyer (`0xFFFF` for none), entity kind.
 
 use ts_rs::TS;
 
@@ -28,9 +35,19 @@ pub const MAX_DATAGRAM_BYTES: usize = 1_000;
 
 pub const HEADER_BYTES: usize = 8;
 pub const ENTITY_BYTES: usize = 14;
+pub const EVENT_BYTES: usize = 6;
+/// Most events one snapshot carries. A server with more drops the rest: events
+/// only drive visuals.
+pub const MAX_EVENTS: usize = 32;
 
-/// Most entities one snapshot can carry within [`MAX_DATAGRAM_BYTES`].
-pub const MAX_ENTITIES: usize = (MAX_DATAGRAM_BYTES - HEADER_BYTES) / ENTITY_BYTES;
+/// Most entities one snapshot can carry within [`MAX_DATAGRAM_BYTES`] with
+/// room for [`MAX_EVENTS`].
+pub const MAX_ENTITIES: usize =
+    (MAX_DATAGRAM_BYTES - HEADER_BYTES - 1 - MAX_EVENTS * EVENT_BYTES) / ENTITY_BYTES;
+
+const FIRED: u8 = 1;
+const DESTROYED: u8 = 2;
+const NO_SHIP: u16 = u16::MAX;
 
 /// Position units per metre: 1/32 m resolution over ±1,024 m.
 pub const POSITION_UNITS_PER_METRE: f32 = 32.0;
@@ -81,7 +98,30 @@ pub struct EntityState {
     pub hull: u8,
 }
 
-/// Every entity the client should draw at `tick`.
+/// Something that happened during a tick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
+#[ts(
+    export,
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum SnapshotEvent {
+    /// `shooter` fired a projectile that homes on `target` at `speed` m/s.
+    Fired {
+        shooter: u16,
+        target: u16,
+        speed: u8,
+    },
+    /// `ship`, of kind `kind`, was destroyed, by a shot from `by` if any.
+    Destroyed {
+        ship: u16,
+        by: Option<u16>,
+        kind: EntityKind,
+    },
+}
+
+/// Every entity the client should draw at `tick`, and what happened during it.
 #[derive(Debug, Clone, PartialEq, Eq, TS)]
 #[ts(export, rename_all = "camelCase")]
 pub struct Snapshot {
@@ -90,6 +130,7 @@ pub struct Snapshot {
     /// applied. The client replays its later inputs on top (prediction).
     pub input_ack: u16,
     pub entities: Vec<EntityState>,
+    pub events: Vec<SnapshotEvent>,
 }
 
 /// Why a snapshot could not be encoded or decoded.
@@ -97,6 +138,10 @@ pub struct Snapshot {
 pub enum SnapshotError {
     #[error("{0} entities exceed the limit of {MAX_ENTITIES} per snapshot")]
     TooManyEntities(usize),
+    #[error("{0} events exceed the limit of {MAX_EVENTS} per snapshot")]
+    TooManyEvents(usize),
+    #[error("unknown event kind {0}")]
+    UnknownEventKind(u8),
     #[error("not a snapshot datagram")]
     WrongKind,
     #[error("snapshot is {actual} bytes; its header implies {expected}")]
@@ -109,13 +154,20 @@ impl Snapshot {
     /// Encodes the snapshot as one datagram payload.
     ///
     /// # Errors
-    /// Fails if there are more than [`MAX_ENTITIES`] entities.
+    /// Fails if there are more than [`MAX_ENTITIES`] entities or
+    /// [`MAX_EVENTS`] events.
     pub fn encode(&self) -> Result<Vec<u8>, SnapshotError> {
         let count = u8::try_from(self.entities.len())
             .ok()
             .filter(|_| self.entities.len() <= MAX_ENTITIES)
             .ok_or(SnapshotError::TooManyEntities(self.entities.len()))?;
-        let mut bytes = Vec::with_capacity(HEADER_BYTES + ENTITY_BYTES * self.entities.len());
+        let event_count = u8::try_from(self.events.len())
+            .ok()
+            .filter(|_| self.events.len() <= MAX_EVENTS)
+            .ok_or(SnapshotError::TooManyEvents(self.events.len()))?;
+        let mut bytes = Vec::with_capacity(
+            HEADER_BYTES + ENTITY_BYTES * self.entities.len() + 1 + EVENT_BYTES * self.events.len(),
+        );
         bytes.push(SNAPSHOT_KIND);
         bytes.extend_from_slice(&self.tick.to_le_bytes());
         bytes.extend_from_slice(&self.input_ack.to_le_bytes());
@@ -130,6 +182,23 @@ impl Snapshot {
             bytes.extend_from_slice(&entity.vz.to_le_bytes());
             bytes.push(entity.hull);
         }
+        bytes.push(event_count);
+        for event in &self.events {
+            let (kind, a, b, c) = match *event {
+                SnapshotEvent::Fired {
+                    shooter,
+                    target,
+                    speed,
+                } => (FIRED, shooter, target, speed),
+                SnapshotEvent::Destroyed { ship, by, kind } => {
+                    (DESTROYED, ship, by.unwrap_or(NO_SHIP), kind.code())
+                }
+            };
+            bytes.push(kind);
+            bytes.extend_from_slice(&a.to_le_bytes());
+            bytes.extend_from_slice(&b.to_le_bytes());
+            bytes.push(c);
+        }
         Ok(bytes)
     }
 
@@ -143,35 +212,39 @@ impl Snapshot {
         if reader.u8() != Some(SNAPSHOT_KIND) {
             return Err(SnapshotError::WrongKind);
         }
+        let wrong_length = |expected| SnapshotError::WrongLength {
+            expected,
+            actual: bytes.len(),
+        };
         let header = (reader.u32(), reader.u16(), reader.u8());
         let (Some(tick), Some(input_ack), Some(count)) = header else {
-            return Err(SnapshotError::WrongLength {
-                expected: HEADER_BYTES,
-                actual: bytes.len(),
-            });
+            return Err(wrong_length(HEADER_BYTES));
         };
-        let expected = HEADER_BYTES + ENTITY_BYTES * usize::from(count);
+        let events_at = HEADER_BYTES + ENTITY_BYTES * usize::from(count);
+        let event_count = bytes
+            .get(events_at)
+            .copied()
+            .ok_or_else(|| wrong_length(events_at + 1))?;
+        let expected = events_at + 1 + EVENT_BYTES * usize::from(event_count);
         if bytes.len() != expected {
-            return Err(SnapshotError::WrongLength {
-                expected,
-                actual: bytes.len(),
-            });
+            return Err(wrong_length(expected));
         }
+
+        // The length is checked, so every read below succeeds.
         let mut entities = Vec::with_capacity(usize::from(count));
         for _ in 0..count {
-            let truncated = SnapshotError::WrongLength {
-                expected,
-                actual: bytes.len(),
-            };
-            let id = reader.u16().ok_or_else(|| truncated.clone())?;
-            let code = reader.u8().ok_or_else(|| truncated.clone())?;
+            let id = reader.u16().ok_or_else(|| wrong_length(expected))?;
+            let code = reader.u8().ok_or_else(|| wrong_length(expected))?;
             let kind = EntityKind::from_code(code).ok_or(SnapshotError::UnknownEntityKind(code))?;
             let mut i16s = [0_i16; 5];
             for value in &mut i16s {
-                *value = reader.u16().ok_or_else(|| truncated.clone())?.cast_signed();
+                *value = reader
+                    .u16()
+                    .ok_or_else(|| wrong_length(expected))?
+                    .cast_signed();
             }
             let [x, z, heading, vx, vz] = i16s;
-            let hull = reader.u8().ok_or(truncated)?;
+            let hull = reader.u8().ok_or_else(|| wrong_length(expected))?;
             entities.push(EntityState {
                 id,
                 kind,
@@ -183,10 +256,32 @@ impl Snapshot {
                 hull,
             });
         }
+        reader.u8();
+        let mut events = Vec::with_capacity(usize::from(event_count));
+        for _ in 0..event_count {
+            let fields = (reader.u8(), reader.u16(), reader.u16(), reader.u8());
+            let (Some(kind), Some(a), Some(b), Some(c)) = fields else {
+                return Err(wrong_length(expected));
+            };
+            events.push(match kind {
+                FIRED => SnapshotEvent::Fired {
+                    shooter: a,
+                    target: b,
+                    speed: c,
+                },
+                DESTROYED => SnapshotEvent::Destroyed {
+                    ship: a,
+                    by: (b != NO_SHIP).then_some(b),
+                    kind: EntityKind::from_code(c).ok_or(SnapshotError::UnknownEntityKind(c))?,
+                },
+                other => return Err(SnapshotError::UnknownEventKind(other)),
+            });
+        }
         Ok(Self {
             tick,
             input_ack,
             entities,
+            events,
         })
     }
 }
@@ -262,6 +357,41 @@ mod tests {
             tick: 123_456,
             input_ack: 789,
             entities: ships.chain(npcs).collect(),
+            events: vec![
+                SnapshotEvent::Fired {
+                    shooter: 0,
+                    target: 5,
+                    speed: 30,
+                },
+                SnapshotEvent::Destroyed {
+                    ship: 6,
+                    by: Some(1),
+                    kind: EntityKind::Raider,
+                },
+                SnapshotEvent::Destroyed {
+                    ship: 2,
+                    by: None,
+                    kind: EntityKind::PlayerShip,
+                },
+            ],
+        }
+    }
+
+    /// The most a snapshot may carry: the entity and event limits together.
+    fn largest() -> Snapshot {
+        Snapshot {
+            entities: (0..MAX_ENTITIES)
+                .map(|i| entity(u16::try_from(i).unwrap(), EntityKind::Drone))
+                .collect(),
+            events: vec![
+                SnapshotEvent::Fired {
+                    shooter: 1,
+                    target: 2,
+                    speed: 30,
+                };
+                MAX_EVENTS
+            ],
+            ..full_expedition()
         }
     }
 
@@ -269,7 +399,10 @@ mod tests {
     fn four_ships_and_twenty_four_npcs_fit_one_datagram() {
         let bytes = full_expedition().encode().unwrap();
         assert!(bytes.len() <= MAX_DATAGRAM_BYTES, "{} bytes", bytes.len());
-        assert_eq!(bytes.len(), HEADER_BYTES + 28 * ENTITY_BYTES);
+        assert_eq!(
+            bytes.len(),
+            HEADER_BYTES + 28 * ENTITY_BYTES + 1 + 3 * EVENT_BYTES
+        );
     }
 
     #[test]
@@ -308,6 +441,11 @@ mod tests {
                     hull: 0,
                 },
             ],
+            events: vec![SnapshotEvent::Destroyed {
+                ship: u16::MAX - 1,
+                by: Some(0),
+                kind: EntityKind::Warden,
+            }],
         };
         assert_eq!(
             Snapshot::decode(&snapshot.encode().unwrap()).unwrap(),
@@ -317,15 +455,18 @@ mod tests {
 
     #[test]
     fn the_largest_snapshot_still_fits() {
-        let mut snapshot = full_expedition();
-        snapshot.entities = (0..MAX_ENTITIES)
-            .map(|i| entity(u16::try_from(i).unwrap(), EntityKind::Drone))
-            .collect();
+        let mut snapshot = largest();
         assert!(snapshot.encode().unwrap().len() <= MAX_DATAGRAM_BYTES);
         snapshot.entities.push(entity(999, EntityKind::Drone));
         assert_eq!(
             snapshot.encode(),
             Err(SnapshotError::TooManyEntities(MAX_ENTITIES + 1))
+        );
+        let mut snapshot = largest();
+        snapshot.events.push(snapshot.events[0]);
+        assert_eq!(
+            snapshot.encode(),
+            Err(SnapshotError::TooManyEvents(MAX_EVENTS + 1))
         );
     }
 
@@ -350,11 +491,18 @@ mod tests {
             Snapshot::decode(&padded),
             Err(SnapshotError::WrongLength { .. })
         ));
-        let mut unknown = bytes;
+        let mut unknown = bytes.clone();
         unknown[HEADER_BYTES + 2] = 9;
         assert_eq!(
             Snapshot::decode(&unknown),
             Err(SnapshotError::UnknownEntityKind(9))
+        );
+        let first_event = HEADER_BYTES + 28 * ENTITY_BYTES + 1;
+        let mut unknown_event = bytes;
+        unknown_event[first_event] = 7;
+        assert_eq!(
+            Snapshot::decode(&unknown_event),
+            Err(SnapshotError::UnknownEventKind(7))
         );
     }
 
@@ -422,8 +570,27 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
+            let events = snapshot
+                .events
+                .iter()
+                .map(|event| match *event {
+                    SnapshotEvent::Fired {
+                        shooter,
+                        target,
+                        speed,
+                    } => format!(
+                        "{{ type: \"fired\", shooter: {shooter}, target: {target}, speed: {speed} }}"
+                    ),
+                    SnapshotEvent::Destroyed { ship, by, kind: k } => format!(
+                        "{{ type: \"destroyed\", ship: {ship}, by: {}, kind: \"{}\" }}",
+                        by.map_or_else(|| "null".to_owned(), |by| by.to_string()),
+                        kind(k)
+                    ),
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
             format!(
-                "{{ tick: {}, inputAck: {}, entities: [{entities}] }}",
+                "{{ tick: {}, inputAck: {}, entities: [{entities}], events: [{events}] }}",
                 snapshot.tick, snapshot.input_ack
             )
         };
@@ -432,6 +599,7 @@ mod tests {
             tick: 0,
             input_ack: 0,
             entities: vec![],
+            events: vec![],
         };
         let extremes = Snapshot {
             tick: u32::MAX,
@@ -445,6 +613,11 @@ mod tests {
                 vx: i16::MAX,
                 vz: i16::MIN,
                 hull: u8::MAX,
+            }],
+            events: vec![SnapshotEvent::Destroyed {
+                ship: 1,
+                by: None,
+                kind: EntityKind::Drone,
             }],
         };
         let valid = [
@@ -467,13 +640,25 @@ mod tests {
         wrong_kind[0] = 2;
         let mut unknown_entity = good.clone();
         unknown_entity[HEADER_BYTES + 2] = 9;
+        let first_event = HEADER_BYTES + 28 * ENTITY_BYTES + 1;
+        let mut unknown_event = good.clone();
+        unknown_event[first_event] = 7;
+        let mut unknown_destroyed_kind = good.clone();
+        unknown_destroyed_kind[first_event + EVENT_BYTES + 5] = 9;
         let invalid = [
             ("empty datagram", vec![]),
             ("wrong kind", wrong_kind),
             ("truncated header", good[..5].to_vec()),
-            ("truncated entity", good[..good.len() - 1].to_vec()),
+            (
+                "truncated entity",
+                good[..HEADER_BYTES + 3 * ENTITY_BYTES + 4].to_vec(),
+            ),
+            ("missing event count", good[..first_event - 1].to_vec()),
+            ("truncated event", good[..good.len() - 1].to_vec()),
             ("trailing byte", [good.as_slice(), &[0]].concat()),
             ("unknown entity kind", unknown_entity),
+            ("unknown event kind", unknown_event),
+            ("unknown destroyed kind", unknown_destroyed_kind),
         ]
         .iter()
         .map(|(name, bytes)| format!("  {{ name: \"{name}\", hex: \"{}\" }},\n", hex(bytes)))

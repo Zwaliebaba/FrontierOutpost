@@ -2,11 +2,15 @@
  * Decoder for snapshot datagrams. The layout is defined by `frontier_protocol::snapshot`;
  * the tests check this decoder against vectors written by the Rust encoder.
  */
-import type { EntityKind, EntityState, Snapshot } from "../protocol";
+import type { EntityKind, EntityState, Snapshot, SnapshotEvent } from "../protocol";
 
 export const SNAPSHOT_KIND = 1;
 const HEADER_BYTES = 8;
 const ENTITY_BYTES = 14;
+const EVENT_BYTES = 6;
+const FIRED = 1;
+const DESTROYED = 2;
+const NO_SHIP = 0xffff;
 const ENTITY_KINDS: readonly EntityKind[] = ["playerShip", "drone", "raider", "warden"];
 
 export const POSITION_UNITS_PER_METRE = 32;
@@ -27,7 +31,14 @@ export function decodeSnapshot(bytes: Uint8Array): Snapshot {
     throw new SnapshotError(`snapshot header is ${String(bytes.length)} bytes`);
   }
   const count = view.getUint8(7);
-  const expected = HEADER_BYTES + ENTITY_BYTES * count;
+  const eventsAt = HEADER_BYTES + ENTITY_BYTES * count;
+  if (bytes.length <= eventsAt) {
+    throw new SnapshotError(
+      `snapshot ends before its event count, at ${String(bytes.length)} bytes`,
+    );
+  }
+  const eventCount = view.getUint8(eventsAt);
+  const expected = eventsAt + 1 + EVENT_BYTES * eventCount;
   if (bytes.length !== expected) {
     throw new SnapshotError(
       `snapshot is ${String(bytes.length)} bytes; its header implies ${String(expected)}`,
@@ -50,7 +61,27 @@ export function decodeSnapshot(bytes: Uint8Array): Snapshot {
       hull: view.getUint8(at + 13),
     });
   }
-  return { tick: view.getUint32(1, true), inputAck: view.getUint16(5, true), entities };
+  const events: SnapshotEvent[] = [];
+  for (let i = 0; i < eventCount; i += 1) {
+    const at = eventsAt + 1 + EVENT_BYTES * i;
+    const a = view.getUint16(at + 1, true);
+    const b = view.getUint16(at + 3, true);
+    const c = view.getUint8(at + 5);
+    switch (view.getUint8(at)) {
+      case FIRED:
+        events.push({ type: "fired", shooter: a, target: b, speed: c });
+        break;
+      case DESTROYED: {
+        const kind = ENTITY_KINDS[c];
+        if (kind === undefined) throw new SnapshotError(`unknown entity kind ${String(c)}`);
+        events.push({ type: "destroyed", ship: a, by: b === NO_SHIP ? null : b, kind });
+        break;
+      }
+      default:
+        throw new SnapshotError(`unknown event kind ${String(view.getUint8(at))}`);
+    }
+  }
+  return { tick: view.getUint32(1, true), inputAck: view.getUint16(5, true), entities, events };
 }
 
 /** Position on the plane in metres. */

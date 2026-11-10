@@ -156,6 +156,10 @@ async fn run_session(session: &Session, expedition: &Expedition) -> Result<(), S
                 radius: o.radius,
             })
             .collect(),
+        weapon_range: frontier_sim::profile::ShipKind::Pilot
+            .profile()
+            .weapon
+            .range,
     };
     let result = match write_frame(&mut send, &joined).await {
         Ok(()) => fly(session, expedition, ship, recv).await,

@@ -83,7 +83,8 @@ const DRONE: Profile = Profile {
     weapon: Weapon {
         range: 8.0,
         cooldown_ticks: 6,
-        damage: 2.0,
+        // Four drones on one pilot remove about 20 hull a second.
+        damage: 1.5,
         projectile_speed: 25.0,
     },
     awareness: 60.0,

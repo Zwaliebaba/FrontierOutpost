@@ -78,7 +78,11 @@ mod tests {
     use super::*;
 
     fn controls(thrust: i8) -> Controls {
-        Controls { thrust, turn: 0 }
+        Controls {
+            thrust,
+            turn: 0,
+            fire: false,
+        }
     }
 
     /// The datagram a client sends at `sequence`: that input and up to three

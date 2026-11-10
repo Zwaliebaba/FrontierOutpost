@@ -95,7 +95,7 @@ function fly(ticks: number, link: Link, controlsAt: (tick: number) => ShipContro
     for (const snapshot of toClient.filter((message) => message.at === tick)) {
       corrections.push(predictor.reconcile(snapshot.state, snapshot.ack));
     }
-    const sent = asServerReads(controlsAt(tick));
+    const sent = asServerReads({ ...controlsAt(tick), fire: false });
     sentInputs.push(sent);
     const inputs = [];
     for (let back = 0; back < 4 && tick - back >= 1; back += 1) {
@@ -108,7 +108,8 @@ function fly(ticks: number, link: Link, controlsAt: (tick: number) => ShipContro
 }
 
 /** Thrust most of the time, weaving left and right: a pilot dodging. */
-const weaving = (tick: number): ShipControls => ({
+const weaving = (tick: number): ShipControls & { fire: boolean } => ({
+  fire: false,
   thrust: tick % 60 < 45 ? 1 : 0,
   turn: Math.floor(tick / 15) % 3 === 0 ? 0 : Math.floor(tick / 15) % 2 === 0 ? 1 : -1,
 });
@@ -149,7 +150,7 @@ describe("prediction against the real movement rules", () => {
 
   it("settles to no correction once the pilot stops steering", () => {
     const corrections = fly(400, { ...target, loss: 0.05 }, (tick) =>
-      tick < 200 ? weaving(tick) : { thrust: 0, turn: 0 },
+      tick < 200 ? weaving(tick) : { thrust: 0, turn: 0, fire: false },
     );
     expect(max(corrections.slice(-50))).toBeLessThan(0.05);
   });

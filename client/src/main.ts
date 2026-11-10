@@ -5,9 +5,11 @@
 import { Vector3 } from "three";
 import { connect, fetchConnectInfo } from "./net/connection";
 import type { Connection } from "./net/connection";
+import type { SnapshotEvent } from "./protocol";
 import type { EntityPose } from "./net/interpolation";
 import { Predictor } from "./game/prediction";
 import { Selection } from "./game/selection";
+import { Shots } from "./game/shots";
 import { ExpeditionFullError, Session, waitForJoin } from "./game/session";
 import type { Controls } from "./game/session";
 import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
@@ -66,6 +68,8 @@ const axis = (positive: string[], negative: string[]) =>
 const readControls = (): Controls => ({
   thrust: axis(["KeyW", "ArrowUp"], ["KeyS", "ArrowDown"]),
   turn: axis(["KeyD", "ArrowRight"], ["KeyA", "ArrowLeft"]),
+  // Hold to fire at the locked target (the owner's choice for M2).
+  fire: held.has("Space"),
 });
 
 // --- Game --------------------------------------------------------------------------------------
@@ -83,21 +87,26 @@ async function start(): Promise<void> {
     showStatus("closed", reason ? `Disconnected: ${reason}` : "Disconnected");
   });
 
-  const [{ shipId, tickRate, obstacles }, loaded] = await Promise.all([
+  const [{ shipId, tickRate, obstacles, weaponRange }, loaded] = await Promise.all([
     waitForJoin(connection),
     rules,
   ]);
   loaded.setObstacles(obstacles);
   // Your own ship is predicted with the server's rules; others are drawn from snapshots.
   const predictor = new Predictor((state, controls) => loaded.stepShip(state, controls));
+  // Events are drawn on the next frame, where every ship's drawn position is known.
+  const events: SnapshotEvent[] = [];
+  const hull = { own: 255 };
   const session = new Session(
     connection,
     shipId,
     tickRate,
     () => performance.now(),
     (snapshot) => {
+      events.push(...snapshot.events);
       const own = snapshot.entities.find((entity) => entity.id === shipId);
       if (!own) return;
+      hull.own = own.hull;
       const { x, z } = positionMetres(own);
       const velocity = velocityMetresPerSecond(own);
       predictor.reconcile(
@@ -109,17 +118,25 @@ async function start(): Promise<void> {
   const view = new ExpeditionView(document.body, shipId, START_WIDTH);
   view.setObstacles(obstacles);
   hud.dataset.ship = String(shipId);
-  fly(connection, session, view, predictor);
+  fly({ connection, session, view, predictor, events, hull, weaponRange });
 }
 
 const KIND_NAME = { playerShip: "Pilot", drone: "Drone", raider: "Raider", warden: "Warden" };
 
-function fly(
-  connection: Connection,
-  session: Session,
-  view: ExpeditionView,
-  predictor: Predictor,
-): void {
+interface Flight {
+  connection: Connection;
+  session: Session;
+  view: ExpeditionView;
+  predictor: Predictor;
+  /** Snapshot events not yet drawn. */
+  events: SnapshotEvent[];
+  /** The player's own hull, 0 to 255, from the latest snapshot. */
+  hull: { own: number };
+  weaponRange: number;
+}
+
+function fly({ connection, session, view, predictor, events, hull, weaponRange }: Flight): void {
+  const shots = new Shots();
   const home: LookState = { yaw: 0, pitch: RESTING_ELEVATION };
   let look: LookState = { ...home };
   let viewWidth = START_WIDTH;
@@ -223,21 +240,34 @@ function fly(
     const others = session.snapshots.sample(now).filter((pose) => pose.id !== session.shipId);
     const predicted = predictor.visual(1 - Math.max(0, untilTick) / tickMs, dt);
     const own: EntityPose | undefined = predicted
-      ? { id: session.shipId, kind: "playerShip", hull: 255, ...predicted }
+      ? { id: session.shipId, kind: "playerShip", hull: hull.own, ...predicted }
       : undefined;
     poses = own ? [own, ...others] : others;
+
+    const drawnAt = (id: number) => poses.find((pose) => pose.id === id);
+    for (const event of events.splice(0)) {
+      if (event.type === "fired") {
+        const from = drawnAt(event.shooter);
+        if (from) shots.fire(event.shooter, event.target, from, event.speed);
+      } else {
+        const at = drawnAt(event.ship);
+        if (at) shots.blast(at);
+      }
+    }
+    shots.advance(dt, drawnAt);
     selection.prune(new Set(others.map((pose) => pose.id)));
     const focus = poses.find((pose) => pose.id === selection.focus);
     const centre = focus ?? own;
     if (centre) target.set(centre.x, 0, centre.z);
-    view.render(poses, target, look.pitch, look.yaw);
+    view.render(poses, target, look.pitch, look.yaw, shots);
 
     const locked = poses.find((pose) => pose.id === selection.lock);
     if (locked && own) {
       lock.dataset.target = String(locked.id);
       lock.textContent =
         `Locked: ${KIND_NAME[locked.kind]} ${String(locked.id)} · ` +
-        `${Math.hypot(locked.x - own.x, locked.z - own.z).toFixed(0)} m · ` +
+        `${Math.hypot(locked.x - own.x, locked.z - own.z).toFixed(0)} m ` +
+        `${Math.hypot(locked.x - own.x, locked.z - own.z) <= weaponRange ? "in range" : "out of range"} · ` +
         `hull ${String(Math.round((locked.hull / 255) * 100))}% · Tab next, Esc release`;
     } else {
       delete lock.dataset.target;
@@ -252,8 +282,10 @@ function fly(
       hud.textContent =
         `Ship ${String(session.shipId)} · ${String(poses.length)} in flight · ` +
         `x ${own.x.toFixed(1)} z ${own.z.toFixed(1)} · ` +
+        `hull ${String(Math.round((hull.own / 255) * 100))}% · ` +
         `round trip ${session.roundTripMs === null ? "–" : `${session.roundTripMs.toFixed(0)} ms`} · ` +
-        `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm · W A S D to fly`;
+        `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm · ` +
+        `W A S D fly, Tab lock, Space fire`;
     }
     requestAnimationFrame(frame);
   };

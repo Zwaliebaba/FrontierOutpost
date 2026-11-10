@@ -6,4 +6,5 @@ export type { EntityState } from "./generated/EntityState";
 export type { ObstacleInfo } from "./generated/ObstacleInfo";
 export type { ServerMessage } from "./generated/ServerMessage";
 export type { Snapshot } from "./generated/Snapshot";
+export type { SnapshotEvent } from "./generated/SnapshotEvent";
 export { PROTOCOL_VERSION } from "./generated/version";

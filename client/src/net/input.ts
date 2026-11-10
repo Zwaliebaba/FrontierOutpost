@@ -4,6 +4,10 @@
  */
 
 export const INPUT_KIND = 2;
+/** Bytes per input: thrust, turn and flags. */
+const INPUT_BYTES = 3;
+/** Flag bit: the trigger is held. */
+const FIRE = 1;
 
 /** Scales -1..1 to -127..127, clamping and treating NaN as 0, exactly as Rust does. */
 export function quantizeControl(value: number): number {
@@ -25,19 +29,21 @@ export const MAX_INPUTS = 4;
  */
 export function encodeInput(
   sequence: number,
-  inputs: readonly { thrust: number; turn: number }[],
+  inputs: readonly { thrust: number; turn: number; fire?: boolean }[],
 ): Uint8Array {
   if (inputs.length < 1 || inputs.length > MAX_INPUTS) {
     throw new RangeError(`an input datagram carries 1 to ${String(MAX_INPUTS)} inputs`);
   }
-  const bytes = new Uint8Array(4 + 2 * inputs.length);
+  const bytes = new Uint8Array(4 + INPUT_BYTES * inputs.length);
   const view = new DataView(bytes.buffer);
   view.setUint8(0, INPUT_KIND);
   view.setUint16(1, sequence & 0xffff, true);
   view.setUint8(3, inputs.length);
   inputs.forEach((input, index) => {
-    view.setInt8(4 + 2 * index, quantizeControl(input.thrust));
-    view.setInt8(5 + 2 * index, quantizeControl(input.turn));
+    const at = 4 + INPUT_BYTES * index;
+    view.setInt8(at, quantizeControl(input.thrust));
+    view.setInt8(at + 1, quantizeControl(input.turn));
+    view.setUint8(at + 2, input.fire === true ? FIRE : 0);
   });
   return bytes;
 }

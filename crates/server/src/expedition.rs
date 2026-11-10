@@ -9,10 +9,12 @@ use std::time::Duration;
 
 use frontier_protocol::input::InputDatagram;
 use frontier_protocol::snapshot::{
-    EntityKind, EntityState, Snapshot, quantize_heading, quantize_position, quantize_velocity,
+    EntityKind, EntityState, MAX_EVENTS, Snapshot, SnapshotEvent, quantize_heading,
+    quantize_position, quantize_velocity,
 };
 use frontier_sim::TICKS_PER_SECOND;
 use frontier_sim::collision::{Obstacle, asteroid_field};
+use frontier_sim::combat::Event;
 use frontier_sim::profile::ShipKind;
 use frontier_sim::ship::ShipInput;
 use frontier_sim::skirmish::Skirmish;
@@ -154,6 +156,7 @@ async fn run(mut commands: mpsc::UnboundedReceiver<Command>, mut world: World) {
                                 turn: controls.turn_unit(),
                             },
                         );
+                        world.set_firing(*ship, controls.fire);
                     }
                 }
                 skirmish.step(&mut world);
@@ -204,6 +207,15 @@ fn leave(ship: ShipId, world: &mut World, pilots: &mut HashMap<ShipId, Pilot>) {
     world.remove_ship(ship);
 }
 
+fn entity_kind(kind: ShipKind) -> EntityKind {
+    match kind {
+        ShipKind::Pilot => EntityKind::PlayerShip,
+        ShipKind::Drone => EntityKind::Drone,
+        ShipKind::Raider => EntityKind::Raider,
+        ShipKind::Warden => EntityKind::Warden,
+    }
+}
+
 /// Sends every pilot the same entities, each with their own input ack.
 fn broadcast(world: &World, pilots: &mut HashMap<ShipId, Pilot>) {
     let entities: Vec<EntityState> = world
@@ -214,12 +226,7 @@ fn broadcast(world: &World, pilots: &mut HashMap<ShipId, Pilot>) {
             let max_hull = ship.kind.profile().max_hull;
             EntityState {
                 id: ship.id.0,
-                kind: match ship.kind {
-                    ShipKind::Pilot => EntityKind::PlayerShip,
-                    ShipKind::Drone => EntityKind::Drone,
-                    ShipKind::Raider => EntityKind::Raider,
-                    ShipKind::Warden => EntityKind::Warden,
-                },
+                kind: entity_kind(ship.kind),
                 x: quantize_position(ship.state.x),
                 z: quantize_position(ship.state.z),
                 heading: quantize_heading(ship.state.heading),
@@ -230,6 +237,29 @@ fn broadcast(world: &World, pilots: &mut HashMap<ShipId, Pilot>) {
             }
         })
         .collect();
+    // Events only drive visuals, so beyond what one snapshot carries they are dropped.
+    let events: Vec<SnapshotEvent> = world
+        .events()
+        .iter()
+        .take(MAX_EVENTS)
+        .map(|event| match *event {
+            Event::Fired {
+                shooter,
+                target,
+                speed,
+            } => SnapshotEvent::Fired {
+                shooter: shooter.0,
+                target: target.0,
+                // Projectile speeds are tens of metres per second; `as` saturates beyond 255.
+                speed: speed.round() as u8,
+            },
+            Event::Destroyed { ship, kind, by } => SnapshotEvent::Destroyed {
+                ship: ship.0,
+                by: by.map(|by| by.0),
+                kind: entity_kind(kind),
+            },
+        })
+        .collect();
     // Snapshots carry the tick modulo 2^32: about 6.8 years at 20 per second.
     let tick = (world.tick().get() % (1 << 32)) as u32;
 
@@ -238,6 +268,7 @@ fn broadcast(world: &World, pilots: &mut HashMap<ShipId, Pilot>) {
             tick,
             input_ack: pilot.last_input.unwrap_or(0),
             entities: entities.clone(),
+            events: events.clone(),
         };
         match snapshot.encode() {
             Ok(datagram) => pilot.sink.send(datagram),
@@ -302,6 +333,7 @@ mod tests {
         let thrust = Controls {
             thrust: 127,
             turn: 0,
+            fire: false,
         };
         expedition.input(
             ship,

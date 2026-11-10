@@ -4,4 +4,8 @@ import type { ObstacleInfo } from "./ObstacleInfo";
 /**
  * A message sent from the server to the client.
  */
-export type ServerMessage = { "type": "welcome", protocolVersion: number, } | { "type": "rejected", protocolVersion: number, reason: string, } | { "type": "joined", shipId: number, tickRate: number, obstacles: Array<ObstacleInfo>, } | { "type": "expeditionFull" };
+export type ServerMessage = { "type": "welcome", protocolVersion: number, } | { "type": "rejected", protocolVersion: number, reason: string, } | { "type": "joined", shipId: number, tickRate: number, obstacles: Array<ObstacleInfo>, 
+/**
+ * How close a locked target must be for the pilot's weapon to fire, m.
+ */
+weaponRange: number, } | { "type": "expeditionFull" };
