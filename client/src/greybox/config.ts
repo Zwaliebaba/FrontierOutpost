@@ -38,7 +38,7 @@ export const DEFAULT_CONFIG: Config = {
   projection: "ortho",
   look: "hold",
   width: 40,
-  cues: true,
+  cues: false,
   occlusion: "silhouette",
   heights: "flat",
   vision: "normal",

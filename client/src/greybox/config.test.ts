@@ -8,6 +8,8 @@ describe("greybox config", () => {
     expect(DEFAULT_CONFIG.scene).toBe("station");
     expect(DEFAULT_CONFIG.projection).toBe("ortho");
     expect(DEFAULT_CONFIG.backdrop).toBe("stars");
+    expect(DEFAULT_CONFIG.cues).toBe(false);
+    expect(parseConfig("?cues=1").cues).toBe(true);
     expect(parseConfig("?backdrop=dark").backdrop).toBe("dark");
   });
 
@@ -24,7 +26,7 @@ describe("greybox config", () => {
       projection: "wide",
       look: "free",
       width: 73,
-      cues: false,
+      cues: true,
       occlusion: "fade",
       heights: "varied",
       vision: "deutan",
