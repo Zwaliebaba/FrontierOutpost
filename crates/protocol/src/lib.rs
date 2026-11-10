@@ -94,6 +94,8 @@ pub enum ServerMessage {
     /// The pilot launched and flies the ship `ship_id`. Snapshots follow as
     /// datagrams, `tick_rate` per second. Everything here is fixed for the run.
     Joined {
+        /// The run's site: a page that rejoins a run has no contract for it.
+        site: SiteInfo,
         ship_id: u16,
         tick_rate: u32,
         tier: u32,

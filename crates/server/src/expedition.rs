@@ -23,20 +23,21 @@ use frontier_sim::combat::Event;
 use frontier_sim::extraction::{EXTRACT_RANGE, ExtractorState, Refusal};
 use frontier_sim::profile::ShipKind;
 use frontier_sim::run::{
-    Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Run, RunEvent, Summary,
-    seconds,
+    Checkpoint, Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Run, RunEvent,
+    Summary, seconds,
 };
 use frontier_sim::ship::ShipInput;
 use frontier_sim::site::{Site, SiteTemplate, ThreatTier, crew_scaling};
 use frontier_sim::world::{ShipId, World};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::time::{MissedTickBehavior, interval};
 use tracing::{debug, info, warn};
 use web_transport_quinn::Session;
 
 use crate::input_queue::InputQueue;
 use crate::ledger::{Item, Npc, Party, Reason, Transfer};
-use crate::store::{AccountId, Store};
+use crate::runs::{Flying, Runs};
+use crate::store::{AccountId, SavedRun, Store};
 use crate::wire;
 
 /// Pilots per expedition (design section 2).
@@ -84,13 +85,27 @@ pub struct LaunchOrder {
     /// The account the pilot flies for.
     pub pilot: AccountId,
     pub store: Store,
+    pub runs: Runs,
 }
 
 /// What an instance needs besides its run to report outcomes.
 struct Books {
     run: String,
     store: Store,
+    runs: Runs,
     accounts: HashMap<ShipId, AccountId>,
+}
+
+impl Books {
+    fn crew(&self) -> Vec<(AccountId, u16)> {
+        let mut crew: Vec<(AccountId, u16)> = self
+            .accounts
+            .iter()
+            .map(|(ship, account)| (*account, ship.0))
+            .collect();
+        crew.sort_unstable();
+        crew
+    }
 }
 
 enum Command {
@@ -114,6 +129,15 @@ enum Command {
     },
     Leave {
         ship: ShipId,
+    },
+    Disconnect {
+        ship: ShipId,
+    },
+    Reconnect {
+        ship: ShipId,
+        sink: Box<dyn SnapshotSink>,
+        events: mpsc::UnboundedSender<PilotEvent>,
+        reply: oneshot::Sender<Option<ServerMessage>>,
     },
 }
 
@@ -163,17 +187,95 @@ impl Expedition {
             site = order.template.name,
             "launched"
         );
+        let expedition = Self { commands };
+        order.runs.insert(
+            order.pilot,
+            Flying {
+                run: order.run.clone(),
+                expedition: expedition.clone(),
+                ship,
+            },
+        );
         let books = Books {
             run: order.run,
             store: order.store,
+            runs: order.runs,
             accounts: HashMap::from([(ship, order.pilot)]),
         };
         tokio::spawn(fly(receiver, run, pilots, books));
         Launched {
-            expedition: Self { commands },
+            expedition,
             ship,
             joined,
         }
+    }
+
+    /// Restores a run from its checkpoint after a restart, with no pilot
+    /// connected: each may rejoin within the grace window. Returns `None` if
+    /// the checkpoint cannot be read.
+    pub fn resume(saved: SavedRun, store: Store, runs: Runs) -> Option<Self> {
+        let checkpoint: Checkpoint = match serde_json::from_str(&saved.document) {
+            Ok(checkpoint) => checkpoint,
+            Err(error) => {
+                warn!(run = saved.run, %error, "checkpoint not readable");
+                return None;
+            }
+        };
+        let run = Run::restore(&checkpoint)?;
+        let (commands, receiver) = mpsc::unbounded_channel();
+        let expedition = Self { commands };
+        let accounts: HashMap<ShipId, AccountId> = saved
+            .crew
+            .iter()
+            .map(|&(account, ship)| (ShipId(ship), account))
+            .collect();
+        for (&ship, &account) in &accounts {
+            if run.is_disconnected(ship) {
+                runs.insert(
+                    account,
+                    Flying {
+                        run: saved.run.clone(),
+                        expedition: expedition.clone(),
+                        ship,
+                    },
+                );
+            }
+        }
+        info!(target: "frontier::run", run = saved.run, tick = checkpoint.elapsed, "restored");
+        let books = Books {
+            run: saved.run,
+            store,
+            runs,
+            accounts,
+        };
+        tokio::spawn(fly(receiver, run, HashMap::new(), books));
+        Some(expedition)
+    }
+
+    /// The pilot's connection dropped: their ship stays exposed for a while,
+    /// then is held inert, and their run waits for them (design section 6).
+    pub fn disconnect(&self, ship: ShipId) {
+        let _ = self.commands.send(Command::Disconnect { ship });
+    }
+
+    /// Puts a returning pilot back in their run. Returns the `Joined` message
+    /// for them, or `None` if the run has ended or no longer holds them.
+    pub async fn reconnect(
+        &self,
+        ship: ShipId,
+        sink: impl SnapshotSink,
+        events: mpsc::UnboundedSender<PilotEvent>,
+    ) -> Option<ServerMessage> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(Command::Reconnect {
+                ship,
+                sink: Box::new(sink),
+                events,
+                reply,
+            })
+            .ok()?;
+        answer.await.ok().flatten()
     }
 
     /// Hands over an input datagram from the pilot flying `ship`.
@@ -252,7 +354,21 @@ async fn fly(
             }
         }
         report(&mut run, &mut pilots, &books).await;
+        if let Some(checkpoint) = run.take_checkpoint() {
+            save_checkpoint(&books, &checkpoint).await;
+        }
         if run.ended().is_some() {
+            let run_id = books.run.clone();
+            if let Err(error) = books
+                .store
+                .call(move |s| s.delete_checkpoint(&run_id))
+                .await
+            {
+                warn!(%error, run = books.run, "checkpoint not deleted");
+            }
+            for account in books.accounts.values() {
+                books.runs.remove(*account, &books.run);
+            }
             return;
         }
     }
@@ -289,6 +405,30 @@ fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
             pilots.remove(&ship);
             run.leave(ship);
         }
+        Command::Disconnect { ship } => {
+            pilots.remove(&ship);
+            run.disconnect(ship);
+        }
+        Command::Reconnect {
+            ship,
+            sink,
+            events,
+            reply,
+        } => {
+            let rejoined = run.reconnect(ship).then(|| {
+                pilots.insert(
+                    ship,
+                    Pilot {
+                        sink,
+                        events,
+                        inputs: InputQueue::default(),
+                        last_input: None,
+                    },
+                );
+                joined(run, ship, run.site().tier)
+            });
+            let _ = reply.send(rejoined);
+        }
     }
 }
 
@@ -299,6 +439,24 @@ fn tell(pilots: &HashMap<ShipId, Pilot>, ship: ShipId, message: ServerMessage) {
 }
 
 /// Writes the run's new events to the log and tells pilots what concerns them.
+async fn save_checkpoint(books: &Books, checkpoint: &Checkpoint) {
+    let document = match serde_json::to_string(checkpoint) {
+        Ok(document) => document,
+        Err(error) => {
+            warn!(%error, run = books.run, "checkpoint not encoded");
+            return;
+        }
+    };
+    let (run, crew) = (books.run.clone(), books.crew());
+    if let Err(error) = books
+        .store
+        .call(move |s| s.save_checkpoint(&run, &crew, &document))
+        .await
+    {
+        warn!(%error, run = books.run, "checkpoint not saved");
+    }
+}
+
 /// Writes the run's new events to the log, banks what docked pilots brought
 /// home, and tells pilots what concerns them.
 async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &Books) {
@@ -322,6 +480,9 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &Book
             | RunEvent::Destroyed { pilot, summary }
             | RunEvent::Abandoned { pilot, summary } => {
                 let holdings = bank(books, pilot, &summary).await;
+                if let Some(account) = books.accounts.get(&pilot) {
+                    books.runs.remove(*account, &books.run);
+                }
                 if let Some(home) = pilots.remove(&pilot) {
                     if let Some(holdings) = holdings {
                         let message = ServerMessage::Account { account: holdings };
@@ -416,6 +577,7 @@ fn scanned(run: &Run) -> ServerMessage {
 
 fn joined(run: &Run, ship: ShipId, tier: ThreatTier) -> ServerMessage {
     ServerMessage::Joined {
+        site: wire::site_info(run.site()),
         ship_id: ship.0,
         tick_rate: TICKS_PER_SECOND,
         tier: tier.number(),
@@ -629,6 +791,7 @@ mod tests {
             run: "test".into(),
             pilot,
             store,
+            runs: Runs::default(),
         }
     }
 
@@ -741,6 +904,7 @@ mod tests {
         let books = Books {
             run: "run-1".into(),
             store: store.clone(),
+            runs: Runs::default(),
             accounts: HashMap::from([(ShipId(0), account)]),
         };
         let summary = Summary {

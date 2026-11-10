@@ -77,6 +77,16 @@ pub(crate) fn random_hex(bytes: usize) -> Result<String, StoreError> {
     Ok(buffer.iter().map(|b| format!("{b:02x}")).collect())
 }
 
+/// A run's latest checkpoint as the store keeps it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedRun {
+    pub run: String,
+    /// Each pilot's account and the ship they fly in the run.
+    pub crew: Vec<(AccountId, u16)>,
+    /// The checkpoint, as JSON.
+    pub document: String,
+}
+
 /// One world's saves. Cheap to clone.
 #[derive(Clone)]
 pub struct Store {
@@ -144,6 +154,12 @@ impl Store {
                  token_hash TEXT PRIMARY KEY,
                  account INTEGER NOT NULL REFERENCES accounts(id),
                  expires INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS checkpoints (
+                 run TEXT PRIMARY KEY,
+                 crew TEXT NOT NULL,
+                 document TEXT NOT NULL,
+                 saved INTEGER NOT NULL
              );",
         )?;
         let schema: Option<String> = connection
@@ -305,6 +321,71 @@ impl Store {
             params![hash(&token), id.0, expires],
         )?;
         Ok(token)
+    }
+
+    /// Saves a run's latest checkpoint, replacing the one before. `crew` pairs
+    /// each pilot's account with the ship they fly in the run.
+    ///
+    /// # Errors
+    /// Fails only if the database does.
+    pub fn save_checkpoint(
+        &self,
+        run: &str,
+        crew: &[(AccountId, u16)],
+        document: &str,
+    ) -> Result<(), StoreError> {
+        let crew: Vec<(i64, u16)> = crew
+            .iter()
+            .map(|&(account, ship)| (account.0, ship))
+            .collect();
+        self.lock()?.execute(
+            "INSERT INTO checkpoints (run, crew, document, saved) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (run) DO UPDATE SET crew = ?2, document = ?3, saved = ?4",
+            params![run, serde_json::to_string(&crew)?, document, unix_now()],
+        )?;
+        Ok(())
+    }
+
+    /// Forgets a run's checkpoint, once the run is over.
+    ///
+    /// # Errors
+    /// Fails only if the database does.
+    pub fn delete_checkpoint(&self, run: &str) -> Result<(), StoreError> {
+        self.lock()?
+            .execute("DELETE FROM checkpoints WHERE run = ?1", params![run])?;
+        Ok(())
+    }
+
+    /// Every run checkpointed and not yet over: the runs a restarted server
+    /// restores.
+    ///
+    /// # Errors
+    /// Fails if the database does or a crew list is malformed.
+    pub fn checkpoints(&self) -> Result<Vec<SavedRun>, StoreError> {
+        let connection = self.lock()?;
+        let mut statement =
+            connection.prepare("SELECT run, crew, document FROM checkpoints ORDER BY saved")?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut runs = Vec::new();
+        for row in rows {
+            let (run, crew, document) = row?;
+            let crew: Vec<(i64, u16)> = serde_json::from_str(&crew)?;
+            runs.push(SavedRun {
+                run,
+                crew: crew
+                    .into_iter()
+                    .map(|(account, ship)| (AccountId(account), ship))
+                    .collect(),
+                document,
+            });
+        }
+        Ok(runs)
     }
 
     /// The account a session token signs in, if it is known and unexpired.
@@ -708,5 +789,24 @@ mod tests {
             .execute("UPDATE sessions SET expires = 0", [])
             .unwrap();
         assert_eq!(store.resume(&token).unwrap(), None);
+    }
+
+    #[test]
+    fn keeps_the_latest_checkpoint_of_each_run_until_it_is_over() {
+        let store = Store::in_memory().unwrap();
+        let id = store.create_account("Vega").unwrap();
+        store
+            .save_checkpoint("run-a", &[(id, 0)], "{\"v\":1}")
+            .unwrap();
+        store
+            .save_checkpoint("run-a", &[(id, 0)], "{\"v\":2}")
+            .unwrap();
+        store.save_checkpoint("run-b", &[(id, 3)], "{}").unwrap();
+        let saved = store.checkpoints().unwrap();
+        assert_eq!(saved.len(), 2);
+        assert_eq!(saved[0].document, "{\"v\":2}");
+        assert_eq!(saved[0].crew, [(id, 0)]);
+        store.delete_checkpoint("run-a").unwrap();
+        assert_eq!(store.checkpoints().unwrap().len(), 1);
     }
 }

@@ -80,7 +80,8 @@ pub fn contract(template: SiteTemplate, seed: u32, open_tiers: u32) -> ServerMes
     }
 }
 
-fn site_info(site: &Site) -> SiteInfo {
+#[must_use]
+pub fn site_info(site: &Site) -> SiteInfo {
     let template = &site.template;
     SiteInfo {
         name: template.name.to_owned(),

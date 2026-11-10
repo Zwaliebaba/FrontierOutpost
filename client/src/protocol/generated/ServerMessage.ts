@@ -13,7 +13,11 @@ import type { WaveInfo } from "./WaveInfo";
 /**
  * A message sent from the server to the client.
  */
-export type ServerMessage = { "type": "welcome", protocolVersion: number, } | { "type": "rejected", protocolVersion: number, reason: string, } | { "type": "passkeyOptions", options: string, } | { "type": "signedIn", callsign: string, token: string, account: AccountInfo, } | { "type": "signInRefused", reason: string, } | { "type": "account", account: AccountInfo, } | { "type": "contract", site: SiteInfo, hazard: Hazard, dominantThreat: DominantThreat, tiers: Array<TierOffer>, } | { "type": "joined", shipId: number, tickRate: number, tier: number, obstacles: Array<ObstacleInfo>, 
+export type ServerMessage = { "type": "welcome", protocolVersion: number, } | { "type": "rejected", protocolVersion: number, reason: string, } | { "type": "passkeyOptions", options: string, } | { "type": "signedIn", callsign: string, token: string, account: AccountInfo, } | { "type": "signInRefused", reason: string, } | { "type": "account", account: AccountInfo, } | { "type": "contract", site: SiteInfo, hazard: Hazard, dominantThreat: DominantThreat, tiers: Array<TierOffer>, } | { "type": "joined", 
+/**
+ * The run's site: a page that rejoins a run has no contract for it.
+ */
+site: SiteInfo, shipId: number, tickRate: number, tier: number, obstacles: Array<ObstacleInfo>, 
 /**
  * The deposits the pilot can work, in the order snapshots report them.
  */

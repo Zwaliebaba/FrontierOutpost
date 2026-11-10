@@ -59,6 +59,7 @@ pub fn start_server_with(
     let identity = Identity {
         store: Store::in_memory().unwrap(),
         auth: Auth::new(&origin()).unwrap(),
+        runs: frontier_server::runs::Runs::default(),
     };
     tokio::spawn(transport::serve(server, settings, identity));
     (format!("https://{addr}/").parse().unwrap(), cert.sha256)

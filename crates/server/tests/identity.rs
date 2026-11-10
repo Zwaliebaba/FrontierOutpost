@@ -135,3 +135,103 @@ async fn a_session_that_launches_before_signing_in_is_closed() {
         .await
         .expect("the server closes a session that breaks the protocol");
 }
+
+/// Launches a signed-up pilot and returns the session, its control stream,
+/// their ship and session token.
+async fn launched(
+    url: &url::Url,
+    sha256: [u8; 32],
+) -> (
+    web_transport_quinn::Session,
+    web_transport_quinn::SendStream,
+    web_transport_quinn::RecvStream,
+    u16,
+    String,
+) {
+    let (session, mut send, mut recv) = connect_to(url, sha256).await;
+    hello(&mut send, &mut recv).await;
+    let (_, token) = sign_up_with(&mut send, &mut recv, &mut SoftPasskey::new(true)).await;
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::Contract { .. }
+    ));
+    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::Account { .. }
+    ));
+    let ServerMessage::Joined { ship_id, .. } = read(&mut recv).await else {
+        panic!("expected Joined");
+    };
+    (session, send, recv, ship_id, token)
+}
+
+#[tokio::test]
+async fn a_pilot_whose_connection_drops_rejoins_their_run() {
+    let (url, sha256) = start_server();
+    let (session, _send, _recv, ship, token) = launched(&url, sha256).await;
+    session.close(0, b"dropped");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let (again, mut send, mut recv) = connect_to(&url, sha256).await;
+    hello(&mut send, &mut recv).await;
+    write(&mut send, &ClientMessage::Resume { token }).await;
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::SignedIn { .. }
+    ));
+    let ServerMessage::Joined { ship_id, site, .. } = read(&mut recv).await else {
+        panic!("expected to rejoin the run, not a new contract");
+    };
+    assert_eq!(ship_id, ship, "the same ship");
+    assert_eq!(site.pockets.len(), 4, "with the site to draw it");
+    let bytes = tokio::time::timeout(Duration::from_secs(2), again.read_datagram())
+        .await
+        .unwrap()
+        .unwrap();
+    let snapshot = frontier_protocol::snapshot::Snapshot::decode(&bytes).unwrap();
+    assert!(snapshot.entities.iter().any(|e| e.id == ship));
+}
+
+#[tokio::test]
+async fn signing_in_on_another_page_closes_the_first() {
+    let (url, sha256) = start_server();
+    let (first, _send, mut first_recv, ship, token) = launched(&url, sha256).await;
+
+    let (_second, mut send, mut recv) = connect_to(&url, sha256).await;
+    hello(&mut send, &mut recv).await;
+    write(&mut send, &ClientMessage::Resume { token }).await;
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::SignedIn { .. }
+    ));
+    let ServerMessage::Joined { ship_id, .. } = read(&mut recv).await else {
+        panic!("the second page takes over the run");
+    };
+    assert_eq!(ship_id, ship);
+
+    // The first page is told why, and its session is closed so it stays closed.
+    let told = tokio::time::timeout(Duration::from_secs(2), read(&mut first_recv))
+        .await
+        .unwrap();
+    assert_eq!(
+        told,
+        ServerMessage::SignInRefused {
+            reason: "Signed in on another page.".into()
+        }
+    );
+    // The server gives a displaced page a moment to close itself first.
+    let closed = tokio::time::timeout(Duration::from_secs(5), first.closed())
+        .await
+        .unwrap();
+    assert!(
+        matches!(
+            &closed,
+            web_transport_quinn::SessionError::WebTransportError(
+                web_transport_quinn::WebTransportError::Closed(code, reason)
+            ) if *code == frontier_server::transport::SIGNED_IN_ELSEWHERE
+                && reason == "signed in elsewhere"
+        ),
+        "{closed:?}"
+    );
+}

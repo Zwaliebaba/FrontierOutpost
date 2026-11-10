@@ -179,6 +179,23 @@ impl World {
         id
     }
 
+    /// Puts a pilot's ship back under its old id, as it was saved: for a
+    /// pilot who reconnects, or a run restored after a restart.
+    pub fn restore_pilot(&mut self, id: ShipId, state: ShipState, hull: f32) {
+        self.remove_ship(id);
+        let mut ship = Ship::new(id, ShipKind::Pilot, state);
+        ship.hull = hull;
+        self.ships.push(ship);
+        if self.next_id <= id.0 {
+            self.next_id = id.0.wrapping_add(1);
+        }
+    }
+
+    /// Starts the clock at `tick`, for a run restored from a checkpoint.
+    pub fn set_tick(&mut self, tick: Tick) {
+        self.tick = tick;
+    }
+
     /// Adds an NPC at `at` that patrols or guards `home`, and returns its id.
     pub fn spawn_npc_at(&mut self, kind: ShipKind, at: (f32, f32), home: (f32, f32)) -> ShipId {
         let id = self.spawn_npc(kind, home);
@@ -847,5 +864,23 @@ mod tests {
         let ship = world.ship(drone).unwrap();
         assert_eq!((ship.state.x, ship.state.z), (50.0, 0.0));
         assert_eq!(ship.home, (0.0, 0.0));
+    }
+
+    #[test]
+    fn restores_a_pilot_under_their_old_id() {
+        let mut world = World::new();
+        let pilot = world.spawn_pilot_at((0.0, 0.0), 0.0);
+        let state = world.ship(pilot).unwrap().state;
+        world.remove_ship(pilot);
+        world.restore_pilot(pilot, ShipState { x: 5.0, ..state }, 40.0);
+        let ship = world.ship(pilot).unwrap();
+        assert_eq!((ship.state.x, ship.hull), (5.0, 40.0));
+        assert_ne!(
+            world.spawn_npc(ShipKind::Drone, (1.0, 1.0)),
+            pilot,
+            "ids stay unique"
+        );
+        world.set_tick(Tick::new(500));
+        assert_eq!(world.tick(), Tick::new(500));
     }
 }

@@ -14,7 +14,7 @@ use frontier_protocol::{ClientMessage, ServerMessage, frame};
 use frontier_sim::run::Options;
 use frontier_sim::site::{FRONTIER_SITE, SiteTemplate, ThreatTier};
 use frontier_sim::world::ShipId;
-use tokio::sync::mpsc;
+use tokio::sync::{Notify, mpsc};
 use tracing::{debug, info, warn};
 use web_transport_quinn::{RecvStream, SendStream, Server, Session, crypto, quinn};
 
@@ -22,6 +22,7 @@ use crate::auth::{Auth, AuthError, Ceremony};
 use crate::cert::DevCertificate;
 use crate::expedition::{Expedition, LaunchOrder, PilotEvent};
 use crate::ledger::{Item, Npc, Party, Reason, Transfer, supplies_due};
+use crate::runs::Runs;
 use crate::store::{AccountId, Store, StoreError, random_hex};
 use crate::{handshake, wire};
 
@@ -85,6 +86,11 @@ pub enum SessionError {
 const PROTOCOL_VIOLATION: u32 = 1;
 /// Session close code for a client whose protocol version is not supported.
 const VERSION_REJECTED: u32 = 2;
+/// Session close code when the pilot signed in on another page. The client
+/// does not reconnect after it, or two pages would keep displacing each other.
+pub const SIGNED_IN_ELSEWHERE: u32 = 4;
+/// How long the server waits for a displaced page to read why and close.
+const PARTING_GRACE: Duration = Duration::from_secs(2);
 
 /// How long a connection may go without hearing from the client before the
 /// server drops it. Browsers do not always close a session when a page closes,
@@ -153,6 +159,8 @@ pub fn bind_with_idle_timeout(
 pub struct Identity {
     pub store: Store,
     pub auth: Auth,
+    /// Live runs and signed-in sessions, shared by every session.
+    pub runs: Runs,
 }
 
 /// Accepts sessions until the endpoint is closed, running each on its own task.
@@ -206,11 +214,16 @@ async fn run_session(
         seed: 0,
         offered_at: Instant::now(),
         home_since: None,
+        leave: None,
     };
     let result = pilot.fly(recv, events).await;
+    // The run waits for a pilot whose connection dropped (design section 6).
     match &pilot.flying {
-        Some((expedition, ship)) => expedition.leave(*ship),
+        Some((expedition, ship)) => expedition.disconnect(*ship),
         None => pilot.log_unloading(),
+    }
+    if let (Some(account), Some(leave)) = (pilot.account, &pilot.leave) {
+        pilot.identity.runs.sign_out(account, leave);
     }
     result
 }
@@ -235,6 +248,8 @@ struct Pilot<'a> {
     offered_at: Instant,
     /// When the pilot's last run ended: unloading starts here.
     home_since: Option<Instant>,
+    /// Tells this session to leave when the pilot signs in on another page.
+    leave: Option<Arc<Notify>>,
 }
 
 impl Pilot<'_> {
@@ -301,6 +316,17 @@ impl Pilot<'_> {
                         write_frame(&mut self.send, &ServerMessage::RunOver { summary }).await?;
                         self.offer().await?;
                     }
+                },
+                () = told_to_leave(self.leave.clone()) => {
+                    // The other page has the run now: this one must not
+                    // report a disconnect that would hand it back.
+                    self.flying = None;
+                    let reason = "Signed in on another page.".to_owned();
+                    let _ = write_frame(&mut self.send, &ServerMessage::SignInRefused { reason }).await;
+                    // Closing at once can lose the message; the page closes when it reads it.
+                    let _ = tokio::time::timeout(PARTING_GRACE, self.session.closed()).await;
+                    self.session.close(SIGNED_IN_ELSEWHERE, b"signed in elsewhere");
+                    return Ok(());
                 },
                 _ = self.session.closed() => return Ok(()),
             }
@@ -418,12 +444,26 @@ impl Pilot<'_> {
             "signed in"
         );
         self.account = Some(account);
+        self.leave = Some(self.identity.runs.sign_in(account));
         let message = ServerMessage::SignedIn {
             callsign: holdings.callsign.clone(),
             token,
             account: wire::account(&holdings),
         };
         write_frame(&mut self.send, &message).await?;
+        // A pilot whose run is still going rejoins it (design section 6).
+        if let Some(flying) = self.identity.runs.get(account) {
+            let rejoined = flying
+                .expedition
+                .reconnect(flying.ship, self.session.clone(), self.events_tx.clone())
+                .await;
+            if let Some(joined) = rejoined {
+                info!(account = account.0, run = flying.run, "rejoined");
+                write_frame(&mut self.send, &joined).await?;
+                self.flying = Some((flying.expedition, flying.ship));
+                return Ok(());
+            }
+        }
         self.offer().await
     }
 
@@ -474,6 +514,7 @@ impl Pilot<'_> {
             run,
             pilot: account,
             store: self.identity.store.clone(),
+            runs: self.identity.runs.clone(),
         };
         let launched = Expedition::launch(order, self.session.clone(), self.events_tx.clone());
         let message = ServerMessage::Account {
@@ -483,6 +524,14 @@ impl Pilot<'_> {
         write_frame(&mut self.send, &launched.joined).await?;
         self.flying = Some((launched.expedition, launched.ship));
         Ok(())
+    }
+}
+
+/// Resolves when a session is told to leave; never, for one not yet signed in.
+async fn told_to_leave(leave: Option<Arc<Notify>>) {
+    match leave {
+        Some(leave) => leave.notified().await,
+        None => std::future::pending().await,
     }
 }
 

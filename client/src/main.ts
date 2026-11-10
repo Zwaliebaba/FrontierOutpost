@@ -51,6 +51,11 @@ const KEY_TURN_RATE = 1.6;
 /** Room kept clear for the HUD lines at the top and bottom of the screen. */
 const NAV_INSETS = { top: 150, right: 12, bottom: 120, left: 12 };
 const NOTICE_MS = 4_000;
+/** How soon a dropped connection is retried, and how often an unreachable server. */
+const RECONNECT_MS = 1_500;
+const RETRY_MS = 3_000;
+/** The reason the server closes a session with when the pilot signs in on another page. */
+const SIGNED_IN_ELSEWHERE = "signed in elsewhere";
 /** Within this distance of a deposit the run line names it, metres. */
 const DEPOSIT_HINT = 25;
 
@@ -144,11 +149,31 @@ async function start(): Promise<void> {
   showStatus("connected", `Connected · protocol ${String(connection.protocolVersion)}`);
   // Browsers do not always close a WebTransport session with its page; without this, the
   // server would keep the run going until the session timed out.
+  let leaving = false;
   window.addEventListener("pagehide", () => {
+    leaving = true;
     connection.close();
   });
+  // Displaced by a sign-in on another page: the server says so, then closes.
+  let displaced = false;
+  connection.onMessage((message) => {
+    if (message.type === "signInRefused" && callsign !== "") {
+      displaced = true;
+      connection.close();
+    }
+  });
   void connection.closed.then((reason) => {
-    showStatus("closed", reason ? `Disconnected: ${reason}` : "Disconnected");
+    if (leaving) return;
+    if (displaced || reason === SIGNED_IN_ELSEWHERE) {
+      // Reconnecting would take the run back from the other page, and it back again.
+      showStatus("closed", "Signed in on another page. Reload this one to play here.");
+      return;
+    }
+    // The run waits for its pilot (design §6): the tab's session token signs straight back in.
+    showStatus("closed", "Connection lost · reconnecting…");
+    window.setTimeout(() => {
+      window.location.reload();
+    }, RECONNECT_MS);
   });
   const loaded = await rules;
   const view = new ExpeditionView(document.body, -1, START_WIDTH);
@@ -334,19 +359,14 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       if (!tier.open) button.title = "Opens with a tier 2 facility";
       button.addEventListener("click", () => {
         for (const other of tiers.querySelectorAll("button")) other.disabled = true;
-        launch(connection, tier.tier)
-          .then((joined) => {
-            beginRun(offer, joined);
-          })
-          .catch((error: unknown) => {
-            note.textContent = `Could not launch: ${error instanceof Error ? error.message : String(error)}`;
-            for (const other of offer.tiers) {
-              const b = tiers.querySelector<HTMLButtonElement>(
-                `[data-tier="${String(other.tier)}"]`,
-              );
-              if (b) b.disabled = !other.open;
-            }
-          });
+        // The run begins when `joined` arrives (handled below, as for a rejoined run).
+        launch(connection, tier.tier).catch((error: unknown) => {
+          note.textContent = `Could not launch: ${error instanceof Error ? error.message : String(error)}`;
+          for (const other of offer.tiers) {
+            const b = tiers.querySelector<HTMLButtonElement>(`[data-tier="${String(other.tier)}"]`);
+            if (b) b.disabled = !other.open;
+          }
+        });
       });
       tiers.append(button);
     }
@@ -374,9 +394,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     summaryPanel.append(next);
   };
 
-  const beginRun = (offer: Contract, joined: Joined) => {
+  const beginRun = (joined: Joined) => {
     loaded.setObstacles(joined.obstacles);
-    view.beginRun(joined.shipId, offer.site, joined.obstacles, joined.deposits);
+    view.beginRun(joined.shipId, joined.site, joined.obstacles, joined.deposits);
     life?.session.retire();
     life = beginLife(connection, joined, loaded);
     reveal = null;
@@ -387,6 +407,11 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
 
   connection.onMessage((message) => {
     switch (message.type) {
+      case "joined":
+        // A launch, or a run rejoined after the connection dropped or the server restarted.
+        delete summaryPanel.dataset.ending;
+        beginRun(message);
+        break;
       case "contract":
         contract = message;
         // After a run the summary comes first; its button opens the new contract.
@@ -521,8 +546,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
 
   const markers = new Map<string, HTMLDivElement>();
   const drawNav = (from: { x: number; z: number }) => {
-    const site = contract?.site;
-    if (!site || !life) {
+    const site = life?.joined.site;
+    if (!site) {
       nav.replaceChildren();
       markers.clear();
       return;
@@ -579,12 +604,10 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       untilTick += tickMs;
       if (untilTick < 0) untilTick = tickMs;
       if (current) {
-        const site = contract?.site;
+        const site = current.joined.site;
         const at = current.predictor.state;
         const outside =
-          site !== undefined &&
-          at !== null &&
-          Math.hypot(at.x - site.centreX, at.z - site.centreZ) > site.radius;
+          at !== null && Math.hypot(at.x - site.centreX, at.z - site.centreZ) > site.radius;
         const controls = readControls(current.own?.drive === "ready" && outside);
         const { sequence, sent } = current.session.sendControls(controls);
         current.predictor.advance(sequence, sent);
@@ -677,7 +700,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         run.dataset.extractor = status.extractor;
         run.textContent = runLine(status) + hint;
         const pocketName = (index: number) => {
-          const pocket = contract?.site.pockets[index];
+          const pocket = current.joined.site.pockets[index];
           return pocket ? POCKET_NAME[pocket.kind] : "?";
         };
         scan.dataset.revealed = String(reveal !== null);
@@ -712,5 +735,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
 }
 
 start().catch((error: unknown) => {
-  showStatus("offline", `Offline: ${error instanceof Error ? error.message : String(error)}`);
+  const why = error instanceof Error ? error.message : String(error);
+  showStatus("offline", `Offline: ${why} · retrying`);
+  window.setTimeout(() => {
+    window.location.reload();
+  }, RETRY_MS);
 });

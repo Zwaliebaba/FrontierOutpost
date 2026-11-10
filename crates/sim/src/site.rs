@@ -338,6 +338,14 @@ pub const COMPACT_SITE: SiteTemplate = SiteTemplate {
     scan_range: 180.0,
 };
 
+/// The template with this name, for restoring a checkpointed run.
+#[must_use]
+pub fn template_named(name: &str) -> Option<SiteTemplate> {
+    [FRONTIER_SITE, COMPACT_SITE]
+        .into_iter()
+        .find(|template| template.name == name)
+}
+
 /// One alert step's wave, before crew scaling (design section 10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Wave {

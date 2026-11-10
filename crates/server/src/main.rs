@@ -2,6 +2,8 @@ use frontier_protocol::{ConnectInfo, PROTOCOL_VERSION};
 use frontier_server::auth::Auth;
 use frontier_server::cert::DevCertificate;
 use frontier_server::config::Config;
+use frontier_server::expedition::Expedition;
+use frontier_server::runs::Runs;
 use frontier_server::store::Store;
 use frontier_server::transport::Identity;
 use frontier_server::{http, relay, transport};
@@ -72,10 +74,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tiers = config.settings.open_tiers,
         "contracts"
     );
+    // Runs that were going when the server stopped come back from their last
+    // checkpoint, waiting for their pilots (design section 6).
+    let runs = Runs::default();
+    for run in store.checkpoints()? {
+        Expedition::resume(run, store.clone(), runs.clone());
+    }
     tokio::spawn(transport::serve(
         server,
         config.settings,
-        Identity { store, auth },
+        Identity { store, auth, runs },
     ));
     axum::serve(listener, http::router(connect, &config.client_dir))
         .with_graceful_shutdown(shutdown_signal())
