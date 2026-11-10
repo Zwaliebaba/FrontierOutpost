@@ -412,7 +412,9 @@ impl Run {
     }
 
     /// Locks a hostile within lock range, or releases the lock. Returns
-    /// whether the requested lock was taken.
+    /// whether the requested lock was taken. Lock range limits only taking a
+    /// lock: once held it lasts until its target is gone, so a target that
+    /// strays out for a moment is not silently lost.
     pub fn set_lock(&mut self, ship: ShipId, target: Option<ShipId>) -> bool {
         if !self.flying(ship) {
             return false;
@@ -523,7 +525,6 @@ impl Run {
             self.move_pilot(index);
             self.work_extractor(index);
             self.work_scan(index);
-            self.keep_lock_in_range(index);
         }
         let elapsed = self.elapsed();
         if !self.warned && elapsed >= LIMIT_WARNING_TICKS {
@@ -899,16 +900,6 @@ impl Run {
         }
     }
 
-    fn keep_lock_in_range(&mut self, index: usize) {
-        let ship = self.pilots[index].ship;
-        let lock = self.world.ship(ship).and_then(|s| s.lock);
-        if let Some(target) = lock
-            && !self.within_lock_range(ship, target)
-        {
-            self.world.set_lock(ship, None);
-        }
-    }
-
     /// Ends a pilot's run with `ending`, logging what it brought or cost.
     fn finish(&mut self, index: usize, ending: Ending) {
         let now = self.elapsed();
@@ -1265,6 +1256,35 @@ mod tests {
         assert!(run.set_lock(ship, Some(near)));
         assert!(!run.set_lock(ship, Some(far)));
         assert_eq!(run.world.ship(ship).unwrap().lock, None);
+    }
+
+    #[test]
+    fn a_lock_holds_while_its_target_strays_beyond_lock_range_and_back() {
+        let (mut run, ship) = quiet(15);
+        let (dx, dz) = COMPACT_SITE.dock;
+        let drone = run.world.spawn_npc(ShipKind::Drone, (dx + 30.0, dz));
+        assert!(run.set_lock(ship, Some(drone)));
+        // Out past lock range for a while...
+        run.world.ship_mut(drone).unwrap().state.x = dx + 200.0;
+        run.world.ship_mut(drone).unwrap().home = (dx + 200.0, dz);
+        steps(&mut run, 10);
+        assert_eq!(run.world.ship(ship).unwrap().lock, Some(drone));
+        // ...and back within weapon range: the held trigger fires.
+        let near = (dx + 10.0, dz);
+        run.world.ship_mut(drone).unwrap().state.x = near.0;
+        run.world.ship_mut(drone).unwrap().home = near;
+        run.set_controls(ship, ShipInput::default(), true);
+        let mut fired = false;
+        for _ in 0..20 {
+            run.step();
+            fired |= run.world.events().iter().any(|event| {
+                matches!(event, crate::combat::Event::Fired { shooter, .. } if *shooter == ship)
+            });
+        }
+        assert!(
+            fired,
+            "the held lock fired once the target was back in range"
+        );
     }
 
     #[test]

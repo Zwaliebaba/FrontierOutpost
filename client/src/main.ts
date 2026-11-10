@@ -315,6 +315,14 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   const send = (message: Parameters<Connection["send"]>[0]) => {
     void connection.send(message).catch(() => undefined);
   };
+  const lockNearest = (own: EntityPose, shipId: number) => {
+    if (!life) return;
+    const range = life.joined.lockRange;
+    const others = poses.filter((pose) => pose.id !== shipId);
+    if (!selection.cycle(own, others, range)) {
+      showNotice(`No hostile within lock range (${range.toFixed(0)} m)`);
+    }
+  };
   window.addEventListener("keydown", (event) => {
     if (!life) return;
     const shipId = life.session.shipId;
@@ -323,17 +331,15 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       const own = poses.find((pose) => pose.id === shipId);
       if (!own) return;
       // Only what is within lock range can be locked (design §10: ion fog shortens it).
-      const range = life.joined.lockRange;
-      selection.cycle(
-        own,
-        poses.filter(
-          (pose) => pose.id !== shipId && Math.hypot(pose.x - own.x, pose.z - own.z) <= range,
-        ),
-      );
+      lockNearest(own, shipId);
     } else if (event.code === "Escape") {
       selection.release();
     } else if (event.repeat) {
       return;
+    } else if (event.code === "Space" && selection.lock === null) {
+      // The trigger with nothing locked takes the nearest hostile it can.
+      const own = poses.find((pose) => pose.id === shipId);
+      if (own) lockNearest(own, shipId);
     } else if (event.code === "KeyX") {
       const working = life.own?.extractor === "on" || life.own?.extractor === "venting";
       send({ type: "extract", on: !working });
@@ -371,7 +377,16 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       screen: worldToScreen(new Vector3(pose.x, 0, pose.z), view.camera, view.viewport),
     }));
     const picked = pickNearest({ x: event.clientX, y: event.clientY }, candidates, PICK_RADIUS_PX);
-    selection.click(others.find((pose) => String(pose.id) === picked) ?? null);
+    const own = poses.find((pose) => pose.id === shipId);
+    const range = life.joined.lockRange;
+    const result = selection.click(
+      others.find((pose) => String(pose.id) === picked) ?? null,
+      own,
+      range,
+    );
+    if (result === "beyond") {
+      showNotice(`Beyond lock range (${range.toFixed(0)} m): centred on it, not locked`);
+    }
   });
   canvas.addEventListener("pointermove", (event) => {
     if (!dragFrom) return;
@@ -508,7 +523,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       lock.dataset.target = String(locked.id);
       lock.textContent =
         `Locked: ${KIND_NAME[locked.kind]} ${String(locked.id)} · ${distance.toFixed(0)} m ` +
-        `${distance <= current.joined.weaponRange ? "in range" : "out of range"} · ` +
+        `${distance <= current.joined.weaponRange ? "in range" : `out of range, fires within ${current.joined.weaponRange.toFixed(0)} m`} · ` +
         `hull ${String(Math.round((locked.hull / 255) * 100))}% · Tab next, Esc release`;
     } else {
       delete lock.dataset.target;

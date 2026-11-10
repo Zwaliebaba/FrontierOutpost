@@ -76,4 +76,24 @@ describe("selection", () => {
     expect([s.focus, s.lock]).toEqual([null, null]);
     expect(sent).toEqual([10, null]);
   });
+
+  it("centres on a hostile beyond lock range without claiming a lock", () => {
+    const { selection: s, sent } = selection();
+    expect(s.click(warden, here, 36)).toBe("beyond");
+    expect(s.focus).toBe(warden.id);
+    expect(s.lock).toBeNull();
+    expect(sent).toEqual([]);
+    expect(s.click(raider, here, 36)).toBe("locked");
+    expect(s.lock).toBe(raider.id);
+  });
+
+  it("cycles only through hostiles within lock range and says when there are none", () => {
+    const { selection: s } = selection();
+    expect(s.cycle(here, [warden], 36)).toBe(false);
+    expect(s.lock).toBeNull();
+    expect(s.cycle(here, [drone, raider, warden], 36)).toBe(true);
+    s.cycle(here, [drone, raider, warden], 36);
+    s.cycle(here, [drone, raider, warden], 36);
+    expect(s.lock, "the warden at 50 m is never offered").toBe(drone.id);
+  });
 });
