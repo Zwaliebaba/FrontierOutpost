@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Frontier Outpost · Readability greybox</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #0b1220;
+        color: #d7deea;
+        font:
+          13px/1.4 system-ui,
+          sans-serif;
+      }
+      body {
+        display: flex;
+      }
+      #panel {
+        box-sizing: border-box;
+        width: 270px;
+        flex: none;
+        padding: 12px;
+        overflow-y: auto;
+        background: #101a2c;
+        border-right: 1px solid #23324d;
+      }
+      #panel h1 {
+        margin: 0 0 10px;
+        font-size: 15px;
+      }
+      #panel h2 {
+        margin: 14px 0 6px;
+        font-size: 13px;
+      }
+      #panel label {
+        display: block;
+        margin-bottom: 8px;
+        color: #9fb0c8;
+      }
+      #panel select,
+      #panel button {
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
+        margin-top: 2px;
+        padding: 4px;
+        background: #0b1220;
+        color: inherit;
+        border: 1px solid #34486b;
+        border-radius: 3px;
+        font: inherit;
+      }
+      #panel button {
+        margin-top: 10px;
+        cursor: pointer;
+      }
+      dl {
+        margin: 12px 0 0;
+      }
+      dt {
+        color: #9fb0c8;
+      }
+      dd {
+        margin: 0 0 6px;
+        font-weight: 600;
+      }
+      dd.ok::after {
+        content: " · within limit";
+        font-weight: 400;
+        color: #7fd1a0;
+      }
+      dd.over::after {
+        content: " · outside limit";
+        font-weight: 400;
+        color: #f0a35e;
+      }
+      .note {
+        color: #9fb0c8;
+      }
+      #stage {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+      }
+      canvas {
+        display: block;
+      }
+      #overlay {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      #prompt {
+        position: absolute;
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 6px 12px;
+        background: rgb(11 18 32 / 85%);
+        border: 1px solid #34486b;
+        border-radius: 4px;
+        font-size: 15px;
+        pointer-events: none;
+      }
+      .bracket {
+        position: absolute;
+        top: -26px;
+        left: -26px;
+        box-sizing: border-box;
+        width: 52px;
+        height: 52px;
+        border: 2px solid #fff;
+        border-radius: 4px;
+        color: #fff;
+        font-weight: 700;
+        font-size: 15px;
+        line-height: 1;
+        text-indent: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Colour-vision simulation matrices (Machado, Oliveira and Fernandes 2009, severity 1.0). -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <filter id="protan">
+        <feColorMatrix
+          type="matrix"
+          values="0.152286 1.052583 -0.204868 0 0
+                  0.114503 0.786281 0.099216 0 0
+                  -0.003882 -0.048116 1.051998 0 0
+                  0 0 0 1 0"
+        />
+      </filter>
+      <filter id="deutan">
+        <feColorMatrix
+          type="matrix"
+          values="0.367322 0.860646 -0.227968 0 0
+                  0.280085 0.672501 0.047413 0 0
+                  -0.011820 0.042940 0.968881 0 0
+                  0 0 0 1 0"
+        />
+      </filter>
+    </svg>
+    <aside id="panel"><h1>Readability greybox</h1></aside>
+    <main id="stage">
+      <div id="overlay"></div>
+      <div id="prompt"></div>
+    </main>
+    <script type="module" src="/src/greybox/main.ts"></script>
+  </body>
+</html>

@@ -28,6 +28,7 @@ crates/
   server/               frontier-server: authoritative server binary
 client/                 TypeScript + Vite + Three.js browser client
   src/protocol/         index.ts re-exports the wire types; generated/ is written by ts-rs
+  src/greybox/          client-only readability test harness, served at /greybox.html
 Design/                 Game design, style guide, Blender scenes (binaries in Git LFS)
 .github/workflows/      CI
 ```
