@@ -476,7 +476,15 @@ impl Store {
         let mut runs = Vec::new();
         for row in rows {
             let (run, crew, document) = row?;
-            let crew: Vec<SeatJson> = serde_json::from_str(&crew)?;
+            // One unreadable row loses one run. It must not stop the server
+            // starting, with every other run and every pilot's home behind it.
+            let crew: Vec<SeatJson> = match serde_json::from_str(&crew) {
+                Ok(crew) => crew,
+                Err(error) => {
+                    tracing::warn!(run, %error, "checkpoint skipped: its crew is unreadable");
+                    continue;
+                }
+            };
             runs.push(SavedRun {
                 run,
                 crew: crew
@@ -1077,6 +1085,34 @@ mod tests {
         assert_eq!(saved[0].crew, [seat(0, 60)]);
         store.delete_checkpoint("run-a").unwrap();
         assert_eq!(store.checkpoints().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_checkpoint_with_an_unreadable_crew_is_skipped_and_the_rest_are_kept() {
+        let store = Store::in_memory().unwrap();
+        let pilot = store.create_account("Vega").unwrap();
+        let seat = Seat {
+            account: pilot,
+            ship: 0,
+            share: 100,
+        };
+        store.save_checkpoint("first", &[seat], "{}").unwrap();
+        store
+            .lock()
+            .execute(
+                "INSERT INTO checkpoints (run, crew, document, saved) VALUES ('bad', 'not json', '{}', 0)",
+                [],
+            )
+            .unwrap();
+        store.save_checkpoint("last", &[seat], "{}").unwrap();
+        let runs: Vec<String> = store
+            .checkpoints()
+            .unwrap()
+            .into_iter()
+            .map(|saved| saved.run)
+            .collect();
+        assert_eq!(runs.len(), 2, "{runs:?}");
+        assert!(runs.contains(&"first".to_owned()) && runs.contains(&"last".to_owned()));
     }
 
     #[test]
