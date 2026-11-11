@@ -368,6 +368,8 @@ impl Store {
             .collect();
         apply(&transaction, &self.world, &grants)?;
         transaction.commit()?;
+        drop(connection);
+        announce(&grants);
         Ok(id)
     }
 
@@ -525,6 +527,8 @@ impl Store {
         let transaction = connection.transaction()?;
         apply(&transaction, &self.world, transfers)?;
         transaction.commit()?;
+        drop(connection);
+        announce(transfers);
         Ok(())
     }
 
@@ -559,6 +563,8 @@ impl Store {
         }
         let account = load(&transaction, id, &self.world)?;
         transaction.commit()?;
+        drop(connection);
+        announce(&transfers);
         Ok(Ok(account))
     }
 
@@ -671,7 +677,19 @@ fn apply(connection: &Connection, world: &str, transfers: &[Transfer]) -> Result
                 transfer.run,
             ],
         )?;
-        // The economy's instrumentation (AGENTS.md section 4.7).
+    }
+    for (id, account) in &accounts {
+        save(connection, *id, account)?;
+    }
+    Ok(())
+}
+
+/// Logs transfers that have been committed: the economy's instrumentation
+/// (AGENTS.md section 4.7). Called once the transaction is in and the lock
+/// released, so a batch that rolled back is never announced, and nothing
+/// that slows the log holds the store.
+fn announce(transfers: &[Transfer]) {
+    for transfer in transfers {
         info!(
             target: "frontier::ledger",
             item = transfer.item.name(),
@@ -683,10 +701,6 @@ fn apply(connection: &Connection, world: &str, transfers: &[Transfer]) -> Result
             "transfer"
         );
     }
-    for (id, account) in &accounts {
-        save(connection, *id, account)?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
