@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { AlwaysStencilFunc, EqualStencilFunc, GreaterDepth, ReplaceStencilOp } from "three";
+import { AlwaysStencilFunc, EqualStencilFunc, GreaterDepth, Mesh, ReplaceStencilOp } from "three";
+import type { MeshBasicMaterial } from "three";
 import {
   HULL,
   RENDER_HEIGHT,
@@ -96,5 +97,16 @@ describe("lock bracket", () => {
     bracket.traverse((node) => {
       expect(node.renderOrder).toBeGreaterThan(shipMeshes("ally").silhouette.renderOrder);
     });
+  });
+
+  it("is drawn in one pass, with the transparent objects it must cover", () => {
+    const [strip] = lockBracket().children;
+    if (!(strip instanceof Mesh)) throw new Error("the bracket is made of meshes");
+    const material = strip.material as MeshBasicMaterial;
+    // Transparent, so it sorts after every opaque object; double-sided, so it shows from
+    // either side of the plane; and one pass, or three.js draws and re-keys it twice a frame.
+    expect(material.transparent).toBe(true);
+    expect(material.depthTest).toBe(false);
+    expect(material.forceSinglePass).toBe(true);
   });
 });
