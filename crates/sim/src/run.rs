@@ -512,7 +512,8 @@ impl Run {
             ended: None,
             events: Vec::new(),
             launch_cost: options.supplies_paid.unwrap_or(LAUNCH_COST),
-            checkpoint_due: false,
+            // A launch is paid for, so it is recoverable from its first tick.
+            checkpoint_due: true,
             crew_left: false,
             core: None,
             bounty: 0,
@@ -649,6 +650,8 @@ impl Run {
             pilot: ship,
             credits: self.launch_cost,
         });
+        // They have paid too: the checkpoint must hold their seat.
+        self.checkpoint_due = true;
         Some(ship)
     }
 
@@ -924,7 +927,8 @@ impl Run {
             .is_some_and(|pilot| pilot.disconnected_at.is_some() && !pilot.phase.is_over())
     }
 
-    /// Takes a checkpoint if one is due: on entering a pocket and every minute.
+    /// Takes a checkpoint if one is due: at launch, when a pilot joins, on
+    /// entering a pocket, when a pilot's run ends, and every minute.
     pub fn take_checkpoint(&mut self) -> Option<Checkpoint> {
         if !std::mem::take(&mut self.checkpoint_due) || self.ended.is_some() {
             return None;
@@ -1652,6 +1656,9 @@ impl Run {
             ),
             phases,
         };
+        // What a finished pilot brought home is banked now. A checkpoint that
+        // still showed them flying would bank it again after a restart.
+        self.checkpoint_due = true;
         let pilot = &mut self.pilots[index];
         self.crew_left |= pilot.disconnected_at.is_none();
         pilot.phase = match ending {
@@ -2889,9 +2896,10 @@ mod tests {
     }
 
     #[test]
-    fn checkpoints_fall_on_entering_a_pocket_and_every_minute() {
+    fn checkpoints_fall_at_launch_on_entering_a_pocket_and_every_minute() {
         let (mut run, ship) = quiet(23);
-        assert!(run.take_checkpoint().is_none());
+        assert!(run.take_checkpoint().is_some(), "at launch");
+        assert!(run.take_checkpoint().is_none(), "taken once");
         at_deposit(&mut run, ship);
         assert!(run.take_checkpoint().is_some(), "entering the ore field");
         assert!(run.take_checkpoint().is_none(), "taken once");
@@ -2952,6 +2960,44 @@ mod tests {
         let wait = next.saturating_sub(restored.elapsed());
         steps(&mut restored, wait + 1);
         assert_eq!(restored.alert(), 1);
+    }
+
+    #[test]
+    fn a_launch_and_a_join_are_each_checkpointed_at_once() {
+        // Supplies are paid at launch; a run stopped before its first minute
+        // or pocket must still be there for its pilots.
+        let (mut run, host) = crew_run(27, 2);
+        let launched = run.take_checkpoint().expect("due at launch");
+        assert_eq!(launched.crew.len(), 1);
+        assert_eq!(launched.crew[0].ship, host.0);
+        assert!(run.take_checkpoint().is_none(), "taken once");
+        let wing = run.join().unwrap();
+        let joined = run.take_checkpoint().expect("due when a pilot joins");
+        assert_eq!(joined.crew.len(), 2);
+        assert_eq!(joined.crew[1].ship, wing.0);
+    }
+
+    #[test]
+    fn a_pilot_whose_run_ends_is_checkpointed_as_home_with_an_empty_hold() {
+        // What they brought is banked when they dock. A later restart must
+        // not find them still flying it.
+        let (mut run, host) = crew_run(28, 2);
+        run.join().unwrap();
+        at_deposit(&mut run, host);
+        run.pilots[0].cargo = [12, 0, 0];
+        run.step();
+        run.take_checkpoint();
+        let dock = run.site.template.dock;
+        place(&mut run, host, dock);
+        run.step();
+        assert_eq!(run.ended(), None, "the wing is still out");
+        let docked = run.take_checkpoint().expect("due when a run ends");
+        assert_eq!(docked.crew[0].phase, Phase::Docked);
+        assert_eq!(docked.crew[0].cargo, [0; 3]);
+
+        let restored = Run::restore(&docked).unwrap();
+        assert!(!restored.is_disconnected(host), "nothing to resume");
+        assert_eq!(restored.status(host).unwrap().cargo, 0);
     }
 
     #[test]

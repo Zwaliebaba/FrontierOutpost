@@ -1150,6 +1150,21 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
+    async fn a_launch_is_checkpointed_before_its_first_minute_or_pocket() {
+        // Supplies are paid at launch: a server stopped seconds later must
+        // still have the run for its pilot.
+        let order = order(None);
+        let store = order.store.clone();
+        let (sink, _snapshots) = channel();
+        let _launched = Expedition::launch(order, sink, mpsc::unbounded_channel().0);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let saved = store.checkpoints().unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].run, "test");
+        assert_eq!(saved[0].crew.len(), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
     async fn a_restored_crew_run_waits_for_the_pilot_still_out() {
         use crate::store::{SavedRun, Seat};
         let store = Store::in_memory().unwrap();
