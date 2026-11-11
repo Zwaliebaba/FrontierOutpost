@@ -56,7 +56,9 @@ pub trait SnapshotSink: Send + 'static {
 
 impl SnapshotSink for Session {
     fn send(&self, datagram: Vec<u8>) -> bool {
-        // A full send buffer drops this snapshot; the next one replaces it.
+        // Never waits. quinn queues what the link cannot take yet, and when
+        // its buffer (`transport::DATAGRAM_SEND_BUFFER`, a few snapshots) is
+        // full it drops the oldest: a stalled client gets the newest state.
         match self.send_datagram(datagram.into()) {
             Ok(()) => true,
             Err(error) => {

@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use frontier_protocol::input::InputDatagram;
+use frontier_protocol::snapshot::MAX_DATAGRAM_BYTES;
 use frontier_protocol::{ClientMessage, ServerMessage, frame};
 use frontier_sim::run::Options;
 use frontier_sim::site::{Capability, FRONTIER_SITE, SiteTemplate, ThreatTier};
@@ -99,6 +100,17 @@ const PARTING_GRACE: Duration = Duration::from_secs(2);
 /// and QUIC's usual 30 s would leave a ghost ship that long.
 pub const IDLE_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// How many bytes of datagrams may wait to be sent to one client. quinn
+/// queues what the link cannot take yet and drops the oldest only when this
+/// is full. At its default of 1 MiB a client back from a stalled link was
+/// sent every snapshot it had missed, oldest first: seven seconds of them
+/// after a five second cut, measured. This holds four of the largest
+/// snapshots, so a client is sent the newest few and no history.
+pub const DATAGRAM_SEND_BUFFER: usize = 4_096;
+
+// Smaller than one snapshot and none would ever be sent.
+const _: () = assert!(DATAGRAM_SEND_BUFFER >= 4 * MAX_DATAGRAM_BYTES);
+
 /// How often the server pings a client. A pilot at home between runs sends
 /// nothing, but their browser acknowledges each ping, which keeps the
 /// connection alive; a closed page stops acknowledging and is dropped after
@@ -149,6 +161,7 @@ pub fn bind_with_idle_timeout(
     let mut transport = quinn::TransportConfig::default();
     transport.max_idle_timeout(Some(idle_timeout.try_into()?));
     transport.keep_alive_interval(Some(keep_alive(idle_timeout)));
+    transport.datagram_send_buffer_size(DATAGRAM_SEND_BUFFER);
     let mut config = quinn::ServerConfig::with_crypto(Arc::new(
         quinn::crypto::rustls::QuicServerConfig::try_from(tls)?,
     ));
