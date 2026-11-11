@@ -22,7 +22,9 @@ pub fn equal_shares(pilots: usize) -> Vec<u32> {
 /// summing to 100.
 #[must_use]
 pub fn valid_split(shares: &[u32], pilots: usize) -> bool {
-    shares.len() == pilots && shares.iter().sum::<u32>() == 100
+    // Summed in u64: the shares come from a client, and a u32 sum can be
+    // made to wrap round to 100.
+    shares.len() == pilots && shares.iter().map(|&share| u64::from(share)).sum::<u64>() == 100
 }
 
 /// `amount` divided by `weights`, rounded down, with what rounding leaves
@@ -63,6 +65,13 @@ mod tests {
         assert!(valid_split(&[60, 40], 2));
         assert!(!valid_split(&[60, 30], 2));
         assert!(!valid_split(&[100], 2));
+    }
+
+    #[test]
+    fn shares_that_only_wrap_round_to_a_hundred_are_not_a_split() {
+        assert!(!valid_split(&[u32::MAX, 101], 2));
+        assert!(!valid_split(&[u32::MAX, u32::MAX, 102], 3));
+        assert!(!valid_split(&[u32::MAX; 4], 4));
     }
 
     #[test]
