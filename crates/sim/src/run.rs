@@ -1417,8 +1417,11 @@ impl Run {
         // A handful, so `as` loses nothing.
         let wardens = ((1 + self.site.tier.number()) as f32 * threat).round() as u32;
         let room = MAX_NPCS.saturating_sub(self.npc_count()) as u32;
-        for i in 0..wardens.min(room) {
-            let angle = i as f32 * std::f32::consts::TAU / wardens as f32;
+        // Spaced by how many are placed: where the cap leaves room for fewer
+        // than planned, they still stand all round the core, not to one side.
+        let placed = wardens.min(room);
+        for i in 0..placed {
+            let angle = i as f32 * std::f32::consts::TAU / placed as f32;
             let post = (cx + angle.cos() * 10.0, cz + angle.sin() * 10.0);
             self.world.spawn_npc_at(ShipKind::Warden, post, post);
         }
@@ -2476,6 +2479,43 @@ mod tests {
             .filter(|ship| ship.kind == ShipKind::Warden)
             .count();
         assert_eq!(wardens, 2, "tier I: two wardens hold the core");
+    }
+
+    #[test]
+    fn wardens_the_npc_cap_leaves_room_for_still_stand_all_round_the_core() {
+        // Tier III with four pilots plans nine wardens, and the opening
+        // threat leaves the cap room for fewer.
+        let site = Site::generate(
+            COMPACT_SITE,
+            35,
+            ThreatTier::III,
+            4,
+            &[Capability::BreachNest],
+        );
+        let (run, _) = Run::launch(site, 1, Options::default());
+        let core = run.world.ship(run.core().unwrap()).unwrap().state;
+        let mut bearings: Vec<f32> = run
+            .world
+            .ships()
+            .iter()
+            .filter(|ship| ship.kind == ShipKind::Warden)
+            .map(|ship| (ship.state.z - core.z).atan2(ship.state.x - core.x))
+            .collect();
+        assert!(
+            (2..9).contains(&bearings.len()),
+            "{} wardens: the cap should bind here",
+            bearings.len()
+        );
+        bearings.sort_by(f32::total_cmp);
+        let even = std::f32::consts::TAU / bearings.len() as f32;
+        let last = bearings[bearings.len() - 1];
+        let gaps = bearings
+            .windows(2)
+            .map(|pair| pair[1] - pair[0])
+            .chain([bearings[0] + std::f32::consts::TAU - last]);
+        for gap in gaps {
+            assert!((gap - even).abs() < 0.01, "a gap of {gap} rad, not {even}");
+        }
     }
 
     /// Ticks to break the core with `ids` fitted, firing from inside its
