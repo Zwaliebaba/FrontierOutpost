@@ -65,6 +65,42 @@
       "options": { "cwd": "${workspaceFolder}" },
       "presentation": { "reveal": "silent", "panel": "shared" },
       "problemMatcher": []
+    },
+    {
+      // Checks the image end to end: builds it, starts the three test servers of compose.e2e.yaml,
+      // runs the browser tests against them and stops them. They have their own project and ports,
+      // so the game at http://localhost:8080/ keeps running. A failing step stops the sequence and
+      // leaves the test servers up to look at; run "container: e2e down" afterwards.
+      "label": "container: verify",
+      "dependsOn": ["container: e2e up", "container: e2e test", "container: e2e down"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
+      // --wait returns once every test server passes its health check.
+      "label": "container: e2e up",
+      "type": "shell",
+      "command": "docker compose -f compose.e2e.yaml up --build --wait",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      // Needs the test servers up, and `npm ci` done in client/.
+      "label": "container: e2e test",
+      "type": "shell",
+      "command": "npm run e2e:container",
+      "options": { "cwd": "${workspaceFolder}/client" },
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": []
+    },
+    {
+      "label": "container: e2e down",
+      "type": "shell",
+      "command": "docker compose -f compose.e2e.yaml down",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "silent", "panel": "shared" },
+      "problemMatcher": []
     }
   ]
 }
