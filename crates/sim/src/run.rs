@@ -189,6 +189,21 @@ pub enum RunEvent {
         pilot: ShipId,
         why: Stop,
     },
+    /// The pilot started their extractor at a deposit: a decision, for the
+    /// Stage 1 gates (design section 9).
+    ExtractorStarted {
+        pilot: ShipId,
+        material: Material,
+    },
+    /// The pilot locked a hostile, or tried to lock one beyond lock range.
+    Locked {
+        pilot: ShipId,
+        target: ShipKind,
+        /// Metres from the pilot.
+        distance: f32,
+        /// Whether the lock was taken: false beyond lock range.
+        taken: bool,
+    },
     Vented {
         pilot: ShipId,
     },
@@ -772,12 +787,30 @@ impl Run {
             return false;
         }
         let in_range = target.is_none_or(|target| self.within_lock_range(ship, target));
-        if in_range {
+        let taken = if in_range {
             self.world.set_lock(ship, target)
         } else {
             self.world.set_lock(ship, None);
             false
+        };
+        // A selection, for the readability gate (design section 9).
+        let aimed = target.and_then(|target| {
+            let (pilot, other) = (self.world.ship(ship)?, self.world.ship(target)?);
+            let distance = (pilot.state.x - other.state.x).hypot(pilot.state.z - other.state.z);
+            pilot
+                .kind
+                .is_hostile_to(other.kind)
+                .then_some((other.kind, distance))
+        });
+        if let Some((kind, distance)) = aimed {
+            self.log(RunEvent::Locked {
+                pilot: ship,
+                target: kind,
+                distance,
+                taken,
+            });
         }
+        taken
     }
 
     /// Starts the extractor at the nearest deposit in reach, or stops it.
@@ -812,7 +845,15 @@ impl Run {
             .map(|(i, _)| i)
             .ok_or(Refusal::NotAtDeposit)?;
         let conditions = self.conditions(index, deposit);
+        let was_on = self.pilots[index].extractor.is_on();
         self.pilots[index].extractor.start(deposit, &conditions)?;
+        if !was_on {
+            let material = self.site.deposits[deposit].material;
+            self.log(RunEvent::ExtractorStarted {
+                pilot: ship,
+                material,
+            });
+        }
         if self.pilots[index].scan.take().is_some() {
             self.log(RunEvent::ScanInterrupted { pilot: ship });
         }
@@ -2752,6 +2793,44 @@ mod tests {
         let pot = settled(&events(&mut run)).expect("both docked");
         assert_eq!((pot.contract, pot.relay), (160, 80));
         assert_eq!(pot.total(), 240);
+    }
+
+    #[test]
+    fn decisions_are_logged_for_the_gates() {
+        let site = Site::generate(COMPACT_SITE, 47, ThreatTier::I, 1, &[]);
+        let (mut run, ships) = Run::launch(
+            site,
+            1,
+            Options {
+                opening_threat: Some(0),
+                ..Options::default()
+            },
+        );
+        let ship = ships[0];
+        at_deposit(&mut run, ship);
+        run.extract(ship, true).unwrap();
+        let drone = run
+            .world
+            .spawn_npc_at(ShipKind::Drone, (-60.0, 0.0), (-60.0, 0.0));
+        let near = run.world.ship(ship).unwrap().state;
+        let far = run
+            .world
+            .spawn_npc_at(ShipKind::Drone, (near.x + 30.0, near.z), (0.0, 0.0));
+        assert!(run.set_lock(ship, Some(far)));
+        let _ = drone;
+        let log = events(&mut run);
+        assert!(log.iter().any(|e| matches!(
+            e,
+            RunEvent::ExtractorStarted {
+                material: Material::Ore,
+                ..
+            }
+        )));
+        assert!(log.iter().any(|e| matches!(
+            e,
+            RunEvent::Locked { target: ShipKind::Drone, taken: true, distance, .. }
+                if (*distance - 30.0).abs() < 0.5
+        )));
     }
 
     #[test]

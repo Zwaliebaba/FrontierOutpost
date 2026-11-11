@@ -9,6 +9,7 @@ pub mod caps;
 pub mod cert;
 pub mod config;
 pub mod crews;
+pub mod events;
 pub mod expedition;
 pub mod home;
 pub mod http;
