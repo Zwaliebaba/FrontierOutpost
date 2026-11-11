@@ -171,6 +171,9 @@ enum Command {
         events: mpsc::UnboundedSender<PilotEvent>,
         reply: oneshot::Sender<Option<(ShipId, ServerMessage)>>,
     },
+    Stop {
+        reply: oneshot::Sender<()>,
+    },
 }
 
 /// A handle to a running expedition. Cheap to clone; the instance stops once
@@ -300,6 +303,17 @@ impl Expedition {
         Some(expedition)
     }
 
+    /// Saves the run as it stands and stops the instance, for a server that
+    /// is shutting down: a restart restores every ship where it was, not
+    /// where its last checkpoint happened to fall (design section 6).
+    /// Resolves once the checkpoint is written, or at once if the run is over.
+    pub async fn stop(&self) {
+        let (reply, stopped) = oneshot::channel();
+        if self.commands.send(Command::Stop { reply }).is_ok() {
+            let _ = stopped.await;
+        }
+    }
+
     /// The pilot's connection dropped: their ship stays exposed for a while,
     /// then is held inert, and their run waits for them (design section 6).
     pub fn disconnect(&self, ship: ShipId) {
@@ -423,6 +437,15 @@ async fn fly(
                     });
                     let _ = reply.send(joined);
                 }
+                Some(Command::Stop { reply }) => {
+                    // Everything settled so far is already banked, at the
+                    // end of the turn that settled it; this saves the rest.
+                    if run.ended().is_none() {
+                        save_checkpoint(&books, &run.checkpoint()).await;
+                    }
+                    let _ = reply.send(());
+                    return;
+                }
                 Some(command) => apply(command, &mut run, &mut pilots),
                 // Every handle is gone: the server is shutting down.
                 None => return,
@@ -503,6 +526,10 @@ fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
         // Joining needs the books, so the instance loop handles it first.
         Command::Join { reply, .. } => {
             let _ = reply.send(None);
+        }
+        // Stopping saves through the books; the instance loop handles it too.
+        Command::Stop { reply } => {
+            let _ = reply.send(());
         }
         Command::Reconnect {
             ship,
@@ -1162,6 +1189,37 @@ mod tests {
         assert_eq!(saved.len(), 1);
         assert_eq!(saved[0].run, "test");
         assert_eq!(saved[0].crew.len(), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn stopping_saves_the_run_where_it_stands_and_ends_the_instance() {
+        let order = order(None);
+        let (store, runs, pilot) = (order.store.clone(), order.runs.clone(), order.pilot);
+        let (sink, _snapshots) = channel();
+        let launched = Expedition::launch(order, sink, mpsc::unbounded_channel().0);
+        // Short of the first minute, and the pilot enters no pocket.
+        tokio::time::sleep(Duration::from_secs(30)).await;
+        let elapsed = |store: &Store| -> u32 {
+            let saved = store.checkpoints().unwrap();
+            let checkpoint: Checkpoint = serde_json::from_str(&saved[0].document).unwrap();
+            checkpoint.elapsed
+        };
+        assert!(elapsed(&store) < TICKS_PER_SECOND, "only the launch so far");
+
+        launched.expedition.stop().await;
+        assert!(
+            elapsed(&store) >= 29 * TICKS_PER_SECOND,
+            "saved at the stop"
+        );
+        assert!(runs.get(pilot).is_some(), "the run is still the pilot's");
+        // The instance is gone: nothing answers, and a second stop returns.
+        let (sink, _snapshots) = channel();
+        let rejoined = launched
+            .expedition
+            .reconnect(launched.ship, sink, mpsc::unbounded_channel().0)
+            .await;
+        assert!(rejoined.is_none());
+        launched.expedition.stop().await;
     }
 
     #[tokio::test(start_paused = true)]

@@ -7,6 +7,7 @@ use frontier_server::runs::Runs;
 use frontier_server::store::Store;
 use frontier_server::transport::Identity;
 use frontier_server::{http, relay, transport};
+use std::time::Duration;
 use time::OffsetDateTime;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
@@ -101,15 +102,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Identity {
             store,
             auth,
-            runs,
+            runs: runs.clone(),
             crews: frontier_server::crews::Crews::default(),
         },
     ));
     axum::serve(listener, http::router(connect, &config.client_dir))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
+    save_runs(&runs).await;
     info!("stopped");
     Ok(())
+}
+
+/// How long a stopping server gives its instances to save. `docker stop`
+/// kills the process ten seconds after asking.
+const STOP_GRACE: Duration = Duration::from_secs(5);
+
+/// Checkpoints every live run before the process ends, so a restart restores
+/// each ship where it was when the server stopped (design section 6).
+async fn save_runs(runs: &Runs) {
+    let instances = runs.expeditions();
+    let count = instances.len();
+    let saved = tokio::time::timeout(STOP_GRACE, async {
+        for instance in instances {
+            instance.stop().await;
+        }
+    })
+    .await;
+    match saved {
+        Ok(()) => info!(runs = count, "runs saved"),
+        Err(_) => warn!(
+            runs = count,
+            "not every run was saved in time; the rest restart from their last checkpoint"
+        ),
+    }
 }
 
 /// Resolves when the process is asked to stop: Ctrl+C, or on Unix SIGTERM,
