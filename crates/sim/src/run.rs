@@ -364,7 +364,7 @@ impl PilotRun {
         let undocked = self.undocked_at.unwrap_or(end);
         let Some(first) = self.first_pocket_at else {
             return PhaseTimes {
-                approach: end - undocked,
+                approach: end.saturating_sub(undocked),
                 ..PhaseTimes::default()
             };
         };
@@ -858,8 +858,9 @@ impl Run {
         true
     }
 
-    /// Takes a pilot out of the run, as when they disconnect. In Stage 1's
-    /// first build the run is abandoned at once; reconnection is plan M4.
+    /// Takes a pilot out of the run for good: it is abandoned at once. A
+    /// dropped connection goes through [`Run::disconnect`], which keeps the
+    /// run for them to resume.
     pub fn leave(&mut self, ship: ShipId) {
         let Some(index) = self.index(ship) else {
             return;
@@ -3086,6 +3087,16 @@ mod tests {
         let restored = Run::restore(&docked).unwrap();
         assert!(!restored.is_disconnected(host), "nothing to resume");
         assert_eq!(restored.status(host).unwrap().cargo, 0);
+    }
+
+    #[test]
+    fn phase_times_do_not_underflow_on_a_checkpoint_from_the_future() {
+        // `undocked_at` is read back from a saved document. One later than
+        // the run's clock must give a zero approach, not a panic.
+        let (mut run, _) = quiet(29);
+        run.pilots[0].undocked_at = Some(run.elapsed() + 10);
+        let times = run.pilots[0].times(run.elapsed());
+        assert_eq!(times.approach, 0);
     }
 
     #[test]

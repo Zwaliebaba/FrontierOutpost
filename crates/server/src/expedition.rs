@@ -2,9 +2,9 @@
 //! inputs and actions, and sends every pilot a snapshot each tick until the run
 //! ends.
 //!
-//! Each launch starts its own instance (design section 10: an instance ends
-//! when every pilot has docked or been destroyed). Stage 1's first build
-//! launches solo; crews joining one instance arrive in plan M6.
+//! A solo launch, or a crew host's, starts an instance; the host's crew
+//! follows into it within the join window (design sections 2 and 10). When
+//! the instance ends is the run's rule: see `Run::check_end`.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -560,7 +560,8 @@ fn tell(pilots: &HashMap<ShipId, Pilot>, ship: ShipId, message: ServerMessage) {
     }
 }
 
-/// Writes the run's new events to the log and tells pilots what concerns them.
+/// Saves the run's checkpoint with its crew's seats, replacing the last one,
+/// for a restarted server to restore.
 async fn save_checkpoint(books: &Books, checkpoint: &Checkpoint) {
     let document = match serde_json::to_string(checkpoint) {
         Ok(document) => document,
