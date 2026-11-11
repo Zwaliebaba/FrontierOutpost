@@ -1149,6 +1149,57 @@ mod tests {
         assert!(folded.contains(&(crate::ledger::Item::ORE, 12)));
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn a_restored_crew_run_waits_for_the_pilot_still_out() {
+        use crate::store::{SavedRun, Seat};
+        let store = Store::in_memory().unwrap();
+        let (vega, rigel) = (
+            store.create_account("Vega").unwrap(),
+            store.create_account("Rigel").unwrap(),
+        );
+        let site = Site::generate(COMPACT_SITE, 11, ThreatTier::I, 2, &[]);
+        let (mut run, ships) = Run::launch(site, 1, Options::default());
+        let (host, wing) = (ships[0], run.join().unwrap());
+        let mut checkpoint = run.checkpoint();
+        // The host had docked before the server stopped; the wing was out.
+        checkpoint.crew[0].phase = Phase::Docked;
+        let crew = [
+            Seat {
+                account: vega,
+                ship: host.0,
+                share: 50,
+            },
+            Seat {
+                account: rigel,
+                ship: wing.0,
+                share: 50,
+            },
+        ];
+        let document = serde_json::to_string(&checkpoint).unwrap();
+        store.save_checkpoint("run-9", &crew, &document).unwrap();
+        let saved = SavedRun {
+            run: "run-9".into(),
+            crew: crew.to_vec(),
+            document,
+        };
+        let runs = Runs::default();
+        let expedition = Expedition::resume(saved, store.clone(), runs.clone()).unwrap();
+
+        // Well past the first tick, which once ended the instance and
+        // abandoned the wing before they could come back.
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        assert!(runs.get(vega).is_none(), "the host's run was over");
+        assert!(runs.get(rigel).is_some(), "the wing's run waits for them");
+        assert_eq!(store.checkpoints().unwrap().len(), 1);
+        let (sink, snapshots) = channel();
+        let joined = expedition
+            .reconnect(wing, sink, mpsc::unbounded_channel().0)
+            .await;
+        assert!(matches!(joined, Some(ServerMessage::Joined { .. })));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(latest(&snapshots).unwrap().own.phase, RunPhase::AtDock);
+    }
+
     #[tokio::test]
     async fn the_pot_is_paid_to_every_crew_member_by_their_share_and_source() {
         let store = Store::in_memory().unwrap();

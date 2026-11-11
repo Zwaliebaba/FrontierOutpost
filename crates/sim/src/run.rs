@@ -452,6 +452,9 @@ pub struct Run {
     launch_cost: u32,
     /// A checkpoint is due at the end of this tick.
     checkpoint_due: bool,
+    /// A connected pilot's run ended since the instance last asked whether
+    /// to end: the one event that may end it over the heads of pilots away.
+    crew_left: bool,
     /// The nest core, while it stands.
     core: Option<ShipId>,
     /// Bounty earned and not yet paid.
@@ -510,6 +513,7 @@ impl Run {
             events: Vec::new(),
             launch_cost: options.supplies_paid.unwrap_or(LAUNCH_COST),
             checkpoint_due: false,
+            crew_left: false,
             core: None,
             bounty: 0,
             relay: Relay::Idle,
@@ -1052,6 +1056,7 @@ impl Run {
             events: Vec::new(),
             launch_cost: checkpoint.launch_cost,
             checkpoint_due: false,
+            crew_left: false,
             core: None,
             bounty: checkpoint.bounty,
             relay: checkpoint.relay,
@@ -1648,6 +1653,7 @@ impl Run {
             phases,
         };
         let pilot = &mut self.pilots[index];
+        self.crew_left |= pilot.disconnected_at.is_none();
         pilot.phase = match ending {
             Ending::Docked => Phase::Docked,
             Ending::Destroyed => Phase::Destroyed,
@@ -1678,18 +1684,25 @@ impl Run {
 
     /// Ends the instance when every connected pilot has docked or been
     /// destroyed (design section 10). A disconnected pilot does not hold it
-    /// open for a crew, and their run is abandoned; a run whose every pilot is
-    /// away waits for them until the grace window closes.
+    /// open for a crew: when a connected pilot's run ends and nobody is left
+    /// connected and flying, the instance ends and those away are abandoned.
+    ///
+    /// Going away does not itself end it. The last pilot flying keeps the
+    /// grace window when their connection drops after a crewmate has gone
+    /// home, as a solo pilot does, and so does every pilot a restore marks
+    /// away. The owner chose this on 11 November 2026 (code review, question
+    /// 8.1); the design's sentence does not yet say which of the two it means.
     fn check_end(&mut self) {
         if self.ended.is_some() {
             return;
         }
-        let any_over = self.pilots.iter().any(|pilot| pilot.phase.is_over());
-        let all_settled = self
+        let crew_left = std::mem::take(&mut self.crew_left);
+        let all_over = self.pilots.iter().all(|pilot| pilot.phase.is_over());
+        let nobody_flying = self
             .pilots
             .iter()
             .all(|pilot| pilot.phase.is_over() || pilot.disconnected_at.is_some());
-        if !(any_over && all_settled) {
+        if !(all_over || crew_left && nobody_flying) {
             return;
         }
         for index in 0..self.pilots.len() {
@@ -2689,6 +2702,69 @@ mod tests {
             RunEvent::Abandoned { pilot, .. } if *pilot == wing
         )));
         assert!(!run.reconnect(wing), "nothing left to rejoin");
+    }
+
+    /// A crew of two whose host has docked, with the wing still out.
+    fn host_home_wing_out(seed: u32) -> (Run, ShipId, ShipId) {
+        let (mut run, host) = crew_run(seed, 2);
+        let wing = run.join().unwrap();
+        place(&mut run, wing, (-60.0, 0.0));
+        place(&mut run, host, (-60.0, 5.0));
+        run.step();
+        let dock = run.site.template.dock;
+        place(&mut run, host, dock);
+        run.step();
+        assert_eq!(run.status(host).unwrap().phase, Phase::Docked);
+        assert_eq!(run.ended(), None, "the wing is still out");
+        (run, host, wing)
+    }
+
+    #[test]
+    fn the_last_pilot_flying_keeps_the_grace_window_when_their_connection_drops() {
+        let (mut run, _host, wing) = host_home_wing_out(44);
+        run.disconnect(wing);
+        steps(&mut run, EXPOSURE_TICKS + 20);
+        assert_eq!(run.ended(), None, "inside the grace window");
+        assert!(run.reconnect(wing), "the run is theirs to resume");
+        run.step();
+        assert_eq!(run.ended(), None);
+        assert!(!run.status(wing).unwrap().phase.is_over());
+    }
+
+    #[test]
+    fn the_last_pilot_flying_is_abandoned_only_when_the_grace_window_closes() {
+        let (mut run, _host, wing) = host_home_wing_out(45);
+        run.disconnect(wing);
+        steps(&mut run, GRACE_TICKS - 1);
+        assert_eq!(run.ended(), None);
+        steps(&mut run, 2);
+        assert_eq!(run.ended(), Some(EndReason::AllDone));
+        assert!(events(&mut run).iter().any(|event| matches!(
+            event,
+            RunEvent::Abandoned { pilot, .. } if *pilot == wing
+        )));
+    }
+
+    #[test]
+    fn a_restored_crew_run_waits_for_the_pilots_still_out() {
+        // Design section 6: after a server failure each ship is restored at
+        // its last checkpoint. A crewmate already home must not end the
+        // instance before the others can come back.
+        let (run, host, wing) = host_home_wing_out(46);
+        let mut restored = Run::restore(&run.checkpoint()).unwrap();
+        assert!(restored.is_disconnected(wing));
+        steps(&mut restored, 40);
+        assert_eq!(restored.ended(), None, "waiting for the wing");
+        assert!(!restored.reconnect(host), "the host's run is over");
+        assert!(restored.reconnect(wing));
+        steps(&mut restored, 40);
+        assert_eq!(restored.ended(), None);
+        assert!(!restored.status(wing).unwrap().phase.is_over());
+
+        // Nobody returning, the instance ends when the grace window closes.
+        let mut unattended = Run::restore(&run.checkpoint()).unwrap();
+        steps(&mut unattended, GRACE_TICKS + 1);
+        assert_eq!(unattended.ended(), Some(EndReason::AllDone));
     }
 
     #[test]
