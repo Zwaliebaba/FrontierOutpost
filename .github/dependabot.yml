@@ -12,6 +12,11 @@ updates:
     directory: /client
     schedule:
       interval: weekly
+    ignore:
+      # typescript-eslint's peer range stops below 6.1, so a newer TypeScript fails the whole
+      # tooling group. Lift this when typescript-eslint supports it (AGENTS.md §5).
+      - dependency-name: typescript
+        versions: [">= 6.1.0"]
     groups:
       # three and its type definitions are versioned together.
       three:
