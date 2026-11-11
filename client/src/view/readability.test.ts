@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AlwaysStencilFunc, EqualStencilFunc, GreaterDepth, ReplaceStencilOp } from "three";
+import type { Mesh } from "three";
 import {
   HULL,
   RENDER_HEIGHT,
@@ -73,7 +74,7 @@ describe("silhouettes", () => {
   it("renders after hulls and structures, sharing the hull's shape and scale", () => {
     const { hull, silhouette } = shipMeshes("hostile", 1.7);
     expect(silhouette.renderOrder).toBeGreaterThan(hull.renderOrder);
-    expect(silhouette.geometry).toBe(hull.geometry);
+    expect((silhouette as Mesh).geometry).toBe((hull as Mesh).geometry);
     expect(silhouette.scale.x).toBe(1.7);
   });
 });

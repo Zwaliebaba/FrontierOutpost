@@ -87,7 +87,8 @@ export class ExpeditionView {
 
   /**
    * Draws `poses`, the bracket on `lock`, and the bolts and blasts in `shots`, with the camera
-   * centred on `target`, turned by `yaw` and raised to `pitch`.
+   * centred on `target`, turned by `yaw` and raised to `pitch`. `dt`, seconds since the last
+   * frame, paces the landing gear.
    */
   render(
     poses: readonly EntityPose[],
@@ -96,8 +97,9 @@ export class ExpeditionView {
     pitch: number,
     yaw: number,
     shots?: Shots,
+    dt = 0,
   ): void {
-    this.world.update(poses, lock, shots);
+    this.world.update(poses, lock, shots, dt);
     aimRig(this.#rig, target, pitch, yaw);
     this.#renderer.clear();
     this.#skyCamera.quaternion.copy(this.#rig.camera.quaternion);

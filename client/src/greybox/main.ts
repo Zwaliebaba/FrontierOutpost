@@ -3,11 +3,9 @@ import {
   BufferAttribute,
   BufferGeometry,
   CylinderGeometry,
-  DirectionalLight,
   DoubleSide,
   GridHelper,
   Group,
-  HemisphereLight,
   IcosahedronGeometry,
   Mesh,
   MeshBasicMaterial,
@@ -20,6 +18,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
+import type { Object3D } from "three";
 import {
   BACKDROPS,
   HEIGHT_MODES,
@@ -61,7 +60,18 @@ import {
   towardCamera,
 } from "../view/view";
 import { SHIP_BEAM, SHIP_LENGTH } from "../view/hulls";
-import { BOLT, SIGNAL, STRUCTURE_STENCIL, linear, shipMeshes } from "../view/readability";
+import { loadFrigate } from "../outpost/models";
+import { setGear } from "../view/frigate";
+import { stationLights } from "../view/lights";
+import {
+  BOLT,
+  SIGNAL,
+  STRUCTURE_STENCIL,
+  linear,
+  shipMeshes,
+  useShipModel,
+  usesShipModel,
+} from "../view/readability";
 
 const STEP = 1 / 60;
 const PICK_RADIUS_PX = 20;
@@ -109,10 +119,13 @@ if (config.backdrop !== "stars") {
   scene.background =
     config.backdrop === "bright" ? linear(0.42, 0.5, 0.6) : linear(0.035, 0.06, 0.11);
 }
-scene.add(new HemisphereLight(linear(0.3, 0.48, 1), linear(0.025, 0.038, 0.055), 0.6));
-const starlight = new DirectionalLight(linear(0.67, 0.77, 1), 2.4);
-starlight.position.set(-4, 10, 6);
-scene.add(starlight);
+// The game's lights and its hull model, so the readability gate measures what players see.
+scene.add(...stationLights());
+try {
+  useShipModel(await loadFrigate());
+} catch (error) {
+  console.warn("The frigate did not load; player ships are the stand-in wedge.", error);
+}
 
 const world = createWorld(config.scene, config.seed, config.heights);
 const cameraTarget = new Vector3();
@@ -210,8 +223,8 @@ function planeMarker(allegiance: Allegiance): Group {
 
 interface ShipView {
   ship: Ship;
-  hull: Mesh;
-  silhouette: Mesh | null;
+  hull: Object3D;
+  silhouette: Object3D | null;
   marker: Group | null;
   drop: Mesh | null;
   hiddenFor: number;
@@ -221,6 +234,8 @@ interface ShipView {
 // Ships draw through the same readability rules as the expedition view (view/readability).
 const shipViews = world.ships.map((ship): ShipView => {
   const meshes = shipMeshes(ship.allegiance);
+  // Every greybox ship is in flight.
+  setGear(meshes.gear, 0);
   const hull = meshes.hull;
   scene.add(hull);
   const silhouette = config.occlusion === "silhouette" ? meshes.silhouette : null;
@@ -687,6 +702,8 @@ function renderResults(): void {
     const payload = {
       generatedAt: new Date().toISOString(),
       config,
+      // Which hull player-side ships were: results from before the frigate measured the wedge.
+      hull: usesShipModel() ? "frigate" : "wedge",
       viewport,
       summary,
       occlusion: { longestHiddenSeconds: longestHidden, hiddenShare },

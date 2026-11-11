@@ -54,6 +54,7 @@ import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
 import { loadSim } from "./sim";
 import type { Sim } from "./sim";
 import { headingRadians, positionMetres, velocityMetresPerSecond } from "./net/snapshot";
+import { useShipModel } from "./view/readability";
 import { dragLook, glideEase, isHome, settleLook, turnLook, zoomWidth } from "./view/look";
 import type { LookState } from "./view/look";
 import { pickNearest, worldToScreen } from "./view/picking";
@@ -194,16 +195,19 @@ async function start(): Promise<void> {
     }, RECONNECT_MS);
   });
   const loaded = await rules;
+  const view = new ExpeditionView(document.body, -1, START_WIDTH);
   // The outpost's models load beside everything else; the home shows once they are in.
   loadOutpostModels()
     .then((models) => {
+      // Player ships fly as the starter frigate from here on, those in flight included.
+      useShipModel(models.frigate);
+      view.world.redraw();
       outpost = new OutpostScene(models);
       homeChanged();
     })
     .catch((error: unknown) => {
       showNotice(`The outpost models did not load: ${String(error)}`);
     });
-  const view = new ExpeditionView(document.body, -1, START_WIDTH);
   play(connection, view, loaded);
   await identify(connection);
 }
@@ -856,7 +860,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     if (atHome) {
       view.renderScene(atHome.scene, aim, look.pitch, look.yaw);
     } else {
-      view.render(poses, selection.lock, aim, look.pitch, look.yaw, shots);
+      view.render(poses, selection.lock, aim, look.pitch, look.yaw, shots, dt);
     }
 
     const locked = poses.find((pose) => pose.id === selection.lock);

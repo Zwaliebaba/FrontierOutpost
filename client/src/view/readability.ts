@@ -18,6 +18,8 @@ import {
   PlaneGeometry,
   ReplaceStencilOp,
 } from "three";
+import type { Material, Object3D } from "three";
+import { gearOf } from "./frigate";
 import { SHIP_BEAM, SHIP_HEIGHT, SHIP_LENGTH, forkedHull, wedgeHull } from "./hulls";
 
 export type Allegiance = "self" | "ally" | "hostile";
@@ -71,16 +73,21 @@ export function hullGeometry(allegiance: Allegiance): BufferGeometry {
   return SHAPES[hullShape(allegiance)];
 }
 
-/** A hull material. A visible hull clears the structure mark, so it is drawn normally. */
+/** Stencil settings for a hull: a visible hull clears the structure mark, so it draws normally. */
+export const HULL_STENCIL = {
+  stencilWrite: true,
+  stencilRef: 0,
+  stencilFunc: AlwaysStencilFunc,
+  stencilZPass: ReplaceStencilOp,
+} as const;
+
+/** A stand-in hull's material. */
 export function hullMaterial(allegiance: Allegiance): MeshStandardMaterial {
   return new MeshStandardMaterial({
     color: HULL[allegiance],
     roughness: 0.45,
     metalness: 0.5,
-    stencilWrite: true,
-    stencilRef: 0,
-    stencilFunc: AlwaysStencilFunc,
-    stencilZPass: ReplaceStencilOp,
+    ...HULL_STENCIL,
   });
 }
 
@@ -106,18 +113,115 @@ export const SILHOUETTE_ORDER = 10;
 
 /** A ship as drawn: its hull, and its silhouette for when a structure hides it. */
 export interface ShipMeshes {
-  hull: Mesh<BufferGeometry, MeshStandardMaterial>;
-  silhouette: Mesh<BufferGeometry, MeshBasicMaterial>;
+  hull: Object3D;
+  silhouette: Object3D;
+  /** The landing gear's nodes in both, for `setGear`; none on a stand-in hull. */
+  gear: Object3D[];
+  /** Frees what is this ship's own; geometry, and a model's materials, are shared. */
+  dispose(): void;
+}
+
+/** The player-side model's two drawings, one per player-side allegiance. */
+interface Templates {
+  hull: Record<"self" | "ally", Object3D>;
+  silhouette: Record<"self" | "ally", Object3D>;
+}
+
+let templates: Templates | null = null;
+
+/**
+ * How far an ally's armour moves toward the ally blue: shape says player side, colour says you
+ * or your crew, as the stand-in hulls' tones did.
+ */
+const ALLY_TINT = 0.55;
+
+function meshesOf(object: Object3D): Mesh[] {
+  const meshes: Mesh[] = [];
+  object.traverse((node) => {
+    if (node instanceof Mesh) meshes.push(node as Mesh);
+  });
+  return meshes;
+}
+
+/** `model` drawn as `allegiance`'s hull: its own materials, the ally's armour tinted. */
+function hullTemplate(model: Object3D, allegiance: "self" | "ally"): Object3D {
+  const template = model.clone();
+  const copies = new Map<Material, Material>();
+  for (const mesh of meshesOf(template)) {
+    const material = mesh.material;
+    const own = (original: Material): Material => {
+      let copy = copies.get(original);
+      if (!copy) {
+        copy = original.clone();
+        Object.assign(copy, HULL_STENCIL);
+        if (allegiance === "ally" && copy instanceof MeshStandardMaterial) {
+          if (copy.name.startsWith("Armor")) copy.color.lerp(SIGNAL.ally, ALLY_TINT);
+        }
+        copies.set(original, copy);
+      }
+      return copy;
+    };
+    mesh.material = Array.isArray(material) ? material.map(own) : own(material);
+  }
+  return template;
+}
+
+/** `model` drawn as `allegiance`'s silhouette: every part in the signal colour. */
+function silhouetteTemplate(model: Object3D, allegiance: "self" | "ally"): Object3D {
+  const template = model.clone();
+  const material = silhouetteMaterial(allegiance);
+  for (const mesh of meshesOf(template)) {
+    mesh.material = material;
+    mesh.renderOrder = SILHOUETTE_ORDER;
+  }
+  return template;
+}
+
+/**
+ * Draws player-side ships as `model` (the starter frigate, view/frigate) from now on, or as the
+ * stand-in wedge again for `null`. Ships already drawn keep their hulls until redrawn.
+ */
+export function useShipModel(model: Object3D | null): void {
+  templates = model && {
+    hull: { self: hullTemplate(model, "self"), ally: hullTemplate(model, "ally") },
+    silhouette: {
+      self: silhouetteTemplate(model, "self"),
+      ally: silhouetteTemplate(model, "ally"),
+    },
+  };
+}
+
+/** Whether player-side ships are drawn as the model rather than the stand-in. */
+export function usesShipModel(): boolean {
+  return templates !== null;
 }
 
 export function shipMeshes(allegiance: Allegiance, scale = 1): ShipMeshes {
-  const geometry = hullGeometry(allegiance);
-  const hull = new Mesh(geometry, hullMaterial(allegiance));
-  const silhouette = new Mesh(geometry, silhouetteMaterial(allegiance));
-  silhouette.renderOrder = SILHOUETTE_ORDER;
-  hull.scale.setScalar(scale);
-  silhouette.scale.setScalar(scale);
-  return { hull, silhouette };
+  let ship: ShipMeshes;
+  if (templates && allegiance !== "hostile") {
+    const hull = templates.hull[allegiance].clone();
+    const silhouette = templates.silhouette[allegiance].clone();
+    ship = { hull, silhouette, gear: [...gearOf(hull), ...gearOf(silhouette)], dispose: () => {} };
+  } else {
+    // Hostiles keep the forked stand-in: there is no hostile model yet.
+    const geometry = hullGeometry(allegiance);
+    const hullMaterialOwn = hullMaterial(allegiance);
+    const silhouetteMaterialOwn = silhouetteMaterial(allegiance);
+    const silhouette = new Mesh(geometry, silhouetteMaterialOwn);
+    silhouette.renderOrder = SILHOUETTE_ORDER;
+    ship = {
+      hull: new Mesh(geometry, hullMaterialOwn),
+      silhouette,
+      gear: [],
+      dispose: () => {
+        hullMaterialOwn.dispose();
+        silhouetteMaterialOwn.dispose();
+      },
+    };
+  }
+  ship.hull.scale.setScalar(scale);
+  ship.silhouette.scale.setScalar(scale);
+  return ship;
 }
 
 /** Places both meshes of a ship at the one render height, facing `heading`. */
