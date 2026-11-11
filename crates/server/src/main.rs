@@ -3,6 +3,7 @@ use frontier_server::auth::Auth;
 use frontier_server::cert::DevCertificate;
 use frontier_server::config::Config;
 use frontier_server::expedition::Expedition;
+use frontier_server::log::Lines;
 use frontier_server::runs::Runs;
 use frontier_server::store::Store;
 use frontier_server::transport::Identity;
@@ -14,8 +15,12 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Logging never waits for whoever reads standard output: see `log`.
+    let log = Lines::to(std::io::stdout())?;
+    let _flushed = log.flush_on_drop();
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with_writer(log)
         .init();
 
     let config = Config::from_env()?;
