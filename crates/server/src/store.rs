@@ -77,12 +77,30 @@ pub(crate) fn random_hex(bytes: usize) -> Result<String, StoreError> {
     Ok(buffer.iter().map(|b| format!("{b:02x}")).collect())
 }
 
+/// A pilot's place in a checkpointed run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Seat {
+    pub account: AccountId,
+    pub ship: u16,
+    /// Their share of the pot, in whole percent.
+    pub share: u32,
+}
+
+/// A seat as JSON: account, ship and share. Checkpoints written before crews
+/// (plan M6) have no share; theirs were solo runs, which take the whole pot.
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum SeatJson {
+    Crew(i64, u16, u32),
+    Solo(i64, u16),
+}
+
 /// A run's latest checkpoint as the store keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavedRun {
     pub run: String,
-    /// Each pilot's account and the ship they fly in the run.
-    pub crew: Vec<(AccountId, u16)>,
+    /// Each pilot's account, ship and share.
+    pub crew: Vec<Seat>,
     /// The checkpoint, as JSON.
     pub document: String,
 }
@@ -92,6 +110,8 @@ pub struct SavedRun {
 pub struct Store {
     connection: Arc<Mutex<Connection>>,
     world: Arc<str>,
+    /// Stock granted to every new pilot on top of the starting balance.
+    grant: Arc<[(Item, u32)]>,
 }
 
 impl Store {
@@ -232,6 +252,7 @@ impl Store {
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
             world: world.into(),
+            grant: Arc::new([]),
         })
     }
 
@@ -258,6 +279,14 @@ impl Store {
         tokio::task::spawn_blocking(move || work(&store))
             .await
             .map_err(|_| StoreError::Poisoned)?
+    }
+
+    /// The same store, granting `grant` to every new pilot on top of the
+    /// starting balance.
+    #[must_use]
+    pub fn with_grant(mut self, grant: &[(Item, u32)]) -> Self {
+        self.grant = grant.into();
+        self
     }
 
     /// Creates a pilot's account and grants the starting balance through the
@@ -303,15 +332,18 @@ impl Store {
                 params![id.0, passkey],
             )?;
         }
-        let grant = Transfer {
-            item: Item::Credits,
-            amount: STARTING_CREDITS,
-            from: Party::Npc(Npc::Grant),
-            to: Party::Account(id),
-            reason: Reason::StartingBalance,
-            run: None,
-        };
-        apply(&transaction, &self.world, &[grant])?;
+        let grants: Vec<Transfer> = std::iter::once((Item::Credits, STARTING_CREDITS))
+            .chain(self.grant.iter().copied())
+            .map(|(item, amount)| Transfer {
+                item,
+                amount,
+                from: Party::Npc(Npc::Grant),
+                to: Party::Account(id),
+                reason: Reason::StartingBalance,
+                run: None,
+            })
+            .collect();
+        apply(&transaction, &self.world, &grants)?;
         transaction.commit()?;
         Ok(id)
     }
@@ -367,20 +399,20 @@ impl Store {
         Ok(token)
     }
 
-    /// Saves a run's latest checkpoint, replacing the one before. `crew` pairs
-    /// each pilot's account with the ship they fly in the run.
+    /// Saves a run's latest checkpoint, replacing the one before, with each
+    /// pilot's seat in the run.
     ///
     /// # Errors
     /// Fails only if the database does.
     pub fn save_checkpoint(
         &self,
         run: &str,
-        crew: &[(AccountId, u16)],
+        crew: &[Seat],
         document: &str,
     ) -> Result<(), StoreError> {
-        let crew: Vec<(i64, u16)> = crew
+        let crew: Vec<(i64, u16, u32)> = crew
             .iter()
-            .map(|&(account, ship)| (account.0, ship))
+            .map(|seat| (seat.account.0, seat.ship, seat.share))
             .collect();
         self.lock()?.execute(
             "INSERT INTO checkpoints (run, crew, document, saved) VALUES (?1, ?2, ?3, ?4)
@@ -419,12 +451,23 @@ impl Store {
         let mut runs = Vec::new();
         for row in rows {
             let (run, crew, document) = row?;
-            let crew: Vec<(i64, u16)> = serde_json::from_str(&crew)?;
+            let crew: Vec<SeatJson> = serde_json::from_str(&crew)?;
             runs.push(SavedRun {
                 run,
                 crew: crew
                     .into_iter()
-                    .map(|(account, ship)| (AccountId(account), ship))
+                    .map(|seat| match seat {
+                        SeatJson::Crew(account, ship, share) => Seat {
+                            account: AccountId(account),
+                            ship,
+                            share,
+                        },
+                        SeatJson::Solo(account, ship) => Seat {
+                            account: AccountId(account),
+                            ship,
+                            share: 100,
+                        },
+                    })
                     .collect(),
                 document,
             });
@@ -460,6 +503,40 @@ impl Store {
         apply(&transaction, &self.world, transfers)?;
         transaction.commit()?;
         Ok(())
+    }
+
+    /// Changes one account in one transaction: `change` edits the document's
+    /// outpost, processor or hangar and returns the transfers that pay for the
+    /// edit; both are saved together, or neither. A refusal from `change`, or
+    /// a transfer the account cannot cover, leaves everything as it was and
+    /// comes back as `Ok(Err(reason))`.
+    ///
+    /// # Errors
+    /// Fails if the account is missing or the database fails.
+    pub fn update<F>(&self, id: AccountId, change: F) -> Result<Result<Account, String>, StoreError>
+    where
+        F: FnOnce(&mut Account) -> Result<Vec<Transfer>, String>,
+    {
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()?;
+        let mut account = load(&transaction, id, &self.world)?;
+        let before = account.clone();
+        let transfers = match change(&mut account) {
+            Ok(transfers) => transfers,
+            Err(reason) => return Ok(Err(reason)),
+        };
+        // Stock moves only through transfers.
+        account.credits = before.credits;
+        account.stock = before.stock;
+        save(&transaction, id, &account)?;
+        match apply(&transaction, &self.world, &transfers) {
+            Ok(()) => {}
+            Err(StoreError::Transfer(error)) => return Ok(Err(error.to_string())),
+            Err(error) => return Err(error),
+        }
+        let account = load(&transaction, id, &self.world)?;
+        transaction.commit()?;
+        Ok(Ok(account))
     }
 
     /// The ledger folded for one account: what every transfer in and out of it
@@ -621,6 +698,17 @@ mod tests {
     }
 
     #[test]
+    fn a_grant_reaches_new_pilots_through_the_ledger() {
+        let store = Store::in_memory()
+            .unwrap()
+            .with_grant(&[(Item::Credits, 900), (Item::ORE, 40)]);
+        let id = store.create_account("Vega").unwrap();
+        let account = store.load(id).unwrap();
+        assert_eq!((account.credits, account.stock.ore), (1_000, 40));
+        assert!(store.ledger_balance(id).unwrap().contains(&(Item::ORE, 40)));
+    }
+
+    #[test]
     fn refuses_taken_and_malformed_callsigns() {
         let store = Store::in_memory().unwrap();
         store.create_account("Vega").unwrap();
@@ -662,26 +750,73 @@ mod tests {
 
     #[test]
     fn the_ledger_folded_equals_the_stock_saved() {
-        use crate::ledger::supplies_due;
         let store = Store::in_memory().unwrap();
         let pilots: Vec<AccountId> = ["Vega", "Rigel", "Deneb"]
             .iter()
             .map(|callsign| store.create_account(callsign).unwrap())
             .collect();
-        // A seeded walk through launches, banked cargo, payouts and refused
-        // overdrafts, checking conservation after every batch.
+        // A seeded walk through launches, banked cargo, payouts, refused
+        // overdrafts and the home's actions, checking conservation after each.
         let mut seed: u32 = 2_266;
         let mut next = |below: u32| {
             seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
             (seed >> 8) % below
         };
-        for round in 0..300 {
+        for round in 0..600 {
             let pilot = pilots[next(3) as usize];
             let run = Some(format!("run-{round}"));
             let account = store.load(pilot).unwrap();
+            if next(2) == 0 {
+                use crate::home::{self, Action};
+                use frontier_sim::goods::Good;
+                let good = Good::ALL[next(5) as usize];
+                let amount = 1 + next(6);
+                let action = match next(8) {
+                    0 => Some(Action::Install {
+                        socket: ["a", "b"][next(2) as usize].into(),
+                        facility: ["sensor_array", "refinery", "fabrication_bay"][next(3) as usize]
+                            .into(),
+                    }),
+                    1 => Some(Action::Upgrade { socket: "a".into() }),
+                    2 => Some(Action::Remove {
+                        socket: ["a", "b"][next(2) as usize].into(),
+                    }),
+                    3 => Some(Action::Sell { good, amount }),
+                    4 => Some(Action::Buy { good, amount }),
+                    5 => Some(Action::Process {
+                        recipe: ["alloy", "components"][next(2) as usize].into(),
+                        batches: amount,
+                    }),
+                    6 => Some(Action::BuyFitting {
+                        fitting: frontier_sim::fitting::FITTINGS[next(7) as usize].id.into(),
+                    }),
+                    _ => None,
+                };
+                let _ = match &action {
+                    Some(action) => store
+                        .update(pilot, |account| home::act(pilot, account, action))
+                        .unwrap(),
+                    None => {
+                        let run = format!("run-{round}");
+                        store
+                            .update(pilot, |account| {
+                                Ok(home::finish_processing(pilot, account, &run))
+                            })
+                            .unwrap()
+                    }
+                };
+                for &id in &pilots {
+                    assert_eq!(
+                        store.ledger_balance(id).unwrap(),
+                        stock_of(&store.load(id).unwrap()),
+                        "account {id:?} after round {round}: {action:?}"
+                    );
+                }
+                continue;
+            }
             let batch = match next(4) {
                 0 => {
-                    let due = supplies_due(account.credits);
+                    let due = account.credits.min(frontier_sim::run::LAUNCH_COST);
                     if due == 0 {
                         continue;
                     }
@@ -696,7 +831,7 @@ mod tests {
                 }
                 1 => vec![
                     Transfer {
-                        item: Item::Ore,
+                        item: Item::ORE,
                         amount: 1 + next(20),
                         from: Party::Site,
                         to: Party::Account(pilot),
@@ -713,7 +848,7 @@ mod tests {
                     },
                 ],
                 2 => vec![Transfer {
-                    item: Item::Volatiles,
+                    item: Item::VOLATILES,
                     amount: 1 + next(5),
                     from: Party::Site,
                     to: Party::Account(pilot),
@@ -723,7 +858,7 @@ mod tests {
                 _ => vec![
                     // A batch that cannot be covered: none of it may apply.
                     Transfer {
-                        item: Item::Ore,
+                        item: Item::ORE,
                         amount: 1,
                         from: Party::Site,
                         to: Party::Account(pilot),
@@ -731,7 +866,7 @@ mod tests {
                         run: run.clone(),
                     },
                     Transfer {
-                        item: Item::Salvage,
+                        item: Item::SALVAGE,
                         amount: account.stock.salvage + 1,
                         from: Party::Account(pilot),
                         to: Party::Npc(Npc::Supplies),
@@ -758,7 +893,7 @@ mod tests {
         let before = store.load(id).unwrap();
         let result = store.transfer(&[
             Transfer {
-                item: Item::Ore,
+                item: Item::ORE,
                 amount: 5,
                 from: Party::Site,
                 to: Party::Account(id),
@@ -839,19 +974,49 @@ mod tests {
     fn keeps_the_latest_checkpoint_of_each_run_until_it_is_over() {
         let store = Store::in_memory().unwrap();
         let id = store.create_account("Vega").unwrap();
+        let seat = |ship, share| Seat {
+            account: id,
+            ship,
+            share,
+        };
         store
-            .save_checkpoint("run-a", &[(id, 0)], "{\"v\":1}")
+            .save_checkpoint("run-a", &[seat(0, 100)], "{\"v\":1}")
             .unwrap();
         store
-            .save_checkpoint("run-a", &[(id, 0)], "{\"v\":2}")
+            .save_checkpoint("run-a", &[seat(0, 60)], "{\"v\":2}")
             .unwrap();
-        store.save_checkpoint("run-b", &[(id, 3)], "{}").unwrap();
+        store
+            .save_checkpoint("run-b", &[seat(3, 100)], "{}")
+            .unwrap();
         let saved = store.checkpoints().unwrap();
         assert_eq!(saved.len(), 2);
         assert_eq!(saved[0].document, "{\"v\":2}");
-        assert_eq!(saved[0].crew, [(id, 0)]);
+        assert_eq!(saved[0].crew, [seat(0, 60)]);
         store.delete_checkpoint("run-a").unwrap();
         assert_eq!(store.checkpoints().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_checkpoint_saved_before_crews_reads_as_a_solo_seat() {
+        let store = Store::in_memory().unwrap();
+        let id = store.create_account("Vega").unwrap();
+        store
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO checkpoints (run, crew, document, saved) VALUES ('old', ?1, '{}', 0)",
+                params![format!("[[{},2]]", id.0)],
+            )
+            .unwrap();
+        let saved = store.checkpoints().unwrap();
+        assert_eq!(
+            saved[0].crew,
+            [Seat {
+                account: id,
+                ship: 2,
+                share: 100
+            }]
+        );
     }
 
     #[test]
@@ -861,7 +1026,17 @@ mod tests {
         let store = Store::open(&path).unwrap();
         let id = store.create_account("Vega").unwrap();
         store.issue_token(id).unwrap();
-        store.save_checkpoint("run", &[(id, 0)], "{}").unwrap();
+        store
+            .save_checkpoint(
+                "run",
+                &[Seat {
+                    account: id,
+                    ship: 0,
+                    share: 100,
+                }],
+                "{}",
+            )
+            .unwrap();
         let old_world = store.world().to_owned();
         assert!(!store.is_empty().unwrap());
         drop(store);

@@ -14,7 +14,7 @@ for data in list(bpy.data.collections):
     if data.name != 'Collection': bpy.data.collections.remove(data)
 scene = bpy.context.scene
 groups = {}
-for name in ['Station', 'Cruiser', 'Frigate', 'Asteroids', 'Backdrop', 'Lighting', 'Cameras']:
+for name in ['Station', 'Cruiser', 'Frigate', 'Asteroids', 'Facilities', 'Backdrop', 'Lighting', 'Cameras']:
     c = bpy.data.collections.new(name); scene.collection.children.link(c); groups[name] = c
 active = 'Station'
 def move(o, name):
@@ -163,6 +163,30 @@ o=bpy.data.objects.new('Banner | hanging pennant',me);groups['Station'].objects.
 sol=o.modifiers.new('Fabric thickness','SOLIDIFY');sol.thickness=.015
 beam('Banner | support bar',sp(4.35,-1.46,2.5),sp(6.05,-1.46,2.5),.04,lightarmor)
 text('Banner | insignia','N',sp(5.2,-1.49,1.3),.8,lightarmor,(pi/2,0,0))
+# Construction sockets (design section 10): socket A beside the cargo bay (the port pod), socket B
+# beside berth 07. Each is a clamp platform with an anchor empty at its deck, where a facility
+# module's base sits. No random draws here, so everything generated after is unchanged.
+def empty(name,p):
+    o=bpy.data.objects.new(name,None);groups[active].objects.link(o);o.location=p;o.empty_display_size=.4;return o
+sockets={}
+def socket(label,beside,c,top,bridge_from,bridge_to):
+    cyl('Socket %s | clamp platform'%label,c+Vector((0,0,top-.2)),1.45,.4,armor,8)
+    cyl('Socket %s | deck'%label,c+Vector((0,0,top-.02)),1.3,.06,steel,8)
+    ring('Socket %s | mounting guide'%label,c+Vector((0,0,top+.015)),1.12,.022,yellow)
+    for i in range(4):
+        # On the rim, clear of a module's square footprint (at most 1.25 from its centre).
+        a=i*pi/2;q=c+Vector((cos(a)*1.4,sin(a)*1.4,top+.08))
+        box('Socket %s | clamp'%label,q,(.26,.26,.16),dark,.02,(0,0,a))
+        box('Socket %s | clamp lamp'%label,q+Vector((0,0,.1)),(.08,.08,.04),warm,.005,(0,0,a))
+    for i in range(3):
+        a=i*2*pi/3+pi/6
+        beam('Socket %s | strut'%label,c+Vector((cos(a)*1.0,sin(a)*1.0,top-.4)),c+Vector((cos(a)*.35,sin(a)*.35,top-1.6)),.06,dark)
+    beam('Socket %s | bridge'%label,bridge_from,bridge_to,.16,steel)
+    beam('Socket %s | power conduit'%label,bridge_from+Vector((0,0,-.22)),bridge_to+Vector((0,0,-.22)),.05,orange)
+    anchor=empty('Socket_%s'%label,c+Vector((0,0,top+.01)))
+    sockets[label]={'beside':beside,'anchor':anchor}
+socket('A','cargo bay',sp(-8.95,.5,0),1.6,sp(-7.1,.5,1.45),sp(-7.6,.5,1.45))
+socket('B','berth',sp(4.95,-4.4,0),.72,sp(2.4,-4.4,.55),sp(3.6,-4.4,.55))
 # Preserve the original Aurora ship at full size, now classified as a cruiser.
 active='Cruiser'; C=layout(-7,4,-8)
 def fp(x,y,z):return C+Vector((x,y,z))
@@ -294,10 +318,103 @@ power=n.new('ShaderNodeMath');power.operation='POWER';power.inputs[1].default_va
 l.new(lw.outputs['Fresnel'],power.inputs[0]);l.new(power.outputs[0],mix.inputs[0]);l.new(tr.outputs[0],mix.inputs[1]);l.new(em.outputs[0],mix.inputs[2]);l.new(mix.outputs[0],out.inputs[0])
 bpy.ops.mesh.primitive_uv_sphere_add(segments=96,ring_count=48,radius=9.85,location=P);o=move(bpy.context.object,'Backdrop | atmosphere');assign(o,atm)
 for f in o.data.polygons:f.use_smooth=True
+# Facility modules (design section 10): three facilities at two tiers, exported separately to
+# facilities.glb. Each is built around its own root, its base at the root, so a game can set the
+# root on a socket anchor. Every tier changes the outline enough to read with the whole outpost in
+# view. Here they stand in a catalogue row out of the overview camera's frame.
+active='Facilities'
+facility_roots=[]
+def facility(fid,tier,slot,build):
+    Q=layout(-9+slot*3.6,-32)
+    build(lambda x,y,z:Q+Vector((x,y,z)))
+    root=bpy.data.objects.new('Facility_%s_T%d'%(fid,tier),None);groups[active].objects.link(root);root.location=Q
+    root['facility']=fid;root['tier']=tier;root['units']='metres';root['up_axis']='+Z'
+    bpy.context.view_layer.update()
+    for o in list(groups[active].objects):
+        if o.parent is None and o is not root and o.type!='EMPTY':
+            w=o.matrix_world.copy();o.parent=root;o.matrix_world=w
+    facility_roots.append(root)
+def sensor_t1(q):
+    cyl('Sensor | plinth',q(0,0,.25),1.0,.5,steel,8)
+    cyl('Sensor | collar',q(0,0,.55),.7,.12,armor,8)
+    cyl('Sensor | mast',q(0,0,1.25),.12,1.4,lightarmor,8)
+    d=cyl('Sensor | dish',q(.15,0,2.05),.9,.32,lightarmor,24,r2=.18);d.rotation_euler=(0,math.radians(-35),0)
+    beam('Sensor | feed arm',q(.15,0,2.05),q(.75,0,2.55),.03,dark)
+    cyl('Sensor | feed horn',q(.75,0,2.55),.07,.14,cyan,8)
+    for i in range(4):
+        a=i*pi/2;box('Sensor | status light',q(cos(a)*.98,sin(a)*.98,.42),(.1,.1,.08),cyan,.01,(0,0,a))
+def sensor_t2(q):
+    cyl('Sensor | plinth',q(0,0,.25),1.15,.5,steel,8)
+    cyl('Sensor | collar',q(0,0,.55),.95,.12,armor,8)
+    for i in range(4):
+        a=pi/4+i*pi/2
+        beam('Sensor | lattice leg',q(cos(a)*.8,sin(a)*.8,.6),q(cos(a)*.18,sin(a)*.18,3.6),.05,lightarmor,6)
+    for z in [1.4,2.3,3.1]:
+        r=.8-(z-.6)/3.0*.62;ring('Sensor | lattice ring',q(0,0,z),r*1.02,.025,dark)
+    for side,z,r in [(1,1.75,.85),(-1,2.6,.65)]:
+        d=cyl('Sensor | dish',q(side*.45,0,z),r,.3,lightarmor,24,r2=.16);d.rotation_euler=(0,math.radians(-40*side),0)
+        cyl('Sensor | feed horn',q(side*.9,0,z+.35),.06,.12,cyan,8)
+    box('Sensor | phased array',q(0,0,3.95),(1.7,.1,.8),dark,.02)
+    for j in range(5):box('Sensor | array tile',q((j-2)*.32,-.06,3.95),(.26,.02,.62),cyan,.005)
+    cyl('Sensor | beacon',q(0,0,4.45),.06,.16,white,6)
+    for i in range(8):
+        a=i*pi/4;box('Sensor | status light',q(cos(a)*1.12,sin(a)*1.12,.42),(.1,.1,.08),cyan,.01,(0,0,a))
+def refinery_t1(q):
+    box('Refinery | skid',q(0,0,.15),(2.3,1.9,.3),dark,.04)
+    for x in [-.55,.55]:
+        cyl('Refinery | tank',q(x,.25,1.1),.45,1.6,steel,16)
+        cyl('Refinery | tank cap',q(x,.25,1.95),.38,.12,armor,16)
+        ring('Refinery | tank band',q(x,.25,.75),.46,.03,orange)
+    beam('Refinery | manifold',q(-.55,-.35,.6),q(.55,-.35,.6),.08,orange)
+    for x in [-.55,.55]:beam('Refinery | riser',q(x,-.35,.6),q(x,.0,1.2),.05,orange)
+    cyl('Refinery | stack',q(.75,-.6,1.2),.15,2.1,dark,10)
+    cyl('Refinery | stack glow',q(.75,-.6,2.3),.12,.1,warm,10)
+    box('Refinery | control hut',q(-.7,-.6,.55),(.55,.45,.5),armor,.03)
+    box('Refinery | hut window',q(-.7,-.84,.6),(.36,.02,.14),warm,.005)
+def refinery_t2(q):
+    box('Refinery | skid',q(0,0,.15),(2.4,2.3,.3),dark,.04)
+    for x,y,h in [(-.65,.5,2.4),(.65,.5,2.4),(-.65,-.35,1.4),(.65,-.35,1.4)]:
+        cyl('Refinery | tank',q(x,y,.3+h/2),.48,h,steel,16)
+        cyl('Refinery | tank cap',q(x,y,.3+h+.05),.4,.12,armor,16)
+        for z in [.3+h*.3,.3+h*.7]:ring('Refinery | tank band',q(x,y,z),.49,.03,orange)
+    cyl('Refinery | crusher hopper',q(0,-.7,1.1),.45,.7,armor,8,r2=.18)
+    for x in [-1.0,1.0]:
+        cyl('Refinery | stack',q(x,-.95,1.7),.16,2.9,dark,10)
+        cyl('Refinery | stack glow',q(x,-.95,3.2),.13,.12,warm,10)
+    ring('Refinery | catwalk',q(0,.5,2.0),.68,.035,lightarmor)
+    beam('Refinery | header pipe',q(-.65,.5,2.6),q(.65,.5,2.6),.08,orange)
+    beam('Refinery | transfer pipe',q(0,-.7,1.45),q(0,.5,2.0),.07,orange)
+def fabrication_t1(q):
+    box('Fabrication | hangar',q(0,.1,.75),(2.1,1.6,1.4),armor,.08)
+    box('Fabrication | roof',q(0,.1,1.5),(2.2,1.7,.12),lightarmor,.03)
+    box('Fabrication | door',q(0,-.71,.62),(1.3,.04,1.0),dark,.01)
+    for j in range(5):box('Fabrication | hazard stripe',q(-.6+j*.3,-.74,.08),(.14,.02,.1),yellow,0)
+    box('Fabrication | crane base',q(.75,.45,1.68),(.3,.3,.25),dark,.02)
+    beam('Fabrication | crane arm',q(.75,.45,1.8),q(-.4,.45,2.15),.06,orange)
+    beam('Fabrication | crane hoist',q(-.4,.45,2.15),q(-.4,.45,1.75),.02,dark)
+    for x in [-.85,.85]:box('Fabrication | window',q(x,-.71,1.2),(.25,.02,.12),warm,.005)
+def fabrication_t2(q):
+    box('Fabrication | hangar',q(0,.1,.95),(2.3,2.0,1.8),armor,.08)
+    box('Fabrication | roof',q(0,.1,1.9),(2.4,2.1,.12),lightarmor,.03)
+    for x in [-.55,.55]:
+        box('Fabrication | door',q(x,-.91,.75),(.95,.04,1.3),dark,.01)
+        for j in range(3):box('Fabrication | hazard stripe',q(x-.3+j*.3,-.94,.08),(.14,.02,.1),yellow,0)
+    for x in [-1.15,1.15]:
+        beam('Fabrication | gantry post',q(x,-1.0,.0),q(x,-1.0,2.6),.07,dark)
+        beam('Fabrication | gantry post',q(x,1.15,.0),q(x,1.15,2.6),.07,dark)
+        beam('Fabrication | gantry rail',q(x,-1.0,2.6),q(x,1.15,2.6),.07,orange)
+    beam('Fabrication | gantry beam',q(-1.15,.1,2.6),q(1.15,.1,2.6),.09,orange)
+    box('Fabrication | trolley',q(.3,.1,2.48),(.4,.35,.2),dark,.02)
+    beam('Fabrication | robot arm',q(.3,.1,2.38),q(.0,-.4,2.05),.05,lightarmor)
+    beam('Fabrication | robot forearm',q(.0,-.4,2.05),q(-.25,-.65,2.15),.04,lightarmor)
+    for x in [-1.0,0,1.0]:box('Fabrication | window',q(x,-.91,1.65),(.25,.02,.12),warm,.005)
+for slot,(fid,tier,build) in enumerate([('sensor_array',1,sensor_t1),('sensor_array',2,sensor_t2),('refinery',1,refinery_t1),('refinery',2,refinery_t2),('fabrication_bay',1,fabrication_t1),('fabrication_bay',2,fabrication_t2)]):
+    facility(fid,tier,slot,build)
 # Camera and film lighting.
 active='Cameras'
 bpy.ops.object.camera_add(location=layout(0,0,60));cam=move(bpy.context.object,'Camera | tactical overview');cam.rotation_euler=(-view).to_track_quat('-Z','Y').to_euler();cam.data.type='ORTHO';cam.data.ortho_scale=40;scene.camera=cam
 bpy.ops.object.camera_add(location=F+view*12);detail=move(bpy.context.object,'Camera | starter frigate detail');detail.rotation_euler=(-view).to_track_quat('-Z','Y').to_euler();detail.data.type='ORTHO';detail.data.ortho_scale=4.2
+bpy.ops.object.camera_add(location=layout(0,-31.4,60));catalogue=move(bpy.context.object,'Camera | facility catalogue');catalogue.rotation_euler=(-view).to_track_quat('-Z','Y').to_euler();catalogue.data.type='ORTHO';catalogue.data.ortho_scale=23
 active='Lighting'
 world=bpy.data.worlds.new('Deep space');scene.world=world;world.use_nodes=True;world.node_tree.nodes['Background'].inputs[0].default_value=(.035,.06,.11,1);world.node_tree.nodes['Background'].inputs[1].default_value=.25
 d=bpy.data.lights.new('Sun | cool starlight','SUN');d.energy=2.4;d.angle=.1;d.color=(.67,.77,1)
@@ -376,14 +493,37 @@ for screen in bpy.data.screens:
 scene.render.filepath=os.path.join(OUT,'FrontierOutpostPreview.png')
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT,'FrontierOutpost.blend'), compress=True)
 # GLB excludes backdrop, cameras, lights, and effect geometry for engine portability.
-for name in ['Station','Cruiser','Frigate','Asteroids']:
+for name in ['Station','Cruiser','Frigate','Asteroids','Facilities']:
     bpy.ops.object.select_all(action='DESELECT')
     for o in groups[name].objects:
         if 'ion exhaust' not in o.name:o.select_set(True)
     bpy.ops.export_scene.gltf(filepath=os.path.join(OUT,name.lower()+'.glb'),export_format='GLB',use_selection=True,export_apply=True,export_yup=True)
 bpy.ops.object.select_all(action='DESELECT')
-manifest={'units':'metres','blender_up':'+Z','blender_forward':'+Y','gltf_up':'+Y','seed':2266,'assets':{name:{'objects':len(groups[name].objects),'triangles':sum(sum(len(p.vertices)-2 for p in o.data.polygons) for o in groups[name].objects if o.type=='MESH')} for name in ['Station','Cruiser','Frigate','Asteroids']},'notes':'GLBs retain scene placement. Aurora cruiser is preserved at original scale in the background; starter frigate is landed on berth 07. Backdrop and cruiser drive plumes are presentation effects.'}
+manifest={'units':'metres','blender_up':'+Z','blender_forward':'+Y','gltf_up':'+Y','seed':2266,'assets':{name:{'objects':len(groups[name].objects),'triangles':sum(sum(len(p.vertices)-2 for p in o.data.polygons) for o in groups[name].objects if o.type=='MESH')} for name in ['Station','Cruiser','Frigate','Asteroids','Facilities']},'notes':'GLBs retain scene placement. Aurora cruiser is preserved at original scale in the background; starter frigate is landed on berth 07. Backdrop and cruiser drive plumes are presentation effects.'}
 manifest['docking_validation']=docking
+station_root=bpy.data.objects['Station_ROOT']
+manifest['sockets']={'Socket_'+label:{'beside':info['beside'],'anchor_station_space':[round(v,4) for v in station_root.matrix_world.inverted()@info['anchor'].matrix_world.translation]} for label,info in sockets.items()}
+def footprint(root):
+    pts=[]
+    for o in root.children_recursive:
+        if o.type!='MESH':continue
+        ev=o.evaluated_get(depsgraph);me=ev.to_mesh()
+        pts.extend(root.matrix_world.inverted()@(o.matrix_world@v.co) for v in me.vertices);ev.to_mesh_clear()
+    lo=[min(p[i] for p in pts) for i in range(3)];hi=[max(p[i] for p in pts) for i in range(3)]
+    return lo,hi
+bpy.context.view_layer.update();depsgraph=bpy.context.evaluated_depsgraph_get()
+manifest['facilities']={}
+for root in facility_roots:
+    lo,hi=footprint(root)
+    # A module must sit on its socket's deck, inside the rim clamps, without hanging below it.
+    assert max(abs(lo[0]),abs(hi[0]),abs(lo[1]),abs(hi[1]))<=1.25,(root.name,'overhangs its socket',lo,hi)
+    assert lo[2]>=-.001,(root.name,'reaches below its base',lo[2])
+    meshes=[o for o in root.children_recursive if o.type=='MESH']
+    manifest['facilities'][root.name]={'facility':root['facility'],'tier':root['tier'],'objects':len(meshes),'triangles_base_mesh':sum(sum(len(p.vertices)-2 for p in o.data.polygons) for o in meshes),'bounds_root_space':{'min':[round(v,4) for v in lo],'max':[round(v,4) for v in hi]}}
+heights={root.name:manifest['facilities'][root.name]['bounds_root_space']['max'][2] for root in facility_roots}
+for fid in ['sensor_array','refinery','fabrication_bay']:
+    # Tier 2 must read as bigger at the zoom where the outpost fits (design section 2).
+    assert heights['Facility_%s_T2'%fid]>heights['Facility_%s_T1'%fid]+.4,(fid,'tiers too alike in height')
 for name, stats in manifest['assets'].items():
     stats['triangles_base_mesh'] = stats.pop('triangles')
     with open(os.path.join(OUT, name.lower()+'.glb'), 'rb') as f:
@@ -394,6 +534,9 @@ if not os.environ.get('SKIP_RENDER'):
     bpy.ops.render.render(write_still=True)
     scene.camera=detail;scene.render.resolution_x=1000;scene.render.resolution_y=1000
     scene.render.filepath=os.path.join(OUT,'starter_frigate_detail.png');scene.cycles.samples=min(scene.cycles.samples,32)
+    bpy.ops.render.render(write_still=True)
+    scene.camera=catalogue;scene.render.resolution_x=1600;scene.render.resolution_y=500
+    scene.render.filepath=os.path.join(OUT,'facilities_preview.png')
     bpy.ops.render.render(write_still=True)
 
 print('SCENE_COMPLETE',OUT,flush=True)

@@ -12,32 +12,36 @@ use std::time::Duration;
 use frontier_protocol::input::InputDatagram;
 use frontier_protocol::snapshot::{
     Drive as WireDrive, EntityKind, EntityState, ExtractorMode, MAX_DEPOSITS, MAX_EVENTS,
-    OwnStatus, RunPhase, Snapshot, SnapshotEvent, quantize_heading, quantize_position,
-    quantize_velocity,
+    OwnStatus, RELAY_LINKED, RunPhase, Snapshot, SnapshotEvent, quantize_heading,
+    quantize_position, quantize_velocity,
 };
 use frontier_protocol::{
-    AccountInfo, DepositInfo, ExtractRefusal, ObstacleInfo, RunSummary, ServerMessage, WaveInfo,
+    AccountInfo, DepositInfo, ExtractRefusal, ObstacleInfo, PotInfo, RunSummary, ServerMessage,
+    WaveInfo,
 };
 use frontier_sim::TICKS_PER_SECOND;
 use frontier_sim::combat::Event;
+use frontier_sim::crew::split;
 use frontier_sim::extraction::{EXTRACT_RANGE, ExtractorState, Refusal};
+use frontier_sim::outcome;
 use frontier_sim::profile::ShipKind;
 use frontier_sim::run::{
-    Checkpoint, Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Run, RunEvent,
-    Summary, seconds,
+    Checkpoint, Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Pot, Relay, Run,
+    RunEvent, Summary, seconds,
 };
 use frontier_sim::ship::ShipInput;
-use frontier_sim::site::{Site, SiteTemplate, ThreatTier, crew_scaling};
+use frontier_sim::site::{Capability, Site, SiteTemplate, ThreatTier, crew_scaling};
 use frontier_sim::world::{ShipId, World};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{MissedTickBehavior, interval};
 use tracing::{debug, info, warn};
 use web_transport_quinn::Session;
 
+use crate::home;
 use crate::input_queue::InputQueue;
 use crate::ledger::{Item, Npc, Party, Reason, Transfer};
 use crate::runs::{Flying, Runs};
-use crate::store::{AccountId, SavedRun, Store};
+use crate::store::{AccountId, SavedRun, Seat, Store};
 use crate::wire;
 
 /// Pilots per expedition (design section 2).
@@ -66,10 +70,13 @@ impl SnapshotSink for Session {
 /// What the expedition tells one pilot's session, besides snapshots.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PilotEvent {
-    /// A message to pass on as it is.
-    Message(ServerMessage),
+    /// A message to pass on as it is. Boxed: an account is far larger than
+    /// the other events.
+    Message(Box<ServerMessage>),
     /// The pilot's run is over; they are home. The session offers a new contract.
     RunOver(RunSummary),
+    /// The pilot's crew changed: members, split, contract or launch.
+    CrewChanged,
 }
 
 /// What a launch needs: the contract the pilot accepted, and where to bank
@@ -84,6 +91,15 @@ pub struct LaunchOrder {
     pub run: String,
     /// The account the pilot flies for.
     pub pilot: AccountId,
+    /// What the pilot's powered layout grants: the pockets they may work.
+    pub access: Vec<Capability>,
+    /// The rigs and modules the pilot flies, by fitting identifier.
+    pub fitted: Vec<String>,
+    /// The pilot's share of the pot, in whole percent: 100 flying solo.
+    pub share: u32,
+    /// The crew the site is scaled for: 1 solo, or every member of the
+    /// host's crew, who may follow within the join window.
+    pub crew_size: u32,
     pub store: Store,
     pub runs: Runs,
 }
@@ -94,14 +110,22 @@ struct Books {
     store: Store,
     runs: Runs,
     accounts: HashMap<ShipId, AccountId>,
+    /// Each pilot's share of the pot, a whole percentage of the host's split.
+    shares: HashMap<ShipId, u32>,
+    /// Where to tell pilots who have gone home about the pot.
+    homes: HashMap<ShipId, mpsc::UnboundedSender<PilotEvent>>,
 }
 
 impl Books {
-    fn crew(&self) -> Vec<(AccountId, u16)> {
-        let mut crew: Vec<(AccountId, u16)> = self
+    fn crew(&self) -> Vec<Seat> {
+        let mut crew: Vec<Seat> = self
             .accounts
             .iter()
-            .map(|(ship, account)| (*account, ship.0))
+            .map(|(ship, account)| Seat {
+                account: *account,
+                ship: ship.0,
+                share: self.shares.get(ship).copied().unwrap_or(0),
+            })
             .collect();
         crew.sort_unstable();
         crew
@@ -139,6 +163,14 @@ enum Command {
         events: mpsc::UnboundedSender<PilotEvent>,
         reply: oneshot::Sender<Option<ServerMessage>>,
     },
+    Join {
+        account: AccountId,
+        fitted: Vec<String>,
+        share: u32,
+        sink: Box<dyn SnapshotSink>,
+        events: mpsc::UnboundedSender<PilotEvent>,
+        reply: oneshot::Sender<Option<(ShipId, ServerMessage)>>,
+    },
 }
 
 /// A handle to a running expedition. Cheap to clone; the instance stops once
@@ -164,9 +196,16 @@ impl Expedition {
         sink: impl SnapshotSink,
         events: mpsc::UnboundedSender<PilotEvent>,
     ) -> Launched {
-        let site = Site::generate(order.template, order.seed, order.tier, 1, &[]);
-        let (run, ships) = Run::launch(site, 1, order.options);
+        let site = Site::generate(
+            order.template,
+            order.seed,
+            order.tier,
+            order.crew_size.max(1),
+            &order.access,
+        );
+        let (mut run, ships) = Run::launch(site, 1, order.options);
         let ship = ships[0];
+        run.fit(ship, &order.fitted);
         let joined = joined(&run, ship, order.tier);
         let (commands, receiver) = mpsc::unbounded_channel();
         let mut pilots = HashMap::new();
@@ -201,6 +240,8 @@ impl Expedition {
             store: order.store,
             runs: order.runs,
             accounts: HashMap::from([(ship, order.pilot)]),
+            shares: HashMap::from([(ship, order.share)]),
+            homes: HashMap::new(),
         };
         tokio::spawn(fly(receiver, run, pilots, books));
         Launched {
@@ -227,7 +268,12 @@ impl Expedition {
         let accounts: HashMap<ShipId, AccountId> = saved
             .crew
             .iter()
-            .map(|&(account, ship)| (ShipId(ship), account))
+            .map(|seat| (ShipId(seat.ship), seat.account))
+            .collect();
+        let shares: HashMap<ShipId, u32> = saved
+            .crew
+            .iter()
+            .map(|seat| (ShipId(seat.ship), seat.share))
             .collect();
         for (&ship, &account) in &accounts {
             if run.is_disconnected(ship) {
@@ -247,6 +293,8 @@ impl Expedition {
             store,
             runs,
             accounts,
+            shares,
+            homes: HashMap::new(),
         };
         tokio::spawn(fly(receiver, run, HashMap::new(), books));
         Some(expedition)
@@ -270,6 +318,31 @@ impl Expedition {
         self.commands
             .send(Command::Reconnect {
                 ship,
+                sink: Box::new(sink),
+                events,
+                reply,
+            })
+            .ok()?;
+        answer.await.ok().flatten()
+    }
+
+    /// Launches a crew member into the host's instance, flying `fitted` for
+    /// `share` percent of the pot. Returns their ship and `Joined`, or `None`
+    /// once the join window has closed or the crew is all here.
+    pub async fn join(
+        &self,
+        account: AccountId,
+        fitted: Vec<String>,
+        share: u32,
+        sink: impl SnapshotSink,
+        events: mpsc::UnboundedSender<PilotEvent>,
+    ) -> Option<(ShipId, ServerMessage)> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(Command::Join {
+                account,
+                fitted,
+                share,
                 sink: Box::new(sink),
                 events,
                 reply,
@@ -324,7 +397,7 @@ async fn fly(
     mut commands: mpsc::UnboundedReceiver<Command>,
     mut run: Run,
     mut pilots: HashMap<ShipId, Pilot>,
-    books: Books,
+    mut books: Books,
 ) {
     let mut ticker = interval(Duration::from_secs(1) / TICKS_PER_SECOND);
     // After a stall, carry on at the normal rate rather than racing to catch up.
@@ -332,6 +405,24 @@ async fn fly(
     loop {
         tokio::select! {
             command = commands.recv() => match command {
+                Some(Command::Join { account, fitted, share, sink, events, reply }) => {
+                    let joined = run.join().map(|ship| {
+                        run.fit(ship, &fitted);
+                        pilots.insert(
+                            ship,
+                            Pilot {
+                                sink,
+                                events,
+                                inputs: InputQueue::default(),
+                                last_input: None,
+                            },
+                        );
+                        books.accounts.insert(ship, account);
+                        books.shares.insert(ship, share);
+                        (ship, joined(&run, ship, run.site().tier))
+                    });
+                    let _ = reply.send(joined);
+                }
                 Some(command) => apply(command, &mut run, &mut pilots),
                 // Every handle is gone: the server is shutting down.
                 None => return,
@@ -353,7 +444,7 @@ async fn fly(
                 broadcast(&run, &mut pilots);
             }
         }
-        report(&mut run, &mut pilots, &books).await;
+        report(&mut run, &mut pilots, &mut books).await;
         if let Some(checkpoint) = run.take_checkpoint() {
             save_checkpoint(&books, &checkpoint).await;
         }
@@ -409,6 +500,10 @@ fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
             pilots.remove(&ship);
             run.disconnect(ship);
         }
+        // Joining needs the books, so the instance loop handles it first.
+        Command::Join { reply, .. } => {
+            let _ = reply.send(None);
+        }
         Command::Reconnect {
             ship,
             sink,
@@ -434,7 +529,7 @@ fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
 
 fn tell(pilots: &HashMap<ShipId, Pilot>, ship: ShipId, message: ServerMessage) {
     if let Some(pilot) = pilots.get(&ship) {
-        let _ = pilot.events.send(PilotEvent::Message(message));
+        let _ = pilot.events.send(PilotEvent::Message(Box::new(message)));
     }
 }
 
@@ -459,53 +554,160 @@ async fn save_checkpoint(books: &Books, checkpoint: &Checkpoint) {
 
 /// Writes the run's new events to the log, banks what docked pilots brought
 /// home, and tells pilots what concerns them.
-async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &Books) {
+async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &mut Books) {
+    let mut finished: Vec<(ShipId, Summary)> = Vec::new();
+    let mut settled: Option<Pot> = None;
     for (tick, event) in run.take_events() {
         info!(target: "frontier::run", run = books.run, tick, event = ?event);
         match event {
             RunEvent::Scanned { .. } => {
                 let message = scanned(run);
                 for pilot in pilots.values() {
-                    let _ = pilot.events.send(PilotEvent::Message(message.clone()));
+                    let _ = pilot
+                        .events
+                        .send(PilotEvent::Message(Box::new(message.clone())));
                 }
             }
             RunEvent::LimitWarning => {
                 let seconds_left = seconds(INSTANCE_LIMIT_TICKS - LIMIT_WARNING_TICKS);
                 for pilot in pilots.values() {
                     let message = ServerMessage::LimitWarning { seconds_left };
-                    let _ = pilot.events.send(PilotEvent::Message(message));
+                    let _ = pilot.events.send(PilotEvent::Message(Box::new(message)));
                 }
             }
             RunEvent::Docked { pilot, summary }
             | RunEvent::Destroyed { pilot, summary }
             | RunEvent::Abandoned { pilot, summary } => {
-                let holdings = bank(books, pilot, &summary).await;
+                let lost = if summary.lost.upgraded_modules > 0 {
+                    run.fitted(pilot).to_vec()
+                } else {
+                    Vec::new()
+                };
+                bank(books, pilot, &summary, lost).await;
                 if let Some(account) = books.accounts.get(&pilot) {
                     books.runs.remove(*account, &books.run);
                 }
+                // A pilot whose run is over goes home; the crew may carry on.
                 if let Some(home) = pilots.remove(&pilot) {
-                    if let Some(holdings) = holdings {
-                        let message = ServerMessage::Account { account: holdings };
-                        let _ = home.events.send(PilotEvent::Message(message));
-                    }
-                    let _ = home
-                        .events
-                        .send(PilotEvent::RunOver(wire::summary(&summary)));
+                    books.homes.insert(pilot, home.events);
                 }
+                finished.push((pilot, summary));
             }
+            RunEvent::PotSettled { pot } => settled = Some(pot),
             _ => {}
+        }
+    }
+    let shares = match settled {
+        Some(pot) => pay_pot(books, &pot).await,
+        None => HashMap::new(),
+    };
+    // Each pilot hears once, with the account as it stands after the pot.
+    let mut told: Vec<ShipId> = Vec::new();
+    for (pilot, summary) in finished {
+        let payout = shares.get(&pilot).copied().unwrap_or(0);
+        if let Some(events) = books.homes.get(&pilot) {
+            if let Some(holdings) = holdings(books, pilot).await {
+                let message = ServerMessage::Account { account: holdings };
+                let _ = events.send(PilotEvent::Message(Box::new(message)));
+            }
+            let _ = events.send(PilotEvent::RunOver(wire::summary(&summary, payout)));
+        }
+        told.push(pilot);
+    }
+    // Pilots who went home before the end hear about the pot now; those who
+    // came home with it saw their share in their summary.
+    if let Some(pot) = settled.filter(|pot| pot.total() > 0) {
+        for (&pilot, &share) in &shares {
+            if told.contains(&pilot) {
+                continue;
+            }
+            let Some(events) = books.homes.get(&pilot) else {
+                continue;
+            };
+            if let Some(holdings) = holdings(books, pilot).await {
+                let message = ServerMessage::Account { account: holdings };
+                let _ = events.send(PilotEvent::Message(Box::new(message)));
+            }
+            let message = ServerMessage::PotPaid {
+                pot: PotInfo {
+                    contract: pot.contract,
+                    bounty: pot.bounty,
+                    relay: pot.relay,
+                },
+                share,
+            };
+            let _ = events.send(PilotEvent::Message(Box::new(message)));
         }
     }
 }
 
-/// Moves a docked pilot's cargo and contract payout into their account through
+/// What a pilot's account holds now.
+async fn holdings(books: &Books, pilot: ShipId) -> Option<AccountInfo> {
+    let account = *books.accounts.get(&pilot)?;
+    match books.store.call(move |store| store.load(account)).await {
+        Ok(holdings) => Some(wire::account(&holdings)),
+        Err(error) => {
+            warn!(%error, account = account.0, "could not load the account");
+            None
+        }
+    }
+}
+
+/// Pays the crew's pot when the instance ends (design section 10): every
+/// pilot who launched, docked or not, by the host's split (the owner's rule),
+/// each part from its source through the ledger. Returns each pilot's total.
+async fn pay_pot(books: &Books, pot: &Pot) -> HashMap<ShipId, u32> {
+    let mut crew: Vec<(ShipId, AccountId, u32)> = books
+        .accounts
+        .iter()
+        .map(|(&ship, &account)| (ship, account, books.shares.get(&ship).copied().unwrap_or(0)))
+        .collect();
+    crew.sort_unstable_by_key(|&(ship, ..)| ship);
+    let weights: Vec<u32> = crew.iter().map(|&(.., share)| share).collect();
+    let mut totals: HashMap<ShipId, u32> = crew.iter().map(|&(ship, ..)| (ship, 0)).collect();
+    let mut batch = Vec::new();
+    for (amount, npc, reason) in [
+        (pot.contract, Npc::Contract, Reason::ContractPayout),
+        (pot.bounty, Npc::Bounty, Reason::NestBounty),
+        (pot.relay, Npc::Contract, Reason::RelayBonus),
+    ] {
+        for (&(ship, account, _), paid) in crew.iter().zip(split(amount, &weights)) {
+            if paid == 0 {
+                continue;
+            }
+            *totals.entry(ship).or_default() += paid;
+            batch.push(Transfer {
+                item: Item::Credits,
+                amount: paid,
+                from: Party::Npc(npc),
+                to: Party::Account(account),
+                reason,
+                run: Some(books.run.clone()),
+            });
+        }
+    }
+    if !batch.is_empty()
+        && let Err(error) = books.store.call(move |store| store.transfer(&batch)).await
+    {
+        warn!(%error, run = books.run, "could not pay the pot");
+        return HashMap::new();
+    }
+    totals
+}
+
+/// Moves a docked pilot's cargo into their account through
 /// the ledger, and returns what the account holds afterwards. The instance
 /// does this itself, so cargo is banked even if the pilot's connection drops
 /// as they dock.
-async fn bank(books: &Books, pilot: ShipId, summary: &Summary) -> Option<AccountInfo> {
+async fn bank(
+    books: &Books,
+    pilot: ShipId,
+    summary: &Summary,
+    lost: Vec<String>,
+) -> Option<AccountInfo> {
     let account = *books.accounts.get(&pilot)?;
     let run = Some(books.run.clone());
-    let mut batch: Vec<Transfer> = [Item::Ore, Item::Salvage, Item::Volatiles]
+    let mut batch: Vec<Transfer> = [Item::ORE, Item::SALVAGE, Item::VOLATILES]
         .into_iter()
         .zip(summary.banked)
         .filter(|&(_, units)| units > 0)
@@ -518,27 +720,29 @@ async fn bank(books: &Books, pilot: ShipId, summary: &Summary) -> Option<Account
             run: run.clone(),
         })
         .collect();
-    if summary.payout > 0 {
-        batch.push(Transfer {
-            item: Item::Credits,
-            amount: summary.payout,
-            from: Party::Npc(Npc::Contract),
-            to: Party::Account(account),
-            reason: Reason::ContractPayout,
-            run,
-        });
-    }
+    let run = books.run.clone();
+    let completed = summary.ending == outcome::Ending::Docked;
     let result = books
         .store
         .call(move |store| {
-            if !batch.is_empty() {
-                store.transfer(&batch)?;
-            }
-            store.load(account)
+            // Banking and processing are one transaction: a completed run
+            // finishes the queued batches (design section 10).
+            store.update(account, |holdings| {
+                if completed {
+                    batch.extend(home::finish_processing(account, holdings, &run));
+                }
+                // Rigs and modules destroyed with the ship (design section 6).
+                holdings.hangar.lose_kinds(&lost);
+                Ok(batch)
+            })
         })
         .await;
     match result {
-        Ok(holdings) => Some(wire::account(&holdings)),
+        Ok(Ok(holdings)) => Some(wire::account(&holdings)),
+        Ok(Err(reason)) => {
+            warn!(reason, account = account.0, "could not bank the run");
+            None
+        }
         Err(error) => {
             warn!(%error, account = account.0, "could not bank the run");
             None
@@ -608,6 +812,9 @@ fn joined(run: &Run, ship: ShipId, tier: ThreatTier) -> ServerMessage {
         lock_range: run.lock_range(),
         scan_range: run.scan_range(),
         extract_range: EXTRACT_RANGE,
+        speed_factor: run.fitting(ship).map_or(1.0, |fitting| fitting.speed),
+        max_shield: run.fitting(ship).map_or(0.0, |fitting| fitting.shield),
+        fitted: run.fitted(ship).to_vec(),
     }
 }
 
@@ -659,6 +866,10 @@ pub fn snapshot(world: &World, input_ack: u16, own: OwnStatus, deposits: Vec<u8>
                 ship: ship.0,
                 by: by.map(|by| by.0),
                 kind: entity_kind(kind),
+            },
+            Event::Intercepted { shooter, target } => SnapshotEvent::Intercepted {
+                shooter: shooter.0,
+                target: target.0,
             },
         })
         .collect();
@@ -713,6 +924,13 @@ fn own_status(run: &Run, ship: ShipId) -> OwnStatus {
             Drive::Hunted => WireDrive::Hunted,
             Drive::Extracting => WireDrive::Extracting,
         },
+        // Tens of points, so `as` loses nothing.
+        shield: run.shield(ship).round().clamp(0.0, 255.0) as u8,
+        relay: match status.relay {
+            Relay::Idle => 0,
+            Relay::Holding(ticks) => byte(ticks / TICKS_PER_SECOND).min(RELAY_LINKED - 1),
+            Relay::Linked => RELAY_LINKED,
+        },
     }
 }
 
@@ -748,6 +966,7 @@ fn entity_kind(kind: ShipKind) -> EntityKind {
         ShipKind::Drone => EntityKind::Drone,
         ShipKind::Raider => EntityKind::Raider,
         ShipKind::Warden => EntityKind::Warden,
+        ShipKind::Core => EntityKind::Core,
     }
 }
 
@@ -790,6 +1009,10 @@ mod tests {
             },
             run: "test".into(),
             pilot,
+            access: Vec::new(),
+            fitted: Vec::new(),
+            share: 100,
+            crew_size: 1,
             store,
             runs: Runs::default(),
         }
@@ -861,9 +1084,9 @@ mod tests {
         let message = told.recv().await.unwrap();
         assert_eq!(
             message,
-            PilotEvent::Message(ServerMessage::ExtractRefused {
+            PilotEvent::Message(Box::new(ServerMessage::ExtractRefused {
                 reason: ExtractRefusal::NotAtDeposit
-            })
+            }))
         );
     }
 
@@ -896,7 +1119,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn docked_cargo_and_the_payout_reach_the_account_through_the_ledger() {
+    async fn docked_cargo_reaches_the_account_through_the_ledger() {
         use frontier_sim::outcome::{Ending, Loadout};
         use frontier_sim::run::PhaseTimes;
         let store = Store::in_memory().unwrap();
@@ -906,22 +1129,120 @@ mod tests {
             store: store.clone(),
             runs: Runs::default(),
             accounts: HashMap::from([(ShipId(0), account)]),
+            shares: HashMap::from([(ShipId(0), 100)]),
+            homes: HashMap::new(),
         };
         let summary = Summary {
             ending: Ending::Docked,
             banked: [12, 0, 2],
-            payout: 100,
             launch_cost: 40,
             lost: Loadout::default(),
             phases: PhaseTimes::default(),
         };
-        let holdings = bank(&books, ShipId(0), &summary).await.unwrap();
+        let holdings = bank(&books, ShipId(0), &summary, Vec::new()).await.unwrap();
         assert_eq!(
             (holdings.credits, holdings.ore, holdings.volatiles),
-            (200, 12, 2)
+            (100, 12, 2),
+            "the payout waits for the pot"
         );
         let folded = store.ledger_balance(account).unwrap();
-        assert!(folded.contains(&(crate::ledger::Item::Ore, 12)));
-        assert!(folded.contains(&(crate::ledger::Item::Credits, 200)));
+        assert!(folded.contains(&(crate::ledger::Item::ORE, 12)));
+    }
+
+    #[tokio::test]
+    async fn the_pot_is_paid_to_every_crew_member_by_their_share_and_source() {
+        let store = Store::in_memory().unwrap();
+        let (vega, rigel) = (
+            store.create_account("Vega").unwrap(),
+            store.create_account("Rigel").unwrap(),
+        );
+        let books = Books {
+            run: "run-3".into(),
+            store: store.clone(),
+            runs: Runs::default(),
+            accounts: HashMap::from([(ShipId(0), vega), (ShipId(1), rigel)]),
+            shares: HashMap::from([(ShipId(0), 60), (ShipId(1), 40)]),
+            homes: HashMap::new(),
+        };
+        let pot = Pot {
+            contract: 160,
+            bounty: 120,
+            relay: 80,
+        };
+        let paid = pay_pot(&books, &pot).await;
+        assert_eq!(paid.get(&ShipId(0)), Some(&216));
+        assert_eq!(paid.get(&ShipId(1)), Some(&144));
+        assert_eq!(store.load(vega).unwrap().credits, 316);
+        assert_eq!(store.load(rigel).unwrap().credits, 244);
+        let reasons: Vec<String> = store
+            .lock()
+            .unwrap()
+            .prepare("SELECT reason FROM ledger WHERE run = 'run-3' ORDER BY id")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            reasons,
+            [
+                "contract payout",
+                "contract payout",
+                "nest bounty",
+                "nest bounty",
+                "relay bonus",
+                "relay bonus"
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_destroyed_pilot_loses_what_they_flew_and_processing_waits() {
+        use frontier_sim::outcome::{Ending, Loadout};
+        use frontier_sim::run::PhaseTimes;
+        let store = Store::in_memory().unwrap();
+        let account = store.create_account("Vega").unwrap();
+        store
+            .update(account, |holdings| {
+                for id in ["escort_rig", "point_defence", "cargo_frame"] {
+                    holdings
+                        .hangar
+                        .add(frontier_sim::fitting::fitting(id).unwrap());
+                }
+                holdings.processing.add("alloy", 1);
+                Ok(Vec::new())
+            })
+            .unwrap()
+            .unwrap();
+        let books = Books {
+            run: "run-2".into(),
+            store: store.clone(),
+            runs: Runs::default(),
+            accounts: HashMap::from([(ShipId(0), account)]),
+            shares: HashMap::from([(ShipId(0), 100)]),
+            homes: HashMap::new(),
+        };
+        let summary = Summary {
+            ending: Ending::Destroyed,
+            banked: [0; 3],
+            launch_cost: 40,
+            lost: Loadout {
+                upgraded_modules: 2,
+                cargo: 5,
+            },
+            phases: PhaseTimes::default(),
+        };
+        let lost = vec!["escort_rig".to_owned(), "point_defence".to_owned()];
+        let holdings = bank(&books, ShipId(0), &summary, lost).await.unwrap();
+        assert_eq!(
+            holdings.hangar,
+            ["cargo_frame"],
+            "the spare in the hangar stays"
+        );
+        assert_eq!(
+            holdings.processing.len(),
+            1,
+            "only a completed run processes"
+        );
     }
 }

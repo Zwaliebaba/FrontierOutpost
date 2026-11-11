@@ -44,6 +44,12 @@ pub struct ShipState {
 }
 
 impl ShipState {
+    /// Where the ship is on the plane.
+    #[must_use]
+    pub const fn into_xz(self) -> (f32, f32) {
+        (self.x, self.z)
+    }
+
     /// Velocity on the plane, in metres per second.
     #[must_use]
     pub fn velocity(&self) -> (f32, f32) {

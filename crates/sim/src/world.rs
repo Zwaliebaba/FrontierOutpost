@@ -33,6 +33,66 @@ pub struct Ship {
     pub cooldown: u32,
     /// Whether its extractor is working; drones gather on extracting ships.
     pub extracting: bool,
+    /// What its fittings change in flight.
+    pub kit: Kit,
+    /// Shield points left, absorbed before the hull.
+    pub shield: f32,
+    /// Steps since it was last hit, for shield regeneration.
+    pub since_hit: u32,
+    /// Hits count only from shooters inside this circle, `(x, z, radius)`:
+    /// the nest core can be harmed only from within its pocket.
+    pub vulnerable_from: Option<(f32, f32, f32)>,
+    /// Steps until its point defence can intercept again.
+    pub defence_cooldown: u32,
+}
+
+/// What a ship's fittings change in flight (design section 10's rigs and
+/// modules). Placeholders where the design gives only words.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Kit {
+    /// Multiplies top speed and acceleration.
+    pub speed: f32,
+    /// Multiplies weapon damage.
+    pub weapon: f32,
+    /// Shield points when full.
+    pub shield: f32,
+    /// Intercepts projectiles near the ship.
+    pub point_defence: bool,
+}
+
+impl Kit {
+    pub const BASIC: Self = Self {
+        speed: 1.0,
+        weapon: 1.0,
+        shield: 0.0,
+        point_defence: false,
+    };
+}
+
+impl Default for Kit {
+    fn default() -> Self {
+        Self::BASIC
+    }
+}
+
+/// A shield starts to recover this long after its last hit. A placeholder.
+pub const SHIELD_DELAY_TICKS: u32 = 5 * crate::TICKS_PER_SECOND;
+/// Shield points recovered per second once it recovers. A placeholder.
+pub const SHIELD_REGEN: f32 = 8.0;
+/// Point defence intercepts shots this close to the ship, metres. A placeholder.
+pub const POINT_DEFENCE_RANGE: f32 = 8.0;
+/// Point defence intercepts at most one shot this often. A placeholder.
+pub const POINT_DEFENCE_COOLDOWN_TICKS: u32 = crate::TICKS_PER_SECOND;
+
+/// A ship's handling with its kit applied.
+#[must_use]
+pub fn handling(kind: ShipKind, kit: &Kit) -> ship::Handling {
+    let base = kind.profile().handling;
+    ship::Handling {
+        max_speed: base.max_speed * kit.speed,
+        acceleration: base.acceleration * kit.speed,
+        ..base
+    }
 }
 
 impl Ship {
@@ -50,6 +110,11 @@ impl Ship {
             firing: false,
             cooldown: 0,
             extracting: false,
+            kit: Kit::BASIC,
+            shield: 0.0,
+            since_hit: 0,
+            vulnerable_from: None,
+            defence_cooldown: 0,
         }
     }
 }
@@ -191,6 +256,14 @@ impl World {
         }
     }
 
+    /// Keeps `id` from being given to a new ship: for a pilot's ship that is
+    /// out of the world and will be put back under its old id.
+    pub fn reserve(&mut self, id: ShipId) {
+        if self.next_id <= id.0 {
+            self.next_id = id.0.wrapping_add(1);
+        }
+    }
+
     /// Starts the clock at `tick`, for a run restored from a checkpoint.
     pub fn set_tick(&mut self, tick: Tick) {
         self.tick = tick;
@@ -228,6 +301,41 @@ impl World {
         match self.ships.iter_mut().find(|ship| ship.id == id) {
             Some(ship) => {
                 ship.extracting = extracting;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Fits a ship with `kit`, its shield full. Returns whether it exists.
+    pub fn set_kit(&mut self, id: ShipId, kit: Kit) -> bool {
+        match self.ships.iter_mut().find(|ship| ship.id == id) {
+            Some(ship) => {
+                ship.kit = kit;
+                ship.shield = kit.shield;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Lets hits on a ship count only from shooters inside `circle`, `(x, z,
+    /// radius)`. Returns whether it exists.
+    pub fn set_vulnerable_from(&mut self, id: ShipId, circle: Option<(f32, f32, f32)>) -> bool {
+        match self.ships.iter_mut().find(|ship| ship.id == id) {
+            Some(ship) => {
+                ship.vulnerable_from = circle;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Sets a ship's hull, for a structure restored from a checkpoint.
+    pub fn set_hull(&mut self, id: ShipId, hull: f32) -> bool {
+        match self.ships.iter_mut().find(|ship| ship.id == id) {
+            Some(ship) => {
+                ship.hull = hull;
                 true
             }
             None => false,
@@ -322,8 +430,13 @@ impl World {
         self.events.clear();
         self.think();
         for ship in &mut self.ships {
-            let handling = ship.kind.profile().handling;
+            let handling = handling(ship.kind, &ship.kit);
             ship.state = ship::step(ship.state, ship.input, &handling);
+            ship.since_hit = ship.since_hit.saturating_add(1);
+            if ship.since_hit >= SHIELD_DELAY_TICKS {
+                ship.shield = (ship.shield + SHIELD_REGEN * ship::DT).min(ship.kit.shield);
+            }
+            ship.defence_cooldown = ship.defence_cooldown.saturating_sub(1);
         }
         for i in 0..self.ships.len() {
             let (done, rest) = self.ships.split_at_mut(i + 1);
@@ -376,6 +489,7 @@ impl World {
                 continue;
             };
             let weapon = shooter.kind.profile().weapon;
+            let damage = weapon.damage * shooter.kit.weapon;
             shooter.cooldown = weapon.cooldown_ticks;
             // Long enough to cross twice the weapon's range, then it gives up.
             let flight = 2.0 * weapon.range / (weapon.projectile_speed * ship::DT);
@@ -385,7 +499,7 @@ impl World {
                 x: shooter.state.x,
                 z: shooter.state.z,
                 speed: weapon.projectile_speed,
-                damage: weapon.damage,
+                damage,
                 // A small positive float, so `as` cannot lose anything that matters.
                 ticks_left: flight.ceil() as u32 + 1,
             });
@@ -397,9 +511,41 @@ impl World {
         }
     }
 
+    /// Intercepts shots that close on a ship with point defence: one per
+    /// cooldown, nearest first.
+    fn defend(&mut self) {
+        let mut intercepted = Vec::new();
+        for ship in &mut self.ships {
+            if !ship.kit.point_defence || ship.defence_cooldown > 0 {
+                continue;
+            }
+            let nearest = self
+                .projectiles
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.target == ship.id)
+                .map(|(i, p)| (i, (p.x - ship.state.x).hypot(p.z - ship.state.z)))
+                .filter(|&(_, distance)| distance <= POINT_DEFENCE_RANGE)
+                .min_by(|a, b| a.1.total_cmp(&b.1));
+            if let Some((index, _)) = nearest {
+                ship.defence_cooldown = POINT_DEFENCE_COOLDOWN_TICKS;
+                intercepted.push(index);
+            }
+        }
+        intercepted.sort_unstable();
+        for index in intercepted.into_iter().rev() {
+            let shot = self.projectiles.remove(index);
+            self.events.push(Event::Intercepted {
+                shooter: shot.shooter,
+                target: shot.target,
+            });
+        }
+    }
+
     /// Moves every projectile toward its target, applying hits and removing
     /// ships whose hull runs out.
     fn fly_projectiles(&mut self) {
+        self.defend();
         let mut hits = Vec::new();
         self.projectiles.retain_mut(|projectile| {
             let Some(target) = self.ships.iter().find(|ship| ship.id == projectile.target) else {
@@ -421,11 +567,21 @@ impl World {
 
         let mut destroyed = Vec::new();
         for (target, shooter, damage) in hits {
+            let from = self.ship(shooter).map(|ship| (ship.state.x, ship.state.z));
             let Some(ship) = self.ships.iter_mut().find(|ship| ship.id == target) else {
                 continue;
             };
+            if let Some((cx, cz, radius)) = ship.vulnerable_from {
+                let inside = from.is_some_and(|(x, z)| (x - cx).hypot(z - cz) <= radius);
+                if !inside {
+                    continue;
+                }
+            }
             let was_alive = ship.hull > 0.0;
-            ship.hull -= damage;
+            let absorbed = ship.shield.min(damage);
+            ship.shield -= absorbed;
+            ship.hull -= damage - absorbed;
+            ship.since_hit = 0;
             if was_alive && ship.hull <= 0.0 {
                 destroyed.push((ship.id, ship.kind, shooter));
             }
@@ -447,7 +603,7 @@ impl World {
             .ships
             .iter()
             .enumerate()
-            .filter(|(_, ship)| ship.kind != ShipKind::Pilot)
+            .filter(|(_, ship)| ship.kind.thinks())
             .map(|(index, npc)| {
                 let target = npc::choose_target(npc, &self.ships);
                 let target_ship = target.and_then(|id| self.ship(id));
@@ -475,6 +631,116 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A pilot and a drone 5 m apart; the drone engages the pilot.
+    fn drone_on_pilot() -> (World, ShipId, ShipId) {
+        let mut world = World::new();
+        let pilot = world.spawn_pilot_at((0.0, 0.0), 0.0);
+        let drone = world.spawn_npc_at(ShipKind::Drone, (5.0, 0.0), (5.0, 0.0));
+        (world, pilot, drone)
+    }
+
+    #[test]
+    fn a_shield_takes_hits_before_the_hull_and_recovers_out_of_combat() {
+        let mut world = World::new();
+        let pilot = world.spawn_pilot_at((0.0, 0.0), 0.0);
+        let raider = world.spawn_pilot_at((10.0, 0.0), 0.0);
+        world.ship_mut(raider).unwrap().kind = ShipKind::Raider;
+        world.set_kit(
+            pilot,
+            Kit {
+                shield: 40.0,
+                ..Kit::BASIC
+            },
+        );
+        world.projectiles.push(Projectile {
+            shooter: raider,
+            target: pilot,
+            x: 0.5,
+            z: 0.0,
+            speed: 30.0,
+            damage: 50.0,
+            ticks_left: 10,
+        });
+        world.remove_ship(raider);
+        world.step();
+        let ship = world.ship(pilot).unwrap();
+        assert!(ship.shield.abs() < f32::EPSILON);
+        assert!((ship.hull - 90.0).abs() < f32::EPSILON, "{}", ship.hull);
+        for _ in 0..SHIELD_DELAY_TICKS + 5 * crate::TICKS_PER_SECOND {
+            world.step();
+        }
+        assert!((world.ship(pilot).unwrap().shield - 40.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn point_defence_intercepts_one_shot_a_second() {
+        let (mut world, pilot, drone) = drone_on_pilot();
+        world.set_kit(
+            pilot,
+            Kit {
+                point_defence: true,
+                ..Kit::BASIC
+            },
+        );
+        for _ in 0..crate::TICKS_PER_SECOND * 3 {
+            world.step();
+        }
+        let hull = world.ship(pilot).unwrap().hull;
+        let (mut unguarded, plain, _) = drone_on_pilot();
+        for _ in 0..crate::TICKS_PER_SECOND * 3 {
+            unguarded.step();
+        }
+        let unguarded_hull = unguarded.ship(plain).unwrap().hull;
+        assert!(hull > unguarded_hull, "{hull} against {unguarded_hull}");
+        assert!(world.ship(drone).is_some());
+    }
+
+    #[test]
+    fn a_structure_ignores_shots_from_outside_its_circle() {
+        let mut world = World::new();
+        let pilot = world.spawn_pilot_at((0.0, 0.0), 0.0);
+        let core = world.spawn_npc_at(ShipKind::Core, (10.0, 0.0), (10.0, 0.0));
+        world.set_vulnerable_from(core, Some((50.0, 0.0, 5.0)));
+        world.set_lock(pilot, Some(core));
+        world.set_firing(pilot, true);
+        for _ in 0..crate::TICKS_PER_SECOND * 2 {
+            world.step();
+        }
+        let full = crate::profile::CORE_HULL;
+        assert!((world.ship(core).unwrap().hull - full).abs() < f32::EPSILON);
+        world.set_vulnerable_from(core, Some((0.0, 0.0, 5.0)));
+        for _ in 0..crate::TICKS_PER_SECOND * 2 {
+            world.step();
+        }
+        assert!(world.ship(core).unwrap().hull < full);
+        assert_eq!(
+            world.ship(core).unwrap().state.x,
+            10.0,
+            "a structure never moves"
+        );
+    }
+
+    #[test]
+    fn a_kit_doubles_damage_and_speeds_the_ship() {
+        let mut world = World::new();
+        let pilot = world.spawn_pilot_at((0.0, 0.0), 0.0);
+        let core = world.spawn_npc_at(ShipKind::Core, (10.0, 0.0), (10.0, 0.0));
+        world.set_kit(
+            pilot,
+            Kit {
+                weapon: 2.0,
+                speed: 1.2,
+                ..Kit::BASIC
+            },
+        );
+        world.set_lock(pilot, Some(core));
+        world.set_firing(pilot, true);
+        world.step();
+        assert!((world.projectiles()[0].damage - 20.0).abs() < f32::EPSILON);
+        let fast = handling(ShipKind::Pilot, &world.ship(pilot).unwrap().kit);
+        assert!((fast.max_speed - 9.0 * 1.2).abs() < 1e-5);
+    }
 
     #[test]
     fn spawned_ships_get_distinct_ids_and_positions() {

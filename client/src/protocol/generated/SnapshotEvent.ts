@@ -4,4 +4,4 @@ import type { EntityKind } from "./EntityKind";
 /**
  * Something that happened during a tick.
  */
-export type SnapshotEvent = { "type": "fired", shooter: number, target: number, speed: number, } | { "type": "destroyed", ship: number, by: number | null, kind: EntityKind, };
+export type SnapshotEvent = { "type": "fired", shooter: number, target: number, speed: number, } | { "type": "destroyed", ship: number, by: number | null, kind: EntityKind, } | { "type": "intercepted", shooter: number, target: number, };

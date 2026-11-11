@@ -22,4 +22,13 @@ scan: number | null, alert: number,
 /**
  * Seconds since launch.
  */
-elapsedSeconds: number, drive: Drive, };
+elapsedSeconds: number, drive: Drive, 
+/**
+ * Shield points left, rounded; 0 without an escort rig.
+ */
+shield: number, 
+/**
+ * The crew's relay link (design section 10): whole seconds both relays
+ * have been held together, or [`RELAY_LINKED`] once linked.
+ */
+relay: number, };

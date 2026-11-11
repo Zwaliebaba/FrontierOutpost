@@ -6,6 +6,7 @@ import type { Ending } from "./Ending";
  */
 export type RunSummary = { ending: Ending, ore: number, salvage: number, volatiles: number, 
 /**
- * The pilot's share of the contract pot, credits.
+ * The pilot's share of the crew's pot, credits, when it was paid as they
+ * came home; otherwise 0 and a `PotPaid` follows when the instance ends.
  */
 payout: number, launchCost: number, cargoLost: number, modulesLost: number, approachSeconds: number, objectiveSeconds: number, returnSeconds: number, };

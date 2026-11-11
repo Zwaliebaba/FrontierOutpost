@@ -14,6 +14,8 @@ const IDLE: OwnStatus = {
   alert: 0,
   elapsedSeconds: 0,
   drive: "ready",
+  shield: 0,
+  relay: 0,
 };
 
 const TICK_RATE = 20;

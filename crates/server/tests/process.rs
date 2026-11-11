@@ -280,7 +280,12 @@ fn the_wipe_command_leaves_an_empty_world() {
     let store = Store::open(&data).unwrap();
     let pilot = store.create_account("Vega").unwrap();
     store.issue_token(pilot).unwrap();
-    store.save_checkpoint("run", &[(pilot, 0)], "{}").unwrap();
+    let seat = frontier_server::store::Seat {
+        account: pilot,
+        ship: 0,
+        share: 100,
+    };
+    store.save_checkpoint("run", &[seat], "{}").unwrap();
     let world = store.world().to_owned();
     drop(store);
 

@@ -29,11 +29,25 @@ test("signing in on another page takes the run over, and the first page stays ou
   const other = await browser.newPage();
   await addAuthenticator(other);
   await other.goto(QUIET);
+  // Only once this first load has found no token and asks to sign in: a token set while it is
+  // still starting would be resumed by it, and the reload below would cut that short.
+  await expect(other.locator("#signin")).toHaveAttribute("data-state", "open");
   await other.evaluate((value) => {
     sessionStorage.setItem("frontier.session", value ?? "");
   }, token);
   await other.reload();
-  await expect(other.locator("#run")).toHaveAttribute("data-phase", "atDock");
+  // What the page shows, so a failure says whether it got the run, a contract or neither.
+  const state = () =>
+    other.evaluate(() => ({
+      phase: document.querySelector<HTMLElement>("#run")?.dataset.phase ?? null,
+      ship: document.querySelector<HTMLElement>("#hud")?.dataset.ship ?? null,
+      briefing: document.querySelector<HTMLElement>("#briefing")?.dataset.state ?? null,
+      status: document.querySelector("#status")?.textContent ?? null,
+      notice: document.querySelector("#notice")?.textContent ?? null,
+    }));
+  await expect
+    .poll(state, { message: "the second page rejoins the run at the dock", timeout: 10_000 })
+    .toMatchObject({ phase: "atDock" });
 
   const status = page.locator("#status");
   await expect(status).toContainText("Signed in on another page");

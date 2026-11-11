@@ -7,9 +7,14 @@
 
 pub mod collision;
 pub mod combat;
+pub mod crew;
 pub mod extraction;
+pub mod fitting;
+pub mod goods;
+pub mod market;
 pub mod npc;
 pub mod outcome;
+pub mod outpost;
 pub mod profile;
 pub mod rng;
 pub mod run;

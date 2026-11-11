@@ -44,7 +44,7 @@ pub fn choose_target(npc: &Ship, ships: &[Ship]) -> Option<ShipId> {
         ShipKind::Warden => candidates
             .min_by(|a, b| distance(a).total_cmp(&distance(b)))
             .map(|ship| ship.id),
-        ShipKind::Pilot => None,
+        ShipKind::Pilot | ShipKind::Core => None,
     }
 }
 

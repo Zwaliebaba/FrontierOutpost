@@ -14,7 +14,7 @@
 //! | 1 | message kind, [`SNAPSHOT_KIND`] |
 //! | 4 | tick, `u32` |
 //! | 2 | last input the server applied for this client, `u16` |
-//! | 11 | the receiving pilot's own status, [`OwnStatus`]: phase `u8`, cargo `u8`, capacity `u8`, heat `u8`, extractor `u8`, extractor seconds `u8`, scan `u8` (`0xFF` for none), alert `u8`, elapsed seconds `u16`, drive `u8` |
+//! | 13 | the receiving pilot's own status, [`OwnStatus`]: phase `u8`, cargo `u8`, capacity `u8`, heat `u8`, extractor `u8`, extractor seconds `u8`, scan `u8` (`0xFF` for none), alert `u8`, elapsed seconds `u16`, drive `u8`, shield `u8`, relay `u8` |
 //! | 1 | deposit count |
 //! | 1 each | units left in each deposit, in the order the client was sent them |
 //! | 1 | entity count |
@@ -26,6 +26,8 @@
 //! are not repeated: a lost snapshot loses its events, which only costs a
 //! visual. A fired event is kind 1: shooter, target, projectile speed in m/s.
 //! A destroyed event is kind 2: ship, destroyer (`0xFFFF` for none), entity kind.
+//! An intercepted event is kind 3: shooter, target whose point defence
+//! destroyed the shot, and 0.
 
 use ts_rs::TS;
 
@@ -38,7 +40,7 @@ pub const MAX_DATAGRAM_BYTES: usize = 1_000;
 
 /// Kind, tick and input ack.
 pub const HEADER_BYTES: usize = 7;
-pub const OWN_STATUS_BYTES: usize = 11;
+pub const OWN_STATUS_BYTES: usize = 13;
 pub const ENTITY_BYTES: usize = 14;
 /// Most deposits a snapshot reports.
 pub const MAX_DEPOSITS: usize = 16;
@@ -69,6 +71,7 @@ const NO_SCAN: u8 = u8::MAX;
 
 const FIRED: u8 = 1;
 const DESTROYED: u8 = 2;
+const INTERCEPTED: u8 = 3;
 const NO_SHIP: u16 = u16::MAX;
 
 /// Position units per metre: 1/32 m resolution over ±1,024 m.
@@ -86,10 +89,18 @@ pub enum EntityKind {
     Drone,
     Raider,
     Warden,
+    /// The nest core: a structure.
+    Core,
 }
 
 impl EntityKind {
-    const ALL: [Self; 4] = [Self::PlayerShip, Self::Drone, Self::Raider, Self::Warden];
+    const ALL: [Self; 5] = [
+        Self::PlayerShip,
+        Self::Drone,
+        Self::Raider,
+        Self::Warden,
+        Self::Core,
+    ];
 
     #[must_use]
     pub const fn code(self) -> u8 {
@@ -194,7 +205,15 @@ pub struct OwnStatus {
     /// Seconds since launch.
     pub elapsed_seconds: u16,
     pub drive: Drive,
+    /// Shield points left, rounded; 0 without an escort rig.
+    pub shield: u8,
+    /// The crew's relay link (design section 10): whole seconds both relays
+    /// have been held together, or [`RELAY_LINKED`] once linked.
+    pub relay: u8,
 }
+
+/// [`OwnStatus::relay`] once the relays are linked.
+pub const RELAY_LINKED: u8 = u8::MAX;
 
 impl OwnStatus {
     /// A pilot at the dock at launch, with nothing to report.
@@ -209,6 +228,8 @@ impl OwnStatus {
         alert: 0,
         elapsed_seconds: 0,
         drive: Drive::Ready,
+        shield: 0,
+        relay: 0,
     };
 }
 
@@ -233,6 +254,8 @@ pub enum SnapshotEvent {
         by: Option<u16>,
         kind: EntityKind,
     },
+    /// Point defence on `target` destroyed a shot from `shooter`.
+    Intercepted { shooter: u16, target: u16 },
 }
 
 /// Every entity the client should draw at `tick`, and what happened during it.
@@ -317,6 +340,8 @@ impl Snapshot {
         ]);
         bytes.extend_from_slice(&own.elapsed_seconds.to_le_bytes());
         bytes.push(own.drive as u8);
+        bytes.push(own.shield);
+        bytes.push(own.relay);
         bytes.push(deposit_count);
         bytes.extend_from_slice(&self.deposits);
         bytes.push(count);
@@ -341,6 +366,7 @@ impl Snapshot {
                 SnapshotEvent::Destroyed { ship, by, kind } => {
                     (DESTROYED, ship, by.unwrap_or(NO_SHIP), kind.code())
                 }
+                SnapshotEvent::Intercepted { shooter, target } => (INTERCEPTED, shooter, target, 0),
             };
             bytes.push(kind);
             bytes.extend_from_slice(&a.to_le_bytes());
@@ -383,6 +409,8 @@ impl Snapshot {
             e0,
             e1,
             drive,
+            shield,
+            relay,
         ] = own_bytes;
         let own = OwnStatus {
             phase: RunPhase::ALL
@@ -404,6 +432,8 @@ impl Snapshot {
                 .get(usize::from(drive))
                 .copied()
                 .ok_or(SnapshotError::UnknownDrive(drive))?,
+            shield,
+            relay,
         };
         let deposit_count = reader
             .u8()
@@ -469,6 +499,10 @@ impl Snapshot {
                     ship: a,
                     by: (b != NO_SHIP).then_some(b),
                     kind: EntityKind::from_code(c).ok_or(SnapshotError::UnknownEntityKind(c))?,
+                },
+                INTERCEPTED => SnapshotEvent::Intercepted {
+                    shooter: a,
+                    target: b,
                 },
                 other => return Err(SnapshotError::UnknownEventKind(other)),
             });
@@ -558,6 +592,8 @@ mod tests {
             alert: 2,
             elapsed_seconds: 1_234,
             drive: Drive::Hunted,
+            shield: 27,
+            relay: 12,
         }
     }
 
@@ -566,9 +602,14 @@ mod tests {
 
     /// The Stage 1 worst case of design section 10: four pilots and the NPC cap.
     fn full_expedition() -> Snapshot {
-        let kinds = [EntityKind::Drone, EntityKind::Raider, EntityKind::Warden];
+        let kinds = [
+            EntityKind::Drone,
+            EntityKind::Raider,
+            EntityKind::Warden,
+            EntityKind::Core,
+        ];
         let ships = (0..4).map(|id| entity(id, EntityKind::PlayerShip));
-        let npcs = (4..28).map(|id| entity(id, kinds[usize::from(id) % 3]));
+        let npcs = (4..28).map(|id| entity(id, kinds[usize::from(id) % 4]));
         Snapshot {
             tick: 123_456,
             input_ack: 789,
@@ -590,6 +631,10 @@ mod tests {
                     ship: 2,
                     by: None,
                     kind: EntityKind::PlayerShip,
+                },
+                SnapshotEvent::Intercepted {
+                    shooter: 7,
+                    target: 3,
                 },
             ],
         }
@@ -620,7 +665,7 @@ mod tests {
         assert!(bytes.len() <= MAX_DATAGRAM_BYTES, "{} bytes", bytes.len());
         assert_eq!(
             bytes.len(),
-            entities_at(DEPOSITS) + 28 * ENTITY_BYTES + 1 + 3 * EVENT_BYTES
+            entities_at(DEPOSITS) + 28 * ENTITY_BYTES + 1 + 4 * EVENT_BYTES
         );
     }
 
@@ -649,6 +694,8 @@ mod tests {
                 alert: u8::MAX,
                 elapsed_seconds: u16::MAX,
                 drive: Drive::Extracting,
+                shield: u8::MAX,
+                relay: RELAY_LINKED,
             },
             deposits: vec![u8::MAX; MAX_DEPOSITS],
             entities: vec![
@@ -784,7 +831,7 @@ mod tests {
         for kind in EntityKind::ALL {
             assert_eq!(EntityKind::from_code(kind.code()), Some(kind));
         }
-        assert_eq!(EntityKind::from_code(4), None);
+        assert_eq!(EntityKind::from_code(5), None);
     }
 
     /// Writes vectors for the TypeScript decoder's tests beside the generated
@@ -800,6 +847,7 @@ mod tests {
             EntityKind::Drone => "drone",
             EntityKind::Raider => "raider",
             EntityKind::Warden => "warden",
+            EntityKind::Core => "core",
         };
         let json = |snapshot: &Snapshot| {
             let entities = snapshot
@@ -836,6 +884,9 @@ mod tests {
                         by.map_or_else(|| "null".to_owned(), |by| by.to_string()),
                         kind(k)
                     ),
+                    SnapshotEvent::Intercepted { shooter, target } => format!(
+                        "{{ type: \"intercepted\", shooter: {shooter}, target: {target} }}"
+                    ),
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
@@ -847,7 +898,7 @@ mod tests {
                 })
             };
             let own = format!(
-                "{{ phase: \"{}\", cargo: {}, capacity: {}, heat: {}, extractor: \"{}\", extractorSeconds: {}, scan: {}, alert: {}, elapsedSeconds: {}, drive: \"{}\" }}",
+                "{{ phase: \"{}\", cargo: {}, capacity: {}, heat: {}, extractor: \"{}\", extractorSeconds: {}, scan: {}, alert: {}, elapsedSeconds: {}, drive: \"{}\", shield: {}, relay: {} }}",
                 camel(format!("{:?}", own.phase)),
                 own.cargo,
                 own.capacity,
@@ -858,7 +909,9 @@ mod tests {
                     .map_or_else(|| "null".to_owned(), |scan| scan.to_string()),
                 own.alert,
                 own.elapsed_seconds,
-                camel(format!("{:?}", own.drive))
+                camel(format!("{:?}", own.drive)),
+                own.shield,
+                own.relay
             );
             let deposits = snapshot
                 .deposits
@@ -894,6 +947,8 @@ mod tests {
                 alert: u8::MAX,
                 elapsed_seconds: u16::MAX,
                 drive: Drive::Extracting,
+                shield: u8::MAX,
+                relay: RELAY_LINKED,
             },
             deposits: vec![u8::MAX; MAX_DEPOSITS],
             entities: vec![EntityState {

@@ -9,14 +9,20 @@
 //! TypeScript `number` without loss.
 
 pub mod frame;
+pub mod home;
 pub mod input;
 pub mod snapshot;
 
+pub use home::{
+    AccountInfo, AdjacencyInfo, Catalog, CostInfo, FacilityInfo, FittingInfo, Good, GoodAmount,
+    LaunchInfo, MissingInfo, OutpostInfo, PriceInfo, QueuedInfo, RecipeInfo, Slot, SocketRuleInfo,
+    SocketState, TierInfo, UnlockInfo,
+};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 6;
+pub const PROTOCOL_VERSION: u32 = 7;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -50,6 +56,40 @@ pub enum ClientMessage {
     Vent,
     /// Starts a scan of the site; the ship must hold still in scan range.
     Scan,
+    /// Installs `facility` in the empty socket `socket`: bought at tier 1 the
+    /// first time, installed again for the reinstallation cost after that.
+    Install { socket: String, facility: String },
+    /// Buys the next tier of the facility in `socket`.
+    Upgrade { socket: String },
+    /// Removes the facility in `socket`, for nothing; its unlock stays.
+    Remove { socket: String },
+    /// Runs the facility in `socket` at tier `run`, or unpowers it with 0.
+    Power { socket: String, run: u32 },
+    /// Sells `amount` of `good` to NPCs at the posted price.
+    Sell { good: Good, amount: u32 },
+    /// Buys `amount` of `good` from NPCs at the posted price.
+    Buy { good: Good, amount: u32 },
+    /// Queues `batches` of `recipe` at the processor; inputs leave the stock now.
+    Process { recipe: String, batches: u32 },
+    /// Takes queued batches back, returning their inputs.
+    Unqueue { recipe: String, batches: u32 },
+    /// Buys a rig or module.
+    BuyFitting { fitting: String },
+    /// Saves the fitting to fly, by fitting identifier.
+    SaveFitting {
+        rig: Option<String>,
+        modules: Vec<String>,
+    },
+    /// Forms a crew with this pilot as host; the server answers with `Crew`
+    /// carrying the invite code.
+    CreateCrew,
+    /// Joins the crew with this invite code.
+    JoinCrew { code: String },
+    /// Leaves the crew.
+    LeaveCrew,
+    /// The host sets the split: one whole percentage per member, in the
+    /// order `Crew` lists them, summing to 100.
+    SetSplit { shares: Vec<u32> },
 }
 
 /// A message sent from the server to the client.
@@ -83,6 +123,14 @@ pub enum ServerMessage {
     SignInRefused { reason: String },
     /// The pilot's home holdings changed.
     Account { account: AccountInfo },
+    /// The outpost's rules and posted prices. Sent once, after `SignedIn`.
+    Catalog { catalog: Catalog },
+    /// An action at home was refused, for `reason`; nothing changed.
+    HomeRefused { reason: String },
+    /// The pilot's crew as it stands, or `None` once they are in none.
+    Crew { crew: Option<CrewInfo> },
+    /// A crew action was refused, for `reason`.
+    CrewRefused { reason: String },
     /// The discovery contract on offer (design section 4): the site and what
     /// preparation shows of its seed. Sent after `Welcome` and after each run.
     Contract {
@@ -110,6 +158,13 @@ pub enum ServerMessage {
         scan_range: f32,
         /// How far from a deposit's centre the extractor reaches, m.
         extract_range: f32,
+        /// Multiplies the starter hull's speed and acceleration: the scout
+        /// rig's 20%. Prediction must use it.
+        speed_factor: f32,
+        /// Shield points when full; 0 without an escort rig.
+        max_shield: f32,
+        /// The rigs and modules flown, by fitting identifier.
+        fitted: Vec<String>,
     },
     /// The launch was refused, for `reason`.
     LaunchRefused { reason: String },
@@ -128,17 +183,56 @@ pub enum ServerMessage {
     LimitWarning { seconds_left: u32 },
     /// The pilot's run is over. A new `Contract` follows.
     RunOver { summary: RunSummary },
+    /// The instance ended and the crew's pot was paid: `share` of it to this
+    /// pilot, by the host's split. A pilot who docked last also sees their
+    /// share in `RunOver`.
+    PotPaid { pot: PotInfo, share: u32 },
 }
 
-/// What a pilot's home holds.
+/// A crew as one member sees it (design section 2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CrewInfo {
+    /// The invite code others join with.
+    pub code: String,
+    /// The host first.
+    pub members: Vec<CrewMember>,
+    /// Whether this pilot hosts: only the host launches and sets the split.
+    pub hosting: bool,
+    /// The host has launched: the tier, and the seconds left to follow.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch: Option<CrewLaunch>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CrewMember {
+    pub callsign: String,
+    /// Their share of the pot, a whole percentage.
+    pub share: u32,
+    /// Whether this is the pilot reading it.
+    pub you: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
-pub struct AccountInfo {
-    pub credits: u32,
-    pub ore: u32,
-    pub salvage: u32,
-    pub volatiles: u32,
+pub struct CrewLaunch {
+    pub tier: u32,
+    pub seconds_left: u32,
+}
+
+/// What a crew earned between them (design section 10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PotInfo {
+    pub contract: u32,
+    pub bounty: u32,
+    pub relay: u32,
 }
 
 /// A pocket of the site, as a contract shows it.
@@ -282,7 +376,8 @@ pub struct RunSummary {
     pub ore: u32,
     pub salvage: u32,
     pub volatiles: u32,
-    /// The pilot's share of the contract pot, credits.
+    /// The pilot's share of the crew's pot, credits, when it was paid as they
+    /// came home; otherwise 0 and a `PotPaid` follows when the instance ends.
     pub payout: u32,
     pub launch_cost: u32,
     pub cargo_lost: u32,
@@ -419,6 +514,28 @@ mod tests {
                 ore: 0,
                 salvage: 0,
                 volatiles: 0,
+                alloy: 0,
+                components: 0,
+                outpost: OutpostInfo {
+                    sockets: Vec::new(),
+                    unlocks: Vec::new(),
+                    power_used: 0,
+                    opens: Vec::new(),
+                    processor_batches: 4,
+                    fitting_discount: 0,
+                    open_tiers: 1,
+                },
+                processing: Vec::new(),
+                hangar: Vec::new(),
+                rig: None,
+                modules: Vec::new(),
+                launch: LaunchInfo {
+                    flown: Vec::new(),
+                    missing: Vec::new(),
+                    stake: 0,
+                    supplies: 40,
+                    capacity: 20,
+                },
             },
         };
         let json = serde_json::to_string(&signed_in).unwrap();
@@ -428,6 +545,34 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<ServerMessage>(&json).unwrap(),
             signed_in
+        );
+    }
+
+    #[test]
+    fn home_actions_use_the_tagged_shape() {
+        assert_eq!(
+            serde_json::to_string(&ClientMessage::Install {
+                socket: "a".into(),
+                facility: "refinery".into()
+            })
+            .unwrap(),
+            r#"{"type":"install","socket":"a","facility":"refinery"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ClientMessage::Sell {
+                good: Good::Ore,
+                amount: 3
+            })
+            .unwrap(),
+            r#"{"type":"sell","good":"ore","amount":3}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ClientMessage::SaveFitting {
+                rig: None,
+                modules: vec!["cargo_frame".into()]
+            })
+            .unwrap(),
+            r#"{"type":"saveFitting","rig":null,"modules":["cargo_frame"]}"#
         );
     }
 

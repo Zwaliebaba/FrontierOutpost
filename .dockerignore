@@ -1,5 +1,5 @@
-# Send the image build only what it compiles. Everything else, above all target/ and the Git LFS
-# assets under Design/, stays out of the build context.
+# Send the image build only what it compiles. Everything else, above all target/ and the scene
+# sources under Design/, stays out of the build context.
 *
 !Cargo.toml
 !Cargo.lock
@@ -7,6 +7,9 @@
 !.cargo/
 !crates/
 !client/
+# The outpost models the client imports.
+!Design/FrontierOutpost/station.glb
+!Design/FrontierOutpost/facilities.glb
 
 **/target/
 client/node_modules/

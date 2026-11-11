@@ -45,10 +45,26 @@ pub fn start_server_with_idle_timeout(idle_timeout: std::time::Duration) -> (url
     start_server_with(test_settings(), idle_timeout)
 }
 
+/// As [`start_server`], and returns the world's store, for tests that set a
+/// pilot's holdings directly.
+pub fn start_server_with_store() -> (url::Url, [u8; 32], Store) {
+    let store = Store::in_memory().unwrap();
+    let (url, sha256) = serve_store(test_settings(), transport::IDLE_TIMEOUT, store.clone());
+    (url, sha256, store)
+}
+
 /// As [`start_server`], with these settings and idle timeout.
 pub fn start_server_with(
     settings: Settings,
     idle_timeout: std::time::Duration,
+) -> (url::Url, [u8; 32]) {
+    serve_store(settings, idle_timeout, Store::in_memory().unwrap())
+}
+
+fn serve_store(
+    settings: Settings,
+    idle_timeout: std::time::Duration,
+    store: Store,
 ) -> (url::Url, [u8; 32]) {
     let cert =
         DevCertificate::generate(&["localhost", "127.0.0.1"], OffsetDateTime::now_utc()).unwrap();
@@ -57,9 +73,10 @@ pub fn start_server_with(
             .unwrap();
     let addr = server.local_addr().unwrap();
     let identity = Identity {
-        store: Store::in_memory().unwrap(),
+        store,
         auth: Auth::new(&origin()).unwrap(),
         runs: frontier_server::runs::Runs::default(),
+        crews: frontier_server::crews::Crews::default(),
     };
     tokio::spawn(transport::serve(server, settings, identity));
     (format!("https://{addr}/").parse().unwrap(), cert.sha256)
@@ -215,6 +232,18 @@ pub async fn write(send: &mut SendStream, message: &ClientMessage) {
 }
 
 pub async fn read(recv: &mut RecvStream) -> ServerMessage {
+    // The catalog follows every sign-in and never changes; tests that care
+    // about it read it with `read_any`.
+    loop {
+        let message = read_any(recv).await;
+        if !matches!(message, ServerMessage::Catalog { .. }) {
+            return message;
+        }
+    }
+}
+
+/// Reads the next message, whatever it is.
+pub async fn read_any(recv: &mut RecvStream) -> ServerMessage {
     let mut header = [0; frame::HEADER_BYTES];
     recv.read_exact(&mut header).await.unwrap();
     let mut body = vec![0; frame::body_length(header).unwrap()];

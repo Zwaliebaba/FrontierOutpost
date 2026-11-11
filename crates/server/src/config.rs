@@ -4,7 +4,10 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use frontier_sim::goods::Good;
 use frontier_sim::site::{COMPACT_SITE, FRONTIER_SITE};
+
+use crate::ledger::Item;
 use frontier_sim::skirmish::MAX_NPCS;
 
 use webauthn_rs::prelude::Url;
@@ -36,6 +39,30 @@ pub struct Config {
     /// `http://localhost` on the HTTP port. Passkeys are bound to it, and need
     /// a domain name: an IP address cannot be a relying party.
     pub origin: Option<Url>,
+    /// Stock every new pilot gets on top of the starting balance, for trying
+    /// facilities without flying for them first: `FRONTIER_GRANT`, such as
+    /// `1000cr,40ore,20alloy,10components`.
+    pub grant: Vec<(Item, u32)>,
+}
+
+/// Reads a grant such as `1000cr,40ore`: amounts, each followed by `cr` or
+/// a good's name.
+fn parse_grant(value: &str) -> Option<Vec<(Item, u32)>> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let split = part.find(|c: char| !c.is_ascii_digit())?;
+            let (amount, name) = part.split_at(split);
+            let amount: u32 = amount.parse().ok().filter(|&amount| amount > 0)?;
+            let item = match name.trim() {
+                "cr" => Item::Credits,
+                name => Item::Good(Good::ALL.into_iter().find(|good| good.name() == name)?),
+            };
+            Some((item, amount))
+        })
+        .collect()
 }
 
 /// Why the configuration could not be read.
@@ -66,6 +93,7 @@ const SEED: &str = "FRONTIER_SEED";
 const NPCS: &str = "FRONTIER_NPCS";
 const DATA: &str = "FRONTIER_DATA";
 const ORIGIN: &str = "FRONTIER_ORIGIN";
+const GRANT: &str = "FRONTIER_GRANT";
 
 /// Reads a whole number from `min` to `max`, if the variable is set.
 fn whole(
@@ -163,6 +191,14 @@ impl Config {
                         })
                 })
                 .transpose()?,
+            grant: match lookup(GRANT) {
+                None => Vec::new(),
+                Some(value) => parse_grant(&value).ok_or(ConfigError::Invalid {
+                    name: GRANT,
+                    expected: "amounts such as 1000cr,40ore,20alloy",
+                    value,
+                })?,
+            },
         };
         if config.public_web_transport_addr.is_some() && config.impairment.is_active() {
             return Err(ConfigError::PublicAddressWithImpairment);
@@ -355,5 +391,27 @@ mod tests {
                 .is_err(),
             "passkeys cannot use an IP address"
         );
+    }
+
+    #[test]
+    fn reads_a_grant_for_new_pilots() {
+        let config = Config::from_lookup(|name| {
+            (name == GRANT).then(|| "1000cr, 40ore,20alloy,10components".to_owned())
+        })
+        .unwrap();
+        assert_eq!(
+            config.grant,
+            [
+                (Item::Credits, 1_000),
+                (Item::ORE, 40),
+                (Item::Good(Good::Alloy), 20),
+                (Item::Good(Good::Components), 10),
+            ]
+        );
+        assert!(Config::from_lookup(|_| None).unwrap().grant.is_empty());
+        for bad in ["40 bananas", "cr", "0ore", "ore40"] {
+            let error = Config::from_lookup(|name| (name == GRANT).then(|| bad.to_owned()));
+            assert!(error.is_err(), "{bad}");
+        }
     }
 }

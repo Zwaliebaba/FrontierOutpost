@@ -54,6 +54,26 @@ export class Shots {
   }
 
   /**
+   * Point defence on `target` destroyed a shot from `shooter`: the nearest such bolt to the
+   * target goes, with a flash where it was. Returns whether a bolt was found.
+   */
+  intercept(shooter: number, target: number, at: Point): boolean {
+    let nearest = -1;
+    let best = Infinity;
+    this.#flying.forEach((shot, index) => {
+      if (shot.shooter !== shooter || shot.target !== target) return;
+      const distance = Math.hypot(shot.x - at.x, shot.z - at.z);
+      if (distance < best) {
+        best = distance;
+        nearest = index;
+      }
+    });
+    const [shot] = nearest >= 0 ? this.#flying.splice(nearest, 1) : [];
+    if (shot) this.#blasts.push({ x: shot.x, z: shot.z, seconds: BLAST_SECONDS / 2 });
+    return shot !== undefined;
+  }
+
+  /**
    * Moves every bolt `dt` seconds toward where its target is drawn now, and ages the blasts.
    * A bolt whose target is gone, or that arrives, disappears.
    */

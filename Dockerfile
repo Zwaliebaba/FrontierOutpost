@@ -36,6 +36,8 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY Cargo.toml Cargo.lock ./
 COPY .cargo .cargo
 COPY crates crates
+# The client imports the outpost's models from the scene's exports.
+COPY Design/FrontierOutpost/station.glb Design/FrontierOutpost/facilities.glb Design/FrontierOutpost/
 COPY client client
 
 # target/ is a cache mount, so the results are copied out of it within the same step.

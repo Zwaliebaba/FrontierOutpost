@@ -8,6 +8,8 @@
 
 use std::fmt;
 
+use frontier_sim::goods::Good;
+
 use crate::account::Account;
 use crate::store::AccountId;
 
@@ -15,21 +17,27 @@ use crate::store::AccountId;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Item {
     Credits,
-    Ore,
-    Salvage,
-    Volatiles,
+    Good(Good),
 }
 
 impl Item {
-    pub const ALL: [Self; 4] = [Self::Credits, Self::Ore, Self::Salvage, Self::Volatiles];
+    pub const ALL: [Self; 6] = [
+        Self::Credits,
+        Self::Good(Good::Ore),
+        Self::Good(Good::Salvage),
+        Self::Good(Good::Volatiles),
+        Self::Good(Good::Alloy),
+        Self::Good(Good::Components),
+    ];
+    pub const ORE: Self = Self::Good(Good::Ore);
+    pub const SALVAGE: Self = Self::Good(Good::Salvage);
+    pub const VOLATILES: Self = Self::Good(Good::Volatiles);
 
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
             Self::Credits => "credits",
-            Self::Ore => "ore",
-            Self::Salvage => "salvage",
-            Self::Volatiles => "volatiles",
+            Self::Good(good) => good.name(),
         }
     }
 
@@ -38,18 +46,14 @@ impl Item {
     pub fn held(self, account: &Account) -> u32 {
         match self {
             Self::Credits => account.credits,
-            Self::Ore => account.stock.ore,
-            Self::Salvage => account.stock.salvage,
-            Self::Volatiles => account.stock.volatiles,
+            Self::Good(good) => account.stock.get(good),
         }
     }
 
     fn holding(self, account: &mut Account) -> &mut u32 {
         match self {
             Self::Credits => &mut account.credits,
-            Self::Ore => &mut account.stock.ore,
-            Self::Salvage => &mut account.stock.salvage,
-            Self::Volatiles => &mut account.stock.volatiles,
+            Self::Good(good) => account.stock.get_mut(good),
         }
     }
 }
@@ -64,6 +68,14 @@ pub enum Npc {
     Supplies,
     /// Contract payouts: a source.
     Contract,
+    /// The nest core's bounty: a source.
+    Bounty,
+    /// Standing buy and sell offers at posted prices (design section 7).
+    Market,
+    /// Facility purchases, upgrades and reinstallations: a sink.
+    Construction,
+    /// Rigs and modules bought or replaced: a sink.
+    Outfitter,
 }
 
 /// One side of a transfer.
@@ -73,6 +85,8 @@ pub enum Party {
     Npc(Npc),
     /// An expedition's site: where banked cargo was extracted.
     Site,
+    /// The home's own processor: queued inputs go in, finished goods come out.
+    Processor,
 }
 
 impl fmt::Display for Party {
@@ -82,7 +96,12 @@ impl fmt::Display for Party {
             Self::Npc(Npc::Grant) => f.write_str("npc:grant"),
             Self::Npc(Npc::Supplies) => f.write_str("npc:supplies"),
             Self::Npc(Npc::Contract) => f.write_str("npc:contract"),
+            Self::Npc(Npc::Bounty) => f.write_str("npc:bounty"),
+            Self::Npc(Npc::Market) => f.write_str("npc:market"),
+            Self::Npc(Npc::Construction) => f.write_str("npc:construction"),
+            Self::Npc(Npc::Outfitter) => f.write_str("npc:outfitter"),
             Self::Site => f.write_str("site"),
+            Self::Processor => f.write_str("processor"),
         }
     }
 }
@@ -95,6 +114,21 @@ pub enum Reason {
     /// Cargo docked at home (design section 6).
     Banked,
     ContractPayout,
+    NestBounty,
+    /// The relay link's bonus on the contract (design section 10).
+    RelayBonus,
+    Sold,
+    Bought,
+    /// A facility bought, upgraded or installed again.
+    Construction,
+    /// A rig or module bought.
+    Outfitting,
+    /// Inputs queued at the processor.
+    Queued,
+    /// Queued inputs taken back.
+    Unqueued,
+    /// Finished goods from the processor.
+    Processed,
 }
 
 impl Reason {
@@ -105,6 +139,15 @@ impl Reason {
             Self::LaunchSupplies => "launch supplies",
             Self::Banked => "banked cargo",
             Self::ContractPayout => "contract payout",
+            Self::NestBounty => "nest bounty",
+            Self::RelayBonus => "relay bonus",
+            Self::Sold => "sold",
+            Self::Bought => "bought",
+            Self::Construction => "construction",
+            Self::Outfitting => "outfitting",
+            Self::Queued => "queued for processing",
+            Self::Unqueued => "taken off the processor",
+            Self::Processed => "processed",
         }
     }
 }
@@ -178,14 +221,6 @@ impl Transfer {
     }
 }
 
-/// What launching costs a pilot who holds `credits`: the posted supplies
-/// price, or everything they have if that is less, so no pilot is ever
-/// locked out of play (the owner's rule until trading arrives in plan M5).
-#[must_use]
-pub fn supplies_due(credits: u32) -> u32 {
-    credits.min(frontier_sim::run::LAUNCH_COST)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,15 +241,15 @@ mod tests {
     #[test]
     fn credits_and_debits_only_the_account_named() {
         let mut account = Account::new("w", "Vega");
-        transfer(Item::Ore, 5, Party::Site, Party::Account(ME))
+        transfer(Item::ORE, 5, Party::Site, Party::Account(ME))
             .apply(ME, &mut account)
             .unwrap();
         assert_eq!(account.stock.ore, 5);
-        transfer(Item::Ore, 2, Party::Account(ME), Party::Npc(Npc::Supplies))
+        transfer(Item::ORE, 2, Party::Account(ME), Party::Npc(Npc::Supplies))
             .apply(ME, &mut account)
             .unwrap();
         assert_eq!(account.stock.ore, 3);
-        transfer(Item::Ore, 9, Party::Site, Party::Account(AccountId(2)))
+        transfer(Item::ORE, 9, Party::Site, Party::Account(AccountId(2)))
             .apply(ME, &mut account)
             .unwrap();
         assert_eq!(account.stock.ore, 3, "another account's transfer");
@@ -233,17 +268,9 @@ mod tests {
         .unwrap_err();
         assert!(matches!(error, TransferError::Insufficient { held: 0, .. }));
         assert_eq!(
-            transfer(Item::Ore, 0, Party::Site, Party::Account(ME)).apply(ME, &mut account),
+            transfer(Item::ORE, 0, Party::Site, Party::Account(ME)).apply(ME, &mut account),
             Err(TransferError::Empty("ore"))
         );
-    }
-
-    #[test]
-    fn supplies_cost_the_posted_price_or_what_is_left() {
-        assert_eq!(supplies_due(100), 40);
-        assert_eq!(supplies_due(40), 40);
-        assert_eq!(supplies_due(25), 25);
-        assert_eq!(supplies_due(0), 0);
     }
 
     #[test]

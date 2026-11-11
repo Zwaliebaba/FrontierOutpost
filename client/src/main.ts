@@ -2,10 +2,22 @@
  * The game client: takes the contract on offer, flies the player's ship through the run with the
  * keyboard, and draws every ship from the server's snapshots with the tactical camera (design §5).
  */
-import { Vector3 } from "three";
+import { Raycaster, Vector2, Vector3 } from "three";
 import { connect, fetchConnectInfo } from "./net/connection";
 import type { Connection } from "./net/connection";
-import type { AccountInfo, OwnStatus, RunSummary, SnapshotEvent } from "./protocol";
+import type {
+  AccountInfo,
+  Catalog,
+  CrewInfo,
+  OwnStatus,
+  RunSummary,
+  SnapshotEvent,
+} from "./protocol";
+import { launchRole, renderCrew } from "./outpost/crew";
+import { loadOutpostModels } from "./outpost/models";
+import { fittingName, launchLines } from "./outpost/options";
+import { OutpostScene } from "./outpost/scene";
+import { renderHome } from "./outpost/ui";
 import type { EntityPose } from "./net/interpolation";
 import { Predictor } from "./game/prediction";
 import { FrameTimer } from "./game/frameTimer";
@@ -28,6 +40,7 @@ import type { Contract, Joined, Scanned } from "./game/contract";
 import {
   SignInRefusedError,
   register,
+  tokenRefused,
   resume,
   signIn,
   storeToken,
@@ -89,7 +102,8 @@ const nav = element("div", "nav");
 const signInPanel = element("div", "signin", "panel");
 const briefing = element("div", "briefing", "panel");
 const summaryPanel = element("div", "summary", "panel");
-document.body.append(nav, signInPanel, briefing, summaryPanel);
+const homePanel = element("div", "home", "panel");
+document.body.append(nav, signInPanel, homePanel, briefing, summaryPanel);
 
 function showStatus(state: "connecting" | "connected" | "closed" | "offline", text: string) {
   status.dataset.state = state;
@@ -176,17 +190,41 @@ async function start(): Promise<void> {
     }, RECONNECT_MS);
   });
   const loaded = await rules;
+  // The outpost's models load beside everything else; the home shows once they are in.
+  loadOutpostModels()
+    .then((models) => {
+      outpost = new OutpostScene(models);
+      homeChanged();
+    })
+    .catch((error: unknown) => {
+      showNotice(`The outpost models did not load: ${String(error)}`);
+    });
   const view = new ExpeditionView(document.body, -1, START_WIDTH);
   play(connection, view, loaded);
   await identify(connection);
 }
 
+/** What the pilot's home holds, the outpost's rules, and the outpost as drawn. */
+let holdings: AccountInfo | null = null;
+let catalog: Catalog | null = null;
+let outpost: OutpostScene | null = null;
+let selectedSocket = "a";
+/** The pilot's crew, if they are in one. */
+let crew: CrewInfo | null = null;
+/** Redraws what depends on the home: set by `play`. */
+let homeChanged = (): void => undefined;
+
 /** Shows what the pilot's home holds. */
 function showAccount(callsign: string, account: AccountInfo): void {
+  holdings = account;
   accountLine.dataset.credits = String(account.credits);
+  accountLine.dataset.ore = String(account.ore);
+  accountLine.dataset.alloy = String(account.alloy);
   accountLine.textContent =
     `${callsign} · ${String(account.credits)} cr · ${String(account.ore)} ore · ` +
-    `${String(account.salvage)} salvage · ${String(account.volatiles)} volatiles`;
+    `${String(account.salvage)} salvage · ${String(account.volatiles)} volatiles · ` +
+    `${String(account.alloy)} alloy · ${String(account.components)} components`;
+  homeChanged();
 }
 
 let callsign = "";
@@ -201,7 +239,10 @@ async function identify(connection: Connection): Promise<void> {
     try {
       signedIn(await resume(connection, token));
       return;
-    } catch {
+    } catch (error) {
+      // Only the server's refusal makes the token worthless. A connection that drops mid-way
+      // keeps it, and the reconnect signs straight back in with it.
+      if (!tokenRefused(error)) throw error;
       storeToken(null);
     }
   }
@@ -317,7 +358,13 @@ function beginLife(connection: Connection, joined: Joined, loaded: Sim): Life {
   return life;
 }
 
-const KIND_NAME = { playerShip: "Pilot", drone: "Drone", raider: "Raider", warden: "Warden" };
+const KIND_NAME = {
+  playerShip: "Pilot",
+  drone: "Drone",
+  raider: "Raider",
+  warden: "Warden",
+  core: "Nest core",
+};
 const TIER_NAME = ["", "I", "II", "III"];
 
 function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
@@ -348,15 +395,49 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const note = element("p");
     note.textContent =
       "Fly out, extract, and dock with at least 10 units to collect the contract. " +
-      "Supplies cost 40 cr a launch, or what you have if less. " +
       "Scanning in the site reveals the rest.";
+    const stake = element("div", undefined, "stake");
+    if (catalog && holdings) {
+      const known = catalog;
+      for (const text of launchLines(known, holdings)) {
+        const p = element("p");
+        p.textContent = text;
+        stake.append(p);
+      }
+      for (const missing of holdings.launch.missing) {
+        if (missing.price === undefined) continue;
+        const buy = element("button");
+        buy.dataset.action = `rebuy:${missing.fitting}`;
+        buy.textContent = `Buy ${fittingName(known, missing.fitting)} · ${String(missing.price)} cr`;
+        buy.disabled = holdings.credits < missing.price;
+        buy.addEventListener("click", () => {
+          send({ type: "buyFitting", fitting: missing.fitting });
+        });
+        stake.append(buy);
+      }
+      stake.dataset.stake = String(holdings.launch.stake);
+    }
+    const crewSection = element("div");
+    renderCrew(crewSection, crew, send);
+    const role = launchRole(crew);
+    if (role.note) {
+      const p = element("p");
+      p.className = "crew-note";
+      p.textContent = role.note;
+      crewSection.append(p);
+    }
     const tiers = element("div", undefined, "tiers");
     for (const tier of offer.tiers) {
       const button = element("button");
       button.dataset.tier = String(tier.tier);
-      button.textContent = `Launch · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} · ${String(tier.payout)} cr`;
-      button.disabled = !tier.open;
+      const following = role.follow === tier.tier;
+      button.textContent = following
+        ? `Follow the host · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)}`
+        : `Launch · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} · ${String(tier.payout)} cr`;
+      if (following) button.dataset.action = "follow";
+      button.disabled = role.launches ? !tier.open : !following;
       if (!tier.open) button.title = "Opens with a tier 2 facility";
+      else if (button.disabled && role.note) button.title = role.note;
       button.addEventListener("click", () => {
         for (const other of tiers.querySelectorAll("button")) other.disabled = true;
         // The run begins when `joined` arrives (handled below, as for a rejoined run).
@@ -370,7 +451,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       });
       tiers.append(button);
     }
-    briefing.append(title, facts, note, tiers);
+    briefing.append(title, facts, note, stake, crewSection, tiers);
   };
 
   const showSummary = (summary: RunSummary) => {
@@ -396,6 +477,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
 
   const beginRun = (joined: Joined) => {
     loaded.setObstacles(joined.obstacles);
+    loaded.setSpeedFactor(joined.speedFactor);
     view.beginRun(joined.shipId, joined.site, joined.obstacles, joined.deposits);
     life?.session.retire();
     life = beginLife(connection, joined, loaded);
@@ -403,6 +485,27 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     selection.release();
     delete briefing.dataset.state;
     briefing.replaceChildren();
+    delete homePanel.dataset.state;
+  };
+
+  // The home: the outpost drawn, the panel of what can be done there, and the stake on the
+  // contract. Redrawn whenever the account or the catalog changes.
+  homeChanged = () => {
+    if (!catalog || !holdings) return;
+    if (outpost) {
+      outpost.apply(holdings);
+      outpost.select(selectedSocket);
+      homePanel.dataset.scene = JSON.stringify(outpost.report());
+    }
+    renderHome(homePanel, catalog, holdings, selectedSocket, {
+      send,
+      select: (socket) => {
+        selectedSocket = socket;
+        homeChanged();
+      },
+    });
+    if (!life) homePanel.dataset.state = "open";
+    if (briefing.dataset.state === "open" && contract) showBriefing(contract);
   };
 
   connection.onMessage((message) => {
@@ -422,6 +525,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         life = null;
         selection.release();
         showSummary(message.summary);
+        homeChanged();
         break;
       case "scanned":
         reveal = message;
@@ -429,6 +533,27 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       case "account":
         showAccount(callsign, message.account);
         break;
+      case "catalog":
+        catalog = message.catalog;
+        homeChanged();
+        break;
+      case "homeRefused":
+      case "crewRefused":
+        showNotice(message.reason);
+        break;
+      case "crew":
+        crew = message.crew ?? null;
+        if (briefing.dataset.state === "open" && contract) showBriefing(contract);
+        break;
+      case "potPaid": {
+        const { pot, share } = message;
+        showNotice(
+          `The crew's pot is paid: ${String(pot.contract + pot.bounty + pot.relay)} cr ` +
+            `(contract ${String(pot.contract)}, bounty ${String(pot.bounty)}, relays ` +
+            `${String(pot.relay)}). Your share: ${String(share)} cr`,
+        );
+        break;
+      }
       case "extractRefused":
         showNotice(refusalText(message.reason));
         break;
@@ -503,6 +628,21 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       canvas.setPointerCapture(event.pointerId);
       return;
     }
+    if (event.button === 0 && !life && outpost) {
+      // At home a click selects the socket under the pointer.
+      const { width, height } = view.viewport;
+      const ray = new Raycaster();
+      ray.setFromCamera(
+        new Vector2((event.clientX / width) * 2 - 1, -(event.clientY / height) * 2 + 1),
+        view.camera,
+      );
+      const socket = outpost.pick(ray);
+      if (socket) {
+        selectedSocket = socket;
+        homeChanged();
+      }
+      return;
+    }
     if (event.button !== 0 || !life) return;
     // Clicking a hostile locks it and centres the view; an ally is only centred on; empty space
     // returns the view to your own ship.
@@ -559,7 +699,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         label:
           POCKET_NAME[pocket.kind] +
           (pocket.locked ? " (locked)" : "") +
-          (reveal?.richPocket === index ? " (rich)" : ""),
+          (reveal?.richPocket === index ? " (rich)" : "") +
+          (reveal?.relays.includes(index) ? " (relay)" : ""),
         x: pocket.x,
         z: pocket.z,
       })),
@@ -625,7 +766,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     }
     const keyTurn = axis(["KeyE"], ["KeyQ"]);
     if (keyTurn !== 0) look = turnLook(look, keyTurn * KEY_TURN_RATE * dt);
-    else if (!dragFrom && !isHome(look, home)) look = settleLook(look, home, dt);
+    // At the outpost the view stays where it is turned (design §5).
+    else if (!dragFrom && current && !isHome(look, home)) look = settleLook(look, home, dt);
 
     let own: EntityPose | undefined;
     if (current) {
@@ -641,6 +783,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         if (event.type === "fired") {
           const from = drawnAt(event.shooter);
           if (from) shots.fire(event.shooter, event.target, from, event.speed);
+        } else if (event.type === "intercepted") {
+          const at = drawnAt(event.target);
+          if (at) shots.intercept(event.shooter, event.target, at);
         } else {
           const at = drawnAt(event.ship);
           if (at) shots.blast(at);
@@ -655,7 +800,11 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const focus = poses.find((pose) => pose.id === selection.focus);
     const centre = focus ?? own;
     if (centre) target.set(centre.x, 0, centre.z);
-    view.render(poses, selection.lock, target, look.pitch, look.yaw, shots);
+    if (!current && outpost && holdings) {
+      view.renderScene(outpost.scene, outpost.centre, look.pitch, look.yaw);
+    } else {
+      view.render(poses, selection.lock, target, look.pitch, look.yaw, shots);
+    }
 
     const locked = poses.find((pose) => pose.id === selection.lock);
     if (locked && own && current) {

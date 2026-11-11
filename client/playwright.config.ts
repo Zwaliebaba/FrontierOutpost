@@ -5,6 +5,10 @@ import { defineConfig } from "@playwright/test";
 const HTTP_PORT = 8181;
 /** A second server whose runs open with no NPCs, for extraction and docking. */
 const QUIET_PORT = 8182;
+/** A third whose new pilots start rich enough to build, for the outpost. */
+const RICH_PORT = 8183;
+/** What every new pilot on the third server starts with besides the usual 100 cr. */
+export const RICH_GRANT = "1000cr,40ore,30alloy,10components";
 const SEED = "29";
 
 const server = (port: number, extra: Record<string, string>) => ({
@@ -47,5 +51,9 @@ export const shared = defineConfig({
 
 export default defineConfig({
   ...shared,
-  webServer: [server(HTTP_PORT, {}), server(QUIET_PORT, { FRONTIER_NPCS: "0" })],
+  webServer: [
+    server(HTTP_PORT, {}),
+    server(QUIET_PORT, { FRONTIER_NPCS: "0" }),
+    server(RICH_PORT, { FRONTIER_NPCS: "0", FRONTIER_GRANT: RICH_GRANT }),
+  ],
 });
