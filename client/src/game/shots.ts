@@ -38,6 +38,12 @@ interface Flying {
 
 const BLAST_SECONDS = 0.6;
 const MAX_LIFE_SECONDS = 3;
+/**
+ * The most bolts drawn at once: as many shots as the server keeps in flight in one instance
+ * (`frontier_sim::combat::MAX_PROJECTILES`). The scene keeps a mesh for the most it has ever
+ * drawn, so this also bounds what a burst of late events can leave behind.
+ */
+export const MAX_BOLTS = 64;
 
 export class Shots {
   #flying: Flying[] = [];
@@ -46,6 +52,8 @@ export class Shots {
   /** A shot from `shooter`, now at `from`, homing on `target` at `speed` m/s. */
   fire(shooter: number, target: number, from: Point, speed: number): void {
     this.#flying.push({ shooter, target, ...from, speed, heading: 0, life: MAX_LIFE_SECONDS });
+    // Beyond what can be in flight, the oldest are leftovers: drop them.
+    if (this.#flying.length > MAX_BOLTS) this.#flying.splice(0, this.#flying.length - MAX_BOLTS);
   }
 
   /** A ship destroyed at `at`. */

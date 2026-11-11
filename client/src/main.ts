@@ -22,6 +22,7 @@ import type { EntityPose } from "./net/interpolation";
 import { Predictor } from "./game/prediction";
 import { FrameTimer } from "./game/frameTimer";
 import { onHidden } from "./game/hidden";
+import { PendingEvents } from "./game/pending";
 import { Selection } from "./game/selection";
 import { Shots } from "./game/shots";
 import { Session } from "./game/session";
@@ -317,7 +318,7 @@ interface Life {
   session: Session;
   predictor: Predictor;
   /** Snapshot events not yet drawn: they are drawn where each ship is drawn. */
-  events: SnapshotEvent[];
+  events: PendingEvents<SnapshotEvent>;
   /** The player's own hull, 0 to 255, from the latest snapshot. */
   hull: number;
   own: OwnStatus | null;
@@ -330,7 +331,7 @@ function beginLife(connection: Connection, joined: Joined, loaded: Sim): Life {
   const life: Life = {
     joined,
     predictor,
-    events: [],
+    events: new PendingEvents(),
     hull: 255,
     own: null,
     deposits: joined.deposits.map((deposit) => deposit.units),
@@ -340,7 +341,7 @@ function beginLife(connection: Connection, joined: Joined, loaded: Sim): Life {
       joined.tickRate,
       () => performance.now(),
       (snapshot) => {
-        life.events.push(...snapshot.events);
+        life.events.push(snapshot.tick, snapshot.events);
         life.own = snapshot.own;
         life.deposits = snapshot.deposits;
         const own = snapshot.entities.find((entity) => entity.id === joined.shipId);
@@ -788,7 +789,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         : undefined;
       poses = own ? [own, ...others] : others;
       const drawnAt = (id: number) => poses.find((pose) => pose.id === id);
-      for (const event of current.events.splice(0)) {
+      for (const event of current.events.take()) {
         if (event.type === "fired") {
           const from = drawnAt(event.shooter);
           if (from) shots.fire(event.shooter, event.target, from, event.speed);

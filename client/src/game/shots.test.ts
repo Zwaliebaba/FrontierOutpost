@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Shots } from "./shots";
+import { MAX_BOLTS, Shots } from "./shots";
 
 describe("shots", () => {
   const positions = new Map([
@@ -22,6 +22,14 @@ describe("shots", () => {
     const [bolt] = shots.bolts;
     expect(bolt?.x).toBeCloseTo(0);
     expect(bolt?.z).toBeCloseTo(1);
+  });
+
+  it("draws no more bolts than the server keeps in flight, and those the newest", () => {
+    const shots = new Shots();
+    for (let shooter = 0; shooter < 500; shooter += 1) shots.fire(shooter, 2, { x: 0, z: 0 }, 20);
+    expect(shots.bolts.length).toBe(MAX_BOLTS);
+    expect(shots.bolts[0]?.shooter).toBe(500 - MAX_BOLTS);
+    expect(shots.bolts.at(-1)?.shooter).toBe(499);
   });
 
   it("disappears on arrival or when its target is gone", () => {
