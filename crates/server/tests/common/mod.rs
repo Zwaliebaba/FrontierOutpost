@@ -215,6 +215,54 @@ impl ServerCertVerifier for Pinned {
     }
 }
 
+/// A client that trusts certificates issued by `root`, as a browser trusts a
+/// public authority: no hash. On IPv4 loopback, as [`pinned_client`].
+pub fn trusting_client(root: CertificateDer<'static>) -> Client {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(root).unwrap();
+    let mut tls = rustls::ClientConfig::builder_with_provider(crypto::default_provider())
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .unwrap()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    tls.alpn_protocols = vec![web_transport_quinn::ALPN.as_bytes().to_vec()];
+    let quic = quinn::crypto::rustls::QuicClientConfig::try_from(tls).unwrap();
+    let endpoint = quinn::Endpoint::client("127.0.0.1:0".parse().unwrap()).unwrap();
+    Client::new(endpoint, quinn::ClientConfig::new(Arc::new(quic)))
+}
+
+/// A new authority, and a certificate it issued for `names`, written as the
+/// PEM files `cert.pem` (the chain) and `key.pem` into `dir`. Returns the files
+/// and the authority's own certificate, for a client to trust.
+pub fn issue_certificate(
+    dir: &std::path::Path,
+    names: &[&str],
+) -> (
+    frontier_server::cert::CertificateFiles,
+    CertificateDer<'static>,
+) {
+    let ca_key = rcgen::KeyPair::generate().unwrap();
+    let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "Test authority");
+    let ca = params.clone().self_signed(&ca_key).unwrap();
+    let key = rcgen::KeyPair::generate().unwrap();
+    let names: Vec<String> = names.iter().map(|name| (*name).to_owned()).collect();
+    let leaf = rcgen::CertificateParams::new(names)
+        .unwrap()
+        .signed_by(&key, &rcgen::Issuer::new(params, &ca_key))
+        .unwrap();
+    let files = frontier_server::cert::CertificateFiles {
+        chain: dir.join("cert.pem"),
+        key: dir.join("key.pem"),
+    };
+    std::fs::write(&files.chain, leaf.pem() + &ca.pem()).unwrap();
+    std::fs::write(&files.key, key.serialize_pem()).unwrap();
+    (files, ca.der().clone())
+}
+
 /// Connects to a server and returns the session with its control stream.
 pub async fn connect_to(url: &url::Url, sha256: [u8; 32]) -> (Session, SendStream, RecvStream) {
     let session = pinned_client(sha256)

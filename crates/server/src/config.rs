@@ -7,6 +7,7 @@ use std::time::Duration;
 use frontier_sim::goods::Good;
 use frontier_sim::site::{COMPACT_SITE, FRONTIER_SITE};
 
+use crate::cert::CertificateFiles;
 use crate::ledger::Item;
 use frontier_sim::skirmish::MAX_NPCS;
 
@@ -43,6 +44,11 @@ pub struct Config {
     /// facilities without flying for them first: `FRONTIER_GRANT`, such as
     /// `1000cr,40ore,20alloy,10components`.
     pub grant: Vec<(Item, u32)>,
+    /// A certificate from an authority for WebTransport, instead of a
+    /// self-signed one: `FRONTIER_TLS_CERT` and `FRONTIER_TLS_KEY`. Browsers
+    /// then dial the origin's name, which the certificate is for, and need no
+    /// hash.
+    pub tls: Option<CertificateFiles>,
 }
 
 /// Reads a grant such as `1000cr,40ore`: amounts, each followed by `cr` or
@@ -79,6 +85,12 @@ pub enum ConfigError {
     /// address would send browsers past it to the unimpaired endpoint.
     #[error("{PUBLIC_WEB_TRANSPORT_ADDR} cannot be combined with the FRONTIER_IMPAIR_* variables")]
     PublicAddressWithImpairment,
+    #[error("{TLS_CERT} and {TLS_KEY} are set together or not at all")]
+    HalfACertificate,
+    /// Browsers dial WebTransport by the origin's name, the one the
+    /// certificate is for, and the page must be secure to use it.
+    #[error("{TLS_CERT} needs {ORIGIN} set to the https:// address the certificate is for")]
+    CertificateWithoutOrigin,
 }
 
 const HTTP_ADDR: &str = "FRONTIER_HTTP_ADDR";
@@ -95,6 +107,8 @@ const NPCS: &str = "FRONTIER_NPCS";
 const DATA: &str = "FRONTIER_DATA";
 const ORIGIN: &str = "FRONTIER_ORIGIN";
 const GRANT: &str = "FRONTIER_GRANT";
+const TLS_CERT: &str = "FRONTIER_TLS_CERT";
+const TLS_KEY: &str = "FRONTIER_TLS_KEY";
 
 /// Reads a whole number from `min` to `max`, if the variable is set.
 fn whole(
@@ -200,11 +214,38 @@ impl Config {
                     value,
                 })?,
             },
+            tls: match (lookup(TLS_CERT), lookup(TLS_KEY)) {
+                (None, None) => None,
+                (Some(chain), Some(key)) => Some(CertificateFiles {
+                    chain: chain.into(),
+                    key: key.into(),
+                }),
+                _ => return Err(ConfigError::HalfACertificate),
+            },
         };
         if config.public_web_transport_addr.is_some() && config.impairment.is_active() {
             return Err(ConfigError::PublicAddressWithImpairment);
         }
+        let secure_origin = config
+            .origin
+            .as_ref()
+            .is_some_and(|origin| origin.scheme() == "https");
+        if config.tls.is_some() && !secure_origin {
+            return Err(ConfigError::CertificateWithoutOrigin);
+        }
         Ok(config)
+    }
+
+    /// The WebTransport URL to give browsers, given the address the server
+    /// (or the relay in front of it) listens on: by the origin's name with a
+    /// certificate from an authority, otherwise by address.
+    #[must_use]
+    pub fn web_transport_url(&self, listening: SocketAddr) -> String {
+        let browser = self.browser_addr(listening);
+        match (&self.tls, self.origin.as_ref().and_then(Url::host_str)) {
+            (Some(_), Some(host)) => format!("https://{host}:{}/", browser.port()),
+            _ => format!("https://{browser}/"),
+        }
     }
 
     /// The WebTransport address to give browsers, given the address the server
@@ -237,6 +278,51 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dials_the_origins_name_with_a_certificate_from_files() {
+        let config = Config::from_lookup(|name| match name {
+            WEB_TRANSPORT_ADDR => Some("0.0.0.0:4443".into()),
+            ORIGIN => Some("https://outpost.example".into()),
+            TLS_CERT => Some("/caddy/outpost.example.crt".into()),
+            TLS_KEY => Some("/caddy/outpost.example.key".into()),
+            _ => None,
+        })
+        .unwrap();
+        assert_eq!(
+            config.tls,
+            Some(CertificateFiles {
+                chain: "/caddy/outpost.example.crt".into(),
+                key: "/caddy/outpost.example.key".into(),
+            })
+        );
+        assert_eq!(
+            config.web_transport_url(config.web_transport_addr),
+            "https://outpost.example:4443/"
+        );
+        // Without one, browsers dial the address, as before.
+        let local = Config::from_lookup(|_| None).unwrap();
+        assert_eq!(
+            local.web_transport_url("127.0.0.1:4443".parse().unwrap()),
+            "https://127.0.0.1:4443/"
+        );
+    }
+
+    #[test]
+    fn refuses_half_a_certificate_or_one_without_a_secure_origin() {
+        let half = Config::from_lookup(|name| (name == TLS_CERT).then(|| "/a.crt".into()));
+        assert!(matches!(half, Err(ConfigError::HalfACertificate)));
+        for origin in [None, Some("http://outpost.example")] {
+            let error = Config::from_lookup(|name| match name {
+                TLS_CERT => Some("/a.crt".into()),
+                TLS_KEY => Some("/a.key".into()),
+                ORIGIN => origin.map(Into::into),
+                _ => None,
+            })
+            .unwrap_err();
+            assert!(matches!(error, ConfigError::CertificateWithoutOrigin));
+        }
+    }
 
     #[test]
     fn defaults_to_loopback() {

@@ -15,12 +15,13 @@ use frontier_protocol::{ClientMessage, ServerMessage, frame};
 use frontier_sim::run::Options;
 use frontier_sim::site::{Capability, FRONTIER_SITE, SiteTemplate, ThreatTier};
 use frontier_sim::world::ShipId;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::sync::{Notify, mpsc};
 use tracing::{debug, info, warn};
 use web_transport_quinn::{RecvStream, SendStream, Server, Session, crypto, quinn};
 
 use crate::auth::{Auth, AuthError, Ceremony};
-use crate::cert::DevCertificate;
+use crate::cert::{CertificateFiles, DevCertificate};
 use crate::crews::{self, Crews};
 use crate::events::{GateEvent, Placed, Recorded, now_ms};
 use crate::expedition::{Expedition, LaunchOrder, PilotEvent};
@@ -153,10 +154,34 @@ pub fn bind_with_idle_timeout(
     cert: &DevCertificate,
     idle_timeout: Duration,
 ) -> Result<Server, BindError> {
+    let endpoint = endpoint(addr, cert.chain.clone(), cert.key.clone_key(), idle_timeout)?;
+    Ok(Server::new(endpoint))
+}
+
+/// The QUIC endpoint for WebTransport, presenting `chain`. Keep a clone of it
+/// to [`renew_certificate`]; `Server::new` takes the other.
+///
+/// # Errors
+/// Fails if the address cannot be bound or the certificate is unusable.
+pub fn endpoint(
+    addr: SocketAddr,
+    chain: Vec<CertificateDer<'static>>,
+    key: PrivateKeyDer<'static>,
+    idle_timeout: Duration,
+) -> Result<quinn::Endpoint, BindError> {
+    let config = server_config(chain, key, idle_timeout)?;
+    Ok(quinn::Endpoint::server(config, addr)?)
+}
+
+fn server_config(
+    chain: Vec<CertificateDer<'static>>,
+    key: PrivateKeyDer<'static>,
+    idle_timeout: Duration,
+) -> Result<quinn::ServerConfig, BindError> {
     let mut tls = rustls::ServerConfig::builder_with_provider(crypto::default_provider())
         .with_protocol_versions(&[&rustls::version::TLS13])?
         .with_no_client_auth()
-        .with_single_cert(cert.chain.clone(), cert.key.clone_key())?;
+        .with_single_cert(chain, key)?;
     tls.alpn_protocols = vec![web_transport_quinn::ALPN.as_bytes().to_vec()];
 
     let mut transport = quinn::TransportConfig::default();
@@ -167,7 +192,50 @@ pub fn bind_with_idle_timeout(
         quinn::crypto::rustls::QuicServerConfig::try_from(tls)?,
     ));
     config.transport_config(Arc::new(transport));
-    Ok(Server::new(quinn::Endpoint::server(config, addr)?))
+    Ok(config)
+}
+
+/// Every `every`, presents the certificate in `files` again if they changed.
+/// Their authority renews it well before it expires (Caddy, a month before);
+/// new sessions get the renewed one, and sessions already open keep theirs.
+/// A renewal that cannot be read is logged and the current one kept.
+pub async fn renew_certificate(
+    endpoint: quinn::Endpoint,
+    files: CertificateFiles,
+    idle_timeout: Duration,
+    every: Duration,
+) {
+    let mut presented = files.modified();
+    loop {
+        tokio::time::sleep(every).await;
+        let modified = files.modified();
+        if modified.is_none() || modified == presented {
+            continue;
+        }
+        // The chain and key are written one after the other: read them only
+        // once neither has changed for a moment, so they are a matching pair.
+        tokio::time::sleep(every.min(Duration::from_secs(5))).await;
+        if files.modified() != modified {
+            continue;
+        }
+        let renewed = files
+            .load()
+            .map_err(|error| error.to_string())
+            .and_then(|loaded| {
+                server_config(loaded.chain, loaded.key, idle_timeout)
+                    .map_err(|error| error.to_string())
+            });
+        match renewed {
+            Ok(config) => {
+                endpoint.set_server_config(Some(config));
+                presented = modified;
+                info!(chain = %files.chain.display(), "WebTransport certificate renewed");
+            }
+            Err(error) => {
+                warn!(%error, "renewed certificate not presented; keeping the current one")
+            }
+        }
+    }
 }
 
 /// The world's saves and the relying party that signs pilots in. Cheap to clone.

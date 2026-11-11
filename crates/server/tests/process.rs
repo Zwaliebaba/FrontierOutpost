@@ -108,6 +108,47 @@ fn tells_browsers_the_public_address_instead_of_the_bound_one() {
     assert!(info.certificate_sha256.is_some());
 }
 
+/// With a certificate from an authority (plan 7.3), browsers dial the origin's
+/// name and get no hash. The server waits for the files: on the Azure host,
+/// Caddy obtains the first certificate after both have started.
+#[test]
+fn waits_for_an_authoritys_certificate_and_names_the_origin() {
+    let dir = data_path().with_extension("tls");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let chain = dir.join("cert.pem");
+    let key = dir.join("key.pem");
+    let issue = {
+        let dir = dir.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs(1));
+            // Written elsewhere and moved in, as an authority's client does,
+            // so the server never reads half a file.
+            let staging = dir.join("staging");
+            std::fs::create_dir_all(&staging).unwrap();
+            let (files, _) = common::issue_certificate(&staging, &["outpost.example"]);
+            std::fs::rename(&files.key, dir.join("key.pem")).unwrap();
+            std::fs::rename(&files.chain, dir.join("cert.pem")).unwrap();
+        })
+    };
+    let server = Server::start(&[
+        ("FRONTIER_ORIGIN", "https://outpost.example"),
+        ("FRONTIER_TLS_CERT", chain.to_str().unwrap()),
+        ("FRONTIER_TLS_KEY", key.to_str().unwrap()),
+    ]);
+    issue.join().unwrap();
+    let info = server.connect_info();
+    assert!(
+        info.web_transport_url
+            .starts_with("https://outpost.example:"),
+        "{}",
+        info.web_transport_url
+    );
+    assert_eq!(info.certificate_sha256, None);
+    drop(server);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn refuses_to_start_with_a_public_address_and_an_impairment() {
     let status = Command::new(env!("CARGO_BIN_EXE_frontier-server"))

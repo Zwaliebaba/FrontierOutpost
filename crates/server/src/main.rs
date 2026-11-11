@@ -1,6 +1,6 @@
 use frontier_protocol::{ConnectInfo, PROTOCOL_VERSION};
 use frontier_server::auth::Auth;
-use frontier_server::cert::DevCertificate;
+use frontier_server::cert::{CertificateFiles, DevCertificate, LoadedCertificate};
 use frontier_server::config::{self, Config};
 use frontier_server::expedition::Expedition;
 use frontier_server::ledger::{Npc, Party, Reason, Transfer};
@@ -96,15 +96,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let stop = shutdown_signal();
-    let host = config.web_transport_addr.ip().to_string();
-    let public_host = config
-        .public_web_transport_addr
-        .map_or_else(|| host.clone(), |addr| addr.ip().to_string());
-    let cert = DevCertificate::generate(
-        &["localhost", &host, &public_host],
-        OffsetDateTime::now_utc(),
-    )?;
-    let server = transport::bind(config.web_transport_addr, &cert)?;
+    // With certificate files from an authority (FRONTIER_TLS_CERT), browsers
+    // trust the certificate and need no hash; otherwise one is generated.
+    let (server, certificate_sha256) = match &config.tls {
+        Some(files) => {
+            let loaded = wait_for_certificate(files).await?;
+            let endpoint = transport::endpoint(
+                config.web_transport_addr,
+                loaded.chain,
+                loaded.key,
+                transport::IDLE_TIMEOUT,
+            )?;
+            tokio::spawn(transport::renew_certificate(
+                endpoint.clone(),
+                files.clone(),
+                transport::IDLE_TIMEOUT,
+                RENEWAL_CHECK,
+            ));
+            info!(chain = %files.chain.display(), "WebTransport certificate from files");
+            (web_transport_quinn::Server::new(endpoint), None)
+        }
+        None => {
+            let host = config.web_transport_addr.ip().to_string();
+            let public_host = config
+                .public_web_transport_addr
+                .map_or_else(|| host.clone(), |addr| addr.ip().to_string());
+            let cert = DevCertificate::generate(
+                &["localhost", &host, &public_host],
+                OffsetDateTime::now_utc(),
+            )?;
+            let server = transport::bind(config.web_transport_addr, &cert)?;
+            (server, Some(cert.sha256_hex()))
+        }
+    };
     let web_transport_addr = server.local_addr()?;
 
     // With an impairment set, browsers connect through the relay instead.
@@ -123,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         web_transport_addr
     };
     let browser_addr = config.browser_addr(listening_addr);
-    if browser_addr.ip().is_unspecified() {
+    if config.tls.is_none() && browser_addr.ip().is_unspecified() {
         warn!(
             %browser_addr,
             "browsers cannot dial an unspecified address: set FRONTIER_PUBLIC_WEBTRANSPORT_ADDR"
@@ -131,8 +155,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let connect = ConnectInfo {
-        web_transport_url: format!("https://{browser_addr}/"),
-        certificate_sha256: Some(cert.sha256_hex()),
+        web_transport_url: config.web_transport_url(listening_addr),
+        certificate_sha256,
     };
     let listener = tokio::net::TcpListener::bind(config.http_addr).await?;
     let http_addr = listener.local_addr()?;
@@ -177,6 +201,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     save_runs(&runs).await;
     info!("stopped");
     Ok(())
+}
+
+/// How often the server looks for a renewed certificate. Caddy renews a month
+/// before expiry, so hourly is ample.
+const RENEWAL_CHECK: Duration = Duration::from_secs(60 * 60);
+
+/// How long a starting server waits for its authority's first certificate:
+/// Caddy obtains it once the name resolves to this host.
+const CERTIFICATE_WAIT: Duration = Duration::from_secs(10 * 60);
+
+/// Waits for the certificate files to appear, then reads them.
+async fn wait_for_certificate(
+    files: &CertificateFiles,
+) -> Result<LoadedCertificate, Box<dyn std::error::Error>> {
+    let started = std::time::Instant::now();
+    let mut said = false;
+    loop {
+        if files.modified().is_some() {
+            return Ok(files.load()?);
+        }
+        if started.elapsed() >= CERTIFICATE_WAIT {
+            return Err(format!(
+                "no certificate at {} after {} minutes",
+                files.chain.display(),
+                CERTIFICATE_WAIT.as_secs() / 60
+            )
+            .into());
+        }
+        if !said {
+            info!(chain = %files.chain.display(), "waiting for the certificate");
+            said = true;
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
 }
 
 /// How long a stopping server gives its instances to save. `docker stop`
