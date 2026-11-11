@@ -5,6 +5,7 @@ import {
   ZOOM_MAX,
   ZOOM_MIN,
   dragLook,
+  glideEase,
   isHome,
   settleLook,
   turnLook,
@@ -68,5 +69,17 @@ describe("greybox look", () => {
     expect(next.yaw).toBeGreaterThan(0);
     expect(next.pitch).toBeLessThan(start.pitch);
     expect(next.pitch).toBeGreaterThan(33);
+  });
+});
+
+describe("glideEase", () => {
+  it("starts and settles gently and stays in range", () => {
+    expect(glideEase(-1)).toBe(0);
+    expect(glideEase(0)).toBe(0);
+    expect(glideEase(0.5)).toBeCloseTo(0.5, 9);
+    expect(glideEase(1)).toBe(1);
+    expect(glideEase(2)).toBe(1);
+    expect(glideEase(0.05)).toBeLessThan(0.05);
+    expect(glideEase(0.95)).toBeGreaterThan(0.95);
   });
 });

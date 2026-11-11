@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Mesh } from "three";
-import type { MeshStandardMaterial } from "three";
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from "three";
 import { ExpeditionScene, SIZE, allegianceOf } from "./scene";
 import type { EntityPose } from "../net/interpolation";
 import type { SiteInfo } from "../protocol";
@@ -89,13 +88,31 @@ describe("ExpeditionScene", () => {
     const rock = world.obstacles[0] as Mesh<never, MeshStandardMaterial> | undefined;
     expect(rock?.material.stencilWrite).toBe(true);
     expect(rock?.material.stencilRef).toBe(STRUCTURE);
-    const dock = world.scene.getObjectByName("dock");
+    const dock = world.scene.getObjectByName("stand-in dock");
     dock?.traverse((node) => {
       if (node instanceof Mesh) {
         expect((node.material as MeshStandardMaterial).stencilRef).toBe(STRUCTURE);
       }
     });
     expect(dock).toBeDefined();
+  });
+
+  it("draws the outpost's station at the dock in place of the stand-in, across runs", () => {
+    const world = new ExpeditionScene(1);
+    const station = new Group();
+    station.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial()));
+    world.setSite(SITE, [], []);
+    world.setStation(station);
+    const standIn = () => world.scene.getObjectByName("stand-in dock");
+    expect(standIn()?.visible).toBe(false);
+    expect(station.parent?.name).toBe("dock");
+    // A new site clears and disposes the last one's meshes, but never the station's.
+    world.setSite(SITE, [], []);
+    expect(standIn()?.visible).toBe(false);
+    expect(station.parent?.name).toBe("dock");
+    world.setStation(null);
+    expect(station.parent).toBeNull();
+    expect(standIn()?.visible).toBe(true);
   });
 
   it("shows a locked pocket by a caged beacon, an open one by a crystal", () => {

@@ -5,10 +5,8 @@
 import {
   BoxGeometry,
   CylinderGeometry,
-  DirectionalLight,
   EdgesGeometry,
   Group,
-  HemisphereLight,
   IcosahedronGeometry,
   LineBasicMaterial,
   LineSegments,
@@ -24,6 +22,7 @@ import type { DepositInfo, EntityKind, Material, ObstacleInfo, SiteInfo } from "
 import type { EntityPose } from "../net/interpolation";
 import type { Shots } from "./shots";
 import { SHIP_HEIGHT } from "../view/hulls";
+import { stationLights } from "../view/lights";
 import { between, createRng } from "../view/rng";
 import {
   BOLT,
@@ -90,16 +89,29 @@ export class ExpeditionScene {
   readonly #site = new Group();
   readonly #pockets: Group[] = [];
   readonly #deposits: DrawnDeposit[] = [];
+  /** Holds the outpost's station at the dock; not cleared with the site, which it outlives. */
+  readonly #dock = new Group();
+  #station: Object3D | null = null;
   #ownShipId: number;
 
   constructor(ownShipId: number) {
     this.#ownShipId = ownShipId;
-    this.scene.add(new HemisphereLight(linear(0.3, 0.48, 1), linear(0.025, 0.038, 0.055), 0.6));
-    const starlight = new DirectionalLight(linear(0.67, 0.77, 1), 2.4);
-    starlight.position.set(-4, 10, 6);
-    this.scene.add(starlight);
+    this.scene.add(...stationLights());
     this.#bracket.visible = false;
-    this.scene.add(this.#bracket, this.#site);
+    this.#dock.name = "dock";
+    this.scene.add(this.#bracket, this.#site, this.#dock);
+  }
+
+  /**
+   * Draws the outpost's station at the dock instead of the stand-in, the same object the outpost
+   * view shows, placed there already (`placeStation`). `null` takes it away again.
+   */
+  setStation(station: Object3D | null): void {
+    if (this.#station) this.#dock.remove(this.#station);
+    this.#station = station;
+    if (station) this.#dock.add(station);
+    const standIn = this.#site.getObjectByName("stand-in dock");
+    if (standIn) standIn.visible = station === null;
   }
 
   /** Drops every ship: a new run's instance numbers its ships afresh. */
@@ -241,7 +253,10 @@ export class ExpeditionScene {
       this.#site.add(rock);
       this.#obstacles.push(rock);
     }
-    this.#site.add(station(site.dockX, site.dockZ));
+    // Drawn while the station's models load, or if they never do.
+    const standIn = station(site.dockX, site.dockZ);
+    standIn.visible = this.#station === null;
+    this.#site.add(standIn);
     for (const pocket of site.pockets) {
       const beacon = pocketBeacon(pocket.locked);
       beacon.position.set(pocket.x, 0, pocket.z);
@@ -315,7 +330,7 @@ function station(x: number, z: number): Group {
   ring.position.y = -1.5;
   group.add(hub, ring);
   group.position.set(x, 0, z);
-  group.name = "dock";
+  group.name = "stand-in dock";
   return group;
 }
 

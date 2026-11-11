@@ -5,8 +5,6 @@
  */
 import {
   Box3,
-  DirectionalLight,
-  HemisphereLight,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -16,10 +14,15 @@ import {
   Vector3,
 } from "three";
 import type { Material, Object3D, Raycaster } from "three";
+import { Group } from "three";
 import type { AccountInfo } from "../protocol";
-import { linear } from "../view/readability";
+import { stationLights } from "../view/lights";
+import { STRUCTURE_STENCIL, linear, placeShip, shipMeshes } from "../view/readability";
+import type { ShipMeshes } from "../view/readability";
 import { facilityKey } from "./models";
 import type { OutpostModels } from "./models";
+import { BERTH, STATION_DROP } from "./placement";
+import type { Placement } from "./placement";
 
 /** How far above its deck a socket's pick target sits, and how large it is, metres. */
 const PICK_LIFT = 1;
@@ -37,6 +40,19 @@ export interface SceneReport {
   facilities: string[];
   /** What is actually in the scene graph under each socket. */
   installed: { socket: string; facility: string; tier: number; powered: boolean }[];
+}
+
+/**
+ * Makes every mesh in `object` a structure (design §5): a ship behind it shows as a silhouette,
+ * as behind an asteroid.
+ */
+function structure(object: Object3D): void {
+  object.traverse((node) => {
+    if (!(node instanceof Mesh)) return;
+    const material = node.material as Material | Material[];
+    for (const m of Array.isArray(material) ? material : [material])
+      Object.assign(m, STRUCTURE_STENCIL);
+  });
 }
 
 /** Every material in `object`, cloned and dimmed, so an unpowered module reads as off. */
@@ -57,8 +73,14 @@ function dim(object: Object3D): void {
 
 export class OutpostScene {
   readonly scene = new Scene();
+  /**
+   * The station with its facilities and, at home, the pilot's ship on the berth: placed where
+   * the run's dock is, it stands in the outpost view or in the expedition, the same object.
+   */
+  readonly root = new Group();
   /** The middle of the station, which the overview orbits. */
   readonly centre = new Vector3();
+  readonly #berthShip: ShipMeshes = shipMeshes("self");
   readonly #models: OutpostModels;
   readonly #placed = new Map<string, Placed>();
   readonly #targets = new Map<string, Mesh>();
@@ -67,17 +89,20 @@ export class OutpostScene {
 
   constructor(models: OutpostModels) {
     this.#models = models;
-    this.scene.add(new HemisphereLight(linear(0.3, 0.48, 1), linear(0.025, 0.038, 0.055), 0.7));
-    const starlight = new DirectionalLight(linear(0.67, 0.77, 1), 2.4);
-    starlight.position.set(-4, 10, 6);
-    this.scene.add(starlight);
-    const warm = new DirectionalLight(linear(1, 0.62, 0.37), 1.2);
-    warm.position.set(6, 4, -5);
-    this.scene.add(warm);
-    this.scene.add(models.station);
-    models.station.updateMatrixWorld(true);
-    new Box3().setFromObject(models.station).getCenter(this.centre);
-    this.centre.y = 0;
+    this.scene.add(...stationLights());
+    structure(models.station);
+    this.root.name = "station";
+    this.root.add(models.station);
+    // The pilot's ship waits on berth 07 between runs, facing out, where the run launches it.
+    placeShip(this.#berthShip, BERTH.x, BERTH.z, Math.PI / 2);
+    for (const mesh of [this.#berthShip.hull, this.#berthShip.silhouette]) {
+      // On the plane wherever the station stands, like the ship the run draws.
+      mesh.position.y += STATION_DROP;
+      mesh.name = "berth ship";
+      this.root.add(mesh);
+    }
+    this.home();
+    this.place({ x: 0, z: 0, yaw: 0, y: 0, heading: 0 });
     const target = new SphereGeometry(PICK_RADIUS, 12, 8);
     const hidden = new MeshBasicMaterial({ visible: false });
     for (const [id, anchor] of models.sockets) {
@@ -116,10 +141,35 @@ export class OutpostScene {
       const object = template.clone();
       object.position.set(0, 0, 0);
       if (!powered) dim(object);
+      structure(object);
       anchor.add(object);
       this.#placed.set(socket.id, { key, powered, object });
     }
     this.scene.updateMatrixWorld(true);
+  }
+
+  /** Stands the station where a run's dock puts it (`placeStation`). */
+  place(placement: Placement): void {
+    this.root.position.set(placement.x, placement.y, placement.z);
+    this.root.rotation.set(0, placement.yaw, 0);
+    this.root.updateMatrixWorld(true);
+    new Box3().setFromObject(this.#models.station).getCenter(this.centre);
+    this.centre.y = 0;
+  }
+
+  /** Brings the station home to the outpost view, with the ship back on its berth. */
+  home(): void {
+    this.scene.add(this.root);
+    this.#berthShip.hull.visible = true;
+    this.#berthShip.silhouette.visible = true;
+    this.scene.updateMatrixWorld(true);
+  }
+
+  /** The station leaves for a run: the ship flies from the berth, drawn from snapshots. */
+  launch(): Object3D {
+    this.#berthShip.hull.visible = false;
+    this.#berthShip.silhouette.visible = false;
+    return this.root;
   }
 
   /** Rings the socket `id`, or none. */
