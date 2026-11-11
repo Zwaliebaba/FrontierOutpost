@@ -5,7 +5,7 @@
 //! It also keeps one session per pilot: signing in again elsewhere tells the
 //! older session to leave, so two pages never fly one ship.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use frontier_sim::world::ShipId;
@@ -52,6 +52,19 @@ impl Runs {
     #[must_use]
     pub fn get(&self, account: AccountId) -> Option<Flying> {
         self.lock().flying.get(&account).cloned()
+    }
+
+    /// Every live instance, once each however many pilots fly in it.
+    #[must_use]
+    pub fn expeditions(&self) -> Vec<Expedition> {
+        let inner = self.lock();
+        let mut seen = HashSet::new();
+        inner
+            .flying
+            .values()
+            .filter(|flying| seen.insert(flying.run.as_str()))
+            .map(|flying| flying.expedition.clone())
+            .collect()
     }
 
     /// Forgets that `account` flies in `run`, if that is still where they are.

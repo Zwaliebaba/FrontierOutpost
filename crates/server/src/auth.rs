@@ -136,6 +136,11 @@ impl Auth {
         store: &Store,
         callsign: &str,
     ) -> Result<(String, Ceremony), AuthError> {
+        // No pilot has a malformed callsign, so one is not looked up, and is
+        // not repeated back: a frame may carry 64 KiB of it.
+        if !valid_callsign(callsign) {
+            return Err(AuthError::BadCallsign(callsign.to_owned()));
+        }
         let account = store
             .find(callsign)?
             .ok_or_else(|| AuthError::NoSuchPilot(callsign.to_owned()))?;
@@ -296,6 +301,16 @@ mod tests {
             auth.begin_sign_in(&store, "Nobody"),
             Err(AuthError::NoSuchPilot(_))
         ));
+    }
+
+    #[test]
+    fn a_sign_in_under_a_malformed_callsign_is_refused_without_repeating_it() {
+        let (auth, store) = (Auth::new(&origin()).unwrap(), Store::in_memory().unwrap());
+        // As long as a frame allows.
+        let huge = "x".repeat(60_000);
+        let refused = auth.begin_sign_in(&store, &huge).err().unwrap();
+        assert!(matches!(refused, AuthError::BadCallsign(_)));
+        assert!(refused.reason().len() < 100, "{}", refused.reason().len());
     }
 
     #[test]

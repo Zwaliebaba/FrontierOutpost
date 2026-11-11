@@ -148,6 +148,56 @@ fn stops_cleanly_on_sigterm() {
     panic!("the server did not stop within 10 s of SIGTERM");
 }
 
+/// The server is ready to be stopped from the moment it says it is open. It
+/// once installed its SIGTERM handler a little after that line, and a signal
+/// in between killed it; here each signal is sent as the line is read.
+#[cfg(unix)]
+#[test]
+fn stops_cleanly_on_a_sigterm_sent_the_moment_it_is_open() {
+    for attempt in 0..10 {
+        let mut server = Command::new(env!("CARGO_BIN_EXE_frontier-server"))
+            .env("FRONTIER_HTTP_ADDR", "127.0.0.1:0")
+            .env("FRONTIER_WEBTRANSPORT_ADDR", "127.0.0.1:0")
+            .env("FRONTIER_DATA", data_path())
+            .env("NO_COLOR", "1")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        // A shell already waiting on its input sends the signal sooner than
+        // starting `kill` would.
+        let mut sender = Command::new("sh")
+            .args([
+                "-c",
+                "read _ && kill -TERM \"$0\"",
+                &server.id().to_string(),
+            ])
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut trigger = sender.stdin.take().unwrap();
+        let stdout = BufReader::new(server.stdout.take().unwrap());
+        let mut opened = false;
+        for line in stdout.lines() {
+            let Ok(line) = line else { break };
+            if !opened && line.contains(" open ") {
+                opened = true;
+                writeln!(trigger).unwrap();
+            }
+        }
+        assert!(
+            opened,
+            "attempt {attempt}: the server never said it was open"
+        );
+        assert!(sender.wait().unwrap().success());
+        let status = server.wait().unwrap();
+        assert!(
+            status.success(),
+            "attempt {attempt}: the server should exit normally: {status}"
+        );
+    }
+}
+
 /// The WebTransport URL and certificate hash a browser would use.
 fn web_transport(server: &Server) -> (url::Url, [u8; 32]) {
     let info = server.connect_info();
@@ -268,6 +318,131 @@ async fn a_run_survives_the_server_being_killed_and_restarted() {
     assert!(
         moved < 30.0,
         "back near where the checkpoint was taken: {moved} m away"
+    );
+    let _ = std::fs::remove_file(&data);
+}
+
+/// A server asked to stop saves every run where it stands. This one is
+/// stopped seconds after launch, in open space: before its first minute and
+/// before any pocket, where the only other checkpoint is the one at launch.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_is_saved_where_it_stands_when_the_server_is_asked_to_stop() {
+    use common::{SoftPasskey, WebauthnAuthenticator, connect_to, hello, origin, read, write};
+    use frontier_protocol::input::{Controls, InputDatagram};
+    use frontier_protocol::snapshot::Snapshot;
+    use frontier_protocol::{ClientMessage, ServerMessage};
+
+    let data = data_path();
+    let env = [
+        ("FRONTIER_SITE", "compact"),
+        ("FRONTIER_SEED", "29"),
+        ("FRONTIER_NPCS", "0"),
+        ("FRONTIER_ORIGIN", "http://localhost:8080"),
+    ];
+    let mut key = SoftPasskey::new(true);
+    let mut server = Server::start_on(&data, &env);
+    let (url, sha256) = web_transport(&server);
+    let (session, mut send, mut recv) = connect_to(&url, sha256).await;
+    hello(&mut send, &mut recv).await;
+    let (callsign, _) = common::sign_up_with(&mut send, &mut recv, &mut key).await;
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::Contract { .. }
+    ));
+    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::Account { .. }
+    ));
+    let ServerMessage::Joined { ship_id, .. } = read(&mut recv).await else {
+        panic!("expected Joined");
+    };
+
+    // Three seconds out from the dock on the main drive.
+    let forward = Controls {
+        thrust: 127,
+        turn: 0,
+        fire: false,
+        cruise: false,
+    };
+    let (mut launched, mut last) = (None, None);
+    for sequence in 0..60_u16 {
+        let input = InputDatagram {
+            sequence,
+            controls: vec![forward; 4],
+        };
+        let _ = session.send_datagram(input.encode().unwrap().into());
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(50);
+        while let Ok(Ok(bytes)) = tokio::time::timeout_at(deadline, session.read_datagram()).await {
+            let snapshot = Snapshot::decode(&bytes).unwrap();
+            last = snapshot.entities.iter().find(|e| e.id == ship_id).copied();
+            launched = launched.or(last);
+        }
+    }
+    let (launched, last) = (launched.unwrap(), last.unwrap());
+    let metres = |a: &frontier_protocol::snapshot::EntityState,
+                  b: &frontier_protocol::snapshot::EntityState| {
+        f32::from(a.x - b.x).hypot(f32::from(a.z - b.z)) / 32.0
+    };
+    assert!(metres(&last, &launched) > 10.0, "well clear of the berth");
+
+    let asked = Command::new("kill")
+        .args(["-TERM", &server.child.id().to_string()])
+        .status()
+        .unwrap();
+    assert!(asked.success());
+    let status = tokio::task::spawn_blocking(move || server.child.wait())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        status.success(),
+        "the server should exit normally: {status}"
+    );
+
+    let server = Server::start_on(&data, &env);
+    let (url, sha256) = web_transport(&server);
+    let (session, mut send, mut recv) = connect_to(&url, sha256).await;
+    hello(&mut send, &mut recv).await;
+    write(&mut send, &ClientMessage::SignIn { callsign }).await;
+    let ServerMessage::PasskeyOptions { options } = read(&mut recv).await else {
+        panic!("expected passkey options");
+    };
+    let credential = key
+        .do_authentication(origin(), serde_json::from_str(&options).unwrap())
+        .unwrap();
+    write(
+        &mut send,
+        &ClientMessage::PasskeyCredential {
+            credential: serde_json::to_string(&credential).unwrap(),
+        },
+    )
+    .await;
+    assert!(matches!(
+        read(&mut recv).await,
+        ServerMessage::SignedIn { .. }
+    ));
+    let ServerMessage::Joined {
+        ship_id: rejoined, ..
+    } = read(&mut recv).await
+    else {
+        panic!("the saved run takes the pilot back");
+    };
+    assert_eq!(rejoined, ship_id);
+    let bytes = tokio::time::timeout(Duration::from_secs(2), session.read_datagram())
+        .await
+        .unwrap()
+        .unwrap();
+    let snapshot = Snapshot::decode(&bytes).unwrap();
+    let me = snapshot.entities.iter().find(|e| e.id == ship_id).unwrap();
+    // The ship coasted on for the moment between the last snapshot read and
+    // the stop; the launch checkpoint would put it back at the berth.
+    assert!(
+        metres(me, &last) < metres(me, &launched),
+        "restored where it stopped, {} m on, not at the berth {} m back",
+        metres(me, &last),
+        metres(me, &launched)
     );
     let _ = std::fs::remove_file(&data);
 }

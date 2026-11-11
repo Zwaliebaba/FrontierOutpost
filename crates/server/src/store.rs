@@ -59,8 +59,8 @@ pub enum StoreError {
     NoSuchAccount(AccountId),
     #[error(transparent)]
     Transfer(#[from] TransferError),
-    #[error("the database lock was poisoned by a panic")]
-    Poisoned,
+    #[error("a store call panicked; its transaction was rolled back")]
+    Panicked,
 }
 
 /// Random bytes from the operating system.
@@ -159,7 +159,7 @@ impl Store {
     /// # Errors
     /// Fails only if the database does.
     pub fn is_empty(&self) -> Result<bool, StoreError> {
-        let connection = self.lock()?;
+        let connection = self.lock();
         let count = |table: &str| -> Result<i64, StoreError> {
             Ok(
                 connection.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
@@ -262,14 +262,37 @@ impl Store {
         &self.world
     }
 
-    pub(crate) fn lock(&self) -> Result<MutexGuard<'_, Connection>, StoreError> {
-        self.connection.lock().map_err(|_| StoreError::Poisoned)
+    /// The connection, also after a panic under the lock. One panic must not
+    /// stop every pilot and every instance from saving: each write of more
+    /// than one statement runs in a transaction, which rolls back as the
+    /// panic unwinds, so the connection is as it was before that call.
+    pub(crate) fn lock(&self) -> MutexGuard<'_, Connection> {
+        self.connection.lock().unwrap_or_else(|poisoned| {
+            self.connection.clear_poison();
+            let connection = poisoned.into_inner();
+            let rolled_back = if connection.is_autocommit() {
+                Ok(())
+            } else {
+                connection.execute_batch("ROLLBACK")
+            };
+            match rolled_back {
+                Ok(()) => tracing::error!(
+                    "a store call panicked under the lock; its transaction was rolled back"
+                ),
+                Err(error) => tracing::error!(
+                    %error,
+                    "a store call panicked under the lock, and its transaction would not roll back"
+                ),
+            }
+            connection
+        })
     }
 
     /// Runs `work` against the store on a blocking thread.
     ///
     /// # Errors
-    /// Whatever `work` returns; a panic in it is reported as a poisoned store.
+    /// Whatever `work` returns; a panic in it fails this call alone, and the
+    /// store carries on.
     pub async fn call<T, F>(&self, work: F) -> Result<T, StoreError>
     where
         T: Send + 'static,
@@ -278,7 +301,7 @@ impl Store {
         let store = self.clone();
         tokio::task::spawn_blocking(move || work(&store))
             .await
-            .map_err(|_| StoreError::Poisoned)?
+            .map_err(|_| StoreError::Panicked)?
     }
 
     /// The same store, granting `grant` to every new pilot on top of the
@@ -312,7 +335,7 @@ impl Store {
             return Err(StoreError::BadCallsign(callsign.to_owned()));
         }
         let document = Account::new(&self.world, callsign).to_json()?;
-        let mut connection = self.lock()?;
+        let mut connection = self.lock();
         let transaction = connection.transaction()?;
         let id = match transaction.execute(
             "INSERT INTO accounts (callsign, document) VALUES (?1, ?2)",
@@ -345,6 +368,8 @@ impl Store {
             .collect();
         apply(&transaction, &self.world, &grants)?;
         transaction.commit()?;
+        drop(connection);
+        announce(&grants);
         Ok(id)
     }
 
@@ -353,7 +378,7 @@ impl Store {
     /// # Errors
     /// Fails only if the database does.
     pub fn passkeys(&self, id: AccountId) -> Result<Vec<String>, StoreError> {
-        let connection = self.lock()?;
+        let connection = self.lock();
         let mut statement =
             connection.prepare("SELECT credential FROM passkeys WHERE account = ?1 ORDER BY id")?;
         let rows = statement.query_map(params![id.0], |row| row.get(0))?;
@@ -365,7 +390,7 @@ impl Store {
     /// # Errors
     /// Fails only if the database does.
     pub fn set_passkeys(&self, id: AccountId, passkeys: &[String]) -> Result<(), StoreError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.lock();
         let transaction = connection.transaction()?;
         transaction.execute("DELETE FROM passkeys WHERE account = ?1", params![id.0])?;
         for passkey in passkeys {
@@ -387,7 +412,7 @@ impl Store {
     pub fn issue_token(&self, id: AccountId) -> Result<String, StoreError> {
         let token = random_hex(32)?;
         let expires = unix_now() + SESSION_SECONDS;
-        let connection = self.lock()?;
+        let connection = self.lock();
         connection.execute(
             "DELETE FROM sessions WHERE expires < ?1",
             params![unix_now()],
@@ -414,7 +439,7 @@ impl Store {
             .iter()
             .map(|seat| (seat.account.0, seat.ship, seat.share))
             .collect();
-        self.lock()?.execute(
+        self.lock().execute(
             "INSERT INTO checkpoints (run, crew, document, saved) VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT (run) DO UPDATE SET crew = ?2, document = ?3, saved = ?4",
             params![run, serde_json::to_string(&crew)?, document, unix_now()],
@@ -427,7 +452,7 @@ impl Store {
     /// # Errors
     /// Fails only if the database does.
     pub fn delete_checkpoint(&self, run: &str) -> Result<(), StoreError> {
-        self.lock()?
+        self.lock()
             .execute("DELETE FROM checkpoints WHERE run = ?1", params![run])?;
         Ok(())
     }
@@ -438,7 +463,7 @@ impl Store {
     /// # Errors
     /// Fails if the database does or a crew list is malformed.
     pub fn checkpoints(&self) -> Result<Vec<SavedRun>, StoreError> {
-        let connection = self.lock()?;
+        let connection = self.lock();
         let mut statement =
             connection.prepare("SELECT run, crew, document FROM checkpoints ORDER BY saved")?;
         let rows = statement.query_map([], |row| {
@@ -451,7 +476,15 @@ impl Store {
         let mut runs = Vec::new();
         for row in rows {
             let (run, crew, document) = row?;
-            let crew: Vec<SeatJson> = serde_json::from_str(&crew)?;
+            // One unreadable row loses one run. It must not stop the server
+            // starting, with every other run and every pilot's home behind it.
+            let crew: Vec<SeatJson> = match serde_json::from_str(&crew) {
+                Ok(crew) => crew,
+                Err(error) => {
+                    tracing::warn!(run, %error, "checkpoint skipped: its crew is unreadable");
+                    continue;
+                }
+            };
             runs.push(SavedRun {
                 run,
                 crew: crew
@@ -481,7 +514,7 @@ impl Store {
     /// Fails only if the database does.
     pub fn resume(&self, token: &str) -> Result<Option<AccountId>, StoreError> {
         Ok(self
-            .lock()?
+            .lock()
             .query_row(
                 "SELECT account FROM sessions WHERE token_hash = ?1 AND expires >= ?2",
                 params![hash(token), unix_now()],
@@ -498,10 +531,12 @@ impl Store {
     /// # Errors
     /// Fails if an account is missing or cannot cover a transfer.
     pub fn transfer(&self, transfers: &[Transfer]) -> Result<(), StoreError> {
-        let mut connection = self.lock()?;
+        let mut connection = self.lock();
         let transaction = connection.transaction()?;
         apply(&transaction, &self.world, transfers)?;
         transaction.commit()?;
+        drop(connection);
+        announce(transfers);
         Ok(())
     }
 
@@ -517,7 +552,7 @@ impl Store {
     where
         F: FnOnce(&mut Account) -> Result<Vec<Transfer>, String>,
     {
-        let mut connection = self.lock()?;
+        let mut connection = self.lock();
         let transaction = connection.transaction()?;
         let mut account = load(&transaction, id, &self.world)?;
         let before = account.clone();
@@ -536,6 +571,8 @@ impl Store {
         }
         let account = load(&transaction, id, &self.world)?;
         transaction.commit()?;
+        drop(connection);
+        announce(&transfers);
         Ok(Ok(account))
     }
 
@@ -545,7 +582,7 @@ impl Store {
     /// # Errors
     /// Fails only if the database does.
     pub fn ledger_balance(&self, id: AccountId) -> Result<Vec<(Item, i64)>, StoreError> {
-        let connection = self.lock()?;
+        let connection = self.lock();
         let party = Party::Account(id).to_string();
         Item::ALL
             .iter()
@@ -568,7 +605,7 @@ impl Store {
     /// Fails only if the database does.
     pub fn find(&self, callsign: &str) -> Result<Option<AccountId>, StoreError> {
         Ok(self
-            .lock()?
+            .lock()
             .query_row(
                 "SELECT id FROM accounts WHERE callsign = ?1",
                 params![callsign],
@@ -583,7 +620,7 @@ impl Store {
     /// # Errors
     /// Fails if there is no such account or its document cannot be read.
     pub fn load(&self, id: AccountId) -> Result<Account, StoreError> {
-        let connection = self.lock()?;
+        let connection = self.lock();
         load(&connection, id, &self.world)
     }
 }
@@ -648,7 +685,19 @@ fn apply(connection: &Connection, world: &str, transfers: &[Transfer]) -> Result
                 transfer.run,
             ],
         )?;
-        // The economy's instrumentation (AGENTS.md section 4.7).
+    }
+    for (id, account) in &accounts {
+        save(connection, *id, account)?;
+    }
+    Ok(())
+}
+
+/// Logs transfers that have been committed: the economy's instrumentation
+/// (AGENTS.md section 4.7). Called once the transaction is in and the lock
+/// released, so a batch that rolled back is never announced, and nothing
+/// that slows the log holds the store.
+fn announce(transfers: &[Transfer]) {
+    for transfer in transfers {
         info!(
             target: "frontier::ledger",
             item = transfer.item.name(),
@@ -660,10 +709,6 @@ fn apply(connection: &Connection, world: &str, transfers: &[Transfer]) -> Result
             "transfer"
         );
     }
-    for (id, account) in &accounts {
-        save(connection, *id, account)?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -681,6 +726,56 @@ mod tests {
         let other = Store::in_memory().unwrap();
         assert_ne!(other.world(), first);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_panic_under_the_lock_rolls_back_and_leaves_the_store_working() {
+        let store = Store::in_memory().unwrap();
+        let id = store.create_account("Vega").unwrap();
+        let spend = |amount| Transfer {
+            item: Item::Credits,
+            amount,
+            from: Party::Account(id),
+            to: Party::Npc(Npc::Market),
+            reason: Reason::Bought,
+            run: None,
+        };
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            store.update(id, |account| {
+                account.hangar.saved.rig = Some("half-written".to_owned());
+                panic!("a bug in a game rule");
+            })
+        }));
+        assert!(panicked.is_err());
+
+        // Nothing of the panicked call was kept, and every later call works,
+        // from this handle and from a clone of it.
+        let account = store.clone().load(id).unwrap();
+        assert_eq!((account.credits, account.hangar.saved.rig), (100, None));
+        let after = store.update(id, |_| Ok(vec![spend(30)])).unwrap().unwrap();
+        assert_eq!(after.credits, 70);
+        assert!(
+            store
+                .ledger_balance(id)
+                .unwrap()
+                .contains(&(Item::Credits, 70))
+        );
+    }
+
+    #[tokio::test]
+    async fn a_panicking_call_fails_alone() {
+        let store = Store::in_memory().unwrap();
+        let id = store.create_account("Vega").unwrap();
+        let failed = store
+            .call(move |store| {
+                store
+                    .update(id, |_| panic!("a bug in a game rule"))
+                    .map(drop)
+            })
+            .await;
+        assert!(matches!(failed, Err(StoreError::Panicked)), "{failed:?}");
+        let loaded = store.call(move |store| store.load(id)).await;
+        assert_eq!(loaded.unwrap().credits, 100);
     }
 
     #[test]
@@ -729,7 +824,6 @@ mod tests {
         let foreign = Account::new("elsewhere", "Vega").to_json().unwrap();
         store
             .lock()
-            .unwrap()
             .execute(
                 "UPDATE accounts SET document = ?1 WHERE id = ?2",
                 params![foreign, id.0],
@@ -916,7 +1010,6 @@ mod tests {
         assert_eq!(store.load(id).unwrap(), before);
         let rows: i64 = store
             .lock()
-            .unwrap()
             .query_row("SELECT COUNT(*) FROM ledger", [], |row| row.get(0))
             .unwrap();
         assert_eq!(rows, 1, "only the starting balance");
@@ -926,7 +1019,7 @@ mod tests {
     fn the_ledger_refuses_to_be_edited() {
         let store = Store::in_memory().unwrap();
         store.create_account("Vega").unwrap();
-        let connection = store.lock().unwrap();
+        let connection = store.lock();
         assert!(
             connection
                 .execute("UPDATE ledger SET amount = 1", [])
@@ -951,7 +1044,6 @@ mod tests {
         assert_eq!(store.resume("not a token").unwrap(), None);
         let stored: String = store
             .lock()
-            .unwrap()
             .query_row("SELECT token_hash FROM sessions", [], |row| row.get(0))
             .unwrap();
         assert_ne!(stored, token, "only the hash is kept");
@@ -964,7 +1056,6 @@ mod tests {
         let token = store.issue_token(id).unwrap();
         store
             .lock()
-            .unwrap()
             .execute("UPDATE sessions SET expires = 0", [])
             .unwrap();
         assert_eq!(store.resume(&token).unwrap(), None);
@@ -997,12 +1088,39 @@ mod tests {
     }
 
     #[test]
+    fn a_checkpoint_with_an_unreadable_crew_is_skipped_and_the_rest_are_kept() {
+        let store = Store::in_memory().unwrap();
+        let pilot = store.create_account("Vega").unwrap();
+        let seat = Seat {
+            account: pilot,
+            ship: 0,
+            share: 100,
+        };
+        store.save_checkpoint("first", &[seat], "{}").unwrap();
+        store
+            .lock()
+            .execute(
+                "INSERT INTO checkpoints (run, crew, document, saved) VALUES ('bad', 'not json', '{}', 0)",
+                [],
+            )
+            .unwrap();
+        store.save_checkpoint("last", &[seat], "{}").unwrap();
+        let runs: Vec<String> = store
+            .checkpoints()
+            .unwrap()
+            .into_iter()
+            .map(|saved| saved.run)
+            .collect();
+        assert_eq!(runs.len(), 2, "{runs:?}");
+        assert!(runs.contains(&"first".to_owned()) && runs.contains(&"last".to_owned()));
+    }
+
+    #[test]
     fn a_checkpoint_saved_before_crews_reads_as_a_solo_seat() {
         let store = Store::in_memory().unwrap();
         let id = store.create_account("Vega").unwrap();
         store
             .lock()
-            .unwrap()
             .execute(
                 "INSERT INTO checkpoints (run, crew, document, saved) VALUES ('old', ?1, '{}', 0)",
                 params![format!("[[{},2]]", id.0)],

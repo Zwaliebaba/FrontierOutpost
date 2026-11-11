@@ -2,9 +2,9 @@
 //! inputs and actions, and sends every pilot a snapshot each tick until the run
 //! ends.
 //!
-//! Each launch starts its own instance (design section 10: an instance ends
-//! when every pilot has docked or been destroyed). Stage 1's first build
-//! launches solo; crews joining one instance arrive in plan M6.
+//! A solo launch, or a crew host's, starts an instance; the host's crew
+//! follows into it within the join window (design sections 2 and 10). When
+//! the instance ends is the run's rule: see `Run::check_end`.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -56,7 +56,9 @@ pub trait SnapshotSink: Send + 'static {
 
 impl SnapshotSink for Session {
     fn send(&self, datagram: Vec<u8>) -> bool {
-        // A full send buffer drops this snapshot; the next one replaces it.
+        // Never waits. quinn queues what the link cannot take yet, and when
+        // its buffer (`transport::DATAGRAM_SEND_BUFFER`, a few snapshots) is
+        // full it drops the oldest: a stalled client gets the newest state.
         match self.send_datagram(datagram.into()) {
             Ok(()) => true,
             Err(error) => {
@@ -170,6 +172,9 @@ enum Command {
         sink: Box<dyn SnapshotSink>,
         events: mpsc::UnboundedSender<PilotEvent>,
         reply: oneshot::Sender<Option<(ShipId, ServerMessage)>>,
+    },
+    Stop {
+        reply: oneshot::Sender<()>,
     },
 }
 
@@ -300,6 +305,17 @@ impl Expedition {
         Some(expedition)
     }
 
+    /// Saves the run as it stands and stops the instance, for a server that
+    /// is shutting down: a restart restores every ship where it was, not
+    /// where its last checkpoint happened to fall (design section 6).
+    /// Resolves once the checkpoint is written, or at once if the run is over.
+    pub async fn stop(&self) {
+        let (reply, stopped) = oneshot::channel();
+        if self.commands.send(Command::Stop { reply }).is_ok() {
+            let _ = stopped.await;
+        }
+    }
+
     /// The pilot's connection dropped: their ship stays exposed for a while,
     /// then is held inert, and their run waits for them (design section 6).
     pub fn disconnect(&self, ship: ShipId) {
@@ -423,6 +439,15 @@ async fn fly(
                     });
                     let _ = reply.send(joined);
                 }
+                Some(Command::Stop { reply }) => {
+                    // Everything settled so far is already banked, at the
+                    // end of the turn that settled it; this saves the rest.
+                    if run.ended().is_none() {
+                        save_checkpoint(&books, &run.checkpoint()).await;
+                    }
+                    let _ = reply.send(());
+                    return;
+                }
                 Some(command) => apply(command, &mut run, &mut pilots),
                 // Every handle is gone: the server is shutting down.
                 None => return,
@@ -504,6 +529,10 @@ fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
         Command::Join { reply, .. } => {
             let _ = reply.send(None);
         }
+        // Stopping saves through the books; the instance loop handles it too.
+        Command::Stop { reply } => {
+            let _ = reply.send(());
+        }
         Command::Reconnect {
             ship,
             sink,
@@ -533,7 +562,8 @@ fn tell(pilots: &HashMap<ShipId, Pilot>, ship: ShipId, message: ServerMessage) {
     }
 }
 
-/// Writes the run's new events to the log and tells pilots what concerns them.
+/// Saves the run's checkpoint with its crew's seats, replacing the last one,
+/// for a restarted server to restore.
 async fn save_checkpoint(books: &Books, checkpoint: &Checkpoint) {
     let document = match serde_json::to_string(checkpoint) {
         Ok(document) => document,
@@ -1149,6 +1179,103 @@ mod tests {
         assert!(folded.contains(&(crate::ledger::Item::ORE, 12)));
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn a_launch_is_checkpointed_before_its_first_minute_or_pocket() {
+        // Supplies are paid at launch: a server stopped seconds later must
+        // still have the run for its pilot.
+        let order = order(None);
+        let store = order.store.clone();
+        let (sink, _snapshots) = channel();
+        let _launched = Expedition::launch(order, sink, mpsc::unbounded_channel().0);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let saved = store.checkpoints().unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].run, "test");
+        assert_eq!(saved[0].crew.len(), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn stopping_saves_the_run_where_it_stands_and_ends_the_instance() {
+        let order = order(None);
+        let (store, runs, pilot) = (order.store.clone(), order.runs.clone(), order.pilot);
+        let (sink, _snapshots) = channel();
+        let launched = Expedition::launch(order, sink, mpsc::unbounded_channel().0);
+        // Short of the first minute, and the pilot enters no pocket.
+        tokio::time::sleep(Duration::from_secs(30)).await;
+        let elapsed = |store: &Store| -> u32 {
+            let saved = store.checkpoints().unwrap();
+            let checkpoint: Checkpoint = serde_json::from_str(&saved[0].document).unwrap();
+            checkpoint.elapsed
+        };
+        assert!(elapsed(&store) < TICKS_PER_SECOND, "only the launch so far");
+
+        launched.expedition.stop().await;
+        assert!(
+            elapsed(&store) >= 29 * TICKS_PER_SECOND,
+            "saved at the stop"
+        );
+        assert!(runs.get(pilot).is_some(), "the run is still the pilot's");
+        // The instance is gone: nothing answers, and a second stop returns.
+        let (sink, _snapshots) = channel();
+        let rejoined = launched
+            .expedition
+            .reconnect(launched.ship, sink, mpsc::unbounded_channel().0)
+            .await;
+        assert!(rejoined.is_none());
+        launched.expedition.stop().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_restored_crew_run_waits_for_the_pilot_still_out() {
+        use crate::store::{SavedRun, Seat};
+        let store = Store::in_memory().unwrap();
+        let (vega, rigel) = (
+            store.create_account("Vega").unwrap(),
+            store.create_account("Rigel").unwrap(),
+        );
+        let site = Site::generate(COMPACT_SITE, 11, ThreatTier::I, 2, &[]);
+        let (mut run, ships) = Run::launch(site, 1, Options::default());
+        let (host, wing) = (ships[0], run.join().unwrap());
+        let mut checkpoint = run.checkpoint();
+        // The host had docked before the server stopped; the wing was out.
+        checkpoint.crew[0].phase = Phase::Docked;
+        let crew = [
+            Seat {
+                account: vega,
+                ship: host.0,
+                share: 50,
+            },
+            Seat {
+                account: rigel,
+                ship: wing.0,
+                share: 50,
+            },
+        ];
+        let document = serde_json::to_string(&checkpoint).unwrap();
+        store.save_checkpoint("run-9", &crew, &document).unwrap();
+        let saved = SavedRun {
+            run: "run-9".into(),
+            crew: crew.to_vec(),
+            document,
+        };
+        let runs = Runs::default();
+        let expedition = Expedition::resume(saved, store.clone(), runs.clone()).unwrap();
+
+        // Well past the first tick, which once ended the instance and
+        // abandoned the wing before they could come back.
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        assert!(runs.get(vega).is_none(), "the host's run was over");
+        assert!(runs.get(rigel).is_some(), "the wing's run waits for them");
+        assert_eq!(store.checkpoints().unwrap().len(), 1);
+        let (sink, snapshots) = channel();
+        let joined = expedition
+            .reconnect(wing, sink, mpsc::unbounded_channel().0)
+            .await;
+        assert!(matches!(joined, Some(ServerMessage::Joined { .. })));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(latest(&snapshots).unwrap().own.phase, RunPhase::AtDock);
+    }
+
     #[tokio::test]
     async fn the_pot_is_paid_to_every_crew_member_by_their_share_and_source() {
         let store = Store::in_memory().unwrap();
@@ -1176,7 +1303,6 @@ mod tests {
         assert_eq!(store.load(rigel).unwrap().credits, 244);
         let reasons: Vec<String> = store
             .lock()
-            .unwrap()
             .prepare("SELECT reason FROM ledger WHERE run = 'run-3' ORDER BY id")
             .unwrap()
             .query_map([], |row| row.get(0))

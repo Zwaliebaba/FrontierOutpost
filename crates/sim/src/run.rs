@@ -364,7 +364,7 @@ impl PilotRun {
         let undocked = self.undocked_at.unwrap_or(end);
         let Some(first) = self.first_pocket_at else {
             return PhaseTimes {
-                approach: end - undocked,
+                approach: end.saturating_sub(undocked),
                 ..PhaseTimes::default()
             };
         };
@@ -452,6 +452,9 @@ pub struct Run {
     launch_cost: u32,
     /// A checkpoint is due at the end of this tick.
     checkpoint_due: bool,
+    /// A connected pilot's run ended since the instance last asked whether
+    /// to end: the one event that may end it over the heads of pilots away.
+    crew_left: bool,
     /// The nest core, while it stands.
     core: Option<ShipId>,
     /// Bounty earned and not yet paid.
@@ -509,7 +512,9 @@ impl Run {
             ended: None,
             events: Vec::new(),
             launch_cost: options.supplies_paid.unwrap_or(LAUNCH_COST),
-            checkpoint_due: false,
+            // A launch is paid for, so it is recoverable from its first tick.
+            checkpoint_due: true,
+            crew_left: false,
             core: None,
             bounty: 0,
             relay: Relay::Idle,
@@ -645,6 +650,8 @@ impl Run {
             pilot: ship,
             credits: self.launch_cost,
         });
+        // They have paid too: the checkpoint must hold their seat.
+        self.checkpoint_due = true;
         Some(ship)
     }
 
@@ -741,11 +748,7 @@ impl Run {
             let Some(state) = self.world.ship(ship).map(|s| s.state) else {
                 continue;
             };
-            let hunted = self
-                .world
-                .ships()
-                .iter()
-                .any(|other| other.kind != ShipKind::Pilot && other.lock == Some(ship));
+            let hunted = self.locked_by_a_hostile(ship);
             let drive = if self.site.contains(state.x, state.z) {
                 Drive::InSite
             } else if pilot.extractor.is_on() {
@@ -761,6 +764,14 @@ impl Run {
                 self.world.set_input(ship, ShipInput { cruise, ..input });
             }
         }
+    }
+
+    /// Whether a hostile holds a lock on `ship`.
+    fn locked_by_a_hostile(&self, ship: ShipId) -> bool {
+        self.world
+            .ships()
+            .iter()
+            .any(|other| other.kind != ShipKind::Pilot && other.lock == Some(ship))
     }
 
     /// Locks a hostile within lock range, or releases the lock. Returns
@@ -847,8 +858,9 @@ impl Run {
         true
     }
 
-    /// Takes a pilot out of the run, as when they disconnect. In Stage 1's
-    /// first build the run is abandoned at once; reconnection is plan M4.
+    /// Takes a pilot out of the run for good: it is abandoned at once. A
+    /// dropped connection goes through [`Run::disconnect`], which keeps the
+    /// run for them to resume.
     pub fn leave(&mut self, ship: ShipId) {
         let Some(index) = self.index(ship) else {
             return;
@@ -920,7 +932,8 @@ impl Run {
             .is_some_and(|pilot| pilot.disconnected_at.is_some() && !pilot.phase.is_over())
     }
 
-    /// Takes a checkpoint if one is due: on entering a pocket and every minute.
+    /// Takes a checkpoint if one is due: at launch, when a pilot joins, on
+    /// entering a pocket, when a pilot's run ends, and every minute.
     pub fn take_checkpoint(&mut self) -> Option<Checkpoint> {
         if !std::mem::take(&mut self.checkpoint_due) || self.ended.is_some() {
             return None;
@@ -1052,6 +1065,7 @@ impl Run {
             events: Vec::new(),
             launch_cost: checkpoint.launch_cost,
             checkpoint_due: false,
+            crew_left: false,
             core: None,
             bounty: checkpoint.bounty,
             relay: checkpoint.relay,
@@ -1082,9 +1096,19 @@ impl Run {
         Some(run)
     }
 
-    /// Notes which pilots fired or were shot at this step, for the exposure timer.
+    /// Notes which pilots fired, were shot at or are locked by a hostile this
+    /// step, for the exposure timer. The lock is read from the world, not
+    /// from the cruise drive's `Hunted` state: that state is never reached
+    /// inside the site, where the drive is simply off, and a pilot locked
+    /// there and not yet fired on could once leave after ten seconds.
     fn note_combat(&mut self) {
         let now = self.elapsed();
+        let hunted: Vec<ShipId> = self
+            .pilots
+            .iter()
+            .map(|pilot| pilot.ship)
+            .filter(|&ship| self.locked_by_a_hostile(ship))
+            .collect();
         let fired: Vec<(ShipId, ShipId)> = self
             .world
             .events()
@@ -1101,7 +1125,7 @@ impl Run {
             if fired
                 .iter()
                 .any(|&(shooter, target)| shooter == pilot.ship || target == pilot.ship)
-                || pilot.drive == Drive::Hunted
+                || hunted.contains(&pilot.ship)
             {
                 pilot.last_combat = Some(now);
             }
@@ -1394,8 +1418,11 @@ impl Run {
         // A handful, so `as` loses nothing.
         let wardens = ((1 + self.site.tier.number()) as f32 * threat).round() as u32;
         let room = MAX_NPCS.saturating_sub(self.npc_count()) as u32;
-        for i in 0..wardens.min(room) {
-            let angle = i as f32 * std::f32::consts::TAU / wardens as f32;
+        // Spaced by how many are placed: where the cap leaves room for fewer
+        // than planned, they still stand all round the core, not to one side.
+        let placed = wardens.min(room);
+        for i in 0..placed {
+            let angle = i as f32 * std::f32::consts::TAU / placed as f32;
             let post = (cx + angle.cos() * 10.0, cz + angle.sin() * 10.0);
             self.world.spawn_npc_at(ShipKind::Warden, post, post);
         }
@@ -1647,7 +1674,11 @@ impl Run {
             ),
             phases,
         };
+        // What a finished pilot brought home is banked now. A checkpoint that
+        // still showed them flying would bank it again after a restart.
+        self.checkpoint_due = true;
         let pilot = &mut self.pilots[index];
+        self.crew_left |= pilot.disconnected_at.is_none();
         pilot.phase = match ending {
             Ending::Docked => Phase::Docked,
             Ending::Destroyed => Phase::Destroyed,
@@ -1678,18 +1709,25 @@ impl Run {
 
     /// Ends the instance when every connected pilot has docked or been
     /// destroyed (design section 10). A disconnected pilot does not hold it
-    /// open for a crew, and their run is abandoned; a run whose every pilot is
-    /// away waits for them until the grace window closes.
+    /// open for a crew: when a connected pilot's run ends and nobody is left
+    /// connected and flying, the instance ends and those away are abandoned.
+    ///
+    /// Going away does not itself end it. The last pilot flying keeps the
+    /// grace window when their connection drops after a crewmate has gone
+    /// home, as a solo pilot does, and so does every pilot a restore marks
+    /// away. The owner chose this on 11 November 2026 (code review, question
+    /// 8.1); the design's sentence does not yet say which of the two it means.
     fn check_end(&mut self) {
         if self.ended.is_some() {
             return;
         }
-        let any_over = self.pilots.iter().any(|pilot| pilot.phase.is_over());
-        let all_settled = self
+        let crew_left = std::mem::take(&mut self.crew_left);
+        let all_over = self.pilots.iter().all(|pilot| pilot.phase.is_over());
+        let nobody_flying = self
             .pilots
             .iter()
             .all(|pilot| pilot.phase.is_over() || pilot.disconnected_at.is_some());
-        if !(any_over && all_settled) {
+        if !(all_over || crew_left && nobody_flying) {
             return;
         }
         for index in 0..self.pilots.len() {
@@ -2444,6 +2482,43 @@ mod tests {
         assert_eq!(wardens, 2, "tier I: two wardens hold the core");
     }
 
+    #[test]
+    fn wardens_the_npc_cap_leaves_room_for_still_stand_all_round_the_core() {
+        // Tier III with four pilots plans nine wardens, and the opening
+        // threat leaves the cap room for fewer.
+        let site = Site::generate(
+            COMPACT_SITE,
+            35,
+            ThreatTier::III,
+            4,
+            &[Capability::BreachNest],
+        );
+        let (run, _) = Run::launch(site, 1, Options::default());
+        let core = run.world.ship(run.core().unwrap()).unwrap().state;
+        let mut bearings: Vec<f32> = run
+            .world
+            .ships()
+            .iter()
+            .filter(|ship| ship.kind == ShipKind::Warden)
+            .map(|ship| (ship.state.z - core.z).atan2(ship.state.x - core.x))
+            .collect();
+        assert!(
+            (2..9).contains(&bearings.len()),
+            "{} wardens: the cap should bind here",
+            bearings.len()
+        );
+        bearings.sort_by(f32::total_cmp);
+        let even = std::f32::consts::TAU / bearings.len() as f32;
+        let last = bearings[bearings.len() - 1];
+        let gaps = bearings
+            .windows(2)
+            .map(|pair| pair[1] - pair[0])
+            .chain([bearings[0] + std::f32::consts::TAU - last]);
+        for gap in gaps {
+            assert!((gap - even).abs() < 0.01, "a gap of {gap} rad, not {even}");
+        }
+    }
+
     /// Ticks to break the core with `ids` fitted, firing from inside its
     /// pocket with the wardens gone.
     fn ticks_to_break_core(ids: &[&str]) -> u32 {
@@ -2691,6 +2766,69 @@ mod tests {
         assert!(!run.reconnect(wing), "nothing left to rejoin");
     }
 
+    /// A crew of two whose host has docked, with the wing still out.
+    fn host_home_wing_out(seed: u32) -> (Run, ShipId, ShipId) {
+        let (mut run, host) = crew_run(seed, 2);
+        let wing = run.join().unwrap();
+        place(&mut run, wing, (-60.0, 0.0));
+        place(&mut run, host, (-60.0, 5.0));
+        run.step();
+        let dock = run.site.template.dock;
+        place(&mut run, host, dock);
+        run.step();
+        assert_eq!(run.status(host).unwrap().phase, Phase::Docked);
+        assert_eq!(run.ended(), None, "the wing is still out");
+        (run, host, wing)
+    }
+
+    #[test]
+    fn the_last_pilot_flying_keeps_the_grace_window_when_their_connection_drops() {
+        let (mut run, _host, wing) = host_home_wing_out(44);
+        run.disconnect(wing);
+        steps(&mut run, EXPOSURE_TICKS + 20);
+        assert_eq!(run.ended(), None, "inside the grace window");
+        assert!(run.reconnect(wing), "the run is theirs to resume");
+        run.step();
+        assert_eq!(run.ended(), None);
+        assert!(!run.status(wing).unwrap().phase.is_over());
+    }
+
+    #[test]
+    fn the_last_pilot_flying_is_abandoned_only_when_the_grace_window_closes() {
+        let (mut run, _host, wing) = host_home_wing_out(45);
+        run.disconnect(wing);
+        steps(&mut run, GRACE_TICKS - 1);
+        assert_eq!(run.ended(), None);
+        steps(&mut run, 2);
+        assert_eq!(run.ended(), Some(EndReason::AllDone));
+        assert!(events(&mut run).iter().any(|event| matches!(
+            event,
+            RunEvent::Abandoned { pilot, .. } if *pilot == wing
+        )));
+    }
+
+    #[test]
+    fn a_restored_crew_run_waits_for_the_pilots_still_out() {
+        // Design section 6: after a server failure each ship is restored at
+        // its last checkpoint. A crewmate already home must not end the
+        // instance before the others can come back.
+        let (run, host, wing) = host_home_wing_out(46);
+        let mut restored = Run::restore(&run.checkpoint()).unwrap();
+        assert!(restored.is_disconnected(wing));
+        steps(&mut restored, 40);
+        assert_eq!(restored.ended(), None, "waiting for the wing");
+        assert!(!restored.reconnect(host), "the host's run is over");
+        assert!(restored.reconnect(wing));
+        steps(&mut restored, 40);
+        assert_eq!(restored.ended(), None);
+        assert!(!restored.status(wing).unwrap().phase.is_over());
+
+        // Nobody returning, the instance ends when the grace window closes.
+        let mut unattended = Run::restore(&run.checkpoint()).unwrap();
+        steps(&mut unattended, GRACE_TICKS + 1);
+        assert_eq!(unattended.ended(), Some(EndReason::AllDone));
+    }
+
     #[test]
     fn a_solo_pilot_away_keeps_the_instance_waiting() {
         let (mut run, ship) = quiet(43);
@@ -2794,6 +2932,40 @@ mod tests {
         }));
     }
 
+    /// A raider out of weapon range of the pilot at `at`, locked on to them.
+    /// Returns the exposure a disconnect then earns, in seconds.
+    fn exposure_when_only_locked(seed: u32, at: (f32, f32)) -> u32 {
+        let (mut run, ship) = quiet(seed);
+        place(&mut run, ship, at);
+        let raider = run.world.spawn_npc(ShipKind::Raider, (at.0 + 45.0, at.1));
+        run.world.set_lock(raider, Some(ship));
+        run.step();
+        assert_eq!(run.world.ship(raider).unwrap().lock, Some(ship));
+        assert!(
+            run.world.events().is_empty(),
+            "no shot yet: only the lock is in play"
+        );
+        run.disconnect(ship);
+        events(&mut run)
+            .into_iter()
+            .find_map(|event| match event {
+                RunEvent::Disconnected { exposed_for, .. } => Some(exposed_for),
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn a_hostile_lock_alone_is_combat_inside_the_site_and_on_the_legs() {
+        // The site's edge is at x = -55: one pilot inside it, one out on the leg.
+        let (inside, outside) = ((20.0, 0.0), (-120.0, 0.0));
+        let (run, _) = quiet(30);
+        assert!(run.site.contains(inside.0, inside.1));
+        assert!(!run.site.contains(outside.0, outside.1));
+        assert_eq!(exposure_when_only_locked(30, inside), 30);
+        assert_eq!(exposure_when_only_locked(30, outside), 30);
+    }
+
     #[test]
     fn the_run_waits_for_a_disconnected_pilot_until_the_grace_window_closes() {
         let (mut run, ship) = quiet(22);
@@ -2813,9 +2985,10 @@ mod tests {
     }
 
     #[test]
-    fn checkpoints_fall_on_entering_a_pocket_and_every_minute() {
+    fn checkpoints_fall_at_launch_on_entering_a_pocket_and_every_minute() {
         let (mut run, ship) = quiet(23);
-        assert!(run.take_checkpoint().is_none());
+        assert!(run.take_checkpoint().is_some(), "at launch");
+        assert!(run.take_checkpoint().is_none(), "taken once");
         at_deposit(&mut run, ship);
         assert!(run.take_checkpoint().is_some(), "entering the ore field");
         assert!(run.take_checkpoint().is_none(), "taken once");
@@ -2876,6 +3049,54 @@ mod tests {
         let wait = next.saturating_sub(restored.elapsed());
         steps(&mut restored, wait + 1);
         assert_eq!(restored.alert(), 1);
+    }
+
+    #[test]
+    fn a_launch_and_a_join_are_each_checkpointed_at_once() {
+        // Supplies are paid at launch; a run stopped before its first minute
+        // or pocket must still be there for its pilots.
+        let (mut run, host) = crew_run(27, 2);
+        let launched = run.take_checkpoint().expect("due at launch");
+        assert_eq!(launched.crew.len(), 1);
+        assert_eq!(launched.crew[0].ship, host.0);
+        assert!(run.take_checkpoint().is_none(), "taken once");
+        let wing = run.join().unwrap();
+        let joined = run.take_checkpoint().expect("due when a pilot joins");
+        assert_eq!(joined.crew.len(), 2);
+        assert_eq!(joined.crew[1].ship, wing.0);
+    }
+
+    #[test]
+    fn a_pilot_whose_run_ends_is_checkpointed_as_home_with_an_empty_hold() {
+        // What they brought is banked when they dock. A later restart must
+        // not find them still flying it.
+        let (mut run, host) = crew_run(28, 2);
+        run.join().unwrap();
+        at_deposit(&mut run, host);
+        run.pilots[0].cargo = [12, 0, 0];
+        run.step();
+        run.take_checkpoint();
+        let dock = run.site.template.dock;
+        place(&mut run, host, dock);
+        run.step();
+        assert_eq!(run.ended(), None, "the wing is still out");
+        let docked = run.take_checkpoint().expect("due when a run ends");
+        assert_eq!(docked.crew[0].phase, Phase::Docked);
+        assert_eq!(docked.crew[0].cargo, [0; 3]);
+
+        let restored = Run::restore(&docked).unwrap();
+        assert!(!restored.is_disconnected(host), "nothing to resume");
+        assert_eq!(restored.status(host).unwrap().cargo, 0);
+    }
+
+    #[test]
+    fn phase_times_do_not_underflow_on_a_checkpoint_from_the_future() {
+        // `undocked_at` is read back from a saved document. One later than
+        // the run's clock must give a zero approach, not a panic.
+        let (mut run, _) = quiet(29);
+        run.pilots[0].undocked_at = Some(run.elapsed() + 10);
+        let times = run.pilots[0].times(run.elapsed());
+        assert_eq!(times.approach, 0);
     }
 
     #[test]

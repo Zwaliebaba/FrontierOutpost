@@ -17,7 +17,9 @@ use common::{
 };
 use frontier_protocol::input::{Controls, InputDatagram, quantize_control};
 use frontier_protocol::snapshot::{EntityKind, Snapshot, SnapshotEvent};
-use frontier_protocol::{ClientMessage, CrewInfo, Ending, PocketKind, ServerMessage, SiteInfo};
+use frontier_protocol::{
+    ClientMessage, CrewInfo, Ending, Good, PocketKind, ServerMessage, SiteInfo,
+};
 use frontier_server::ledger::{Item, Npc, Party, Reason, Transfer};
 use frontier_server::transport;
 use web_transport_quinn::{RecvStream, SendStream, Session};
@@ -256,6 +258,70 @@ async fn a_crew_shares_what_its_outposts_open_and_the_host_sets_the_split() {
     );
     let (crew, _) = wing.crew().await;
     assert_eq!(crew.members[1].share, 30, "every pilot sees the split");
+}
+
+#[tokio::test]
+async fn a_member_back_from_the_hosts_launch_is_not_offered_or_charged_for_it_again() {
+    let settings = transport::Settings {
+        opening_threat: Some(0),
+        ..test_settings()
+    };
+    let (url, sha256) = start_server_with(settings, transport::IDLE_TIMEOUT);
+    let (mut host, _) = arrive(&url, sha256).await;
+    let (mut wing, _) = arrive(&url, sha256).await;
+    crew_up(&mut host, &mut wing).await;
+    host.launch().await;
+    let (crew, _) = wing.crew().await;
+    assert!(crew.launch.is_some(), "the host's launch is offered");
+    wing.say(&ClientMessage::Launch { tier: 1 }).await;
+    let ServerMessage::Account { account } = wing.hear().await else {
+        panic!("expected the account");
+    };
+    assert_eq!(account.credits, 60, "supplies paid once");
+    assert!(matches!(wing.hear().await, ServerMessage::Joined { .. }));
+
+    // Out past the undock radius and straight back, well inside the minute
+    // the host's launch stays open.
+    wing.fly(FORWARD, 100).await;
+    wing.fly(BRAKE, 60).await;
+    let about = Controls {
+        turn: quantize_control(1.0),
+        ..IDLE
+    };
+    wing.fly(about, 26).await;
+    wing.fly(FORWARD, 200).await;
+    assert!(matches!(wing.hear().await, ServerMessage::Account { .. }));
+    let ServerMessage::RunOver { summary } = wing.hear().await else {
+        panic!("expected RunOver");
+    };
+    assert_eq!(summary.ending, Ending::Docked);
+    loop {
+        match wing.hear().await {
+            ServerMessage::Crew { crew } => assert!(
+                crew.is_none_or(|crew| crew.launch.is_none()),
+                "a launch they have flown is not offered again"
+            ),
+            ServerMessage::Contract { .. } => break,
+            _ => {}
+        }
+    }
+
+    // Pressing "Follow the host" all the same once took 40 cr, then 20, for
+    // a seat the instance refused.
+    wing.say(&ClientMessage::Launch { tier: 1 }).await;
+    assert!(matches!(
+        wing.hear().await,
+        ServerMessage::LaunchRefused { .. }
+    ));
+    wing.say(&ClientMessage::Buy {
+        good: Good::Ore,
+        amount: 1,
+    })
+    .await;
+    let ServerMessage::Account { account } = wing.hear().await else {
+        panic!("expected the account");
+    };
+    assert_eq!(account.credits, 60 - 16, "nothing taken by the refusal");
 }
 
 #[tokio::test]

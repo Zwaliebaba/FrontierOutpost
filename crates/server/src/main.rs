@@ -3,18 +3,24 @@ use frontier_server::auth::Auth;
 use frontier_server::cert::DevCertificate;
 use frontier_server::config::Config;
 use frontier_server::expedition::Expedition;
+use frontier_server::log::Lines;
 use frontier_server::runs::Runs;
 use frontier_server::store::Store;
 use frontier_server::transport::Identity;
 use frontier_server::{http, relay, transport};
+use std::time::Duration;
 use time::OffsetDateTime;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Logging never waits for whoever reads standard output: see `log`.
+    let log = Lines::to(std::io::stdout())?;
+    let _flushed = log.flush_on_drop();
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with_writer(log)
         .init();
 
     let config = Config::from_env()?;
@@ -30,6 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(format!("unknown command {other:?}; the only one is wipe").into());
         }
     }
+    let stop = shutdown_signal();
     let host = config.web_transport_addr.ip().to_string();
     let public_host = config
         .public_web_transport_addr
@@ -101,34 +108,69 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Identity {
             store,
             auth,
-            runs,
+            runs: runs.clone(),
             crews: frontier_server::crews::Crews::default(),
         },
     ));
     axum::serve(listener, http::router(connect, &config.client_dir))
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(stop)
         .await?;
+    save_runs(&runs).await;
     info!("stopped");
     Ok(())
 }
 
-/// Resolves when the process is asked to stop: Ctrl+C, or on Unix SIGTERM,
-/// which is how `docker stop` asks. A process running as a container's PID 1
-/// ignores SIGTERM unless it handles it, and is killed after a timeout.
-async fn shutdown_signal() {
-    #[cfg(unix)]
-    {
-        use tokio::signal::unix::{SignalKind, signal};
-        match signal(SignalKind::terminate()) {
-            Ok(mut terminate) => {
-                tokio::select! {
-                    _ = tokio::signal::ctrl_c() => {}
-                    _ = terminate.recv() => {}
-                }
-                return;
-            }
-            Err(error) => warn!(%error, "cannot listen for SIGTERM; only Ctrl+C stops the server"),
+/// How long a stopping server gives its instances to save. `docker stop`
+/// kills the process ten seconds after asking.
+const STOP_GRACE: Duration = Duration::from_secs(5);
+
+/// Checkpoints every live run before the process ends, so a restart restores
+/// each ship where it was when the server stopped (design section 6).
+async fn save_runs(runs: &Runs) {
+    let instances = runs.expeditions();
+    let count = instances.len();
+    let saved = tokio::time::timeout(STOP_GRACE, async {
+        for instance in instances {
+            instance.stop().await;
         }
+    })
+    .await;
+    match saved {
+        Ok(()) => info!(runs = count, "runs saved"),
+        Err(_) => warn!(
+            runs = count,
+            "not every run was saved in time; the rest restart from their last checkpoint"
+        ),
     }
-    let _ = tokio::signal::ctrl_c().await;
+}
+
+/// Starts listening for the request to stop, and returns what resolves when
+/// it comes: Ctrl+C, or on Unix SIGTERM, which is how `docker stop` asks. A
+/// process running as a container's PID 1 ignores SIGTERM unless it handles
+/// it, and is killed after a timeout.
+///
+/// The SIGTERM handler is installed here, not when the result is first
+/// awaited. Until it is, the signal kills the process outright, so this is
+/// called before the server says it is open.
+fn shutdown_signal() -> impl Future<Output = ()> {
+    #[cfg(unix)]
+    let terminate = {
+        use tokio::signal::unix::{SignalKind, signal};
+        signal(SignalKind::terminate())
+            .inspect_err(
+                |error| warn!(%error, "cannot listen for SIGTERM; only Ctrl+C stops the server"),
+            )
+            .ok()
+    };
+    async move {
+        #[cfg(unix)]
+        if let Some(mut terminate) = terminate {
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {}
+                _ = terminate.recv() => {}
+            }
+            return;
+        }
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }

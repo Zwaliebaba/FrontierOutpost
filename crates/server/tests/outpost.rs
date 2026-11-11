@@ -173,3 +173,57 @@ async fn trading_pays_posted_prices_and_refusals_change_nothing() {
     let id = store.find(&callsign).unwrap().unwrap();
     assert_eq!(store.load(id).unwrap().credits, 150);
 }
+
+#[tokio::test]
+async fn counts_too_large_to_price_are_refused_and_the_home_carries_on() {
+    let (url, sha256, store) = start_server_with_store();
+    let (_session, mut send, mut recv) = connect_to(&url, sha256).await;
+    hello(&mut send, &mut recv).await;
+    let (callsign, _token) = sign_up(&mut send, &mut recv).await;
+    read(&mut recv).await;
+    let id = store.find(&callsign).unwrap().unwrap();
+    let before = store.load(id).unwrap();
+
+    // Ore sells at 16: unchecked, 2^28 of it cost nothing in a release build
+    // and panicked under the store's lock in a debug one.
+    let huge = [
+        ClientMessage::Buy {
+            good: Good::Ore,
+            amount: 1 << 28,
+        },
+        ClientMessage::Buy {
+            good: Good::Ore,
+            amount: u32::MAX,
+        },
+        ClientMessage::Process {
+            recipe: "alloy".into(),
+            batches: 1 << 31,
+        },
+        ClientMessage::Unqueue {
+            recipe: "alloy".into(),
+            batches: u32::MAX,
+        },
+    ];
+    for message in huge {
+        write(&mut send, &message).await;
+        assert!(
+            matches!(read(&mut recv).await, ServerMessage::HomeRefused { .. }),
+            "{message:?}"
+        );
+    }
+    assert_eq!(store.load(id).unwrap(), before);
+
+    // The session and the store are both still there.
+    write(
+        &mut send,
+        &ClientMessage::Buy {
+            good: Good::Ore,
+            amount: 1,
+        },
+    )
+    .await;
+    let ServerMessage::Account { account } = read(&mut recv).await else {
+        panic!("expected the account");
+    };
+    assert_eq!((account.credits, account.ore), (before.credits - 16, 1));
+}

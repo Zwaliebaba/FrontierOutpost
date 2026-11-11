@@ -66,6 +66,9 @@ struct Crew {
     /// The contract on offer to the crew: the host's.
     seed: u32,
     launch: Option<Launch>,
+    /// Who is already in the launched instance, the host first. A seat is
+    /// taken once: nobody is offered the same launch twice.
+    aboard: Vec<AccountId>,
 }
 
 /// A crew as one member sees it.
@@ -157,6 +160,7 @@ impl Crews {
                 split: equal_shares(1),
                 seed,
                 launch: None,
+                aboard: Vec::new(),
             },
         );
         inner.member_of.insert(account, code.clone());
@@ -285,6 +289,7 @@ impl Crews {
         {
             crew.seed = seed;
             crew.launch = None;
+            crew.aboard.clear();
         }
     }
 
@@ -296,15 +301,34 @@ impl Crews {
         };
         if let Some(crew) = inner.crews.get_mut(&code) {
             crew.launch = Some(launch);
+            crew.aboard = vec![account];
         }
     }
 
-    /// The host's launch that `account` may still follow.
+    /// Records that `account` has followed the host into the instance.
+    pub fn followed(&self, account: AccountId) {
+        let mut inner = self.lock();
+        let Some(code) = inner.member_of.get(&account).cloned() else {
+            return;
+        };
+        if let Some(crew) = inner.crews.get_mut(&code)
+            && !crew.aboard.contains(&account)
+        {
+            crew.aboard.push(account);
+        }
+    }
+
+    /// The host's launch that `account` may still follow: one inside its
+    /// window that they are not already in, or back from.
     #[must_use]
     pub fn open_launch(&self, account: AccountId) -> Option<Launch> {
         let inner = self.lock();
         let code = inner.member_of.get(&account)?;
-        let launch = inner.crews.get(code)?.launch.clone()?;
+        let crew = inner.crews.get(code)?;
+        if crew.aboard.contains(&account) {
+            return None;
+        }
+        let launch = crew.launch.clone()?;
         launch.seconds_left(Instant::now())?;
         Some(launch)
     }
@@ -329,6 +353,7 @@ impl Crews {
             launch: crew
                 .launch
                 .as_ref()
+                .filter(|_| !crew.aboard.contains(&account))
                 .and_then(|launch| Some((launch.tier, launch.seconds_left(now)?))),
         })
     }

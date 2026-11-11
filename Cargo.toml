@@ -50,3 +50,10 @@ dbg_macro = "warn"
 todo = "warn"
 unimplemented = "warn"
 unwrap_used = "warn"
+
+# The server does arithmetic on numbers a client chose. A release build that
+# wraps where a debug build panics hides the bug from every test and can mint
+# currency, so the shipped profile checks too. Measured cost on the caps
+# benchmark: none.
+[profile.release]
+overflow-checks = true

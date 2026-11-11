@@ -20,6 +20,10 @@ export const INTERPOLATION_DELAY_MS = 100;
 /** How far past the newest snapshot an entity is extrapolated before it stops. */
 const MAX_EXTRAPOLATION_MS = 150;
 const KEEP_MS = 1_000;
+/** How long a snapshot counts towards the estimate of the clock offset. */
+const OFFSET_WINDOW_MS = 5_000;
+/** How fast the offset may rise, as a share of the time passing: drawn time never runs backwards. */
+const OFFSET_RISE = 0.1;
 
 interface Received {
   snapshot: Snapshot;
@@ -32,10 +36,19 @@ export class SnapshotBuffer {
   readonly #delayMs: number;
   #received: Received[] = [];
   /**
-   * Local time minus server time, from the fastest snapshot seen. Delay only ever adds to it,
-   * so the smallest observed value is the closest to the true offset.
+   * Local time minus server time, from the fastest snapshot seen lately. Delay only ever adds
+   * to it, so the smallest observed value is the closest to the true offset.
+   *
+   * Lately, not ever: the true offset can rise. A server that skips a tick after a stall does
+   * not make it up, so its tick clock falls 50 ms behind for good, and a client clock a little
+   * fast does the same slowly. An all-time minimum then draws ever closer to the newest
+   * snapshot, and past it, for the rest of the run. So the minimum is taken over a window, and
+   * the offset follows it down at once and up gradually.
    */
   #offset = Number.POSITIVE_INFINITY;
+  /** Local-minus-server time of each recent snapshot, with when it arrived. */
+  #offsets: { at: number; offset: number }[] = [];
+  #lastArrival = 0;
 
   constructor(tickRate: number, delayMs = INTERPOLATION_DELAY_MS) {
     this.#tickMs = 1_000 / tickRate;
@@ -45,13 +58,28 @@ export class SnapshotBuffer {
   /** Records a snapshot that arrived at local time `arrivedMs`. */
   push(snapshot: Snapshot, arrivedMs: number): void {
     const serverMs = snapshot.tick * this.#tickMs;
-    this.#offset = Math.min(this.#offset, arrivedMs - serverMs);
+    this.#follow(arrivedMs - serverMs, arrivedMs);
     const newest = this.#received.at(-1);
     // Datagrams can arrive out of order; an older snapshot adds nothing.
     if (newest && snapshot.tick <= newest.snapshot.tick) return;
     this.#received.push({ snapshot, at: serverMs });
     const oldest = serverMs - KEEP_MS;
     while ((this.#received[1]?.at ?? Number.POSITIVE_INFINITY) < oldest) this.#received.shift();
+  }
+
+  /** Moves the offset towards the smallest seen in the window ending at `arrivedMs`. */
+  #follow(offset: number, arrivedMs: number): void {
+    this.#offsets.push({ at: arrivedMs, offset });
+    while ((this.#offsets[0]?.at ?? arrivedMs) < arrivedMs - OFFSET_WINDOW_MS)
+      this.#offsets.shift();
+    const smallest = this.#offsets.reduce((least, entry) => Math.min(least, entry.offset), offset);
+    if (smallest <= this.#offset) {
+      this.#offset = smallest;
+    } else {
+      const passed = Math.max(0, arrivedMs - this.#lastArrival);
+      this.#offset = Math.min(smallest, this.#offset + passed * OFFSET_RISE);
+    }
+    this.#lastArrival = arrivedMs;
   }
 
   /** The newest snapshot received, if any. */

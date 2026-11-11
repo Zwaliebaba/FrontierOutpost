@@ -20,7 +20,7 @@ pub struct Ship {
     /// What it is flying with this tick: a pilot's controls, or an NPC's choice.
     pub input: ShipInput,
     pub hull: f32,
-    /// Cargo units carried. Always 0 until extraction (plan M3).
+    /// Cargo units carried, as the run last set them.
     pub cargo: u32,
     /// Where an NPC patrols, or a warden's post. A pilot's spawn point.
     pub home: (f32, f32),
