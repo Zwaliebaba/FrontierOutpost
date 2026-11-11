@@ -16,6 +16,7 @@ pub mod http;
 pub mod input_queue;
 pub mod ledger;
 pub mod relay;
+pub mod report;
 pub mod runs;
 pub mod store;
 pub mod transport;

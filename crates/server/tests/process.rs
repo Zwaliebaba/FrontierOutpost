@@ -307,6 +307,52 @@ fn the_wipe_command_leaves_an_empty_world() {
     let _ = std::fs::remove_file(&data);
 }
 
+/// Plan work item 7.2: `frontier-server report` prints the gates from the saves
+/// and the greybox's downloaded results.
+#[test]
+fn the_report_command_prints_the_gates() {
+    use frontier_server::events::{GateEvent, Recorded};
+    use frontier_server::store::Store;
+    let data = data_path();
+    let store = Store::open(&data).unwrap();
+    let pilot = store.create_account("Vega").unwrap();
+    store
+        .record(&[Recorded {
+            at: 60_000,
+            account: pilot.0,
+            run: None,
+            event: GateEvent::SessionEnded { millis: 60_000 },
+        }])
+        .unwrap();
+    drop(store);
+    let greybox = data.with_extension("greybox.json");
+    std::fs::write(
+        &greybox,
+        r#"{"config":{"vision":"grey"},"records":[{"kind":"acquire","ms":700,"outcome":"correct"}]}"#,
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_frontier-server"))
+        .arg("report")
+        .arg(&greybox)
+        .env("FRONTIER_DATA", &data)
+        .stderr(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let report = String::from_utf8(output.stdout).unwrap();
+    assert!(report.starts_with("# Stage 1 gate report"), "{report}");
+    assert!(report.contains("1 play sessions"), "{report}");
+    assert!(
+        report.contains(
+            "| Median time to select a named hostile (grey vision) | 0.7 s | ≤ 1.0 s | yes |"
+        ),
+        "{report}"
+    );
+    let _ = std::fs::remove_file(&data);
+    let _ = std::fs::remove_file(&greybox);
+}
+
 #[test]
 fn refuses_an_unknown_command() {
     let status = Command::new(env!("CARGO_BIN_EXE_frontier-server"))

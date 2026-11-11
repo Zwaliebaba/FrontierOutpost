@@ -173,4 +173,14 @@ async fn a_session_records_sessions_launches_choices_reconfigurations_and_ending
         _ => None,
     });
     assert_eq!(ending, Some("docked"));
+
+    // And the report computes every gate from them.
+    let report = frontier_server::report::compute(&store.events().unwrap(), &[]);
+    assert_eq!((report.pilots, report.runs, report.sessions), (1, 1, 1));
+    let reconfigured = report.gates[0]
+        .measures
+        .iter()
+        .find(|m| m.name.starts_with("Pilots who reconfigure"))
+        .unwrap();
+    assert_eq!(reconfigured.met(), Some(true));
 }

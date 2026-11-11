@@ -6,7 +6,7 @@ use frontier_server::expedition::Expedition;
 use frontier_server::runs::Runs;
 use frontier_server::store::Store;
 use frontier_server::transport::Identity;
-use frontier_server::{http, relay, transport};
+use frontier_server::{http, relay, report, transport};
 use time::OffsetDateTime;
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
@@ -19,6 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = Config::from_env()?;
     // `frontier-server wipe`: Stage 1 data may be wiped between builds.
+    // `frontier-server report`: the Stage 1 gate report from the saves.
     match std::env::args().nth(1).as_deref() {
         None => {}
         Some("wipe") => {
@@ -26,8 +27,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!(data = %config.data_path.display(), world = store.world(), "wiped: an empty world");
             return Ok(());
         }
+        Some("report") => {
+            // `frontier-server report [greybox.json ...]`: the Stage 1 gates.
+            let store = Store::open(&config.data_path)?;
+            let greybox = std::env::args()
+                .skip(2)
+                .map(
+                    |path| -> Result<report::Greybox, Box<dyn std::error::Error>> {
+                        let text = std::fs::read_to_string(&path)
+                            .map_err(|error| format!("{path}: {error}"))?;
+                        Ok(serde_json::from_str(&text)
+                            .map_err(|error| format!("{path}: {error}"))?)
+                    },
+                )
+                .collect::<Result<Vec<_>, _>>()?;
+            print!("{}", report::compute(&store.events()?, &greybox).markdown());
+            return Ok(());
+        }
         Some(other) => {
-            return Err(format!("unknown command {other:?}; the only one is wipe").into());
+            return Err(
+                format!("unknown command {other:?}; the commands are wipe and report").into(),
+            );
         }
     }
     let host = config.web_transport_addr.ip().to_string();
