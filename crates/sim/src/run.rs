@@ -748,11 +748,7 @@ impl Run {
             let Some(state) = self.world.ship(ship).map(|s| s.state) else {
                 continue;
             };
-            let hunted = self
-                .world
-                .ships()
-                .iter()
-                .any(|other| other.kind != ShipKind::Pilot && other.lock == Some(ship));
+            let hunted = self.locked_by_a_hostile(ship);
             let drive = if self.site.contains(state.x, state.z) {
                 Drive::InSite
             } else if pilot.extractor.is_on() {
@@ -768,6 +764,14 @@ impl Run {
                 self.world.set_input(ship, ShipInput { cruise, ..input });
             }
         }
+    }
+
+    /// Whether a hostile holds a lock on `ship`.
+    fn locked_by_a_hostile(&self, ship: ShipId) -> bool {
+        self.world
+            .ships()
+            .iter()
+            .any(|other| other.kind != ShipKind::Pilot && other.lock == Some(ship))
     }
 
     /// Locks a hostile within lock range, or releases the lock. Returns
@@ -1091,9 +1095,19 @@ impl Run {
         Some(run)
     }
 
-    /// Notes which pilots fired or were shot at this step, for the exposure timer.
+    /// Notes which pilots fired, were shot at or are locked by a hostile this
+    /// step, for the exposure timer. The lock is read from the world, not
+    /// from the cruise drive's `Hunted` state: that state is never reached
+    /// inside the site, where the drive is simply off, and a pilot locked
+    /// there and not yet fired on could once leave after ten seconds.
     fn note_combat(&mut self) {
         let now = self.elapsed();
+        let hunted: Vec<ShipId> = self
+            .pilots
+            .iter()
+            .map(|pilot| pilot.ship)
+            .filter(|&ship| self.locked_by_a_hostile(ship))
+            .collect();
         let fired: Vec<(ShipId, ShipId)> = self
             .world
             .events()
@@ -1110,7 +1124,7 @@ impl Run {
             if fired
                 .iter()
                 .any(|&(shooter, target)| shooter == pilot.ship || target == pilot.ship)
-                || pilot.drive == Drive::Hunted
+                || hunted.contains(&pilot.ship)
             {
                 pilot.last_combat = Some(now);
             }
@@ -2875,6 +2889,40 @@ mod tests {
             pilot: ship,
             exposed_for: 30
         }));
+    }
+
+    /// A raider out of weapon range of the pilot at `at`, locked on to them.
+    /// Returns the exposure a disconnect then earns, in seconds.
+    fn exposure_when_only_locked(seed: u32, at: (f32, f32)) -> u32 {
+        let (mut run, ship) = quiet(seed);
+        place(&mut run, ship, at);
+        let raider = run.world.spawn_npc(ShipKind::Raider, (at.0 + 45.0, at.1));
+        run.world.set_lock(raider, Some(ship));
+        run.step();
+        assert_eq!(run.world.ship(raider).unwrap().lock, Some(ship));
+        assert!(
+            run.world.events().is_empty(),
+            "no shot yet: only the lock is in play"
+        );
+        run.disconnect(ship);
+        events(&mut run)
+            .into_iter()
+            .find_map(|event| match event {
+                RunEvent::Disconnected { exposed_for, .. } => Some(exposed_for),
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn a_hostile_lock_alone_is_combat_inside_the_site_and_on_the_legs() {
+        // The site's edge is at x = -55: one pilot inside it, one out on the leg.
+        let (inside, outside) = ((20.0, 0.0), (-120.0, 0.0));
+        let (run, _) = quiet(30);
+        assert!(run.site.contains(inside.0, inside.1));
+        assert!(!run.site.contains(outside.0, outside.1));
+        assert_eq!(exposure_when_only_locked(30, inside), 30);
+        assert_eq!(exposure_when_only_locked(30, outside), 30);
     }
 
     #[test]
