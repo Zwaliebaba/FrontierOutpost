@@ -31,6 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err(format!("unknown command {other:?}; the only one is wipe").into());
         }
     }
+    let stop = shutdown_signal();
     let host = config.web_transport_addr.ip().to_string();
     let public_host = config
         .public_web_transport_addr
@@ -107,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     ));
     axum::serve(listener, http::router(connect, &config.client_dir))
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(stop)
         .await?;
     save_runs(&runs).await;
     info!("stopped");
@@ -138,23 +139,33 @@ async fn save_runs(runs: &Runs) {
     }
 }
 
-/// Resolves when the process is asked to stop: Ctrl+C, or on Unix SIGTERM,
-/// which is how `docker stop` asks. A process running as a container's PID 1
-/// ignores SIGTERM unless it handles it, and is killed after a timeout.
-async fn shutdown_signal() {
+/// Starts listening for the request to stop, and returns what resolves when
+/// it comes: Ctrl+C, or on Unix SIGTERM, which is how `docker stop` asks. A
+/// process running as a container's PID 1 ignores SIGTERM unless it handles
+/// it, and is killed after a timeout.
+///
+/// The SIGTERM handler is installed here, not when the result is first
+/// awaited. Until it is, the signal kills the process outright, so this is
+/// called before the server says it is open.
+fn shutdown_signal() -> impl Future<Output = ()> {
     #[cfg(unix)]
-    {
+    let terminate = {
         use tokio::signal::unix::{SignalKind, signal};
-        match signal(SignalKind::terminate()) {
-            Ok(mut terminate) => {
-                tokio::select! {
-                    _ = tokio::signal::ctrl_c() => {}
-                    _ = terminate.recv() => {}
-                }
-                return;
+        signal(SignalKind::terminate())
+            .inspect_err(
+                |error| warn!(%error, "cannot listen for SIGTERM; only Ctrl+C stops the server"),
+            )
+            .ok()
+    };
+    async move {
+        #[cfg(unix)]
+        if let Some(mut terminate) = terminate {
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {}
+                _ = terminate.recv() => {}
             }
-            Err(error) => warn!(%error, "cannot listen for SIGTERM; only Ctrl+C stops the server"),
+            return;
         }
+        let _ = tokio::signal::ctrl_c().await;
     }
-    let _ = tokio::signal::ctrl_c().await;
 }

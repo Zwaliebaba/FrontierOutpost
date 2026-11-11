@@ -148,6 +148,56 @@ fn stops_cleanly_on_sigterm() {
     panic!("the server did not stop within 10 s of SIGTERM");
 }
 
+/// The server is ready to be stopped from the moment it says it is open. It
+/// once installed its SIGTERM handler a little after that line, and a signal
+/// in between killed it; here each signal is sent as the line is read.
+#[cfg(unix)]
+#[test]
+fn stops_cleanly_on_a_sigterm_sent_the_moment_it_is_open() {
+    for attempt in 0..10 {
+        let mut server = Command::new(env!("CARGO_BIN_EXE_frontier-server"))
+            .env("FRONTIER_HTTP_ADDR", "127.0.0.1:0")
+            .env("FRONTIER_WEBTRANSPORT_ADDR", "127.0.0.1:0")
+            .env("FRONTIER_DATA", data_path())
+            .env("NO_COLOR", "1")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        // A shell already waiting on its input sends the signal sooner than
+        // starting `kill` would.
+        let mut sender = Command::new("sh")
+            .args([
+                "-c",
+                "read _ && kill -TERM \"$0\"",
+                &server.id().to_string(),
+            ])
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut trigger = sender.stdin.take().unwrap();
+        let stdout = BufReader::new(server.stdout.take().unwrap());
+        let mut opened = false;
+        for line in stdout.lines() {
+            let Ok(line) = line else { break };
+            if !opened && line.contains(" open ") {
+                opened = true;
+                writeln!(trigger).unwrap();
+            }
+        }
+        assert!(
+            opened,
+            "attempt {attempt}: the server never said it was open"
+        );
+        assert!(sender.wait().unwrap().success());
+        let status = server.wait().unwrap();
+        assert!(
+            status.success(),
+            "attempt {attempt}: the server should exit normally: {status}"
+        );
+    }
+}
+
 /// The WebTransport URL and certificate hash a browser would use.
 fn web_transport(server: &Server) -> (url::Url, [u8; 32]) {
     let info = server.connect_info();
