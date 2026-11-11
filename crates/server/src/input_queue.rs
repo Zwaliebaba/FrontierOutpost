@@ -7,11 +7,22 @@
 //! arrived it repeats the last. A backlog means the pilot's inputs are
 //! arriving faster than the server steps or in a burst after a stall; beyond
 //! [`MAX_BACKLOG`] the oldest are dropped, so delay cannot build up.
+//!
+//! Repeating covers a lost datagram or two. A pilot silent for
+//! [`SILENT_TICKS`] is no longer steering: a hidden tab stops sending while
+//! the browser still answers the keep-alive, and a ship left on its last
+//! input would thrust and fire on its own for as long as that lasted. From
+//! then on the queue hands out neutral controls until an input arrives.
 
 use frontier_protocol::input::{Controls, InputDatagram, is_newer};
 
 /// Inputs waiting beyond which the oldest are dropped.
 pub const MAX_BACKLOG: usize = 3;
+
+/// Ticks without a fresh input after which the last one is no longer
+/// repeated: half a second, well past the three datagrams in a row that the
+/// client's redundant copies recover.
+pub const SILENT_TICKS: u32 = 10;
 
 #[derive(Debug, Default)]
 pub struct InputQueue {
@@ -19,6 +30,8 @@ pub struct InputQueue {
     waiting: Vec<(u16, Controls)>,
     /// The input applied on the most recent tick and its sequence.
     current: Option<(u16, Controls)>,
+    /// Ticks in a row that repeated `current` for want of a fresh input.
+    repeats: u32,
 }
 
 impl InputQueue {
@@ -48,17 +61,26 @@ impl InputQueue {
         }
     }
 
-    /// Takes the input for this tick: the next waiting one, or the last again.
-    /// Returns it with the sequence to acknowledge, or `None` before any input.
+    /// Takes the input for this tick: the next waiting one, or the last again,
+    /// or neutral controls once the pilot has been silent for
+    /// [`SILENT_TICKS`]. Returns it with the sequence to acknowledge, which
+    /// is always the last one received, or `None` before any input.
     pub fn take_for_tick(&mut self) -> Option<(u16, Controls)> {
         if self.waiting.len() > MAX_BACKLOG {
             let excess = self.waiting.len() - MAX_BACKLOG;
             self.waiting.drain(..excess);
         }
-        if !self.waiting.is_empty() {
+        if self.waiting.is_empty() {
+            self.repeats = self.repeats.saturating_add(1);
+        } else {
             self.current = Some(self.waiting.remove(0));
+            self.repeats = 0;
         }
-        self.current
+        let (sequence, controls) = self.current?;
+        if self.repeats >= SILENT_TICKS {
+            return Some((sequence, Controls::default()));
+        }
+        Some((sequence, controls))
     }
 }
 
@@ -133,6 +155,40 @@ mod tests {
         assert_eq!(sequences(&mut queue, 3), [Some(0), Some(0), Some(0)]);
         queue.receive(&datagram(1));
         assert_eq!(queue.take_for_tick().unwrap(), (1, controls(1)));
+    }
+
+    #[test]
+    fn a_silent_pilot_stops_steering_after_half_a_second() {
+        let held = Controls {
+            thrust: 127,
+            turn: 40,
+            fire: true,
+            cruise: true,
+        };
+        let mut queue = InputQueue::default();
+        queue.receive(&InputDatagram {
+            sequence: 7,
+            controls: vec![held],
+        });
+        assert_eq!(queue.take_for_tick(), Some((7, held)), "applied");
+        // The tab is hidden: nothing more arrives, but the session stays up.
+        for tick in 1..SILENT_TICKS {
+            assert_eq!(queue.take_for_tick(), Some((7, held)), "repeat {tick}");
+        }
+        for _ in 0..100 {
+            assert_eq!(
+                queue.take_for_tick(),
+                Some((7, Controls::default())),
+                "neutral, still acknowledging the last input"
+            );
+        }
+        // The pilot is back: their input is applied as ever.
+        queue.receive(&InputDatagram {
+            sequence: 8,
+            controls: vec![held],
+        });
+        assert_eq!(queue.take_for_tick(), Some((8, held)));
+        assert_eq!(queue.take_for_tick(), Some((8, held)), "and repeated");
     }
 
     #[test]

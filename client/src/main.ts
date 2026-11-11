@@ -21,6 +21,7 @@ import { renderHome } from "./outpost/ui";
 import type { EntityPose } from "./net/interpolation";
 import { Predictor } from "./game/prediction";
 import { FrameTimer } from "./game/frameTimer";
+import { onHidden } from "./game/hidden";
 import { Selection } from "./game/selection";
 import { Shots } from "./game/shots";
 import { Session } from "./game/session";
@@ -730,6 +731,14 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   };
 
   let last = performance.now();
+  // A hidden tab draws no frames, so no more controls would go out: let go of them now.
+  onHidden(document, () => {
+    held.clear();
+    if (!life) return;
+    const { sequence, sent } = life.session.sendControls(readControls(false));
+    life.predictor.advance(sequence, sent);
+  });
+
   let untilTick = 0;
   const frames = new FrameTimer();
   const frame = (now: number) => {
