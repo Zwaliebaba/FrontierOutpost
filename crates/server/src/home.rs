@@ -94,6 +94,13 @@ pub fn open_tiers(account: &Account) -> u32 {
     STAGE1.open_tiers(&account.outpost)
 }
 
+/// The refusal for a count whose price or total does not fit the books.
+/// Counts come from the client as any `u32`, so every product and sum of one
+/// is checked: unchecked, a wrapped price is a free purchase.
+fn too_large() -> String {
+    "That amount is too large.".to_owned()
+}
+
 fn transfer(item: Item, amount: u32, from: Party, to: Party, reason: Reason) -> Option<Transfer> {
     (amount > 0).then_some(Transfer {
         item,
@@ -223,7 +230,10 @@ pub fn act(id: AccountId, account: &mut Account, action: &Action) -> Result<Vec<
                 return Err("Sell at least one.".to_owned());
             }
             afford(account, 0, &[(good, amount)])?;
-            let paid = market::price(good).buys_at * amount;
+            let paid = market::price(good)
+                .buys_at
+                .checked_mul(amount)
+                .ok_or_else(too_large)?;
             let market = Party::Npc(Npc::Market);
             Ok([
                 transfer(Item::Good(good), amount, me, market, Reason::Sold),
@@ -237,7 +247,10 @@ pub fn act(id: AccountId, account: &mut Account, action: &Action) -> Result<Vec<
             if amount == 0 {
                 return Err("Buy at least one.".to_owned());
             }
-            let cost = market::price(good).sells_at * amount;
+            let cost = market::price(good)
+                .sells_at
+                .checked_mul(amount)
+                .ok_or_else(too_large)?;
             afford(account, cost, &[])?;
             let market = Party::Npc(Npc::Market);
             Ok([
@@ -255,9 +268,12 @@ pub fn act(id: AccountId, account: &mut Account, action: &Action) -> Result<Vec<
                 return Err("Queue at least one batch.".to_owned());
             }
             let (input, per_batch) = rule.input;
-            let needed = per_batch * batches;
+            let needed = per_batch.checked_mul(*batches).ok_or_else(too_large)?;
             afford(account, 0, &[(input, needed)])?;
-            account.processing.add(rule.id, *batches);
+            account
+                .processing
+                .add(rule.id, *batches)
+                .ok_or_else(too_large)?;
             Ok(transfer(
                 Item::Good(input),
                 needed,
@@ -271,14 +287,21 @@ pub fn act(id: AccountId, account: &mut Account, action: &Action) -> Result<Vec<
         Action::Unqueue { recipe, batches } => {
             let rule =
                 market::recipe(recipe).ok_or_else(|| format!("There is no recipe {recipe}."))?;
+            let (input, per_batch) = rule.input;
+            // Priced before anything leaves the queue, so a refusal changes nothing.
+            let returned = account
+                .processing
+                .waiting(rule.id)
+                .min(*batches)
+                .checked_mul(per_batch)
+                .ok_or_else(too_large)?;
             let taken = account.processing.take(rule.id, *batches);
             if taken == 0 {
                 return Err(format!("No {} batches are queued.", rule.id));
             }
-            let (input, per_batch) = rule.input;
             Ok(transfer(
                 Item::Good(input),
-                per_batch * taken,
+                returned,
                 Party::Processor,
                 me,
                 Reason::Unqueued,
@@ -343,11 +366,12 @@ pub fn supplies_due(account: &Account) -> Result<u32, String> {
     if account.credits >= LAUNCH_COST {
         return Ok(LAUNCH_COST);
     }
-    let stock_value: u32 = Good::ALL
+    // In u64, where no stock a u32 can count overflows its value.
+    let stock_value: u64 = Good::ALL
         .iter()
-        .map(|&good| account.stock.get(good) * market::price(good).buys_at)
+        .map(|&good| u64::from(account.stock.get(good)) * u64::from(market::price(good).buys_at))
         .sum();
-    if account.credits + stock_value >= LAUNCH_COST {
+    if u64::from(account.credits) + stock_value >= u64::from(LAUNCH_COST) {
         return Err(format!(
             "Supplies cost {LAUNCH_COST} cr and you have {} cr: sell some stock first.",
             account.credits
@@ -589,5 +613,95 @@ mod tests {
         assert!(supplies_due(&home).is_err(), "two ore cover the rest");
         home.stock.ore = 1;
         assert_eq!(supplies_due(&home), Ok(25));
+    }
+
+    /// The counts a client may send for which an unchecked price wraps:
+    /// ore sells at 16, so 2^28 of it once cost nothing.
+    const HUGE: [u32; 4] = [1 << 28, (1 << 28) + 5, 1 << 31, u32::MAX];
+
+    #[test]
+    fn buying_more_than_any_price_can_count_is_refused_and_changes_nothing() {
+        for amount in HUGE {
+            let mut home = rich();
+            let before = home.clone();
+            for good in Good::ALL {
+                assert!(
+                    run(&mut home, Action::Buy { good, amount }).is_err(),
+                    "{amount} {}",
+                    good.name()
+                );
+            }
+            assert_eq!(home, before, "{amount}");
+        }
+    }
+
+    #[test]
+    fn selling_a_hold_worth_more_than_credits_can_count_is_refused() {
+        // Only a stock that is already wrong can reach this; it must still
+        // not pay a wrapped price.
+        let mut home = rich();
+        home.stock.ore = u32::MAX;
+        let before = home.clone();
+        let sale = Action::Sell {
+            good: Good::Ore,
+            amount: u32::MAX,
+        };
+        assert!(run(&mut home, sale).is_err());
+        assert_eq!(home, before);
+    }
+
+    #[test]
+    fn queueing_more_batches_than_can_be_counted_is_refused_and_changes_nothing() {
+        for batches in HUGE {
+            let mut home = rich();
+            let before = home.clone();
+            let queue = Action::Process {
+                recipe: "alloy".into(),
+                batches,
+            };
+            assert!(run(&mut home, queue).is_err(), "{batches}");
+            assert_eq!(home, before, "{batches}");
+        }
+        // A queue already at the limit takes no more, and keeps the ore.
+        let mut home = rich();
+        home.processing.add("alloy", u32::MAX);
+        let before = home.clone();
+        let queue = Action::Process {
+            recipe: "alloy".into(),
+            batches: 1,
+        };
+        assert!(run(&mut home, queue).is_err());
+        assert_eq!(home, before);
+    }
+
+    #[test]
+    fn taking_back_more_inputs_than_can_be_counted_is_refused_and_changes_nothing() {
+        let mut home = rich();
+        home.processing.add("alloy", u32::MAX);
+        let before = home.clone();
+        let unqueue = Action::Unqueue {
+            recipe: "alloy".into(),
+            batches: u32::MAX,
+        };
+        assert!(run(&mut home, unqueue).is_err());
+        assert_eq!(home, before);
+        // A count the stock can hold still comes back, two ore a batch.
+        let unqueue = Action::Unqueue {
+            recipe: "alloy".into(),
+            batches: 500,
+        };
+        run(&mut home, unqueue).unwrap();
+        assert_eq!(home.stock.ore, before.stock.ore + 1_000);
+        assert_eq!(home.processing.waiting("alloy"), u32::MAX - 500);
+    }
+
+    #[test]
+    fn supplies_are_priced_without_overflow_for_any_stock() {
+        let mut home = Account::new("w", "Vega");
+        home.credits = 0;
+        for good in Good::ALL {
+            *home.stock.get_mut(good) = u32::MAX;
+        }
+        assert!(supplies_due(&home).is_err(), "there is stock to sell");
     }
 }

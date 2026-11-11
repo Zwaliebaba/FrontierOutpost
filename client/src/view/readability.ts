@@ -246,6 +246,10 @@ export function lockBracket(): Group {
     depthWrite: false,
     transparent: true,
     side: DoubleSide,
+    // Flat strips with no depth: one pass draws both faces. Without this three.js draws a
+    // transparent double-sided material twice, back faces then front, and marks the material
+    // changed before each, so every strip rebuilt its program parameters twice a frame.
+    forceSinglePass: true,
   });
   const group = new Group();
   const half = Math.max(SHIP_LENGTH, SHIP_BEAM) * 0.75;

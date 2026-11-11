@@ -15,6 +15,7 @@ pub mod home;
 pub mod http;
 pub mod input_queue;
 pub mod ledger;
+pub mod log;
 pub mod relay;
 pub mod report;
 pub mod runs;

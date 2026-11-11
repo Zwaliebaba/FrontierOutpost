@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use frontier_protocol::input::InputDatagram;
+use frontier_protocol::snapshot::MAX_DATAGRAM_BYTES;
 use frontier_protocol::{ClientMessage, ServerMessage, frame};
 use frontier_sim::run::Options;
 use frontier_sim::site::{Capability, FRONTIER_SITE, SiteTemplate, ThreatTier};
@@ -100,6 +101,17 @@ const PARTING_GRACE: Duration = Duration::from_secs(2);
 /// and QUIC's usual 30 s would leave a ghost ship that long.
 pub const IDLE_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// How many bytes of datagrams may wait to be sent to one client. quinn
+/// queues what the link cannot take yet and drops the oldest only when this
+/// is full. At its default of 1 MiB a client back from a stalled link was
+/// sent every snapshot it had missed, oldest first: seven seconds of them
+/// after a five second cut, measured. This holds four of the largest
+/// snapshots, so a client is sent the newest few and no history.
+pub const DATAGRAM_SEND_BUFFER: usize = 4_096;
+
+// Smaller than one snapshot and none would ever be sent.
+const _: () = assert!(DATAGRAM_SEND_BUFFER >= 4 * MAX_DATAGRAM_BYTES);
+
 /// How often the server pings a client. A pilot at home between runs sends
 /// nothing, but their browser acknowledges each ping, which keeps the
 /// connection alive; a closed page stops acknowledging and is dropped after
@@ -150,6 +162,7 @@ pub fn bind_with_idle_timeout(
     let mut transport = quinn::TransportConfig::default();
     transport.max_idle_timeout(Some(idle_timeout.try_into()?));
     transport.keep_alive_interval(Some(keep_alive(idle_timeout)));
+    transport.datagram_send_buffer_size(DATAGRAM_SEND_BUFFER);
     let mut config = quinn::ServerConfig::with_crypto(Arc::new(
         quinn::crypto::rustls::QuicServerConfig::try_from(tls)?,
     ));
@@ -730,22 +743,36 @@ impl Pilot<'_> {
                 if tier.is_none() {
                     return Ok(Err("That tier is not open.".to_owned()));
                 }
-                let holdings = s.load(account)?;
-                let due = match home::supplies_due(&holdings) {
-                    Ok(due) => due,
-                    Err(reason) => return Ok(Err(reason)),
-                };
-                if due > 0 {
-                    s.transfer(&[Transfer {
+                // Priced and paid in one transaction, on the holdings it reads.
+                let mut paid = 0;
+                let holdings = s.update(account, |holdings| {
+                    paid = home::supplies_due(holdings)?;
+                    Ok(Vec::from_iter((paid > 0).then_some(Transfer {
                         item: Item::Credits,
-                        amount: due,
+                        amount: paid,
                         from: Party::Account(account),
                         to: Party::Npc(Npc::Supplies),
                         reason: Reason::LaunchSupplies,
                         run: Some(paid_for),
-                    }])?;
-                }
-                Ok(Ok((due, s.load(account)?)))
+                    })))
+                })?;
+                Ok(holdings.map(|holdings| (paid, holdings)))
+            })
+            .await?)
+    }
+
+    /// The pilot's holdings, if they can pay for launch supplies as they
+    /// stand, or the reason they cannot. Nothing is charged.
+    async fn can_pay_supplies(
+        &self,
+        account: AccountId,
+    ) -> Result<Result<crate::account::Account, String>, SessionError> {
+        Ok(self
+            .identity
+            .store
+            .call(move |s| {
+                let holdings = s.load(account)?;
+                Ok(home::supplies_due(&holdings).map(|_| holdings))
             })
             .await?)
     }
@@ -840,8 +867,11 @@ impl Pilot<'_> {
             return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
         };
         let run = launch.run.clone();
-        let (paid, holdings) = match self.pay_supplies(account, &run, Some(launch.tier)).await? {
-            Ok(paid) => paid,
+        // The seat comes first and the charge after it. The instance has its
+        // own reasons to refuse a join (its window is counted in ticks, its
+        // seats in pilots), and a pilot refused there must not have paid.
+        let holdings = match self.can_pay_supplies(account).await? {
+            Ok(holdings) => holdings,
             Err(reason) => {
                 return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
             }
@@ -861,6 +891,30 @@ impl Pilot<'_> {
             return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
         };
         info!(target: "frontier::run", account = account.0, ship = ship.0, "followed the host");
+        // In the run from here on, whatever happens to this session next.
+        self.identity.crews.followed(account);
+        self.identity.runs.insert(
+            account,
+            Flying {
+                run: run.clone(),
+                expedition: launch.expedition.clone(),
+                ship,
+            },
+        );
+        self.flying = Some((launch.expedition.clone(), ship));
+        self.log_unloading();
+        let (paid, holdings) = match self.pay_supplies(account, &run, Some(launch.tier)).await? {
+            Ok(paid) => paid,
+            // They could pay a moment ago and only this session spends for
+            // them, so this is not expected. They fly; nothing was taken.
+            Err(reason) => {
+                warn!(
+                    account = account.0,
+                    run, reason, "supplies not charged to a follower"
+                );
+                (0, holdings)
+            }
+        };
         let crew_size = self
             .identity
             .crews
@@ -868,22 +922,11 @@ impl Pilot<'_> {
             .map_or(1, |view| view.members.len());
         let event = launched_event(&holdings, self.seed, launch.tier, crew_size, "member", paid);
         self.gate(account, Some(run.clone()), event).await;
-        self.log_unloading();
-        self.identity.runs.insert(
-            account,
-            Flying {
-                run,
-                expedition: launch.expedition.clone(),
-                ship,
-            },
-        );
         let message = ServerMessage::Account {
             account: wire::account(&holdings),
         };
         write_frame(&mut self.send, &message).await?;
-        write_frame(&mut self.send, &joined).await?;
-        self.flying = Some((launch.expedition, ship));
-        Ok(())
+        write_frame(&mut self.send, &joined).await
     }
 }
 

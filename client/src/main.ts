@@ -22,6 +22,8 @@ import { renderHome } from "./outpost/ui";
 import type { EntityPose } from "./net/interpolation";
 import { Predictor } from "./game/prediction";
 import { FrameTimer } from "./game/frameTimer";
+import { onHidden } from "./game/hidden";
+import { PendingEvents } from "./game/pending";
 import { Selection } from "./game/selection";
 import { Shots } from "./game/shots";
 import { Session } from "./game/session";
@@ -58,6 +60,7 @@ import { useShipModel } from "./view/readability";
 import { dragLook, glideEase, isHome, settleLook, turnLook, zoomWidth } from "./view/look";
 import type { LookState } from "./view/look";
 import { pickNearest, worldToScreen } from "./view/picking";
+import { Written } from "./view/written";
 import type { ScreenPoint } from "./view/picking";
 
 const START_WIDTH = 40;
@@ -71,6 +74,8 @@ const NAV_INSETS = { top: 150, right: 12, bottom: 120, left: 12 };
 const NOTICE_MS = 4_000;
 /** How soon a dropped connection is retried, and how often an unreachable server. */
 const RECONNECT_MS = 1_500;
+/** How often the HUD's top line is rewritten, at most. */
+const HUD_LINE_MS = 200;
 const RETRY_MS = 3_000;
 /** The reason the server closes a session with when the pilot signs in on another page. */
 const SIGNED_IN_ELSEWHERE = "signed in elsewhere";
@@ -324,7 +329,7 @@ interface Life {
   session: Session;
   predictor: Predictor;
   /** Snapshot events not yet drawn: they are drawn where each ship is drawn. */
-  events: SnapshotEvent[];
+  events: PendingEvents<SnapshotEvent>;
   /** The player's own hull, 0 to 255, from the latest snapshot. */
   hull: number;
   own: OwnStatus | null;
@@ -337,7 +342,7 @@ function beginLife(connection: Connection, joined: Joined, loaded: Sim): Life {
   const life: Life = {
     joined,
     predictor,
-    events: [],
+    events: new PendingEvents(),
     hull: 255,
     own: null,
     deposits: joined.deposits.map((deposit) => deposit.units),
@@ -347,7 +352,7 @@ function beginLife(connection: Connection, joined: Joined, loaded: Sim): Life {
       joined.tickRate,
       () => performance.now(),
       (snapshot) => {
-        life.events.push(...snapshot.events);
+        life.events.push(snapshot.tick, snapshot.events);
         life.own = snapshot.own;
         life.deposits = snapshot.deposits;
         const own = snapshot.entities.find((entity) => entity.id === joined.shipId);
@@ -728,12 +733,31 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     { passive: false },
   );
 
-  const markers = new Map<string, HTMLDivElement>();
+  // The HUD is redrawn every frame, and written to the page only where it changed.
+  const written = new Written();
+  const setText = (node: HTMLElement, text: string) => {
+    if (written.changed(`${node.id}.text`, text)) node.textContent = text;
+  };
+  const setData = (node: HTMLElement, name: string, value: string | null) => {
+    if (!written.changed(`${node.id}.data.${name}`, value ?? "\u0000")) return;
+    if (value === null) Reflect.deleteProperty(node.dataset, name);
+    else node.dataset[name] = value;
+  };
+
+  interface Marker {
+    node: HTMLDivElement;
+    arrow: HTMLSpanElement;
+    label: Text;
+  }
+  const markers = new Map<string, Marker>();
   const drawNav = (from: { x: number; z: number }) => {
     const site = life?.joined.site;
     if (!site) {
-      nav.replaceChildren();
-      markers.clear();
+      if (markers.size > 0) {
+        nav.replaceChildren();
+        markers.clear();
+        written.forget("nav.");
+      }
       return;
     }
     const targets: NavTarget[] = [
@@ -752,29 +776,47 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const project = (x: number, z: number) =>
       worldToScreen(new Vector3(x, 0, z), view.camera, view.viewport);
     for (const marker of placeMarkers(targets, from, project, view.viewport, NAV_INSETS)) {
-      let node = markers.get(marker.id);
-      if (!node) {
-        node = element("div", undefined, "nav-marker");
+      let drawn = markers.get(marker.id);
+      if (!drawn) {
+        const node = element("div", undefined, "nav-marker");
         node.dataset.target = marker.id;
+        const arrow = element("span", undefined, "nav-arrow");
+        arrow.textContent = "➤";
         nav.append(node);
-        markers.set(marker.id, node);
+        drawn = { node, arrow, label: document.createTextNode("") };
+        markers.set(marker.id, drawn);
       }
-      node.dataset.onScreen = String(marker.onScreen);
-      const arrow = element("span", undefined, "nav-arrow");
-      arrow.textContent = "➤";
-      arrow.style.transform = `rotate(${marker.angle.toFixed(2)}rad)`;
+      const { node, arrow, label } = drawn;
+      const place = `nav.${marker.id}`;
+      // The arrow points the way to a target off screen; an on-screen one needs none.
+      if (written.changed(`${place}.onScreen`, String(marker.onScreen))) {
+        node.dataset.onScreen = String(marker.onScreen);
+        node.replaceChildren(...(marker.onScreen ? [label] : [arrow, " ", label]));
+      }
+      const turned = `rotate(${marker.angle.toFixed(2)}rad)`;
+      if (written.changed(`${place}.arrow`, turned)) arrow.style.transform = turned;
       const text = `${marker.label} · ${distanceText(marker.distance)}`;
-      node.replaceChildren(...(marker.onScreen ? [text] : [arrow, " ", text]));
+      if (written.changed(`${place}.text`, text)) label.data = text;
       // Above an on-screen target; inward from an edge, so the label stays whole.
       const lift = marker.onScreen ? 12 : 0;
-      node.style.transform =
+      const moved =
         `translate(${marker.screen.x.toFixed(0)}px, ${(marker.screen.y - lift).toFixed(0)}px) ` +
         `translate(${(-marker.anchor.x * 100).toFixed(0)}%, ${(-marker.anchor.y * 100).toFixed(0)}%)`;
+      if (written.changed(`${place}.at`, moved)) node.style.transform = moved;
     }
   };
 
   let last = performance.now();
+  // A hidden tab draws no frames, so no more controls would go out: let go of them now.
+  onHidden(document, () => {
+    held.clear();
+    if (!life) return;
+    const { sequence, sent } = life.session.sendControls(readControls(false));
+    life.predictor.advance(sequence, sent);
+  });
+
   let untilTick = 0;
+  let hudLineAt = Number.NEGATIVE_INFINITY;
   const frames = new FrameTimer();
   const frame = (now: number) => {
     const workStart = performance.now();
@@ -823,7 +865,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         : undefined;
       poses = own ? [own, ...others] : others;
       const drawnAt = (id: number) => poses.find((pose) => pose.id === id);
-      for (const event of current.events.splice(0)) {
+      for (const event of current.events.take()) {
         if (event.type === "fired") {
           const from = drawnAt(event.shooter);
           if (from) shots.fire(event.shooter, event.target, from, event.speed);
@@ -866,27 +908,35 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const locked = poses.find((pose) => pose.id === selection.lock);
     if (locked && own && current) {
       const distance = Math.hypot(locked.x - own.x, locked.z - own.z);
-      lock.dataset.target = String(locked.id);
-      lock.textContent =
+      setData(lock, "target", String(locked.id));
+      setText(
+        lock,
         `Locked: ${KIND_NAME[locked.kind]} ${String(locked.id)} · ${distance.toFixed(0)} m ` +
-        `${distance <= current.joined.weaponRange ? "in range" : `out of range, fires within ${current.joined.weaponRange.toFixed(0)} m`} · ` +
-        `hull ${String(Math.round((locked.hull / 255) * 100))}% · Tab next, Esc release`;
+          `${distance <= current.joined.weaponRange ? "in range" : `out of range, fires within ${current.joined.weaponRange.toFixed(0)} m`} · ` +
+          `hull ${String(Math.round((locked.hull / 255) * 100))}% · Tab next, Esc release`,
+      );
     } else {
-      delete lock.dataset.target;
-      lock.textContent = "";
+      setData(lock, "target", null);
+      setText(lock, "");
     }
 
     if (own && current) {
       const { session, predictor } = current;
-      hud.dataset.ships = poses.map((pose) => pose.id).join(" ");
-      if (session.roundTripMs !== null) hud.dataset.roundTrip = session.roundTripMs.toFixed(0);
-      hud.dataset.x = own.x.toFixed(2);
-      hud.dataset.z = own.z.toFixed(2);
-      hud.textContent =
-        `Ship ${String(session.shipId)} · hull ${String(Math.round((current.hull / 255) * 100))}% · ` +
-        `round trip ${session.roundTripMs === null ? "–" : `${session.roundTripMs.toFixed(0)} ms`} · ` +
-        `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm · ` +
-        `W A S D fly · Shift cruise · Tab lock · Space fire · X extract · V vent · C scan`;
+      setData(hud, "ships", poses.map((pose) => pose.id).join(" "));
+      if (session.roundTripMs !== null) setData(hud, "roundTrip", session.roundTripMs.toFixed(0));
+      setData(hud, "x", own.x.toFixed(2));
+      setData(hud, "z", own.z.toFixed(2));
+      // Round trip and correction waver from frame to frame; nobody reads them that fast.
+      if (now - hudLineAt >= HUD_LINE_MS) {
+        hudLineAt = now;
+        setText(
+          hud,
+          `Ship ${String(session.shipId)} · hull ${String(Math.round((current.hull / 255) * 100))}% · ` +
+            `round trip ${session.roundTripMs === null ? "–" : `${session.roundTripMs.toFixed(0)} ms`} · ` +
+            `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm · ` +
+            `W A S D fly · Shift cruise · Tab lock · Space fire · X extract · V vent · C scan`,
+        );
+      }
       const status = current.own;
       if (status) {
         const nearest = current.joined.deposits
@@ -901,24 +951,25 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
             ? ` · deposit ${nearest.distance.toFixed(0)} m, ${String(nearest.left)} left` +
               (nearest.distance <= current.joined.extractRange ? " (in reach)" : "")
             : "";
-        run.dataset.phase = status.phase;
-        run.dataset.cargo = String(status.cargo);
-        run.dataset.extractor = status.extractor;
-        run.textContent = runLine(status) + hint;
+        setData(run, "phase", status.phase);
+        setData(run, "cargo", String(status.cargo));
+        setData(run, "extractor", status.extractor);
+        setText(run, runLine(status) + hint);
         const pocketName = (index: number) => {
           const pocket = current.joined.site.pockets[index];
           return pocket ? POCKET_NAME[pocket.kind] : "?";
         };
-        scan.dataset.revealed = String(reveal !== null);
-        scan.textContent = scanLine(status, reveal, pocketName);
+        setData(scan, "revealed", String(reveal !== null));
+        setText(scan, scanLine(status, reveal, pocketName));
       }
       drawNav(own);
     } else {
-      delete run.dataset.phase;
-      delete hud.dataset.x;
-      hud.textContent = "";
-      run.textContent = "";
-      scan.textContent = "";
+      setData(run, "phase", null);
+      setData(hud, "x", null);
+      hudLineAt = Number.NEGATIVE_INFINITY;
+      setText(hud, "");
+      setText(run, "");
+      setText(scan, "");
       drawNav({ x: 0, z: 0 });
     }
     if (noticeUntil && now > noticeUntil) {

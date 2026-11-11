@@ -107,21 +107,30 @@ impl Queue {
     /// Batches waiting across every recipe.
     #[must_use]
     pub fn total(&self) -> u32 {
-        self.batches.iter().map(|queued| queued.batches).sum()
+        self.batches
+            .iter()
+            .fold(0, |total, queued| total.saturating_add(queued.batches))
     }
 
-    /// Adds `batches` of `recipe` to the queue.
-    pub fn add(&mut self, recipe: &str, batches: u32) {
+    /// Adds `batches` of `recipe` to the queue and returns how many now wait,
+    /// or `None`, changing nothing, if that is more than the queue can count.
+    pub fn add(&mut self, recipe: &str, batches: u32) -> Option<u32> {
         match self
             .batches
             .iter_mut()
             .find(|queued| queued.recipe == recipe)
         {
-            Some(queued) => queued.batches += batches,
-            None => self.batches.push(Queued {
-                recipe: recipe.to_owned(),
-                batches,
-            }),
+            Some(queued) => {
+                queued.batches = queued.batches.checked_add(batches)?;
+                Some(queued.batches)
+            }
+            None => {
+                self.batches.push(Queued {
+                    recipe: recipe.to_owned(),
+                    batches,
+                });
+                Some(batches)
+            }
         }
     }
 
@@ -229,5 +238,17 @@ mod tests {
         assert_eq!(queue.take("alloy", 5), 2);
         assert_eq!(queue.take("components", 1), 0);
         assert_eq!(queue, Queue::default());
+    }
+
+    #[test]
+    fn a_queue_refuses_more_batches_than_it_can_count() {
+        let mut queue = Queue::default();
+        assert_eq!(queue.add("alloy", u32::MAX - 1), Some(u32::MAX - 1));
+        assert_eq!(queue.add("alloy", 1), Some(u32::MAX));
+        let full = queue.clone();
+        assert_eq!(queue.add("alloy", 1), None);
+        assert_eq!(queue, full, "a refusal changes nothing");
+        assert_eq!(queue.add("components", 7), Some(7));
+        assert_eq!(queue.total(), u32::MAX, "the total saturates");
     }
 }
