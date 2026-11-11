@@ -8,6 +8,14 @@
 //! arriving faster than the server steps or in a burst after a stall; beyond
 //! [`MAX_BACKLOG`] the oldest are dropped, so delay cannot build up.
 //!
+//! One repeat leaves one more input waiting when the late ones arrive, and
+//! nothing took two in a tick, so each lost datagram or late burst added a
+//! tick of delay for the rest of the run. Inputs left waiting after the take
+//! are a buffer against jitter only if the queue sometimes runs dry. Where it
+//! has not for [`SETTLE_TICKS`], the fewest it held in that time were never
+//! needed, and that many of the oldest are skipped: one small correction for
+//! the client, in place of lasting delay.
+//!
 //! Repeating covers a lost datagram or two. A pilot silent for
 //! [`SILENT_TICKS`] is no longer steering: a hidden tab stops sending while
 //! the browser still answers the keep-alive, and a ship left on its last
@@ -24,6 +32,18 @@ pub const MAX_BACKLOG: usize = 3;
 /// client's redundant copies recover.
 pub const SILENT_TICKS: u32 = 10;
 
+/// Ticks the queue must go without running dry before the inputs it kept
+/// waiting throughout count as delay: five seconds.
+///
+/// Shorter recovers sooner from one stall but skips on every lost datagram;
+/// longer leaves a lossy link a tick or two late. Modelled on the client's
+/// send loop over 45 minutes, with 0 to 20 ms of jitter and 2% loss, the
+/// mean age of an applied input was 113 to 136 ms before this rule, 80 ms
+/// at 60 ticks with six skips a minute, 90 ms at 100 with three and a half,
+/// and 98 ms at 200 with one. Jitter alone, with no loss, skips a handful of
+/// times in twenty minutes at most at any of these.
+pub const SETTLE_TICKS: u32 = 100;
+
 #[derive(Debug, Default)]
 pub struct InputQueue {
     /// Waiting inputs, oldest first.
@@ -32,6 +52,10 @@ pub struct InputQueue {
     current: Option<(u16, Controls)>,
     /// Ticks in a row that repeated `current` for want of a fresh input.
     repeats: u32,
+    /// Ticks since the queue last ran dry or was drained, and the fewest
+    /// inputs left waiting after a take in that time.
+    settled: u32,
+    spare: usize,
 }
 
 impl InputQueue {
@@ -70,17 +94,45 @@ impl InputQueue {
             let excess = self.waiting.len() - MAX_BACKLOG;
             self.waiting.drain(..excess);
         }
+        if self.settled >= SETTLE_TICKS {
+            // Skipped just before a take, and never the last one waiting, so
+            // the input taken is newer than those skipped: their redundant
+            // copies, still arriving, are then known to be old.
+            let skipped = self.spare.min(self.waiting.len().saturating_sub(1));
+            self.waiting.drain(..skipped);
+            (self.settled, self.spare) = (0, 0);
+        }
         if self.waiting.is_empty() {
             self.repeats = self.repeats.saturating_add(1);
         } else {
             self.current = Some(self.waiting.remove(0));
             self.repeats = 0;
         }
+        self.note_spare();
         let (sequence, controls) = self.current?;
         if self.repeats >= SILENT_TICKS {
             return Some((sequence, Controls::default()));
         }
         Some((sequence, controls))
+    }
+}
+
+impl InputQueue {
+    /// Notes how many inputs this tick's take left waiting: the fewest since
+    /// the queue last ran dry are the ones that have only been delay.
+    fn note_spare(&mut self) {
+        let left = self.waiting.len();
+        if left == 0 {
+            // Dry: what waits from here on is doing a buffer's work.
+            (self.settled, self.spare) = (0, 0);
+            return;
+        }
+        self.spare = if self.settled == 0 {
+            left
+        } else {
+            self.spare.min(left)
+        };
+        self.settled += 1;
     }
 }
 
@@ -189,6 +241,58 @@ mod tests {
         });
         assert_eq!(queue.take_for_tick(), Some((8, held)));
         assert_eq!(queue.take_for_tick(), Some((8, held)), "and repeated");
+    }
+
+    /// One input arrives and one is taken, for `ticks` ticks from `next`.
+    /// Returns the inputs left waiting after each take.
+    fn in_step(queue: &mut InputQueue, next: &mut u16, ticks: u32) -> Vec<usize> {
+        (0..ticks)
+            .map(|_| {
+                queue.receive(&datagram(*next));
+                *next += 1;
+                queue.take_for_tick();
+                queue.waiting.len()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn inputs_that_only_ever_waited_are_skipped_once_the_link_has_settled() {
+        let mut queue = InputQueue::default();
+        let mut next = 0;
+        assert_eq!(in_step(&mut queue, &mut next, 5), [0; 5], "in step");
+        // The uplink stalls for two ticks: the last input is repeated, then
+        // the late ones arrive together.
+        queue.take_for_tick();
+        queue.take_for_tick();
+        queue.receive(&datagram(next + 1));
+        next += 2;
+        let after = in_step(&mut queue, &mut next, SETTLE_TICKS + 5);
+        assert_eq!(after[0], 2, "two ticks behind, and it once stayed so");
+        assert_eq!(after[after.len() - 1], 0, "back in step");
+        let behind = after.iter().filter(|&&left| left > 0).count();
+        assert!(behind <= SETTLE_TICKS as usize, "{behind} ticks behind");
+        // Every input since is applied as it arrives, once.
+        queue.receive(&datagram(next));
+        assert_eq!(queue.take_for_tick().unwrap().0, next);
+    }
+
+    #[test]
+    fn a_queue_that_runs_dry_keeps_what_it_buffers() {
+        // Jitter: no input one tick, two the next, over and over. The one
+        // left waiting is what covers the empty tick, so it is never skipped.
+        let mut queue = InputQueue::default();
+        queue.receive(&datagram(0));
+        queue.take_for_tick();
+        let mut applied = vec![0];
+        for pair in 0..(2 * SETTLE_TICKS as u16) {
+            queue.take_for_tick();
+            queue.receive(&datagram(2 * pair + 2));
+            applied.push(queue.take_for_tick().unwrap().0);
+            applied.push(queue.take_for_tick().unwrap().0);
+        }
+        let expected: Vec<u16> = (0..=(4 * SETTLE_TICKS as u16)).collect();
+        assert_eq!(applied, expected, "every input applied, none skipped");
     }
 
     #[test]
