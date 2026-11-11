@@ -11,6 +11,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use tracing::info;
 
 use crate::account::{Account, DocumentError, STARTING_CREDITS, valid_callsign};
+use crate::events::{GateEvent, Recorded};
 use crate::ledger::{Item, Npc, Party, Reason, Transfer, TransferError};
 
 /// The database layout this server writes. Unrelated to the document version.
@@ -171,7 +172,8 @@ impl Store {
             && count("ledger")? == 0
             && count("passkeys")? == 0
             && count("sessions")? == 0
-            && count("checkpoints")? == 0)
+            && count("checkpoints")? == 0
+            && count("events")? == 0)
     }
 
     /// A world held in memory, for tests.
@@ -183,6 +185,9 @@ impl Store {
     }
 
     fn init(connection: Connection) -> Result<Self, StoreError> {
+        // `frontier-server grant` may write while the server runs: each waits
+        // for the other's transaction rather than failing.
+        connection.busy_timeout(std::time::Duration::from_secs(5))?;
         connection.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA foreign_keys = ON;
@@ -219,6 +224,19 @@ impl Store {
                  account INTEGER NOT NULL REFERENCES accounts(id),
                  expires INTEGER NOT NULL
              );
+             CREATE TABLE IF NOT EXISTS events (
+                 id INTEGER PRIMARY KEY,
+                 at INTEGER NOT NULL,
+                 account INTEGER NOT NULL,
+                 run TEXT,
+                 kind TEXT NOT NULL,
+                 data TEXT NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS events_by_account ON events (account, at);
+             CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events
+                 BEGIN SELECT RAISE(ABORT, 'the gate events are append-only'); END;
+             CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events
+                 BEGIN SELECT RAISE(ABORT, 'the gate events are append-only'); END;
              CREATE TABLE IF NOT EXISTS checkpoints (
                  run TEXT PRIMARY KEY,
                  crew TEXT NOT NULL,
@@ -576,6 +594,72 @@ impl Store {
         Ok(Ok(account))
     }
 
+    /// Records gate events (plan 7.1), all at `at` (Unix milliseconds).
+    ///
+    /// # Errors
+    /// Fails only if the database does.
+    pub fn record(&self, events: &[Recorded]) -> Result<(), StoreError> {
+        let mut connection = self.lock();
+        let transaction = connection.transaction()?;
+        for recorded in events {
+            transaction.execute(
+                "INSERT INTO events (at, account, run, kind, data) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    recorded.at,
+                    recorded.account,
+                    recorded.run,
+                    recorded.event.kind(),
+                    serde_json::to_string(&recorded.event)?,
+                ],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Every gate event, oldest first. Rows this server cannot read (from a
+    /// newer build) are skipped.
+    ///
+    /// # Errors
+    /// Fails only if the database does.
+    pub fn events(&self) -> Result<Vec<Recorded>, StoreError> {
+        let connection = self.lock();
+        let mut statement =
+            connection.prepare("SELECT at, account, run, data FROM events ORDER BY at, id")?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?;
+        let mut events = Vec::new();
+        for row in rows {
+            let (at, account, run, data) = row?;
+            if let Ok(event) = serde_json::from_str::<GateEvent>(&data) {
+                events.push(Recorded {
+                    at,
+                    account,
+                    run,
+                    event,
+                });
+            }
+        }
+        Ok(events)
+    }
+
+    /// Every account's callsign, by account.
+    ///
+    /// # Errors
+    /// Fails only if the database does.
+    pub fn callsigns(&self) -> Result<Vec<(i64, String)>, StoreError> {
+        let connection = self.lock();
+        let mut statement = connection.prepare("SELECT id, callsign FROM accounts ORDER BY id")?;
+        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     /// The ledger folded for one account: what every transfer in and out of it
     /// adds up to, by item. Equals the account's stock.
     ///
@@ -801,6 +885,31 @@ mod tests {
         let account = store.load(id).unwrap();
         assert_eq!((account.credits, account.stock.ore), (1_000, 40));
         assert!(store.ledger_balance(id).unwrap().contains(&(Item::ORE, 40)));
+    }
+
+    #[test]
+    fn gate_events_are_recorded_in_order_and_cannot_be_changed() {
+        let store = Store::in_memory().unwrap();
+        let id = store.create_account("Vega").unwrap();
+        let at = |ms, event| Recorded {
+            at: ms,
+            account: id.0,
+            run: Some("r".into()),
+            event,
+        };
+        store
+            .record(&[
+                at(2_000, GateEvent::ScanStarted),
+                at(1_000, GateEvent::SessionStarted),
+            ])
+            .unwrap();
+        let events = store.events().unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].event, GateEvent::SessionStarted);
+        assert!(!store.is_empty().unwrap());
+        let changed = store.lock().execute("DELETE FROM events", []).is_err();
+        assert!(changed, "append-only");
+        assert_eq!(store.callsigns().unwrap(), [(id.0, "Vega".to_owned())]);
     }
 
     #[test]

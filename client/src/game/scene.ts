@@ -5,10 +5,8 @@
 import {
   BoxGeometry,
   CylinderGeometry,
-  DirectionalLight,
   EdgesGeometry,
   Group,
-  HemisphereLight,
   IcosahedronGeometry,
   LineBasicMaterial,
   LineSegments,
@@ -24,6 +22,8 @@ import type { DepositInfo, EntityKind, Material, ObstacleInfo, SiteInfo } from "
 import type { EntityPose } from "../net/interpolation";
 import type { Shots } from "./shots";
 import { SHIP_HEIGHT } from "../view/hulls";
+import { setGear, stepGear } from "../view/frigate";
+import { stationLights } from "../view/lights";
 import { between, createRng } from "../view/rng";
 import {
   BOLT,
@@ -78,7 +78,12 @@ export function allegianceOf(kind: EntityKind, own: boolean): Allegiance {
 interface DrawnShip extends ShipMeshes {
   allegiance: Allegiance;
   kind: EntityKind;
+  /** The landing gear, 0 folded to 1 lowered. */
+  lowered: number;
 }
+
+/** A ship this close to the dock is on berth 07, so its gear is down, metres. */
+export const ON_BERTH = 1.2;
 
 export class ExpeditionScene {
   readonly scene = new Scene();
@@ -90,16 +95,35 @@ export class ExpeditionScene {
   readonly #site = new Group();
   readonly #pockets: Group[] = [];
   readonly #deposits: DrawnDeposit[] = [];
+  /** Holds the outpost's station at the dock; not cleared with the site, which it outlives. */
+  readonly #dock = new Group();
+  #station: Object3D | null = null;
+  #dockAt: { x: number; z: number } | null = null;
   #ownShipId: number;
 
   constructor(ownShipId: number) {
     this.#ownShipId = ownShipId;
-    this.scene.add(new HemisphereLight(linear(0.3, 0.48, 1), linear(0.025, 0.038, 0.055), 0.6));
-    const starlight = new DirectionalLight(linear(0.67, 0.77, 1), 2.4);
-    starlight.position.set(-4, 10, 6);
-    this.scene.add(starlight);
+    this.scene.add(...stationLights());
     this.#bracket.visible = false;
-    this.scene.add(this.#bracket, this.#site);
+    this.#dock.name = "dock";
+    this.scene.add(this.#bracket, this.#site, this.#dock);
+  }
+
+  /**
+   * Draws the outpost's station at the dock instead of the stand-in, the same object the outpost
+   * view shows, placed there already (`placeStation`). `null` takes it away again.
+   */
+  setStation(station: Object3D | null): void {
+    if (this.#station) this.#dock.remove(this.#station);
+    this.#station = station;
+    if (station) this.#dock.add(station);
+    const standIn = this.#site.getObjectByName("stand-in dock");
+    if (standIn) standIn.visible = station === null;
+  }
+
+  /** Drops every ship's drawing, so the next update draws them anew (a hull model loaded). */
+  redraw(): void {
+    for (const [id, drawn] of this.#ships) this.#remove(id, drawn);
   }
 
   /** Drops every ship: a new run's instance numbers its ships afresh. */
@@ -127,8 +151,11 @@ export class ExpeditionScene {
     return this.#obstacles;
   }
 
-  /** Moves every ship to its pose, brackets the locked one, and draws the shots. */
-  update(poses: readonly EntityPose[], lock: number | null, shots?: Shots): void {
+  /**
+   * Moves every ship to its pose, brackets the locked one, and draws the shots. `dt`, seconds
+   * since the last update, paces the landing gear.
+   */
+  update(poses: readonly EntityPose[], lock: number | null, shots?: Shots, dt = 0): void {
     const seen = new Set<number>();
     for (const pose of poses) {
       seen.add(pose.id);
@@ -138,11 +165,19 @@ export class ExpeditionScene {
         this.#remove(pose.id, drawn);
         drawn = undefined;
       }
+      // Gear is down only on the berth: it folds as a launching ship lifts off.
+      const dock = this.#dockAt;
+      const berthed = dock !== null && Math.hypot(pose.x - dock.x, pose.z - dock.z) <= ON_BERTH;
+      const target = berthed ? 1 : 0;
       if (!drawn) {
-        drawn = { ...shipMeshes(allegiance, SIZE[pose.kind]), allegiance, kind: pose.kind };
+        const meshes = shipMeshes(allegiance, SIZE[pose.kind]);
+        drawn = { ...meshes, allegiance, kind: pose.kind, lowered: target };
         this.#ships.set(pose.id, drawn);
         this.scene.add(drawn.hull, drawn.silhouette);
+      } else {
+        drawn.lowered = stepGear(drawn.lowered, target, dt);
       }
+      setGear(drawn.gear, drawn.lowered);
       placeShip(drawn, pose.x, pose.z, pose.heading);
     }
     for (const [id, drawn] of this.#ships) {
@@ -162,9 +197,7 @@ export class ExpeditionScene {
 
   #remove(id: number, drawn: DrawnShip): void {
     this.scene.remove(drawn.hull, drawn.silhouette);
-    // Geometry is shared between ships of one shape; only the materials are this ship's.
-    drawn.hull.material.dispose();
-    drawn.silhouette.material.dispose();
+    drawn.dispose();
     this.#ships.delete(id);
   }
 
@@ -227,6 +260,7 @@ export class ExpeditionScene {
    */
   setSite(site: SiteInfo, obstacles: readonly ObstacleInfo[], deposits: readonly DepositInfo[]) {
     this.#clearSite();
+    this.#dockAt = { x: site.dockX, z: site.dockZ };
     const rng = createRng(LANDMARK_SEED);
     const rockMaterial = new MeshStandardMaterial({
       color: linear(0.1, 0.12, 0.15),
@@ -241,7 +275,10 @@ export class ExpeditionScene {
       this.#site.add(rock);
       this.#obstacles.push(rock);
     }
-    this.#site.add(station(site.dockX, site.dockZ));
+    // Drawn while the station's models load, or if they never do.
+    const standIn = station(site.dockX, site.dockZ);
+    standIn.visible = this.#station === null;
+    this.#site.add(standIn);
     for (const pocket of site.pockets) {
       const beacon = pocketBeacon(pocket.locked);
       beacon.position.set(pocket.x, 0, pocket.z);
@@ -315,7 +352,7 @@ function station(x: number, z: number): Group {
   ring.position.y = -1.5;
   group.add(hub, ring);
   group.position.set(x, 0, z);
-  group.name = "dock";
+  group.name = "stand-in dock";
   return group;
 }
 

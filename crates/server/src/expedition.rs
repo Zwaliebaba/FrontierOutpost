@@ -37,6 +37,7 @@ use tokio::time::{MissedTickBehavior, interval};
 use tracing::{debug, info, warn};
 use web_transport_quinn::Session;
 
+use crate::events::{GateEvent, Recorded, now_ms};
 use crate::home;
 use crate::input_queue::InputQueue;
 use crate::ledger::{Item, Npc, Party, Reason, Transfer};
@@ -587,8 +588,12 @@ async fn save_checkpoint(books: &Books, checkpoint: &Checkpoint) {
 async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &mut Books) {
     let mut finished: Vec<(ShipId, Summary)> = Vec::new();
     let mut settled: Option<Pot> = None;
+    let mut gate: Vec<(ShipId, GateEvent)> = Vec::new();
     for (tick, event) in run.take_events() {
         info!(target: "frontier::run", run = books.run, tick, event = ?event);
+        if let Some(recorded) = gate_event(run, &event) {
+            gate.push(recorded);
+        }
         match event {
             RunEvent::Scanned { .. } => {
                 let message = scanned(run);
@@ -631,6 +636,13 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &mut 
         Some(pot) => pay_pot(books, &pot).await,
         None => HashMap::new(),
     };
+    if settled.is_some() {
+        let crew = u32::try_from(books.accounts.len()).unwrap_or(u32::MAX);
+        for (&pilot, &share) in &shares {
+            gate.push((pilot, GateEvent::PotShare { share, crew }));
+        }
+    }
+    record(books, gate).await;
     // Each pilot hears once, with the account as it stands after the pot.
     let mut told: Vec<ShipId> = Vec::new();
     for (pilot, summary) in finished {
@@ -668,6 +680,92 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &mut 
             };
             let _ = events.send(PilotEvent::Message(Box::new(message)));
         }
+    }
+}
+
+/// The gate event (plan 7.1) a run event stands for, if any, and whose it is.
+fn gate_event(run: &Run, event: &RunEvent) -> Option<(ShipId, GateEvent)> {
+    let name = |kind: ShipKind| {
+        match kind {
+            ShipKind::Pilot => "pilot",
+            ShipKind::Drone => "drone",
+            ShipKind::Raider => "raider",
+            ShipKind::Warden => "warden",
+            ShipKind::Core => "core",
+        }
+        .to_owned()
+    };
+    Some(match *event {
+        RunEvent::EnteredPocket { pilot, pocket } => {
+            let kind = run.site().pockets.get(pocket)?.template.kind;
+            (
+                pilot,
+                GateEvent::PocketEntered {
+                    pocket: format!("{kind:?}"),
+                },
+            )
+        }
+        RunEvent::ScanStarted { pilot } => (pilot, GateEvent::ScanStarted),
+        RunEvent::ExtractorStarted { pilot, material } => (
+            pilot,
+            GateEvent::ExtractorStarted {
+                material: format!("{material:?}").to_lowercase(),
+            },
+        ),
+        RunEvent::Locked {
+            pilot,
+            target,
+            distance,
+            taken,
+        } => (
+            pilot,
+            GateEvent::Locked {
+                target: name(target),
+                distance,
+                taken,
+            },
+        ),
+        RunEvent::Docked { pilot, summary }
+        | RunEvent::Destroyed { pilot, summary }
+        | RunEvent::Abandoned { pilot, summary } => (
+            pilot,
+            GateEvent::RunEnded {
+                ending: format!("{:?}", summary.ending).to_lowercase(),
+                banked: summary.banked.iter().sum(),
+                cargo_lost: summary.lost.cargo,
+                lost: if summary.lost.upgraded_modules > 0 {
+                    run.fitted(pilot).to_vec()
+                } else {
+                    Vec::new()
+                },
+                approach_seconds: seconds(summary.phases.approach),
+                objective_seconds: seconds(summary.phases.objective),
+                return_seconds: seconds(summary.phases.return_leg),
+            },
+        ),
+        _ => return None,
+    })
+}
+
+/// Records gate events for the pilots they belong to.
+async fn record(books: &Books, events: Vec<(ShipId, GateEvent)>) {
+    let at = now_ms();
+    let recorded: Vec<Recorded> = events
+        .into_iter()
+        .filter_map(|(ship, event)| {
+            Some(Recorded {
+                at,
+                account: books.accounts.get(&ship)?.0,
+                run: Some(books.run.clone()),
+                event,
+            })
+        })
+        .collect();
+    if recorded.is_empty() {
+        return;
+    }
+    if let Err(error) = books.store.call(move |store| store.record(&recorded)).await {
+        warn!(%error, run = books.run, "gate events not recorded");
     }
 }
 

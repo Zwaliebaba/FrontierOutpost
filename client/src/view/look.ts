@@ -68,3 +68,9 @@ export function zoomWidth(width: number, deltaY: number, deltaMode = 0): number 
 export function isHome(state: LookState, home: LookState): boolean {
   return state.yaw === home.yaw && state.pitch === home.pitch;
 }
+
+/** Smoothstep over `t` in [0, 1]: a camera glide that starts and settles gently. */
+export function glideEase(t: number): number {
+  const c = Math.min(1, Math.max(0, t));
+  return c * c * (3 - 2 * c);
+}

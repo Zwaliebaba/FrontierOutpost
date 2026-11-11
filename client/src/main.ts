@@ -16,6 +16,7 @@ import type {
 import { launchRole, renderCrew } from "./outpost/crew";
 import { loadOutpostModels } from "./outpost/models";
 import { fittingName, launchLines } from "./outpost/options";
+import { placeStation } from "./outpost/placement";
 import { OutpostScene } from "./outpost/scene";
 import { renderHome } from "./outpost/ui";
 import type { EntityPose } from "./net/interpolation";
@@ -55,13 +56,17 @@ import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
 import { loadSim } from "./sim";
 import type { Sim } from "./sim";
 import { headingRadians, positionMetres, velocityMetresPerSecond } from "./net/snapshot";
-import { dragLook, isHome, settleLook, turnLook, zoomWidth } from "./view/look";
+import { useShipModel } from "./view/readability";
+import { dragLook, glideEase, isHome, settleLook, turnLook, zoomWidth } from "./view/look";
 import type { LookState } from "./view/look";
 import { pickNearest, worldToScreen } from "./view/picking";
 import { Written } from "./view/written";
 import type { ScreenPoint } from "./view/picking";
 
 const START_WIDTH = 40;
+/** How long the camera takes between the station and the ship, seconds. */
+const GLIDE_SECONDS = 0.9;
+
 const PICK_RADIUS_PX = 24;
 const KEY_TURN_RATE = 1.6;
 /** Room kept clear for the HUD lines at the top and bottom of the screen. */
@@ -195,16 +200,19 @@ async function start(): Promise<void> {
     }, RECONNECT_MS);
   });
   const loaded = await rules;
+  const view = new ExpeditionView(document.body, -1, START_WIDTH);
   // The outpost's models load beside everything else; the home shows once they are in.
   loadOutpostModels()
     .then((models) => {
+      // Player ships fly as the starter frigate from here on, those in flight included.
+      useShipModel(models.frigate);
+      view.world.redraw();
       outpost = new OutpostScene(models);
       homeChanged();
     })
     .catch((error: unknown) => {
       showNotice(`The outpost models did not load: ${String(error)}`);
     });
-  const view = new ExpeditionView(document.body, -1, START_WIDTH);
   play(connection, view, loaded);
   await identify(connection);
 }
@@ -376,6 +384,12 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   let life: Life | null = null;
   let contract: Contract | null = null;
   let reveal: Scanned | null = null;
+  /**
+   * The camera moving between the station and the ship, when a run begins or ends. It starts
+   * `from` this far from the station's centre, so it holds if the next dock moves the station.
+   */
+  let glide: { from: Vector3; toStation: boolean; t: number } | null = null;
+  const glided = new Vector3();
   const shots = new Shots();
 
   const showBriefing = (offer: Contract) => {
@@ -480,7 +494,33 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     summaryPanel.append(next);
   };
 
+  // The station is one object (design §5: one camera, one plane): stood where the contract's dock
+  // is, it is the outpost view at home and the dock in the run, and launching only moves the
+  // camera from the station to the ship.
+  const placeFor = (site: Joined["site"]) => {
+    outpost?.place(
+      placeStation({ x: site.dockX, z: site.dockZ }, { x: site.centreX, z: site.centreZ }),
+    );
+  };
+  const stationWhere = () => {
+    if (!outpost) return;
+    if (life) {
+      view.world.setStation(outpost.launch());
+    } else {
+      view.world.setStation(null);
+      outpost.home();
+    }
+    document.body.dataset.station = life ? "dock" : "home";
+  };
+
   const beginRun = (joined: Joined) => {
+    // Launching from the outpost view glides to the ship; a rejoined run starts on it.
+    if (!life && outpost && homePanel.dataset.state === "open") {
+      glide = { from: new Vector3(), toStation: false, t: 0 };
+    }
+    placeFor(joined.site);
+    // Until the first snapshot the ship is on the berth.
+    target.set(joined.site.dockX, 0, joined.site.dockZ);
     loaded.setObstacles(joined.obstacles);
     loaded.setSpeedFactor(joined.speedFactor);
     view.beginRun(joined.shipId, joined.site, joined.obstacles, joined.deposits);
@@ -491,11 +531,13 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     delete briefing.dataset.state;
     briefing.replaceChildren();
     delete homePanel.dataset.state;
+    stationWhere();
   };
 
   // The home: the outpost drawn, the panel of what can be done there, and the stake on the
   // contract. Redrawn whenever the account or the catalog changes.
   homeChanged = () => {
+    stationWhere();
     if (!catalog || !holdings) return;
     if (outpost) {
       outpost.apply(holdings);
@@ -522,10 +564,12 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         break;
       case "contract":
         contract = message;
+        if (!life) placeFor(message.site);
         // After a run the summary comes first; its button opens the new contract.
         if (summaryPanel.dataset.ending === undefined) showBriefing(message);
         break;
       case "runOver":
+        if (outpost) glide = { from: target.clone().sub(outpost.centre), toStation: true, t: 0 };
         life?.session.retire();
         life = null;
         selection.release();
@@ -842,10 +886,23 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const focus = poses.find((pose) => pose.id === selection.focus);
     const centre = focus ?? own;
     if (centre) target.set(centre.x, 0, centre.z);
-    if (!current && outpost && holdings) {
-      view.renderScene(outpost.scene, outpost.centre, look.pitch, look.yaw);
+    const atHome = !current && outpost && holdings ? outpost : null;
+    let aim = atHome ? atHome.centre : target;
+    if (glide) {
+      // A glide still under way when the view changes again (a run that ends at once) stops.
+      const under = glide.toStation === (atHome !== null);
+      glide.t = Math.min(1, glide.t + dt / GLIDE_SECONDS);
+      // Into the run it follows the ship as it flies off the berth.
+      if (under && outpost) {
+        const from = glided.copy(outpost.centre).add(glide.from);
+        aim = from.lerp(aim, glideEase(glide.t));
+      }
+      if (!under || glide.t >= 1) glide = null;
+    }
+    if (atHome) {
+      view.renderScene(atHome.scene, aim, look.pitch, look.yaw);
     } else {
-      view.render(poses, selection.lock, target, look.pitch, look.yaw, shots);
+      view.render(poses, selection.lock, aim, look.pitch, look.yaw, shots, dt);
     }
 
     const locked = poses.find((pose) => pose.id === selection.lock);

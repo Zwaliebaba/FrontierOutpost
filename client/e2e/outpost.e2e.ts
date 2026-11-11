@@ -38,6 +38,14 @@ test("the outpost loads the station, both sockets and every module", async ({ pa
   );
 });
 
+test("the run docks at the outpost's own station, the one the home shows", async ({ page }) => {
+  await signUp(page);
+  await expect(page.locator("body")).toHaveAttribute("data-station", "home");
+  await page.locator('#briefing[data-state="open"] button[data-tier="1"]').click();
+  await page.locator("#hud[data-x]").waitFor();
+  await expect(page.locator("body")).toHaveAttribute("data-station", "dock");
+});
+
 test("building a refinery puts it on its socket and opens its pocket", async ({ page }) => {
   await signUp(page, RICH);
   await expect(account(page)).toHaveAttribute("data-credits", "1100");

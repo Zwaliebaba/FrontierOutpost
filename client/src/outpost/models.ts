@@ -8,7 +8,9 @@ import type { BufferGeometry, Material, Object3D } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import facilitiesUrl from "../../../Design/FrontierOutpost/facilities.glb?url";
+import frigateUrl from "../../../Design/FrontierOutpost/frigate.glb?url";
 import stationUrl from "../../../Design/FrontierOutpost/station.glb?url";
+import { frigateModel } from "../view/frigate";
 
 export interface OutpostModels {
   /** The station, its root at the origin. Sockets are among its descendants. */
@@ -17,6 +19,11 @@ export interface OutpostModels {
   readonly sockets: ReadonlyMap<string, Object3D>;
   /** Each facility module, its root at the origin, by {@link facilityKey}. */
   readonly facilities: ReadonlyMap<string, Object3D>;
+}
+
+/** The outpost's models and the starter frigate (view/frigate), which waits on its berth. */
+export interface LoadedModels extends OutpostModels {
+  readonly frigate: Object3D;
 }
 
 export function facilityKey(facility: string, tier: number): string {
@@ -126,12 +133,17 @@ async function fetchGlb(url: string): Promise<Object3D> {
   return parseGlb(await response.arrayBuffer());
 }
 
-let loading: Promise<OutpostModels> | null = null;
+let loading: Promise<LoadedModels> | null = null;
 
-/** Loads both GLBs once; later calls share the result. */
-export function loadOutpostModels(): Promise<OutpostModels> {
-  loading ??= Promise.all([fetchGlb(stationUrl), fetchGlb(facilitiesUrl)]).then(
-    ([station, facilities]) => indexModels(station, facilities),
+/** Loads the three GLBs once; later calls share the result. */
+export function loadOutpostModels(): Promise<LoadedModels> {
+  loading ??= Promise.all([fetchGlb(stationUrl), fetchGlb(facilitiesUrl), loadFrigate()]).then(
+    ([station, facilities, frigate]) => ({ ...indexModels(station, facilities), frigate }),
   );
   return loading;
+}
+
+/** Loads the starter frigate on its own, for the greybox. */
+export async function loadFrigate(): Promise<Object3D> {
+  return frigateModel(await fetchGlb(frigateUrl));
 }

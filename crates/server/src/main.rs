@@ -1,13 +1,14 @@
 use frontier_protocol::{ConnectInfo, PROTOCOL_VERSION};
 use frontier_server::auth::Auth;
 use frontier_server::cert::DevCertificate;
-use frontier_server::config::Config;
+use frontier_server::config::{self, Config};
 use frontier_server::expedition::Expedition;
+use frontier_server::ledger::{Npc, Party, Reason, Transfer};
 use frontier_server::log::Lines;
 use frontier_server::runs::Runs;
 use frontier_server::store::Store;
 use frontier_server::transport::Identity;
-use frontier_server::{http, relay, transport};
+use frontier_server::{http, relay, report, transport};
 use std::time::Duration;
 use time::OffsetDateTime;
 use tracing::{info, warn};
@@ -25,6 +26,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = Config::from_env()?;
     // `frontier-server wipe`: Stage 1 data may be wiped between builds.
+    // `frontier-server report`: the Stage 1 gate report from the saves.
+    // `frontier-server grant`: stock for an existing pilot, for testing.
     match std::env::args().nth(1).as_deref() {
         None => {}
         Some("wipe") => {
@@ -32,8 +35,64 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!(data = %config.data_path.display(), world = store.world(), "wiped: an empty world");
             return Ok(());
         }
+        Some("report") => {
+            // `frontier-server report [greybox.json ...]`: the Stage 1 gates.
+            let store = Store::open(&config.data_path)?;
+            let greybox = std::env::args()
+                .skip(2)
+                .map(
+                    |path| -> Result<report::Greybox, Box<dyn std::error::Error>> {
+                        let text = std::fs::read_to_string(&path)
+                            .map_err(|error| format!("{path}: {error}"))?;
+                        Ok(serde_json::from_str(&text)
+                            .map_err(|error| format!("{path}: {error}"))?)
+                    },
+                )
+                .collect::<Result<Vec<_>, _>>()?;
+            print!("{}", report::compute(&store.events()?, &greybox).markdown());
+            return Ok(());
+        }
+        Some("grant") => {
+            // `frontier-server grant <callsign> 1000cr,40ore`: tops up a pilot
+            // who already exists, as FRONTIER_GRANT does for new ones.
+            const USAGE: &str =
+                "usage: frontier-server grant <callsign> <stock, such as 1000cr,40ore>";
+            let mut args = std::env::args().skip(2);
+            let (Some(callsign), Some(stock), None) = (args.next(), args.next(), args.next())
+            else {
+                return Err(USAGE.into());
+            };
+            let stock = config::parse_grant(&stock)
+                .filter(|stock| !stock.is_empty())
+                .ok_or_else(|| format!("{stock:?} is not stock such as 1000cr,40ore; {USAGE}"))?;
+            let store = Store::open(&config.data_path)?;
+            let pilot = store
+                .find(&callsign)?
+                .ok_or_else(|| format!("no pilot is called {callsign:?}"))?;
+            let transfers: Vec<Transfer> = stock
+                .iter()
+                .map(|&(item, amount)| Transfer {
+                    item,
+                    amount,
+                    from: Party::Npc(Npc::Grant),
+                    to: Party::Account(pilot),
+                    reason: Reason::TestGrant,
+                    run: None,
+                })
+                .collect();
+            store.transfer(&transfers)?;
+            info!(
+                callsign,
+                ?stock,
+                "granted: the page shows it after a reload"
+            );
+            return Ok(());
+        }
         Some(other) => {
-            return Err(format!("unknown command {other:?}; the only one is wipe").into());
+            return Err(format!(
+                "unknown command {other:?}; the commands are wipe, report and grant"
+            )
+            .into());
         }
     }
     let stop = shutdown_signal();

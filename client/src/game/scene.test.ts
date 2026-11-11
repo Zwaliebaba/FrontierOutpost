@@ -1,10 +1,26 @@
-import { describe, expect, it } from "vitest";
-import { Mesh } from "three";
-import type { MeshStandardMaterial } from "three";
+import { afterEach, describe, expect, it } from "vitest";
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from "three";
 import { ExpeditionScene, SIZE, allegianceOf } from "./scene";
 import type { EntityPose } from "../net/interpolation";
 import type { SiteInfo } from "../protocol";
-import { RENDER_HEIGHT, STRUCTURE, hullGeometry } from "../view/readability";
+import { GEAR_LIFT, GEAR_SECONDS } from "../view/frigate";
+import { RENDER_HEIGHT, STRUCTURE, hullGeometry, useShipModel } from "../view/readability";
+
+/** A stand-in for the frigate: one hull part and one leg, as view/frigate sets them up. */
+function model(): Group {
+  const ship = new Group();
+  ship.add(new Mesh(new BoxGeometry(2, 1, 1), new MeshStandardMaterial({ name: "Armor | test" })));
+  const leg = new Mesh(new BoxGeometry(0.1, 0.3, 0.1), new MeshStandardMaterial());
+  leg.name = "Frigate_|_landing_strut";
+  leg.position.y = -0.4;
+  leg.userData.deployedY = -0.4;
+  ship.add(leg);
+  return ship;
+}
+
+afterEach(() => {
+  useShipModel(null);
+});
 
 const SITE: SiteInfo = {
   name: "Test",
@@ -54,7 +70,7 @@ describe("ExpeditionScene", () => {
     }
     expect(world.ship(1)?.allegiance).toBe("self");
     expect(world.ship(2)?.allegiance).toBe("ally");
-    expect(world.ship(3)?.hull.geometry).toBe(hullGeometry("hostile"));
+    expect((world.ship(3)?.hull as Mesh | undefined)?.geometry).toBe(hullGeometry("hostile"));
     expect(world.ship(3)?.hull.scale.x).toBe(SIZE.warden);
   });
 
@@ -89,13 +105,31 @@ describe("ExpeditionScene", () => {
     const rock = world.obstacles[0] as Mesh<never, MeshStandardMaterial> | undefined;
     expect(rock?.material.stencilWrite).toBe(true);
     expect(rock?.material.stencilRef).toBe(STRUCTURE);
-    const dock = world.scene.getObjectByName("dock");
+    const dock = world.scene.getObjectByName("stand-in dock");
     dock?.traverse((node) => {
       if (node instanceof Mesh) {
         expect((node.material as MeshStandardMaterial).stencilRef).toBe(STRUCTURE);
       }
     });
     expect(dock).toBeDefined();
+  });
+
+  it("draws the outpost's station at the dock in place of the stand-in, across runs", () => {
+    const world = new ExpeditionScene(1);
+    const station = new Group();
+    station.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial()));
+    world.setSite(SITE, [], []);
+    world.setStation(station);
+    const standIn = () => world.scene.getObjectByName("stand-in dock");
+    expect(standIn()?.visible).toBe(false);
+    expect(station.parent?.name).toBe("dock");
+    // A new site clears and disposes the last one's meshes, but never the station's.
+    world.setSite(SITE, [], []);
+    expect(standIn()?.visible).toBe(false);
+    expect(station.parent?.name).toBe("dock");
+    world.setStation(null);
+    expect(station.parent).toBeNull();
+    expect(standIn()?.visible).toBe(true);
   });
 
   it("shows a locked pocket by a caged beacon, an open one by a crystal", () => {
@@ -142,5 +176,46 @@ describe("ExpeditionScene", () => {
     world.update([pose(3, "drone")], null);
     world.update([pose(3, "warden")], null);
     expect(world.ship(3)?.hull.scale.x).toBe(SIZE.warden);
+  });
+
+  it("lowers a player ship's gear on the berth and folds it once the ship lifts off", () => {
+    useShipModel(model());
+    const world = new ExpeditionScene(1);
+    world.setSite(SITE, [], []);
+    const leg = () => {
+      let y = Number.NaN;
+      world.ship(1)?.hull.traverse((node) => {
+        if (node.name.includes("landing_strut")) y = node.position.y;
+      });
+      return y;
+    };
+    world.update([pose(1, "playerShip", SITE.dockX, SITE.dockZ)], null, undefined, 0.1);
+    expect(leg()).toBeCloseTo(-0.4, 6);
+    // Off the berth the legs fold over the gear's time, not at once.
+    world.update([pose(1, "playerShip", SITE.dockX + 3, 0)], null, undefined, GEAR_SECONDS / 2);
+    expect(leg()).toBeGreaterThan(-0.4);
+    expect(leg()).toBeLessThan(-0.4 + GEAR_LIFT);
+    world.update([pose(1, "playerShip", SITE.dockX + 6, 0)], null, undefined, GEAR_SECONDS);
+    expect(leg()).toBeCloseTo(-0.4 + GEAR_LIFT, 6);
+    // A ship first seen in flight is drawn with its gear up.
+    world.update([pose(2, "playerShip", 40, 0)], null, undefined, 0.016);
+    let folded = Number.NaN;
+    world.ship(2)?.hull.traverse((node) => {
+      if (node.name.includes("landing_strut")) folded = node.position.y;
+    });
+    expect(folded).toBeCloseTo(-0.4 + GEAR_LIFT, 6);
+  });
+
+  it("draws ships in flight anew once the hull model loads", () => {
+    const world = new ExpeditionScene(1);
+    world.update([pose(1, "playerShip"), pose(3, "raider")], null);
+    expect(world.ship(1)?.hull).toBeInstanceOf(Mesh);
+    useShipModel(model());
+    world.redraw();
+    world.update([pose(1, "playerShip"), pose(3, "raider")], null);
+    expect(world.ship(1)?.hull).toBeInstanceOf(Group);
+    expect(world.ship(1)?.hull.parent).toBe(world.scene);
+    // Hostiles have no model yet.
+    expect(world.ship(3)?.hull).toBeInstanceOf(Mesh);
   });
 });

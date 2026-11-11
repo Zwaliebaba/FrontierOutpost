@@ -47,7 +47,8 @@ pub struct Config {
 
 /// Reads a grant such as `1000cr,40ore`: amounts, each followed by `cr` or
 /// a good's name.
-fn parse_grant(value: &str) -> Option<Vec<(Item, u32)>> {
+#[must_use]
+pub fn parse_grant(value: &str) -> Option<Vec<(Item, u32)>> {
     value
         .split(',')
         .map(str::trim)

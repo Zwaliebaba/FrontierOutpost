@@ -1,0 +1,1158 @@
+//! The Stage 1 gate report (design section 9, plan 7.2): each gate's measures
+//! computed from the recorded gate events, set beside the provisional
+//! thresholds. Gate 2's trials happen in the readability greybox, which
+//! downloads them as JSON; the report reads those files too.
+//!
+//! A play session is a pilot's sign-ins joined across gaps of less than
+//! [`SESSION_GAP_MS`], so a reload does not start a new one. Days are UTC.
+
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::fmt::Write as _;
+
+use serde::Deserialize;
+
+use crate::events::{GateEvent, Placed, Recorded};
+
+/// Sign-ins closer together than this are one play session: half an hour.
+pub const SESSION_GAP_MS: i64 = 30 * 60 * 1_000;
+const DAY_MS: i64 = 24 * 60 * 60 * 1_000;
+
+/// The provisional thresholds of design section 9.
+pub mod thresholds {
+    /// Gate 1: share of testers who reconfigure in their first three sessions.
+    pub const RECONFIGURE_SHARE: f64 = 0.5;
+    /// Gate 2: median seconds to select a named hostile.
+    pub const SELECT_SECONDS: f64 = 1.0;
+    /// Gate 2: share of selections that pick the wrong ship.
+    pub const WRONG_TARGET_SHARE: f64 = 0.05;
+    /// Gate 2: share of headings judged within 22.5 degrees.
+    pub const HEADING_SHARE: f64 = 0.9;
+    /// Gate 2: share of nearer targets chosen correctly.
+    pub const NEARER_SHARE: f64 = 0.85;
+    /// Gate 3: share of defeats followed by a launch in that session or the next.
+    pub const RELAUNCH_SHARE: f64 = 0.6;
+    /// Gate 4: travel's share of session time.
+    pub const TRAVEL_SHARE: f64 = 0.2;
+    /// Gate 4: minutes from a loss to flying an equivalent fitting.
+    pub const RECOVERY_MINUTES: f64 = 15.0;
+    /// Gate 4: seconds from launch to the first decision.
+    pub const FIRST_DECISION_SECONDS: f64 = 120.0;
+}
+
+/// Whether a measure must be at most or at least its threshold.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Target {
+    AtMost(f64),
+    AtLeast(f64),
+}
+
+/// One measure of a gate.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Measure {
+    pub name: String,
+    /// `None` when the events hold nothing to measure.
+    pub value: Option<f64>,
+    /// How to show the value: "%" for a share, or a unit.
+    pub unit: &'static str,
+    pub target: Option<Target>,
+    /// What the value was computed from, such as "12 defeats".
+    pub basis: String,
+}
+
+impl Measure {
+    fn new(name: &str, value: Option<f64>, unit: &'static str, basis: String) -> Self {
+        Self {
+            name: name.to_owned(),
+            value,
+            unit,
+            target: None,
+            basis,
+        }
+    }
+
+    fn target(mut self, target: Target) -> Self {
+        self.target = Some(target);
+        self
+    }
+
+    /// Whether the value meets its threshold, if it has both.
+    #[must_use]
+    pub fn met(&self) -> Option<bool> {
+        let value = self.value?;
+        Some(match self.target? {
+            Target::AtMost(limit) => value <= limit,
+            Target::AtLeast(limit) => value >= limit,
+        })
+    }
+
+    fn shown(value: f64, unit: &str) -> String {
+        if unit == "%" {
+            format!("{:.0}%", value * 100.0)
+        } else {
+            format!("{value:.1} {unit}")
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Gate {
+    pub title: &'static str,
+    pub measures: Vec<Measure>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Report {
+    pub pilots: usize,
+    pub runs: usize,
+    pub sessions: usize,
+    pub gates: Vec<Gate>,
+}
+
+/// One greybox trial, as the greybox downloads it.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Trial {
+    pub kind: String,
+    pub ms: f64,
+    pub outcome: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GreyboxConfig {
+    #[serde(default)]
+    vision: Option<String>,
+}
+
+/// A downloaded greybox result file.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Greybox {
+    config: GreyboxConfig,
+    pub records: Vec<Trial>,
+}
+
+impl Greybox {
+    /// The colour-vision mode the trials ran under.
+    #[must_use]
+    pub fn vision(&self) -> &str {
+        self.config.vision.as_deref().unwrap_or("normal")
+    }
+}
+
+/// A launched run as the events tell it.
+#[derive(Debug, Clone, Default)]
+struct Run {
+    account: i64,
+    launched_at: i64,
+    seed: u32,
+    layout: Vec<Placed>,
+    unlocks: Vec<String>,
+    fitted: Vec<String>,
+    stake: u32,
+    first_pocket: Option<String>,
+    first_decision_at: Option<i64>,
+    ended: Option<(i64, String, Vec<String>, u32)>,
+}
+
+impl Run {
+    /// What the pilot chose on the seed: the rig flown and the first pocket.
+    fn choice(&self) -> (Option<String>, Option<String>) {
+        let rig = self.fitted.iter().find(|id| id.ends_with("_rig")).cloned();
+        (rig, self.first_pocket.clone())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Session {
+    start: i64,
+    end: i64,
+}
+
+fn median(values: &mut [f64]) -> Option<f64> {
+    if values.is_empty() {
+        return None;
+    }
+    values.sort_by(f64::total_cmp);
+    let mid = values.len() / 2;
+    Some(if values.len().is_multiple_of(2) {
+        f64::midpoint(values[mid - 1], values[mid])
+    } else {
+        values[mid]
+    })
+}
+
+fn share(part: usize, whole: usize) -> Option<f64> {
+    // Counts of a few thousand at most, so `as` loses nothing.
+    (whole > 0).then(|| part as f64 / whole as f64)
+}
+
+/// Each account's play sessions: sign-ins joined across short gaps.
+fn sessions(events: &[Recorded]) -> HashMap<i64, Vec<Session>> {
+    let mut spans: HashMap<i64, Vec<Session>> = HashMap::new();
+    for recorded in events {
+        if let GateEvent::SessionEnded { millis } = recorded.event {
+            spans.entry(recorded.account).or_default().push(Session {
+                start: recorded.at - i64::try_from(millis).unwrap_or(i64::MAX),
+                end: recorded.at,
+            });
+        }
+    }
+    for list in spans.values_mut() {
+        list.sort_by_key(|session| session.start);
+        let mut merged: Vec<Session> = Vec::new();
+        for session in list.drain(..) {
+            match merged.last_mut() {
+                Some(last) if session.start - last.end < SESSION_GAP_MS => {
+                    last.end = last.end.max(session.end);
+                }
+                _ => merged.push(session),
+            }
+        }
+        *list = merged;
+    }
+    spans
+}
+
+/// The index of the session holding `at`, or the last one starting before it.
+fn session_of(list: &[Session], at: i64) -> Option<usize> {
+    list.iter().rposition(|session| session.start <= at)
+}
+
+fn runs(events: &[Recorded]) -> Vec<Run> {
+    let mut by_key: BTreeMap<(i64, i64, String), Run> = BTreeMap::new();
+    let mut key_of: HashMap<(i64, String), (i64, i64, String)> = HashMap::new();
+    for recorded in events {
+        let Some(run_id) = &recorded.run else {
+            continue;
+        };
+        let id = (recorded.account, run_id.clone());
+        match &recorded.event {
+            GateEvent::Launched {
+                seed,
+                layout,
+                unlocks,
+                fitted,
+                stake,
+                ..
+            } => {
+                let key = (recorded.at, recorded.account, run_id.clone());
+                key_of.insert(id, key.clone());
+                by_key.insert(
+                    key,
+                    Run {
+                        account: recorded.account,
+                        launched_at: recorded.at,
+                        seed: *seed,
+                        layout: layout.clone(),
+                        unlocks: unlocks.clone(),
+                        fitted: fitted.clone(),
+                        stake: *stake,
+                        ..Run::default()
+                    },
+                );
+            }
+            event => {
+                let Some(run) = key_of.get(&id).and_then(|key| by_key.get_mut(key)) else {
+                    continue;
+                };
+                if event.is_decision() && run.first_decision_at.is_none() {
+                    run.first_decision_at = Some(recorded.at);
+                }
+                match event {
+                    GateEvent::PocketEntered { pocket } if run.first_pocket.is_none() => {
+                        run.first_pocket = Some(pocket.clone());
+                    }
+                    GateEvent::RunEnded {
+                        ending,
+                        lost,
+                        approach_seconds,
+                        return_seconds,
+                        ..
+                    } => {
+                        run.ended = Some((
+                            recorded.at,
+                            ending.clone(),
+                            lost.clone(),
+                            approach_seconds + return_seconds,
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    by_key.into_values().collect()
+}
+
+/// Computes the gates from `events` and greybox `trials`.
+#[must_use]
+pub fn compute(events: &[Recorded], greybox: &[Greybox]) -> Report {
+    let sessions = sessions(events);
+    let runs = runs(events);
+    let pilots: BTreeSet<i64> = runs.iter().map(|run| run.account).collect();
+    Report {
+        pilots: pilots.len(),
+        runs: runs.len(),
+        sessions: sessions.values().map(Vec::len).sum(),
+        gates: vec![
+            gate_1(events, &runs, &sessions),
+            gate_2(events, greybox),
+            gate_3(&runs, &sessions),
+            gate_4(&runs, &sessions),
+            crew_evidence(events),
+        ],
+    }
+}
+
+fn gate_1(events: &[Recorded], runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
+    // Among pilots with the same unlocks, do active layouts differ?
+    let mut by_unlocks: BTreeMap<&[String], BTreeMap<i64, &[Placed]>> = BTreeMap::new();
+    for run in runs.iter().filter(|run| !run.unlocks.is_empty()) {
+        by_unlocks
+            .entry(&run.unlocks)
+            .or_default()
+            .insert(run.account, &run.layout);
+    }
+    let groups: Vec<_> = by_unlocks.values().filter(|g| g.len() >= 2).collect();
+    let differing = groups
+        .iter()
+        .filter(|group| group.values().collect::<BTreeSet<_>>().len() > 1)
+        .count();
+
+    // On the same seed, does the layout predict the rig and the first pocket?
+    let (mut same, mut same_agree, mut other, mut other_agree) = (0, 0, 0, 0);
+    let mut by_seed: BTreeMap<u32, Vec<&Run>> = BTreeMap::new();
+    for run in runs.iter().filter(|run| run.first_pocket.is_some()) {
+        by_seed.entry(run.seed).or_default().push(run);
+    }
+    for list in by_seed.values() {
+        for (i, a) in list.iter().enumerate() {
+            for b in &list[i + 1..] {
+                if a.account == b.account {
+                    continue;
+                }
+                let agree = usize::from(a.choice() == b.choice());
+                if a.layout == b.layout {
+                    same += 1;
+                    same_agree += agree;
+                } else {
+                    other += 1;
+                    other_agree += agree;
+                }
+            }
+        }
+    }
+
+    // Reconfigurations: installing again, removing, or changing power.
+    let reconfigurations: Vec<&Recorded> = events
+        .iter()
+        .filter(|r| {
+            matches!(&r.event, GateEvent::OutpostChanged { action, .. }
+                if matches!(action.as_str(), "reinstalled" | "removed" | "powered"))
+        })
+        .collect();
+    let mut per_ten: Vec<f64> = Vec::new();
+    let mut runs_by: BTreeMap<i64, usize> = BTreeMap::new();
+    for run in runs {
+        *runs_by.entry(run.account).or_default() += 1;
+    }
+    for (&account, &count) in &runs_by {
+        let changes = reconfigurations
+            .iter()
+            .filter(|r| r.account == account)
+            .count();
+        per_ten.push(changes as f64 * 10.0 / count as f64);
+    }
+    let pilots = runs_by.len();
+    let early = runs_by
+        .keys()
+        .filter(|&&account| {
+            let Some(list) = sessions.get(&account) else {
+                return false;
+            };
+            reconfigurations.iter().any(|r| {
+                r.account == account && session_of(list, r.at).is_some_and(|index| index < 3)
+            })
+        })
+        .count();
+    let per_ten_median = median(&mut per_ten);
+    Gate {
+        title: "Gate 1 · Outpost enhancements change expedition decisions",
+        measures: vec![
+            Measure::new(
+                "Pilots with the same unlocks whose layouts differ",
+                share(differing, groups.len()),
+                "%",
+                format!("{} groups of two or more pilots", groups.len()),
+            ),
+            Measure::new(
+                "Same seed, same layout: same rig and first pocket",
+                share(same_agree, same),
+                "%",
+                format!("{same} pairs of runs"),
+            ),
+            Measure::new(
+                "Same seed, different layout: same rig and first pocket",
+                share(other_agree, other),
+                "%",
+                format!(
+                    "{other} pairs of runs; lower than the line above means layout predicts choice"
+                ),
+            ),
+            Measure::new(
+                "Reconfigurations per ten runs (median pilot)",
+                per_ten_median,
+                "per 10 runs",
+                format!(
+                    "{} reconfigurations; should be neither 0 nor 10",
+                    reconfigurations.len()
+                ),
+            ),
+            Measure::new(
+                "Pilots who reconfigure in their first three sessions",
+                share(early, pilots),
+                "%",
+                format!("{pilots} pilots"),
+            )
+            .target(Target::AtLeast(thresholds::RECONFIGURE_SHARE)),
+        ],
+    }
+}
+
+fn gate_2(events: &[Recorded], greybox: &[Greybox]) -> Gate {
+    let mut measures = Vec::new();
+    let mut by_vision: BTreeMap<&str, Vec<&Trial>> = BTreeMap::new();
+    for file in greybox {
+        by_vision
+            .entry(file.vision())
+            .or_default()
+            .extend(file.records.iter());
+    }
+    for (vision, trials) in by_vision {
+        let of =
+            |kind: &str| -> Vec<&&Trial> { trials.iter().filter(|t| t.kind == kind).collect() };
+        let (acquire, heading, range) = (of("acquire"), of("heading"), of("range"));
+        let mut times: Vec<f64> = acquire
+            .iter()
+            .filter(|t| t.outcome == "correct")
+            .map(|t| t.ms / 1_000.0)
+            .collect();
+        let answered = acquire
+            .iter()
+            .filter(|t| t.outcome == "correct" || t.outcome == "wrong")
+            .count();
+        let wrong = acquire.iter().filter(|t| t.outcome == "wrong").count();
+        let correct = |list: &[&&Trial]| list.iter().filter(|t| t.outcome == "correct").count();
+        let label = |what: &str| format!("{what} ({vision} vision)");
+        measures.push(
+            Measure::new(
+                &label("Median time to select a named hostile"),
+                median(&mut times),
+                "s",
+                format!("{} selections", times.len()),
+            )
+            .target(Target::AtMost(thresholds::SELECT_SECONDS)),
+        );
+        measures.push(
+            Measure::new(
+                &label("Wrong-target selections"),
+                share(wrong, answered),
+                "%",
+                format!("{answered} answered"),
+            )
+            .target(Target::AtMost(thresholds::WRONG_TARGET_SHARE)),
+        );
+        measures.push(
+            Measure::new(
+                &label("Headings judged within 22.5°"),
+                share(correct(&heading), heading.len()),
+                "%",
+                format!("{} trials", heading.len()),
+            )
+            .target(Target::AtLeast(thresholds::HEADING_SHARE)),
+        );
+        measures.push(
+            Measure::new(
+                &label("Nearer target chosen"),
+                share(correct(&range), range.len()),
+                "%",
+                format!("{} trials", range.len()),
+            )
+            .target(Target::AtLeast(thresholds::NEARER_SHARE)),
+        );
+    }
+    if measures.is_empty() {
+        measures.push(Measure::new(
+            "Greybox trials",
+            None,
+            "",
+            "none given: pass the greybox's downloaded JSON files to the report".to_owned(),
+        ));
+    }
+    // In the game itself: how often a lock attempt is beyond lock range.
+    let locks: Vec<bool> = events
+        .iter()
+        .filter_map(|r| match r.event {
+            GateEvent::Locked { taken, .. } => Some(taken),
+            _ => None,
+        })
+        .collect();
+    let refused = locks.iter().filter(|taken| !**taken).count();
+    measures.push(Measure::new(
+        "In play: lock attempts beyond lock range",
+        share(refused, locks.len()),
+        "%",
+        format!("{} lock attempts", locks.len()),
+    ));
+    Gate {
+        title: "Gate 2 · Angled-view targeting stays readable",
+        measures,
+    }
+}
+
+fn gate_3(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
+    let mut defeats = 0;
+    let mut relaunched = 0;
+    let mut stake_ratios: Vec<f64> = Vec::new();
+    for (index, run) in runs.iter().enumerate() {
+        let Some((ended_at, ending, ..)) = &run.ended else {
+            continue;
+        };
+        if ending != "destroyed" {
+            continue;
+        }
+        defeats += 1;
+        let next = runs[index + 1..]
+            .iter()
+            .find(|later| later.account == run.account && later.launched_at > *ended_at);
+        let list = sessions.get(&run.account).map_or(&[][..], Vec::as_slice);
+        if let Some(next) = next {
+            let (lost_in, next_in) = (
+                session_of(list, *ended_at),
+                session_of(list, next.launched_at),
+            );
+            if let (Some(a), Some(b)) = (lost_in, next_in)
+                && b <= a + 1
+            {
+                relaunched += 1;
+            }
+            if run.stake > 0 {
+                stake_ratios.push(f64::from(next.stake) / f64::from(run.stake));
+            }
+        }
+    }
+
+    // Next-day return after a session that ended in defeat, and in success.
+    let (mut after_defeat, mut back_after_defeat, mut after_success, mut back_after_success) =
+        (0, 0, 0, 0);
+    for (account, list) in sessions {
+        for (index, session) in list.iter().enumerate() {
+            let last = runs
+                .iter()
+                .filter(|run| run.account == *account)
+                .filter_map(|run| run.ended.as_ref())
+                .filter(|(at, ..)| *at >= session.start && *at <= session.end)
+                .max_by_key(|(at, ..)| *at);
+            let Some((_, ending, ..)) = last else {
+                continue;
+            };
+            let day = session.end.div_euclid(DAY_MS);
+            let back = list[index + 1..]
+                .iter()
+                .any(|later| later.start.div_euclid(DAY_MS) == day + 1);
+            match ending.as_str() {
+                "destroyed" => {
+                    after_defeat += 1;
+                    back_after_defeat += usize::from(back);
+                }
+                "docked" => {
+                    after_success += 1;
+                    back_after_success += usize::from(back);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // The spread of choices across pilots on one seed at their third and
+    // tenth run.
+    let spread = |nth: usize| -> (Option<f64>, usize) {
+        let mut by_account: BTreeMap<i64, Vec<&Run>> = BTreeMap::new();
+        for run in runs {
+            by_account.entry(run.account).or_default().push(run);
+        }
+        let picked: Vec<&Run> = by_account
+            .values()
+            .filter_map(|list| list.get(nth - 1).copied())
+            .collect();
+        let mut by_seed: BTreeMap<u32, Vec<&Run>> = BTreeMap::new();
+        for run in picked {
+            by_seed.entry(run.seed).or_default().push(run);
+        }
+        let Some(list) = by_seed.into_values().max_by_key(Vec::len) else {
+            return (None, 0);
+        };
+        let distinct: BTreeSet<_> = list
+            .iter()
+            .map(|run| (run.layout.clone(), run.choice()))
+            .collect();
+        (share(distinct.len(), list.len()), list.len())
+    };
+    let (third, third_n) = spread(3);
+    let (tenth, tenth_n) = spread(10);
+    let mut stake_ratio = stake_ratios.clone();
+    Gate {
+        title: "Gate 3 · Players voluntarily repeat after loss",
+        measures: vec![
+            Measure::new(
+                "Defeats followed by a launch in that session or the next",
+                share(relaunched, defeats),
+                "%",
+                format!("{defeats} defeats"),
+            )
+            .target(Target::AtLeast(thresholds::RELAUNCH_SHARE)),
+            Measure::new(
+                "Next-day return after a session ending in defeat",
+                share(back_after_defeat, after_defeat),
+                "%",
+                format!("{after_defeat} sessions"),
+            ),
+            Measure::new(
+                "Next-day return after a session ending docked",
+                share(back_after_success, after_success),
+                "%",
+                format!("{after_success} sessions"),
+            ),
+            Measure::new(
+                "Stake on the launch after a defeat, against the one lost (median)",
+                median(&mut stake_ratio),
+                "×",
+                format!(
+                    "{} relaunches after a defeat with a stake",
+                    stake_ratios.len()
+                ),
+            ),
+            Measure::new(
+                "Distinct choices per pilot on one seed at run 3",
+                third,
+                "%",
+                format!("{third_n} pilots on the most played seed"),
+            ),
+            Measure::new(
+                "Distinct choices per pilot on one seed at run 10",
+                tenth,
+                "%",
+                format!("{tenth_n} pilots on the most played seed"),
+            ),
+        ],
+    }
+}
+
+fn gate_4(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
+    let travel: u64 = runs
+        .iter()
+        .filter_map(|run| run.ended.as_ref())
+        .map(|(.., travel)| u64::from(*travel))
+        .sum();
+    let played: i64 = sessions
+        .values()
+        .flatten()
+        .map(|session| session.end - session.start)
+        .sum();
+    let travel_share = (played > 0).then(|| travel as f64 * 1_000.0 / played as f64);
+
+    let mut recovery: Vec<f64> = Vec::new();
+    let mut losses = 0;
+    for (index, run) in runs.iter().enumerate() {
+        let Some((ended_at, _, lost, _)) = &run.ended else {
+            continue;
+        };
+        if lost.is_empty() {
+            continue;
+        }
+        losses += 1;
+        let back = runs[index + 1..].iter().find(|later| {
+            later.account == run.account
+                && later.launched_at > *ended_at
+                && lost.iter().all(|piece| later.fitted.contains(piece))
+        });
+        if let Some(back) = back {
+            recovery.push((back.launched_at - ended_at) as f64 / 60_000.0);
+        }
+    }
+
+    let mut decisions: Vec<f64> = runs
+        .iter()
+        .filter_map(|run| {
+            run.first_decision_at
+                .map(|at| (at - run.launched_at) as f64 / 1_000.0)
+        })
+        .collect();
+    let recovered = recovery.len();
+    Gate {
+        title: "Gate 4 · Travel and recovery meet targets",
+        measures: vec![
+            Measure::new(
+                "Travel (undock to first pocket, last pocket to dock) as a share of session time",
+                travel_share,
+                "%",
+                format!(
+                    "{} runs ended",
+                    runs.iter().filter(|r| r.ended.is_some()).count()
+                ),
+            )
+            .target(Target::AtMost(thresholds::TRAVEL_SHARE)),
+            Measure::new(
+                "Minutes from losing a fitting to flying it again (median)",
+                median(&mut recovery),
+                "min",
+                format!("{losses} losses, {recovered} recovered"),
+            )
+            .target(Target::AtMost(thresholds::RECOVERY_MINUTES)),
+            Measure::new(
+                "Seconds from launch to the first decision (median)",
+                median(&mut decisions),
+                "s",
+                format!("{} runs with a decision", decisions.len()),
+            )
+            .target(Target::AtMost(thresholds::FIRST_DECISION_SECONDS)),
+        ],
+    }
+}
+
+/// Early evidence for the Stage 2 crew gate, not itself a Stage 1 gate.
+fn crew_evidence(events: &[Recorded]) -> Gate {
+    let mut by_crew: BTreeMap<u32, Vec<f64>> = BTreeMap::new();
+    for recorded in events {
+        if let GateEvent::PotShare { share, crew } = recorded.event {
+            by_crew.entry(crew).or_default().push(f64::from(share));
+        }
+    }
+    let measures = if by_crew.is_empty() {
+        vec![Measure::new(
+            "Pot share per pilot",
+            None,
+            "cr",
+            "no pots paid".to_owned(),
+        )]
+    } else {
+        by_crew
+            .into_iter()
+            .map(|(crew, mut shares)| {
+                let count = shares.len();
+                Measure::new(
+                    &format!("Pot share per pilot, crew of {crew} (median)"),
+                    median(&mut shares),
+                    "cr",
+                    format!("{count} shares"),
+                )
+            })
+            .collect()
+    };
+    Gate {
+        title: "Evidence for the Stage 2 crew gate · per-head reward by crew size",
+        measures,
+    }
+}
+
+impl Report {
+    /// The report as Markdown.
+    #[must_use]
+    pub fn markdown(&self) -> String {
+        let mut out = String::new();
+        let _ = writeln!(out, "# Stage 1 gate report\n");
+        let _ = writeln!(
+            out,
+            "{} pilots · {} runs · {} play sessions. Thresholds are design section 9's provisional figures.\n",
+            self.pilots, self.runs, self.sessions
+        );
+        for gate in &self.gates {
+            let _ = writeln!(out, "## {}\n", gate.title);
+            let _ = writeln!(
+                out,
+                "| Measure | Value | Provisional target | Met | Basis |"
+            );
+            let _ = writeln!(out, "| --- | --- | --- | --- | --- |");
+            for measure in &gate.measures {
+                let value = measure
+                    .value
+                    .map_or_else(|| "–".to_owned(), |v| Measure::shown(v, measure.unit));
+                let target = match measure.target {
+                    Some(Target::AtMost(limit)) => {
+                        format!("≤ {}", Measure::shown(limit, measure.unit))
+                    }
+                    Some(Target::AtLeast(limit)) => {
+                        format!("≥ {}", Measure::shown(limit, measure.unit))
+                    }
+                    None => String::new(),
+                };
+                let met = match measure.met() {
+                    Some(true) => "yes",
+                    Some(false) => "no",
+                    None => "",
+                };
+                let _ = writeln!(
+                    out,
+                    "| {} | {value} | {target} | {met} | {} |",
+                    measure.name, measure.basis
+                );
+            }
+            out.push('\n');
+        }
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const M: i64 = 60_000;
+    const DAY: i64 = DAY_MS;
+
+    fn at(at: i64, account: i64, run: Option<&str>, event: GateEvent) -> Recorded {
+        Recorded {
+            at,
+            account,
+            run: run.map(str::to_owned),
+            event,
+        }
+    }
+
+    fn launched(
+        layout: &[(&str, &str)],
+        unlocks: &[&str],
+        fitted: &[&str],
+        stake: u32,
+    ) -> GateEvent {
+        GateEvent::Launched {
+            seed: 29,
+            tier: 1,
+            crew: 1,
+            role: "solo".into(),
+            layout: layout
+                .iter()
+                .map(|(socket, facility)| Placed {
+                    socket: (*socket).into(),
+                    facility: (*facility).into(),
+                    run: 1,
+                })
+                .collect(),
+            unlocks: unlocks.iter().map(|u| (*u).to_owned()).collect(),
+            fitted: fitted.iter().map(|f| (*f).to_owned()).collect(),
+            stake,
+            supplies: 40,
+        }
+    }
+
+    fn ended(ending: &str, travel: u32, lost: &[&str]) -> GateEvent {
+        GateEvent::RunEnded {
+            ending: ending.into(),
+            banked: 0,
+            cargo_lost: 0,
+            lost: lost.iter().map(|l| (*l).to_owned()).collect(),
+            approach_seconds: travel / 2,
+            objective_seconds: 600,
+            return_seconds: travel - travel / 2,
+        }
+    }
+
+    fn pocket(name: &str) -> GateEvent {
+        GateEvent::PocketEntered {
+            pocket: name.into(),
+        }
+    }
+
+    fn outpost(action: &str) -> GateEvent {
+        GateEvent::OutpostChanged {
+            action: action.into(),
+            socket: "a".into(),
+            facility: "refinery".into(),
+            run: 1,
+        }
+    }
+
+    /// Two pilots' play, scripted so every figure can be worked out by hand.
+    ///
+    /// Pilot 1, day one, one session of an hour: a docked run in the basic
+    /// fitting; buys a refinery; a run with the extraction rig, destroyed,
+    /// losing the rig; removes the refinery (a reconfiguration); a docked run.
+    /// Day two, half an hour: the refinery back on, the rig flown, docked.
+    /// Pilot 2, day one, half an hour: one run, destroyed, and no other.
+    fn history() -> Vec<Recorded> {
+        let refinery_a = [("a", "refinery")];
+        let refinery_b = [("b", "refinery")];
+        let unlocked = ["refinery:1"];
+        let rig = ["extraction_rig"];
+        let mut events = vec![
+            at(
+                60 * M,
+                1,
+                None,
+                GateEvent::SessionEnded { millis: 3_600_000 },
+            ),
+            at(M, 1, Some("r1"), launched(&[], &[], &[], 0)),
+            at(
+                M + 90_000,
+                1,
+                Some("r1"),
+                GateEvent::Locked {
+                    target: "drone".into(),
+                    distance: 40.0,
+                    taken: true,
+                },
+            ),
+            at(M + 150_000, 1, Some("r1"), pocket("OreField")),
+            at(20 * M, 1, Some("r1"), ended("docked", 300, &[])),
+            at(21 * M, 1, None, outpost("bought")),
+            at(
+                22 * M,
+                1,
+                Some("r2"),
+                launched(&refinery_a, &unlocked, &rig, 60),
+            ),
+            at(22 * M + 30_000, 1, Some("r2"), GateEvent::ScanStarted),
+            at(22 * M + 100_000, 1, Some("r2"), pocket("VolatileVeins")),
+            at(40 * M, 1, Some("r2"), ended("destroyed", 200, &rig)),
+            at(41 * M, 1, None, outpost("removed")),
+            at(45 * M, 1, Some("r3"), launched(&[], &unlocked, &[], 0)),
+            at(55 * M, 1, Some("r3"), ended("docked", 100, &[])),
+            at(
+                DAY + 30 * M,
+                1,
+                None,
+                GateEvent::SessionEnded { millis: 1_800_000 },
+            ),
+            at(
+                DAY + 5 * M,
+                1,
+                Some("r4"),
+                launched(&refinery_a, &unlocked, &rig, 60),
+            ),
+            at(DAY + 5 * M + 40_000, 1, Some("r4"), pocket("OreField")),
+            at(DAY + 25 * M, 1, Some("r4"), ended("docked", 400, &[])),
+            at(
+                DAY + 25 * M,
+                1,
+                Some("r4"),
+                GateEvent::PotShare {
+                    share: 100,
+                    crew: 1,
+                },
+            ),
+            at(
+                30 * M,
+                2,
+                None,
+                GateEvent::SessionEnded { millis: 1_800_000 },
+            ),
+            at(
+                2 * M,
+                2,
+                Some("r5"),
+                launched(&refinery_b, &unlocked, &rig, 60),
+            ),
+            at(2 * M + 60_000, 2, Some("r5"), pocket("OreField")),
+            at(
+                2 * M + 70_000,
+                2,
+                Some("r5"),
+                GateEvent::Locked {
+                    target: "raider".into(),
+                    distance: 75.0,
+                    taken: false,
+                },
+            ),
+            at(10 * M, 2, Some("r5"), ended("destroyed", 0, &[])),
+            at(
+                10 * M,
+                2,
+                Some("r5"),
+                GateEvent::PotShare { share: 80, crew: 2 },
+            ),
+        ];
+        events.sort_by_key(|recorded| recorded.at);
+        events
+    }
+
+    fn greybox() -> Greybox {
+        let trial = |kind: &str, ms: f64, outcome: &str| {
+            format!(r#"{{"kind":"{kind}","ms":{ms},"outcome":"{outcome}"}}"#)
+        };
+        let mut records = vec![
+            trial("acquire", 800.0, "correct"),
+            trial("acquire", 1_200.0, "correct"),
+            trial("acquire", 900.0, "correct"),
+            trial("acquire", 500.0, "wrong"),
+            trial("acquire", 4_000.0, "timeout"),
+            trial("heading", 2_000.0, "wrong"),
+            trial("range", 1_000.0, "wrong"),
+        ];
+        records.extend((0..9).map(|_| trial("heading", 2_000.0, "correct")));
+        records.extend((0..4).map(|_| trial("range", 1_000.0, "correct")));
+        let json = format!(
+            r#"{{"config":{{"vision":"normal","scene":"station"}},"summary":{{}},"records":[{}]}}"#,
+            records.join(",")
+        );
+        serde_json::from_str(&json).unwrap()
+    }
+
+    fn value(report: &Report, gate: usize, name: &str) -> Option<f64> {
+        report.gates[gate]
+            .measures
+            .iter()
+            .find(|m| m.name.starts_with(name))
+            .unwrap_or_else(|| panic!("no measure {name}"))
+            .value
+    }
+
+    fn close(actual: Option<f64>, expected: f64) -> bool {
+        actual.is_some_and(|actual| (actual - expected).abs() < 1e-9)
+    }
+
+    #[test]
+    fn reproduces_the_hand_checked_figures() {
+        let report = compute(&history(), &[greybox()]);
+        assert_eq!((report.pilots, report.runs, report.sessions), (2, 5, 3));
+
+        // Gate 1. Both pilots own a refinery at tier 1 and install it in
+        // different sockets: their layouts differ.
+        assert!(close(
+            value(&report, 0, "Pilots with the same unlocks"),
+            1.0
+        ));
+        // Seed 29, pairs across pilots: r1-r5, r2-r5, r4-r5, all with
+        // different layouts; only r4 and r5 agree (extraction rig, ore field).
+        assert_eq!(value(&report, 0, "Same seed, same layout"), None);
+        assert!(close(
+            value(&report, 0, "Same seed, different layout"),
+            1.0 / 3.0
+        ));
+        // Pilot 1: one reconfiguration in four runs, 2.5 per ten; pilot 2:
+        // none in one run. The median of 2.5 and 0.
+        assert!(close(
+            value(&report, 0, "Reconfigurations per ten runs"),
+            1.25
+        ));
+        // Pilot 1 reconfigures in their first session; pilot 2 never: 1 of 2.
+        let early = &report.gates[0].measures[4];
+        assert!(close(early.value, 0.5));
+        assert_eq!(early.met(), Some(true), "at least half");
+
+        // Gate 2. Acquire: correct in 0.8, 1.2 and 0.9 s, one wrong, one
+        // timed out: median 0.9 s, wrong 1 of 4 answered. Heading 9 of 10;
+        // nearer 4 of 5. In play, one lock of two was beyond range.
+        assert!(close(value(&report, 1, "Median time to select"), 0.9));
+        assert!(close(value(&report, 1, "Wrong-target selections"), 0.25));
+        assert!(close(value(&report, 1, "Headings judged"), 0.9));
+        assert!(close(value(&report, 1, "Nearer target chosen"), 0.8));
+        assert!(close(value(&report, 1, "In play: lock attempts"), 0.5));
+        let met: Vec<Option<bool>> = report.gates[1].measures[..4]
+            .iter()
+            .map(Measure::met)
+            .collect();
+        assert_eq!(met, [Some(true), Some(false), Some(true), Some(false)]);
+
+        // Gate 3. Two defeats: pilot 1 relaunches in the same session, pilot
+        // 2 never does: 1 of 2. Pilot 1's day-one session ends docked and
+        // they return the next day; their day-two session ends docked with no
+        // later one: 1 of 2. Pilot 2's session ends in defeat: 0 of 1. The
+        // relaunch after r2 stakes nothing against 60. At run 3 only pilot 1
+        // has played three runs: one choice for one pilot.
+        let relaunch = &report.gates[2].measures[0];
+        assert!(close(relaunch.value, 0.5));
+        assert_eq!(relaunch.met(), Some(false), "short of 60%");
+        assert!(close(
+            value(
+                &report,
+                2,
+                "Next-day return after a session ending in defeat"
+            ),
+            0.0
+        ));
+        assert!(close(
+            value(&report, 2, "Next-day return after a session ending docked"),
+            0.5
+        ));
+        assert!(close(
+            value(&report, 2, "Stake on the launch after a defeat"),
+            0.0
+        ));
+        assert!(close(
+            value(
+                &report,
+                2,
+                "Distinct choices per pilot on one seed at run 3"
+            ),
+            1.0
+        ));
+        assert_eq!(
+            value(
+                &report,
+                2,
+                "Distinct choices per pilot on one seed at run 10"
+            ),
+            None
+        );
+
+        // Gate 4. Travel 300 + 200 + 100 + 400 + 0 = 1,000 s of 7,200 s
+        // played. The rig lost at minute 40 of day one flies again at minute
+        // 5 of day two: 1,405 minutes. First decisions 90, 30, 40 and 60 s
+        // (r3 has none): median 50 s.
+        assert!(close(value(&report, 3, "Travel"), 1_000.0 / 7_200.0));
+        assert!(close(value(&report, 3, "Minutes from losing"), 1_405.0));
+        assert!(close(value(&report, 3, "Seconds from launch"), 50.0));
+        let met: Vec<Option<bool>> = report.gates[3].measures.iter().map(Measure::met).collect();
+        assert_eq!(met, [Some(true), Some(false), Some(true)]);
+
+        // Crew evidence: one share in a crew of one, one in a crew of two.
+        assert!(close(
+            value(&report, 4, "Pot share per pilot, crew of 1"),
+            100.0
+        ));
+        assert!(close(
+            value(&report, 4, "Pot share per pilot, crew of 2"),
+            80.0
+        ));
+    }
+
+    #[test]
+    fn a_reload_does_not_start_a_new_session() {
+        let events = vec![
+            at(10 * M, 1, None, GateEvent::SessionEnded { millis: 600_000 }),
+            at(25 * M, 1, None, GateEvent::SessionEnded { millis: 840_000 }),
+            at(90 * M, 1, None, GateEvent::SessionEnded { millis: 300_000 }),
+        ];
+        let spans = sessions(&events);
+        let list = &spans[&1];
+        assert_eq!(
+            list.len(),
+            2,
+            "eleven minutes apart joins; over half an hour does not"
+        );
+        assert_eq!((list[0].start, list[0].end), (0, 25 * M));
+    }
+
+    #[test]
+    fn an_empty_world_reports_nothing_measured_and_renders() {
+        let report = compute(&[], &[]);
+        assert_eq!((report.pilots, report.runs), (0, 0));
+        let markdown = report.markdown();
+        assert!(markdown.starts_with("# Stage 1 gate report"));
+        assert!(markdown.contains("none given: pass the greybox's downloaded JSON files"));
+        assert!(
+            report
+                .gates
+                .iter()
+                .flat_map(|g| &g.measures)
+                .all(|m| m.met().is_none())
+        );
+    }
+
+    #[test]
+    fn the_markdown_shows_values_targets_and_verdicts() {
+        let markdown = compute(&history(), &[greybox()]).markdown();
+        assert!(markdown.contains(
+            "| Median time to select a named hostile (normal vision) | 0.9 s | ≤ 1.0 s | yes |"
+        ));
+        assert!(markdown.contains("| Defeats followed by a launch in that session or the next | 50% | ≥ 60% | no | 2 defeats |"));
+    }
+}

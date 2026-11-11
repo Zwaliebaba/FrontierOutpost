@@ -22,6 +22,7 @@ use web_transport_quinn::{RecvStream, SendStream, Server, Session, crypto, quinn
 use crate::auth::{Auth, AuthError, Ceremony};
 use crate::cert::DevCertificate;
 use crate::crews::{self, Crews};
+use crate::events::{GateEvent, Placed, Recorded, now_ms};
 use crate::expedition::{Expedition, LaunchOrder, PilotEvent};
 use crate::home::{self, Action};
 use crate::ledger::{Item, Npc, Party, Reason, Transfer};
@@ -232,9 +233,16 @@ async fn run_session(
         seed: 0,
         offered_at: Instant::now(),
         home_since: None,
+        signed_in_at: None,
         leave: None,
     };
     let result = pilot.fly(recv, events).await;
+    if let (Some(account), Some(since)) = (pilot.account, pilot.signed_in_at) {
+        let millis = u64::try_from(since.elapsed().as_millis()).unwrap_or(u64::MAX);
+        pilot
+            .gate(account, None, GateEvent::SessionEnded { millis })
+            .await;
+    }
     // The run waits for a pilot whose connection dropped (design section 6).
     match &pilot.flying {
         Some((expedition, ship)) => expedition.disconnect(*ship),
@@ -268,6 +276,8 @@ struct Pilot<'a> {
     offered_at: Instant,
     /// When the pilot's last run ended: unloading starts here.
     home_since: Option<Instant>,
+    /// When the pilot signed in on this page, for the session's length.
+    signed_in_at: Option<Instant>,
     /// Tells this session to leave when the pilot signs in on another page.
     leave: Option<Arc<Notify>>,
 }
@@ -411,7 +421,29 @@ impl Pilot<'_> {
         let outcome = self
             .identity
             .store
-            .call(move |s| s.update(account, |holdings| home::act(account, holdings, &action)))
+            .call(move |s| {
+                let before = s.load(account)?;
+                let socket = match &action {
+                    Action::Install { socket, .. }
+                    | Action::Upgrade { socket }
+                    | Action::Remove { socket }
+                    | Action::Power { socket, .. } => Some(socket.clone()),
+                    _ => None,
+                };
+                let outcome =
+                    s.update(account, |holdings| home::act(account, holdings, &action))?;
+                // A change to the outpost, for gate 1 (design section 9).
+                if let (Ok(after), Some(socket)) = (&outcome, socket) {
+                    let event = outpost_changed(&before, after, &socket);
+                    s.record(&[Recorded {
+                        at: now_ms(),
+                        account: account.0,
+                        run: None,
+                        event,
+                    }])?;
+                }
+                Ok(outcome)
+            })
             .await?;
         match outcome {
             Ok(holdings) => {
@@ -655,6 +687,8 @@ impl Pilot<'_> {
         );
         self.account = Some(account);
         self.leave = Some(self.identity.runs.sign_in(account));
+        self.signed_in_at = Some(Instant::now());
+        self.gate(account, None, GateEvent::SessionStarted).await;
         self.callsign.clone_from(&holdings.callsign);
         // A member whose page reloaded is still in their crew.
         self.identity
@@ -792,6 +826,12 @@ impl Pilot<'_> {
             store: self.identity.store.clone(),
             runs: self.identity.runs.clone(),
         };
+        let role = match &crew {
+            Some(view) if view.members.len() > 1 => "host",
+            _ => "solo",
+        };
+        let event = launched_event(&holdings, self.seed, tier, crew_size, role, paid);
+        self.gate(account, Some(run_id.clone()), event).await;
         let launched = Expedition::launch(order, self.session.clone(), self.events_tx.clone());
         if let Some(view) = crew.filter(|view| view.members.len() > 1) {
             self.identity.crews.launched(
@@ -863,8 +903,8 @@ impl Pilot<'_> {
         );
         self.flying = Some((launch.expedition.clone(), ship));
         self.log_unloading();
-        let holdings = match self.pay_supplies(account, &run, Some(launch.tier)).await? {
-            Ok((_, holdings)) => holdings,
+        let (paid, holdings) = match self.pay_supplies(account, &run, Some(launch.tier)).await? {
+            Ok(paid) => paid,
             // They could pay a moment ago and only this session spends for
             // them, so this is not expected. They fly; nothing was taken.
             Err(reason) => {
@@ -872,14 +912,116 @@ impl Pilot<'_> {
                     account = account.0,
                     run, reason, "supplies not charged to a follower"
                 );
-                holdings
+                (0, holdings)
             }
         };
+        let crew_size = self
+            .identity
+            .crews
+            .view(account)
+            .map_or(1, |view| view.members.len());
+        let event = launched_event(&holdings, self.seed, launch.tier, crew_size, "member", paid);
+        self.gate(account, Some(run.clone()), event).await;
         let message = ServerMessage::Account {
             account: wire::account(&holdings),
         };
         write_frame(&mut self.send, &message).await?;
         write_frame(&mut self.send, &joined).await
+    }
+}
+
+impl Pilot<'_> {
+    /// Records a gate event (plan 7.1) for this pilot. A failure is logged,
+    /// never fatal: measurement must not stop play.
+    async fn gate(&self, account: AccountId, run: Option<String>, event: GateEvent) {
+        let recorded = Recorded {
+            at: now_ms(),
+            account: account.0,
+            run,
+            event,
+        };
+        if let Err(error) = self
+            .identity
+            .store
+            .call(move |s| s.record(&[recorded]))
+            .await
+        {
+            warn!(%error, "gate event not recorded");
+        }
+    }
+}
+
+/// What a launch records for the gates: the layout, unlocks and fitting the
+/// pilot flies with, on which seed and tier, and what they stake.
+fn launched_event(
+    holdings: &crate::account::Account,
+    seed: u32,
+    tier: ThreatTier,
+    crew: usize,
+    role: &str,
+    supplies: u32,
+) -> GateEvent {
+    let mut layout: Vec<Placed> = holdings
+        .outpost
+        .layout
+        .iter()
+        .map(|installed| Placed {
+            socket: installed.socket.clone(),
+            facility: installed.facility.clone(),
+            run: installed.run,
+        })
+        .collect();
+    layout.sort();
+    let mut unlocks: Vec<String> = holdings
+        .outpost
+        .unlocks
+        .iter()
+        .map(|unlock| format!("{}:{}", unlock.facility, unlock.tier))
+        .collect();
+    unlocks.sort();
+    let launch = home::launch(holdings);
+    let mut fitted: Vec<String> = launch.flown.iter().map(|p| p.fitting.clone()).collect();
+    fitted.sort();
+    GateEvent::Launched {
+        seed,
+        tier: tier.number(),
+        crew: u32::try_from(crew).unwrap_or(1),
+        role: role.to_owned(),
+        layout,
+        unlocks,
+        fitted,
+        stake: launch.stake(home::discount(holdings)),
+        supplies,
+    }
+}
+
+/// What an outpost action did to `socket`, between `before` and `after`.
+fn outpost_changed(
+    before: &crate::account::Account,
+    after: &crate::account::Account,
+    socket: &str,
+) -> GateEvent {
+    let was = before.outpost.installed(socket);
+    let now = after.outpost.installed(socket);
+    let (action, facility, run) = match (was, now) {
+        (None, Some(now)) if before.outpost.owned(&now.facility) == 0 => {
+            ("bought", now.facility.clone(), now.run)
+        }
+        (None, Some(now)) => ("reinstalled", now.facility.clone(), now.run),
+        (Some(was), None) => ("removed", was.facility.clone(), 0),
+        (Some(was), Some(now))
+            if after.outpost.owned(&now.facility) > before.outpost.owned(&was.facility) =>
+        {
+            ("upgraded", now.facility.clone(), now.run)
+        }
+        (_, Some(now)) => ("powered", now.facility.clone(), now.run),
+        (None, None) => ("none", String::new(), 0),
+    };
+    GateEvent::OutpostChanged {
+        action: action.to_owned(),
+        socket: socket.to_owned(),
+        facility,
+        run,
     }
 }
 
