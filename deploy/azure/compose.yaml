@@ -1,0 +1,46 @@
+# Frontier Outpost on one small VM (README.md in this folder). Caddy serves the page over
+# HTTPS with a Let's Encrypt certificate; the game server reads that certificate for
+# WebTransport, which browsers reach directly on UDP 4443.
+#
+# Set FRONTIER_DOMAIN and FRONTIER_IMAGE in a .env file beside this one.
+name: frontier
+
+x-logging: &logging
+  # A small VM's disk: keep a few megabytes of logs, not all of them.
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  caddy:
+    image: caddy:2.11.9
+    # The game server's user (Dockerfile), so it can read the certificate's key, which
+    # Caddy writes readable by its owner only.
+    user: "10001:10001"
+    restart: unless-stopped
+    ports:
+      - "80:8000"
+      - "443:8443"
+    environment:
+      FRONTIER_DOMAIN: ${FRONTIER_DOMAIN:?set FRONTIER_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/frontier/caddy/data:/data
+      - /srv/frontier/caddy/config:/config
+    logging: *logging
+
+  server:
+    image: ${FRONTIER_IMAGE:?set FRONTIER_IMAGE in .env}
+    restart: unless-stopped
+    ports:
+      - "4443:4443/udp"
+    environment:
+      FRONTIER_ORIGIN: https://${FRONTIER_DOMAIN}
+      FRONTIER_TLS_CERT: /caddy/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${FRONTIER_DOMAIN}/${FRONTIER_DOMAIN}.crt
+      FRONTIER_TLS_KEY: /caddy/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${FRONTIER_DOMAIN}/${FRONTIER_DOMAIN}.key
+      FRONTIER_GRANT: ${FRONTIER_GRANT:-}
+      RUST_LOG: info
+    volumes:
+      - /srv/frontier/caddy/data:/caddy:ro
+      - /srv/frontier/saves:/var/lib/frontier
+    logging: *logging

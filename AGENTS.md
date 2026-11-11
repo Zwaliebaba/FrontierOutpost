@@ -33,6 +33,7 @@ client/                 TypeScript + Vite + Three.js browser client
   src/greybox/          client-only readability test harness, served at /greybox.html
   src/sim/              loads the WebAssembly simulation; pkg/ is written by wasm-bindgen
 spikes/                 Throwaway experiments, each its own Cargo workspace; not built by CI
+deploy/azure/           Compose file, Caddyfile and guide for the hosted playtest server
 Design/                 Game design, style guide, Blender scenes and their exports
 .github/workflows/      CI
 ```
@@ -55,6 +56,7 @@ FRONTIER_NPCS=24 cargo run -p frontier-server             # opening threat at th
 FRONTIER_DATA=/tmp/w.db cargo run -p frontier-server     # where saves go (default data/frontier.db)
 FRONTIER_ORIGIN=https://host cargo run -p frontier-server # the page origin passkeys bind to (default http://localhost:<port>)
 FRONTIER_GRANT=1000cr,40ore,20alloy cargo run -p frontier-server # extra stock for new pilots, to try facilities
+FRONTIER_TLS_CERT=chain.pem FRONTIER_TLS_KEY=key.pem FRONTIER_ORIGIN=https://host cargo run -p frontier-server # a certificate from an authority instead of a self-signed one
 cargo run -p frontier-server -- grant Vega 1000cr,40ore   # extra stock for an existing pilot (reload the page)
 cargo run --release -p frontier-server --example caps     # server tick cost and snapshot size at the caps
 cargo run -p frontier-server -- wipe                      # wipe Stage 1 data: an empty world (stop the server first)
@@ -176,6 +178,9 @@ Decided:
 - Persistence: embedded SQLite, with an append-only ledger beside the saves. Stage 1 data may be
   wiped; saves are still versioned.
 - Prediction: the browser runs `frontier-sim`'s movement rules compiled to WebAssembly.
-- Hosting for Stage 1: the owner's machine. Testers play on machines the owner provides.
+- Hosting for Stage 1: a small Azure VM at `https://outpost.zwaliebaba.com` (`deploy/azure/`), with
+  Caddy obtaining a Let's Encrypt certificate that the game server also uses for WebTransport.
+  Cloudflare holds the DNS record, unproxied: its proxy cannot carry WebTransport. The server is
+  open to the internet. Local play on `localhost` works as before.
 - Licence: all rights reserved for now (`LICENSE`).
 - Art for Stage 1: sockets and facility modules come from `create_scene.py`, not primitives.

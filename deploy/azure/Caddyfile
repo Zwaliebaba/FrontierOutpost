@@ -1,0 +1,20 @@
+# Caddy for Frontier Outpost on its Azure VM (README.md in this folder). It serves the page
+# over HTTPS and obtains the certificate from Let's Encrypt; the game server reads the same
+# certificate from Caddy's storage for WebTransport.
+{
+	# Unprivileged ports, so Caddy runs as the game server's user; compose.yaml publishes
+	# them as 80 and 443.
+	http_port 8000
+	https_port 8443
+	# Let's Encrypt only: the game server reads the certificate from this issuer's folder.
+	cert_issuer acme
+	servers {
+		# The page needs no HTTP/3, and UDP 443 is not published.
+		protocols h1 h2
+	}
+}
+
+{$FRONTIER_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy server:8080
+}
