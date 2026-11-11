@@ -10,6 +10,8 @@
 # The outpost models the client imports.
 !Design/FrontierOutpost/station.glb
 !Design/FrontierOutpost/facilities.glb
+!Design/FrontierOutpost/frigate.glb
+!Design/FrontierOutpost/scene_manifest.json
 
 **/target/
 client/node_modules/
