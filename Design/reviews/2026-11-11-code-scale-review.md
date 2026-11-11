@@ -19,7 +19,7 @@ Findings keep their reviewer's identifier (`SIM`, `SRV`, `NET`, `DB`, `CLI`, `QU
 
 **The code is sound for Stage 1, with four correctness defects to fix before the next playtest.** The architecture holds up: one task per instance, an I/O-free simulation, a guarded binary protocol, strict lints passing clean, and tests on every recent behaviour change. The defects are in rules at the edges, not in structure: unchecked arithmetic on client-supplied trade amounts (2.1), crew runs that end or pay wrongly when a pilot drops or the server restarts (2.3), a follower charged for a launch that is then refused (2.4), and a ship that keeps flying and firing when its tab is hidden (2.5).
 
-**Capacity is not what breaks first at S-many; exposure and operability are.** A load bot drove the unmodified release server with 300 pilots in 100 instances at 31% of one core and 37 MB, every pilot receiving 20 snapshots a second. The single SQLite connection has 40 to 65 times the write capacity that load needs. What fails first is everything that assumes invited testers: one crafted message mints currency, one connection can grow server memory without bound, and nothing limits sessions, streams or message rates. Next comes operation: the server reports nothing about its own lag, a stop drops runs, the pinned certificate lasts 13 days, and there is no safe backup. On a home connection the binding resource is egress, at 12 to 33 Mbit/s for 300 pilots.
+**Capacity is not what breaks first at S-many; exposure and operability are.** A load bot drove the unmodified release server with 300 pilots in 100 instances at 31–36% of one core and 37 MB, every pilot receiving 20 snapshots a second; 300 pilots in real combat cost the same, and 600 pilots in full crews cost 51%. The single SQLite connection has 40 to 65 times the write capacity that load needs. What fails first is everything that assumes invited testers: one crafted message mints currency, one connection can grow server memory without bound, and nothing limits sessions, streams or message rates. Next comes operation: the server logs nothing when a tick overruns, a stop drops runs, and a write lock taken on the database from outside closes players' sessions. On a home connection the binding resource is egress, at 12 to 33 Mbit/s for 300 pilots.
 
 **For S-site and S-region the constraint is the snapshot, not the simulation.** A tick with 400 ships in one world costs about 1.5% of the 50 ms budget, so no spatial index or data-layout work is justified by any named scenario. The single-datagram full-state snapshot stops at 54 entities, which is 40 ships plus 14 others. The other decisions that bind later are the pilot-against-everything hostility rule, a 16-bit ship identifier, positions limited to ±1,024 m, two draw calls per ship on the client, and registries held in process memory. None needs building now, and none is expensive to change later, because client and server are version-locked and served together.
 
@@ -29,7 +29,7 @@ The review started from five suspected limits. The evidence removed three of the
 |---|---|---|
 | Per-tick simulation cost grows quadratically | True, and measured at 0.04% of the tick budget at S1 and 1.5% at 400 ships | Not a limit through S-region |
 | One SQLite connection behind a mutex | 6–10 write transactions a second needed at S-many; 370–670 measured on a slow disk, 4,000–8,000 on a fast one | Not a limit at S-many |
-| One task per instance on a shared runtime | 100 instances of 4 pilots: 20.0 snapshots a second each, on 9.7% of one core | Not a limit at S-many |
+| One task per instance on a shared runtime | 300 pilots in 100 instances over real WebTransport: 20.0 snapshots a second each, on 31–36% of one core | Not a limit at S-many |
 | Unbounded channels | One connection grew the server by 1–5 MB a second at a 10–16 Mbit/s uplink | A limit once strangers can connect |
 | Full-state snapshot in one datagram | 54 entities maximum; S1 peaks at 29 | A limit at S-site |
 
@@ -67,7 +67,7 @@ Unchecked sites: `home.rs:226`, `:240`, `:258`, `:281`, `:348-350`; `crates/sim/
 2. **A restored crew run with a finished member ends on its first tick.** `Run::restore` marks every unfinished pilot away (`run.rs:1032`), so the same rule fires at once. Against the real binary: `tick=2400 Restored`, then `Abandoned`, `PotSettled`, `Ended` within 2 ms, and the checkpoint row deleted before anyone could reconnect. Design §6 promises each ship is restored at its last checkpoint.
 3. **Settlement is not atomic with the checkpoint.** A dock banks cargo in its own transaction; the checkpoint is rewritten only each minute and on pocket entry, and `finish()` never requests one. Against the real binary: a crew host mined one ore and docked, the server was killed 0.3 s later and restarted, the host was restored flying with the ore and docked again. Result: two ore, two ledger rows for one run. The window is up to 60 s in a crew run and a few milliseconds solo.
 
-Two related gaps: no checkpoint is written at launch, and none at shutdown. A server stopped 20 s into nine runs left no checkpoint rows, with 360 credits of launch supplies already debited. Shutdown drains only HTTP; the process exits in 5–16 ms, and clients notice 10 s later through the idle timeout.
+Two related gaps: no checkpoint is written at launch, and none at shutdown. A server stopped 20 s into nine runs left no checkpoint rows, with 360 credits of launch supplies already debited. Shutdown drains only HTTP; the process exits in 5–16 ms, and clients notice 8–10 s later through the idle timeout. The page then reloads onto the browser's own error page, since the same process serves it; a full Chromium retried by itself and was back 17–47 s after the server returned.
 
 **Fix, in this order.** Decide the end rule (question 8.1), then fix defects 1 and 2 together with a crew restore test. Only then set `checkpoint_due` in `finish()`, a one-line change that shrinks the double-bank window from 60 s to one commit; done earlier, it makes defect 2 fire immediately. Add a checkpoint at launch and on the shutdown signal, and close sessions with a reason the client can act on. Full atomicity (settlement, pot and checkpoint delete in one transaction) is larger than the reviewer estimated, because settlement is per event and the checkpoint per tick. Effort M in total.
 
@@ -131,12 +131,12 @@ Each is S. The client items were measured by the reviewer and not challenged.
 
 ### 2.10 Tooling to add now
 
-These are tools, not Stage 2 systems, and each is the cheapest way to get evidence the next gate needs.
+These are tools, not Stage 2 systems. The challenger cut each to its smallest useful part; all are low at S1.
 
-- **CI should build what ships.** No job compiles the server in release, and e2e runs against a debug server; that is what hid 2.1. Run e2e against `--release`. (OPS-9)
-- **A load bot.** The reviewer assembled one in about 300 lines from `tests/common` and the `Pilot::fly` helper, with no server change. The helpers live under `tests/`, so nothing else can import them; move them into a small crate the integration tests also use. (OPS-10)
-- **The server's own lag signals.** There is no metric, tick-duration measurement or overrun log anywhere in `crates/server`, and `MissedTickBehavior::Skip` hides overruns. Two load runs showed hitches the reviewer could not attribute, which is the finding. The minimum: tick duration and overrun count per instance, time in `report` and `save_checkpoint`, store queue wait, and gauges for sessions and instances, as one summary log line or a `/metrics` route. (OPS-3)
-- **A backup command.** Recent data lives in the write-ahead log, so copying `frontier.db` alone gives a stale file: the main file was 4 KB beside a 239 KB log after a session. Add `frontier-server backup <path>` using `VACUUM INTO`. The ledger is the evidence for the Stage 1 gate measures. (OPS-8)
+- **Run e2e against the release build.** No job compiles the server in release, and e2e runs against a debug server; that is what hid 2.1. It is a one-flag change. A `caps` tripwire is optional, and sound only as a release step: the debug median is 46 µs, too close to a 100 µs bound for shared runners. (OPS-9)
+- **Log an overrun.** There is no metric, tick-duration measurement or overrun log anywhere in `crates/server`, and `MissedTickBehavior::Skip` hides overruns. About ten lines cover it: a `warn!` when a loop turn exceeds one tick, and when a store call exceeds some tens of milliseconds. Holding the database locked for 0.5 s from outside stalled eight instances for 110–530 ms and the server logged nothing. Histograms and a `/metrics` route belong with the load bot at the scale gate. At S1 the client's HUD already shows round trip and prediction correction. (OPS-3)
+- **A load bot.** The reviewer assembled one in about 300 lines from `tests/common` and the `Pilot::fly` helper, with no server change, and the challenger confirmed it does real work: passkey registration, crews by invite code, inputs at 20 Hz, decoded snapshots. The helpers live under `tests/`, so nothing else can import them; move them into a small crate the integration tests also use. (OPS-10; not challenged as a finding)
+- **One README line on backups.** Recent data lives in the write-ahead log, so a copy of `frontier.db` alone is stale: with 4 MB of log it opened without error and was missing 27% of the ledger. Say "stop the server first, or never copy the `.db` alone". A `backup` command fits with plan item 7.2; it should use `VACUUM INTO` from a second read-only connection (4 ms, no effect on 16 live sessions) and must never take a write lock. (OPS-8)
 
 ### 2.11 Suggested order
 
@@ -155,7 +155,8 @@ Small changes now that keep a later option open. None builds a Stage 2 system.
 | `impl SnapshotSink for Session` lives in `expedition.rs:38`, `:57-68`, the one place the instance module depends on the transport. (OPS-13) | An instance host separate from the connection gateway | Move the impl to `transport.rs` |
 | The client learns the WebTransport address from `/api/connect`. (OPS-13) | A gateway that hands out addresses | Keep the indirection |
 | The public WebTransport setting is a `SocketAddr`, and `bind` takes only `DevCertificate`. (OPS-6) | A host name and a CA certificate, which plan item 7.3 needs | Make the setting a `host:port` string; make `bind` take a chain and key |
-| The pinned certificate lasts 13 days and nothing warns before it lapses. (OPS-5) | Uptime beyond a fortnight | Log the expiry at start; warn from 24 hours before |
+| The pinned certificate lasts 13 days and nothing says when it lapses. A documented Stage 1 limit of the development path, which plan item 7.3 retires. (OPS-5) | An operator who can see why new connections fail | Log the expiry at start and an error when it passes. Do not build rotation |
+| `Store::update` opens a deferred transaction, reads, then writes. A write lock held by another process makes that fail at once, and the session is closed: 27 of 60 trading sessions dropped during a 0.5 s foreign lock. (from the OPS challenge) | Running a report, backup or `wipe` beside a live server | `BEGIN IMMEDIATE` for read-then-write transactions, so they wait instead of failing |
 | One material per hull, per silhouette and per bolt part: 2 draw calls per ship. (CLI-3) | Instanced rendering at the Stage 2 gate, measured at 87 draws for 280 ships against 1,883 | Cache materials per allegiance; share bolt geometry; keep `shipMeshes()` and `#drawShots()` the only places that create per-entity objects. Merge hull GLBs by material when they are first loaded: `frigate.glb` is 45 mesh nodes |
 | Connection listeners cannot be removed. (CLI-9, NET-10, QUAL-11) | Long sessions without leaks | Return an unsubscribe function from `onMessage` and `onDatagram` |
 | Rules written twice: the server re-derives the sim's wave forecast, and the client mirrors outpost rules and about ten constants. (QUAL-6) | Balance changes that cannot drift | `Run::forecast()` in the sim; export the constants from the existing `version.ts` writer; Rust-written preview vectors for `options.ts` |
@@ -179,7 +180,8 @@ Small changes now that keep a later option open. None builds a Stage 2 system.
 - 2.1 must already be done; it is critical here.
 - A CA certificate, a host name and HTTPS for the page; choose the passkey relying-party identifier deliberately, since a passkey cannot move to another one. (OPS-6)
 - Compression and cache headers: a cold load is 2.66 MB uncompressed and about 397 kB gzipped. (CLI-8, OPS-11)
-- Egress: 12–33 Mbit/s for 300 pilots, the first resource to run out on a home connection. The cheap levers are a leaner entity record, then far entities at 10 Hz. (NET-6)
+- Egress: 12–33 Mbit/s for 300 pilots, the first resource to run out on a home connection; two agents computed it independently and neither measured it on a wire. The cheap levers are a leaner entity record, then far entities at 10 Hz. (NET-6)
+- Measure through Docker Desktop's UDP forwarding, the documented way to host, which no load test here covered.
 - Rotate resume tokens and add the two missing indexes. (DB-8)
 - Cap the pixel ratio; reject unknown `FRONTIER_*` names; log a build identity. (CLI-11, OPS-14)
 
@@ -220,7 +222,7 @@ Checked and found good, so it need not be re-examined.
 
 ## 6. Rejected and disputed
 
-Of 27 findings and claims put to challengers on the first five lenses, 8 were confirmed as rated, 17 were confirmed with a lower severity or a narrower scope, and 2 were rejected.
+Of 33 findings and claims put to challengers, 9 were confirmed as rated, 22 were confirmed with a lower severity or a narrower scope, and 2 were rejected. The client lens had no challenger of its own; its one high finding was tested as NET-1.
 
 | Finding | Reviewer | Challenger | Reason |
 |---|---|---|---|
@@ -240,6 +242,12 @@ Of 27 findings and claims put to challengers on the first five lenses, 8 were co
 | The caps benchmark measures a placeholder (QUAL-5) | Medium, fix now | Low, tidy | Keeping the skirmish as the fixture was deliberate; no sizing decision changes |
 | Transport limits (SRV-8) | Fix now | Defer | No honest Stage 1 client touches any of it |
 | Stale snapshots after a blackout (NET-4) | Medium | Low | Worst staleness 7 s, not 108 s; the client half is already handled by the browser's datagram queue |
+| No server-side lag signals (OPS-3) | Medium at S1, fix now | Low at S1 | The absence is confirmed, but the HUD shows round trip and correction, and the unexplained hitches were a whole-process stall while other agents compiled, not the checkpoint. Ten lines of `warn!` now; metrics at the scale gate |
+| The 13-day certificate (OPS-5) | High at S-many; keep a rotation seam | Low; no seam | A documented limit of a path plan item 7.3 retires. "High at S-many" counts OPS-6 twice |
+| No backup path (OPS-8) | Medium, fix now | Low at S1 | Data is wipeable and a clean stop yields a complete file. A README line now; the command with plan item 7.2 |
+| CI does not build what ships (OPS-9) | Medium | Low | The harm is 2.1, already counted. Take the one-flag change; the tick tripwire flakes in debug |
+| After a restart the client's reload strands the page with no retry (OPS-4, client half) | Medium | Low | True of the headless test browser only. A full Chromium retries its own error page and recovered unaided |
+| The load test's "combat" run (OPS, run `many-e`) | 1,173 run-overs in combat | Not combat | The bot flew a circle and re-docked. The challenger's own combat pass (931 ships destroyed in 80 s) cost the same 36% |
 
 Dissent that stands: the server reviewer would fix the transport limits and the hello deadline now, because they are a few lines. The challenger defers them because no Stage 1 client reaches them. This report follows the challenger and lists them at the exposure gate.
 
@@ -266,7 +274,17 @@ All on one 4-core container shared between the reviewers, so tails are pessimist
 **Server**
 
 - In process, 100 instances of 4 pilots at the NPC cap: 20.0 snapshots a second each; tick gap p50 50.0 ms, p99 51.0 ms, maximum 54.1 ms; 9.7% of one core.
-- Load bot against the release binary, 300 pilots in 100 instances: 31% of one core, 37 MB, 6 threads; snapshot gap p50 50.0 ms, p99 51.1 ms, maximum 60.1 ms. Pilots sat at the dock with fire held.
+- Load bot against the release binary over real WebTransport (challenger's passes; the reviewer's first pass gave 31%):
+
+| Pass | Server CPU (one core) | Memory | Snapshot gap p50 / p99 / max |
+|---|---|---|---|
+| 4 pilots, 1 instance | 1.2% | — | maximum 53.7 ms |
+| 300 pilots, 100 instances, at the dock | 36.0% | 37 MB | 50.0 / 51.2 / 60.1 ms |
+| 300 solo pilots in combat, relaunching | 36.1% | 39 MB | 50.0 / 51.1 / 66.6 ms |
+| 600 pilots, 150 crews of 4 | 50.8% | 61 MB | 50.0 / 51.2 / 72.8 ms |
+| 300 pilots, 40 ± 10 ms delay and 2% loss each way | 47.3%, relay included | 43 MB | 50.1 / 100.2 / 196 ms |
+
+- Every pilot saw 20.00 ticks a second in the unimpaired passes. The simulation is about 2 points of the 36; transport is the rest.
 - 2,000 sessions that never said hello: all open after 75 s, 114 MB.
 - SIGTERM to exit: 5–16 ms with up to 300 sessions.
 
@@ -295,7 +313,7 @@ All on one 4-core container shared between the reviewers, so tails are pessimist
 - `cargo clippy --workspace --all-targets -- -D warnings`: clean. With `arithmetic_side_effects`: 88 sites in non-test code.
 - CI on `main`: 6 min 12 s wall; e2e 6 min 08 s, rust 2 min 31 s.
 
-**Not measured.** Real-GPU frame times; real WAN links; a browser-driven restart; a Docker build. The load bot's pilots did not fly into combat.
+**Not measured.** Real-GPU frame times; real network cards, WAN links and browsers under load; Docker Desktop's UDP forwarding; any load run longer than 80 seconds, so no 45-minute instance and no check for memory growth; more than one or two runs per configuration. Read the load figures as "one process has several-fold CPU headroom for 300 pilots on Linux", not as a WAN capacity figure.
 
 ## 8. Open questions for the owner
 
@@ -382,14 +400,14 @@ Final rating after challenge, and where each finding landed. "Unchallenged" mean
 | QUAL-12 | Behaviours with no test | Low | with each fix |
 | OPS-1 | Trade overflow; release against debug | High at S1 | 2.1 |
 | OPS-2 | Store panic; no health signal | Medium | 2.2 |
-| OPS-3 | No lag signals | Medium at S1 | 2.10 |
-| OPS-4 | Stop and restart | Medium at S1 | 2.3 |
-| OPS-5 | 13-day certificate | Low at S1 | 3 |
-| OPS-6 | No path to a real certificate | Medium | 3, 4 |
+| OPS-3 | No lag signals | Low at S1 | 2.10 |
+| OPS-4 | Stop and restart | Medium at S1; client half low | 2.3 |
+| OPS-5 | 13-day certificate | Low | 3 |
+| OPS-6 | No path to a real certificate | Medium, unchallenged | 3, 4 |
 | OPS-7 | No admission control | High at S-many, deferred | 4 |
-| OPS-8 | No backup path | Medium | 2.10 |
-| OPS-9 | CI does not build what ships | Medium | 2.10 |
-| OPS-10 | No load harness | Medium | 2.10 |
+| OPS-8 | No backup path | Low at S1 | 2.10 |
+| OPS-9 | CI does not build what ships | Low | 2.10 |
+| OPS-10 | No load harness | Medium, unchallenged | 2.10 |
 | OPS-11 | No cache policy or compression | Low at S1 | 4 |
 | OPS-12 | Run events only in logs | Low | 4 |
 | OPS-13 | Process-local state | Low | 3, 4 |
