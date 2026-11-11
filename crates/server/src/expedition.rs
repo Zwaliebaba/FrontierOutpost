@@ -1176,7 +1176,6 @@ mod tests {
         assert_eq!(store.load(rigel).unwrap().credits, 244);
         let reasons: Vec<String> = store
             .lock()
-            .unwrap()
             .prepare("SELECT reason FROM ledger WHERE run = 'run-3' ORDER BY id")
             .unwrap()
             .query_map([], |row| row.get(0))
