@@ -696,22 +696,36 @@ impl Pilot<'_> {
                 if tier.is_none() {
                     return Ok(Err("That tier is not open.".to_owned()));
                 }
-                let holdings = s.load(account)?;
-                let due = match home::supplies_due(&holdings) {
-                    Ok(due) => due,
-                    Err(reason) => return Ok(Err(reason)),
-                };
-                if due > 0 {
-                    s.transfer(&[Transfer {
+                // Priced and paid in one transaction, on the holdings it reads.
+                let mut paid = 0;
+                let holdings = s.update(account, |holdings| {
+                    paid = home::supplies_due(holdings)?;
+                    Ok(Vec::from_iter((paid > 0).then_some(Transfer {
                         item: Item::Credits,
-                        amount: due,
+                        amount: paid,
                         from: Party::Account(account),
                         to: Party::Npc(Npc::Supplies),
                         reason: Reason::LaunchSupplies,
                         run: Some(paid_for),
-                    }])?;
-                }
-                Ok(Ok((due, s.load(account)?)))
+                    })))
+                })?;
+                Ok(holdings.map(|holdings| (paid, holdings)))
+            })
+            .await?)
+    }
+
+    /// The pilot's holdings, if they can pay for launch supplies as they
+    /// stand, or the reason they cannot. Nothing is charged.
+    async fn can_pay_supplies(
+        &self,
+        account: AccountId,
+    ) -> Result<Result<crate::account::Account, String>, SessionError> {
+        Ok(self
+            .identity
+            .store
+            .call(move |s| {
+                let holdings = s.load(account)?;
+                Ok(home::supplies_due(&holdings).map(|_| holdings))
             })
             .await?)
     }
@@ -800,8 +814,11 @@ impl Pilot<'_> {
             return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
         };
         let run = launch.run.clone();
-        let (_, holdings) = match self.pay_supplies(account, &run, Some(launch.tier)).await? {
-            Ok(paid) => paid,
+        // The seat comes first and the charge after it. The instance has its
+        // own reasons to refuse a join (its window is counted in ticks, its
+        // seats in pilots), and a pilot refused there must not have paid.
+        let holdings = match self.can_pay_supplies(account).await? {
+            Ok(holdings) => holdings,
             Err(reason) => {
                 return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
             }
@@ -821,22 +838,35 @@ impl Pilot<'_> {
             return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
         };
         info!(target: "frontier::run", account = account.0, ship = ship.0, "followed the host");
-        self.log_unloading();
+        // In the run from here on, whatever happens to this session next.
+        self.identity.crews.followed(account);
         self.identity.runs.insert(
             account,
             Flying {
-                run,
+                run: run.clone(),
                 expedition: launch.expedition.clone(),
                 ship,
             },
         );
+        self.flying = Some((launch.expedition.clone(), ship));
+        self.log_unloading();
+        let holdings = match self.pay_supplies(account, &run, Some(launch.tier)).await? {
+            Ok((_, holdings)) => holdings,
+            // They could pay a moment ago and only this session spends for
+            // them, so this is not expected. They fly; nothing was taken.
+            Err(reason) => {
+                warn!(
+                    account = account.0,
+                    run, reason, "supplies not charged to a follower"
+                );
+                holdings
+            }
+        };
         let message = ServerMessage::Account {
             account: wire::account(&holdings),
         };
         write_frame(&mut self.send, &message).await?;
-        write_frame(&mut self.send, &joined).await?;
-        self.flying = Some((launch.expedition, ship));
-        Ok(())
+        write_frame(&mut self.send, &joined).await
     }
 }
 
