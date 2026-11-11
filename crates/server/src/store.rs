@@ -185,6 +185,9 @@ impl Store {
     }
 
     fn init(connection: Connection) -> Result<Self, StoreError> {
+        // `frontier-server grant` may write while the server runs: each waits
+        // for the other's transaction rather than failing.
+        connection.busy_timeout(std::time::Duration::from_secs(5))?;
         connection.execute_batch(
             "PRAGMA journal_mode = WAL;
              PRAGMA foreign_keys = ON;

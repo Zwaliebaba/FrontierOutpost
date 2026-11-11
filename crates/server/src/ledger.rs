@@ -129,6 +129,9 @@ pub enum Reason {
     Unqueued,
     /// Finished goods from the processor.
     Processed,
+    /// Stock given by `frontier-server grant`, for trying things out: kept
+    /// apart from what play earns, so the economy's figures can leave it out.
+    TestGrant,
 }
 
 impl Reason {
@@ -148,6 +151,7 @@ impl Reason {
             Self::Queued => "queued for processing",
             Self::Unqueued => "taken off the processor",
             Self::Processed => "processed",
+            Self::TestGrant => "test grant",
         }
     }
 }
