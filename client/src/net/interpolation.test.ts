@@ -66,6 +66,52 @@ describe("snapshot interpolation", () => {
     expect(xAt(buffer, 109 * 50 + 30)).toBeCloseTo(7, 5);
   });
 
+  /**
+   * A server at 20 Hz that stalls once at tick `at` and skips `skipped` ticks without making
+   * them up, as its ticker does. The ship moves 1 m a tick; velocity is reported as zero, so
+   * a pose drawn past the newest snapshot stands still and shows.
+   */
+  function afterSkip(skipped: number, at = 200, until = 600) {
+    const buffer = new SnapshotBuffer(TICK_RATE);
+    const arrival = (tick: number) => tick * 50 + 30 + (tick >= at ? skipped * 50 : 0);
+    const drawn: number[] = [];
+    for (let tick = 100; tick < until; tick += 1) {
+      buffer.push(snapshot(tick, tick, 0), arrival(tick));
+      // Three frames a tick, as a 60 Hz display draws them.
+      for (const frame of [0, 17, 33]) drawn.push(xAt(buffer, arrival(tick) + frame) ?? Number.NaN);
+    }
+    return { buffer, arrival, drawn };
+  }
+
+  it("draws 100 ms behind again after the server skips ticks", () => {
+    for (const skipped of [1, 2, 4, 10]) {
+      const { buffer, arrival } = afterSkip(skipped);
+      // Twenty seconds on: server time at the newest arrival is tick 599, so draw tick 597.
+      expect(xAt(buffer, arrival(599)), `${String(skipped)} skipped`).toBeCloseTo(597, 5);
+    }
+  });
+
+  it("never draws time running backwards, and is smooth again once it has recovered", () => {
+    const { drawn } = afterSkip(4);
+    const steps = drawn.slice(1).map((x, i) => x - (drawn[i] ?? x));
+    expect(Math.min(...steps)).toBeGreaterThanOrEqual(0);
+    // Until the window has passed and the offset has risen, the ship is drawn at the newest
+    // snapshot and steps a tick at a time: 5 s, then 2 s to give back 200 ms. From tick 360 on
+    // each frame moves a third of a tick, 0.33 m here.
+    const recovered = steps.slice(3 * (360 - 100));
+    expect(Math.max(...recovered)).toBeLessThan(0.5);
+    expect(Math.min(...recovered)).toBeGreaterThan(0.2);
+  });
+
+  it("follows a client clock that runs fast", () => {
+    // 200 ppm fast for ten minutes: local time gains 120 ms on the server's.
+    const buffer = new SnapshotBuffer(TICK_RATE);
+    const arrival = (tick: number) => (tick * 50 + 30) * 1.0002;
+    for (let tick = 0; tick < 12_000; tick += 1)
+      buffer.push(snapshot(tick, tick, 0), arrival(tick));
+    expect(xAt(buffer, arrival(11_999))).toBeCloseTo(11_997, 1);
+  });
+
   it("bridges a lost snapshot", () => {
     const buffer = new SnapshotBuffer(TICK_RATE);
     for (const i of [0, 1, 2, 4, 5, 6]) buffer.push(snapshot(100 + i, i, 20), (100 + i) * 50 + 30);
