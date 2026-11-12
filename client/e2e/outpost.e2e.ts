@@ -18,6 +18,7 @@ const account = (page: Page) => page.locator("#account");
 
 test("the outpost loads the station, both sockets and every module", async ({ page }) => {
   await signUp(page);
+  await home(page).locator('button[data-action="view:facilities"]').click();
   await expect(home(page)).toHaveAttribute("data-scene", /sockets/);
   const report = await scene(page);
   expect(report.sockets).toEqual(["a", "b"]);
@@ -40,6 +41,7 @@ test("the outpost loads the station, both sockets and every module", async ({ pa
 
 test("the run docks at the outpost's own station, the one the home shows", async ({ page }) => {
   await signUp(page);
+  await home(page).locator('button[data-action="view:facilities"]').click();
   await expect(page.locator("body")).toHaveAttribute("data-station", "home");
   await page.locator('#briefing[data-state="open"] button[data-tier="1"]').click();
   await page.locator("#hud[data-x]").waitFor();
@@ -48,6 +50,7 @@ test("the run docks at the outpost's own station, the one the home shows", async
 
 test("building a refinery puts it on its socket and opens its pocket", async ({ page }) => {
   await signUp(page, RICH);
+  await home(page).locator('button[data-action="view:facilities"]').click();
   await expect(account(page)).toHaveAttribute("data-credits", "1100");
   const build = home(page).locator('button[data-action="install:refinery"]');
   await expect(build.locator("xpath=..")).toContainText("Opens: Volatile veins pocket");
@@ -68,6 +71,7 @@ test("building a refinery puts it on its socket and opens its pocket", async ({ 
 
 test("reconfiguring moves a facility for the reinstallation cost", async ({ page }) => {
   await signUp(page, RICH);
+  await home(page).locator('button[data-action="view:facilities"]').click();
   await home(page).locator('button[data-action="install:sensor_array"]').click();
   await expect(home(page)).toHaveAttribute("data-installed", "a:sensor_array:1 b:-:0");
   await home(page).locator('button[data-action="remove"]').click();
@@ -88,12 +92,14 @@ test("reconfiguring moves a facility for the reinstallation cost", async ({ page
 
 test("the contract shows the stake at replacement price", async ({ page }) => {
   await signUp(page, RICH);
+  await home(page).locator('button[data-action="view:facilities"]').click();
   const stake = page.locator('#briefing[data-state="open"] .stake');
   await expect(stake).toHaveAttribute("data-stake", "0");
   await expect(stake).toContainText("Flies the basic fitting · hold 20");
   // The refinery's extraction rig comes with it and is fitted at once.
   await home(page).locator('button[data-action="install:refinery"]').click();
   await expect(stake).toHaveAttribute("data-stake", "60");
+  await home(page).locator('button[data-action="view:hangar"]').click();
   await home(page).locator('button[data-action="buy-fitting:cargo_frame"]').click();
   await expect(home(page).locator('[data-fitting="cargo_frame"]')).toHaveAttribute(
     "data-owned",
@@ -103,4 +109,28 @@ test("the contract shows the stake at replacement price", async ({ page }) => {
   await expect(stake).toHaveAttribute("data-stake", "90");
   await expect(stake).toContainText("Flies: Extraction rig, Cargo frame · hold 38");
   await expect(stake).toContainText("Stake: 90 cr of rigs and modules at replacement price");
+});
+
+test("station services switch without losing state or covering the viewport", async ({ page }) => {
+  await signUp(page, RICH);
+  await expect(home(page)).toHaveAttribute("data-view", "overview");
+  for (const view of ["market", "processor", "hangar", "facilities", "overview"]) {
+    await home(page).locator(`[data-action="view:${view}"]`).click();
+    await expect(home(page).locator(`[data-action="view:${view}"]`)).toBeFocused();
+    await expect(home(page).locator(`#service-${view}`)).toBeVisible();
+    await expect(home(page).locator(".service-pane:visible")).toHaveCount(1);
+  }
+  await home(page).locator('[data-action="overview:b"]').click();
+  await expect(home(page)).toHaveAttribute("data-selected", "b");
+  await expect(home(page)).toHaveAttribute("data-view", "facilities");
+  await home(page).locator('[data-action="view:market"]').click();
+  await home(page).locator('[data-action="view:facilities"]').click();
+  await expect(home(page)).toHaveAttribute("data-selected", "b");
+  for (const width of [1024, 1600]) {
+    await page.setViewportSize({ width, height: 900 });
+    const left = await home(page).boundingBox();
+    const right = await page.locator("#briefing").boundingBox();
+    if (!left || !right) throw new Error("Station panels must be visible");
+    expect(right.x - left.x - left.width).toBeGreaterThan(width * 0.45);
+  }
 });

@@ -4,26 +4,12 @@
  * flies straight off the deck and away from the station. The outpost view shows the station
  * turned the same way, so launching only moves the camera from the station to the ship.
  */
-import manifest from "../../../Design/FrontierOutpost/scene_manifest.json";
+import layout from "../../../Design/FrontierOutpost/berths.json";
 import { SHIP_HEIGHT } from "../view/hulls";
 
-interface Bounds {
-  min: number[];
-  max: number[];
-}
-
-const landed: Bounds = manifest.docking_validation.ship_bounds_station_space;
-
-/**
- * The starter frigate landed on berth 07, in station space (glTF: Blender -Y is +Z), from the
- * generator's docking check: the middle of the deck, and the height of its landing feet.
- */
-export const BERTH = {
-  x: ((landed.min[0] ?? 0) + (landed.max[0] ?? 0)) / 2,
-  z: -((landed.min[1] ?? 0) + (landed.max[1] ?? 0)) / 2,
-  /** The height of the deck, where the landing feet rest. */
-  deck: landed.min[2] ?? 0,
-};
+/** The apron centre, aligned with the simulation's dock. Individual slots are lateral offsets. */
+export const BERTH = { x: 0, z: -layout.centreY, deck: layout.deck };
+export const BERTHS = layout.berths.map((b) => ({ ...BERTH, x: b.x, id: b.id }));
 
 /**
  * How far below the gameplay plane the station's origin sits (design §5: one plane). Hulls are

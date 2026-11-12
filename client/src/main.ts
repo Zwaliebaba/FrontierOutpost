@@ -2,6 +2,7 @@
  * The game client: takes the contract on offer, flies the player's ship through the run with the
  * keyboard, and draws every ship from the server's snapshots with the tactical camera (design §5).
  */
+import "./command.css";
 import { Raycaster, Vector2, Vector3 } from "three";
 import { connect, fetchConnectInfo } from "./net/connection";
 import type { Connection } from "./net/connection";
@@ -16,8 +17,9 @@ import type {
 import { launchRole, renderCrew } from "./outpost/crew";
 import { loadOutpostModels } from "./outpost/models";
 import { fittingName, launchLines } from "./outpost/options";
-import { placeStation } from "./outpost/placement";
+import { BERTHS, placeStation } from "./outpost/placement";
 import { OutpostScene } from "./outpost/scene";
+import type { HomeTab } from "./outpost/ui";
 import { renderHome } from "./outpost/ui";
 import type { EntityPose } from "./net/interpolation";
 import { Predictor } from "./game/prediction";
@@ -108,6 +110,19 @@ const scan = line("scan");
 const lock = line("lock");
 const notice = line("notice");
 const accountLine = line("account");
+const command = element("header", "command");
+const brand = element("div", undefined, "brand");
+brand.innerHTML =
+  '<span class="insignia" aria-hidden="true">⌃</span><strong>FRONTIER / OUTPOST</strong><span class="command-title">STATION COMMAND</span>';
+command.append(brand, status);
+const utility = element("footer", "utility");
+utility.textContent = "HOME OUTPOST   /   BERTHS 07–10";
+const cameraHints = element("span");
+cameraHints.textContent = "SCROLL  Zoom   /   RMB  Orbit   /   R  Reset";
+utility.append(cameraHints, sim);
+document.body.append(command, utility);
+const stationLabels = element("div", "station-labels");
+document.body.append(stationLabels);
 const nav = element("div", "nav");
 const signInPanel = element("div", "signin", "panel");
 const briefing = element("div", "briefing", "panel");
@@ -170,7 +185,8 @@ const readControls = (driveReady: boolean): Controls => ({
 async function start(): Promise<void> {
   showStatus("connecting", "Connecting…");
   const connection = await connect(await fetchConnectInfo());
-  showStatus("connected", `Connected · protocol ${String(connection.protocolVersion)}`);
+  showStatus("connected", "Connected");
+  status.dataset.protocol = String(connection.protocolVersion);
   // Browsers do not always close a WebTransport session with its page; without this, the
   // server would keep the run going until the session timed out.
   let leaving = false;
@@ -222,6 +238,7 @@ let holdings: AccountInfo | null = null;
 let catalog: Catalog | null = null;
 let outpost: OutpostScene | null = null;
 let selectedSocket = "a";
+let homeTab: HomeTab = "overview";
 /** The pilot's crew, if they are in one. */
 let crew: CrewInfo | null = null;
 /** Redraws what depends on the home: set by `play`. */
@@ -233,10 +250,26 @@ function showAccount(callsign: string, account: AccountInfo): void {
   accountLine.dataset.credits = String(account.credits);
   accountLine.dataset.ore = String(account.ore);
   accountLine.dataset.alloy = String(account.alloy);
-  accountLine.textContent =
-    `${callsign} · ${String(account.credits)} cr · ${String(account.ore)} ore · ` +
-    `${String(account.salvage)} salvage · ${String(account.volatiles)} volatiles · ` +
-    `${String(account.alloy)} alloy · ${String(account.components)} components`;
+  accountLine.replaceChildren();
+  const pilot = element("span", undefined, "pilot-name");
+  pilot.textContent = callsign;
+  accountLine.append(pilot);
+  for (const [label, value] of [
+    ["Credits", `${String(account.credits)} cr`],
+    ["Ore", account.ore],
+    ["Salvage", account.salvage],
+    ["Volatiles", account.volatiles],
+    ["Alloy", account.alloy],
+    ["Components", account.components],
+  ] as const) {
+    const cell = element("span", undefined, "resource");
+    const name = element("span");
+    name.textContent = label;
+    const amount = element("strong");
+    amount.textContent = String(value);
+    cell.append(name, amount);
+    accountLine.append(cell);
+  }
   homeChanged();
 }
 
@@ -382,6 +415,7 @@ const TIER_NAME = ["", "I", "II", "III"];
 
 function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   let life: Life | null = null;
+  let selectedTier = 1;
   let contract: Contract | null = null;
   let reveal: Scanned | null = null;
   /**
@@ -396,7 +430,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     briefing.replaceChildren();
     briefing.dataset.state = "open";
     const title = element("h2");
-    title.textContent = `Contract: ${offer.site.name}`;
+    const eyebrow = element("p", undefined, "eyebrow");
+    eyebrow.textContent = "EXPEDITION / CONTRACT BRIEFING";
+    title.textContent = offer.site.name;
     const facts = element("ul");
     for (const text of [HAZARD_TEXT[offer.hazard], THREAT_TEXT[offer.dominantThreat]]) {
       const item = element("li");
@@ -446,9 +482,35 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       crewSection.append(p);
     }
     const tiers = element("div", undefined, "tiers");
+    selectedTier =
+      role.follow ??
+      (offer.tiers.some((tier) => tier.tier === selectedTier && tier.open)
+        ? selectedTier
+        : (offer.tiers.find((tier) => tier.open)?.tier ?? 1));
+    const tierLabel = element("label");
+    tierLabel.textContent = "THREAT TIER";
+    const tierSelect = element("select", "threat-tier");
+    tierSelect.disabled = !role.launches;
+    for (const tier of offer.tiers) {
+      const option = element("option");
+      option.value = String(tier.tier);
+      option.textContent = `Tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} / ${String(tier.payout)} cr${tier.open ? "" : " / locked"}`;
+      option.disabled = !tier.open && role.follow !== tier.tier;
+      option.selected = tier.tier === selectedTier;
+      tierSelect.append(option);
+    }
+    tierSelect.addEventListener("change", () => {
+      selectedTier = Number(tierSelect.value);
+      for (const button of tiers.querySelectorAll<HTMLButtonElement>("button[data-tier]")) {
+        button.hidden = Number(button.dataset.tier) !== selectedTier;
+      }
+    });
+    tierLabel.append(tierSelect);
+    tiers.append(tierLabel);
     for (const tier of offer.tiers) {
       const button = element("button");
       button.dataset.tier = String(tier.tier);
+      button.hidden = tier.tier !== selectedTier;
       const following = role.follow === tier.tier;
       button.textContent = following
         ? `Follow the host · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)}`
@@ -464,13 +526,15 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           note.textContent = `Could not launch: ${error instanceof Error ? error.message : String(error)}`;
           for (const other of offer.tiers) {
             const b = tiers.querySelector<HTMLButtonElement>(`[data-tier="${String(other.tier)}"]`);
-            if (b) b.disabled = !other.open;
+            if (b) b.disabled = role.launches ? !other.open : role.follow !== other.tier;
           }
         });
       });
       tiers.append(button);
     }
-    briefing.append(title, facts, note, stake, crewSection, tiers);
+    const content = element("div", undefined, "briefing-content");
+    content.append(eyebrow, title, facts, note, stake, crewSection);
+    briefing.append(content, tiers);
   };
 
   const showSummary = (summary: RunSummary) => {
@@ -511,6 +575,11 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       outpost.home();
     }
     document.body.dataset.station = life ? "dock" : "home";
+    if (utility.firstChild)
+      utility.firstChild.textContent = life
+        ? "EXPEDITION / ACTIVE"
+        : `HOME OUTPOST / ${String(crew?.members.length ?? 1)} OF 4 BERTHS OCCUPIED`;
+    resize();
   };
 
   const beginRun = (joined: Joined) => {
@@ -519,8 +588,18 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       glide = { from: new Vector3(), toStation: false, t: 0 };
     }
     placeFor(joined.site);
-    // Until the first snapshot the ship is on the berth.
-    target.set(joined.site.dockX, 0, joined.site.dockZ);
+    // Start the camera at this pilot's authored berth until the first snapshot arrives.
+    const slot = crew?.members.findIndex((member) => member.you) ?? 0;
+    const lateral = BERTHS[crew?.members[slot]?.berth ?? slot]?.x ?? BERTHS[0]?.x ?? 0;
+    const heading = Math.atan2(
+      joined.site.centreZ - joined.site.dockZ,
+      joined.site.centreX - joined.site.dockX,
+    );
+    target.set(
+      joined.site.dockX + Math.sin(heading) * lateral,
+      0,
+      joined.site.dockZ - Math.cos(heading) * lateral,
+    );
     loaded.setObstacles(joined.obstacles);
     loaded.setSpeedFactor(joined.speedFactor);
     view.beginRun(joined.shipId, joined.site, joined.obstacles, joined.deposits);
@@ -539,18 +618,42 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   homeChanged = () => {
     stationWhere();
     if (!catalog || !holdings) return;
+    let power = document.getElementById("resource-power");
+    if (!power) {
+      power = element("span", "resource-power", "resource");
+      accountLine.append(power);
+    }
+    power.replaceChildren();
+    const powerLabel = element("span");
+    powerLabel.textContent = "Power";
+    const powerValue = element("strong");
+    powerValue.textContent = `${String(holdings.outpost.powerUsed)} / ${String(catalog.powerCap)}`;
+    power.append(powerLabel, powerValue);
     if (outpost) {
+      outpost.setCrew(crew, callsign);
       outpost.apply(holdings);
       outpost.select(selectedSocket);
       homePanel.dataset.scene = JSON.stringify(outpost.report());
     }
-    renderHome(homePanel, catalog, holdings, selectedSocket, {
-      send,
-      select: (socket) => {
-        selectedSocket = socket;
-        homeChanged();
+    renderHome(
+      homePanel,
+      catalog,
+      holdings,
+      selectedSocket,
+      {
+        send,
+        tab: (tab) => {
+          homeTab = tab;
+          homeChanged();
+        },
+        select: (socket) => {
+          selectedSocket = socket;
+          homeTab = "facilities";
+          homeChanged();
+        },
       },
-    });
+      homeTab,
+    );
     if (!life) homePanel.dataset.state = "open";
     if (briefing.dataset.state === "open" && contract) showBriefing(contract);
   };
@@ -592,7 +695,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         break;
       case "crew":
         crew = message.crew ?? null;
-        if (briefing.dataset.state === "open" && contract) showBriefing(contract);
+        homeChanged();
         break;
       case "potPaid": {
         const { pot, share } = message;
@@ -662,7 +765,10 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   const target = new Vector3();
 
   const resize = () => {
-    view.resize(window.innerWidth, window.innerHeight, viewWidth);
+    const width = window.innerWidth;
+    const panels = life ? 0 : width <= 1100 ? 490 : 580;
+    const available = Math.max(width * 0.35, width - panels);
+    view.resize(width, window.innerHeight, (viewWidth * width * (life ? 1 : 0.8)) / available);
   };
   window.addEventListener("resize", resize);
   resize();
@@ -688,6 +794,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       const socket = outpost.pick(ray);
       if (socket) {
         selectedSocket = socket;
+        homeTab = "facilities";
         homeChanged();
       }
       return;
@@ -806,6 +913,44 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     }
   };
 
+  const homeMarkers = new Map<string, HTMLElement>();
+  const drawHomeLabels = () => {
+    stationLabels.hidden = life !== null || !outpost || !holdings;
+    if (stationLabels.hidden || !outpost) return;
+    const station = outpost;
+    const roster = crew?.members ?? [{ callsign, you: true, berth: 0 }];
+    const targets = [
+      ...BERTHS.map((b, i) => ({
+        id: `berth-${b.id}`,
+        label: `${b.id} / ${roster.find((member, index) => (member.berth ?? index) === i)?.callsign ?? "VACANT"}`,
+        at: station.root.localToWorld(new Vector3(b.x, b.deck + 0.2, b.z + 1.8)),
+      })),
+      ...["a", "b"].map((id) => ({
+        id: `socket-${id}`,
+        label: `SOCKET ${id.toUpperCase()}`,
+        at: station.socketPosition(id)?.add(new Vector3(0, 1.7, 0)),
+      })),
+    ];
+    for (const marker of targets) {
+      if (!marker.at) continue;
+      let node = homeMarkers.get(marker.id);
+      if (!node) {
+        node = element("span", undefined, "station-label");
+        node.dataset.marker = marker.id;
+        homeMarkers.set(marker.id, node);
+        stationLabels.append(node);
+      }
+      const screen = worldToScreen(marker.at, view.camera, view.viewport);
+      const left = window.innerWidth <= 1100 ? 240 : 286;
+      const right = window.innerWidth - (window.innerWidth <= 1100 ? 270 : 314);
+      node.hidden =
+        screen.x < left || screen.x > right || screen.y < 126 || screen.y > window.innerHeight - 70;
+      if (written.changed(`home.${marker.id}.text`, marker.label)) node.textContent = marker.label;
+      const transform = `translate(${screen.x.toFixed(0)}px, ${screen.y.toFixed(0)}px) translate(-50%, -100%)`;
+      if (written.changed(`home.${marker.id}.at`, transform)) node.style.transform = transform;
+    }
+  };
+
   let last = performance.now();
   // A hidden tab draws no frames, so no more controls would go out: let go of them now.
   onHidden(document, () => {
@@ -815,7 +960,24 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     life.predictor.advance(sequence, sent);
   });
 
-  let untilTick = 0;
+  let lastControlAt = performance.now();
+  const controlTimer = window.setInterval(() => {
+    const current = life;
+    if (!current || document.hidden) return;
+    const site = current.joined.site;
+    const at = current.predictor.state;
+    const outside =
+      at !== null && Math.hypot(at.x - site.centreX, at.z - site.centreZ) > site.radius;
+    const controls = readControls(current.own?.drive === "ready" && outside);
+    const { sequence, sent } = current.session.sendControls(controls);
+    current.predictor.advance(sequence, sent);
+    lastControlAt = performance.now();
+    if (controls.thrust !== 0 || controls.turn !== 0) selection.steer();
+  }, 1_000 / loaded.ticksPerSecond());
+  window.addEventListener("pagehide", () => {
+    window.clearInterval(controlTimer);
+  });
+
   let hudLineAt = Number.NEGATIVE_INFINITY;
   const frames = new FrameTimer();
   const frame = (now: number) => {
@@ -824,24 +986,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     last = now;
     const current = life;
 
-    // Controls go out once per simulation tick, as the server steps.
+    // Drawing can be slower than the simulation; input delivery has its own clock.
     const tickMs = 1_000 / (current?.session.tickRate ?? 20);
-    untilTick -= dt * 1_000;
-    if (untilTick <= 0) {
-      untilTick += tickMs;
-      if (untilTick < 0) untilTick = tickMs;
-      if (current) {
-        const site = current.joined.site;
-        const at = current.predictor.state;
-        const outside =
-          at !== null && Math.hypot(at.x - site.centreX, at.z - site.centreZ) > site.radius;
-        const controls = readControls(current.own?.drive === "ready" && outside);
-        const { sequence, sent } = current.session.sendControls(controls);
-        current.predictor.advance(sequence, sent);
-        // Steering takes the view back to your own ship, so it is never flown off screen.
-        if (controls.thrust !== 0 || controls.turn !== 0) selection.steer();
-      }
-    }
 
     // In flight the view springs back once the look control is released (design §5).
     if (held.has("KeyR")) {
@@ -859,7 +1005,10 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     if (current) {
       const { session, predictor } = current;
       const others = session.snapshots.sample(now).filter((pose) => pose.id !== session.shipId);
-      const predicted = predictor.visual(1 - Math.max(0, untilTick) / tickMs, dt);
+      const predicted = predictor.visual(
+        Math.min(1, Math.max(0, now - lastControlAt) / tickMs),
+        dt,
+      );
       own = predicted
         ? { id: session.shipId, kind: "playerShip", hull: current.hull, ...predicted }
         : undefined;
@@ -904,6 +1053,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     } else {
       view.render(poses, selection.lock, aim, look.pitch, look.yaw, shots, dt);
     }
+
+    drawHomeLabels();
 
     const locked = poses.find((pose) => pose.id === selection.lock);
     if (locked && own && current) {

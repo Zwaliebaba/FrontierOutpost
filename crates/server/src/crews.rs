@@ -69,6 +69,7 @@ struct Crew {
     /// Who is already in the launched instance, the host first. A seat is
     /// taken once: nobody is offered the same launch twice.
     aboard: Vec<AccountId>,
+    launch_slots: Vec<AccountId>,
 }
 
 /// A crew as one member sees it.
@@ -79,11 +80,20 @@ pub struct View {
     pub members: Vec<(AccountId, String, u32)>,
     pub you: AccountId,
     pub seed: u32,
+    pub berth_accounts: Vec<AccountId>,
     /// The tier the host launched at and the seconds left to follow.
     pub launch: Option<(ThreatTier, u32)>,
 }
 
 impl View {
+    #[must_use]
+    pub fn berth_slot(&self, account: AccountId) -> Option<u32> {
+        self.berth_accounts
+            .iter()
+            .position(|a| *a == account)
+            .and_then(|i| u32::try_from(i).ok())
+    }
+
     #[must_use]
     pub fn host(&self) -> Option<AccountId> {
         self.members.first().map(|&(account, ..)| account)
@@ -161,6 +171,7 @@ impl Crews {
                 seed,
                 launch: None,
                 aboard: Vec::new(),
+                launch_slots: Vec::new(),
             },
         );
         inner.member_of.insert(account, code.clone());
@@ -290,6 +301,7 @@ impl Crews {
             crew.seed = seed;
             crew.launch = None;
             crew.aboard.clear();
+            crew.launch_slots.clear();
         }
     }
 
@@ -300,6 +312,7 @@ impl Crews {
             return;
         };
         if let Some(crew) = inner.crews.get_mut(&code) {
+            crew.launch_slots = crew.members.iter().map(|m| m.account).collect();
             crew.launch = Some(launch);
             crew.aboard = vec![account];
         }
@@ -340,6 +353,22 @@ impl Crews {
         let code = inner.member_of.get(&account)?;
         let crew = inner.crews.get(code)?;
         let now = Instant::now();
+        let mut berth_accounts = crew.launch_slots.clone();
+        for member in &crew.members {
+            if berth_accounts.contains(&member.account) {
+                continue;
+            }
+            // After the follow window, a newcomer may fill a departed member's berth.
+            // Preserve the slots of everyone still present, rather than overlapping the last slot.
+            if let Some(vacant) = berth_accounts
+                .iter()
+                .position(|account| !crew.members.iter().any(|member| member.account == *account))
+            {
+                berth_accounts[vacant] = member.account;
+            } else {
+                berth_accounts.push(member.account);
+            }
+        }
         Some(View {
             code: code.clone(),
             members: crew
@@ -350,6 +379,7 @@ impl Crews {
                 .collect(),
             you: account,
             seed: crew.seed,
+            berth_accounts,
             launch: crew
                 .launch
                 .as_ref()
@@ -412,6 +442,33 @@ mod tests {
         assert_eq!(view.host(), Some(AccountId(1)));
         assert!(!view.is_host());
         assert_eq!(view.seed, 29, "the host's contract");
+    }
+
+    #[test]
+    fn launch_slots_survive_a_departure_without_reassigning_an_occupied_berth() {
+        let crews = Crews::default();
+        let code = crews.create(AccountId(1), "Host", events(), 29, counter());
+        for id in 2..=4 {
+            crews.join(&code, AccountId(id), "Wing", events()).unwrap();
+        }
+        // Snapshot the slots exactly as `launched` does, without starting a network instance.
+        crews.lock().crews.get_mut(&code).unwrap().launch_slots = (1..=4).map(AccountId).collect();
+        crews.leave(AccountId(2));
+        let view = crews.view(AccountId(3)).unwrap();
+        assert_eq!(view.berth_slot(AccountId(3)), Some(2));
+        assert_eq!(view.berth_slot(AccountId(4)), Some(3));
+        let wire = crate::wire::crew(&view);
+        assert_eq!(
+            wire.members.iter().map(|m| m.berth).collect::<Vec<_>>(),
+            [Some(0), Some(2), Some(3)]
+        );
+        crews
+            .join(&code, AccountId(5), "New wing", events())
+            .unwrap();
+        let view = crews.view(AccountId(5)).unwrap();
+        assert_eq!(view.berth_slot(AccountId(5)), Some(1));
+        assert_eq!(view.berth_slot(AccountId(3)), Some(2));
+        assert_eq!(view.berth_slot(AccountId(4)), Some(3));
     }
 
     #[test]

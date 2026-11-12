@@ -4,7 +4,7 @@ test("a new pilot registers a passkey and starts with 100 cr", async ({ page }) 
   const callsign = await signUp(page);
   const account = page.locator("#account");
   await expect(account).toHaveAttribute("data-credits", "100");
-  await expect(account).toContainText(`${callsign} · 100 cr`);
+  await expect(account).toContainText(callsign);
   await expect(page.locator("#briefing")).toHaveAttribute("data-state", "open");
 });
 
@@ -15,6 +15,7 @@ test("a reload signs back in by token; a fresh tab signs in with the passkey", a
   // Same tab: the session token signs straight back in, with no passkey prompt.
   await page.reload();
   await expect(page.locator("#account")).toContainText(callsign);
+  await expect(page.locator("#account")).toHaveAttribute("data-credits", "100");
   await expect(signInPanel).not.toHaveAttribute("data-state", "open");
 
   // The token forgotten, as in a new tab: the passkey signs in.
@@ -25,7 +26,8 @@ test("a reload signs back in by token; a fresh tab signs in with the passkey", a
   await expect(signInPanel).toHaveAttribute("data-state", "open");
   await page.locator("#callsign").fill(callsign.toLowerCase());
   await page.locator('#signin button[data-action="sign-in"]').click();
-  await expect(page.locator("#account")).toContainText(`${callsign} · 100 cr`);
+  await expect(page.locator("#account")).toContainText(callsign);
+  await expect(page.locator("#account")).toHaveAttribute("data-credits", "100");
 });
 
 test("launching pays for supplies from the pilot's credits", async ({ page }) => {

@@ -123,7 +123,7 @@ describe("the outpost scene", () => {
     const ship = scene.root.getObjectByName("berth ship");
     const at = ship?.getWorldPosition(ship.position.clone());
     expect(at?.x).toBeCloseTo(-120, 1);
-    expect(at?.z).toBeCloseTo(0, 1);
+    expect(at?.z).toBeCloseTo(6, 1);
     // Drawn on the plane, as the run draws the same ship once it launches.
     expect(at?.y).toBeCloseTo(0, 6);
 
@@ -133,6 +133,43 @@ describe("the outpost scene", () => {
     scene.home();
     expect(scene.root.parent).toBe(scene.scene);
     expect(ships()).toEqual([true, true]);
+  });
+
+  it("updates four roster ships and removes departed crewmates without ghosts", () => {
+    const scene = new OutpostScene(models());
+    const members = ["Vega", "Rigel", "Deneb", "Altair"].map((callsign, index) => ({
+      callsign,
+      share: 25,
+      you: index === 2,
+    }));
+    const crew = { code: "ABC234", hosting: false, members };
+    scene.setCrew(crew, "Deneb");
+    expect(scene.report().berths.map((b) => b.berth)).toEqual(["07", "08", "09", "10"]);
+    const hulls = () => scene.root.children.filter((n) => n.name === "berth ship");
+    expect(hulls()).toHaveLength(8);
+    expect(new Set(hulls().map((n) => n.position.x)).size).toBe(4);
+    scene.launch();
+    expect(hulls().every((n) => !n.visible)).toBe(true);
+    scene.setCrew({ ...crew, members: members.slice(0, 2) }, "Vega");
+    expect(hulls()).toHaveLength(4);
+    expect(hulls().every((n) => !n.visible)).toBe(true);
+    scene.home();
+    expect(hulls().every((n) => n.visible)).toBe(true);
+    scene.setCrew(
+      {
+        ...crew,
+        members: [
+          { callsign: "Vega", you: false, share: 50, berth: 0 },
+          { callsign: "Altair", you: true, share: 50, berth: 3 },
+        ],
+      },
+      "Altair",
+    );
+    expect(scene.report().berths.map((b) => b.berth)).toEqual(["07", "10"]);
+    expect(new Set(hulls().map((n) => n.position.x))).toEqual(new Set([-6, 6]));
+    scene.setCrew(null, "Deneb");
+    expect(scene.report().berths).toEqual([{ berth: "07", callsign: "Deneb", you: true }]);
+    expect(hulls()).toHaveLength(2);
   });
 
   it("makes the station and its modules structures, so ships behind them show as silhouettes", () => {

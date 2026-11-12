@@ -880,6 +880,11 @@ impl Pilot<'_> {
             .expedition
             .join(
                 account,
+                self.identity
+                    .crews
+                    .view(account)
+                    .and_then(|view| view.berth_slot(account))
+                    .unwrap_or(0),
                 fitted(&holdings),
                 share,
                 self.session.clone(),

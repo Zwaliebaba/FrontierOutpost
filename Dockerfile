@@ -39,6 +39,7 @@ COPY crates crates
 # The client imports the outpost's models and their placement from the scene's exports.
 COPY Design/FrontierOutpost/station.glb Design/FrontierOutpost/facilities.glb \
     Design/FrontierOutpost/frigate.glb Design/FrontierOutpost/scene_manifest.json \
+    Design/FrontierOutpost/berths.json \
     Design/FrontierOutpost/
 COPY client client
 

@@ -2,18 +2,18 @@
 
 Art direction: [Frontier Outpost Visual Style Guide](../Visual-Style-Guide.md). Game design: [Frontier Outpost](../FrontierOutpost.md).
 
-A HUD-free outpost scene: an octagonal orbital depot with two circular side pods, a numbered forward landing deck, a service spine, antenna mast and red pennant; the original Aurora ship preserved as a cruiser in the background; a new starter frigate landed on berth 07; faceted asteroids; a distant blue planet and procedural starfield.
+A HUD-free outpost scene: an octagonal orbital depot with two circular side pods, a reinforced four-berth forward landing deck, a service spine, antenna mast and red pennant; the original Aurora ship preserved as a cruiser in the background; starter frigates demonstrating berths 07–10; faceted asteroids; a distant blue planet and procedural starfield.
 
 ![Rendered overview](FrontierOutpostPreview.png)
 
 ## Files
 
-- `FrontierOutpost.blend`: editable scene (saved by Blender 5.2.3 since the construction sockets were added; it may not open in 4.x, but the script still runs there), overview camera and lighting.
+- `FrontierOutpost.blend`: editable scene saved by Blender 4.3.2 for the four-berth upgrade, overview camera and lighting.
 - `FrontierOutpostPreview.png`: rendered overview.
 - `facilities.glb`: the three facility modules at two tiers each (plan item 5.1), exported apart from the station.
 - `facilities_preview.png`: the six modules in a row, rendered from the facility catalogue camera.
 - `starter_frigate_detail.png`: close-up of the starter frigate on its landing gear.
-- `station.glb`, `cruiser.glb`, `frigate.glb`, `asteroids.glb`: separate gameplay asset exports. `station.glb` was regenerated with Blender 5.2.3 when the sockets were added; the other three are still the 4.3 exports, with the same geometry the script produces now. `cruiser.glb` preserves the original Aurora hull at its original scale; `frigate.glb` is the new starter ship.
+- `station.glb`, `cruiser.glb`, `frigate.glb`, `asteroids.glb`: separate gameplay asset exports. `station.glb` and `frigate.glb` were regenerated with Blender 4.3.2 for the four-berth upgrade; cruiser and asteroid exports retain their original bytes. `cruiser.glb` preserves the original Aurora hull at its original scale; `frigate.glb` is the new starter ship.
 - `create_scene.py`: deterministic source generator, seed 2266.
 - `scene_manifest.json`: mesh statistics, scale and axis conventions.
 
@@ -23,7 +23,7 @@ A HUD-free outpost scene: an octagonal orbital depot with two circular side pods
 blender -b -t 8 --python create_scene.py
 ```
 
-The script runs on Blender 4.3+ and 5.x (verified on 5.2.3 LTS, which reproduces the committed manifest exactly). The committed `.blend` and GLBs were generated with Blender 4.3; regenerating them on a newer Blender changes their bytes, not their geometry, so only commit regenerated binaries together with a reason. The script writes files alongside itself by default. Use `SCENE_OUTPUT` to choose a different directory, `RENDER_SAMPLES` to adjust quality, `RENDER_SCALE` for resolution percentage, or `SKIP_RENDER=1` to generate assets without rendering. No external textures, downloads or add-ons are required. Rendering uses Cycles, with denoising enabled only when the Blender build supports OpenImageDenoise.
+The script supports Blender 4.3+ and 5.x. This four-berth revision was generated and validated on Blender 4.3.2. The committed `.blend` and GLBs were generated with Blender 4.3; regenerating them on a newer Blender changes their bytes, not their geometry, so only commit regenerated binaries together with a reason. The script writes files alongside itself by default. Use `SCENE_OUTPUT` to choose a different directory, `RENDER_SAMPLES` to adjust quality, `RENDER_SCALE` for resolution percentage, or `SKIP_RENDER=1` to generate assets without rendering. No external textures, downloads or add-ons are required. Rendering uses Cycles, with denoising enabled only when the Blender build supports OpenImageDenoise.
 
 ## Game import
 
@@ -56,3 +56,30 @@ This is an editable visual foundation, not a fully optimized production asset pa
 ## Scene organization
 
 `Station`, `Cruiser`, `Frigate`, `Asteroids`, `Backdrop`, `Lighting`, and `Cameras` collections isolate gameplay geometry from presentation. Materials are named by role. Geometry uses restrained bevels and flat-shaded rock facets to echo the reference's stylized industrial art direction.
+
+## Four-berth station command upgrade
+
+`berths.json` defines four slots (07–10), spaced 4 metres apart on a reinforced apron.
+`Berth_07` through `Berth_10` are named empties in `station.glb`, with their bases on the
+0.86-metre landing plane and their headings pointing outward. The frigate stays at its
+established scale. Socket B moves to the apron’s outer starboard edge, preserving its berth
+adjacency bonus and clearing all departure lanes. The core gains segmented crown armor and
+identification bands; the apron gains fascia, structural beams and service cabinets.
+
+The generator checks the evaluated frigate in every berth, all station solids along each
+straight departure corridor, the gameplay collision envelope, inter-ship clearance and socket
+clearance. The manifest records the four individual results. The Blender overview includes
+three linked presentation copies of the frigate; these are excluded from the gameplay exports.
+
+The TypeScript client draws ships from the crew roster at server-assigned slots. The server
+freezes slots for an active launch, so following out of order or another member leaving does
+not reassign an occupied berth. Checkpoints preserve these assignments. Each pilot still owns
+and manages their own home; roster ships do not introduce shared inventory or visiting-world
+simulation. Home services are organized behind the Station Command HUD’s service navigation.
+
+Static frigate armor is batched by material while landing gear remains independently animated.
+Flight inputs use their own simulation-rate timer, so slow drawing does not interrupt thrust
+or firing. The browser regression pauses drawing, flies, and reconnects to verify the server’s
+position.
+
+![Station Command HUD with four roster ships in a local test world](StationCommandPreview.png)
