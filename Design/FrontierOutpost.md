@@ -36,6 +36,8 @@ Everyone receives a starter outpost: a starter ship with a saved basic fitting, 
 
 **Travel** consists of approach and return legs flown inside the expedition instance. There is no separate transit scene. Return risk rises with cargo carried. Travel time is measured from undock to the first pocket and from the last pocket to dock.
 
+Two drives shorten the legs without removing that risk. The *cruise drive* multiplies speed outside the site, but not while a hostile has the ship locked or the extractor is working. The *jump drive* moves the ship to the dock or a pocket after a short spool: the pilot chooses a navigation marker and engages it. A hostile lock or a working extractor refuses or cancels the spool. A jump to a pocket arrives outside it, facing it, so the pilot sees what guards it before entering. A jump home with cargo arrives short of the dock and outside the site, so the return-leg interceptors still stand between the ship and the berth. Docking is always flown.
+
 **Session budget:** target 30–60 minutes, with ordinary outbound and return travel together at most 20% of session time. A 30-minute example allocates 4 minutes to preparation, 6 to travel, 16 to the objective, and 4 to unloading and decisions. A first expedition should reach its first decision within about two minutes of launch. Longer expeditions are explicit commitments. **[S3]** Frontier staging reduces travel while exposing supplies and position.
 
 **Crews.** A crew of 1–4 forms by invite code. The host chooses the contract and the threat tier. Each pilot launches from, and returns to, their own home in their own ship. Access is shared: if any crew member's outpost opens a pocket, the whole crew may enter. Rigs and modules stay tied to each pilot's own outpost. Cargo belongs to the ship that docks with it. Contract payouts are per expedition, split equally by default; the host may change the split before launch and every pilot sees it. Players cannot transfer items or currency to each other in Stage 1. Threat scales less than proportionally with crew size and never with experience. The site includes at least one optional objective that rewards two ships acting in different places at once; nothing essential requires it.
@@ -247,17 +249,17 @@ Extraction builds heat. At full heat the extractor cuts out for 20 seconds; vent
 | Wave composition and timing | Drawn from the threat mix | Revealed by scanning in the site |
 | Relay positions | Two different pockets | Revealed by scanning in the site |
 
-| Threat tier | Contract payout | Yield pools | Opening threat | Alert rises every |
-|---|---|---|---|---|
-| I | 100 cr | ×1.0 | 3 NPCs | 4 minutes |
-| II | 160 cr | ×1.25 | 5 NPCs | 3 minutes |
-| III | 240 cr | ×1.5 | 8 NPCs | 2 minutes |
+| Threat tier | Contract payout | Yield pools | Opening threat | Alert rises every | NPC speed | NPC damage |
+|---|---|---|---|---|---|---|
+| I | 100 cr | ×1.0 | 3 NPCs | 4 minutes | ×0.7 | ×0.5 |
+| II | 160 cr | ×1.25 | 5 NPCs | 3 minutes | ×1.0 | ×1.0 |
+| III | 240 cr | ×1.5 | 8 NPCs | 2 minutes | ×1.0 | ×1.0 |
 
-Alert also rises by one each time any extractor cuts out on heat. Each alert step adds a wave of one NPC plus one per tier number. On the return leg, one raider intercepts for each full third of cargo capacity carried. Tier I is completable in the basic fitting. Tiers open with facilities: tier II when a player first owns a tier 2 facility, tier III when they own a second. They follow unlocks, not the active layout. The host may choose any tier that a crew member has opened.
+Alert also rises by one each time any extractor cuts out on heat. Each alert step adds a wave of one NPC plus one per tier number. On the return leg, one raider intercepts for each full third of cargo capacity carried that no earlier interception has answered: leaving the site empty does not spend the ambush, and the same cargo is not intercepted twice. At tier I, NPCs are slower than the starter hull and hit half as hard, so a first run can be survived and escaped; tiers II and III field NPCs at full strength. Tier I is completable in the basic fitting. Tiers open with facilities: tier II when a player first owns a tier 2 facility, tier III when they own a second. They follow unlocks, not the active layout. The host may choose any tier that a crew member has opened.
 
 The optional two-place objective is a relay link: two relays in different pockets must each be held by a ship for the same 30 seconds. It adds 50% to the contract payout.
 
-**Threats and crew scaling (placeholders).** Provisional caps are 24 NPCs and 64 projectiles alive in one instance; these are the benchmark targets of §5.
+**Threats and crew scaling (placeholders).** Provisional caps are 24 NPCs and 64 projectiles alive in one instance; these are the benchmark targets of §5. When the NPC cap binds, wardens are placed first, so the nest is always fully guarded; the opening threat takes the room left, and NPCs of a wave that do not fit are dropped.
 
 | NPC | Behaviour |
 |---|---|
@@ -273,7 +275,7 @@ The optional two-place objective is a relay link: two relays in different pocket
 
 Threat never scales with experience or fittings. The contract payout, the nest bounty and the relay bonus form one pot, split equally unless the host changes the split before launch. Cargo belongs to the ship that docks with it.
 
-**Prices, recipes and costs (placeholders).** Prices are fixed and posted. The starting balance is 100 cr and each launch costs each pilot 40 cr in supplies.
+**Prices, recipes and costs (placeholders).** Prices are fixed and posted. The starting balance is 100 cr and each launch costs each pilot 40 cr in supplies. A pilot short of 40 cr who holds goods, in stock or queued for processing, sells first; one whose credits and goods together fall short launches for the credits they have, so nobody is stranded.
 
 | Good | NPC buys at | NPC sells at |
 |---|---|---|
@@ -296,6 +298,8 @@ Recipes: 2 ore make 1 alloy; 2 salvage make 1 components. Batches are queued at 
 | Approach leg | 3 minutes; first decision within 2 minutes of launch |
 | Objective | 16 minutes |
 | Return leg | 3 minutes |
+| Cruise drive | 3 times speed and acceleration, outside the site |
+| Jump drive | Spools for 6 seconds; arrives 40 m outside a pocket's edge, 40 m from the dock when empty, or beyond the interceptors' reach (still outside the site) when carrying cargo |
 | Unloading and decisions | 4 minutes |
 | Instance limit | 45 minutes, with a warning at 40 |
 | Disconnect exposure timer | 30 seconds in combat, 10 seconds otherwise; the ship is then held inert and cannot be targeted |

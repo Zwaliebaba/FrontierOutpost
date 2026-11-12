@@ -55,8 +55,8 @@ import {
   storedToken,
 } from "./game/identity";
 import type { SignedIn } from "./game/identity";
-import { distanceText, placeMarkers } from "./game/navigation";
-import type { NavTarget } from "./game/navigation";
+import { distanceText, placeMarkers, spreadBoxes } from "./game/navigation";
+import type { NavMarker, NavTarget } from "./game/navigation";
 import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
 import { loadSim } from "./sim";
 import type { Sim } from "./sim";
@@ -940,6 +940,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     ];
     const project = (x: number, z: number) =>
       worldToScreen(new Vector3(x, 0, z), view.camera, view.viewport);
+    const placed: { marker: NavMarker; node: HTMLDivElement }[] = [];
     for (const marker of placeMarkers(targets, from, project, view.viewport, NAV_INSETS)) {
       let drawn = markers.get(marker.id);
       if (!drawn) {
@@ -980,13 +981,28 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       if (written.changed(`${place}.arrow`, turned)) arrow.style.transform = turned;
       const text = `${marker.label} · ${distanceText(marker.distance)}`;
       if (written.changed(`${place}.text`, text)) label.data = text;
+      placed.push({ marker, node });
+    }
+    // Every label's text is written; one read of their sizes, then each is placed, with any
+    // that would overlap pushed apart so that each can be clicked.
+    const boxes = placed.map(({ marker, node }) => {
+      const width = node.offsetWidth;
+      const height = node.offsetHeight;
       // Above an on-screen target; inward from an edge, so the label stays whole.
       const lift = marker.onScreen ? 12 : 0;
-      const moved =
-        `translate(${marker.screen.x.toFixed(0)}px, ${(marker.screen.y - lift).toFixed(0)}px) ` +
-        `translate(${(-marker.anchor.x * 100).toFixed(0)}%, ${(-marker.anchor.y * 100).toFixed(0)}%)`;
-      if (written.changed(`${place}.at`, moved)) node.style.transform = moved;
-    }
+      return {
+        x: marker.screen.x - marker.anchor.x * width,
+        y: marker.screen.y - lift - marker.anchor.y * height,
+        width,
+        height,
+      };
+    });
+    spreadBoxes(boxes, view.viewport).forEach((box, index) => {
+      const entry = placed[index];
+      if (!entry) return;
+      const moved = `translate(${box.x.toFixed(0)}px, ${box.y.toFixed(0)}px)`;
+      if (written.changed(`nav.${entry.marker.id}.at`, moved)) entry.node.style.transform = moved;
+    });
   };
 
   const homeMarkers = new Map<string, HTMLElement>();

@@ -649,6 +649,21 @@ impl Store {
         Ok(events)
     }
 
+    /// How many runs an account has launched, by the gate events: the run
+    /// number the gate report counts in, less one for the next launch.
+    ///
+    /// # Errors
+    /// Fails only if the database does.
+    pub fn launches(&self, id: AccountId) -> Result<u32, StoreError> {
+        let connection = self.lock();
+        let count: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM events WHERE account = ?1 AND kind = 'launched'",
+            params![id.0],
+            |row| row.get(0),
+        )?;
+        Ok(u32::try_from(count).unwrap_or(u32::MAX))
+    }
+
     /// Every account's callsign, by account.
     ///
     /// # Errors
@@ -885,6 +900,45 @@ mod tests {
         let account = store.load(id).unwrap();
         assert_eq!((account.credits, account.stock.ore), (1_000, 40));
         assert!(store.ledger_balance(id).unwrap().contains(&(Item::ORE, 40)));
+    }
+
+    #[test]
+    fn launches_count_an_accounts_own_launched_events() {
+        let store = Store::in_memory().unwrap();
+        let vega = store.create_account("Vega").unwrap();
+        let rigel = store.create_account("Rigel").unwrap();
+        let launched = |account: AccountId, run: &str| Recorded {
+            at: 1_000,
+            account: account.0,
+            run: Some(run.into()),
+            event: GateEvent::Launched {
+                seed: 29,
+                tier: 1,
+                crew: 1,
+                role: "solo".into(),
+                layout: Vec::new(),
+                unlocks: Vec::new(),
+                fitted: Vec::new(),
+                stake: 0,
+                supplies: 40,
+            },
+        };
+        assert_eq!(store.launches(vega).unwrap(), 0);
+        store
+            .record(&[
+                launched(vega, "a"),
+                launched(vega, "b"),
+                launched(rigel, "c"),
+                Recorded {
+                    at: 1_000,
+                    account: vega.0,
+                    run: None,
+                    event: GateEvent::SessionStarted,
+                },
+            ])
+            .unwrap();
+        assert_eq!(store.launches(vega).unwrap(), 2);
+        assert_eq!(store.launches(rigel).unwrap(), 1);
     }
 
     #[test]

@@ -40,6 +40,8 @@ pub struct Settings {
     pub open_tiers: u32,
     /// A fixed seed for every contract, for tests; random otherwise.
     pub seed: Option<u32>,
+    /// Seeds assigned by run number, for playtests; used when `seed` is not set.
+    pub seed_pool: SeedPool,
     /// Replaces the opening threat, for benchmarks.
     pub opening_threat: Option<u32>,
 }
@@ -50,20 +52,64 @@ impl Default for Settings {
             template: FRONTIER_SITE,
             open_tiers: 1,
             seed: None,
+            seed_pool: SeedPool::default(),
             opening_threat: None,
         }
     }
 }
 
+/// Contract seeds assigned by run number: a pilot's Nth run uses seed
+/// `(N - 1) mod len`. The playtest's seed policy (playtest script §8):
+/// random seeds leave the gate report's same-seed measures without data,
+/// while one fixed seed removes the site's variation. With seven seeds, every
+/// pilot's run 3 shares a seed, and so do runs 3 and 10.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SeedPool {
+    seeds: [u32; SeedPool::MAX],
+    len: usize,
+}
+
+impl SeedPool {
+    /// The most seeds a pool holds.
+    pub const MAX: usize = 16;
+
+    /// A pool of `seeds`, or `None` for none or more than [`Self::MAX`].
+    #[must_use]
+    pub fn new(seeds: &[u32]) -> Option<Self> {
+        if seeds.is_empty() || seeds.len() > Self::MAX {
+            return None;
+        }
+        let mut pool = Self {
+            seeds: [0; Self::MAX],
+            len: seeds.len(),
+        };
+        pool.seeds[..seeds.len()].copy_from_slice(seeds);
+        Some(pool)
+    }
+
+    /// The seed for the run after `launched` runs, if the pool has any.
+    #[must_use]
+    pub fn for_run(&self, launched: u32) -> Option<u32> {
+        if self.len == 0 {
+            return None;
+        }
+        let index = usize::try_from(launched).ok()? % self.len;
+        self.seeds.get(index).copied()
+    }
+}
+
 impl Settings {
-    fn next_seed(&self) -> u32 {
+    /// The seed for a pilot who has launched `launched` runs.
+    fn next_seed(&self, launched: u32) -> u32 {
         // A per-process random hasher of a varying value: a seed nobody can guess.
-        self.seed.unwrap_or_else(|| {
-            let nanos = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |since| since.as_nanos());
-            RandomState::new().hash_one(nanos) as u32
-        })
+        self.seed
+            .or_else(|| self.seed_pool.for_run(launched))
+            .unwrap_or_else(|| {
+                let nanos = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |since| since.as_nanos());
+                RandomState::new().hash_one(nanos) as u32
+            })
     }
 }
 
@@ -289,10 +335,20 @@ impl Pilot<'_> {
         let crew = self
             .account
             .and_then(|account| self.identity.crews.view(account));
+        // A crew flies the host's seed, so the pool follows the host's runs.
+        let launched = match self.account {
+            Some(account) => {
+                self.identity
+                    .store
+                    .call(move |s| s.launches(account))
+                    .await?
+            }
+            None => 0,
+        };
         match crew {
             Some(view) if !view.is_host() => self.seed = view.seed,
             Some(view) => {
-                self.seed = self.settings.next_seed();
+                self.seed = self.settings.next_seed(launched);
                 self.identity.crews.set_seed(view.you, self.seed);
                 let others: Vec<AccountId> = view
                     .accounts()
@@ -301,7 +357,7 @@ impl Pilot<'_> {
                     .collect();
                 self.identity.crews.notify(&others);
             }
-            None => self.seed = self.settings.next_seed(),
+            None => self.seed = self.settings.next_seed(launched),
         }
         self.show_contract().await
     }
@@ -1098,4 +1154,31 @@ pub async fn write_frame<T: serde::Serialize>(
 ) -> Result<(), SessionError> {
     send.write_all(&frame::encode(message)?).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SeedPool, Settings};
+
+    #[test]
+    fn a_seed_pool_assigns_seeds_by_run_number() {
+        let pool = SeedPool::new(&[11, 22, 33, 44, 55, 66, 77]).expect("seven seeds fit");
+        // Run 1 has 0 launches before it, run 3 has 2, run 10 has 9.
+        assert_eq!(pool.for_run(0), Some(11));
+        assert_eq!(pool.for_run(2), Some(33));
+        assert_eq!(pool.for_run(9), Some(33), "runs 3 and 10 share a seed");
+        assert_eq!(SeedPool::default().for_run(2), None);
+        assert!(SeedPool::new(&[]).is_none());
+        assert!(SeedPool::new(&[1; 17]).is_none());
+        let settings = Settings {
+            seed_pool: pool,
+            ..Settings::default()
+        };
+        assert_eq!(settings.next_seed(2), 33);
+        let fixed = Settings {
+            seed: Some(29),
+            ..settings
+        };
+        assert_eq!(fixed.next_seed(2), 29, "a fixed seed wins");
+    }
 }

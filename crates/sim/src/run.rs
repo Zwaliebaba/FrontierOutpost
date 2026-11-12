@@ -369,7 +369,8 @@ struct PilotRun {
     extractor: Extractor,
     scan: Option<u32>,
     pocket: Option<usize>,
-    intercepted: bool,
+    /// Thirds of cargo capacity that interceptors have already answered.
+    intercepted: u32,
     undocked_at: Option<u32>,
     first_pocket_at: Option<u32>,
     last_pocket_exit_at: Option<u32>,
@@ -433,7 +434,12 @@ pub struct PilotCheckpoint {
     pub undocked_at: Option<u32>,
     pub first_pocket_at: Option<u32>,
     pub last_pocket_exit_at: Option<u32>,
+    /// Whether any interception was planned: what a checkpoint from before
+    /// `intercepted_thirds` holds.
     pub intercepted: bool,
+    /// Thirds of cargo capacity that interceptors have already answered.
+    #[serde(default)]
+    pub intercepted_thirds: Option<u32>,
     /// The rigs and modules flown, by identifier.
     #[serde(default)]
     pub fitted: Vec<String>,
@@ -527,7 +533,7 @@ impl Run {
                     extractor: Extractor::default(),
                     scan: None,
                     pocket: None,
-                    intercepted: false,
+                    intercepted: 0,
                     undocked_at: None,
                     first_pocket_at: None,
                     last_pocket_exit_at: None,
@@ -569,8 +575,11 @@ impl Run {
         let opening = options
             .opening_threat
             .unwrap_or_else(|| run.site.opening_threat());
-        run.place_opening_threat(opening);
+        // Wardens first: when the NPC cap binds, the nest stays fully guarded
+        // and the opening threat takes what room is left (code review
+        // question 2, the owner's rule). Waves past the cap are dropped.
         run.place_nest();
+        run.place_opening_threat(opening);
         (run, ships)
     }
 
@@ -682,7 +691,7 @@ impl Run {
             extractor: Extractor::default(),
             scan: None,
             pocket: None,
-            intercepted: false,
+            intercepted: 0,
             undocked_at: None,
             first_pocket_at: None,
             last_pocket_exit_at: None,
@@ -1179,7 +1188,8 @@ impl Run {
                         undocked_at: pilot.undocked_at,
                         first_pocket_at: pilot.first_pocket_at,
                         last_pocket_exit_at: pilot.last_pocket_exit_at,
-                        intercepted: pilot.intercepted,
+                        intercepted: pilot.intercepted > 0,
+                        intercepted_thirds: Some(pilot.intercepted),
                         fitted: pilot.fitted.clone(),
                     }
                 })
@@ -1239,7 +1249,13 @@ impl Run {
                     extractor: Extractor::default(),
                     scan: None,
                     pocket: None,
-                    intercepted: saved.intercepted,
+                    // An older checkpoint knows only that an interception
+                    // happened: count the cargo then carried as answered.
+                    intercepted: saved.intercepted_thirds.unwrap_or(if saved.intercepted {
+                        thirds(saved.cargo.iter().sum(), saved.capacity)
+                    } else {
+                        0
+                    }),
                     undocked_at: saved.undocked_at,
                     first_pocket_at: saved.first_pocket_at,
                     last_pocket_exit_at: saved.last_pocket_exit_at,
@@ -1598,7 +1614,8 @@ impl Run {
         let share = self.site.values.dominant.drone_share();
         let ore = self.site.pockets[0].template;
         let (cx, cz) = self.site.template.centre;
-        for i in 0..count.min(MAX_NPCS as u32) {
+        let room = MAX_NPCS.saturating_sub(self.npc_count()) as u32;
+        for i in 0..count.min(room) {
             let angle = rng.between(0.0, std::f32::consts::TAU);
             if rng.unit() < share {
                 // Drones gather in the ore field (design section 10).
@@ -1779,13 +1796,14 @@ impl Run {
     /// On the return leg one raider intercepts for each full third of cargo
     /// capacity carried (design section 10), once per pilot.
     fn intercept(&mut self, index: usize) {
-        if self.pilots[index].intercepted {
-            return;
-        }
-        self.pilots[index].intercepted = true;
         let pilot = &self.pilots[index];
-        let raiders = pilot.total() * 3 / pilot.capacity.max(1);
+        let carried = thirds(pilot.total(), pilot.capacity);
+        // Only cargo no earlier interception answered draws raiders: leaving
+        // the site empty first does not spend the ambush.
+        let raiders = carried.saturating_sub(pilot.intercepted);
+        let answered = pilot.intercepted.max(carried);
         let ship = pilot.ship;
+        self.pilots[index].intercepted = answered;
         let Some(state) = self.world.ship(ship).map(|s| s.state) else {
             return;
         };
@@ -2026,6 +2044,11 @@ fn berth(site: &Site, index: u32) -> (f32, f32) {
     (dx + heading.sin() * offset, dz - heading.cos() * offset)
 }
 
+/// Full thirds of `capacity` that `cargo` fills: one return-leg raider each.
+fn thirds(cargo: u32, capacity: u32) -> u32 {
+    cargo * 3 / capacity.max(1)
+}
+
 /// How long a scan takes in `fitting`.
 fn scan_ticks(fitting: &Fitting) -> u32 {
     // A few hundred ticks, so `as` loses nothing.
@@ -2106,6 +2129,54 @@ mod tests {
         let deposit = run.site.deposits[0];
         place(run, ship, (deposit.x, deposit.z));
         run.step();
+    }
+
+    #[test]
+    fn leaving_the_site_empty_first_does_not_spend_the_ambush() {
+        let raiders = |run: &Run| {
+            run.world
+                .ships()
+                .iter()
+                .filter(|s| s.kind == ShipKind::Raider)
+                .count()
+        };
+        let (mut run, ship) = quiet(6);
+        at_deposit(&mut run, ship);
+        // Out of the site with nothing: the return leg starts, no raiders.
+        place(&mut run, ship, (-80.0, 0.0));
+        run.step();
+        assert!(events(&mut run).contains(&RunEvent::ReturnLeg { pilot: ship }));
+        assert_eq!(raiders(&run), 0);
+        // Back in, laden, and out again: two thirds full, two raiders.
+        at_deposit(&mut run, ship);
+        run.pilots[0].cargo = [14, 0, 0];
+        place(&mut run, ship, (-80.0, 0.0));
+        run.step();
+        assert!(events(&mut run).contains(&RunEvent::Intercepted {
+            pilot: ship,
+            raiders: 2
+        }));
+        assert_eq!(raiders(&run), 2);
+        // The same cargo out a third time draws no more.
+        at_deposit(&mut run, ship);
+        place(&mut run, ship, (-80.0, 0.0));
+        run.step();
+        assert!(events(&mut run).contains(&RunEvent::ReturnLeg { pilot: ship }));
+        assert_eq!(raiders(&run), 2);
+    }
+
+    #[test]
+    fn an_older_checkpoint_counts_its_interception_as_answered() {
+        let (mut run, ship) = quiet(6);
+        at_deposit(&mut run, ship);
+        run.pilots[0].cargo = [14, 0, 0];
+        place(&mut run, ship, (-80.0, 0.0));
+        run.step();
+        let mut checkpoint = run.checkpoint();
+        assert_eq!(checkpoint.crew[0].intercepted_thirds, Some(2));
+        checkpoint.crew[0].intercepted_thirds = None;
+        let restored = Run::restore(&checkpoint).unwrap();
+        assert_eq!(restored.pilots[0].intercepted, 2);
     }
 
     #[test]
@@ -2242,6 +2313,29 @@ mod tests {
             (from_dock - crate::jump::DOCK_STANDOFF).abs() < 1.5,
             "{from_dock}"
         );
+    }
+
+    #[test]
+    fn when_the_npc_cap_binds_the_wardens_are_placed_first() {
+        // Tier III, four pilots, the nest open: nine wardens and an opening
+        // threat of eighteen do not fit in twenty-four.
+        let site = Site::generate(
+            COMPACT_SITE,
+            4,
+            ThreatTier::III,
+            4,
+            &[Capability::BreachNest],
+        );
+        let (run, _) = Run::launch(site, 4, Options::default());
+        let count = |kind| run.world.ships().iter().filter(|s| s.kind == kind).count();
+        assert_eq!(count(ShipKind::Warden), 9);
+        let npcs = run
+            .world
+            .ships()
+            .iter()
+            .filter(|s| s.kind != ShipKind::Pilot)
+            .count();
+        assert_eq!(npcs, MAX_NPCS, "the opening threat fills what room is left");
     }
 
     #[test]
@@ -2869,9 +2963,9 @@ mod tests {
     }
 
     #[test]
-    fn wardens_the_npc_cap_leaves_room_for_still_stand_all_round_the_core() {
-        // Tier III with four pilots plans nine wardens, and the opening
-        // threat leaves the cap room for fewer.
+    fn wardens_stand_evenly_all_round_the_core() {
+        // Tier III with four pilots plans nine wardens; placed before the
+        // opening threat, all nine stand, evenly spaced.
         let site = Site::generate(
             COMPACT_SITE,
             35,
@@ -2888,11 +2982,7 @@ mod tests {
             .filter(|ship| ship.kind == ShipKind::Warden)
             .map(|ship| (ship.state.z - core.z).atan2(ship.state.x - core.x))
             .collect();
-        assert!(
-            (2..9).contains(&bearings.len()),
-            "{} wardens: the cap should bind here",
-            bearings.len()
-        );
+        assert_eq!(bearings.len(), 9, "the cap no longer cuts the wardens");
         bearings.sort_by(f32::total_cmp);
         let even = std::f32::consts::TAU / bearings.len() as f32;
         let last = bearings[bearings.len() - 1];
