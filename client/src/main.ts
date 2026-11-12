@@ -40,6 +40,8 @@ import {
   summaryLines,
 } from "./game/contract";
 import type { Contract, Joined, Scanned } from "./game/contract";
+import { Pulse, gauges } from "./game/gauges";
+import type { GaugeKey } from "./game/gauges";
 import {
   SignInRefusedError,
   register,
@@ -69,8 +71,8 @@ const GLIDE_SECONDS = 0.9;
 
 const PICK_RADIUS_PX = 24;
 const KEY_TURN_RATE = 1.6;
-/** Room kept clear for the HUD lines at the top and bottom of the screen. */
-const NAV_INSETS = { top: 150, right: 12, bottom: 120, left: 12 };
+/** Room kept clear for the HUD lines at the top, and the ship gauges and lines at the bottom. */
+const NAV_INSETS = { top: 150, right: 12, bottom: 200, left: 12 };
 const NOTICE_MS = 4_000;
 /** How soon a dropped connection is retried, and how often an unreachable server. */
 const RECONNECT_MS = 1_500;
@@ -109,6 +111,32 @@ const lock = line("lock");
 const notice = line("notice");
 const accountLine = line("account");
 const nav = element("div", "nav");
+// The ship gauges: one row each for hull, hold and heat, built once and updated in place.
+const shipPanel = element("div", "ship");
+const gaugeRows = new Map<
+  GaugeKey,
+  {
+    row: HTMLDivElement;
+    label: HTMLSpanElement;
+    fill: HTMLDivElement;
+    value: HTMLSpanElement;
+    note: HTMLSpanElement;
+  }
+>();
+for (const key of ["hull", "hold", "heat"] as const) {
+  const row = element("div", undefined, "gauge");
+  row.dataset.gauge = key;
+  const label = element("span", undefined, "gauge-label");
+  const track = element("div", undefined, "gauge-track");
+  const fill = element("div", undefined, "gauge-fill");
+  const value = element("span", undefined, "gauge-value");
+  const note = element("span", undefined, "gauge-note");
+  track.append(fill);
+  row.append(label, track, value, note);
+  shipPanel.append(row);
+  gaugeRows.set(key, { row, label, fill, value, note });
+}
+document.body.append(shipPanel);
 const signInPanel = element("div", "signin", "panel");
 const briefing = element("div", "briefing", "panel");
 const summaryPanel = element("div", "summary", "panel");
@@ -332,6 +360,9 @@ interface Life {
   events: PendingEvents<SnapshotEvent>;
   /** The player's own hull, 0 to 255, from the latest snapshot. */
   hull: number;
+  /** Recent changes to the hull and the hold, which the gauges call out. */
+  hullPulse: Pulse;
+  cargoPulse: Pulse;
   own: OwnStatus | null;
   deposits: number[];
 }
@@ -344,6 +375,8 @@ function beginLife(connection: Connection, joined: Joined, loaded: Sim): Life {
     predictor,
     events: new PendingEvents(),
     hull: 255,
+    hullPulse: new Pulse(),
+    cargoPulse: new Pulse(),
     own: null,
     deposits: joined.deposits.map((deposit) => deposit.units),
     session: new Session(
@@ -355,9 +388,12 @@ function beginLife(connection: Connection, joined: Joined, loaded: Sim): Life {
         life.events.push(snapshot.tick, snapshot.events);
         life.own = snapshot.own;
         life.deposits = snapshot.deposits;
+        const now = performance.now();
+        life.cargoPulse.observe(snapshot.own.cargo, now);
         const own = snapshot.entities.find((entity) => entity.id === joined.shipId);
         if (!own) return;
         life.hull = own.hull;
+        life.hullPulse.observe(own.hull, now);
         const { x, z } = positionMetres(own);
         const velocity = velocityMetresPerSecond(own);
         predictor.reconcile(
@@ -931,7 +967,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         hudLineAt = now;
         setText(
           hud,
-          `Ship ${String(session.shipId)} · hull ${String(Math.round((current.hull / 255) * 100))}% · ` +
+          `Ship ${String(session.shipId)} · ` +
             `round trip ${session.roundTripMs === null ? "–" : `${session.roundTripMs.toFixed(0)} ms`} · ` +
             `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm · ` +
             `W A S D fly · Shift cruise · Tab lock · Space fire · X extract · V vent · C scan`,
@@ -941,6 +977,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       if (status) {
         const nearest = current.joined.deposits
           .map((deposit, index) => ({
+            index,
             distance: Math.hypot(deposit.x - own.x, deposit.z - own.z),
             left: current.deposits[index] ?? deposit.units,
           }))
@@ -955,6 +992,27 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         setData(run, "cargo", String(status.cargo));
         setData(run, "extractor", status.extractor);
         setText(run, runLine(status) + hint);
+        setData(shipPanel, "active", "true");
+        for (const gauge of gauges(
+          status,
+          current.hull,
+          current.hullPulse.recent(now),
+          current.cargoPulse.recent(now),
+        )) {
+          const row = gaugeRows.get(gauge.key);
+          if (!row) continue;
+          const id = `ship.${gauge.key}`;
+          if (written.changed(`${id}.level`, gauge.level)) row.row.dataset.level = gauge.level;
+          const width = `${(gauge.share * 100).toFixed(1)}%`;
+          if (written.changed(`${id}.width`, width)) row.fill.style.width = width;
+          if (written.changed(`${id}.label`, gauge.label)) row.label.textContent = gauge.label;
+          if (written.changed(`${id}.value`, gauge.value)) row.value.textContent = gauge.value;
+          if (written.changed(`${id}.note`, gauge.note)) row.note.textContent = gauge.note;
+        }
+        // The extractor's beam, to the deposit it can be working: the nearest within reach.
+        const working =
+          status.extractor === "on" && nearest && nearest.distance <= current.joined.extractRange;
+        view.world.setBeam(working ? own : null, working ? nearest.index : null);
         const pocketName = (index: number) => {
           const pocket = current.joined.site.pockets[index];
           return pocket ? POCKET_NAME[pocket.kind] : "?";
@@ -965,6 +1023,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       drawNav(own);
     } else {
       setData(run, "phase", null);
+      setData(shipPanel, "active", null);
       setData(hud, "x", null);
       hudLineAt = Number.NEGATIVE_INFINITY;
       setText(hud, "");

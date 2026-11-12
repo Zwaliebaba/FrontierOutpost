@@ -16,6 +16,7 @@ import {
   OctahedronGeometry,
   Scene,
   TorusGeometry,
+  Vector3,
 } from "three";
 import type { Material as ThreeMaterial, Object3D } from "three";
 import type { DepositInfo, EntityKind, Material, ObstacleInfo, SiteInfo } from "../protocol";
@@ -49,6 +50,7 @@ export const SIZE: Readonly<Record<EntityKind, number>> = {
 };
 
 const BLAST = linear(1, 0.6, 0.2);
+const X_AXIS = new Vector3(1, 0, 0);
 const LANDMARK_SEED = 2266;
 
 /**
@@ -101,6 +103,8 @@ export class ExpeditionScene {
   readonly #deposits: DrawnDeposit[] = [];
   /** Holds the outpost's station at the dock; not cleared with the site, which it outlives. */
   readonly #dock = new Group();
+  /** The extractor's beam from the player's ship to the deposit it works; one at a time. */
+  readonly #beam: Mesh<BoxGeometry, MeshBasicMaterial>;
   #station: Object3D | null = null;
   #dockAt: { x: number; z: number } | null = null;
   #ownShipId: number;
@@ -110,7 +114,45 @@ export class ExpeditionScene {
     this.scene.add(...stationLights());
     this.#bracket.visible = false;
     this.#dock.name = "dock";
-    this.scene.add(this.#bracket, this.#site, this.#dock);
+    // The style guide's rule for effects: a bright core in a coloured edge.
+    this.#beam = new Mesh(
+      new BoxGeometry(1, 0.32, 0.32),
+      new MeshBasicMaterial({ transparent: true, opacity: 0.55 }),
+    );
+    this.#beam.add(new Mesh(new BoxGeometry(1, 0.1, 0.1), new MeshBasicMaterial()));
+    this.#beam.name = "extractor beam";
+    this.#beam.visible = false;
+    this.scene.add(this.#bracket, this.#site, this.#dock, this.#beam);
+  }
+
+  get beam(): Readonly<Mesh> {
+    return this.#beam;
+  }
+
+  /**
+   * Draws the extractor's beam from `from`, the player's ship, to the deposit numbered `deposit`
+   * in the site's list, or hides it with `null`. Playtesting found extraction gave no sign in
+   * the world that anything was happening; the beam shows which deposit is being worked.
+   */
+  setBeam(from: { x: number; z: number } | null, deposit: number | null): void {
+    const drawn = deposit === null ? undefined : this.#deposits[deposit];
+    if (!from || !drawn) {
+      this.#beam.visible = false;
+      return;
+    }
+    // From where bolts leave the hull, down to the crystals.
+    const start = new Vector3(from.x, SHIP_HEIGHT / 2, from.z);
+    const end = drawn.group.position.clone().setY(0.6);
+    const length = start.distanceTo(end);
+    if (length < 1e-3) {
+      this.#beam.visible = false;
+      return;
+    }
+    this.#beam.visible = true;
+    this.#beam.material.color.copy(drawn.material.color);
+    this.#beam.position.copy(start).add(end).multiplyScalar(0.5);
+    this.#beam.scale.set(length, 1, 1);
+    this.#beam.quaternion.setFromUnitVectors(X_AXIS, end.sub(start).normalize());
   }
 
   /**
@@ -348,6 +390,7 @@ export class ExpeditionScene {
     this.#obstacles.length = 0;
     this.#pockets.length = 0;
     this.#deposits.length = 0;
+    this.#beam.visible = false;
   }
 }
 

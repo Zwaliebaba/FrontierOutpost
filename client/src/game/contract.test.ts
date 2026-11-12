@@ -27,7 +27,7 @@ describe("clock", () => {
 });
 
 describe("bar", () => {
-  it("fills ten cells, so heat reads without colour", () => {
+  it("fills ten cells, so progress reads without colour", () => {
     expect(bar(0)).toBe("[..........]");
     expect(bar(0.75)).toBe("[########..]");
     expect(bar(2)).toBe("[##########]");
@@ -35,14 +35,8 @@ describe("bar", () => {
 });
 
 describe("runLine", () => {
-  it("names the phase, clock, alert, hold, heat and extractor", () => {
-    expect(runLine(working)).toBe(
-      "In the site · 3:07 · alert 2 · hold 7/20 · heat [#######...] 75% · extractor working · " +
-        "drive off in the site",
-    );
-    expect(runLine({ ...working, extractor: "cutOut", extractorSeconds: 14 })).toContain(
-      "extractor CUT OUT 14 s",
-    );
+  it("names the phase, clock, alert and drive, leaving the ship to the gauges", () => {
+    expect(runLine(working)).toBe("In the site · 3:07 · alert 2 · drive off in the site");
     expect(runLine({ ...working, drive: "hunted" })).toContain("drive jammed");
   });
 });
@@ -96,13 +90,6 @@ describe("summaryLines", () => {
     const lines = summaryLines({ ...docked, ending: "destroyed", ore: 0, payout: 0, cargoLost: 9 });
     expect(lines[1]).toBe("Lost: 9 cargo, 0 upgraded modules");
     expect(lines[2]).toContain("net −40 cr");
-  });
-});
-
-describe("runLine with a shield", () => {
-  it("shows the shield only when the ship has one", () => {
-    expect(runLine(working)).not.toContain("shield");
-    expect(runLine({ ...working, shield: 33 })).toContain("shield 33");
   });
 });
 

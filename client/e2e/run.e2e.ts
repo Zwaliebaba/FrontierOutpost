@@ -21,7 +21,7 @@ test("a pilot stops at a deposit, extracts ore and vents", async ({ page }) => {
   await expect(run).toHaveAttribute("data-extractor", "on");
   // 2 ore a minute: the first unit within 30 seconds.
   await expect(run).toHaveAttribute("data-cargo", "1", { timeout: 35_000 });
-  await expect(run).toContainText("hold 1/20");
+  await expect(page.locator('#ship [data-gauge="hold"]')).toContainText("1/20");
 
   await page.keyboard.press("KeyV");
   await expect(run).toHaveAttribute("data-extractor", "venting");

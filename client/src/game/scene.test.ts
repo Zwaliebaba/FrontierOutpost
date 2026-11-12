@@ -56,6 +56,28 @@ describe("allegianceOf", () => {
 });
 
 describe("ExpeditionScene", () => {
+  it("draws the extractor beam from the ship to the deposit being worked", () => {
+    const world = new ExpeditionScene(1);
+    world.setSite(
+      SITE,
+      [],
+      [
+        { x: 40, z: 0, pocket: 0, material: "ore", units: 8 },
+        { x: 50, z: 10, pocket: 0, material: "ore", units: 8 },
+      ],
+    );
+    expect(world.beam.visible).toBe(false);
+    world.setBeam({ x: 46, z: 10 }, 1);
+    expect(world.beam.visible).toBe(true);
+    expect(world.beam.position.x).toBeCloseTo(48);
+    expect(world.beam.position.z).toBeCloseTo(10);
+    expect(world.beam.scale.x).toBeGreaterThan(4);
+    world.setBeam({ x: 46, z: 10 }, null);
+    expect(world.beam.visible).toBe(false);
+    world.setBeam({ x: 46, z: 10 }, 7);
+    expect(world.beam.visible).toBe(false);
+  });
+
   it("leans a turning ship into the turn and levels it when the turn ends", () => {
     const world = new ExpeditionScene(1);
     let heading = 0;
