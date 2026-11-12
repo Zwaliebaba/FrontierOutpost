@@ -56,6 +56,24 @@ describe("allegianceOf", () => {
 });
 
 describe("ExpeditionScene", () => {
+  it("leans a turning ship into the turn and levels it when the turn ends", () => {
+    const world = new ExpeditionScene(1);
+    let heading = 0;
+    world.update([pose(1, "playerShip")], null, undefined, 1 / 60);
+    for (let i = 0; i < 30; i++) {
+      heading += 2.4 / 60;
+      world.update([{ ...pose(1, "playerShip"), heading }], null, undefined, 1 / 60);
+    }
+    const drawn = world.ship(1);
+    expect(drawn?.bank).toBeGreaterThan(0.3);
+    expect(drawn?.hull.rotation.x).toBe(drawn?.bank);
+    expect(drawn?.hull.position.y).toBe(RENDER_HEIGHT);
+    for (let i = 0; i < 60; i++) {
+      world.update([{ ...pose(1, "playerShip"), heading }], null, undefined, 1 / 60);
+    }
+    expect(Math.abs(world.ship(1)?.bank ?? 1)).toBeLessThan(0.01);
+  });
+
   it("draws every ship at one height with its allegiance's shape and a silhouette", () => {
     const world = new ExpeditionScene(1);
     world.update(

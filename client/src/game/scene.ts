@@ -22,6 +22,7 @@ import type { DepositInfo, EntityKind, Material, ObstacleInfo, SiteInfo } from "
 import type { EntityPose } from "../net/interpolation";
 import type { Shots } from "./shots";
 import { SHIP_HEIGHT } from "../view/hulls";
+import { stepBank } from "../view/bank";
 import { setGear, stepGear } from "../view/frigate";
 import { stationLights } from "../view/lights";
 import { between, createRng } from "../view/rng";
@@ -80,6 +81,9 @@ interface DrawnShip extends ShipMeshes {
   kind: EntityKind;
   /** The landing gear, 0 folded to 1 lowered. */
   lowered: number;
+  /** The heading it was last drawn at, and its lean into the turn (view/bank). */
+  heading: number;
+  bank: number;
 }
 
 /** A ship this close to the dock is on berth 07, so its gear is down, metres. */
@@ -171,14 +175,25 @@ export class ExpeditionScene {
       const target = berthed ? 1 : 0;
       if (!drawn) {
         const meshes = shipMeshes(allegiance, SIZE[pose.kind]);
-        drawn = { ...meshes, allegiance, kind: pose.kind, lowered: target };
+        drawn = {
+          ...meshes,
+          allegiance,
+          kind: pose.kind,
+          lowered: target,
+          heading: pose.heading,
+          bank: 0,
+        };
         this.#ships.set(pose.id, drawn);
         this.scene.add(drawn.hull, drawn.silhouette);
       } else {
         drawn.lowered = stepGear(drawn.lowered, target, dt);
+        // Structures never move; everything that flies leans into its turns.
+        if (pose.kind !== "core")
+          drawn.bank = stepBank(drawn.bank, drawn.heading, pose.heading, dt);
+        drawn.heading = pose.heading;
       }
       setGear(drawn.gear, drawn.lowered);
-      placeShip(drawn, pose.x, pose.z, pose.heading);
+      placeShip(drawn, pose.x, pose.z, pose.heading, drawn.bank);
     }
     for (const [id, drawn] of this.#ships) {
       if (!seen.has(id)) this.#remove(id, drawn);
