@@ -6,6 +6,9 @@ import type { DepositInfo } from "./DepositInfo";
 import type { DominantThreat } from "./DominantThreat";
 import type { ExtractRefusal } from "./ExtractRefusal";
 import type { Hazard } from "./Hazard";
+import type { JumpCancel } from "./JumpCancel";
+import type { JumpRefusal } from "./JumpRefusal";
+import type { JumpTarget } from "./JumpTarget";
 import type { ObstacleInfo } from "./ObstacleInfo";
 import type { PotInfo } from "./PotInfo";
 import type { RunSummary } from "./RunSummary";
@@ -53,7 +56,7 @@ maxShield: number,
 /**
  * The rigs and modules flown, by fitting identifier.
  */
-fitted: Array<string>, } | { "type": "launchRefused", reason: string, } | { "type": "extractRefused", reason: ExtractRefusal, } | { "type": "scanned", 
+fitted: Array<string>, } | { "type": "launchRefused", reason: string, } | { "type": "extractRefused", reason: ExtractRefusal, } | { "type": "jumpSpooling", target: JumpTarget, seconds: number, } | { "type": "jumpRefused", reason: JumpRefusal, } | { "type": "jumpCancelled", reason: JumpCancel, } | { "type": "jumped", target: JumpTarget, } | { "type": "scanned", 
 /**
  * Index into the contract's pockets.
  */

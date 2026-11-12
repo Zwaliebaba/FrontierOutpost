@@ -14,8 +14,9 @@ use common::{
     start_server_with_idle_timeout, test_settings, write,
 };
 use frontier_protocol::input::{Controls, InputDatagram, quantize_control};
+use frontier_protocol::snapshot::POSITION_UNITS_PER_METRE;
 use frontier_protocol::snapshot::{EntityKind, RunPhase, Snapshot, SnapshotEvent};
-use frontier_protocol::{ClientMessage, Ending, ServerMessage};
+use frontier_protocol::{ClientMessage, Ending, JumpRefusal, JumpTarget, ServerMessage};
 use frontier_server::transport;
 use web_transport_quinn::{RecvStream, SendStream, Session};
 
@@ -146,6 +147,55 @@ async fn a_pilot_flies_with_inputs_and_leaves_the_dock() {
     assert!(last.input_ack >= 90);
     let me = last.entities.iter().find(|e| e.id == pilot.ship).unwrap();
     assert!(me.vx > 0, "flying toward the site");
+}
+
+#[tokio::test]
+async fn a_pilot_jumps_from_the_dock_to_just_outside_the_ore_field() {
+    let (url, sha256) = start_server();
+    let mut pilot = launch(&url, sha256).await;
+    write(
+        &mut pilot.send,
+        &ClientMessage::Jump {
+            target: Some(JumpTarget::Dock),
+        },
+    )
+    .await;
+    assert_eq!(
+        read(&mut pilot.recv).await,
+        ServerMessage::JumpRefused {
+            reason: JumpRefusal::AlreadyThere
+        }
+    );
+
+    let ore = JumpTarget::Pocket { index: 0 };
+    write(&mut pilot.send, &ClientMessage::Jump { target: Some(ore) }).await;
+    assert_eq!(
+        read(&mut pilot.recv).await,
+        ServerMessage::JumpSpooling {
+            target: ore,
+            seconds: 6
+        }
+    );
+    // Six seconds of spool, and a little over.
+    let snapshots = pilot.fly(IDLE, 130).await;
+    let jumped = tokio::time::timeout(Duration::from_secs(5), read(&mut pilot.recv))
+        .await
+        .unwrap();
+    assert_eq!(jumped, ServerMessage::Jumped { target: ore });
+    let last = snapshots.last().unwrap();
+    let me = last.entities.iter().find(|e| e.id == pilot.ship).unwrap();
+    let (x, z) = (
+        f32::from(me.x) / POSITION_UNITS_PER_METRE,
+        f32::from(me.z) / POSITION_UNITS_PER_METRE,
+    );
+    // The compact site's ore field: centre (45, -10), radius 36. The jump
+    // lands 40 m outside its edge.
+    let from_centre = (x - 45.0).hypot(z + 10.0);
+    assert!(
+        (from_centre - 76.0).abs() < 2.0,
+        "{from_centre} m from the centre"
+    );
+    assert_eq!(last.own.phase, RunPhase::Approach, "outside the pocket");
 }
 
 #[tokio::test]

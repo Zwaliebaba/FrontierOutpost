@@ -38,6 +38,7 @@ pub fn handshake(message: &ClientMessage) -> ServerMessage {
         | ClientMessage::Extract { .. }
         | ClientMessage::Vent
         | ClientMessage::Scan
+        | ClientMessage::Jump { .. }
         | ClientMessage::Install { .. }
         | ClientMessage::Upgrade { .. }
         | ClientMessage::Remove { .. }
