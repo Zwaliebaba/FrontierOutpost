@@ -134,3 +134,24 @@ test("station services switch without losing state or covering the viewport", as
     expect(right.x - left.x - left.width).toBeGreaterThan(width * 0.45);
   }
 });
+
+test("a loaded batch starts at once, counts down, and can be taken back", async ({ page }) => {
+  await signUp(page, RICH);
+  await home(page).locator('[data-action="view:processor"]').click();
+  const status = home(page).locator(".processor-status");
+  await expect(status).toHaveAttribute("data-state", "idle");
+
+  await home(page).locator('button[data-action="process:alloy"]').click();
+  await expect(account(page)).toHaveAttribute("data-ore", "38");
+  await expect(status).toHaveAttribute("data-state", "working");
+  await expect(status).toContainText("Making alloy · 1 batch left");
+  // Four minutes a batch at the core's pace: the page counts down between account messages.
+  const left = status.locator(".processor-left");
+  await expect(left).toContainText(/^[34]:\d\d left on this batch$/);
+  const before = await left.textContent();
+  await expect(left).not.toHaveText(before ?? "", { timeout: 5_000 });
+
+  await home(page).locator('button[data-action="unqueue:alloy"]').click();
+  await expect(account(page)).toHaveAttribute("data-ore", "40");
+  await expect(status).toHaveAttribute("data-state", "idle");
+});

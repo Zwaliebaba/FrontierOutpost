@@ -14,7 +14,7 @@ use frontier_sim::site::Capability;
 
 use crate::account::Account;
 use crate::ledger::{Item, Npc, Party, Reason, Transfer};
-use crate::store::AccountId;
+use crate::store::{AccountId, Store, StoreError};
 
 /// Something a pilot asks for at home.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -165,13 +165,37 @@ fn pay(id: AccountId, cost: &Cost, sink: Npc, reason: Reason) -> Vec<Transfer> {
     .collect()
 }
 
-/// Applies `action` to `account`, numbered `id`, and returns the transfers
-/// that pay for it.
+/// Applies `action` to `account`, numbered `id`, at `now` (Unix seconds), and
+/// returns the transfers that pay for it. [`settle`] the account first, in
+/// its own update: an action that changes the processor's pace must not
+/// change the batches already due.
 ///
 /// # Errors
 /// Refuses, with a reason to show the pilot, anything the rules or the
 /// pilot's holdings do not allow. Nothing changes on refusal.
-pub fn act(id: AccountId, account: &mut Account, action: &Action) -> Result<Vec<Transfer>, String> {
+pub fn act(
+    id: AccountId,
+    account: &mut Account,
+    action: &Action,
+    now: u64,
+) -> Result<Vec<Transfer>, String> {
+    let pace = STAGE1.batch_seconds(&account.outpost);
+    let transfers = apply(id, account, action, now)?;
+    // A layout that changes the processor's pace leaves the batch in hand as
+    // far along as it was.
+    let paced = STAGE1.batch_seconds(&account.outpost);
+    if paced != pace {
+        account.processing.repace(now, pace, paced);
+    }
+    Ok(transfers)
+}
+
+fn apply(
+    id: AccountId,
+    account: &mut Account,
+    action: &Action,
+    now: u64,
+) -> Result<Vec<Transfer>, String> {
     let me = Party::Account(id);
     match action {
         Action::Install { socket, facility } => {
@@ -265,14 +289,14 @@ pub fn act(id: AccountId, account: &mut Account, action: &Action) -> Result<Vec<
             let rule =
                 market::recipe(recipe).ok_or_else(|| format!("There is no recipe {recipe}."))?;
             if *batches == 0 {
-                return Err("Queue at least one batch.".to_owned());
+                return Err("Load at least one batch.".to_owned());
             }
             let (input, per_batch) = rule.input;
             let needed = per_batch.checked_mul(*batches).ok_or_else(too_large)?;
             afford(account, 0, &[(input, needed)])?;
             account
                 .processing
-                .add(rule.id, *batches)
+                .add(rule.id, *batches, now)
                 .ok_or_else(too_large)?;
             Ok(transfer(
                 Item::Good(input),
@@ -295,9 +319,9 @@ pub fn act(id: AccountId, account: &mut Account, action: &Action) -> Result<Vec<
                 .min(*batches)
                 .checked_mul(per_batch)
                 .ok_or_else(too_large)?;
-            let taken = account.processing.take(rule.id, *batches);
+            let taken = account.processing.take(rule.id, *batches, now);
             if taken == 0 {
-                return Err(format!("No {} batches are queued.", rule.id));
+                return Err(format!("No {} batches are at the processor.", rule.id));
             }
             Ok(transfer(
                 Item::Good(input),
@@ -333,27 +357,52 @@ pub fn act(id: AccountId, account: &mut Account, action: &Action) -> Result<Vec<
     }
 }
 
-/// Finishes processing after a completed run, up to the processor's
-/// capacity, and returns the transfers of finished goods.
-pub fn finish_processing(id: AccountId, account: &mut Account, run: &str) -> Vec<Transfer> {
-    let capacity = STAGE1.processor_batches(&account.outpost);
+/// Finishes every batch whose time has come by `now` (Unix seconds), at the
+/// pace the powered layout gives the processor, and returns the transfers of
+/// finished goods. Call it before anything that reads or changes the home:
+/// the processor works whether or not anyone is looking.
+pub fn settle(id: AccountId, account: &mut Account, now: u64) -> Vec<Transfer> {
+    let pace = STAGE1.batch_seconds(&account.outpost);
     account
         .processing
-        .finish(capacity)
+        .advance(now, pace)
         .into_iter()
         .filter_map(|(recipe, batches)| {
             let (output, per_batch) = recipe.output;
-            let mut transfer = transfer(
+            transfer(
                 Item::Good(output),
-                per_batch * batches,
+                per_batch.saturating_mul(batches),
                 Party::Processor,
                 Party::Account(id),
                 Reason::Processed,
-            )?;
-            transfer.run = Some(run.to_owned());
-            Some(transfer)
+            )
         })
         .collect()
+}
+
+/// Settles the account numbered `id` in `store` at `now` and returns it as
+/// it then stands: what every reader of a home should start from.
+///
+/// # Errors
+/// Fails if the account is missing or the database fails.
+pub fn settled(store: &Store, id: AccountId, now: u64) -> Result<Account, StoreError> {
+    match store.update(id, |account| Ok(settle(id, account, now)))? {
+        Ok(account) => Ok(account),
+        // Finished goods the stock cannot count: the batches stay put.
+        Err(reason) => {
+            tracing::warn!(reason, account = id.0, "processor not settled");
+            store.load(id)
+        }
+    }
+}
+
+/// When the batch the processor is working finishes, in Unix seconds, if
+/// it is working one.
+#[must_use]
+pub fn processor_due(account: &Account) -> Option<u64> {
+    account
+        .processing
+        .next_due(STAGE1.batch_seconds(&account.outpost))
 }
 
 /// What a pilot's launch supplies come to as their home stands.
@@ -386,8 +435,8 @@ pub fn supplies(account: &Account) -> Supplies {
         .iter()
         .map(|&good| u64::from(account.stock.get(good)) * u64::from(market::price(good).buys_at))
         .sum();
-    // Inputs waiting at the processor count as stock (code review question
-    // 3): otherwise queueing ore let a pilot launch for less and keep it.
+    // Inputs at the processor count as stock (code review question 3):
+    // otherwise loading ore let a pilot launch for less and keep it.
     let queued_value: u64 = account
         .processing
         .batches
@@ -447,9 +496,16 @@ mod tests {
         account
     }
 
+    /// When the tests' actions happen, Unix seconds.
+    const NOW: u64 = 1_800_000_000;
+
     /// Applies an action and its transfers, as the store would.
     fn run(account: &mut Account, action: Action) -> Result<Vec<Transfer>, String> {
-        let transfers = act(ME, account, &action)?;
+        run_at(account, action, NOW)
+    }
+
+    fn run_at(account: &mut Account, action: Action, now: u64) -> Result<Vec<Transfer>, String> {
+        let transfers = act(ME, account, &action, now)?;
         for transfer in &transfers {
             transfer.apply(ME, account).unwrap();
         }
@@ -564,7 +620,7 @@ mod tests {
     }
 
     #[test]
-    fn processing_takes_inputs_now_and_gives_outputs_after_a_completed_run() {
+    fn processing_takes_inputs_now_and_gives_outputs_a_batch_at_a_time() {
         let mut home = rich();
         run(
             &mut home,
@@ -585,12 +641,83 @@ mod tests {
         )
         .unwrap();
         assert_eq!(home.stock.ore, 30);
-        // The core processor finishes 4 of the 5 batches.
-        for transfer in finish_processing(ME, &mut home, "r1") {
-            transfer.apply(ME, &mut home).unwrap();
-        }
+        // The core processor takes four minutes over a batch.
+        let settle_at = |home: &mut Account, now: u64| {
+            for transfer in settle(ME, home, now) {
+                transfer.apply(ME, home).unwrap();
+            }
+        };
+        settle_at(&mut home, NOW + 239);
+        assert_eq!(home.stock.alloy, 30, "a second short of the first batch");
+        assert_eq!(processor_due(&home), Some(NOW + 240));
+        settle_at(&mut home, NOW + 240);
+        assert_eq!(home.stock.alloy, 31);
+        // A pilot away for a quarter of an hour finds three batches done.
+        settle_at(&mut home, NOW + 16 * 60);
         assert_eq!(home.stock.alloy, 34);
         assert_eq!(home.processing.waiting("alloy"), 1);
+        settle_at(&mut home, NOW + 20 * 60);
+        assert_eq!(home.stock.alloy, 35);
+        assert_eq!(processor_due(&home), None, "idle");
+    }
+
+    #[test]
+    fn settling_a_stored_home_moves_finished_goods_through_the_ledger() {
+        let store = Store::in_memory().unwrap();
+        let id = store.create_account("Vega").unwrap();
+        let banked = Transfer {
+            item: Item::ORE,
+            amount: 6,
+            from: Party::Site,
+            to: Party::Account(id),
+            reason: Reason::Banked,
+            run: None,
+        };
+        store.update(id, |_| Ok(vec![banked])).unwrap().unwrap();
+        let load = Action::Process {
+            recipe: "alloy".into(),
+            batches: 3,
+        };
+        store
+            .update(id, |home| act(id, home, &load, NOW))
+            .unwrap()
+            .unwrap();
+        // Nothing is due yet; then two batches are, however late anyone looks.
+        assert_eq!(settled(&store, id, NOW + 100).unwrap().stock.alloy, 0);
+        let home = settled(&store, id, NOW + 500).unwrap();
+        assert_eq!((home.stock.ore, home.stock.alloy), (0, 2));
+        assert_eq!(home.processing.waiting("alloy"), 1);
+        assert_eq!(processor_due(&home), Some(NOW + 720));
+        // Settling again changes nothing, and the ledger agrees with the stock.
+        assert_eq!(settled(&store, id, NOW + 500).unwrap(), home);
+        let folded = store.ledger_balance(id).unwrap();
+        assert!(folded.contains(&(Item::Good(Good::Alloy), 2)));
+        assert!(folded.contains(&(Item::ORE, 0)));
+    }
+
+    #[test]
+    fn a_refinery_built_mid_batch_keeps_the_share_done_and_speeds_the_rest() {
+        let mut home = rich();
+        run(
+            &mut home,
+            Action::Process {
+                recipe: "alloy".into(),
+                batches: 2,
+            },
+        )
+        .unwrap();
+        // Half way through the first batch at the core's four minutes.
+        assert!(settle(ME, &mut home, NOW + 120).is_empty());
+        let build = Action::Install {
+            socket: "a".into(),
+            facility: "refinery".into(),
+        };
+        run_at(&mut home, build, NOW + 120).unwrap();
+        // In socket A a batch takes 96 seconds: half of that is left.
+        assert_eq!(processor_due(&home), Some(NOW + 168));
+        assert!(settle(ME, &mut home, NOW + 167).is_empty());
+        assert_eq!(settle(ME, &mut home, NOW + 168).len(), 1);
+        assert_eq!(processor_due(&home), Some(NOW + 264), "a full batch more");
     }
 
     #[test]
@@ -677,7 +804,7 @@ mod tests {
         // have left the stock, and must not buy a cheaper launch.
         let mut home = Account::new("w", "Vega");
         home.credits = 25;
-        home.processing.add("alloy", 1);
+        home.processing.add("alloy", 1, NOW);
         assert!(
             supplies_due(&home).is_err(),
             "the queued ore covers the rest"
@@ -735,7 +862,7 @@ mod tests {
         }
         // A queue already at the limit takes no more, and keeps the ore.
         let mut home = rich();
-        home.processing.add("alloy", u32::MAX);
+        home.processing.add("alloy", u32::MAX, NOW);
         let before = home.clone();
         let queue = Action::Process {
             recipe: "alloy".into(),
@@ -748,7 +875,7 @@ mod tests {
     #[test]
     fn taking_back_more_inputs_than_can_be_counted_is_refused_and_changes_nothing() {
         let mut home = rich();
-        home.processing.add("alloy", u32::MAX);
+        home.processing.add("alloy", u32::MAX, NOW);
         let before = home.clone();
         let unqueue = Action::Unqueue {
             recipe: "alloy".into(),

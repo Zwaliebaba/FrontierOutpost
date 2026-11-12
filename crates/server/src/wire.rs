@@ -5,7 +5,7 @@ use frontier_protocol::{
     AccountInfo, AdjacencyInfo, Catalog, CostInfo, DominantThreat, Ending, FacilityInfo,
     FittingInfo, Good, GoodAmount, Hazard, LaunchInfo, Material, MissingInfo, OutpostInfo,
     PocketInfo, PocketKind, PriceInfo, QueuedInfo, RecipeInfo, RunSummary, ServerMessage, SiteInfo,
-    Slot, SocketRuleInfo, SocketState, SuppliesDue, TierInfo, TierOffer, UnlockInfo,
+    Slot, SocketRuleInfo, SocketState, SuppliesDue, TierInfo, TierOffer, UnlockInfo, WorkingInfo,
 };
 use frontier_sim::fitting::{self, FITTINGS, Missing};
 use frontier_sim::market::{PRICES, RECIPES};
@@ -131,7 +131,7 @@ fn effect(rule: &fitting::FittingRule) -> String {
 pub fn catalog() -> Catalog {
     Catalog {
         power_cap: STAGE1.power_cap,
-        processor_batches: STAGE1.processor_batches,
+        batch_seconds: STAGE1.batch_seconds,
         sockets: STAGE1
             .sockets
             .iter()
@@ -154,7 +154,7 @@ pub fn catalog() -> Catalog {
                         cost: cost(&tier.cost),
                         draw: tier.draw,
                         opens: names(tier.grants),
-                        processor_batches: tier.processor_batches,
+                        batch_seconds: tier.batch_seconds,
                     })
                     .collect(),
                 rig: facility.rig.map(str::to_owned),
@@ -167,12 +167,16 @@ pub fn catalog() -> Catalog {
                 facility: rule.facility.to_owned(),
                 socket: rule.socket.to_owned(),
                 bonus: match rule.bonus {
-                    Bonus::ProcessorBatches(extra) => {
-                        format!("processes {extra} more batches per run")
+                    Bonus::ProcessorFaster(percent) => {
+                        format!("processes batches in {percent}% less time")
                     }
                     Bonus::FittingDiscount(percent) => {
                         format!("cuts rig and module prices by {percent}%")
                     }
+                },
+                processor_faster: match rule.bonus {
+                    Bonus::ProcessorFaster(percent) => Some(percent),
+                    Bonus::FittingDiscount(_) => None,
                 },
             })
             .collect(),
@@ -217,9 +221,13 @@ pub fn catalog() -> Catalog {
     }
 }
 
+/// The account as the pilot sees it at `now` (Unix seconds). Settle it
+/// first (`home::settle`): a batch whose time has come shows as complete
+/// here, but only settling finishes it.
 #[must_use]
-pub fn account(account: &Account) -> AccountInfo {
+pub fn account(account: &Account, now: u64) -> AccountInfo {
     let outpost = &account.outpost;
+    let batch_seconds = STAGE1.batch_seconds(outpost);
     let discount = home::discount(account);
     let launch = home::launch(account);
     AccountInfo {
@@ -253,7 +261,7 @@ pub fn account(account: &Account) -> AccountInfo {
                 .collect(),
             power_used: STAGE1.power_used(outpost),
             opens: names(&home::capabilities(account)),
-            processor_batches: STAGE1.processor_batches(outpost),
+            batch_seconds,
             fitting_discount: discount,
             open_tiers: home::open_tiers(account),
         },
@@ -266,6 +274,13 @@ pub fn account(account: &Account) -> AccountInfo {
                 batches: queued.batches,
             })
             .collect(),
+        working: account
+            .processing
+            .working(now, batch_seconds)
+            .map(|working| WorkingInfo {
+                recipe: working.recipe.id.to_owned(),
+                elapsed_seconds: working.elapsed,
+            }),
         hangar: account
             .hangar
             .pieces
@@ -455,7 +470,7 @@ mod tests {
                 .opens
                 .contains(&"Volatile veins pocket".to_owned())
         );
-        assert_eq!(refinery.tiers[1].processor_batches, Some(14));
+        assert_eq!(refinery.tiers[1].batch_seconds, Some(60));
         let extraction = catalog
             .fittings
             .iter()
@@ -486,13 +501,30 @@ mod tests {
     }
 
     #[test]
+    fn a_home_shows_the_batch_in_hand_and_how_far_along_it_is() {
+        let mut home = Account::new("w", "Vega");
+        home.processing.add("alloy", 2, 1_000);
+        let info = account(&home, 1_090);
+        assert_eq!(info.processing[0].batches, 2);
+        assert_eq!(
+            info.working,
+            Some(WorkingInfo {
+                recipe: "alloy".to_owned(),
+                elapsed_seconds: 90
+            })
+        );
+    }
+
+    #[test]
     fn a_home_shows_its_stake_and_what_stays_behind() {
         let mut home = Account::new("w", "Vega");
         home.hangar.add(fitting::fitting("scout_rig").unwrap());
         home.hangar
             .save(Some("scout_rig"), &["cargo_frame"])
             .unwrap();
-        let info = account(&home);
+        let info = account(&home, 0);
+        assert_eq!(info.outpost.batch_seconds, 240);
+        assert_eq!(info.working, None, "an idle processor works nothing");
         assert!(
             info.launch.flown.is_empty(),
             "no sensor array: basic fitting"

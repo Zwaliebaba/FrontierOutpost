@@ -27,7 +27,6 @@ use frontier_sim::extraction::{EXTRACT_RANGE, ExtractorState, Refusal};
 use frontier_sim::jump::{
     Cancel as JumpCancel, Refusal as JumpRefusal, SPOOL_TICKS, Target as JumpTarget,
 };
-use frontier_sim::outcome;
 use frontier_sim::profile::ShipKind;
 use frontier_sim::run::{
     CONTRACT_MIN_CARGO, Checkpoint, Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options,
@@ -41,7 +40,7 @@ use tokio::time::{MissedTickBehavior, interval};
 use tracing::{debug, info, warn};
 use web_transport_quinn::Session;
 
-use crate::events::{GateEvent, Recorded, now_ms};
+use crate::events::{GateEvent, Recorded, now_ms, now_secs};
 use crate::home;
 use crate::input_queue::InputQueue;
 use crate::ledger::{Item, Npc, Party, Reason, Transfer};
@@ -854,7 +853,7 @@ async fn record(books: &Books, events: Vec<(ShipId, GateEvent)>) {
 async fn holdings(books: &Books, pilot: ShipId) -> Option<AccountInfo> {
     let account = *books.accounts.get(&pilot)?;
     match books.store.call(move |store| store.load(account)).await {
-        Ok(holdings) => Some(wire::account(&holdings)),
+        Ok(holdings) => Some(wire::account(&holdings, now_secs())),
         Err(error) => {
             warn!(%error, account = account.0, "could not load the account");
             None
@@ -958,17 +957,15 @@ async fn bank(
             run: run.clone(),
         })
         .collect();
-    let run = books.run.clone();
-    let completed = summary.ending == outcome::Ending::Docked;
+    let now = now_secs();
     let result = books
         .store
         .call(move |store| {
-            // Banking and processing are one transaction: a completed run
-            // finishes the queued batches (design section 10).
+            // Banking and processing are one transaction: the processor
+            // worked while the pilot flew (design section 10), and they come
+            // home to what it finished, however the run ended.
             store.update(account, |holdings| {
-                if completed {
-                    batch.extend(home::finish_processing(account, holdings, &run));
-                }
+                batch.extend(home::settle(account, holdings, now));
                 // Rigs and modules destroyed with the ship (design section 6).
                 holdings.hangar.lose_kinds(&lost);
                 Ok(batch)
@@ -976,7 +973,7 @@ async fn bank(
         })
         .await;
     match result {
-        Ok(Ok(holdings)) => Some(wire::account(&holdings)),
+        Ok(Ok(holdings)) => Some(wire::account(&holdings, now)),
         Ok(Err(reason)) => {
             warn!(reason, account = account.0, "could not bank the run");
             None
@@ -1551,14 +1548,15 @@ mod tests {
         assert!(store.load(vega).unwrap().supplies_carried);
         assert!(!store.load(rigel).unwrap().supplies_carried);
         assert_eq!(home::supplies_due(&store.load(vega).unwrap()), Ok(0));
-        assert_eq!(wire::account(&store.load(vega).unwrap()).launch.due, {
+        assert_eq!(
+            wire::account(&store.load(vega).unwrap(), 0).launch.due,
             frontier_protocol::SuppliesDue::Carried
-        });
+        );
         assert_eq!(store.load(vega).unwrap().credits, 100, "no credits moved");
     }
 
     #[tokio::test]
-    async fn a_destroyed_pilot_loses_what_they_flew_and_processing_waits() {
+    async fn a_destroyed_pilot_loses_what_they_flew_and_keeps_what_the_processor_finished() {
         use frontier_sim::outcome::{Ending, Loadout};
         use frontier_sim::run::PhaseTimes;
         let store = Store::in_memory().unwrap();
@@ -1570,7 +1568,8 @@ mod tests {
                         .hangar
                         .add(frontier_sim::fitting::fitting(id).unwrap());
                 }
-                holdings.processing.add("alloy", 1);
+                // Loaded five minutes ago, at four minutes a batch.
+                holdings.processing.add("alloy", 2, now_secs() - 300);
                 Ok(Vec::new())
             })
             .unwrap()
@@ -1600,10 +1599,12 @@ mod tests {
             ["cargo_frame"],
             "the spare in the hangar stays"
         );
+        assert_eq!(holdings.alloy, 1, "the processor worked while they flew");
+        assert_eq!(holdings.processing[0].batches, 1);
         assert_eq!(
-            holdings.processing.len(),
-            1,
-            "only a completed run processes"
+            holdings.working.map(|working| working.recipe),
+            Some("alloy".to_owned()),
+            "and is on the second batch"
         );
     }
 }

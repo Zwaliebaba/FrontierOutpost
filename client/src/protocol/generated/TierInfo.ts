@@ -5,4 +5,9 @@ export type TierInfo = { cost: CostInfo, draw: number,
 /**
  * What this tier adds, by name: the pockets, rigs and modules it opens.
  */
-opens: Array<string>, processorBatches?: number, };
+opens: Array<string>, 
+/**
+ * Seconds the processor takes over a batch while a facility runs at
+ * this tier, when the tier changes that.
+ */
+batchSeconds?: number, };

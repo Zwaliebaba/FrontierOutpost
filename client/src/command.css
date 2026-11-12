@@ -352,6 +352,55 @@ p {
   margin: 6px 0 0;
   padding-left: 16px;
 }
+/* The processor: what it is making now and how long that takes, then the recipes to load. */
+.processor-status {
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: #0a1420;
+}
+.processor-status[data-state="working"] {
+  border-left: 3px solid var(--cyan);
+}
+.processor-status p {
+  margin: 4px 0 0;
+}
+.processor-track {
+  height: 8px;
+  margin-top: 8px;
+  background: #1a2634;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.processor-fill {
+  width: 0;
+  height: 100%;
+  background: var(--cyan);
+  transition: width 1s linear;
+}
+.processor-left {
+  color: var(--muted);
+  font:
+    12px ui-monospace,
+    monospace;
+}
+.recipe-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+.recipe-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+.recipe-actions button {
+  margin: 0;
+  text-align: center;
+  white-space: nowrap;
+}
 #home section h3 {
   color: #ffbc74;
   font-size: 17px;

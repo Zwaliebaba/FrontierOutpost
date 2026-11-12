@@ -50,4 +50,5 @@ export type { TierInfo } from "./generated/TierInfo";
 export type { TierOffer } from "./generated/TierOffer";
 export type { UnlockInfo } from "./generated/UnlockInfo";
 export type { WaveInfo } from "./generated/WaveInfo";
+export type { WorkingInfo } from "./generated/WorkingInfo";
 export { PROTOCOL_VERSION } from "./generated/version";

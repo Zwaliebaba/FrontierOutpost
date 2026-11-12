@@ -1022,6 +1022,8 @@ mod tests {
         for round in 0..600 {
             let pilot = pilots[next(3) as usize];
             let run = Some(format!("run-{round}"));
+            // A minute a round.
+            let now = 1_800_000_000 + round * 60;
             let account = store.load(pilot).unwrap();
             if next(2) == 0 {
                 use crate::home::{self, Action};
@@ -1051,16 +1053,12 @@ mod tests {
                 };
                 let _ = match &action {
                     Some(action) => store
-                        .update(pilot, |account| home::act(pilot, account, action))
+                        .update(pilot, |account| home::act(pilot, account, action, now))
                         .unwrap(),
-                    None => {
-                        let run = format!("run-{round}");
-                        store
-                            .update(pilot, |account| {
-                                Ok(home::finish_processing(pilot, account, &run))
-                            })
-                            .unwrap()
-                    }
+                    // The processor's batches come due as the minutes pass.
+                    None => store
+                        .update(pilot, |account| Ok(home::settle(pilot, account, now)))
+                        .unwrap(),
                 };
                 for &id in &pilots {
                     assert_eq!(

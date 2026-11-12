@@ -118,6 +118,14 @@ pub fn now_ms() -> i64 {
         })
 }
 
+/// Now, in Unix seconds: the clock the processor's batches are timed by.
+#[must_use]
+pub fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs())
+}
+
 /// An event as recorded: when, by whom, in which run.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Recorded {

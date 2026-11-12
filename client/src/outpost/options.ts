@@ -12,6 +12,7 @@ import type {
   FittingInfo,
   Good,
 } from "../protocol";
+import { pace } from "./processor";
 
 /** Something the pilot can ask for, with what it would do. */
 export interface Choice {
@@ -101,24 +102,24 @@ function opens(catalog: Catalog, layout: readonly Placed[]): Set<string> {
   return names;
 }
 
-/** Processor batches per run for a layout, as the server counts them. */
-function processorBatches(catalog: Catalog, layout: readonly Placed[]): number {
+/** Seconds the processor takes over a batch with a layout, as the server counts them. */
+function batchSeconds(catalog: Catalog, layout: readonly Placed[]): number {
   let best: number | null = null;
-  let extra = 0;
+  let faster = 0;
   for (const placed of layout) {
     const tiers = facility(catalog, placed.facility)?.tiers ?? [];
     for (const tier of tiers.slice(0, placed.run)) {
-      if (tier.processorBatches !== undefined) best = Math.max(best ?? 0, tier.processorBatches);
+      if (tier.batchSeconds !== undefined) best = Math.min(best ?? Infinity, tier.batchSeconds);
     }
     if (placed.run === 0) continue;
     for (const rule of catalog.adjacency) {
-      const more = /processes (\d+) more batches/.exec(rule.bonus);
-      if (more?.[1] && rule.facility === placed.facility && rule.socket === placed.socket) {
-        extra += Number(more[1]);
+      if (rule.facility === placed.facility && rule.socket === placed.socket) {
+        faster += rule.processorFaster ?? 0;
       }
     }
   }
-  return (best ?? catalog.processorBatches) + extra;
+  const seconds = best ?? catalog.batchSeconds;
+  return Math.max(1, Math.floor((seconds * Math.max(0, 100 - faster)) / 100));
 }
 
 /** The lines that say what changing `before` into `after` does. */
@@ -131,10 +132,8 @@ function effects(catalog: Catalog, before: readonly Placed[], after: readonly Pl
   const lost = [...was].filter((name) => !will.has(name));
   if (gained.length > 0) lines.push(`Opens: ${gained.join(", ")}`);
   if (lost.length > 0) lines.push(`Closes: ${lost.join(", ")}`);
-  const [batches, next] = [processorBatches(catalog, before), processorBatches(catalog, after)];
-  if (batches !== next) {
-    lines.push(`Processor: ${String(batches)} → ${String(next)} batches per run`);
-  }
+  const [each, next] = [batchSeconds(catalog, before), batchSeconds(catalog, after)];
+  if (each !== next) lines.push(`Processor: ${pace(each)} → ${pace(next)} a batch`);
   return lines;
 }
 

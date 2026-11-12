@@ -16,13 +16,13 @@ pub mod snapshot;
 pub use home::{
     AccountInfo, AdjacencyInfo, Catalog, CostInfo, FacilityInfo, FittingInfo, Good, GoodAmount,
     LaunchInfo, MissingInfo, OutpostInfo, PriceInfo, QueuedInfo, RecipeInfo, Slot, SocketRuleInfo,
-    SocketState, SuppliesDue, TierInfo, UnlockInfo,
+    SocketState, SuppliesDue, TierInfo, UnlockInfo, WorkingInfo,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 9;
+pub const PROTOCOL_VERSION: u32 = 10;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -609,11 +609,12 @@ mod tests {
                     unlocks: Vec::new(),
                     power_used: 0,
                     opens: Vec::new(),
-                    processor_batches: 4,
+                    batch_seconds: 240,
                     fitting_discount: 0,
                     open_tiers: 1,
                 },
                 processing: Vec::new(),
+                working: None,
                 hangar: Vec::new(),
                 rig: None,
                 modules: Vec::new(),

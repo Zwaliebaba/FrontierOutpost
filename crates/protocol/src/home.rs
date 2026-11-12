@@ -51,9 +51,11 @@ pub struct TierInfo {
     pub draw: u32,
     /// What this tier adds, by name: the pockets, rigs and modules it opens.
     pub opens: Vec<String>,
+    /// Seconds the processor takes over a batch while a facility runs at
+    /// this tier, when the tier changes that.
     #[ts(optional)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub processor_batches: Option<u32>,
+    pub batch_seconds: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -76,8 +78,12 @@ pub struct FacilityInfo {
 pub struct AdjacencyInfo {
     pub facility: String,
     pub socket: String,
-    /// What it gains there, as a phrase: "processes 2 more batches per run".
+    /// What it gains there, as a phrase: "processes batches in 20% less time".
     pub bonus: String,
+    /// The percentage it takes off the processor's time for a batch there.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub processor_faster: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -130,8 +136,8 @@ pub struct RecipeInfo {
 #[ts(export)]
 pub struct Catalog {
     pub power_cap: u32,
-    /// The core processor's batches per run.
-    pub processor_batches: u32,
+    /// Seconds the core processor takes over a batch.
+    pub batch_seconds: u32,
     pub sockets: Vec<SocketRuleInfo>,
     pub facilities: Vec<FacilityInfo>,
     pub adjacency: Vec<AdjacencyInfo>,
@@ -177,7 +183,8 @@ pub struct OutpostInfo {
     pub power_used: u32,
     /// What the powered layout opens on the expedition, by name.
     pub opens: Vec<String>,
-    pub processor_batches: u32,
+    /// Seconds the processor takes over a batch with this layout.
+    pub batch_seconds: u32,
     /// Percent off rigs and modules.
     pub fitting_discount: u32,
     /// The highest threat tier opened.
@@ -189,7 +196,20 @@ pub struct OutpostInfo {
 #[ts(export)]
 pub struct QueuedInfo {
     pub recipe: String,
+    /// Batches at the processor, the one being worked included.
     pub batches: u32,
+}
+
+/// The batch the processor is working, as the account message was written.
+/// The client counts on from there by its own clock; the server finishes the
+/// batch and sends the account again when its time has come.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct WorkingInfo {
+    pub recipe: String,
+    /// Seconds of work done, of the layout's `batchSeconds`.
+    pub elapsed_seconds: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -256,7 +276,12 @@ pub struct AccountInfo {
     pub alloy: u32,
     pub components: u32,
     pub outpost: OutpostInfo,
+    /// Batches at the processor, in the order they are worked.
     pub processing: Vec<QueuedInfo>,
+    /// The batch being worked; absent while the processor is idle.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working: Option<WorkingInfo>,
     /// Rigs and modules owned, by fitting identifier, one entry per piece.
     pub hangar: Vec<String>,
     /// The saved fitting.

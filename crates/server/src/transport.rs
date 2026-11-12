@@ -22,7 +22,7 @@ use web_transport_quinn::{RecvStream, SendStream, Server, Session, crypto, quinn
 use crate::auth::{Auth, AuthError, Ceremony};
 use crate::cert::DevCertificate;
 use crate::crews::{self, Crews};
-use crate::events::{GateEvent, Placed, Recorded, now_ms};
+use crate::events::{GateEvent, Placed, Recorded, now_ms, now_secs};
 use crate::expedition::{Expedition, LaunchOrder, PilotEvent};
 use crate::home::{self, Action};
 use crate::ledger::{Item, Npc, Party, Reason, Transfer};
@@ -281,6 +281,7 @@ async fn run_session(
         home_since: None,
         signed_in_at: None,
         leave: None,
+        processor_due: None,
     };
     let result = pilot.fly(recv, events).await;
     if let (Some(account), Some(since)) = (pilot.account, pilot.signed_in_at) {
@@ -326,6 +327,9 @@ struct Pilot<'a> {
     signed_in_at: Option<Instant>,
     /// Tells this session to leave when the pilot signs in on another page.
     leave: Option<Arc<Notify>>,
+    /// When the batch the home's processor is working finishes: the session
+    /// settles the account then and sends it, at home or in flight.
+    processor_due: Option<tokio::time::Instant>,
 }
 
 impl Pilot<'_> {
@@ -478,7 +482,9 @@ impl Pilot<'_> {
             .identity
             .store
             .call(move |s| {
-                let before = s.load(account)?;
+                // Batches due are finished first, at the pace they ran at.
+                let now = now_secs();
+                let before = home::settled(s, account, now)?;
                 let socket = match &action {
                     Action::Install { socket, .. }
                     | Action::Upgrade { socket }
@@ -486,8 +492,9 @@ impl Pilot<'_> {
                     | Action::Power { socket, .. } => Some(socket.clone()),
                     _ => None,
                 };
-                let outcome =
-                    s.update(account, |holdings| home::act(account, holdings, &action))?;
+                let outcome = s.update(account, |holdings| {
+                    home::act(account, holdings, &action, now)
+                })?;
                 // A change to the outpost, for gate 1 (design section 9).
                 if let (Ok(after), Some(socket)) = (&outcome, socket) {
                     let event = outpost_changed(&before, after, &socket);
@@ -504,9 +511,7 @@ impl Pilot<'_> {
         match outcome {
             Ok(holdings) => {
                 info!(target: "frontier::home", account = account.0, action = logged, "done");
-                let message = ServerMessage::Account {
-                    account: wire::account(&holdings),
-                };
+                let message = self.account_message(&holdings);
                 write_frame(&mut self.send, &message).await?;
                 if changes_outpost {
                     self.show_contract().await?;
@@ -582,6 +587,7 @@ impl Pilot<'_> {
                         self.offer().await?;
                     }
                 },
+                () = processor_timer(self.processor_due) => self.processor_tick().await?,
                 () = told_to_leave(self.leave.clone()) => {
                     // The other page has the run now: this one must not
                     // report a disconnect that would hand it back.
@@ -596,6 +602,44 @@ impl Pilot<'_> {
                 _ = self.session.closed() => return Ok(()),
             }
         }
+    }
+
+    /// The account message for `holdings` as they stand now. It also sets the
+    /// processor's timer by them, so every account the pilot is shown is
+    /// followed by another when the batch in hand finishes.
+    fn account_message(&mut self, holdings: &crate::account::Account) -> ServerMessage {
+        ServerMessage::Account {
+            account: self.account_info(holdings),
+        }
+    }
+
+    fn account_info(
+        &mut self,
+        holdings: &crate::account::Account,
+    ) -> frontier_protocol::AccountInfo {
+        let now = now_secs();
+        self.processor_due = home::processor_due(holdings).map(|due| {
+            // A second past the batch's time, so it is done when this fires.
+            tokio::time::Instant::now() + Duration::from_secs(due.saturating_sub(now) + 1)
+        });
+        wire::account(holdings, now)
+    }
+
+    /// The processor's batch in hand has had its time: finishes it and shows
+    /// the pilot their home as it now stands.
+    async fn processor_tick(&mut self) -> Result<(), SessionError> {
+        self.processor_due = None;
+        let Some(account) = self.account else {
+            return Ok(());
+        };
+        let now = now_secs();
+        let holdings = self
+            .identity
+            .store
+            .call(move |s| home::settled(s, account, now))
+            .await?;
+        let message = self.account_message(&holdings);
+        write_frame(&mut self.send, &message).await
     }
 
     async fn handle(&mut self, message: ClientMessage) -> Result<(), SessionError> {
@@ -738,7 +782,12 @@ impl Pilot<'_> {
         let (token, holdings) = self
             .identity
             .store
-            .call(move |s| Ok((s.issue_token(account)?, s.load(account)?)))
+            .call(move |s| {
+                Ok((
+                    s.issue_token(account)?,
+                    home::settled(s, account, now_secs())?,
+                ))
+            })
             .await?;
         info!(
             account = account.0,
@@ -757,7 +806,7 @@ impl Pilot<'_> {
         let message = ServerMessage::SignedIn {
             callsign: holdings.callsign.clone(),
             token,
-            account: wire::account(&holdings),
+            account: self.account_info(&holdings),
         };
         write_frame(&mut self.send, &message).await?;
         let catalog = ServerMessage::Catalog {
@@ -803,6 +852,8 @@ impl Pilot<'_> {
                 if tier.is_none() {
                     return Ok(Err("That tier is not open.".to_owned()));
                 }
+                // What the processor has finished is stock to price against.
+                home::settled(s, account, now_secs())?;
                 // Priced and paid in one transaction, on the holdings it reads.
                 let mut paid = 0;
                 let holdings = s.update(account, |holdings| {
@@ -833,7 +884,7 @@ impl Pilot<'_> {
             .identity
             .store
             .call(move |s| {
-                let holdings = s.load(account)?;
+                let holdings = home::settled(s, account, now_secs())?;
                 Ok(home::supplies_due(&holdings).map(|_| holdings))
             })
             .await?)
@@ -912,9 +963,7 @@ impl Pilot<'_> {
                 .collect();
             self.identity.crews.notify(&others);
         }
-        let message = ServerMessage::Account {
-            account: wire::account(&holdings),
-        };
+        let message = self.account_message(&holdings);
         write_frame(&mut self.send, &message).await?;
         write_frame(&mut self.send, &launched.joined).await?;
         self.flying = Some((launched.expedition, launched.ship));
@@ -989,9 +1038,7 @@ impl Pilot<'_> {
             .map_or(1, |view| view.members.len());
         let event = launched_event(&holdings, self.seed, launch.tier, crew_size, "member", paid);
         self.gate(account, Some(run.clone()), event).await;
-        let message = ServerMessage::Account {
-            account: wire::account(&holdings),
-        };
+        let message = self.account_message(&holdings);
         write_frame(&mut self.send, &message).await?;
         write_frame(&mut self.send, &joined).await
     }
@@ -1015,6 +1062,14 @@ impl Pilot<'_> {
         {
             warn!(%error, "gate event not recorded");
         }
+    }
+}
+
+/// Waits until the processor's batch in hand is due; for ever when it is idle.
+async fn processor_timer(due: Option<tokio::time::Instant>) {
+    match due {
+        Some(at) => tokio::time::sleep_until(at).await,
+        None => std::future::pending().await,
     }
 }
 
@@ -1160,7 +1215,20 @@ pub async fn write_frame<T: serde::Serialize>(
 
 #[cfg(test)]
 mod tests {
-    use super::{SeedPool, Settings};
+    use std::time::Duration;
+
+    use super::{SeedPool, Settings, processor_timer};
+
+    #[tokio::test(start_paused = true)]
+    async fn the_processor_timer_waits_for_the_batch_in_hand_and_for_ever_when_idle() {
+        let due = tokio::time::Instant::now() + Duration::from_secs(96);
+        let early = tokio::time::timeout(Duration::from_secs(95), processor_timer(Some(due)));
+        assert!(early.await.is_err(), "not before the batch is due");
+        let on_time = tokio::time::timeout(Duration::from_secs(2), processor_timer(Some(due)));
+        assert!(on_time.await.is_ok());
+        let idle = tokio::time::timeout(Duration::from_secs(86_400), processor_timer(None));
+        assert!(idle.await.is_err(), "an idle processor never fires");
+    }
 
     #[test]
     fn a_seed_pool_assigns_seeds_by_run_number() {

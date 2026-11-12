@@ -13,7 +13,7 @@ use frontier_sim::outpost::{self, Outpost};
 use serde::{Deserialize, Serialize};
 
 /// The version [`Account::to_json`] writes.
-pub const DOCUMENT_VERSION: u32 = 4;
+pub const DOCUMENT_VERSION: u32 = 5;
 
 /// Credits a new pilot starts with (design section 10).
 pub const STARTING_CREDITS: u32 = 100;
@@ -84,10 +84,12 @@ pub enum DocumentError {
     WrongWorld { expected: String, found: String },
 }
 
-/// Version 4: the account as it is. Version 3 is the same document without
+/// Version 5: the account as it is. Version 4 is the same document without
+/// the time the processor's batch in hand was started, so its batches start
+/// when the processor is next looked at; version 3 also lacks
 /// `supplies_carried`, which then reads as false.
 #[derive(Serialize, Deserialize)]
-struct V4 {
+struct V5 {
     version: u32,
     #[serde(flatten)]
     account: Account,
@@ -190,7 +192,7 @@ impl Account {
                     .collect();
                 account
             }
-            3 | 4 => serde_json::from_str::<V4>(json)?.account,
+            3..=5 => serde_json::from_str::<V5>(json)?.account,
             newer => return Err(DocumentError::TooNew(newer)),
         };
         if account.world != world {
@@ -207,7 +209,7 @@ impl Account {
     /// # Errors
     /// Cannot fail for these types; the error is serde's.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(&V4 {
+        serde_json::to_string(&V5 {
             version: DOCUMENT_VERSION,
             account: self.clone(),
         })
@@ -299,6 +301,7 @@ mod tests {
         assert_eq!(account.processing.waiting("alloy"), 3);
         assert_eq!(account.hangar.count("extraction_rig"), 1);
         assert!(!account.supplies_carried, "nothing was carried before");
+        assert_eq!(account.processing.started, None, "nor batches timed");
         let mut carried = account;
         carried.supplies_carried = true;
         let json = carried.to_json().unwrap();
@@ -318,7 +321,7 @@ mod tests {
             facility: "refinery".into(),
             run: 1,
         });
-        account.processing.add("alloy", 3);
+        account.processing.add("alloy", 3, 1_800_000_000);
         account
             .hangar
             .add(frontier_sim::fitting::fitting("extraction_rig").unwrap());

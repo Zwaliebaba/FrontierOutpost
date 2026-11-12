@@ -2,6 +2,10 @@
 
 export type AdjacencyInfo = { facility: string, socket: string, 
 /**
- * What it gains there, as a phrase: "processes 2 more batches per run".
+ * What it gains there, as a phrase: "processes batches in 20% less time".
  */
-bonus: string, };
+bonus: string, 
+/**
+ * The percentage it takes off the processor's time for a batch there.
+ */
+processorFaster?: number, };

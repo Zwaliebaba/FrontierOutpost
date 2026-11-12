@@ -10,7 +10,11 @@ unlocks: Array<UnlockInfo>, powerUsed: number,
 /**
  * What the powered layout opens on the expedition, by name.
  */
-opens: Array<string>, processorBatches: number, 
+opens: Array<string>, 
+/**
+ * Seconds the processor takes over a batch with this layout.
+ */
+batchSeconds: number, 
 /**
  * Percent off rigs and modules.
  */

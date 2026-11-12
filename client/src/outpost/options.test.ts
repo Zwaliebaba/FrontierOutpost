@@ -29,7 +29,7 @@ function home(overrides: Partial<AccountInfo> = {}): AccountInfo {
       unlocks: [],
       powerUsed: 0,
       opens: [],
-      processorBatches: 4,
+      batchSeconds: 240,
       fittingDiscount: 0,
       openTiers: 1,
     },
@@ -91,8 +91,8 @@ describe("a socket's choices", () => {
     expect(refinery?.details).toContain(
       "Opens: Volatile veins pocket, Extraction rig, Cargo frame module",
     );
-    expect(refinery?.details).toContain("Processor: 4 → 10 batches per run");
-    expect(refinery?.details).toContain("Here it processes 2 more batches per run");
+    expect(refinery?.details).toContain("Processor: 4 min → 1 min 36 s a batch");
+    expect(refinery?.details).toContain("Here it processes batches in 20% less time");
     expect(refinery?.details).toContain("Comes with a extraction rig");
     expect(refinery?.message).toEqual({ type: "install", socket: "a", facility: "refinery" });
   });
@@ -113,7 +113,7 @@ describe("a socket's choices", () => {
     expect(upgrade?.label).toBe("Upgrade to tier 2");
     expect(upgrade?.details).toContain("Cost 550 cr + 12 alloy + 5 components");
     expect(upgrade?.details).toContain("Opens: Heat sink module");
-    expect(upgrade?.details).toContain("Processor: 10 → 16 batches per run");
+    expect(upgrade?.details).toContain("Processor: 1 min 36 s → 48 s a batch");
     expect(unpower?.label).toBe("Unpower");
     expect(unpower?.details).toContain(
       "Closes: Volatile veins pocket, Extraction rig, Cargo frame module",

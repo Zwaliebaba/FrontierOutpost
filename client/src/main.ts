@@ -20,7 +20,7 @@ import { fittingName, launchLines, supplySales } from "./outpost/options";
 import { BERTHS, placeStation } from "./outpost/placement";
 import { OutpostScene } from "./outpost/scene";
 import type { HomeTab } from "./outpost/ui";
-import { renderHome } from "./outpost/ui";
+import { renderHome, tickProcessor } from "./outpost/ui";
 import type { EntityPose } from "./net/interpolation";
 import { Predictor } from "./game/prediction";
 import { FrameTimer } from "./game/frameTimer";
@@ -273,6 +273,9 @@ async function start(): Promise<void> {
 
 /** What the pilot's home holds, the outpost's rules, and the outpost as drawn. */
 let holdings: AccountInfo | null = null;
+/** When `holdings` arrived, on the page's clock: the processor's progress counts on from it. */
+let holdingsAt = 0;
+const sinceHoldings = () => (performance.now() - holdingsAt) / 1000;
 let catalog: Catalog | null = null;
 let outpost: OutpostScene | null = null;
 let selectedSocket = "a";
@@ -285,6 +288,7 @@ let homeChanged = (): void => undefined;
 /** Shows what the pilot's home holds. */
 function showAccount(callsign: string, account: AccountInfo): void {
   holdings = account;
+  holdingsAt = performance.now();
   accountLine.dataset.credits = String(account.credits);
   accountLine.dataset.ore = String(account.ore);
   accountLine.dataset.alloy = String(account.alloy);
@@ -517,6 +521,11 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         });
         stake.append(sell);
       }
+      if (holdings.launch.due.type === "short" && supplySales(known, holdings).length === 0) {
+        const p = element("p");
+        p.textContent = "Your goods are at the processor: take a batch back to sell its inputs.";
+        stake.append(p);
+      }
       for (const missing of holdings.launch.missing) {
         if (missing.price === undefined) continue;
         const buy = element("button");
@@ -732,10 +741,17 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         },
       },
       homeTab,
+      sinceHoldings(),
     );
     if (!life) homePanel.dataset.state = "open";
     if (briefing.dataset.state === "open" && contract) showBriefing(contract);
   };
+  // The processor's bar moves on between account messages; the server finishes the batch.
+  window.setInterval(() => {
+    if (holdings && homePanel.dataset.state === "open") {
+      tickProcessor(homePanel, holdings, sinceHoldings());
+    }
+  }, 1_000);
 
   connection.onMessage((message) => {
     switch (message.type) {
