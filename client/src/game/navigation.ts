@@ -76,6 +76,68 @@ export function placeMarkers(
   });
 }
 
+/** A label's box on screen, pixels from the top left. */
+export interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Moves overlapping labels apart, so that each stays whole and can be clicked to choose a jump
+ * target. Markers pinned to the same stretch of edge, or targets close together on screen, would
+ * otherwise stack. Each overlapping pair is pushed apart along the axis where it overlaps least,
+ * half each way, for a few passes; boxes stay inside `bounds`.
+ */
+export function spreadBoxes(
+  boxes: readonly Box[],
+  bounds: { width: number; height: number },
+  gap = 4,
+  passes = 24,
+): Box[] {
+  const moved = boxes.map((box) => ({ ...box }));
+  const keepIn = (box: Box) => {
+    box.x = Math.min(Math.max(0, box.x), Math.max(0, bounds.width - box.width));
+    box.y = Math.min(Math.max(0, box.y), Math.max(0, bounds.height - box.height));
+  };
+  for (let pass = 0; pass < passes; pass++) {
+    let clear = true;
+    for (let i = 0; i < moved.length; i++) {
+      for (let j = i + 1; j < moved.length; j++) {
+        const a = moved[i];
+        const b = moved[j];
+        if (!a || !b) continue;
+        const overlapX = Math.min(a.x + a.width, b.x + b.width) + gap - Math.max(a.x, b.x);
+        const overlapY = Math.min(a.y + a.height, b.y + b.height) + gap - Math.max(a.y, b.y);
+        if (overlapX <= 0 || overlapY <= 0) continue;
+        clear = false;
+        const axis = overlapX < overlapY ? "x" : "y";
+        const size = axis === "x" ? "width" : "height";
+        const needed = Math.min(overlapX, overlapY);
+        // a goes toward the lower side, b the higher; ties, as for two boxes in one place, by
+        // list order.
+        const away = a[axis] + a[size] / 2 <= b[axis] + b[size] / 2 ? 1 : -1;
+        // Half each way; what one cannot move, held by an edge, the other moves instead.
+        const aFrom = a[axis];
+        a[axis] -= (away * needed) / 2;
+        keepIn(a);
+        const aMoved = Math.abs(a[axis] - aFrom);
+        const bFrom = b[axis];
+        b[axis] += away * (needed - aMoved);
+        keepIn(b);
+        const short = needed - aMoved - Math.abs(b[axis] - bFrom);
+        if (short > 0) {
+          a[axis] -= away * short;
+          keepIn(a);
+        }
+      }
+    }
+    if (clear) break;
+  }
+  return moved;
+}
+
 /** A distance as the markers show it: metres up to a kilometre, then kilometres. */
 export function distanceText(metres: number): string {
   return metres < 1_000 ? `${String(Math.round(metres))} m` : `${(metres / 1_000).toFixed(1)} km`;
