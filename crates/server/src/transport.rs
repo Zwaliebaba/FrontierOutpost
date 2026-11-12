@@ -573,12 +573,16 @@ impl Pilot<'_> {
             }
             (ClientMessage::Vent, Some((expedition, ship))) => expedition.vent(ship),
             (ClientMessage::Scan, Some((expedition, ship))) => expedition.scan(ship),
+            (ClientMessage::Jump { target }, Some((expedition, ship))) => {
+                expedition.jump(ship, target);
+            }
             // Actions sent just as a run ends arrive too late to matter.
             (
                 ClientMessage::Lock { .. }
                 | ClientMessage::Extract { .. }
                 | ClientMessage::Vent
-                | ClientMessage::Scan,
+                | ClientMessage::Scan
+                | ClientMessage::Jump { .. },
                 None,
             ) => {}
             (

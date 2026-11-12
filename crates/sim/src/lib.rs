@@ -12,6 +12,7 @@ pub mod crew;
 pub mod extraction;
 pub mod fitting;
 pub mod goods;
+pub mod jump;
 pub mod market;
 pub mod npc;
 pub mod outcome;

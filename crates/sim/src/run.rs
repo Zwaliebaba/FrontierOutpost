@@ -13,6 +13,9 @@ use crate::extraction::{
     Refusal, Stop,
 };
 use crate::fitting::Loadout as Fitting;
+use crate::jump::{
+    Cancel as JumpCancel, Refusal as JumpRefusal, SPOOL_TICKS, Spool, Target as JumpTarget,
+};
 use crate::outcome::{Ending, Loadout, losses};
 use crate::profile::ShipKind;
 use crate::rng::Rng;
@@ -287,6 +290,21 @@ pub enum RunEvent {
     Ended {
         reason: EndReason,
     },
+    /// A pilot's jump drive started to spool.
+    JumpSpooling {
+        pilot: ShipId,
+        target: JumpTarget,
+    },
+    /// A spooling jump stopped before the ship jumped.
+    JumpCancelled {
+        pilot: ShipId,
+        reason: JumpCancel,
+    },
+    /// The ship jumped and arrived near its target.
+    Jumped {
+        pilot: ShipId,
+        target: JumpTarget,
+    },
 }
 
 /// What a pilot's client shows about their own ship and the run.
@@ -357,6 +375,8 @@ struct PilotRun {
     last_pocket_exit_at: Option<u32>,
     /// The pilot holds the cruise control.
     cruise_requested: bool,
+    /// A jump spooling up.
+    jump: Option<Spool>,
     drive: Drive,
     /// When the pilot's connection dropped, while they are away.
     disconnected_at: Option<u32>,
@@ -512,6 +532,7 @@ impl Run {
                     first_pocket_at: None,
                     last_pocket_exit_at: None,
                     cruise_requested: false,
+                    jump: None,
                     drive: Drive::Ready,
                     disconnected_at: None,
                     exposure_ends: 0,
@@ -666,6 +687,7 @@ impl Run {
             first_pocket_at: None,
             last_pocket_exit_at: None,
             cruise_requested: false,
+            jump: None,
             drive: Drive::Ready,
             disconnected_at: None,
             exposure_ends: 0,
@@ -793,6 +815,127 @@ impl Run {
                 self.world.set_input(ship, ShipInput { cruise, ..input });
             }
         }
+    }
+
+    /// Starts spooling a jump to `target`, or with `None` cancels one. A new
+    /// target replaces a spool in progress and starts it again.
+    ///
+    /// # Errors
+    /// Refuses where the drive may not spool ([`crate::jump`]): a ship not
+    /// flying, locked by a hostile or extracting, a pocket the crew may not
+    /// enter, or the place the ship already is.
+    pub fn jump(&mut self, ship: ShipId, target: Option<JumpTarget>) -> Result<(), JumpRefusal> {
+        if !self.flying(ship) {
+            return Err(JumpRefusal::NotFlying);
+        }
+        let index = self.index(ship).ok_or(JumpRefusal::NotFlying)?;
+        let Some(target) = target else {
+            if self.pilots[index].jump.take().is_some() {
+                self.log(RunEvent::JumpCancelled {
+                    pilot: ship,
+                    reason: JumpCancel::Pilot,
+                });
+            }
+            return Ok(());
+        };
+        let state = self
+            .world
+            .ship(ship)
+            .map(|s| s.state)
+            .ok_or(JumpRefusal::NotFlying)?;
+        if self.locked_by_a_hostile(ship) {
+            return Err(JumpRefusal::Hunted);
+        }
+        if self.pilots[index].extractor.is_on() {
+            return Err(JumpRefusal::Extracting);
+        }
+        match target {
+            JumpTarget::Dock if self.pilots[index].phase == Phase::AtDock => {
+                return Err(JumpRefusal::AlreadyThere);
+            }
+            JumpTarget::Dock => {}
+            JumpTarget::Pocket(pocket) => {
+                let open = self.site.pockets.get(pocket).is_some_and(|p| !p.locked);
+                if !open {
+                    return Err(JumpRefusal::Unavailable);
+                }
+                if self.site.pocket_at(state.x, state.z) == Some(pocket) {
+                    return Err(JumpRefusal::AlreadyThere);
+                }
+            }
+        }
+        self.pilots[index].jump = Some(Spool {
+            target,
+            ticks_left: SPOOL_TICKS,
+        });
+        self.log(RunEvent::JumpSpooling {
+            pilot: ship,
+            target,
+        });
+        Ok(())
+    }
+
+    /// Counts down each spooling jump, cancels one whose ship a hostile has
+    /// locked or whose extractor started, and moves a ship whose spool is
+    /// done. Runs before the world steps, so the arrival is collided at once.
+    fn work_jumps(&mut self) {
+        for index in 0..self.pilots.len() {
+            let Some(spool) = self.pilots[index].jump else {
+                continue;
+            };
+            let ship = self.pilots[index].ship;
+            let Some(state) = self.world.ship(ship).map(|s| s.state) else {
+                // Held inert or gone: the spool lapses.
+                self.pilots[index].jump = None;
+                continue;
+            };
+            let cancel = if self.locked_by_a_hostile(ship) {
+                Some(JumpCancel::Hunted)
+            } else if self.pilots[index].extractor.is_on() {
+                Some(JumpCancel::Extracting)
+            } else {
+                None
+            };
+            if let Some(reason) = cancel {
+                self.pilots[index].jump = None;
+                self.log(RunEvent::JumpCancelled {
+                    pilot: ship,
+                    reason,
+                });
+                continue;
+            }
+            if spool.ticks_left > 1 {
+                self.pilots[index].jump = Some(Spool {
+                    ticks_left: spool.ticks_left - 1,
+                    ..spool
+                });
+                continue;
+            }
+            self.pilots[index].jump = None;
+            let template = &self.site.template;
+            let arrival = match spool.target {
+                JumpTarget::Dock => {
+                    crate::jump::dock_arrival(state, template, self.pilots[index].total() > 0)
+                }
+                JumpTarget::Pocket(pocket) => {
+                    let pocket = self.site.pockets[pocket].template;
+                    crate::jump::pocket_arrival(state, pocket.centre, pocket.radius, template.dock)
+                }
+            };
+            self.world.set_state(ship, arrival);
+            // The ship arrives at rest, its cruise drive dropped.
+            self.pilots[index].cruise_requested = false;
+            self.log(RunEvent::Jumped {
+                pilot: ship,
+                target: spool.target,
+            });
+        }
+    }
+
+    /// The jump a pilot's drive is spooling, if any.
+    #[must_use]
+    pub fn spooling(&self, ship: ShipId) -> Option<Spool> {
+        self.pilot(ship).and_then(|pilot| pilot.jump)
     }
 
     /// Whether a hostile holds a lock on `ship`.
@@ -1101,6 +1244,7 @@ impl Run {
                     first_pocket_at: saved.first_pocket_at,
                     last_pocket_exit_at: saved.last_pocket_exit_at,
                     cruise_requested: false,
+                    jump: None,
                     drive: Drive::Ready,
                     disconnected_at: away.then_some(now),
                     exposure_ends: now,
@@ -1227,6 +1371,7 @@ impl Run {
         }
         self.rise_with_time();
         self.gate_drives();
+        self.work_jumps();
         self.world.step();
         self.note_combat();
         self.debris_damage();
@@ -1379,7 +1524,7 @@ impl Run {
                 }
                 let spread = i as f32 * 3.0;
                 let at = clamp_to_arena((entry.0 + spread, entry.1 - spread));
-                self.world.spawn_npc_at(kind, at, home);
+                self.spawn_hostile(kind, at, home);
                 if kind == ShipKind::Drone {
                     spawned.0 += 1;
                 } else {
@@ -1432,6 +1577,22 @@ impl Run {
             .count()
     }
 
+    /// Places an NPC at `at` with its post or patrol at `home`, at the
+    /// tier's strength (`TierRules::npc_speed` and `npc_damage`).
+    fn spawn_hostile(&mut self, kind: ShipKind, at: (f32, f32), home: (f32, f32)) -> ShipId {
+        let ship = self.world.spawn_npc_at(kind, at, home);
+        let rules = self.site.tier.rules();
+        self.world.set_kit(
+            ship,
+            Kit {
+                speed: rules.npc_speed,
+                weapon: rules.npc_damage,
+                ..Kit::BASIC
+            },
+        );
+        ship
+    }
+
     fn place_opening_threat(&mut self, count: u32) {
         let mut rng = Rng::new(self.site.seed ^ 0x5bd1_e995);
         let share = self.site.values.dominant.drone_share();
@@ -1446,11 +1607,11 @@ impl Run {
                     ore.centre.0 + angle.cos() * r,
                     ore.centre.1 + angle.sin() * r,
                 );
-                self.world.spawn_npc(ShipKind::Drone, home);
+                self.spawn_hostile(ShipKind::Drone, home, home);
             } else {
                 let r = 30.0 + i as f32 * 5.0;
                 let home = (cx + angle.cos() * r, cz + angle.sin() * r);
-                self.world.spawn_npc(ShipKind::Raider, home);
+                self.spawn_hostile(ShipKind::Raider, home, home);
             }
         }
     }
@@ -1484,7 +1645,7 @@ impl Run {
         for i in 0..placed {
             let angle = i as f32 * std::f32::consts::TAU / placed as f32;
             let post = (cx + angle.cos() * 10.0, cz + angle.sin() * 10.0);
-            self.world.spawn_npc_at(ShipKind::Warden, post, post);
+            self.spawn_hostile(ShipKind::Warden, post, post);
         }
     }
 
@@ -1643,7 +1804,7 @@ impl Run {
             }
             let side = (i as f32 - (raiders as f32 - 1.0) / 2.0) * 6.0;
             let at = clamp_to_arena((point.0 - vz / length * side, point.1 + vx / length * side));
-            self.world.spawn_npc_at(ShipKind::Raider, at, at);
+            self.spawn_hostile(ShipKind::Raider, at, at);
             spawned += 1;
         }
         self.log(RunEvent::Intercepted {
@@ -1945,6 +2106,167 @@ mod tests {
         let deposit = run.site.deposits[0];
         place(run, ship, (deposit.x, deposit.z));
         run.step();
+    }
+
+    #[test]
+    fn a_jump_spools_then_lands_outside_the_pocket_facing_it() {
+        let (mut run, ship) = quiet(6);
+        events(&mut run);
+        assert_eq!(run.jump(ship, Some(JumpTarget::Pocket(0))), Ok(()));
+        steps(&mut run, SPOOL_TICKS - 1);
+        let ore = run.site.pockets[0].template;
+        let before = run.world.ship(ship).unwrap().state;
+        assert!((before.x - ore.centre.0).hypot(before.z - ore.centre.1) > 100.0);
+        run.step();
+        let after = run.world.ship(ship).unwrap().state;
+        let from_centre = (after.x - ore.centre.0).hypot(after.z - ore.centre.1);
+        assert!(
+            (from_centre - (ore.radius + crate::jump::POCKET_STANDOFF)).abs() < 1.5,
+            "{from_centre}"
+        );
+        assert!(run.spooling(ship).is_none());
+        let log = events(&mut run);
+        assert!(log.contains(&RunEvent::JumpSpooling {
+            pilot: ship,
+            target: JumpTarget::Pocket(0)
+        }));
+        assert!(log.contains(&RunEvent::Jumped {
+            pilot: ship,
+            target: JumpTarget::Pocket(0)
+        }));
+        // Off the berth, so the approach has begun; outside the pocket, so
+        // the objective has not.
+        run.step();
+        assert_eq!(run.status(ship).unwrap().phase, Phase::Approach);
+    }
+
+    #[test]
+    fn a_jump_is_refused_where_the_drive_may_not_spool() {
+        let (mut run, ship) = quiet(6);
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Dock)),
+            Err(JumpRefusal::AlreadyThere)
+        );
+        // Only the ore field is open without facilities.
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Pocket(1))),
+            Err(JumpRefusal::Unavailable)
+        );
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Pocket(9))),
+            Err(JumpRefusal::Unavailable)
+        );
+        at_deposit(&mut run, ship);
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Pocket(0))),
+            Err(JumpRefusal::AlreadyThere)
+        );
+        run.extract(ship, true).unwrap();
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Dock)),
+            Err(JumpRefusal::Extracting)
+        );
+        run.extract(ship, false).unwrap();
+        let at = run.world.ship(ship).unwrap().state;
+        let drone = run.world.spawn_npc(ShipKind::Drone, (at.x + 5.0, at.z));
+        run.step();
+        assert_eq!(run.world.ship(drone).unwrap().lock, Some(ship));
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Dock)),
+            Err(JumpRefusal::Hunted)
+        );
+    }
+
+    #[test]
+    fn a_spool_is_cancelled_by_a_hostile_lock_or_by_the_pilot() {
+        let (mut run, ship) = quiet(6);
+        run.jump(ship, Some(JumpTarget::Pocket(0))).unwrap();
+        steps(&mut run, 10);
+        events(&mut run);
+        run.jump(ship, None).unwrap();
+        assert!(run.spooling(ship).is_none());
+        assert!(events(&mut run).contains(&RunEvent::JumpCancelled {
+            pilot: ship,
+            reason: JumpCancel::Pilot
+        }));
+
+        run.jump(ship, Some(JumpTarget::Pocket(0))).unwrap();
+        let at = run.world.ship(ship).unwrap().state;
+        run.world.spawn_npc(ShipKind::Drone, (at.x + 5.0, at.z));
+        steps(&mut run, 3);
+        assert!(run.spooling(ship).is_none());
+        assert!(events(&mut run).contains(&RunEvent::JumpCancelled {
+            pilot: ship,
+            reason: JumpCancel::Hunted
+        }));
+    }
+
+    #[test]
+    fn a_laden_jump_home_lands_short_with_the_interceptors_in_the_way() {
+        let (mut run, ship) = quiet(6);
+        at_deposit(&mut run, ship);
+        run.pilots[0].cargo = [14, 0, 0];
+        run.jump(ship, Some(JumpTarget::Dock)).unwrap();
+        steps(&mut run, SPOOL_TICKS + 1);
+        let (dx, dz) = COMPACT_SITE.dock;
+        let state = run.world.ship(ship).expect("not docked").state;
+        let from_dock = (state.x - dx).hypot(state.z - dz);
+        assert!(from_dock > DOCK_RADIUS + 20.0, "{from_dock}");
+        assert_eq!(run.status(ship).unwrap().phase, Phase::Return);
+        assert!(events(&mut run).contains(&RunEvent::Intercepted {
+            pilot: ship,
+            raiders: 2
+        }));
+        // Each raider is nearer the dock than the ship is.
+        for raider in run
+            .world
+            .ships()
+            .iter()
+            .filter(|s| s.kind == ShipKind::Raider)
+        {
+            let theirs = (raider.state.x - dx).hypot(raider.state.z - dz);
+            assert!(theirs < from_dock, "{theirs} against {from_dock}");
+        }
+    }
+
+    #[test]
+    fn an_empty_jump_home_lands_just_outside_the_berth() {
+        let (mut run, ship) = quiet(6);
+        at_deposit(&mut run, ship);
+        run.jump(ship, Some(JumpTarget::Dock)).unwrap();
+        steps(&mut run, SPOOL_TICKS + 1);
+        let (dx, dz) = COMPACT_SITE.dock;
+        let state = run.world.ship(ship).expect("not docked yet").state;
+        let from_dock = (state.x - dx).hypot(state.z - dz);
+        assert!(
+            (from_dock - crate::jump::DOCK_STANDOFF).abs() < 1.5,
+            "{from_dock}"
+        );
+    }
+
+    #[test]
+    fn tier_one_npcs_are_slower_than_a_pilot_and_hit_half_as_hard() {
+        let pilot_speed = ShipKind::Pilot.profile().handling.max_speed;
+        for tier in ThreatTier::ALL {
+            let site = Site::generate(COMPACT_SITE, 4, tier, 1, &[]);
+            let (run, _) = Run::launch(site, 1, Options::default());
+            let npcs: Vec<_> = run
+                .world
+                .ships()
+                .iter()
+                .filter(|s| s.kind.thinks())
+                .collect();
+            assert!(!npcs.is_empty());
+            for npc in npcs {
+                let top = crate::world::handling(npc.kind, &npc.kit).max_speed;
+                if tier == ThreatTier::I {
+                    assert!(top < pilot_speed, "{:?} at {top} m/s", npc.kind);
+                    assert!((npc.kit.weapon - 0.5).abs() < f32::EPSILON);
+                } else {
+                    assert_eq!(npc.kit, Kit::BASIC, "{tier:?} keeps full strength");
+                }
+            }
+        }
     }
 
     #[test]

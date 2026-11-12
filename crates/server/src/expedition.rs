@@ -16,13 +16,17 @@ use frontier_protocol::snapshot::{
     quantize_position, quantize_velocity,
 };
 use frontier_protocol::{
-    AccountInfo, DepositInfo, ExtractRefusal, ObstacleInfo, PotInfo, RunSummary, ServerMessage,
-    WaveInfo,
+    AccountInfo, DepositInfo, ExtractRefusal, JumpCancel as WireJumpCancel,
+    JumpRefusal as WireJumpRefusal, JumpTarget as WireJumpTarget, ObstacleInfo, PotInfo,
+    RunSummary, ServerMessage, WaveInfo,
 };
 use frontier_sim::TICKS_PER_SECOND;
 use frontier_sim::combat::Event;
 use frontier_sim::crew::split;
 use frontier_sim::extraction::{EXTRACT_RANGE, ExtractorState, Refusal};
+use frontier_sim::jump::{
+    Cancel as JumpCancel, Refusal as JumpRefusal, SPOOL_TICKS, Target as JumpTarget,
+};
 use frontier_sim::outcome;
 use frontier_sim::profile::ShipKind;
 use frontier_sim::run::{
@@ -153,6 +157,10 @@ enum Command {
     },
     Scan {
         ship: ShipId,
+    },
+    Jump {
+        ship: ShipId,
+        target: Option<WireJumpTarget>,
     },
     Leave {
         ship: ShipId,
@@ -394,6 +402,11 @@ impl Expedition {
         let _ = self.commands.send(Command::Scan { ship });
     }
 
+    /// Spools the pilot's jump drive toward `target`, or cancels it.
+    pub fn jump(&self, ship: ShipId, target: Option<WireJumpTarget>) {
+        let _ = self.commands.send(Command::Jump { ship, target });
+    }
+
     /// Takes the pilot out of the run, abandoning it.
     pub fn leave(&self, ship: ShipId) {
         let _ = self.commands.send(Command::Leave { ship });
@@ -521,6 +534,25 @@ fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
         Command::Scan { ship } => {
             run.scan(ship);
         }
+        Command::Jump { ship, target } => {
+            let target = target.map(|target| match target {
+                WireJumpTarget::Dock => JumpTarget::Dock,
+                WireJumpTarget::Pocket { index } => {
+                    // An index past usize's range names no pocket either way.
+                    JumpTarget::Pocket(usize::try_from(index).unwrap_or(usize::MAX))
+                }
+            });
+            if let Err(refusal) = run.jump(ship, target) {
+                let reason = match refusal {
+                    JumpRefusal::NotFlying => WireJumpRefusal::NotFlying,
+                    JumpRefusal::Hunted => WireJumpRefusal::Hunted,
+                    JumpRefusal::Extracting => WireJumpRefusal::Extracting,
+                    JumpRefusal::Unavailable => WireJumpRefusal::Unavailable,
+                    JumpRefusal::AlreadyThere => WireJumpRefusal::AlreadyThere,
+                };
+                tell(pilots, ship, ServerMessage::JumpRefused { reason });
+            }
+        }
         Command::Leave { ship } => {
             pilots.remove(&ship);
             run.leave(ship);
@@ -557,6 +589,17 @@ fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
             });
             let _ = reply.send(rejoined);
         }
+    }
+}
+
+/// A jump target as the wire names it.
+fn wire_jump_target(target: JumpTarget) -> WireJumpTarget {
+    match target {
+        JumpTarget::Dock => WireJumpTarget::Dock,
+        JumpTarget::Pocket(index) => WireJumpTarget::Pocket {
+            // A site has a handful of pockets.
+            index: u32::try_from(index).unwrap_or(u32::MAX),
+        },
     }
 }
 
@@ -632,6 +675,27 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &mut 
                 finished.push((pilot, summary));
             }
             RunEvent::PotSettled { pot } => settled = Some(pot),
+            RunEvent::JumpSpooling { pilot, target } => {
+                let message = ServerMessage::JumpSpooling {
+                    target: wire_jump_target(target),
+                    seconds: seconds(SPOOL_TICKS),
+                };
+                tell(pilots, pilot, message);
+            }
+            RunEvent::JumpCancelled { pilot, reason } => {
+                let reason = match reason {
+                    JumpCancel::Pilot => WireJumpCancel::Pilot,
+                    JumpCancel::Hunted => WireJumpCancel::Hunted,
+                    JumpCancel::Extracting => WireJumpCancel::Extracting,
+                };
+                tell(pilots, pilot, ServerMessage::JumpCancelled { reason });
+            }
+            RunEvent::Jumped { pilot, target } => {
+                let message = ServerMessage::Jumped {
+                    target: wire_jump_target(target),
+                };
+                tell(pilots, pilot, message);
+            }
             _ => {}
         }
     }

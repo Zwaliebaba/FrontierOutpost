@@ -169,6 +169,10 @@ pub struct TierRules {
     pub opening_threat: u32,
     /// How often the alert rises with time.
     pub alert_interval_ticks: u32,
+    /// Multiplies every NPC's top speed and acceleration.
+    pub npc_speed: f32,
+    /// Multiplies every NPC's weapon damage.
+    pub npc_damage: f32,
 }
 
 impl ThreatTier {
@@ -185,6 +189,12 @@ impl ThreatTier {
         Self::ALL.into_iter().find(|tier| tier.number() == number)
     }
 
+    /// The tier's values. NPC speed and damage are the owner's addition after
+    /// the first playtest, not design section 10's: at full strength drones
+    /// and raiders outran the starter hull and three drones broke it in about
+    /// seven seconds, too much for a first run. Tier I NPCs are slower than a
+    /// pilot and hit half as hard; tiers II and III keep full strength, so
+    /// the step up stays real. Threat still never scales with experience.
     #[must_use]
     pub const fn rules(self) -> TierRules {
         const MINUTE: u32 = 60 * TICKS_PER_SECOND;
@@ -194,18 +204,24 @@ impl ThreatTier {
                 yield_factor: 1.0,
                 opening_threat: 3,
                 alert_interval_ticks: 4 * MINUTE,
+                npc_speed: 0.7,
+                npc_damage: 0.5,
             },
             Self::II => TierRules {
                 payout: 160,
                 yield_factor: 1.25,
                 opening_threat: 5,
                 alert_interval_ticks: 3 * MINUTE,
+                npc_speed: 1.0,
+                npc_damage: 1.0,
             },
             Self::III => TierRules {
                 payout: 240,
                 yield_factor: 1.5,
                 opening_threat: 8,
                 alert_interval_ticks: 2 * MINUTE,
+                npc_speed: 1.0,
+                npc_damage: 1.0,
             },
         }
     }

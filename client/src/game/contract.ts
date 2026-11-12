@@ -6,7 +6,6 @@ import type {
   DominantThreat,
   Drive,
   ExtractRefusal,
-  ExtractorMode,
   Hazard,
   OwnStatus,
   PocketKind,
@@ -111,19 +110,6 @@ export function bar(share: number): string {
   return `[${"#".repeat(cells)}${".".repeat(10 - cells)}]`;
 }
 
-function extractorText(mode: ExtractorMode, seconds: number): string {
-  switch (mode) {
-    case "off":
-      return "off";
-    case "on":
-      return "working";
-    case "venting":
-      return `venting ${String(seconds)} s`;
-    case "cutOut":
-      return `CUT OUT ${String(seconds)} s`;
-  }
-}
-
 const DRIVE_TEXT: Readonly<Record<Drive, string>> = {
   ready: "drive ready (Shift)",
   inSite: "drive off in the site",
@@ -131,22 +117,20 @@ const DRIVE_TEXT: Readonly<Record<Drive, string>> = {
   extracting: "drive off while extracting",
 };
 
-/** The run line: where the pilot is, the clock, the alert, the hold, the extractor, the drive. */
+/**
+ * The run line: where the pilot is, the clock, the alert, the relays and the drive. Hull, hold,
+ * heat and the extractor are on the ship gauges (game/gauges).
+ */
 export function runLine(own: OwnStatus): string {
-  const heat = own.heat / 255;
   return [
     PHASE_TEXT[own.phase],
     clock(own.elapsedSeconds),
     `alert ${String(own.alert)}`,
-    `hold ${String(own.cargo)}/${String(own.capacity)}`,
-    ...(own.shield > 0 ? [`shield ${String(own.shield)}`] : []),
     ...(own.relay === RELAY_LINKED
       ? ["relays linked"]
       : own.relay > 0
         ? [`relays held ${String(own.relay)}/30 s`]
         : []),
-    `heat ${bar(heat)} ${String(Math.round(heat * 100))}%`,
-    `extractor ${extractorText(own.extractor, own.extractorSeconds)}`,
     DRIVE_TEXT[own.drive],
   ].join(" · ");
 }

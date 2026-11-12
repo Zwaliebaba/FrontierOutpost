@@ -460,6 +460,69 @@ meter {
   border-color: var(--orange);
   z-index: 5;
 }
+/* The ship gauges, above the run line. Level shows by a marker as well as colour. */
+#ship {
+  position: fixed;
+  left: 18px;
+  bottom: 152px;
+  display: none;
+  padding: 6px 12px;
+  color: var(--text);
+  background: #0b1622eb;
+  border: 1px solid var(--line);
+  font:
+    12px/1.4 ui-monospace,
+    monospace;
+}
+#ship[data-active] {
+  display: grid;
+  grid-template-columns: auto 160px 48px auto;
+  gap: 4px 10px;
+  align-items: center;
+}
+.gauge {
+  display: contents;
+}
+.gauge-label {
+  font-weight: bold;
+}
+.gauge-track {
+  height: 10px;
+  background: #1a2634;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.gauge-fill {
+  width: 0;
+  height: 100%;
+  background: #6f9fd8;
+  transition: width 0.2s linear;
+}
+.gauge[data-gauge="hold"] .gauge-fill {
+  background: #b39a5a;
+}
+.gauge[data-level="warn"] .gauge-fill {
+  background: #e0b040;
+}
+.gauge[data-level="danger"] .gauge-fill {
+  background: #e05a40;
+}
+.gauge-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.gauge[data-level="warn"] .gauge-value::before {
+  content: "! ";
+}
+.gauge[data-level="danger"] .gauge-value::before {
+  content: "!! ";
+}
+.gauge-note {
+  color: var(--muted);
+}
+.gauge[data-level="danger"] .gauge-note {
+  color: #f0a080;
+}
 #hud:empty,
 #lock:empty,
 #run:empty,
@@ -483,6 +546,27 @@ meter {
     11px ui-monospace,
     monospace;
   white-space: nowrap;
+}
+/* A marker chooses where the jump drive goes: a 44 px target whatever its drawn size. */
+.nav-marker {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.nav-marker::before {
+  content: "";
+  position: absolute;
+  inset: -12px -4px;
+}
+.nav-marker[data-selected="true"] {
+  border-color: var(--orange);
+  color: #fff3df;
+}
+.nav-marker[data-selected="true"]::after {
+  content: " · J";
+  color: var(--orange);
+}
+.nav-marker[data-jumping="true"] {
+  background: #3a2410e0;
 }
 .nav-arrow {
   display: inline-block;
