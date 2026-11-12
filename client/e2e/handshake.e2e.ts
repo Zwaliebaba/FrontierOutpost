@@ -5,5 +5,6 @@ test("the client connects to the real server and completes the handshake", async
   await page.goto("/");
   const status = page.locator("#status");
   await expect(status).toHaveAttribute("data-state", "connected");
-  await expect(status).toHaveText(`Connected · protocol ${String(PROTOCOL_VERSION)}`);
+  await expect(status).toHaveText("Connected");
+  await expect(status).toHaveAttribute("data-protocol", String(PROTOCOL_VERSION));
 });

@@ -15,13 +15,13 @@ import {
 } from "three";
 import type { Material, Object3D, Raycaster } from "three";
 import { Group } from "three";
-import type { AccountInfo } from "../protocol";
+import type { AccountInfo, CrewInfo } from "../protocol";
 import { stationLights } from "../view/lights";
 import { STRUCTURE_STENCIL, linear, placeShip, shipMeshes } from "../view/readability";
 import type { ShipMeshes } from "../view/readability";
 import { facilityKey } from "./models";
 import type { OutpostModels } from "./models";
-import { BERTH, STATION_DROP } from "./placement";
+import { BERTHS, STATION_DROP } from "./placement";
 import type { Placement } from "./placement";
 
 /** How far above its deck a socket's pick target sits, and how large it is, metres. */
@@ -36,6 +36,7 @@ interface Placed {
 }
 
 export interface SceneReport {
+  berths: { berth: string; callsign: string; you: boolean }[];
   sockets: string[];
   facilities: string[];
   /** What is actually in the scene graph under each socket. */
@@ -80,12 +81,14 @@ export class OutpostScene {
   readonly root = new Group();
   /** The middle of the station, which the overview orbits. */
   readonly centre = new Vector3();
-  readonly #berthShip: ShipMeshes = shipMeshes("self");
   readonly #models: OutpostModels;
   readonly #placed = new Map<string, Placed>();
   readonly #targets = new Map<string, Mesh>();
   readonly #ring: Mesh;
   #selected: string | null = null;
+  #crewShips: ShipMeshes[] = [];
+  #roster: { berth: string; callsign: string; you: boolean }[] = [];
+  #atHome = true;
 
   constructor(models: OutpostModels) {
     this.#models = models;
@@ -93,14 +96,7 @@ export class OutpostScene {
     structure(models.station);
     this.root.name = "station";
     this.root.add(models.station);
-    // The pilot's ship waits on berth 07 between runs, facing out, where the run launches it.
-    placeShip(this.#berthShip, BERTH.x, BERTH.z, Math.PI / 2);
-    for (const mesh of [this.#berthShip.hull, this.#berthShip.silhouette]) {
-      // On the plane wherever the station stands, like the ship the run draws.
-      mesh.position.y += STATION_DROP;
-      mesh.name = "berth ship";
-      this.root.add(mesh);
-    }
+    this.setCrew(null, "Pilot");
     this.home();
     this.place({ x: 0, z: 0, yaw: 0, y: 0, heading: 0 });
     const target = new SphereGeometry(PICK_RADIUS, 12, 8);
@@ -119,6 +115,38 @@ export class OutpostScene {
     this.#ring.rotation.x = Math.PI / 2;
     this.#ring.visible = false;
     this.scene.updateMatrixWorld(true);
+  }
+
+  /** Roster ships are presentation at each pilot's own home, never shared inventory. */
+  setCrew(crew: CrewInfo | null, callsign: string): void {
+    const roster = crew?.members ?? [{ callsign, you: true, share: 100, berth: 0 }];
+    const next = roster.slice(0, BERTHS.length).map((member, index) => ({
+      berth: BERTHS[member.berth ?? index]?.id ?? "07",
+      callsign: member.callsign,
+      you: member.you,
+    }));
+    if (JSON.stringify(next) === JSON.stringify(this.#roster)) return;
+    for (const ship of this.#crewShips) {
+      ship.hull.removeFromParent();
+      ship.silhouette.removeFromParent();
+      ship.dispose();
+    }
+    this.#roster = next;
+    this.#crewShips = next.map((member) => {
+      const berth = BERTHS.find((b) => b.id === member.berth);
+      const ship = shipMeshes(member.you ? "self" : "ally");
+      if (!berth) return ship;
+      placeShip(ship, berth.x, berth.z, Math.PI / 2);
+      for (const mesh of [ship.hull, ship.silhouette]) {
+        mesh.position.y += STATION_DROP;
+        mesh.name = "berth ship";
+        mesh.userData.callsign = member.callsign;
+        mesh.visible = this.#atHome;
+        this.root.add(mesh);
+      }
+      return ship;
+    });
+    this.root.updateMatrixWorld(true);
   }
 
   /** Shows each socket as `account` has it: the module at its owned tier, dimmed if unpowered. */
@@ -160,15 +188,21 @@ export class OutpostScene {
   /** Brings the station home to the outpost view, with the ship back on its berth. */
   home(): void {
     this.scene.add(this.root);
-    this.#berthShip.hull.visible = true;
-    this.#berthShip.silhouette.visible = true;
+    this.#atHome = true;
+    for (const ship of this.#crewShips) {
+      ship.hull.visible = true;
+      ship.silhouette.visible = true;
+    }
     this.scene.updateMatrixWorld(true);
   }
 
   /** The station leaves for a run: the ship flies from the berth, drawn from snapshots. */
   launch(): Object3D {
-    this.#berthShip.hull.visible = false;
-    this.#berthShip.silhouette.visible = false;
+    this.#atHome = false;
+    for (const ship of this.#crewShips) {
+      ship.hull.visible = false;
+      ship.silhouette.visible = false;
+    }
     return this.root;
   }
 
@@ -214,6 +248,7 @@ export class OutpostScene {
       }
     }
     return {
+      berths: this.#roster,
       sockets: [...this.#models.sockets.keys()].sort(),
       facilities: [...this.#models.facilities.keys()].sort(),
       installed,

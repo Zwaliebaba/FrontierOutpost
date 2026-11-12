@@ -211,6 +211,10 @@ pub struct CrewInfo {
 #[ts(export)]
 pub struct CrewMember {
     pub callsign: String,
+    /// Zero-based berth slot, stable while following an active launch.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub berth: Option<u32>,
     /// Their share of the pot, a whole percentage.
     pub share: u32,
     /// Whether this is the pilot reading it.

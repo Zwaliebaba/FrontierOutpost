@@ -12,6 +12,7 @@
 !Design/FrontierOutpost/facilities.glb
 !Design/FrontierOutpost/frigate.glb
 !Design/FrontierOutpost/scene_manifest.json
+!Design/FrontierOutpost/berths.json
 
 **/target/
 client/node_modules/

@@ -112,3 +112,19 @@ Before accepting a new scene, check:
 5. Source assets remain available, with effects and equipment organized separately.
 6. The saved Blender file opens without missing external resources, and exports use the documented axes and scale.
 7. The preview reflects the delivered scene. Record any new visual conventions here so the next scene can reuse them.
+
+## 10. Station command HUD and four-berth apron
+
+The home HUD uses a restrained Military C2 layout: a command header, resource strip, left station
+services, right expedition briefing and a quiet utility rail. Graphite/naval panels, thin titanium
+rules and square corners complement the assets. Orange marks selection and the launch action;
+cyan marks operational status. Pair state colors with text. Keep typography legible and the
+central station silhouette clear. Detailed market, processor, fitting and facility controls live
+in separate service views. Actual catalog and roster data supply all values and available actions.
+
+The forward apron has four side-by-side berths, 07–10, facing outward. The authored offsets,
+deck height and painted boundaries live in `FrontierOutpost/berths.json`, shared by Blender,
+the simulation and the client. Validate the full parked geometry, inter-ship clearance and
+straight departure corridors. Socket A stays beside cargo; Socket B stays beside the apron,
+clear of all four lanes. Crew preview instances in the Blender overview are presentation only;
+the browser draws roster ships separately from the station asset.

@@ -168,6 +168,7 @@ enum Command {
     },
     Join {
         account: AccountId,
+        slot: u32,
         fitted: Vec<String>,
         share: u32,
         sink: Box<dyn SnapshotSink>,
@@ -349,6 +350,7 @@ impl Expedition {
     pub async fn join(
         &self,
         account: AccountId,
+        slot: u32,
         fitted: Vec<String>,
         share: u32,
         sink: impl SnapshotSink,
@@ -358,6 +360,7 @@ impl Expedition {
         self.commands
             .send(Command::Join {
                 account,
+                slot,
                 fitted,
                 share,
                 sink: Box::new(sink),
@@ -422,8 +425,8 @@ async fn fly(
     loop {
         tokio::select! {
             command = commands.recv() => match command {
-                Some(Command::Join { account, fitted, share, sink, events, reply }) => {
-                    let joined = run.join().map(|ship| {
+                Some(Command::Join { account, slot, fitted, share, sink, events, reply }) => {
+                    let joined = run.join_at(slot).map(|ship| {
                         run.fit(ship, &fitted);
                         pilots.insert(
                             ship,

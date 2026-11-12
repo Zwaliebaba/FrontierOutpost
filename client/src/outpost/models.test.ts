@@ -1,9 +1,12 @@
+import { BERTHS } from "./placement";
 import { Box3, Mesh, Vector3 } from "three";
 import type { BufferGeometry, Object3D } from "three";
 import { describe, expect, it } from "vitest";
 import facilitiesGlb from "../../../Design/FrontierOutpost/facilities.glb?inline";
 import stationGlb from "../../../Design/FrontierOutpost/station.glb?inline";
-import { facilityKey, indexModels, parseGlb } from "./models";
+import frigateGlb from "../../../Design/FrontierOutpost/frigate.glb?inline";
+import { frigateModel, gearOf, setGear } from "../view/frigate";
+import { facilityKey, indexModels, mergeByMaterial, parseGlb } from "./models";
 import type { OutpostModels } from "./models";
 
 /** The bytes of a data URL, as Vite inlines an asset. */
@@ -42,6 +45,33 @@ function socketAt(id: string): Vector3 {
 }
 
 describe("the outpost models", () => {
+  it("batches ship armor while preserving independently animated landing gear", async () => {
+    const ship = frigateModel(await parseGlb(bytes(frigateGlb)));
+    const before = drawn(ship);
+    const legs = gearOf(ship);
+    const deployed = legs.map((leg) => leg.position.y);
+    mergeByMaterial(ship, new Set(legs));
+    const after = drawn(ship);
+    expect(after.meshes).toBeLessThanOrEqual(16);
+    expect(after.triangles).toBe(before.triangles);
+    expect(after.size.distanceTo(before.size)).toBeLessThan(0.0001);
+    expect(after.centre.distanceTo(before.centre)).toBeLessThan(0.0001);
+    expect(gearOf(ship)).toEqual(legs);
+    setGear(legs, 0);
+    expect(legs.every((leg, index) => leg.position.y > (deployed[index] ?? 0))).toBe(true);
+  });
+
+  it("exports four berth anchors aligned with the shared layout", () => {
+    for (const berth of BERTHS) {
+      const anchor = models.station.getObjectByName(`Berth_${berth.id}`);
+      expect(anchor, berth.id).toBeDefined();
+      const at = anchor?.getWorldPosition(new Vector3());
+      expect(at?.x).toBeCloseTo(berth.x, 4);
+      expect(at?.y).toBeCloseTo(berth.deck, 4);
+      expect(at?.z).toBeCloseTo(berth.z, 4);
+    }
+  });
+
   it("has both construction sockets on the station", () => {
     expect([...models.sockets.keys()].sort()).toEqual(["a", "b"]);
     // Socket A beside the port pod, socket B beside the berth (glTF is Y-up; Blender -Y is +Z).

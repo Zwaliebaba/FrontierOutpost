@@ -6,7 +6,10 @@
 import type { AccountInfo, Catalog, ClientMessage, Good } from "../protocol";
 import { fittingRows, holding, socketView, toggleFitting } from "./options";
 
+export type HomeTab = "overview" | "facilities" | "market" | "processor" | "hangar";
+
 export interface HomeHandlers {
+  tab(tab: HomeTab): void;
   send(message: ClientMessage): void;
   select(socket: string): void;
 }
@@ -47,7 +50,11 @@ export function renderHome(
   account: AccountInfo,
   selected: string,
   on: HomeHandlers,
+  active: HomeTab = "overview",
 ): void {
+  const focused = document.activeElement;
+  const focusAction =
+    focused instanceof HTMLElement && panel.contains(focused) ? focused.dataset.action : undefined;
   const { outpost } = account;
   panel.replaceChildren();
   panel.dataset.selected = selected;
@@ -252,5 +259,79 @@ export function renderHome(
       ),
     );
     panel.append(item);
+  }
+
+  const contents = [...panel.children];
+  const panes = new Map<HomeTab, HTMLElement>();
+  for (const name of ["overview", "facilities", "market", "processor", "hangar"] as const) {
+    const pane = el("div", undefined, "service-pane");
+    pane.id = `service-${name}`;
+    pane.hidden = name !== active;
+    panes.set(name, pane);
+  }
+  let group: HomeTab = "facilities";
+  for (const node of contents) {
+    if (node.tagName === "H3") {
+      if (node.textContent.startsWith("Market")) group = "market";
+      else if (node.textContent === "Processor") group = "processor";
+      else if (node.textContent.startsWith("Hangar")) group = "hangar";
+    }
+    panes.get(group)?.append(node);
+  }
+  const overview = panes.get("overview");
+  overview?.append(el("p", "HOME / OPERATIONS", "eyebrow"), el("h2", "Station overview"));
+  overview?.append(el("p", "Four berths. One expedition.", "facts"));
+  const power = el("div", undefined, "readout");
+  power.append(
+    el("span", "POWER ALLOCATION"),
+    el("strong", `${String(outpost.powerUsed)} / ${String(catalog.powerCap)}`),
+  );
+  overview?.append(power);
+  const meter = el("meter");
+  meter.min = 0;
+  meter.max = catalog.powerCap;
+  meter.value = outpost.powerUsed;
+  meter.setAttribute("aria-label", "Station power allocation");
+  overview?.append(meter, el("h3", "Construction sockets"));
+  for (const socket of outpost.sockets) {
+    const name = catalog.facilities.find((f) => f.id === socket.facility)?.name;
+    const open = socketView(catalog, account, socket.id);
+    const select = button(
+      `SOCKET ${socket.id.toUpperCase()} / ${name ?? open.state}`,
+      `overview:${socket.id}`,
+      () => {
+        on.select(socket.id);
+      },
+    );
+    select.className = "socket-card";
+    overview?.append(select);
+  }
+  overview?.append(
+    el(
+      "p",
+      "Select a socket to inspect its capabilities and configure the next expedition.",
+      "facts",
+    ),
+  );
+  const navigation = el("nav", undefined, "service-nav");
+  navigation.setAttribute("aria-label", "Station services");
+  ["overview", "facilities", "market", "processor", "hangar"].forEach((name, index) => {
+    const tab = name as HomeTab;
+    const control = button(`${String(index + 1).padStart(2, "0")}  ${name}`, `view:${name}`, () => {
+      on.tab(tab);
+    });
+    control.setAttribute("aria-current", name === active ? "page" : "false");
+    control.setAttribute("aria-controls", `service-${name}`);
+    navigation.append(control);
+  });
+  panel.replaceChildren(navigation, ...panes.values());
+  panel.dataset.view = active;
+  if (focusAction) {
+    const replacement = [...panel.querySelectorAll<HTMLButtonElement>("button[data-action]")].find(
+      (control) => control.dataset.action === focusAction,
+    );
+    if (replacement && !replacement.disabled && !replacement.closest("[hidden]")) {
+      replacement.focus({ preventScroll: true });
+    }
   }
 }
