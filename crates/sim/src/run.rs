@@ -575,8 +575,11 @@ impl Run {
         let opening = options
             .opening_threat
             .unwrap_or_else(|| run.site.opening_threat());
-        run.place_opening_threat(opening);
+        // Wardens first: when the NPC cap binds, the nest stays fully guarded
+        // and the opening threat takes what room is left (code review
+        // question 2, the owner's rule). Waves past the cap are dropped.
         run.place_nest();
+        run.place_opening_threat(opening);
         (run, ships)
     }
 
@@ -1611,7 +1614,8 @@ impl Run {
         let share = self.site.values.dominant.drone_share();
         let ore = self.site.pockets[0].template;
         let (cx, cz) = self.site.template.centre;
-        for i in 0..count.min(MAX_NPCS as u32) {
+        let room = MAX_NPCS.saturating_sub(self.npc_count()) as u32;
+        for i in 0..count.min(room) {
             let angle = rng.between(0.0, std::f32::consts::TAU);
             if rng.unit() < share {
                 // Drones gather in the ore field (design section 10).
@@ -2312,6 +2316,29 @@ mod tests {
     }
 
     #[test]
+    fn when_the_npc_cap_binds_the_wardens_are_placed_first() {
+        // Tier III, four pilots, the nest open: nine wardens and an opening
+        // threat of eighteen do not fit in twenty-four.
+        let site = Site::generate(
+            COMPACT_SITE,
+            4,
+            ThreatTier::III,
+            4,
+            &[Capability::BreachNest],
+        );
+        let (run, _) = Run::launch(site, 4, Options::default());
+        let count = |kind| run.world.ships().iter().filter(|s| s.kind == kind).count();
+        assert_eq!(count(ShipKind::Warden), 9);
+        let npcs = run
+            .world
+            .ships()
+            .iter()
+            .filter(|s| s.kind != ShipKind::Pilot)
+            .count();
+        assert_eq!(npcs, MAX_NPCS, "the opening threat fills what room is left");
+    }
+
+    #[test]
     fn tier_one_npcs_are_slower_than_a_pilot_and_hit_half_as_hard() {
         let pilot_speed = ShipKind::Pilot.profile().handling.max_speed;
         for tier in ThreatTier::ALL {
@@ -2936,9 +2963,9 @@ mod tests {
     }
 
     #[test]
-    fn wardens_the_npc_cap_leaves_room_for_still_stand_all_round_the_core() {
-        // Tier III with four pilots plans nine wardens, and the opening
-        // threat leaves the cap room for fewer.
+    fn wardens_stand_evenly_all_round_the_core() {
+        // Tier III with four pilots plans nine wardens; placed before the
+        // opening threat, all nine stand, evenly spaced.
         let site = Site::generate(
             COMPACT_SITE,
             35,
@@ -2955,11 +2982,7 @@ mod tests {
             .filter(|ship| ship.kind == ShipKind::Warden)
             .map(|ship| (ship.state.z - core.z).atan2(ship.state.x - core.x))
             .collect();
-        assert!(
-            (2..9).contains(&bearings.len()),
-            "{} wardens: the cap should bind here",
-            bearings.len()
-        );
+        assert_eq!(bearings.len(), 9, "the cap no longer cuts the wardens");
         bearings.sort_by(f32::total_cmp);
         let even = std::f32::consts::TAU / bearings.len() as f32;
         let last = bearings[bearings.len() - 1];
