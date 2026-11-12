@@ -547,6 +547,27 @@ meter {
     monospace;
   white-space: nowrap;
 }
+/* A marker chooses where the jump drive goes: a 44 px target whatever its drawn size. */
+.nav-marker {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.nav-marker::before {
+  content: "";
+  position: absolute;
+  inset: -12px -4px;
+}
+.nav-marker[data-selected="true"] {
+  border-color: var(--orange);
+  color: #fff3df;
+}
+.nav-marker[data-selected="true"]::after {
+  content: " · J";
+  color: var(--orange);
+}
+.nav-marker[data-jumping="true"] {
+  background: #3a2410e0;
+}
 .nav-arrow {
   display: inline-block;
 }

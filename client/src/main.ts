@@ -43,6 +43,7 @@ import {
 } from "./game/contract";
 import type { Contract, Joined, Scanned } from "./game/contract";
 import { Pulse, gauges } from "./game/gauges";
+import { CANCEL_TEXT, JumpDrive, REFUSAL_TEXT, markerOf } from "./game/jump";
 import type { GaugeKey } from "./game/gauges";
 import {
   SignInRefusedError,
@@ -454,6 +455,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   let selectedTier = 1;
   let contract: Contract | null = null;
   let reveal: Scanned | null = null;
+  /** The marker chosen for the jump drive, and any spool in progress. */
+  const jumpDrive = new JumpDrive();
   /**
    * The camera moving between the station and the ship, when a run begins or ends. It starts
    * `from` this far from the station's centre, so it holds if the next dock moves the station.
@@ -642,6 +645,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     life?.session.retire();
     life = beginLife(connection, joined, loaded);
     reveal = null;
+    jumpDrive.reset();
     selection.release();
     delete briefing.dataset.state;
     briefing.replaceChildren();
@@ -711,6 +715,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         if (outpost) glide = { from: target.clone().sub(outpost.centre), toStation: true, t: 0 };
         life?.session.retire();
         life = null;
+        jumpDrive.reset();
         selection.release();
         showSummary(message.summary);
         homeChanged();
@@ -744,6 +749,19 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       }
       case "extractRefused":
         showNotice(refusalText(message.reason));
+        break;
+      case "jumpSpooling":
+        jumpDrive.spooling(message.target, message.seconds, performance.now());
+        break;
+      case "jumpRefused":
+        showNotice(REFUSAL_TEXT[message.reason]);
+        break;
+      case "jumpCancelled":
+        jumpDrive.ended();
+        showNotice(CANCEL_TEXT[message.reason]);
+        break;
+      case "jumped":
+        jumpDrive.ended();
         break;
       case "limitWarning":
         showNotice(`The instance ends in ${String(Math.round(message.secondsLeft / 60))} minutes`);
@@ -796,6 +814,10 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       send({ type: "vent" });
     } else if (event.code === "KeyC") {
       send({ type: "scan" });
+    } else if (event.code === "KeyJ") {
+      const action = jumpDrive.press(life.joined.site.pockets);
+      if (action) send({ type: "jump", target: action.jump });
+      else showNotice("Jump drive: click the Dock or a pocket marker to choose where to jump");
     }
   });
   const target = new Vector3();
@@ -922,7 +944,19 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       let drawn = markers.get(marker.id);
       if (!drawn) {
         const node = element("div", undefined, "nav-marker");
-        node.dataset.target = marker.id;
+        const id = marker.id;
+        node.dataset.target = id;
+        // A click or tap chooses where J jumps; a right click chooses and jumps at once.
+        node.addEventListener("click", (event) => {
+          event.stopPropagation();
+          jumpDrive.toggle(id);
+        });
+        node.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          jumpDrive.selected = id;
+          const action = life ? jumpDrive.press(life.joined.site.pockets) : null;
+          if (action?.jump) send({ type: "jump", target: action.jump });
+        });
         const arrow = element("span", undefined, "nav-arrow");
         arrow.textContent = "➤";
         nav.append(node);
@@ -936,6 +970,12 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         node.dataset.onScreen = String(marker.onScreen);
         node.replaceChildren(...(marker.onScreen ? [label] : [arrow, " ", label]));
       }
+      // Marker nodes have no id, so they keep their own keys in `written`.
+      const selected = String(jumpDrive.selected === marker.id);
+      if (written.changed(`${place}.selected`, selected)) node.dataset.selected = selected;
+      const spool = jumpDrive.spool;
+      const jumping = String(spool !== null && markerOf(spool.target, site.pockets) === marker.id);
+      if (written.changed(`${place}.jumping`, jumping)) node.dataset.jumping = jumping;
       const turned = `rotate(${marker.angle.toFixed(2)}rad)`;
       if (written.changed(`${place}.arrow`, turned)) arrow.style.transform = turned;
       const text = `${marker.label} · ${distanceText(marker.distance)}`;
@@ -1121,7 +1161,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           `Ship ${String(session.shipId)} · ` +
             `round trip ${session.roundTripMs === null ? "–" : `${session.roundTripMs.toFixed(0)} ms`} · ` +
             `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm · ` +
-            `W A S D fly · Shift cruise · Tab lock · Space fire · X extract · V vent · C scan`,
+            `W A S D fly · Shift cruise · J jump · Tab lock · Space fire · X extract · V vent · C scan`,
         );
       }
       const status = current.own;
@@ -1142,7 +1182,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         setData(run, "phase", status.phase);
         setData(run, "cargo", String(status.cargo));
         setData(run, "extractor", status.extractor);
-        setText(run, runLine(status) + hint);
+        const jumpLine = jumpDrive.line(now, current.joined.site.pockets);
+        setText(run, runLine(status) + hint + (jumpLine ? ` · ${jumpLine}` : ""));
         setData(shipPanel, "active", "true");
         for (const gauge of gauges(
           status,
