@@ -172,9 +172,11 @@ Decided:
 - Wire format: JSON on reliable streams for everything except snapshots, which are compact binary
   datagrams. A transport spike (removed; in Git history at commit 3d37c06) showed why: on a
   lossy link, large reliable messages hitch whether or not each has its own stream.
-- Identity: passkeys (WebAuthn), through webauthn-rs. On the playtest machines the owner
-  provides, each tester has their own operating-system account, which holds their passkey.
-  Passkeys need a domain name, so the game is opened at `localhost`, never `127.0.0.1`.
+- Identity: passkeys (WebAuthn), through webauthn-rs. Each tester's passkey lives on their own
+  device, in their operating system or password manager, and is bound to the name they play at:
+  `outpost.zwaliebaba.com` hosted, `localhost` locally, so a passkey made in one does not work in
+  the other. Passkeys need a domain name, so local play is opened at `localhost`, never
+  `127.0.0.1`.
 - Persistence: embedded SQLite, with an append-only ledger beside the saves. Stage 1 data may be
   wiped; saves are still versioned.
 - Prediction: the browser runs `frontier-sim`'s movement rules compiled to WebAssembly.
