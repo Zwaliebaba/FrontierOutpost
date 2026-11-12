@@ -42,6 +42,8 @@ only have to create the conditions for them, and not spoil them.
 
 - Each tester has their own operating-system account on the machine they use. Their passkey
   lives there (AGENTS.md §8), so a tester always signs in on the same machine and account.
+- On the owner's own network only (AGENTS.md §8). A self-signed certificate, trusted on each
+  machine, is enough; the code review's hardening for outside clients stays deferred.
 - A Chromium-based browser (the only one tested), with the server's certificate trusted and the
   server reachable by name.
 - Mouse and keyboard; sound as the owner prefers, the same for everyone.
@@ -52,14 +54,30 @@ only have to create the conditions for them, and not spoil them.
 ```sh
 export FRONTIER_DATA=data/playtest.db                 # the server, wipe and report all use it
 cargo run --release -p frontier-server -- wipe        # an empty world, once, before session 1
+FRONTIER_SEEDS=9,10,20,16,8,3,5 \
 FRONTIER_ORIGIN=https://<host name> \
 cargo run --release -p frontier-server
 ```
 
 - No `FRONTIER_GRANT`, `FRONTIER_TIERS`, `FRONTIER_NPCS` or `FRONTIER_SITE`: testers play the real
   economy, tiers and site.
-- **Open: the seed policy.** Without `FRONTIER_SEED` every contract has a random seed, so no two
-  testers share one and gate 1's and gate 3's same-seed measures have no data. See §8.
+- **Seeds by run number.** `FRONTIER_SEEDS` gives a tester's Nth run the Nth seed of the pool,
+  wrapping after seven, so every tester flies the same site on the same run number, and runs 3
+  and 10 share a seed. That feeds gate 1's and gate 3's same-seed measures; random seeds would
+  leave them empty. The pool spans every hazard and threat type, and puts the rich pocket in
+  each of the four pockets at least once:
+
+  | Run | Seed | Hazard | Dominant threat | Rich pocket |
+  | --- | --- | --- | --- | --- |
+  | 1, 8 | 9 | Thermal flare | Balanced | Ore field |
+  | 2, 9 | 10 | Debris drift | Balanced | Volatile veins |
+  | 3, 10 | 20 | Ion fog | Raiders | Volatile veins |
+  | 4 | 16 | Debris drift | Drones | Nest core |
+  | 5 | 8 | Thermal flare | Raiders | Derelict |
+  | 6 | 3 | Ion fog | Drones | Derelict |
+  | 7 | 5 | Ion fog | Balanced | Ore field |
+
+  A crew flies its host's seed, so a member's run number and seed can differ in paired sessions.
 - Copy `data/playtest.db` somewhere safe after each day's sessions. Stage 1 data may be wiped,
   but losing it mid-playtest loses the measures.
 - Check the build once on the playtest machines: sign up, launch, extract a unit, jump, dock.
@@ -160,18 +178,20 @@ After the last session, also ask:
 6. Would you play this again if it were available? What would make you?
 7. If you described this game to a friend, what would you say it is?
 
-## 8. Open items for the owner
+## 8. Decisions and open items
 
-1. **Seed policy.** Same-seed measures need testers on shared seeds. Options: one fixed seed for
-   the whole playtest; a small pool of seeds assigned by run number, so every tester's run 3 shares
-   a seed (with seven seeds, run 3 and run 10 even share the same one); or random seeds, giving up
-   those measures.
-2. **Veteran and newcomer pairing.** Recruit two extra newcomers for the second week, or skip it
+Decided by the owner on 12 November 2026:
+
+- **Seeds:** a pool of seven by run number (§3).
+- **Network:** the owner's own network only (§3).
+- **NPC cap:** wardens are placed first; the rest of a full instance's NPCs are dropped (design
+  §10). It only binds for large crews at tier III.
+- **Launch price:** goods queued for processing count toward it, like stock (design §10).
+
+Open:
+
+1. **Veteran and newcomer pairing.** Recruit two extra newcomers for the second week, or skip it
    in the first playtest (§2).
-3. **The review's open questions** (2026-11-11 code review §8): what happens when the NPC cap
-   binds, whether queued processing counts toward the launch price, and which gate admits clients
-   the owner does not control. The last one decides whether the review's §4 hardening is due
-   before testers connect over a network the owner does not fully control.
 
 ## 9. After the playtest
 

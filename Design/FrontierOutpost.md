@@ -259,7 +259,7 @@ Alert also rises by one each time any extractor cuts out on heat. Each alert ste
 
 The optional two-place objective is a relay link: two relays in different pockets must each be held by a ship for the same 30 seconds. It adds 50% to the contract payout.
 
-**Threats and crew scaling (placeholders).** Provisional caps are 24 NPCs and 64 projectiles alive in one instance; these are the benchmark targets of §5.
+**Threats and crew scaling (placeholders).** Provisional caps are 24 NPCs and 64 projectiles alive in one instance; these are the benchmark targets of §5. When the NPC cap binds, wardens are placed first, so the nest is always fully guarded; the opening threat takes the room left, and NPCs of a wave that do not fit are dropped.
 
 | NPC | Behaviour |
 |---|---|
@@ -275,7 +275,7 @@ The optional two-place objective is a relay link: two relays in different pocket
 
 Threat never scales with experience or fittings. The contract payout, the nest bounty and the relay bonus form one pot, split equally unless the host changes the split before launch. Cargo belongs to the ship that docks with it.
 
-**Prices, recipes and costs (placeholders).** Prices are fixed and posted. The starting balance is 100 cr and each launch costs each pilot 40 cr in supplies.
+**Prices, recipes and costs (placeholders).** Prices are fixed and posted. The starting balance is 100 cr and each launch costs each pilot 40 cr in supplies. A pilot short of 40 cr who holds goods, in stock or queued for processing, sells first; one whose credits and goods together fall short launches for the credits they have, so nobody is stranded.
 
 | Good | NPC buys at | NPC sells at |
 |---|---|---|

@@ -51,6 +51,7 @@ FRONTIER_IMPAIR_DELAY_MS=75 cargo run -p frontier-server   # add delay (and _JIT
 FRONTIER_SITE=compact cargo run -p frontier-server        # short legs for trying the loop (default: frontier)
 FRONTIER_TIERS=3 cargo run -p frontier-server             # open tiers II and III before facilities exist
 FRONTIER_SEED=29 cargo run -p frontier-server             # every contract on one seed (the e2e tests use 29)
+FRONTIER_SEEDS=9,10,20,16,8,3,5 cargo run -p frontier-server # seeds by run number: the playtest's pool
 FRONTIER_NPCS=24 cargo run -p frontier-server             # opening threat at the NPC cap (frame time shows in the client)
 FRONTIER_DATA=/tmp/w.db cargo run -p frontier-server     # where saves go (default data/frontier.db)
 FRONTIER_ORIGIN=https://host cargo run -p frontier-server # the page origin passkeys bind to (default http://localhost:<port>)
@@ -176,6 +177,8 @@ Decided:
 - Persistence: embedded SQLite, with an append-only ledger beside the saves. Stage 1 data may be
   wiped; saves are still versioned.
 - Prediction: the browser runs `frontier-sim`'s movement rules compiled to WebAssembly.
-- Hosting for Stage 1: the owner's machine. Testers play on machines the owner provides.
+- Hosting for Stage 1: the owner's machine. Testers play on machines the owner provides, on the
+  owner's own network. The hardening the 2026-11-11 code review lists for clients the owner does
+  not control (its §4) stays deferred until a build is reachable from outside that network.
 - Licence: all rights reserved for now (`LICENSE`).
 - Art for Stage 1: sockets and facility modules come from `create_scene.py`, not primitives.
