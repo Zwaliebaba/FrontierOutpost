@@ -29,6 +29,7 @@ import { stationLights } from "../view/lights";
 import { between, createRng } from "../view/rng";
 import {
   BOLT,
+  RENDER_HEIGHT,
   STRUCTURE_STENCIL,
   linear,
   lockBracket,
@@ -52,6 +53,10 @@ export const SIZE: Readonly<Record<EntityKind, number>> = {
 const BLAST = linear(1, 0.6, 0.2);
 const X_AXIS = new Vector3(1, 0, 0);
 const LANDMARK_SEED = 2266;
+/** The extractor beam's coloured edge, metres across: thinner than a bolt, which it is not. */
+const BEAM_WIDTH = 0.2;
+/** How high in a full deposit's crystals the beam ends, metres. */
+const BEAM_END_HEIGHT = 0.6;
 
 /**
  * Deposit crystals by material. None is orange or cyan, the signal colours, and each also has
@@ -116,10 +121,12 @@ export class ExpeditionScene {
     this.#dock.name = "dock";
     // The style guide's rule for effects: a bright core in a coloured edge.
     this.#beam = new Mesh(
-      new BoxGeometry(1, 0.32, 0.32),
-      new MeshBasicMaterial({ transparent: true, opacity: 0.55 }),
+      new BoxGeometry(1, BEAM_WIDTH, BEAM_WIDTH),
+      new MeshBasicMaterial({ transparent: true, opacity: 0.5 }),
     );
-    this.#beam.add(new Mesh(new BoxGeometry(1, 0.1, 0.1), new MeshBasicMaterial()));
+    this.#beam.add(
+      new Mesh(new BoxGeometry(1, BEAM_WIDTH / 3, BEAM_WIDTH / 3), new MeshBasicMaterial()),
+    );
     this.#beam.name = "extractor beam";
     this.#beam.visible = false;
     this.scene.add(this.#bracket, this.#site, this.#dock, this.#beam);
@@ -140,9 +147,11 @@ export class ExpeditionScene {
       this.#beam.visible = false;
       return;
     }
-    // From where bolts leave the hull, down to the crystals.
-    const start = new Vector3(from.x, SHIP_HEIGHT / 2, from.z);
-    const end = drawn.group.position.clone().setY(0.6);
+    // From the keel, so the hull hides the beam beneath it and the beam leaves from under the
+    // ship's edge. Started at bolt height it lay along the roof, drawn across the hull.
+    const start = new Vector3(from.x, RENDER_HEIGHT - SHIP_HEIGHT / 2, from.z);
+    // Into the crystals, which shrink as the deposit empties.
+    const end = drawn.group.position.clone().setY(BEAM_END_HEIGHT * drawn.group.scale.y);
     const length = start.distanceTo(end);
     if (length < 1e-3) {
       this.#beam.visible = false;
