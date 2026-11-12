@@ -369,7 +369,8 @@ struct PilotRun {
     extractor: Extractor,
     scan: Option<u32>,
     pocket: Option<usize>,
-    intercepted: bool,
+    /// Thirds of cargo capacity that interceptors have already answered.
+    intercepted: u32,
     undocked_at: Option<u32>,
     first_pocket_at: Option<u32>,
     last_pocket_exit_at: Option<u32>,
@@ -433,7 +434,12 @@ pub struct PilotCheckpoint {
     pub undocked_at: Option<u32>,
     pub first_pocket_at: Option<u32>,
     pub last_pocket_exit_at: Option<u32>,
+    /// Whether any interception was planned: what a checkpoint from before
+    /// `intercepted_thirds` holds.
     pub intercepted: bool,
+    /// Thirds of cargo capacity that interceptors have already answered.
+    #[serde(default)]
+    pub intercepted_thirds: Option<u32>,
     /// The rigs and modules flown, by identifier.
     #[serde(default)]
     pub fitted: Vec<String>,
@@ -527,7 +533,7 @@ impl Run {
                     extractor: Extractor::default(),
                     scan: None,
                     pocket: None,
-                    intercepted: false,
+                    intercepted: 0,
                     undocked_at: None,
                     first_pocket_at: None,
                     last_pocket_exit_at: None,
@@ -682,7 +688,7 @@ impl Run {
             extractor: Extractor::default(),
             scan: None,
             pocket: None,
-            intercepted: false,
+            intercepted: 0,
             undocked_at: None,
             first_pocket_at: None,
             last_pocket_exit_at: None,
@@ -1179,7 +1185,8 @@ impl Run {
                         undocked_at: pilot.undocked_at,
                         first_pocket_at: pilot.first_pocket_at,
                         last_pocket_exit_at: pilot.last_pocket_exit_at,
-                        intercepted: pilot.intercepted,
+                        intercepted: pilot.intercepted > 0,
+                        intercepted_thirds: Some(pilot.intercepted),
                         fitted: pilot.fitted.clone(),
                     }
                 })
@@ -1239,7 +1246,13 @@ impl Run {
                     extractor: Extractor::default(),
                     scan: None,
                     pocket: None,
-                    intercepted: saved.intercepted,
+                    // An older checkpoint knows only that an interception
+                    // happened: count the cargo then carried as answered.
+                    intercepted: saved.intercepted_thirds.unwrap_or(if saved.intercepted {
+                        thirds(saved.cargo.iter().sum(), saved.capacity)
+                    } else {
+                        0
+                    }),
                     undocked_at: saved.undocked_at,
                     first_pocket_at: saved.first_pocket_at,
                     last_pocket_exit_at: saved.last_pocket_exit_at,
@@ -1779,13 +1792,14 @@ impl Run {
     /// On the return leg one raider intercepts for each full third of cargo
     /// capacity carried (design section 10), once per pilot.
     fn intercept(&mut self, index: usize) {
-        if self.pilots[index].intercepted {
-            return;
-        }
-        self.pilots[index].intercepted = true;
         let pilot = &self.pilots[index];
-        let raiders = pilot.total() * 3 / pilot.capacity.max(1);
+        let carried = thirds(pilot.total(), pilot.capacity);
+        // Only cargo no earlier interception answered draws raiders: leaving
+        // the site empty first does not spend the ambush.
+        let raiders = carried.saturating_sub(pilot.intercepted);
+        let answered = pilot.intercepted.max(carried);
         let ship = pilot.ship;
+        self.pilots[index].intercepted = answered;
         let Some(state) = self.world.ship(ship).map(|s| s.state) else {
             return;
         };
@@ -2026,6 +2040,11 @@ fn berth(site: &Site, index: u32) -> (f32, f32) {
     (dx + heading.sin() * offset, dz - heading.cos() * offset)
 }
 
+/// Full thirds of `capacity` that `cargo` fills: one return-leg raider each.
+fn thirds(cargo: u32, capacity: u32) -> u32 {
+    cargo * 3 / capacity.max(1)
+}
+
 /// How long a scan takes in `fitting`.
 fn scan_ticks(fitting: &Fitting) -> u32 {
     // A few hundred ticks, so `as` loses nothing.
@@ -2106,6 +2125,54 @@ mod tests {
         let deposit = run.site.deposits[0];
         place(run, ship, (deposit.x, deposit.z));
         run.step();
+    }
+
+    #[test]
+    fn leaving_the_site_empty_first_does_not_spend_the_ambush() {
+        let raiders = |run: &Run| {
+            run.world
+                .ships()
+                .iter()
+                .filter(|s| s.kind == ShipKind::Raider)
+                .count()
+        };
+        let (mut run, ship) = quiet(6);
+        at_deposit(&mut run, ship);
+        // Out of the site with nothing: the return leg starts, no raiders.
+        place(&mut run, ship, (-80.0, 0.0));
+        run.step();
+        assert!(events(&mut run).contains(&RunEvent::ReturnLeg { pilot: ship }));
+        assert_eq!(raiders(&run), 0);
+        // Back in, laden, and out again: two thirds full, two raiders.
+        at_deposit(&mut run, ship);
+        run.pilots[0].cargo = [14, 0, 0];
+        place(&mut run, ship, (-80.0, 0.0));
+        run.step();
+        assert!(events(&mut run).contains(&RunEvent::Intercepted {
+            pilot: ship,
+            raiders: 2
+        }));
+        assert_eq!(raiders(&run), 2);
+        // The same cargo out a third time draws no more.
+        at_deposit(&mut run, ship);
+        place(&mut run, ship, (-80.0, 0.0));
+        run.step();
+        assert!(events(&mut run).contains(&RunEvent::ReturnLeg { pilot: ship }));
+        assert_eq!(raiders(&run), 2);
+    }
+
+    #[test]
+    fn an_older_checkpoint_counts_its_interception_as_answered() {
+        let (mut run, ship) = quiet(6);
+        at_deposit(&mut run, ship);
+        run.pilots[0].cargo = [14, 0, 0];
+        place(&mut run, ship, (-80.0, 0.0));
+        run.step();
+        let mut checkpoint = run.checkpoint();
+        assert_eq!(checkpoint.crew[0].intercepted_thirds, Some(2));
+        checkpoint.crew[0].intercepted_thirds = None;
+        let restored = Run::restore(&checkpoint).unwrap();
+        assert_eq!(restored.pilots[0].intercepted, 2);
     }
 
     #[test]
