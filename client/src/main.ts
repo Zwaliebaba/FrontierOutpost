@@ -74,8 +74,11 @@ const GLIDE_SECONDS = 0.9;
 
 const PICK_RADIUS_PX = 24;
 const KEY_TURN_RATE = 1.6;
-/** Room kept clear for the HUD lines at the top, and the ship gauges and lines at the bottom. */
-const NAV_INSETS = { top: 150, right: 12, bottom: 240, left: 12 };
+/** Room kept clear for the bar and lock line at the top, and the gauges and lines at the bottom. */
+const NAV_INSETS = { top: 96, right: 12, bottom: 226, left: 12 };
+/** The flight keys, shown in the footer for as long as a run lasts. */
+const FLIGHT_KEYS =
+  "W A S D fly · Shift cruise · J jump · Tab lock · Space fire · X extract · V vent · C scan";
 const NOTICE_MS = 4_000;
 /** How soon a dropped connection is retried, and how often an unreachable server. */
 const RECONNECT_MS = 1_500;
@@ -116,13 +119,19 @@ const accountLine = line("account");
 const command = element("header", "command");
 const brand = element("div", undefined, "brand");
 brand.innerHTML =
-  '<span class="insignia" aria-hidden="true">⌃</span><strong>FRONTIER / OUTPOST</strong><span class="command-title">STATION COMMAND</span>';
-command.append(brand, status);
+  '<span class="insignia" aria-hidden="true">⌃</span><strong>FRONTIER / OUTPOST</strong>';
+// One bar: the brand, what the pilot holds, and the connection.
+command.append(brand, accountLine, status);
 const utility = element("footer", "utility");
 utility.textContent = "HOME OUTPOST   /   BERTHS 07–10";
 const cameraHints = element("span");
 cameraHints.textContent = "SCROLL  Zoom   /   RMB  Orbit   /   R  Reset";
-utility.append(cameraHints, sim);
+// In flight the footer carries the keys. The link's diagnostics stay in the page for the
+// browser tests, out of sight: nobody flies by a round trip in milliseconds.
+const hudKeys = element("span", undefined, "hud-keys");
+const hudDiagnostics = element("span", undefined, "diagnostic");
+hud.append(hudKeys, hudDiagnostics);
+utility.append(hud, cameraHints, sim);
 document.body.append(command, utility);
 const stationLabels = element("div", "station-labels");
 document.body.append(stationLabels);
@@ -824,7 +833,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
 
   const resize = () => {
     const width = window.innerWidth;
-    const panels = life ? 0 : width <= 1100 ? 490 : 580;
+    // The home and briefing panels with their margins (command.css).
+    const panels = life ? 0 : width <= 1100 ? 516 : 662;
     const available = Math.max(width * 0.35, width - panels);
     view.resize(width, window.innerHeight, (viewWidth * width * (life ? 1 : 0.8)) / available);
   };
@@ -1172,13 +1182,14 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       // Round trip and correction waver from frame to frame; nobody reads them that fast.
       if (now - hudLineAt >= HUD_LINE_MS) {
         hudLineAt = now;
-        setText(
-          hud,
-          `Ship ${String(session.shipId)} · ` +
-            `round trip ${session.roundTripMs === null ? "–" : `${session.roundTripMs.toFixed(0)} ms`} · ` +
-            `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm · ` +
-            `W A S D fly · Shift cruise · J jump · Tab lock · Space fire · X extract · V vent · C scan`,
-        );
+        const diagnostics =
+          ` · Ship ${String(session.shipId)} · ` +
+          `round trip ${session.roundTripMs === null ? "–" : `${session.roundTripMs.toFixed(0)} ms`} · ` +
+          `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm`;
+        if (written.changed("hud.keys", FLIGHT_KEYS)) hudKeys.textContent = FLIGHT_KEYS;
+        if (written.changed("hud.diagnostics", diagnostics)) {
+          hudDiagnostics.textContent = diagnostics;
+        }
       }
       const status = current.own;
       if (status) {
@@ -1234,7 +1245,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       setData(shipPanel, "active", null);
       setData(hud, "x", null);
       hudLineAt = Number.NEGATIVE_INFINITY;
-      setText(hud, "");
+      if (written.changed("hud.keys", "")) hudKeys.textContent = "";
+      if (written.changed("hud.diagnostics", "")) hudDiagnostics.textContent = "";
       setText(run, "");
       setText(scan, "");
       drawNav({ x: 0, z: 0 });

@@ -315,9 +315,9 @@ export function renderHome(
   );
   const navigation = el("nav", undefined, "service-nav");
   navigation.setAttribute("aria-label", "Station services");
-  ["overview", "facilities", "market", "processor", "hangar"].forEach((name, index) => {
+  ["overview", "facilities", "market", "processor", "hangar"].forEach((name) => {
     const tab = name as HomeTab;
-    const control = button(`${String(index + 1).padStart(2, "0")}  ${name}`, `view:${name}`, () => {
+    const control = button(name, `view:${name}`, () => {
       on.tab(tab);
     });
     control.setAttribute("aria-current", name === active ? "page" : "false");
