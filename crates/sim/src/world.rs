@@ -285,6 +285,17 @@ impl World {
         self.ships.iter_mut().find(|ship| ship.id == id)
     }
 
+    /// Moves a ship to `state` at once: a jump. Returns whether it exists.
+    pub fn set_state(&mut self, id: ShipId, state: ShipState) -> bool {
+        match self.ships.iter_mut().find(|ship| ship.id == id) {
+            Some(ship) => {
+                ship.state = state;
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Sets the cargo a ship carries. Returns whether it exists.
     pub fn set_cargo(&mut self, id: ShipId, cargo: u32) -> bool {
         match self.ships.iter_mut().find(|ship| ship.id == id) {

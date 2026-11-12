@@ -1,4 +1,19 @@
-import { expect, launch, position, signUp, test } from "./fixtures";
+import { QUIET, expect, launch, position, signUp, test } from "./fixtures";
+
+test("flight input continues when drawing is paused", async ({ page }) => {
+  await launch(page, QUIET);
+  const start = await position(page);
+  await page.evaluate(() => {
+    window.requestAnimationFrame = () => 0;
+  });
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(2_000);
+  await page.keyboard.up("KeyW");
+  // Rejoin to read the authoritative position; the paused renderer cannot update its HUD.
+  await page.reload();
+  await page.locator("#hud[data-x]").waitFor();
+  expect((await position(page)).x - start.x).toBeGreaterThan(5);
+});
 
 test("the briefing shows the contract and opens only tier I", async ({ page }) => {
   await signUp(page);

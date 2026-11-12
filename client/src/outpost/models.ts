@@ -10,7 +10,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import facilitiesUrl from "../../../Design/FrontierOutpost/facilities.glb?url";
 import frigateUrl from "../../../Design/FrontierOutpost/frigate.glb?url";
 import stationUrl from "../../../Design/FrontierOutpost/station.glb?url";
-import { frigateModel } from "../view/frigate";
+import { frigateModel, gearOf } from "../view/frigate";
 
 export interface OutpostModels {
   /** The station, its root at the origin. Sockets are among its descendants. */
@@ -44,17 +44,21 @@ export class ModelError extends Error {
  * every mesh is a draw call, every frame, though none of them ever moves. Merged, it is the
  * same triangles in ten calls (style guide section 9: combine parts when preparing engine
  * assets). Nodes that are not meshes, the socket anchors among them, stay where they are.
+ * `preserved` keeps moving parts such as landing gear independently transformable.
  *
  * Left alone, and still drawn singly: a mesh with several materials, with children of its own,
  * or mirrored by a negative scale, whose faces baking would turn inside out. The committed
  * exports have none of these.
  */
-export function mergeByMaterial(root: Object3D): void {
+export function mergeByMaterial(
+  root: Object3D,
+  preserved: ReadonlySet<Object3D> = new Set(),
+): void {
   root.updateMatrixWorld(true);
   const toRoot = root.matrixWorld.clone().invert();
   const batches = new Map<string, { material: Material; meshes: Mesh[] }>();
   root.traverse((node) => {
-    if (!(node instanceof Mesh) || node.children.length > 0) return;
+    if (!(node instanceof Mesh) || node.children.length > 0 || preserved.has(node)) return;
     const material = node.material as Material | Material[];
     if (Array.isArray(material) || node.matrixWorld.determinant() < 0) return;
     // Geometries merge only when they carry the same attributes.
@@ -145,5 +149,9 @@ export function loadOutpostModels(): Promise<LoadedModels> {
 
 /** Loads the starter frigate on its own, for the greybox. */
 export async function loadFrigate(): Promise<Object3D> {
-  return frigateModel(await fetchGlb(frigateUrl));
+  const ship = frigateModel(await fetchGlb(frigateUrl));
+  // Four roster ships should not multiply every authored plate into a draw call.
+  // Landing gear keeps its own transforms so deployment still animates.
+  mergeByMaterial(ship, new Set(gearOf(ship)));
+  return ship;
 }

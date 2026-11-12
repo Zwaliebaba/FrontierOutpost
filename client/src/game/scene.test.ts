@@ -56,6 +56,46 @@ describe("allegianceOf", () => {
 });
 
 describe("ExpeditionScene", () => {
+  it("draws the extractor beam from the ship to the deposit being worked", () => {
+    const world = new ExpeditionScene(1);
+    world.setSite(
+      SITE,
+      [],
+      [
+        { x: 40, z: 0, pocket: 0, material: "ore", units: 8 },
+        { x: 50, z: 10, pocket: 0, material: "ore", units: 8 },
+      ],
+    );
+    expect(world.beam.visible).toBe(false);
+    world.setBeam({ x: 46, z: 10 }, 1);
+    expect(world.beam.visible).toBe(true);
+    expect(world.beam.position.x).toBeCloseTo(48);
+    expect(world.beam.position.z).toBeCloseTo(10);
+    expect(world.beam.scale.x).toBeGreaterThan(4);
+    world.setBeam({ x: 46, z: 10 }, null);
+    expect(world.beam.visible).toBe(false);
+    world.setBeam({ x: 46, z: 10 }, 7);
+    expect(world.beam.visible).toBe(false);
+  });
+
+  it("leans a turning ship into the turn and levels it when the turn ends", () => {
+    const world = new ExpeditionScene(1);
+    let heading = 0;
+    world.update([pose(1, "playerShip")], null, undefined, 1 / 60);
+    for (let i = 0; i < 30; i++) {
+      heading += 2.4 / 60;
+      world.update([{ ...pose(1, "playerShip"), heading }], null, undefined, 1 / 60);
+    }
+    const drawn = world.ship(1);
+    expect(drawn?.bank).toBeGreaterThan(0.3);
+    expect(drawn?.hull.rotation.x).toBe(drawn?.bank);
+    expect(drawn?.hull.position.y).toBe(RENDER_HEIGHT);
+    for (let i = 0; i < 60; i++) {
+      world.update([{ ...pose(1, "playerShip"), heading }], null, undefined, 1 / 60);
+    }
+    expect(Math.abs(world.ship(1)?.bank ?? 1)).toBeLessThan(0.01);
+  });
+
   it("draws every ship at one height with its allegiance's shape and a silhouette", () => {
     const world = new ExpeditionScene(1);
     world.update(

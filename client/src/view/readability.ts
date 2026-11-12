@@ -224,11 +224,22 @@ export function shipMeshes(allegiance: Allegiance, scale = 1): ShipMeshes {
   return ship;
 }
 
-/** Places both meshes of a ship at the one render height, facing `heading`. */
-export function placeShip(meshes: ShipMeshes, x: number, z: number, heading: number): void {
+/**
+ * Places both meshes of a ship at the one render height, facing `heading` and leaning `bank`
+ * radians about its own length (view/bank). The lean turns the hull about its centre, so the
+ * ship stays at the one render height.
+ */
+export function placeShip(
+  meshes: ShipMeshes,
+  x: number,
+  z: number,
+  heading: number,
+  bank = 0,
+): void {
   for (const mesh of [meshes.hull, meshes.silhouette]) {
     mesh.position.set(x, RENDER_HEIGHT, z);
-    mesh.rotation.set(0, -heading, 0);
+    // Yaw first, then roll about the ship's own +x, its length.
+    mesh.rotation.set(bank, -heading, 0, "YXZ");
   }
 }
 

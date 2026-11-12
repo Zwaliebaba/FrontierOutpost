@@ -14,7 +14,7 @@ use frontier_sim::skirmish::MAX_NPCS;
 use webauthn_rs::prelude::Url;
 
 use crate::relay::Impairment;
-use crate::transport::Settings;
+use crate::transport::{SeedPool, Settings};
 
 /// Where the server listens and what it serves.
 #[derive(Debug, Clone, PartialEq)]
@@ -103,6 +103,7 @@ const IMPAIR_LOSS_PERCENT: &str = "FRONTIER_IMPAIR_LOSS_PERCENT";
 const SITE: &str = "FRONTIER_SITE";
 const TIERS: &str = "FRONTIER_TIERS";
 const SEED: &str = "FRONTIER_SEED";
+const SEEDS: &str = "FRONTIER_SEEDS";
 const NPCS: &str = "FRONTIER_NPCS";
 const DATA: &str = "FRONTIER_DATA";
 const ORIGIN: &str = "FRONTIER_ORIGIN";
@@ -130,6 +131,24 @@ fn whole(
                 })
         })
         .transpose()
+}
+
+/// Reads a comma-separated list of seeds, if the variable is set.
+fn seed_pool(lookup: &impl Fn(&str) -> Option<String>) -> Result<SeedPool, ConfigError> {
+    let Some(value) = lookup(SEEDS) else {
+        return Ok(SeedPool::default());
+    };
+    let seeds: Option<Vec<u32>> = value
+        .split(',')
+        .map(|seed| seed.trim().parse::<u32>().ok())
+        .collect();
+    seeds
+        .and_then(|seeds| SeedPool::new(&seeds))
+        .ok_or(ConfigError::Invalid {
+            name: SEEDS,
+            expected: "1 to 16 whole numbers separated by commas",
+            value,
+        })
 }
 
 impl Config {
@@ -190,6 +209,7 @@ impl Config {
                 },
                 open_tiers: whole(&lookup, TIERS, 1, 3)?.unwrap_or(1),
                 seed: whole(&lookup, SEED, 0, u32::MAX)?,
+                seed_pool: seed_pool(&lookup)?,
                 opening_threat: whole(&lookup, NPCS, 0, MAX_NPCS as u32)?,
             },
             data_path: lookup(DATA)
@@ -446,6 +466,16 @@ mod tests {
         assert_eq!(set.open_tiers, 3);
         assert_eq!(set.seed, Some(42));
         assert_eq!(set.opening_threat, Some(24));
+        let pooled = Config::from_lookup(|name| (name == SEEDS).then(|| "29, 41,77".into()))
+            .unwrap()
+            .settings;
+        assert_eq!(pooled.seed_pool, SeedPool::new(&[29, 41, 77]).unwrap());
+        assert_eq!(defaults.seed_pool, SeedPool::default());
+        for bad in ["", "1,x", "1,,2", &vec!["3"; 17].join(",")] {
+            let bad = bad.to_owned();
+            let result = Config::from_lookup(move |n| (n == SEEDS).then(|| bad.clone()));
+            assert!(result.is_err(), "{SEEDS}");
+        }
         for (name, value) in [(SITE, "huge"), (TIERS, "4"), (TIERS, "0"), (NPCS, "25")] {
             let value = value.to_owned();
             let result = Config::from_lookup(move |n| (n == name).then(|| value.clone()));

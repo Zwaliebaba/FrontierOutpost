@@ -1,5 +1,11 @@
 # Frontier Outpost on Azure
 
+> **Not the Stage 1 hosting.** Stage 1 playtests run on the owner's machines and network
+> (AGENTS.md §8). This guide prepares a hosted server for when a build is opened beyond that
+> network. Before it is reachable from the internet, do the hardening that
+> `Design/reviews/2026-11-11-code-scale-review.md` §4 lists for clients the owner does not control:
+> above all, the server's memory per connection is unbounded today.
+
 One small Linux VM runs two containers:
 
 - **Caddy** serves the page at `https://outpost.zwaliebaba.com` and gets and renews its certificate

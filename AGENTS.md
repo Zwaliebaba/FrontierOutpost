@@ -52,6 +52,7 @@ FRONTIER_IMPAIR_DELAY_MS=75 cargo run -p frontier-server   # add delay (and _JIT
 FRONTIER_SITE=compact cargo run -p frontier-server        # short legs for trying the loop (default: frontier)
 FRONTIER_TIERS=3 cargo run -p frontier-server             # open tiers II and III before facilities exist
 FRONTIER_SEED=29 cargo run -p frontier-server             # every contract on one seed (the e2e tests use 29)
+FRONTIER_SEEDS=9,10,20,16,8,3,5 cargo run -p frontier-server # seeds by run number: the playtest's pool
 FRONTIER_NPCS=24 cargo run -p frontier-server             # opening threat at the NPC cap (frame time shows in the client)
 FRONTIER_DATA=/tmp/w.db cargo run -p frontier-server     # where saves go (default data/frontier.db)
 FRONTIER_ORIGIN=https://host cargo run -p frontier-server # the page origin passkeys bind to (default http://localhost:<port>)
@@ -172,17 +173,16 @@ Decided:
 - Wire format: JSON on reliable streams for everything except snapshots, which are compact binary
   datagrams. A transport spike (removed; in Git history at commit 3d37c06) showed why: on a
   lossy link, large reliable messages hitch whether or not each has its own stream.
-- Identity: passkeys (WebAuthn), through webauthn-rs. Each tester's passkey lives on their own
-  device, in their operating system or password manager, and is bound to the name they play at:
-  `outpost.zwaliebaba.com` hosted, `localhost` locally, so a passkey made in one does not work in
-  the other. Passkeys need a domain name, so local play is opened at `localhost`, never
-  `127.0.0.1`.
+- Identity: passkeys (WebAuthn), through webauthn-rs. On the playtest machines the owner
+  provides, each tester has their own operating-system account, which holds their passkey.
+  Passkeys need a domain name, so the game is opened at `localhost`, never `127.0.0.1`.
 - Persistence: embedded SQLite, with an append-only ledger beside the saves. Stage 1 data may be
   wiped; saves are still versioned.
 - Prediction: the browser runs `frontier-sim`'s movement rules compiled to WebAssembly.
-- Hosting for Stage 1: a small Azure VM at `https://outpost.zwaliebaba.com` (`deploy/azure/`), with
-  Caddy obtaining a Let's Encrypt certificate that the game server also uses for WebTransport.
-  Cloudflare holds the DNS record, unproxied: its proxy cannot carry WebTransport. The server is
-  open to the internet. Local play on `localhost` works as before.
+- Hosting for Stage 1: the owner's machine. Testers play on machines the owner provides, on the
+  owner's own network. The hardening the 2026-11-11 code review lists for clients the owner does
+  not control (its §4) stays deferred until a build is reachable from outside that network.
+  `deploy/azure/` prepares a hosted server at `outpost.zwaliebaba.com` for when a build is opened
+  beyond that network; that review's hardening comes first.
 - Licence: all rights reserved for now (`LICENSE`).
 - Art for Stage 1: sockets and facility modules come from `create_scene.py`, not primitives.

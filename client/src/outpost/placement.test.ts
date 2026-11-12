@@ -1,7 +1,7 @@
 import { Object3D, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 import { SHIP_HEIGHT } from "../view/hulls";
-import { BERTH, STATION_DROP, placeStation } from "./placement";
+import { BERTH, BERTHS, STATION_DROP, placeStation } from "./placement";
 
 /** Where a point in station space lands once the station is placed. */
 function world(placement: ReturnType<typeof placeStation>, x: number, y: number, z: number) {
@@ -13,7 +13,7 @@ function world(placement: ReturnType<typeof placeStation>, x: number, y: number,
 }
 
 describe("placing the station at the dock", () => {
-  it("reads berth 07 from the scene's docking check", () => {
+  it("reads the apron centre from the shared berth layout", () => {
     expect(BERTH.x).toBeCloseTo(0, 3);
     expect(BERTH.z).toBeCloseTo(4.33, 2);
     expect(BERTH.deck).toBeCloseTo(0.86, 2);
@@ -38,6 +38,12 @@ describe("placing the station at the dock", () => {
       const toHub = Math.atan2(hub.z - dock.z, hub.x - dock.x);
       expect(Math.cos(toHub - toSite)).toBeCloseTo(-1, 6);
       expect(placement.heading).toBeCloseTo(toSite, 6);
+      for (const slot of BERTHS) {
+        const at = world(placement, slot.x, slot.deck, slot.z);
+        // This is the authoritative simulation's lateral-offset convention.
+        expect(at.x).toBeCloseTo(dock.x + Math.sin(toSite) * slot.x, 6);
+        expect(at.z).toBeCloseTo(dock.z - Math.cos(toSite) * slot.x, 6);
+      }
     });
   }
 });

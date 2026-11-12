@@ -30,6 +30,7 @@ pub fn test_settings() -> Settings {
         template: frontier_sim::site::COMPACT_SITE,
         open_tiers: 1,
         seed: Some(7),
+        seed_pool: transport::SeedPool::default(),
         opening_threat: None,
     }
 }

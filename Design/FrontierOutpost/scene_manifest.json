@@ -6,9 +6,9 @@
   "seed": 2266,
   "assets": {
     "Station": {
-      "objects": 382,
-      "triangles_base_mesh": 9051,
-      "triangles_export": 17056
+      "objects": 478,
+      "triangles_base_mesh": 10039,
+      "triangles_export": 22512
     },
     "Cruiser": {
       "objects": 92,
@@ -31,32 +31,147 @@
       "triangles_export": 10924
     }
   },
-  "notes": "GLBs retain scene placement. Aurora cruiser is preserved at original scale in the background; starter frigate is landed on berth 07. Backdrop and cruiser drive plumes are presentation effects.",
+  "notes": "GLBs retain scene placement. Berths 07\u201310 use berths.json; the reference frigate faces outward on 07. Preview crew copies are excluded from GLBs. Aurora cruiser stays at its original scale. Backdrop and drive plumes are presentation effects.",
   "docking_validation": {
     "berth": "07",
     "landed": true,
     "ship_bounds_station_space": {
       "min": [
-        -0.6454999446868896,
+        -6.645500183105469,
         -5.664999961853027,
         0.8600000143051147
       ],
       "max": [
-        0.6455001831054688,
+        -5.354499816894531,
         -3.000000238418579,
         2.0
       ]
     },
     "safety_boundary_xy": [
-      -2.04,
-      2.04,
-      -5.83,
-      -2.77
+      -7.8,
+      -4.2,
+      -6.132499999999999,
+      -2.5324999999999998
     ],
-    "minimum_edge_clearance": 0.16500003814697273,
+    "minimum_edge_clearance": 0.46750003814697205,
     "landing_foot_height": 0.8600000143051147,
-    "structural_obstacles_checked": 366,
-    "connector_top_height": 0.83
+    "structural_obstacles_checked": 434,
+    "connector_top_height": 0.83,
+    "berths": [
+      {
+        "berth": "07",
+        "anchor_station_space": [
+          -6,
+          -4.3325,
+          0.86
+        ],
+        "ship_bounds_station_space": {
+          "min": [
+            -6.645500183105469,
+            -5.664999961853027,
+            0.8600000143051147
+          ],
+          "max": [
+            -5.354499816894531,
+            -3.000000238418579,
+            2.0
+          ]
+        },
+        "safety_boundary_xy": [
+          -7.8,
+          -4.2,
+          -6.132499999999999,
+          -2.5324999999999998
+        ],
+        "minimum_edge_clearance": 0.46750003814697205,
+        "departure_clear": true
+      },
+      {
+        "berth": "08",
+        "anchor_station_space": [
+          -2,
+          -4.3325,
+          0.86
+        ],
+        "ship_bounds_station_space": {
+          "min": [
+            -2.6455001831054688,
+            -5.664999961853027,
+            0.8600000143051147
+          ],
+          "max": [
+            -1.3544998168945312,
+            -3.000000238418579,
+            2.0
+          ]
+        },
+        "safety_boundary_xy": [
+          -3.8,
+          -0.19999999999999996,
+          -6.132499999999999,
+          -2.5324999999999998
+        ],
+        "minimum_edge_clearance": 0.46750003814697205,
+        "departure_clear": true
+      },
+      {
+        "berth": "09",
+        "anchor_station_space": [
+          2,
+          -4.3325,
+          0.86
+        ],
+        "ship_bounds_station_space": {
+          "min": [
+            1.3544998168945312,
+            -5.664999961853027,
+            0.8600000143051147
+          ],
+          "max": [
+            2.6455001831054688,
+            -3.000000238418579,
+            2.0
+          ]
+        },
+        "safety_boundary_xy": [
+          0.19999999999999996,
+          3.8,
+          -6.132499999999999,
+          -2.5324999999999998
+        ],
+        "minimum_edge_clearance": 0.46750003814697205,
+        "departure_clear": true
+      },
+      {
+        "berth": "10",
+        "anchor_station_space": [
+          6,
+          -4.3325,
+          0.86
+        ],
+        "ship_bounds_station_space": {
+          "min": [
+            5.354499816894531,
+            -5.664999961853027,
+            0.8600000143051147
+          ],
+          "max": [
+            6.645500183105469,
+            -3.000000238418579,
+            2.0
+          ]
+        },
+        "safety_boundary_xy": [
+          4.2,
+          7.8,
+          -6.132499999999999,
+          -2.5324999999999998
+        ],
+        "minimum_edge_clearance": 0.46750003814697205,
+        "departure_clear": true
+      }
+    ],
+    "inter_ship_clearance": 2.7089996337890625
   },
   "sockets": {
     "Socket_A": {
@@ -70,8 +185,8 @@
     "Socket_B": {
       "beside": "berth",
       "anchor_station_space": [
-        4.95,
-        -4.4,
+        10.2,
+        -4.3325,
         0.73
       ]
     }

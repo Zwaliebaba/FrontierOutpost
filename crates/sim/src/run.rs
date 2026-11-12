@@ -13,6 +13,9 @@ use crate::extraction::{
     Refusal, Stop,
 };
 use crate::fitting::Loadout as Fitting;
+use crate::jump::{
+    Cancel as JumpCancel, Refusal as JumpRefusal, SPOOL_TICKS, Spool, Target as JumpTarget,
+};
 use crate::outcome::{Ending, Loadout, losses};
 use crate::profile::ShipKind;
 use crate::rng::Rng;
@@ -287,6 +290,21 @@ pub enum RunEvent {
     Ended {
         reason: EndReason,
     },
+    /// A pilot's jump drive started to spool.
+    JumpSpooling {
+        pilot: ShipId,
+        target: JumpTarget,
+    },
+    /// A spooling jump stopped before the ship jumped.
+    JumpCancelled {
+        pilot: ShipId,
+        reason: JumpCancel,
+    },
+    /// The ship jumped and arrived near its target.
+    Jumped {
+        pilot: ShipId,
+        target: JumpTarget,
+    },
 }
 
 /// What a pilot's client shows about their own ship and the run.
@@ -344,18 +362,22 @@ pub struct Options {
 #[derive(Debug, Clone)]
 struct PilotRun {
     ship: ShipId,
+    berth_slot: u32,
     phase: Phase,
     cargo: Cargo,
     capacity: u32,
     extractor: Extractor,
     scan: Option<u32>,
     pocket: Option<usize>,
-    intercepted: bool,
+    /// Thirds of cargo capacity that interceptors have already answered.
+    intercepted: u32,
     undocked_at: Option<u32>,
     first_pocket_at: Option<u32>,
     last_pocket_exit_at: Option<u32>,
     /// The pilot holds the cruise control.
     cruise_requested: bool,
+    /// A jump spooling up.
+    jump: Option<Spool>,
     drive: Drive,
     /// When the pilot's connection dropped, while they are away.
     disconnected_at: Option<u32>,
@@ -400,6 +422,8 @@ impl PilotRun {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PilotCheckpoint {
     pub ship: u16,
+    #[serde(default)]
+    pub berth_slot: Option<u32>,
     pub phase: Phase,
     pub cargo: Cargo,
     pub capacity: u32,
@@ -410,7 +434,12 @@ pub struct PilotCheckpoint {
     pub undocked_at: Option<u32>,
     pub first_pocket_at: Option<u32>,
     pub last_pocket_exit_at: Option<u32>,
+    /// Whether any interception was planned: what a checkpoint from before
+    /// `intercepted_thirds` holds.
     pub intercepted: bool,
+    /// Thirds of cargo capacity that interceptors have already answered.
+    #[serde(default)]
+    pub intercepted_thirds: Option<u32>,
     /// The rigs and modules flown, by identifier.
     #[serde(default)]
     pub fitted: Vec<String>,
@@ -487,27 +516,29 @@ impl Run {
         let (dx, dz) = site.template.dock;
         let (cx, cz) = site.template.centre;
         let heading = (cz - dz).atan2(cx - dx);
-        let crew = site.pilots.max(pilots);
         let ships: Vec<ShipId> = (0..pilots)
-            .map(|i| world.spawn_pilot_at(berth(&site, i, crew), heading))
+            .map(|i| world.spawn_pilot_at(berth(&site, i), heading))
             .collect();
         let mut run = Self {
             world,
             pilots: ships
                 .iter()
-                .map(|&ship| PilotRun {
+                .enumerate()
+                .map(|(index, &ship)| PilotRun {
                     ship,
+                    berth_slot: u32::try_from(index).expect("at most four pilots"),
                     phase: Phase::AtDock,
                     cargo: [0; 3],
                     capacity: BASIC_CAPACITY,
                     extractor: Extractor::default(),
                     scan: None,
                     pocket: None,
-                    intercepted: false,
+                    intercepted: 0,
                     undocked_at: None,
                     first_pocket_at: None,
                     last_pocket_exit_at: None,
                     cruise_requested: false,
+                    jump: None,
                     drive: Drive::Ready,
                     disconnected_at: None,
                     exposure_ends: 0,
@@ -544,8 +575,11 @@ impl Run {
         let opening = options
             .opening_threat
             .unwrap_or_else(|| run.site.opening_threat());
-        run.place_opening_threat(opening);
+        // Wardens first: when the NPC cap binds, the nest stays fully guarded
+        // and the opening threat takes what room is left (code review
+        // question 2, the owner's rule). Waves past the cap are dropped.
         run.place_nest();
+        run.place_opening_threat(opening);
         (run, ships)
     }
 
@@ -628,6 +662,17 @@ impl Run {
     /// the join window is open and the crew the site was scaled for is not
     /// all here. Returns their ship.
     pub fn join(&mut self) -> Option<ShipId> {
+        let slot = (0..self.site.pilots)
+            .find(|slot| !self.pilots.iter().any(|p| p.berth_slot == *slot))?;
+        self.join_at(slot)
+    }
+
+    /// Joins at the server-assigned roster slot, even if crewmates follow out of order.
+    pub fn join_at(&mut self, slot: u32) -> Option<ShipId> {
+        if slot >= self.site.pilots || slot >= 4 || self.pilots.iter().any(|p| p.berth_slot == slot)
+        {
+            return None;
+        }
         let joined = u32::try_from(self.pilots.len()).unwrap_or(u32::MAX);
         if self.ended.is_some() || self.elapsed() > JOIN_WINDOW_TICKS || joined >= self.site.pilots
         {
@@ -636,22 +681,22 @@ impl Run {
         let (dx, dz) = self.site.template.dock;
         let (cx, cz) = self.site.template.centre;
         let heading = (cz - dz).atan2(cx - dx);
-        let ship = self
-            .world
-            .spawn_pilot_at(berth(&self.site, joined, self.site.pilots), heading);
+        let ship = self.world.spawn_pilot_at(berth(&self.site, slot), heading);
         self.pilots.push(PilotRun {
             ship,
+            berth_slot: slot,
             phase: Phase::AtDock,
             cargo: [0; 3],
             capacity: BASIC_CAPACITY,
             extractor: Extractor::default(),
             scan: None,
             pocket: None,
-            intercepted: false,
+            intercepted: 0,
             undocked_at: None,
             first_pocket_at: None,
             last_pocket_exit_at: None,
             cruise_requested: false,
+            jump: None,
             drive: Drive::Ready,
             disconnected_at: None,
             exposure_ends: 0,
@@ -779,6 +824,127 @@ impl Run {
                 self.world.set_input(ship, ShipInput { cruise, ..input });
             }
         }
+    }
+
+    /// Starts spooling a jump to `target`, or with `None` cancels one. A new
+    /// target replaces a spool in progress and starts it again.
+    ///
+    /// # Errors
+    /// Refuses where the drive may not spool ([`crate::jump`]): a ship not
+    /// flying, locked by a hostile or extracting, a pocket the crew may not
+    /// enter, or the place the ship already is.
+    pub fn jump(&mut self, ship: ShipId, target: Option<JumpTarget>) -> Result<(), JumpRefusal> {
+        if !self.flying(ship) {
+            return Err(JumpRefusal::NotFlying);
+        }
+        let index = self.index(ship).ok_or(JumpRefusal::NotFlying)?;
+        let Some(target) = target else {
+            if self.pilots[index].jump.take().is_some() {
+                self.log(RunEvent::JumpCancelled {
+                    pilot: ship,
+                    reason: JumpCancel::Pilot,
+                });
+            }
+            return Ok(());
+        };
+        let state = self
+            .world
+            .ship(ship)
+            .map(|s| s.state)
+            .ok_or(JumpRefusal::NotFlying)?;
+        if self.locked_by_a_hostile(ship) {
+            return Err(JumpRefusal::Hunted);
+        }
+        if self.pilots[index].extractor.is_on() {
+            return Err(JumpRefusal::Extracting);
+        }
+        match target {
+            JumpTarget::Dock if self.pilots[index].phase == Phase::AtDock => {
+                return Err(JumpRefusal::AlreadyThere);
+            }
+            JumpTarget::Dock => {}
+            JumpTarget::Pocket(pocket) => {
+                let open = self.site.pockets.get(pocket).is_some_and(|p| !p.locked);
+                if !open {
+                    return Err(JumpRefusal::Unavailable);
+                }
+                if self.site.pocket_at(state.x, state.z) == Some(pocket) {
+                    return Err(JumpRefusal::AlreadyThere);
+                }
+            }
+        }
+        self.pilots[index].jump = Some(Spool {
+            target,
+            ticks_left: SPOOL_TICKS,
+        });
+        self.log(RunEvent::JumpSpooling {
+            pilot: ship,
+            target,
+        });
+        Ok(())
+    }
+
+    /// Counts down each spooling jump, cancels one whose ship a hostile has
+    /// locked or whose extractor started, and moves a ship whose spool is
+    /// done. Runs before the world steps, so the arrival is collided at once.
+    fn work_jumps(&mut self) {
+        for index in 0..self.pilots.len() {
+            let Some(spool) = self.pilots[index].jump else {
+                continue;
+            };
+            let ship = self.pilots[index].ship;
+            let Some(state) = self.world.ship(ship).map(|s| s.state) else {
+                // Held inert or gone: the spool lapses.
+                self.pilots[index].jump = None;
+                continue;
+            };
+            let cancel = if self.locked_by_a_hostile(ship) {
+                Some(JumpCancel::Hunted)
+            } else if self.pilots[index].extractor.is_on() {
+                Some(JumpCancel::Extracting)
+            } else {
+                None
+            };
+            if let Some(reason) = cancel {
+                self.pilots[index].jump = None;
+                self.log(RunEvent::JumpCancelled {
+                    pilot: ship,
+                    reason,
+                });
+                continue;
+            }
+            if spool.ticks_left > 1 {
+                self.pilots[index].jump = Some(Spool {
+                    ticks_left: spool.ticks_left - 1,
+                    ..spool
+                });
+                continue;
+            }
+            self.pilots[index].jump = None;
+            let template = &self.site.template;
+            let arrival = match spool.target {
+                JumpTarget::Dock => {
+                    crate::jump::dock_arrival(state, template, self.pilots[index].total() > 0)
+                }
+                JumpTarget::Pocket(pocket) => {
+                    let pocket = self.site.pockets[pocket].template;
+                    crate::jump::pocket_arrival(state, pocket.centre, pocket.radius, template.dock)
+                }
+            };
+            self.world.set_state(ship, arrival);
+            // The ship arrives at rest, its cruise drive dropped.
+            self.pilots[index].cruise_requested = false;
+            self.log(RunEvent::Jumped {
+                pilot: ship,
+                target: spool.target,
+            });
+        }
+    }
+
+    /// The jump a pilot's drive is spooling, if any.
+    #[must_use]
+    pub fn spooling(&self, ship: ShipId) -> Option<Spool> {
+        self.pilot(ship).and_then(|pilot| pilot.jump)
     }
 
     /// Whether a hostile holds a lock on `ship`.
@@ -1011,6 +1177,7 @@ impl Run {
                         .unwrap_or_default();
                     PilotCheckpoint {
                         ship: pilot.ship.0,
+                        berth_slot: Some(pilot.berth_slot),
                         phase: pilot.phase,
                         cargo: pilot.cargo,
                         capacity: pilot.capacity,
@@ -1021,7 +1188,8 @@ impl Run {
                         undocked_at: pilot.undocked_at,
                         first_pocket_at: pilot.first_pocket_at,
                         last_pocket_exit_at: pilot.last_pocket_exit_at,
-                        intercepted: pilot.intercepted,
+                        intercepted: pilot.intercepted > 0,
+                        intercepted_thirds: Some(pilot.intercepted),
                         fitted: pilot.fitted.clone(),
                     }
                 })
@@ -1061,7 +1229,8 @@ impl Run {
         let pilots = checkpoint
             .crew
             .iter()
-            .map(|saved| {
+            .enumerate()
+            .map(|(index, saved)| {
                 let away = !saved.phase.is_over();
                 let state = ShipState {
                     x: saved.x,
@@ -1071,17 +1240,27 @@ impl Run {
                 };
                 PilotRun {
                     ship: ShipId(saved.ship),
+                    berth_slot: saved
+                        .berth_slot
+                        .unwrap_or(u32::try_from(index).expect("at most four pilots")),
                     phase: saved.phase,
                     cargo: saved.cargo,
                     capacity: saved.capacity,
                     extractor: Extractor::default(),
                     scan: None,
                     pocket: None,
-                    intercepted: saved.intercepted,
+                    // An older checkpoint knows only that an interception
+                    // happened: count the cargo then carried as answered.
+                    intercepted: saved.intercepted_thirds.unwrap_or(if saved.intercepted {
+                        thirds(saved.cargo.iter().sum(), saved.capacity)
+                    } else {
+                        0
+                    }),
                     undocked_at: saved.undocked_at,
                     first_pocket_at: saved.first_pocket_at,
                     last_pocket_exit_at: saved.last_pocket_exit_at,
                     cruise_requested: false,
+                    jump: None,
                     drive: Drive::Ready,
                     disconnected_at: away.then_some(now),
                     exposure_ends: now,
@@ -1208,6 +1387,7 @@ impl Run {
         }
         self.rise_with_time();
         self.gate_drives();
+        self.work_jumps();
         self.world.step();
         self.note_combat();
         self.debris_damage();
@@ -1360,7 +1540,7 @@ impl Run {
                 }
                 let spread = i as f32 * 3.0;
                 let at = clamp_to_arena((entry.0 + spread, entry.1 - spread));
-                self.world.spawn_npc_at(kind, at, home);
+                self.spawn_hostile(kind, at, home);
                 if kind == ShipKind::Drone {
                     spawned.0 += 1;
                 } else {
@@ -1413,12 +1593,29 @@ impl Run {
             .count()
     }
 
+    /// Places an NPC at `at` with its post or patrol at `home`, at the
+    /// tier's strength (`TierRules::npc_speed` and `npc_damage`).
+    fn spawn_hostile(&mut self, kind: ShipKind, at: (f32, f32), home: (f32, f32)) -> ShipId {
+        let ship = self.world.spawn_npc_at(kind, at, home);
+        let rules = self.site.tier.rules();
+        self.world.set_kit(
+            ship,
+            Kit {
+                speed: rules.npc_speed,
+                weapon: rules.npc_damage,
+                ..Kit::BASIC
+            },
+        );
+        ship
+    }
+
     fn place_opening_threat(&mut self, count: u32) {
         let mut rng = Rng::new(self.site.seed ^ 0x5bd1_e995);
         let share = self.site.values.dominant.drone_share();
         let ore = self.site.pockets[0].template;
         let (cx, cz) = self.site.template.centre;
-        for i in 0..count.min(MAX_NPCS as u32) {
+        let room = MAX_NPCS.saturating_sub(self.npc_count()) as u32;
+        for i in 0..count.min(room) {
             let angle = rng.between(0.0, std::f32::consts::TAU);
             if rng.unit() < share {
                 // Drones gather in the ore field (design section 10).
@@ -1427,11 +1624,11 @@ impl Run {
                     ore.centre.0 + angle.cos() * r,
                     ore.centre.1 + angle.sin() * r,
                 );
-                self.world.spawn_npc(ShipKind::Drone, home);
+                self.spawn_hostile(ShipKind::Drone, home, home);
             } else {
                 let r = 30.0 + i as f32 * 5.0;
                 let home = (cx + angle.cos() * r, cz + angle.sin() * r);
-                self.world.spawn_npc(ShipKind::Raider, home);
+                self.spawn_hostile(ShipKind::Raider, home, home);
             }
         }
     }
@@ -1465,7 +1662,7 @@ impl Run {
         for i in 0..placed {
             let angle = i as f32 * std::f32::consts::TAU / placed as f32;
             let post = (cx + angle.cos() * 10.0, cz + angle.sin() * 10.0);
-            self.world.spawn_npc_at(ShipKind::Warden, post, post);
+            self.spawn_hostile(ShipKind::Warden, post, post);
         }
     }
 
@@ -1599,13 +1796,14 @@ impl Run {
     /// On the return leg one raider intercepts for each full third of cargo
     /// capacity carried (design section 10), once per pilot.
     fn intercept(&mut self, index: usize) {
-        if self.pilots[index].intercepted {
-            return;
-        }
-        self.pilots[index].intercepted = true;
         let pilot = &self.pilots[index];
-        let raiders = pilot.total() * 3 / pilot.capacity.max(1);
+        let carried = thirds(pilot.total(), pilot.capacity);
+        // Only cargo no earlier interception answered draws raiders: leaving
+        // the site empty first does not spend the ambush.
+        let raiders = carried.saturating_sub(pilot.intercepted);
+        let answered = pilot.intercepted.max(carried);
         let ship = pilot.ship;
+        self.pilots[index].intercepted = answered;
         let Some(state) = self.world.ship(ship).map(|s| s.state) else {
             return;
         };
@@ -1624,7 +1822,7 @@ impl Run {
             }
             let side = (i as f32 - (raiders as f32 - 1.0) / 2.0) * 6.0;
             let at = clamp_to_arena((point.0 - vz / length * side, point.1 + vx / length * side));
-            self.world.spawn_npc_at(ShipKind::Raider, at, at);
+            self.spawn_hostile(ShipKind::Raider, at, at);
             spawned += 1;
         }
         self.log(RunEvent::Intercepted {
@@ -1836,14 +2034,19 @@ impl Run {
     }
 }
 
-/// Where crew member `index` of `crew` starts: side by side across the launch
-/// direction at the dock, 4 m apart.
-fn berth(site: &Site, index: u32, crew: u32) -> (f32, f32) {
+/// Where crew member `index` starts: side by side across the launch
+/// direction at the dock, using the same authored offsets as the station.
+fn berth(site: &Site, index: u32) -> (f32, f32) {
     let (dx, dz) = site.template.dock;
     let (cx, cz) = site.template.centre;
     let heading = (cz - dz).atan2(cx - dx);
-    let offset = (index as f32 - (crew as f32 - 1.0) / 2.0) * 4.0;
-    (dx - heading.sin() * offset, dz + heading.cos() * offset)
+    let offset = crate::berths::lateral(index);
+    (dx + heading.sin() * offset, dz - heading.cos() * offset)
+}
+
+/// Full thirds of `capacity` that `cargo` fills: one return-leg raider each.
+fn thirds(cargo: u32, capacity: u32) -> u32 {
+    cargo * 3 / capacity.max(1)
 }
 
 /// How long a scan takes in `fitting`.
@@ -1929,6 +2132,238 @@ mod tests {
     }
 
     #[test]
+    fn leaving_the_site_empty_first_does_not_spend_the_ambush() {
+        let raiders = |run: &Run| {
+            run.world
+                .ships()
+                .iter()
+                .filter(|s| s.kind == ShipKind::Raider)
+                .count()
+        };
+        let (mut run, ship) = quiet(6);
+        at_deposit(&mut run, ship);
+        // Out of the site with nothing: the return leg starts, no raiders.
+        place(&mut run, ship, (-80.0, 0.0));
+        run.step();
+        assert!(events(&mut run).contains(&RunEvent::ReturnLeg { pilot: ship }));
+        assert_eq!(raiders(&run), 0);
+        // Back in, laden, and out again: two thirds full, two raiders.
+        at_deposit(&mut run, ship);
+        run.pilots[0].cargo = [14, 0, 0];
+        place(&mut run, ship, (-80.0, 0.0));
+        run.step();
+        assert!(events(&mut run).contains(&RunEvent::Intercepted {
+            pilot: ship,
+            raiders: 2
+        }));
+        assert_eq!(raiders(&run), 2);
+        // The same cargo out a third time draws no more.
+        at_deposit(&mut run, ship);
+        place(&mut run, ship, (-80.0, 0.0));
+        run.step();
+        assert!(events(&mut run).contains(&RunEvent::ReturnLeg { pilot: ship }));
+        assert_eq!(raiders(&run), 2);
+    }
+
+    #[test]
+    fn an_older_checkpoint_counts_its_interception_as_answered() {
+        let (mut run, ship) = quiet(6);
+        at_deposit(&mut run, ship);
+        run.pilots[0].cargo = [14, 0, 0];
+        place(&mut run, ship, (-80.0, 0.0));
+        run.step();
+        let mut checkpoint = run.checkpoint();
+        assert_eq!(checkpoint.crew[0].intercepted_thirds, Some(2));
+        checkpoint.crew[0].intercepted_thirds = None;
+        let restored = Run::restore(&checkpoint).unwrap();
+        assert_eq!(restored.pilots[0].intercepted, 2);
+    }
+
+    #[test]
+    fn a_jump_spools_then_lands_outside_the_pocket_facing_it() {
+        let (mut run, ship) = quiet(6);
+        events(&mut run);
+        assert_eq!(run.jump(ship, Some(JumpTarget::Pocket(0))), Ok(()));
+        steps(&mut run, SPOOL_TICKS - 1);
+        let ore = run.site.pockets[0].template;
+        let before = run.world.ship(ship).unwrap().state;
+        assert!((before.x - ore.centre.0).hypot(before.z - ore.centre.1) > 100.0);
+        run.step();
+        let after = run.world.ship(ship).unwrap().state;
+        let from_centre = (after.x - ore.centre.0).hypot(after.z - ore.centre.1);
+        assert!(
+            (from_centre - (ore.radius + crate::jump::POCKET_STANDOFF)).abs() < 1.5,
+            "{from_centre}"
+        );
+        assert!(run.spooling(ship).is_none());
+        let log = events(&mut run);
+        assert!(log.contains(&RunEvent::JumpSpooling {
+            pilot: ship,
+            target: JumpTarget::Pocket(0)
+        }));
+        assert!(log.contains(&RunEvent::Jumped {
+            pilot: ship,
+            target: JumpTarget::Pocket(0)
+        }));
+        // Off the berth, so the approach has begun; outside the pocket, so
+        // the objective has not.
+        run.step();
+        assert_eq!(run.status(ship).unwrap().phase, Phase::Approach);
+    }
+
+    #[test]
+    fn a_jump_is_refused_where_the_drive_may_not_spool() {
+        let (mut run, ship) = quiet(6);
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Dock)),
+            Err(JumpRefusal::AlreadyThere)
+        );
+        // Only the ore field is open without facilities.
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Pocket(1))),
+            Err(JumpRefusal::Unavailable)
+        );
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Pocket(9))),
+            Err(JumpRefusal::Unavailable)
+        );
+        at_deposit(&mut run, ship);
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Pocket(0))),
+            Err(JumpRefusal::AlreadyThere)
+        );
+        run.extract(ship, true).unwrap();
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Dock)),
+            Err(JumpRefusal::Extracting)
+        );
+        run.extract(ship, false).unwrap();
+        let at = run.world.ship(ship).unwrap().state;
+        let drone = run.world.spawn_npc(ShipKind::Drone, (at.x + 5.0, at.z));
+        run.step();
+        assert_eq!(run.world.ship(drone).unwrap().lock, Some(ship));
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Dock)),
+            Err(JumpRefusal::Hunted)
+        );
+    }
+
+    #[test]
+    fn a_spool_is_cancelled_by_a_hostile_lock_or_by_the_pilot() {
+        let (mut run, ship) = quiet(6);
+        run.jump(ship, Some(JumpTarget::Pocket(0))).unwrap();
+        steps(&mut run, 10);
+        events(&mut run);
+        run.jump(ship, None).unwrap();
+        assert!(run.spooling(ship).is_none());
+        assert!(events(&mut run).contains(&RunEvent::JumpCancelled {
+            pilot: ship,
+            reason: JumpCancel::Pilot
+        }));
+
+        run.jump(ship, Some(JumpTarget::Pocket(0))).unwrap();
+        let at = run.world.ship(ship).unwrap().state;
+        run.world.spawn_npc(ShipKind::Drone, (at.x + 5.0, at.z));
+        steps(&mut run, 3);
+        assert!(run.spooling(ship).is_none());
+        assert!(events(&mut run).contains(&RunEvent::JumpCancelled {
+            pilot: ship,
+            reason: JumpCancel::Hunted
+        }));
+    }
+
+    #[test]
+    fn a_laden_jump_home_lands_short_with_the_interceptors_in_the_way() {
+        let (mut run, ship) = quiet(6);
+        at_deposit(&mut run, ship);
+        run.pilots[0].cargo = [14, 0, 0];
+        run.jump(ship, Some(JumpTarget::Dock)).unwrap();
+        steps(&mut run, SPOOL_TICKS + 1);
+        let (dx, dz) = COMPACT_SITE.dock;
+        let state = run.world.ship(ship).expect("not docked").state;
+        let from_dock = (state.x - dx).hypot(state.z - dz);
+        assert!(from_dock > DOCK_RADIUS + 20.0, "{from_dock}");
+        assert_eq!(run.status(ship).unwrap().phase, Phase::Return);
+        assert!(events(&mut run).contains(&RunEvent::Intercepted {
+            pilot: ship,
+            raiders: 2
+        }));
+        // Each raider is nearer the dock than the ship is.
+        for raider in run
+            .world
+            .ships()
+            .iter()
+            .filter(|s| s.kind == ShipKind::Raider)
+        {
+            let theirs = (raider.state.x - dx).hypot(raider.state.z - dz);
+            assert!(theirs < from_dock, "{theirs} against {from_dock}");
+        }
+    }
+
+    #[test]
+    fn an_empty_jump_home_lands_just_outside_the_berth() {
+        let (mut run, ship) = quiet(6);
+        at_deposit(&mut run, ship);
+        run.jump(ship, Some(JumpTarget::Dock)).unwrap();
+        steps(&mut run, SPOOL_TICKS + 1);
+        let (dx, dz) = COMPACT_SITE.dock;
+        let state = run.world.ship(ship).expect("not docked yet").state;
+        let from_dock = (state.x - dx).hypot(state.z - dz);
+        assert!(
+            (from_dock - crate::jump::DOCK_STANDOFF).abs() < 1.5,
+            "{from_dock}"
+        );
+    }
+
+    #[test]
+    fn when_the_npc_cap_binds_the_wardens_are_placed_first() {
+        // Tier III, four pilots, the nest open: nine wardens and an opening
+        // threat of eighteen do not fit in twenty-four.
+        let site = Site::generate(
+            COMPACT_SITE,
+            4,
+            ThreatTier::III,
+            4,
+            &[Capability::BreachNest],
+        );
+        let (run, _) = Run::launch(site, 4, Options::default());
+        let count = |kind| run.world.ships().iter().filter(|s| s.kind == kind).count();
+        assert_eq!(count(ShipKind::Warden), 9);
+        let npcs = run
+            .world
+            .ships()
+            .iter()
+            .filter(|s| s.kind != ShipKind::Pilot)
+            .count();
+        assert_eq!(npcs, MAX_NPCS, "the opening threat fills what room is left");
+    }
+
+    #[test]
+    fn tier_one_npcs_are_slower_than_a_pilot_and_hit_half_as_hard() {
+        let pilot_speed = ShipKind::Pilot.profile().handling.max_speed;
+        for tier in ThreatTier::ALL {
+            let site = Site::generate(COMPACT_SITE, 4, tier, 1, &[]);
+            let (run, _) = Run::launch(site, 1, Options::default());
+            let npcs: Vec<_> = run
+                .world
+                .ships()
+                .iter()
+                .filter(|s| s.kind.thinks())
+                .collect();
+            assert!(!npcs.is_empty());
+            for npc in npcs {
+                let top = crate::world::handling(npc.kind, &npc.kit).max_speed;
+                if tier == ThreatTier::I {
+                    assert!(top < pilot_speed, "{:?} at {top} m/s", npc.kind);
+                    assert!((npc.kit.weapon - 0.5).abs() < f32::EPSILON);
+                } else {
+                    assert_eq!(npc.kit, Kit::BASIC, "{tier:?} keeps full strength");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn launches_pilots_at_the_dock_with_the_opening_threat() {
         let site = Site::generate(COMPACT_SITE, 4, ThreatTier::I, 1, &[]);
         let (mut run, ships) = Run::launch(site, 1, Options::default());
@@ -1940,7 +2375,8 @@ mod tests {
         assert_eq!(npcs.count(), 3);
         let state = run.world.ship(ships[0]).unwrap().state;
         let (dx, dz) = COMPACT_SITE.dock;
-        assert!((state.x - dx).hypot(state.z - dz) < 1.0);
+        assert!((state.x - dx).abs() < 0.001);
+        assert!((state.z - dz - 6.0).abs() < 0.001);
         assert_eq!(run.status(ships[0]).unwrap().phase, Phase::AtDock);
         assert_eq!(
             events(&mut run),
@@ -2478,6 +2914,9 @@ mod tests {
         let top_speed = |ids: &[&str]| {
             let (mut run, ship) = quiet(23);
             run.fit(ship, &fitted(ids));
+            // Compare fittings on the clear centreline, independently of the assigned berth.
+            let dock = run.site.template.dock;
+            place(&mut run, ship, dock);
             run.set_controls(
                 ship,
                 ShipInput {
@@ -2524,9 +2963,9 @@ mod tests {
     }
 
     #[test]
-    fn wardens_the_npc_cap_leaves_room_for_still_stand_all_round_the_core() {
-        // Tier III with four pilots plans nine wardens, and the opening
-        // threat leaves the cap room for fewer.
+    fn wardens_stand_evenly_all_round_the_core() {
+        // Tier III with four pilots plans nine wardens; placed before the
+        // opening threat, all nine stand, evenly spaced.
         let site = Site::generate(
             COMPACT_SITE,
             35,
@@ -2543,11 +2982,7 @@ mod tests {
             .filter(|ship| ship.kind == ShipKind::Warden)
             .map(|ship| (ship.state.z - core.z).atan2(ship.state.x - core.x))
             .collect();
-        assert!(
-            (2..9).contains(&bearings.len()),
-            "{} wardens: the cap should bind here",
-            bearings.len()
-        );
+        assert_eq!(bearings.len(), 9, "the cap no longer cuts the wardens");
         bearings.sort_by(f32::total_cmp);
         let even = std::f32::consts::TAU / bearings.len() as f32;
         let last = bearings[bearings.len() - 1];
@@ -2746,6 +3181,34 @@ mod tests {
             },
         );
         (run, ships[0])
+    }
+
+    #[test]
+    fn four_pilots_keep_their_berths_when_following_out_of_order() {
+        let (mut run, host) = crew_run(40, 4);
+        let last = run.join_at(3).unwrap();
+        let second = run.join_at(1).unwrap();
+        assert!(
+            run.join_at(3).is_none(),
+            "a berth cannot be allocated twice"
+        );
+        assert!(run.join_at(4).is_none(), "only four berths exist");
+        let third = run.join_at(2).unwrap();
+        for (slot, ship) in [host, second, third, last].into_iter().enumerate() {
+            let state = run.world.ship(ship).unwrap().state;
+            let expected = berth(run.site(), u32::try_from(slot).unwrap());
+            assert!((state.x - expected.0).hypot(state.z - expected.1) < 0.001);
+        }
+        let checkpoint = run.checkpoint();
+        let restored = Run::restore(&checkpoint).unwrap();
+        assert_eq!(
+            restored
+                .pilots
+                .iter()
+                .map(|p| p.berth_slot)
+                .collect::<Vec<_>>(),
+            [0, 3, 1, 2]
+        );
     }
 
     #[test]

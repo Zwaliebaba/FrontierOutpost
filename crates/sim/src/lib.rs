@@ -5,12 +5,14 @@
 //! server runs it, and the browser runs its movement rules through
 //! `frontier-sim-wasm` to predict the player's own ship.
 
+pub mod berths;
 pub mod collision;
 pub mod combat;
 pub mod crew;
 pub mod extraction;
 pub mod fitting;
 pub mod goods;
+pub mod jump;
 pub mod market;
 pub mod npc;
 pub mod outcome;

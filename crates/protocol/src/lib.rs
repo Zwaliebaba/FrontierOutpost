@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 7;
+pub const PROTOCOL_VERSION: u32 = 8;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -56,6 +56,9 @@ pub enum ClientMessage {
     Vent,
     /// Starts a scan of the site; the ship must hold still in scan range.
     Scan,
+    /// Spools the jump drive toward `target`, or cancels a spool with `None`.
+    /// The server answers with `JumpSpooling` or `JumpRefused`.
+    Jump { target: Option<JumpTarget> },
     /// Installs `facility` in the empty socket `socket`: bought at tier 1 the
     /// first time, installed again for the reinstallation cost after that.
     Install { socket: String, facility: String },
@@ -170,6 +173,15 @@ pub enum ServerMessage {
     LaunchRefused { reason: String },
     /// The extractor did not start.
     ExtractRefused { reason: ExtractRefusal },
+    /// The jump drive started to spool toward `target`; the ship jumps in
+    /// `seconds` unless the spool is cancelled.
+    JumpSpooling { target: JumpTarget, seconds: u32 },
+    /// The jump drive did not spool.
+    JumpRefused { reason: JumpRefusal },
+    /// A spooling jump stopped before the ship jumped.
+    JumpCancelled { reason: JumpCancel },
+    /// The ship jumped and arrived near `target`, at rest.
+    Jumped { target: JumpTarget },
     /// A scan revealed the site's hidden seed values (design section 10).
     Scanned {
         /// Index into the contract's pockets.
@@ -211,6 +223,10 @@ pub struct CrewInfo {
 #[ts(export)]
 pub struct CrewMember {
     pub callsign: String,
+    /// Zero-based berth slot, stable while following an active launch.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub berth: Option<u32>,
     /// Their share of the pot, a whole percentage.
     pub share: u32,
     /// Whether this is the pilot reading it.
@@ -330,6 +346,51 @@ pub struct DepositInfo {
     pub material: Material,
     /// Units it holds at launch.
     pub units: u32,
+}
+
+/// Where the jump drive takes a ship.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+#[ts(export)]
+pub enum JumpTarget {
+    /// Short of the pilot's own dock: still flown in.
+    Dock,
+    /// Just outside a pocket, by its index in the contract's pockets.
+    Pocket { index: u32 },
+}
+
+/// Why the jump drive did not spool.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum JumpRefusal {
+    /// Docked, destroyed, or the run is over.
+    NotFlying,
+    /// A hostile has the ship locked.
+    Hunted,
+    /// The extractor is working.
+    Extracting,
+    /// No such pocket, or one the crew may not enter.
+    Unavailable,
+    /// The ship is already there.
+    AlreadyThere,
+}
+
+/// Why a spooling jump stopped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum JumpCancel {
+    /// The pilot cancelled it.
+    Pilot,
+    /// A hostile locked the ship.
+    Hunted,
+    /// The extractor started.
+    Extracting,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -490,6 +551,31 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&ClientMessage::Extract { on: true }).unwrap(),
             r#"{"type":"extract","on":true}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ClientMessage::Jump {
+                target: Some(JumpTarget::Pocket { index: 2 })
+            })
+            .unwrap(),
+            r#"{"type":"jump","target":{"type":"pocket","index":2}}"#
+        );
+        let cancel: ClientMessage =
+            serde_json::from_str(r#"{"type":"jump","target":null}"#).unwrap();
+        assert_eq!(cancel, ClientMessage::Jump { target: None });
+        assert_eq!(
+            serde_json::to_string(&ServerMessage::JumpSpooling {
+                target: JumpTarget::Dock,
+                seconds: 6
+            })
+            .unwrap(),
+            r#"{"type":"jumpSpooling","target":{"type":"dock"},"seconds":6}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ServerMessage::JumpRefused {
+                reason: JumpRefusal::AlreadyThere
+            })
+            .unwrap(),
+            r#"{"type":"jumpRefused","reason":"alreadyThere"}"#
         );
         assert_eq!(
             serde_json::to_string(&ClientMessage::Vent).unwrap(),

@@ -371,6 +371,19 @@ pub fn supplies_due(account: &Account) -> Result<u32, String> {
         .iter()
         .map(|&good| u64::from(account.stock.get(good)) * u64::from(market::price(good).buys_at))
         .sum();
+    // Inputs waiting at the processor count as stock (code review question
+    // 3): otherwise queueing ore let a pilot launch for less and keep it.
+    let queued_value: u64 = account
+        .processing
+        .batches
+        .iter()
+        .filter_map(|queued| market::recipe(&queued.recipe).map(|rule| (rule, queued.batches)))
+        .map(|(rule, batches)| {
+            let (input, per_batch) = rule.input;
+            u64::from(batches) * u64::from(per_batch) * u64::from(market::price(input).buys_at)
+        })
+        .sum();
+    let stock_value = stock_value + queued_value;
     if u64::from(account.credits) + stock_value >= u64::from(LAUNCH_COST) {
         return Err(format!(
             "Supplies cost {LAUNCH_COST} cr and you have {} cr: sell some stock first.",
@@ -612,6 +625,21 @@ mod tests {
         home.stock.ore = 2;
         assert!(supplies_due(&home).is_err(), "two ore cover the rest");
         home.stock.ore = 1;
+        assert_eq!(supplies_due(&home), Ok(25));
+    }
+
+    #[test]
+    fn ore_queued_for_processing_still_counts_toward_supplies() {
+        // Two ore at 10 cover the 15 short; queued as an alloy batch they
+        // have left the stock, and must not buy a cheaper launch.
+        let mut home = Account::new("w", "Vega");
+        home.credits = 25;
+        home.processing.add("alloy", 1);
+        assert!(
+            supplies_due(&home).is_err(),
+            "the queued ore covers the rest"
+        );
+        home.processing = market::Queue::default();
         assert_eq!(supplies_due(&home), Ok(25));
     }
 
