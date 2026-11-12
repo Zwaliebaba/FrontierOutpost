@@ -1360,7 +1360,7 @@ impl Run {
                 }
                 let spread = i as f32 * 3.0;
                 let at = clamp_to_arena((entry.0 + spread, entry.1 - spread));
-                self.world.spawn_npc_at(kind, at, home);
+                self.spawn_hostile(kind, at, home);
                 if kind == ShipKind::Drone {
                     spawned.0 += 1;
                 } else {
@@ -1413,6 +1413,22 @@ impl Run {
             .count()
     }
 
+    /// Places an NPC at `at` with its post or patrol at `home`, at the
+    /// tier's strength (`TierRules::npc_speed` and `npc_damage`).
+    fn spawn_hostile(&mut self, kind: ShipKind, at: (f32, f32), home: (f32, f32)) -> ShipId {
+        let ship = self.world.spawn_npc_at(kind, at, home);
+        let rules = self.site.tier.rules();
+        self.world.set_kit(
+            ship,
+            Kit {
+                speed: rules.npc_speed,
+                weapon: rules.npc_damage,
+                ..Kit::BASIC
+            },
+        );
+        ship
+    }
+
     fn place_opening_threat(&mut self, count: u32) {
         let mut rng = Rng::new(self.site.seed ^ 0x5bd1_e995);
         let share = self.site.values.dominant.drone_share();
@@ -1427,11 +1443,11 @@ impl Run {
                     ore.centre.0 + angle.cos() * r,
                     ore.centre.1 + angle.sin() * r,
                 );
-                self.world.spawn_npc(ShipKind::Drone, home);
+                self.spawn_hostile(ShipKind::Drone, home, home);
             } else {
                 let r = 30.0 + i as f32 * 5.0;
                 let home = (cx + angle.cos() * r, cz + angle.sin() * r);
-                self.world.spawn_npc(ShipKind::Raider, home);
+                self.spawn_hostile(ShipKind::Raider, home, home);
             }
         }
     }
@@ -1465,7 +1481,7 @@ impl Run {
         for i in 0..placed {
             let angle = i as f32 * std::f32::consts::TAU / placed as f32;
             let post = (cx + angle.cos() * 10.0, cz + angle.sin() * 10.0);
-            self.world.spawn_npc_at(ShipKind::Warden, post, post);
+            self.spawn_hostile(ShipKind::Warden, post, post);
         }
     }
 
@@ -1624,7 +1640,7 @@ impl Run {
             }
             let side = (i as f32 - (raiders as f32 - 1.0) / 2.0) * 6.0;
             let at = clamp_to_arena((point.0 - vz / length * side, point.1 + vx / length * side));
-            self.world.spawn_npc_at(ShipKind::Raider, at, at);
+            self.spawn_hostile(ShipKind::Raider, at, at);
             spawned += 1;
         }
         self.log(RunEvent::Intercepted {
@@ -1926,6 +1942,31 @@ mod tests {
         let deposit = run.site.deposits[0];
         place(run, ship, (deposit.x, deposit.z));
         run.step();
+    }
+
+    #[test]
+    fn tier_one_npcs_are_slower_than_a_pilot_and_hit_half_as_hard() {
+        let pilot_speed = ShipKind::Pilot.profile().handling.max_speed;
+        for tier in ThreatTier::ALL {
+            let site = Site::generate(COMPACT_SITE, 4, tier, 1, &[]);
+            let (run, _) = Run::launch(site, 1, Options::default());
+            let npcs: Vec<_> = run
+                .world
+                .ships()
+                .iter()
+                .filter(|s| s.kind.thinks())
+                .collect();
+            assert!(!npcs.is_empty());
+            for npc in npcs {
+                let top = crate::world::handling(npc.kind, &npc.kit).max_speed;
+                if tier == ThreatTier::I {
+                    assert!(top < pilot_speed, "{:?} at {top} m/s", npc.kind);
+                    assert!((npc.kit.weapon - 0.5).abs() < f32::EPSILON);
+                } else {
+                    assert_eq!(npc.kit, Kit::BASIC, "{tier:?} keeps full strength");
+                }
+            }
+        }
     }
 
     #[test]
