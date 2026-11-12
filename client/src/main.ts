@@ -16,7 +16,7 @@ import type {
 } from "./protocol";
 import { launchRole, renderCrew } from "./outpost/crew";
 import { loadOutpostModels } from "./outpost/models";
-import { fittingName, launchLines } from "./outpost/options";
+import { fittingName, launchLines, supplySales } from "./outpost/options";
 import { BERTHS, placeStation } from "./outpost/placement";
 import { OutpostScene } from "./outpost/scene";
 import type { HomeTab } from "./outpost/ui";
@@ -507,6 +507,16 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         p.textContent = text;
         stake.append(p);
       }
+      // Short of supplies: the sales that cover it, one click each, before the launch refuses.
+      for (const sale of supplySales(known, holdings)) {
+        const sell = element("button");
+        sell.dataset.action = `supply-sale:${sale.good}`;
+        sell.textContent = `Sell ${String(sale.amount)} ${sale.good} · +${String(sale.credits)} cr`;
+        sell.addEventListener("click", () => {
+          send({ type: "sell", good: sale.good, amount: sale.amount });
+        });
+        stake.append(sell);
+      }
       for (const missing of holdings.launch.missing) {
         if (missing.price === undefined) continue;
         const buy = element("button");
@@ -542,7 +552,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     for (const tier of offer.tiers) {
       const option = element("option");
       option.value = String(tier.tier);
-      option.textContent = `Tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} / ${String(tier.payout)} cr${tier.open ? "" : " / locked"}`;
+      option.textContent = `Tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} / pays ${String(tier.payout)} cr${tier.open ? "" : " / locked"}`;
       option.disabled = !tier.open && role.follow !== tier.tier;
       option.selected = tier.tier === selectedTier;
       tierSelect.append(option);
@@ -555,6 +565,15 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     });
     tierLabel.append(tierSelect);
     tiers.append(tierLabel);
+    // The server would refuse a pilot who must sell first; say so here, where the button is.
+    const due = holdings?.launch.due;
+    const short = due?.type === "short" ? due.missing : 0;
+    if (short > 0) {
+      const p = element("p", undefined, "crew-note");
+      p.dataset.short = String(short);
+      p.textContent = `Supplies: sell ${String(short)} cr of goods to launch`;
+      tiers.append(p);
+    }
     for (const tier of offer.tiers) {
       const button = element("button");
       button.dataset.tier = String(tier.tier);
@@ -562,11 +581,13 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       const following = role.follow === tier.tier;
       button.textContent = following
         ? `Follow the host · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)}`
-        : `Launch · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} · ${String(tier.payout)} cr`;
+        : `Launch · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)}`;
       if (following) button.dataset.action = "follow";
-      button.disabled = role.launches ? !tier.open : !following;
+      const ready = role.launches ? tier.open : following;
+      button.disabled = !ready || short > 0;
       if (!tier.open) button.title = "Opens with a tier 2 facility";
-      else if (button.disabled && role.note) button.title = role.note;
+      else if (!ready && role.note) button.title = role.note;
+      else if (short > 0) button.title = `Sell ${String(short)} cr of goods first`;
       button.addEventListener("click", () => {
         for (const other of tiers.querySelectorAll("button")) other.disabled = true;
         // The run begins when `joined` arrives (handled below, as for a rejoined run).
@@ -574,7 +595,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           note.textContent = `Could not launch: ${error instanceof Error ? error.message : String(error)}`;
           for (const other of offer.tiers) {
             const b = tiers.querySelector<HTMLButtonElement>(`[data-tier="${String(other.tier)}"]`);
-            if (b) b.disabled = role.launches ? !other.open : role.follow !== other.tier;
+            if (b) {
+              b.disabled = (role.launches ? !other.open : role.follow !== other.tier) || short > 0;
+            }
           }
         });
       });
@@ -595,6 +618,13 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     for (const text of lines.slice(1)) {
       const p = element("p");
       p.textContent = text;
+      summaryPanel.append(p);
+    }
+    // The account arrives before the summary, so it already says whether supplies carried.
+    if (summary.ending === "docked" && holdings?.launch.due.type === "carried") {
+      const p = element("p", undefined, "crew-note");
+      p.dataset.supplies = "carried";
+      p.textContent = "Contract not met: your supplies carry over, so the next launch is free.";
       summaryPanel.append(p);
     }
     const next = element("button");
@@ -1217,6 +1247,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           current.hull,
           current.hullPulse.recent(now),
           current.cargoPulse.recent(now),
+          current.joined.contractCargo,
         )) {
           const row = gaugeRows.get(gauge.key);
           if (!row) continue;

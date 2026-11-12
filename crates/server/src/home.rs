@@ -356,15 +356,30 @@ pub fn finish_processing(id: AccountId, account: &mut Account, run: &str) -> Vec
         .collect()
 }
 
-/// What launching costs a pilot: the posted supplies price. A pilot short of
-/// credits sells stock first; one with too little left to cover it pays what
-/// they have, so nobody is ever locked out of play.
-///
-/// # Errors
-/// Refuses a pilot who could cover the price by selling stock.
-pub fn supplies_due(account: &Account) -> Result<u32, String> {
+/// What a pilot's launch supplies come to as their home stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Supplies {
+    /// Still aboard from a run that docked without the contract being paid:
+    /// this launch costs nothing.
+    Carried,
+    /// They pay this: the posted price, or all they have when credits and
+    /// goods together fall short of it, so nobody is ever locked out of play.
+    Pays(u32),
+    /// Short by this many credits, with goods that would cover it: they sell
+    /// first.
+    Short(u32),
+}
+
+/// What launching costs a pilot (design section 10): nothing while supplies
+/// are carried over, else the posted price. A pilot short of credits sells
+/// stock first; one with too little left to cover it pays what they have.
+#[must_use]
+pub fn supplies(account: &Account) -> Supplies {
+    if account.supplies_carried {
+        return Supplies::Carried;
+    }
     if account.credits >= LAUNCH_COST {
-        return Ok(LAUNCH_COST);
+        return Supplies::Pays(LAUNCH_COST);
     }
     // In u64, where no stock a u32 can count overflows its value.
     let stock_value: u64 = Good::ALL
@@ -385,12 +400,25 @@ pub fn supplies_due(account: &Account) -> Result<u32, String> {
         .sum();
     let stock_value = stock_value + queued_value;
     if u64::from(account.credits) + stock_value >= u64::from(LAUNCH_COST) {
-        return Err(format!(
-            "Supplies cost {LAUNCH_COST} cr and you have {} cr: sell some stock first.",
-            account.credits
-        ));
+        Supplies::Short(LAUNCH_COST - account.credits)
+    } else {
+        Supplies::Pays(account.credits)
     }
-    Ok(account.credits)
+}
+
+/// The credits a launch takes now.
+///
+/// # Errors
+/// Refuses a pilot who could cover the price by selling stock.
+pub fn supplies_due(account: &Account) -> Result<u32, String> {
+    match supplies(account) {
+        Supplies::Carried => Ok(0),
+        Supplies::Pays(credits) => Ok(credits),
+        Supplies::Short(missing) => Err(format!(
+            "Supplies cost {LAUNCH_COST} cr and you have {} cr: sell {missing} cr of goods first.",
+            account.credits
+        )),
+    }
 }
 
 /// A refusal as a sentence for the pilot.
@@ -626,6 +654,21 @@ mod tests {
         assert!(supplies_due(&home).is_err(), "two ore cover the rest");
         home.stock.ore = 1;
         assert_eq!(supplies_due(&home), Ok(25));
+    }
+
+    #[test]
+    fn supplies_carried_from_an_unpaid_dock_make_the_next_launch_free() {
+        // Whatever the pilot holds: nothing is charged and nothing need be sold.
+        let mut home = Account::new("w", "Vega");
+        home.credits = 10;
+        home.stock.ore = 6;
+        assert_eq!(supplies(&home), Supplies::Short(30));
+        assert!(supplies_due(&home).unwrap_err().contains("sell 30 cr"));
+        home.supplies_carried = true;
+        assert_eq!(supplies(&home), Supplies::Carried);
+        assert_eq!(supplies_due(&home), Ok(0));
+        home.credits = 500;
+        assert_eq!(supplies_due(&home), Ok(0), "nor from a pilot who could pay");
     }
 
     #[test]

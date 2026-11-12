@@ -30,8 +30,8 @@ use frontier_sim::jump::{
 use frontier_sim::outcome;
 use frontier_sim::profile::ShipKind;
 use frontier_sim::run::{
-    Checkpoint, Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Pot, Relay, Run,
-    RunEvent, Summary, seconds,
+    CONTRACT_MIN_CARGO, Checkpoint, Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options,
+    Phase, Pot, Relay, Run, RunEvent, Summary, seconds,
 };
 use frontier_sim::ship::ShipInput;
 use frontier_sim::site::{Capability, Site, SiteTemplate, ThreatTier, crew_scaling};
@@ -703,6 +703,20 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &mut 
         Some(pot) => pay_pot(books, &pot).await,
         None => HashMap::new(),
     };
+    // The instance ended with the contract unpaid: those who docked still
+    // have the supplies they launched with (design section 10).
+    if settled.is_some_and(|pot| pot.contract == 0) {
+        let docked: Vec<ShipId> = books
+            .accounts
+            .keys()
+            .copied()
+            .filter(|&ship| {
+                run.status(ship)
+                    .is_some_and(|status| status.phase == Phase::Docked)
+            })
+            .collect();
+        carry_supplies(books, &docked).await;
+    }
     if settled.is_some() {
         let crew = u32::try_from(books.accounts.len()).unwrap_or(u32::MAX);
         for (&pilot, &share) in &shares {
@@ -890,6 +904,35 @@ async fn pay_pot(books: &Books, pot: &Pot) -> HashMap<ShipId, u32> {
     totals
 }
 
+/// Marks the supplies of the pilots flying `docked` as carried over: their
+/// next launch costs nothing. No credits move, so the ledger records nothing.
+async fn carry_supplies(books: &Books, docked: &[ShipId]) {
+    for ship in docked {
+        let Some(&account) = books.accounts.get(ship) else {
+            continue;
+        };
+        let result = books
+            .store
+            .call(move |store| {
+                store.update(account, |holdings| {
+                    holdings.supplies_carried = true;
+                    Ok(Vec::new())
+                })
+            })
+            .await;
+        match result {
+            Ok(Ok(_)) => info!(
+                target: "frontier::run",
+                run = books.run,
+                account = account.0,
+                "supplies carried over"
+            ),
+            Ok(Err(reason)) => warn!(reason, account = account.0, "supplies not carried over"),
+            Err(error) => warn!(%error, account = account.0, "supplies not carried over"),
+        }
+    }
+}
+
 /// Moves a docked pilot's cargo into their account through
 /// the ledger, and returns what the account holds afterwards. The instance
 /// does this itself, so cargo is banked even if the pilot's connection drops
@@ -1010,6 +1053,7 @@ fn joined(run: &Run, ship: ShipId, tier: ThreatTier) -> ServerMessage {
         speed_factor: run.fitting(ship).map_or(1.0, |fitting| fitting.speed),
         max_shield: run.fitting(ship).map_or(0.0, |fitting| fitting.shield),
         fitted: run.fitted(ship).to_vec(),
+        contract_cargo: CONTRACT_MIN_CARGO,
     }
 }
 
@@ -1485,6 +1529,32 @@ mod tests {
                 "relay bonus"
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn supplies_carry_over_for_the_pilots_named_and_the_next_launch_uses_them() {
+        let store = Store::in_memory().unwrap();
+        let (vega, rigel) = (
+            store.create_account("Vega").unwrap(),
+            store.create_account("Rigel").unwrap(),
+        );
+        let books = Books {
+            run: "run-4".into(),
+            store: store.clone(),
+            runs: Runs::default(),
+            accounts: HashMap::from([(ShipId(0), vega), (ShipId(1), rigel)]),
+            shares: HashMap::from([(ShipId(0), 50), (ShipId(1), 50)]),
+            homes: HashMap::new(),
+        };
+        // Vega docked; Rigel was destroyed, and their supplies with the ship.
+        carry_supplies(&books, &[ShipId(0)]).await;
+        assert!(store.load(vega).unwrap().supplies_carried);
+        assert!(!store.load(rigel).unwrap().supplies_carried);
+        assert_eq!(home::supplies_due(&store.load(vega).unwrap()), Ok(0));
+        assert_eq!(wire::account(&store.load(vega).unwrap()).launch.due, {
+            frontier_protocol::SuppliesDue::Carried
+        });
+        assert_eq!(store.load(vega).unwrap().credits, 100, "no credits moved");
     }
 
     #[tokio::test]

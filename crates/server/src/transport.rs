@@ -807,6 +807,8 @@ impl Pilot<'_> {
                 let mut paid = 0;
                 let holdings = s.update(account, |holdings| {
                     paid = home::supplies_due(holdings)?;
+                    // Supplies carried from an unpaid dock are used up here.
+                    holdings.supplies_carried = false;
                     Ok(Vec::from_iter((paid > 0).then_some(Transfer {
                         item: Item::Credits,
                         amount: paid,

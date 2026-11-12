@@ -16,13 +16,13 @@ pub mod snapshot;
 pub use home::{
     AccountInfo, AdjacencyInfo, Catalog, CostInfo, FacilityInfo, FittingInfo, Good, GoodAmount,
     LaunchInfo, MissingInfo, OutpostInfo, PriceInfo, QueuedInfo, RecipeInfo, Slot, SocketRuleInfo,
-    SocketState, TierInfo, UnlockInfo,
+    SocketState, SuppliesDue, TierInfo, UnlockInfo,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 8;
+pub const PROTOCOL_VERSION: u32 = 9;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -168,6 +168,8 @@ pub enum ServerMessage {
         max_shield: f32,
         /// The rigs and modules flown, by fitting identifier.
         fitted: Vec<String>,
+        /// Site cargo a ship must dock with for the contract to pay.
+        contract_cargo: u32,
     },
     /// The launch was refused, for `reason`.
     LaunchRefused { reason: String },
@@ -620,6 +622,7 @@ mod tests {
                     missing: Vec::new(),
                     stake: 0,
                     supplies: 40,
+                    due: SuppliesDue::Pays { credits: 40 },
                     capacity: 20,
                 },
             },

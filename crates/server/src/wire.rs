@@ -5,7 +5,7 @@ use frontier_protocol::{
     AccountInfo, AdjacencyInfo, Catalog, CostInfo, DominantThreat, Ending, FacilityInfo,
     FittingInfo, Good, GoodAmount, Hazard, LaunchInfo, Material, MissingInfo, OutpostInfo,
     PocketInfo, PocketKind, PriceInfo, QueuedInfo, RecipeInfo, RunSummary, ServerMessage, SiteInfo,
-    Slot, SocketRuleInfo, SocketState, TierInfo, TierOffer, UnlockInfo,
+    Slot, SocketRuleInfo, SocketState, SuppliesDue, TierInfo, TierOffer, UnlockInfo,
 };
 use frontier_sim::fitting::{self, FITTINGS, Missing};
 use frontier_sim::market::{PRICES, RECIPES};
@@ -301,6 +301,11 @@ pub fn account(account: &Account) -> AccountInfo {
                 .collect(),
             stake: launch.stake(discount),
             supplies: LAUNCH_COST,
+            due: match home::supplies(account) {
+                home::Supplies::Pays(credits) => SuppliesDue::Pays { credits },
+                home::Supplies::Carried => SuppliesDue::Carried,
+                home::Supplies::Short(missing) => SuppliesDue::Short { missing },
+            },
             capacity: launch.loadout().capacity,
         },
     }

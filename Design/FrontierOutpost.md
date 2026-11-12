@@ -275,7 +275,7 @@ The optional two-place objective is a relay link: two relays in different pocket
 
 Threat never scales with experience or fittings. The contract payout, the nest bounty and the relay bonus form one pot, split equally unless the host changes the split before launch. Cargo belongs to the ship that docks with it.
 
-**Prices, recipes and costs (placeholders).** Prices are fixed and posted. The starting balance is 100 cr and each launch costs each pilot 40 cr in supplies. A pilot short of 40 cr who holds goods, in stock or queued for processing, sells first; one whose credits and goods together fall short launches for the credits they have, so nobody is stranded.
+**Prices, recipes and costs (placeholders).** Prices are fixed and posted. The starting balance is 100 cr and each launch costs each pilot 40 cr in supplies. A pilot short of 40 cr who holds goods, in stock or queued for processing, sells first; one whose credits and goods together fall short launches for the credits they have, so nobody is stranded. Supplies are spent by a contract that pays: a pilot who docks from an expedition whose contract was not paid still has them aboard, and their next launch costs nothing.
 
 | Good | NPC buys at | NPC sells at |
 |---|---|---|

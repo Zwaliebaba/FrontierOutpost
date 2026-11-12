@@ -264,6 +264,52 @@ export function fittingName(catalog: Catalog, id: string): string {
   return catalog.fittings.find((f) => f.id === id)?.name ?? id;
 }
 
+/** What the pilot's supplies come to if they launch now, as the server priced it (design §10). */
+export function suppliesLine(account: AccountInfo): string {
+  const { due, supplies } = account.launch;
+  switch (due.type) {
+    case "carried":
+      return "Supplies: carried over from your last run, no charge";
+    case "short":
+      return (
+        `Supplies: ${String(supplies)} cr · you have ${String(account.credits)} cr · ` +
+        `sell ${String(due.missing)} cr of goods to launch`
+      );
+    case "pays":
+      return due.credits < supplies
+        ? `Supplies: ${String(due.credits)} cr, all you have (posted at ${String(supplies)} cr)`
+        : `Supplies: ${String(supplies)} cr`;
+  }
+}
+
+/** A sale that would cover the supplies a pilot is short of. */
+export interface SupplySale {
+  good: Good;
+  amount: number;
+  /** What the sale pays. */
+  credits: number;
+}
+
+/**
+ * The sales that would let a pilot who is short of supplies launch: for each good held, the
+ * fewest units that cover what is missing, or all of it when even that falls short. Raw
+ * materials come first: they are worth least. Empty when nothing need be sold.
+ */
+export function supplySales(catalog: Catalog, account: AccountInfo): SupplySale[] {
+  const { due } = account.launch;
+  if (due.type !== "short") return [];
+  const sales: SupplySale[] = [];
+  for (const price of catalog.prices) {
+    const held = holding(account, price.good);
+    if (held < 1 || price.buysAt < 1) continue;
+    const amount = Math.min(held, Math.ceil(due.missing / price.buysAt));
+    sales.push({ good: price.good, amount, credits: amount * price.buysAt });
+  }
+  // One sale that covers it is all the pilot needs to see.
+  const enough = sales.filter((sale) => sale.credits >= due.missing);
+  return enough.length > 0 ? enough.slice(0, 2) : sales;
+}
+
 /** The launch stake and what flies (design §6: the stake at NPC replacement price). */
 export function launchLines(catalog: Catalog, account: AccountInfo): string[] {
   const { launch } = account;
@@ -273,8 +319,8 @@ export function launchLines(catalog: Catalog, account: AccountInfo): string[] {
       : "Flies the basic fitting";
   return [
     `${flies} · hold ${String(launch.capacity)}`,
-    `Stake: ${String(launch.stake)} cr of rigs and modules at replacement price, ` +
-      `and ${String(launch.supplies)} cr of supplies`,
+    `Stake: ${String(launch.stake)} cr of rigs and modules at replacement price`,
+    suppliesLine(account),
     ...launch.missing.map((m) => `${fittingName(catalog, m.fitting)} stays home: ${m.reason}`),
   ];
 }

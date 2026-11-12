@@ -205,6 +205,27 @@ pub struct MissingInfo {
     pub price: Option<u32>,
 }
 
+/// What the pilot's supplies for a launch come to as their home stands
+/// (design section 10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+#[ts(export)]
+pub enum SuppliesDue {
+    /// Launching takes this many credits: the posted price, or all the pilot
+    /// has when credits and goods together fall short of it.
+    Pays { credits: u32 },
+    /// Supplies are still aboard from a run that docked without the contract
+    /// being paid: launching costs nothing.
+    Carried,
+    /// The pilot is this many credits short and holds goods that cover it:
+    /// the launch is refused until they sell.
+    Short { missing: u32 },
+}
+
 /// What launching now would carry and risk (design section 6).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -216,7 +237,10 @@ pub struct LaunchInfo {
     pub missing: Vec<MissingInfo>,
     /// Replacement price of what flies.
     pub stake: u32,
+    /// The posted price of supplies.
     pub supplies: u32,
+    /// What this pilot's supplies come to if they launch now.
+    pub due: SuppliesDue,
     pub capacity: u32,
 }
 

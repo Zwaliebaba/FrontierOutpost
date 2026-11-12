@@ -56,7 +56,11 @@ maxShield: number,
 /**
  * The rigs and modules flown, by fitting identifier.
  */
-fitted: Array<string>, } | { "type": "launchRefused", reason: string, } | { "type": "extractRefused", reason: ExtractRefusal, } | { "type": "jumpSpooling", target: JumpTarget, seconds: number, } | { "type": "jumpRefused", reason: JumpRefusal, } | { "type": "jumpCancelled", reason: JumpCancel, } | { "type": "jumped", target: JumpTarget, } | { "type": "scanned", 
+fitted: Array<string>, 
+/**
+ * Site cargo a ship must dock with for the contract to pay.
+ */
+contractCargo: number, } | { "type": "launchRefused", reason: string, } | { "type": "extractRefused", reason: ExtractRefusal, } | { "type": "jumpSpooling", target: JumpTarget, seconds: number, } | { "type": "jumpRefused", reason: JumpRefusal, } | { "type": "jumpCancelled", reason: JumpCancel, } | { "type": "jumped", target: JumpTarget, } | { "type": "scanned", 
 /**
  * Index into the contract's pockets.
  */

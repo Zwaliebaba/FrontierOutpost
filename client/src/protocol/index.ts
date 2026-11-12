@@ -45,6 +45,7 @@ export type { Snapshot } from "./generated/Snapshot";
 export type { SnapshotEvent } from "./generated/SnapshotEvent";
 export type { SocketRuleInfo } from "./generated/SocketRuleInfo";
 export type { SocketState } from "./generated/SocketState";
+export type { SuppliesDue } from "./generated/SuppliesDue";
 export type { TierInfo } from "./generated/TierInfo";
 export type { TierOffer } from "./generated/TierOffer";
 export type { UnlockInfo } from "./generated/UnlockInfo";

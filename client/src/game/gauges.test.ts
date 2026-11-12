@@ -49,6 +49,16 @@ describe("holdGauge", () => {
     expect(gauge.note).toBe("+1 cargo · counts only once docked at home");
   });
 
+  it("says how far the hold is from what the contract needs, until it has it", () => {
+    expect(holdGauge({ ...own, cargo: 0 }, 0, 10).note).toBe("contract pays from 10: 10 more");
+    expect(holdGauge({ ...own, cargo: 6 }, 1, 10).note).toBe(
+      "+1 cargo · contract pays from 10: 4 more",
+    );
+    expect(holdGauge({ ...own, cargo: 10 }, 0, 10).note).toBe(
+      "enough for the contract · counts only once docked at home",
+    );
+  });
+
   it("says to go home when full", () => {
     const full = holdGauge({ ...own, cargo: 20 }, 0);
     expect(full.note).toContain("fly home and dock");
