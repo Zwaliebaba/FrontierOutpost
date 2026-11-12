@@ -1,5 +1,14 @@
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from "three";
 import { describe, expect, it } from "vitest";
-import { centreOf, firstHit, occludersHiding, rayEntry, rayHits } from "./occlusion";
+import {
+  centreOf,
+  firstHit,
+  modelOccluder,
+  occludersHiding,
+  rayEntry,
+  rayHits,
+  topOf,
+} from "./occlusion";
 import type { Occluder } from "./occlusion";
 import { stationOccluders } from "./stationProxy";
 import { hiddenDepthBehind, viewDirectionAtElevation } from "../view/view";
@@ -97,5 +106,35 @@ describe("greybox occlusion", () => {
     const behindHub = onPlane((-view.x / horizontal) * 5, (-view.z / horizontal) * 5);
     expect(occludersHiding(behindHub, view, occluders)).toContain(0);
     expect(occludersHiding(onPlane(0, 30), view, occluders)).toEqual([]);
+  });
+});
+
+describe("a loaded model as an occluder", () => {
+  // A 4 m cube centred 2 m up at x = 10, inside a group as a loaded scene is.
+  const model = new Group();
+  const cube = new Mesh(new BoxGeometry(4, 4, 4), new MeshStandardMaterial());
+  cube.position.set(10, 2, 0);
+  model.add(cube);
+  const occluder = modelOccluder(model);
+
+  it("is bounded by the model where it stands", () => {
+    const centre = centreOf(occluder);
+    expect(centre.x).toBeCloseTo(10, 5);
+    expect(centre.y).toBeCloseTo(2, 5);
+    expect(centre.z).toBeCloseTo(0, 5);
+    expect(topOf(occluder)).toBeCloseTo(4, 5);
+  });
+
+  it("is entered where a ray meets its triangles", () => {
+    expect(rayEntry({ x: 0, y: 2, z: 0 }, { x: 1, y: 0, z: 0 }, occluder)).toBeCloseTo(8);
+    expect(rayEntry({ x: 0, y: 2, z: 0 }, { x: -1, y: 0, z: 0 }, occluder)).toBeNull();
+    // Inside the model's box but past its triangles: a miss, not the box.
+    expect(rayEntry({ x: 0, y: 5, z: 0 }, { x: 1, y: 0, z: 0 }, occluder)).toBeNull();
+  });
+
+  it("hides what is behind it and is picked before what is farther", () => {
+    const far: Occluder = { kind: "sphere", x: 20, y: 2, z: 0, radius: 1 };
+    expect(occludersHiding({ x: 15, y: 2, z: 0 }, { x: -1, y: 0, z: 0 }, [occluder])).toEqual([0]);
+    expect(firstHit({ x: 0, y: 2, z: 0 }, { x: 1, y: 0, z: 0 }, [far, occluder])).toBe(1);
   });
 });

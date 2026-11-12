@@ -16,8 +16,8 @@ npm run dev        # then open http://localhost:5173/greybox.html
 
 Twelve ships (the tester, three allies, eight hostiles) fly seeded routes and exchange lock-on
 fire in one of four scenes: open crossing traffic, a fight around the reference scene's largest
-asteroid, a fight around a proxy of the home station, and ships heading toward and away from the
-camera. The tester steers one ship with W A S D or the arrow keys.
+asteroid, a fight around the home station (the real `station.glb`, as gate 2 asks), and ships
+heading toward and away from the camera. The tester steers one ship with W A S D or the arrow keys.
 
 The panel changes one variable at a time; every setting is also a URL parameter, so a
 configuration can be shared as a link.
@@ -80,10 +80,15 @@ the rules the game uses, not a copy of them.
 
 - The limits shown beside results are the review's starting hypotheses. The design leaves gate
   thresholds and cohort sizes open.
-- Ships are extruded outlines at the starter frigate's dimensions, and the station is a dozen
-  boxes and cylinders taken from `create_scene.py`. The harness loads no GLB.
-- The station's landing deck is assumed to lie on the gameplay plane. Neither design document
-  defines that datum yet.
+- Player-side ships are the starter frigate (`frigate.glb`) and the station is `station.glb`, its
+  sockets empty, both as the game draws them. If either fails to load, the harness falls back to
+  an extruded wedge, or to a dozen boxes and cylinders taken from `create_scene.py`, and says so in
+  the console. Downloaded results record which it measured (`hull`, `station`); results from
+  before these fields measured the wedge and the proxy. Hostiles are an extruded forked outline in
+  the harness and the game alike: there is no hostile model yet.
+- The station stands where the game stands it: its deck half a hull below the gameplay plane,
+  where a ship's underside rests (`STATION_DROP` in `src/outpost/placement.ts`). Whether a ship is
+  hidden is tested against the model's own triangles.
 - Steering, weapons and NPC routes are placeholders written for this harness. The real rules
   belong in `frontier-sim`.
 - Colour-vision modes are approximate simulations, not a substitute for testers.

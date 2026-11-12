@@ -1,4 +1,6 @@
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from "three";
 import { describe, expect, it } from "vitest";
+import { STATION_DROP } from "../outpost/placement";
 import { MAX_BOLTS, SCENE_IDS, createWorld, stepWorld } from "./scenarios";
 
 const idle = { thrust: 0, turn: 0 };
@@ -52,5 +54,17 @@ describe("greybox scenarios", () => {
     expect(createWorld("headon", 1, "flat").occluders).toEqual([]);
     expect(createWorld("rock", 1, "flat").occluders).toHaveLength(1);
     expect(createWorld("station", 1, "flat").occluders.length).toBeGreaterThan(8);
+  });
+
+  it("uses the real station when it is given, and the proxy only without it", () => {
+    const station = new Group();
+    station.add(new Mesh(new BoxGeometry(4, 4, 4), new MeshStandardMaterial()));
+    const [occluder, ...rest] = createWorld("station", 1, "flat", station).occluders;
+    expect(occluder?.kind).toBe("model");
+    expect(rest).toEqual([]);
+    // Stood where the game stands the station.
+    expect(station.position.y).toBeCloseTo(-STATION_DROP);
+    // The other scenes ignore it.
+    expect(createWorld("rock", 1, "flat", station).occluders[0]?.kind).toBe("sphere");
   });
 });

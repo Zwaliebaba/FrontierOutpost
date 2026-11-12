@@ -1,8 +1,9 @@
 import { NPC_HANDLING, PLAYER_HANDLING, seek, stepShip } from "./kinematics";
 import type { ShipInput, ShipState } from "./kinematics";
+import type { Object3D } from "three";
 import type { Occluder } from "./occlusion";
 import { between, createRng } from "../view/rng";
-import { LARGE_ASTEROID_RADIUS, stationOccluders } from "./stationProxy";
+import { LARGE_ASTEROID_RADIUS, realStation, stationOccluders } from "./stationProxy";
 
 export const SCENE_IDS = ["crossing", "rock", "station", "headon"] as const;
 export type SceneId = (typeof SCENE_IDS)[number];
@@ -81,7 +82,16 @@ function lane(offset: number, length: number, towardFirst: boolean): Waypoint[] 
   return towardFirst ? [near, far] : [far, near];
 }
 
-export function createWorld(scene: SceneId, seed: number, heights: HeightMode): World {
+/**
+ * The scene's ships and structures. The station scene uses `station`, the real model, when it is
+ * given ({@link realStation}), and the coarse proxy otherwise.
+ */
+export function createWorld(
+  scene: SceneId,
+  seed: number,
+  heights: HeightMode,
+  station?: Object3D,
+): World {
   const rng = createRng(seed);
   const ships: Ship[] = [];
 
@@ -146,7 +156,9 @@ export function createWorld(scene: SceneId, seed: number, heights: HeightMode): 
     scene === "rock"
       ? [{ kind: "sphere", x: 0, y: 0, z: 0, radius: LARGE_ASTEROID_RADIUS }]
       : scene === "station"
-        ? stationOccluders()
+        ? station
+          ? [realStation(station)]
+          : stationOccluders()
         : [];
   return { ships, bolts: [], occluders, time: 0 };
 }

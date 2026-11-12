@@ -18,7 +18,7 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import type { Object3D } from "three";
+import type { Material, Object3D } from "three";
 import {
   BACKDROPS,
   HEIGHT_MODES,
@@ -32,7 +32,7 @@ import type { Config } from "./config";
 import type { ShipInput } from "./kinematics";
 import { LOOK_MODES, dragLook, isHome, settleLook, turnLook, zoomWidth } from "../view/look";
 import type { LookState } from "../view/look";
-import { centreOf, firstHit, occludersHiding } from "./occlusion";
+import { centreOf, firstHit, occludersHiding, topOf } from "./occlusion";
 import type { Occluder } from "./occlusion";
 import { pickNearest, screenRay, screenToPlane, worldToScreen } from "../view/picking";
 import type { PickCandidate, ScreenPoint } from "../view/picking";
@@ -60,7 +60,7 @@ import {
   towardCamera,
 } from "../view/view";
 import { SHIP_BEAM, SHIP_LENGTH } from "../view/hulls";
-import { loadFrigate } from "../outpost/models";
+import { loadFrigate, loadStation } from "../outpost/models";
 import { setGear } from "../view/frigate";
 import { stationLights } from "../view/lights";
 import {
@@ -127,7 +127,17 @@ try {
   console.warn("The frigate did not load; player ships are the stand-in wedge.", error);
 }
 
-const world = createWorld(config.scene, config.seed, config.heights);
+// Gate 2 is measured around the real station silhouette (design §9); the proxy stands in only if
+// the model does not load.
+let station: Object3D | undefined;
+if (config.scene === "station") {
+  try {
+    station = await loadStation();
+  } catch (error) {
+    console.warn("The station did not load; the scene uses the coarse proxy.", error);
+  }
+}
+const world = createWorld(config.scene, config.seed, config.heights, station);
 const cameraTarget = new Vector3();
 let viewport = { width: 1, height: 1 };
 // The configured width is where the view starts; the wheel zooms from there.
@@ -171,7 +181,27 @@ if (sky) {
   renderer.setClearColor(linear(0.006, 0.009, 0.02));
 }
 
-function occluderMesh(occluder: Occluder): Mesh<BufferGeometry, MeshStandardMaterial> {
+/** Every material in a structure, for silhouettes and fading. */
+function materialsOf(object: Object3D): MeshStandardMaterial[] {
+  const materials: MeshStandardMaterial[] = [];
+  object.traverse((node) => {
+    if (!(node instanceof Mesh)) return;
+    const material = node.material as Material | Material[];
+    for (const m of Array.isArray(material) ? material : [material]) {
+      if (m instanceof MeshStandardMaterial) materials.push(m);
+    }
+  });
+  return materials;
+}
+
+function occluderMesh(occluder: Occluder): Object3D {
+  if (occluder.kind === "model") {
+    // The real station: a structure, so ships behind it show as silhouettes.
+    for (const material of materialsOf(occluder.object)) {
+      Object.assign(material, STRUCTURE_STENCIL, { transparent: config.occlusion === "fade" });
+    }
+    return occluder.object;
+  }
   const material = new MeshStandardMaterial({
     color: occluder.kind === "sphere" ? linear(0.1, 0.12, 0.15) : linear(0.095, 0.135, 0.19),
     roughness: occluder.kind === "sphere" ? 0.95 : 0.5,
@@ -626,10 +656,7 @@ function row(list: HTMLElement, term: string, value: string, className?: string)
 
 function renderReadout(): void {
   const scale = pixelsPerMetre(viewWidth, viewport.width);
-  const tallest = Math.max(
-    0,
-    ...world.occluders.map((o) => (o.kind === "sphere" ? o.radius : o.yMax)),
-  );
+  const tallest = Math.max(0, ...world.occluders.map(topOf));
   readout.replaceChildren();
   row(readout, "Visible width", `${viewWidth.toFixed(0)} m`);
   row(readout, "Scale", `${scale.toFixed(1)} px/m`);
@@ -704,6 +731,13 @@ function renderResults(): void {
       config,
       // Which hull player-side ships were: results from before the frigate measured the wedge.
       hull: usesShipModel() ? "frigate" : "wedge",
+      // Which station the station scene measured: results from before this used the proxy.
+      station:
+        config.scene !== "station"
+          ? "none"
+          : world.occluders.some((o) => o.kind === "model")
+            ? "model"
+            : "proxy",
       viewport,
       summary,
       occlusion: { longestHiddenSeconds: longestHidden, hiddenShare },
@@ -775,7 +809,7 @@ function syncViews(): void {
   if (config.occlusion === "fade") {
     const inFront = new Set(hiding(player.ship));
     occluderMeshes.forEach((mesh, index) => {
-      mesh.material.opacity = inFront.has(index) ? 0.22 : 1;
+      for (const material of materialsOf(mesh)) material.opacity = inFront.has(index) ? 0.22 : 1;
     });
   }
 

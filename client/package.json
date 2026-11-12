@@ -25,7 +25,8 @@
     "e2e:software": "playwright test --config playwright.software.config.ts"
   },
   "dependencies": {
-    "three": "^0.187.0"
+    "three": "^0.187.0",
+    "three-mesh-bvh": "^0.9.16"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

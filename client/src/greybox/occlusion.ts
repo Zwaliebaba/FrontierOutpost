@@ -1,8 +1,19 @@
-/** Structure proxies in Three.js space (Y up, metres). The gameplay plane is y = 0. */
+import { Box3, Mesh, Raycaster, Vector3 } from "three";
+import type { BufferGeometry, Object3D } from "three";
+import { MeshBVH, acceleratedRaycast } from "three-mesh-bvh";
+
+/**
+ * Structures in Three.js space (Y up, metres). The gameplay plane is y = 0. A `model` is a loaded
+ * one, such as the real station, tested against its triangles; `min` and `max` bound it.
+ */
 export type Occluder =
   | { kind: "sphere"; x: number; y: number; z: number; radius: number }
   | { kind: "cylinder"; x: number; z: number; radius: number; yMin: number; yMax: number }
-  | { kind: "box"; x: number; z: number; halfX: number; halfZ: number; yMin: number; yMax: number };
+  | { kind: "box"; x: number; z: number; halfX: number; halfZ: number; yMin: number; yMax: number }
+  | { kind: "model"; object: Object3D; min: Point3; max: Point3 };
+
+/** The occluders made of simple shapes, such as the station proxy's. */
+export type Primitive = Exclude<Occluder, { kind: "model" }>;
 
 export interface Point3 {
   x: number;
@@ -11,6 +22,33 @@ export interface Point3 {
 }
 
 const EPSILON = 1e-6;
+
+/**
+ * `object`, where it stands now, as an occluder. Move it before this, not after. Each mesh gets a
+ * bounding-volume hierarchy: tested triangle by triangle, the station's 17,000 cost about 6 ms a
+ * frame for the scene's ships, a third of a frame.
+ */
+export function modelOccluder(object: Object3D): Occluder {
+  object.updateMatrixWorld(true);
+  object.traverse((node) => {
+    if (!(node instanceof Mesh)) return;
+    const geometry = node.geometry as BufferGeometry;
+    geometry.boundsTree ??= new MeshBVH(geometry);
+    node.raycast = acceleratedRaycast;
+  });
+  const bounds = new Box3().setFromObject(object);
+  return {
+    kind: "model",
+    object,
+    min: { x: bounds.min.x, y: bounds.min.y, z: bounds.min.z },
+    max: { x: bounds.max.x, y: bounds.max.y, z: bounds.max.z },
+  };
+}
+
+const raycaster = new Raycaster();
+// Whether a structure is in the way needs only the nearest hit, ahead of the ray's start.
+raycaster.firstHitOnly = true;
+raycaster.near = EPSILON;
 
 /** [enter, exit] of a ray through the slab min..max on one axis, or null if it misses. */
 function slab(origin: number, dir: number, min: number, max: number): [number, number] | null {
@@ -74,6 +112,19 @@ export function rayEntry(origin: Point3, dir: Point3, occluder: Occluder): numbe
         slab(origin.y, dir.y, occluder.yMin, occluder.yMax),
         slab(origin.z, dir.z, occluder.z - occluder.halfZ, occluder.z + occluder.halfZ),
       ]);
+    case "model": {
+      // Most rays miss the model's box; only those that enter it are tested against triangles.
+      const { min, max } = occluder;
+      const inBox = entryAhead([
+        slab(origin.x, dir.x, min.x, max.x),
+        slab(origin.y, dir.y, min.y, max.y),
+        slab(origin.z, dir.z, min.z, max.z),
+      ]);
+      if (inBox === null) return null;
+      raycaster.set(new Vector3(origin.x, origin.y, origin.z), new Vector3(dir.x, dir.y, dir.z));
+      const [hit] = raycaster.intersectObject(occluder.object, true);
+      return hit ? hit.distance : null;
+    }
   }
 }
 
@@ -98,9 +149,28 @@ export function firstHit(origin: Point3, dir: Point3, occluders: readonly Occlud
 
 /** The middle of an occluder, as a point for the camera to look at. */
 export function centreOf(occluder: Occluder): Point3 {
-  return occluder.kind === "sphere"
-    ? { x: occluder.x, y: occluder.y, z: occluder.z }
-    : { x: occluder.x, y: (occluder.yMin + occluder.yMax) / 2, z: occluder.z };
+  switch (occluder.kind) {
+    case "sphere":
+      return { x: occluder.x, y: occluder.y, z: occluder.z };
+    case "model": {
+      const { min, max } = occluder;
+      return { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2, z: (min.z + max.z) / 2 };
+    }
+    default:
+      return { x: occluder.x, y: (occluder.yMin + occluder.yMax) / 2, z: occluder.z };
+  }
+}
+
+/** How high an occluder reaches above the plane. */
+export function topOf(occluder: Occluder): number {
+  switch (occluder.kind) {
+    case "sphere":
+      return occluder.y + occluder.radius;
+    case "model":
+      return occluder.max.y;
+    default:
+      return occluder.yMax;
+  }
 }
 
 /** Indexes of the occluders between `point` and a camera in direction `towardCamera`. */

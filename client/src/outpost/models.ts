@@ -94,10 +94,7 @@ export function mergeByMaterial(
  * meshes by material.
  */
 export function indexModels(stationScene: Object3D, facilitiesScene: Object3D): OutpostModels {
-  const station = stationScene.getObjectByName("Station_ROOT");
-  if (!station) throw new ModelError("station.glb has no Station_ROOT");
-  station.position.set(0, 0, 0);
-  station.updateMatrixWorld(true);
+  const station = stationRoot(stationScene);
   const sockets = new Map<string, Object3D>();
   station.traverse((node) => {
     const match = SOCKET.exec(node.name);
@@ -113,6 +110,15 @@ export function indexModels(stationScene: Object3D, facilitiesScene: Object3D): 
     facilities.set(facilityKey(match[1], Number(match[2])), node);
   }
   return { station, sockets, facilities };
+}
+
+/** The station's root in station.glb's scene, moved to the origin. */
+function stationRoot(stationScene: Object3D): Object3D {
+  const station = stationScene.getObjectByName("Station_ROOT");
+  if (!station) throw new ModelError("station.glb has no Station_ROOT");
+  station.position.set(0, 0, 0);
+  station.updateMatrixWorld(true);
+  return station;
 }
 
 /** Parses a GLB's bytes into its scene. */
@@ -145,6 +151,13 @@ export function loadOutpostModels(): Promise<LoadedModels> {
     ([station, facilities, frigate]) => ({ ...indexModels(station, facilities), frigate }),
   );
   return loading;
+}
+
+/** Loads the bare station on its own, for the greybox: its sockets empty, merged by material. */
+export async function loadStation(): Promise<Object3D> {
+  const station = stationRoot(await fetchGlb(stationUrl));
+  mergeByMaterial(station);
+  return station;
 }
 
 /** Loads the starter frigate on its own, for the greybox. */

@@ -1,16 +1,28 @@
-import type { Occluder } from "./occlusion";
+import type { Object3D } from "three";
+import { STATION_DROP } from "../outpost/placement";
+import { modelOccluder } from "./occlusion";
+import type { Occluder, Primitive } from "./occlusion";
 
 /**
- * Coarse proxy of the home station, from the primitives in
- * `Design/FrontierOutpost/create_scene.py` (hub, crown, masts, arms, pods, landing apron, spine).
+ * The home station for the greybox's station scene. Gate 2 is measured around the real station
+ * silhouette (design §9), so the scene uses `station.glb` ({@link realStation}); this coarse
+ * proxy, from the primitives in `Design/FrontierOutpost/create_scene.py` (hub, crown, masts,
+ * arms, pods, landing apron, spine), stands in only if the model cannot load.
  *
- * Dimensions below are in the generator's station-local Blender space (Z up, metres). The dock's
- * inset deck (z = 0.83) is taken as the gameplay plane, which is an assumption: neither design
- * document defines the plane datum yet.
+ * Dimensions below are in the generator's station-local Blender space (Z up, metres). Both stand
+ * where the game stands the station: its origin {@link STATION_DROP} below the gameplay plane, so
+ * the deck lies half a hull below it, where a ship's underside rests.
  */
-const DECK_HEIGHT = 0.83;
+const DECK_HEIGHT = STATION_DROP;
 
-const cylinder = (x: number, y: number, radius: number, zMin: number, zMax: number): Occluder => ({
+/** The real station, at the game's height and unturned, as an occluder. */
+export function realStation(station: Object3D): Occluder {
+  station.position.set(0, -STATION_DROP, 0);
+  station.rotation.set(0, 0, 0);
+  return modelOccluder(station);
+}
+
+const cylinder = (x: number, y: number, radius: number, zMin: number, zMax: number): Primitive => ({
   kind: "cylinder",
   x,
   z: -y,
@@ -26,7 +38,7 @@ const box = (
   sizeY: number,
   zMin: number,
   zMax: number,
-): Occluder => ({
+): Primitive => ({
   kind: "box",
   x,
   z: -y,
@@ -36,8 +48,8 @@ const box = (
   yMax: zMax - DECK_HEIGHT,
 });
 
-export function stationOccluders(): Occluder[] {
-  const parts: Occluder[] = [
+export function stationOccluders(): Primitive[] {
+  const parts: Primitive[] = [
     // Hub: lower collar to rooftop armour.
     cylinder(0, 0, 2.4, -0.275, 4.68),
     // Landing apron: neck and slab, top at the deck.
