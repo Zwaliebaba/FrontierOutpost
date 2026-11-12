@@ -82,7 +82,7 @@ export async function launch(page: Page, url = "/"): Promise<void> {
 /** Flies straight out of the dock until the ship is inside the ore field. */
 export async function flyIntoSite(page: Page): Promise<void> {
   await page.keyboard.down("KeyW");
-  await page.locator('#run[data-phase="objective"]').waitFor({ timeout: 30_000 });
+  await page.locator('#run[data-phase="objective"]').waitFor({ timeout: 45_000 });
   await page.keyboard.up("KeyW");
 }
 

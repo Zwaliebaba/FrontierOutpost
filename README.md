@@ -40,6 +40,13 @@ npm ci
 npm run dev
 ```
 
+The home screen uses Station Command service views around a four-berth apron. Crew ships use
+the same authored slots at home and when launching. See the [station upgrade notes](Design/FrontierOutpost/README.md#four-berth-station-command-upgrade).
+
+After building the client, `npm run e2e` runs browser checks against the real server. On a
+CPU-only machine, `npm run e2e:software` uses the same tests and CSS viewport with half-density
+rendering buffers. The ordinary configuration keeps full-density rendering.
+
 ## Trying the game under latency
 
 The server can route WebTransport through a relay that delays and drops packets, so a local

@@ -1,6 +1,9 @@
 import { expect, flyUntilLocked, launch, test } from "./fixtures";
 import type { Page } from "@playwright/test";
 
+// Signal-color pixel assertions need native-density edges, including on the software runner.
+test.use({ deviceScaleFactor: 1 });
+
 test("Tab locks the nearest hostile and Escape releases it", async ({ page }) => {
   test.setTimeout(60_000);
   await launch(page);

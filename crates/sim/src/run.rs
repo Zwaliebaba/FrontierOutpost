@@ -344,6 +344,7 @@ pub struct Options {
 #[derive(Debug, Clone)]
 struct PilotRun {
     ship: ShipId,
+    berth_slot: u32,
     phase: Phase,
     cargo: Cargo,
     capacity: u32,
@@ -400,6 +401,8 @@ impl PilotRun {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PilotCheckpoint {
     pub ship: u16,
+    #[serde(default)]
+    pub berth_slot: Option<u32>,
     pub phase: Phase,
     pub cargo: Cargo,
     pub capacity: u32,
@@ -487,16 +490,17 @@ impl Run {
         let (dx, dz) = site.template.dock;
         let (cx, cz) = site.template.centre;
         let heading = (cz - dz).atan2(cx - dx);
-        let crew = site.pilots.max(pilots);
         let ships: Vec<ShipId> = (0..pilots)
-            .map(|i| world.spawn_pilot_at(berth(&site, i, crew), heading))
+            .map(|i| world.spawn_pilot_at(berth(&site, i), heading))
             .collect();
         let mut run = Self {
             world,
             pilots: ships
                 .iter()
-                .map(|&ship| PilotRun {
+                .enumerate()
+                .map(|(index, &ship)| PilotRun {
                     ship,
+                    berth_slot: u32::try_from(index).expect("at most four pilots"),
                     phase: Phase::AtDock,
                     cargo: [0; 3],
                     capacity: BASIC_CAPACITY,
@@ -628,6 +632,17 @@ impl Run {
     /// the join window is open and the crew the site was scaled for is not
     /// all here. Returns their ship.
     pub fn join(&mut self) -> Option<ShipId> {
+        let slot = (0..self.site.pilots)
+            .find(|slot| !self.pilots.iter().any(|p| p.berth_slot == *slot))?;
+        self.join_at(slot)
+    }
+
+    /// Joins at the server-assigned roster slot, even if crewmates follow out of order.
+    pub fn join_at(&mut self, slot: u32) -> Option<ShipId> {
+        if slot >= self.site.pilots || slot >= 4 || self.pilots.iter().any(|p| p.berth_slot == slot)
+        {
+            return None;
+        }
         let joined = u32::try_from(self.pilots.len()).unwrap_or(u32::MAX);
         if self.ended.is_some() || self.elapsed() > JOIN_WINDOW_TICKS || joined >= self.site.pilots
         {
@@ -636,11 +651,10 @@ impl Run {
         let (dx, dz) = self.site.template.dock;
         let (cx, cz) = self.site.template.centre;
         let heading = (cz - dz).atan2(cx - dx);
-        let ship = self
-            .world
-            .spawn_pilot_at(berth(&self.site, joined, self.site.pilots), heading);
+        let ship = self.world.spawn_pilot_at(berth(&self.site, slot), heading);
         self.pilots.push(PilotRun {
             ship,
+            berth_slot: slot,
             phase: Phase::AtDock,
             cargo: [0; 3],
             capacity: BASIC_CAPACITY,
@@ -1011,6 +1025,7 @@ impl Run {
                         .unwrap_or_default();
                     PilotCheckpoint {
                         ship: pilot.ship.0,
+                        berth_slot: Some(pilot.berth_slot),
                         phase: pilot.phase,
                         cargo: pilot.cargo,
                         capacity: pilot.capacity,
@@ -1061,7 +1076,8 @@ impl Run {
         let pilots = checkpoint
             .crew
             .iter()
-            .map(|saved| {
+            .enumerate()
+            .map(|(index, saved)| {
                 let away = !saved.phase.is_over();
                 let state = ShipState {
                     x: saved.x,
@@ -1071,6 +1087,9 @@ impl Run {
                 };
                 PilotRun {
                     ship: ShipId(saved.ship),
+                    berth_slot: saved
+                        .berth_slot
+                        .unwrap_or(u32::try_from(index).expect("at most four pilots")),
                     phase: saved.phase,
                     cargo: saved.cargo,
                     capacity: saved.capacity,
@@ -1852,14 +1871,14 @@ impl Run {
     }
 }
 
-/// Where crew member `index` of `crew` starts: side by side across the launch
-/// direction at the dock, 4 m apart.
-fn berth(site: &Site, index: u32, crew: u32) -> (f32, f32) {
+/// Where crew member `index` starts: side by side across the launch
+/// direction at the dock, using the same authored offsets as the station.
+fn berth(site: &Site, index: u32) -> (f32, f32) {
     let (dx, dz) = site.template.dock;
     let (cx, cz) = site.template.centre;
     let heading = (cz - dz).atan2(cx - dx);
-    let offset = (index as f32 - (crew as f32 - 1.0) / 2.0) * 4.0;
-    (dx - heading.sin() * offset, dz + heading.cos() * offset)
+    let offset = crate::berths::lateral(index);
+    (dx + heading.sin() * offset, dz - heading.cos() * offset)
 }
 
 /// How long a scan takes in `fitting`.
@@ -1981,7 +2000,8 @@ mod tests {
         assert_eq!(npcs.count(), 3);
         let state = run.world.ship(ships[0]).unwrap().state;
         let (dx, dz) = COMPACT_SITE.dock;
-        assert!((state.x - dx).hypot(state.z - dz) < 1.0);
+        assert!((state.x - dx).abs() < 0.001);
+        assert!((state.z - dz - 6.0).abs() < 0.001);
         assert_eq!(run.status(ships[0]).unwrap().phase, Phase::AtDock);
         assert_eq!(
             events(&mut run),
@@ -2519,6 +2539,9 @@ mod tests {
         let top_speed = |ids: &[&str]| {
             let (mut run, ship) = quiet(23);
             run.fit(ship, &fitted(ids));
+            // Compare fittings on the clear centreline, independently of the assigned berth.
+            let dock = run.site.template.dock;
+            place(&mut run, ship, dock);
             run.set_controls(
                 ship,
                 ShipInput {
@@ -2787,6 +2810,34 @@ mod tests {
             },
         );
         (run, ships[0])
+    }
+
+    #[test]
+    fn four_pilots_keep_their_berths_when_following_out_of_order() {
+        let (mut run, host) = crew_run(40, 4);
+        let last = run.join_at(3).unwrap();
+        let second = run.join_at(1).unwrap();
+        assert!(
+            run.join_at(3).is_none(),
+            "a berth cannot be allocated twice"
+        );
+        assert!(run.join_at(4).is_none(), "only four berths exist");
+        let third = run.join_at(2).unwrap();
+        for (slot, ship) in [host, second, third, last].into_iter().enumerate() {
+            let state = run.world.ship(ship).unwrap().state;
+            let expected = berth(run.site(), u32::try_from(slot).unwrap());
+            assert!((state.x - expected.0).hypot(state.z - expected.1) < 0.001);
+        }
+        let checkpoint = run.checkpoint();
+        let restored = Run::restore(&checkpoint).unwrap();
+        assert_eq!(
+            restored
+                .pilots
+                .iter()
+                .map(|p| p.berth_slot)
+                .collect::<Vec<_>>(),
+            [0, 3, 1, 2]
+        );
     }
 
     #[test]

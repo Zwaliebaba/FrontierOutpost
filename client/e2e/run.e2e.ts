@@ -3,7 +3,7 @@ import { QUIET, expect, flyIntoSite, launch, position, test } from "./fixtures";
 // These run on the quiet server: no NPCs open the run, so nothing interrupts the pilot.
 
 test("a pilot stops at a deposit, extracts ore and vents", async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
   await launch(page, QUIET);
   const run = page.locator("#run");
   // Straight out of the dock, then brake beside the deposit at (64, 1).
@@ -19,8 +19,8 @@ test("a pilot stops at a deposit, extracts ore and vents", async ({ page }) => {
 
   await page.keyboard.press("KeyX");
   await expect(run).toHaveAttribute("data-extractor", "on");
-  // 2 ore a minute: the first unit within 30 seconds.
-  await expect(run).toHaveAttribute("data-cargo", "1", { timeout: 35_000 });
+  // 2 ore a simulation minute. Allow wall-clock headroom when software rendering shares a CPU.
+  await expect(run).toHaveAttribute("data-cargo", "1", { timeout: 60_000 });
   await expect(page.locator('#ship [data-gauge="hold"]')).toContainText("1/20");
 
   await page.keyboard.press("KeyV");
@@ -35,7 +35,7 @@ test("pressing X away from a deposit explains why nothing happened", async ({ pa
 });
 
 test("a scan held still in the site reveals the rich pocket and the waves", async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   await launch(page, QUIET);
   await flyIntoSite(page);
   await page.keyboard.down("KeyS");

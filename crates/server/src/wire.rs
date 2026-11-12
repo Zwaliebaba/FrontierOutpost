@@ -28,6 +28,7 @@ pub fn crew(view: &crews::View) -> frontier_protocol::CrewInfo {
             .iter()
             .map(|(account, callsign, share)| frontier_protocol::CrewMember {
                 callsign: callsign.clone(),
+                berth: view.berth_slot(*account),
                 share: *share,
                 you: *account == view.you,
             })

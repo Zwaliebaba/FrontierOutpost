@@ -9,6 +9,10 @@ from math import sin, cos, pi
 random.seed(2266)
 OUT = os.environ.get('SCENE_OUTPUT', os.path.dirname(os.path.abspath(__file__)))
 os.makedirs(OUT, exist_ok=True)
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'berths.json')) as f:
+    BERTH_LAYOUT=json.load(f)
+BERTHS=BERTH_LAYOUT['berths']
+DECK_Y=BERTH_LAYOUT['centreY']
 bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete(use_global=False)
 for data in list(bpy.data.collections):
     if data.name != 'Collection': bpy.data.collections.remove(data)
@@ -94,6 +98,17 @@ for i in range(8):
     for z in [.8,3.12]:box('Hub | belt rail',sp(n.x*2.23,n.y*2.23,z),(1.55,.16,.12),dark,.015,rot)
     box('Hub | roof vent',sp(n.x*1.72,n.y*1.72,4.06),(.65,.36,.13),dark,.02,rot)
     for j in range(3): box('Hub | roof vent slat',sp(n.x*1.72,n.y*1.72,4.14)+tangent*((j-1)*.18),(.05,.3,.025),lightarmor,0,rot)
+# Segmented crown armor: broad bevel-lit plates with deliberate graphite gaps.
+for i in range(8):
+    a=i*pi/4; gap=.035
+    vs=[]
+    for radius,z in [(1.45,4.62),(2.48,4.03)]:
+        for angle in [a+gap,a+pi/4-gap]:vs.append(tuple(sp(cos(angle)*radius,sin(angle)*radius,z)))
+    me=bpy.data.meshes.new('Crown armor plate');me.from_pydata(vs,[],[(0,2,3,1)]);me.update()
+    uv=me.uv_layers.new(name='UVMap')
+    for loop,coord in zip(uv.data,[(0,0),(0,1),(1,1),(1,0)]):loop.uv=coord
+    o=bpy.data.objects.new('Hub | segmented crown',me);groups['Station'].objects.link(o);assign(o,armor if i%3 else lightarmor)
+    solid=o.modifiers.new('Armor thickness','SOLIDIFY');solid.thickness=.08
 # Suspended spine, heat radiators, pipes and aerials.
 for z,r,h in [(-.8,1.4,1.2),(-1.9,.95,1.1),(-3,.65,1.3),(-4.05,.33,.9)]:
     cyl('Spine | service tier',sp(0,0,z),r,h,steel,8)
@@ -138,23 +153,40 @@ for side in [-1,1]:
         box('Pod | antenna base',sp(x,.5,3.15),(.55,.5,.3),steel)
         beam('Pod | antenna',sp(x,.5,3.2),sp(x,.5,5.0),.045,lightarmor)
         cyl('Pod | amber beacon',sp(x,.5,5.05),.05,.1,warm)
-# Forward rectangular landing apron with painted broken perimeter and guidance.
-box('Dock | neck',sp(0,-2.6,.40),(1.65,2,.86),dark,.1)
-box('Dock | slab',sp(0,-4.3,.55),(4.9,4,.42),armor,.14)
-box('Dock | inset deck',sp(0,-4.3,.79),(4.55,3.65,.08),steel,.1)
-for x in [-2.04,2.04]:
-    box('Dock | yellow side stripe',sp(x,-4.3,.845),(.045,3.05,.012),yellow,0)
-for y in [-5.83,-2.77]:box('Dock | yellow end stripe',sp(0,y,.845),(4.08,.045,.012),yellow,0)
-for x in [-1.95,1.95]:
-    for y in [-5.75,-2.85]:
-        box('Dock | corner lamp',sp(x,y,.9),(.17,.17,.07),white,.02)
-        beam('Dock | diagonal brace',sp(x,y,.3),sp(x*.35,-2.1,-1.2),.1,dark)
-for y in [-5.25,-4.7,-4.15,-3.6]:box('Dock | center approach dash',sp(0,y,.85),(.05,.25,.012),yellow,0)
-for x in [-.65,.65]:box('Dock | berth H',sp(x,-4.35,.852),(.08,1.25,.015),lightarmor,0)
-box('Dock | berth H crossbar',sp(0,-4.35,.854),(1.3,.08,.015),lightarmor,0)
-text('Dock | berth number','07',sp(1.25,-5.3,.855),.42,yellow)
-for x in [-2.2,2.2]:
-    for y in [-5.2,-4.3,-3.4]:box('Dock | edge signal',sp(x,y,.55),(.09,.24,.14),warm,.01)
+# Four independently accessible berths share the layout used by the simulation and HUD.
+box('Dock | neck',sp(0,-2.6,.40),(3.3,2,.86),dark,.1)
+box('Dock | slab',sp(0,DECK_Y,.435),(16.8,4.5,.65),armor,.14)
+box('Dock | inset deck',sp(0,DECK_Y,.79),(16.45,4.18,.08),steel,.06)
+for berth in BERTHS:
+    x=berth['x'];number=berth['id']
+    # Anchors point outward (-Y in Blender / +Z in glTF).
+    anchor=bpy.data.objects.new('Berth_'+number,None);groups['Station'].objects.link(anchor)
+    anchor.location=sp(x,DECK_Y,BERTH_LAYOUT['deck']);anchor.rotation_euler.z=pi
+    for side in [-1,1]:
+        box('Dock | yellow side stripe',sp(x+side*1.8,DECK_Y,.845),(.045,3.6,.012),yellow,0)
+        for y in [DECK_Y-1.9,DECK_Y+1.9]:
+            box('Dock | corner lamp',sp(x+side*1.7,y,.89),(.12,.12,.06),cyan,.01)
+    for y in [DECK_Y-1.8,DECK_Y+1.8]:
+        box('Dock | yellow end stripe',sp(x,y,.845),(3.6,.045,.012),yellow,0)
+    for y in [-1.1,-.5,.1,.7]:
+        box('Dock | center approach dash',sp(x,DECK_Y+y,.85),(.04,.22,.012),yellow,0)
+    text('Dock | berth number',number,sp(x+1.25,DECK_Y-1.2,.855),.45,yellow)
+    box('Dock | underside beam',sp(x,DECK_Y,.02),(.35,4,.35),dark,.04)
+    box('Dock | forward armor fascia',sp(x,DECK_Y-2.22,.4),(3.7,.13,.48),steel,.025)
+    box('Dock | forward identification band',sp(x,DECK_Y-2.30,.4),(.65,.025,.25),orange,.01)
+    for side in [-1,1]:
+        box('Dock | rear service cabinet',sp(x+side*1.6,DECK_Y+2.03,1.03),(.3,.22,.4),dark,.025)
+        box('Dock | service cabinet cap',sp(x+side*1.6,DECK_Y+2.03,1.25),(.34,.25,.05),lightarmor,.01)
+    beam('Dock | diagonal brace',sp(x,DECK_Y-1.7,.25),sp(x*.6,-1.7,-1.4),.12,dark)
+    for y in [-1.5,0,1.5]:
+        box('Dock | edge signal',sp(x,DECK_Y+y,.54),(.22,.1,.14),warm,.01)
+# Armor seams and identification bands emphasize the station's structural rhythm.
+for i in range(8):
+    a=i*pi/4+pi/8
+    box('Hub | identification band',sp(cos(a)*2.2,sin(a)*2.2,3.25),(.65,.08,.2),orange,.01,(0,0,a+pi/2))
+for side in [-1,1]:
+    for y in [-.5,.5,1.5]:
+        box('Pod | identification band',sp(side*5.2,y,3.0),(.42,.6,.04),orange,.01)
 # Cloth banner: cut pennant, custom mesh, double-sided PBR material.
 bx,by,bz=sp(5.2,-1.45,2.45)
 verts=[(bx-0.7,by,bz),(bx+.7,by,bz),(bx+.65,by-.09,bz-2.75),(bx,by-.18,bz-2.48),(bx-.7,by-.12,bz-2.75)]
@@ -186,7 +218,7 @@ def socket(label,beside,c,top,bridge_from,bridge_to):
     anchor=empty('Socket_%s'%label,c+Vector((0,0,top+.01)))
     sockets[label]={'beside':beside,'anchor':anchor}
 socket('A','cargo bay',sp(-8.95,.5,0),1.6,sp(-7.1,.5,1.45),sp(-7.6,.5,1.45))
-socket('B','berth',sp(4.95,-4.4,0),.72,sp(2.4,-4.4,.55),sp(3.6,-4.4,.55))
+socket('B','berth',sp(10.2,DECK_Y,0),.72,sp(8.4,DECK_Y,.55),sp(8.85,DECK_Y,.55))
 # Preserve the original Aurora ship at full size, now classified as a cruiser.
 active='Cruiser'; C=layout(-7,4,-8)
 def fp(x,y,z):return C+Vector((x,y,z))
@@ -433,8 +465,16 @@ for group,pivot in [('Station',S),('Cruiser',C),('Frigate',F)]:
     for o in list(groups[group].objects):
         if o!=root:
             w=o.matrix_world.copy();o.parent=root;o.matrix_world=w
+frigate_root=bpy.data.objects['Frigate_ROOT']
+frigate_root.location.x+=BERTHS[0]['x']
+frigate_root.rotation_euler.z=pi
+# Correct the small asymmetric fore/aft extent so its bounds centre matches the berth.
+frigate_root.location.y+=2*(DECK_Y+4.3)
 bpy.data.objects['Cruiser_ROOT'].rotation_euler.z=math.radians(-35)
 bpy.context.view_layer.update()
+# The detail camera follows berth 07 after the apron is expanded.
+detail.location=frigate_root.location+view*12
+detail.rotation_euler=(-view).to_track_quat('-Z','Y').to_euler()
 # Validate the complete evaluated frigate, including bevels, gear and aerials.
 bpy.context.view_layer.update()
 depsgraph=bpy.context.evaluated_depsgraph_get()
@@ -446,25 +486,42 @@ for obj in groups['Frigate'].objects:
     points.extend(station_inverse @ (obj.matrix_world @ v.co) for v in mesh.vertices)
     evaluated.to_mesh_clear()
 lo=[min(p[i] for p in points) for i in range(3)];hi=[max(p[i] for p in points) for i in range(3)]
-clearance=min(lo[0]+2.04,2.04-hi[0],lo[1]+5.83,-2.77-hi[1])
-assert clearance>=.15, ('Frigate overlaps pad safety boundary',lo,hi,clearance)
-assert abs(lo[2]-.86)<.002, ('Landing feet are not on the deck',lo[2])
-# Reject intersections with every structural station mesh; paint is a visual overlay.
-structural_checks=0
+assert BERTH_LAYOUT['halfWidth'] >= 1.3+.15 and BERTH_LAYOUT['halfLength'] >= 1.3+.15, 'Berths must clear the gameplay collision envelope'
+# Check every parked hull and the complete straight departure corridor against station solids.
+obstacles=[]
 for obj in groups['Station'].objects:
     if obj.type!='MESH':continue
     if any(label in obj.name for label in ['stripe','dash','berth H','berth number']):continue
     evaluated=obj.evaluated_get(depsgraph);mesh=evaluated.to_mesh()
-    obstacle=[station_inverse @ (obj.matrix_world @ v.co) for v in mesh.vertices]
+    pts=[station_inverse @ (obj.matrix_world @ v.co) for v in mesh.vertices]
     evaluated.to_mesh_clear()
-    lower=[min(p[i] for p in obstacle) for i in range(3)];upper=[max(p[i] for p in obstacle) for i in range(3)]
-    assert any(hi[i]<=lower[i]+.0001 or lo[i]>=upper[i]-.0001 for i in range(3)), ('Frigate intersects station structure',obj.name,lower,upper)
-    structural_checks+=1
-
-docking={'berth':'07','landed':True,'ship_bounds_station_space':{'min':lo,'max':hi},'safety_boundary_xy':[-2.04,2.04,-5.83,-2.77],'minimum_edge_clearance':clearance,'landing_foot_height':lo[2],'structural_obstacles_checked':structural_checks,'connector_top_height':.83}
+    obstacles.append((obj.name,[min(p[i] for p in pts) for i in range(3)],[max(p[i] for p in pts) for i in range(3)]))
+checks=[]
+for berth in BERTHS:
+    shift=berth['x']-BERTHS[0]['x']
+    lower=[lo[0]+shift,lo[1],lo[2]];upper=[hi[0]+shift,hi[1],hi[2]]
+    boundary=[berth['x']-BERTH_LAYOUT['halfWidth'],berth['x']+BERTH_LAYOUT['halfWidth'],DECK_Y-BERTH_LAYOUT['halfLength'],DECK_Y+BERTH_LAYOUT['halfLength']]
+    clearance=min(lower[0]-boundary[0],boundary[1]-upper[0],lower[1]-boundary[2],boundary[3]-upper[1])
+    assert clearance>=.15, ('Frigate overlaps pad safety boundary',berth,clearance)
+    assert abs(lower[2]-BERTH_LAYOUT['deck'])<.002, ('Landing feet are not on deck',lower)
+    # Swept AABB to the outside of the apron; paint overlays are excluded above.
+    swept=[lower[0],DECK_Y-5,lower[2]]
+    for name,obs_lo,obs_hi in obstacles:
+        assert any(upper[i]<=obs_lo[i]+.0001 or swept[i]>=obs_hi[i]-.0001 for i in range(3)), ('Departure intersects station',berth['id'],name)
+    checks.append({'berth':berth['id'],'anchor_station_space':[berth['x'],DECK_Y,BERTH_LAYOUT['deck']],'ship_bounds_station_space':{'min':lower,'max':upper},'safety_boundary_xy':boundary,'minimum_edge_clearance':clearance,'departure_clear':True})
+for i,a in enumerate(checks):
+    for b in checks[i+1:]:
+        assert a['ship_bounds_station_space']['max'][0]+.15 < b['ship_bounds_station_space']['min'][0], ('Parked ships overlap',a,b)
+# Socket footprints must also stay outside all departure lanes, even with tier-two modules.
+for info in sockets.values():
+    anchor=station_inverse@info['anchor'].matrix_world.translation
+    for berth in BERTHS:
+        assert abs(anchor.x-berth['x'])>1.25+.65+.15 or anchor.y>DECK_Y+1.34+1.25+.15
+clearance=min(c['minimum_edge_clearance'] for c in checks)
+docking={'berth':'07','landed':True,'ship_bounds_station_space':checks[0]['ship_bounds_station_space'],'safety_boundary_xy':checks[0]['safety_boundary_xy'],'minimum_edge_clearance':clearance,'landing_foot_height':lo[2],'structural_obstacles_checked':len(obstacles),'connector_top_height':.83,'berths':checks,'inter_ship_clearance':4-(hi[0]-lo[0])}
 scene['starter_frigate_pad_clearance']=clearance
 print('DOCK_FIT_OK',json.dumps(docking),flush=True)
-scene['description']='Frontier Outpost — HUD-free game environment blockout'
+scene['description']='Frontier Outpost — four-berth industrial station'
 scene['seed']=2266
 scene.render.engine='CYCLES';scene.cycles.samples=int(os.environ.get('RENDER_SAMPLES','128'));scene.cycles.use_denoising=bool(getattr(bpy.app.build_options, 'openimagedenoise', False))
 scene.render.resolution_x=1600;scene.render.resolution_y=900;scene.render.resolution_percentage=int(os.environ.get('RENDER_SCALE','100'))
@@ -499,7 +556,7 @@ for name in ['Station','Cruiser','Frigate','Asteroids','Facilities']:
         if 'ion exhaust' not in o.name:o.select_set(True)
     bpy.ops.export_scene.gltf(filepath=os.path.join(OUT,name.lower()+'.glb'),export_format='GLB',use_selection=True,export_apply=True,export_yup=True)
 bpy.ops.object.select_all(action='DESELECT')
-manifest={'units':'metres','blender_up':'+Z','blender_forward':'+Y','gltf_up':'+Y','seed':2266,'assets':{name:{'objects':len(groups[name].objects),'triangles':sum(sum(len(p.vertices)-2 for p in o.data.polygons) for o in groups[name].objects if o.type=='MESH')} for name in ['Station','Cruiser','Frigate','Asteroids','Facilities']},'notes':'GLBs retain scene placement. Aurora cruiser is preserved at original scale in the background; starter frigate is landed on berth 07. Backdrop and cruiser drive plumes are presentation effects.'}
+manifest={'units':'metres','blender_up':'+Z','blender_forward':'+Y','gltf_up':'+Y','seed':2266,'assets':{name:{'objects':len(groups[name].objects),'triangles':sum(sum(len(p.vertices)-2 for p in o.data.polygons) for o in groups[name].objects if o.type=='MESH')} for name in ['Station','Cruiser','Frigate','Asteroids','Facilities']},'notes':'GLBs retain scene placement. Berths 07–10 use berths.json; the reference frigate faces outward on 07. Preview crew copies are excluded from GLBs. Aurora cruiser stays at its original scale. Backdrop and drive plumes are presentation effects.'}
 manifest['docking_validation']=docking
 station_root=bpy.data.objects['Station_ROOT']
 manifest['sockets']={'Socket_'+label:{'beside':info['beside'],'anchor_station_space':[round(v,4) for v in station_root.matrix_world.inverted()@info['anchor'].matrix_world.translation]} for label,info in sockets.items()}
@@ -530,6 +587,15 @@ for name, stats in manifest['assets'].items():
         f.seek(12); length, chunk_type = struct.unpack('<II', f.read(8)); gltf = json.loads(f.read(length))
     stats['triangles_export'] = sum(gltf['accessors'][p['indices']]['count']//3 for m in gltf['meshes'] for p in m['primitives'])
 with open(os.path.join(OUT,'scene_manifest.json'),'w') as f:json.dump(manifest,f,indent=2)
+# Reference overview displays four ships, but their copies are not part of any gameplay GLB.
+preview_crew=bpy.data.collections.new('Docked crew | preview only');scene.collection.children.link(preview_crew)
+for berth in BERTHS[1:]:
+    delta=Vector((berth['x']-BERTHS[0]['x'],0,0))
+    for source in list(groups['Frigate'].objects):
+        if source.type not in {'MESH','FONT'}:continue
+        copy=source.copy();copy.data=source.data;copy.parent=None
+        preview_crew.objects.link(copy);copy.matrix_world=source.matrix_world.copy();copy.location+=delta
+bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT,'FrontierOutpost.blend'), compress=True)
 if not os.environ.get('SKIP_RENDER'):
     bpy.ops.render.render(write_still=True)
     scene.camera=detail;scene.render.resolution_x=1000;scene.render.resolution_y=1000
