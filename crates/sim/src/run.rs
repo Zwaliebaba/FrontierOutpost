@@ -2339,7 +2339,7 @@ mod tests {
     }
 
     #[test]
-    fn tier_one_npcs_are_slower_than_a_pilot_and_hit_half_as_hard() {
+    fn tier_one_npcs_fly_at_half_speed_and_hit_a_quarter_as_hard() {
         let pilot_speed = ShipKind::Pilot.profile().handling.max_speed;
         for tier in ThreatTier::ALL {
             let site = Site::generate(COMPACT_SITE, 4, tier, 1, &[]);
@@ -2354,13 +2354,37 @@ mod tests {
             for npc in npcs {
                 let top = crate::world::handling(npc.kind, &npc.kit).max_speed;
                 if tier == ThreatTier::I {
-                    assert!(top < pilot_speed, "{:?} at {top} m/s", npc.kind);
-                    assert!((npc.kit.weapon - 0.5).abs() < f32::EPSILON);
+                    // Left behind without the cruise drive, not merely matched.
+                    assert!(top < pilot_speed * 0.65, "{:?} at {top} m/s", npc.kind);
+                    assert!((npc.kit.weapon - 0.25).abs() < f32::EPSILON);
                 } else {
                     assert_eq!(npc.kit, Kit::BASIC, "{tier:?} keeps full strength");
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_beginner_who_fights_the_tier_one_opening_raiders_keeps_most_of_the_hull() {
+        // The hardest opening at tier I for one pilot: every NPC a raider.
+        // Shots home, so the toll is arithmetic: each raider fires for as
+        // long as it lives, and the pilot destroys them one after another.
+        let seconds = |ticks: u32| (ticks + 1) as f32 * crate::ship::DT;
+        let (pilot, raider) = (ShipKind::Pilot.profile(), ShipKind::Raider.profile());
+        let rules = ThreatTier::I.rules();
+        let shots_to_kill = (raider.max_hull / pilot.weapon.damage).ceil();
+        let kill_time = shots_to_kill * seconds(pilot.weapon.cooldown_ticks);
+        let raider_dps =
+            raider.weapon.damage * rules.npc_damage / seconds(raider.weapon.cooldown_ticks);
+        let raiders = rules.opening_threat;
+        // Raider-seconds under fire: all of them, then one fewer, and so on.
+        let exposure = (raiders * (raiders + 1) / 2) as f32 * kill_time;
+        let toll = exposure * raider_dps;
+        assert!(
+            toll < pilot.max_hull * 0.5,
+            "the opening raiders take {toll} of {} hull",
+            pilot.max_hull
+        );
     }
 
     #[test]

@@ -251,11 +251,11 @@ Extraction builds heat. At full heat the extractor cuts out for 20 seconds; vent
 
 | Threat tier | Contract payout | Yield pools | Opening threat | Alert rises every | NPC speed | NPC damage |
 |---|---|---|---|---|---|---|
-| I | 100 cr | ×1.0 | 3 NPCs | 4 minutes | ×0.7 | ×0.5 |
+| I | 100 cr | ×1.0 | 3 NPCs | 4 minutes | ×0.5 | ×0.25 |
 | II | 160 cr | ×1.25 | 5 NPCs | 3 minutes | ×1.0 | ×1.0 |
 | III | 240 cr | ×1.5 | 8 NPCs | 2 minutes | ×1.0 | ×1.0 |
 
-Alert also rises by one each time any extractor cuts out on heat. Each alert step adds a wave of one NPC plus one per tier number. On the return leg, one raider intercepts for each full third of cargo capacity carried that no earlier interception has answered: leaving the site empty does not spend the ambush, and the same cargo is not intercepted twice. At tier I, NPCs are slower than the starter hull and hit half as hard, so a first run can be survived and escaped; tiers II and III field NPCs at full strength. Tier I is completable in the basic fitting. Tiers open with facilities: tier II when a player first owns a tier 2 facility, tier III when they own a second. They follow unlocks, not the active layout. The host may choose any tier that a crew member has opened.
+Alert also rises by one each time any extractor cuts out on heat. Each alert step adds a wave of one NPC plus one per tier number. On the return leg, one raider intercepts for each full third of cargo capacity carried that no earlier interception has answered: leaving the site empty does not spend the ambush, and the same cargo is not intercepted twice. At tier I, NPCs fly at half speed, so the starter hull leaves them behind without its cruise drive, and hit a quarter as hard, so a first run can be survived and escaped; tiers II and III field NPCs at full strength. Tier I is completable in the basic fitting. Tiers open with facilities: tier II when a player first owns a tier 2 facility, tier III when they own a second. They follow unlocks, not the active layout. The host may choose any tier that a crew member has opened.
 
 The optional two-place objective is a relay link: two relays in different pockets must each be held by a ship for the same 30 seconds. It adds 50% to the contract payout.
 

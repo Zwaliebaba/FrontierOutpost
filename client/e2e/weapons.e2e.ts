@@ -25,8 +25,8 @@ test("holding Space damages the locked hostile", async ({ page }) => {
 });
 
 test("a destroyed pilot sees what was lost and can take the next contract", async ({ page }) => {
-  // The ore field's NPCs have to find and destroy an idle pilot.
-  test.setTimeout(120_000);
+  // The ore field's NPCs have to find and destroy an idle pilot, at tier I's quarter damage.
+  test.setTimeout(180_000);
   await launch(page);
   // Toward the ore field, then idle among its NPCs.
   await page.keyboard.down("KeyW");
@@ -34,7 +34,7 @@ test("a destroyed pilot sees what was lost and can take the next contract", asyn
   await page.keyboard.up("KeyW");
 
   const summary = page.locator("#summary");
-  await expect(summary).toHaveAttribute("data-ending", "destroyed", { timeout: 90_000 });
+  await expect(summary).toHaveAttribute("data-ending", "destroyed", { timeout: 150_000 });
   await expect(summary).toContainText("Destroyed. Returned home");
   await expect(summary).toContainText("net −40 cr");
 
