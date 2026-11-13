@@ -1,4 +1,18 @@
-import { addAuthenticator, expect, leave, QUIET, RICH, signUp, test } from "./fixtures";
+import { Vector3 } from "three";
+import { ZOOM_MAX } from "../src/view/look";
+import { worldToScreen } from "../src/view/picking";
+import { aimRig, createRig } from "../src/view/view";
+import {
+  addAuthenticator,
+  expect,
+  flyClear,
+  leave,
+  position,
+  QUIET,
+  RICH,
+  signUp,
+  test,
+} from "./fixtures";
 
 test("launch facts stay beside the action and preparation controls keep usable hit areas", async ({
   page,
@@ -41,6 +55,8 @@ test("map keys navigate real destinations while safety instruments remain in vie
   await signUp(page, QUIET);
   await page.locator('#briefing [data-tier="1"]').click();
   await page.locator("#hud[data-x]").waitFor();
+  // Off the berth, so the engage button is live: a jump is made from open space.
+  await flyClear(page);
   await page.keyboard.press("KeyM");
   await expect(page.locator('.chart-row[data-target="dock"]')).toBeFocused();
   await page.keyboard.press("ArrowDown");
@@ -171,8 +187,26 @@ test("crew sees a spool and the jumping pilot regains the camera from a selected
     await expect(page.locator("#hud")).toHaveAttribute("data-camera-moving", "false");
     const own = await page.locator("#hud").getAttribute("data-ship");
     const other = await wing.locator("#hud").getAttribute("data-ship");
-    await page.mouse.click(706, 300);
-    await expect(page.locator("#hud")).toHaveAttribute("data-camera", other ?? "");
+    // A jump is made from open space: the pilot flies off the berth, then selects the crewmate
+    // still on theirs, found on screen with the client's own camera.
+    await flyClear(page);
+    const crewmate = await position(wing);
+    // Zoomed fully out, so the berth behind is in view.
+    await page.mouse.move(640, 360);
+    for (let i = 0; i < 8; i += 1) await page.mouse.wheel(0, 400);
+    await expect(async () => {
+      const own = await position(page);
+      const rig = createRig(1280 / 720, ZOOM_MAX, "ortho");
+      aimRig(rig, new Vector3(own.x, 0, own.z), 33);
+      const at = worldToScreen(new Vector3(crewmate.x, 0, crewmate.z), rig.camera, {
+        width: 1280,
+        height: 720,
+      });
+      await page.mouse.click(at.x, at.y);
+      await expect(page.locator("#hud")).toHaveAttribute("data-camera", other ?? "", {
+        timeout: 500,
+      });
+    }).toPass({ timeout: 10_000 });
     await page.keyboard.press("KeyM");
     await page.keyboard.press("Digit2");
     await page.keyboard.press("KeyJ");

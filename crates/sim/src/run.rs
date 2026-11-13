@@ -889,6 +889,10 @@ impl Run {
                 return Err(JumpRefusal::AlreadyThere);
             }
             JumpTarget::Dock => {}
+            // A jump is made from open space: the pilot flies off the berth first.
+            JumpTarget::Pocket(_) if self.pilots[index].phase == Phase::AtDock => {
+                return Err(JumpRefusal::AtDock);
+            }
             JumpTarget::Pocket(pocket) => {
                 let open = self.site.pockets.get(pocket).is_some_and(|p| !p.locked);
                 if !open {
@@ -2162,6 +2166,21 @@ mod tests {
         })
     }
 
+    /// Takes the pilot just clear of the dock, toward the site, at rest.
+    fn undock(run: &mut Run, ship: ShipId) {
+        let (dx, dz) = run.site.template.dock;
+        let (cx, cz) = run.site.template.centre;
+        let length = (cx - dx).hypot(cz - dz);
+        let out = UNDOCK_RADIUS + 5.0;
+        place(
+            run,
+            ship,
+            (dx + (cx - dx) / length * out, dz + (cz - dz) / length * out),
+        );
+        run.step();
+        assert_eq!(run.status(ship).unwrap().phase, Phase::Approach);
+    }
+
     /// Takes the pilot from the dock into the ore field, at its first deposit.
     fn at_deposit(run: &mut Run, ship: ShipId) {
         place(run, ship, (-60.0, 0.0));
@@ -2222,6 +2241,7 @@ mod tests {
     #[test]
     fn a_jump_spools_then_lands_outside_the_pocket_facing_it() {
         let (mut run, ship) = quiet(6);
+        undock(&mut run, ship);
         events(&mut run);
         assert_eq!(run.jump(ship, Some(JumpTarget::Pocket(0))), Ok(()));
         steps(&mut run, SPOOL_TICKS - 1);
@@ -2245,8 +2265,7 @@ mod tests {
             pilot: ship,
             target: JumpTarget::Pocket(0)
         }));
-        // Off the berth, so the approach has begun; outside the pocket, so
-        // the objective has not.
+        // Outside the pocket, so the objective has not begun.
         run.step();
         assert_eq!(run.status(ship).unwrap().phase, Phase::Approach);
     }
@@ -2258,6 +2277,13 @@ mod tests {
             run.jump(ship, Some(JumpTarget::Dock)),
             Err(JumpRefusal::AlreadyThere)
         );
+        // Still on the berth: the pilot flies clear before the drive spools.
+        assert_eq!(
+            run.jump(ship, Some(JumpTarget::Pocket(0))),
+            Err(JumpRefusal::AtDock)
+        );
+        assert!(run.spooling(ship).is_none());
+        undock(&mut run, ship);
         // Only the ore field is open without facilities.
         assert_eq!(
             run.jump(ship, Some(JumpTarget::Pocket(1))),
@@ -2291,6 +2317,7 @@ mod tests {
     #[test]
     fn a_spool_is_cancelled_by_a_hostile_lock_or_by_the_pilot() {
         let (mut run, ship) = quiet(6);
+        undock(&mut run, ship);
         run.jump(ship, Some(JumpTarget::Pocket(0))).unwrap();
         steps(&mut run, 10);
         events(&mut run);

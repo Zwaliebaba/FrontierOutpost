@@ -5,7 +5,7 @@
  * Kept free of the DOM so it can be tested.
  */
 import { tacticalViewDirection } from "../camera";
-import type { Drive, EntityKind, PocketKind, SiteInfo } from "../protocol";
+import type { Drive, EntityKind, PocketKind, RunPhase, SiteInfo } from "../protocol";
 import { POCKET_NAME, POCKET_NEEDS } from "./contract";
 import type { Scanned } from "./contract";
 import { DOCK_MARKER } from "./jump";
@@ -207,11 +207,19 @@ export interface JumpReadiness {
 /**
  * What the pilot can tell before asking: the server judges again (frontier_sim::jump), and its
  * refusal still shows. `drive` is the cruise drive's state, which the same hostile lock and
- * working extractor stop.
+ * working extractor stop. `phase` is the pilot's: a jump is made from open space, so not until
+ * the ship has flown clear of the dock.
  */
-export function jumpReadiness(place: ChartPlace | null, drive: Drive | null): JumpReadiness {
+export function jumpReadiness(
+  place: ChartPlace | null,
+  drive: Drive | null,
+  phase: RunPhase | null = null,
+): JumpReadiness {
   if (!place) return { ready: false, reason: "Choose a destination" };
   if (place.locked) return { ready: false, reason: place.status.replace(" · ", ": ") };
+  if (phase === "atDock" && place.kind !== "dock") {
+    return { ready: false, reason: "Fly clear of the dock first" };
+  }
   if (drive === "hunted") {
     return { ready: false, reason: "Drive jammed: a hostile has you locked" };
   }

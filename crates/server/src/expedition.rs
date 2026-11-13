@@ -553,6 +553,7 @@ fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
             if let Err(refusal) = run.jump(ship, target) {
                 let reason = match refusal {
                     JumpRefusal::NotFlying => WireJumpRefusal::NotFlying,
+                    JumpRefusal::AtDock => WireJumpRefusal::AtDock,
                     JumpRefusal::Hunted => WireJumpRefusal::Hunted,
                     JumpRefusal::Extracting => WireJumpRefusal::Extracting,
                     JumpRefusal::Unavailable => WireJumpRefusal::Unavailable,

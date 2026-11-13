@@ -1,4 +1,4 @@
-import { QUIET, expect, lastNotice, launch, position, test } from "./fixtures";
+import { QUIET, expect, flyClear, lastNotice, launch, position, test } from "./fixtures";
 
 // On the quiet server no NPCs open the run, so nothing jams the drive.
 
@@ -7,6 +7,7 @@ test("choosing a destination on the map and pressing J jumps to just outside it"
 }) => {
   test.setTimeout(60_000);
   await launch(page, QUIET);
+  await flyClear(page);
   const map = page.locator("#chart");
   const jump = page.locator("#jump");
   const ore = page.locator('.chart-row[data-target="oreField"]');
@@ -62,6 +63,7 @@ test("J with nothing chosen opens the map, and the server's refusal shows", asyn
 
 test("a spool is cancelled by pressing J again", async ({ page }) => {
   await launch(page, QUIET);
+  await flyClear(page);
   const jump = page.locator("#jump");
   await page.keyboard.press("KeyM");
   // A double click chooses and engages at once.
@@ -88,7 +90,11 @@ test("the map says why a locked pocket cannot be jumped to, and its button jumps
   await expect(engage).toBeDisabled();
   await expect(map.locator(".action-note")).toHaveText("Locked: needs a sensor array");
 
+  // Still on the berth: a jump is made from open space.
   await map.locator('.chart-row[data-target="oreField"]').click();
+  await expect(engage).toBeDisabled();
+  await expect(map.locator(".action-note")).toHaveText("Fly clear of the dock first");
+  await flyClear(page);
   await expect(engage).toBeEnabled();
   await engage.click();
   await expect(page.locator("#jump")).toHaveAttribute("data-state", "spooling");

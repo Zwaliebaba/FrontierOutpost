@@ -1706,7 +1706,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           relay: status?.relay ?? 0,
           selected: jumpDrive.selected,
           readout: jumpDrive.readout(now, site.pockets),
-          readiness: jumpReadiness(chosen ?? null, status?.drive ?? null),
+          readiness: jumpReadiness(chosen ?? null, status?.drive ?? null, status?.phase ?? null),
           own,
           contacts: poses.map((pose) => ({ ...pose, side: sideOf(pose.kind, pose.id, ownId) })),
           deposits: current.deposits,
