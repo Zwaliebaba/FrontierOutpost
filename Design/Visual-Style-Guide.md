@@ -176,9 +176,9 @@ once where each kind of thing is:
 
 | Place | Holds |
 | --- | --- |
-| Top bar | The run's status, in place of the resource strip: phase, time, alert, drives, the relays while held, a scan in progress, the next wave once a scan has found it |
+| Top bar | The run's status, in place of the resource strip: phase, time, alert with the hostiles left, the contract's progress, the drives while something stops them, the relays while held, a scan in progress, a countdown to the next wave once a scan has found it |
 | Top centre, under the bar | The locked target: name, distance, whether the weapons reach it, hull as a bar |
-| Bottom left | The ship gauges: hull, hold, heat, each with a note on what happens next |
+| Bottom left | The ship gauges: hull, hold, heat, one line each: a change just seen beside the value, and a short note on what happens next. The panel keeps its size; a note too long for its column is cut short, never wrapped |
 | Bottom right | The minimap and the jump readout |
 | Bottom centre, above the gauges' band | Notices, and under them the prompts |
 
@@ -236,6 +236,20 @@ and then where it is, never slid across the space between. The pilot's own jump 
 view once with the drive's light, to cover the camera's cut.
 
 Motion is small. The wash is skipped when the system asks for reduced motion.
+
+**Extraction.** The extractor's beam runs from under the ship's edge into the worked crystals:
+a soft glow tinted by the material, around a bright, nearly white core (§6). Bands in the glow
+run from the deposit toward the ship, and a few fragments in the material's colour break from
+the crystals and fly into the hull, so cargo is seen arriving. Neither the beam nor the
+fragments is solid. With reduced motion the beam holds still and the fragments are not drawn.
+
+**Flight dust.** In flight a sparse field of dust lies just below the gameplay plane, fixed in
+the world, so that open space shows the ship moving. Each speck is a short, faint streak that
+trails against the ship's motion and fades to its tail: its length follows the ship's speed,
+it is capped on the cruise drive, and it vanishes when the ship stops, so dust is never taken
+for stars. About two dozen cross the view at the starting zoom. It moves only as the scenery
+does, so reduced motion leaves it as it is. The home scene has no dust.
+
 Reliable crew events start and cancel spool effects; every remote spool also has a bounded
 expiry. The pilot's confirmed jump returns camera focus to their ship without clearing a
 valid hostile lock. Small material pulses follow actual hull loss or the own ship's shield loss,
