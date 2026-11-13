@@ -56,7 +56,13 @@ export function prompts(input: PromptInput): Prompt[] {
     );
   }
   if (own.phase === "objective" && !input.scanned && own.scan === null) {
-    found.push({ id: "scan", key: "C", text: "Scan the site · hold still" });
+    // Deposits show without a scan, so the prompt says what one adds (design §10): a playtester
+    // who could already see the deposits did not know why to press the key.
+    found.push({
+      id: "scan",
+      key: "C",
+      text: "Scan · finds the rich pocket, relays and waves · hold still",
+    });
   }
   if (flying && own.drive === "ready") {
     found.push({ id: "cruise", key: "Shift", text: "Hold to cruise" });

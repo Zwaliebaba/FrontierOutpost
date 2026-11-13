@@ -61,7 +61,9 @@ describe("prompts", () => {
   });
 
   it("offers the scan inside an unscanned site, until the scan starts", () => {
-    expect(ids({ ...quiet, scanned: false })).toEqual(["scan"]);
+    expect(prompts({ ...quiet, scanned: false })).toEqual([
+      { id: "scan", key: "C", text: "Scan · finds the rich pocket, relays and waves · hold still" },
+    ]);
     expect(ids({ ...quiet, scanned: false, own: { ...own, scan: 10 } })).toEqual([]);
     expect(ids({ ...quiet, scanned: false, own: { ...own, phase: "approach" } })).toEqual([]);
   });
