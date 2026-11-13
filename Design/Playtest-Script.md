@@ -156,11 +156,13 @@ Look out for:
 
 - **Stuck:** more than 30 seconds without knowing what to do. Where were they, and what did they
   try?
-- **Misread:** a gauge, marker or notice taken for something else. Last build's examples were the
-  heat bar read as the hold, and damage that could not be seen.
+- **Misread:** a gauge, the map, the waypoint or a notice taken for something else. Last build's
+  examples were the heat bar read as the hold, and damage that could not be seen.
 - **Defeat:** what killed them, what they said, and what they did next, unprompted.
 - **Choice:** which pocket, fitting or tier, and their reason if they say one aloud.
 - **The jump drive and the cruise drive:** found unaided? Used to skip travel, or ignored?
+- **The system map (M, or the minimap):** found unaided? Did they choose a destination there, or
+  hunt the scene for something to click? Without labels on the scene, could they find a pocket?
 - **Quote:** anything said about wanting to come back, or not.
 
 ## 7. Questions after each session
