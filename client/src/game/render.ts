@@ -3,9 +3,12 @@
  * tactical camera with the greybox's defaults (design §5).
  */
 import {
+  AdditiveBlending,
   AgXToneMapping,
   BufferAttribute,
   BufferGeometry,
+  LineBasicMaterial,
+  LineSegments,
   PerspectiveCamera,
   Points,
   PointsMaterial,
@@ -18,6 +21,7 @@ import type { EntityPose } from "../net/interpolation";
 import type { JumpEffects } from "./jumpEffects";
 import type { Shots } from "./shots";
 import { ExpeditionScene } from "./scene";
+import { createDust, streakDust } from "../view/dust";
 import { linear } from "../view/readability";
 import { createStarField } from "../view/sky";
 import { aimRig, createRig } from "../view/view";
@@ -27,6 +31,11 @@ export const RESTING_ELEVATION = 33;
 
 const SKY_FOV = 50;
 const STAR_SEED = 2266;
+const DUST_SEED = 4417;
+/** A camera step longer than this in one frame is a jump's cut, not flight, metres. */
+const DUST_CUT = 20;
+/** How quickly the streaks follow a change of speed, per second. */
+const DUST_EASE = 10;
 
 export class ExpeditionView {
   readonly canvas: HTMLCanvasElement;
@@ -34,6 +43,15 @@ export class ExpeditionView {
   readonly #renderer: WebGLRenderer;
   readonly #sky = new Scene();
   readonly #skyCamera = new PerspectiveCamera(SKY_FOV, 1, 0.1, 10);
+  /** Drawn in flight only, after the scene, so it shares the scene's depth (view/dust). */
+  readonly #dust = new Scene();
+  readonly #dustField = createDust(DUST_SEED);
+  readonly #dustPositions = new BufferAttribute(
+    new Float32Array((this.#dustField.homes.length / 3) * 6),
+    3,
+  );
+  #dustAt: { x: number; z: number } | null = null;
+  #dustVelocity = { x: 0, z: 0 };
   #rig: CameraRig;
   #width = 1;
   #height = 1;
@@ -53,6 +71,7 @@ export class ExpeditionView {
     container.prepend(this.canvas);
     this.#rig = createRig(1, viewWidth, "ortho");
     this.#addStars();
+    this.#addDust();
   }
 
   /** The player's ship after a relaunch, drawn as their own. */
@@ -111,6 +130,7 @@ export class ExpeditionView {
     this.#renderer.render(this.#sky, this.#skyCamera);
     this.#renderer.clearDepth();
     this.#renderer.render(this.world.scene, this.#rig.camera);
+    this.#drawDust(target, dt);
   }
 
   /** Draws another scene, the outpost, with the same camera rules and star backdrop. */
@@ -121,6 +141,54 @@ export class ExpeditionView {
     this.#renderer.render(this.#sky, this.#skyCamera);
     this.#renderer.clearDepth();
     this.#renderer.render(scene, this.#rig.camera);
+  }
+
+  /** The streaks, from how fast the camera's target is moving: the ship it follows. */
+  #drawDust(target: Vector3, dt: number): void {
+    const last = this.#dustAt;
+    this.#dustAt = { x: target.x, z: target.z };
+    if (last && dt > 0) {
+      const dx = target.x - last.x;
+      const dz = target.z - last.z;
+      const cut = Math.hypot(dx, dz) > DUST_CUT;
+      const ease = Math.min(1, dt * DUST_EASE);
+      const v = this.#dustVelocity;
+      v.x = cut ? 0 : v.x + (dx / dt - v.x) * ease;
+      v.z = cut ? 0 : v.z + (dz / dt - v.z) * ease;
+    }
+    streakDust(
+      this.#dustField,
+      target.x,
+      target.z,
+      this.#dustVelocity.x,
+      this.#dustVelocity.z,
+      this.#dustPositions.array as Float32Array,
+    );
+    this.#dustPositions.needsUpdate = true;
+    this.#renderer.render(this.#dust, this.#rig.camera);
+  }
+
+  #addDust(): void {
+    // Bright at the head, black at the tail: with additive blending the tail fades out.
+    const { colours } = this.#dustField;
+    const ends = new Float32Array((colours.length / 3) * 6);
+    for (let i = 0; i < colours.length; i += 3) {
+      ends.set([colours[i] ?? 0, colours[i + 1] ?? 0, colours[i + 2] ?? 0, 0, 0, 0], i * 2);
+    }
+    const streaks = new LineSegments(
+      new BufferGeometry()
+        .setAttribute("position", this.#dustPositions)
+        .setAttribute("color", new BufferAttribute(ends, 3)),
+      new LineBasicMaterial({
+        vertexColors: true,
+        blending: AdditiveBlending,
+        transparent: true,
+        depthWrite: false,
+      }),
+    );
+    // The positions follow the camera, so the bounds three.js computed once would cull them.
+    streaks.frustumCulled = false;
+    this.#dust.add(streaks);
   }
 
   #addStars(): void {
