@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from "three";
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial, Vector3 } from "three";
 import { ExpeditionScene, SIZE, allegianceOf } from "./scene";
 import type { EntityPose } from "../net/interpolation";
 import type { SiteInfo } from "../protocol";
 import { GEAR_LIFT, GEAR_SECONDS } from "../view/frigate";
+import { SHIP_HEIGHT } from "../view/hulls";
 import { RENDER_HEIGHT, STRUCTURE, hullGeometry, useShipModel } from "../view/readability";
 
 /** A stand-in for the frigate: one hull part and one leg, as view/frigate sets them up. */
@@ -72,6 +73,14 @@ describe("ExpeditionScene", () => {
     expect(world.beam.position.x).toBeCloseTo(48);
     expect(world.beam.position.z).toBeCloseTo(10);
     expect(world.beam.scale.x).toBeGreaterThan(4);
+    // It leaves from the keel, never the roof, where it was drawn across the hull.
+    const half = new Vector3(world.beam.scale.x / 2, 0, 0).applyQuaternion(world.beam.quaternion);
+    const start = world.beam.position.clone().sub(half);
+    const end = world.beam.position.clone().add(half);
+    expect(start.x).toBeCloseTo(46);
+    expect(start.y).toBeCloseTo(-SHIP_HEIGHT / 2);
+    expect(end.x).toBeCloseTo(50);
+    expect(end.y).toBeGreaterThan(0);
     world.setBeam({ x: 46, z: 10 }, null);
     expect(world.beam.visible).toBe(false);
     world.setBeam({ x: 46, z: 10 }, 7);

@@ -16,11 +16,11 @@ import type {
 } from "./protocol";
 import { launchRole, renderCrew } from "./outpost/crew";
 import { loadOutpostModels } from "./outpost/models";
-import { fittingName, launchLines } from "./outpost/options";
+import { fittingName, launchLines, supplySales } from "./outpost/options";
 import { BERTHS, placeStation } from "./outpost/placement";
 import { OutpostScene } from "./outpost/scene";
 import type { HomeTab } from "./outpost/ui";
-import { renderHome } from "./outpost/ui";
+import { renderHome, tickProcessor } from "./outpost/ui";
 import type { EntityPose } from "./net/interpolation";
 import { Predictor } from "./game/prediction";
 import { FrameTimer } from "./game/frameTimer";
@@ -74,8 +74,11 @@ const GLIDE_SECONDS = 0.9;
 
 const PICK_RADIUS_PX = 24;
 const KEY_TURN_RATE = 1.6;
-/** Room kept clear for the HUD lines at the top, and the ship gauges and lines at the bottom. */
-const NAV_INSETS = { top: 150, right: 12, bottom: 240, left: 12 };
+/** Room kept clear for the bar and lock line at the top, and the gauges and lines at the bottom. */
+const NAV_INSETS = { top: 96, right: 12, bottom: 226, left: 12 };
+/** The flight keys, shown in the footer for as long as a run lasts. */
+const FLIGHT_KEYS =
+  "W A S D fly · Shift cruise · J jump · Tab lock · Space fire · X extract · V vent · C scan";
 const NOTICE_MS = 4_000;
 /** How soon a dropped connection is retried, and how often an unreachable server. */
 const RECONNECT_MS = 1_500;
@@ -116,13 +119,19 @@ const accountLine = line("account");
 const command = element("header", "command");
 const brand = element("div", undefined, "brand");
 brand.innerHTML =
-  '<span class="insignia" aria-hidden="true">⌃</span><strong>FRONTIER / OUTPOST</strong><span class="command-title">STATION COMMAND</span>';
-command.append(brand, status);
+  '<span class="insignia" aria-hidden="true">⌃</span><strong>FRONTIER / OUTPOST</strong>';
+// One bar: the brand, what the pilot holds, and the connection.
+command.append(brand, accountLine, status);
 const utility = element("footer", "utility");
 utility.textContent = "HOME OUTPOST   /   BERTHS 07–10";
 const cameraHints = element("span");
 cameraHints.textContent = "SCROLL  Zoom   /   RMB  Orbit   /   R  Reset";
-utility.append(cameraHints, sim);
+// In flight the footer carries the keys. The link's diagnostics stay in the page for the
+// browser tests, out of sight: nobody flies by a round trip in milliseconds.
+const hudKeys = element("span", undefined, "hud-keys");
+const hudDiagnostics = element("span", undefined, "diagnostic");
+hud.append(hudKeys, hudDiagnostics);
+utility.append(hud, cameraHints, sim);
 document.body.append(command, utility);
 const stationLabels = element("div", "station-labels");
 document.body.append(stationLabels);
@@ -264,6 +273,9 @@ async function start(): Promise<void> {
 
 /** What the pilot's home holds, the outpost's rules, and the outpost as drawn. */
 let holdings: AccountInfo | null = null;
+/** When `holdings` arrived, on the page's clock: the processor's progress counts on from it. */
+let holdingsAt = 0;
+const sinceHoldings = () => (performance.now() - holdingsAt) / 1000;
 let catalog: Catalog | null = null;
 let outpost: OutpostScene | null = null;
 let selectedSocket = "a";
@@ -276,6 +288,7 @@ let homeChanged = (): void => undefined;
 /** Shows what the pilot's home holds. */
 function showAccount(callsign: string, account: AccountInfo): void {
   holdings = account;
+  holdingsAt = performance.now();
   accountLine.dataset.credits = String(account.credits);
   accountLine.dataset.ore = String(account.ore);
   accountLine.dataset.alloy = String(account.alloy);
@@ -498,6 +511,21 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         p.textContent = text;
         stake.append(p);
       }
+      // Short of supplies: the sales that cover it, one click each, before the launch refuses.
+      for (const sale of supplySales(known, holdings)) {
+        const sell = element("button");
+        sell.dataset.action = `supply-sale:${sale.good}`;
+        sell.textContent = `Sell ${String(sale.amount)} ${sale.good} · +${String(sale.credits)} cr`;
+        sell.addEventListener("click", () => {
+          send({ type: "sell", good: sale.good, amount: sale.amount });
+        });
+        stake.append(sell);
+      }
+      if (holdings.launch.due.type === "short" && supplySales(known, holdings).length === 0) {
+        const p = element("p");
+        p.textContent = "Your goods are at the processor: take a batch back to sell its inputs.";
+        stake.append(p);
+      }
       for (const missing of holdings.launch.missing) {
         if (missing.price === undefined) continue;
         const buy = element("button");
@@ -533,7 +561,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     for (const tier of offer.tiers) {
       const option = element("option");
       option.value = String(tier.tier);
-      option.textContent = `Tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} / ${String(tier.payout)} cr${tier.open ? "" : " / locked"}`;
+      option.textContent = `Tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} / pays ${String(tier.payout)} cr${tier.open ? "" : " / locked"}`;
       option.disabled = !tier.open && role.follow !== tier.tier;
       option.selected = tier.tier === selectedTier;
       tierSelect.append(option);
@@ -546,6 +574,15 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     });
     tierLabel.append(tierSelect);
     tiers.append(tierLabel);
+    // The server would refuse a pilot who must sell first; say so here, where the button is.
+    const due = holdings?.launch.due;
+    const short = due?.type === "short" ? due.missing : 0;
+    if (short > 0) {
+      const p = element("p", undefined, "crew-note");
+      p.dataset.short = String(short);
+      p.textContent = `Supplies: sell ${String(short)} cr of goods to launch`;
+      tiers.append(p);
+    }
     for (const tier of offer.tiers) {
       const button = element("button");
       button.dataset.tier = String(tier.tier);
@@ -553,11 +590,13 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       const following = role.follow === tier.tier;
       button.textContent = following
         ? `Follow the host · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)}`
-        : `Launch · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} · ${String(tier.payout)} cr`;
+        : `Launch · tier ${TIER_NAME[tier.tier] ?? String(tier.tier)}`;
       if (following) button.dataset.action = "follow";
-      button.disabled = role.launches ? !tier.open : !following;
+      const ready = role.launches ? tier.open : following;
+      button.disabled = !ready || short > 0;
       if (!tier.open) button.title = "Opens with a tier 2 facility";
-      else if (button.disabled && role.note) button.title = role.note;
+      else if (!ready && role.note) button.title = role.note;
+      else if (short > 0) button.title = `Sell ${String(short)} cr of goods first`;
       button.addEventListener("click", () => {
         for (const other of tiers.querySelectorAll("button")) other.disabled = true;
         // The run begins when `joined` arrives (handled below, as for a rejoined run).
@@ -565,7 +604,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           note.textContent = `Could not launch: ${error instanceof Error ? error.message : String(error)}`;
           for (const other of offer.tiers) {
             const b = tiers.querySelector<HTMLButtonElement>(`[data-tier="${String(other.tier)}"]`);
-            if (b) b.disabled = role.launches ? !other.open : role.follow !== other.tier;
+            if (b) {
+              b.disabled = (role.launches ? !other.open : role.follow !== other.tier) || short > 0;
+            }
           }
         });
       });
@@ -586,6 +627,13 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     for (const text of lines.slice(1)) {
       const p = element("p");
       p.textContent = text;
+      summaryPanel.append(p);
+    }
+    // The account arrives before the summary, so it already says whether supplies carried.
+    if (summary.ending === "docked" && holdings?.launch.due.type === "carried") {
+      const p = element("p", undefined, "crew-note");
+      p.dataset.supplies = "carried";
+      p.textContent = "Contract not met: your supplies carry over, so the next launch is free.";
       summaryPanel.append(p);
     }
     const next = element("button");
@@ -693,10 +741,17 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         },
       },
       homeTab,
+      sinceHoldings(),
     );
     if (!life) homePanel.dataset.state = "open";
     if (briefing.dataset.state === "open" && contract) showBriefing(contract);
   };
+  // The processor's bar moves on between account messages; the server finishes the batch.
+  window.setInterval(() => {
+    if (holdings && homePanel.dataset.state === "open") {
+      tickProcessor(homePanel, holdings, sinceHoldings());
+    }
+  }, 1_000);
 
   connection.onMessage((message) => {
     switch (message.type) {
@@ -824,7 +879,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
 
   const resize = () => {
     const width = window.innerWidth;
-    const panels = life ? 0 : width <= 1100 ? 490 : 580;
+    // The home and briefing panels with their margins (command.css).
+    const panels = life ? 0 : width <= 1100 ? 516 : 662;
     const available = Math.max(width * 0.35, width - panels);
     view.resize(width, window.innerHeight, (viewWidth * width * (life ? 1 : 0.8)) / available);
   };
@@ -1172,13 +1228,14 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       // Round trip and correction waver from frame to frame; nobody reads them that fast.
       if (now - hudLineAt >= HUD_LINE_MS) {
         hudLineAt = now;
-        setText(
-          hud,
-          `Ship ${String(session.shipId)} · ` +
-            `round trip ${session.roundTripMs === null ? "–" : `${session.roundTripMs.toFixed(0)} ms`} · ` +
-            `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm · ` +
-            `W A S D fly · Shift cruise · J jump · Tab lock · Space fire · X extract · V vent · C scan`,
-        );
+        const diagnostics =
+          ` · Ship ${String(session.shipId)} · ` +
+          `round trip ${session.roundTripMs === null ? "–" : `${session.roundTripMs.toFixed(0)} ms`} · ` +
+          `correction ${(predictor.lastCorrection * 100).toFixed(0)} cm`;
+        if (written.changed("hud.keys", FLIGHT_KEYS)) hudKeys.textContent = FLIGHT_KEYS;
+        if (written.changed("hud.diagnostics", diagnostics)) {
+          hudDiagnostics.textContent = diagnostics;
+        }
       }
       const status = current.own;
       if (status) {
@@ -1206,6 +1263,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           current.hull,
           current.hullPulse.recent(now),
           current.cargoPulse.recent(now),
+          current.joined.contractCargo,
         )) {
           const row = gaugeRows.get(gauge.key);
           if (!row) continue;
@@ -1234,7 +1292,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       setData(shipPanel, "active", null);
       setData(hud, "x", null);
       hudLineAt = Number.NEGATIVE_INFINITY;
-      setText(hud, "");
+      if (written.changed("hud.keys", "")) hudKeys.textContent = "";
+      if (written.changed("hud.diagnostics", "")) hudDiagnostics.textContent = "";
       setText(run, "");
       setText(scan, "");
       drawNav({ x: 0, z: 0 });

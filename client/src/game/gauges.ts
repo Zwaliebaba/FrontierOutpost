@@ -71,16 +71,24 @@ export function hullGauge(hull: number, shield: number, lost: number): Gauge {
   };
 }
 
-export function holdGauge(own: OwnStatus, gained: number): Gauge {
+/**
+ * The hold. `contractCargo` is what a ship must dock with for the contract to pay: until the hold
+ * has it, the gauge says how far short it is, so a pilot never docks short by surprise.
+ */
+export function holdGauge(own: OwnStatus, gained: number, contractCargo = 0): Gauge {
   const share = own.capacity > 0 ? clampShare(own.cargo / own.capacity) : 0;
   const full = own.capacity > 0 && own.cargo >= own.capacity;
+  const short = contractCargo - own.cargo;
   const notes = [
     ...(gained > 0 ? [`+${String(gained)} cargo`] : []),
     full
       ? "full: fly home and dock to bank it"
-      : own.cargo > 0
-        ? "counts only once docked at home"
-        : "",
+      : short > 0
+        ? `contract pays from ${String(contractCargo)}: ${String(short)} more`
+        : own.cargo > 0
+          ? (contractCargo > 0 ? "enough for the contract · " : "") +
+            "counts only once docked at home"
+          : "",
   ].filter((note) => note !== "");
   return {
     key: "hold",
@@ -118,6 +126,11 @@ export function gauges(
   hull: number,
   hullChange: number,
   cargoChange: number,
+  contractCargo = 0,
 ): Gauge[] {
-  return [hullGauge(hull, own.shield, hullChange), holdGauge(own, cargoChange), heatGauge(own)];
+  return [
+    hullGauge(hull, own.shield, hullChange),
+    holdGauge(own, cargoChange, contractCargo),
+    heatGauge(own),
+  ];
 }

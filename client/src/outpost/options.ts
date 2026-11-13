@@ -12,6 +12,7 @@ import type {
   FittingInfo,
   Good,
 } from "../protocol";
+import { pace } from "./processor";
 
 /** Something the pilot can ask for, with what it would do. */
 export interface Choice {
@@ -101,24 +102,24 @@ function opens(catalog: Catalog, layout: readonly Placed[]): Set<string> {
   return names;
 }
 
-/** Processor batches per run for a layout, as the server counts them. */
-function processorBatches(catalog: Catalog, layout: readonly Placed[]): number {
+/** Seconds the processor takes over a batch with a layout, as the server counts them. */
+function batchSeconds(catalog: Catalog, layout: readonly Placed[]): number {
   let best: number | null = null;
-  let extra = 0;
+  let faster = 0;
   for (const placed of layout) {
     const tiers = facility(catalog, placed.facility)?.tiers ?? [];
     for (const tier of tiers.slice(0, placed.run)) {
-      if (tier.processorBatches !== undefined) best = Math.max(best ?? 0, tier.processorBatches);
+      if (tier.batchSeconds !== undefined) best = Math.min(best ?? Infinity, tier.batchSeconds);
     }
     if (placed.run === 0) continue;
     for (const rule of catalog.adjacency) {
-      const more = /processes (\d+) more batches/.exec(rule.bonus);
-      if (more?.[1] && rule.facility === placed.facility && rule.socket === placed.socket) {
-        extra += Number(more[1]);
+      if (rule.facility === placed.facility && rule.socket === placed.socket) {
+        faster += rule.processorFaster ?? 0;
       }
     }
   }
-  return (best ?? catalog.processorBatches) + extra;
+  const seconds = best ?? catalog.batchSeconds;
+  return Math.max(1, Math.floor((seconds * Math.max(0, 100 - faster)) / 100));
 }
 
 /** The lines that say what changing `before` into `after` does. */
@@ -131,10 +132,8 @@ function effects(catalog: Catalog, before: readonly Placed[], after: readonly Pl
   const lost = [...was].filter((name) => !will.has(name));
   if (gained.length > 0) lines.push(`Opens: ${gained.join(", ")}`);
   if (lost.length > 0) lines.push(`Closes: ${lost.join(", ")}`);
-  const [batches, next] = [processorBatches(catalog, before), processorBatches(catalog, after)];
-  if (batches !== next) {
-    lines.push(`Processor: ${String(batches)} → ${String(next)} batches per run`);
-  }
+  const [each, next] = [batchSeconds(catalog, before), batchSeconds(catalog, after)];
+  if (each !== next) lines.push(`Processor: ${pace(each)} → ${pace(next)} a batch`);
   return lines;
 }
 
@@ -264,6 +263,52 @@ export function fittingName(catalog: Catalog, id: string): string {
   return catalog.fittings.find((f) => f.id === id)?.name ?? id;
 }
 
+/** What the pilot's supplies come to if they launch now, as the server priced it (design §10). */
+export function suppliesLine(account: AccountInfo): string {
+  const { due, supplies } = account.launch;
+  switch (due.type) {
+    case "carried":
+      return "Supplies: carried over from your last run, no charge";
+    case "short":
+      return (
+        `Supplies: ${String(supplies)} cr · you have ${String(account.credits)} cr · ` +
+        `sell ${String(due.missing)} cr of goods to launch`
+      );
+    case "pays":
+      return due.credits < supplies
+        ? `Supplies: ${String(due.credits)} cr, all you have (posted at ${String(supplies)} cr)`
+        : `Supplies: ${String(supplies)} cr`;
+  }
+}
+
+/** A sale that would cover the supplies a pilot is short of. */
+export interface SupplySale {
+  good: Good;
+  amount: number;
+  /** What the sale pays. */
+  credits: number;
+}
+
+/**
+ * The sales that would let a pilot who is short of supplies launch: for each good held, the
+ * fewest units that cover what is missing, or all of it when even that falls short. Raw
+ * materials come first: they are worth least. Empty when nothing need be sold.
+ */
+export function supplySales(catalog: Catalog, account: AccountInfo): SupplySale[] {
+  const { due } = account.launch;
+  if (due.type !== "short") return [];
+  const sales: SupplySale[] = [];
+  for (const price of catalog.prices) {
+    const held = holding(account, price.good);
+    if (held < 1 || price.buysAt < 1) continue;
+    const amount = Math.min(held, Math.ceil(due.missing / price.buysAt));
+    sales.push({ good: price.good, amount, credits: amount * price.buysAt });
+  }
+  // One sale that covers it is all the pilot needs to see.
+  const enough = sales.filter((sale) => sale.credits >= due.missing);
+  return enough.length > 0 ? enough.slice(0, 2) : sales;
+}
+
 /** The launch stake and what flies (design §6: the stake at NPC replacement price). */
 export function launchLines(catalog: Catalog, account: AccountInfo): string[] {
   const { launch } = account;
@@ -273,8 +318,8 @@ export function launchLines(catalog: Catalog, account: AccountInfo): string[] {
       : "Flies the basic fitting";
   return [
     `${flies} · hold ${String(launch.capacity)}`,
-    `Stake: ${String(launch.stake)} cr of rigs and modules at replacement price, ` +
-      `and ${String(launch.supplies)} cr of supplies`,
+    `Stake: ${String(launch.stake)} cr of rigs and modules at replacement price`,
+    suppliesLine(account),
     ...launch.missing.map((m) => `${fittingName(catalog, m.fitting)} stays home: ${m.reason}`),
   ];
 }

@@ -7,6 +7,8 @@ import {
   launchLines,
   shortfall,
   socketView,
+  suppliesLine,
+  supplySales,
   toggleFitting,
 } from "./options";
 
@@ -27,14 +29,21 @@ function home(overrides: Partial<AccountInfo> = {}): AccountInfo {
       unlocks: [],
       powerUsed: 0,
       opens: [],
-      processorBatches: 4,
+      batchSeconds: 240,
       fittingDiscount: 0,
       openTiers: 1,
     },
     processing: [],
     hangar: [],
     modules: [],
-    launch: { flown: [], missing: [], stake: 0, supplies: 40, capacity: 20 },
+    launch: {
+      flown: [],
+      missing: [],
+      stake: 0,
+      supplies: 40,
+      due: { type: "pays", credits: 40 },
+      capacity: 20,
+    },
     ...overrides,
   };
 }
@@ -82,8 +91,8 @@ describe("a socket's choices", () => {
     expect(refinery?.details).toContain(
       "Opens: Volatile veins pocket, Extraction rig, Cargo frame module",
     );
-    expect(refinery?.details).toContain("Processor: 4 → 10 batches per run");
-    expect(refinery?.details).toContain("Here it processes 2 more batches per run");
+    expect(refinery?.details).toContain("Processor: 4 min → 1 min 36 s a batch");
+    expect(refinery?.details).toContain("Here it processes batches in 20% less time");
     expect(refinery?.details).toContain("Comes with a extraction rig");
     expect(refinery?.message).toEqual({ type: "install", socket: "a", facility: "refinery" });
   });
@@ -104,7 +113,7 @@ describe("a socket's choices", () => {
     expect(upgrade?.label).toBe("Upgrade to tier 2");
     expect(upgrade?.details).toContain("Cost 550 cr + 12 alloy + 5 components");
     expect(upgrade?.details).toContain("Opens: Heat sink module");
-    expect(upgrade?.details).toContain("Processor: 10 → 16 batches per run");
+    expect(upgrade?.details).toContain("Processor: 1 min 36 s → 48 s a batch");
     expect(unpower?.label).toBe("Unpower");
     expect(unpower?.details).toContain(
       "Closes: Volatile veins pocket, Extraction rig, Cargo frame module",
@@ -200,13 +209,58 @@ describe("the hangar and the launch", () => {
         missing: [{ fitting: "deep_scan", reason: "needs the Deep-scan array module powered" }],
         stake: 180,
         supplies: 40,
+        due: { type: "pays", credits: 40 },
         capacity: 38,
       },
     });
     expect(launchLines(CATALOG, account)).toEqual([
       "Flies: Extraction rig, Heat sink, Cargo frame · hold 38",
-      "Stake: 180 cr of rigs and modules at replacement price, and 40 cr of supplies",
+      "Stake: 180 cr of rigs and modules at replacement price",
+      "Supplies: 40 cr",
       "Deep-scan array stays home: needs the Deep-scan array module powered",
     ]);
+  });
+});
+
+describe("launch supplies", () => {
+  const launch = home().launch;
+
+  it("says what the supplies come to, however the server priced them", () => {
+    expect(suppliesLine(home())).toBe("Supplies: 40 cr");
+    expect(
+      suppliesLine(
+        home({ credits: 25, launch: { ...launch, due: { type: "pays", credits: 25 } } }),
+      ),
+    ).toBe("Supplies: 25 cr, all you have (posted at 40 cr)");
+    expect(suppliesLine(home({ launch: { ...launch, due: { type: "carried" } } }))).toBe(
+      "Supplies: carried over from your last run, no charge",
+    );
+    expect(
+      suppliesLine(
+        home({ credits: 10, launch: { ...launch, due: { type: "short", missing: 30 } } }),
+      ),
+    ).toBe("Supplies: 40 cr · you have 10 cr · sell 30 cr of goods to launch");
+  });
+
+  it("offers the fewest units of a good that cover what is missing", () => {
+    // Ten credits and six ore: three ore at 10 cr cover the 30 missing.
+    const short = home({
+      credits: 10,
+      ore: 6,
+      launch: { ...launch, due: { type: "short", missing: 30 } },
+    });
+    expect(supplySales(CATALOG, short)).toEqual([{ good: "ore", amount: 3, credits: 30 }]);
+    // One alloy at 26 does not cover it alone, nor one ore: both are offered whole.
+    const scraps = home({
+      credits: 10,
+      ore: 1,
+      alloy: 1,
+      launch: { ...launch, due: { type: "short", missing: 30 } },
+    });
+    expect(supplySales(CATALOG, scraps)).toEqual([
+      { good: "ore", amount: 1, credits: 10 },
+      { good: "alloy", amount: 1, credits: 26 },
+    ]);
+    expect(supplySales(CATALOG, home())).toEqual([]);
   });
 });

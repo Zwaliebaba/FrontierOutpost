@@ -36,9 +36,10 @@ pub struct TierRule {
     pub draw: u32,
     /// What running at this tier adds to the tiers below it.
     pub grants: &'static [Capability],
-    /// Processor batches per run while running at this tier, replacing the
-    /// core's own; `None` leaves the processor alone.
-    pub processor_batches: Option<u32>,
+    /// Seconds the processor takes over a batch while a facility runs at
+    /// this tier, replacing the core's own; `None` leaves the processor
+    /// alone.
+    pub batch_seconds: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,7 +56,8 @@ pub struct FacilityRule {
 /// What a facility gains from the socket it sits in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Bonus {
-    ProcessorBatches(u32),
+    /// The processor's batches take this percentage less time.
+    ProcessorFaster(u32),
     /// Rig and module prices, purchase and replacement, fall by this percentage.
     FittingDiscount(u32),
 }
@@ -70,8 +72,8 @@ pub struct AdjacencyRule {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OutpostRules {
     pub power_cap: u32,
-    /// The core processor's batches per run.
-    pub processor_batches: u32,
+    /// Seconds the core processor takes over a batch.
+    pub batch_seconds: u32,
     pub sockets: &'static [SocketRule],
     pub facilities: &'static [FacilityRule],
     pub adjacency: &'static [AdjacencyRule],
@@ -93,7 +95,7 @@ const TIER_1_COST: Cost = Cost {
 /// The Stage 1 outpost of design section 10.
 pub const STAGE1: OutpostRules = OutpostRules {
     power_cap: 5,
-    processor_batches: 4,
+    batch_seconds: 240,
     sockets: &[
         SocketRule {
             id: "a",
@@ -117,13 +119,13 @@ pub const STAGE1: OutpostRules = OutpostRules {
                     cost: TIER_1_COST,
                     draw: 2,
                     grants: &[Capability::LocateSignal, Capability::ScoutRig],
-                    processor_batches: None,
+                    batch_seconds: None,
                 },
                 TierRule {
                     cost: TIER_2_COST,
                     draw: 3,
                     grants: &[Capability::DeepScan],
-                    processor_batches: None,
+                    batch_seconds: None,
                 },
             ],
             rig: Some("scout_rig"),
@@ -140,13 +142,13 @@ pub const STAGE1: OutpostRules = OutpostRules {
                         Capability::ExtractionRig,
                         Capability::CargoFrame,
                     ],
-                    processor_batches: Some(8),
+                    batch_seconds: Some(120),
                 },
                 TierRule {
                     cost: TIER_2_COST,
                     draw: 3,
                     grants: &[Capability::HeatSink],
-                    processor_batches: Some(14),
+                    batch_seconds: Some(60),
                 },
             ],
             rig: Some("extraction_rig"),
@@ -159,13 +161,13 @@ pub const STAGE1: OutpostRules = OutpostRules {
                     cost: TIER_1_COST,
                     draw: 2,
                     grants: &[Capability::BreachNest, Capability::EscortRig],
-                    processor_batches: None,
+                    batch_seconds: None,
                 },
                 TierRule {
                     cost: TIER_2_COST,
                     draw: 3,
                     grants: &[Capability::PointDefence],
-                    processor_batches: None,
+                    batch_seconds: None,
                 },
             ],
             rig: Some("escort_rig"),
@@ -175,7 +177,7 @@ pub const STAGE1: OutpostRules = OutpostRules {
         AdjacencyRule {
             facility: "refinery",
             socket: "a",
-            bonus: Bonus::ProcessorBatches(2),
+            bonus: Bonus::ProcessorFaster(20),
         },
         AdjacencyRule {
             facility: "fabrication_bay",
@@ -369,28 +371,30 @@ impl OutpostRules {
             .map(|rule| rule.bonus)
     }
 
-    /// Processor batches per completed run.
+    /// Seconds the processor takes over one batch (design section 10): the
+    /// core's own pace, or the fastest a running facility gives it, less
+    /// what adjacency takes off. Never less than a second.
     #[must_use]
-    pub fn processor_batches(&self, outpost: &Outpost) -> u32 {
-        let facilities = outpost
+    pub fn batch_seconds(&self, outpost: &Outpost) -> u32 {
+        let seconds = outpost
             .layout
             .iter()
             .filter_map(|installed| {
                 let facility = self.facility(&installed.facility).ok()?;
                 running(facility, installed.run)
-                    .filter_map(|tier| tier.processor_batches)
-                    .last()
+                    .filter_map(|tier| tier.batch_seconds)
+                    .min()
             })
-            .max()
-            .unwrap_or(self.processor_batches);
-        let adjacency: u32 = self
+            .min()
+            .unwrap_or(self.batch_seconds);
+        let faster: u32 = self
             .bonuses(outpost)
             .map(|bonus| match bonus {
-                Bonus::ProcessorBatches(extra) => extra,
+                Bonus::ProcessorFaster(percent) => percent,
                 Bonus::FittingDiscount(_) => 0,
             })
             .sum();
-        facilities + adjacency
+        (seconds.saturating_mul(100u32.saturating_sub(faster)) / 100).max(1)
     }
 
     /// The percentage off rig and module prices.
@@ -399,7 +403,7 @@ impl OutpostRules {
         self.bonuses(outpost)
             .map(|bonus| match bonus {
                 Bonus::FittingDiscount(percent) => percent,
-                Bonus::ProcessorBatches(_) => 0,
+                Bonus::ProcessorFaster(_) => 0,
             })
             .sum::<u32>()
             .min(100)
@@ -613,7 +617,7 @@ mod tests {
             .collect();
         assert_eq!(open, ["a"]);
         assert!(RULES.capabilities(&home).is_empty());
-        assert_eq!(RULES.processor_batches(&home), 4);
+        assert_eq!(RULES.batch_seconds(&home), 240);
         assert_eq!(RULES.open_tiers(&home), 1);
         assert_eq!(
             RULES.install(&home, "b", "refinery"),
@@ -717,20 +721,24 @@ mod tests {
         let mut home = build(&Outpost::default(), "a", "refinery");
         home = RULES.power(&home, "a", 0).unwrap().outpost;
         assert!(RULES.capabilities(&home).is_empty());
-        assert_eq!(RULES.processor_batches(&home), 4);
+        assert_eq!(RULES.batch_seconds(&home), 240);
         assert_eq!(RULES.power_used(&home), 0);
     }
 
     #[test]
     fn the_refinery_runs_the_processor_and_works_harder_beside_the_cargo_bay() {
         let in_a = build(&Outpost::default(), "a", "refinery");
-        assert_eq!(RULES.processor_batches(&in_a), 10, "8, and 2 for socket A");
+        assert_eq!(
+            RULES.batch_seconds(&in_a),
+            96,
+            "120, a fifth off in socket A"
+        );
         let in_a = RULES.upgrade(&in_a, "a").unwrap().outpost;
-        assert_eq!(RULES.processor_batches(&in_a), 16);
+        assert_eq!(RULES.batch_seconds(&in_a), 48);
 
         let mut in_b = build(&Outpost::default(), "a", "sensor_array");
         in_b = build(&in_b, "b", "refinery");
-        assert_eq!(RULES.processor_batches(&in_b), 8);
+        assert_eq!(RULES.batch_seconds(&in_b), 120);
     }
 
     #[test]
@@ -816,7 +824,7 @@ mod tests {
                 cost: Cost::credits(90),
                 draw: 1,
                 grants: &[Capability::PointDefence],
-                processor_batches: Some(6),
+                batch_seconds: Some(200),
             }],
             rig: None,
         };
@@ -831,7 +839,7 @@ mod tests {
             adjacency: &[AdjacencyRule {
                 facility: "shield_works",
                 socket: "c",
-                bonus: Bonus::ProcessorBatches(1),
+                bonus: Bonus::ProcessorFaster(10),
             }],
             ..STAGE1
         };
@@ -844,7 +852,7 @@ mod tests {
             RULES.capabilities(&change.outpost),
             [Capability::PointDefence]
         );
-        assert_eq!(RULES.processor_batches(&change.outpost), 7);
+        assert_eq!(RULES.batch_seconds(&change.outpost), 180);
         assert_eq!(RULES.power_used(&change.outpost), 1);
     }
 

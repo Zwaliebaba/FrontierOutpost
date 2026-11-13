@@ -72,15 +72,21 @@ test("flying out and back docks, shows the summary and offers the next contract"
   await page.keyboard.up("KeyW");
   await expect(summary).toContainText("Banked: nothing");
   await expect(summary).toContainText("Contract: 0 cr");
+  // The contract was not met, so the supplies bought for this run are still aboard.
+  await expect(summary.locator('[data-supplies="carried"]')).toContainText("next launch is free");
+  await expect(page.locator("#account")).toHaveAttribute("data-credits", "60");
 
   // At home the client sends nothing; the server's keep-alive must hold the connection past
   // its 10-second idle timeout, which used to disconnect a pilot reading the summary.
   await page.waitForTimeout(12_000);
   await summary.getByRole("button", { name: "Next contract" }).click();
   await expect(page.locator("#briefing")).toHaveAttribute("data-state", "open");
+  await expect(page.locator("#briefing .stake")).toContainText("Supplies: carried over");
   await page.locator('#briefing button[data-tier="1"]').click();
   await expect(page.locator("#run")).toHaveAttribute("data-phase", "atDock");
   await expect(page.locator("#status")).toHaveAttribute("data-state", "connected");
+  // The relaunch cost nothing.
+  await expect(page.locator("#account")).toHaveAttribute("data-credits", "60");
 });
 
 test("holding Shift engages the cruise drive on the legs", async ({ page }) => {

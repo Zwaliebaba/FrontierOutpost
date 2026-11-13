@@ -13,7 +13,7 @@ use frontier_sim::outpost::{self, Outpost};
 use serde::{Deserialize, Serialize};
 
 /// The version [`Account::to_json`] writes.
-pub const DOCUMENT_VERSION: u32 = 3;
+pub const DOCUMENT_VERSION: u32 = 5;
 
 /// Credits a new pilot starts with (design section 10).
 pub const STARTING_CREDITS: u32 = 100;
@@ -66,6 +66,11 @@ pub struct Account {
     pub processing: Queue,
     /// Rigs and modules owned, and the saved fitting.
     pub hangar: Hangar,
+    /// Supplies bought for a run that docked without the contract being
+    /// paid: they are still aboard, and the next launch costs nothing
+    /// (design section 10). Absent from documents before version 4.
+    #[serde(default)]
+    pub supplies_carried: bool,
 }
 
 /// Why a document could not be read.
@@ -79,9 +84,12 @@ pub enum DocumentError {
     WrongWorld { expected: String, found: String },
 }
 
-/// Version 3: the account as it is.
+/// Version 5: the account as it is. Version 4 is the same document without
+/// the time the processor's batch in hand was started, so its batches start
+/// when the processor is next looked at; version 3 also lacks
+/// `supplies_carried`, which then reads as false.
 #[derive(Serialize, Deserialize)]
-struct V3 {
+struct V5 {
     version: u32,
     #[serde(flatten)]
     account: Account,
@@ -142,6 +150,7 @@ impl Account {
             outpost: Outpost::default(),
             processing: Queue::default(),
             hangar: Hangar::default(),
+            supplies_carried: false,
         }
     }
 
@@ -183,7 +192,7 @@ impl Account {
                     .collect();
                 account
             }
-            3 => serde_json::from_str::<V3>(json)?.account,
+            3..=5 => serde_json::from_str::<V5>(json)?.account,
             newer => return Err(DocumentError::TooNew(newer)),
         };
         if account.world != world {
@@ -200,7 +209,7 @@ impl Account {
     /// # Errors
     /// Cannot fail for these types; the error is serde's.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(&V3 {
+        serde_json::to_string(&V5 {
             version: DOCUMENT_VERSION,
             account: self.clone(),
         })
@@ -253,7 +262,12 @@ mod tests {
         );
         assert_eq!(account.outpost, Outpost::default());
         // Saved again, it is written at the current version.
-        assert!(account.to_json().unwrap().contains(r#""version":3"#));
+        assert!(
+            account
+                .to_json()
+                .unwrap()
+                .contains(&format!(r#""version":{DOCUMENT_VERSION}"#))
+        );
     }
 
     #[test]
@@ -276,6 +290,26 @@ mod tests {
     }
 
     #[test]
+    fn loads_a_version_3_document_as_the_previous_build_wrote_it() {
+        // Written by commit a229f24, the last build before supplies carried
+        // over from an unpaid dock.
+        let v3 = r#"{"version":3,"world":"w","callsign":"Vega","credits":110,"stock":{"ore":4,"salvage":0,"volatiles":0,"alloy":0,"components":0},"unlocks":[{"facility":"refinery","tier":1}],"layout":[{"socket":"a","facility":"refinery","run":1}],"processing":{"batches":[{"recipe":"alloy","batches":3}]},"hangar":{"pieces":[{"id":0,"fitting":"extraction_rig","wear":0}],"next_id":1,"saved":{"rig":null,"modules":[]}}}"#;
+        let account = Account::from_json(v3, "w").unwrap();
+        assert_eq!(account.credits, 110);
+        assert_eq!(account.stock.ore, 4);
+        assert_eq!(account.outpost.installed("a").unwrap().run, 1);
+        assert_eq!(account.processing.waiting("alloy"), 3);
+        assert_eq!(account.hangar.count("extraction_rig"), 1);
+        assert!(!account.supplies_carried, "nothing was carried before");
+        assert_eq!(account.processing.started, None, "nor batches timed");
+        let mut carried = account;
+        carried.supplies_carried = true;
+        let json = carried.to_json().unwrap();
+        assert!(json.contains(&format!(r#""version":{DOCUMENT_VERSION}"#)));
+        assert_eq!(Account::from_json(&json, "w").unwrap(), carried);
+    }
+
+    #[test]
     fn keeps_unlocks_apart_from_the_layout() {
         let mut account = Account::new("w", "Vega");
         account.outpost.unlocks.push(outpost::Unlock {
@@ -287,7 +321,7 @@ mod tests {
             facility: "refinery".into(),
             run: 1,
         });
-        account.processing.add("alloy", 3);
+        account.processing.add("alloy", 3, 1_800_000_000);
         account
             .hangar
             .add(frontier_sim::fitting::fitting("extraction_rig").unwrap());

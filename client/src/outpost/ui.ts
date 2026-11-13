@@ -5,6 +5,7 @@
  */
 import type { AccountInfo, Catalog, ClientMessage, Good } from "../protocol";
 import { fittingRows, holding, socketView, toggleFitting } from "./options";
+import { pace, processorView, progressLine } from "./processor";
 
 export type HomeTab = "overview" | "facilities" | "market" | "processor" | "hangar";
 
@@ -43,7 +44,24 @@ function button(
 
 const GOODS: readonly Good[] = ["ore", "salvage", "volatiles", "alloy", "components"];
 
-/** Rebuilds the home panel's contents for `account`, with `selected` socket open. */
+/**
+ * Moves the processor's progress bar and countdown on, `since` seconds after `account` arrived,
+ * without rebuilding the panel: called every second while the home is open.
+ */
+export function tickProcessor(panel: HTMLElement, account: AccountInfo, since: number): void {
+  const status = panel.querySelector<HTMLElement>(".processor-status");
+  if (!status) return;
+  const view = processorView(account, since);
+  const fill = status.querySelector<HTMLElement>(".processor-fill");
+  if (fill) fill.style.width = `${(view.share * 100).toFixed(1)}%`;
+  const left = status.querySelector<HTMLElement>(".processor-left");
+  if (left) left.textContent = progressLine(view);
+}
+
+/**
+ * Rebuilds the home panel's contents for `account`, with `selected` socket open. `since` is how
+ * many seconds ago the account arrived, for the processor's progress.
+ */
 export function renderHome(
   panel: HTMLElement,
   catalog: Catalog,
@@ -51,6 +69,7 @@ export function renderHome(
   selected: string,
   on: HomeHandlers,
   active: HomeTab = "overview",
+  since = 0,
 ): void {
   const focused = document.activeElement;
   const focusAction =
@@ -67,7 +86,7 @@ export function renderHome(
     el(
       "p",
       `Power ${String(outpost.powerUsed)}/${String(catalog.powerCap)} · processor ` +
-        `${String(outpost.processorBatches)} batches per run · threat tiers up to ` +
+        `${pace(outpost.batchSeconds)} a batch · threat tiers up to ` +
         (["", "I", "II", "III"][outpost.openTiers] ?? String(outpost.openTiers)),
       "facts",
     ),
@@ -179,12 +198,35 @@ export function renderHome(
   panel.append(market);
 
   panel.append(el("h3", "Processor"));
-  const queued = account.processing.reduce((sum, q) => sum + q.batches, 0);
+  // What it is doing now: the batch in hand with its progress, or that it is idle.
+  const making = processorView(account, since);
+  const status = el("div", undefined, "processor-status");
+  status.dataset.state = making.recipe === undefined ? "idle" : "working";
+  if (making.recipe === undefined) {
+    status.append(el("strong", "Idle"), el("p", "Load a batch and it starts at once.", "facts"));
+  } else {
+    const output =
+      catalog.recipes.find((r) => r.id === making.recipe)?.output.good ?? making.recipe;
+    status.dataset.recipe = making.recipe;
+    status.append(
+      el(
+        "strong",
+        `Making ${output} · ${String(making.batches)} ` +
+          `${making.batches === 1 ? "batch" : "batches"} left`,
+      ),
+      el("div", undefined, "processor-track"),
+      el("p", progressLine(making), "processor-left"),
+    );
+    const fill = el("div", undefined, "processor-fill");
+    fill.style.width = `${(making.share * 100).toFixed(1)}%`;
+    status.querySelector(".processor-track")?.append(fill);
+  }
+  panel.append(status);
   panel.append(
     el(
       "p",
-      `${String(queued)} batches queued · finishes up to ${String(outpost.processorBatches)} ` +
-        "when you next dock from a run",
+      `One batch at a time, ${pace(outpost.batchSeconds)} each. ` +
+        "It keeps working while you fly and while you are away.",
       "facts",
     ),
   );
@@ -192,29 +234,37 @@ export function renderHome(
     const held = holding(account, recipe.input.good);
     const waiting = account.processing.find((q) => q.recipe === recipe.id)?.batches ?? 0;
     const most = Math.floor(held / recipe.input.amount);
-    const row = el("div", undefined, "choice");
+    const needs = `Needs ${String(recipe.input.amount)} ${recipe.input.good}`;
+    const row = el("div", undefined, "choice recipe");
     row.dataset.recipe = recipe.id;
-    row.append(
+    row.dataset.loaded = String(waiting);
+    const title = el("p", undefined, "recipe-title");
+    title.append(
       el(
         "span",
-        `${String(recipe.input.amount)} ${recipe.input.good} → ${String(recipe.output.amount)} ` +
-          `${recipe.output.good} · ${String(waiting)} queued `,
+        `${String(recipe.input.amount)} ${recipe.input.good} → ` +
+          `${String(recipe.output.amount)} ${recipe.output.good}`,
       ),
+      el("span", waiting > 0 ? `${String(waiting)} loaded` : "none loaded", "facts"),
+    );
+    const actions = el("div", undefined, "recipe-actions");
+    actions.append(
       button(
-        "Queue 1",
+        "Load 1",
         `process:${recipe.id}`,
         () => {
           on.send({ type: "process", recipe: recipe.id, batches: 1 });
         },
-        most < 1 ? `Needs ${String(recipe.input.amount)} ${recipe.input.good}` : undefined,
+        most < 1 ? needs : undefined,
       ),
       button(
-        `Queue ${String(Math.max(most, 1))}`,
+        most > 1 ? `Load all ${String(most)}` : "Load all",
         `process-all:${recipe.id}`,
         () => {
           on.send({ type: "process", recipe: recipe.id, batches: most });
         },
-        most < 1 ? `Needs ${String(recipe.input.amount)} ${recipe.input.good}` : undefined,
+        // With one batch's worth, "Load 1" is the same thing.
+        most < 2 ? (most < 1 ? needs : "Only one batch's worth: use Load 1") : undefined,
       ),
       button(
         "Take back 1",
@@ -222,9 +272,10 @@ export function renderHome(
         () => {
           on.send({ type: "unqueue", recipe: recipe.id, batches: 1 });
         },
-        waiting < 1 ? "Nothing queued" : undefined,
+        waiting < 1 ? "Nothing loaded" : undefined,
       ),
     );
+    row.append(title, actions);
     panel.append(row);
   }
 
@@ -315,9 +366,9 @@ export function renderHome(
   );
   const navigation = el("nav", undefined, "service-nav");
   navigation.setAttribute("aria-label", "Station services");
-  ["overview", "facilities", "market", "processor", "hangar"].forEach((name, index) => {
+  ["overview", "facilities", "market", "processor", "hangar"].forEach((name) => {
     const tab = name as HomeTab;
-    const control = button(`${String(index + 1).padStart(2, "0")}  ${name}`, `view:${name}`, () => {
+    const control = button(name, `view:${name}`, () => {
       on.tab(tab);
     });
     control.setAttribute("aria-current", name === active ? "page" : "false");

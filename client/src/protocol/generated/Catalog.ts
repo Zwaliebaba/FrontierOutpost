@@ -13,9 +13,9 @@ import type { SocketRuleInfo } from "./SocketRuleInfo";
  */
 export type Catalog = { powerCap: number, 
 /**
- * The core processor's batches per run.
+ * Seconds the core processor takes over a batch.
  */
-processorBatches: number, sockets: Array<SocketRuleInfo>, facilities: Array<FacilityInfo>, adjacency: Array<AdjacencyInfo>, reinstall: CostInfo, fittings: Array<FittingInfo>, prices: Array<PriceInfo>, recipes: Array<RecipeInfo>, 
+batchSeconds: number, sockets: Array<SocketRuleInfo>, facilities: Array<FacilityInfo>, adjacency: Array<AdjacencyInfo>, reinstall: CostInfo, fittings: Array<FittingInfo>, prices: Array<PriceInfo>, recipes: Array<RecipeInfo>, 
 /**
  * Launch supplies, credits per pilot.
  */

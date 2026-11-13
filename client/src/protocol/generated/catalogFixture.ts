@@ -5,7 +5,7 @@ import type { Catalog } from "./Catalog";
 /** The catalog the server sends after signing in. */
 export const CATALOG: Catalog = {
   "powerCap": 5,
-  "processorBatches": 4,
+  "batchSeconds": 240,
   "sockets": [
     {
       "id": "a",
@@ -81,7 +81,7 @@ export const CATALOG: Catalog = {
             "Extraction rig",
             "Cargo frame module"
           ],
-          "processorBatches": 8
+          "batchSeconds": 120
         },
         {
           "cost": {
@@ -101,7 +101,7 @@ export const CATALOG: Catalog = {
           "opens": [
             "Heat sink module"
           ],
-          "processorBatches": 14
+          "batchSeconds": 60
         }
       ],
       "rig": "extraction_rig"
@@ -153,7 +153,8 @@ export const CATALOG: Catalog = {
     {
       "facility": "refinery",
       "socket": "a",
-      "bonus": "processes 2 more batches per run"
+      "bonus": "processes batches in 20% less time",
+      "processorFaster": 20
     },
     {
       "facility": "fabrication_bay",

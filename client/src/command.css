@@ -92,37 +92,34 @@ p {
   letter-spacing: 0.16em;
   margin: 0 0 10px;
 }
+/* One bar for the brand, the pilot's holdings and the connection: at home and in flight the
+   rest of the screen belongs to the scene. */
 #command {
   position: fixed;
   z-index: 4;
   inset: 0 0 auto;
-  height: 64px;
+  height: 44px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
+  gap: 18px;
+  padding: 0 16px;
   background: #0b1622f5;
   border-bottom: 1px solid #718494;
 }
 .brand {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 10px;
   letter-spacing: 0.13em;
+  white-space: nowrap;
 }
 .brand strong {
-  font-size: 21px;
+  font-size: 14px;
 }
 .insignia {
   color: var(--orange);
-  font: bold 50px/1 monospace;
-  transform: translateY(7px);
-}
-.command-title {
-  border-left: 1px solid var(--line);
-  padding-left: 24px;
-  color: var(--muted);
-  font-size: 12px;
+  font: bold 30px/1 monospace;
+  transform: translateY(5px);
 }
 .hud-line {
   position: fixed;
@@ -137,10 +134,12 @@ p {
 }
 #status {
   position: static;
+  margin-left: auto;
+  padding: 0;
   border: 0;
   color: var(--cyan);
   background: none;
-  max-width: 40%;
+  max-width: 30%;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -153,21 +152,21 @@ p {
   color: var(--orange);
 }
 #account {
-  top: 64px;
-  inset-inline: 0;
-  height: 52px;
+  position: static;
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
   display: flex;
   align-items: center;
-  padding: 0 24px;
-  border-inline: 0;
-  border-top: 0;
-  background: #0d1926f2;
+  padding: 0;
+  border: 0;
+  background: none;
 }
 .resource {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 23px;
+  gap: 8px;
+  padding: 0 14px;
   border-left: 1px solid var(--line);
   white-space: nowrap;
 }
@@ -180,11 +179,11 @@ p {
 .resource strong {
   color: #f3b168;
   font:
-    16px ui-monospace,
+    14px ui-monospace,
     monospace;
 }
 .pilot-name {
-  min-width: 110px;
+  padding-right: 14px;
   text-transform: uppercase;
   letter-spacing: 0.13em;
   font-weight: bold;
@@ -193,12 +192,11 @@ p {
   position: fixed;
   inset: auto 0 0;
   z-index: 3;
-  height: 39px;
+  height: 30px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 20px;
+  gap: 24px;
+  padding: 0 16px;
   border-top: 1px solid #718494;
   background: #0b1622f5;
   font-size: 10px;
@@ -207,6 +205,28 @@ p {
 }
 #utility > span {
   margin-left: auto;
+  white-space: nowrap;
+}
+/* The flight keys, in the footer for as long as a run lasts. */
+#hud {
+  position: static;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font:
+    10px ui-monospace,
+    monospace;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#hud:not([data-x]) {
+  display: none;
+}
+.diagnostic {
+  display: none;
 }
 #sim {
   position: static;
@@ -246,10 +266,11 @@ p {
 .panel button {
   margin: 5px 5px 0 0;
 }
+/* As tall as what they hold, no taller: an empty panel would only cover the station. */
 #home,
 #briefing {
-  top: 136px;
-  bottom: 59px;
+  top: 56px;
+  max-height: calc(100vh - 56px - 42px);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: #506477 #101c28;
@@ -260,7 +281,7 @@ p {
 }
 #home {
   left: 18px;
-  width: 258px;
+  width: 340px;
   padding: 0;
 }
 #briefing {
@@ -268,29 +289,31 @@ p {
   width: 286px;
   padding: 20px;
 }
+/* One row of tabs, so the panel's height goes to the service that is open. */
 .service-nav {
-  padding: 8px 0;
+  display: flex;
+  flex-wrap: wrap;
   border-bottom: 1px solid #6b7b89;
 }
 .service-nav button {
   margin: 0;
-  display: block;
-  width: 100%;
+  flex: 1 1 auto;
   border: 0;
-  border-left: 3px solid transparent;
+  border-bottom: 2px solid transparent;
   background: transparent;
   text-transform: uppercase;
-  letter-spacing: 0.13em;
-  font-size: 12px;
-  padding: 11px 18px;
+  text-align: center;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+  padding: 10px 4px 8px;
 }
 .service-nav button[aria-current="page"] {
-  border-left-color: var(--orange);
-  background: linear-gradient(90deg, #8a522337, #8a522310);
+  border-bottom-color: var(--orange);
+  background: linear-gradient(0deg, #8a522337, #8a522310);
   color: #ffbb70;
 }
 .service-pane {
-  padding: 20px 16px;
+  padding: 14px 16px 16px;
 }
 [hidden] {
   display: none !important;
@@ -328,6 +351,55 @@ p {
 .choice ul {
   margin: 6px 0 0;
   padding-left: 16px;
+}
+/* The processor: what it is making now and how long that takes, then the recipes to load. */
+.processor-status {
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: #0a1420;
+}
+.processor-status[data-state="working"] {
+  border-left: 3px solid var(--cyan);
+}
+.processor-status p {
+  margin: 4px 0 0;
+}
+.processor-track {
+  height: 8px;
+  margin-top: 8px;
+  background: #1a2634;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.processor-fill {
+  width: 0;
+  height: 100%;
+  background: var(--cyan);
+  transition: width 1s linear;
+}
+.processor-left {
+  color: var(--muted);
+  font:
+    12px ui-monospace,
+    monospace;
+}
+.recipe-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+.recipe-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+.recipe-actions button {
+  margin: 0;
+  text-align: center;
+  white-space: nowrap;
 }
 #home section h3 {
   color: #ffbc74;
@@ -436,24 +508,20 @@ meter {
   border-color: #ed9d4a;
   color: #fff3df;
 }
-#hud {
-  top: 128px;
-  left: 18px;
-}
 #lock {
-  top: 164px;
+  top: 56px;
   left: 18px;
 }
 #run {
-  bottom: 116px;
+  bottom: 107px;
   left: 18px;
 }
 #scan {
-  bottom: 80px;
+  bottom: 71px;
   left: 18px;
 }
 #notice {
-  bottom: 47px;
+  bottom: 38px;
   left: 50%;
   transform: translateX(-50%);
   max-width: 70vw;
@@ -464,7 +532,7 @@ meter {
 #ship {
   position: fixed;
   left: 18px;
-  bottom: 152px;
+  bottom: 143px;
   display: none;
   padding: 6px 12px;
   color: var(--text);
@@ -523,7 +591,6 @@ meter {
 .gauge[data-level="danger"] .gauge-note {
   color: #f0a080;
 }
-#hud:empty,
 #lock:empty,
 #run:empty,
 #scan:empty,
@@ -571,12 +638,9 @@ meter {
 .nav-arrow {
   display: inline-block;
 }
-body[data-station="dock"] #account {
-  height: 40px;
-}
 @media (max-width: 1100px) {
   #home {
-    width: 220px;
+    width: 250px;
     left: 10px;
   }
   #briefing {
@@ -591,24 +655,12 @@ body[data-station="dock"] #account {
   .resource strong {
     font-size: 13px;
   }
-  .command-title {
+  .brand strong {
     display: none;
   }
-  #utility #sim {
+  /* The flight keys need the footer's width here; the camera's are the same as at home. */
+  body[data-station="dock"] #utility > span {
     display: none;
-  }
-}
-@media (max-height: 760px) {
-  #home,
-  #briefing {
-    top: 126px;
-    bottom: 49px;
-  }
-  .service-nav button {
-    padding-block: 7px;
-  }
-  .service-pane {
-    padding: 14px;
   }
 }
 
@@ -637,19 +689,9 @@ body[data-station="dock"] #account {
   padding: 12px 0;
   background: #0c1723;
 }
-@media (max-width: 1300px) {
-  .resource {
-    padding-inline: 12px;
-    gap: 8px;
-  }
-  .pilot-name {
-    min-width: 90px;
-  }
-}
-
 #account {
   overflow-x: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
 }
 #account > span {
   flex-shrink: 0;

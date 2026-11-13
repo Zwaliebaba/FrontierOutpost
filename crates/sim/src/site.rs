@@ -192,9 +192,14 @@ impl ThreatTier {
     /// The tier's values. NPC speed and damage are the owner's addition after
     /// the first playtest, not design section 10's: at full strength drones
     /// and raiders outran the starter hull and three drones broke it in about
-    /// seven seconds, too much for a first run. Tier I NPCs are slower than a
-    /// pilot and hit half as hard; tiers II and III keep full strength, so
-    /// the step up stays real. Threat still never scales with experience.
+    /// seven seconds, too much for a first run. The first cut, 0.7 and 0.5,
+    /// was still too much: shots home, so three raiders took about three
+    /// quarters of a starter hull in the time a pilot who never misses a
+    /// beat needs to destroy them.
+    /// Tier I NPCs now fly at half speed, so the starter hull leaves them
+    /// behind without its cruise drive, and hit a quarter as hard; tiers II
+    /// and III keep full strength, so the step up stays real. Threat still
+    /// never scales with experience.
     #[must_use]
     pub const fn rules(self) -> TierRules {
         const MINUTE: u32 = 60 * TICKS_PER_SECOND;
@@ -204,8 +209,8 @@ impl ThreatTier {
                 yield_factor: 1.0,
                 opening_threat: 3,
                 alert_interval_ticks: 4 * MINUTE,
-                npc_speed: 0.7,
-                npc_damage: 0.5,
+                npc_speed: 0.5,
+                npc_damage: 0.25,
             },
             Self::II => TierRules {
                 payout: 160,

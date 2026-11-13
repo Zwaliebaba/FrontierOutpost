@@ -204,18 +204,18 @@ A client-only readability greybox comes before server work and before further st
 | Alloy | 2 ore | Tier 2 facilities; reinstallation |
 | Components | 2 salvage | Tier 2 facilities |
 
-**Outpost and facilities (placeholders).** The starter outpost has a fixed core (berth, cargo bay, a processor with 4 batches per run) and two construction sockets. Socket A, beside the cargo bay, is open and empty at the start. Socket B, beside the berth, opens when the first facility is installed. Any facility fits either socket. The power cap is 5; a tier 1 facility draws 2 and a tier 2 facility draws 3. Three facilities cannot all be installed, two cannot both run at tier 2, and a tier 2 facility may be run at tier 1 draw with tier 1 capabilities. An unpowered facility grants nothing. Construction is instant.
+**Outpost and facilities (placeholders).** The starter outpost has a fixed core (berth, cargo bay, a processor that takes 4 minutes over a batch) and two construction sockets. Socket A, beside the cargo bay, is open and empty at the start. Socket B, beside the berth, opens when the first facility is installed. Any facility fits either socket. The power cap is 5; a tier 1 facility draws 2 and a tier 2 facility draws 3. Three facilities cannot all be installed, two cannot both run at tier 2, and a tier 2 facility may be run at tier 1 draw with tier 1 capabilities. An unpowered facility grants nothing. Construction is instant.
 
 | Facility | Tier | Cost | Opens on the expedition | Home side |
 |---|---|---|---|---|
 | Sensor array | 1 | 150 cr + 10 ore | Derelict pocket; scout rig | None |
 | | 2 | 550 cr + 12 alloy + 5 components | Deep-scan array module | None |
-| Refinery | 1 | 150 cr + 10 ore | Volatile veins pocket; extraction rig; cargo frame module | Processor 8 batches per run |
-| | 2 | 550 cr + 12 alloy + 5 components | Heat sink module | Processor 14 batches per run |
+| Refinery | 1 | 150 cr + 10 ore | Volatile veins pocket; extraction rig; cargo frame module | Processor takes 2 minutes over a batch |
+| | 2 | 550 cr + 12 alloy + 5 components | Heat sink module | Processor takes 1 minute over a batch |
 | Fabrication bay | 1 | 150 cr + 10 ore | Nest core pocket; escort rig | None |
 | | 2 | 550 cr + 12 alloy + 5 components | Point-defence module | None |
 
-Adjacency: a refinery in socket A processes 2 more batches per run; a fabrication bay in socket B cuts rig and module replacement prices by 20%. The purchase price includes the first installation. Installing a facility again after removing it costs 40 cr and 6 alloy; removal is free. Capabilities come from the active, powered layout, not from the list of unlocks.
+Adjacency: a refinery in socket A processes batches in 20% less time; a fabrication bay in socket B cuts rig and module replacement prices by 20%. The purchase price includes the first installation. Installing a facility again after removing it costs 40 cr and 6 alloy; removal is free. Capabilities come from the active, powered layout, not from the list of unlocks.
 
 **Ship, rigs and modules (placeholders).** One hull carries one rig and up to two modules. The first rig comes with its facility. A rig or module can be fitted only while its facility is installed and powered at the required tier.
 
@@ -251,11 +251,11 @@ Extraction builds heat. At full heat the extractor cuts out for 20 seconds; vent
 
 | Threat tier | Contract payout | Yield pools | Opening threat | Alert rises every | NPC speed | NPC damage |
 |---|---|---|---|---|---|---|
-| I | 100 cr | ×1.0 | 3 NPCs | 4 minutes | ×0.7 | ×0.5 |
+| I | 100 cr | ×1.0 | 3 NPCs | 4 minutes | ×0.5 | ×0.25 |
 | II | 160 cr | ×1.25 | 5 NPCs | 3 minutes | ×1.0 | ×1.0 |
 | III | 240 cr | ×1.5 | 8 NPCs | 2 minutes | ×1.0 | ×1.0 |
 
-Alert also rises by one each time any extractor cuts out on heat. Each alert step adds a wave of one NPC plus one per tier number. On the return leg, one raider intercepts for each full third of cargo capacity carried that no earlier interception has answered: leaving the site empty does not spend the ambush, and the same cargo is not intercepted twice. At tier I, NPCs are slower than the starter hull and hit half as hard, so a first run can be survived and escaped; tiers II and III field NPCs at full strength. Tier I is completable in the basic fitting. Tiers open with facilities: tier II when a player first owns a tier 2 facility, tier III when they own a second. They follow unlocks, not the active layout. The host may choose any tier that a crew member has opened.
+Alert also rises by one each time any extractor cuts out on heat. Each alert step adds a wave of one NPC plus one per tier number. On the return leg, one raider intercepts for each full third of cargo capacity carried that no earlier interception has answered: leaving the site empty does not spend the ambush, and the same cargo is not intercepted twice. At tier I, NPCs fly at half speed, so the starter hull leaves them behind without its cruise drive, and hit a quarter as hard, so a first run can be survived and escaped; tiers II and III field NPCs at full strength. Tier I is completable in the basic fitting. Tiers open with facilities: tier II when a player first owns a tier 2 facility, tier III when they own a second. They follow unlocks, not the active layout. The host may choose any tier that a crew member has opened.
 
 The optional two-place objective is a relay link: two relays in different pockets must each be held by a ship for the same 30 seconds. It adds 50% to the contract payout.
 
@@ -275,7 +275,7 @@ The optional two-place objective is a relay link: two relays in different pocket
 
 Threat never scales with experience or fittings. The contract payout, the nest bounty and the relay bonus form one pot, split equally unless the host changes the split before launch. Cargo belongs to the ship that docks with it.
 
-**Prices, recipes and costs (placeholders).** Prices are fixed and posted. The starting balance is 100 cr and each launch costs each pilot 40 cr in supplies. A pilot short of 40 cr who holds goods, in stock or queued for processing, sells first; one whose credits and goods together fall short launches for the credits they have, so nobody is stranded.
+**Prices, recipes and costs (placeholders).** Prices are fixed and posted. The starting balance is 100 cr and each launch costs each pilot 40 cr in supplies. A pilot short of 40 cr who holds goods, in stock or queued for processing, sells first; one whose credits and goods together fall short launches for the credits they have, so nobody is stranded. Supplies are spent by a contract that pays: a pilot who docks from an expedition whose contract was not paid still has them aboard, and their next launch costs nothing.
 
 | Good | NPC buys at | NPC sells at |
 |---|---|---|
@@ -285,7 +285,7 @@ Threat never scales with experience or fittings. The contract payout, the nest b
 | Alloy | 26 | 40 |
 | Components | 46 | 70 |
 
-Recipes: 2 ore make 1 alloy; 2 salvage make 1 components. Batches are queued at the dock and finish when the pilot next docks from a completed run, up to the processor's capacity. Rigs, modules and facilities cannot be sold.
+Recipes: 2 ore make 1 alloy; 2 salvage make 1 components. Batches are loaded at the dock and the processor works them one at a time, in the order loaded, each taking the time the outpost's layout gives it. It works by the server's clock: while the pilot is home, flying or signed out, and whatever the outcome of a run. A batch not yet finished can be taken back for its inputs; the one in hand loses the work done on it. When the layout changes the processor's pace, the batch in hand stays as far along as it was. Rigs, modules and facilities cannot be sold.
 
 **View (placeholders).** The view starts 40 metres wide and zooms between 12 and 140 metres. While the look control is held the elevation can range from 8° to 88°. The resting elevation of 33° and the orthographic projection are decisions, not placeholders.
 

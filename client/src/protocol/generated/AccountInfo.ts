@@ -2,11 +2,20 @@
 import type { LaunchInfo } from "./LaunchInfo";
 import type { OutpostInfo } from "./OutpostInfo";
 import type { QueuedInfo } from "./QueuedInfo";
+import type { WorkingInfo } from "./WorkingInfo";
 
 /**
  * What a pilot's home holds.
  */
-export type AccountInfo = { credits: number, ore: number, salvage: number, volatiles: number, alloy: number, components: number, outpost: OutpostInfo, processing: Array<QueuedInfo>, 
+export type AccountInfo = { credits: number, ore: number, salvage: number, volatiles: number, alloy: number, components: number, outpost: OutpostInfo, 
+/**
+ * Batches at the processor, in the order they are worked.
+ */
+processing: Array<QueuedInfo>, 
+/**
+ * The batch being worked; absent while the processor is idle.
+ */
+working?: WorkingInfo, 
 /**
  * Rigs and modules owned, by fitting identifier, one entry per piece.
  */

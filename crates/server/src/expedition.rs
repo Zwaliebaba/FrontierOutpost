@@ -27,11 +27,10 @@ use frontier_sim::extraction::{EXTRACT_RANGE, ExtractorState, Refusal};
 use frontier_sim::jump::{
     Cancel as JumpCancel, Refusal as JumpRefusal, SPOOL_TICKS, Target as JumpTarget,
 };
-use frontier_sim::outcome;
 use frontier_sim::profile::ShipKind;
 use frontier_sim::run::{
-    Checkpoint, Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options, Phase, Pot, Relay, Run,
-    RunEvent, Summary, seconds,
+    CONTRACT_MIN_CARGO, Checkpoint, Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options,
+    Phase, Pot, Relay, Run, RunEvent, Summary, seconds,
 };
 use frontier_sim::ship::ShipInput;
 use frontier_sim::site::{Capability, Site, SiteTemplate, ThreatTier, crew_scaling};
@@ -41,7 +40,7 @@ use tokio::time::{MissedTickBehavior, interval};
 use tracing::{debug, info, warn};
 use web_transport_quinn::Session;
 
-use crate::events::{GateEvent, Recorded, now_ms};
+use crate::events::{GateEvent, Recorded, now_ms, now_secs};
 use crate::home;
 use crate::input_queue::InputQueue;
 use crate::ledger::{Item, Npc, Party, Reason, Transfer};
@@ -703,6 +702,20 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &mut 
         Some(pot) => pay_pot(books, &pot).await,
         None => HashMap::new(),
     };
+    // The instance ended with the contract unpaid: those who docked still
+    // have the supplies they launched with (design section 10).
+    if settled.is_some_and(|pot| pot.contract == 0) {
+        let docked: Vec<ShipId> = books
+            .accounts
+            .keys()
+            .copied()
+            .filter(|&ship| {
+                run.status(ship)
+                    .is_some_and(|status| status.phase == Phase::Docked)
+            })
+            .collect();
+        carry_supplies(books, &docked).await;
+    }
     if settled.is_some() {
         let crew = u32::try_from(books.accounts.len()).unwrap_or(u32::MAX);
         for (&pilot, &share) in &shares {
@@ -840,7 +853,7 @@ async fn record(books: &Books, events: Vec<(ShipId, GateEvent)>) {
 async fn holdings(books: &Books, pilot: ShipId) -> Option<AccountInfo> {
     let account = *books.accounts.get(&pilot)?;
     match books.store.call(move |store| store.load(account)).await {
-        Ok(holdings) => Some(wire::account(&holdings)),
+        Ok(holdings) => Some(wire::account(&holdings, now_secs())),
         Err(error) => {
             warn!(%error, account = account.0, "could not load the account");
             None
@@ -890,6 +903,35 @@ async fn pay_pot(books: &Books, pot: &Pot) -> HashMap<ShipId, u32> {
     totals
 }
 
+/// Marks the supplies of the pilots flying `docked` as carried over: their
+/// next launch costs nothing. No credits move, so the ledger records nothing.
+async fn carry_supplies(books: &Books, docked: &[ShipId]) {
+    for ship in docked {
+        let Some(&account) = books.accounts.get(ship) else {
+            continue;
+        };
+        let result = books
+            .store
+            .call(move |store| {
+                store.update(account, |holdings| {
+                    holdings.supplies_carried = true;
+                    Ok(Vec::new())
+                })
+            })
+            .await;
+        match result {
+            Ok(Ok(_)) => info!(
+                target: "frontier::run",
+                run = books.run,
+                account = account.0,
+                "supplies carried over"
+            ),
+            Ok(Err(reason)) => warn!(reason, account = account.0, "supplies not carried over"),
+            Err(error) => warn!(%error, account = account.0, "supplies not carried over"),
+        }
+    }
+}
+
 /// Moves a docked pilot's cargo into their account through
 /// the ledger, and returns what the account holds afterwards. The instance
 /// does this itself, so cargo is banked even if the pilot's connection drops
@@ -915,17 +957,15 @@ async fn bank(
             run: run.clone(),
         })
         .collect();
-    let run = books.run.clone();
-    let completed = summary.ending == outcome::Ending::Docked;
+    let now = now_secs();
     let result = books
         .store
         .call(move |store| {
-            // Banking and processing are one transaction: a completed run
-            // finishes the queued batches (design section 10).
+            // Banking and processing are one transaction: the processor
+            // worked while the pilot flew (design section 10), and they come
+            // home to what it finished, however the run ended.
             store.update(account, |holdings| {
-                if completed {
-                    batch.extend(home::finish_processing(account, holdings, &run));
-                }
+                batch.extend(home::settle(account, holdings, now));
                 // Rigs and modules destroyed with the ship (design section 6).
                 holdings.hangar.lose_kinds(&lost);
                 Ok(batch)
@@ -933,7 +973,7 @@ async fn bank(
         })
         .await;
     match result {
-        Ok(Ok(holdings)) => Some(wire::account(&holdings)),
+        Ok(Ok(holdings)) => Some(wire::account(&holdings, now)),
         Ok(Err(reason)) => {
             warn!(reason, account = account.0, "could not bank the run");
             None
@@ -1010,6 +1050,7 @@ fn joined(run: &Run, ship: ShipId, tier: ThreatTier) -> ServerMessage {
         speed_factor: run.fitting(ship).map_or(1.0, |fitting| fitting.speed),
         max_shield: run.fitting(ship).map_or(0.0, |fitting| fitting.shield),
         fitted: run.fitted(ship).to_vec(),
+        contract_cargo: CONTRACT_MIN_CARGO,
     }
 }
 
@@ -1488,7 +1529,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_destroyed_pilot_loses_what_they_flew_and_processing_waits() {
+    async fn supplies_carry_over_for_the_pilots_named_and_the_next_launch_uses_them() {
+        let store = Store::in_memory().unwrap();
+        let (vega, rigel) = (
+            store.create_account("Vega").unwrap(),
+            store.create_account("Rigel").unwrap(),
+        );
+        let books = Books {
+            run: "run-4".into(),
+            store: store.clone(),
+            runs: Runs::default(),
+            accounts: HashMap::from([(ShipId(0), vega), (ShipId(1), rigel)]),
+            shares: HashMap::from([(ShipId(0), 50), (ShipId(1), 50)]),
+            homes: HashMap::new(),
+        };
+        // Vega docked; Rigel was destroyed, and their supplies with the ship.
+        carry_supplies(&books, &[ShipId(0)]).await;
+        assert!(store.load(vega).unwrap().supplies_carried);
+        assert!(!store.load(rigel).unwrap().supplies_carried);
+        assert_eq!(home::supplies_due(&store.load(vega).unwrap()), Ok(0));
+        assert_eq!(
+            wire::account(&store.load(vega).unwrap(), 0).launch.due,
+            frontier_protocol::SuppliesDue::Carried
+        );
+        assert_eq!(store.load(vega).unwrap().credits, 100, "no credits moved");
+    }
+
+    #[tokio::test]
+    async fn a_destroyed_pilot_loses_what_they_flew_and_keeps_what_the_processor_finished() {
         use frontier_sim::outcome::{Ending, Loadout};
         use frontier_sim::run::PhaseTimes;
         let store = Store::in_memory().unwrap();
@@ -1500,7 +1568,8 @@ mod tests {
                         .hangar
                         .add(frontier_sim::fitting::fitting(id).unwrap());
                 }
-                holdings.processing.add("alloy", 1);
+                // Loaded five minutes ago, at four minutes a batch.
+                holdings.processing.add("alloy", 2, now_secs() - 300);
                 Ok(Vec::new())
             })
             .unwrap()
@@ -1530,10 +1599,12 @@ mod tests {
             ["cargo_frame"],
             "the spare in the hangar stays"
         );
+        assert_eq!(holdings.alloy, 1, "the processor worked while they flew");
+        assert_eq!(holdings.processing[0].batches, 1);
         assert_eq!(
-            holdings.processing.len(),
-            1,
-            "only a completed run processes"
+            holdings.working.map(|working| working.recipe),
+            Some("alloy".to_owned()),
+            "and is on the second batch"
         );
     }
 }
