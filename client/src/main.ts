@@ -1523,14 +1523,15 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         String(jumpEffects.charges.filter((charge) => charge.ship !== session.shipId).length),
       );
       const leapt = jumpEffects.observe(poses, elapsed);
+      view.setPunch(calm.matches ? 1 : jumpEffects.punch(session.shipId));
       if (leapt.length > 0) {
         jumpsSeen += leapt.length;
         setData(hud, "jumps", String(jumpsSeen));
         // The wash covers the camera's cut, so it is for the pilot's own jump only.
         if (leapt.includes(session.shipId)) selection.steer();
         if (leapt.includes(session.shipId) && !calm.matches) {
-          jumpWash.animate([{ opacity: 0 }, { opacity: 0.7, offset: 0.2 }, { opacity: 0 }], {
-            duration: 520,
+          jumpWash.animate([{ opacity: 0 }, { opacity: 0.8, offset: 0.12 }, { opacity: 0 }], {
+            duration: 420,
             easing: "ease-out",
           });
         }

@@ -3,7 +3,6 @@
  * tactical camera with the greybox's defaults (design §5).
  */
 import {
-  AdditiveBlending,
   AgXToneMapping,
   BufferAttribute,
   BufferGeometry,
@@ -11,7 +10,6 @@ import {
   Points,
   PointsMaterial,
   Scene,
-  ShaderMaterial,
   WebGLRenderer,
 } from "three";
 import type { Vector3 } from "three";
@@ -23,6 +21,7 @@ import { ExpeditionScene } from "./scene";
 import { createDust, dustOpacity, placeDust } from "../view/dust";
 import { linear } from "../view/readability";
 import { createStarField } from "../view/sky";
+import { softPoints, softPointsMaterial } from "../view/softPoints";
 import { aimRig, createRig } from "../view/view";
 import type { CameraRig } from "../view/view";
 
@@ -53,6 +52,8 @@ export class ExpeditionView {
   #width = 1;
   #height = 1;
   #viewWidth: number;
+  /** The jump's lean in: a zoom over the view width the player chose (jumpEffects). */
+  #punch = 1;
 
   constructor(container: HTMLElement, ownShipId: number, viewWidth: number) {
     this.world = new ExpeditionScene(ownShipId);
@@ -69,6 +70,12 @@ export class ExpeditionView {
     this.#rig = createRig(1, viewWidth, "ortho");
     this.#addStars();
     this.#addDust();
+    this.world.setPixelRatio(this.#renderer.getPixelRatio());
+  }
+
+  /** Leans the view in by `zoom` over the chosen width, for the pilot's own jump; 1 at rest. */
+  setPunch(zoom: number): void {
+    this.#punch = zoom;
   }
 
   /** The player's ship after a relaunch, drawn as their own. */
@@ -122,6 +129,10 @@ export class ExpeditionView {
     jumps?: JumpEffects,
   ): void {
     this.world.update(poses, lock, shots, dt, jumps);
+    if (this.#rig.camera.zoom !== this.#punch) {
+      this.#rig.camera.zoom = this.#punch;
+      this.#rig.camera.updateProjectionMatrix();
+    }
     aimRig(this.#rig, target, pitch, yaw);
     this.#renderer.clear();
     this.#skyCamera.quaternion.copy(this.#rig.camera.quaternion);
@@ -133,6 +144,11 @@ export class ExpeditionView {
 
   /** Draws another scene, the outpost, with the same camera rules and star backdrop. */
   renderScene(scene: Scene, target: Vector3, pitch: number, yaw: number): void {
+    // Home has no jumps: a lean left over from a run's last frame must not stay.
+    if (this.#rig.camera.zoom !== 1) {
+      this.#rig.camera.zoom = 1;
+      this.#rig.camera.updateProjectionMatrix();
+    }
     aimRig(this.#rig, target, pitch, yaw);
     this.#renderer.clear();
     this.#skyCamera.quaternion.copy(this.#rig.camera.quaternion);
@@ -164,47 +180,12 @@ export class ExpeditionView {
 
   #addDust(): void {
     const { colours, sizes } = this.#dustField;
-    // Round and soft to the edge, where the stars are crisp squares: dust is not another star.
     this.#dustUniforms.pixelRatio.value = this.#renderer.getPixelRatio();
-    const material = new ShaderMaterial({
-      uniforms: this.#dustUniforms,
-      vertexShader: /* glsl */ `
-        attribute vec3 tint;
-        attribute float size;
-        uniform float pixelRatio;
-        varying vec3 vTint;
-        void main() {
-          vTint = tint;
-          gl_PointSize = size * pixelRatio;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        uniform float opacity;
-        varying vec3 vTint;
-        void main() {
-          vec2 p = gl_PointCoord * 2.0 - 1.0;
-          float r = dot(p, p);
-          if (r > 1.0) discard;
-          float fall = 1.0 - r;
-          gl_FragColor = vec4(vTint, fall * fall * opacity);
-          #include <tonemapping_fragment>
-          #include <colorspace_fragment>
-        }
-      `,
-      blending: AdditiveBlending,
-      transparent: true,
-      depthWrite: false,
-    });
-    const specks = new Points(
-      new BufferGeometry()
-        .setAttribute("position", this.#dustPositions)
-        .setAttribute("tint", new BufferAttribute(colours, 3))
-        .setAttribute("size", new BufferAttribute(sizes, 1)),
-      material,
-    );
-    // The positions follow the camera, so the bounds three.js computed once would cull them.
-    specks.frustumCulled = false;
+    const specks = softPoints(sizes.length, softPointsMaterial(this.#dustUniforms));
+    specks.geometry
+      .setAttribute("position", this.#dustPositions)
+      .setAttribute("tint", new BufferAttribute(colours, 3))
+      .setAttribute("size", new BufferAttribute(sizes, 1));
     this.#dust.add(specks);
   }
 

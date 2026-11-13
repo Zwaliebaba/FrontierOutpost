@@ -14,8 +14,9 @@ export default defineConfig({
     target: "es2023",
     sourcemap: true,
     rolldownOptions: {
-      // greybox.html is the client-only readability test harness (design §5, §9).
-      input: { main: "index.html", greybox: "greybox.html" },
+      // greybox.html is the client-only readability test harness (design §5, §9); jump-lab.html
+      // loops the jump drive's effects with no server, to judge their look.
+      input: { main: "index.html", greybox: "greybox.html", jumpLab: "jump-lab.html" },
       output: {
         // three.js is most of the bundle and changes far less often than the game, so it gets a
         // chunk of its own that browsers keep cached across game updates.

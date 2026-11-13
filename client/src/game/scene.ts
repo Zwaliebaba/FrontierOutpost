@@ -23,7 +23,8 @@ import type { DepositInfo, EntityKind, Material, ObstacleInfo, SiteInfo } from "
 import { berthPositions } from "../outpost/placement";
 import type { EntityPose } from "../net/interpolation";
 import { ExtractorBeam } from "./extractorBeam";
-import type { Flash, JumpEffects } from "./jumpEffects";
+import type { JumpEffects } from "./jumpEffects";
+import { JumpVisuals } from "./jumpVisuals";
 import type { Shots } from "./shots";
 import { SHIP_HEIGHT } from "../view/hulls";
 import { stepBank } from "../view/bank";
@@ -54,18 +55,6 @@ export const SIZE: Readonly<Record<EntityKind, number>> = {
 };
 
 const BLAST = linear(1, 0.6, 0.2);
-/** The jump drive's light: the blue of propulsion, on the pilots' side of the palette. */
-const JUMP = linear(0.25, 0.72, 1);
-/**
- * The spool's two rings, metres from the hull: the steady one closes as the spool runs, the
- * other loops inward faster and faster.
- */
-const CHARGE_RING = { far: 5.5, near: 1.8 };
-const PULSE_RING = { far: 7.5, near: 1.5 };
-/** How far a jump's streak reaches along the way the ship went, metres. */
-const STREAK_LENGTH = 60;
-/** A flash's ring, metres: it opens where a ship left and closes where one arrives. */
-const FLASH_RING = { near: 1.5, far: 7.5 };
 const LANDMARK_SEED = 2266;
 /** How high in a full deposit's crystals the beam ends, metres. */
 const BEAM_END_HEIGHT = 0.6;
@@ -93,78 +82,6 @@ interface DrawnDeposit {
 export function allegianceOf(kind: EntityKind, own: boolean): Allegiance {
   if (kind !== "playerShip") return "hostile";
   return own ? "self" : "ally";
-}
-
-/** A flat ring on the plane, one metre in radius: a coloured edge around a bright core. */
-function effectRing(): Mesh<TorusGeometry, MeshBasicMaterial> {
-  const ring = new Mesh(
-    new TorusGeometry(1, 0.024, 6, 64).rotateX(Math.PI / 2),
-    new MeshBasicMaterial({ toneMapped: false, color: JUMP, transparent: true, depthWrite: false }),
-  );
-  ring.add(
-    new Mesh(
-      new TorusGeometry(1, 0.008, 6, 64).rotateX(Math.PI / 2),
-      new MeshBasicMaterial({ toneMapped: false, transparent: true, depthWrite: false }),
-    ),
-  );
-  return ring;
-}
-
-/** Sets a ring's radius and the opacity of its edge and its core. */
-function setRing(ring: Mesh<TorusGeometry, MeshBasicMaterial>, radius: number, opacity: number) {
-  ring.scale.setScalar(radius);
-  ring.material.opacity = opacity;
-  const core = ring.children[0];
-  if (core instanceof Mesh) (core.material as MeshBasicMaterial).opacity = opacity;
-}
-
-/** The spool on a ship: two rings around the hull. Nothing solid, so it is no shield. */
-interface DrawnCharge {
-  group: Group;
-  steady: Mesh<TorusGeometry, MeshBasicMaterial>;
-  pulse: Mesh<TorusGeometry, MeshBasicMaterial>;
-}
-
-/**
- * One end of a jump: a ring that opens or closes, a second that goes the other way, a point
- * of light at the middle and a streak along the way the ship went.
- */
-interface DrawnFlash {
-  group: Group;
-  ring: Mesh<TorusGeometry, MeshBasicMaterial>;
-  echo: Mesh<TorusGeometry, MeshBasicMaterial>;
-  spark: Mesh<IcosahedronGeometry, MeshBasicMaterial>;
-  streak: Mesh<BoxGeometry, MeshBasicMaterial>;
-  core: Mesh<BoxGeometry, MeshBasicMaterial>;
-}
-
-/**
- * Draws one end of a jump at `flash.age`. Where the ship left, the ring opens and the streak
- * shoots out the way it went; where it arrives, the streak comes in behind it and the ring
- * closes on the hull.
- */
-function drawFlash(drawn: DrawnFlash, flash: Flash): void {
-  const leaving = flash.kind === "leave";
-  const fade = 1 - flash.age;
-  // Fast at first, then easing: most of the streak's reach comes in its first third.
-  const reach = 1 - fade * fade * fade;
-  drawn.group.position.set(flash.x, SHIP_HEIGHT / 2, flash.z);
-  drawn.group.rotation.set(0, -flash.heading, 0);
-  const span = FLASH_RING.far - FLASH_RING.near;
-  const out = FLASH_RING.near + span * reach;
-  const back = FLASH_RING.far - span * reach;
-  setRing(drawn.ring, leaving ? out : back, fade);
-  setRing(drawn.echo, (leaving ? back : out) * 0.6, 0.45 * fade);
-  drawn.spark.scale.setScalar(Math.max(0.01, fade));
-  drawn.spark.material.opacity = fade * fade;
-  // No longer than the jump itself: a short hop's streak must not shoot past where it ends.
-  const most = Math.min(STREAK_LENGTH, flash.distance);
-  const length = Math.max(0.01, most * (leaving ? reach : 1 - reach));
-  drawn.streak.scale.set(length, fade, fade);
-  // Ahead of where the ship left; behind where it arrives.
-  drawn.streak.position.set(((leaving ? 1 : -1) * length) / 2, 0, 0);
-  drawn.streak.material.opacity = 0.55 * fade;
-  drawn.core.material.opacity = fade;
 }
 
 const HIT_LIGHT = linear(0.8, 0.9, 1);
@@ -223,9 +140,7 @@ export class ExpeditionScene {
   readonly #bracket: Group = lockBracket();
   readonly #bolts: Mesh<BoxGeometry, MeshBasicMaterial>[] = [];
   readonly #blasts: Mesh<IcosahedronGeometry, MeshBasicMaterial>[] = [];
-  readonly #charge: DrawnCharge;
-  readonly #flashes: DrawnFlash[] = [];
-  readonly #crewCharges: DrawnCharge[] = [];
+  readonly #jumps = new JumpVisuals();
   readonly #obstacles: Mesh[] = [];
   readonly #site = new Group();
   readonly #pockets: Group[] = [];
@@ -245,17 +160,13 @@ export class ExpeditionScene {
     this.scene.add(...stationLights());
     this.#bracket.visible = false;
     this.#dock.name = "dock";
-    this.#charge = { group: new Group(), steady: effectRing(), pulse: effectRing() };
-    this.#charge.group.add(this.#charge.steady, this.#charge.pulse);
-    this.#charge.group.name = "jump spool";
-    this.#charge.group.visible = false;
     this.scene.add(
       this.#bracket,
       this.#site,
       this.#dock,
       this.#extractor.beam,
       this.#extractor.fragments,
-      this.#charge.group,
+      this.#jumps.group,
     );
   }
 
@@ -265,13 +176,18 @@ export class ExpeditionScene {
     this.#shield = shield;
   }
 
-  /** The spool's rings and glow, and the flashes on show, for tests. */
+  /** The spool's glow, sparks and countdown, and the flashes on show, for tests. */
   get jumpSpool(): Readonly<Group> {
-    return this.#charge.group;
+    return this.#jumps.spool;
   }
 
   get jumpFlashes(): readonly Readonly<Group>[] {
-    return this.#flashes.filter((flash) => flash.group.visible).map((flash) => flash.group);
+    return this.#jumps.flashes;
+  }
+
+  /** Device pixels per CSS pixel, so a jump's sparks are as wide on every screen. */
+  setPixelRatio(ratio: number): void {
+    this.#jumps.setPixelRatio(ratio);
   }
 
   get beam(): Readonly<Group> {
@@ -410,6 +326,15 @@ export class ExpeditionScene {
       drawn.hit = Math.max(0, drawn.hit - dt);
       setGear(drawn.gear, drawn.lowered);
       placeShip(drawn, pose.x, pose.z, pose.heading, drawn.bank);
+      // A jumping hull draws out along its length, +x, and thins to match: presentation only.
+      const stretch = jumps && this.#feedback ? jumps.stretch(pose.id) : 1;
+      for (const mesh of [drawn.hull, drawn.silhouette]) {
+        mesh.scale.set(
+          SIZE[pose.kind] * stretch,
+          SIZE[pose.kind],
+          SIZE[pose.kind] / Math.sqrt(stretch),
+        );
+      }
     }
     for (const [id, drawn] of this.#ships) {
       if (!seen.has(id)) this.#remove(id, drawn);
@@ -427,77 +352,16 @@ export class ExpeditionScene {
     if (jumps) this.#drawJumps(jumps);
   }
 
-  /**
-   * The spool on the ship whose drive is charging, and a flash at each end of every jump. They
-   * keep the rule for effects, a bright core in a coloured edge, and none of them is solid: a
-   * hostile behind one stays in sight.
-   */
+  /** Each spool on its ship, and both ends of every jump (jumpVisuals). */
   #drawJumps(jumps: JumpEffects): void {
-    const charges = jumps.charges;
-    while (this.#crewCharges.length + 1 < charges.length) {
-      const drawn = { group: new Group(), steady: effectRing(), pulse: effectRing() };
-      drawn.group.add(drawn.steady, drawn.pulse);
-      drawn.group.name = "crew jump spool";
-      this.scene.add(drawn.group);
-      this.#crewCharges.push(drawn);
-    }
-    [this.#charge, ...this.#crewCharges].forEach((drawn, index) => {
-      const charge = charges[index];
-      const ship = charge ? this.#ships.get(charge.ship) : undefined;
-      drawn.group.visible = charge !== undefined && ship !== undefined;
-      if (!charge || !ship) return;
-      drawn.group.position.copy(ship.hull.position).setY(SHIP_HEIGHT / 2);
-      setRing(
-        drawn.steady,
-        CHARGE_RING.far + (CHARGE_RING.near - CHARGE_RING.far) * charge.share,
-        0.35 + 0.5 * charge.share,
-      );
-      setRing(
-        drawn.pulse,
-        PULSE_RING.far + (PULSE_RING.near - PULSE_RING.far) * charge.pulse,
-        0.1 + 0.6 * charge.pulse,
-      );
-    });
-
-    const flashes = jumps.flashes;
-    while (this.#flashes.length < flashes.length) {
-      const spark = new Mesh(
-        new IcosahedronGeometry(0.8, 2),
-        new MeshBasicMaterial({ toneMapped: false, transparent: true, depthWrite: false }),
-      );
-      const streak = new Mesh(
-        new BoxGeometry(1, 0.5, 0.5),
-        new MeshBasicMaterial({
-          toneMapped: false,
-          color: JUMP,
-          transparent: true,
-          depthWrite: false,
-        }),
-      );
-      const core = new Mesh(
-        new BoxGeometry(1, 0.16, 0.16),
-        new MeshBasicMaterial({ toneMapped: false, transparent: true, depthWrite: false }),
-      );
-      streak.add(core);
-      streak.name = "streak";
-      const drawn = {
-        group: new Group(),
-        ring: effectRing(),
-        echo: effectRing(),
-        spark,
-        streak,
-        core,
-      };
-      drawn.group.add(drawn.ring, drawn.echo, streak, spark);
-      drawn.group.name = "jump flash";
-      this.scene.add(drawn.group);
-      this.#flashes.push(drawn);
-    }
-    this.#flashes.forEach((drawn, index) => {
-      const flash = flashes[index];
-      drawn.group.visible = flash !== undefined;
-      if (flash) drawFlash(drawn, flash);
-    });
+    this.#jumps.update(
+      jumps,
+      (id) => {
+        const ship = this.#ships.get(id);
+        return ship ? { x: ship.hull.position.x, z: ship.hull.position.z } : undefined;
+      },
+      !this.#feedback,
+    );
   }
 
   #remove(id: number, drawn: DrawnShip): void {
