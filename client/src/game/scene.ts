@@ -18,8 +18,9 @@ import {
   TorusGeometry,
   Vector3,
 } from "three";
-import type { Material as ThreeMaterial, Object3D } from "three";
+import type { Color, Material as ThreeMaterial, Object3D } from "three";
 import type { DepositInfo, EntityKind, Material, ObstacleInfo, SiteInfo } from "../protocol";
+import { berthPositions } from "../outpost/placement";
 import type { EntityPose } from "../net/interpolation";
 import type { Flash, JumpEffects } from "./jumpEffects";
 import type { Shots } from "./shots";
@@ -100,12 +101,12 @@ export function allegianceOf(kind: EntityKind, own: boolean): Allegiance {
 function effectRing(): Mesh<TorusGeometry, MeshBasicMaterial> {
   const ring = new Mesh(
     new TorusGeometry(1, 0.024, 6, 64).rotateX(Math.PI / 2),
-    new MeshBasicMaterial({ color: JUMP, transparent: true, depthWrite: false }),
+    new MeshBasicMaterial({ toneMapped: false, color: JUMP, transparent: true, depthWrite: false }),
   );
   ring.add(
     new Mesh(
       new TorusGeometry(1, 0.008, 6, 64).rotateX(Math.PI / 2),
-      new MeshBasicMaterial({ transparent: true, depthWrite: false }),
+      new MeshBasicMaterial({ toneMapped: false, transparent: true, depthWrite: false }),
     ),
   );
   return ring;
@@ -168,7 +169,44 @@ function drawFlash(drawn: DrawnFlash, flash: Flash): void {
   drawn.core.material.opacity = fade;
 }
 
+const HIT_LIGHT = linear(0.8, 0.9, 1);
+
+interface FeedbackMaterial {
+  material: MeshStandardMaterial;
+  emission: Color;
+  intensity: number;
+}
+
+/** Clone once per ship: flashing one hull must not change its crewmates' shared materials. */
+function feedbackMaterials(root: Object3D): FeedbackMaterial[] {
+  const copies = new Map<MeshStandardMaterial, MeshStandardMaterial>();
+  root.traverse((node) => {
+    if (!(node instanceof Mesh)) return;
+    const copy = (material: ThreeMaterial): ThreeMaterial => {
+      if (!(material instanceof MeshStandardMaterial)) return material;
+      let owned = copies.get(material);
+      if (!owned) {
+        owned = material.clone();
+        copies.set(material, owned);
+      }
+      return owned;
+    };
+    node.material = Array.isArray(node.material)
+      ? node.material.map(copy)
+      : copy(node.material as ThreeMaterial);
+  });
+  return [...copies.values()].map((material) => ({
+    material,
+    emission: material.emissive.clone(),
+    intensity: material.emissiveIntensity,
+  }));
+}
+
 interface DrawnShip extends ShipMeshes {
+  health: number;
+  shield: number;
+  hit: number;
+  feedback: FeedbackMaterial[];
   allegiance: Allegiance;
   kind: EntityKind;
   /** The landing gear, 0 folded to 1 lowered. */
@@ -189,6 +227,7 @@ export class ExpeditionScene {
   readonly #blasts: Mesh<IcosahedronGeometry, MeshBasicMaterial>[] = [];
   readonly #charge: DrawnCharge;
   readonly #flashes: DrawnFlash[] = [];
+  readonly #crewCharges: DrawnCharge[] = [];
   readonly #obstacles: Mesh[] = [];
   readonly #site = new Group();
   readonly #pockets: Group[] = [];
@@ -198,8 +237,10 @@ export class ExpeditionScene {
   /** The extractor's beam from the player's ship to the deposit it works; one at a time. */
   readonly #beam: Mesh<BoxGeometry, MeshBasicMaterial>;
   #station: Object3D | null = null;
-  #dockAt: { x: number; z: number } | null = null;
+  #berths: { x: number; z: number }[] = [];
   #ownShipId: number;
+  #feedback = true;
+  #shield = 0;
 
   constructor(ownShipId: number) {
     this.#ownShipId = ownShipId;
@@ -209,7 +250,7 @@ export class ExpeditionScene {
     // The style guide's rule for effects: a bright core in a coloured edge.
     this.#beam = new Mesh(
       new BoxGeometry(1, BEAM_WIDTH, BEAM_WIDTH),
-      new MeshBasicMaterial({ transparent: true, opacity: 0.5 }),
+      new MeshBasicMaterial({ toneMapped: false, transparent: true, opacity: 0.5 }),
     );
     this.#beam.add(
       new Mesh(new BoxGeometry(1, BEAM_WIDTH / 3, BEAM_WIDTH / 3), new MeshBasicMaterial()),
@@ -221,6 +262,12 @@ export class ExpeditionScene {
     this.#charge.group.name = "jump spool";
     this.#charge.group.visible = false;
     this.scene.add(this.#bracket, this.#site, this.#dock, this.#beam, this.#charge.group);
+  }
+
+  /** Health and shields are authoritative readings; cosmetic bolt arrival never implies a hit. */
+  configureFeedback(enabled: boolean, shield: number): void {
+    this.#feedback = enabled;
+    this.#shield = shield;
   }
 
   /** The spool's rings and glow, and the flashes on show, for tests. */
@@ -327,13 +374,18 @@ export class ExpeditionScene {
         drawn = undefined;
       }
       // Gear is down only on the berth: it folds as a launching ship lifts off.
-      const dock = this.#dockAt;
-      const berthed = dock !== null && Math.hypot(pose.x - dock.x, pose.z - dock.z) <= ON_BERTH;
+      const berthed = this.#berths.some(
+        (berth) => Math.hypot(pose.x - berth.x, pose.z - berth.z) <= ON_BERTH,
+      );
       const target = berthed ? 1 : 0;
       if (!drawn) {
         const meshes = shipMeshes(allegiance, SIZE[pose.kind]);
         drawn = {
           ...meshes,
+          health: pose.hull,
+          shield: pose.id === this.#ownShipId ? this.#shield : 0,
+          hit: 0,
+          feedback: feedbackMaterials(meshes.hull),
           allegiance,
           kind: pose.kind,
           lowered: target,
@@ -349,6 +401,17 @@ export class ExpeditionScene {
           drawn.bank = stepBank(drawn.bank, drawn.heading, pose.heading, dt);
         drawn.heading = pose.heading;
       }
+      const shield = pose.id === this.#ownShipId ? this.#shield : 0;
+      if (this.#feedback && (pose.hull < drawn.health || shield < drawn.shield)) drawn.hit = 0.3;
+      drawn.health = pose.hull;
+      drawn.shield = shield;
+      if (!this.#feedback) drawn.hit = 0;
+      const strength = drawn.hit / 0.3;
+      for (const signal of drawn.feedback) {
+        signal.material.emissive.copy(signal.emission).lerp(HIT_LIGHT, strength * 0.35);
+        signal.material.emissiveIntensity = signal.intensity + strength * 0.55;
+      }
+      drawn.hit = Math.max(0, drawn.hit - dt);
       setGear(drawn.gear, drawn.lowered);
       placeShip(drawn, pose.x, pose.z, pose.heading, drawn.bank);
     }
@@ -374,37 +437,50 @@ export class ExpeditionScene {
    * hostile behind one stays in sight.
    */
   #drawJumps(jumps: JumpEffects): void {
-    const charge = jumps.charge;
-    const ship = charge ? this.#ships.get(charge.ship) : undefined;
-    this.#charge.group.visible = charge !== null && ship !== undefined;
-    if (charge && ship) {
-      const { share, pulse } = charge;
-      this.#charge.group.position.copy(ship.hull.position).setY(SHIP_HEIGHT / 2);
-      setRing(
-        this.#charge.steady,
-        CHARGE_RING.far + (CHARGE_RING.near - CHARGE_RING.far) * share,
-        0.35 + 0.5 * share,
-      );
-      setRing(
-        this.#charge.pulse,
-        PULSE_RING.far + (PULSE_RING.near - PULSE_RING.far) * pulse,
-        0.1 + 0.6 * pulse,
-      );
+    const charges = jumps.charges;
+    while (this.#crewCharges.length + 1 < charges.length) {
+      const drawn = { group: new Group(), steady: effectRing(), pulse: effectRing() };
+      drawn.group.add(drawn.steady, drawn.pulse);
+      drawn.group.name = "crew jump spool";
+      this.scene.add(drawn.group);
+      this.#crewCharges.push(drawn);
     }
+    [this.#charge, ...this.#crewCharges].forEach((drawn, index) => {
+      const charge = charges[index];
+      const ship = charge ? this.#ships.get(charge.ship) : undefined;
+      drawn.group.visible = charge !== undefined && ship !== undefined;
+      if (!charge || !ship) return;
+      drawn.group.position.copy(ship.hull.position).setY(SHIP_HEIGHT / 2);
+      setRing(
+        drawn.steady,
+        CHARGE_RING.far + (CHARGE_RING.near - CHARGE_RING.far) * charge.share,
+        0.35 + 0.5 * charge.share,
+      );
+      setRing(
+        drawn.pulse,
+        PULSE_RING.far + (PULSE_RING.near - PULSE_RING.far) * charge.pulse,
+        0.1 + 0.6 * charge.pulse,
+      );
+    });
 
     const flashes = jumps.flashes;
     while (this.#flashes.length < flashes.length) {
       const spark = new Mesh(
         new IcosahedronGeometry(0.8, 2),
-        new MeshBasicMaterial({ transparent: true, depthWrite: false }),
+        new MeshBasicMaterial({ toneMapped: false, transparent: true, depthWrite: false }),
       );
       const streak = new Mesh(
         new BoxGeometry(1, 0.5, 0.5),
-        new MeshBasicMaterial({ color: JUMP, transparent: true, depthWrite: false }),
+        new MeshBasicMaterial({
+          toneMapped: false,
+          color: JUMP,
+          transparent: true,
+          depthWrite: false,
+        }),
       );
       const core = new Mesh(
         new BoxGeometry(1, 0.16, 0.16),
-        new MeshBasicMaterial({ transparent: true, depthWrite: false }),
+        new MeshBasicMaterial({ toneMapped: false, transparent: true, depthWrite: false }),
       );
       streak.add(core);
       streak.name = "streak";
@@ -430,6 +506,7 @@ export class ExpeditionScene {
 
   #remove(id: number, drawn: DrawnShip): void {
     this.scene.remove(drawn.hull, drawn.silhouette);
+    for (const signal of drawn.feedback) signal.material.dispose();
     drawn.dispose();
     this.#ships.delete(id);
   }
@@ -440,7 +517,7 @@ export class ExpeditionScene {
     while (this.#bolts.length < bolts.length) {
       const edge = new Mesh(
         new BoxGeometry(1.1, 0.26, 0.26),
-        new MeshBasicMaterial({ transparent: true, opacity: 0.6 }),
+        new MeshBasicMaterial({ toneMapped: false, transparent: true, opacity: 0.6 }),
       );
       edge.add(new Mesh(new BoxGeometry(0.9, 0.1, 0.1), new MeshBasicMaterial()));
       this.scene.add(edge);
@@ -461,7 +538,7 @@ export class ExpeditionScene {
     while (this.#blasts.length < blasts.length) {
       const mesh = new Mesh(
         new IcosahedronGeometry(1, 1),
-        new MeshBasicMaterial({ color: BLAST, transparent: true }),
+        new MeshBasicMaterial({ toneMapped: false, color: BLAST, transparent: true }),
       );
       this.scene.add(mesh);
       this.#blasts.push(mesh);
@@ -493,7 +570,10 @@ export class ExpeditionScene {
    */
   setSite(site: SiteInfo, obstacles: readonly ObstacleInfo[], deposits: readonly DepositInfo[]) {
     this.#clearSite();
-    this.#dockAt = { x: site.dockX, z: site.dockZ };
+    this.#berths = berthPositions(
+      { x: site.dockX, z: site.dockZ },
+      { x: site.centreX, z: site.centreZ },
+    );
     const rng = createRng(LANDMARK_SEED);
     const rockMaterial = new MeshStandardMaterial({
       color: linear(0.1, 0.12, 0.15),
@@ -595,7 +675,12 @@ function station(x: number, z: number): Group {
  * it is locked, so its state reads by shape as well as by its label.
  */
 function pocketBeacon(locked: boolean): Group {
-  const material = new MeshBasicMaterial({ color: BEACON });
+  const material = new MeshStandardMaterial({
+    color: linear(0.18, 0.22, 0.28),
+    metalness: 0.5,
+    roughness: 0.7,
+    ...STRUCTURE_STENCIL,
+  });
   const group = new Group();
   const mast = new Mesh(new CylinderGeometry(0.25, 0.35, 8, 6), material);
   mast.position.y = 4;
@@ -609,7 +694,15 @@ function pocketBeacon(locked: boolean): Group {
     cage.name = "locked";
     group.add(cage);
   } else {
-    const top = new Mesh(new OctahedronGeometry(1.4), material);
+    const top = new Mesh(
+      new OctahedronGeometry(1.4),
+      new MeshStandardMaterial({
+        color: BEACON,
+        emissive: BEACON,
+        emissiveIntensity: 0.5,
+        roughness: 0.5,
+      }),
+    );
     top.position.y = 9.4;
     top.name = "open";
     group.add(top);

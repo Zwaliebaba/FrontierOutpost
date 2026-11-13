@@ -172,6 +172,7 @@ async fn a_pilot_jumps_from_the_dock_to_just_outside_the_ore_field() {
     assert_eq!(
         read(&mut pilot.recv).await,
         ServerMessage::JumpSpooling {
+            ship: 0,
             target: ore,
             seconds: 6
         }
@@ -181,7 +182,13 @@ async fn a_pilot_jumps_from_the_dock_to_just_outside_the_ore_field() {
     let jumped = tokio::time::timeout(Duration::from_secs(5), read(&mut pilot.recv))
         .await
         .unwrap();
-    assert_eq!(jumped, ServerMessage::Jumped { target: ore });
+    assert_eq!(
+        jumped,
+        ServerMessage::Jumped {
+            ship: 0,
+            target: ore
+        }
+    );
     let last = snapshots.last().unwrap();
     let me = last.entities.iter().find(|e| e.id == pilot.ship).unwrap();
     let (x, z) = (

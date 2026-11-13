@@ -46,3 +46,15 @@ export function placeStation(
   const bz = -BERTH.x * sin + BERTH.z * cos;
   return { x: dock.x - bx, z: dock.z - bz, yaw, y: -STATION_DROP, heading };
 }
+
+/** Actual launch/departure positions, using the same lateral offsets as the simulation. */
+export function berthPositions(
+  dock: { x: number; z: number },
+  toward: { x: number; z: number },
+): { x: number; z: number }[] {
+  const heading = Math.atan2(toward.z - dock.z, toward.x - dock.x);
+  return BERTHS.map((berth) => ({
+    x: dock.x + berth.x * Math.sin(heading),
+    z: dock.z - berth.x * Math.cos(heading),
+  }));
+}

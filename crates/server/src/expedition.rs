@@ -676,10 +676,15 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &mut 
             RunEvent::PotSettled { pot } => settled = Some(pot),
             RunEvent::JumpSpooling { pilot, target } => {
                 let message = ServerMessage::JumpSpooling {
+                    ship: u32::from(pilot.0),
                     target: wire_jump_target(target),
                     seconds: seconds(SPOOL_TICKS),
                 };
-                tell(pilots, pilot, message);
+                for observer in pilots.values() {
+                    let _ = observer
+                        .events
+                        .send(PilotEvent::Message(Box::new(message.clone())));
+                }
             }
             RunEvent::JumpCancelled { pilot, reason } => {
                 let reason = match reason {
@@ -687,13 +692,25 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &mut 
                     JumpCancel::Hunted => WireJumpCancel::Hunted,
                     JumpCancel::Extracting => WireJumpCancel::Extracting,
                 };
-                tell(pilots, pilot, ServerMessage::JumpCancelled { reason });
+                for observer in pilots.values() {
+                    let _ = observer.events.send(PilotEvent::Message(Box::new(
+                        ServerMessage::JumpCancelled {
+                            ship: u32::from(pilot.0),
+                            reason,
+                        },
+                    )));
+                }
             }
             RunEvent::Jumped { pilot, target } => {
                 let message = ServerMessage::Jumped {
+                    ship: u32::from(pilot.0),
                     target: wire_jump_target(target),
                 };
-                tell(pilots, pilot, message);
+                for observer in pilots.values() {
+                    let _ = observer
+                        .events
+                        .send(PilotEvent::Message(Box::new(message.clone())));
+                }
             }
             _ => {}
         }
@@ -732,13 +749,15 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &mut 
                 let message = ServerMessage::Account { account: holdings };
                 let _ = events.send(PilotEvent::Message(Box::new(message)));
             }
-            let _ = events.send(PilotEvent::RunOver(wire::summary(&summary, payout)));
+            let _ = events.send(PilotEvent::RunOver(wire::summary(
+                &summary, payout, &books.run, settled,
+            )));
         }
         told.push(pilot);
     }
     // Pilots who went home before the end hear about the pot now; those who
     // came home with it saw their share in their summary.
-    if let Some(pot) = settled.filter(|pot| pot.total() > 0) {
+    if let Some(pot) = settled {
         for (&pilot, &share) in &shares {
             if told.contains(&pilot) {
                 continue;
@@ -751,6 +770,7 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &mut 
                 let _ = events.send(PilotEvent::Message(Box::new(message)));
             }
             let message = ServerMessage::PotPaid {
+                run: books.run.clone(),
                 pot: PotInfo {
                     contract: pot.contract,
                     bounty: pot.bounty,

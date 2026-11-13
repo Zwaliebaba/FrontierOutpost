@@ -318,7 +318,7 @@ export function launchLines(catalog: Catalog, account: AccountInfo): string[] {
       : "Flies the basic fitting";
   return [
     `${flies} · hold ${String(launch.capacity)}`,
-    `Stake: ${String(launch.stake)} cr of rigs and modules at replacement price`,
+    `Fittings at risk: ${String(launch.stake)} cr`,
     suppliesLine(account),
     ...launch.missing.map((m) => `${fittingName(catalog, m.fitting)} stays home: ${m.reason}`),
   ];
@@ -341,7 +341,7 @@ export function fittingRows(catalog: Catalog, account: AccountInfo): FittingRow[
     const price = Math.ceil((fitting.price * (100 - discount)) / 100);
     const granted = account.outpost.opens.includes(fitting.needs);
     const blocked = !granted
-      ? `Needs the ${fitting.needs}`
+      ? `Needs ${catalog.facilities.flatMap((f) => f.tiers.flatMap((t, i) => (t.opens.includes(fitting.needs) ? [`${f.name} tier ${String(i + 1)} powered`] : []))).join(" or ") || fitting.needs}`
       : account.credits < price
         ? `Needs ${String(price - account.credits)} cr more`
         : undefined;
@@ -372,4 +372,47 @@ export function toggleFitting(
     : [...account.modules, id];
   if (modules.length > 2) return null;
   return { type: "saveFitting", rig, modules };
+}
+
+/** Active facts for the overview, independent of what the station permanently owns. */
+export function socketFacts(catalog: Catalog, account: AccountInfo, id: string): string[] {
+  const socket = account.outpost.sockets.find((s) => s.id === id);
+  if (!socket?.facility)
+    return [socket?.open ? "Empty · ready to build" : "Closed · opens with the first facility"];
+  const owned = account.outpost.unlocks.find((u) => u.facility === socket.facility)?.tier ?? 0;
+  const active =
+    catalog.facilities
+      .find((f) => f.id === socket.facility)
+      ?.tiers.slice(0, socket.run)
+      .flatMap((t) => t.opens) ?? [];
+  return [
+    `Built ${String(owned)} · ${socket.run ? `Running ${String(socket.run)}` : "OFF"}`,
+    active.length ? `Enables: ${active.join(", ")}` : "No expedition capabilities while off",
+  ];
+}
+
+/** Existing build choices the pilot can afford with goods actually banked at home. */
+export function affordableFacilities(
+  catalog: Catalog,
+  account: AccountInfo,
+): { socket: string; facility: string; name: string; opens: string[] }[] {
+  const socket = account.outpost.sockets.find((s) => s.open && !s.facility);
+  if (!socket) return [];
+  return socketView(catalog, account, socket.id).choices.flatMap((choice) => {
+    if (choice.blocked || choice.message.type !== "install") return [];
+    const facility = catalog.facilities.find(
+      (f) => f.id === (choice.message.type === "install" ? choice.message.facility : ""),
+    );
+    return facility &&
+      (facility.tiers[0]?.draw ?? Infinity) <= catalog.powerCap - account.outpost.powerUsed
+      ? [
+          {
+            socket: socket.id,
+            facility: facility.id,
+            name: facility.name,
+            opens: facility.tiers[0]?.opens ?? [],
+          },
+        ]
+      : [];
+  });
 }

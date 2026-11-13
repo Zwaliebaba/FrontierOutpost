@@ -43,6 +43,7 @@ test("a scan held still in the site reveals the rich pocket and the waves", asyn
   await page.waitForTimeout(2_000);
   await page.keyboard.up("KeyS");
   const run = page.locator("#run");
+  const phaseBefore = await run.locator('[data-cell="phase"]').boundingBox();
   // Inside an unscanned site the scan's key is prompted; the scan then shows as a reading.
   await expect(page.locator('#prompts [data-prompt="scan"]')).toContainText("C");
   await page.keyboard.press("KeyC");
@@ -50,6 +51,30 @@ test("a scan held still in the site reveals the rich pocket and the waves", asyn
   await expect(run).toHaveAttribute("data-revealed", "true", { timeout: 20_000 });
   await expect(lastNotice(page)).toContainText("rich pocket: Derelict");
   await expect(run.locator('[data-cell="wave"]')).toBeVisible();
+  await expect(run.locator('[data-cell="wave"]')).toContainText(/\d+ drones · \d+ raiders/);
+  expect((await run.locator('[data-cell="phase"]').boundingBox())?.x).toBe(phaseBefore?.x);
+  expect((await run.locator('[data-cell="phase"]').boundingBox())?.width).toBe(phaseBefore?.width);
+  for (const size of [
+    { width: 1280, height: 720 },
+    { width: 1920, height: 1080 },
+    { width: 1100, height: 720 },
+  ]) {
+    await page.setViewportSize(size);
+    const clipped = await run.locator(".cell strong").evaluateAll((nodes) =>
+      nodes
+        .filter((node) => {
+          const box = node.getBoundingClientRect();
+          const header = document.querySelector("#command")?.getBoundingClientRect();
+          return (
+            parseFloat(getComputedStyle(node).fontSize) < 11 ||
+            box.bottom > (header?.bottom ?? 0) ||
+            node.scrollWidth > node.clientWidth + 1
+          );
+        })
+        .map((node) => node.textContent),
+    );
+    expect(clipped).toEqual([]);
+  }
   // The map tags what the scan found.
   await page.keyboard.press("KeyM");
   await expect(
@@ -79,7 +104,7 @@ test("flying out and back docks, shows the summary and offers the next contract"
   await expect(summary).toHaveAttribute("data-ending", "docked", { timeout: 20_000 });
   await page.keyboard.up("KeyW");
   await expect(summary).toContainText("Banked: nothing");
-  await expect(summary).toContainText("Contract: 0 cr");
+  await expect(summary).toContainText("Your crew-pot share: 0 cr");
   // The contract was not met, so the supplies bought for this run are still aboard.
   await expect(summary.locator('[data-supplies="carried"]')).toContainText("next launch is free");
   await expect(page.locator("#account")).toHaveAttribute("data-credits", "60");

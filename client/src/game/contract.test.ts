@@ -83,6 +83,9 @@ describe("scanSummary", () => {
 describe("summaryLines", () => {
   const docked: RunSummary = {
     ending: "docked",
+    run: "receipt-a",
+    settled: true,
+    pot: { contract: 100, bounty: 0, relay: 0 },
     ore: 20,
     salvage: 0,
     volatiles: 0,
@@ -99,7 +102,7 @@ describe("summaryLines", () => {
     expect(summaryLines(docked)).toEqual([
       "Docked at home",
       "Banked: 20 ore",
-      "Contract: 100 cr · supplies −40 cr · net 60 cr",
+      "Your crew-pot share: 100 cr · supplies −40 cr · net 60 cr",
       "Approach 2:50 · in the site 15:00 · return 2:55",
     ]);
   });

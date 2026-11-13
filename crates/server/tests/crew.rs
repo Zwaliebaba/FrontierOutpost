@@ -295,6 +295,11 @@ async fn a_member_back_from_the_hosts_launch_is_not_offered_or_charged_for_it_ag
         panic!("expected RunOver");
     };
     assert_eq!(summary.ending, Ending::Docked);
+    assert!(!summary.run.is_empty());
+    assert!(
+        !summary.settled,
+        "the crew is still flying; zero payout is pending"
+    );
     loop {
         match wing.hear().await {
             ServerMessage::Crew { crew } => assert!(

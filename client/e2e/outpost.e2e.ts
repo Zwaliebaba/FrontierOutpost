@@ -108,7 +108,7 @@ test("the contract shows the stake at replacement price", async ({ page }) => {
   await home(page).locator('button[data-action="fit:cargo_frame"]').click();
   await expect(stake).toHaveAttribute("data-stake", "90");
   await expect(stake).toContainText("Flies: Extraction rig, Cargo frame · hold 38");
-  await expect(stake).toContainText("Stake: 90 cr of rigs and modules at replacement price");
+  await expect(stake).toContainText("Fittings at risk: 90 cr");
 });
 
 test("station services switch without losing state or covering the viewport", async ({ page }) => {

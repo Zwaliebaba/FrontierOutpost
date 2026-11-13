@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { CATALOG } from "../protocol/generated/catalogFixture";
 import type { CrewInfo } from "../protocol";
-import { launchRole, readSplit } from "./crew";
+import { crewQuote, launchRole, readSplit } from "./crew";
 
 const crew = (overrides: Partial<CrewInfo> = {}): CrewInfo => ({
   code: "ABC234",
@@ -34,4 +35,23 @@ describe("the split", () => {
     expect(readSplit(["50.5", "49.5"])).toBeNull();
     expect(readSplit(["-10", "110"])).toBeNull();
   });
+});
+
+it("quotes the server-scaled pot separately from a pilot's share", () => {
+  const four = crew({
+    members: ["Vega", "Orion", "Talia", "Brakk"].map((callsign, index) => ({
+      callsign,
+      share: 25,
+      you: index === 0,
+    })),
+  });
+  expect(crewQuote(CATALOG, 100, four)).toEqual({ total: 280, share: 70, percent: 25, pilots: 4 });
+  expect(crewQuote(CATALOG, 240, four).total).toBe(672);
+  expect(crewQuote(CATALOG, 100, null)).toEqual({
+    total: 100,
+    share: 100,
+    percent: 100,
+    pilots: 1,
+  });
+  expect(readSplit(["", "100"])).toBeNull();
 });

@@ -280,5 +280,11 @@ export const CATALOG: Catalog = {
       }
     }
   ],
-  "supplies": 40
+  "supplies": 40,
+  "crewPayoutPercent": [
+    100,
+    160,
+    220,
+    280
+  ]
 };

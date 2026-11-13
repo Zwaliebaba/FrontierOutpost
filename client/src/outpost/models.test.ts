@@ -88,7 +88,12 @@ describe("the outpost models", () => {
     const before = drawn(authored);
     const after = drawn(models.station);
     expect(before.meshes).toBeGreaterThan(300);
-    expect(after.meshes).toBeLessThanOrEqual(10);
+    const moving: Object3D[] = [];
+    models.station.traverse((node) => {
+      if (node.name.startsWith("SocketClosure_")) moving.push(node);
+    });
+    expect(moving).toHaveLength(3);
+    expect(after.meshes - moving.length).toBeLessThanOrEqual(10);
     expect(after.triangles).toBe(before.triangles);
     for (const axis of ["x", "y", "z"] as const) {
       expect(after.size[axis]).toBeCloseTo(before.size[axis], 3);

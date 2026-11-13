@@ -19,4 +19,8 @@ batchSeconds: number, sockets: Array<SocketRuleInfo>, facilities: Array<Facility
 /**
  * Launch supplies, credits per pilot.
  */
-supplies: number, };
+supplies: number, 
+/**
+ * Percentage of the solo contract pot for crews of one through four.
+ */
+crewPayoutPercent: Array<number>, };

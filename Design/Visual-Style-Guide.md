@@ -121,6 +121,21 @@ rules and square corners complement the assets. Keep typography legible and the 
 silhouette clear. Detailed market, processor, fitting and facility controls live in separate
 service views. Actual catalog and roster data supply all values and available actions.
 
+Keep the authoritative launch receipt beside the launch action: equipment that will fly, hold,
+supplies due or carried, fittings at risk and missing equipment. Contract detail and crew
+administration may scroll; commitment facts stay visible. A saved fitting is a recovery plan,
+so distinguish it from equipment available for this launch and name its powered facility
+prerequisite in visible text. Crew split drafts show their total separately from the applied
+split. Quotes distinguish the shared contract pot from the pilot's conditional personal share.
+Final expedition receipts remain available from Overview after their notices expire.
+
+Overview names both the built and running tier, including OFF, and lists only currently enabled
+options. Tier-II modules keep their owned silhouette when throttled or off; one or two small
+service indicators show their effective tier. A closed socket has a removable graphite plate
+with a titanium cross, visibly different from an available empty mounting deck. Affordable
+development suggestions use banked goods and available power and open the existing facility
+choices for inspection.
+
 The resource strip holds what the pilot owns: credits and goods. Power is a capacity of the
 station, not a good, so it shows in the overview and the facilities view and not in the strip.
 The briefing draws the contract's site as the system map will (§11), framed on the site alone,
@@ -149,6 +164,11 @@ straight departure corridors. Socket A stays beside cargo; Socket B stays beside
 clear of all four lanes. Crew preview instances in the Blender overview are presentation only;
 the browser draws roster ships separately from the station asset.
 
+Frame the home scene inside the actual gap between the service and briefing panels, using one
+stable envelope for every supported facility. Preserve player zoom and orbit. Berth captions
+sit beyond the ships' noses with a short leader; they must clear hulls and controls at both
+1280×720 and 1920×1080. Landing gear uses the four authored berth positions.
+
 ## 11. Flight HUD and system map
 
 In flight the screen belongs to the scene. The HUD keeps to five fixed places, so a pilot learns
@@ -166,6 +186,8 @@ The footer carries the full list of flight keys as a reference.
 
 **Readings, not sentences.** Each cell of the run status is one reading with a short label. A
 reading that needs attention changes colour and takes its marker; it does not move.
+Use bounded, wrapping slots and reclaim branding space before removing tactical readings.
+The full map sits between the target and ship-gauge bands; notices keep clear of its actions.
 
 **Prompts.** A key is prompted only while pressing it would do something: the extractor in reach
 of a deposit, the scan inside an unscanned site, the vent near the cut-out, the lock with a
@@ -196,6 +218,14 @@ to spool. Up on the chart is up on the screen with the camera at rest.
   screen reader works: the chart is never the only way to choose.
 - What a scan found is tagged on the map and stays there; the notice that announces it goes.
 
+Opening the map focuses its selected destination. Arrow keys and Home/End navigate destinations;
+Enter selects, F6 cycles destination list, engage and close, and closing returns focus. Tab remains
+the combat lock key, and movement, firing, digits, J and M stay live. Labels and hit targets use
+displayed CSS pixels: at short heights the chart uses numbered destinations with full names and
+facts in its adjacent list. Scan results persistently explain the optional relay task: two ships
+within 8 m of the two pocket centres simultaneously for 30 seconds, for +50% of earned shared
+contract payment. Selected relay feedback gives remaining range and held/waiting/linked state.
+
 **The jump.** A jump is seen, by the pilot and by the crew. While the drive spools, two thin
 rings close on the pilot's ship, one steadily and one in loops that quicken, so the last second
 reads as the last. Where a ship leaves, a ring opens and a streak shoots out the way it went;
@@ -206,3 +236,13 @@ and then where it is, never slid across the space between. The pilot's own jump 
 view once with the drive's light, to cover the camera's cut.
 
 Motion is small. The wash is skipped when the system asks for reduced motion.
+Reliable crew events start and cancel spool effects; every remote spool also has a bounded
+expiry. The pilot's confirmed jump returns camera focus to their ship without clearing a
+valid hostile lock. Small material pulses follow actual hull loss or the own ship's shield loss,
+never a cosmetic bolt reaching its endpoint; reduced motion disables these pulses.
+
+The browser renderer uses AgX at exposure 1. Imported window and navigation emissions stay
+bounded so warm windows retain their colour. Tactical marker materials bypass tone mapping to
+preserve their specified colour roles. Keep space dark and armor lit; do not add bloom, shadows
+or extra light rigs by default. Hostile fork silhouettes retain their gameplay footprint, with
+restrained lit armor and recessed graphite details; beacon armor carries a small emissive cap.

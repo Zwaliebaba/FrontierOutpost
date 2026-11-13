@@ -32,6 +32,7 @@ const RING = linear(1, 0.62, 0.15);
 interface Placed {
   key: string;
   powered: boolean;
+  run: number;
   object: Object3D;
 }
 
@@ -110,7 +111,7 @@ export class OutpostScene {
     }
     this.#ring = new Mesh(
       new TorusGeometry(1.55, 0.06, 6, 48),
-      new MeshBasicMaterial({ color: RING }),
+      new MeshBasicMaterial({ color: RING, toneMapped: false }),
     );
     this.#ring.rotation.x = Math.PI / 2;
     this.#ring.visible = false;
@@ -154,12 +155,21 @@ export class OutpostScene {
     for (const socket of account.outpost.sockets) {
       const anchor = this.#models.sockets.get(socket.id);
       if (!anchor) continue;
+      anchor.traverse((node) => {
+        if (node.name.startsWith("SocketClosure_")) node.visible = !socket.open;
+      });
       const current = this.#placed.get(socket.id);
       const tier =
         account.outpost.unlocks.find((unlock) => unlock.facility === socket.facility)?.tier ?? 0;
       const key = socket.facility === undefined ? null : facilityKey(socket.facility, tier);
       const powered = socket.run > 0;
-      if (current && current.key === key && current.powered === powered) continue;
+      if (
+        current &&
+        current.key === key &&
+        current.powered === powered &&
+        current.run === socket.run
+      )
+        continue;
       if (current) {
         anchor.remove(current.object);
         this.#placed.delete(socket.id);
@@ -168,10 +178,14 @@ export class OutpostScene {
       if (!key || !template) continue;
       const object = template.clone();
       object.position.set(0, 0, 0);
+      object.traverse((node) => {
+        const match = /^Operating_Tier_(\d+)/.exec(node.name);
+        if (match?.[1]) node.visible = Number(match[1]) <= socket.run;
+      });
       if (!powered) dim(object);
       structure(object);
       anchor.add(object);
-      this.#placed.set(socket.id, { key, powered, object });
+      this.#placed.set(socket.id, { key, powered, run: socket.run, object });
     }
     this.scene.updateMatrixWorld(true);
   }

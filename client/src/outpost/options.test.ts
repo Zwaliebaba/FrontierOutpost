@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { CATALOG } from "../protocol/generated/catalogFixture";
 import type { AccountInfo } from "../protocol";
 import {
+  affordableFacilities,
+  socketFacts,
   costText,
   fittingRows,
   launchLines,
@@ -181,7 +183,7 @@ describe("the hangar and the launch", () => {
     expect(frame?.price).toBe(24);
     expect(frame?.blocked).toBeUndefined();
     expect(rows.find((r) => r.fitting.id === "heat_sink")?.blocked).toBe(
-      "Needs the Heat sink module",
+      "Needs Refinery tier 2 powered",
     );
     const rig = rows.find((r) => r.fitting.id === "extraction_rig");
     expect([rig?.owned, rig?.saved]).toEqual([1, true]);
@@ -215,7 +217,7 @@ describe("the hangar and the launch", () => {
     });
     expect(launchLines(CATALOG, account)).toEqual([
       "Flies: Extraction rig, Heat sink, Cargo frame · hold 38",
-      "Stake: 180 cr of rigs and modules at replacement price",
+      "Fittings at risk: 180 cr",
       "Supplies: 40 cr",
       "Deep-scan array stays home: needs the Deep-scan array module powered",
     ]);
@@ -262,5 +264,29 @@ describe("launch supplies", () => {
       { good: "alloy", amount: 1, credits: 26 },
     ]);
     expect(supplySales(CATALOG, home())).toEqual([]);
+  });
+});
+
+describe("overview preparation", () => {
+  it("keeps the owned tier while explaining effective capabilities and off state", () => {
+    const low = socketFacts(CATALOG, withRefinery(2, 1), "a");
+    expect(low[0]).toBe("Built 2 · Running 1");
+    expect(low[1]).toContain("Volatile veins");
+    expect(low[1]).not.toContain("Heat sink");
+    expect(socketFacts(CATALOG, withRefinery(2, 0), "a")).toEqual([
+      "Built 2 · OFF",
+      "No expedition capabilities while off",
+    ]);
+  });
+  it("offers only facilities paid for by banked goods, not unearned mission rewards", () => {
+    expect(affordableFacilities(CATALOG, home({ credits: 100, ore: 0 }))).toEqual([]);
+    expect(
+      affordableFacilities(CATALOG, home({ credits: 160, ore: 10 })).map((f) => f.name),
+    ).toEqual(["Sensor array", "Refinery", "Fabrication bay"]);
+  });
+  it("does not promise an immediate expedition benefit without enough power to run it", () => {
+    const account = home({ credits: 160, ore: 10 });
+    account.outpost.powerUsed = CATALOG.powerCap;
+    expect(affordableFacilities(CATALOG, account)).toEqual([]);
   });
 });

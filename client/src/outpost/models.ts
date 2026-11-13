@@ -3,7 +3,7 @@
  * station with its construction sockets, and the facility modules at each tier. Node names are
  * the generator's: `Station_ROOT`, `Socket_A`, `Facility_<facility>_T<tier>`.
  */
-import { Matrix4, Mesh } from "three";
+import { Matrix4, Mesh, MeshStandardMaterial } from "three";
 import type { BufferGeometry, Material, Object3D } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -103,13 +103,21 @@ export function indexModels(stationScene: Object3D, facilitiesScene: Object3D): 
     const match = SOCKET.exec(node.name);
     if (match?.[1]) sockets.set(match[1].toLowerCase(), node);
   });
-  mergeByMaterial(station);
+  const controls = new Set<Object3D>();
+  station.traverse((node) => {
+    if (node.name.startsWith("SocketClosure_")) controls.add(node);
+  });
+  mergeByMaterial(station, controls);
   const facilities = new Map<string, Object3D>();
   for (const node of [...facilitiesScene.children]) {
     const match = FACILITY.exec(node.name);
     if (!match?.[1] || !match[2]) continue;
     node.position.set(0, 0, 0);
-    mergeByMaterial(node);
+    const indicators = new Set<Object3D>();
+    node.traverse((part) => {
+      if (part.name.startsWith("Operating_Tier_")) indicators.add(part);
+    });
+    mergeByMaterial(node, indicators);
     facilities.set(facilityKey(match[1], Number(match[2])), node);
   }
   return { station, sockets, facilities };
@@ -122,6 +130,18 @@ export function parseGlb(bytes: ArrayBuffer): Promise<Object3D> {
       bytes,
       "",
       (gltf) => {
+        gltf.scene.traverse((node) => {
+          if (!(node instanceof Mesh)) return;
+          const materials = Array.isArray(node.material) ? node.material : [node.material];
+          for (const material of materials) {
+            if (material instanceof MeshStandardMaterial) {
+              if (material.name.startsWith("Windows"))
+                material.emissiveIntensity = Math.min(material.emissiveIntensity, 1.8);
+              else if (material.name.startsWith("Lights") || material.name.startsWith("Navigation"))
+                material.emissiveIntensity = Math.min(material.emissiveIntensity, 2);
+            }
+          }
+        });
         resolve(gltf.scene);
       },
       (error) => {

@@ -35,6 +35,13 @@ Design section 10's starter outpost has two construction sockets. `Socket A` sit
 
 `facilities.glb` holds six roots, `Facility_<facility>_T<tier>`, named by the game's facility identifiers (`sensor_array`, `refinery` and `fabrication_bay`) at tiers 1 and 2. Each root carries `facility` and `tier` custom properties. Each module is built around its root with its base at the root's origin. Its footprint stays within 1.25 scene metres of the centre on both horizontal axes, inside the rim clamps. Every tier 2 module stands more than 0.4 scene metres taller than its tier 1, so a tier change reads at the zoom where the whole outpost fits (design section 2). The generator asserts all three rules. In the Blender file the modules stand in a catalogue row out of the overview camera's frame. Move a root to a socket anchor (or its position to zero, under the anchor) to install it.
 
+`SocketClosure_B*` meshes form a removable blanking plate and cross under the B anchor.
+`Operating_Tier_1*` and `Operating_Tier_2*` meshes are service indicators on each facility.
+The runtime importer preserves these nodes separately from static material batches so closed
+and effective-tier states can change without replacing an owned module's silhouette. This
+revision was regenerated with Blender 4.3.2; the added cover increases the station obstacle
+check from 434 to 437 meshes while preserving the recorded four-berth clearances.
+
 - **Sensor array.** Tier 1 is a plinth with a single dish on a mast. Tier 2 adds a lattice tower with two dishes and a phased array on top.
 - **Refinery.** Tier 1 is two tanks, a manifold and a stack on a skid. Tier 2 has four tanks, a crusher hopper, twin stacks and a catwalk.
 - **Fabrication bay.** Tier 1 is a hangar with one door and a crane arm. Tier 2 is a larger hangar with two doors, an overhead gantry and a robot arm.
@@ -51,7 +58,7 @@ The station's rear pad connector is flush with the bare deck at Z=0.83, leaving 
 
 GLBs use standard metal/roughness materials and emissive windows. The camera, planet, starfield, nebula, lights and translucent engine exhaust are presentation elements in the Blender file, excluded from the gameplay exports. Recreate bloom and exhaust in the target engine. The GLB exports contain no gameplay scripts, collision shapes or baked lightmaps.
 
-This is an editable visual foundation, not a fully optimized production asset pack. Before shipping, combine repeated details or instance them, add collision meshes and LODs, atlas materials if needed, and profile against the target engine and hardware. Windows and small greebles intentionally remain separate for easy revision. There is no HUD, ship control, docking logic or other gameplay implementation yet.
+This is an editable visual foundation, not a fully optimized production asset pack. Before shipping, combine repeated details or instance them, add collision meshes and LODs, atlas materials if needed, and profile against the target engine and hardware. Windows and small greebles intentionally remain separate for easy revision in the source. The game client supplies the HUD, controls, gear animation and runtime batching; the exports themselves contain no gameplay code.
 
 ## Scene organization
 
@@ -83,3 +90,8 @@ or firing. The browser regression pauses drawing, flies, and reconnects to verif
 position.
 
 ![Station Command HUD with four roster ships in a local test world](StationCommandPreview.png)
+
+The runtime preview is a native browser capture from a granted local demonstration world,
+not a Blender render or evidence of ordinary progression pacing. The current HUD uses the
+measured clear scene area, forward berth labels and a pinned launch receipt. See
+[the review implementation record](../Look-And-Feel-Implementation.md) for changes and validation.

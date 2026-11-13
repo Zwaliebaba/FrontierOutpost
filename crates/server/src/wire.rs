@@ -130,6 +130,9 @@ fn effect(rule: &fitting::FittingRule) -> String {
 #[must_use]
 pub fn catalog() -> Catalog {
     Catalog {
+        crew_payout_percent: (1..=4)
+            .map(|pilots| (frontier_sim::site::crew_scaling(pilots).payout * 100.0).round() as u32)
+            .collect(),
         power_cap: STAGE1.power_cap,
         batch_seconds: STAGE1.batch_seconds,
         sockets: STAGE1
@@ -308,7 +311,22 @@ pub fn account(account: &Account, now: u64) -> AccountInfo {
                         },
                         Missing::NeedsCapability(needs) => MissingInfo {
                             fitting: rule.id.to_owned(),
-                            reason: format!("needs the {} powered", needs.name()),
+                            reason: format!(
+                                "needs {} powered",
+                                STAGE1
+                                    .facilities
+                                    .iter()
+                                    .find_map(|facility| {
+                                        facility
+                                            .tiers
+                                            .iter()
+                                            .position(|tier| tier.grants.contains(needs))
+                                            .map(|tier| {
+                                                format!("{} tier {}", facility.name, tier + 1)
+                                            })
+                                    })
+                                    .unwrap_or_else(|| needs.name().to_owned())
+                            ),
                             price: None,
                         },
                     }
@@ -336,9 +354,21 @@ pub fn material(material: site::Material) -> Material {
 }
 
 #[must_use]
-pub fn summary(summary: &run::Summary, payout: u32) -> RunSummary {
+pub fn summary(
+    summary: &run::Summary,
+    payout: u32,
+    key: &str,
+    pot: Option<run::Pot>,
+) -> RunSummary {
     let [ore, salvage, volatiles] = summary.banked;
     RunSummary {
+        run: key.to_owned(),
+        settled: pot.is_some(),
+        pot: frontier_protocol::PotInfo {
+            contract: pot.map_or(0, |p| p.contract),
+            bounty: pot.map_or(0, |p| p.bounty),
+            relay: pot.map_or(0, |p| p.relay),
+        },
         ending: match summary.ending {
             outcome::Ending::Docked => Ending::Docked,
             outcome::Ending::Destroyed => Ending::Destroyed,
@@ -531,7 +561,10 @@ mod tests {
         );
         assert_eq!(info.launch.capacity, 20);
         assert_eq!(info.launch.missing.len(), 2);
-        assert_eq!(info.launch.missing[0].reason, "needs the Scout rig powered");
+        assert_eq!(
+            info.launch.missing[0].reason,
+            "needs Sensor array tier 1 powered"
+        );
         assert!(info.outpost.sockets[0].open);
         assert!(!info.outpost.sockets[1].open);
     }
