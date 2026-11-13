@@ -31,13 +31,11 @@ describe("gauges", () => {
     for (const extractor of ["off", "on", "venting", "cutOut"] as const) {
       for (const heat of [0, 40, 200, 255]) {
         for (const cargo of [0, 1, 99, 100, 250]) {
-          for (const contractCargo of [0, 100]) {
-            for (const hull of [255, 20]) {
-              // The widest numbers the wire can carry: three digits everywhere.
-              const widest = { ...own, extractor, heat, cargo, capacity: 250, shield: 255 };
-              const status = { ...widest, extractorSeconds: 120 };
-              notes.push(...gauges(status, hull, -200, 20, contractCargo).map((g) => g.note));
-            }
+          for (const hull of [255, 20]) {
+            // The widest numbers the wire can carry: three digits everywhere.
+            const widest = { ...own, extractor, heat, cargo, capacity: 250, shield: 255 };
+            const status = { ...widest, extractorSeconds: 120 };
+            notes.push(...gauges(status, hull, -200, 20).map((g) => g.note));
           }
         }
       }
@@ -70,14 +68,6 @@ describe("holdGauge", () => {
     expect(gauge.change).toBe("+1");
     expect(gauge.note).toBe("counts only once docked at home");
     expect(holdGauge(own, 0).change).toBe("");
-  });
-
-  it("says how far the hold is from what the contract needs, until it has it", () => {
-    expect(holdGauge({ ...own, cargo: 0 }, 0, 10).note).toBe("contract pays from 10: 10 more");
-    expect(holdGauge({ ...own, cargo: 6 }, 1, 10).note).toBe("contract pays from 10: 4 more");
-    expect(holdGauge({ ...own, cargo: 10 }, 0, 10).note).toBe(
-      "contract met · counts only once docked",
-    );
   });
 
   it("says to go home when full", () => {

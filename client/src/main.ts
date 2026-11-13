@@ -1626,7 +1626,15 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         const hostiles = poses.filter(
           (pose) => pose.kind !== "playerShip" && pose.kind !== "core",
         ).length;
-        drawRun(runCells(status, reveal, hostiles));
+        const payout =
+          contract?.tiers.find((offer) => offer.tier === current.joined.tier)?.payout ?? null;
+        drawRun(
+          runCells(status, reveal, {
+            hostiles,
+            contractCargo: current.joined.contractCargo,
+            payout,
+          }),
+        );
         const lockRange = current.joined.lockRange;
         drawPrompts(
           prompts({
@@ -1665,7 +1673,6 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           current.hull,
           current.hullPulse.recent(now),
           current.cargoPulse.recent(now),
-          current.joined.contractCargo,
         )) {
           const row = gaugeRows.get(gauge.key);
           if (!row) continue;

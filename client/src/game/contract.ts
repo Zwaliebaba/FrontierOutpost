@@ -126,20 +126,31 @@ export type CellLevel = "ok" | "warn" | "danger";
 
 /** One instrument of the run status in the top bar: what it measures, and its reading. */
 export interface RunCell {
-  key: "phase" | "time" | "alert" | "drive" | "relay" | "scan" | "wave";
+  key: "phase" | "time" | "alert" | "contract" | "drive" | "relay" | "scan" | "wave";
   label: string;
   value: string;
   level: CellLevel;
 }
 
-// The drive state stops the cruise drive; a hostile lock or the extractor stops the jump drive
-// too, so the cell is labelled for both.
-const DRIVE_CELL: Readonly<Record<Drive, { value: string; level: CellLevel }>> = {
-  ready: { value: "Ready", level: "ok" },
-  inSite: { value: "Cruise off in the site", level: "ok" },
+// A hostile lock or the extractor stops the jump drive as well as the cruise drive, so the cell
+// is labelled for both. It shows only then: ready on the legs is the cruise prompt's to say, and
+// off in the site only repeated the phase.
+const DRIVE_CELL: Readonly<Record<Drive, { value: string; level: CellLevel } | null>> = {
+  ready: null,
+  inSite: null,
   hunted: { value: "Jammed: hostile lock", level: "danger" },
   extracting: { value: "Off while extracting", level: "warn" },
 };
+
+/** What the run status needs besides the pilot's own status. */
+export interface RunContext {
+  /** Drones, raiders and wardens in the run. */
+  hostiles?: number;
+  /** Site cargo a ship must dock with for the contract to pay; 0 for none. */
+  contractCargo?: number;
+  /** What the contract pays the crew, credits, if known. */
+  payout?: number | null;
+}
 
 /**
  * The run status, one cell for each thing a pilot reads at a glance: where they are, the clock,
@@ -151,12 +162,17 @@ const DRIVE_CELL: Readonly<Record<Drive, { value: string; level: CellLevel }>> =
  * a bigger wave. A playtester read "1" with its warning marker as a hostile still out there after
  * the last one was destroyed, so the cell says how many `hostiles` are in the run, and warns only
  * while there are some.
+ *
+ * The contract is what the pilot came for, so its progress has a cell of its own: playtesting
+ * found the bar said little about the run while the contract hid in the hold gauge's note.
  */
 export function runCells(
   own: OwnStatus,
   reveal: Pick<Scanned, "waves"> | null,
-  hostiles = 0,
+  context: RunContext = {},
 ): RunCell[] {
+  const { hostiles = 0, contractCargo = 0, payout = null } = context;
+  const pays = payout === null ? "" : ` · pays ${String(payout)} cr`;
   const cells: RunCell[] = [
     { key: "phase", label: "Phase", value: PHASE_TEXT[own.phase], level: "ok" },
     { key: "time", label: "Time", value: clock(own.elapsedSeconds), level: "ok" },
@@ -172,8 +188,20 @@ export function runCells(
             : ""),
       level: hostiles === 0 ? "ok" : own.alert >= 3 ? "danger" : "warn",
     },
-    { key: "drive", label: "Drives", ...DRIVE_CELL[own.drive] },
   ];
+  if (contractCargo > 0) {
+    cells.push({
+      key: "contract",
+      label: "Contract",
+      value:
+        own.cargo >= contractCargo
+          ? `Met · dock to collect${payout === null ? "" : ` ${String(payout)} cr`}`
+          : `${String(own.cargo)}/${String(contractCargo)} cargo${pays}`,
+      level: "ok",
+    });
+  }
+  const drive = DRIVE_CELL[own.drive];
+  if (drive) cells.push({ key: "drive", label: "Drives", ...drive });
   if (own.relay > 0) {
     cells.push({
       key: "relay",

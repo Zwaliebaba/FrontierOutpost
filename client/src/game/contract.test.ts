@@ -31,22 +31,45 @@ const cell = (cells: ReturnType<typeof runCells>, key: string) =>
   cells.find((candidate) => candidate.key === key);
 
 describe("runCells", () => {
-  it("reads the phase, the clock, the alert and the drives, one cell each", () => {
-    expect(runCells(working, null).map(({ key, value }) => [key, value])).toEqual([
+  it("reads the phase, the clock, the alert and the contract, one cell each", () => {
+    const cells = runCells(working, null, { contractCargo: 10, payout: 100 });
+    expect(cells.map(({ key, value }) => [key, value])).toEqual([
       ["phase", "In the site"],
       ["time", "3:07"],
       ["alert", "2 · clear"],
-      ["drive", "Cruise off in the site"],
+      ["contract", "7/10 cargo · pays 100 cr"],
     ]);
   });
 
+  it("says when the hold has enough for the contract, and has no cell without one", () => {
+    const met = runCells({ ...working, cargo: 10 }, null, { contractCargo: 10, payout: 100 });
+    expect(cell(met, "contract")?.value).toBe("Met · dock to collect 100 cr");
+    expect(cell(runCells(working, null, { contractCargo: 10 }), "contract")?.value).toBe(
+      "7/10 cargo",
+    );
+    expect(cell(runCells(working, null), "contract")).toBeUndefined();
+  });
+
+  it("shows the drives only while something stops them", () => {
+    expect(cell(runCells(working, null), "drive")).toBeUndefined();
+    expect(cell(runCells({ ...working, drive: "ready" }, null), "drive")).toBeUndefined();
+    expect(cell(runCells({ ...working, drive: "extracting" }, null), "drive")).toMatchObject({
+      value: "Off while extracting",
+      level: "warn",
+    });
+  });
+
   it("raises the alert's level as it climbs, and a jammed drive's at once", () => {
-    expect(cell(runCells({ ...working, alert: 0 }, null, 3), "alert")?.level).toBe("warn");
-    expect(cell(runCells(working, null, 1), "alert")?.level).toBe("warn");
-    expect(cell(runCells({ ...working, alert: 3 }, null, 2), "alert")?.level).toBe("danger");
+    const hostiles = (count: number) => ({ hostiles: count });
+    expect(cell(runCells({ ...working, alert: 0 }, null, hostiles(3)), "alert")?.level).toBe(
+      "warn",
+    );
+    expect(cell(runCells(working, null, hostiles(1)), "alert")?.level).toBe("warn");
+    expect(cell(runCells({ ...working, alert: 3 }, null, hostiles(2)), "alert")?.level).toBe(
+      "danger",
+    );
     const jammed = cell(runCells({ ...working, drive: "hunted" }, null), "drive");
     expect(jammed).toMatchObject({ value: "Jammed: hostile lock", level: "danger" });
-    expect(cell(runCells({ ...working, drive: "ready" }, null), "drive")?.value).toBe("Ready");
   });
 
   it("shows the crew's relay link while it is held and once linked", () => {
@@ -138,7 +161,7 @@ describe("scanRefusalText", () => {
 
 describe("the alert cell", () => {
   const alert = (level: number, hostiles: number) =>
-    cell(runCells({ ...working, alert: level }, null, hostiles), "alert");
+    cell(runCells({ ...working, alert: level }, null, { hostiles }), "alert");
 
   it("counts the hostiles in the run beside the level", () => {
     expect(alert(1, 1)?.value).toBe("1 · 1 hostile");

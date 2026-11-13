@@ -144,9 +144,10 @@ test("flying out and back docks, shows the summary and offers the next contract"
 
 test("holding Shift engages the cruise drive on the legs", async ({ page }) => {
   await launch(page, QUIET);
-  // On the leg the drives read ready, and the cruise drive's key is prompted.
-  await expect(page.locator('#run [data-cell="drive"]')).toContainText("Ready");
+  // On the leg nothing stops the drives, so the bar leaves them out and the cruise key is prompted.
   await expect(page.locator('#prompts [data-prompt="cruise"]')).toContainText("Shift");
+  await expect(page.locator('#run [data-cell="drive"]')).toHaveCount(0);
+  await expect(page.locator('#run [data-cell="contract"]')).toContainText("0/10 cargo · pays");
   const start = await position(page);
   await page.keyboard.down("ShiftLeft");
   await page.keyboard.down("KeyW");

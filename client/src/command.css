@@ -970,8 +970,8 @@ body[data-station="dock"] #account {
 #run {
   display: grid;
   grid-template-columns:
-    minmax(0, 1fr) minmax(0, 0.65fr) minmax(0, 0.5fr) minmax(0, 1.45fr)
-    minmax(0, 0.9fr) minmax(0, 1.15fr) minmax(0, 1.65fr);
+    minmax(0, 1fr) minmax(0, 0.6fr) minmax(0, 0.85fr) minmax(0, 1.3fr) minmax(0, 1.1fr)
+    minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 1.65fr);
   overflow: visible;
 }
 .cell[data-cell="phase"] {
@@ -983,17 +983,20 @@ body[data-station="dock"] #account {
 .cell[data-cell="alert"] {
   grid-column: 3;
 }
-.cell[data-cell="drive"] {
+.cell[data-cell="contract"] {
   grid-column: 4;
 }
-.cell[data-cell="relay"] {
+.cell[data-cell="drive"] {
   grid-column: 5;
 }
-.cell[data-cell="scan"] {
+.cell[data-cell="relay"] {
   grid-column: 6;
 }
-.cell[data-cell="wave"] {
+.cell[data-cell="scan"] {
   grid-column: 7;
+}
+.cell[data-cell="wave"] {
+  grid-column: 8;
 }
 .cell {
   grid-row: 1;

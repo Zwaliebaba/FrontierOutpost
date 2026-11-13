@@ -79,22 +79,17 @@ export function hullGauge(hull: number, shield: number, lost: number): Gauge {
 }
 
 /**
- * The hold. `contractCargo` is what a ship must dock with for the contract to pay: until the hold
- * has it, the gauge says how far short it is, so a pilot never docks short by surprise.
+ * The hold. How far it is from what the contract needs is the top bar's contract cell
+ * (game/contract), so the gauge says only what cargo is worth: nothing until docked.
  */
-export function holdGauge(own: OwnStatus, gained: number, contractCargo = 0): Gauge {
+export function holdGauge(own: OwnStatus, gained: number): Gauge {
   const share = own.capacity > 0 ? clampShare(own.cargo / own.capacity) : 0;
   const full = own.capacity > 0 && own.cargo >= own.capacity;
-  const short = contractCargo - own.cargo;
   const note = full
     ? "full: fly home and dock to bank it"
-    : short > 0
-      ? `contract pays from ${String(contractCargo)}: ${String(short)} more`
-      : own.cargo === 0
-        ? ""
-        : contractCargo > 0
-          ? "contract met · counts only once docked"
-          : "counts only once docked at home";
+    : own.cargo > 0
+      ? "counts only once docked at home"
+      : "";
   return {
     key: "hold",
     label: "Hold",
@@ -134,11 +129,6 @@ export function gauges(
   hull: number,
   hullChange: number,
   cargoChange: number,
-  contractCargo = 0,
 ): Gauge[] {
-  return [
-    hullGauge(hull, own.shield, hullChange),
-    holdGauge(own, cargoChange, contractCargo),
-    heatGauge(own),
-  ];
+  return [hullGauge(hull, own.shield, hullChange), holdGauge(own, cargoChange), heatGauge(own)];
 }
