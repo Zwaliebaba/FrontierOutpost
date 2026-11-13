@@ -3,6 +3,7 @@
  * keyboard, and draws every ship from the server's snapshots with the tactical camera (design §5).
  */
 import "./command.css";
+import "./chart.css";
 import { Raycaster, Vector2, Vector3 } from "three";
 import { connect, fetchConnectInfo } from "./net/connection";
 import type { Connection } from "./net/connection";
@@ -42,8 +43,11 @@ import {
   summaryLines,
 } from "./game/contract";
 import type { Contract, Joined, Scanned } from "./game/contract";
+import { chartPlaces, jumpReadiness, sideOf, waypointFor } from "./game/chart";
+import type { ChartPlace } from "./game/chart";
+import { ChartView } from "./game/chartView";
 import { Pulse, gauges } from "./game/gauges";
-import { CANCEL_TEXT, JumpDrive, REFUSAL_TEXT, markerOf } from "./game/jump";
+import { CANCEL_TEXT, JumpDrive, REFUSAL_TEXT } from "./game/jump";
 import type { GaugeKey } from "./game/gauges";
 import {
   SignInRefusedError,
@@ -55,8 +59,8 @@ import {
   storedToken,
 } from "./game/identity";
 import type { SignedIn } from "./game/identity";
-import { distanceText, placeMarkers, spreadBoxes } from "./game/navigation";
-import type { NavMarker, NavTarget } from "./game/navigation";
+import { clearOf, distanceText, placeMarkers } from "./game/navigation";
+import type { Box } from "./game/navigation";
 import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
 import { loadSim } from "./sim";
 import type { Sim } from "./sim";
@@ -74,11 +78,16 @@ const GLIDE_SECONDS = 0.9;
 
 const PICK_RADIUS_PX = 24;
 const KEY_TURN_RATE = 1.6;
-/** Room kept clear for the bar and lock line at the top, and the gauges and lines at the bottom. */
-const NAV_INSETS = { top: 96, right: 12, bottom: 226, left: 12 };
+/** Room the waypoint keeps from the screen's edges: the bar at the top, the footer below. */
+const NAV_INSETS = { top: 62, right: 16, bottom: 48, left: 16 };
+/** The top bar's and the footer's heights (command.css): the waypoint stays between them. */
+const BAR_HEIGHT = 44;
+const FOOTER_HEIGHT = 30;
 /** The flight keys, shown in the footer for as long as a run lasts. */
 const FLIGHT_KEYS =
-  "W A S D fly · Shift cruise · J jump · Tab lock · Space fire · X extract · V vent · C scan";
+  "W A S D fly · Shift cruise · M map · J jump · Tab lock · Space fire · X extract · V vent · C scan";
+/** How often the map and the minimap are redrawn, at most: ships cross them slowly. */
+const CHART_MS = 100;
 const NOTICE_MS = 4_000;
 /** How soon a dropped connection is retried, and how often an unreachable server. */
 const RECONNECT_MS = 1_500;
@@ -468,8 +477,35 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   let selectedTier = 1;
   let contract: Contract | null = null;
   let reveal: Scanned | null = null;
-  /** The marker chosen for the jump drive, and any spool in progress. */
+  /** The destination chosen for the jump drive, and any spool in progress. */
   const jumpDrive = new JumpDrive();
+  /** When the map was last redrawn; set back to redraw it on the next frame. */
+  let chartAt = Number.NEGATIVE_INFINITY;
+  /** J, or the map's button: cancels a spool, jumps to the destination chosen, or asks for one. */
+  const engageJump = () => {
+    if (!life) return;
+    const action = jumpDrive.press(life.joined.site.pockets);
+    if (action) {
+      send({ type: "jump", target: action.jump });
+    } else {
+      // Nothing chosen: the map is where a destination is chosen, so J leads there.
+      chart.open();
+      showNotice("Jump drive: choose a destination on the map, then press J");
+    }
+    chartAt = Number.NEGATIVE_INFINITY;
+  };
+  const chart = new ChartView({
+    choose: (id) => {
+      jumpDrive.toggle(id);
+      chartAt = Number.NEGATIVE_INFINITY;
+    },
+    engage: engageJump,
+    jumpTo: (id) => {
+      jumpDrive.selected = id;
+      engageJump();
+    },
+  });
+  document.body.append(chart.navigator, chart.overlay);
   /**
    * The camera moving between the station and the ship, when a run begins or ends. It starts
    * `from` this far from the station's centre, so it holds if the next dock moves the station.
@@ -694,6 +730,14 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     life = beginLife(connection, joined, loaded);
     reveal = null;
     jumpDrive.reset();
+    chart.close();
+    chart.setSite(
+      joined.site,
+      joined.obstacles,
+      joined.deposits,
+      chartPlaces(joined.site, { x: joined.site.dockX, z: joined.site.dockZ }, null, false),
+    );
+    chartAt = Number.NEGATIVE_INFINITY;
     selection.release();
     delete briefing.dataset.state;
     briefing.replaceChildren();
@@ -771,6 +815,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         life?.session.retire();
         life = null;
         jumpDrive.reset();
+        chart.clear();
         selection.release();
         showSummary(message.summary);
         homeChanged();
@@ -807,16 +852,21 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         break;
       case "jumpSpooling":
         jumpDrive.spooling(message.target, message.seconds, performance.now());
+        // The drive is spooling: back to the scene, where a hostile lock would show.
+        chart.close();
+        chartAt = Number.NEGATIVE_INFINITY;
         break;
       case "jumpRefused":
         showNotice(REFUSAL_TEXT[message.reason]);
         break;
       case "jumpCancelled":
         jumpDrive.ended();
+        chartAt = Number.NEGATIVE_INFINITY;
         showNotice(CANCEL_TEXT[message.reason]);
         break;
       case "jumped":
         jumpDrive.ended();
+        chartAt = Number.NEGATIVE_INFINITY;
         break;
       case "limitWarning":
         showNotice(`The instance ends in ${String(Math.round(message.secondsLeft / 60))} minutes`);
@@ -855,7 +905,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       // Only what is within lock range can be locked (design §10: ion fog shortens it).
       lockNearest(own, shipId);
     } else if (event.code === "Escape") {
-      selection.release();
+      // Esc closes the map first; with the map closed it lets go of the lock.
+      if (chart.isOpen) chart.close();
+      else selection.release();
     } else if (event.repeat) {
       return;
     } else if (event.code === "Space" && selection.lock === null) {
@@ -869,10 +921,18 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       send({ type: "vent" });
     } else if (event.code === "KeyC") {
       send({ type: "scan" });
+    } else if (event.code === "KeyM") {
+      chart.toggle();
+      chartAt = Number.NEGATIVE_INFINITY;
     } else if (event.code === "KeyJ") {
-      const action = jumpDrive.press(life.joined.site.pockets);
-      if (action) send({ type: "jump", target: action.jump });
-      else showNotice("Jump drive: click the Dock or a pocket marker to choose where to jump");
+      engageJump();
+    } else if (chart.isOpen && /^Digit[1-9]$/.test(event.code)) {
+      // With the map open, a digit chooses the destination it is listed beside.
+      const id = chart.keyed(event.code.slice("Digit".length));
+      if (id !== null) {
+        jumpDrive.toggle(id);
+        chartAt = Number.NEGATIVE_INFINITY;
+      }
     }
   });
   const target = new Vector3();
@@ -965,100 +1025,68 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     else node.dataset[name] = value;
   };
 
-  interface Marker {
-    node: HTMLDivElement;
-    arrow: HTMLSpanElement;
-    label: Text;
-  }
-  const markers = new Map<string, Marker>();
-  const drawNav = (from: { x: number; z: number }) => {
-    const site = life?.joined.site;
-    if (!site) {
-      if (markers.size > 0) {
-        nav.replaceChildren();
-        markers.clear();
-        written.forget("nav.");
-      }
-      return;
-    }
-    const targets: NavTarget[] = [
-      { id: "dock", label: "Dock", x: site.dockX, z: site.dockZ },
-      ...site.pockets.map((pocket, index) => ({
-        id: pocket.kind,
-        label:
-          POCKET_NAME[pocket.kind] +
-          (pocket.locked ? " (locked)" : "") +
-          (reveal?.richPocket === index ? " (rich)" : "") +
-          (reveal?.relays.includes(index) ? " (relay)" : ""),
-        x: pocket.x,
-        z: pocket.z,
-      })),
-    ];
+  // The waypoint: the destination chosen on the map, marked where it is on screen or at the
+  // screen's edge toward it. It is the scene's one label, and it takes no clicks.
+  const waypoint = element("div", "waypoint");
+  const waypointArrow = element("span", undefined, "waypoint-arrow");
+  const waypointText = element("span", undefined, "waypoint-text");
+  waypoint.append(waypointText, waypointArrow);
+  waypoint.hidden = true;
+  nav.append(waypoint);
+  let waypointSize = { width: 0, height: 0 };
+  /** Where the HUD's panels are, so the waypoint is never drawn under one. */
+  let hudPanels: Box[] = [];
+  const measurePanels = () => {
+    hudPanels = [shipPanel, run, scan, lock, notice, chart.navigator]
+      .map((node) => node.getBoundingClientRect())
+      .filter((box) => box.width > 0 && box.height > 0)
+      .map(({ x, y, width, height }) => ({ x, y, width, height }));
+  };
+  const drawWaypoint = (place: ChartPlace | undefined) => {
+    if (written.changed("waypoint.hidden", String(!place))) waypoint.hidden = !place;
+    if (!place) return;
     const project = (x: number, z: number) =>
       worldToScreen(new Vector3(x, 0, z), view.camera, view.viewport);
-    const placed: { marker: NavMarker; node: HTMLDivElement }[] = [];
-    for (const marker of placeMarkers(targets, from, project, view.viewport, NAV_INSETS)) {
-      let drawn = markers.get(marker.id);
-      if (!drawn) {
-        const node = element("div", undefined, "nav-marker");
-        const id = marker.id;
-        node.dataset.target = id;
-        // A click or tap chooses where J jumps; a right click chooses and jumps at once.
-        node.addEventListener("click", (event) => {
-          event.stopPropagation();
-          jumpDrive.toggle(id);
-        });
-        node.addEventListener("contextmenu", (event) => {
-          event.preventDefault();
-          jumpDrive.selected = id;
-          const action = life ? jumpDrive.press(life.joined.site.pockets) : null;
-          if (action?.jump) send({ type: "jump", target: action.jump });
-        });
-        const arrow = element("span", undefined, "nav-arrow");
-        arrow.textContent = "➤";
-        nav.append(node);
-        drawn = { node, arrow, label: document.createTextNode("") };
-        markers.set(marker.id, drawn);
-      }
-      const { node, arrow, label } = drawn;
-      const place = `nav.${marker.id}`;
-      // The arrow points the way to a target off screen; an on-screen one needs none.
-      if (written.changed(`${place}.onScreen`, String(marker.onScreen))) {
-        node.dataset.onScreen = String(marker.onScreen);
-        node.replaceChildren(...(marker.onScreen ? [label] : [arrow, " ", label]));
-      }
-      // Marker nodes have no id, so they keep their own keys in `written`.
-      const selected = String(jumpDrive.selected === marker.id);
-      if (written.changed(`${place}.selected`, selected)) node.dataset.selected = selected;
-      const spool = jumpDrive.spool;
-      const jumping = String(spool !== null && markerOf(spool.target, site.pockets) === marker.id);
-      if (written.changed(`${place}.jumping`, jumping)) node.dataset.jumping = jumping;
-      const turned = `rotate(${marker.angle.toFixed(2)}rad)`;
-      if (written.changed(`${place}.arrow`, turned)) arrow.style.transform = turned;
-      const text = `${marker.label} · ${distanceText(marker.distance)}`;
-      if (written.changed(`${place}.text`, text)) label.data = text;
-      placed.push({ marker, node });
-    }
-    // Every label's text is written; one read of their sizes, then each is placed, with any
-    // that would overlap pushed apart so that each can be clicked.
-    const boxes = placed.map(({ marker, node }) => {
-      const width = node.offsetWidth;
-      const height = node.offsetHeight;
-      // Above an on-screen target; inward from an edge, so the label stays whole.
-      const lift = marker.onScreen ? 12 : 0;
-      return {
+    const [marker] = placeMarkers(
+      [{ id: place.id, label: place.name, x: place.x, z: place.z }],
+      { x: 0, z: 0 },
+      project,
+      view.viewport,
+      NAV_INSETS,
+    );
+    if (!marker) return;
+    setData(waypoint, "target", place.id);
+    setData(waypoint, "onScreen", String(marker.onScreen));
+    // Off screen the arrow points the way; on screen it points down at the place itself.
+    const turned = marker.onScreen ? "rotate(90deg)" : `rotate(${marker.angle.toFixed(2)}rad)`;
+    if (written.changed("waypoint.arrow", turned)) waypointArrow.style.transform = turned;
+    const text = `${place.name} · ${distanceText(place.distance)}`;
+    const resized =
+      written.changed("waypoint.length", `${String(text.length)} ${String(marker.onScreen)}`) ||
+      waypointSize.width === 0;
+    if (written.changed("waypoint.text", text)) waypointText.textContent = text;
+    // The font is monospace: the size changes only when the text's length does.
+    if (resized) waypointSize = { width: waypoint.offsetWidth, height: waypoint.offsetHeight };
+    const { width, height } = waypointSize;
+    // Above an on-screen place; inward from an edge, so the label stays whole.
+    const lift = marker.onScreen ? 10 : 0;
+    const box = clearOf(
+      {
         x: marker.screen.x - marker.anchor.x * width,
         y: marker.screen.y - lift - marker.anchor.y * height,
         width,
         height,
-      };
-    });
-    spreadBoxes(boxes, view.viewport).forEach((box, index) => {
-      const entry = placed[index];
-      if (!entry) return;
-      const moved = `translate(${box.x.toFixed(0)}px, ${box.y.toFixed(0)}px)`;
-      if (written.changed(`nav.${entry.marker.id}.at`, moved)) entry.node.style.transform = moved;
-    });
+      },
+      hudPanels,
+      {
+        x: 0,
+        y: BAR_HEIGHT,
+        width: view.viewport.width,
+        height: view.viewport.height - BAR_HEIGHT - FOOTER_HEIGHT,
+      },
+    );
+    const moved = `translate(${box.x.toFixed(0)}px, ${box.y.toFixed(0)}px)`;
+    if (written.changed("waypoint.at", moved)) waypoint.style.transform = moved;
   };
 
   const homeMarkers = new Map<string, HTMLElement>();
@@ -1255,8 +1283,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         setData(run, "phase", status.phase);
         setData(run, "cargo", String(status.cargo));
         setData(run, "extractor", status.extractor);
-        const jumpLine = jumpDrive.line(now, current.joined.site.pockets);
-        setText(run, runLine(status) + hint + (jumpLine ? ` · ${jumpLine}` : ""));
+        setText(run, runLine(status) + hint);
         setData(shipPanel, "active", "true");
         for (const gauge of gauges(
           status,
@@ -1286,7 +1313,25 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         setData(scan, "revealed", String(reveal !== null));
         setText(scan, scanLine(status, reveal, pocketName));
       }
-      drawNav(own);
+      // The map, the minimap beside the gauges, and the waypoint to the destination chosen.
+      const { site } = current.joined;
+      const places = chartPlaces(site, own, reveal, (status?.cargo ?? 0) > 0);
+      const chosen = places.find((place) => place.id === jumpDrive.selected);
+      if (now - chartAt >= CHART_MS) {
+        chartAt = now;
+        const ownId = session.shipId;
+        chart.update({
+          places,
+          selected: jumpDrive.selected,
+          readout: jumpDrive.readout(now, site.pockets),
+          readiness: jumpReadiness(chosen ?? null, status?.drive ?? null),
+          own,
+          contacts: poses.map((pose) => ({ ...pose, side: sideOf(pose.kind, pose.id, ownId) })),
+          deposits: current.deposits,
+        });
+        measurePanels();
+      }
+      drawWaypoint(waypointFor(places, jumpDrive.selected));
     } else {
       setData(run, "phase", null);
       setData(shipPanel, "active", null);
@@ -1296,7 +1341,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       if (written.changed("hud.diagnostics", "")) hudDiagnostics.textContent = "";
       setText(run, "");
       setText(scan, "");
-      drawNav({ x: 0, z: 0 });
+      drawWaypoint(undefined);
     }
     if (noticeUntil && now > noticeUntil) {
       notice.textContent = "";

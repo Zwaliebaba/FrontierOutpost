@@ -46,7 +46,11 @@ test("a scan held still in the site reveals the rich pocket and the waves", asyn
   await expect(scan).toContainText("Scanning");
   await expect(scan).toHaveAttribute("data-revealed", "true", { timeout: 20_000 });
   await expect(scan).toContainText("rich: Derelict");
-  await expect(page.locator('.nav-marker[data-target="derelict"]')).toContainText("(rich)");
+  // The map tags what the scan found.
+  await page.keyboard.press("KeyM");
+  await expect(
+    page.locator('.chart-row[data-target="derelict"] .tag[data-tag="rich"]'),
+  ).toBeVisible();
 });
 
 test("flying out and back docks, shows the summary and offers the next contract", async ({

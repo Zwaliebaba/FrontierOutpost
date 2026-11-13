@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { distanceText, placeMarkers, spreadBoxes } from "./navigation";
+import { clearOf, distanceText, placeMarkers } from "./navigation";
 import type { Box } from "./navigation";
 
 // A plane seen straight down, one pixel per metre, centred on the origin.
@@ -77,49 +77,42 @@ describe("distanceText", () => {
   });
 });
 
-describe("spreadBoxes", () => {
-  const bounds = { width: 1280, height: 720 };
+describe("clearOf", () => {
+  // The screen between the top bar and the footer.
+  const bounds: Box = { x: 0, y: 44, width: 1280, height: 646 };
+  const gauges: Box = { x: 18, y: 500, width: 520, height: 180 };
+  const minimap: Box = { x: 1030, y: 480, width: 232, height: 198 };
   const overlaps = (a: Box, b: Box) =>
     a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
-  it("leaves boxes that do not overlap where they are", () => {
-    const boxes = [
-      { x: 10, y: 10, width: 100, height: 20 },
-      { x: 300, y: 10, width: 100, height: 20 },
-    ];
-    expect(spreadBoxes(boxes, bounds)).toEqual(boxes);
+  it("leaves a waypoint that is on no panel where it is", () => {
+    const box = { x: 600, y: 660, width: 140, height: 18 };
+    expect(clearOf(box, [gauges, minimap], bounds)).toEqual(box);
   });
 
-  it("parts two labels stacked on the bottom edge, as the playtest showed", () => {
-    // Nest core and Derelict pinned to the same stretch of edge, mostly side by side.
-    const [a, b] = spreadBoxes(
-      [
-        { x: 690, y: 460, width: 200, height: 22 },
-        { x: 790, y: 460, width: 200, height: 22 },
-      ],
-      bounds,
-    );
-    expect(a && b && overlaps(a, b)).toBe(false);
-    // Stacked rather than slid along: the smaller move.
-    expect(a && b && Math.abs(a.y - b.y)).toBeGreaterThanOrEqual(22);
-    expect(a?.x).toBe(690);
+  it("lifts a waypoint pinned to the bottom edge over the gauges", () => {
+    const moved = clearOf({ x: 200, y: 660, width: 140, height: 18 }, [gauges, minimap], bounds);
+    expect(overlaps(moved, gauges)).toBe(false);
+    expect(moved.x, "it keeps its place along the edge").toBe(200);
+    expect(moved.y + moved.height).toBeLessThanOrEqual(gauges.y);
   });
 
-  it("parts boxes in the same place, and several at once, inside the bounds", () => {
-    const boxes = spreadBoxes(
-      [0, 1, 2, 3].map(() => ({ x: 600, y: 700, width: 180, height: 22 })),
-      bounds,
-    );
-    for (let i = 0; i < boxes.length; i++) {
-      for (let j = i + 1; j < boxes.length; j++) {
-        const a = boxes[i];
-        const b = boxes[j];
-        expect(a && b && overlaps(a, b)).toBe(false);
-      }
-    }
-    for (const box of boxes) {
-      expect(box.y + box.height).toBeLessThanOrEqual(bounds.height);
-      expect(box.y).toBeGreaterThanOrEqual(0);
-    }
+  it("goes sideways when above and below are off the screen", () => {
+    const tall: Box = { x: 0, y: 44, width: 300, height: 646 };
+    const moved = clearOf({ x: 250, y: 300, width: 140, height: 18 }, [tall], bounds);
+    expect(overlaps(moved, tall)).toBe(false);
+    expect(moved.y).toBe(300);
+  });
+
+  it("clears a second panel the first move landed on", () => {
+    const lock: Box = { x: 18, y: 470, width: 400, height: 24 };
+    const moved = clearOf({ x: 200, y: 660, width: 140, height: 18 }, [gauges, lock], bounds);
+    expect(overlaps(moved, gauges) || overlaps(moved, lock)).toBe(false);
+    expect(moved.y + moved.height).toBeLessThanOrEqual(lock.y);
+  });
+
+  it("stays put when nowhere is clear", () => {
+    const box = { x: 200, y: 300, width: 140, height: 18 };
+    expect(clearOf(box, [bounds], bounds)).toEqual(box);
   });
 });

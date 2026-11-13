@@ -1,0 +1,733 @@
+/* The system map, the minimap that opens it, the jump readout and the waypoint (game/chartView).
+   Orange marks what is chosen and the jump action; cyan marks the pilot's own side; hostiles are
+   red and a different shape, so no state rests on colour alone (style guide §10, design §5). */
+:root {
+  --hostile: #ff7a63;
+  --chart-ink: #7d93a8;
+  --chart-ground: #060e18;
+}
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 5px;
+  color: var(--text);
+  background: #13212f;
+  border: 1px solid #60798e;
+  border-bottom-width: 2px;
+  font:
+    10px/15px ui-monospace,
+    monospace;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+/* --- The chart itself, in the minimap and in the full map ---------------------------------- */
+.chart-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.chart-grid {
+  fill: none;
+  stroke: #1a2a3a;
+  stroke-width: 1;
+}
+.chart-rock {
+  fill: #42566b;
+  opacity: 0.55;
+}
+.chart-lane {
+  stroke: #33485c;
+  stroke-width: 1;
+  stroke-dasharray: 2 6;
+}
+.chart-boundary {
+  fill: #64d5e408;
+  stroke: #4f6d86;
+  stroke-width: 1;
+  stroke-dasharray: 5 5;
+}
+.chart-caption {
+  fill: var(--chart-ink);
+  font:
+    9px ui-monospace,
+    monospace;
+  letter-spacing: 0.14em;
+}
+.chart-deposit {
+  fill: #d9c07a;
+}
+.chart-deposit[data-material="salvage"] {
+  fill: #b9c6d4;
+}
+.chart-deposit[data-material="volatiles"] {
+  fill: #8fd6c2;
+}
+.chart-deposit[data-empty="true"] {
+  fill: none;
+  stroke: #5b6c7d;
+}
+.place-area {
+  fill: #6f9fd81f;
+  stroke: #9fb6cc;
+  stroke-width: 1.25;
+}
+.place-glyph,
+.place-lock {
+  fill: none;
+  stroke: #dbe6f0;
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+}
+.place-lock {
+  stroke: var(--muted);
+  fill: var(--chart-ground);
+}
+.place-name {
+  fill: var(--text);
+  font:
+    600 11px "Bahnschrift",
+    "Roboto Condensed",
+    "Arial Narrow",
+    sans-serif;
+  letter-spacing: 0.12em;
+}
+.place-sub {
+  fill: var(--muted);
+  font:
+    10px ui-monospace,
+    monospace;
+}
+.place-name,
+.place-sub,
+.chart-caption {
+  paint-order: stroke;
+  stroke: var(--chart-ground);
+  stroke-width: 3px;
+}
+.place-ring {
+  fill: none;
+  stroke: var(--orange);
+  stroke-width: 1.5;
+  stroke-dasharray: 10 6;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.place-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+.chart-place[data-kind="dock"] .place-area {
+  fill: #64d5e41f;
+  stroke: var(--cyan);
+}
+/* Locked: a dashed outline, a padlock and the word, as well as the dimmer ink. */
+.chart-place[data-locked="true"] .place-area {
+  fill: none;
+  stroke: #62788c;
+  stroke-dasharray: 3 4;
+}
+.chart-place[data-locked="true"] .place-glyph {
+  stroke: #7d91a4;
+}
+.chart-place[data-locked="true"] .place-name {
+  fill: var(--muted);
+}
+.chart-place:hover .place-area {
+  stroke: #ffd3a1;
+}
+.chart-place[data-selected="true"] .place-ring {
+  opacity: 1;
+  animation: chart-turn 14s linear infinite;
+}
+.chart-place[data-selected="true"] .place-area {
+  stroke: var(--orange);
+  fill: #ef9a3c24;
+}
+.chart-place[data-selected="true"] .place-name {
+  fill: #ffcf9a;
+}
+.chart-place[data-jumping="true"] .place-ring {
+  animation: chart-turn 2.4s linear infinite;
+}
+.chart-course {
+  stroke: var(--orange);
+  stroke-width: 1.25;
+  stroke-dasharray: 6 5;
+  opacity: 0.85;
+}
+.chart-course[data-jumping="true"] {
+  stroke-width: 2;
+  animation: chart-flow 0.5s linear infinite;
+}
+.ship-hull {
+  fill: var(--cyan);
+  stroke: var(--chart-ground);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+.ship-pulse {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 1;
+  animation: chart-pulse 2.2s ease-out infinite;
+}
+/* Crew fly the pilot's hull as an outline; hostiles are solid red diamonds. */
+.chart-contact[data-side="crew"] path {
+  fill: var(--chart-ground);
+  stroke: var(--cyan);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.chart-contact[data-side="hostile"] path {
+  fill: var(--hostile);
+  stroke: var(--chart-ground);
+  stroke-width: 1;
+}
+.chart-contact[data-kind="core"] path {
+  fill: none;
+  stroke: var(--hostile);
+  stroke-width: 1.6;
+}
+.chart-svg-mini .place-area {
+  stroke-width: 1;
+}
+.chart-svg-mini .place-ring {
+  stroke-dasharray: none;
+}
+.chart-svg-mini .chart-place[data-selected="true"] .place-ring {
+  animation: none;
+}
+@keyframes chart-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes chart-flow {
+  to {
+    stroke-dashoffset: -11;
+  }
+}
+@keyframes chart-pulse {
+  from {
+    r: 6;
+    opacity: 0.9;
+  }
+  to {
+    r: 22;
+    opacity: 0;
+  }
+}
+
+/* --- The minimap and the jump readout: a corner of the flight HUD -------------------------- */
+#navigator {
+  position: fixed;
+  z-index: 3;
+  right: 18px;
+  bottom: 42px;
+  width: 234px;
+  display: none;
+}
+#navigator[data-active] {
+  display: block;
+}
+#minimap {
+  display: block;
+  width: 100%;
+  padding: 0;
+  color: var(--muted);
+  background: #0b1622eb;
+  border: 1px solid var(--line);
+}
+#minimap:hover,
+#navigator[data-map="open"] #minimap {
+  background: #0d1a28f5;
+  border-color: var(--orange);
+}
+.mini-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px 5px 10px;
+  border-bottom: 1px solid #2c3e4f;
+  font:
+    10px "Bahnschrift",
+    "Roboto Condensed",
+    "Arial Narrow",
+    sans-serif;
+  letter-spacing: 0.16em;
+}
+#minimap .chart-svg {
+  height: 156px;
+  background:
+    radial-gradient(120% 90% at 50% 45%, #0e1c2b 0%, var(--chart-ground) 75%), var(--chart-ground);
+}
+/* Two lines: what the drive is set to, and the key that acts on it. */
+#jump {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 7px 8px 9px 10px;
+  color: var(--text);
+  background: #0b1622eb;
+  border: 1px solid var(--line);
+  border-top: 0;
+  font:
+    12px/1.4 ui-monospace,
+    monospace;
+}
+.jump-label {
+  color: var(--muted);
+  font:
+    10px "Bahnschrift",
+    "Roboto Condensed",
+    "Arial Narrow",
+    sans-serif;
+  letter-spacing: 0.16em;
+}
+.jump-text {
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jump-hint {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+#jump[data-state="idle"] .jump-text {
+  color: var(--muted);
+}
+#jump[data-state="chosen"] .jump-text {
+  color: #ffcf9a;
+}
+#jump[data-state="spooling"] {
+  border-color: var(--orange);
+  background: #2a1b0ef0;
+}
+.jump-track,
+.action-track {
+  height: 3px;
+  background: #1a2634;
+  overflow: hidden;
+}
+.jump-track {
+  position: absolute;
+  inset: auto 0 0;
+}
+.jump-fill,
+.action-fill {
+  width: 0;
+  height: 100%;
+  background: var(--orange);
+  transition: width 0.12s linear;
+}
+#jump:not([data-state="spooling"]) .jump-track,
+.chart-action:not([data-state="spooling"]) .action-track {
+  visibility: hidden;
+}
+
+/* --- The waypoint: the scene's one label, to the destination chosen ------------------------ */
+#waypoint {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #ffd9ae;
+  font:
+    11px/1.3 ui-monospace,
+    monospace;
+  white-space: nowrap;
+  text-shadow:
+    0 0 3px #050b13,
+    0 0 6px #050b13,
+    0 1px 2px #050b13;
+}
+.waypoint-arrow {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 5px 0 5px 9px;
+  border-color: transparent transparent transparent var(--orange);
+  filter: drop-shadow(0 0 2px #050b13);
+}
+/* Above a place that is on screen: its name, then the arrow pointing down at it. */
+#waypoint[data-on-screen="true"] {
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* --- The full map --------------------------------------------------------------------------- */
+#chart {
+  position: fixed;
+  z-index: 6;
+  inset: 44px 0 30px;
+  display: none;
+  /* One cell the size of the space between the bars, so the window's 100% means that space. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
+  padding: 18px;
+  background: #050b13b8;
+  backdrop-filter: blur(2px) saturate(0.7);
+}
+#chart[data-state="open"] {
+  display: grid;
+  animation: chart-in 0.16s ease-out;
+}
+@keyframes chart-in {
+  from {
+    opacity: 0;
+  }
+}
+.chart-window {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(1180px, 100%);
+  height: min(720px, 100%);
+  background: #0b1622fa;
+  border: 1px solid #718494;
+  box-shadow: 0 30px 90px #000b;
+}
+/* Two corner ticks: the map is the one window that sits over the scene. */
+.chart-window::before,
+.chart-window::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--orange);
+  pointer-events: none;
+}
+.chart-window::before {
+  top: -2px;
+  left: -2px;
+  border-right: 0;
+  border-bottom: 0;
+}
+.chart-window::after {
+  right: -2px;
+  bottom: -2px;
+  border-left: 0;
+  border-top: 0;
+}
+.chart-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 18px 12px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.chart-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.chart-head .eyebrow {
+  margin: 0 0 4px;
+}
+.chart-close {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* A finger-sized target, as everything a pilot must press is (design §5). */
+  min-height: 44px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.chart-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 336px;
+  min-height: 0;
+}
+.chart-plot {
+  position: relative;
+  min-height: 0;
+  background:
+    radial-gradient(90% 80% at 50% 45%, #0e1c2b 0%, var(--chart-ground) 78%), var(--chart-ground);
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+.chart-scale-box {
+  position: absolute;
+  left: 16px;
+  bottom: 14px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  color: var(--chart-ink);
+  font:
+    10px ui-monospace,
+    monospace;
+  pointer-events: none;
+}
+.chart-scale {
+  height: 6px;
+  border: 1px solid var(--chart-ink);
+  border-top: 0;
+}
+.chart-legend {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+.chart-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chart-legend .glyph[data-side="own"] path {
+  fill: var(--cyan);
+}
+.chart-legend .glyph[data-side="crew"] path {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 1.8;
+}
+.chart-legend .glyph[data-side="hostile"] path {
+  fill: var(--hostile);
+}
+.chart-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #506477 #101c28;
+}
+.chart-side > .eyebrow {
+  margin: 14px 18px 8px;
+}
+.chart-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid #2c3e4f;
+}
+.chart-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 50px;
+  padding: 7px 16px 7px 15px;
+  background: transparent;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid #2c3e4f;
+}
+.chart-row .glyph path {
+  fill: none;
+  stroke: #dbe6f0;
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+}
+.row-main {
+  display: grid;
+  min-width: 0;
+}
+.row-main strong {
+  font:
+    600 13px "Bahnschrift",
+    "Roboto Condensed",
+    "Arial Narrow",
+    sans-serif;
+  letter-spacing: 0.06em;
+}
+.row-main small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-tags {
+  display: flex;
+  gap: 4px;
+}
+.tag {
+  padding: 0 5px;
+  color: #0b1622;
+  background: var(--cyan);
+  font:
+    600 9px/15px ui-monospace,
+    monospace;
+  letter-spacing: 0.08em;
+}
+.tag[data-tag="rich"] {
+  background: #e7c868;
+}
+.row-distance {
+  min-width: 52px;
+  color: var(--text);
+  font:
+    12px ui-monospace,
+    monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.chart-row[data-locked="true"] strong,
+.chart-row[data-locked="true"] .row-distance {
+  color: var(--muted);
+}
+.chart-row[data-locked="true"] .glyph path {
+  stroke: #7d91a4;
+  stroke-dasharray: 2.5 2;
+}
+.chart-row:hover:not(:disabled) {
+  background: #17273780;
+  border-color: transparent transparent #2c3e4f #ef9a3c80;
+}
+.chart-row[data-selected="true"],
+.chart-row[data-selected="true"]:hover {
+  background: linear-gradient(90deg, #8a522340, #8a522308);
+  border-left-color: var(--orange);
+}
+.chart-row[data-selected="true"] strong {
+  color: #ffcf9a;
+}
+.chart-row[data-selected="true"] kbd {
+  border-color: var(--orange);
+}
+/* Held at the foot of the column: on a short screen the list scrolls under it, so the jump
+   button is never off screen. */
+.chart-action {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--line);
+  background: #0a1420;
+}
+.chart-action .eyebrow {
+  margin: 0 0 4px;
+}
+.action-target {
+  margin: 0 0 10px;
+  font:
+    600 18px/1.2 "Bahnschrift",
+    "Roboto Condensed",
+    "Arial Narrow",
+    sans-serif;
+  letter-spacing: 0.04em;
+}
+.chart-action[data-state="idle"] .action-target {
+  color: var(--muted);
+}
+.action-facts {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 12px;
+}
+.action-facts > div {
+  display: grid;
+  grid-template-columns: 68px 1fr;
+  gap: 8px;
+}
+.action-facts dt {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 18px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.action-facts dd {
+  margin: 0;
+  font-size: 12px;
+}
+.chart-engage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.chart-engage:enabled {
+  color: #fff3df;
+  background: #a75a22;
+  border-color: #ed9d4a;
+}
+.chart-engage:enabled:hover {
+  background: #bb6a2c;
+  border-color: #ffc17d;
+}
+.chart-action[data-state="spooling"] .chart-engage {
+  background: #172737;
+  border-color: var(--orange);
+}
+.action-note {
+  min-height: 34px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.chart-action[data-state="blocked"] .action-note,
+.chart-action[data-state="spooling"] .action-note {
+  color: #eeb66d;
+}
+.chart-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 22px;
+  padding: 8px 18px 9px 20px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+.chart-live {
+  margin-left: auto;
+  color: var(--cyan);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.chart-live::before {
+  content: "● ";
+}
+
+/* Narrow screens: the destinations go under the chart. */
+@media (max-width: 900px) {
+  .chart-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(180px, 1fr) auto;
+    overflow-y: auto;
+  }
+  .chart-plot {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .chart-side {
+    overflow: visible;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ship-pulse,
+  .place-ring,
+  .chart-course,
+  #chart[data-state="open"] {
+    animation: none !important;
+  }
+}

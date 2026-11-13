@@ -23,12 +23,24 @@ describe("targetOf and markerOf", () => {
 });
 
 describe("JumpDrive", () => {
-  it("does nothing on J until a marker is chosen, then jumps to it", () => {
+  it("does nothing on J until a destination is chosen, then jumps to it", () => {
     const drive = new JumpDrive();
     expect(drive.press(pockets)).toBeNull();
-    expect(drive.line(0, pockets)).toBe("");
+    expect(drive.readout(0, pockets)).toEqual({
+      state: "idle",
+      target: null,
+      text: "No destination",
+      hint: "M map",
+      share: 0,
+    });
     drive.toggle("oreField");
-    expect(drive.line(0, pockets)).toBe("J jumps to Ore field");
+    expect(drive.readout(0, pockets)).toEqual({
+      state: "chosen",
+      target: "oreField",
+      text: "Ore field",
+      hint: "J jumps",
+      share: 0,
+    });
     expect(drive.press(pockets)).toEqual({ jump: { type: "pocket", index: 0 } });
   });
 
@@ -48,11 +60,27 @@ describe("JumpDrive", () => {
     drive.spooling({ type: "pocket", index: 0 }, 6, 1_000);
     expect(drive.secondsLeft(1_000)).toBe(6);
     expect(drive.secondsLeft(5_500)).toBe(2);
-    expect(drive.line(5_500, pockets)).toBe("jumping to Ore field in 2 s · J cancels");
+    expect(drive.readout(5_500, pockets)).toEqual({
+      state: "spooling",
+      target: "oreField",
+      text: "Jumping to Ore field in 2 s",
+      hint: "J cancels",
+      share: 0.75,
+    });
     expect(drive.press(pockets)).toEqual({ jump: null });
     drive.ended();
     expect(drive.secondsLeft(5_500)).toBeNull();
     expect(drive.press(pockets)).toEqual({ jump: { type: "pocket", index: 0 } });
+  });
+
+  it("names the dock as a place, and holds the spool's share between its ends", () => {
+    const drive = new JumpDrive();
+    drive.toggle("dock");
+    expect(drive.readout(0, pockets).text).toBe("Dock");
+    drive.spooling({ type: "dock" }, 6, 1_000);
+    expect(drive.readout(1_000, pockets).share).toBe(0);
+    expect(drive.readout(9_000, pockets).share).toBe(1);
+    expect(drive.readout(9_000, pockets).text).toBe("Jumping to the dock in 0 s");
   });
 
   it("forgets everything on a new run", () => {

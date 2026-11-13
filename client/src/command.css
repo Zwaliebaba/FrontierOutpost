@@ -526,7 +526,8 @@ meter {
   transform: translateX(-50%);
   max-width: 70vw;
   border-color: var(--orange);
-  z-index: 5;
+  /* Over the system map, which a refused jump leaves open. */
+  z-index: 7;
 }
 /* The ship gauges, above the run line. Level shows by a marker as well as colour. */
 #ship {
@@ -602,41 +603,6 @@ meter {
   position: fixed;
   inset: 0;
   pointer-events: none;
-}
-.nav-marker {
-  position: absolute;
-  padding: 3px 8px;
-  color: var(--text);
-  background: #0b1622b0;
-  border: 1px solid #60798e;
-  font:
-    11px ui-monospace,
-    monospace;
-  white-space: nowrap;
-}
-/* A marker chooses where the jump drive goes: a 44 px target whatever its drawn size. */
-.nav-marker {
-  pointer-events: auto;
-  cursor: pointer;
-}
-.nav-marker::before {
-  content: "";
-  position: absolute;
-  inset: -12px -4px;
-}
-.nav-marker[data-selected="true"] {
-  border-color: var(--orange);
-  color: #fff3df;
-}
-.nav-marker[data-selected="true"]::after {
-  content: " · J";
-  color: var(--orange);
-}
-.nav-marker[data-jumping="true"] {
-  background: #3a2410e0;
-}
-.nav-arrow {
-  display: inline-block;
 }
 @media (max-width: 1100px) {
   #home {
