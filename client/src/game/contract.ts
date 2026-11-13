@@ -143,16 +143,31 @@ const DRIVE_CELL: Readonly<Record<Drive, { value: string; level: CellLevel }>> =
  * the alert, the drives, the relays while held, a scan in progress and the next wave once a scan
  * has found it. Hull, hold and heat are on the ship gauges (game/gauges); what a scan found
  * about the pockets is on the system map (game/chart).
+ *
+ * The alert is how far the site has escalated (design §10): it never falls, and each step brings
+ * a bigger wave. A playtester read "1" with its warning marker as a hostile still out there after
+ * the last one was destroyed, so the cell says how many `hostiles` are in the run, and warns only
+ * while there are some.
  */
-export function runCells(own: OwnStatus, reveal: Pick<Scanned, "waves"> | null): RunCell[] {
+export function runCells(
+  own: OwnStatus,
+  reveal: Pick<Scanned, "waves"> | null,
+  hostiles = 0,
+): RunCell[] {
   const cells: RunCell[] = [
     { key: "phase", label: "Phase", value: PHASE_TEXT[own.phase], level: "ok" },
     { key: "time", label: "Time", value: clock(own.elapsedSeconds), level: "ok" },
     {
       key: "alert",
       label: "Alert",
-      value: String(own.alert),
-      level: own.alert >= 3 ? "danger" : own.alert > 0 ? "warn" : "ok",
+      value:
+        String(own.alert) +
+        (hostiles > 0
+          ? ` · ${String(hostiles)} ${hostiles === 1 ? "hostile" : "hostiles"}`
+          : own.alert > 0
+            ? " · clear"
+            : ""),
+      level: hostiles === 0 ? "ok" : own.alert >= 3 ? "danger" : "warn",
     },
     { key: "drive", label: "Drives", ...DRIVE_CELL[own.drive] },
   ];

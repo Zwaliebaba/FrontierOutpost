@@ -1579,7 +1579,11 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         setData(run, "cargo", String(status.cargo));
         setData(run, "extractor", status.extractor);
         setData(run, "revealed", String(reveal !== null));
-        drawRun(runCells(status, reveal));
+        // Everything that fights: the nest core is a target, not a hunter.
+        const hostiles = poses.filter(
+          (pose) => pose.kind !== "playerShip" && pose.kind !== "core",
+        ).length;
+        drawRun(runCells(status, reveal, hostiles));
         const lockRange = current.joined.lockRange;
         drawPrompts(
           prompts({

@@ -35,15 +35,15 @@ describe("runCells", () => {
     expect(runCells(working, null).map(({ key, value }) => [key, value])).toEqual([
       ["phase", "In the site"],
       ["time", "3:07"],
-      ["alert", "2"],
+      ["alert", "2 · clear"],
       ["drive", "Cruise off in the site"],
     ]);
   });
 
   it("raises the alert's level as it climbs, and a jammed drive's at once", () => {
-    expect(cell(runCells({ ...working, alert: 0 }, null), "alert")?.level).toBe("ok");
-    expect(cell(runCells(working, null), "alert")?.level).toBe("warn");
-    expect(cell(runCells({ ...working, alert: 3 }, null), "alert")?.level).toBe("danger");
+    expect(cell(runCells({ ...working, alert: 0 }, null, 3), "alert")?.level).toBe("warn");
+    expect(cell(runCells(working, null, 1), "alert")?.level).toBe("warn");
+    expect(cell(runCells({ ...working, alert: 3 }, null, 2), "alert")?.level).toBe("danger");
     const jammed = cell(runCells({ ...working, drive: "hunted" }, null), "drive");
     expect(jammed).toMatchObject({ value: "Jammed: hostile lock", level: "danger" });
     expect(cell(runCells({ ...working, drive: "ready" }, null), "drive")?.value).toBe("Ready");
@@ -120,5 +120,22 @@ describe("scanRefusalText", () => {
     expect(scanRefusalText("moving")).toBe("Scan: slow to a stop first");
     expect(scanRefusalText("outOfRange")).toContain("fly nearer");
     expect(scanRefusalText("revealed")).toContain("map");
+  });
+});
+
+describe("the alert cell", () => {
+  const alert = (level: number, hostiles: number) =>
+    cell(runCells({ ...working, alert: level }, null, hostiles), "alert");
+
+  it("counts the hostiles in the run beside the level", () => {
+    expect(alert(1, 1)?.value).toBe("1 · 1 hostile");
+    expect(alert(2, 4)?.value).toBe("2 · 4 hostiles");
+    expect(alert(0, 3)?.value).toBe("0 · 3 hostiles");
+  });
+
+  it("stops warning once the last hostile is gone, though the level stays", () => {
+    expect(alert(1, 0)).toMatchObject({ value: "1 · clear", level: "ok" });
+    expect(alert(3, 0)).toMatchObject({ value: "3 · clear", level: "ok" });
+    expect(alert(0, 0)).toMatchObject({ value: "0", level: "ok" });
   });
 });
