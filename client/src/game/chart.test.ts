@@ -218,3 +218,18 @@ describe("sideOf", () => {
     expect(sideOf("core", 7, 4)).toBe("hostile");
   });
 });
+
+describe("a pocket opened since the last run", () => {
+  it("is tagged new on the map while it is open", () => {
+    const opened = {
+      ...site,
+      pockets: site.pockets.map((pocket) => ({ ...pocket, locked: false })),
+    };
+    const [, ore, derelict] = chartPlaces(opened, { x: 0, z: 0 }, null, false, ["derelict"]);
+    expect(derelict?.tags).toContain("new");
+    expect(ore?.tags).not.toContain("new");
+    // Still locked, it is not new to anyone.
+    const [, , locked] = chartPlaces(site, { x: 0, z: 0 }, null, false, ["derelict"]);
+    expect(locked?.tags).not.toContain("new");
+  });
+});

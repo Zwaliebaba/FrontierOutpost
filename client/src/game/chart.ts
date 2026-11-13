@@ -120,7 +120,7 @@ export interface ChartPlace {
   locked: boolean;
   /** What it is, in a line. */
   status: string;
-  /** What a scan found there: `rich`, `relay`. */
+  /** What a scan found there, `rich` or `relay`, and `new` for a pocket opened since the last run. */
   tags: string[];
   /** Where a jump there arrives (design §2), so the pilot knows before committing. */
   arrival: string;
@@ -137,6 +137,7 @@ export function chartPlaces(
   from: { x: number; z: number },
   reveal: Pick<Scanned, "richPocket" | "relays"> | null,
   laden: boolean,
+  fresh: readonly string[] = [],
 ): ChartPlace[] {
   const distance = (x: number, z: number) => Math.hypot(x - from.x, z - from.z);
   return [
@@ -173,6 +174,7 @@ export function chartPlaces(
             ? `Open · yields ${pocket.material}`
             : "Open",
         tags: [
+          ...(!pocket.locked && fresh.includes(pocket.kind) ? ["new"] : []),
           ...(reveal?.richPocket === index ? ["rich"] : []),
           ...(reveal?.relays.includes(index) ? ["relay"] : []),
         ],

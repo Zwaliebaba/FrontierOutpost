@@ -12,6 +12,7 @@ import type {
   Catalog,
   CrewInfo,
   OwnStatus,
+  PocketKind,
   RunSummary,
   SnapshotEvent,
 } from "./protocol";
@@ -46,6 +47,7 @@ import {
 import type { Contract, Joined, RunCell, Scanned } from "./game/contract";
 import { chartPlaces, jumpReadiness, sideOf, waypointFor } from "./game/chart";
 import type { ChartPlace } from "./game/chart";
+import { freshPockets, openLine, parseSeen, seenAfter, unlockNotice } from "./game/unlocks";
 import { ChartView, glyph, sitePreview } from "./game/chartView";
 import { Pulse, gauges } from "./game/gauges";
 import { CANCEL_TEXT, JumpDrive, REFUSAL_TEXT } from "./game/jump";
@@ -555,6 +557,17 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   } catch {
     /* Storage may be disabled. */
   }
+  // Which facility-opened pockets the pilot has flown with, so a newly opened one is called new.
+  const seenKey = `frontier.pocketsSeen.${callsign}`;
+  const readSeen = (): PocketKind[] | null => {
+    try {
+      return parseSeen(localStorage.getItem(seenKey));
+    } catch {
+      return null;
+    }
+  };
+  /** The pockets new to the pilot in the run being flown. */
+  let freshKinds: PocketKind[] = [];
   const saveReceipts = () => {
     try {
       localStorage.setItem(receiptKey, receipts.serialize());
@@ -586,8 +599,14 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     // The site as the system map will draw it, and its pockets listed with the map's glyphs.
     const { site } = offer;
     const figure = element("figure", undefined, "briefing-site");
+    const fresh = freshPockets(site, readSeen());
     figure.append(
-      sitePreview(site, chartPlaces(site, { x: site.dockX, z: site.dockZ }, null, false), 244, 108),
+      sitePreview(
+        site,
+        chartPlaces(site, { x: site.dockX, z: site.dockZ }, null, false, fresh),
+        244,
+        108,
+      ),
     );
     const pockets = element("ul", undefined, "briefing-places");
     for (const pocket of site.pockets) {
@@ -598,8 +617,15 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         glyph(pocket.kind, 18),
         pocket.locked
           ? `${POCKET_NAME[pocket.kind]}: locked, needs ${needs ?? "a facility"}`
-          : `${POCKET_NAME[pocket.kind]}: open`,
+          : openLine(pocket.kind),
       );
+      if (!pocket.locked && fresh.includes(pocket.kind)) {
+        item.dataset.fresh = "true";
+        const tag = element("span", undefined, "tag");
+        tag.dataset.tag = "new";
+        tag.textContent = "NEW";
+        item.append(" ", tag);
+      }
       pockets.append(item);
     }
     const note = element("p");
@@ -878,6 +904,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     life?.session.retire();
     life = beginLife(connection, joined, loaded);
     reveal = null;
+    freshKinds = freshPockets(joined.site, readSeen());
+    const unlocked = unlockNotice(joined.site, freshKinds);
+    if (unlocked) showNotice(unlocked, "good");
     jumpDrive.reset();
     jumpEffects.reset();
     jumpsSeen = 0;
@@ -886,7 +915,13 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       joined.site,
       joined.obstacles,
       joined.deposits,
-      chartPlaces(joined.site, { x: joined.site.dockX, z: joined.site.dockZ }, null, false),
+      chartPlaces(
+        joined.site,
+        { x: joined.site.dockX, z: joined.site.dockZ },
+        null,
+        false,
+        freshKinds,
+      ),
     );
     chartAt = Number.NEGATIVE_INFINITY;
     selection.release();
@@ -967,6 +1002,14 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         break;
       case "runOver":
         if (outpost) glide = { from: target.clone().sub(outpost.centre), toStation: true, t: 0 };
+        if (life) {
+          try {
+            localStorage.setItem(seenKey, seenAfter(life.joined.site, readSeen()));
+          } catch {
+            /* Storage may be disabled; the pockets read as new again next time. */
+          }
+        }
+        freshKinds = [];
         life?.session.retire();
         life = null;
         jumpDrive.reset();
@@ -1646,7 +1689,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       }
       // The map, the minimap beside the gauges, and the waypoint to the destination chosen.
       const { site } = current.joined;
-      const places = chartPlaces(site, own, reveal, (status?.cargo ?? 0) > 0);
+      const places = chartPlaces(site, own, reveal, (status?.cargo ?? 0) > 0, freshKinds);
       const chosen = places.find((place) => place.id === jumpDrive.selected);
       if (now - chartAt >= CHART_MS) {
         chartAt = now;
