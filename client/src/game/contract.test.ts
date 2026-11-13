@@ -62,7 +62,20 @@ describe("runCells", () => {
       { level: 3, atSeconds: 610, drones: 2, raiders: 0 },
     ];
     // The alert is at 2 already: its wave has come.
-    expect(cell(runCells(working, { waves }), "wave")?.value).toBe("10:10 · 2 drones · 0 raiders");
+    // A countdown from now (3:07) to the wave at 10:10.
+    expect(cell(runCells(working, { waves }), "wave")).toMatchObject({
+      value: "in 7:03 · 2 drones · 0 raiders",
+      level: "ok",
+    });
+    // It warns in the last half minute, and says when the wave is due.
+    const close = { ...working, elapsedSeconds: 590 };
+    expect(cell(runCells(close, { waves }), "wave")).toMatchObject({
+      value: "in 0:20 · 2 drones · 0 raiders",
+      level: "warn",
+    });
+    expect(cell(runCells({ ...working, elapsedSeconds: 611 }, { waves }), "wave")?.value).toBe(
+      "due · 2 drones · 0 raiders",
+    );
     expect(cell(runCells({ ...working, alert: 3 }, { waves }), "wave")?.value).toBe(
       "None before the limit",
     );

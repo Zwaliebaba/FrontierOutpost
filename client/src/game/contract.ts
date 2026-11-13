@@ -118,6 +118,9 @@ export function clock(seconds: number): string {
   return `${String(Math.floor(whole / 60))}:${String(whole % 60).padStart(2, "0")}`;
 }
 
+/** How long before the next wave its cell warns, seconds. */
+const WAVE_WARNING_SECONDS = 30;
+
 /** How urgent a cell of the run status is. Shown by a marker as well as colour. */
 export type CellLevel = "ok" | "warn" | "danger";
 
@@ -189,14 +192,17 @@ export function runCells(
   } else if (reveal) {
     // The next wave is the first the alert has not reached: a cut-out can bring one early.
     const next: WaveInfo | undefined = reveal.waves.find((wave) => wave.level > own.alert);
+    // A countdown, not the run-clock time it lands: a playtester read "4:58" beside "Time 2:47"
+    // as a counter that did not run. Both clocks count from launch.
+    const left = next ? next.atSeconds - own.elapsedSeconds : 0;
     cells.push({
       key: "wave",
       label: "Next wave",
       value: next
-        ? `${clock(next.atSeconds)} · ${String(next.drones)} drones · ` +
+        ? `${left > 0 ? `in ${clock(left)}` : "due"} · ${String(next.drones)} drones · ` +
           `${String(next.raiders)} raiders`
         : "None before the limit",
-      level: "ok",
+      level: next && left <= WAVE_WARNING_SECONDS ? "warn" : "ok",
     });
   }
   return cells;
