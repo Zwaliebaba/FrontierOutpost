@@ -67,6 +67,7 @@ import { Notices } from "./game/notices";
 import type { NoticeLevel } from "./game/notices";
 import { prompts } from "./game/prompts";
 import type { Prompt } from "./game/prompts";
+import { SCAN_REFUSAL_TEXT } from "./game/scan";
 import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
 import { targetReadout } from "./game/target";
 import { loadSim } from "./sim";
@@ -1022,6 +1023,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       }
       case "extractRefused":
         showNotice(refusalText(message.reason), "warn");
+        break;
+      case "scanRefused":
+        showNotice(SCAN_REFUSAL_TEXT[message.reason], "warn");
         break;
       case "jumpSpooling":
         if (message.ship !== life?.session.shipId) {

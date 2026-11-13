@@ -12,6 +12,7 @@ import type { JumpTarget } from "./JumpTarget";
 import type { ObstacleInfo } from "./ObstacleInfo";
 import type { PotInfo } from "./PotInfo";
 import type { RunSummary } from "./RunSummary";
+import type { ScanRefusal } from "./ScanRefusal";
 import type { SiteInfo } from "./SiteInfo";
 import type { TierOffer } from "./TierOffer";
 import type { WaveInfo } from "./WaveInfo";
@@ -60,7 +61,7 @@ fitted: Array<string>,
 /**
  * Site cargo a ship must dock with for the contract to pay.
  */
-contractCargo: number, } | { "type": "launchRefused", reason: string, } | { "type": "extractRefused", reason: ExtractRefusal, } | { "type": "jumpSpooling", ship: number, target: JumpTarget, seconds: number, } | { "type": "jumpRefused", reason: JumpRefusal, } | { "type": "jumpCancelled", ship: number, reason: JumpCancel, } | { "type": "jumped", ship: number, target: JumpTarget, } | { "type": "scanned", 
+contractCargo: number, } | { "type": "launchRefused", reason: string, } | { "type": "extractRefused", reason: ExtractRefusal, } | { "type": "scanRefused", reason: ScanRefusal, } | { "type": "jumpSpooling", ship: number, target: JumpTarget, seconds: number, } | { "type": "jumpRefused", reason: JumpRefusal, } | { "type": "jumpCancelled", ship: number, reason: JumpCancel, } | { "type": "jumped", ship: number, target: JumpTarget, } | { "type": "scanned", 
 /**
  * Index into the contract's pockets.
  */

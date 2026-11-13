@@ -35,6 +35,26 @@ test("pressing X away from a deposit explains why nothing happened", async ({ pa
   await expect(lastNotice(page)).toHaveText("Extractor: hold still beside a deposit");
 });
 
+test("pressing C out of range or on the move explains why nothing happened", async ({ page }) => {
+  test.setTimeout(60_000);
+  await launch(page, QUIET);
+  // At the dock, 190 m from the site's centre, the scanner's 180 m do not reach.
+  await page.keyboard.press("KeyC");
+  await expect(lastNotice(page)).toHaveText(
+    "Scan: out of range · move closer to the site's centre",
+  );
+  // Under way and in range, pressing it says what is missing.
+  await page.keyboard.down("KeyW");
+  await expect(async () => {
+    expect((await position(page)).x).toBeGreaterThan(-100);
+  }).toPass({ timeout: 30_000, intervals: [50] });
+  await page.keyboard.press("KeyC");
+  await expect(lastNotice(page)).toHaveText("Scan: hold still first");
+  await page.keyboard.up("KeyW");
+  await expect(page.locator("#run")).toHaveAttribute("data-revealed", "false");
+  await expect(page.locator('#run [data-cell="scan"]')).toHaveCount(0);
+});
+
 test("a scan held still in the site reveals the rich pocket and the waves", async ({ page }) => {
   test.setTimeout(90_000);
   await launch(page, QUIET);

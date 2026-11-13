@@ -18,7 +18,7 @@ use frontier_protocol::snapshot::{
 use frontier_protocol::{
     AccountInfo, DepositInfo, ExtractRefusal, JumpCancel as WireJumpCancel,
     JumpRefusal as WireJumpRefusal, JumpTarget as WireJumpTarget, ObstacleInfo, PotInfo,
-    RunSummary, ServerMessage, WaveInfo,
+    RunSummary, ScanRefusal as WireScanRefusal, ServerMessage, WaveInfo,
 };
 use frontier_sim::TICKS_PER_SECOND;
 use frontier_sim::combat::Event;
@@ -30,7 +30,7 @@ use frontier_sim::jump::{
 use frontier_sim::profile::ShipKind;
 use frontier_sim::run::{
     CONTRACT_MIN_CARGO, Checkpoint, Drive, INSTANCE_LIMIT_TICKS, LIMIT_WARNING_TICKS, Options,
-    Phase, Pot, Relay, Run, RunEvent, Summary, seconds,
+    Phase, Pot, Relay, Run, RunEvent, ScanRefusal, Summary, seconds,
 };
 use frontier_sim::ship::ShipInput;
 use frontier_sim::site::{Capability, Site, SiteTemplate, ThreatTier, crew_scaling};
@@ -531,7 +531,16 @@ fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
             run.vent(ship);
         }
         Command::Scan { ship } => {
-            run.scan(ship);
+            if let Err(refusal) = run.scan(ship) {
+                let reason = match refusal {
+                    ScanRefusal::NotFlying => WireScanRefusal::NotFlying,
+                    ScanRefusal::Revealed => WireScanRefusal::Revealed,
+                    ScanRefusal::Scanning => WireScanRefusal::Scanning,
+                    ScanRefusal::OutOfRange => WireScanRefusal::OutOfRange,
+                    ScanRefusal::Moving => WireScanRefusal::Moving,
+                };
+                tell(pilots, ship, ServerMessage::ScanRefused { reason });
+            }
         }
         Command::Jump { ship, target } => {
             let target = target.map(|target| match target {
@@ -1342,6 +1351,22 @@ mod tests {
             message,
             PilotEvent::Message(Box::new(ServerMessage::ExtractRefused {
                 reason: ExtractRefusal::NotAtDeposit
+            }))
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn refuses_a_scan_from_the_dock() {
+        let (events, mut told) = mpsc::unbounded_channel();
+        // Held, or the pilot would be dropped as unreachable.
+        let (sink, _snapshots) = channel();
+        let launched = Expedition::launch(order(Some(0)), sink, events);
+        launched.expedition.scan(launched.ship);
+        let message = told.recv().await.unwrap();
+        assert_eq!(
+            message,
+            PilotEvent::Message(Box::new(ServerMessage::ScanRefused {
+                reason: WireScanRefusal::OutOfRange
             }))
         );
     }

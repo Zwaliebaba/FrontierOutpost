@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 11;
+pub const PROTOCOL_VERSION: u32 = 12;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -175,6 +175,8 @@ pub enum ServerMessage {
     LaunchRefused { reason: String },
     /// The extractor did not start.
     ExtractRefused { reason: ExtractRefusal },
+    /// The scan did not start.
+    ScanRefused { reason: ScanRefusal },
     /// The jump drive started to spool toward `target`; the ship jumps in
     /// `seconds` unless the spool is cancelled.
     JumpSpooling {
@@ -415,6 +417,23 @@ pub enum ExtractRefusal {
     Busy,
 }
 
+/// Why a scan did not start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ScanRefusal {
+    /// Docked, destroyed, or the run is over.
+    NotFlying,
+    /// A scan has already revealed the site.
+    Revealed,
+    /// The pilot's scan is already in hand.
+    Scanning,
+    /// Too far from the site's centre.
+    OutOfRange,
+    /// Moving too fast to scan.
+    Moving,
+}
+
 /// One coming alert step, revealed by a scan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -591,6 +610,13 @@ mod tests {
             })
             .unwrap(),
             r#"{"type":"jumpRefused","reason":"alreadyThere"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ServerMessage::ScanRefused {
+                reason: ScanRefusal::OutOfRange
+            })
+            .unwrap(),
+            r#"{"type":"scanRefused","reason":"outOfRange"}"#
         );
         assert_eq!(
             serde_json::to_string(&ClientMessage::Vent).unwrap(),

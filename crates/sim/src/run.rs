@@ -39,6 +39,23 @@ pub const LOCK_RANGE: f32 = 60.0;
 pub const SCAN_TICKS: u32 = 15 * TICKS_PER_SECOND;
 /// The fastest a ship may move and keep scanning, metres per second.
 pub const MAX_SCAN_SPEED: f32 = 1.0;
+
+/// Why a scan did not start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScanRefusal {
+    /// The ship is docked, destroyed, held inert or the run is over.
+    NotFlying,
+    /// A scan has already revealed the site.
+    Revealed,
+    /// The pilot's scan is already in hand.
+    Scanning,
+    /// Too far from the site's centre, or still at the dock with the
+    /// deep-scan array.
+    OutOfRange,
+    /// Faster than [`MAX_SCAN_SPEED`].
+    Moving,
+}
+
 /// Leaving this circle around the dock counts as undocking, metres.
 pub const UNDOCK_RADIUS: f32 = 30.0;
 /// Entering this circle around the dock after undocking docks the ship.
@@ -1050,19 +1067,27 @@ impl Run {
     }
 
     /// Starts a scan of the site. It needs the ship nearly still and within
-    /// scan range of the site, and stops the extractor. Returns false if it
-    /// cannot start or the site is already revealed.
-    pub fn scan(&mut self, ship: ShipId) -> bool {
+    /// scan range of the site, and stops the extractor.
+    ///
+    /// # Errors
+    /// Refuses a pilot who is not flying, a site already revealed, a scan
+    /// already in hand, and a ship out of range or moving. A ship that is
+    /// both is told it is out of range: it has to move before it can stop.
+    pub fn scan(&mut self, ship: ShipId) -> Result<(), ScanRefusal> {
         let Some(index) = self.index(ship).filter(|_| self.flying(ship)) else {
-            return false;
+            return Err(ScanRefusal::NotFlying);
         };
-        if self.revealed || self.pilots[index].scan.is_some() || !self.can_scan(ship) {
-            return false;
+        if self.revealed {
+            return Err(ScanRefusal::Revealed);
         }
+        if self.pilots[index].scan.is_some() {
+            return Err(ScanRefusal::Scanning);
+        }
+        self.scan_conditions(ship)?;
         self.pilots[index].extractor.stop();
         self.pilots[index].scan = Some(0);
         self.log(RunEvent::ScanStarted { pilot: ship });
-        true
+        Ok(())
     }
 
     /// Takes a pilot out of the run for good: it is abandoned at once. A
@@ -1448,12 +1473,13 @@ impl Run {
         (a.state.x - b.state.x).hypot(a.state.z - b.state.z) <= self.lock_range()
     }
 
-    fn can_scan(&self, ship: ShipId) -> bool {
+    /// Whether the ship is where a scan can start or go on, and still enough.
+    fn scan_conditions(&self, ship: ShipId) -> Result<(), ScanRefusal> {
         let Some(state) = self.world.ship(ship).map(|s| s.state) else {
-            return false;
+            return Err(ScanRefusal::NotFlying);
         };
         let Some(pilot) = self.pilot(ship) else {
-            return false;
+            return Err(ScanRefusal::NotFlying);
         };
         let (cx, cz) = self.site.template.centre;
         // The deep-scan array reaches the site from the approach leg.
@@ -1462,7 +1488,13 @@ impl Run {
         } else {
             (state.x - cx).hypot(state.z - cz) <= self.scan_range()
         };
-        state.speed.abs() <= MAX_SCAN_SPEED && in_reach
+        if !in_reach {
+            return Err(ScanRefusal::OutOfRange);
+        }
+        if state.speed.abs() > MAX_SCAN_SPEED {
+            return Err(ScanRefusal::Moving);
+        }
+        Ok(())
     }
 
     fn conditions(&self, index: usize, deposit: usize) -> Conditions {
@@ -1870,7 +1902,7 @@ impl Run {
         let Some(progress) = self.pilots[index].scan else {
             return;
         };
-        if !self.can_scan(ship) {
+        if self.scan_conditions(ship).is_err() {
             self.pilots[index].scan = None;
             self.log(RunEvent::ScanInterrupted { pilot: ship });
             return;
@@ -2608,8 +2640,8 @@ mod tests {
     fn a_scan_needs_stillness_and_reveals_the_site() {
         let (mut run, ship) = quiet(9);
         at_deposit(&mut run, ship);
-        assert!(run.scan(ship));
-        assert!(!run.scan(ship), "already scanning");
+        assert_eq!(run.scan(ship), Ok(()));
+        assert_eq!(run.scan(ship), Err(ScanRefusal::Scanning));
         steps(&mut run, SCAN_TICKS / 2);
         run.world.ship_mut(ship).unwrap().state.speed = 5.0;
         run.step();
@@ -2617,17 +2649,55 @@ mod tests {
         assert!(events(&mut run).contains(&RunEvent::ScanInterrupted { pilot: ship }));
         let deposit = run.site.deposits[0];
         place(&mut run, ship, (deposit.x, deposit.z));
-        assert!(run.scan(ship));
+        assert_eq!(run.scan(ship), Ok(()));
         steps(&mut run, SCAN_TICKS);
         assert!(run.revealed());
         assert!(events(&mut run).contains(&RunEvent::Scanned { pilot: ship }));
-        assert!(!run.scan(ship), "nothing left to reveal");
+        assert_eq!(run.scan(ship), Err(ScanRefusal::Revealed));
     }
 
     #[test]
     fn a_scan_cannot_start_from_the_dock() {
         let (mut run, ship) = quiet(10);
-        assert!(!run.scan(ship));
+        assert_eq!(run.scan(ship), Err(ScanRefusal::OutOfRange));
+    }
+
+    #[test]
+    fn a_refused_scan_says_why_and_starts_nothing() {
+        let (mut run, ship) = quiet(10);
+        let (cx, cz) = run.site.template.centre;
+        let range = run.scan_range();
+        events(&mut run);
+
+        // The edge of the range is in it; a metre past is not.
+        place(&mut run, ship, (cx - range - 1.0, cz));
+        assert_eq!(run.scan(ship), Err(ScanRefusal::OutOfRange));
+        place(&mut run, ship, (cx - range + 0.5, cz));
+        run.world.ship_mut(ship).unwrap().state.speed = MAX_SCAN_SPEED + 0.1;
+        assert_eq!(run.scan(ship), Err(ScanRefusal::Moving));
+        // Reverse is movement too.
+        run.world.ship_mut(ship).unwrap().state.speed = -5.0;
+        assert_eq!(run.scan(ship), Err(ScanRefusal::Moving));
+        // Out of range and moving, the range comes first: stopping there would not help.
+        place(&mut run, ship, (cx - range - 1.0, cz));
+        run.world.ship_mut(ship).unwrap().state.speed = 5.0;
+        assert_eq!(run.scan(ship), Err(ScanRefusal::OutOfRange));
+
+        assert_eq!(run.status(ship).unwrap().scan, None);
+        assert!(!events(&mut run).contains(&RunEvent::ScanStarted { pilot: ship }));
+
+        place(&mut run, ship, (cx - range + 0.5, cz));
+        run.world.ship_mut(ship).unwrap().state.speed = MAX_SCAN_SPEED;
+        assert_eq!(run.scan(ship), Ok(()));
+    }
+
+    #[test]
+    fn a_scan_is_refused_once_the_pilot_is_out_of_the_run() {
+        let (mut run, ship) = quiet(10);
+        at_deposit(&mut run, ship);
+        run.leave(ship);
+        assert_eq!(run.scan(ship), Err(ScanRefusal::NotFlying));
+        assert_eq!(run.scan(ShipId(9_999)), Err(ScanRefusal::NotFlying));
     }
 
     #[test]
@@ -2919,16 +2989,24 @@ mod tests {
         run.fit(ship, &fitted(&["scout_rig"]));
         let centre = run.site.template.centre;
         place(&mut run, ship, centre);
-        assert!(run.scan(ship));
+        assert_eq!(run.scan(ship), Ok(()));
         steps(&mut run, SCAN_TICKS / 2);
         assert!(run.revealed(), "half the basic time");
 
         let (mut run, ship) = quiet(22);
         run.fit(ship, &fitted(&["deep_scan"]));
-        assert!(!run.scan(ship), "not from the dock");
+        assert_eq!(
+            run.scan(ship),
+            Err(ScanRefusal::OutOfRange),
+            "not from the dock"
+        );
         place(&mut run, ship, (-60.0, 0.0));
         run.step();
-        assert!(run.scan(ship), "from the approach leg, far from the site");
+        assert_eq!(
+            run.scan(ship),
+            Ok(()),
+            "from the approach leg, far from the site"
+        );
         steps(&mut run, SCAN_TICKS);
         assert!(run.revealed());
     }
