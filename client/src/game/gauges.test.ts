@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OwnStatus } from "../protocol";
-import { PULSE_MS, Pulse, gauges, heatGauge, holdGauge, hullGauge } from "./gauges";
+import { NOTE_MOST, PULSE_MS, Pulse, gauges, heatGauge, holdGauge, hullGauge } from "./gauges";
 
 const own: OwnStatus = {
   phase: "objective",
@@ -25,6 +25,25 @@ describe("gauges", () => {
     expect(hold?.value).toBe("7/20");
     expect(heat?.value).toBe("75%");
   });
+
+  it("keeps every note to one line of the panel, whatever the ship is doing", () => {
+    const notes: string[] = [];
+    for (const extractor of ["off", "on", "venting", "cutOut"] as const) {
+      for (const heat of [0, 40, 200, 255]) {
+        for (const cargo of [0, 1, 99, 100, 250]) {
+          for (const contractCargo of [0, 100]) {
+            for (const hull of [255, 20]) {
+              // The widest numbers the wire can carry: three digits everywhere.
+              const widest = { ...own, extractor, heat, cargo, capacity: 250, shield: 255 };
+              const status = { ...widest, extractorSeconds: 120 };
+              notes.push(...gauges(status, hull, -200, 20, contractCargo).map((g) => g.note));
+            }
+          }
+        }
+      }
+    }
+    expect(notes.filter((note) => note.length > NOTE_MOST)).toEqual([]);
+  });
 });
 
 describe("hullGauge", () => {
@@ -33,12 +52,14 @@ describe("hullGauge", () => {
     expect(hullGauge(128, 0, 0).level).toBe("warn");
     const low = hullGauge(51, 0, -26);
     expect(low.level).toBe("danger");
-    expect(low.note).toContain("hit −10%");
-    expect(low.note).toContain("no repairs until you dock");
+    expect(low.change).toBe("−10%");
+    expect(low.note).toBe("critical: dock to repair");
+    expect(hullGauge(255, 0, 0).change).toBe("");
   });
 
   it("names a shield when there is one", () => {
     expect(hullGauge(255, 33, 0).note).toBe("shield 33");
+    expect(hullGauge(51, 33, 0).note).toBe("shield 33 · critical: dock to repair");
   });
 });
 
@@ -46,16 +67,16 @@ describe("holdGauge", () => {
   it("calls out a unit gained and says cargo counts only once docked", () => {
     const gauge = holdGauge(own, 1);
     expect(gauge.share).toBeCloseTo(0.35);
-    expect(gauge.note).toBe("+1 cargo · counts only once docked at home");
+    expect(gauge.change).toBe("+1");
+    expect(gauge.note).toBe("counts only once docked at home");
+    expect(holdGauge(own, 0).change).toBe("");
   });
 
   it("says how far the hold is from what the contract needs, until it has it", () => {
     expect(holdGauge({ ...own, cargo: 0 }, 0, 10).note).toBe("contract pays from 10: 10 more");
-    expect(holdGauge({ ...own, cargo: 6 }, 1, 10).note).toBe(
-      "+1 cargo · contract pays from 10: 4 more",
-    );
+    expect(holdGauge({ ...own, cargo: 6 }, 1, 10).note).toBe("contract pays from 10: 4 more");
     expect(holdGauge({ ...own, cargo: 10 }, 0, 10).note).toBe(
-      "enough for the contract · counts only once docked at home",
+      "contract met · counts only once docked",
     );
   });
 

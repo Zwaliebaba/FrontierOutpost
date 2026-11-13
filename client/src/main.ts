@@ -172,6 +172,7 @@ const gaugeRows = new Map<
     label: HTMLSpanElement;
     fill: HTMLDivElement;
     value: HTMLSpanElement;
+    change: HTMLSpanElement;
     note: HTMLSpanElement;
   }
 >();
@@ -182,11 +183,12 @@ for (const key of ["hull", "hold", "heat"] as const) {
   const track = element("div", undefined, "gauge-track");
   const fill = element("div", undefined, "gauge-fill");
   const value = element("span", undefined, "gauge-value");
+  const change = element("span", undefined, "gauge-change");
   const note = element("span", undefined, "gauge-note");
   track.append(fill);
-  row.append(label, track, value, note);
+  row.append(label, track, value, change, note);
   shipPanel.append(row);
-  gaugeRows.set(key, { row, label, fill, value, note });
+  gaugeRows.set(key, { row, label, fill, value, change, note });
 }
 document.body.append(shipPanel);
 const signInPanel = element("div", "signin", "panel");
@@ -1612,7 +1614,12 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           if (written.changed(`${id}.width`, width)) row.fill.style.width = width;
           if (written.changed(`${id}.label`, gauge.label)) row.label.textContent = gauge.label;
           if (written.changed(`${id}.value`, gauge.value)) row.value.textContent = gauge.value;
-          if (written.changed(`${id}.note`, gauge.note)) row.note.textContent = gauge.note;
+          if (written.changed(`${id}.change`, gauge.change)) row.change.textContent = gauge.change;
+          if (written.changed(`${id}.note`, gauge.note)) {
+            row.note.textContent = gauge.note;
+            // A window too narrow for the whole note cuts it short; the rest is on hover.
+            row.note.title = gauge.note;
+          }
         }
         // The extractor's beam, to the deposit it can be working: the nearest within reach.
         const working =

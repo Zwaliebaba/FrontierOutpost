@@ -6,6 +6,8 @@ test("a pilot stops at a deposit, extracts ore and vents", async ({ page }) => {
   test.setTimeout(150_000);
   await launch(page, QUIET);
   const run = page.locator("#run");
+  const gauges = page.locator("#ship");
+  const atDock = await gauges.boundingBox();
   // Straight out of the dock, then brake beside the deposit at (64, 1).
   await page.keyboard.down("KeyW");
   await expect(async () => {
@@ -22,7 +24,16 @@ test("a pilot stops at a deposit, extracts ore and vents", async ({ page }) => {
   await expect(run).toHaveAttribute("data-extractor", "on");
   // 2 ore a simulation minute. Allow wall-clock headroom when software rendering shares a CPU.
   await expect(run).toHaveAttribute("data-cargo", "1", { timeout: 60_000 });
-  await expect(page.locator('#ship [data-gauge="hold"]')).toContainText("1/20");
+  const hold = gauges.locator('[data-gauge="hold"]');
+  await expect(hold).toContainText("1/20");
+  // The unit gained is called out, and the panel is the size it was at the dock: a note that
+  // wrapped used to make it grow.
+  await expect(hold.locator(".gauge-change")).toHaveText("+1");
+  expect(await gauges.boundingBox()).toEqual(atDock);
+  const cut = await gauges
+    .locator(".gauge-note")
+    .evaluateAll((notes) => notes.filter((note) => note.scrollWidth > note.clientWidth).length);
+  expect(cut).toBe(0);
 
   await page.keyboard.press("KeyV");
   await expect(run).toHaveAttribute("data-extractor", "venting");
