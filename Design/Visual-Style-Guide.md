@@ -244,11 +244,12 @@ the crystals and fly into the hull, so cargo is seen arriving. Neither the beam 
 fragments is solid. With reduced motion the beam holds still and the fragments are not drawn.
 
 **Flight dust.** In flight a sparse field of dust lies just below the gameplay plane, fixed in
-the world, so that open space shows the ship moving. Each speck is a short, faint streak that
-trails against the ship's motion and fades to its tail: its length follows the ship's speed,
-it is capped on the cruise drive, and it vanishes when the ship stops, so dust is never taken
-for stars. About two dozen cross the view at the starting zoom. It moves only as the scenery
-does, so reduced motion leaves it as it is. The home scene has no dust.
+the world, so that open space shows the ship moving. Each speck is a faint, soft round dot, a
+few pixels across, smaller and dimmer the deeper it lies; it never stretches into a streak,
+which on the cruise drive read as lines across the view. Dust is told from stars by its soft
+edge, by drifting against the sky as the ship moves, and by fading nearly out when the ship
+stops. About sixteen cross the view at the starting zoom. It moves only as the scenery does, so
+reduced motion leaves it as it is. The home scene has no dust.
 
 Reliable crew events start and cancel spool effects; every remote spool also has a bounded
 expiry. The pilot's confirmed jump returns camera focus to their ship without clearing a

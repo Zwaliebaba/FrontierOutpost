@@ -7,12 +7,11 @@ import {
   AgXToneMapping,
   BufferAttribute,
   BufferGeometry,
-  LineBasicMaterial,
-  LineSegments,
   PerspectiveCamera,
   Points,
   PointsMaterial,
   Scene,
+  ShaderMaterial,
   WebGLRenderer,
 } from "three";
 import type { Vector3 } from "three";
@@ -21,7 +20,7 @@ import type { EntityPose } from "../net/interpolation";
 import type { JumpEffects } from "./jumpEffects";
 import type { Shots } from "./shots";
 import { ExpeditionScene } from "./scene";
-import { createDust, streakDust } from "../view/dust";
+import { createDust, dustOpacity, placeDust } from "../view/dust";
 import { linear } from "../view/readability";
 import { createStarField } from "../view/sky";
 import { aimRig, createRig } from "../view/view";
@@ -34,7 +33,7 @@ const STAR_SEED = 2266;
 const DUST_SEED = 4417;
 /** A camera step longer than this in one frame is a jump's cut, not flight, metres. */
 const DUST_CUT = 20;
-/** How quickly the streaks follow a change of speed, per second. */
+/** How quickly the dust follows a change of speed, per second. */
 const DUST_EASE = 10;
 
 export class ExpeditionView {
@@ -46,10 +45,8 @@ export class ExpeditionView {
   /** Drawn in flight only, after the scene, so it shares the scene's depth (view/dust). */
   readonly #dust = new Scene();
   readonly #dustField = createDust(DUST_SEED);
-  readonly #dustPositions = new BufferAttribute(
-    new Float32Array((this.#dustField.homes.length / 3) * 6),
-    3,
-  );
+  readonly #dustPositions = new BufferAttribute(new Float32Array(this.#dustField.homes.length), 3);
+  readonly #dustUniforms = { pixelRatio: { value: 1 }, opacity: { value: dustOpacity(0) } };
   #dustAt: { x: number; z: number } | null = null;
   #dustVelocity = { x: 0, z: 0 };
   #rig: CameraRig;
@@ -103,6 +100,7 @@ export class ExpeditionView {
     this.#height = height;
     this.#viewWidth = viewWidth;
     this.#renderer.setSize(width, height);
+    this.#dustUniforms.pixelRatio.value = this.#renderer.getPixelRatio();
     this.#rig = createRig(width / height, viewWidth, "ortho");
     this.#skyCamera.aspect = width / height;
     this.#skyCamera.updateProjectionMatrix();
@@ -143,7 +141,7 @@ export class ExpeditionView {
     this.#renderer.render(scene, this.#rig.camera);
   }
 
-  /** The streaks, from how fast the camera's target is moving: the ship it follows. */
+  /** The dust round the camera, shown as much as the ship it follows is moving. */
   #drawDust(target: Vector3, dt: number): void {
     const last = this.#dustAt;
     this.#dustAt = { x: target.x, z: target.z };
@@ -156,39 +154,58 @@ export class ExpeditionView {
       v.x = cut ? 0 : v.x + (dx / dt - v.x) * ease;
       v.z = cut ? 0 : v.z + (dz / dt - v.z) * ease;
     }
-    streakDust(
-      this.#dustField,
-      target.x,
-      target.z,
-      this.#dustVelocity.x,
-      this.#dustVelocity.z,
-      this.#dustPositions.array as Float32Array,
-    );
+    placeDust(this.#dustField, target.x, target.z, this.#dustPositions.array as Float32Array);
     this.#dustPositions.needsUpdate = true;
+    this.#dustUniforms.opacity.value = dustOpacity(
+      Math.hypot(this.#dustVelocity.x, this.#dustVelocity.z),
+    );
     this.#renderer.render(this.#dust, this.#rig.camera);
   }
 
   #addDust(): void {
-    // Bright at the head, black at the tail: with additive blending the tail fades out.
-    const { colours } = this.#dustField;
-    const ends = new Float32Array((colours.length / 3) * 6);
-    for (let i = 0; i < colours.length; i += 3) {
-      ends.set([colours[i] ?? 0, colours[i + 1] ?? 0, colours[i + 2] ?? 0, 0, 0, 0], i * 2);
-    }
-    const streaks = new LineSegments(
+    const { colours, sizes } = this.#dustField;
+    // Round and soft to the edge, where the stars are crisp squares: dust is not another star.
+    this.#dustUniforms.pixelRatio.value = this.#renderer.getPixelRatio();
+    const material = new ShaderMaterial({
+      uniforms: this.#dustUniforms,
+      vertexShader: /* glsl */ `
+        attribute vec3 tint;
+        attribute float size;
+        uniform float pixelRatio;
+        varying vec3 vTint;
+        void main() {
+          vTint = tint;
+          gl_PointSize = size * pixelRatio;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform float opacity;
+        varying vec3 vTint;
+        void main() {
+          vec2 p = gl_PointCoord * 2.0 - 1.0;
+          float r = dot(p, p);
+          if (r > 1.0) discard;
+          float fall = 1.0 - r;
+          gl_FragColor = vec4(vTint, fall * fall * opacity);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }
+      `,
+      blending: AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
+    });
+    const specks = new Points(
       new BufferGeometry()
         .setAttribute("position", this.#dustPositions)
-        .setAttribute("color", new BufferAttribute(ends, 3)),
-      new LineBasicMaterial({
-        vertexColors: true,
-        blending: AdditiveBlending,
-        transparent: true,
-        depthWrite: false,
-      }),
+        .setAttribute("tint", new BufferAttribute(colours, 3))
+        .setAttribute("size", new BufferAttribute(sizes, 1)),
+      material,
     );
     // The positions follow the camera, so the bounds three.js computed once would cull them.
-    streaks.frustumCulled = false;
-    this.#dust.add(streaks);
+    specks.frustumCulled = false;
+    this.#dust.add(specks);
   }
 
   #addStars(): void {

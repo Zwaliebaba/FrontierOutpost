@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { DUST_TILE, STREAK_MOST, createDust, placeDust, streakDust } from "./dust";
+import {
+  DUST_AT_REST,
+  DUST_FULL_SPEED,
+  DUST_TILE,
+  createDust,
+  dustOpacity,
+  placeDust,
+} from "./dust";
 
 describe("flight dust", () => {
   const field = createDust(7);
@@ -56,31 +63,33 @@ describe("flight dust", () => {
     expect(seen).toBeLessThan(40);
   });
 
-  describe("streaks", () => {
-    const streaks = (vx: number, vz: number) => {
-      const out = new Float32Array((field.homes.length / 3) * 6);
-      streakDust(field, 10, 20, vx, vz, out);
-      return out;
-    };
-    const length = (out: Float32Array, i: number) =>
-      Math.hypot((out[i + 3] ?? 0) - (out[i] ?? 0), (out[i + 5] ?? 0) - (out[i + 2] ?? 0));
+  it("draws specks of a few pixels, the deepest smallest and dimmest", () => {
+    let deepest = 0;
+    let nearest = 0;
+    for (let i = 0; i < field.sizes.length; i += 1) {
+      expect(field.sizes[i]).toBeGreaterThanOrEqual(2);
+      expect(field.sizes[i]).toBeLessThanOrEqual(4);
+      if ((field.homes[i * 3 + 1] ?? 0) < (field.homes[deepest * 3 + 1] ?? 0)) deepest = i;
+      if ((field.homes[i * 3 + 1] ?? 0) > (field.homes[nearest * 3 + 1] ?? 0)) nearest = i;
+    }
+    expect(field.sizes[deepest]).toBeLessThan(field.sizes[nearest] ?? 0);
+  });
 
-    it("vanish when the ship is still, so the dust is never taken for stars", () => {
-      expect(length(streaks(0, 0), 0)).toBe(0);
+  it("is faint: no speck as bright as a middling star", () => {
+    for (const c of field.colours) expect(c).toBeLessThan(0.25);
+  });
+
+  describe("opacity", () => {
+    it("fades nearly out when the ship is still, so the dust is not taken for stars", () => {
+      expect(dustOpacity(0)).toBe(DUST_AT_REST);
+      expect(DUST_AT_REST).toBeLessThan(0.5);
     });
 
-    it("grow with speed up to a cap, and point the way the ship is going", () => {
-      const slow = streaks(5, 0);
-      expect(length(slow, 0)).toBeCloseTo(1, 5);
-      // The tail is ahead of the head in the direction of travel: the ship is passing it.
-      expect((slow[3] ?? 0) - (slow[0] ?? 0)).toBeGreaterThan(0);
-      expect(length(streaks(0, -400), 6)).toBeCloseTo(STREAK_MOST, 5);
-    });
-
-    it("start where the speck is drawn", () => {
-      const heads = placed(10, 20);
-      const out = streaks(3, 4);
-      expect([out[6], out[7], out[8]]).toEqual([heads[3], heads[4], heads[5]]);
+    it("grows with speed to full, and stays full on the cruise drive", () => {
+      expect(dustOpacity(DUST_FULL_SPEED / 2)).toBeGreaterThan(DUST_AT_REST);
+      expect(dustOpacity(DUST_FULL_SPEED / 2)).toBeLessThan(1);
+      expect(dustOpacity(DUST_FULL_SPEED)).toBe(1);
+      expect(dustOpacity(33)).toBe(1);
     });
   });
 });
