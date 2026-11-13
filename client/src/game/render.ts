@@ -14,6 +14,7 @@ import {
 import type { Vector3 } from "three";
 import type { DepositInfo, ObstacleInfo, SiteInfo } from "../protocol";
 import type { EntityPose } from "../net/interpolation";
+import type { JumpEffects } from "./jumpEffects";
 import type { Shots } from "./shots";
 import { ExpeditionScene } from "./scene";
 import { linear } from "../view/readability";
@@ -86,9 +87,9 @@ export class ExpeditionView {
   }
 
   /**
-   * Draws `poses`, the bracket on `lock`, and the bolts and blasts in `shots`, with the camera
-   * centred on `target`, turned by `yaw` and raised to `pitch`. `dt`, seconds since the last
-   * frame, paces the landing gear.
+   * Draws `poses`, the bracket on `lock`, the bolts and blasts in `shots` and the jumps in
+   * `jumps`, with the camera centred on `target`, turned by `yaw` and raised to `pitch`. `dt`,
+   * seconds since the last frame, paces the landing gear.
    */
   render(
     poses: readonly EntityPose[],
@@ -98,8 +99,9 @@ export class ExpeditionView {
     yaw: number,
     shots?: Shots,
     dt = 0,
+    jumps?: JumpEffects,
   ): void {
-    this.world.update(poses, lock, shots, dt);
+    this.world.update(poses, lock, shots, dt, jumps);
     aimRig(this.#rig, target, pitch, yaw);
     this.#renderer.clear();
     this.#skyCamera.quaternion.copy(this.#rig.camera.quaternion);

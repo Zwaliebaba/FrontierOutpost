@@ -3,6 +3,7 @@
  * keyboard, and draws every ship from the server's snapshots with the tactical camera (design §5).
  */
 import "./command.css";
+import "./chart.css";
 import { Raycaster, Vector2, Vector3 } from "three";
 import { connect, fetchConnectInfo } from "./net/connection";
 import type { Connection } from "./net/connection";
@@ -37,13 +38,17 @@ import {
   THREAT_TEXT,
   launch,
   refusalText,
-  runLine,
-  scanLine,
+  runCells,
+  scanSummary,
   summaryLines,
 } from "./game/contract";
-import type { Contract, Joined, Scanned } from "./game/contract";
+import type { Contract, Joined, RunCell, Scanned } from "./game/contract";
+import { chartPlaces, jumpReadiness, sideOf, waypointFor } from "./game/chart";
+import type { ChartPlace } from "./game/chart";
+import { ChartView, glyph, sitePreview } from "./game/chartView";
 import { Pulse, gauges } from "./game/gauges";
-import { CANCEL_TEXT, JumpDrive, REFUSAL_TEXT, markerOf } from "./game/jump";
+import { CANCEL_TEXT, JumpDrive, REFUSAL_TEXT } from "./game/jump";
+import { JumpEffects } from "./game/jumpEffects";
 import type { GaugeKey } from "./game/gauges";
 import {
   SignInRefusedError,
@@ -55,9 +60,14 @@ import {
   storedToken,
 } from "./game/identity";
 import type { SignedIn } from "./game/identity";
-import { distanceText, placeMarkers, spreadBoxes } from "./game/navigation";
-import type { NavMarker, NavTarget } from "./game/navigation";
+import { clearOf, distanceText, placeMarkers } from "./game/navigation";
+import type { Box } from "./game/navigation";
+import { Notices } from "./game/notices";
+import type { NoticeLevel } from "./game/notices";
+import { prompts } from "./game/prompts";
+import type { Prompt } from "./game/prompts";
 import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
+import { targetReadout } from "./game/target";
 import { loadSim } from "./sim";
 import type { Sim } from "./sim";
 import { headingRadians, positionMetres, velocityMetresPerSecond } from "./net/snapshot";
@@ -74,12 +84,16 @@ const GLIDE_SECONDS = 0.9;
 
 const PICK_RADIUS_PX = 24;
 const KEY_TURN_RATE = 1.6;
-/** Room kept clear for the bar and lock line at the top, and the gauges and lines at the bottom. */
-const NAV_INSETS = { top: 96, right: 12, bottom: 226, left: 12 };
+/** Room the waypoint keeps from the screen's edges: the bar at the top, the footer below. */
+const NAV_INSETS = { top: 62, right: 16, bottom: 48, left: 16 };
+/** The top bar's and the footer's heights (command.css): the waypoint stays between them. */
+const BAR_HEIGHT = 44;
+const FOOTER_HEIGHT = 30;
 /** The flight keys, shown in the footer for as long as a run lasts. */
 const FLIGHT_KEYS =
-  "W A S D fly · Shift cruise · J jump · Tab lock · Space fire · X extract · V vent · C scan";
-const NOTICE_MS = 4_000;
+  "W A S D fly · Shift cruise · M map · J jump · Tab lock · Space fire · X extract · V vent · C scan";
+/** How often the map and the minimap are redrawn, at most: ships cross them slowly. */
+const CHART_MS = 100;
 /** How soon a dropped connection is retried, and how often an unreachable server. */
 const RECONNECT_MS = 1_500;
 /** How often the HUD's top line is rewritten, at most. */
@@ -87,7 +101,7 @@ const HUD_LINE_MS = 200;
 const RETRY_MS = 3_000;
 /** The reason the server closes a session with when the pilot signs in on another page. */
 const SIGNED_IN_ELSEWHERE = "signed in elsewhere";
-/** Within this distance of a deposit the run line names it, metres. */
+/** Within this distance of a deposit a prompt points to it, metres. */
 const DEPOSIT_HINT = 25;
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -111,17 +125,29 @@ function line(id: string): HTMLParagraphElement {
 const status = line("status");
 const sim = line("sim");
 const hud = line("hud");
-const run = line("run");
-const scan = line("scan");
-const lock = line("lock");
-const notice = line("notice");
+// The run status: one cell an instrument, in the top bar for as long as a run lasts.
+const run = element("div", "run");
+// The locked target, under the top bar at the middle of the screen.
+const lock = element("div", "lock");
+// Bottom centre: the notices, and under them the prompts for the keys that would act now.
+const messages = element("div", "messages");
+const notice = element("div", "notice");
+notice.setAttribute("role", "status");
+notice.setAttribute("aria-live", "polite");
+const promptRow = element("div", "prompts");
+messages.append(notice, promptRow);
+// A wash of the drive's light over the whole view as the pilot's own ship jumps: the camera
+// goes with the ship, and the wash covers the cut.
+const jumpWash = element("div", "jump-wash");
+jumpWash.setAttribute("aria-hidden", "true");
 const accountLine = line("account");
 const command = element("header", "command");
 const brand = element("div", undefined, "brand");
 brand.innerHTML =
   '<span class="insignia" aria-hidden="true">⌃</span><strong>FRONTIER / OUTPOST</strong>';
-// One bar: the brand, what the pilot holds, and the connection.
-command.append(brand, accountLine, status);
+// One bar: the brand, what the pilot holds at home or the run's status in flight, and the
+// connection.
+command.append(brand, accountLine, run, status);
 const utility = element("footer", "utility");
 utility.textContent = "HOME OUTPOST   /   BERTHS 07–10";
 const cameraHints = element("span");
@@ -132,7 +158,7 @@ const hudKeys = element("span", undefined, "hud-keys");
 const hudDiagnostics = element("span", undefined, "diagnostic");
 hud.append(hudKeys, hudDiagnostics);
 utility.append(hud, cameraHints, sim);
-document.body.append(command, utility);
+document.body.append(command, utility, lock, messages, jumpWash);
 const stationLabels = element("div", "station-labels");
 document.body.append(stationLabels);
 const nav = element("div", "nav");
@@ -173,10 +199,25 @@ function showStatus(state: "connecting" | "connected" | "closed" | "offline", te
   status.textContent = text;
 }
 
-let noticeUntil = 0;
-function showNotice(text: string): void {
-  notice.textContent = text;
-  noticeUntil = performance.now() + NOTICE_MS;
+const notices = new Notices();
+function showNotice(text: string, level: NoticeLevel = "info"): void {
+  notices.push(text, level, performance.now());
+}
+let noticesDrawn = "";
+/** Writes the notices on show to the page, when they have changed. */
+function drawNotices(now: number): void {
+  const shown = notices.visible(now);
+  const key = shown.map((entry) => entry.id).join(" ");
+  if (key === noticesDrawn) return;
+  noticesDrawn = key;
+  notice.replaceChildren(
+    ...shown.map((entry) => {
+      const node = element("p", undefined, "notice");
+      node.dataset.level = entry.level;
+      node.textContent = entry.text;
+      return node;
+    }),
+  );
 }
 
 let simLine = "Simulation";
@@ -265,7 +306,7 @@ async function start(): Promise<void> {
       homeChanged();
     })
     .catch((error: unknown) => {
-      showNotice(`The outpost models did not load: ${String(error)}`);
+      showNotice(`The outpost models did not load: ${String(error)}`, "warn");
     });
   play(connection, view, loaded);
   await identify(connection);
@@ -454,13 +495,6 @@ function beginLife(connection: Connection, joined: Joined, loaded: Sim): Life {
   return life;
 }
 
-const KIND_NAME = {
-  playerShip: "Pilot",
-  drone: "Drone",
-  raider: "Raider",
-  warden: "Warden",
-  core: "Nest core",
-};
 const TIER_NAME = ["", "I", "II", "III"];
 
 function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
@@ -468,8 +502,40 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   let selectedTier = 1;
   let contract: Contract | null = null;
   let reveal: Scanned | null = null;
-  /** The marker chosen for the jump drive, and any spool in progress. */
+  /** The destination chosen for the jump drive, and any spool in progress. */
   const jumpDrive = new JumpDrive();
+  /** The spool on the pilot's ship and the flashes of every pilot's jump, as drawn. */
+  const jumpEffects = new JumpEffects();
+  /** How many jumps this page has drawn this run, the pilot's own and the crew's, for tests. */
+  let jumpsSeen = 0;
+  const calm = window.matchMedia("(prefers-reduced-motion: reduce)");
+  /** When the map was last redrawn; set back to redraw it on the next frame. */
+  let chartAt = Number.NEGATIVE_INFINITY;
+  /** J, or the map's button: cancels a spool, jumps to the destination chosen, or asks for one. */
+  const engageJump = () => {
+    if (!life) return;
+    const action = jumpDrive.press(life.joined.site.pockets);
+    if (action) {
+      send({ type: "jump", target: action.jump });
+    } else {
+      // Nothing chosen: the map is where a destination is chosen, so J leads there.
+      chart.open();
+      showNotice("Jump drive: choose a destination on the map, then press J");
+    }
+    chartAt = Number.NEGATIVE_INFINITY;
+  };
+  const chart = new ChartView({
+    choose: (id) => {
+      jumpDrive.toggle(id);
+      chartAt = Number.NEGATIVE_INFINITY;
+    },
+    engage: engageJump,
+    jumpTo: (id) => {
+      jumpDrive.selected = id;
+      engageJump();
+    },
+  });
+  document.body.append(chart.navigator, chart.overlay);
   /**
    * The camera moving between the station and the ship, when a run begins or ends. It starts
    * `from` this far from the station's centre, so it holds if the next dock moves the station.
@@ -491,13 +557,24 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       item.textContent = text;
       facts.append(item);
     }
-    for (const pocket of offer.site.pockets) {
+    // The site as the system map will draw it, and its pockets listed with the map's glyphs.
+    const { site } = offer;
+    const figure = element("figure", undefined, "briefing-site");
+    figure.append(
+      sitePreview(site, chartPlaces(site, { x: site.dockX, z: site.dockZ }, null, false), 244, 108),
+    );
+    const pockets = element("ul", undefined, "briefing-places");
+    for (const pocket of site.pockets) {
       const item = element("li");
+      item.dataset.locked = String(pocket.locked);
       const needs = POCKET_NEEDS[pocket.kind];
-      item.textContent = pocket.locked
-        ? `${POCKET_NAME[pocket.kind]}: locked, needs ${needs ?? "a facility"}`
-        : `${POCKET_NAME[pocket.kind]}: open`;
-      facts.append(item);
+      item.append(
+        glyph(pocket.kind, 18),
+        pocket.locked
+          ? `${POCKET_NAME[pocket.kind]}: locked, needs ${needs ?? "a facility"}`
+          : `${POCKET_NAME[pocket.kind]}: open`,
+      );
+      pockets.append(item);
     }
     const note = element("p");
     note.textContent =
@@ -613,7 +690,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       tiers.append(button);
     }
     const content = element("div", undefined, "briefing-content");
-    content.append(eyebrow, title, facts, note, stake, crewSection);
+    content.append(eyebrow, title, figure, pockets, facts, note, stake, crewSection);
     briefing.append(content, tiers);
   };
 
@@ -694,6 +771,16 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     life = beginLife(connection, joined, loaded);
     reveal = null;
     jumpDrive.reset();
+    jumpEffects.reset();
+    jumpsSeen = 0;
+    chart.close();
+    chart.setSite(
+      joined.site,
+      joined.obstacles,
+      joined.deposits,
+      chartPlaces(joined.site, { x: joined.site.dockX, z: joined.site.dockZ }, null, false),
+    );
+    chartAt = Number.NEGATIVE_INFINITY;
     selection.release();
     delete briefing.dataset.state;
     briefing.replaceChildren();
@@ -706,17 +793,6 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   homeChanged = () => {
     stationWhere();
     if (!catalog || !holdings) return;
-    let power = document.getElementById("resource-power");
-    if (!power) {
-      power = element("span", "resource-power", "resource");
-      accountLine.append(power);
-    }
-    power.replaceChildren();
-    const powerLabel = element("span");
-    powerLabel.textContent = "Power";
-    const powerValue = element("strong");
-    powerValue.textContent = `${String(holdings.outpost.powerUsed)} / ${String(catalog.powerCap)}`;
-    power.append(powerLabel, powerValue);
     if (outpost) {
       outpost.setCrew(crew, callsign);
       outpost.apply(holdings);
@@ -771,13 +847,25 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         life?.session.retire();
         life = null;
         jumpDrive.reset();
+        jumpEffects.reset();
+        chart.clear();
         selection.release();
         showSummary(message.summary);
         homeChanged();
         break;
-      case "scanned":
+      case "scanned": {
         reveal = message;
+        // What it found about the pockets is on the map from now on; the notice says so once.
+        const pockets = life?.joined.site.pockets ?? [];
+        showNotice(
+          scanSummary(message, (index) => {
+            const pocket = pockets[index];
+            return pocket ? POCKET_NAME[pocket.kind] : "?";
+          }),
+          "good",
+        );
         break;
+      }
       case "account":
         showAccount(callsign, message.account);
         break;
@@ -787,7 +875,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         break;
       case "homeRefused":
       case "crewRefused":
-        showNotice(message.reason);
+        showNotice(message.reason, "warn");
         break;
       case "crew":
         crew = message.crew ?? null;
@@ -799,27 +887,36 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           `The crew's pot is paid: ${String(pot.contract + pot.bounty + pot.relay)} cr ` +
             `(contract ${String(pot.contract)}, bounty ${String(pot.bounty)}, relays ` +
             `${String(pot.relay)}). Your share: ${String(share)} cr`,
+          "good",
         );
         break;
       }
       case "extractRefused":
-        showNotice(refusalText(message.reason));
+        showNotice(refusalText(message.reason), "warn");
         break;
       case "jumpSpooling":
         jumpDrive.spooling(message.target, message.seconds, performance.now());
+        // The drive is spooling: back to the scene, where a hostile lock would show.
+        chart.close();
+        chartAt = Number.NEGATIVE_INFINITY;
         break;
       case "jumpRefused":
-        showNotice(REFUSAL_TEXT[message.reason]);
+        showNotice(REFUSAL_TEXT[message.reason], "warn");
         break;
       case "jumpCancelled":
         jumpDrive.ended();
-        showNotice(CANCEL_TEXT[message.reason]);
+        chartAt = Number.NEGATIVE_INFINITY;
+        showNotice(CANCEL_TEXT[message.reason], message.reason === "pilot" ? "info" : "warn");
         break;
       case "jumped":
         jumpDrive.ended();
+        chartAt = Number.NEGATIVE_INFINITY;
         break;
       case "limitWarning":
-        showNotice(`The instance ends in ${String(Math.round(message.secondsLeft / 60))} minutes`);
+        showNotice(
+          `The instance ends in ${String(Math.round(message.secondsLeft / 60))} minutes`,
+          "warn",
+        );
         break;
       default:
         break;
@@ -842,7 +939,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const range = life.joined.lockRange;
     const others = poses.filter((pose) => pose.id !== shipId);
     if (!selection.cycle(own, others, range)) {
-      showNotice(`No hostile within lock range (${range.toFixed(0)} m)`);
+      showNotice(`No hostile within lock range (${range.toFixed(0)} m)`, "warn");
     }
   };
   window.addEventListener("keydown", (event) => {
@@ -855,7 +952,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       // Only what is within lock range can be locked (design §10: ion fog shortens it).
       lockNearest(own, shipId);
     } else if (event.code === "Escape") {
-      selection.release();
+      // Esc closes the map first; with the map closed it lets go of the lock.
+      if (chart.isOpen) chart.close();
+      else selection.release();
     } else if (event.repeat) {
       return;
     } else if (event.code === "Space" && selection.lock === null) {
@@ -869,10 +968,18 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       send({ type: "vent" });
     } else if (event.code === "KeyC") {
       send({ type: "scan" });
+    } else if (event.code === "KeyM") {
+      chart.toggle();
+      chartAt = Number.NEGATIVE_INFINITY;
     } else if (event.code === "KeyJ") {
-      const action = jumpDrive.press(life.joined.site.pockets);
-      if (action) send({ type: "jump", target: action.jump });
-      else showNotice("Jump drive: click the Dock or a pocket marker to choose where to jump");
+      engageJump();
+    } else if (chart.isOpen && /^Digit[1-9]$/.test(event.code)) {
+      // With the map open, a digit chooses the destination it is listed beside.
+      const id = chart.keyed(event.code.slice("Digit".length));
+      if (id !== null) {
+        jumpDrive.toggle(id);
+        chartAt = Number.NEGATIVE_INFINITY;
+      }
     }
   });
   const target = new Vector3();
@@ -931,7 +1038,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       range,
     );
     if (result === "beyond") {
-      showNotice(`Beyond lock range (${range.toFixed(0)} m): centred on it, not locked`);
+      showNotice(`Beyond lock range (${range.toFixed(0)} m): centred on it, not locked`, "warn");
     }
   });
   canvas.addEventListener("pointermove", (event) => {
@@ -965,100 +1072,137 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     else node.dataset[name] = value;
   };
 
-  interface Marker {
-    node: HTMLDivElement;
-    arrow: HTMLSpanElement;
-    label: Text;
-  }
-  const markers = new Map<string, Marker>();
-  const drawNav = (from: { x: number; z: number }) => {
-    const site = life?.joined.site;
-    if (!site) {
-      if (markers.size > 0) {
-        nav.replaceChildren();
-        markers.clear();
-        written.forget("nav.");
-      }
-      return;
+  // The run status in the top bar: a cell for each reading, rebuilt only when the set of cells
+  // changes, as when a scan starts or the relays are first held.
+  const runCellNodes = new Map<string, { cell: HTMLSpanElement; value: HTMLElement }>();
+  const drawRun = (cells: readonly RunCell[]) => {
+    if (written.changed("run.cells", cells.map((cell) => cell.key).join(" "))) {
+      written.forget("run.cell.");
+      runCellNodes.clear();
+      run.replaceChildren(
+        ...cells.map((cell) => {
+          const node = element("span", undefined, "cell");
+          node.dataset.cell = cell.key;
+          const label = element("span");
+          label.textContent = cell.label;
+          const value = element("strong");
+          node.append(label, value);
+          runCellNodes.set(cell.key, { cell: node, value });
+          return node;
+        }),
+      );
     }
-    const targets: NavTarget[] = [
-      { id: "dock", label: "Dock", x: site.dockX, z: site.dockZ },
-      ...site.pockets.map((pocket, index) => ({
-        id: pocket.kind,
-        label:
-          POCKET_NAME[pocket.kind] +
-          (pocket.locked ? " (locked)" : "") +
-          (reveal?.richPocket === index ? " (rich)" : "") +
-          (reveal?.relays.includes(index) ? " (relay)" : ""),
-        x: pocket.x,
-        z: pocket.z,
-      })),
-    ];
+    for (const cell of cells) {
+      const drawn = runCellNodes.get(cell.key);
+      if (!drawn) continue;
+      const place = `run.cell.${cell.key}`;
+      if (written.changed(`${place}.value`, cell.value)) drawn.value.textContent = cell.value;
+      if (written.changed(`${place}.level`, cell.level)) drawn.cell.dataset.level = cell.level;
+    }
+  };
+
+  // The prompts: the keys that would act now, under the notices.
+  const drawPrompts = (list: readonly Prompt[]) => {
+    const key = list.map((prompt) => `${prompt.id}:${prompt.text}`).join("|");
+    if (!written.changed("prompts", key)) return;
+    promptRow.replaceChildren(
+      ...list.map((prompt) => {
+        const node = element("span", undefined, "prompt");
+        node.dataset.prompt = prompt.id;
+        if (prompt.key !== "") {
+          const cap = element("kbd");
+          cap.textContent = prompt.key;
+          node.append(cap);
+        }
+        node.append(prompt.text);
+        return node;
+      }),
+    );
+  };
+
+  // The target card: built once, shown while a hostile is locked.
+  const lockCard = (() => {
+    const name = element("strong", "lock-name");
+    const distance = element("span", "lock-distance");
+    const range = element("span", "lock-range");
+    const track = element("div", undefined, "lock-track");
+    const fill = element("div", undefined, "lock-fill");
+    track.append(fill);
+    const hull = element("span", "lock-hull");
+    const keys = element("span", undefined, "lock-keys");
+    for (const [cap, text] of [
+      ["Tab", "next"],
+      ["Esc", "release"],
+    ] as const) {
+      const key = element("kbd");
+      key.textContent = cap;
+      keys.append(key, ` ${text} `);
+    }
+    return { name, distance, range, hull, fill, nodes: [name, distance, range, track, hull, keys] };
+  })();
+
+  // The waypoint: the destination chosen on the map, marked where it is on screen or at the
+  // screen's edge toward it. It is the scene's one label, and it takes no clicks.
+  const waypoint = element("div", "waypoint");
+  const waypointArrow = element("span", undefined, "waypoint-arrow");
+  const waypointText = element("span", undefined, "waypoint-text");
+  waypoint.append(waypointText, waypointArrow);
+  waypoint.hidden = true;
+  nav.append(waypoint);
+  let waypointSize = { width: 0, height: 0 };
+  /** Where the HUD's panels are, so the waypoint is never drawn under one. */
+  let hudPanels: Box[] = [];
+  const measurePanels = () => {
+    hudPanels = [shipPanel, lock, messages, chart.navigator]
+      .map((node) => node.getBoundingClientRect())
+      .filter((box) => box.width > 0 && box.height > 0)
+      .map(({ x, y, width, height }) => ({ x, y, width, height }));
+  };
+  const drawWaypoint = (place: ChartPlace | undefined) => {
+    if (written.changed("waypoint.hidden", String(!place))) waypoint.hidden = !place;
+    if (!place) return;
     const project = (x: number, z: number) =>
       worldToScreen(new Vector3(x, 0, z), view.camera, view.viewport);
-    const placed: { marker: NavMarker; node: HTMLDivElement }[] = [];
-    for (const marker of placeMarkers(targets, from, project, view.viewport, NAV_INSETS)) {
-      let drawn = markers.get(marker.id);
-      if (!drawn) {
-        const node = element("div", undefined, "nav-marker");
-        const id = marker.id;
-        node.dataset.target = id;
-        // A click or tap chooses where J jumps; a right click chooses and jumps at once.
-        node.addEventListener("click", (event) => {
-          event.stopPropagation();
-          jumpDrive.toggle(id);
-        });
-        node.addEventListener("contextmenu", (event) => {
-          event.preventDefault();
-          jumpDrive.selected = id;
-          const action = life ? jumpDrive.press(life.joined.site.pockets) : null;
-          if (action?.jump) send({ type: "jump", target: action.jump });
-        });
-        const arrow = element("span", undefined, "nav-arrow");
-        arrow.textContent = "➤";
-        nav.append(node);
-        drawn = { node, arrow, label: document.createTextNode("") };
-        markers.set(marker.id, drawn);
-      }
-      const { node, arrow, label } = drawn;
-      const place = `nav.${marker.id}`;
-      // The arrow points the way to a target off screen; an on-screen one needs none.
-      if (written.changed(`${place}.onScreen`, String(marker.onScreen))) {
-        node.dataset.onScreen = String(marker.onScreen);
-        node.replaceChildren(...(marker.onScreen ? [label] : [arrow, " ", label]));
-      }
-      // Marker nodes have no id, so they keep their own keys in `written`.
-      const selected = String(jumpDrive.selected === marker.id);
-      if (written.changed(`${place}.selected`, selected)) node.dataset.selected = selected;
-      const spool = jumpDrive.spool;
-      const jumping = String(spool !== null && markerOf(spool.target, site.pockets) === marker.id);
-      if (written.changed(`${place}.jumping`, jumping)) node.dataset.jumping = jumping;
-      const turned = `rotate(${marker.angle.toFixed(2)}rad)`;
-      if (written.changed(`${place}.arrow`, turned)) arrow.style.transform = turned;
-      const text = `${marker.label} · ${distanceText(marker.distance)}`;
-      if (written.changed(`${place}.text`, text)) label.data = text;
-      placed.push({ marker, node });
-    }
-    // Every label's text is written; one read of their sizes, then each is placed, with any
-    // that would overlap pushed apart so that each can be clicked.
-    const boxes = placed.map(({ marker, node }) => {
-      const width = node.offsetWidth;
-      const height = node.offsetHeight;
-      // Above an on-screen target; inward from an edge, so the label stays whole.
-      const lift = marker.onScreen ? 12 : 0;
-      return {
+    const [marker] = placeMarkers(
+      [{ id: place.id, label: place.name, x: place.x, z: place.z }],
+      { x: 0, z: 0 },
+      project,
+      view.viewport,
+      NAV_INSETS,
+    );
+    if (!marker) return;
+    setData(waypoint, "target", place.id);
+    setData(waypoint, "onScreen", String(marker.onScreen));
+    // Off screen the arrow points the way; on screen it points down at the place itself.
+    const turned = marker.onScreen ? "rotate(90deg)" : `rotate(${marker.angle.toFixed(2)}rad)`;
+    if (written.changed("waypoint.arrow", turned)) waypointArrow.style.transform = turned;
+    const text = `${place.name} · ${distanceText(place.distance)}`;
+    const resized =
+      written.changed("waypoint.length", `${String(text.length)} ${String(marker.onScreen)}`) ||
+      waypointSize.width === 0;
+    if (written.changed("waypoint.text", text)) waypointText.textContent = text;
+    // The font is monospace: the size changes only when the text's length does.
+    if (resized) waypointSize = { width: waypoint.offsetWidth, height: waypoint.offsetHeight };
+    const { width, height } = waypointSize;
+    // Above an on-screen place; inward from an edge, so the label stays whole.
+    const lift = marker.onScreen ? 10 : 0;
+    const box = clearOf(
+      {
         x: marker.screen.x - marker.anchor.x * width,
         y: marker.screen.y - lift - marker.anchor.y * height,
         width,
         height,
-      };
-    });
-    spreadBoxes(boxes, view.viewport).forEach((box, index) => {
-      const entry = placed[index];
-      if (!entry) return;
-      const moved = `translate(${box.x.toFixed(0)}px, ${box.y.toFixed(0)}px)`;
-      if (written.changed(`nav.${entry.marker.id}.at`, moved)) entry.node.style.transform = moved;
-    });
+      },
+      hudPanels,
+      {
+        x: 0,
+        y: BAR_HEIGHT,
+        width: view.viewport.width,
+        height: view.viewport.height - BAR_HEIGHT - FOOTER_HEIGHT,
+      },
+    );
+    const moved = `translate(${box.x.toFixed(0)}px, ${box.y.toFixed(0)}px)`;
+    if (written.changed("waypoint.at", moved)) waypoint.style.transform = moved;
   };
 
   const homeMarkers = new Map<string, HTMLElement>();
@@ -1130,7 +1274,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   const frames = new FrameTimer();
   const frame = (now: number) => {
     const workStart = performance.now();
-    const dt = Math.min(0.1, (now - last) / 1_000);
+    /** Seconds since the last frame as they passed, however long: a hidden tab draws none. */
+    const elapsed = Math.max(0, (now - last) / 1_000);
+    const dt = Math.min(0.1, elapsed);
     last = now;
     const current = life;
 
@@ -1177,6 +1323,22 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       shots.advance(dt, drawnAt);
       selection.prune(new Set(others.map((pose) => pose.id)));
       view.world.setDeposits(current.deposits);
+      // A pilot's ship that moved farther than flight allows jumped: flash both ends.
+      const spool = jumpDrive.readout(now, current.joined.site.pockets);
+      jumpEffects.setCharge(spool.state === "spooling" ? session.shipId : null, spool.share);
+      const leapt = jumpEffects.observe(poses, elapsed);
+      if (leapt.length > 0) {
+        jumpsSeen += leapt.length;
+        setData(hud, "jumps", String(jumpsSeen));
+        // The wash covers the camera's cut, so it is for the pilot's own jump only.
+        if (leapt.includes(session.shipId) && !calm.matches) {
+          jumpWash.animate([{ opacity: 0 }, { opacity: 0.7, offset: 0.2 }, { opacity: 0 }], {
+            duration: 520,
+            easing: "ease-out",
+          });
+        }
+      }
+      jumpEffects.advance(dt);
     } else {
       poses = [];
     }
@@ -1199,24 +1361,34 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     if (atHome) {
       view.renderScene(atHome.scene, aim, look.pitch, look.yaw);
     } else {
-      view.render(poses, selection.lock, aim, look.pitch, look.yaw, shots, dt);
+      view.render(poses, selection.lock, aim, look.pitch, look.yaw, shots, dt, jumpEffects);
     }
 
     drawHomeLabels();
 
     const locked = poses.find((pose) => pose.id === selection.lock);
+    const lockedAt = locked && own ? Math.hypot(locked.x - own.x, locked.z - own.z) : 0;
     if (locked && own && current) {
-      const distance = Math.hypot(locked.x - own.x, locked.z - own.z);
-      setData(lock, "target", String(locked.id));
-      setText(
-        lock,
-        `Locked: ${KIND_NAME[locked.kind]} ${String(locked.id)} · ${distance.toFixed(0)} m ` +
-          `${distance <= current.joined.weaponRange ? "in range" : `out of range, fires within ${current.joined.weaponRange.toFixed(0)} m`} · ` +
-          `hull ${String(Math.round((locked.hull / 255) * 100))}% · Tab next, Esc release`,
+      const readout = targetReadout(
+        locked.kind,
+        locked.id,
+        lockedAt,
+        current.joined.weaponRange,
+        locked.hull,
       );
+      if (written.changed("lock.shown", "true")) lock.append(...lockCard.nodes);
+      setData(lock, "target", String(locked.id));
+      setData(lock, "range", readout.inRange ? "in" : "out");
+      setText(lockCard.name, readout.name);
+      setText(lockCard.distance, readout.distance);
+      setText(lockCard.range, readout.range);
+      setText(lockCard.hull, readout.hull);
+      const width = `${(readout.hullShare * 100).toFixed(1)}%`;
+      if (written.changed("lock.fill", width)) lockCard.fill.style.width = width;
     } else {
       setData(lock, "target", null);
-      setText(lock, "");
+      setData(lock, "range", null);
+      if (written.changed("lock.shown", "false")) lock.replaceChildren();
     }
 
     if (own && current) {
@@ -1247,16 +1419,33 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           }))
           .filter((deposit) => deposit.left > 0)
           .sort((a, b) => a.distance - b.distance)[0];
-        const hint =
-          nearest && nearest.distance <= DEPOSIT_HINT
-            ? ` · deposit ${nearest.distance.toFixed(0)} m, ${String(nearest.left)} left` +
-              (nearest.distance <= current.joined.extractRange ? " (in reach)" : "")
-            : "";
         setData(run, "phase", status.phase);
         setData(run, "cargo", String(status.cargo));
         setData(run, "extractor", status.extractor);
-        const jumpLine = jumpDrive.line(now, current.joined.site.pockets);
-        setText(run, runLine(status) + hint + (jumpLine ? ` · ${jumpLine}` : ""));
+        setData(run, "revealed", String(reveal !== null));
+        drawRun(runCells(status, reveal));
+        const lockRange = current.joined.lockRange;
+        drawPrompts(
+          prompts({
+            own: status,
+            deposit:
+              nearest && nearest.distance <= DEPOSIT_HINT
+                ? {
+                    distance: nearest.distance,
+                    left: nearest.left,
+                    inReach: nearest.distance <= current.joined.extractRange,
+                  }
+                : null,
+            scanned: reveal !== null,
+            locked: locked !== undefined,
+            lockedInRange: locked !== undefined && lockedAt <= current.joined.weaponRange,
+            hostileInLockRange: poses.some(
+              (pose) =>
+                pose.kind !== "playerShip" &&
+                Math.hypot(pose.x - own.x, pose.z - own.z) <= lockRange,
+            ),
+          }),
+        );
         setData(shipPanel, "active", "true");
         for (const gauge of gauges(
           status,
@@ -1279,29 +1468,39 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         const working =
           status.extractor === "on" && nearest && nearest.distance <= current.joined.extractRange;
         view.world.setBeam(working ? own : null, working ? nearest.index : null);
-        const pocketName = (index: number) => {
-          const pocket = current.joined.site.pockets[index];
-          return pocket ? POCKET_NAME[pocket.kind] : "?";
-        };
-        setData(scan, "revealed", String(reveal !== null));
-        setText(scan, scanLine(status, reveal, pocketName));
       }
-      drawNav(own);
+      // The map, the minimap beside the gauges, and the waypoint to the destination chosen.
+      const { site } = current.joined;
+      const places = chartPlaces(site, own, reveal, (status?.cargo ?? 0) > 0);
+      const chosen = places.find((place) => place.id === jumpDrive.selected);
+      if (now - chartAt >= CHART_MS) {
+        chartAt = now;
+        const ownId = session.shipId;
+        chart.update({
+          places,
+          selected: jumpDrive.selected,
+          readout: jumpDrive.readout(now, site.pockets),
+          readiness: jumpReadiness(chosen ?? null, status?.drive ?? null),
+          own,
+          contacts: poses.map((pose) => ({ ...pose, side: sideOf(pose.kind, pose.id, ownId) })),
+          deposits: current.deposits,
+        });
+        measurePanels();
+      }
+      drawWaypoint(waypointFor(places, jumpDrive.selected));
     } else {
       setData(run, "phase", null);
+      setData(run, "revealed", null);
+      drawRun([]);
+      drawPrompts([]);
       setData(shipPanel, "active", null);
       setData(hud, "x", null);
       hudLineAt = Number.NEGATIVE_INFINITY;
       if (written.changed("hud.keys", "")) hudKeys.textContent = "";
       if (written.changed("hud.diagnostics", "")) hudDiagnostics.textContent = "";
-      setText(run, "");
-      setText(scan, "");
-      drawNav({ x: 0, z: 0 });
+      drawWaypoint(undefined);
     }
-    if (noticeUntil && now > noticeUntil) {
-      notice.textContent = "";
-      noticeUntil = 0;
-    }
+    drawNotices(now);
 
     const cost = frames.record(workStart, performance.now());
     if (cost) {

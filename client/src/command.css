@@ -3,8 +3,13 @@
   --line: #405365;
   --muted: #a5b5c6;
   --text: #e3eaf0;
+  /* Orange marks what is selected and the action that commits; cyan marks operational status
+     (style guide §10). Warnings and danger have their own colours, always with a marker. */
   --orange: #ef9a3c;
   --cyan: #64d5e4;
+  --warn: #e0b040;
+  --danger: #e8705a;
+  --good: #7fd6a0;
   font:
     13px/1.5 "Segoe UI",
     system-ui,
@@ -88,8 +93,8 @@ p {
 }
 .eyebrow {
   color: var(--muted);
-  font-size: 10px;
-  letter-spacing: 0.16em;
+  font-size: 11px;
+  letter-spacing: 0.12em;
   margin: 0 0 10px;
 }
 /* One bar for the brand, the pilot's holdings and the connection: at home and in flight the
@@ -170,17 +175,64 @@ p {
   border-left: 1px solid var(--line);
   white-space: nowrap;
 }
-.resource span {
+.resource span,
+.cell span {
   color: var(--muted);
   text-transform: uppercase;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.1em;
 }
-.resource strong {
-  color: #f3b168;
+/* Readings are plain text: orange is kept for what is selected. */
+.resource strong,
+.cell strong {
+  color: var(--text);
   font:
     14px ui-monospace,
     monospace;
+}
+/* The run status takes the resource strip's place in flight: what the pilot holds at home is
+   no use out there, and the phase, the clock and the alert are. */
+#run {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#run:not([data-phase]) {
+  display: none;
+}
+body[data-station="dock"] #account {
+  flex: none;
+}
+body[data-station="dock"] #account .resource {
+  display: none;
+}
+.cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-left: 1px solid var(--line);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.cell[data-cell="time"] strong {
+  font-variant-numeric: tabular-nums;
+}
+.cell[data-level="warn"] strong {
+  color: var(--warn);
+}
+.cell[data-level="danger"] strong {
+  color: var(--danger);
+}
+.cell[data-level="warn"] strong::before {
+  content: "! ";
+}
+.cell[data-level="danger"] strong::before {
+  content: "!! ";
 }
 .pilot-name {
   padding-right: 14px;
@@ -199,7 +251,7 @@ p {
   padding: 0 16px;
   border-top: 1px solid #718494;
   background: #0b1622f5;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   color: var(--muted);
 }
@@ -215,7 +267,7 @@ p {
   background: none;
   color: var(--muted);
   font:
-    10px ui-monospace,
+    11px ui-monospace,
     monospace;
   letter-spacing: 0;
   white-space: nowrap;
@@ -303,9 +355,9 @@ p {
   background: transparent;
   text-transform: uppercase;
   text-align: center;
-  letter-spacing: 0.05em;
-  font-size: 10px;
-  padding: 10px 4px 8px;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+  padding: 10px 3px 8px;
 }
 .service-nav button[aria-current="page"] {
   border-bottom-color: var(--orange);
@@ -402,7 +454,6 @@ p {
   white-space: nowrap;
 }
 #home section h3 {
-  color: #ffbc74;
   font-size: 17px;
 }
 #home table {
@@ -432,7 +483,7 @@ p {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.07em;
   color: var(--muted);
 }
@@ -488,8 +539,12 @@ meter {
   font-size: 11px;
   padding: 5px 8px;
 }
+/* What stands between the pilot and the launch: a warning, with its own colour and marker. */
 .crew-note {
-  color: #eeb66d !important;
+  color: var(--warn) !important;
+}
+.crew-note::before {
+  content: "! ";
 }
 .tiers {
   display: grid;
@@ -508,31 +563,167 @@ meter {
   border-color: #ed9d4a;
   color: #fff3df;
 }
+/* The locked target: under the top bar at the middle of the screen, the nearest fixed place to
+   the bracket, which the view centres. */
 #lock {
+  position: fixed;
+  z-index: 3;
   top: 56px;
-  left: 18px;
-}
-#run {
-  bottom: 107px;
-  left: 18px;
-}
-#scan {
-  bottom: 71px;
-  left: 18px;
-}
-#notice {
-  bottom: 38px;
   left: 50%;
   transform: translateX(-50%);
-  max-width: 70vw;
-  border-color: var(--orange);
-  z-index: 5;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 5px 12px;
+  min-width: 300px;
+  padding: 8px 12px 9px;
+  color: var(--text);
+  background: #0b1622eb;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--orange);
+  font:
+    12px/1.4 ui-monospace,
+    monospace;
+  white-space: nowrap;
 }
-/* The ship gauges, above the run line. Level shows by a marker as well as colour. */
+#lock:empty {
+  display: none;
+}
+#lock-name {
+  font:
+    600 14px "Bahnschrift",
+    "Roboto Condensed",
+    "Arial Narrow",
+    sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+#lock-range {
+  justify-self: end;
+  color: var(--muted);
+}
+#lock[data-range="in"] #lock-range {
+  color: var(--good);
+}
+#lock[data-range="in"] #lock-range::before {
+  content: "◆ ";
+}
+.lock-track {
+  grid-column: 1 / 3;
+  height: 8px;
+  background: #1a2634;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.lock-fill {
+  width: 0;
+  height: 100%;
+  background: var(--danger);
+  transition: width 0.2s linear;
+}
+#lock-hull {
+  justify-self: end;
+}
+.lock-keys {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+/* Bottom centre: the notices, newest lowest, and under them the prompts. In flight they sit
+   above the band the gauges and the minimap share, and no wider than the room between the
+   minimap and its mirror on the left, so they never cover either. */
+#messages {
+  position: fixed;
+  z-index: 7;
+  left: 50%;
+  bottom: 42px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: min(720px, calc(100vw - 540px));
+  pointer-events: none;
+}
+body[data-station="dock"] #messages {
+  bottom: 130px;
+}
+#notice,
+#prompts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+#prompts {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+#notice:empty,
+#prompts:empty {
+  display: none;
+}
+/* A notice says what kind it is by a marker and a coloured edge, never by the colour alone. */
+.notice {
+  margin: 0;
+  padding: 6px 12px 6px 10px;
+  color: var(--text);
+  background: #0b1622f5;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--cyan);
+  font:
+    12px/1.4 ui-monospace,
+    monospace;
+  animation: notice-in 0.18s ease-out;
+}
+.notice::before {
+  content: "› ";
+  color: var(--cyan);
+}
+.notice[data-level="warn"] {
+  border-left-color: var(--warn);
+}
+.notice[data-level="warn"]::before {
+  content: "! ";
+  color: var(--warn);
+}
+.notice[data-level="good"] {
+  border-left-color: var(--good);
+}
+.notice[data-level="good"]::before {
+  content: "✓ ";
+  color: var(--good);
+}
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.prompt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px 5px 7px;
+  color: var(--text);
+  background: #0b1622d9;
+  border: 1px solid #2c3e4f;
+  font:
+    12px/1.4 ui-monospace,
+    monospace;
+  white-space: nowrap;
+}
+.prompt[data-prompt="vent"] {
+  border-color: var(--warn);
+}
+/* The ship gauges, bottom left. Level shows by a marker as well as colour. */
 #ship {
   position: fixed;
   left: 18px;
-  bottom: 143px;
+  bottom: 42px;
   display: none;
   padding: 6px 12px;
   color: var(--text);
@@ -570,10 +761,10 @@ meter {
   background: #b39a5a;
 }
 .gauge[data-level="warn"] .gauge-fill {
-  background: #e0b040;
+  background: var(--warn);
 }
 .gauge[data-level="danger"] .gauge-fill {
-  background: #e05a40;
+  background: var(--danger);
 }
 .gauge-value {
   text-align: right;
@@ -591,10 +782,6 @@ meter {
 .gauge[data-level="danger"] .gauge-note {
   color: #f0a080;
 }
-#lock:empty,
-#run:empty,
-#scan:empty,
-#notice:empty,
 #account:empty {
   display: none;
 }
@@ -602,41 +789,6 @@ meter {
   position: fixed;
   inset: 0;
   pointer-events: none;
-}
-.nav-marker {
-  position: absolute;
-  padding: 3px 8px;
-  color: var(--text);
-  background: #0b1622b0;
-  border: 1px solid #60798e;
-  font:
-    11px ui-monospace,
-    monospace;
-  white-space: nowrap;
-}
-/* A marker chooses where the jump drive goes: a 44 px target whatever its drawn size. */
-.nav-marker {
-  pointer-events: auto;
-  cursor: pointer;
-}
-.nav-marker::before {
-  content: "";
-  position: absolute;
-  inset: -12px -4px;
-}
-.nav-marker[data-selected="true"] {
-  border-color: var(--orange);
-  color: #fff3df;
-}
-.nav-marker[data-selected="true"]::after {
-  content: " · J";
-  color: var(--orange);
-}
-.nav-marker[data-jumping="true"] {
-  background: #3a2410e0;
-}
-.nav-arrow {
-  display: inline-block;
 }
 @media (max-width: 1100px) {
   #home {
@@ -662,6 +814,10 @@ meter {
   body[data-station="dock"] #utility > span {
     display: none;
   }
+  .cell {
+    padding: 0 10px;
+    gap: 7px;
+  }
 }
 
 #station-labels {
@@ -669,18 +825,19 @@ meter {
   inset: 0;
   pointer-events: none;
 }
+/* Labels, not selections: plain ink on a thin rule. */
 .station-label {
   position: absolute;
   left: 0;
   top: 0;
-  border-bottom: 1px solid #eeb66d;
+  border-bottom: 1px solid #8ea3b6;
   padding: 3px 7px;
   background: #08121ccc;
   font:
-    10px ui-monospace,
+    11px ui-monospace,
     monospace;
   letter-spacing: 0.06em;
-  color: #e5bf8c;
+  color: var(--text);
 }
 
 .tiers {
@@ -715,7 +872,7 @@ meter {
 }
 .briefing-content > ul {
   padding-left: 16px;
-  margin: 18px 0;
+  margin: 10px 0;
 }
 .briefing-content > p:not(.eyebrow) {
   font-size: 11px;
@@ -731,7 +888,7 @@ meter {
 .tiers label {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
 }
 .tiers select {
@@ -749,4 +906,48 @@ meter {
 select:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 2px;
+}
+
+/* The site as the system map draws it, and its pockets listed with the map's glyphs. */
+.briefing-site {
+  margin: 12px 0 8px;
+  border: 1px solid #2c3e4f;
+  background: radial-gradient(110% 90% at 50% 45%, #0e1c2b 0%, #060e18 78%), #060e18;
+}
+.briefing-site .chart-svg {
+  height: 108px;
+}
+.briefing-content > .briefing-places {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.briefing-places li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.briefing-places .glyph {
+  flex-shrink: 0;
+}
+.briefing-places li[data-locked="true"] {
+  color: var(--muted);
+}
+.briefing-places .glyph path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+}
+.briefing-places li[data-locked="true"] .glyph path {
+  stroke-dasharray: 2.5 2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .notice {
+    animation: none;
+  }
 }

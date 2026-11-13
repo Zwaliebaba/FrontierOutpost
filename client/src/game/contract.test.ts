@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OwnStatus, RunSummary } from "../protocol";
-import { bar, clock, runLine, scanLine, summaryLines } from "./contract";
+import { clock, runCells, scanSummary, summaryLines } from "./contract";
 import type { Scanned } from "./contract";
 
 const working: OwnStatus = {
@@ -26,38 +26,56 @@ describe("clock", () => {
   });
 });
 
-describe("bar", () => {
-  it("fills ten cells, so progress reads without colour", () => {
-    expect(bar(0)).toBe("[..........]");
-    expect(bar(0.75)).toBe("[########..]");
-    expect(bar(2)).toBe("[##########]");
+const cell = (cells: ReturnType<typeof runCells>, key: string) =>
+  cells.find((candidate) => candidate.key === key);
+
+describe("runCells", () => {
+  it("reads the phase, the clock, the alert and the drives, one cell each", () => {
+    expect(runCells(working, null).map(({ key, value }) => [key, value])).toEqual([
+      ["phase", "In the site"],
+      ["time", "3:07"],
+      ["alert", "2"],
+      ["drive", "Cruise off in the site"],
+    ]);
   });
-});
 
-describe("runLine", () => {
-  it("names the phase, clock, alert and drive, leaving the ship to the gauges", () => {
-    expect(runLine(working)).toBe("In the site · 3:07 · alert 2 · drive off in the site");
-    expect(runLine({ ...working, drive: "hunted" })).toContain("drive jammed");
+  it("raises the alert's level as it climbs, and a jammed drive's at once", () => {
+    expect(cell(runCells({ ...working, alert: 0 }, null), "alert")?.level).toBe("ok");
+    expect(cell(runCells(working, null), "alert")?.level).toBe("warn");
+    expect(cell(runCells({ ...working, alert: 3 }, null), "alert")?.level).toBe("danger");
+    const jammed = cell(runCells({ ...working, drive: "hunted" }, null), "drive");
+    expect(jammed).toMatchObject({ value: "Jammed: hostile lock", level: "danger" });
+    expect(cell(runCells({ ...working, drive: "ready" }, null), "drive")?.value).toBe("Ready");
   });
-});
 
-describe("scanLine", () => {
-  const name = (index: number) =>
-    ["Ore field", "Derelict", "Volatile veins", "Nest core"][index] ?? "?";
+  it("shows the crew's relay link while it is held and once linked", () => {
+    expect(cell(runCells(working, null), "relay")).toBeUndefined();
+    expect(cell(runCells({ ...working, relay: 12 }, null), "relay")?.value).toBe("Held 12/30 s");
+    expect(cell(runCells({ ...working, relay: 255 }, null), "relay")?.value).toBe("Linked");
+  });
 
-  it("prompts for a scan, shows progress, then what it revealed", () => {
-    expect(scanLine(working, null, name)).toContain("not scanned");
-    expect(scanLine({ ...working, scan: 127 }, null, name)).toBe(
-      "Scanning [#####.....] · hold still",
+  it("shows a scan in progress, then the next wave the alert has not reached", () => {
+    expect(cell(runCells({ ...working, scan: 127 }, null), "scan")?.value).toBe("50% · hold still");
+    const waves = [
+      { level: 2, atSeconds: 400, drones: 1, raiders: 1 },
+      { level: 3, atSeconds: 610, drones: 2, raiders: 0 },
+    ];
+    // The alert is at 2 already: its wave has come.
+    expect(cell(runCells(working, { waves }), "wave")?.value).toBe("10:10 · 2 drones · 0 raiders");
+    expect(cell(runCells({ ...working, alert: 3 }, { waves }), "wave")?.value).toBe(
+      "None before the limit",
     );
-    const reveal: Scanned = {
-      type: "scanned",
-      richPocket: 0,
-      relays: [1, 3],
-      waves: [{ level: 3, atSeconds: 610, drones: 2, raiders: 0 }],
-    };
-    expect(scanLine(working, reveal, name)).toBe(
-      "Scanned · rich: Ore field · relays: Derelict and Nest core · next wave 10:10: 2 drones, 0 raiders",
+    expect(cell(runCells(working, null), "wave")).toBeUndefined();
+  });
+});
+
+describe("scanSummary", () => {
+  it("names the rich pocket and the relays", () => {
+    const name = (index: number) =>
+      ["Ore field", "Derelict", "Volatile veins", "Nest core"][index] ?? "?";
+    const reveal: Pick<Scanned, "richPocket" | "relays"> = { richPocket: 0, relays: [1, 3] };
+    expect(scanSummary(reveal, name)).toBe(
+      "Scan complete · rich pocket: Ore field · relays: Derelict and Nest core · marked on the map",
     );
   });
 });
@@ -90,13 +108,5 @@ describe("summaryLines", () => {
     const lines = summaryLines({ ...docked, ending: "destroyed", ore: 0, payout: 0, cargoLost: 9 });
     expect(lines[1]).toBe("Lost: 9 cargo, 0 upgraded modules");
     expect(lines[2]).toContain("net −40 cr");
-  });
-});
-
-describe("runLine with the relays", () => {
-  it("shows the crew's relay link while it is held and once linked", () => {
-    expect(runLine(working)).not.toContain("relays");
-    expect(runLine({ ...working, relay: 12 })).toContain("relays held 12/30 s");
-    expect(runLine({ ...working, relay: 255 })).toContain("relays linked");
   });
 });

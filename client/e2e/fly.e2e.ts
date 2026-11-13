@@ -36,7 +36,12 @@ test("the player's ship leaves the dock when they hold thrust", async ({ page })
   await page.waitForTimeout(300);
   const end = await position(page);
   expect(Math.hypot(end.x - start.x, end.z - start.z)).toBeGreaterThan(2);
-  // The dock and the pockets are labelled, on screen or at its edge.
-  await expect(page.locator('.nav-marker[data-target="oreField"]')).toContainText("Ore field");
-  await expect(page.locator('.nav-marker[data-target="derelict"]')).toContainText("(locked)");
+  // The scene carries no labels: the map lists the dock and the pockets, and how far each is.
+  await expect(page.locator("#waypoint")).toBeHidden();
+  await page.keyboard.press("KeyM");
+  await expect(page.locator('.chart-row[data-target="oreField"]')).toContainText("Ore field");
+  await expect(page.locator('.chart-row[data-target="oreField"] .row-distance')).toHaveText(
+    /\d+ m/,
+  );
+  await expect(page.locator('.chart-row[data-target="derelict"]')).toContainText("Locked");
 });

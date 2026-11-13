@@ -104,53 +104,83 @@ export function clock(seconds: number): string {
   return `${String(Math.floor(whole / 60))}:${String(whole % 60).padStart(2, "0")}`;
 }
 
-/** A ten-cell bar for a share of 0 to 1, readable without colour. */
-export function bar(share: number): string {
-  const cells = Math.round(Math.min(1, Math.max(0, share)) * 10);
-  return `[${"#".repeat(cells)}${".".repeat(10 - cells)}]`;
+/** How urgent a cell of the run status is. Shown by a marker as well as colour. */
+export type CellLevel = "ok" | "warn" | "danger";
+
+/** One instrument of the run status in the top bar: what it measures, and its reading. */
+export interface RunCell {
+  key: "phase" | "time" | "alert" | "drive" | "relay" | "scan" | "wave";
+  label: string;
+  value: string;
+  level: CellLevel;
 }
 
-const DRIVE_TEXT: Readonly<Record<Drive, string>> = {
-  ready: "drive ready (Shift)",
-  inSite: "drive off in the site",
-  hunted: "drive jammed: locked by a hostile",
-  extracting: "drive off while extracting",
+// The drive state stops the cruise drive; a hostile lock or the extractor stops the jump drive
+// too, so the cell is labelled for both.
+const DRIVE_CELL: Readonly<Record<Drive, { value: string; level: CellLevel }>> = {
+  ready: { value: "Ready", level: "ok" },
+  inSite: { value: "Cruise off in the site", level: "ok" },
+  hunted: { value: "Jammed: hostile lock", level: "danger" },
+  extracting: { value: "Off while extracting", level: "warn" },
 };
 
 /**
- * The run line: where the pilot is, the clock, the alert, the relays and the drive. Hull, hold,
- * heat and the extractor are on the ship gauges (game/gauges).
+ * The run status, one cell for each thing a pilot reads at a glance: where they are, the clock,
+ * the alert, the drives, the relays while held, a scan in progress and the next wave once a scan
+ * has found it. Hull, hold and heat are on the ship gauges (game/gauges); what a scan found
+ * about the pockets is on the system map (game/chart).
  */
-export function runLine(own: OwnStatus): string {
-  return [
-    PHASE_TEXT[own.phase],
-    clock(own.elapsedSeconds),
-    `alert ${String(own.alert)}`,
-    ...(own.relay === RELAY_LINKED
-      ? ["relays linked"]
-      : own.relay > 0
-        ? [`relays held ${String(own.relay)}/30 s`]
-        : []),
-    DRIVE_TEXT[own.drive],
-  ].join(" · ");
+export function runCells(own: OwnStatus, reveal: Pick<Scanned, "waves"> | null): RunCell[] {
+  const cells: RunCell[] = [
+    { key: "phase", label: "Phase", value: PHASE_TEXT[own.phase], level: "ok" },
+    { key: "time", label: "Time", value: clock(own.elapsedSeconds), level: "ok" },
+    {
+      key: "alert",
+      label: "Alert",
+      value: String(own.alert),
+      level: own.alert >= 3 ? "danger" : own.alert > 0 ? "warn" : "ok",
+    },
+    { key: "drive", label: "Drives", ...DRIVE_CELL[own.drive] },
+  ];
+  if (own.relay > 0) {
+    cells.push({
+      key: "relay",
+      label: "Relays",
+      value: own.relay === RELAY_LINKED ? "Linked" : `Held ${String(own.relay)}/30 s`,
+      level: "ok",
+    });
+  }
+  if (own.scan !== null) {
+    cells.push({
+      key: "scan",
+      label: "Scan",
+      value: `${String(Math.round((own.scan / 254) * 100))}% · hold still`,
+      level: "ok",
+    });
+  } else if (reveal) {
+    // The next wave is the first the alert has not reached: a cut-out can bring one early.
+    const next: WaveInfo | undefined = reveal.waves.find((wave) => wave.level > own.alert);
+    cells.push({
+      key: "wave",
+      label: "Next wave",
+      value: next
+        ? `${clock(next.atSeconds)} · ${String(next.drones)} drones · ` +
+          `${String(next.raiders)} raiders`
+        : "None before the limit",
+      level: "ok",
+    });
+  }
+  return cells;
 }
 
-/** The scan line: progress while scanning, what a scan revealed after. */
-export function scanLine(
-  own: OwnStatus,
-  reveal: Scanned | null,
+/** What a finished scan found about the pockets, for the notice that announces it. */
+export function scanSummary(
+  reveal: Pick<Scanned, "richPocket" | "relays">,
   pocketName: (index: number) => string,
 ): string {
-  if (own.scan !== null) return `Scanning ${bar(own.scan / 254)} · hold still`;
-  if (!reveal) return "Site not scanned · C to scan, holding still inside the site";
-  const next: WaveInfo | undefined = reveal.waves[0];
-  const wave = next
-    ? `next wave ${clock(next.atSeconds)}: ${String(next.drones)} drones, ` +
-      `${String(next.raiders)} raiders`
-    : "no more waves before the limit";
   return (
-    `Scanned · rich: ${pocketName(reveal.richPocket)} · ` +
-    `relays: ${reveal.relays.map(pocketName).join(" and ")} · ${wave}`
+    `Scan complete · rich pocket: ${pocketName(reveal.richPocket)} · ` +
+    `relays: ${reveal.relays.map(pocketName).join(" and ")} · marked on the map`
   );
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EntityState, Snapshot } from "../protocol";
-import { SnapshotBuffer } from "./interpolation";
+import { SnapshotBuffer, teleported } from "./interpolation";
 import type { OwnStatus } from "../protocol";
 
 const IDLE: OwnStatus = {
@@ -144,5 +144,32 @@ describe("snapshot interpolation", () => {
 
   it("draws nothing before the first snapshot", () => {
     expect(new SnapshotBuffer(TICK_RATE).sample(0)).toEqual([]);
+  });
+});
+
+describe("teleported", () => {
+  it("tells a jump from flight, however long the gap", () => {
+    // The cruise drive at its fastest covers 1.35 m a tick; a jump arrives 40 m off at least.
+    expect(teleported(1.35, 0.05)).toBe(false);
+    expect(teleported(19, 0.05)).toBe(false);
+    expect(teleported(120, 0.05)).toBe(true);
+    // Ten seconds unseen at cruise speed is 270 m of flight, not a jump.
+    expect(teleported(270, 10)).toBe(false);
+    expect(teleported(700, 10)).toBe(true);
+  });
+});
+
+describe("a ship that jumps between two snapshots", () => {
+  it("is drawn where it was, then where it is, never in between", () => {
+    const buffer = new SnapshotBuffer(TICK_RATE);
+    buffer.push(snapshot(100, 0), 100 * 50);
+    buffer.push(snapshot(101, 0), 101 * 50);
+    buffer.push(snapshot(102, 400), 102 * 50);
+    buffer.push(snapshot(103, 400), 103 * 50);
+    // Drawn 100 ms behind: these sample server times 5,060 to 5,095, across the jump.
+    const drawn = [5_160, 5_170, 5_180, 5_190, 5_195].map((now) => xAt(buffer, now));
+    for (const x of drawn) expect(x === 0 || x === 400).toBe(true);
+    expect(drawn[0]).toBe(0);
+    expect(drawn.at(-1)).toBe(400);
   });
 });

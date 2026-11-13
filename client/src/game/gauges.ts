@@ -108,7 +108,8 @@ export function heatGauge(own: OwnStatus): Gauge {
       share >= 0.75 ? "extracting: near cut-out, V to vent" : "extracting: heat rises, V vents it",
     venting: `venting ${seconds} s: extraction paused`,
     cutOut: `CUT OUT ${seconds} s: overheated, extractor off`,
-    off: share > 0 ? "extractor off, cooling" : "extractor off · X at a deposit",
+    // The key to start it shows as a prompt when a deposit is in reach (game/prompts).
+    off: share > 0 ? "extractor off, cooling" : "extractor off",
   }[own.extractor];
   return {
     key: "heat",

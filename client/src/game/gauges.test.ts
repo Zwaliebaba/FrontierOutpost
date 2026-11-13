@@ -69,7 +69,7 @@ describe("holdGauge", () => {
 describe("heatGauge", () => {
   it("explains that heat is the extractor's, not the hold's", () => {
     expect(heatGauge(own).note).toContain("extracting");
-    expect(heatGauge({ ...own, heat: 0, extractor: "off" }).note).toContain("X at a deposit");
+    expect(heatGauge({ ...own, heat: 0, extractor: "off" }).note).toBe("extractor off");
     expect(heatGauge({ ...own, heat: 40, extractor: "off" }).note).toContain("cooling");
   });
 

@@ -25,6 +25,19 @@ const OFFSET_WINDOW_MS = 5_000;
 /** How fast the offset may rise, as a share of the time passing: drawn time never runs backwards. */
 const OFFSET_RISE = 0.1;
 
+/** No drive flies this fast, metres per second: the cruise drive tops out at 27. */
+const FASTEST_FLIGHT = 60;
+/** A jump moves a ship at least this far, metres: it arrives 40 m from where it is going. */
+const SHORTEST_JUMP = 20;
+
+/**
+ * Whether something that moved `metres` in `seconds` jumped rather than flew. A jump is drawn as
+ * one: the ship is here and then there, never slid across the space between.
+ */
+export function teleported(metres: number, seconds: number): boolean {
+  return metres > Math.max(SHORTEST_JUMP, FASTEST_FLIGHT * Math.max(0, seconds));
+}
+
 interface Received {
   snapshot: Snapshot;
   /** Server time of the snapshot, in local milliseconds. */
@@ -109,6 +122,7 @@ export class SnapshotBuffer {
     if (!before) return after.snapshot.entities.map(poseOf);
 
     const t = (renderAt - before.at) / (after.at - before.at);
+    const seconds = (after.at - before.at) / 1_000;
     const earlier = new Map(before.snapshot.entities.map((entity) => [entity.id, entity]));
     // Entities that left before `after` are gone; ones that joined appear where they joined.
     return after.snapshot.entities.map((entity) => {
@@ -116,6 +130,10 @@ export class SnapshotBuffer {
       const previous = earlier.get(entity.id);
       if (!previous) return end;
       const start = poseOf(previous);
+      // A ship that jumped between the two is drawn where it was, then where it is.
+      if (teleported(Math.hypot(end.x - start.x, end.z - start.z), seconds)) {
+        return t < 0.5 ? start : end;
+      }
       return {
         ...end,
         x: start.x + (end.x - start.x) * t,

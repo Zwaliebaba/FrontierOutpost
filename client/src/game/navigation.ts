@@ -1,7 +1,7 @@
 /**
- * Navigation markers for the dock and the site's pockets. The legs are long (design §10: about
- * three minutes each way), so each target is labelled where it is on screen, or at the screen
- * edge in its direction when it is off screen.
+ * The waypoint: the one bearing cue on the scene. The legs are long (design §10: about three
+ * minutes each way), so the destination chosen on the system map is marked where it is on
+ * screen, or at the screen edge in its direction when it is off screen.
  */
 import type { ScreenPoint } from "../view/picking";
 
@@ -85,57 +85,36 @@ export interface Box {
 }
 
 /**
- * Moves overlapping labels apart, so that each stays whole and can be clicked to choose a jump
- * target. Markers pinned to the same stretch of edge, or targets close together on screen, would
- * otherwise stack. Each overlapping pair is pushed apart along the axis where it overlaps least,
- * half each way, for a few passes; boxes stay inside `bounds`.
+ * Moves the waypoint off the HUD's panels: it is the one bearing cue on the scene, so it must
+ * never be drawn under the gauges or the minimap. Of the places just clear of a panel's edge, it
+ * takes the nearest that is whole inside `bounds` and on no panel; with none, it stays put.
  */
-export function spreadBoxes(
-  boxes: readonly Box[],
-  bounds: { width: number; height: number },
-  gap = 4,
-  passes = 24,
-): Box[] {
-  const moved = boxes.map((box) => ({ ...box }));
-  const keepIn = (box: Box) => {
-    box.x = Math.min(Math.max(0, box.x), Math.max(0, bounds.width - box.width));
-    box.y = Math.min(Math.max(0, box.y), Math.max(0, bounds.height - box.height));
-  };
-  for (let pass = 0; pass < passes; pass++) {
-    let clear = true;
-    for (let i = 0; i < moved.length; i++) {
-      for (let j = i + 1; j < moved.length; j++) {
-        const a = moved[i];
-        const b = moved[j];
-        if (!a || !b) continue;
-        const overlapX = Math.min(a.x + a.width, b.x + b.width) + gap - Math.max(a.x, b.x);
-        const overlapY = Math.min(a.y + a.height, b.y + b.height) + gap - Math.max(a.y, b.y);
-        if (overlapX <= 0 || overlapY <= 0) continue;
-        clear = false;
-        const axis = overlapX < overlapY ? "x" : "y";
-        const size = axis === "x" ? "width" : "height";
-        const needed = Math.min(overlapX, overlapY);
-        // a goes toward the lower side, b the higher; ties, as for two boxes in one place, by
-        // list order.
-        const away = a[axis] + a[size] / 2 <= b[axis] + b[size] / 2 ? 1 : -1;
-        // Half each way; what one cannot move, held by an edge, the other moves instead.
-        const aFrom = a[axis];
-        a[axis] -= (away * needed) / 2;
-        keepIn(a);
-        const aMoved = Math.abs(a[axis] - aFrom);
-        const bFrom = b[axis];
-        b[axis] += away * (needed - aMoved);
-        keepIn(b);
-        const short = needed - aMoved - Math.abs(b[axis] - bFrom);
-        if (short > 0) {
-          a[axis] -= away * short;
-          keepIn(a);
-        }
-      }
-    }
-    if (clear) break;
-  }
-  return moved;
+export function clearOf(box: Box, blocked: readonly Box[], bounds: Box, gap = 6): Box {
+  const overlaps = (a: Box, b: Box) =>
+    a.x < b.x + b.width + gap &&
+    b.x < a.x + a.width + gap &&
+    a.y < b.y + b.height + gap &&
+    b.y < a.y + a.height + gap;
+  const free = (at: Box) =>
+    at.x >= bounds.x &&
+    at.y >= bounds.y &&
+    at.x + at.width <= bounds.x + bounds.width &&
+    at.y + at.height <= bounds.y + bounds.height &&
+    !blocked.some((panel) => overlaps(at, panel));
+  if (!blocked.some((panel) => overlaps(box, panel))) return box;
+  const moved = (at: Box) => Math.abs(at.x - box.x) + Math.abs(at.y - box.y);
+  // Above and below each panel, then beside it: a tie goes to the earlier, so the waypoint
+  // keeps its place along a top or bottom edge when it can.
+  const places = blocked
+    .flatMap((panel) => [
+      { ...box, y: panel.y - gap - box.height },
+      { ...box, y: panel.y + panel.height + gap },
+      { ...box, x: panel.x - gap - box.width },
+      { ...box, x: panel.x + panel.width + gap },
+    ])
+    .filter(free)
+    .sort((a, b) => moved(a) - moved(b));
+  return places[0] ?? box;
 }
 
 /** A distance as the markers show it: metres up to a kilometre, then kilometres. */

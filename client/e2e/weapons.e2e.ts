@@ -9,7 +9,7 @@ test("holding Space damages the locked hostile", async ({ page }) => {
   // The ore field's NPCs notice the pilot and close in; wait until one is in range.
   await expect(async () => {
     await page.keyboard.press("Tab");
-    await expect(lock).toContainText("in range", { timeout: 500 });
+    await expect(lock).toHaveAttribute("data-range", "in", { timeout: 500 });
   }).toPass({ timeout: 15_000 });
   const target = await lock.getAttribute("data-target");
 

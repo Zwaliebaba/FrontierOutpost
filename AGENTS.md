@@ -10,7 +10,7 @@ multiplayer isometric space game with an authoritative Rust server and an HTML5 
 | --- | --- |
 | [Design/FrontierOutpost.md](Design/FrontierOutpost.md) | Game design: scope, rules, delivery gates. |
 | [Design/Stage1-Plan.md](Design/Stage1-Plan.md) | Build order, work items and checkpoints for Stage 1. |
-| [Design/Visual-Style-Guide.md](Design/Visual-Style-Guide.md) | Art direction, material baselines, camera, scene structure. |
+| [Design/Visual-Style-Guide.md](Design/Visual-Style-Guide.md) | Art direction, material baselines, camera, scene structure, and the HUD's conventions (§10, §11). |
 | [Design/FrontierOutpost/](Design/FrontierOutpost/README.md) | The reference Blender scene, its generator, GLB exports and manifest. |
 
 - Build toward **Stage 1** of the design (§9): a persistent home outpost, one 1–4-player
@@ -132,6 +132,10 @@ change ships with a test. Keep comments for the *why*.
 - Tests use Vitest and sit next to the source as `*.test.ts`. Browser tests against the real
   server use Playwright and live in `client/e2e/` as `*.e2e.ts`. Keep rendering-free logic (camera,
   math, state) in plain modules so it can be tested without WebGL.
+- The HUD follows the style guide (§10 at home, §11 in flight): what a reading, a prompt, a notice
+  or the map says is worked out in a plain module under `client/src/game/` with its own test, and
+  the page only draws it. The browser tests find HUD elements by `id` and `data-*` attributes,
+  so keep those when the look changes.
 
 ## 6. Assets
 

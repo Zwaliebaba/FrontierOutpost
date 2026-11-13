@@ -80,8 +80,8 @@ cargo run --release -p frontier-server
   A crew flies its host's seed, so a member's run number and seed can differ in paired sessions.
 - Copy `data/playtest.db` somewhere safe after each day's sessions. Stage 1 data may be wiped,
   but losing it mid-playtest loses the measures.
-- Check the build once on the playtest machines: sign up, launch, extract a unit, jump, dock.
-  Then wipe again.
+- Check the build once on the playtest machines: sign up, launch, open the map (M), extract a
+  unit, jump, dock. Then wipe again.
 
 ### Thresholds
 
@@ -90,9 +90,9 @@ write-up, so the results are judged against figures chosen in advance.
 
 ## 4. The facilitator's rules
 
-- **Do not teach.** The game's briefing, gauges and key hints are all the tester gets. If a tester
-  is stuck for more than two minutes on something outside the game (sign-in, the browser, the
-  machine), help. Inside the game, note it and wait.
+- **Do not teach.** The game's briefing, gauges, prompts, notices, map and key list are all the
+  tester gets. If a tester is stuck for more than two minutes on something outside the game
+  (sign-in, the browser, the machine), help. Inside the game, note it and wait.
 - **Never prompt a relaunch.** After a defeat, say nothing about what to do next. Whether the
   tester launches again is gate 3.
 - **No thinking aloud during play.** It slows people down, which skews gate 4's timings. Ask
@@ -156,11 +156,18 @@ Look out for:
 
 - **Stuck:** more than 30 seconds without knowing what to do. Where were they, and what did they
   try?
-- **Misread:** a gauge, marker or notice taken for something else. Last build's examples were the
-  heat bar read as the hold, and damage that could not be seen.
+- **Misread:** a gauge, the map, the waypoint or a notice taken for something else. Last build's
+  examples were the heat bar read as the hold, and damage that could not be seen.
 - **Defeat:** what killed them, what they said, and what they did next, unprompted.
 - **Choice:** which pocket, fitting or tier, and their reason if they say one aloud.
 - **The jump drive and the cruise drive:** found unaided? Used to skip travel, or ignored?
+- **The system map (M, or the minimap):** found unaided? Did they choose a destination there, or
+  hunt the scene for something to click? Without labels on the scene, could they find a pocket?
+- **Prompts:** did a prompt lead to its key (extract, scan, vent), or go unread? Note any key a
+  tester looked for and did not find.
+- **The run status in the top bar:** did they see the alert rise or the drives jam, or learn it
+  from what followed?
+- **The scan's result:** once its notice had gone, did they look for it on the map?
 - **Quote:** anything said about wanting to come back, or not.
 
 ## 7. Questions after each session
@@ -187,6 +194,15 @@ Decided by the owner on 12 November 2026:
 - **NPC cap:** wardens are placed first; the rest of a full instance's NPCs are dropped (design
   §10). It only binds for large crews at tier III.
 - **Launch price:** goods queued for processing count toward it, like stock (design §10).
+
+Changed on 13 November 2026, at the owner's request:
+
+- **The flight HUD and the system map** (style guide §11): the jump destination is chosen on a
+  system map, the scene carries no labels, the run's status is in the top bar, and prompts and
+  notices replace the standing lines of text. Two things the earlier build showed all the time
+  are now shown once or on request: a scan's result (a notice, then the map) and the key for each
+  action (a prompt while it would act, and the footer's list). §6 watches for both. Check the
+  build on the playtest machines again (§3) before session 1.
 
 Open:
 
