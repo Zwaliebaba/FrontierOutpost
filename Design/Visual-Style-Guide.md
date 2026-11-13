@@ -117,10 +117,30 @@ Before accepting a new scene, check:
 
 The home HUD uses a restrained Military C2 layout: a command header, resource strip, left station
 services, right expedition briefing and a quiet utility rail. Graphite/naval panels, thin titanium
-rules and square corners complement the assets. Orange marks selection and the launch action;
-cyan marks operational status. Pair state colors with text. Keep typography legible and the
-central station silhouette clear. Detailed market, processor, fitting and facility controls live
-in separate service views. Actual catalog and roster data supply all values and available actions.
+rules and square corners complement the assets. Keep typography legible and the central station
+silhouette clear. Detailed market, processor, fitting and facility controls live in separate
+service views. Actual catalog and roster data supply all values and available actions.
+
+The resource strip holds what the pilot owns: credits and goods. Power is a capacity of the
+station, not a good, so it shows in the overview and the facilities view and not in the strip.
+The briefing draws the contract's site as the system map will (§11), framed on the site alone,
+and lists its pockets with the map's glyphs. Berth and socket labels on the station are plain
+ink on a thin rule: they name things and select nothing.
+
+**Colour roles in the HUD.** These hold at home and in flight.
+
+| Colour | Role |
+| --- | --- |
+| Orange | What is selected, and the action that commits: the launch, the jump, a chosen destination, the lock bracket |
+| Cyan | Operational status and the pilot's own side: the connection, the pilot's ship, the dock |
+| Yellow | A warning, with a `!` marker |
+| Red | Danger and hostiles, with a `!!` marker or a shape of its own |
+| Green | Something gained or in the pilot's favour, with a `✓` or `◆` marker |
+| Plain ink | Readings and labels: resource values, headings, names |
+
+No state rests on colour alone: each has a marker, a shape or a word as well (design §5). No text
+is smaller than 11 px. Anything a pilot must press is at least 44 px, whatever its drawn size, and
+nothing is reachable only by hover or a right click (design §5).
 
 The forward apron has four side-by-side berths, 07–10, facing outward. The authored offsets,
 deck height and painted boundaries live in `FrontierOutpost/berths.json`, shared by Blender,
@@ -128,3 +148,52 @@ the simulation and the client. Validate the full parked geometry, inter-ship cle
 straight departure corridors. Socket A stays beside cargo; Socket B stays beside the apron,
 clear of all four lanes. Crew preview instances in the Blender overview are presentation only;
 the browser draws roster ships separately from the station asset.
+
+## 11. Flight HUD and system map
+
+In flight the screen belongs to the scene. The HUD keeps to five fixed places, so a pilot learns
+once where each kind of thing is:
+
+| Place | Holds |
+| --- | --- |
+| Top bar | The run's status, in place of the resource strip: phase, time, alert, drives, the relays while held, a scan in progress, the next wave once a scan has found it |
+| Top centre, under the bar | The locked target: name, distance, whether the weapons reach it, hull as a bar |
+| Bottom left | The ship gauges: hull, hold, heat, each with a note on what happens next |
+| Bottom right | The minimap and the jump readout |
+| Bottom centre, above the gauges' band | Notices, and under them the prompts |
+
+The footer carries the full list of flight keys as a reference.
+
+**Readings, not sentences.** Each cell of the run status is one reading with a short label. A
+reading that needs attention changes colour and takes its marker; it does not move.
+
+**Prompts.** A key is prompted only while pressing it would do something: the extractor in reach
+of a deposit, the scan inside an unscanned site, the vent near the cut-out, the lock with a
+hostile near, the trigger with one in range, the cruise drive on the legs. At most three show.
+Instruments do not carry standing key hints.
+
+**Notices.** A notice answers something the pilot did or warns of something coming. Its level
+(news, warning, gain) shows by a marker and a coloured edge. The newest three stay together, each
+for long enough to read; one said again replaces itself. They are announced politely to assistive
+technology.
+
+**No labels on the scene.** Places are not labelled where they are (design §2, §5). The minimap
+gives their bearings, and the destination chosen on the system map is marked by one waypoint: at
+the place when it is on screen, at the screen's edge toward it when it is not. The waypoint takes
+no clicks, keeps clear of the HUD's panels, and goes once the ship is inside the place.
+
+**The system map.** It opens over the scene (M, the minimap, or J with nothing chosen), and the
+ship keeps flying under it, so it never takes the flight keys and it closes when the drive starts
+to spool. Up on the chart is up on the screen with the camera at rest.
+
+- Each kind of place has a glyph, used wherever the place is named: the chart, the list beside
+  it, the briefing.
+- A locked pocket has a dashed outline, a padlock and the word.
+- The pilot's ship is a solid cyan arrow; a crew mate's is the same arrow in outline; a hostile
+  is a red diamond, the nest core a red hexagon in outline.
+- The destination chosen has an orange ring and a dashed course from the ship.
+- The list beside the chart says everything the chart shows, and is what a keyboard, a touch or a
+  screen reader works: the chart is never the only way to choose.
+- What a scan found is tagged on the map and stays there; the notice that announces it goes.
+
+Motion is small and stops when the system asks for reduced motion.

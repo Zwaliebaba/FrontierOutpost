@@ -59,9 +59,10 @@ FRONTIER_IMPAIR_DELAY_MS=75 FRONTIER_CLIENT_DIR=client/dist cargo run -p frontie
 ```
 
 Optional: `FRONTIER_IMPAIR_JITTER_MS` adds up to that much random extra delay per packet, and
-`FRONTIER_IMPAIR_LOSS_PERCENT` drops that share of packets. Open the printed address. The status
-line shows the measured round trip, which includes up to one 50 ms server tick, and the last
-prediction correction.
+`FRONTIER_IMPAIR_LOSS_PERCENT` drops that share of packets. Open the printed address. The measured
+round trip, which includes up to one 50 ms server tick, and the last prediction correction are
+kept in the page but out of sight, since nobody flies by them: in the browser's inspector, read
+the `data-round-trip` attribute of `#hud`, or the hidden text inside it.
 
 ## Running in a container
 
