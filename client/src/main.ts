@@ -67,7 +67,7 @@ import { Notices } from "./game/notices";
 import type { NoticeLevel } from "./game/notices";
 import { prompts } from "./game/prompts";
 import type { Prompt } from "./game/prompts";
-import { SCAN_REFUSAL_TEXT } from "./game/scan";
+import { SCAN_REFUSAL_TEXT, scanReach } from "./game/scan";
 import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
 import { targetReadout } from "./game/target";
 import { loadSim } from "./sim";
@@ -1591,6 +1591,15 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
                   }
                 : null,
             scanned: reveal !== null,
+            scan: scanReach({
+              phase: status.phase,
+              x: own.x,
+              z: own.z,
+              centreX: current.joined.site.centreX,
+              centreZ: current.joined.site.centreZ,
+              range: current.joined.scanRange,
+              fitted: current.joined.fitted,
+            }),
             locked: locked !== undefined,
             lockedInRange: locked !== undefined && lockedAt <= current.joined.weaponRange,
             hostileInLockRange: poses.some(

@@ -21,6 +21,7 @@ const quiet: PromptInput = {
   own,
   deposit: null,
   scanned: true,
+  scan: { inReach: true, short: 0 },
   locked: false,
   lockedInRange: false,
   hostileInLockRange: false,
@@ -60,10 +61,23 @@ describe("prompts", () => {
     expect(ids({ ...quiet, locked: true, lockedInRange: true })).toEqual(["fire"]);
   });
 
-  it("offers the scan inside an unscanned site, until the scan starts", () => {
+  it("offers the scan in reach of an unscanned site, until the scan starts", () => {
     expect(ids({ ...quiet, scanned: false })).toEqual(["scan"]);
     expect(ids({ ...quiet, scanned: false, own: { ...own, scan: 10 } })).toEqual([]);
-    expect(ids({ ...quiet, scanned: false, own: { ...own, phase: "approach" } })).toEqual([]);
+    // The reach, not the leg, decides: the scan range can cover part of the approach.
+    expect(ids({ ...quiet, scanned: false, own: { ...own, phase: "approach" } })).toEqual(["scan"]);
+    expect(ids({ ...quiet, scanned: false, scan: null })).toEqual([]);
+  });
+
+  it("points to the site's centre, without the key, while the scan would not reach", () => {
+    const far = { ...quiet, scanned: false, scan: { inReach: false, short: 16.2 } };
+    expect(prompts(far)).toEqual([
+      { id: "scanRange", key: "", text: "Scan · site centre 17 m out of range · move closer" },
+    ]);
+    // On the legs the site is plainly far off: no standing hint.
+    expect(ids({ ...far, own: { ...own, phase: "approach" } })).toEqual([]);
+    expect(ids({ ...far, own: { ...own, phase: "atDock" } })).toEqual([]);
+    expect(ids({ ...far, scanned: true })).toEqual([]);
   });
 
   it("offers the cruise drive on the legs while it is ready", () => {
@@ -77,6 +91,7 @@ describe("prompts", () => {
       own: { ...own, extractor: "on", heat: 250 },
       deposit: { distance: 2, left: 5, inReach: true },
       scanned: false,
+      scan: { inReach: true, short: 0 },
       locked: true,
       lockedInRange: true,
       hostileInLockRange: true,

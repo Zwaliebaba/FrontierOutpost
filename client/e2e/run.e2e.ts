@@ -38,16 +38,21 @@ test("pressing X away from a deposit explains why nothing happened", async ({ pa
 test("pressing C out of range or on the move explains why nothing happened", async ({ page }) => {
   test.setTimeout(60_000);
   await launch(page, QUIET);
-  // At the dock, 190 m from the site's centre, the scanner's 180 m do not reach.
+  const prompt = page.locator('#prompts [data-prompt="scan"]');
+  // At the dock, 190 m from the site's centre, the scanner's 180 m do not reach: its key is
+  // not among the prompts, and pressing it says why.
+  await expect(page.locator('#prompts [data-prompt="cruise"]')).toBeVisible();
+  await expect(prompt).toHaveCount(0);
   await page.keyboard.press("KeyC");
   await expect(lastNotice(page)).toHaveText(
     "Scan: out of range · move closer to the site's centre",
   );
-  // Under way and in range, pressing it says what is missing.
+  // Under way and in range, the key is prompted, and pressing it says what is missing.
   await page.keyboard.down("KeyW");
   await expect(async () => {
     expect((await position(page)).x).toBeGreaterThan(-100);
   }).toPass({ timeout: 30_000, intervals: [50] });
+  await expect(prompt).toContainText("C");
   await page.keyboard.press("KeyC");
   await expect(lastNotice(page)).toHaveText("Scan: hold still first");
   await page.keyboard.up("KeyW");

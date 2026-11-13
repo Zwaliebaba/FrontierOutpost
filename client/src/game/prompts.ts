@@ -4,9 +4,10 @@
  * deposit says the extractor can start here. Kept free of the DOM so it can be tested.
  */
 import type { OwnStatus } from "../protocol";
+import type { ScanReach } from "./scan";
 
 export interface Prompt {
-  id: "vent" | "extract" | "deposit" | "fire" | "lock" | "scan" | "cruise";
+  id: "vent" | "extract" | "deposit" | "fire" | "lock" | "scan" | "scanRange" | "cruise";
   /** The key to press, or empty for a prompt that only tells. */
   key: string;
   text: string;
@@ -18,6 +19,8 @@ export interface PromptInput {
   deposit: { distance: number; left: number; inReach: boolean } | null;
   /** Whether a scan has revealed the site. */
   scanned: boolean;
+  /** Whether a scan would reach the site from here; null when the ship is not flying. */
+  scan: ScanReach | null;
   /** Whether a hostile is locked, and whether the weapons reach it. */
   locked: boolean;
   lockedInRange: boolean;
@@ -55,8 +58,15 @@ export function prompts(input: PromptInput): Prompt[] {
           },
     );
   }
-  if (own.phase === "objective" && !input.scanned && own.scan === null) {
-    found.push({ id: "scan", key: "C", text: "Scan the site · hold still" });
+  if (input.scan && !input.scanned && own.scan === null) {
+    if (input.scan.inReach) {
+      found.push({ id: "scan", key: "C", text: "Scan the site · hold still" });
+    } else if (own.phase === "objective") {
+      // Inside the site and still out of range: ion fog shortens the scanner's reach.
+      // On the legs the site is plainly far off, and a standing hint would only be read once.
+      const short = `${String(Math.ceil(input.scan.short))} m out of range`;
+      found.push({ id: "scanRange", key: "", text: `Scan · site centre ${short} · move closer` });
+    }
   }
   if (flying && own.drive === "ready") {
     found.push({ id: "cruise", key: "Shift", text: "Hold to cruise" });
