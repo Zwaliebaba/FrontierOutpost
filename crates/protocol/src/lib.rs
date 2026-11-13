@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 11;
+pub const PROTOCOL_VERSION: u32 = 12;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -175,6 +175,8 @@ pub enum ServerMessage {
     LaunchRefused { reason: String },
     /// The extractor did not start.
     ExtractRefused { reason: ExtractRefusal },
+    /// The scan did not start.
+    ScanRefused { reason: ScanRefusal },
     /// The jump drive started to spool toward `target`; the ship jumps in
     /// `seconds` unless the spool is cancelled.
     JumpSpooling {
@@ -413,6 +415,22 @@ pub enum ExtractRefusal {
     CargoFull,
     /// Cutting out or venting.
     Busy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ScanRefusal {
+    /// Destroyed, out of the run, or the run is over.
+    NotFlying,
+    /// A scan has already revealed the site.
+    Revealed,
+    /// The pilot's scan is already in hand.
+    Scanning,
+    /// Beyond scan range of the site's centre.
+    OutOfRange,
+    /// Moving too fast to scan.
+    Moving,
 }
 
 /// One coming alert step, revealed by a scan.

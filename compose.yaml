@@ -18,6 +18,8 @@ services:
       RUST_LOG: info
       # Extra stock for new pilots, to try facilities: FRONTIER_GRANT=1000cr,40ore docker compose up
       FRONTIER_GRANT: ${FRONTIER_GRANT:-}
+      # Mine faster than the design's rate, to try one: FRONTIER_EXTRACT_RATE=2 docker compose up
+      FRONTIER_EXTRACT_RATE: ${FRONTIER_EXTRACT_RATE:-}
     volumes:
       # The world's saves, kept across rebuilds. `docker compose down -v` deletes them.
       - saves:/var/lib/frontier

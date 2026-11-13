@@ -6,7 +6,7 @@
 import type { OwnStatus } from "../protocol";
 
 export interface Prompt {
-  id: "vent" | "extract" | "deposit" | "fire" | "lock" | "scan" | "cruise";
+  id: "vent" | "extract" | "deposit" | "fire" | "lock" | "scan" | "scanRange" | "cruise";
   /** The key to press, or empty for a prompt that only tells. */
   key: string;
   text: string;
@@ -18,6 +18,10 @@ export interface PromptInput {
   deposit: { distance: number; left: number; inReach: boolean } | null;
   /** Whether a scan has revealed the site. */
   scanned: boolean;
+  /** How many metres the ship is beyond scan range of the site's centre; 0 within it. Ion fog
+   * shortens the range to less than the site's own radius, so a ship can be in the site and
+   * still out of range. */
+  scanShort: number;
   /** Whether a hostile is locked, and whether the weapons reach it. */
   locked: boolean;
   lockedInRange: boolean;
@@ -56,7 +60,22 @@ export function prompts(input: PromptInput): Prompt[] {
     );
   }
   if (own.phase === "objective" && !input.scanned && own.scan === null) {
-    found.push({ id: "scan", key: "C", text: "Scan the site · hold still" });
+    // Deposits show without a scan, so the prompt says what one adds (design §10): a playtester
+    // who could already see the deposits did not know why to press the key. Out of range the key
+    // would do nothing, so the prompt only tells, as the deposit's does.
+    found.push(
+      input.scanShort > 0
+        ? {
+            id: "scanRange",
+            key: "",
+            text: `Scan · ${input.scanShort.toFixed(0)} m nearer the site's centre`,
+          }
+        : {
+            id: "scan",
+            key: "C",
+            text: "Scan · finds the rich pocket, relays and waves · hold still",
+          },
+    );
   }
   if (flying && own.drive === "ready") {
     found.push({ id: "cruise", key: "Shift", text: "Hold to cruise" });

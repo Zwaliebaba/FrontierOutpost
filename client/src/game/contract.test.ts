@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { OwnStatus, RunSummary } from "../protocol";
 import { clock, runCells, scanSummary, summaryLines } from "./contract";
 import type { Scanned } from "./contract";
+import { scanRefusalText } from "./contract";
 
 const working: OwnStatus = {
   phase: "objective",
@@ -30,22 +31,45 @@ const cell = (cells: ReturnType<typeof runCells>, key: string) =>
   cells.find((candidate) => candidate.key === key);
 
 describe("runCells", () => {
-  it("reads the phase, the clock, the alert and the drives, one cell each", () => {
-    expect(runCells(working, null).map(({ key, value }) => [key, value])).toEqual([
+  it("reads the phase, the clock, the alert and the contract, one cell each", () => {
+    const cells = runCells(working, null, { contractCargo: 10, payout: 100 });
+    expect(cells.map(({ key, value }) => [key, value])).toEqual([
       ["phase", "In the site"],
       ["time", "3:07"],
-      ["alert", "2"],
-      ["drive", "Cruise off in the site"],
+      ["alert", "2 · clear"],
+      ["contract", "7/10 cargo · pays 100 cr"],
     ]);
   });
 
+  it("says when the hold has enough for the contract, and has no cell without one", () => {
+    const met = runCells({ ...working, cargo: 10 }, null, { contractCargo: 10, payout: 100 });
+    expect(cell(met, "contract")?.value).toBe("Met · dock to collect 100 cr");
+    expect(cell(runCells(working, null, { contractCargo: 10 }), "contract")?.value).toBe(
+      "7/10 cargo",
+    );
+    expect(cell(runCells(working, null), "contract")).toBeUndefined();
+  });
+
+  it("shows the drives only while something stops them", () => {
+    expect(cell(runCells(working, null), "drive")).toBeUndefined();
+    expect(cell(runCells({ ...working, drive: "ready" }, null), "drive")).toBeUndefined();
+    expect(cell(runCells({ ...working, drive: "extracting" }, null), "drive")).toMatchObject({
+      value: "Off while extracting",
+      level: "warn",
+    });
+  });
+
   it("raises the alert's level as it climbs, and a jammed drive's at once", () => {
-    expect(cell(runCells({ ...working, alert: 0 }, null), "alert")?.level).toBe("ok");
-    expect(cell(runCells(working, null), "alert")?.level).toBe("warn");
-    expect(cell(runCells({ ...working, alert: 3 }, null), "alert")?.level).toBe("danger");
+    const hostiles = (count: number) => ({ hostiles: count });
+    expect(cell(runCells({ ...working, alert: 0 }, null, hostiles(3)), "alert")?.level).toBe(
+      "warn",
+    );
+    expect(cell(runCells(working, null, hostiles(1)), "alert")?.level).toBe("warn");
+    expect(cell(runCells({ ...working, alert: 3 }, null, hostiles(2)), "alert")?.level).toBe(
+      "danger",
+    );
     const jammed = cell(runCells({ ...working, drive: "hunted" }, null), "drive");
     expect(jammed).toMatchObject({ value: "Jammed: hostile lock", level: "danger" });
-    expect(cell(runCells({ ...working, drive: "ready" }, null), "drive")?.value).toBe("Ready");
   });
 
   it("shows the crew's relay link while it is held and once linked", () => {
@@ -61,7 +85,20 @@ describe("runCells", () => {
       { level: 3, atSeconds: 610, drones: 2, raiders: 0 },
     ];
     // The alert is at 2 already: its wave has come.
-    expect(cell(runCells(working, { waves }), "wave")?.value).toBe("10:10 · 2 drones · 0 raiders");
+    // A countdown from now (3:07) to the wave at 10:10.
+    expect(cell(runCells(working, { waves }), "wave")).toMatchObject({
+      value: "in 7:03 · 2 drones · 0 raiders",
+      level: "ok",
+    });
+    // It warns in the last half minute, and says when the wave is due.
+    const close = { ...working, elapsedSeconds: 590 };
+    expect(cell(runCells(close, { waves }), "wave")).toMatchObject({
+      value: "in 0:20 · 2 drones · 0 raiders",
+      level: "warn",
+    });
+    expect(cell(runCells({ ...working, elapsedSeconds: 611 }, { waves }), "wave")?.value).toBe(
+      "due · 2 drones · 0 raiders",
+    );
     expect(cell(runCells({ ...working, alert: 3 }, { waves }), "wave")?.value).toBe(
       "None before the limit",
     );
@@ -111,5 +148,30 @@ describe("summaryLines", () => {
     const lines = summaryLines({ ...docked, ending: "destroyed", ore: 0, payout: 0, cargoLost: 9 });
     expect(lines[1]).toBe("Lost: 9 cargo, 0 upgraded modules");
     expect(lines[2]).toContain("net −40 cr");
+  });
+});
+
+describe("scanRefusalText", () => {
+  it("says what to do when a scan does not start", () => {
+    expect(scanRefusalText("moving")).toBe("Scan: slow to a stop first");
+    expect(scanRefusalText("outOfRange")).toContain("fly nearer");
+    expect(scanRefusalText("revealed")).toContain("map");
+  });
+});
+
+describe("the alert cell", () => {
+  const alert = (level: number, hostiles: number) =>
+    cell(runCells({ ...working, alert: level }, null, { hostiles }), "alert");
+
+  it("counts the hostiles in the run beside the level", () => {
+    expect(alert(1, 1)?.value).toBe("1 · 1 hostile");
+    expect(alert(2, 4)?.value).toBe("2 · 4 hostiles");
+    expect(alert(0, 3)?.value).toBe("0 · 3 hostiles");
+  });
+
+  it("stops warning once the last hostile is gone, though the level stays", () => {
+    expect(alert(1, 0)).toMatchObject({ value: "1 · clear", level: "ok" });
+    expect(alert(3, 0)).toMatchObject({ value: "3 · clear", level: "ok" });
+    expect(alert(0, 0)).toMatchObject({ value: "0", level: "ok" });
   });
 });

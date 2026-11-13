@@ -6,6 +6,8 @@ test("a pilot stops at a deposit, extracts ore and vents", async ({ page }) => {
   test.setTimeout(150_000);
   await launch(page, QUIET);
   const run = page.locator("#run");
+  const gauges = page.locator("#ship");
+  const atDock = await gauges.boundingBox();
   // Straight out of the dock, then brake beside the deposit at (64, 1).
   await page.keyboard.down("KeyW");
   await expect(async () => {
@@ -22,7 +24,16 @@ test("a pilot stops at a deposit, extracts ore and vents", async ({ page }) => {
   await expect(run).toHaveAttribute("data-extractor", "on");
   // 2 ore a simulation minute. Allow wall-clock headroom when software rendering shares a CPU.
   await expect(run).toHaveAttribute("data-cargo", "1", { timeout: 60_000 });
-  await expect(page.locator('#ship [data-gauge="hold"]')).toContainText("1/20");
+  const hold = gauges.locator('[data-gauge="hold"]');
+  await expect(hold).toContainText("1/20");
+  // The unit gained is called out, and the panel is the size it was at the dock: a note that
+  // wrapped used to make it grow.
+  await expect(hold.locator(".gauge-change")).toHaveText("+1");
+  expect(await gauges.boundingBox()).toEqual(atDock);
+  const cut = await gauges
+    .locator(".gauge-note")
+    .evaluateAll((notes) => notes.filter((note) => note.scrollWidth > note.clientWidth).length);
+  expect(cut).toBe(0);
 
   await page.keyboard.press("KeyV");
   await expect(run).toHaveAttribute("data-extractor", "venting");
@@ -35,10 +46,19 @@ test("pressing X away from a deposit explains why nothing happened", async ({ pa
   await expect(lastNotice(page)).toHaveText("Extractor: hold still beside a deposit");
 });
 
+test("pressing C away from the site explains why nothing happened", async ({ page }) => {
+  await launch(page, QUIET);
+  await page.keyboard.press("KeyC");
+  await expect(lastNotice(page)).toHaveText("Scan: out of range · fly nearer the site's centre");
+});
+
 test("a scan held still in the site reveals the rich pocket and the waves", async ({ page }) => {
   test.setTimeout(90_000);
   await launch(page, QUIET);
   await flyIntoSite(page);
+  // Still coasting in: the scan is refused, and the pilot is told to stop.
+  await page.keyboard.press("KeyC");
+  await expect(lastNotice(page)).toHaveText("Scan: slow to a stop first");
   await page.keyboard.down("KeyS");
   await page.waitForTimeout(2_000);
   await page.keyboard.up("KeyS");
@@ -124,9 +144,10 @@ test("flying out and back docks, shows the summary and offers the next contract"
 
 test("holding Shift engages the cruise drive on the legs", async ({ page }) => {
   await launch(page, QUIET);
-  // On the leg the drives read ready, and the cruise drive's key is prompted.
-  await expect(page.locator('#run [data-cell="drive"]')).toContainText("Ready");
+  // On the leg nothing stops the drives, so the bar leaves them out and the cruise key is prompted.
   await expect(page.locator('#prompts [data-prompt="cruise"]')).toContainText("Shift");
+  await expect(page.locator('#run [data-cell="drive"]')).toHaveCount(0);
+  await expect(page.locator('#run [data-cell="contract"]')).toContainText("0/10 cargo · pays");
   const start = await position(page);
   await page.keyboard.down("ShiftLeft");
   await page.keyboard.down("KeyW");

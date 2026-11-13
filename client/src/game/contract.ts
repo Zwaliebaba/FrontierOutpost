@@ -11,6 +11,7 @@ import type {
   PocketKind,
   RunPhase,
   RunSummary,
+  ScanRefusal,
   ServerMessage,
   WaveInfo,
 } from "../protocol";
@@ -98,50 +99,109 @@ export function refusalText(reason: ExtractRefusal): string {
   return REFUSAL_TEXT[reason];
 }
 
+// Each says what to do next, as the extractor's do: a key that did nothing used to say nothing.
+const SCAN_REFUSAL_TEXT: Readonly<Record<ScanRefusal, string>> = {
+  notFlying: "Scan: only in flight",
+  revealed: "Scan: the site is already scanned · M for the map",
+  scanning: "Scan: already scanning · hold still",
+  outOfRange: "Scan: out of range · fly nearer the site's centre",
+  moving: "Scan: slow to a stop first",
+};
+
+export function scanRefusalText(reason: ScanRefusal): string {
+  return SCAN_REFUSAL_TEXT[reason];
+}
+
 /** Minutes and seconds, such as 3:07. */
 export function clock(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
   return `${String(Math.floor(whole / 60))}:${String(whole % 60).padStart(2, "0")}`;
 }
 
+/** How long before the next wave its cell warns, seconds. */
+const WAVE_WARNING_SECONDS = 30;
+
 /** How urgent a cell of the run status is. Shown by a marker as well as colour. */
 export type CellLevel = "ok" | "warn" | "danger";
 
 /** One instrument of the run status in the top bar: what it measures, and its reading. */
 export interface RunCell {
-  key: "phase" | "time" | "alert" | "drive" | "relay" | "scan" | "wave";
+  key: "phase" | "time" | "alert" | "contract" | "drive" | "relay" | "scan" | "wave";
   label: string;
   value: string;
   level: CellLevel;
 }
 
-// The drive state stops the cruise drive; a hostile lock or the extractor stops the jump drive
-// too, so the cell is labelled for both.
-const DRIVE_CELL: Readonly<Record<Drive, { value: string; level: CellLevel }>> = {
-  ready: { value: "Ready", level: "ok" },
-  inSite: { value: "Cruise off in the site", level: "ok" },
+// A hostile lock or the extractor stops the jump drive as well as the cruise drive, so the cell
+// is labelled for both. It shows only then: ready on the legs is the cruise prompt's to say, and
+// off in the site only repeated the phase.
+const DRIVE_CELL: Readonly<Record<Drive, { value: string; level: CellLevel } | null>> = {
+  ready: null,
+  inSite: null,
   hunted: { value: "Jammed: hostile lock", level: "danger" },
   extracting: { value: "Off while extracting", level: "warn" },
 };
+
+/** What the run status needs besides the pilot's own status. */
+export interface RunContext {
+  /** Drones, raiders and wardens in the run. */
+  hostiles?: number;
+  /** Site cargo a ship must dock with for the contract to pay; 0 for none. */
+  contractCargo?: number;
+  /** What the contract pays the crew, credits, if known. */
+  payout?: number | null;
+}
 
 /**
  * The run status, one cell for each thing a pilot reads at a glance: where they are, the clock,
  * the alert, the drives, the relays while held, a scan in progress and the next wave once a scan
  * has found it. Hull, hold and heat are on the ship gauges (game/gauges); what a scan found
  * about the pockets is on the system map (game/chart).
+ *
+ * The alert is how far the site has escalated (design §10): it never falls, and each step brings
+ * a bigger wave. A playtester read "1" with its warning marker as a hostile still out there after
+ * the last one was destroyed, so the cell says how many `hostiles` are in the run, and warns only
+ * while there are some.
+ *
+ * The contract is what the pilot came for, so its progress has a cell of its own: playtesting
+ * found the bar said little about the run while the contract hid in the hold gauge's note.
  */
-export function runCells(own: OwnStatus, reveal: Pick<Scanned, "waves"> | null): RunCell[] {
+export function runCells(
+  own: OwnStatus,
+  reveal: Pick<Scanned, "waves"> | null,
+  context: RunContext = {},
+): RunCell[] {
+  const { hostiles = 0, contractCargo = 0, payout = null } = context;
+  const pays = payout === null ? "" : ` · pays ${String(payout)} cr`;
   const cells: RunCell[] = [
     { key: "phase", label: "Phase", value: PHASE_TEXT[own.phase], level: "ok" },
     { key: "time", label: "Time", value: clock(own.elapsedSeconds), level: "ok" },
     {
       key: "alert",
       label: "Alert",
-      value: String(own.alert),
-      level: own.alert >= 3 ? "danger" : own.alert > 0 ? "warn" : "ok",
+      value:
+        String(own.alert) +
+        (hostiles > 0
+          ? ` · ${String(hostiles)} ${hostiles === 1 ? "hostile" : "hostiles"}`
+          : own.alert > 0
+            ? " · clear"
+            : ""),
+      level: hostiles === 0 ? "ok" : own.alert >= 3 ? "danger" : "warn",
     },
-    { key: "drive", label: "Drives", ...DRIVE_CELL[own.drive] },
   ];
+  if (contractCargo > 0) {
+    cells.push({
+      key: "contract",
+      label: "Contract",
+      value:
+        own.cargo >= contractCargo
+          ? `Met · dock to collect${payout === null ? "" : ` ${String(payout)} cr`}`
+          : `${String(own.cargo)}/${String(contractCargo)} cargo${pays}`,
+      level: "ok",
+    });
+  }
+  const drive = DRIVE_CELL[own.drive];
+  if (drive) cells.push({ key: "drive", label: "Drives", ...drive });
   if (own.relay > 0) {
     cells.push({
       key: "relay",
@@ -160,14 +220,17 @@ export function runCells(own: OwnStatus, reveal: Pick<Scanned, "waves"> | null):
   } else if (reveal) {
     // The next wave is the first the alert has not reached: a cut-out can bring one early.
     const next: WaveInfo | undefined = reveal.waves.find((wave) => wave.level > own.alert);
+    // A countdown, not the run-clock time it lands: a playtester read "4:58" beside "Time 2:47"
+    // as a counter that did not run. Both clocks count from launch.
+    const left = next ? next.atSeconds - own.elapsedSeconds : 0;
     cells.push({
       key: "wave",
       label: "Next wave",
       value: next
-        ? `${clock(next.atSeconds)} · ${String(next.drones)} drones · ` +
+        ? `${left > 0 ? `in ${clock(left)}` : "due"} · ${String(next.drones)} drones · ` +
           `${String(next.raiders)} raiders`
         : "None before the limit",
-      level: "ok",
+      level: next && left <= WAVE_WARNING_SECONDS ? "warn" : "ok",
     });
   }
   return cells;

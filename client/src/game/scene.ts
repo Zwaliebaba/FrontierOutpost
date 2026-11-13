@@ -22,6 +22,7 @@ import type { Color, Material as ThreeMaterial, Object3D } from "three";
 import type { DepositInfo, EntityKind, Material, ObstacleInfo, SiteInfo } from "../protocol";
 import { berthPositions } from "../outpost/placement";
 import type { EntityPose } from "../net/interpolation";
+import { ExtractorBeam } from "./extractorBeam";
 import type { Flash, JumpEffects } from "./jumpEffects";
 import type { Shots } from "./shots";
 import { SHIP_HEIGHT } from "../view/hulls";
@@ -65,10 +66,7 @@ const PULSE_RING = { far: 7.5, near: 1.5 };
 const STREAK_LENGTH = 60;
 /** A flash's ring, metres: it opens where a ship left and closes where one arrives. */
 const FLASH_RING = { near: 1.5, far: 7.5 };
-const X_AXIS = new Vector3(1, 0, 0);
 const LANDMARK_SEED = 2266;
-/** The extractor beam's coloured edge, metres across: thinner than a bolt, which it is not. */
-const BEAM_WIDTH = 0.2;
 /** How high in a full deposit's crystals the beam ends, metres. */
 const BEAM_END_HEIGHT = 0.6;
 
@@ -235,7 +233,7 @@ export class ExpeditionScene {
   /** Holds the outpost's station at the dock; not cleared with the site, which it outlives. */
   readonly #dock = new Group();
   /** The extractor's beam from the player's ship to the deposit it works; one at a time. */
-  readonly #beam: Mesh<BoxGeometry, MeshBasicMaterial>;
+  readonly #extractor = new ExtractorBeam();
   #station: Object3D | null = null;
   #berths: { x: number; z: number }[] = [];
   #ownShipId: number;
@@ -247,21 +245,18 @@ export class ExpeditionScene {
     this.scene.add(...stationLights());
     this.#bracket.visible = false;
     this.#dock.name = "dock";
-    // The style guide's rule for effects: a bright core in a coloured edge.
-    this.#beam = new Mesh(
-      new BoxGeometry(1, BEAM_WIDTH, BEAM_WIDTH),
-      new MeshBasicMaterial({ toneMapped: false, transparent: true, opacity: 0.5 }),
-    );
-    this.#beam.add(
-      new Mesh(new BoxGeometry(1, BEAM_WIDTH / 3, BEAM_WIDTH / 3), new MeshBasicMaterial()),
-    );
-    this.#beam.name = "extractor beam";
-    this.#beam.visible = false;
     this.#charge = { group: new Group(), steady: effectRing(), pulse: effectRing() };
     this.#charge.group.add(this.#charge.steady, this.#charge.pulse);
     this.#charge.group.name = "jump spool";
     this.#charge.group.visible = false;
-    this.scene.add(this.#bracket, this.#site, this.#dock, this.#beam, this.#charge.group);
+    this.scene.add(
+      this.#bracket,
+      this.#site,
+      this.#dock,
+      this.#extractor.beam,
+      this.#extractor.fragments,
+      this.#charge.group,
+    );
   }
 
   /** Health and shields are authoritative readings; cosmetic bolt arrival never implies a hit. */
@@ -279,8 +274,12 @@ export class ExpeditionScene {
     return this.#flashes.filter((flash) => flash.group.visible).map((flash) => flash.group);
   }
 
-  get beam(): Readonly<Mesh> {
-    return this.#beam;
+  get beam(): Readonly<Group> {
+    return this.#extractor.beam;
+  }
+
+  get beamFragments(): Readonly<Group> {
+    return this.#extractor.fragments;
   }
 
   /**
@@ -291,7 +290,7 @@ export class ExpeditionScene {
   setBeam(from: { x: number; z: number } | null, deposit: number | null): void {
     const drawn = deposit === null ? undefined : this.#deposits[deposit];
     if (!from || !drawn) {
-      this.#beam.visible = false;
+      this.#extractor.hide();
       return;
     }
     // From the keel, so the hull hides the beam beneath it and the beam leaves from under the
@@ -299,16 +298,11 @@ export class ExpeditionScene {
     const start = new Vector3(from.x, RENDER_HEIGHT - SHIP_HEIGHT / 2, from.z);
     // Into the crystals, which shrink as the deposit empties.
     const end = drawn.group.position.clone().setY(BEAM_END_HEIGHT * drawn.group.scale.y);
-    const length = start.distanceTo(end);
-    if (length < 1e-3) {
-      this.#beam.visible = false;
+    if (start.distanceTo(end) < 1e-3) {
+      this.#extractor.hide();
       return;
     }
-    this.#beam.visible = true;
-    this.#beam.material.color.copy(drawn.material.color);
-    this.#beam.position.copy(start).add(end).multiplyScalar(0.5);
-    this.#beam.scale.set(length, 1, 1);
-    this.#beam.quaternion.setFromUnitVectors(X_AXIS, end.sub(start).normalize());
+    this.#extractor.aim(start, end, drawn.material.color);
   }
 
   /**
@@ -364,6 +358,8 @@ export class ExpeditionScene {
     dt = 0,
     jumps?: JumpEffects,
   ): void {
+    // Feedback is off when the system asks for reduced motion (configureFeedback).
+    this.#extractor.step(dt, !this.#feedback);
     const seen = new Set<number>();
     for (const pose of poses) {
       seen.add(pose.id);
@@ -646,7 +642,7 @@ export class ExpeditionScene {
     this.#obstacles.length = 0;
     this.#pockets.length = 0;
     this.#deposits.length = 0;
-    this.#beam.visible = false;
+    this.#extractor.hide();
   }
 }
 

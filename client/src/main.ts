@@ -12,6 +12,7 @@ import type {
   Catalog,
   CrewInfo,
   OwnStatus,
+  PocketKind,
   RunSummary,
   SnapshotEvent,
 } from "./protocol";
@@ -38,6 +39,7 @@ import {
   THREAT_TEXT,
   launch,
   refusalText,
+  scanRefusalText,
   runCells,
   scanSummary,
   summaryLines,
@@ -45,6 +47,7 @@ import {
 import type { Contract, Joined, RunCell, Scanned } from "./game/contract";
 import { chartPlaces, jumpReadiness, sideOf, waypointFor } from "./game/chart";
 import type { ChartPlace } from "./game/chart";
+import { freshPockets, openLine, parseSeen, seenAfter, unlockNotice } from "./game/unlocks";
 import { ChartView, glyph, sitePreview } from "./game/chartView";
 import { Pulse, gauges } from "./game/gauges";
 import { CANCEL_TEXT, JumpDrive, REFUSAL_TEXT } from "./game/jump";
@@ -172,6 +175,7 @@ const gaugeRows = new Map<
     label: HTMLSpanElement;
     fill: HTMLDivElement;
     value: HTMLSpanElement;
+    change: HTMLSpanElement;
     note: HTMLSpanElement;
   }
 >();
@@ -182,11 +186,12 @@ for (const key of ["hull", "hold", "heat"] as const) {
   const track = element("div", undefined, "gauge-track");
   const fill = element("div", undefined, "gauge-fill");
   const value = element("span", undefined, "gauge-value");
+  const change = element("span", undefined, "gauge-change");
   const note = element("span", undefined, "gauge-note");
   track.append(fill);
-  row.append(label, track, value, note);
+  row.append(label, track, value, change, note);
   shipPanel.append(row);
-  gaugeRows.set(key, { row, label, fill, value, note });
+  gaugeRows.set(key, { row, label, fill, value, change, note });
 }
 document.body.append(shipPanel);
 const signInPanel = element("div", "signin", "panel");
@@ -552,6 +557,17 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   } catch {
     /* Storage may be disabled. */
   }
+  // Which facility-opened pockets the pilot has flown with, so a newly opened one is called new.
+  const seenKey = `frontier.pocketsSeen.${callsign}`;
+  const readSeen = (): PocketKind[] | null => {
+    try {
+      return parseSeen(localStorage.getItem(seenKey));
+    } catch {
+      return null;
+    }
+  };
+  /** The pockets new to the pilot in the run being flown. */
+  let freshKinds: PocketKind[] = [];
   const saveReceipts = () => {
     try {
       localStorage.setItem(receiptKey, receipts.serialize());
@@ -583,8 +599,14 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     // The site as the system map will draw it, and its pockets listed with the map's glyphs.
     const { site } = offer;
     const figure = element("figure", undefined, "briefing-site");
+    const fresh = freshPockets(site, readSeen());
     figure.append(
-      sitePreview(site, chartPlaces(site, { x: site.dockX, z: site.dockZ }, null, false), 244, 108),
+      sitePreview(
+        site,
+        chartPlaces(site, { x: site.dockX, z: site.dockZ }, null, false, fresh),
+        244,
+        108,
+      ),
     );
     const pockets = element("ul", undefined, "briefing-places");
     for (const pocket of site.pockets) {
@@ -595,8 +617,15 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         glyph(pocket.kind, 18),
         pocket.locked
           ? `${POCKET_NAME[pocket.kind]}: locked, needs ${needs ?? "a facility"}`
-          : `${POCKET_NAME[pocket.kind]}: open`,
+          : openLine(pocket.kind),
       );
+      if (!pocket.locked && fresh.includes(pocket.kind)) {
+        item.dataset.fresh = "true";
+        const tag = element("span", undefined, "tag");
+        tag.dataset.tag = "new";
+        tag.textContent = "NEW";
+        item.append(" ", tag);
+      }
       pockets.append(item);
     }
     const note = element("p");
@@ -875,6 +904,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     life?.session.retire();
     life = beginLife(connection, joined, loaded);
     reveal = null;
+    freshKinds = freshPockets(joined.site, readSeen());
+    const unlocked = unlockNotice(joined.site, freshKinds);
+    if (unlocked) showNotice(unlocked, "good");
     jumpDrive.reset();
     jumpEffects.reset();
     jumpsSeen = 0;
@@ -883,7 +915,13 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       joined.site,
       joined.obstacles,
       joined.deposits,
-      chartPlaces(joined.site, { x: joined.site.dockX, z: joined.site.dockZ }, null, false),
+      chartPlaces(
+        joined.site,
+        { x: joined.site.dockX, z: joined.site.dockZ },
+        null,
+        false,
+        freshKinds,
+      ),
     );
     chartAt = Number.NEGATIVE_INFINITY;
     selection.release();
@@ -964,6 +1002,14 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         break;
       case "runOver":
         if (outpost) glide = { from: target.clone().sub(outpost.centre), toStation: true, t: 0 };
+        if (life) {
+          try {
+            localStorage.setItem(seenKey, seenAfter(life.joined.site, readSeen()));
+          } catch {
+            /* Storage may be disabled; the pockets read as new again next time. */
+          }
+        }
+        freshKinds = [];
         life?.session.retire();
         life = null;
         jumpDrive.reset();
@@ -1022,6 +1068,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       }
       case "extractRefused":
         showNotice(refusalText(message.reason), "warn");
+        break;
+      case "scanRefused":
+        showNotice(scanRefusalText(message.reason), "warn");
         break;
       case "jumpSpooling":
         if (message.ship !== life?.session.shipId) {
@@ -1573,7 +1622,19 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         setData(run, "cargo", String(status.cargo));
         setData(run, "extractor", status.extractor);
         setData(run, "revealed", String(reveal !== null));
-        drawRun(runCells(status, reveal));
+        // Everything that fights: the nest core is a target, not a hunter.
+        const hostiles = poses.filter(
+          (pose) => pose.kind !== "playerShip" && pose.kind !== "core",
+        ).length;
+        const payout =
+          contract?.tiers.find((offer) => offer.tier === current.joined.tier)?.payout ?? null;
+        drawRun(
+          runCells(status, reveal, {
+            hostiles,
+            contractCargo: current.joined.contractCargo,
+            payout,
+          }),
+        );
         const lockRange = current.joined.lockRange;
         drawPrompts(
           prompts({
@@ -1587,6 +1648,16 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
                   }
                 : null,
             scanned: reveal !== null,
+            // The deep-scan array reaches the site from anywhere off the dock.
+            scanShort: current.joined.fitted.includes("deep_scan")
+              ? 0
+              : Math.max(
+                  0,
+                  Math.hypot(
+                    current.joined.site.centreX - own.x,
+                    current.joined.site.centreZ - own.z,
+                  ) - current.joined.scanRange,
+                ),
             locked: locked !== undefined,
             lockedInRange: locked !== undefined && lockedAt <= current.joined.weaponRange,
             hostileInLockRange: poses.some(
@@ -1602,7 +1673,6 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           current.hull,
           current.hullPulse.recent(now),
           current.cargoPulse.recent(now),
-          current.joined.contractCargo,
         )) {
           const row = gaugeRows.get(gauge.key);
           if (!row) continue;
@@ -1612,7 +1682,12 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           if (written.changed(`${id}.width`, width)) row.fill.style.width = width;
           if (written.changed(`${id}.label`, gauge.label)) row.label.textContent = gauge.label;
           if (written.changed(`${id}.value`, gauge.value)) row.value.textContent = gauge.value;
-          if (written.changed(`${id}.note`, gauge.note)) row.note.textContent = gauge.note;
+          if (written.changed(`${id}.change`, gauge.change)) row.change.textContent = gauge.change;
+          if (written.changed(`${id}.note`, gauge.note)) {
+            row.note.textContent = gauge.note;
+            // A window too narrow for the whole note cuts it short; the rest is on hover.
+            row.note.title = gauge.note;
+          }
         }
         // The extractor's beam, to the deposit it can be working: the nearest within reach.
         const working =
@@ -1621,7 +1696,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       }
       // The map, the minimap beside the gauges, and the waypoint to the destination chosen.
       const { site } = current.joined;
-      const places = chartPlaces(site, own, reveal, (status?.cargo ?? 0) > 0);
+      const places = chartPlaces(site, own, reveal, (status?.cargo ?? 0) > 0, freshKinds);
       const chosen = places.find((place) => place.id === jumpDrive.selected);
       if (now - chartAt >= CHART_MS) {
         chartAt = now;

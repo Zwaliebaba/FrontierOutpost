@@ -2,7 +2,10 @@
  * The ship gauges: hull, hold and heat as three labelled bars. Playtesting found the run line's
  * one bar, heat, read as the hold: it fills over a minute of extraction and empties on a vent or
  * cut-out, while the hold itself rises a unit every 30 seconds at the basic rate. Each gauge now
- * names what it measures and what happens next. Kept free of the DOM so it can be tested.
+ * names what it measures and what happens next. A gauge is one line whatever it says: a note
+ * that wrapped made the panel grow and shrink as the hold filled, so a change just seen has its
+ * own place beside the value and a note keeps to [`NOTE_MOST`]. Kept free of the DOM so it can be
+ * tested.
  */
 import type { OwnStatus } from "../protocol";
 
@@ -16,11 +19,15 @@ export interface Gauge {
   /** 0 to 1. */
   share: number;
   value: string;
-  /** What the gauge means right now, or empty. */
+  /** A change just seen, such as "+1" in the hold or "−10%" of the hull, or empty. */
+  change: string;
+  /** What the gauge means right now, or empty. At most [`NOTE_MOST`] characters. */
   note: string;
   level: GaugeLevel;
 }
 
+/** The longest note, in characters: what the panel's note column is sized to show on one line. */
+export const NOTE_MOST = 40;
 /** How long a change in the hold or the hull is called out, milliseconds. */
 export const PULSE_MS = 2_500;
 
@@ -58,44 +65,38 @@ export function hullGauge(hull: number, shield: number, lost: number): Gauge {
   const share = clampShare(hull / 255);
   const notes = [
     ...(shield > 0 ? [`shield ${String(shield)}`] : []),
-    ...(lost < 0 ? [`hit −${percent(-lost / 255)}`] : []),
-    ...(share < 0.3 ? ["critical: no repairs until you dock"] : []),
+    ...(share < 0.3 ? ["critical: dock to repair"] : []),
   ];
   return {
     key: "hull",
     label: "Hull",
     share,
     value: percent(share),
+    change: lost < 0 ? `−${percent(-lost / 255)}` : "",
     note: notes.join(" · "),
     level: share < 0.3 ? "danger" : share < 0.6 ? "warn" : "ok",
   };
 }
 
 /**
- * The hold. `contractCargo` is what a ship must dock with for the contract to pay: until the hold
- * has it, the gauge says how far short it is, so a pilot never docks short by surprise.
+ * The hold. How far it is from what the contract needs is the top bar's contract cell
+ * (game/contract), so the gauge says only what cargo is worth: nothing until docked.
  */
-export function holdGauge(own: OwnStatus, gained: number, contractCargo = 0): Gauge {
+export function holdGauge(own: OwnStatus, gained: number): Gauge {
   const share = own.capacity > 0 ? clampShare(own.cargo / own.capacity) : 0;
   const full = own.capacity > 0 && own.cargo >= own.capacity;
-  const short = contractCargo - own.cargo;
-  const notes = [
-    ...(gained > 0 ? [`+${String(gained)} cargo`] : []),
-    full
-      ? "full: fly home and dock to bank it"
-      : short > 0
-        ? `contract pays from ${String(contractCargo)}: ${String(short)} more`
-        : own.cargo > 0
-          ? (contractCargo > 0 ? "enough for the contract · " : "") +
-            "counts only once docked at home"
-          : "",
-  ].filter((note) => note !== "");
+  const note = full
+    ? "full: fly home and dock to bank it"
+    : own.cargo > 0
+      ? "counts only once docked at home"
+      : "";
   return {
     key: "hold",
     label: "Hold",
     share,
     value: `${String(own.cargo)}/${String(own.capacity)}`,
-    note: notes.join(" · "),
+    change: gained > 0 ? `+${String(gained)}` : "",
+    note,
     level: full ? "warn" : "ok",
   };
 }
@@ -116,6 +117,7 @@ export function heatGauge(own: OwnStatus): Gauge {
     label: "Heat",
     share,
     value: percent(share),
+    change: "",
     note,
     level: own.extractor === "cutOut" || share >= 0.9 ? "danger" : share >= 0.75 ? "warn" : "ok",
   };
@@ -127,11 +129,6 @@ export function gauges(
   hull: number,
   hullChange: number,
   cargoChange: number,
-  contractCargo = 0,
 ): Gauge[] {
-  return [
-    hullGauge(hull, own.shield, hullChange),
-    holdGauge(own, cargoChange, contractCargo),
-    heatGauge(own),
-  ];
+  return [hullGauge(hull, own.shield, hullChange), holdGauge(own, cargoChange), heatGauge(own)];
 }

@@ -21,6 +21,7 @@ const quiet: PromptInput = {
   own,
   deposit: null,
   scanned: true,
+  scanShort: 0,
   locked: false,
   lockedInRange: false,
   hostileInLockRange: false,
@@ -61,9 +62,17 @@ describe("prompts", () => {
   });
 
   it("offers the scan inside an unscanned site, until the scan starts", () => {
-    expect(ids({ ...quiet, scanned: false })).toEqual(["scan"]);
+    expect(prompts({ ...quiet, scanned: false })).toEqual([
+      { id: "scan", key: "C", text: "Scan · finds the rich pocket, relays and waves · hold still" },
+    ]);
     expect(ids({ ...quiet, scanned: false, own: { ...own, scan: 10 } })).toEqual([]);
     expect(ids({ ...quiet, scanned: false, own: { ...own, phase: "approach" } })).toEqual([]);
+  });
+
+  it("out of scan range, says how much nearer to fly instead of offering the key", () => {
+    expect(prompts({ ...quiet, scanned: false, scanShort: 41.6 })).toEqual([
+      { id: "scanRange", key: "", text: "Scan · 42 m nearer the site's centre" },
+    ]);
   });
 
   it("offers the cruise drive on the legs while it is ready", () => {
@@ -77,6 +86,7 @@ describe("prompts", () => {
       own: { ...own, extractor: "on", heat: 250 },
       deposit: { distance: 2, left: 5, inReach: true },
       scanned: false,
+      scanShort: 0,
       locked: true,
       lockedInRange: true,
       hostileInLockRange: true,

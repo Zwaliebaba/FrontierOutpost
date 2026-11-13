@@ -970,8 +970,8 @@ body[data-station="dock"] #account {
 #run {
   display: grid;
   grid-template-columns:
-    minmax(0, 1fr) minmax(0, 0.65fr) minmax(0, 0.5fr) minmax(0, 1.45fr)
-    minmax(0, 0.9fr) minmax(0, 1.15fr) minmax(0, 1.65fr);
+    minmax(0, 1fr) minmax(0, 0.6fr) minmax(0, 0.85fr) minmax(0, 1.3fr) minmax(0, 1.1fr)
+    minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 1.65fr);
   overflow: visible;
 }
 .cell[data-cell="phase"] {
@@ -983,17 +983,20 @@ body[data-station="dock"] #account {
 .cell[data-cell="alert"] {
   grid-column: 3;
 }
-.cell[data-cell="drive"] {
+.cell[data-cell="contract"] {
   grid-column: 4;
 }
-.cell[data-cell="relay"] {
+.cell[data-cell="drive"] {
   grid-column: 5;
 }
-.cell[data-cell="scan"] {
+.cell[data-cell="relay"] {
   grid-column: 6;
 }
-.cell[data-cell="wave"] {
+.cell[data-cell="scan"] {
   grid-column: 7;
+}
+.cell[data-cell="wave"] {
+  grid-column: 8;
 }
 .cell {
   grid-row: 1;
@@ -1014,14 +1017,29 @@ body[data-station="dock"] #account {
 }
 #ship {
   z-index: 8;
-  max-width: min(540px, calc(100vw - 290px));
+  max-width: calc(100vw - 290px);
 }
+/* Every gauge is one line, so the panel keeps its size whatever the notes say. The note column
+   holds the longest note (NOTE_MOST in game/gauges: 40 characters at 11px is 37ch of the
+   panel's 12px); in a window too narrow for that the note is cut short, never wrapped. */
 #ship[data-active] {
-  grid-template-columns: auto minmax(80px, 140px) 48px minmax(100px, 220px);
+  grid-template-columns: auto minmax(60px, 120px) 48px 5ch minmax(0, 37ch);
+}
+.gauge-change {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.gauge[data-gauge="hold"] .gauge-change {
+  color: var(--good);
+}
+.gauge[data-gauge="hull"] .gauge-change {
+  color: #f0a080;
 }
 .gauge-note {
   font-size: 11px;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 body[data-map="open"] #messages {
   left: calc(50% - 100px);

@@ -157,6 +157,22 @@ impl Pot {
     }
 }
 
+/// Why a scan did not start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScanRefusal {
+    /// Destroyed, out of the run, or the run is over.
+    NotFlying,
+    /// A scan has already revealed the site to the crew.
+    Revealed,
+    /// This pilot's scan is already in hand.
+    Scanning,
+    /// Beyond scan range of the site's centre; with the deep-scan array,
+    /// still at the dock.
+    OutOfRange,
+    /// Faster than [`MAX_SCAN_SPEED`].
+    Moving,
+}
+
 /// Something that happened in the run, for the event log.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RunEvent {
@@ -354,6 +370,10 @@ pub enum Drive {
 pub struct Options {
     /// Replaces the site's opening threat, up to the NPC cap; for benchmarks.
     pub opening_threat: Option<u32>,
+    /// Multiplies every extraction rate, in whole percent: 200 mines twice
+    /// as fast. For playtests trying a rate before the design takes it;
+    /// `None` is the design's rate.
+    pub extract_percent: Option<u32>,
     /// What each pilot actually paid for supplies, when it was less than
     /// [`LAUNCH_COST`]: a pilot short of credits pays what they have.
     pub supplies_paid: Option<u32>,
@@ -462,6 +482,9 @@ pub struct Checkpoint {
     pub warned: bool,
     pub launch_cost: u32,
     pub deposits: Vec<f32>,
+    /// The playtest's extraction rate, if one was set ([`Options`]).
+    #[serde(default)]
+    pub extract_percent: Option<u32>,
     pub crew: Vec<PilotCheckpoint>,
     /// The nest core's hull, while it stands.
     #[serde(default)]
@@ -494,6 +517,8 @@ pub struct Run {
     events: Vec<(u32, RunEvent)>,
     /// What each pilot paid for supplies.
     launch_cost: u32,
+    /// Multiplies every extraction rate, in whole percent ([`Options`]).
+    extract_percent: Option<u32>,
     /// A checkpoint is due at the end of this tick.
     checkpoint_due: bool,
     /// A connected pilot's run ended since the instance last asked whether
@@ -558,6 +583,7 @@ impl Run {
             ended: None,
             events: Vec::new(),
             launch_cost: options.supplies_paid.unwrap_or(LAUNCH_COST),
+            extract_percent: options.extract_percent,
             // A launch is paid for, so it is recoverable from its first tick.
             checkpoint_due: true,
             crew_left: false,
@@ -1050,19 +1076,23 @@ impl Run {
     }
 
     /// Starts a scan of the site. It needs the ship nearly still and within
-    /// scan range of the site, and stops the extractor. Returns false if it
-    /// cannot start or the site is already revealed.
-    pub fn scan(&mut self, ship: ShipId) -> bool {
+    /// scan range of the site, and stops the extractor. Says why when it
+    /// cannot start, so the pilot is never left guessing.
+    pub fn scan(&mut self, ship: ShipId) -> Result<(), ScanRefusal> {
         let Some(index) = self.index(ship).filter(|_| self.flying(ship)) else {
-            return false;
+            return Err(ScanRefusal::NotFlying);
         };
-        if self.revealed || self.pilots[index].scan.is_some() || !self.can_scan(ship) {
-            return false;
+        if self.revealed {
+            return Err(ScanRefusal::Revealed);
         }
+        if self.pilots[index].scan.is_some() {
+            return Err(ScanRefusal::Scanning);
+        }
+        self.scan_blocked(ship)?;
         self.pilots[index].extractor.stop();
         self.pilots[index].scan = Some(0);
         self.log(RunEvent::ScanStarted { pilot: ship });
-        true
+        Ok(())
     }
 
     /// Takes a pilot out of the run for good: it is abandoned at once. A
@@ -1165,6 +1195,7 @@ impl Run {
             warned: self.warned,
             launch_cost: self.launch_cost,
             deposits: self.site.deposits.iter().map(|d| d.remaining).collect(),
+            extract_percent: self.extract_percent,
             crew: self
                 .pilots
                 .iter()
@@ -1284,6 +1315,7 @@ impl Run {
             ended: None,
             events: Vec::new(),
             launch_cost: checkpoint.launch_cost,
+            extract_percent: checkpoint.extract_percent,
             checkpoint_due: false,
             crew_left: false,
             core: None,
@@ -1448,12 +1480,14 @@ impl Run {
         (a.state.x - b.state.x).hypot(a.state.z - b.state.z) <= self.lock_range()
     }
 
-    fn can_scan(&self, ship: ShipId) -> bool {
+    /// Whether the ship's place and speed let it scan. Range is checked
+    /// first: a pilot far from the site needs to fly, not to stop.
+    fn scan_blocked(&self, ship: ShipId) -> Result<(), ScanRefusal> {
         let Some(state) = self.world.ship(ship).map(|s| s.state) else {
-            return false;
+            return Err(ScanRefusal::NotFlying);
         };
         let Some(pilot) = self.pilot(ship) else {
-            return false;
+            return Err(ScanRefusal::NotFlying);
         };
         let (cx, cz) = self.site.template.centre;
         // The deep-scan array reaches the site from the approach leg.
@@ -1462,7 +1496,13 @@ impl Run {
         } else {
             (state.x - cx).hypot(state.z - cz) <= self.scan_range()
         };
-        state.speed.abs() <= MAX_SCAN_SPEED && in_reach
+        if !in_reach {
+            Err(ScanRefusal::OutOfRange)
+        } else if state.speed.abs() > MAX_SCAN_SPEED {
+            Err(ScanRefusal::Moving)
+        } else {
+            Ok(())
+        }
     }
 
     fn conditions(&self, index: usize, deposit: usize) -> Conditions {
@@ -1493,7 +1533,7 @@ impl Run {
             at_deposit,
             remaining: d.remaining,
             space: pilot.capacity.saturating_sub(pilot.total()),
-            rate,
+            rate: rate * self.extract_percent.unwrap_or(100) as f32 / 100.0,
             // A heat sink lets more extraction build the same heat.
             heat_factor: self.site.values.hazard.heat_factor() * pocket.template.heat_factor
                 / pilot.fitting.heat_capacity,
@@ -1870,7 +1910,7 @@ impl Run {
         let Some(progress) = self.pilots[index].scan else {
             return;
         };
-        if !self.can_scan(ship) {
+        if self.scan_blocked(ship).is_err() {
             self.pilots[index].scan = None;
             self.log(RunEvent::ScanInterrupted { pilot: ship });
             return;
@@ -2420,6 +2460,7 @@ mod tests {
         let options = Options {
             opening_threat: Some(0),
             supplies_paid: Some(25),
+            ..Options::default()
         };
         let (mut run, ships) = Run::launch(site, 1, options);
         assert!(events(&mut run).contains(&RunEvent::SuppliesSpent {
@@ -2464,6 +2505,34 @@ mod tests {
         assert_eq!(summary.phases.approach, 102, "100 steps and two placements");
         assert_eq!(summary.phases.objective, 201);
         assert_eq!(summary.phases.return_leg, 61);
+    }
+
+    #[test]
+    fn a_playtest_rate_multiplies_extraction_and_survives_a_restore() {
+        let mined = |extract_percent: Option<u32>| {
+            let site = Site::generate(COMPACT_SITE, 2, ThreatTier::I, 1, &[]);
+            let options = Options {
+                opening_threat: Some(0),
+                extract_percent,
+                ..Options::default()
+            };
+            let (mut run, ships) = Run::launch(site, 1, options);
+            let ship = ships[0];
+            at_deposit(&mut run, ship);
+            assert_eq!(run.extract(ship, true), Ok(()));
+            // Short of the minute that heats the extractor to its cut-out.
+            steps(&mut run, 55 * TICKS_PER_SECOND);
+            (run.status(ship).unwrap().cargo, run)
+        };
+        let (basic, _) = mined(None);
+        let (doubled, run) = mined(Some(200));
+        assert!(basic >= 1, "the basic rate mines a unit in 55 seconds");
+        assert!(
+            doubled >= 2 * basic && doubled > basic,
+            "{doubled} against {basic}"
+        );
+        let restored = Run::restore(&run.checkpoint()).unwrap();
+        assert_eq!(restored.checkpoint().extract_percent, Some(200));
     }
 
     #[test]
@@ -2608,8 +2677,8 @@ mod tests {
     fn a_scan_needs_stillness_and_reveals_the_site() {
         let (mut run, ship) = quiet(9);
         at_deposit(&mut run, ship);
-        assert!(run.scan(ship));
-        assert!(!run.scan(ship), "already scanning");
+        assert_eq!(run.scan(ship), Ok(()));
+        assert_eq!(run.scan(ship), Err(ScanRefusal::Scanning));
         steps(&mut run, SCAN_TICKS / 2);
         run.world.ship_mut(ship).unwrap().state.speed = 5.0;
         run.step();
@@ -2617,17 +2686,37 @@ mod tests {
         assert!(events(&mut run).contains(&RunEvent::ScanInterrupted { pilot: ship }));
         let deposit = run.site.deposits[0];
         place(&mut run, ship, (deposit.x, deposit.z));
-        assert!(run.scan(ship));
+        assert_eq!(run.scan(ship), Ok(()));
         steps(&mut run, SCAN_TICKS);
         assert!(run.revealed());
         assert!(events(&mut run).contains(&RunEvent::Scanned { pilot: ship }));
-        assert!(!run.scan(ship), "nothing left to reveal");
+        assert_eq!(run.scan(ship), Err(ScanRefusal::Revealed));
     }
 
     #[test]
     fn a_scan_cannot_start_from_the_dock() {
         let (mut run, ship) = quiet(10);
-        assert!(!run.scan(ship));
+        assert_eq!(run.scan(ship), Err(ScanRefusal::OutOfRange));
+    }
+
+    #[test]
+    fn a_refused_scan_says_whether_to_fly_closer_or_to_stop() {
+        let (mut run, ship) = quiet(10);
+        let centre = run.site.template.centre;
+        place(&mut run, ship, centre);
+        run.world.ship_mut(ship).unwrap().state.speed = MAX_SCAN_SPEED + 1.0;
+        assert_eq!(run.scan(ship), Err(ScanRefusal::Moving));
+        // Far from the site, flying closer comes first, moving or not.
+        let far = (centre.0 + run.scan_range() + 10.0, centre.1);
+        place(&mut run, ship, far);
+        run.world.ship_mut(ship).unwrap().state.speed = MAX_SCAN_SPEED + 1.0;
+        assert_eq!(run.scan(ship), Err(ScanRefusal::OutOfRange));
+        assert!(
+            !events(&mut run)
+                .iter()
+                .any(|event| matches!(event, RunEvent::ScanStarted { .. })),
+            "a refused scan starts nothing"
+        );
     }
 
     #[test]
@@ -2919,16 +3008,24 @@ mod tests {
         run.fit(ship, &fitted(&["scout_rig"]));
         let centre = run.site.template.centre;
         place(&mut run, ship, centre);
-        assert!(run.scan(ship));
+        assert_eq!(run.scan(ship), Ok(()));
         steps(&mut run, SCAN_TICKS / 2);
         assert!(run.revealed(), "half the basic time");
 
         let (mut run, ship) = quiet(22);
         run.fit(ship, &fitted(&["deep_scan"]));
-        assert!(!run.scan(ship), "not from the dock");
+        assert_eq!(
+            run.scan(ship),
+            Err(ScanRefusal::OutOfRange),
+            "not from the dock"
+        );
         place(&mut run, ship, (-60.0, 0.0));
         run.step();
-        assert!(run.scan(ship), "from the approach leg, far from the site");
+        assert_eq!(
+            run.scan(ship),
+            Ok(()),
+            "from the approach leg, far from the site"
+        );
         steps(&mut run, SCAN_TICKS);
         assert!(run.revealed());
     }

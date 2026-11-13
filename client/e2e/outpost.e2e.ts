@@ -61,12 +61,22 @@ test("building a refinery puts it on its socket and opens its pocket", async ({ 
   await expect
     .poll(async () => (await scene(page)).installed)
     .toEqual([{ socket: "a", facility: "refinery", tier: 1, powered: true }]);
-  // The contract is shown again, with the pocket the refinery opens.
-  await expect(page.locator('#briefing[data-state="open"]')).toContainText("Volatile veins: open");
+  // The contract is shown again, with the pocket the refinery opens, credited and called new.
+  const briefing = page.locator('#briefing[data-state="open"]');
+  await expect(briefing).toContainText("Volatile veins: open · your refinery opened it");
+  await expect(briefing.locator('li[data-fresh="true"] .tag[data-tag="new"]')).toHaveText("NEW");
   await expect(home(page).locator('button[data-action="socket:b"]')).toHaveAttribute(
     "data-state",
     "empty",
   );
+  // The run it opened for announces it and tags it on the map.
+  await briefing.locator('button[data-tier="1"]').click();
+  await page.locator("#hud[data-x]").waitFor();
+  await expect(page.locator("#notice")).toContainText("New pocket open: Volatile veins (refinery");
+  await page.keyboard.press("KeyM");
+  await expect(
+    page.locator('.chart-row[data-target="volatileVeins"] .tag[data-tag="new"]'),
+  ).toBeVisible();
 });
 
 test("reconfiguring moves a facility for the reinstallation cost", async ({ page }) => {
