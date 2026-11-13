@@ -15,7 +15,7 @@ kbd {
   border: 1px solid #60798e;
   border-bottom-width: 2px;
   font:
-    10px/15px ui-monospace,
+    11px/15px ui-monospace,
     monospace;
   text-align: center;
   letter-spacing: 0;
@@ -50,7 +50,7 @@ kbd {
 .chart-caption {
   fill: var(--chart-ink);
   font:
-    9px ui-monospace,
+    11px ui-monospace,
     monospace;
   letter-spacing: 0.14em;
 }
@@ -95,7 +95,7 @@ kbd {
 .place-sub {
   fill: var(--muted);
   font:
-    10px ui-monospace,
+    11px ui-monospace,
     monospace;
 }
 .place-name,
@@ -190,6 +190,10 @@ kbd {
   stroke: var(--hostile);
   stroke-width: 1.6;
 }
+/* The briefing's still preview: no course, no ship, glyphs only. */
+.chart-svg-preview .place-glyph {
+  stroke-width: 1.5;
+}
 .chart-svg-mini .place-area {
   stroke-width: 1;
 }
@@ -252,7 +256,7 @@ kbd {
   padding: 5px 8px 5px 10px;
   border-bottom: 1px solid #2c3e4f;
   font:
-    10px "Bahnschrift",
+    11px "Bahnschrift",
     "Roboto Condensed",
     "Arial Narrow",
     sans-serif;
@@ -282,7 +286,7 @@ kbd {
 .jump-label {
   color: var(--muted);
   font:
-    10px "Bahnschrift",
+    11px "Bahnschrift",
     "Roboto Condensed",
     "Arial Narrow",
     sans-serif;
@@ -466,7 +470,7 @@ kbd {
   gap: 8px;
   color: var(--chart-ink);
   font:
-    10px ui-monospace,
+    11px ui-monospace,
     monospace;
   pointer-events: none;
 }
@@ -568,9 +572,9 @@ kbd {
   color: #0b1622;
   background: var(--cyan);
   font:
-    600 9px/15px ui-monospace,
+    600 11px/16px ui-monospace,
     monospace;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
 }
 .tag[data-tag="rich"] {
   background: #e7c868;
@@ -639,12 +643,12 @@ kbd {
 }
 .action-facts > div {
   display: grid;
-  grid-template-columns: 68px 1fr;
+  grid-template-columns: 76px 1fr;
   gap: 8px;
 }
 .action-facts dt {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 18px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -683,9 +687,14 @@ kbd {
   color: var(--muted);
   font-size: 11px;
 }
-.chart-action[data-state="blocked"] .action-note,
+.chart-action[data-state="blocked"] .action-note {
+  color: var(--warn);
+}
+.chart-action[data-state="blocked"] .action-note::before {
+  content: "! ";
+}
 .chart-action[data-state="spooling"] .action-note {
-  color: #eeb66d;
+  color: #ffcf9a;
 }
 .chart-foot {
   display: flex;
@@ -700,7 +709,7 @@ kbd {
 .chart-live {
   margin-left: auto;
   color: var(--cyan);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }

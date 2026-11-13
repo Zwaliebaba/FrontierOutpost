@@ -1,4 +1,4 @@
-import { QUIET, expect, launch, position, test } from "./fixtures";
+import { QUIET, expect, lastNotice, launch, position, test } from "./fixtures";
 
 // On the quiet server no NPCs open the run, so nothing jams the drive.
 
@@ -37,9 +37,10 @@ test("choosing a destination on the map and pressing J jumps to just outside it"
 
 test("J with nothing chosen opens the map, and the server's refusal shows", async ({ page }) => {
   await launch(page, QUIET);
-  const notice = page.locator("#notice");
+  const notice = lastNotice(page);
   await page.keyboard.press("KeyJ");
   await expect(notice).toContainText("choose a destination on the map");
+  await expect(notice).toHaveAttribute("data-level", "info");
   await expect(page.locator("#chart")).toHaveAttribute("data-state", "open");
 
   // A digit chooses the destination it is listed beside: 1 is the dock.
@@ -49,7 +50,10 @@ test("J with nothing chosen opens the map, and the server's refusal shows", asyn
     "true",
   );
   await page.keyboard.press("KeyJ");
+  // A refusal is a warning, and it does not wipe out the notice before it.
   await expect(notice).toHaveText("Jump drive: you are already there");
+  await expect(notice).toHaveAttribute("data-level", "warn");
+  await expect(page.locator("#notice .notice")).toHaveCount(2);
   // Refused, so the map stays open for another choice.
   await expect(page.locator("#chart")).toHaveAttribute("data-state", "open");
 });
@@ -62,7 +66,7 @@ test("a spool is cancelled by pressing J again", async ({ page }) => {
   await page.locator('.chart-row[data-target="oreField"]').dblclick();
   await expect(jump).toContainText("Jumping to Ore field in");
   await page.keyboard.press("KeyJ");
-  await expect(page.locator("#notice")).toHaveText("Jump cancelled");
+  await expect(lastNotice(page)).toHaveText("Jump cancelled");
   await expect(jump).not.toContainText("Jumping to");
 });
 

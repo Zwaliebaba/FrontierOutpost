@@ -43,15 +43,20 @@ export interface ChartFrame {
   centre: ChartPoint;
 }
 
-/** The frame that shows the whole site, dock to farthest pocket, with `padding` pixels clear. */
+/**
+ * The frame that shows the whole site, dock to farthest pocket, with `padding` pixels clear.
+ * Without the dock it frames the site alone: the legs are long, and a small drawing that showed
+ * the dock too would crowd the pockets into a corner.
+ */
 export function fitChart(
   site: SiteInfo,
   width: number,
   height: number,
   padding: number,
+  withDock = true,
 ): ChartFrame {
   const circles = [
-    { x: site.dockX, z: site.dockZ, radius: site.dockRadius },
+    ...(withDock ? [{ x: site.dockX, z: site.dockZ, radius: site.dockRadius }] : []),
     { x: site.centreX, z: site.centreZ, radius: site.radius },
     ...site.pockets,
   ];

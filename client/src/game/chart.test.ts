@@ -85,6 +85,19 @@ describe("fitChart and plot", () => {
     }
   });
 
+  it("frames the site alone when asked, leaving a far dock off the chart", () => {
+    // The Stage 1 site's proportions: the dock is four site radii from the site's centre.
+    const far: SiteInfo = { ...site, dockX: -900, centreX: 620, radius: 360, pockets: [] };
+    const whole = fitChart(far, 244, 108, 14);
+    const alone = fitChart(far, 244, 108, 14, false);
+    expect(alone.scale).toBeGreaterThan(whole.scale * 1.5);
+    // The site's circle fills the height; the dock falls outside the frame.
+    expect(plot(alone, far.centreX, far.centreZ).x).toBeCloseTo(122);
+    expect(plot(alone, far.centreX, far.centreZ).y).toBeCloseTo(54);
+    expect(far.radius * alone.scale).toBeCloseTo(40);
+    expect(plot(alone, far.dockX, far.dockZ).x).toBeLessThan(0);
+  });
+
   it("fills the frame along the axis that binds", () => {
     const frame = fitChart(site, 800, 600, 40);
     // The least room left at any edge is none: a larger scale would overflow the padding.

@@ -1,4 +1,4 @@
-import { QUIET, expect, flyIntoSite, launch, position, test } from "./fixtures";
+import { QUIET, expect, flyIntoSite, lastNotice, launch, position, test } from "./fixtures";
 
 // These run on the quiet server: no NPCs open the run, so nothing interrupts the pilot.
 
@@ -15,7 +15,8 @@ test("a pilot stops at a deposit, extracts ore and vents", async ({ page }) => {
   await page.keyboard.down("KeyS");
   await page.waitForTimeout(1_500);
   await page.keyboard.up("KeyS");
-  await expect(run).toContainText("(in reach)");
+  // In reach of the deposit, the extractor's key is prompted.
+  await expect(page.locator('#prompts [data-prompt="extract"]')).toContainText("X");
 
   await page.keyboard.press("KeyX");
   await expect(run).toHaveAttribute("data-extractor", "on");
@@ -31,7 +32,7 @@ test("a pilot stops at a deposit, extracts ore and vents", async ({ page }) => {
 test("pressing X away from a deposit explains why nothing happened", async ({ page }) => {
   await launch(page, QUIET);
   await page.keyboard.press("KeyX");
-  await expect(page.locator("#notice")).toHaveText("Extractor: hold still beside a deposit");
+  await expect(lastNotice(page)).toHaveText("Extractor: hold still beside a deposit");
 });
 
 test("a scan held still in the site reveals the rich pocket and the waves", async ({ page }) => {
@@ -41,11 +42,14 @@ test("a scan held still in the site reveals the rich pocket and the waves", asyn
   await page.keyboard.down("KeyS");
   await page.waitForTimeout(2_000);
   await page.keyboard.up("KeyS");
-  const scan = page.locator("#scan");
+  const run = page.locator("#run");
+  // Inside an unscanned site the scan's key is prompted; the scan then shows as a reading.
+  await expect(page.locator('#prompts [data-prompt="scan"]')).toContainText("C");
   await page.keyboard.press("KeyC");
-  await expect(scan).toContainText("Scanning");
-  await expect(scan).toHaveAttribute("data-revealed", "true", { timeout: 20_000 });
-  await expect(scan).toContainText("rich: Derelict");
+  await expect(run.locator('[data-cell="scan"]')).toContainText("hold still");
+  await expect(run).toHaveAttribute("data-revealed", "true", { timeout: 20_000 });
+  await expect(lastNotice(page)).toContainText("rich pocket: Derelict");
+  await expect(run.locator('[data-cell="wave"]')).toBeVisible();
   // The map tags what the scan found.
   await page.keyboard.press("KeyM");
   await expect(
@@ -95,8 +99,9 @@ test("flying out and back docks, shows the summary and offers the next contract"
 
 test("holding Shift engages the cruise drive on the legs", async ({ page }) => {
   await launch(page, QUIET);
-  const run = page.locator("#run");
-  await expect(run).toContainText("drive ready (Shift)");
+  // On the leg the drives read ready, and the cruise drive's key is prompted.
+  await expect(page.locator('#run [data-cell="drive"]')).toContainText("Ready");
+  await expect(page.locator('#prompts [data-prompt="cruise"]')).toContainText("Shift");
   const start = await position(page);
   await page.keyboard.down("ShiftLeft");
   await page.keyboard.down("KeyW");

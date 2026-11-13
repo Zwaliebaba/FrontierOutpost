@@ -13,7 +13,7 @@ test("Tab locks the nearest hostile and Escape releases it", async ({ page }) =>
 
   await page.keyboard.press("Tab");
   await expect(lock).toHaveAttribute("data-target", /\d+/);
-  await expect(lock).toContainText(/Locked: (Drone|Raider|Warden) \d+/);
+  await expect(lock).toContainText(/(Drone|Raider|Warden) \d+/);
 
   // Tab again moves to the next hostile in range, or keeps the only one (cycling order is
   // covered by selection.test.ts).

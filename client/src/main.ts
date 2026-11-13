@@ -38,14 +38,14 @@ import {
   THREAT_TEXT,
   launch,
   refusalText,
-  runLine,
-  scanLine,
+  runCells,
+  scanSummary,
   summaryLines,
 } from "./game/contract";
-import type { Contract, Joined, Scanned } from "./game/contract";
+import type { Contract, Joined, RunCell, Scanned } from "./game/contract";
 import { chartPlaces, jumpReadiness, sideOf, waypointFor } from "./game/chart";
 import type { ChartPlace } from "./game/chart";
-import { ChartView } from "./game/chartView";
+import { ChartView, glyph, sitePreview } from "./game/chartView";
 import { Pulse, gauges } from "./game/gauges";
 import { CANCEL_TEXT, JumpDrive, REFUSAL_TEXT } from "./game/jump";
 import type { GaugeKey } from "./game/gauges";
@@ -61,7 +61,12 @@ import {
 import type { SignedIn } from "./game/identity";
 import { clearOf, distanceText, placeMarkers } from "./game/navigation";
 import type { Box } from "./game/navigation";
+import { Notices } from "./game/notices";
+import type { NoticeLevel } from "./game/notices";
+import { prompts } from "./game/prompts";
+import type { Prompt } from "./game/prompts";
 import { ExpeditionView, RESTING_ELEVATION } from "./game/render";
+import { targetReadout } from "./game/target";
 import { loadSim } from "./sim";
 import type { Sim } from "./sim";
 import { headingRadians, positionMetres, velocityMetresPerSecond } from "./net/snapshot";
@@ -88,7 +93,6 @@ const FLIGHT_KEYS =
   "W A S D fly · Shift cruise · M map · J jump · Tab lock · Space fire · X extract · V vent · C scan";
 /** How often the map and the minimap are redrawn, at most: ships cross them slowly. */
 const CHART_MS = 100;
-const NOTICE_MS = 4_000;
 /** How soon a dropped connection is retried, and how often an unreachable server. */
 const RECONNECT_MS = 1_500;
 /** How often the HUD's top line is rewritten, at most. */
@@ -96,7 +100,7 @@ const HUD_LINE_MS = 200;
 const RETRY_MS = 3_000;
 /** The reason the server closes a session with when the pilot signs in on another page. */
 const SIGNED_IN_ELSEWHERE = "signed in elsewhere";
-/** Within this distance of a deposit the run line names it, metres. */
+/** Within this distance of a deposit a prompt points to it, metres. */
 const DEPOSIT_HINT = 25;
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -120,17 +124,25 @@ function line(id: string): HTMLParagraphElement {
 const status = line("status");
 const sim = line("sim");
 const hud = line("hud");
-const run = line("run");
-const scan = line("scan");
-const lock = line("lock");
-const notice = line("notice");
+// The run status: one cell an instrument, in the top bar for as long as a run lasts.
+const run = element("div", "run");
+// The locked target, under the top bar at the middle of the screen.
+const lock = element("div", "lock");
+// Bottom centre: the notices, and under them the prompts for the keys that would act now.
+const messages = element("div", "messages");
+const notice = element("div", "notice");
+notice.setAttribute("role", "status");
+notice.setAttribute("aria-live", "polite");
+const promptRow = element("div", "prompts");
+messages.append(notice, promptRow);
 const accountLine = line("account");
 const command = element("header", "command");
 const brand = element("div", undefined, "brand");
 brand.innerHTML =
   '<span class="insignia" aria-hidden="true">⌃</span><strong>FRONTIER / OUTPOST</strong>';
-// One bar: the brand, what the pilot holds, and the connection.
-command.append(brand, accountLine, status);
+// One bar: the brand, what the pilot holds at home or the run's status in flight, and the
+// connection.
+command.append(brand, accountLine, run, status);
 const utility = element("footer", "utility");
 utility.textContent = "HOME OUTPOST   /   BERTHS 07–10";
 const cameraHints = element("span");
@@ -141,7 +153,7 @@ const hudKeys = element("span", undefined, "hud-keys");
 const hudDiagnostics = element("span", undefined, "diagnostic");
 hud.append(hudKeys, hudDiagnostics);
 utility.append(hud, cameraHints, sim);
-document.body.append(command, utility);
+document.body.append(command, utility, lock, messages);
 const stationLabels = element("div", "station-labels");
 document.body.append(stationLabels);
 const nav = element("div", "nav");
@@ -182,10 +194,25 @@ function showStatus(state: "connecting" | "connected" | "closed" | "offline", te
   status.textContent = text;
 }
 
-let noticeUntil = 0;
-function showNotice(text: string): void {
-  notice.textContent = text;
-  noticeUntil = performance.now() + NOTICE_MS;
+const notices = new Notices();
+function showNotice(text: string, level: NoticeLevel = "info"): void {
+  notices.push(text, level, performance.now());
+}
+let noticesDrawn = "";
+/** Writes the notices on show to the page, when they have changed. */
+function drawNotices(now: number): void {
+  const shown = notices.visible(now);
+  const key = shown.map((entry) => entry.id).join(" ");
+  if (key === noticesDrawn) return;
+  noticesDrawn = key;
+  notice.replaceChildren(
+    ...shown.map((entry) => {
+      const node = element("p", undefined, "notice");
+      node.dataset.level = entry.level;
+      node.textContent = entry.text;
+      return node;
+    }),
+  );
 }
 
 let simLine = "Simulation";
@@ -274,7 +301,7 @@ async function start(): Promise<void> {
       homeChanged();
     })
     .catch((error: unknown) => {
-      showNotice(`The outpost models did not load: ${String(error)}`);
+      showNotice(`The outpost models did not load: ${String(error)}`, "warn");
     });
   play(connection, view, loaded);
   await identify(connection);
@@ -463,13 +490,6 @@ function beginLife(connection: Connection, joined: Joined, loaded: Sim): Life {
   return life;
 }
 
-const KIND_NAME = {
-  playerShip: "Pilot",
-  drone: "Drone",
-  raider: "Raider",
-  warden: "Warden",
-  core: "Nest core",
-};
 const TIER_NAME = ["", "I", "II", "III"];
 
 function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
@@ -527,13 +547,24 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       item.textContent = text;
       facts.append(item);
     }
-    for (const pocket of offer.site.pockets) {
+    // The site as the system map will draw it, and its pockets listed with the map's glyphs.
+    const { site } = offer;
+    const figure = element("figure", undefined, "briefing-site");
+    figure.append(
+      sitePreview(site, chartPlaces(site, { x: site.dockX, z: site.dockZ }, null, false), 244, 108),
+    );
+    const pockets = element("ul", undefined, "briefing-places");
+    for (const pocket of site.pockets) {
       const item = element("li");
+      item.dataset.locked = String(pocket.locked);
       const needs = POCKET_NEEDS[pocket.kind];
-      item.textContent = pocket.locked
-        ? `${POCKET_NAME[pocket.kind]}: locked, needs ${needs ?? "a facility"}`
-        : `${POCKET_NAME[pocket.kind]}: open`;
-      facts.append(item);
+      item.append(
+        glyph(pocket.kind, 18),
+        pocket.locked
+          ? `${POCKET_NAME[pocket.kind]}: locked, needs ${needs ?? "a facility"}`
+          : `${POCKET_NAME[pocket.kind]}: open`,
+      );
+      pockets.append(item);
     }
     const note = element("p");
     note.textContent =
@@ -649,7 +680,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       tiers.append(button);
     }
     const content = element("div", undefined, "briefing-content");
-    content.append(eyebrow, title, facts, note, stake, crewSection);
+    content.append(eyebrow, title, figure, pockets, facts, note, stake, crewSection);
     briefing.append(content, tiers);
   };
 
@@ -750,17 +781,6 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   homeChanged = () => {
     stationWhere();
     if (!catalog || !holdings) return;
-    let power = document.getElementById("resource-power");
-    if (!power) {
-      power = element("span", "resource-power", "resource");
-      accountLine.append(power);
-    }
-    power.replaceChildren();
-    const powerLabel = element("span");
-    powerLabel.textContent = "Power";
-    const powerValue = element("strong");
-    powerValue.textContent = `${String(holdings.outpost.powerUsed)} / ${String(catalog.powerCap)}`;
-    power.append(powerLabel, powerValue);
     if (outpost) {
       outpost.setCrew(crew, callsign);
       outpost.apply(holdings);
@@ -820,9 +840,19 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         showSummary(message.summary);
         homeChanged();
         break;
-      case "scanned":
+      case "scanned": {
         reveal = message;
+        // What it found about the pockets is on the map from now on; the notice says so once.
+        const pockets = life?.joined.site.pockets ?? [];
+        showNotice(
+          scanSummary(message, (index) => {
+            const pocket = pockets[index];
+            return pocket ? POCKET_NAME[pocket.kind] : "?";
+          }),
+          "good",
+        );
         break;
+      }
       case "account":
         showAccount(callsign, message.account);
         break;
@@ -832,7 +862,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         break;
       case "homeRefused":
       case "crewRefused":
-        showNotice(message.reason);
+        showNotice(message.reason, "warn");
         break;
       case "crew":
         crew = message.crew ?? null;
@@ -844,11 +874,12 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           `The crew's pot is paid: ${String(pot.contract + pot.bounty + pot.relay)} cr ` +
             `(contract ${String(pot.contract)}, bounty ${String(pot.bounty)}, relays ` +
             `${String(pot.relay)}). Your share: ${String(share)} cr`,
+          "good",
         );
         break;
       }
       case "extractRefused":
-        showNotice(refusalText(message.reason));
+        showNotice(refusalText(message.reason), "warn");
         break;
       case "jumpSpooling":
         jumpDrive.spooling(message.target, message.seconds, performance.now());
@@ -857,19 +888,22 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         chartAt = Number.NEGATIVE_INFINITY;
         break;
       case "jumpRefused":
-        showNotice(REFUSAL_TEXT[message.reason]);
+        showNotice(REFUSAL_TEXT[message.reason], "warn");
         break;
       case "jumpCancelled":
         jumpDrive.ended();
         chartAt = Number.NEGATIVE_INFINITY;
-        showNotice(CANCEL_TEXT[message.reason]);
+        showNotice(CANCEL_TEXT[message.reason], message.reason === "pilot" ? "info" : "warn");
         break;
       case "jumped":
         jumpDrive.ended();
         chartAt = Number.NEGATIVE_INFINITY;
         break;
       case "limitWarning":
-        showNotice(`The instance ends in ${String(Math.round(message.secondsLeft / 60))} minutes`);
+        showNotice(
+          `The instance ends in ${String(Math.round(message.secondsLeft / 60))} minutes`,
+          "warn",
+        );
         break;
       default:
         break;
@@ -892,7 +926,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const range = life.joined.lockRange;
     const others = poses.filter((pose) => pose.id !== shipId);
     if (!selection.cycle(own, others, range)) {
-      showNotice(`No hostile within lock range (${range.toFixed(0)} m)`);
+      showNotice(`No hostile within lock range (${range.toFixed(0)} m)`, "warn");
     }
   };
   window.addEventListener("keydown", (event) => {
@@ -991,7 +1025,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       range,
     );
     if (result === "beyond") {
-      showNotice(`Beyond lock range (${range.toFixed(0)} m): centred on it, not locked`);
+      showNotice(`Beyond lock range (${range.toFixed(0)} m): centred on it, not locked`, "warn");
     }
   });
   canvas.addEventListener("pointermove", (event) => {
@@ -1025,6 +1059,75 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     else node.dataset[name] = value;
   };
 
+  // The run status in the top bar: a cell for each reading, rebuilt only when the set of cells
+  // changes, as when a scan starts or the relays are first held.
+  const runCellNodes = new Map<string, { cell: HTMLSpanElement; value: HTMLElement }>();
+  const drawRun = (cells: readonly RunCell[]) => {
+    if (written.changed("run.cells", cells.map((cell) => cell.key).join(" "))) {
+      written.forget("run.cell.");
+      runCellNodes.clear();
+      run.replaceChildren(
+        ...cells.map((cell) => {
+          const node = element("span", undefined, "cell");
+          node.dataset.cell = cell.key;
+          const label = element("span");
+          label.textContent = cell.label;
+          const value = element("strong");
+          node.append(label, value);
+          runCellNodes.set(cell.key, { cell: node, value });
+          return node;
+        }),
+      );
+    }
+    for (const cell of cells) {
+      const drawn = runCellNodes.get(cell.key);
+      if (!drawn) continue;
+      const place = `run.cell.${cell.key}`;
+      if (written.changed(`${place}.value`, cell.value)) drawn.value.textContent = cell.value;
+      if (written.changed(`${place}.level`, cell.level)) drawn.cell.dataset.level = cell.level;
+    }
+  };
+
+  // The prompts: the keys that would act now, under the notices.
+  const drawPrompts = (list: readonly Prompt[]) => {
+    const key = list.map((prompt) => `${prompt.id}:${prompt.text}`).join("|");
+    if (!written.changed("prompts", key)) return;
+    promptRow.replaceChildren(
+      ...list.map((prompt) => {
+        const node = element("span", undefined, "prompt");
+        node.dataset.prompt = prompt.id;
+        if (prompt.key !== "") {
+          const cap = element("kbd");
+          cap.textContent = prompt.key;
+          node.append(cap);
+        }
+        node.append(prompt.text);
+        return node;
+      }),
+    );
+  };
+
+  // The target card: built once, shown while a hostile is locked.
+  const lockCard = (() => {
+    const name = element("strong", "lock-name");
+    const distance = element("span", "lock-distance");
+    const range = element("span", "lock-range");
+    const track = element("div", undefined, "lock-track");
+    const fill = element("div", undefined, "lock-fill");
+    track.append(fill);
+    const hull = element("span", "lock-hull");
+    const keys = element("span", undefined, "lock-keys");
+    for (const [cap, text] of [
+      ["Tab", "next"],
+      ["Esc", "release"],
+    ] as const) {
+      const key = element("kbd");
+      key.textContent = cap;
+      keys.append(key, ` ${text} `);
+    }
+    return { name, distance, range, hull, fill, nodes: [name, distance, range, track, hull, keys] };
+  })();
+
   // The waypoint: the destination chosen on the map, marked where it is on screen or at the
   // screen's edge toward it. It is the scene's one label, and it takes no clicks.
   const waypoint = element("div", "waypoint");
@@ -1037,7 +1140,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   /** Where the HUD's panels are, so the waypoint is never drawn under one. */
   let hudPanels: Box[] = [];
   const measurePanels = () => {
-    hudPanels = [shipPanel, run, scan, lock, notice, chart.navigator]
+    hudPanels = [shipPanel, lock, messages, chart.navigator]
       .map((node) => node.getBoundingClientRect())
       .filter((box) => box.width > 0 && box.height > 0)
       .map(({ x, y, width, height }) => ({ x, y, width, height }));
@@ -1233,18 +1336,28 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     drawHomeLabels();
 
     const locked = poses.find((pose) => pose.id === selection.lock);
+    const lockedAt = locked && own ? Math.hypot(locked.x - own.x, locked.z - own.z) : 0;
     if (locked && own && current) {
-      const distance = Math.hypot(locked.x - own.x, locked.z - own.z);
-      setData(lock, "target", String(locked.id));
-      setText(
-        lock,
-        `Locked: ${KIND_NAME[locked.kind]} ${String(locked.id)} · ${distance.toFixed(0)} m ` +
-          `${distance <= current.joined.weaponRange ? "in range" : `out of range, fires within ${current.joined.weaponRange.toFixed(0)} m`} · ` +
-          `hull ${String(Math.round((locked.hull / 255) * 100))}% · Tab next, Esc release`,
+      const readout = targetReadout(
+        locked.kind,
+        locked.id,
+        lockedAt,
+        current.joined.weaponRange,
+        locked.hull,
       );
+      if (written.changed("lock.shown", "true")) lock.append(...lockCard.nodes);
+      setData(lock, "target", String(locked.id));
+      setData(lock, "range", readout.inRange ? "in" : "out");
+      setText(lockCard.name, readout.name);
+      setText(lockCard.distance, readout.distance);
+      setText(lockCard.range, readout.range);
+      setText(lockCard.hull, readout.hull);
+      const width = `${(readout.hullShare * 100).toFixed(1)}%`;
+      if (written.changed("lock.fill", width)) lockCard.fill.style.width = width;
     } else {
       setData(lock, "target", null);
-      setText(lock, "");
+      setData(lock, "range", null);
+      if (written.changed("lock.shown", "false")) lock.replaceChildren();
     }
 
     if (own && current) {
@@ -1275,15 +1388,33 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           }))
           .filter((deposit) => deposit.left > 0)
           .sort((a, b) => a.distance - b.distance)[0];
-        const hint =
-          nearest && nearest.distance <= DEPOSIT_HINT
-            ? ` · deposit ${nearest.distance.toFixed(0)} m, ${String(nearest.left)} left` +
-              (nearest.distance <= current.joined.extractRange ? " (in reach)" : "")
-            : "";
         setData(run, "phase", status.phase);
         setData(run, "cargo", String(status.cargo));
         setData(run, "extractor", status.extractor);
-        setText(run, runLine(status) + hint);
+        setData(run, "revealed", String(reveal !== null));
+        drawRun(runCells(status, reveal));
+        const lockRange = current.joined.lockRange;
+        drawPrompts(
+          prompts({
+            own: status,
+            deposit:
+              nearest && nearest.distance <= DEPOSIT_HINT
+                ? {
+                    distance: nearest.distance,
+                    left: nearest.left,
+                    inReach: nearest.distance <= current.joined.extractRange,
+                  }
+                : null,
+            scanned: reveal !== null,
+            locked: locked !== undefined,
+            lockedInRange: locked !== undefined && lockedAt <= current.joined.weaponRange,
+            hostileInLockRange: poses.some(
+              (pose) =>
+                pose.kind !== "playerShip" &&
+                Math.hypot(pose.x - own.x, pose.z - own.z) <= lockRange,
+            ),
+          }),
+        );
         setData(shipPanel, "active", "true");
         for (const gauge of gauges(
           status,
@@ -1306,12 +1437,6 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         const working =
           status.extractor === "on" && nearest && nearest.distance <= current.joined.extractRange;
         view.world.setBeam(working ? own : null, working ? nearest.index : null);
-        const pocketName = (index: number) => {
-          const pocket = current.joined.site.pockets[index];
-          return pocket ? POCKET_NAME[pocket.kind] : "?";
-        };
-        setData(scan, "revealed", String(reveal !== null));
-        setText(scan, scanLine(status, reveal, pocketName));
       }
       // The map, the minimap beside the gauges, and the waypoint to the destination chosen.
       const { site } = current.joined;
@@ -1334,19 +1459,17 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       drawWaypoint(waypointFor(places, jumpDrive.selected));
     } else {
       setData(run, "phase", null);
+      setData(run, "revealed", null);
+      drawRun([]);
+      drawPrompts([]);
       setData(shipPanel, "active", null);
       setData(hud, "x", null);
       hudLineAt = Number.NEGATIVE_INFINITY;
       if (written.changed("hud.keys", "")) hudKeys.textContent = "";
       if (written.changed("hud.diagnostics", "")) hudDiagnostics.textContent = "";
-      setText(run, "");
-      setText(scan, "");
       drawWaypoint(undefined);
     }
-    if (noticeUntil && now > noticeUntil) {
-      notice.textContent = "";
-      noticeUntil = 0;
-    }
+    drawNotices(now);
 
     const cost = frames.record(workStart, performance.now());
     if (cost) {

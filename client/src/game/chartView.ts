@@ -81,7 +81,8 @@ const SHIP = "M0 -9L6 7L0 3.5L-6 7Z";
 const DIAMOND = "M0 -5L5 0L0 5L-5 0Z";
 const HEXAGON = "M0 -7L6 -3.5V3.5L0 7L-6 3.5V-3.5Z";
 
-function glyph(kind: PlaceKind, size: number): SVGSVGElement {
+/** The glyph the map draws for a kind of place, as an icon for a list beside it. */
+export function glyph(kind: PlaceKind, size: number): SVGSVGElement {
   const icon = svg("svg", "glyph", { viewBox: "-10 -10 20 20", width: size, height: size });
   icon.setAttribute("aria-hidden", "true");
   icon.append(svg("path", undefined, { d: GLYPH[kind] }));
@@ -98,12 +99,19 @@ interface PlaceNodes {
   at: { x: number; y: number };
 }
 
-/** One drawing of the chart: the minimap, or the full map with its labels and detail. */
+/**
+ * How much a drawing of the chart shows: the minimap's dots, the full map with its labels and
+ * detail, or a still preview of a site not yet flown, with a glyph for each place.
+ */
+type PlotMode = "mini" | "full" | "preview";
+
+/** One drawing of the chart. */
 class Plot {
   readonly root: SVGSVGElement;
   readonly #width: number;
   readonly #height: number;
   readonly #padding: number;
+  readonly #mode: PlotMode;
   readonly #detailed: boolean;
   readonly #choose: ((id: string) => void) | null;
   readonly #jumpTo: ((id: string) => void) | null;
@@ -122,16 +130,18 @@ class Plot {
     width: number,
     height: number,
     padding: number,
-    detailed: boolean,
+    mode: PlotMode,
     handlers?: Pick<ChartHandlers, "choose" | "jumpTo">,
   ) {
+    const detailed = mode === "full";
+    this.#mode = mode;
     this.#width = width;
     this.#height = height;
     this.#padding = padding;
     this.#detailed = detailed;
     this.#choose = handlers?.choose ?? null;
     this.#jumpTo = handlers?.jumpTo ?? null;
-    this.root = svg("svg", detailed ? "chart-svg" : "chart-svg chart-svg-mini", {
+    this.root = svg("svg", `chart-svg chart-svg-${mode}`, {
       viewBox: `0 0 ${String(width)} ${String(height)}`,
       preserveAspectRatio: "xMidYMid meet",
     });
@@ -139,6 +149,9 @@ class Plot {
     this.root.setAttribute("aria-hidden", "true");
     if (detailed) this.#ship.append(svg("circle", "ship-pulse", { r: 9 }));
     this.#ship.append(svg("path", "ship-hull", { d: SHIP }));
+    // The ship and the course show from the first update; a preview never has one.
+    this.#ship.setAttribute("visibility", "hidden");
+    this.#course.setAttribute("visibility", "hidden");
     this.root.append(this.#ground, this.#course, this.#placeLayer, this.#contactLayer, this.#ship);
   }
 
@@ -154,7 +167,9 @@ class Plot {
     deposits: readonly DepositInfo[],
     places: readonly ChartPlace[],
   ): void {
-    const frame = fitChart(site, this.#width, this.#height, this.#padding);
+    // A preview is small: it frames the site, and holds the dock at its edge to show the way.
+    const preview = this.#mode === "preview";
+    const frame = fitChart(site, this.#width, this.#height, this.#padding, !preview);
     this.#frame = frame;
     this.#written.forget("");
     this.#ground.replaceChildren();
@@ -164,7 +179,7 @@ class Plot {
     this.#contacts.clear();
 
     const centre = plot(frame, site.centreX, site.centreZ);
-    const dock = plot(frame, site.dockX, site.dockZ);
+    const dock = this.#at(frame, site.dockX, site.dockZ);
     if (this.#detailed) {
       // A metric grid: one square is the scale bar's length.
       const step = scaleBar(frame, 110).pixels;
@@ -216,8 +231,14 @@ class Plot {
       : [];
   }
 
+  /** Where a place is drawn: where it is, or at the edge of a preview that does not reach it. */
+  #at(frame: ChartFrame, x: number, z: number): { x: number; y: number } {
+    const at = plot(frame, x, z);
+    return this.#mode === "preview" ? keepInFrame(frame, at, 16) : at;
+  }
+
   #addPlace(frame: ChartFrame, place: ChartPlace): void {
-    const at = plot(frame, place.x, place.z);
+    const at = this.#at(frame, place.x, place.z);
     const reach = place.radius * frame.scale;
     const group = svg("g", "chart-place", {
       transform: `translate(${at.x.toFixed(1)} ${at.y.toFixed(1)})`,
@@ -226,7 +247,16 @@ class Plot {
     group.dataset.kind = place.kind;
     group.dataset.locked = String(place.locked);
     let sub: SVGTextElement | null = null;
-    if (!this.#detailed) {
+    if (this.#mode === "preview") {
+      const size = Math.max(11, reach);
+      group.append(
+        svg("circle", "place-area", { r: size }),
+        svg("path", "place-glyph", { d: GLYPH[place.kind], transform: "scale(0.85)" }),
+      );
+      if (place.locked) {
+        group.append(svg("path", "place-lock", { d: PADLOCK, transform: "translate(9 -9)" }));
+      }
+    } else if (!this.#detailed) {
       const size = place.kind === "dock" ? 4 : Math.max(4, reach);
       group.append(
         svg("circle", "place-ring", { r: size + 4 }),
@@ -358,6 +388,21 @@ class Plot {
   }
 }
 
+/**
+ * A still chart of a site, for the briefing: where the dock and the pockets lie, and which are
+ * locked, before the pilot commits to the run.
+ */
+export function sitePreview(
+  site: SiteInfo,
+  places: readonly ChartPlace[],
+  width: number,
+  height: number,
+): SVGSVGElement {
+  const preview = new Plot(width, height, 14, "preview");
+  preview.setSite(site, [], [], places);
+  return preview.root;
+}
+
 interface Row {
   button: HTMLButtonElement;
   status: HTMLElement;
@@ -397,8 +442,8 @@ export class ChartView {
 
   constructor(handlers: ChartHandlers) {
     this.#on = handlers;
-    this.#mini = new Plot(232, 156, 16, false);
-    this.#full = new Plot(820, 600, 64, true, handlers);
+    this.#mini = new Plot(232, 156, 16, "mini");
+    this.#full = new Plot(820, 600, 64, "full", handlers);
     this.#buildNavigator();
     this.#buildOverlay();
   }

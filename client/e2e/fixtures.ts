@@ -86,6 +86,11 @@ export async function flyIntoSite(page: Page): Promise<void> {
   await page.keyboard.up("KeyW");
 }
 
+/** The newest notice on show. Earlier ones stay beside it until their own time is up. */
+export function lastNotice(page: Page) {
+  return page.locator("#notice .notice").last();
+}
+
 /** The ship's position from the HUD. */
 export async function position(page: Page): Promise<{ x: number; z: number }> {
   const hud = page.locator("#hud");
