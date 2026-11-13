@@ -336,6 +336,24 @@ kbd {
   visibility: hidden;
 }
 
+/* --- The jump's wash: the drive's light over the view as the pilot's own ship jumps. It is
+   one soft pulse, never a strobe, and main.ts skips it when the system asks for less motion. */
+#jump-wash {
+  /* Over the scene and under the HUD: it comes before every panel in the page, and has no
+     z-index of its own to lift it over them. */
+  position: fixed;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    #d8f3ffb8 0%,
+    #64d5e466 22%,
+    #2a6fb022 55%,
+    transparent 78%
+  );
+}
+
 /* --- The waypoint: the scene's one label, to the destination chosen ------------------------ */
 #waypoint {
   position: absolute;

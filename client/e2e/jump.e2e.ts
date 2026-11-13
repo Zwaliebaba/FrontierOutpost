@@ -33,6 +33,8 @@ test("choosing a destination on the map and pressing J jumps to just outside it"
   }).toPass({ timeout: 15_000 });
   await expect(jump).toHaveAttribute("data-state", "chosen");
   await expect(jump).not.toContainText("Jumping to");
+  // The jump was seen as one, so it was drawn: once, not once a frame.
+  await expect(page.locator("#hud")).toHaveAttribute("data-jumps", "1");
 });
 
 test("J with nothing chosen opens the map, and the server's refusal shows", async ({ page }) => {

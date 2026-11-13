@@ -48,6 +48,7 @@ import type { ChartPlace } from "./game/chart";
 import { ChartView, glyph, sitePreview } from "./game/chartView";
 import { Pulse, gauges } from "./game/gauges";
 import { CANCEL_TEXT, JumpDrive, REFUSAL_TEXT } from "./game/jump";
+import { JumpEffects } from "./game/jumpEffects";
 import type { GaugeKey } from "./game/gauges";
 import {
   SignInRefusedError,
@@ -135,6 +136,10 @@ notice.setAttribute("role", "status");
 notice.setAttribute("aria-live", "polite");
 const promptRow = element("div", "prompts");
 messages.append(notice, promptRow);
+// A wash of the drive's light over the whole view as the pilot's own ship jumps: the camera
+// goes with the ship, and the wash covers the cut.
+const jumpWash = element("div", "jump-wash");
+jumpWash.setAttribute("aria-hidden", "true");
 const accountLine = line("account");
 const command = element("header", "command");
 const brand = element("div", undefined, "brand");
@@ -153,7 +158,7 @@ const hudKeys = element("span", undefined, "hud-keys");
 const hudDiagnostics = element("span", undefined, "diagnostic");
 hud.append(hudKeys, hudDiagnostics);
 utility.append(hud, cameraHints, sim);
-document.body.append(command, utility, lock, messages);
+document.body.append(command, utility, lock, messages, jumpWash);
 const stationLabels = element("div", "station-labels");
 document.body.append(stationLabels);
 const nav = element("div", "nav");
@@ -499,6 +504,11 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   let reveal: Scanned | null = null;
   /** The destination chosen for the jump drive, and any spool in progress. */
   const jumpDrive = new JumpDrive();
+  /** The spool on the pilot's ship and the flashes of every pilot's jump, as drawn. */
+  const jumpEffects = new JumpEffects();
+  /** How many jumps this page has drawn this run, the pilot's own and the crew's, for tests. */
+  let jumpsSeen = 0;
+  const calm = window.matchMedia("(prefers-reduced-motion: reduce)");
   /** When the map was last redrawn; set back to redraw it on the next frame. */
   let chartAt = Number.NEGATIVE_INFINITY;
   /** J, or the map's button: cancels a spool, jumps to the destination chosen, or asks for one. */
@@ -761,6 +771,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     life = beginLife(connection, joined, loaded);
     reveal = null;
     jumpDrive.reset();
+    jumpEffects.reset();
+    jumpsSeen = 0;
     chart.close();
     chart.setSite(
       joined.site,
@@ -835,6 +847,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         life?.session.retire();
         life = null;
         jumpDrive.reset();
+        jumpEffects.reset();
         chart.clear();
         selection.release();
         showSummary(message.summary);
@@ -1261,7 +1274,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   const frames = new FrameTimer();
   const frame = (now: number) => {
     const workStart = performance.now();
-    const dt = Math.min(0.1, (now - last) / 1_000);
+    /** Seconds since the last frame as they passed, however long: a hidden tab draws none. */
+    const elapsed = Math.max(0, (now - last) / 1_000);
+    const dt = Math.min(0.1, elapsed);
     last = now;
     const current = life;
 
@@ -1308,6 +1323,22 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       shots.advance(dt, drawnAt);
       selection.prune(new Set(others.map((pose) => pose.id)));
       view.world.setDeposits(current.deposits);
+      // A pilot's ship that moved farther than flight allows jumped: flash both ends.
+      const spool = jumpDrive.readout(now, current.joined.site.pockets);
+      jumpEffects.setCharge(spool.state === "spooling" ? session.shipId : null, spool.share);
+      const leapt = jumpEffects.observe(poses, elapsed);
+      if (leapt.length > 0) {
+        jumpsSeen += leapt.length;
+        setData(hud, "jumps", String(jumpsSeen));
+        // The wash covers the camera's cut, so it is for the pilot's own jump only.
+        if (leapt.includes(session.shipId) && !calm.matches) {
+          jumpWash.animate([{ opacity: 0 }, { opacity: 0.7, offset: 0.2 }, { opacity: 0 }], {
+            duration: 520,
+            easing: "ease-out",
+          });
+        }
+      }
+      jumpEffects.advance(dt);
     } else {
       poses = [];
     }
@@ -1330,7 +1361,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     if (atHome) {
       view.renderScene(atHome.scene, aim, look.pitch, look.yaw);
     } else {
-      view.render(poses, selection.lock, aim, look.pitch, look.yaw, shots, dt);
+      view.render(poses, selection.lock, aim, look.pitch, look.yaw, shots, dt, jumpEffects);
     }
 
     drawHomeLabels();

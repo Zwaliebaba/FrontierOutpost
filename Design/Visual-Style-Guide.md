@@ -196,4 +196,13 @@ to spool. Up on the chart is up on the screen with the camera at rest.
   screen reader works: the chart is never the only way to choose.
 - What a scan found is tagged on the map and stays there; the notice that announces it goes.
 
-Motion is small and stops when the system asks for reduced motion.
+**The jump.** A jump is seen, by the pilot and by the crew. While the drive spools, two thin
+rings close on the pilot's ship, one steadily and one in loops that quicken, so the last second
+reads as the last. Where a ship leaves, a ring opens and a streak shoots out the way it went;
+where it arrives, the streak comes in behind it and a ring closes on the hull. The effects are
+the blue of propulsion, a bright core in a coloured edge (§6), and none is solid: nothing behind
+one is hidden, and the spool is not taken for a shield. A ship that jumps is drawn where it was
+and then where it is, never slid across the space between. The pilot's own jump also washes the
+view once with the drive's light, to cover the camera's cut.
+
+Motion is small. The wash is skipped when the system asks for reduced motion.

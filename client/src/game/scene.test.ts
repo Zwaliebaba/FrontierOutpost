@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { BoxGeometry, Group, Mesh, MeshStandardMaterial, Vector3 } from "three";
 import { ExpeditionScene, SIZE, allegianceOf } from "./scene";
+import { FLASH_SECONDS, JumpEffects } from "./jumpEffects";
 import type { EntityPose } from "../net/interpolation";
 import type { SiteInfo } from "../protocol";
 import { GEAR_LIFT, GEAR_SECONDS } from "../view/frigate";
@@ -266,5 +267,63 @@ describe("ExpeditionScene", () => {
     expect(world.ship(1)?.hull.parent).toBe(world.scene);
     // Hostiles have no model yet.
     expect(world.ship(3)?.hull).toBeInstanceOf(Mesh);
+  });
+
+  it("rings the ship whose jump drive spools, closer as the jump nears", () => {
+    const scene = new ExpeditionScene(1);
+    const jumps = new JumpEffects();
+    scene.update([pose(1, "playerShip", 10, 4)], null, undefined, 0, jumps);
+    expect(scene.jumpSpool.visible).toBe(false);
+
+    jumps.setCharge(1, 0);
+    scene.update([pose(1, "playerShip", 10, 4)], null, undefined, 0, jumps);
+    expect(scene.jumpSpool.visible).toBe(true);
+    expect(scene.jumpSpool.position.x).toBe(10);
+    expect(scene.jumpSpool.position.z).toBe(4);
+    const far = scene.jumpSpool.children[0]?.scale.x ?? 0;
+
+    jumps.setCharge(1, 1);
+    scene.update([pose(1, "playerShip", 10, 4)], null, undefined, 0, jumps);
+    expect(scene.jumpSpool.children[0]?.scale.x).toBeLessThan(far);
+
+    // No ring without the ship it is on, or once the spool ends.
+    scene.update([], null, undefined, 0, jumps);
+    expect(scene.jumpSpool.visible).toBe(false);
+    jumps.setCharge(null);
+    scene.update([pose(1, "playerShip", 10, 4)], null, undefined, 0, jumps);
+    expect(scene.jumpSpool.visible).toBe(false);
+  });
+
+  it("flashes at both ends of a jump, with the streak along the way the ship went", () => {
+    const scene = new ExpeditionScene(1);
+    const jumps = new JumpEffects();
+    jumps.observe([pose(2, "playerShip", 0, 0)], 0.016);
+    jumps.observe([pose(2, "playerShip", 0, 300)], 0.016);
+    jumps.advance(FLASH_SECONDS / 2);
+    scene.update([pose(2, "playerShip", 0, 300)], null, undefined, 0, jumps);
+    const [leave, arrive] = scene.jumpFlashes;
+    expect(scene.jumpFlashes).toHaveLength(2);
+    expect(leave?.position.z).toBe(0);
+    expect(arrive?.position.z).toBe(300);
+    // The ship went toward +z: the streak leads from where it left and trails where it arrived.
+    const streakOf = (flash: typeof leave) =>
+      flash?.getObjectByName("streak")?.getWorldPosition(new Vector3()) ?? new Vector3();
+    scene.scene.updateMatrixWorld();
+    expect(streakOf(leave).z).toBeGreaterThan(1);
+    expect(streakOf(arrive).z).toBeLessThan(300);
+    expect(Math.abs(streakOf(leave).x)).toBeLessThan(1e-6);
+
+    // A short hop's streak stops where the hop ends.
+    jumps.observe([pose(2, "playerShip", 0, 330)], 0.016);
+    jumps.advance(FLASH_SECONDS * 0.9);
+    scene.update([pose(2, "playerShip", 0, 330)], null, undefined, 0, jumps);
+    const hop = scene.jumpFlashes.at(-2)?.getObjectByName("streak");
+    expect(hop?.scale.x).toBeGreaterThan(20);
+    expect(hop?.scale.x).toBeLessThanOrEqual(30);
+
+    // Faded, they are gone.
+    jumps.advance(FLASH_SECONDS);
+    scene.update([pose(2, "playerShip", 0, 300)], null, undefined, 0, jumps);
+    expect(scene.jumpFlashes).toHaveLength(0);
   });
 });
