@@ -60,7 +60,7 @@ fitted: Array<string>,
 /**
  * Site cargo a ship must dock with for the contract to pay.
  */
-contractCargo: number, } | { "type": "launchRefused", reason: string, } | { "type": "extractRefused", reason: ExtractRefusal, } | { "type": "jumpSpooling", target: JumpTarget, seconds: number, } | { "type": "jumpRefused", reason: JumpRefusal, } | { "type": "jumpCancelled", reason: JumpCancel, } | { "type": "jumped", target: JumpTarget, } | { "type": "scanned", 
+contractCargo: number, } | { "type": "launchRefused", reason: string, } | { "type": "extractRefused", reason: ExtractRefusal, } | { "type": "jumpSpooling", ship: number, target: JumpTarget, seconds: number, } | { "type": "jumpRefused", reason: JumpRefusal, } | { "type": "jumpCancelled", ship: number, reason: JumpCancel, } | { "type": "jumped", ship: number, target: JumpTarget, } | { "type": "scanned", 
 /**
  * Index into the contract's pockets.
  */
@@ -72,4 +72,4 @@ relays: Array<number>,
 /**
  * The coming alert steps, as far as the instance can last.
  */
-waves: Array<WaveInfo>, } | { "type": "limitWarning", secondsLeft: number, } | { "type": "runOver", summary: RunSummary, } | { "type": "potPaid", pot: PotInfo, share: number, };
+waves: Array<WaveInfo>, } | { "type": "limitWarning", secondsLeft: number, } | { "type": "runOver", summary: RunSummary, } | { "type": "potPaid", run: string, pot: PotInfo, share: number, };

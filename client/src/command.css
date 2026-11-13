@@ -951,3 +951,192 @@ select:focus-visible {
     animation: none;
   }
 }
+
+/* Operations controls and flight safety share the same minimum target convention. */
+button,
+input,
+select {
+  min-width: 44px;
+  min-height: 44px;
+}
+body[data-station="dock"] #command {
+  height: 64px;
+  gap: 10px;
+}
+body[data-station="dock"] .brand strong,
+body[data-station="dock"] #account {
+  display: none;
+}
+#run {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) minmax(0, 0.65fr) minmax(0, 0.5fr) minmax(0, 1.45fr)
+    minmax(0, 0.9fr) minmax(0, 1.15fr) minmax(0, 1.65fr);
+  overflow: visible;
+}
+.cell[data-cell="phase"] {
+  grid-column: 1;
+}
+.cell[data-cell="time"] {
+  grid-column: 2;
+}
+.cell[data-cell="alert"] {
+  grid-column: 3;
+}
+.cell[data-cell="drive"] {
+  grid-column: 4;
+}
+.cell[data-cell="relay"] {
+  grid-column: 5;
+}
+.cell[data-cell="scan"] {
+  grid-column: 6;
+}
+.cell[data-cell="wave"] {
+  grid-column: 7;
+}
+.cell {
+  grid-row: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0;
+  padding: 4px 10px;
+  white-space: normal;
+}
+.cell strong {
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+#lock {
+  top: 72px;
+  z-index: 8;
+}
+#ship {
+  z-index: 8;
+  max-width: min(540px, calc(100vw - 290px));
+}
+#ship[data-active] {
+  grid-template-columns: auto minmax(80px, 140px) 48px minmax(100px, 220px);
+}
+.gauge-note {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+body[data-map="open"] #messages {
+  left: calc(50% - 100px);
+  max-width: min(680px, calc(100vw - 540px));
+}
+.stake {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.stake p {
+  margin: 3px 0;
+  font-size: 11px;
+}
+.stake button {
+  margin: 4px 4px 0 0;
+}
+.socket-card {
+  white-space: normal;
+}
+.socket-card small {
+  display: block;
+  font-size: 11px;
+  text-transform: none;
+  color: var(--muted);
+}
+.fitting-state,
+.blocked-reason,
+.crew-validation {
+  font-size: 11px;
+  color: var(--muted);
+}
+.blocked-reason,
+.crew-validation[data-state="invalid"] {
+  color: var(--warn);
+}
+.crew input[type="number"] {
+  width: 68px;
+}
+.crew li:has(input) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 68px 16px;
+  gap: 4px;
+  align-items: center;
+}
+.crew li > span:first-child {
+  overflow-wrap: anywhere;
+}
+.crew-validation {
+  min-height: 34px;
+}
+.station-label[data-marker^="berth-"] {
+  background: transparent;
+  padding: 2px 5px;
+}
+
+.crew-quote {
+  font-size: 11px;
+  margin: 6px 0;
+  color: var(--cyan);
+}
+.crew-quote small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+#summary select {
+  max-width: 100%;
+  color: var(--text);
+  background: #10202f;
+}
+
+.station-label[data-marker^="berth-"]::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  height: 8px;
+  border-left: 1px solid #8ea3b6;
+}
+
+.tiers .stake {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.tiers .stake p {
+  line-height: 1.35;
+  margin: 3px 0;
+}
+.briefing-heading {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.briefing-heading h2 {
+  flex: 1;
+  font-size: 20px;
+  margin: 0;
+}
+.briefing-heading button {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 6px;
+}
+.development-card {
+  display: block;
+  width: 100%;
+  margin: 5px 0;
+}
+.development-card small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.launch-remedies button {
+  margin: 4px 3px 4px 0;
+}

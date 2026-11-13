@@ -4,7 +4,14 @@
  * `options.ts`, which holds the rules; every action goes to the server, which decides.
  */
 import type { AccountInfo, Catalog, ClientMessage, Good } from "../protocol";
-import { fittingRows, holding, socketView, toggleFitting } from "./options";
+import {
+  affordableFacilities,
+  fittingRows,
+  holding,
+  socketFacts,
+  socketView,
+  toggleFitting,
+} from "./options";
 import { pace, processorView, progressLine } from "./processor";
 
 export type HomeTab = "overview" | "facilities" | "market" | "processor" | "hangar";
@@ -12,7 +19,8 @@ export type HomeTab = "overview" | "facilities" | "market" | "processor" | "hang
 export interface HomeHandlers {
   tab(tab: HomeTab): void;
   send(message: ClientMessage): void;
-  select(socket: string): void;
+  select(socket: string, facility?: string): void;
+  receipt?(): void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -128,6 +136,10 @@ export function renderHome(
   for (const line of view.summary) section.append(el("p", line, "facts"));
   for (const choice of view.choices) {
     const item = el("div", undefined, "choice");
+    if (choice.message.type === "install") {
+      item.dataset.facility = choice.message.facility;
+      item.tabIndex = -1;
+    }
     const action =
       choice.message.type === "install"
         ? `install:${choice.message.facility}`
@@ -301,7 +313,7 @@ export function renderHome(
         row.blocked,
       ),
       button(
-        row.saved ? "Unfit" : "Fit",
+        row.saved ? "Remove from plan" : "Save to fitting",
         `fit:${row.fitting.id}`,
         () => {
           if (toggle) on.send(toggle);
@@ -309,6 +321,17 @@ export function renderHome(
         toggle ? undefined : "A hull carries two modules",
       ),
     );
+    const flown = account.launch.flown.includes(row.fitting.id);
+    item.append(
+      el(
+        "p",
+        row.saved ? (flown ? "✓ Will fly" : "Saved · stays home") : "Not in the saved fitting",
+        "fitting-state",
+      ),
+    );
+    if (row.blocked) item.append(el("p", row.blocked, "blocked-reason"));
+    else if (row.saved && !flown)
+      item.append(el("p", "Buy a replacement to fly this saved fitting", "blocked-reason"));
     panel.append(item);
   }
 
@@ -332,6 +355,12 @@ export function renderHome(
   const overview = panes.get("overview");
   overview?.append(el("p", "HOME / OPERATIONS", "eyebrow"), el("h2", "Station overview"));
   overview?.append(el("p", "Four berths. One expedition.", "facts"));
+  if (on.receipt)
+    overview?.append(
+      button("Expedition receipts", "view-receipts", () => {
+        on.receipt?.();
+      }),
+    );
   const power = el("div", undefined, "readout");
   power.append(
     el("span", "POWER ALLOCATION"),
@@ -355,6 +384,8 @@ export function renderHome(
       },
     );
     select.className = "socket-card";
+    select.dataset.state = open.state;
+    for (const fact of socketFacts(catalog, account, socket.id)) select.append(el("small", fact));
     overview?.append(select);
   }
   overview?.append(
@@ -364,6 +395,18 @@ export function renderHome(
       "facts",
     ),
   );
+  const ready = affordableFacilities(catalog, account);
+  if (ready.length) {
+    overview?.append(el("h3", "Ready to develop"));
+    for (const choice of ready) {
+      const inspect = button(`Inspect ${choice.name}`, `develop:${choice.name}`, () => {
+        on.select(choice.socket, choice.facility);
+      });
+      inspect.className = "development-card";
+      inspect.append(el("small", `Enables: ${choice.opens.join(", ")}`));
+      overview?.append(inspect);
+    }
+  }
   const navigation = el("nav", undefined, "service-nav");
   navigation.setAttribute("aria-label", "Station services");
   ["overview", "facilities", "market", "processor", "hangar"].forEach((name) => {

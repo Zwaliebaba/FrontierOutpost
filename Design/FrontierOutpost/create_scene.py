@@ -216,6 +216,13 @@ def socket(label,beside,c,top,bridge_from,bridge_to):
     beam('Socket %s | bridge'%label,bridge_from,bridge_to,.16,steel)
     beam('Socket %s | power conduit'%label,bridge_from+Vector((0,0,-.22)),bridge_to+Vector((0,0,-.22)),.05,orange)
     anchor=empty('Socket_%s'%label,c+Vector((0,0,top+.01)))
+    if label == 'B':
+        # Removable blanking plate: kept separate at import and shown only while closed.
+        lid=cyl('SocketClosure_B_plate',c+Vector((0,0,top+.12)),1.16,.16,dark,8)
+        bpy.context.view_layer.update();w=lid.matrix_world.copy();lid.parent=anchor;lid.matrix_world=w
+        for angle in [-pi/4,pi/4]:
+            bar=box('SocketClosure_B_cross',c+Vector((0,0,top+.22)),(1.7,.12,.06),lightarmor,.015,(0,0,angle))
+            bpy.context.view_layer.update();w=bar.matrix_world.copy();bar.parent=anchor;bar.matrix_world=w
     sockets[label]={'beside':beside,'anchor':anchor}
 socket('A','cargo bay',sp(-8.95,.5,0),1.6,sp(-7.1,.5,1.45),sp(-7.6,.5,1.45))
 socket('B','berth',sp(10.2,DECK_Y,0),.72,sp(8.4,DECK_Y,.55),sp(8.85,DECK_Y,.55))
@@ -359,6 +366,9 @@ facility_roots=[]
 def facility(fid,tier,slot,build):
     Q=layout(-9+slot*3.6,-32)
     build(lambda x,y,z:Q+Vector((x,y,z)))
+    # A count of live service indicators shows effective tier without changing owned silhouette.
+    for level in range(1,tier+1):
+        box('Operating_Tier_%d'%level,Q+Vector((-.35+(level-1)*.7,-1.15,.32)),(.3,.06,.16),cyan,.01)
     root=bpy.data.objects.new('Facility_%s_T%d'%(fid,tier),None);groups[active].objects.link(root);root.location=Q
     root['facility']=fid;root['tier']=tier;root['units']='metres';root['up_axis']='+Z'
     bpy.context.view_layer.update()

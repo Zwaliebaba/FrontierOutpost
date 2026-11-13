@@ -202,8 +202,9 @@ export function summaryLines(summary: RunSummary): string[] {
     summary.ending === "docked"
       ? `Banked: ${banked.length ? banked.join(", ") : "nothing"}`
       : `Lost: ${String(summary.cargoLost)} cargo, ${String(summary.modulesLost)} upgraded modules`,
-    `Contract: ${String(summary.payout)} cr · supplies −${String(summary.launchCost)} cr · ` +
-      `net ${net < 0 ? "−" : ""}${String(Math.abs(net))} cr`,
+    summary.settled
+      ? `Your crew-pot share: ${String(summary.payout)} cr · supplies −${String(summary.launchCost)} cr · net ${net < 0 ? "−" : ""}${String(Math.abs(net))} cr`
+      : `Crew payout pending · supplies −${String(summary.launchCost)} cr · cargo is banked separately`,
     `Approach ${clock(summary.approachSeconds)} · in the site ${clock(summary.objectiveSeconds)} · ` +
       `return ${clock(summary.returnSeconds)}`,
   ];

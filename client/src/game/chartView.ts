@@ -24,6 +24,7 @@ export interface ChartContact {
 
 /** Everything the map shows that changes during a run. */
 export interface ChartState {
+  relay?: number;
   places: readonly ChartPlace[];
   /** The destination chosen for the jump drive. */
   selected: string | null;
@@ -108,8 +109,8 @@ type PlotMode = "mini" | "full" | "preview";
 /** One drawing of the chart. */
 class Plot {
   readonly root: SVGSVGElement;
-  readonly #width: number;
-  readonly #height: number;
+  #width: number;
+  #height: number;
   readonly #padding: number;
   readonly #mode: PlotMode;
   readonly #detailed: boolean;
@@ -125,6 +126,12 @@ class Plot {
   readonly #contacts = new Map<number, SVGGElement>();
   #deposits: SVGCircleElement[] = [];
   #frame: ChartFrame | null = null;
+  #site: {
+    site: SiteInfo;
+    obstacles: readonly ObstacleInfo[];
+    deposits: readonly DepositInfo[];
+    places: readonly ChartPlace[];
+  } | null = null;
 
   constructor(
     width: number,
@@ -155,6 +162,22 @@ class Plot {
     this.root.append(this.#ground, this.#course, this.#placeLayer, this.#contactLayer, this.#ship);
   }
 
+  /** Full-map SVG units are CSS pixels, so labels and hit areas never shrink with the panel. */
+  resize(width: number, height: number): void {
+    if (
+      width < 100 ||
+      height < 100 ||
+      (Math.abs(this.#width - width) < 0.5 && Math.abs(this.#height - height) < 0.5)
+    )
+      return;
+    this.#width = width;
+    this.#height = height;
+    this.root.dataset.compact = String(height < 400);
+    this.root.setAttribute("viewBox", `0 0 ${String(width)} ${String(height)}`);
+    const data = this.#site;
+    if (data) this.setSite(data.site, data.obstacles, data.deposits, data.places);
+  }
+
   /** The length the scale bar shows, for the full map's legend. */
   get bar(): { metres: number; pixels: number } | null {
     return this.#frame ? scaleBar(this.#frame, 110) : null;
@@ -168,6 +191,7 @@ class Plot {
     places: readonly ChartPlace[],
   ): void {
     // A preview is small: it frames the site, and holds the dock at its edge to show the way.
+    this.#site = { site, obstacles, deposits, places };
     const preview = this.#mode === "preview";
     const frame = fitChart(site, this.#width, this.#height, this.#padding, !preview);
     this.#frame = frame;
@@ -268,7 +292,7 @@ class Plot {
       const size = Math.max(13, reach);
       const icon = svg("path", "place-glyph", { d: GLYPH[place.kind] });
       const name = svg("text", "place-name", { y: size + 17, "text-anchor": "middle" });
-      name.textContent = place.name.toUpperCase();
+      name.textContent = this.#height < 400 ? place.key : place.name.toUpperCase();
       sub = svg("text", "place-sub", { y: size + 31, "text-anchor": "middle" });
       // The touch target is a finger wide whatever the pocket's drawn size (design §5).
       const hit = svg("circle", "place-hit", { r: Math.max(24, size + 4) });
@@ -281,9 +305,20 @@ class Plot {
         group.append(svg("path", "place-lock", { d: PADLOCK, transform: "translate(11 -11)" }));
       }
       group.append(name, sub, hit);
-      const id = place.id;
-      hit.addEventListener("click", () => this.#choose?.(id));
-      hit.addEventListener("dblclick", () => this.#jumpTo?.(id));
+      // Overlapping generous hit areas still choose the nearest plotted centre.
+      const nearest = (event: MouseEvent): string => {
+        const box = this.root.getBoundingClientRect();
+        const x = ((event.clientX - box.left) * this.#width) / box.width;
+        const y = ((event.clientY - box.top) * this.#height) / box.height;
+        return (
+          [...this.#places].sort(
+            ([, a], [, b]) =>
+              Math.hypot(a.at.x - x, a.at.y - y) - Math.hypot(b.at.x - x, b.at.y - y),
+          )[0]?.[0] ?? place.id
+        );
+      };
+      hit.addEventListener("click", (event) => this.#choose?.(nearest(event)));
+      hit.addEventListener("dblclick", (event) => this.#jumpTo?.(nearest(event)));
     }
     this.#placeLayer.append(group);
     this.#places.set(place.id, { group, sub, at });
@@ -432,6 +467,7 @@ export class ChartView {
   readonly #engage = html("button", "chart-engage");
   readonly #engageLabel = html("span");
   readonly #note = html("p", "action-note");
+  readonly #relay = html("p", "relay-brief");
   readonly #jump = html("div");
   readonly #jumpText = html("span", "jump-text");
   readonly #jumpHint = html("span", "jump-hint");
@@ -439,6 +475,7 @@ export class ChartView {
   /** The last digit that chooses a destination, in the footer's hint. */
   readonly #lastKey = key("5");
   #places: readonly ChartPlace[] = [];
+  #previousFocus: HTMLElement | null = null;
 
   constructor(handlers: ChartHandlers) {
     this.#on = handlers;
@@ -456,15 +493,27 @@ export class ChartView {
     if (this.isOpen || this.#places.length === 0) return;
     this.overlay.dataset.state = "open";
     this.navigator.dataset.map = "open";
+    document.body.dataset.map = "open";
+    this.#previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    (
+      [...this.#rows.values()].find((row) => row.button.dataset.selected === "true") ??
+      this.#rows.values().next().value
+    )?.button.focus({ preventScroll: true });
   }
 
   close(): void {
     if (!this.isOpen) return;
     delete this.overlay.dataset.state;
     delete this.navigator.dataset.map;
+    delete document.body.dataset.map;
     // Nothing in the closed map may keep the focus: Enter would press a button nobody can see.
     const focused = document.activeElement;
-    if (focused instanceof HTMLElement && this.overlay.contains(focused)) focused.blur();
+    if (focused instanceof HTMLElement && this.overlay.contains(focused)) {
+      focused.blur();
+      if (this.#previousFocus?.isConnected) this.#previousFocus.focus({ preventScroll: true });
+    }
+    this.#previousFocus = null;
   }
 
   toggle(): void {
@@ -532,6 +581,10 @@ export class ChartView {
 
   update(state: ChartState): void {
     this.#places = state.places;
+    const relays = state.places.filter((place) => place.tags.includes("relay"));
+    this.#relay.hidden = relays.length === 0;
+    if (relays.length)
+      this.#relay.textContent = `Optional relay job: two pilots hold the centres of ${relays.map((place) => place.name).join(" and ")} within 8 m, together for 30 s. Adds 50% to the shared contract pot once earned.`;
     this.#mini.update(state);
     this.#updateReadout(state);
     if (!this.isOpen) return;
@@ -616,11 +669,22 @@ export class ChartView {
     if (this.#written.changed("action.disabled", String(disabled))) {
       this.#engage.disabled = disabled;
     }
-    const note = spooling
+    let note = spooling
       ? readout.text
       : readiness.ready
         ? "The drive spools for a few seconds. A hostile lock cancels it."
         : readiness.reason;
+    if (place?.tags.includes("relay")) {
+      const held = state.relay ?? 0;
+      note +=
+        held >= 30
+          ? " Relays linked ✓ · bonus secured if the contract is earned."
+          : held > 0
+            ? ` Both held: ${String(held)}/30 s.`
+            : place.distance <= 8
+              ? " You are in relay range · waiting for the other centre."
+              : ` Fly to the centre: ${distanceText(Math.max(0, place.distance - 8))} to relay range.`;
+    }
     if (this.#written.changed("action.note", note)) this.#note.textContent = note;
     const width = `${(readout.share * 100).toFixed(1)}%`;
     if (this.#written.changed("action.fill", width)) this.#progress.style.width = width;
@@ -664,6 +728,32 @@ export class ChartView {
     this.overlay.id = "chart";
     this.overlay.setAttribute("role", "dialog");
     this.overlay.setAttribute("aria-label", "System map");
+    this.overlay.setAttribute("aria-describedby", "chart-keys");
+    this.overlay.addEventListener("keydown", (event) => {
+      const rows = [...this.#rows.values()].map((row) => row.button);
+      const index = rows.findIndex((button) => button === document.activeElement);
+      if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.code)) {
+        event.preventDefault();
+        const next =
+          event.code === "Home"
+            ? 0
+            : event.code === "End"
+              ? rows.length - 1
+              : (Math.max(0, index) + (event.code === "ArrowUp" ? -1 : 1) + rows.length) %
+                rows.length;
+        rows[next]?.focus();
+      } else if (event.code === "F6") {
+        event.preventDefault();
+        const controls = [
+          rows[index < 0 ? 0 : index],
+          this.#engage,
+          this.overlay.querySelector<HTMLButtonElement>(".chart-close"),
+        ].filter((button): button is HTMLButtonElement => !!button && !button.disabled);
+        controls[
+          (controls.indexOf(document.activeElement as HTMLButtonElement) + 1) % controls.length
+        ]?.focus();
+      }
+    });
     // A click on the dimmed scene around the map closes it.
     this.overlay.addEventListener("click", (event) => {
       if (event.target === this.overlay) this.close();
@@ -691,6 +781,14 @@ export class ChartView {
 
     const body = html("div", "chart-body");
     const stage = html("div", "chart-plot");
+    new ResizeObserver(([entry]) => {
+      if (entry) this.#full.resize(entry.contentRect.width, entry.contentRect.height);
+      const bar = this.#full.bar;
+      if (bar) {
+        this.#scale.style.width = `${bar.pixels.toFixed(0)}px`;
+        this.#scaleText.textContent = distanceText(bar.metres);
+      }
+    }).observe(stage);
     const legend = html("ul", "chart-legend");
     for (const [side, path, text] of [
       ["own", SHIP, "You"],
@@ -733,10 +831,12 @@ export class ChartView {
       this.#engage,
       this.#note,
     );
-    side.append(html("p", "eyebrow", "DESTINATIONS"), this.#list, this.#action);
+    side.append(html("p", "eyebrow", "DESTINATIONS"), this.#relay, this.#list, this.#action);
     body.append(stage, side);
 
     const foot = html("footer", "chart-foot");
+    foot.id = "chart-keys";
+    foot.append(html("span", undefined, "↑↓ destinations · F6 actions · Enter select · Tab lock"));
     const digits = html("span");
     digits.append(key("1"), "–", this.#lastKey, " choose");
     foot.append(digits);

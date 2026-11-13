@@ -1,10 +1,7 @@
 /**
- * A jump as the pilot sees it. The drive's spool shows on the pilot's own ship as rings closing
- * on the hull; any pilot's jump leaves a flash and a streak where the ship was and another where
- * it arrives. The server decides every jump: this only draws them, and it finds one by what a
- * jump looks like in the snapshots, a ship that moved farther than any drive flies, so a crew
- * mate's jump shows without the server saying so. Kept free of the DOM and of WebGL so it can be
- * tested.
+ * A jump as the pilot sees it. Reliable events start crew spool rings; snapshots locate the
+ * departure and arrival flashes when a ship moves farther than normal flight allows. The
+ * server decides every jump. Kept free of the DOM and WebGL so it can be tested.
  */
 import type { EntityKind } from "../protocol";
 import { teleported } from "../net/interpolation";
@@ -51,6 +48,7 @@ export class JumpEffects {
   #flashes: (Omit<Flash, "age"> & { seconds: number })[] = [];
   #charge: { ship: number; share: number } | null = null;
   #phase = 0;
+  readonly #remote = new Map<number, { left: number; total: number; phase: number }>();
 
   /**
    * Notes where each ship is drawn this frame, `seconds` after the last. A pilot's ship that
@@ -96,8 +94,39 @@ export class JumpEffects {
     this.#charge = { ship, share: Math.min(1, Math.max(0, share)) };
   }
 
+  /** Reliable crew spool events; a missing end event expires after the advertised duration. */
+  remoteCharge(ship: number, seconds: number): void {
+    if (seconds <= 0) {
+      this.#remote.delete(ship);
+      return;
+    }
+    if (this.#remote.size < 4 || this.#remote.has(ship))
+      this.#remote.set(ship, { left: seconds, total: seconds, phase: 0 });
+  }
+
+  get charges(): Charge[] {
+    return [
+      ...(this.charge ? [this.charge] : []),
+      ...[...this.#remote].map(([ship, charge]) => ({
+        ship,
+        share: 1 - charge.left / charge.total,
+        pulse: charge.phase,
+      })),
+    ];
+  }
+
   /** Ages the flashes and turns the spool's closing ring, `dt` seconds on. */
-  advance(dt: number): void {
+  advance(dt: number, elapsed = dt): void {
+    for (const [ship, charge] of this.#remote) {
+      charge.left -= elapsed;
+      charge.phase =
+        (charge.phase +
+          dt *
+            (PULSE_RATE.start +
+              (PULSE_RATE.end - PULSE_RATE.start) * (1 - charge.left / charge.total))) %
+        1;
+      if (charge.left <= 0) this.#remote.delete(ship);
+    }
     for (const flash of this.#flashes) flash.seconds += dt;
     this.#flashes = this.#flashes.filter((flash) => flash.seconds < FLASH_SECONDS);
     if (this.#charge) {
@@ -121,6 +150,7 @@ export class JumpEffects {
   /** A new run, or none: nothing carries over. */
   reset(): void {
     this.#seen.clear();
+    this.#remote.clear();
     this.#flashes = [];
     this.#charge = null;
     this.#phase = 0;

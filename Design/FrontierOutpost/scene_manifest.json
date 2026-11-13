@@ -6,9 +6,9 @@
   "seed": 2266,
   "assets": {
     "Station": {
-      "objects": 478,
-      "triangles_base_mesh": 10039,
-      "triangles_export": 22512
+      "objects": 481,
+      "triangles_base_mesh": 10091,
+      "triangles_export": 22628
     },
     "Cruiser": {
       "objects": 92,
@@ -26,9 +26,9 @@
       "triangles_export": 480
     },
     "Facilities": {
-      "objects": 119,
-      "triangles_base_mesh": 9772,
-      "triangles_export": 10924
+      "objects": 128,
+      "triangles_base_mesh": 9880,
+      "triangles_export": 11320
     }
   },
   "notes": "GLBs retain scene placement. Berths 07\u201310 use berths.json; the reference frigate faces outward on 07. Preview crew copies are excluded from GLBs. Aurora cruiser stays at its original scale. Backdrop and drive plumes are presentation effects.",
@@ -55,7 +55,7 @@
     ],
     "minimum_edge_clearance": 0.46750003814697205,
     "landing_foot_height": 0.8600000143051147,
-    "structural_obstacles_checked": 434,
+    "structural_obstacles_checked": 437,
     "connector_top_height": 0.83,
     "berths": [
       {
@@ -195,12 +195,12 @@
     "Facility_sensor_array_T1": {
       "facility": "sensor_array",
       "tier": 1,
-      "objects": 10,
-      "triangles_base_mesh": 280,
+      "objects": 11,
+      "triangles_base_mesh": 292,
       "bounds_root_space": {
         "min": [
           -1.03,
-          -1.03,
+          -1.18,
           0.0
         ],
         "max": [
@@ -213,12 +213,12 @@
     "Facility_sensor_array_T2": {
       "facility": "sensor_array",
       "tier": 2,
-      "objects": 28,
-      "triangles_base_mesh": 2100,
+      "objects": 30,
+      "triangles_base_mesh": 2124,
       "bounds_root_space": {
         "min": [
           -1.17,
-          -1.17,
+          -1.18,
           0.0
         ],
         "max": [
@@ -231,12 +231,12 @@
     "Facility_refinery_T1": {
       "facility": "refinery",
       "tier": 1,
-      "objects": 14,
-      "triangles_base_mesh": 1456,
+      "objects": 15,
+      "triangles_base_mesh": 1468,
       "bounds_root_space": {
         "min": [
           -1.15,
-          -0.95,
+          -1.18,
           0.0
         ],
         "max": [
@@ -249,12 +249,12 @@
     "Facility_refinery_T2": {
       "facility": "refinery",
       "tier": 2,
-      "objects": 25,
-      "triangles_base_mesh": 5328,
+      "objects": 27,
+      "triangles_base_mesh": 5352,
       "bounds_root_space": {
         "min": [
           -1.2,
-          -1.15,
+          -1.18,
           0.0
         ],
         "max": [
@@ -267,12 +267,12 @@
     "Facility_fabrication_bay_T1": {
       "facility": "fabrication_bay",
       "tier": 1,
-      "objects": 13,
-      "triangles_base_mesh": 188,
+      "objects": 14,
+      "triangles_base_mesh": 200,
       "bounds_root_space": {
         "min": [
           -1.1,
-          -0.75,
+          -1.18,
           0.03
         ],
         "max": [
@@ -285,12 +285,12 @@
     "Facility_fabrication_bay_T2": {
       "facility": "fabrication_bay",
       "tier": 2,
-      "objects": 23,
-      "triangles_base_mesh": 420,
+      "objects": 25,
+      "triangles_base_mesh": 444,
       "bounds_root_space": {
         "min": [
           -1.22,
-          -1.07,
+          -1.18,
           0.0
         ],
         "max": [

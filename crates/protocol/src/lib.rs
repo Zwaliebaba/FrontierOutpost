@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 10;
+pub const PROTOCOL_VERSION: u32 = 11;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -177,13 +177,17 @@ pub enum ServerMessage {
     ExtractRefused { reason: ExtractRefusal },
     /// The jump drive started to spool toward `target`; the ship jumps in
     /// `seconds` unless the spool is cancelled.
-    JumpSpooling { target: JumpTarget, seconds: u32 },
+    JumpSpooling {
+        ship: u32,
+        target: JumpTarget,
+        seconds: u32,
+    },
     /// The jump drive did not spool.
     JumpRefused { reason: JumpRefusal },
     /// A spooling jump stopped before the ship jumped.
-    JumpCancelled { reason: JumpCancel },
+    JumpCancelled { ship: u32, reason: JumpCancel },
     /// The ship jumped and arrived near `target`, at rest.
-    Jumped { target: JumpTarget },
+    Jumped { ship: u32, target: JumpTarget },
     /// A scan revealed the site's hidden seed values (design section 10).
     Scanned {
         /// Index into the contract's pockets.
@@ -200,7 +204,11 @@ pub enum ServerMessage {
     /// The instance ended and the crew's pot was paid: `share` of it to this
     /// pilot, by the host's split. A pilot who docked last also sees their
     /// share in `RunOver`.
-    PotPaid { pot: PotInfo, share: u32 },
+    PotPaid {
+        run: String,
+        pot: PotInfo,
+        share: u32,
+    },
 }
 
 /// A crew as one member sees it (design section 2).
@@ -431,7 +439,7 @@ pub enum Ending {
 }
 
 /// How a pilot's run ended and what it brought home (design section 6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct RunSummary {
@@ -448,6 +456,10 @@ pub struct RunSummary {
     pub approach_seconds: u32,
     pub objective_seconds: u32,
     pub return_seconds: u32,
+    pub run: String,
+    /// False while other pilots are still flying. A settled zero is not pending.
+    pub settled: bool,
+    pub pot: PotInfo,
 }
 
 /// A fixed circular obstacle on the gameplay plane, in metres.
@@ -566,11 +578,12 @@ mod tests {
         assert_eq!(cancel, ClientMessage::Jump { target: None });
         assert_eq!(
             serde_json::to_string(&ServerMessage::JumpSpooling {
+                ship: 0,
                 target: JumpTarget::Dock,
                 seconds: 6
             })
             .unwrap(),
-            r#"{"type":"jumpSpooling","target":{"type":"dock"},"seconds":6}"#
+            r#"{"type":"jumpSpooling","ship":0,"target":{"type":"dock"},"seconds":6}"#
         );
         assert_eq!(
             serde_json::to_string(&ServerMessage::JumpRefused {
@@ -681,6 +694,13 @@ mod tests {
                 approach_seconds: 170,
                 objective_seconds: 900,
                 return_seconds: 180,
+                run: "receipt-test".into(),
+                settled: true,
+                pot: PotInfo {
+                    contract: 100,
+                    bounty: 0,
+                    relay: 0,
+                },
             },
         };
         let json = serde_json::to_string(&message).unwrap();

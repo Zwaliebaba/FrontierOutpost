@@ -239,7 +239,7 @@ describe("ExpeditionScene", () => {
       });
       return y;
     };
-    world.update([pose(1, "playerShip", SITE.dockX, SITE.dockZ)], null, undefined, 0.1);
+    world.update([pose(1, "playerShip", SITE.dockX, SITE.dockZ + 6)], null, undefined, 0.1);
     expect(leg()).toBeCloseTo(-0.4, 6);
     // Off the berth the legs fold over the gear's time, not at once.
     world.update([pose(1, "playerShip", SITE.dockX + 3, 0)], null, undefined, GEAR_SECONDS / 2);
@@ -326,4 +326,38 @@ describe("ExpeditionScene", () => {
     scene.update([pose(2, "playerShip", 0, 300)], null, undefined, 0, jumps);
     expect(scene.jumpFlashes).toHaveLength(0);
   });
+});
+
+it("recognizes each authored berth and does not lower gear at the apron centre", () => {
+  useShipModel(model());
+  const world = new ExpeditionScene(0);
+  world.setSite(SITE, [], []);
+  const ships = [6, 2, -2, -6].map((z, id) => pose(id, "playerShip", SITE.dockX, z));
+  world.update(ships, null, undefined, 0.1);
+  for (const ship of ships) expect(world.ship(ship.id)?.lowered).toBe(1);
+  world.update([pose(4, "playerShip", SITE.dockX, 0)], null, undefined, 0.1);
+  expect(world.ship(4)?.lowered).toBe(0);
+});
+
+it("confirms hull and own-shield loss without flashing another ship or a new contact", () => {
+  useShipModel(model());
+  const world = new ExpeditionScene(1);
+  world.configureFeedback(true, 40);
+  const own = pose(1, "playerShip");
+  const ally = pose(2, "playerShip", 4);
+  world.update([own, ally], null, undefined, 0.016);
+  expect(world.ship(1)?.hit).toBe(0);
+  world.update([{ ...own, hull: 200 }, ally], null, undefined, 0.016);
+  expect(world.ship(1)?.hit).toBeGreaterThan(0);
+  expect(world.ship(2)?.hit).toBe(0);
+  expect(world.ship(1)?.feedback[0]?.material).not.toBe(world.ship(2)?.feedback[0]?.material);
+  world.update([{ ...own, hull: 200 }, ally], null, undefined, 1);
+  world.configureFeedback(true, 30);
+  world.update([{ ...own, hull: 200 }, ally], null, undefined, 0.016);
+  expect(world.ship(1)?.hit).toBeGreaterThan(0);
+  world.configureFeedback(false, 20);
+  world.update([{ ...own, hull: 100 }, ally], null, undefined, 0.016);
+  expect(world.ship(1)?.hit).toBe(0);
+  world.update([pose(3, "drone")], null, undefined, 0.016);
+  expect(world.ship(3)?.hit).toBe(0);
 });

@@ -19,6 +19,11 @@ function models(): OutpostModels {
     const anchor = new Group();
     anchor.name = `Socket_${id.toUpperCase()}`;
     anchor.position.set(x, 1, 0);
+    if (id === "b") {
+      const cover = new Mesh(new BoxGeometry(1, 0.1, 1), new MeshStandardMaterial());
+      cover.name = "SocketClosure_B_plate";
+      anchor.add(cover);
+    }
     station.add(anchor);
     sockets.set(id, anchor);
   }
@@ -30,6 +35,11 @@ function models(): OutpostModels {
       root.add(
         new Mesh(new BoxGeometry(1, tier, 1), new MeshStandardMaterial({ emissive: 0xffffff })),
       );
+      for (let level = 1; level <= tier; level++) {
+        const indicator = new Mesh(new BoxGeometry(0.1, 0.1, 0.1), new MeshStandardMaterial());
+        indicator.name = `Operating_Tier_${String(level)}`;
+        root.add(indicator);
+      }
       facilities.set(facilityKey(facility, tier), root);
     }
   }
@@ -189,6 +199,33 @@ describe("the outpost scene", () => {
       }
     });
     // The hull and the dimmed refinery; pick targets and the ring are not drawn as structure.
-    expect(refs).toEqual([STRUCTURE, STRUCTURE]);
+    expect(refs.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(refs)).toEqual(new Set([STRUCTURE]));
   });
+});
+
+it("preserves the built tier while changing operating indicators and the socket cover", () => {
+  const pack = models();
+  const scene = new OutpostScene(pack);
+  const layout = (run: number, open: boolean) =>
+    account(
+      [
+        { id: "a", open: true, facility: "sensor_array", run },
+        { id: "b", open, run: 0 },
+      ],
+      [{ facility: "sensor_array", tier: 2 }],
+    );
+  scene.apply(layout(1, false));
+  const socket = pack.sockets.get("a");
+  const cover = pack.station.getObjectByName("SocketClosure_B_plate");
+  expect(socket?.getObjectByName("Facility_sensor_array_T2")).toBeDefined();
+  expect(socket?.getObjectByName("Operating_Tier_1")?.visible).toBe(true);
+  expect(socket?.getObjectByName("Operating_Tier_2")?.visible).toBe(false);
+  expect(cover?.visible).toBe(true);
+  scene.apply(layout(2, true));
+  expect(socket?.getObjectByName("Operating_Tier_2")?.visible).toBe(true);
+  expect(cover?.visible).toBe(false);
+  scene.apply(layout(0, true));
+  expect(socket?.getObjectByName("Facility_sensor_array_T2")).toBeDefined();
+  expect(socket?.getObjectByName("Operating_Tier_1")?.visible).toBe(false);
 });

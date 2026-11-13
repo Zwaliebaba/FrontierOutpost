@@ -147,6 +147,8 @@ pub struct Catalog {
     pub recipes: Vec<RecipeInfo>,
     /// Launch supplies, credits per pilot.
     pub supplies: u32,
+    /// Percentage of the solo contract pot for crews of one through four.
+    pub crew_payout_percent: Vec<u32>,
 }
 
 /// A socket of the pilot's outpost as it stands.

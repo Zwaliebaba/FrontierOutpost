@@ -117,7 +117,7 @@ new on the next run. This is the game's signature.*
 | 5.3 | Outpost rules as data: facilities, capability tags, power cap, sockets, adjacency, reinstallation cost | Sim tests; a test adds a facility through data alone |
 | 5.4 | Outpost view: free orbit, select a facility, build, upgrade and reconfigure, with previews that name what opens | Browser tests for build and reconfigure |
 | 5.5 | Capabilities reach the expedition: pockets, rigs, modules and threat tiers follow the powered layout and unlocks | An integration test shows a locked pocket opening after a purchase |
-| 5.6 | Trade and processing: fixed NPC prices, recipes that advance per completed run, the launch cost | Sim tests; a data test that no recipe is an arbitrage |
+| 5.6 | Trade and processing: fixed NPC prices, recipes that advance by the server clock, online or away, the launch cost | Sim tests; a data test that no recipe is an arbitrage |
 | 5.7 | Fittings and the launch screen, showing the stake at replacement price | Browser test of the stake shown |
 
 ### M6 · Crew

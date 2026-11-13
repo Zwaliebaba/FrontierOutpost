@@ -15,9 +15,9 @@ import type {
   RunSummary,
   SnapshotEvent,
 } from "./protocol";
-import { launchRole, renderCrew } from "./outpost/crew";
+import { crewQuote, launchRole, renderCrew, resetSplitPending } from "./outpost/crew";
 import { loadOutpostModels } from "./outpost/models";
-import { fittingName, launchLines, supplySales } from "./outpost/options";
+import { affordableFacilities, fittingName, launchLines, supplySales } from "./outpost/options";
 import { BERTHS, placeStation } from "./outpost/placement";
 import { OutpostScene } from "./outpost/scene";
 import type { HomeTab } from "./outpost/ui";
@@ -62,6 +62,7 @@ import {
 import type { SignedIn } from "./game/identity";
 import { clearOf, distanceText, placeMarkers } from "./game/navigation";
 import type { Box } from "./game/navigation";
+import { Receipts } from "./game/receipts";
 import { Notices } from "./game/notices";
 import type { NoticeLevel } from "./game/notices";
 import { prompts } from "./game/prompts";
@@ -87,7 +88,7 @@ const KEY_TURN_RATE = 1.6;
 /** Room the waypoint keeps from the screen's edges: the bar at the top, the footer below. */
 const NAV_INSETS = { top: 62, right: 16, bottom: 48, left: 16 };
 /** The top bar's and the footer's heights (command.css): the waypoint stays between them. */
-const BAR_HEIGHT = 44;
+const BAR_HEIGHT = 64;
 const FOOTER_HEIGHT = 30;
 /** The flight keys, shown in the footer for as long as a run lasts. */
 const FLIGHT_KEYS =
@@ -543,8 +544,30 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   let glide: { from: Vector3; toStation: boolean; t: number } | null = null;
   const glided = new Vector3();
   const shots = new Shots();
+  resetSplitPending();
+  const receipts = new Receipts();
+  const receiptKey = `frontier.receipts.${callsign}`;
+  try {
+    receipts.restore(localStorage.getItem(receiptKey));
+  } catch {
+    /* Storage may be disabled. */
+  }
+  const saveReceipts = () => {
+    try {
+      localStorage.setItem(receiptKey, receipts.serialize());
+    } catch {
+      /* History is optional; account state remains authoritative. */
+    }
+  };
 
   const showBriefing = (offer: Contract) => {
+    const scrollTop = briefing.querySelector(".briefing-content")?.scrollTop ?? 0;
+    const focused =
+      document.activeElement instanceof HTMLElement && briefing.contains(document.activeElement)
+        ? document.activeElement
+        : null;
+    const focusAction = focused?.dataset.action;
+    const focusSplit = focused?.dataset.split;
     briefing.replaceChildren();
     briefing.dataset.state = "open";
     const title = element("h2");
@@ -581,6 +604,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       "Fly out, extract, and dock with at least 10 units to collect the contract. " +
       "Scanning in the site reveals the rest.";
     const stake = element("div", undefined, "stake");
+    const remedies = element("div", undefined, "launch-remedies");
     if (catalog && holdings) {
       const known = catalog;
       for (const text of launchLines(known, holdings)) {
@@ -596,7 +620,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         sell.addEventListener("click", () => {
           send({ type: "sell", good: sale.good, amount: sale.amount });
         });
-        stake.append(sell);
+        remedies.append(sell);
       }
       if (holdings.launch.due.type === "short" && supplySales(known, holdings).length === 0) {
         const p = element("p");
@@ -612,7 +636,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         buy.addEventListener("click", () => {
           send({ type: "buyFitting", fitting: missing.fitting });
         });
-        stake.append(buy);
+        remedies.append(buy);
       }
       stake.dataset.stake = String(holdings.launch.stake);
     }
@@ -638,7 +662,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     for (const tier of offer.tiers) {
       const option = element("option");
       option.value = String(tier.tier);
-      option.textContent = `Tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} / pays ${String(tier.payout)} cr${tier.open ? "" : " / locked"}`;
+      option.textContent = `Tier ${TIER_NAME[tier.tier] ?? String(tier.tier)} / pays ${String(catalog ? crewQuote(catalog, tier.payout, crew).total : tier.payout)} cr${tier.open ? "" : " / locked"}`;
       option.disabled = !tier.open && role.follow !== tier.tier;
       option.selected = tier.tier === selectedTier;
       tierSelect.append(option);
@@ -690,24 +714,89 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       tiers.append(button);
     }
     const content = element("div", undefined, "briefing-content");
-    content.append(eyebrow, title, figure, pockets, facts, note, stake, crewSection);
+    const heading = element("div", undefined, "briefing-heading");
+    const crewControl = element("button");
+    crewControl.dataset.action = "crew-controls";
+    crewControl.textContent = `CREW ${String(crew?.members.length ?? 1)}/4`;
+    crewControl.setAttribute("aria-label", "Open crew formation and payout controls");
+    crewControl.addEventListener("click", () => {
+      crewSection.scrollIntoView({ block: "start" });
+      crewSection.querySelector<HTMLElement>("input,button")?.focus({ preventScroll: true });
+    });
+    heading.append(title, crewControl);
+    content.append(eyebrow, heading, note, figure, pockets, facts, remedies, crewSection);
+    tiers.prepend(stake);
+    const quoted = offer.tiers.find((tier) => tier.tier === selectedTier);
+    if (catalog && quoted && (crew?.members.length ?? 1) > 1) {
+      const quote = crewQuote(catalog, quoted.payout, crew);
+      const payout = element("p", undefined, "crew-quote");
+      payout.textContent = `Crew contract pot ${String(quote.total)} cr · your ${String(quote.percent)}% ≈ ${String(quote.share)} cr`;
+      const terms = element("small");
+      terms.textContent = `Estimate with ${String(quote.pilots)} pilot(s) following. Cargo is personal; the pot pays when the expedition ends. Bonuses and missing followers change the final share.`;
+      payout.append(terms);
+      tiers.insertBefore(payout, stake.nextSibling);
+      tierSelect.addEventListener("change", () => {
+        showBriefing(offer);
+        document.getElementById("threat-tier")?.focus();
+      });
+    }
     briefing.append(content, tiers);
+    content.scrollTop = scrollTop;
+    if (focusAction || focusSplit) {
+      const replacement = [
+        ...briefing.querySelectorAll<HTMLElement>("[data-action], [data-split]"),
+      ].find((node) =>
+        focusSplit !== undefined
+          ? node.dataset.split === focusSplit
+          : node.dataset.action === focusAction,
+      );
+      replacement?.focus({ preventScroll: true });
+    }
   };
 
   const showSummary = (summary: RunSummary) => {
     summaryPanel.replaceChildren();
+    receipts.add(summary);
+    saveReceipts();
     summaryPanel.dataset.ending = summary.ending;
+    summaryPanel.dataset.run = summary.run;
+    summaryPanel.dataset.settled = String(summary.settled);
     const lines = summaryLines(summary);
     const title = element("h2");
     title.textContent = lines[0] ?? "";
     summaryPanel.append(title);
+    const history = element("select");
+    history.setAttribute("aria-label", "Expedition receipt");
+    for (const [index, receipt] of receipts.all.entries()) {
+      const option = element("option");
+      option.value = receipt.run;
+      option.textContent = `Expedition ${String(receipts.all.length - index)} · ${receipt.ending} · ${receipt.settled ? `${String(receipt.payout)} cr` : "payment pending"}`;
+      option.selected = receipt.run === summary.run;
+      history.append(option);
+    }
+    history.addEventListener("change", () => {
+      const receipt = receipts.all.find((r) => r.run === history.value);
+      if (receipt) showSummary(receipt);
+    });
+    summaryPanel.append(history);
     for (const text of lines.slice(1)) {
       const p = element("p");
       p.textContent = text;
       summaryPanel.append(p);
     }
+    if (summary.settled) {
+      const pot = element("p");
+      pot.textContent = `Crew pot: contract ${String(summary.pot.contract)} · bounty ${String(summary.pot.bounty)} · relays ${String(summary.pot.relay)} cr. Your banked cargo belongs to you.`;
+      summaryPanel.append(pot);
+    }
     // The account arrives before the summary, so it already says whether supplies carried.
-    if (summary.ending === "docked" && holdings?.launch.due.type === "carried") {
+    if (
+      summary.ending === "docked" &&
+      summary.settled &&
+      summary.pot.contract === 0 &&
+      summary.run === receipts.all[0]?.run &&
+      holdings?.launch.due.type === "carried"
+    ) {
       const p = element("p", undefined, "crew-note");
       p.dataset.supplies = "carried";
       p.textContent = "Contract not met: your supplies carry over, so the next launch is free.";
@@ -720,6 +809,22 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       if (contract) showBriefing(contract);
     });
     summaryPanel.append(next);
+    homeChanged();
+    const ready = catalog && holdings ? affordableFacilities(catalog, holdings) : [];
+    const development = ready[0];
+    if (development) {
+      const develop = element("button");
+      develop.dataset.action = "develop-outpost";
+      develop.textContent = `Compare ${String(ready.length)} affordable facilities`;
+      develop.addEventListener("click", () => {
+        delete summaryPanel.dataset.ending;
+        selectedSocket = development.socket;
+        homeTab = "facilities";
+        homeChanged();
+        if (contract) showBriefing(contract);
+      });
+      summaryPanel.append(develop);
+    }
   };
 
   // The station is one object (design §5: one camera, one plane): stood where the contract's dock
@@ -806,14 +911,29 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       selectedSocket,
       {
         send,
+        ...(receipts.all.length
+          ? {
+              receipt: () => {
+                const last = receipts.all[0];
+                if (last) showSummary(last);
+              },
+            }
+          : {}),
         tab: (tab) => {
           homeTab = tab;
           homeChanged();
         },
-        select: (socket) => {
+        select: (socket, facility) => {
           selectedSocket = socket;
           homeTab = "facilities";
           homeChanged();
+          if (facility) {
+            const card = homePanel.querySelector<HTMLElement>(
+              `[data-facility="${CSS.escape(facility)}"]`,
+            );
+            card?.scrollIntoView({ block: "nearest" });
+            card?.focus({ preventScroll: true });
+          }
         },
       },
       homeTab,
@@ -873,8 +993,12 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         catalog = message.catalog;
         homeChanged();
         break;
-      case "homeRefused":
       case "crewRefused":
+        resetSplitPending();
+        homeChanged();
+        showNotice(message.reason, "warn");
+        break;
+      case "homeRefused":
         showNotice(message.reason, "warn");
         break;
       case "crew":
@@ -883,6 +1007,11 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         break;
       case "potPaid": {
         const { pot, share } = message;
+        const receipt = receipts.settle(message.run, pot, share);
+        saveReceipts();
+        if (receipt && summaryPanel.dataset.run === message.run && summaryPanel.dataset.ending)
+          showSummary(receipt);
+        homeChanged();
         showNotice(
           `The crew's pot is paid: ${String(pot.contract + pot.bounty + pot.relay)} cr ` +
             `(contract ${String(pot.contract)}, bounty ${String(pot.bounty)}, relays ` +
@@ -895,6 +1024,10 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         showNotice(refusalText(message.reason), "warn");
         break;
       case "jumpSpooling":
+        if (message.ship !== life?.session.shipId) {
+          jumpEffects.remoteCharge(message.ship, message.seconds);
+          break;
+        }
         jumpDrive.spooling(message.target, message.seconds, performance.now());
         // The drive is spooling: back to the scene, where a hostile lock would show.
         chart.close();
@@ -904,11 +1037,16 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         showNotice(REFUSAL_TEXT[message.reason], "warn");
         break;
       case "jumpCancelled":
+        jumpEffects.remoteCharge(message.ship, 0);
+        if (message.ship !== life?.session.shipId) break;
         jumpDrive.ended();
         chartAt = Number.NEGATIVE_INFINITY;
         showNotice(CANCEL_TEXT[message.reason], message.reason === "pilot" ? "info" : "warn");
         break;
       case "jumped":
+        jumpEffects.remoteCharge(message.ship, 0);
+        if (message.ship !== life?.session.shipId) break;
+        selection.steer();
         jumpDrive.ended();
         chartAt = Number.NEGATIVE_INFINITY;
         break;
@@ -987,9 +1125,20 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   const resize = () => {
     const width = window.innerWidth;
     // The home and briefing panels with their margins (command.css).
-    const panels = life ? 0 : width <= 1100 ? 516 : 662;
-    const available = Math.max(width * 0.35, width - panels);
-    view.resize(width, window.innerHeight, (viewWidth * width * (life ? 1 : 0.8)) / available);
+    const left = homePanel.getBoundingClientRect();
+    const right = briefing.getBoundingClientRect();
+    const available = life ? width : Math.max(width * 0.35, right.left - left.right - 32);
+    // A fixed envelope holds every facility tier, four ships and outward captions.
+    // Fit the same envelope after purchases, so an upgrade never changes its apparent scale.
+    const homeWidth = Math.max(
+      (25 * width) / available,
+      (23 * width) / Math.max(240, window.innerHeight - 150),
+    );
+    view.resize(
+      width,
+      window.innerHeight,
+      life ? viewWidth : (homeWidth * viewWidth) / START_WIDTH,
+    );
   };
   window.addEventListener("resize", resize);
   resize();
@@ -1129,16 +1278,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const fill = element("div", undefined, "lock-fill");
     track.append(fill);
     const hull = element("span", "lock-hull");
-    const keys = element("span", undefined, "lock-keys");
-    for (const [cap, text] of [
-      ["Tab", "next"],
-      ["Esc", "release"],
-    ] as const) {
-      const key = element("kbd");
-      key.textContent = cap;
-      keys.append(key, ` ${text} `);
-    }
-    return { name, distance, range, hull, fill, nodes: [name, distance, range, track, hull, keys] };
+    return { name, distance, range, hull, fill, nodes: [name, distance, range, track, hull] };
   })();
 
   // The waypoint: the destination chosen on the map, marked where it is on screen or at the
@@ -1215,7 +1355,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       ...BERTHS.map((b, i) => ({
         id: `berth-${b.id}`,
         label: `${b.id} / ${roster.find((member, index) => (member.berth ?? index) === i)?.callsign ?? "VACANT"}`,
-        at: station.root.localToWorld(new Vector3(b.x, b.deck + 0.2, b.z + 1.8)),
+        at: station.root.localToWorld(new Vector3(b.x, b.deck + 0.2, b.z + 3.4)),
       })),
       ...["a", "b"].map((id) => ({
         id: `socket-${id}`,
@@ -1233,12 +1373,12 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         stationLabels.append(node);
       }
       const screen = worldToScreen(marker.at, view.camera, view.viewport);
-      const left = window.innerWidth <= 1100 ? 240 : 286;
-      const right = window.innerWidth - (window.innerWidth <= 1100 ? 270 : 314);
+      const left = homePanel.getBoundingClientRect().right + 8;
+      const right = briefing.getBoundingClientRect().left - 8;
       node.hidden =
         screen.x < left || screen.x > right || screen.y < 126 || screen.y > window.innerHeight - 70;
       if (written.changed(`home.${marker.id}.text`, marker.label)) node.textContent = marker.label;
-      const transform = `translate(${screen.x.toFixed(0)}px, ${screen.y.toFixed(0)}px) translate(-50%, -100%)`;
+      const transform = `translate(${screen.x.toFixed(0)}px, ${screen.y.toFixed(0)}px) translate(-50%, ${marker.id.startsWith("berth-") ? "0" : "-100%"})`;
       if (written.changed(`home.${marker.id}.at`, transform)) node.style.transform = transform;
     }
   };
@@ -1255,6 +1395,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   let lastControlAt = performance.now();
   const controlTimer = window.setInterval(() => {
     const current = life;
+    view.world.configureFeedback(!calm.matches, current?.own?.shield ?? 0);
     if (!current || document.hidden) return;
     const site = current.joined.site;
     const at = current.predictor.state;
@@ -1279,6 +1420,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const dt = Math.min(0.1, elapsed);
     last = now;
     const current = life;
+    view.world.configureFeedback(!calm.matches, current?.own?.shield ?? 0);
 
     // Drawing can be slower than the simulation; input delivery has its own clock.
     const tickMs = 1_000 / (current?.session.tickRate ?? 20);
@@ -1326,11 +1468,17 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       // A pilot's ship that moved farther than flight allows jumped: flash both ends.
       const spool = jumpDrive.readout(now, current.joined.site.pockets);
       jumpEffects.setCharge(spool.state === "spooling" ? session.shipId : null, spool.share);
+      setData(
+        hud,
+        "crewSpools",
+        String(jumpEffects.charges.filter((charge) => charge.ship !== session.shipId).length),
+      );
       const leapt = jumpEffects.observe(poses, elapsed);
       if (leapt.length > 0) {
         jumpsSeen += leapt.length;
         setData(hud, "jumps", String(jumpsSeen));
         // The wash covers the camera's cut, so it is for the pilot's own jump only.
+        if (leapt.includes(session.shipId)) selection.steer();
         if (leapt.includes(session.shipId) && !calm.matches) {
           jumpWash.animate([{ opacity: 0 }, { opacity: 0.7, offset: 0.2 }, { opacity: 0 }], {
             duration: 520,
@@ -1338,12 +1486,14 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           });
         }
       }
-      jumpEffects.advance(dt);
+      jumpEffects.advance(dt, elapsed);
     } else {
       poses = [];
     }
     const focus = poses.find((pose) => pose.id === selection.focus);
     const centre = focus ?? own;
+    setData(hud, "camera", centre ? String(centre.id) : null);
+    setData(hud, "cameraMoving", String(glide !== null));
     if (centre) target.set(centre.x, 0, centre.z);
     const atHome = !current && outpost && holdings ? outpost : null;
     let aim = atHome ? atHome.centre : target;
@@ -1478,6 +1628,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         const ownId = session.shipId;
         chart.update({
           places,
+          relay: status?.relay ?? 0,
           selected: jumpDrive.selected,
           readout: jumpDrive.readout(now, site.pockets),
           readiness: jumpReadiness(chosen ?? null, status?.drive ?? null),

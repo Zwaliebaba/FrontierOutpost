@@ -3,6 +3,7 @@
  * tactical camera with the greybox's defaults (design §5).
  */
 import {
+  AgXToneMapping,
   BufferAttribute,
   BufferGeometry,
   PerspectiveCamera,
@@ -43,6 +44,8 @@ export class ExpeditionView {
     this.#viewWidth = viewWidth;
     // Silhouettes behind structures need a stencil buffer.
     this.#renderer = new WebGLRenderer({ antialias: true, stencil: true });
+    this.#renderer.toneMapping = AgXToneMapping;
+    this.#renderer.toneMappingExposure = 1;
     this.#renderer.setPixelRatio(window.devicePixelRatio);
     this.#renderer.autoClear = false;
     this.#renderer.setClearColor(linear(0.006, 0.009, 0.02));

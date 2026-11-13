@@ -97,6 +97,7 @@ export function hullMaterial(allegiance: Allegiance): MeshStandardMaterial {
  */
 export function silhouetteMaterial(allegiance: Allegiance): MeshBasicMaterial {
   return new MeshBasicMaterial({
+    toneMapped: false,
     color: SIGNAL[allegiance],
     depthFunc: GreaterDepth,
     depthWrite: false,
@@ -209,11 +210,50 @@ export function shipMeshes(allegiance: Allegiance, scale = 1): ShipMeshes {
     const silhouetteMaterialOwn = silhouetteMaterial(allegiance);
     const silhouette = new Mesh(geometry, silhouetteMaterialOwn);
     silhouette.renderOrder = SILHOUETTE_ORDER;
+    const hull = new Mesh(geometry, hullMaterialOwn);
+    const details: Mesh[] = [];
+    if (allegiance === "hostile") {
+      const dark = new MeshStandardMaterial({
+        color: linear(0.025, 0.038, 0.055),
+        metalness: 0.65,
+        roughness: 0.5,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+        ...HULL_STENCIL,
+      });
+      const armor = new MeshStandardMaterial({
+        color: linear(0.4, 0.32, 0.27),
+        metalness: 0.55,
+        roughness: 0.5,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+        ...HULL_STENCIL,
+      });
+      const service = new Mesh(new PlaneGeometry(0.75, 0.45).rotateX(-Math.PI / 2), dark);
+      service.position.set(-0.65, SHIP_HEIGHT / 2, 0);
+      service.name = "hostile service spine";
+      hull.add(service);
+      details.push(service);
+      for (const side of [-1, 1]) {
+        const plate = new Mesh(new PlaneGeometry(0.85, 0.12).rotateX(-Math.PI / 2), armor);
+        plate.position.set(0.7, SHIP_HEIGHT / 2, side * 0.44);
+        plate.name = "hostile fork armor";
+        hull.add(plate);
+        details.push(plate);
+      }
+    }
     ship = {
-      hull: new Mesh(geometry, hullMaterialOwn),
+      hull,
       silhouette,
       gear: [],
       dispose: () => {
+        for (const detail of details) {
+          detail.geometry.dispose();
+          const material = detail.material;
+          if (!Array.isArray(material)) material.dispose();
+        }
         hullMaterialOwn.dispose();
         silhouetteMaterialOwn.dispose();
       },
@@ -252,6 +292,7 @@ export const BRACKET_ORDER = 20;
  */
 export function lockBracket(): Group {
   const material = new MeshBasicMaterial({
+    toneMapped: false,
     color: SIGNAL.hostile,
     depthTest: false,
     depthWrite: false,

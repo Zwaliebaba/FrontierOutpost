@@ -83,3 +83,20 @@ describe("JumpEffects", () => {
     expect(effects.charge).toBeNull();
   });
 });
+
+it("keeps independent crew charges and expires a missing end event by wall time", () => {
+  const jumps = new JumpEffects();
+  jumps.setCharge(1, 0.4);
+  jumps.remoteCharge(2, 6);
+  jumps.remoteCharge(3, 6);
+  jumps.advance(0.1, 3);
+  expect(jumps.charges.map((c) => c.ship)).toEqual([1, 2, 3]);
+  expect(jumps.charges[1]?.share).toBeCloseTo(0.5);
+  jumps.remoteCharge(2, 0);
+  expect(jumps.charges.map((c) => c.ship)).toEqual([1, 3]);
+  jumps.advance(0.1, 4);
+  expect(jumps.charges.map((c) => c.ship)).toEqual([1]);
+  jumps.remoteCharge(2, 6);
+  jumps.reset();
+  expect(jumps.charges).toEqual([]);
+});
