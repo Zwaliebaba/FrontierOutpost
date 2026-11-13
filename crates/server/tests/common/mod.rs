@@ -32,6 +32,7 @@ pub fn test_settings() -> Settings {
         seed: Some(7),
         seed_pool: transport::SeedPool::default(),
         opening_threat: None,
+        extract_percent: None,
     }
 }
 

@@ -44,6 +44,8 @@ pub struct Settings {
     pub seed_pool: SeedPool,
     /// Replaces the opening threat, for benchmarks.
     pub opening_threat: Option<u32>,
+    /// Multiplies every extraction rate, in whole percent, for playtests.
+    pub extract_percent: Option<u32>,
 }
 
 impl Default for Settings {
@@ -54,6 +56,7 @@ impl Default for Settings {
             seed: None,
             seed_pool: SeedPool::default(),
             opening_threat: None,
+            extract_percent: None,
         }
     }
 }
@@ -925,6 +928,7 @@ impl Pilot<'_> {
             tier,
             options: Options {
                 opening_threat: self.settings.opening_threat,
+                extract_percent: self.settings.extract_percent,
                 supplies_paid: Some(paid),
             },
             run,

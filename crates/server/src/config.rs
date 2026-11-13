@@ -96,6 +96,30 @@ const NPCS: &str = "FRONTIER_NPCS";
 const DATA: &str = "FRONTIER_DATA";
 const ORIGIN: &str = "FRONTIER_ORIGIN";
 const GRANT: &str = "FRONTIER_GRANT";
+const EXTRACT_RATE: &str = "FRONTIER_EXTRACT_RATE";
+
+/// Reads a multiple of the design's extraction rate, such as 2 or 1.5, as
+/// whole percent, if the variable is set: from a tenth to ten times. Empty is
+/// unset, as Docker Compose passes a variable the shell did not give.
+fn extract_rate(lookup: &impl Fn(&str) -> Option<String>) -> Result<Option<u32>, ConfigError> {
+    lookup(EXTRACT_RATE)
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| {
+            value
+                .trim()
+                .parse::<f64>()
+                .ok()
+                .filter(|times| (0.1..=10.0).contains(times))
+                // In range, so the percent fits a u32 and is positive.
+                .map(|times| (times * 100.0).round() as u32)
+                .ok_or(ConfigError::Invalid {
+                    name: EXTRACT_RATE,
+                    expected: "a multiple of the extraction rate from 0.1 to 10, such as 2",
+                    value,
+                })
+        })
+        .transpose()
+}
 
 /// Reads a whole number from `min` to `max`, if the variable is set.
 fn whole(
@@ -197,6 +221,7 @@ impl Config {
                 seed: whole(&lookup, SEED, 0, u32::MAX)?,
                 seed_pool: seed_pool(&lookup)?,
                 opening_threat: whole(&lookup, NPCS, 0, MAX_NPCS as u32)?,
+                extract_percent: extract_rate(&lookup)?,
             },
             data_path: lookup(DATA)
                 .map_or_else(|| PathBuf::from("data/frontier.db"), PathBuf::from),
@@ -380,6 +405,21 @@ mod tests {
         assert_eq!(set.open_tiers, 3);
         assert_eq!(set.seed, Some(42));
         assert_eq!(set.opening_threat, Some(24));
+        assert_eq!(defaults.extract_percent, None);
+        let empty = Config::from_lookup(|n| (n == EXTRACT_RATE).then(String::new)).unwrap();
+        assert_eq!(empty.settings.extract_percent, None);
+        for (value, percent) in [("2", 200), ("1.5", 150), (" 3 ", 300), ("0.1", 10)] {
+            let value = value.to_owned();
+            let read = Config::from_lookup(move |n| (n == EXTRACT_RATE).then(|| value.clone()))
+                .unwrap()
+                .settings;
+            assert_eq!(read.extract_percent, Some(percent));
+        }
+        for bad in ["0", "11", "fast", "-2", "NaN"] {
+            let value = bad.to_owned();
+            let result = Config::from_lookup(move |n| (n == EXTRACT_RATE).then(|| value.clone()));
+            assert!(result.is_err(), "{EXTRACT_RATE}={bad}");
+        }
         let pooled = Config::from_lookup(|name| (name == SEEDS).then(|| "29, 41,77".into()))
             .unwrap()
             .settings;

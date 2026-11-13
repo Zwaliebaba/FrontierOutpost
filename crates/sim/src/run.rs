@@ -370,6 +370,10 @@ pub enum Drive {
 pub struct Options {
     /// Replaces the site's opening threat, up to the NPC cap; for benchmarks.
     pub opening_threat: Option<u32>,
+    /// Multiplies every extraction rate, in whole percent: 200 mines twice
+    /// as fast. For playtests trying a rate before the design takes it;
+    /// `None` is the design's rate.
+    pub extract_percent: Option<u32>,
     /// What each pilot actually paid for supplies, when it was less than
     /// [`LAUNCH_COST`]: a pilot short of credits pays what they have.
     pub supplies_paid: Option<u32>,
@@ -478,6 +482,9 @@ pub struct Checkpoint {
     pub warned: bool,
     pub launch_cost: u32,
     pub deposits: Vec<f32>,
+    /// The playtest's extraction rate, if one was set ([`Options`]).
+    #[serde(default)]
+    pub extract_percent: Option<u32>,
     pub crew: Vec<PilotCheckpoint>,
     /// The nest core's hull, while it stands.
     #[serde(default)]
@@ -510,6 +517,8 @@ pub struct Run {
     events: Vec<(u32, RunEvent)>,
     /// What each pilot paid for supplies.
     launch_cost: u32,
+    /// Multiplies every extraction rate, in whole percent ([`Options`]).
+    extract_percent: Option<u32>,
     /// A checkpoint is due at the end of this tick.
     checkpoint_due: bool,
     /// A connected pilot's run ended since the instance last asked whether
@@ -574,6 +583,7 @@ impl Run {
             ended: None,
             events: Vec::new(),
             launch_cost: options.supplies_paid.unwrap_or(LAUNCH_COST),
+            extract_percent: options.extract_percent,
             // A launch is paid for, so it is recoverable from its first tick.
             checkpoint_due: true,
             crew_left: false,
@@ -1185,6 +1195,7 @@ impl Run {
             warned: self.warned,
             launch_cost: self.launch_cost,
             deposits: self.site.deposits.iter().map(|d| d.remaining).collect(),
+            extract_percent: self.extract_percent,
             crew: self
                 .pilots
                 .iter()
@@ -1304,6 +1315,7 @@ impl Run {
             ended: None,
             events: Vec::new(),
             launch_cost: checkpoint.launch_cost,
+            extract_percent: checkpoint.extract_percent,
             checkpoint_due: false,
             crew_left: false,
             core: None,
@@ -1521,7 +1533,7 @@ impl Run {
             at_deposit,
             remaining: d.remaining,
             space: pilot.capacity.saturating_sub(pilot.total()),
-            rate,
+            rate: rate * self.extract_percent.unwrap_or(100) as f32 / 100.0,
             // A heat sink lets more extraction build the same heat.
             heat_factor: self.site.values.hazard.heat_factor() * pocket.template.heat_factor
                 / pilot.fitting.heat_capacity,
@@ -2448,6 +2460,7 @@ mod tests {
         let options = Options {
             opening_threat: Some(0),
             supplies_paid: Some(25),
+            ..Options::default()
         };
         let (mut run, ships) = Run::launch(site, 1, options);
         assert!(events(&mut run).contains(&RunEvent::SuppliesSpent {
@@ -2492,6 +2505,34 @@ mod tests {
         assert_eq!(summary.phases.approach, 102, "100 steps and two placements");
         assert_eq!(summary.phases.objective, 201);
         assert_eq!(summary.phases.return_leg, 61);
+    }
+
+    #[test]
+    fn a_playtest_rate_multiplies_extraction_and_survives_a_restore() {
+        let mined = |extract_percent: Option<u32>| {
+            let site = Site::generate(COMPACT_SITE, 2, ThreatTier::I, 1, &[]);
+            let options = Options {
+                opening_threat: Some(0),
+                extract_percent,
+                ..Options::default()
+            };
+            let (mut run, ships) = Run::launch(site, 1, options);
+            let ship = ships[0];
+            at_deposit(&mut run, ship);
+            assert_eq!(run.extract(ship, true), Ok(()));
+            // Short of the minute that heats the extractor to its cut-out.
+            steps(&mut run, 55 * TICKS_PER_SECOND);
+            (run.status(ship).unwrap().cargo, run)
+        };
+        let (basic, _) = mined(None);
+        let (doubled, run) = mined(Some(200));
+        assert!(basic >= 1, "the basic rate mines a unit in 55 seconds");
+        assert!(
+            doubled >= 2 * basic && doubled > basic,
+            "{doubled} against {basic}"
+        );
+        let restored = Run::restore(&run.checkpoint()).unwrap();
+        assert_eq!(restored.checkpoint().extract_percent, Some(200));
     }
 
     #[test]
