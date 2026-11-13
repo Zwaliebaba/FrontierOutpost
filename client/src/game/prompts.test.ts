@@ -21,6 +21,7 @@ const quiet: PromptInput = {
   own,
   deposit: null,
   scanned: true,
+  scanShort: 0,
   locked: false,
   lockedInRange: false,
   hostileInLockRange: false,
@@ -68,6 +69,12 @@ describe("prompts", () => {
     expect(ids({ ...quiet, scanned: false, own: { ...own, phase: "approach" } })).toEqual([]);
   });
 
+  it("out of scan range, says how much nearer to fly instead of offering the key", () => {
+    expect(prompts({ ...quiet, scanned: false, scanShort: 41.6 })).toEqual([
+      { id: "scanRange", key: "", text: "Scan · 42 m nearer the site's centre" },
+    ]);
+  });
+
   it("offers the cruise drive on the legs while it is ready", () => {
     const leg = { ...own, phase: "approach" as const, drive: "ready" as const };
     expect(ids({ ...quiet, own: leg })).toEqual(["cruise"]);
@@ -79,6 +86,7 @@ describe("prompts", () => {
       own: { ...own, extractor: "on", heat: 250 },
       deposit: { distance: 2, left: 5, inReach: true },
       scanned: false,
+      scanShort: 0,
       locked: true,
       lockedInRange: true,
       hostileInLockRange: true,

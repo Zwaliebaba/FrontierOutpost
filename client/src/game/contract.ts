@@ -11,6 +11,7 @@ import type {
   PocketKind,
   RunPhase,
   RunSummary,
+  ScanRefusal,
   ServerMessage,
   WaveInfo,
 } from "../protocol";
@@ -96,6 +97,19 @@ const REFUSAL_TEXT: Readonly<Record<ExtractRefusal, string>> = {
 
 export function refusalText(reason: ExtractRefusal): string {
   return REFUSAL_TEXT[reason];
+}
+
+// Each says what to do next, as the extractor's do: a key that did nothing used to say nothing.
+const SCAN_REFUSAL_TEXT: Readonly<Record<ScanRefusal, string>> = {
+  notFlying: "Scan: only in flight",
+  revealed: "Scan: the site is already scanned · M for the map",
+  scanning: "Scan: already scanning · hold still",
+  outOfRange: "Scan: out of range · fly nearer the site's centre",
+  moving: "Scan: slow to a stop first",
+};
+
+export function scanRefusalText(reason: ScanRefusal): string {
+  return SCAN_REFUSAL_TEXT[reason];
 }
 
 /** Minutes and seconds, such as 3:07. */

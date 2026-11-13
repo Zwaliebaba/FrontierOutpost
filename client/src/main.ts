@@ -38,6 +38,7 @@ import {
   THREAT_TEXT,
   launch,
   refusalText,
+  scanRefusalText,
   runCells,
   scanSummary,
   summaryLines,
@@ -1025,6 +1026,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       case "extractRefused":
         showNotice(refusalText(message.reason), "warn");
         break;
+      case "scanRefused":
+        showNotice(scanRefusalText(message.reason), "warn");
+        break;
       case "jumpSpooling":
         if (message.ship !== life?.session.shipId) {
           jumpEffects.remoteCharge(message.ship, message.seconds);
@@ -1589,6 +1593,16 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
                   }
                 : null,
             scanned: reveal !== null,
+            // The deep-scan array reaches the site from anywhere off the dock.
+            scanShort: current.joined.fitted.includes("deep_scan")
+              ? 0
+              : Math.max(
+                  0,
+                  Math.hypot(
+                    current.joined.site.centreX - own.x,
+                    current.joined.site.centreZ - own.z,
+                  ) - current.joined.scanRange,
+                ),
             locked: locked !== undefined,
             lockedInRange: locked !== undefined && lockedAt <= current.joined.weaponRange,
             hostileInLockRange: poses.some(

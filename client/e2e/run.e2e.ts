@@ -46,10 +46,19 @@ test("pressing X away from a deposit explains why nothing happened", async ({ pa
   await expect(lastNotice(page)).toHaveText("Extractor: hold still beside a deposit");
 });
 
+test("pressing C away from the site explains why nothing happened", async ({ page }) => {
+  await launch(page, QUIET);
+  await page.keyboard.press("KeyC");
+  await expect(lastNotice(page)).toHaveText("Scan: out of range · fly nearer the site's centre");
+});
+
 test("a scan held still in the site reveals the rich pocket and the waves", async ({ page }) => {
   test.setTimeout(90_000);
   await launch(page, QUIET);
   await flyIntoSite(page);
+  // Still coasting in: the scan is refused, and the pilot is told to stop.
+  await page.keyboard.press("KeyC");
+  await expect(lastNotice(page)).toHaveText("Scan: slow to a stop first");
   await page.keyboard.down("KeyS");
   await page.waitForTimeout(2_000);
   await page.keyboard.up("KeyS");

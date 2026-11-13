@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { OwnStatus, RunSummary } from "../protocol";
 import { clock, runCells, scanSummary, summaryLines } from "./contract";
 import type { Scanned } from "./contract";
+import { scanRefusalText } from "./contract";
 
 const working: OwnStatus = {
   phase: "objective",
@@ -111,5 +112,13 @@ describe("summaryLines", () => {
     const lines = summaryLines({ ...docked, ending: "destroyed", ore: 0, payout: 0, cargoLost: 9 });
     expect(lines[1]).toBe("Lost: 9 cargo, 0 upgraded modules");
     expect(lines[2]).toContain("net −40 cr");
+  });
+});
+
+describe("scanRefusalText", () => {
+  it("says what to do when a scan does not start", () => {
+    expect(scanRefusalText("moving")).toBe("Scan: slow to a stop first");
+    expect(scanRefusalText("outOfRange")).toContain("fly nearer");
+    expect(scanRefusalText("revealed")).toContain("map");
   });
 });

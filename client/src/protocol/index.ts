@@ -38,6 +38,7 @@ export type { QueuedInfo } from "./generated/QueuedInfo";
 export type { RecipeInfo } from "./generated/RecipeInfo";
 export type { RunPhase } from "./generated/RunPhase";
 export type { RunSummary } from "./generated/RunSummary";
+export type { ScanRefusal } from "./generated/ScanRefusal";
 export type { ServerMessage } from "./generated/ServerMessage";
 export type { SiteInfo } from "./generated/SiteInfo";
 export type { Slot } from "./generated/Slot";
