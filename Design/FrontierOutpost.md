@@ -353,9 +353,9 @@ and §5's caps and snapshot budget stand.
 **The station: exterior and interior.** The station is seen two ways, in the one tactical
 camera (§5). The **exterior** is the station as it stands at the dock in every run and at home:
 two to three times larger than today's, with one hangar mouth and no berths, apron, sockets or
-parked ships. It still changes as the outpost grows: each facility shows a small **tell** at its
-own fixed hardpoint on the hull, which grows with the facility's tier, and the reactor upgrade
-has one too, so the outside evolves even though the modules are inside. Selecting the station at
+parked ships. It still changes as the outpost grows: each installed facility shows a small
+**tell** in its signature shape at its socket's hardpoint on the hull, which grows with the
+facility's tier, and the reactor upgrade has one too, so the outside evolves even though the modules are inside. Selecting the station at
 home opens the **interior**: a cutaway of the same station, seen through the same orthographic
 view, orbit and zoom, showing the construction sockets with their facility modules and states
 (empty, building, powered, unpowered, producing, blocked; §2), the processor and cargo bay, and

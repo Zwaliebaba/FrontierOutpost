@@ -127,8 +127,8 @@ No game code changes for a new module.
   step taller than the tier below. It carries an `Operating_Tier_<n>` indicator for each tier up
   to its own.
 - **Each tier's tell** is a root `Tell_<id>_T<n>`, a small marker in the facility's signature
-  shape within the tell cube, bigger at each tier. The game sets it on the exterior's
-  `Tell_<id>` hardpoint, so a facility is recognised outside and in.
+  shape within the tell cube, bigger at each tier. The game sets it on the exterior's hardpoint
+  for the socket the facility is installed in, so a facility is recognised outside and in.
 - **Each facility keeps a signature shape** no other uses, told apart at the zoom where the whole
   station fits: dishes are the sensor array's, a closed hall with doors the fabrication bay's, an
   open cradle the shipyard's. No tool can judge a shape, so the owner reviews each new facility's
@@ -158,10 +158,11 @@ home, with no sockets, modules, berths or parked ships.
   after another.
 - **A clear approach lane** straight out of the mouth, as wide as the opening and as long as the
   contract says, free of every exterior mesh and of every tell at its largest.
-- **Tell hardpoints:** an empty `Tell_<id>` for every facility in the game's data and
-  `Tell_reactor`, on the hull's surface, visible from the resting camera, and far enough from the
-  lane that the largest tell clears it. A new facility needs a hardpoint added here; the CI check
-  fails until it has one.
+- **Tell hardpoints belong to the sockets, not the facilities:** an empty per interior socket
+  (`Tell_A`, `Tell_B`, `Tell_C`) and `Tell_reactor`, on the hull's surface, visible from the
+  resting camera, and far enough from the lane that the largest tell clears it. The tell of
+  whichever facility is installed in a socket stands on that socket's hardpoint, so the exterior
+  never changes for a new facility, however many there are; only a new socket needs a hardpoint.
 - **Readable from the tactical view.** A strong central mass and restrained detail (style guide
   §1, §2). Tall spires and dense lit detail that work in a perspective hero shot become clutter at
   33° orthographic and hide ships; the greybox (9.1) decides how tall the station may stand.

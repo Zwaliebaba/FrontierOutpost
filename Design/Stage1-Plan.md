@@ -224,7 +224,7 @@ The owner models the exterior, the interior and the tells by hand, through the a
 | # | Work item | Proof |
 | --- | --- | --- |
 | 9.1 | The larger exterior's silhouette and hangar mouth in the readability greybox, before the owner models it | The greybox block's measures with the new silhouette at the dock, against gate 2's thresholds |
-| 9.2 | The owner models the exterior through the pipeline: the hangar mouth against the largest hull, a clear approach lane, a tell hardpoint per facility and for the reactor, within the scale the greybox chose and the budget | `check` passes; the tool fails it with the mouth narrowed or the lane blocked |
+| 9.2 | The owner models the exterior through the pipeline: the hangar mouth against the largest hull, a clear approach lane, a tell hardpoint per interior socket and for the reactor, within the scale the greybox chose and the budget | `check` passes; the tool fails it with the mouth narrowed or the lane blocked |
 | 9.3 | The owner models the interior through the pipeline (the hangar deck with a parking place per hull, sockets A to C with C closed, the processor and the cargo bay), and a tell at each tier in each existing facility's file | `check` passes for the interior and every facility; CI's art check is green |
 | 9.4 | Rules: docking and undocking measured from the hangar mouth; crew ships leave the mouth one after another; jump arrivals stay outside the station; the berth slots removed | Sim tests, including four ships launching without colliding and a jump home landing clear of the station |
 | 9.5 | Server and protocol: berth slots leave the crew roster and the wire | An integration test: four pilots launch and dock |
