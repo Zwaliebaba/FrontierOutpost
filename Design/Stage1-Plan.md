@@ -28,7 +28,7 @@ puts the riskiest questions first where the owner's decisions allow it.
 | Persistence | Embedded SQLite with an append-only ledger; Stage 1 data may be wiped |
 | Simulation | Fixed ticks, no I/O; sites reproducible from a seed; no session replay |
 | Camera and input | The greybox defaults; mouse and keyboard; touch after the Stage 1 gates |
-| Art | Sockets and facility modules authored through `create_scene.py` |
+| Art | Sockets and facility modules authored through `create_scene.py`; from M8 every asset modelled by hand through the art pipeline (`Design/Art/`) |
 | Playtests | About eight invited testers, on machines the owner provides |
 | Licence | All rights reserved for now |
 
@@ -186,20 +186,28 @@ were taken on. The wingman comes first: it needs one facility module and no hull
 rebuilt around its hangar next, before anything else is authored at its old scale: socket C and
 tier 3 are built on the new station, and the berth limit, which would constrain the new hulls,
 is gone before they are made. The sites, which need the most authored content, come last. Each
-milestone brings its own art, so none waits on another's Blender work.
+milestone brings its own art, modelled by the owner through the art pipeline that M8 builds
+first, so none waits on another's Blender work.
 
-### M8 · Wingman
+### M8 · Art pipeline and wingman
 
-*At the end: you launch with a wingman, order it to hold a relay, and earn the relay bonus alone.*
+*At the end: art goes from the owner's Blender files into the game through one pipeline, and you
+launch with a wingman, order it to hold a relay, and earn the relay bonus alone.*
+
+The pipeline comes first because every later milestone's art goes through it, and the crew
+quarters are its first new model.
 
 | # | Work item | Proof |
 | --- | --- | --- |
-| 8.1 | `create_scene.py`: the crew quarters module at two tiers, and `facilities.glb` split into one GLB per facility with the client's loader changed to match, per the [art brief](FrontierOutpost/README.md#stage-1-expansion-art-brief) | The manifest lists it and the brief's checks pass; the owner runs Blender and commits the regenerated assets |
-| 8.2 | Rules: crew quarters as data; a wingman is a ship that counts in threat and yield scaling but not in the pot; pilots and wingmen never exceed four ships | Sim tests against design §11, including the four-ship limit |
-| 8.3 | Wingman behaviour: follow, hold and return; extract at crew quarters 2; it acts only on what a pilot could see | A sim test for each order, and one that a wingman never acts on an unscanned seed value |
-| 8.4 | Server and protocol: a wingman hired at launch for the launch cost, with an instrumentation event; orders as intents; wingmen in snapshots | An integration test: a solo pilot and a wingman earn the relay bonus |
-| 8.5 | Client: the launch screen offers the wingman; order keys and a mark on the plane; the HUD shows its order and state; it is drawn as an ally, told from a pilot | A browser test gives each tier 1 order |
-| 8.6 | Loss and cargo: a destroyed wingman loses its cargo and fitting; a docked wingman's cargo banks to its pilot | A sim test of both outcomes |
+| 8.1 | The art pipeline's Blender tool, `frontier_art.py`, with `new`, `check` and `export` for every kind, `contract.json` and the shared material library, per the [art pipeline](Art/README.md) | The owner runs it on fixture files: it passes a good one and fails one that breaks each rule |
+| 8.2 | The catalogue, assembled without Blender; CI's art check (each manifest's GLB and hash, every facility's tiers and tells unless `art: pending`, names and budgets); the client loading art only through the catalogue, each facility when first shown | CI fails on a missing tier and on a GLB that differs from its manifest; a browser test loads a module through the catalogue |
+| 8.3 | The six generated facility modules split into their own facility files (`split`), exported through the pipeline, and removed from `create_scene.py` | The six pass `check`; the outpost's browser tests still find every module |
+| 8.4 | The owner models the crew quarters at two tiers, with their tells | `check` passes and CI's art check is green |
+| 8.5 | Rules: crew quarters as data; a wingman is a ship that counts in threat and yield scaling but not in the pot; pilots and wingmen never exceed four ships | Sim tests against design §11, including the four-ship limit |
+| 8.6 | Wingman behaviour: follow, hold and return; extract at crew quarters 2; it acts only on what a pilot could see | A sim test for each order, and one that a wingman never acts on an unscanned seed value |
+| 8.7 | Server and protocol: a wingman hired at launch for the launch cost, with an instrumentation event; orders as intents; wingmen in snapshots | An integration test: a solo pilot and a wingman earn the relay bonus |
+| 8.8 | Client: the launch screen offers the wingman; order keys and a mark on the plane; the HUD shows its order and state; it is drawn as an ally, told from a pilot | A browser test gives each tier 1 order |
+| 8.9 | Loss and cargo: a destroyed wingman loses its cargo and fitting; a docked wingman's cargo banks to its pilot | A sim test of both outcomes |
 
 **Checkpoint.** The owner plays solo with a wingman. If the scaled threat and yield make runs
 trivial, or the wingman too often feels like a burden, its values are reworked before M9.
@@ -210,14 +218,14 @@ trivial, or the wingman too often feels like a burden, its values are reworked b
 you select it to see your modules and ships inside, fly out of its hangar at launch and back in
 to dock, and the berths are gone.*
 
-The exterior is the owner's own Blender model, not generated (AGENTS.md §6, §8); the interior,
-the facility modules and the tells stay in `create_scene.py`.
+The owner models the exterior, the interior and the tells by hand, through the art pipeline
+(M8).
 
 | # | Work item | Proof |
 | --- | --- | --- |
 | 9.1 | The larger exterior's silhouette and hangar mouth in the readability greybox, before the owner models it | The greybox block's measures with the new silhouette at the dock, against gate 2's thresholds |
-| 9.2 | A check script for the owner's exterior model, run in Blender: units and axes, scale, the hangar mouth's opening against the largest hull, a clear approach lane, the facility and reactor tell hardpoints, the triangle budget; it writes the exterior's manifest. Then the owner's model, exported | The script passes on the owner's model and fails on fixtures without a mouth or with a blocked lane |
-| 9.3 | `create_scene.py`: the interior cutaway (the hangar deck with a parking place per hull, sockets A and B with C blanked, the processor and the cargo bay), every existing facility module refitted to the interior sockets, and each facility's exterior tell at each tier, per the art brief | The brief's checks pass; the owner runs Blender and commits the regenerated assets |
+| 9.2 | The owner models the exterior through the pipeline: the hangar mouth against the largest hull, a clear approach lane, a tell hardpoint per facility and for the reactor, within the scale the greybox chose and the budget | `check` passes; the tool fails it with the mouth narrowed or the lane blocked |
+| 9.3 | The owner models the interior through the pipeline (the hangar deck with a parking place per hull, sockets A to C with C closed, the processor and the cargo bay), and a tell at each tier in each existing facility's file | `check` passes for the interior and every facility; CI's art check is green |
 | 9.4 | Rules: docking and undocking measured from the hangar mouth; crew ships leave the mouth one after another; jump arrivals stay outside the station; the berth slots removed | Sim tests, including four ships launching without colliding and a jump home landing clear of the station |
 | 9.5 | Server and protocol: berth slots leave the crew roster and the wire | An integration test: four pilots launch and dock |
 | 9.6 | Client: the exterior at the dock and at home with its tells drawn from facility state; selecting the station opens the interior in the same camera, with the owned ships, the modules and their states; building and upgrading move into the interior; ships leave the mouth at launch and are drawn into it on docking; the station HUD without berth slots | Browser tests: open the interior, build in a socket and see its tell outside, launch and dock |
@@ -234,7 +242,7 @@ choices between six facilities.*
 
 | # | Work item | Proof |
 | --- | --- | --- |
-| 10.1 | `create_scene.py`: socket C opened in the interior, the reactor inside and its exterior tell, and the three Stage 1 facilities at tier 3 with their tells, per the art brief | The manifest lists them and the brief's checks pass, including every module fitting every socket; the owner runs Blender and commits the regenerated assets |
+| 10.1 | The owner models the reactor in the interior file and its tell, and the three Stage 1 facilities' tier 3 with their tells, through the pipeline | `check` passes, including every module within the socket envelope; CI's art check is green |
 | 10.2 | Rules as data: the reactor and power cap 8, socket C and its adjacency, tier 3, fuel cells with their recipe and prices | Sim tests; the data tests of design §11's checks, including no arbitrage |
 | 10.3 | Interior view: build the reactor, socket C and tier 3, with previews that name what opens; the tells follow outside | A browser test builds in socket C and sees the reactor's tell |
 | 10.4 | Tier 3 reaches the expedition: preparation shows the rich pocket and waves; armour plating | An integration test for each |
@@ -247,7 +255,7 @@ replacement.*
 
 | # | Work item | Proof |
 | --- | --- | --- |
-| 11.1 | `create_scene.py`: the shipyard module at two tiers, and the hauler and gunship hulls, per the art brief | The manifest lists them and the brief's checks pass, including each hull through the hangar mouth and in its parking place; the owner runs Blender and commits the regenerated assets |
+| 11.1 | The owner models the shipyard at two tiers with its tells, and the hauler and gunship, through the pipeline; the starter frigate moves from the generated scene into its own hull file | `check` passes, including each hull through the mouth and in its parking place; CI's art check is green |
 | 11.2 | Hulls as data: cargo, handling, weapons, shield, slots, collision radius and replacement price; the afterburner and armour plating | Sim tests per hull; prediction uses the same rules in WebAssembly |
 | 11.3 | The hull in snapshots and on the wire | Snapshot vectors updated; the size test still passes at 4 ships and 24 NPCs |
 | 11.4 | Launch screen: choose a hull; the stake shows its replacement price | A browser test of the stake shown |
@@ -261,7 +269,7 @@ threat.*
 
 | # | Work item | Proof |
 | --- | --- | --- |
-| 12.1 | `create_scene.py`: the navigation array module at two tiers, per the art brief | The manifest lists it and the brief's checks pass; the owner runs Blender and commits the regenerated assets |
+| 12.1 | The owner models the navigation array at two tiers with its tells, through the pipeline | `check` passes and CI's art check is green |
 | 12.2 | The Shattered moon and the Ice ring as site templates, with their pockets keyed to capability tags | The same seed gives the same site for each; a second seed differs |
 | 12.3 | The sentinel and the stalker; debris everywhere and the ion storm | A sim test for each behaviour and hazard |
 | 12.4 | The site map at preparation, with a contract per site and the navigation array's adjacency | A browser test takes a contract on the second site |
@@ -270,7 +278,7 @@ threat.*
 
 ## 4. Size
 
-The plan has 45 work items, and the Stage 1 expansion (M8 to M12) adds 30 more. Some will split
+The plan has 45 work items, and the Stage 1 expansion (M8 to M12) adds 33 more. Some will split
 once work starts, so expect 55 to 75 pull requests for M0 to M7 and about 30 more for the
 expansion.
 The plan gives no dates: with agents writing the code, the pace is set by how many pull requests
@@ -289,11 +297,12 @@ for the rest.
 | Windows builds | M0.1 | Proven in CI before anything depends on it |
 | Facility art waits on Blender | M5.1 | It has no code dependency and can start any time after M0 |
 | Passkeys on shared playtest machines | The playtest after M7 | Each tester has their own operating-system account (AGENTS.md §8) |
-| Blender work in every expansion milestone | M8.1, M9.2, M9.3, M10.1, M11.1, M12.1 | Each milestone's art comes first and has no code dependency, so it can start as soon as the milestone is chosen |
+| The owner's modelling sets the pace of every milestone | M8.4, M9.2, M9.3, M10.1, M11.1, M12.1 | A facility marked `art: pending` can merge its rules before its model; art has no code dependency once the pipeline exists (M8.1 to M8.3) |
+| Tens of hand-made models drift apart in scale, palette or names | From M8 | One contract, one material library and one tool check every asset; CI rejects an export the tool did not check |
 | A wingman makes runs trivial, or feels like a burden | M8 | Threat and yield scale for it but the pot does not; the M8 checkpoint reworks its values before M9 |
 | New hulls or sites break the snapshot budget | M11.3, M12.6 | Ships stay at four per instance; the size test and the caps benchmark are re-run |
 | A larger station hides ships or crowds the dock | M9 | The greybox tests its silhouette before the owner models it (9.1); gates 2 and 4 are measured again (9.7) |
-| The owner's hand-made exterior drifts from what the game needs | M9.2 | A check script, run on every export, fails on a missing mouth, a blocked lane or a missing hardpoint |
+| The owner's hand-made exterior drifts from what the game needs | M9.2 | The pipeline's `check`, run on every export, fails on a missing mouth, a blocked lane or a missing hardpoint |
 | With the modules inside, the outside stops showing the outpost's growth | M9 | Each facility and the reactor keep a tell on the exterior; gate 1's images show both views |
 | The expansion swallows the gates | M8 to M12 | M7 measures Stage 1 before the expansion starts; gates 1 and 3 stay unproven until other players are measured |
 | A solo measure is read as a pass | M7 | Each measure carries its basis, and a measure that needs other players is unproven, never met |

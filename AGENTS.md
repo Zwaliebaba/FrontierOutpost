@@ -39,6 +39,7 @@ client/                 TypeScript + Vite + Three.js browser client
   src/sim/              loads the WebAssembly simulation; pkg/ is written by wasm-bindgen
 spikes/                 Throwaway experiments, each its own Cargo workspace; not built by CI
 Design/                 Game design, style guide, Blender scenes and their exports
+  Art/                  hand-made art from plan M8: one folder per asset, the tool, the catalogue
 .github/workflows/      CI
 ```
 
@@ -148,14 +149,17 @@ change ships with a test. Keep comments for the *why*.
 - **Binary files are committed to Git directly**, not to Git LFS. `.gitattributes` marks them
   `binary`; add the pattern *before* committing a new binary type. CI fails if a Git LFS pointer
   is committed. Keep them small: every regenerated binary stays in the history for good.
-- Do not hand-edit `.glb`, `.blend`, `scene_manifest.json` or preview PNGs: change
-  `create_scene.py` and regenerate. The one exception, from plan M9, is the station's exterior:
-  the owner models it by hand, and its `.blend`, its GLB export and the manifest its check script
-  writes are committed together. Regenerating on a different Blender version changes bytes
+- **From plan M8, art is modelled by hand** in `Design/Art/` ([its README](Design/Art/README.md)):
+  one `.blend` per asset, checked and exported by `Design/Art/tools/frontier_art.py`, found by the
+  game through `catalogue.json`. The owner models; agents write the tool, the CI check and the
+  game code, and never edit a `.blend`, an exported GLB, a manifest or the catalogue by hand.
+- The generated scene, `Design/FrontierOutpost/`, is frozen: do not hand-edit its `.glb`,
+  `.blend`, `scene_manifest.json` or preview PNGs, and change `create_scene.py` only to remove an
+  asset that has moved to `Design/Art/`. Regenerating on a different Blender version changes bytes
   without changing geometry, so commit regenerated binaries only on purpose.
-- `create_scene.py` must keep working on Blender 4.3+ and 5.x. After changing it, run it with
-  `SCENE_OUTPUT` pointing outside the repo and diff the new `scene_manifest.json` against the
-  committed one.
+- `create_scene.py` and `frontier_art.py` must keep working on Blender 4.3+ and 5.x. After
+  removing an asset from `create_scene.py`, run it with `SCENE_OUTPUT` pointing outside the repo
+  and diff the new `scene_manifest.json` against the committed one.
 - A new scene goes in `Design/<SceneName>/` with the files listed in style guide §8. Record any
   new visual convention in the style guide.
 
@@ -196,6 +200,6 @@ Decided:
 - Stage 2 may start without other players. The owner has no testers, so Stage 1 is measured alone
   (plan M7), and Stage 2 may begin with gates 1 and 3 unproven, an accepted risk. Reports keep
   them unproven until players other than the owner are measured; never record them as met.
-- Art for Stage 1: sockets and facility modules come from `create_scene.py`, not primitives.
-  From plan M9 the station's exterior is the owner's hand-made Blender model, validated by a check
-  script; the interior, the facility modules and their exterior tells stay in `create_scene.py`.
+- Art: hand-made by the owner from plan M8, through the art pipeline in `Design/Art/`, scaled to
+  tens of facility modules; not primitives. The generated scene is frozen and its assets move to
+  the pipeline one by one.

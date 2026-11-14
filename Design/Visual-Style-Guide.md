@@ -103,7 +103,7 @@ Store each scene under `Design/<SceneName>/` (the outpost scene is `Design/Front
 - A manifest recording axes, units, geometry statistics and meaningful validation results.
 - A README explaining rebuilding, importing and the intended activity.
 
-The station's exterior (from plan M9) is the one hand-made scene: in `Design/StationExterior/`, its `.blend` is the owner's source and a check script stands in for the generation script, validating the model and writing its manifest. Everything else stays generated.
+From plan M8, new assets are modelled by hand, one `.blend` per asset in `Design/Art/`, and a shared tool stands in for the generation script: it checks each file against one contract and one material library, exports it and writes its manifest ([the art pipeline](Art/README.md)). The generated outpost scene is frozen and its assets move there one by one.
 
 Use standard metallic/roughness materials for GLB geometry. Procedural backgrounds, Blender lighting and compositor glow remain presentation elements. Recreate dynamic particles, bloom and exhaust in the game engine. The outpost scene is a static visual setup; docking, extraction, inventory, targeting and combat simulation are separate gameplay work.
 

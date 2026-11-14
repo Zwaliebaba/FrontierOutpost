@@ -194,7 +194,7 @@ The sections above state rules; this section gives values. **Every number here i
 
 The data model is fixed now so that later stages do not need a rewrite. Facilities are data with capability tags. Expedition options are keyed to capability tags, not to facility identifiers. A site is a template plus a seed plus parameters. Saves are versioned, carry a world identifier, and store unlocks separately from the active layout. Items have identities, so that trade and keys can refer to them later. Ships and fittings are instances with a wear field.
 
-A client-only readability greybox comes before server work and before further station art. Construction sockets and facility modules are authored through the scene generator in Stage 1; primitive stand-ins are not the plan.
+A client-only readability greybox comes before server work and before further station art. Construction sockets and facility modules are authored through the scene generator in Stage 1, and from plan M8 modelled by hand through the art pipeline (`Design/Art/`); primitive stand-ins are not the plan.
 
 **Materials and currency (placeholders).** One currency, credits (cr). Three raw materials come from the site and two goods are processed at the outpost.
 
