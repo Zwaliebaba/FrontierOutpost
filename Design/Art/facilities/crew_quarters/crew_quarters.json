@@ -1,0 +1,256 @@
+{
+  "blender_version": "4.3.2",
+  "bounds_space": "root-local Blender Z-up metres",
+  "glb": "crew_quarters.glb",
+  "gltf_up": "+Y",
+  "id": "crew_quarters",
+  "inputs": {
+    "blender": "4.3.2",
+    "contract": "05354ee00a364ba4819d93f6b2395dd3f6b9750a3431e2a1bdedd37c41ae2ac8",
+    "game_data_reader": "112e176506b279dc9978d40cf011152e16a10f48dde61073c5ac184c3938c7a4",
+    "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
+    "source": "9592f7d1a2adda75cc620ff4fdcb58fc66371a46f0c0f47cc17811832ad82bd6",
+    "tool": "35a3bc7ed4e985a9a40ac5cac1864ba11f99c4a65f57951a75cbd9dd78ad6b00"
+  },
+  "kind": "facility",
+  "planned": true,
+  "preview": "crew_quarters.png",
+  "preview_sha256": "23624809ae339df7f2c9ab7aeaeeb2c7269bf6a073be2e1faf351c547ae19044",
+  "roots": {
+    "Facility_crew_quarters_T1": {
+      "bounds": {
+        "max": [
+          1.059999942779541,
+          1.100000023841858,
+          1.1649999618530273
+        ],
+        "min": [
+          -1.059999942779541,
+          -1.25,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "Airlock door__Facility_crew_quarters_T1",
+        "Airlock frame__Facility_crew_quarters_T1",
+        "Airlock seam__Facility_crew_quarters_T1",
+        "Dorsal armor -0.51 0__Facility_crew_quarters_T1",
+        "Dorsal armor 0.51 0__Facility_crew_quarters_T1",
+        "End plate -0.51__Facility_crew_quarters_T1",
+        "End plate 0.51__Facility_crew_quarters_T1",
+        "Entry light__Facility_crew_quarters_T1",
+        "Entry vestibule__Facility_crew_quarters_T1",
+        "Facility_crew_quarters_T1",
+        "Habitat -0.51 deck 0__Facility_crew_quarters_T1",
+        "Habitat 0.51 deck 0__Facility_crew_quarters_T1",
+        "ID stripe -0.51 0__Facility_crew_quarters_T1",
+        "ID stripe 0.51 0__Facility_crew_quarters_T1",
+        "Life support rack__Facility_crew_quarters_T1",
+        "Mounting skid__Facility_crew_quarters_T1",
+        "Operating_Tier_1__Facility_crew_quarters_T1",
+        "Pressure collar -0.51 0 -0.74__Facility_crew_quarters_T1",
+        "Pressure collar -0.51 0 0.74__Facility_crew_quarters_T1",
+        "Pressure collar 0.51 0 -0.74__Facility_crew_quarters_T1",
+        "Pressure collar 0.51 0 0.74__Facility_crew_quarters_T1",
+        "Pressure spine__Facility_crew_quarters_T1",
+        "Radiator fin 0.12__Facility_crew_quarters_T1",
+        "Radiator fin 0.28__Facility_crew_quarters_T1",
+        "Radiator fin 0.44__Facility_crew_quarters_T1",
+        "Radiator fin 0.6__Facility_crew_quarters_T1",
+        "Service manifold__Facility_crew_quarters_T1",
+        "Warm window -0.51 0 -0.16__Facility_crew_quarters_T1",
+        "Warm window -0.51 0 -0.48__Facility_crew_quarters_T1",
+        "Warm window -0.51 0 0.16__Facility_crew_quarters_T1",
+        "Warm window -0.51 0 0.48__Facility_crew_quarters_T1",
+        "Warm window 0.51 0 -0.16__Facility_crew_quarters_T1",
+        "Warm window 0.51 0 -0.48__Facility_crew_quarters_T1",
+        "Warm window 0.51 0 0.16__Facility_crew_quarters_T1",
+        "Warm window 0.51 0 0.48__Facility_crew_quarters_T1",
+        "Window recess -0.51 0 -0.16__Facility_crew_quarters_T1",
+        "Window recess -0.51 0 -0.48__Facility_crew_quarters_T1",
+        "Window recess -0.51 0 0.16__Facility_crew_quarters_T1",
+        "Window recess -0.51 0 0.48__Facility_crew_quarters_T1",
+        "Window recess 0.51 0 -0.16__Facility_crew_quarters_T1",
+        "Window recess 0.51 0 -0.48__Facility_crew_quarters_T1",
+        "Window recess 0.51 0 0.16__Facility_crew_quarters_T1",
+        "Window recess 0.51 0 0.48__Facility_crew_quarters_T1"
+      ],
+      "triangles": 1784
+    },
+    "Facility_crew_quarters_T2": {
+      "bounds": {
+        "max": [
+          1.0950000286102295,
+          1.100000023841858,
+          2.130000114440918
+        ],
+        "min": [
+          -1.059999942779541,
+          -1.25,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "Airlock door__Facility_crew_quarters_T2",
+        "Airlock frame__Facility_crew_quarters_T2",
+        "Airlock seam__Facility_crew_quarters_T2",
+        "Cupola mullion -0.15__Facility_crew_quarters_T2",
+        "Cupola mullion 0.15__Facility_crew_quarters_T2",
+        "Dorsal armor -0.51 0__Facility_crew_quarters_T2",
+        "Dorsal armor -0.51 1__Facility_crew_quarters_T2",
+        "Dorsal armor 0.51 0__Facility_crew_quarters_T2",
+        "Dorsal armor 0.51 1__Facility_crew_quarters_T2",
+        "End plate -0.51__Facility_crew_quarters_T2",
+        "End plate 0.51__Facility_crew_quarters_T2",
+        "Entry light__Facility_crew_quarters_T2",
+        "Entry vestibule__Facility_crew_quarters_T2",
+        "Facility_crew_quarters_T2",
+        "Habitat -0.51 deck 0__Facility_crew_quarters_T2",
+        "Habitat -0.51 deck 1__Facility_crew_quarters_T2",
+        "Habitat 0.51 deck 0__Facility_crew_quarters_T2",
+        "Habitat 0.51 deck 1__Facility_crew_quarters_T2",
+        "ID stripe -0.51 0__Facility_crew_quarters_T2",
+        "ID stripe -0.51 1__Facility_crew_quarters_T2",
+        "ID stripe 0.51 0__Facility_crew_quarters_T2",
+        "ID stripe 0.51 1__Facility_crew_quarters_T2",
+        "Mounting skid__Facility_crew_quarters_T2",
+        "Observation cupola__Facility_crew_quarters_T2",
+        "Observation drum__Facility_crew_quarters_T2",
+        "Operating_Tier_1__Facility_crew_quarters_T2",
+        "Operating_Tier_2__Facility_crew_quarters_T2",
+        "Pressure collar -0.51 0 -0.74__Facility_crew_quarters_T2",
+        "Pressure collar -0.51 0 0.74__Facility_crew_quarters_T2",
+        "Pressure collar -0.51 1 -0.74__Facility_crew_quarters_T2",
+        "Pressure collar -0.51 1 0.74__Facility_crew_quarters_T2",
+        "Pressure collar 0.51 0 -0.74__Facility_crew_quarters_T2",
+        "Pressure collar 0.51 0 0.74__Facility_crew_quarters_T2",
+        "Pressure collar 0.51 1 -0.74__Facility_crew_quarters_T2",
+        "Pressure collar 0.51 1 0.74__Facility_crew_quarters_T2",
+        "Pressure spine__Facility_crew_quarters_T2",
+        "Service manifold__Facility_crew_quarters_T2",
+        "Shuttle davit arm__Facility_crew_quarters_T2",
+        "Shuttle davit post__Facility_crew_quarters_T2",
+        "Shuttle winch__Facility_crew_quarters_T2",
+        "Upper connecting deck__Facility_crew_quarters_T2",
+        "Warm window -0.51 0 -0.16__Facility_crew_quarters_T2",
+        "Warm window -0.51 0 -0.48__Facility_crew_quarters_T2",
+        "Warm window -0.51 0 0.16__Facility_crew_quarters_T2",
+        "Warm window -0.51 0 0.48__Facility_crew_quarters_T2",
+        "Warm window -0.51 1 -0.16__Facility_crew_quarters_T2",
+        "Warm window -0.51 1 -0.48__Facility_crew_quarters_T2",
+        "Warm window -0.51 1 0.16__Facility_crew_quarters_T2",
+        "Warm window -0.51 1 0.48__Facility_crew_quarters_T2",
+        "Warm window 0.51 0 -0.16__Facility_crew_quarters_T2",
+        "Warm window 0.51 0 -0.48__Facility_crew_quarters_T2",
+        "Warm window 0.51 0 0.16__Facility_crew_quarters_T2",
+        "Warm window 0.51 0 0.48__Facility_crew_quarters_T2",
+        "Warm window 0.51 1 -0.16__Facility_crew_quarters_T2",
+        "Warm window 0.51 1 -0.48__Facility_crew_quarters_T2",
+        "Warm window 0.51 1 0.16__Facility_crew_quarters_T2",
+        "Warm window 0.51 1 0.48__Facility_crew_quarters_T2",
+        "Window recess -0.51 0 -0.16__Facility_crew_quarters_T2",
+        "Window recess -0.51 0 -0.48__Facility_crew_quarters_T2",
+        "Window recess -0.51 0 0.16__Facility_crew_quarters_T2",
+        "Window recess -0.51 0 0.48__Facility_crew_quarters_T2",
+        "Window recess -0.51 1 -0.16__Facility_crew_quarters_T2",
+        "Window recess -0.51 1 -0.48__Facility_crew_quarters_T2",
+        "Window recess -0.51 1 0.16__Facility_crew_quarters_T2",
+        "Window recess -0.51 1 0.48__Facility_crew_quarters_T2",
+        "Window recess 0.51 0 -0.16__Facility_crew_quarters_T2",
+        "Window recess 0.51 0 -0.48__Facility_crew_quarters_T2",
+        "Window recess 0.51 0 0.16__Facility_crew_quarters_T2",
+        "Window recess 0.51 0 0.48__Facility_crew_quarters_T2",
+        "Window recess 0.51 1 -0.16__Facility_crew_quarters_T2",
+        "Window recess 0.51 1 -0.48__Facility_crew_quarters_T2",
+        "Window recess 0.51 1 0.16__Facility_crew_quarters_T2",
+        "Window recess 0.51 1 0.48__Facility_crew_quarters_T2"
+      ],
+      "triangles": 3332
+    },
+    "Tell_crew_quarters_T1": {
+      "bounds": {
+        "max": [
+          0.3149999976158142,
+          0.3149999976158142,
+          0.37800002098083496
+        ],
+        "min": [
+          -0.3149999976158142,
+          -0.3149999976158142,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Graphite",
+        "Titanium"
+      ],
+      "nodes": [
+        "Tell habitat -0.22__Tell_crew_quarters_T1",
+        "Tell habitat 0.22__Tell_crew_quarters_T1",
+        "Tell plinth__Tell_crew_quarters_T1",
+        "Tell window -0.22__Tell_crew_quarters_T1",
+        "Tell window 0.22__Tell_crew_quarters_T1",
+        "Tell_crew_quarters_T1"
+      ],
+      "triangles": 156
+    },
+    "Tell_crew_quarters_T2": {
+      "bounds": {
+        "max": [
+          0.44999998807907104,
+          0.44999998807907104,
+          1.0
+        ],
+        "min": [
+          -0.44999998807907104,
+          -0.44999998807907104,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "Titanium"
+      ],
+      "nodes": [
+        "Tell dome__Tell_crew_quarters_T2",
+        "Tell habitat -0.22__Tell_crew_quarters_T2",
+        "Tell habitat 0.22__Tell_crew_quarters_T2",
+        "Tell plinth__Tell_crew_quarters_T2",
+        "Tell second deck__Tell_crew_quarters_T2",
+        "Tell window -0.22__Tell_crew_quarters_T2",
+        "Tell window 0.22__Tell_crew_quarters_T2",
+        "Tell_crew_quarters_T2"
+      ],
+      "triangles": 424
+    }
+  },
+  "schema_version": 1,
+  "sha256": "4b625c4e8e059b3ea1cdc9a1202ae4047a64f4f98c398c4cb7fef2a98052a336",
+  "source_forward": "+Y",
+  "source_up": "+Z",
+  "tiers": 2,
+  "tool_version": "0.1.0",
+  "units": "metres"
+}

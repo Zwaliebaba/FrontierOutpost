@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "units": "metres",
+  "epsilon": 0.00001,
+  "camera_direction": [0.43, -0.72, 0.545],
+  "preview_pixels": 512,
+  "socket": {"half_width": 1.25, "max_height": 4.5, "tier_step": 0.4},
+  "tell": {"cube_size": 1.5},
+  "hangar": {"min_width": 6.0, "min_height": 3.0, "approach_length": 30.0},
+  "clearance": 0.15,
+  "station_scale": null,
+  "triangle_budgets": {"facility": 6000, "tell": 500, "hull": 6000, "station_exterior": 30000, "station_interior": 30000},
+  "roots": {"facility": "Facility_{id}_T{tier}", "tell": "Tell_{id}_T{tier}", "hull": "Hull_{id}", "station_exterior": "StationExterior_ROOT", "station_interior": "StationInterior_ROOT"},
+  "runtime_nodes": {"operating": "Operating_Tier_{tier}", "mouth": "Hangar_Mouth", "tells": ["Tell_A", "Tell_B", "Tell_C", "Tell_reactor"], "sockets": ["Socket_A", "Socket_B", "Socket_C"], "closure": "Closure_C", "reactor": "Reactor_Upgrade"},
+  "materials": {
+    "HullSteel": {"rgb": [0.095, 0.135, 0.19], "metallic": 0.72, "roughness": 0.38, "emission": 0},
+    "Armor": {"rgb": [0.29, 0.35, 0.43], "metallic": 0.56, "roughness": 0.45, "emission": 0},
+    "Titanium": {"rgb": [0.53, 0.57, 0.61], "metallic": 0.6, "roughness": 0.38, "emission": 0},
+    "Graphite": {"rgb": [0.025, 0.038, 0.055], "metallic": 0.65, "roughness": 0.47, "emission": 0},
+    "Orange": {"rgb": [0.62, 0.19, 0.055], "metallic": 0.5, "roughness": 0.4, "emission": 0},
+    "Ochre": {"rgb": [0.95, 0.57, 0.12], "metallic": 0.25, "roughness": 0.45, "emission": 0},
+    "Amber": {"rgb": [1.0, 0.4, 0.055], "metallic": 0.1, "roughness": 0.35, "emission": 4},
+    "Cyan": {"rgb": [0.04, 0.65, 1.0], "metallic": 0, "roughness": 0.3, "emission": 5},
+    "IonBlue": {"rgb": [0.015, 0.19, 1.0], "metallic": 0, "roughness": 0.3, "emission": 7}
+  }
+}

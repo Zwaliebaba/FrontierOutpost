@@ -1,5 +1,9 @@
 # Frontier Outpost art
 
+Implementation status and runnable commands: [the first M8 pipeline](PIPELINE.md). For this
+implementation the owner has authorised agent-generated Blender sources using the shared
+Blender instance, superseding the owner-only modelling assumption below.
+
 From plan M8 every new asset is modelled by hand in Blender by the owner, one file per asset,
 and goes through one pipeline that checks it, exports it and records it, so the game finds it
 without code changes. The pipeline is built to hold tens of facility modules: adding one is a
