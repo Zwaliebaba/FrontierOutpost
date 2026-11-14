@@ -1,18 +1,18 @@
 # Frontier Outpost art
 
-Implementation status and runnable commands: [the first M8 pipeline](PIPELINE.md). For this
-implementation the owner has authorised agent-generated Blender sources using the shared
-Blender instance, superseding the owner-only modelling assumption below.
+Implementation status and runnable commands: [the M8 pipeline](PIPELINE.md). The owner has
+authorised agent-authored Blender sources using the shared Blender instance.
 
-From plan M8 every new asset is modelled by hand in Blender by the owner, one file per asset,
+From plan M8 every new asset is authored in Blender, one file per asset,
 and goes through one pipeline that checks it, exports it and records it, so the game finds it
 without code changes. The pipeline is built to hold tens of facility modules: adding one is a
 model, an export and a line of game data.
 
 The generated scene in [`Design/FrontierOutpost/`](../FrontierOutpost/README.md) is frozen. Its
 assets stay until each is replaced here (see the last section), and `create_scene.py` changes only
-to remove what has moved. The agents write the pipeline's tools and the game code; they never edit
-a `.blend`, an exported GLB or a manifest, and their environment has no Blender.
+to remove what has moved. Agents may author `.blend` files through Blender when the owner asks; the pipeline writes
+GLBs and manifests, and a repository script assembles the catalogue. Never edit generated
+outputs by hand.
 
 This document is also the art brief for the Stage 1 expansion (design §11, plan M8 to M12). Where
 it sets a visual convention, the [style guide](../Visual-Style-Guide.md) records it too.

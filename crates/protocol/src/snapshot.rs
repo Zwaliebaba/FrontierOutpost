@@ -91,15 +91,17 @@ pub enum EntityKind {
     Warden,
     /// The nest core: a structure.
     Core,
+    Wingman,
 }
 
 impl EntityKind {
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::PlayerShip,
         Self::Drone,
         Self::Raider,
         Self::Warden,
         Self::Core,
+        Self::Wingman,
     ];
 
     #[must_use]
@@ -831,7 +833,7 @@ mod tests {
         for kind in EntityKind::ALL {
             assert_eq!(EntityKind::from_code(kind.code()), Some(kind));
         }
-        assert_eq!(EntityKind::from_code(5), None);
+        assert_eq!(EntityKind::from_code(6), None);
     }
 
     /// Writes vectors for the TypeScript decoder's tests beside the generated
@@ -848,6 +850,7 @@ mod tests {
             EntityKind::Raider => "raider",
             EntityKind::Warden => "warden",
             EntityKind::Core => "core",
+            EntityKind::Wingman => "wingman",
         };
         let json = |snapshot: &Snapshot| {
             let entities = snapshot

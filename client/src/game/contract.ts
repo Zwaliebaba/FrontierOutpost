@@ -14,6 +14,7 @@ import type {
   ScanRefusal,
   ServerMessage,
   WaveInfo,
+  WingmanHire,
 } from "../protocol";
 
 /** `OwnStatus.relay` once both relays have been held for 30 seconds (design §10). */
@@ -29,7 +30,11 @@ export class LaunchRefusedError extends Error {
 }
 
 /** Sends `launch` at `tier` and waits for the server to place the pilot in a new run. */
-export function launch(connection: Connection, tier: number): Promise<Joined> {
+export function launch(
+  connection: Connection,
+  tier: number,
+  wingman?: WingmanHire,
+): Promise<Joined> {
   return new Promise((resolve, reject) => {
     let settled = false;
     connection.onMessage((message: ServerMessage) => {
@@ -45,9 +50,11 @@ export function launch(connection: Connection, tier: number): Promise<Joined> {
     void connection.closed.then((reason) => {
       if (!settled) reject(new Error(`disconnected before launching: ${reason}`));
     });
-    connection.send({ type: "launch", tier }).catch((error: unknown) => {
-      if (!settled) reject(error instanceof Error ? error : new Error(String(error)));
-    });
+    connection
+      .send({ type: "launch", tier, ...(wingman ? { wingman } : {}) })
+      .catch((error: unknown) => {
+        if (!settled) reject(error instanceof Error ? error : new Error(String(error)));
+      });
   });
 }
 

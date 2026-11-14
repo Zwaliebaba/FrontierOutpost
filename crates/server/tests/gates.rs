@@ -69,7 +69,14 @@ async fn a_session_records_sessions_launches_choices_reconfigurations_and_ending
     }
 
     // Launch, fly out past the undock radius, turn about and dock.
-    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    write(
+        &mut send,
+        &ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        },
+    )
+    .await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Account { .. }

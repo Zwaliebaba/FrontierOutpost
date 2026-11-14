@@ -7,6 +7,7 @@ import type { EntityKind } from "../protocol";
 
 const KIND_NAME: Readonly<Record<EntityKind, string>> = {
   playerShip: "Pilot",
+  wingman: "Wingman",
   drone: "Drone",
   raider: "Raider",
   warden: "Warden",

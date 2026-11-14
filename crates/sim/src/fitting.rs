@@ -610,7 +610,8 @@ mod tests {
             assert!(granted.contains(&fitting.needs), "{}", fitting.name);
         }
         for facility in crate::outpost::STAGE1.facilities {
-            let rig = facility.rig.and_then(self::fitting).unwrap();
+            let Some(id) = facility.rig else { continue };
+            let rig = self::fitting(id).unwrap();
             assert_eq!(rig.slot, Slot::Rig);
             assert!(facility.tiers[0].grants.contains(&rig.needs));
         }

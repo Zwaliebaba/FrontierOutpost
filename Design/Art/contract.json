@@ -4,7 +4,7 @@
   "epsilon": 0.00001,
   "camera_direction": [0.43, -0.72, 0.545],
   "preview_pixels": 512,
-  "socket": {"half_width": 1.25, "max_height": 4.5, "tier_step": 0.4},
+  "socket": {"half_width": 1.25, "max_height": 5.0, "tier_step": 0.4},
   "tell": {"cube_size": 1.5},
   "hangar": {"min_width": 6.0, "min_height": 3.0, "approach_length": 30.0},
   "clearance": 0.15,

@@ -91,7 +91,11 @@ impl Pilot {
 
     /// Launches (or follows the host) and returns the ship.
     async fn launch(&mut self) -> u16 {
-        self.say(&ClientMessage::Launch { tier: 1 }).await;
+        self.say(&ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        })
+        .await;
         assert!(matches!(self.hear().await, ServerMessage::Account { .. }));
         let ServerMessage::Joined { ship_id, .. } = self.hear().await else {
             panic!("expected Joined");
@@ -168,7 +172,11 @@ async fn two_pilots_crew_by_code_and_the_wing_follows_the_host_into_one_instance
     host.crew().await;
 
     // Only the host launches; the wing follows.
-    wing.say(&ClientMessage::Launch { tier: 1 }).await;
+    wing.say(&ClientMessage::Launch {
+        tier: 1,
+        wingman: None,
+    })
+    .await;
     assert!(matches!(
         wing.hear().await,
         ServerMessage::LaunchRefused { .. }
@@ -273,7 +281,11 @@ async fn a_member_back_from_the_hosts_launch_is_not_offered_or_charged_for_it_ag
     host.launch().await;
     let (crew, _) = wing.crew().await;
     assert!(crew.launch.is_some(), "the host's launch is offered");
-    wing.say(&ClientMessage::Launch { tier: 1 }).await;
+    wing.say(&ClientMessage::Launch {
+        tier: 1,
+        wingman: None,
+    })
+    .await;
     let ServerMessage::Account { account } = wing.hear().await else {
         panic!("expected the account");
     };
@@ -313,7 +325,11 @@ async fn a_member_back_from_the_hosts_launch_is_not_offered_or_charged_for_it_ag
 
     // Pressing "Follow the host" all the same once took 40 cr, then 20, for
     // a seat the instance refused.
-    wing.say(&ClientMessage::Launch { tier: 1 }).await;
+    wing.say(&ClientMessage::Launch {
+        tier: 1,
+        wingman: None,
+    })
+    .await;
     assert!(matches!(
         wing.hear().await,
         ServerMessage::LaunchRefused { .. }

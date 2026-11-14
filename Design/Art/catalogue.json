@@ -1,0 +1,767 @@
+{
+  "assets": {
+    "facility:crew_quarters": {
+      "glb": "facilities/crew_quarters/crew_quarters.glb",
+      "id": "crew_quarters",
+      "kind": "facility",
+      "pending": false,
+      "roots": {
+        "Facility_crew_quarters_T1": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              1.059999942779541,
+              1.100000023841858,
+              1.1649999618530273
+            ],
+            "min": [
+              -1.059999942779541,
+              -1.25,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "Orange",
+            "Titanium"
+          ],
+          "nodes": [
+            "Airlock door__Facility_crew_quarters_T1",
+            "Airlock frame__Facility_crew_quarters_T1",
+            "Airlock seam__Facility_crew_quarters_T1",
+            "Dorsal armor -0.51 0__Facility_crew_quarters_T1",
+            "Dorsal armor 0.51 0__Facility_crew_quarters_T1",
+            "End plate -0.51__Facility_crew_quarters_T1",
+            "End plate 0.51__Facility_crew_quarters_T1",
+            "Entry light__Facility_crew_quarters_T1",
+            "Entry vestibule__Facility_crew_quarters_T1",
+            "Facility_crew_quarters_T1",
+            "Habitat -0.51 deck 0__Facility_crew_quarters_T1",
+            "Habitat 0.51 deck 0__Facility_crew_quarters_T1",
+            "ID stripe -0.51 0__Facility_crew_quarters_T1",
+            "ID stripe 0.51 0__Facility_crew_quarters_T1",
+            "Life support rack__Facility_crew_quarters_T1",
+            "Mounting skid__Facility_crew_quarters_T1",
+            "Operating_Tier_1__Facility_crew_quarters_T1",
+            "Pressure collar -0.51 0 -0.74__Facility_crew_quarters_T1",
+            "Pressure collar -0.51 0 0.74__Facility_crew_quarters_T1",
+            "Pressure collar 0.51 0 -0.74__Facility_crew_quarters_T1",
+            "Pressure collar 0.51 0 0.74__Facility_crew_quarters_T1",
+            "Pressure spine__Facility_crew_quarters_T1",
+            "Radiator fin 0.12__Facility_crew_quarters_T1",
+            "Radiator fin 0.28__Facility_crew_quarters_T1",
+            "Radiator fin 0.44__Facility_crew_quarters_T1",
+            "Radiator fin 0.6__Facility_crew_quarters_T1",
+            "Service manifold__Facility_crew_quarters_T1",
+            "Warm window -0.51 0 -0.16__Facility_crew_quarters_T1",
+            "Warm window -0.51 0 -0.48__Facility_crew_quarters_T1",
+            "Warm window -0.51 0 0.16__Facility_crew_quarters_T1",
+            "Warm window -0.51 0 0.48__Facility_crew_quarters_T1",
+            "Warm window 0.51 0 -0.16__Facility_crew_quarters_T1",
+            "Warm window 0.51 0 -0.48__Facility_crew_quarters_T1",
+            "Warm window 0.51 0 0.16__Facility_crew_quarters_T1",
+            "Warm window 0.51 0 0.48__Facility_crew_quarters_T1",
+            "Window recess -0.51 0 -0.16__Facility_crew_quarters_T1",
+            "Window recess -0.51 0 -0.48__Facility_crew_quarters_T1",
+            "Window recess -0.51 0 0.16__Facility_crew_quarters_T1",
+            "Window recess -0.51 0 0.48__Facility_crew_quarters_T1",
+            "Window recess 0.51 0 -0.16__Facility_crew_quarters_T1",
+            "Window recess 0.51 0 -0.48__Facility_crew_quarters_T1",
+            "Window recess 0.51 0 0.16__Facility_crew_quarters_T1",
+            "Window recess 0.51 0 0.48__Facility_crew_quarters_T1"
+          ],
+          "triangles": 1784
+        },
+        "Facility_crew_quarters_T2": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              1.0950000286102295,
+              1.100000023841858,
+              2.130000114440918
+            ],
+            "min": [
+              -1.059999942779541,
+              -1.25,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "Orange",
+            "Titanium"
+          ],
+          "nodes": [
+            "Airlock door__Facility_crew_quarters_T2",
+            "Airlock frame__Facility_crew_quarters_T2",
+            "Airlock seam__Facility_crew_quarters_T2",
+            "Cupola mullion -0.15__Facility_crew_quarters_T2",
+            "Cupola mullion 0.15__Facility_crew_quarters_T2",
+            "Dorsal armor -0.51 0__Facility_crew_quarters_T2",
+            "Dorsal armor -0.51 1__Facility_crew_quarters_T2",
+            "Dorsal armor 0.51 0__Facility_crew_quarters_T2",
+            "Dorsal armor 0.51 1__Facility_crew_quarters_T2",
+            "End plate -0.51__Facility_crew_quarters_T2",
+            "End plate 0.51__Facility_crew_quarters_T2",
+            "Entry light__Facility_crew_quarters_T2",
+            "Entry vestibule__Facility_crew_quarters_T2",
+            "Facility_crew_quarters_T2",
+            "Habitat -0.51 deck 0__Facility_crew_quarters_T2",
+            "Habitat -0.51 deck 1__Facility_crew_quarters_T2",
+            "Habitat 0.51 deck 0__Facility_crew_quarters_T2",
+            "Habitat 0.51 deck 1__Facility_crew_quarters_T2",
+            "ID stripe -0.51 0__Facility_crew_quarters_T2",
+            "ID stripe -0.51 1__Facility_crew_quarters_T2",
+            "ID stripe 0.51 0__Facility_crew_quarters_T2",
+            "ID stripe 0.51 1__Facility_crew_quarters_T2",
+            "Mounting skid__Facility_crew_quarters_T2",
+            "Observation cupola__Facility_crew_quarters_T2",
+            "Observation drum__Facility_crew_quarters_T2",
+            "Operating_Tier_1__Facility_crew_quarters_T2",
+            "Operating_Tier_2__Facility_crew_quarters_T2",
+            "Pressure collar -0.51 0 -0.74__Facility_crew_quarters_T2",
+            "Pressure collar -0.51 0 0.74__Facility_crew_quarters_T2",
+            "Pressure collar -0.51 1 -0.74__Facility_crew_quarters_T2",
+            "Pressure collar -0.51 1 0.74__Facility_crew_quarters_T2",
+            "Pressure collar 0.51 0 -0.74__Facility_crew_quarters_T2",
+            "Pressure collar 0.51 0 0.74__Facility_crew_quarters_T2",
+            "Pressure collar 0.51 1 -0.74__Facility_crew_quarters_T2",
+            "Pressure collar 0.51 1 0.74__Facility_crew_quarters_T2",
+            "Pressure spine__Facility_crew_quarters_T2",
+            "Service manifold__Facility_crew_quarters_T2",
+            "Shuttle davit arm__Facility_crew_quarters_T2",
+            "Shuttle davit post__Facility_crew_quarters_T2",
+            "Shuttle winch__Facility_crew_quarters_T2",
+            "Upper connecting deck__Facility_crew_quarters_T2",
+            "Warm window -0.51 0 -0.16__Facility_crew_quarters_T2",
+            "Warm window -0.51 0 -0.48__Facility_crew_quarters_T2",
+            "Warm window -0.51 0 0.16__Facility_crew_quarters_T2",
+            "Warm window -0.51 0 0.48__Facility_crew_quarters_T2",
+            "Warm window -0.51 1 -0.16__Facility_crew_quarters_T2",
+            "Warm window -0.51 1 -0.48__Facility_crew_quarters_T2",
+            "Warm window -0.51 1 0.16__Facility_crew_quarters_T2",
+            "Warm window -0.51 1 0.48__Facility_crew_quarters_T2",
+            "Warm window 0.51 0 -0.16__Facility_crew_quarters_T2",
+            "Warm window 0.51 0 -0.48__Facility_crew_quarters_T2",
+            "Warm window 0.51 0 0.16__Facility_crew_quarters_T2",
+            "Warm window 0.51 0 0.48__Facility_crew_quarters_T2",
+            "Warm window 0.51 1 -0.16__Facility_crew_quarters_T2",
+            "Warm window 0.51 1 -0.48__Facility_crew_quarters_T2",
+            "Warm window 0.51 1 0.16__Facility_crew_quarters_T2",
+            "Warm window 0.51 1 0.48__Facility_crew_quarters_T2",
+            "Window recess -0.51 0 -0.16__Facility_crew_quarters_T2",
+            "Window recess -0.51 0 -0.48__Facility_crew_quarters_T2",
+            "Window recess -0.51 0 0.16__Facility_crew_quarters_T2",
+            "Window recess -0.51 0 0.48__Facility_crew_quarters_T2",
+            "Window recess -0.51 1 -0.16__Facility_crew_quarters_T2",
+            "Window recess -0.51 1 -0.48__Facility_crew_quarters_T2",
+            "Window recess -0.51 1 0.16__Facility_crew_quarters_T2",
+            "Window recess -0.51 1 0.48__Facility_crew_quarters_T2",
+            "Window recess 0.51 0 -0.16__Facility_crew_quarters_T2",
+            "Window recess 0.51 0 -0.48__Facility_crew_quarters_T2",
+            "Window recess 0.51 0 0.16__Facility_crew_quarters_T2",
+            "Window recess 0.51 0 0.48__Facility_crew_quarters_T2",
+            "Window recess 0.51 1 -0.16__Facility_crew_quarters_T2",
+            "Window recess 0.51 1 -0.48__Facility_crew_quarters_T2",
+            "Window recess 0.51 1 0.16__Facility_crew_quarters_T2",
+            "Window recess 0.51 1 0.48__Facility_crew_quarters_T2"
+          ],
+          "triangles": 3332
+        },
+        "Tell_crew_quarters_T1": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              0.3149999976158142,
+              0.3149999976158142,
+              0.37800002098083496
+            ],
+            "min": [
+              -0.3149999976158142,
+              -0.3149999976158142,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Graphite",
+            "Titanium"
+          ],
+          "nodes": [
+            "Tell habitat -0.22__Tell_crew_quarters_T1",
+            "Tell habitat 0.22__Tell_crew_quarters_T1",
+            "Tell plinth__Tell_crew_quarters_T1",
+            "Tell window -0.22__Tell_crew_quarters_T1",
+            "Tell window 0.22__Tell_crew_quarters_T1",
+            "Tell_crew_quarters_T1"
+          ],
+          "triangles": 156
+        },
+        "Tell_crew_quarters_T2": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              0.44999998807907104,
+              0.44999998807907104,
+              1.0
+            ],
+            "min": [
+              -0.44999998807907104,
+              -0.44999998807907104,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "Titanium"
+          ],
+          "nodes": [
+            "Tell dome__Tell_crew_quarters_T2",
+            "Tell habitat -0.22__Tell_crew_quarters_T2",
+            "Tell habitat 0.22__Tell_crew_quarters_T2",
+            "Tell plinth__Tell_crew_quarters_T2",
+            "Tell second deck__Tell_crew_quarters_T2",
+            "Tell window -0.22__Tell_crew_quarters_T2",
+            "Tell window 0.22__Tell_crew_quarters_T2",
+            "Tell_crew_quarters_T2"
+          ],
+          "triangles": 424
+        }
+      },
+      "sha256": "1e3d1a225679cc362b7e540346f28eac793a21c030e5c69735f62b593088b5d1"
+    },
+    "facility:fabrication_bay": {
+      "glb": "facilities/fabrication_bay/fabrication_bay.glb",
+      "id": "fabrication_bay",
+      "kind": "facility",
+      "pending": false,
+      "roots": {
+        "Facility_fabrication_bay_T1": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              1.100000023841858,
+              0.9500004053115845,
+              2.177398920059204
+            ],
+            "min": [
+              -1.100000023841858,
+              -1.179999589920044,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "Ochre",
+            "Orange",
+            "Titanium"
+          ],
+          "nodes": [
+            "Fabrication | crane arm__Facility_fabrication_bay_T1",
+            "Fabrication | crane base__Facility_fabrication_bay_T1",
+            "Fabrication | crane hoist__Facility_fabrication_bay_T1",
+            "Fabrication | door__Facility_fabrication_bay_T1",
+            "Fabrication | hangar__Facility_fabrication_bay_T1",
+            "Fabrication | hazard stripe.001__Facility_fabrication_bay_T1",
+            "Fabrication | hazard stripe.002__Facility_fabrication_bay_T1",
+            "Fabrication | hazard stripe.003__Facility_fabrication_bay_T1",
+            "Fabrication | hazard stripe.004__Facility_fabrication_bay_T1",
+            "Fabrication | hazard stripe__Facility_fabrication_bay_T1",
+            "Fabrication | roof__Facility_fabrication_bay_T1",
+            "Fabrication | window.001__Facility_fabrication_bay_T1",
+            "Fabrication | window__Facility_fabrication_bay_T1",
+            "Facility_fabrication_bay_T1",
+            "Operating_Tier_1__Facility_fabrication_bay_T1"
+          ],
+          "triangles": 424
+        },
+        "Facility_fabrication_bay_T2": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              1.2199996709823608,
+              1.2199996709823608,
+              2.6900014877319336
+            ],
+            "min": [
+              -1.2199996709823608,
+              -1.179999589920044,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "Ochre",
+            "Orange",
+            "Titanium"
+          ],
+          "nodes": [
+            "Fabrication | door.001__Facility_fabrication_bay_T2",
+            "Fabrication | door.002__Facility_fabrication_bay_T2",
+            "Fabrication | gantry beam__Facility_fabrication_bay_T2",
+            "Fabrication | gantry post.001__Facility_fabrication_bay_T2",
+            "Fabrication | gantry post.002__Facility_fabrication_bay_T2",
+            "Fabrication | gantry post.003__Facility_fabrication_bay_T2",
+            "Fabrication | gantry post__Facility_fabrication_bay_T2",
+            "Fabrication | gantry rail.001__Facility_fabrication_bay_T2",
+            "Fabrication | gantry rail__Facility_fabrication_bay_T2",
+            "Fabrication | hangar.001__Facility_fabrication_bay_T2",
+            "Fabrication | hazard stripe.005__Facility_fabrication_bay_T2",
+            "Fabrication | hazard stripe.006__Facility_fabrication_bay_T2",
+            "Fabrication | hazard stripe.007__Facility_fabrication_bay_T2",
+            "Fabrication | hazard stripe.008__Facility_fabrication_bay_T2",
+            "Fabrication | hazard stripe.009__Facility_fabrication_bay_T2",
+            "Fabrication | hazard stripe.010__Facility_fabrication_bay_T2",
+            "Fabrication | robot arm__Facility_fabrication_bay_T2",
+            "Fabrication | robot forearm__Facility_fabrication_bay_T2",
+            "Fabrication | roof.001__Facility_fabrication_bay_T2",
+            "Fabrication | trolley__Facility_fabrication_bay_T2",
+            "Fabrication | window.002__Facility_fabrication_bay_T2",
+            "Fabrication | window.003__Facility_fabrication_bay_T2",
+            "Fabrication | window.004__Facility_fabrication_bay_T2",
+            "Facility_fabrication_bay_T2",
+            "Operating_Tier_1__Facility_fabrication_bay_T2",
+            "Operating_Tier_2__Facility_fabrication_bay_T2"
+          ],
+          "triangles": 764
+        },
+        "Tell_fabrication_bay_T1": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              0.4000000059604645,
+              0.4000000059604645,
+              0.800000011920929
+            ],
+            "min": [
+              -0.4000000059604645,
+              -0.4000000059604645,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "IonBlue",
+            "Ochre",
+            "Orange",
+            "Titanium"
+          ],
+          "nodes": [
+            "IonBlue",
+            "Tell_fabrication_bay_T1"
+          ],
+          "triangles": 424
+        },
+        "Tell_fabrication_bay_T2": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              0.574999988079071,
+              0.574999988079071,
+              1.149999976158142
+            ],
+            "min": [
+              -0.574999988079071,
+              -0.5731082558631897,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "IonBlue",
+            "Ochre",
+            "Orange",
+            "Titanium"
+          ],
+          "nodes": [
+            "IonBlue.001",
+            "Tell_fabrication_bay_T2"
+          ],
+          "triangles": 460
+        }
+      },
+      "sha256": "640585dc6146185770274d3712285bcc19953379a0b0487574eff9178c0ec219"
+    },
+    "facility:refinery": {
+      "glb": "facilities/refinery/refinery.glb",
+      "id": "refinery",
+      "kind": "facility",
+      "pending": false,
+      "roots": {
+        "Facility_refinery_T1": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              1.149999976158142,
+              0.949999988079071,
+              2.3499996662139893
+            ],
+            "min": [
+              -1.149999976158142,
+              -1.1800005435943604,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "Orange"
+          ],
+          "nodes": [
+            "Facility_refinery_T1",
+            "Operating_Tier_1__Facility_refinery_T1",
+            "Refinery | control hut__Facility_refinery_T1",
+            "Refinery | hut window__Facility_refinery_T1",
+            "Refinery | manifold__Facility_refinery_T1",
+            "Refinery | riser.001__Facility_refinery_T1",
+            "Refinery | riser__Facility_refinery_T1",
+            "Refinery | skid__Facility_refinery_T1",
+            "Refinery | stack glow__Facility_refinery_T1",
+            "Refinery | stack__Facility_refinery_T1",
+            "Refinery | tank band.001__Facility_refinery_T1",
+            "Refinery | tank band__Facility_refinery_T1",
+            "Refinery | tank cap.001__Facility_refinery_T1",
+            "Refinery | tank cap__Facility_refinery_T1",
+            "Refinery | tank.001__Facility_refinery_T1",
+            "Refinery | tank__Facility_refinery_T1"
+          ],
+          "triangles": 1596
+        },
+        "Facility_refinery_T2": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              1.2000000476837158,
+              1.215000033378601,
+              3.2600011825561523
+            ],
+            "min": [
+              -1.2000000476837158,
+              -1.179999589920044,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "Orange",
+            "Titanium"
+          ],
+          "nodes": [
+            "Facility_refinery_T2",
+            "Operating_Tier_1__Facility_refinery_T2",
+            "Operating_Tier_2__Facility_refinery_T2",
+            "Refinery | catwalk__Facility_refinery_T2",
+            "Refinery | crusher hopper__Facility_refinery_T2",
+            "Refinery | header pipe__Facility_refinery_T2",
+            "Refinery | skid.001__Facility_refinery_T2",
+            "Refinery | stack glow.001__Facility_refinery_T2",
+            "Refinery | stack glow.002__Facility_refinery_T2",
+            "Refinery | stack.001__Facility_refinery_T2",
+            "Refinery | stack.002__Facility_refinery_T2",
+            "Refinery | tank band.002__Facility_refinery_T2",
+            "Refinery | tank band.003__Facility_refinery_T2",
+            "Refinery | tank band.004__Facility_refinery_T2",
+            "Refinery | tank band.005__Facility_refinery_T2",
+            "Refinery | tank band.006__Facility_refinery_T2",
+            "Refinery | tank band.007__Facility_refinery_T2",
+            "Refinery | tank band.008__Facility_refinery_T2",
+            "Refinery | tank band.009__Facility_refinery_T2",
+            "Refinery | tank cap.002__Facility_refinery_T2",
+            "Refinery | tank cap.003__Facility_refinery_T2",
+            "Refinery | tank cap.004__Facility_refinery_T2",
+            "Refinery | tank cap.005__Facility_refinery_T2",
+            "Refinery | tank.002__Facility_refinery_T2",
+            "Refinery | tank.003__Facility_refinery_T2",
+            "Refinery | tank.004__Facility_refinery_T2",
+            "Refinery | tank.005__Facility_refinery_T2",
+            "Refinery | transfer pipe__Facility_refinery_T2"
+          ],
+          "triangles": 5448
+        },
+        "Tell_refinery_T1": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              0.3945325016975403,
+              0.4000000059604645,
+              0.8000000715255737
+            ],
+            "min": [
+              -0.3945325016975403,
+              -0.3985377550125122,
+              0.00436252960935235
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "IonBlue",
+            "Ochre",
+            "Orange",
+            "Titanium"
+          ],
+          "nodes": [
+            "IonBlue",
+            "Tell_refinery_T1"
+          ],
+          "triangles": 460
+        },
+        "Tell_refinery_T2": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              0.58243328332901,
+              0.5833961367607117,
+              1.1366322040557861
+            ],
+            "min": [
+              -0.58243328332901,
+              -0.568053126335144,
+              0.049043308943510056
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "IonBlue",
+            "Ochre",
+            "Orange",
+            "Titanium"
+          ],
+          "nodes": [
+            "IonBlue.001",
+            "Tell_refinery_T2"
+          ],
+          "triangles": 460
+        }
+      },
+      "sha256": "f4ded72757310f35325a42a4ced71e7139487b71ec15d9887a012fc22da6cdb1"
+    },
+    "facility:sensor_array": {
+      "glb": "facilities/sensor_array/sensor_array.glb",
+      "id": "sensor_array",
+      "kind": "facility",
+      "pending": false,
+      "roots": {
+        "Facility_sensor_array_T1": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              1.0299999713897705,
+              1.0299994945526123,
+              2.6199991703033447
+            ],
+            "min": [
+              -1.0299999713897705,
+              -1.179999589920044,
+              0.0
+            ]
+          },
+          "materials": [
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "Titanium"
+          ],
+          "nodes": [
+            "Facility_sensor_array_T1",
+            "Operating_Tier_1__Facility_sensor_array_T1",
+            "Sensor | collar__Facility_sensor_array_T1",
+            "Sensor | dish__Facility_sensor_array_T1",
+            "Sensor | feed arm__Facility_sensor_array_T1",
+            "Sensor | feed horn__Facility_sensor_array_T1",
+            "Sensor | mast__Facility_sensor_array_T1",
+            "Sensor | plinth__Facility_sensor_array_T1",
+            "Sensor | status light.001__Facility_sensor_array_T1",
+            "Sensor | status light.002__Facility_sensor_array_T1",
+            "Sensor | status light.003__Facility_sensor_array_T1",
+            "Sensor | status light__Facility_sensor_array_T1"
+          ],
+          "triangles": 452
+        },
+        "Facility_sensor_array_T2": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              1.1975557804107666,
+              1.1700007915496826,
+              4.530000686645508
+            ],
+            "min": [
+              -1.1699998378753662,
+              -1.179999589920044,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "Titanium"
+          ],
+          "nodes": [
+            "Facility_sensor_array_T2",
+            "Operating_Tier_1__Facility_sensor_array_T2",
+            "Operating_Tier_2__Facility_sensor_array_T2",
+            "Sensor | array tile.001__Facility_sensor_array_T2",
+            "Sensor | array tile.002__Facility_sensor_array_T2",
+            "Sensor | array tile.003__Facility_sensor_array_T2",
+            "Sensor | array tile.004__Facility_sensor_array_T2",
+            "Sensor | array tile__Facility_sensor_array_T2",
+            "Sensor | beacon__Facility_sensor_array_T2",
+            "Sensor | collar.001__Facility_sensor_array_T2",
+            "Sensor | dish.001__Facility_sensor_array_T2",
+            "Sensor | dish.002__Facility_sensor_array_T2",
+            "Sensor | feed horn.001__Facility_sensor_array_T2",
+            "Sensor | feed horn.002__Facility_sensor_array_T2",
+            "Sensor | lattice leg.001__Facility_sensor_array_T2",
+            "Sensor | lattice leg.002__Facility_sensor_array_T2",
+            "Sensor | lattice leg.003__Facility_sensor_array_T2",
+            "Sensor | lattice leg__Facility_sensor_array_T2",
+            "Sensor | lattice ring.001__Facility_sensor_array_T2",
+            "Sensor | lattice ring.002__Facility_sensor_array_T2",
+            "Sensor | lattice ring__Facility_sensor_array_T2",
+            "Sensor | phased array__Facility_sensor_array_T2",
+            "Sensor | plinth.001__Facility_sensor_array_T2",
+            "Sensor | status light.004__Facility_sensor_array_T2",
+            "Sensor | status light.005__Facility_sensor_array_T2",
+            "Sensor | status light.006__Facility_sensor_array_T2",
+            "Sensor | status light.007__Facility_sensor_array_T2",
+            "Sensor | status light.008__Facility_sensor_array_T2",
+            "Sensor | status light.009__Facility_sensor_array_T2",
+            "Sensor | status light.010__Facility_sensor_array_T2",
+            "Sensor | status light.011__Facility_sensor_array_T2"
+          ],
+          "triangles": 2636
+        },
+        "Tell_sensor_array_T1": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              0.4000000059604645,
+              0.4000000059604645,
+              0.800000011920929
+            ],
+            "min": [
+              -0.4000000059604645,
+              -0.4000000059604645,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "IonBlue",
+            "Ochre",
+            "Orange",
+            "Titanium"
+          ],
+          "nodes": [
+            "IonBlue",
+            "Tell_sensor_array_T1"
+          ],
+          "triangles": 452
+        },
+        "Tell_sensor_array_T2": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              0.5718724727630615,
+              0.5761651396751404,
+              1.149999976158142
+            ],
+            "min": [
+              -0.5761558413505554,
+              -0.5712721347808838,
+              0.0
+            ]
+          },
+          "materials": [
+            "Amber",
+            "Armor",
+            "Cyan",
+            "Graphite",
+            "HullSteel",
+            "IonBlue",
+            "Ochre",
+            "Orange",
+            "Titanium"
+          ],
+          "nodes": [
+            "IonBlue.001",
+            "Tell_sensor_array_T2"
+          ],
+          "triangles": 460
+        }
+      },
+      "sha256": "0f2efbfd47f12be4106a8323418f7b5fcc4b307752a42d48ea78978acdbe4547"
+    }
+  },
+  "legacy": {
+    "asteroids": {
+      "glb": "../FrontierOutpost/asteroids.glb",
+      "root": null,
+      "sha256": "f8f1a54cdf951d56dce87219ad8bc2e116c34da84dee51289bab8286511a7ccd"
+    },
+    "cruiser": {
+      "glb": "../FrontierOutpost/cruiser.glb",
+      "root": "Cruiser_ROOT",
+      "sha256": "f5fe8eb13875e836da76780d037df8306ad307d4b2a7247d210e63d48759cd25"
+    },
+    "frigate": {
+      "glb": "../FrontierOutpost/frigate.glb",
+      "root": "Frigate_ROOT",
+      "sha256": "5efd79dda69b3179e0cdab8e8cb7d2e7942ba4896338e916f2026ac9cf90d915"
+    },
+    "station": {
+      "glb": "../FrontierOutpost/station.glb",
+      "root": "Station_ROOT",
+      "sha256": "7e525658ae8e73f2e48947da274786998dbd58c91e9b2839b26fe01cc64cb7b4"
+    }
+  },
+  "schema_version": 1
+}

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import sys
 
-from game_data import facility_tiers
+from game_data import facility_definitions
 
 ART = Path(__file__).resolve().parents[1]
 
@@ -17,16 +17,19 @@ def sha(path):
 def verify(art=ART):
     errors = []
     contract = json.loads((art / "contract.json").read_text())
-    game_tiers = facility_tiers()
+    definitions = facility_definitions()
+    game_tiers = {name: data["tiers"] for name, data in definitions.items()}
+    seen = set()
     for manifest_path in sorted(art.glob("**/*.json")):
         if manifest_path.parent == art:
             continue
         try:
             manifest = json.loads(manifest_path.read_text())
             identifier, kind = manifest["id"], manifest["kind"]
-            if kind not in {"facility", "hull"}:
-                raise ValueError("Station exports remain gated on M9 validation")
-            folder = "facilities" if kind == "facility" else "hulls"
+            seen.add((kind, identifier))
+            if kind not in {"facility", "hull", "station_exterior", "station_interior"}:
+                raise ValueError("Unknown asset kind")
+            folder = "facilities" if kind == "facility" else "hulls" if kind == "hull" else "station"
             if manifest_path != art / folder / identifier / f"{identifier}.json":
                 raise ValueError("Identifier differs from file layout")
             if manifest["schema_version"] != 1:
@@ -51,12 +54,19 @@ def verify(art=ART):
                     raise ValueError("Invalid tier count")
                 if identifier in game_tiers and tiers != game_tiers[identifier]:
                     raise ValueError("Tier count differs from gameplay rules")
-                if identifier not in game_tiers and manifest["planned"] is not True:
-                    raise ValueError("Unknown facility must remain planned")
+                if identifier not in game_tiers:
+                    raise ValueError("Unknown facility identifier in gameplay data")
                 expected = {contract["roots"][k].format(id=identifier, tier=n): k
                             for n in range(1, tiers + 1) for k in ["facility", "tell"]}
             else:
                 expected = {contract["roots"][kind].format(id=identifier): kind}
+                if kind == "hull" and identifier != "frigate":
+                    raise ValueError("Unknown hull identifier in gameplay data")
+                if kind.startswith("station_"):
+                    if identifier != kind.removeprefix("station_"):
+                        raise ValueError("Invalid station identifier")
+                    if sha(art / "tools/station_checks.py") != manifest["inputs"]["station_checks"]:
+                        raise ValueError("station checks changed; re-export")
             if set(manifest["roots"]) != set(expected):
                 raise ValueError("Missing or extra tier/tell roots")
             for name, root_kind in expected.items():
@@ -73,6 +83,9 @@ def verify(art=ART):
     for glb in sorted(art.glob("**/*.glb")):
         if not glb.with_suffix(".json").exists():
             errors.append(f"{glb.relative_to(art)}: missing export manifest")
+    for identifier, definition in definitions.items():
+        if definition["art"] != "pending" and ("facility", identifier) not in seen:
+            errors.append(f"facility {identifier}: missing ready facility asset")
     return errors
 
 

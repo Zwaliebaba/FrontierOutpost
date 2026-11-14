@@ -26,6 +26,7 @@ use crate::site::{
     template_named,
 };
 use crate::skirmish::MAX_NPCS;
+use crate::wingman::{self, Order as WingmanOrder, Wingman};
 use crate::world::{Kit, ShipId, World};
 use serde::{Deserialize, Serialize};
 
@@ -176,6 +177,11 @@ pub enum ScanRefusal {
 /// Something that happened in the run, for the event log.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RunEvent {
+    WingmanHired {
+        owner: ShipId,
+        ship: ShipId,
+        credits: u32,
+    },
     Launched {
         pilots: u32,
     },
@@ -382,6 +388,7 @@ pub struct Options {
 #[derive(Debug, Clone)]
 struct PilotRun {
     ship: ShipId,
+    wingman: Option<Wingman>,
     berth_slot: u32,
     phase: Phase,
     cargo: Cargo,
@@ -443,6 +450,8 @@ impl PilotRun {
 pub struct PilotCheckpoint {
     pub ship: u16,
     #[serde(default)]
+    pub wingman: Option<Wingman>,
+    #[serde(default)]
     pub berth_slot: Option<u32>,
     pub phase: Phase,
     pub cargo: Cargo,
@@ -469,10 +478,14 @@ pub struct PilotCheckpoint {
 /// restart (design section 6). NPCs and shots in flight are not kept.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Checkpoint {
+    #[serde(default)]
+    pub opening_threat: Option<u32>,
     pub template: String,
     pub seed: u32,
     pub tier: u32,
     pub pilots: u32,
+    #[serde(default)]
+    pub payout_pilots: Option<u32>,
     pub elapsed: u32,
     pub alert: u32,
     pub rises_done: u32,
@@ -503,6 +516,7 @@ pub struct Checkpoint {
 /// One expedition instance from launch to its end.
 #[derive(Debug, Clone)]
 pub struct Run {
+    opening_override: Option<u32>,
     world: World,
     site: Site,
     pilots: Vec<PilotRun>,
@@ -545,12 +559,14 @@ impl Run {
             .map(|i| world.spawn_pilot_at(berth(&site, i), heading))
             .collect();
         let mut run = Self {
+            opening_override: options.opening_threat,
             world,
             pilots: ships
                 .iter()
                 .enumerate()
                 .map(|(index, &ship)| PilotRun {
                     ship,
+                    wingman: None,
                     berth_slot: u32::try_from(index).expect("at most four pilots"),
                     phase: Phase::AtDock,
                     cargo: [0; 3],
@@ -607,6 +623,268 @@ impl Run {
         run.place_nest();
         run.place_opening_threat(opening);
         (run, ships)
+    }
+
+    /// Hire into a reserved slot after the humans' roster slots. Supplies are charged by
+    /// the server; the simulation records the sink and never allocates a payout share.
+    pub fn hire_wingman(
+        &mut self,
+        owner: ShipId,
+        tier: u32,
+        fitted: &[String],
+        slot: u32,
+    ) -> Result<ShipId, wingman::Refusal> {
+        if !self.flying(owner) || self.wingman_ship(owner).is_some() {
+            return Err(wingman::Refusal::NotFlying);
+        }
+        if tier == 0
+            || tier > 2
+            || !self.site.access.contains(&Capability::Wingman)
+            || tier == 2 && !self.site.access.contains(&Capability::WingmanExtract)
+        {
+            return Err(wingman::Refusal::NeedsQuarters);
+        }
+        if self.pilots.len() >= 4 || slot >= 4 {
+            return Err(wingman::Refusal::ShipLimit);
+        }
+        let ship = self.join_at(slot).ok_or(wingman::Refusal::ShipLimit)?;
+        let index = self.index(ship).expect("just joined");
+        self.pilots[index].wingman = Some(Wingman {
+            owner: owner.0,
+            tier,
+            order: WingmanOrder::Follow,
+            follow_jump: None,
+            attacker: None,
+        });
+        self.fit(ship, fitted);
+        self.events.retain(|(_, event)| {
+            !matches!(event,
+            RunEvent::Joined { pilot } | RunEvent::SuppliesSpent { pilot, .. } if *pilot == ship)
+        });
+        self.log(RunEvent::WingmanHired {
+            owner,
+            ship,
+            credits: LAUNCH_COST,
+        });
+        Ok(ship)
+    }
+
+    #[must_use]
+    pub fn wingman_ship(&self, owner: ShipId) -> Option<ShipId> {
+        self.pilots
+            .iter()
+            .find(|p| p.wingman.is_some_and(|w| w.owner == owner.0))
+            .map(|p| p.ship)
+    }
+
+    #[must_use]
+    pub fn wingman(&self, ship: ShipId) -> Option<Wingman> {
+        self.pilot(ship)?.wingman
+    }
+
+    /// A later human follower may bring a wingman while a slot remains. Only yield pools
+    /// and threat grow: human roster slots and the pot's scaling remain fixed.
+    pub fn add_wingman(
+        &mut self,
+        owner: ShipId,
+        tier: u32,
+        fitted: &[String],
+    ) -> Result<ShipId, wingman::Refusal> {
+        let old = self.site.pilots;
+        if old >= 4 {
+            return Err(wingman::Refusal::ShipLimit);
+        }
+        self.site.pilots += 1;
+        let hired = self.hire_wingman(owner, tier, fitted, old);
+        if hired.is_err() {
+            self.site.pilots = old;
+            return hired;
+        }
+        let ratio = crew_scaling(old + 1).yield_pools / crew_scaling(old).yield_pools;
+        for deposit in &mut self.site.deposits {
+            deposit.remaining *= ratio;
+        }
+        for pocket in &mut self.site.pockets {
+            pocket.pool *= ratio;
+        }
+        if self.opening_override.is_none() {
+            let new = self.site.opening_threat();
+            let previous = (self.site.tier.rules().opening_threat as f32 * crew_scaling(old).threat)
+                .round() as u32;
+            self.place_opening_threat(new.saturating_sub(previous));
+        }
+        hired
+    }
+
+    /// The server checked the joining owner's current powered quarters.
+    pub fn allow_wingman(&mut self, tier: u32) {
+        if !self.site.access.contains(&Capability::Wingman) {
+            self.site.access.push(Capability::Wingman);
+        }
+        if tier >= 2 && !self.site.access.contains(&Capability::WingmanExtract) {
+            self.site.access.push(Capability::WingmanExtract);
+        }
+    }
+
+    pub fn order_wingman(
+        &mut self,
+        owner: ShipId,
+        order: WingmanOrder,
+    ) -> Result<(), wingman::Refusal> {
+        let ship = self
+            .wingman_ship(owner)
+            .ok_or(wingman::Refusal::NotFlying)?;
+        if !self.flying(owner) || !self.flying(ship) {
+            return Err(wingman::Refusal::NotFlying);
+        }
+        let index = self.index(ship).expect("wingman exists");
+        let wing = self.pilots[index].wingman.expect("wingman exists");
+        if let WingmanOrder::Hold { x, z } = order
+            && ((x as f32).abs() > ARENA_HALF_WIDTH || (z as f32).abs() > ARENA_HALF_WIDTH)
+        {
+            return Err(wingman::Refusal::OutOfBounds);
+        }
+        if let WingmanOrder::Extract { deposit } = order {
+            if wing.tier < 2 {
+                return Err(wingman::Refusal::NeedsQuarters);
+            }
+            if !self.revealed || self.site.deposits.get(deposit as usize).is_none() {
+                return Err(wingman::Refusal::Unrevealed);
+            }
+        }
+        self.pilots[index].extractor.stop();
+        self.pilots[index]
+            .wingman
+            .as_mut()
+            .expect("wingman exists")
+            .order = order;
+        self.pilots[index]
+            .wingman
+            .as_mut()
+            .expect("wingman exists")
+            .follow_jump = None;
+        self.checkpoint_due = true;
+        Ok(())
+    }
+
+    fn think_wingmen(&mut self) {
+        let indices: Vec<usize> = self
+            .pilots
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| p.wingman.map(|_| i))
+            .collect();
+        for index in indices {
+            let mut wing = self.pilots[index].wingman.expect("wingman index");
+            let id = self.pilots[index].ship;
+            if self.pilots[index].phase.is_over() || self.pilots[index].inert.is_some() {
+                continue;
+            }
+            let owner = ShipId(wing.owner);
+            if !self.flying(owner) || self.is_disconnected(owner) {
+                wing.order = WingmanOrder::Return;
+                self.pilots[index].wingman = Some(wing);
+            }
+            let Some(ship) = self.world.ship(id).cloned() else {
+                continue;
+            };
+            if wing.order == WingmanOrder::Follow
+                && let Some(target) = wing.follow_jump
+                && self.pilots[index].jump.is_none()
+                && self.jump(id, Some(target)).is_ok()
+            {
+                self.pilots[index]
+                    .wingman
+                    .as_mut()
+                    .expect("wingman")
+                    .follow_jump = None;
+            }
+            let (point, stop, cruise) = match wing.order {
+                WingmanOrder::Follow => {
+                    let Some(pilot) = self.world.ship(owner) else {
+                        continue;
+                    };
+                    (
+                        (
+                            pilot.state.x - pilot.state.heading.cos() * wingman::FOLLOW_DISTANCE,
+                            pilot.state.z - pilot.state.heading.sin() * wingman::FOLLOW_DISTANCE,
+                        ),
+                        2.0,
+                        true,
+                    )
+                }
+                WingmanOrder::Hold { x, z } => ((x as f32, z as f32), 1.0, true),
+                WingmanOrder::Return => {
+                    (berth(&self.site, self.pilots[index].berth_slot), 1.0, true)
+                }
+                WingmanOrder::Extract { deposit } => {
+                    // Explicit mark only: no rich-pocket, relay or wave values are read.
+                    let Some(deposit) = self.site.deposits.get(deposit as usize) else {
+                        continue;
+                    };
+                    ((deposit.x, deposit.z), EXTRACT_RANGE * 0.55, true)
+                }
+            };
+            if wing.order == WingmanOrder::Return
+                && self.pilots[index].phase == Phase::AtDock
+                && (ship.state.x - point.0).hypot(ship.state.z - point.1) <= DOCK_RADIUS
+            {
+                self.world.remove_ship(id);
+                self.finish(index, Ending::Docked);
+                continue;
+            }
+            let waypoint = wingman::waypoint(&ship, point, self.world.obstacles());
+            let input = wingman::steer(
+                &ship,
+                waypoint,
+                if waypoint == point { stop } else { 1.0 },
+                cruise,
+            );
+            for event in self.world.events() {
+                if let crate::combat::Event::Fired {
+                    shooter, target, ..
+                } = event
+                    && (*target == owner || *target == id)
+                {
+                    wing.attacker = Some((shooter.0, self.elapsed()));
+                }
+            }
+            self.pilots[index]
+                .wingman
+                .as_mut()
+                .expect("wingman")
+                .attacker = wing.attacker;
+            let target = wing
+                .attacker
+                .filter(|(_, at)| self.elapsed().saturating_sub(*at) <= COMBAT_MEMORY_TICKS)
+                .and_then(|(enemy, _)| self.world.ship(ShipId(enemy)))
+                .filter(|enemy| {
+                    wing.order != WingmanOrder::Return
+                        && enemy.kind.is_hostile_to(ShipKind::Pilot)
+                        && (enemy.state.x - ship.state.x).hypot(enemy.state.z - ship.state.z)
+                            <= self.lock_range()
+                })
+                .map(|enemy| enemy.id);
+            self.set_lock(id, target);
+            self.set_controls(id, input, target.is_some());
+            if let WingmanOrder::Extract { deposit } = wing.order {
+                let conditions = self.conditions(index, deposit as usize);
+                if self.pilots[index].total() >= self.pilots[index].capacity {
+                    self.pilots[index].wingman.as_mut().expect("wingman").order =
+                        WingmanOrder::Return;
+                    self.pilots[index].extractor.stop();
+                } else if self.pilots[index].extractor.heat >= 0.7 {
+                    self.vent(id);
+                } else if conditions.at_deposit && conditions.remaining > 0.0 {
+                    let _ = self.pilots[index]
+                        .extractor
+                        .start(deposit as usize, &conditions);
+                } else if conditions.at_deposit && conditions.remaining <= 0.0 {
+                    self.pilots[index].wingman.as_mut().expect("wingman").order =
+                        WingmanOrder::Return;
+                }
+            }
+        }
     }
 
     #[must_use]
@@ -710,6 +988,7 @@ impl Run {
         let ship = self.world.spawn_pilot_at(berth(&self.site, slot), heading);
         self.pilots.push(PilotRun {
             ship,
+            wingman: None,
             berth_slot: slot,
             phase: Phase::AtDock,
             cargo: [0; 3],
@@ -774,7 +1053,11 @@ impl Run {
         pilot.fitted = fitted.to_vec();
         pilot.fitting = fitting;
         pilot.capacity = fitting.capacity;
-        self.world.set_kit(ship, kit(&fitting));
+        let mut equipment = kit(&fitting);
+        if pilot.wingman.is_some() {
+            equipment.weapon *= wingman::WEAPON_FACTOR;
+        }
+        self.world.set_kit(ship, equipment);
     }
 
     /// The rigs and modules a pilot flies, by identifier.
@@ -871,6 +1154,16 @@ impl Run {
                     reason: JumpCancel::Pilot,
                 });
             }
+            if let Some(wing) = self.wingman_ship(ship) {
+                if let Some(wi) = self.index(wing) {
+                    self.pilots[wi]
+                        .wingman
+                        .as_mut()
+                        .expect("wingman")
+                        .follow_jump = None;
+                }
+                let _ = self.jump(wing, None);
+            }
             return Ok(());
         };
         let state = self
@@ -911,6 +1204,14 @@ impl Run {
             pilot: ship,
             target,
         });
+        if let Some(wing) = self.wingman_ship(ship) {
+            let wi = self.index(wing).expect("wingman exists");
+            if let Some(wingman) = &mut self.pilots[wi].wingman
+                && wingman.order == WingmanOrder::Follow
+            {
+                wingman.follow_jump = Some(target);
+            }
+        }
         Ok(())
     }
 
@@ -1083,6 +1384,9 @@ impl Run {
     /// scan range of the site, and stops the extractor. Says why when it
     /// cannot start, so the pilot is never left guessing.
     pub fn scan(&mut self, ship: ShipId) -> Result<(), ScanRefusal> {
+        if self.wingman(ship).is_some() {
+            return Err(ScanRefusal::NotFlying);
+        }
         let Some(index) = self.index(ship).filter(|_| self.flying(ship)) else {
             return Err(ScanRefusal::NotFlying);
         };
@@ -1163,6 +1467,17 @@ impl Run {
             }
             self.log(RunEvent::Reconnected { pilot: ship });
         }
+        if let Some(wing) = self.wingman_ship(ship) {
+            let wi = self.index(wing).expect("wingman exists");
+            if !self.pilots[wi].phase.is_over()
+                && let Some((state, hull)) = self.pilots[wi].inert.take()
+            {
+                self.world.restore_pilot(wing, state, hull);
+                self.pilots[wi].disconnected_at = None;
+                let fitted = self.pilots[wi].fitted.clone();
+                self.fit(wing, &fitted);
+            }
+        }
         true
     }
 
@@ -1186,10 +1501,12 @@ impl Run {
     #[must_use]
     pub fn checkpoint(&self) -> Checkpoint {
         Checkpoint {
+            opening_threat: self.opening_override,
             template: self.site.template.name.to_owned(),
             seed: self.site.seed,
             tier: self.site.tier.number(),
             pilots: self.site.pilots,
+            payout_pilots: Some(self.site.payout_pilots),
             elapsed: self.elapsed(),
             alert: self.alert,
             rises_done: u32::try_from(self.rises_done).unwrap_or(u32::MAX),
@@ -1212,6 +1529,7 @@ impl Run {
                         .unwrap_or_default();
                     PilotCheckpoint {
                         ship: pilot.ship.0,
+                        wingman: pilot.wingman,
                         berth_slot: Some(pilot.berth_slot),
                         phase: pilot.phase,
                         cargo: pilot.cargo,
@@ -1255,6 +1573,7 @@ impl Run {
             checkpoint.pilots,
             &checkpoint.access,
         );
+        site.payout_pilots = checkpoint.payout_pilots.unwrap_or(checkpoint.pilots);
         for (deposit, remaining) in site.deposits.iter_mut().zip(&checkpoint.deposits) {
             deposit.remaining = *remaining;
         }
@@ -1275,6 +1594,7 @@ impl Run {
                 };
                 PilotRun {
                     ship: ShipId(saved.ship),
+                    wingman: saved.wingman,
                     berth_slot: saved
                         .berth_slot
                         .unwrap_or(u32::try_from(index).expect("at most four pilots")),
@@ -1307,6 +1627,7 @@ impl Run {
             })
             .collect();
         let mut run = Self {
+            opening_override: checkpoint.opening_threat,
             world,
             site,
             pilots,
@@ -1328,6 +1649,22 @@ impl Run {
         };
         for pilot in &run.pilots {
             run.world.reserve(pilot.ship);
+        }
+        // If the human had already gone home, its returning wingman has nobody to
+        // reconnect it. Resume that known return order instead of holding it inert.
+        for index in 0..run.pilots.len() {
+            if let Some(wing) = run.pilots[index].wingman
+                && !run.flying(ShipId(wing.owner))
+                && !run.pilots[index].phase.is_over()
+                && let Some((state, hull)) = run.pilots[index].inert.take()
+            {
+                let ship = run.pilots[index].ship;
+                run.world.restore_pilot(ship, state, hull);
+                run.pilots[index].disconnected_at = None;
+                run.pilots[index].wingman.as_mut().expect("wingman").order = WingmanOrder::Return;
+                let fitted = run.pilots[index].fitted.clone();
+                run.fit(ship, &fitted);
+            }
         }
         // The core is a structure, not an NPC: it stands where it stood, as
         // damaged as it was. Its wardens are NPCs and are not restored.
@@ -1421,6 +1758,7 @@ impl Run {
         if self.ended.is_some() {
             return;
         }
+        self.think_wingmen();
         self.rise_with_time();
         self.gate_drives();
         self.work_jumps();
@@ -1947,7 +2285,11 @@ impl Run {
         let summary = Summary {
             ending,
             banked,
-            launch_cost: self.launch_cost,
+            launch_cost: if pilot.wingman.is_some() {
+                LAUNCH_COST
+            } else {
+                self.launch_cost
+            },
             lost: losses(
                 ending,
                 Loadout {
@@ -3795,5 +4137,275 @@ mod tests {
         let mut checkpoint = run.checkpoint();
         checkpoint.template = "Nowhere".into();
         assert!(Run::restore(&checkpoint).is_none());
+    }
+}
+
+#[cfg(test)]
+mod wingman_tests {
+    use super::*;
+    use crate::site::COMPACT_SITE;
+
+    fn launch() -> (Run, ShipId, ShipId) {
+        let mut site = Site::generate(
+            COMPACT_SITE,
+            29,
+            ThreatTier::I,
+            2,
+            &[Capability::Wingman, Capability::WingmanExtract],
+        );
+        site.payout_pilots = 1;
+        let (mut run, pilots) = Run::launch(
+            site,
+            1,
+            Options {
+                opening_threat: Some(0),
+                ..Options::default()
+            },
+        );
+        let wing = run.hire_wingman(pilots[0], 2, &[], 1).unwrap();
+        (run, pilots[0], wing)
+    }
+
+    fn place(run: &mut Run, ship: ShipId, point: (f32, f32)) {
+        run.world.set_state(
+            ship,
+            ShipState {
+                x: point.0,
+                z: point.1,
+                heading: 0.0,
+                speed: 0.0,
+            },
+        );
+        let index = run.index(ship).unwrap();
+        run.pilots[index].phase = Phase::Approach;
+    }
+
+    #[test]
+    fn a_wingman_scales_threat_and_yield_but_not_the_pot() {
+        let (run, _, wing) = launch();
+        let solo = Site::generate(COMPACT_SITE, 29, ThreatTier::I, 1, &[]);
+        assert!(run.site.opening_threat() > solo.opening_threat());
+        assert!(run.site.deposits[0].remaining > solo.deposits[0].remaining);
+        assert_eq!(run.site.payout(), solo.payout());
+        assert_eq!(
+            run.world.ship(wing).unwrap().kit.weapon,
+            wingman::WEAPON_FACTOR
+        );
+    }
+
+    #[test]
+    fn pilots_and_wingmen_never_exceed_four_and_each_owner_gets_one() {
+        let site = Site::generate(COMPACT_SITE, 29, ThreatTier::I, 4, &[Capability::Wingman]);
+        let (mut run, humans) = Run::launch(
+            site,
+            3,
+            Options {
+                opening_threat: Some(0),
+                ..Options::default()
+            },
+        );
+        run.hire_wingman(humans[0], 1, &[], 3).unwrap();
+        assert!(run.hire_wingman(humans[1], 1, &[], 4).is_err());
+        assert!(run.hire_wingman(humans[0], 1, &[], 2).is_err());
+        assert_eq!(run.ships().len(), 4);
+    }
+
+    #[test]
+    fn orders_require_the_owner_and_extraction_requires_tier_two_and_a_scan() {
+        let (mut run, owner, wing) = launch();
+        assert_eq!(
+            run.order_wingman(wing, WingmanOrder::Return),
+            Err(wingman::Refusal::NotFlying)
+        );
+        assert_eq!(
+            run.order_wingman(owner, WingmanOrder::Extract { deposit: 0 }),
+            Err(wingman::Refusal::Unrevealed)
+        );
+        assert_eq!(run.scan(wing), Err(ScanRefusal::NotFlying));
+        run.revealed = true;
+        run.order_wingman(owner, WingmanOrder::Extract { deposit: 0 })
+            .unwrap();
+        run.pilots[1].wingman.as_mut().unwrap().tier = 1;
+        assert_eq!(
+            run.order_wingman(owner, WingmanOrder::Extract { deposit: 0 }),
+            Err(wingman::Refusal::NeedsQuarters)
+        );
+        assert_eq!(
+            run.order_wingman(owner, WingmanOrder::Hold { x: i32::MAX, z: 0 }),
+            Err(wingman::Refusal::OutOfBounds)
+        );
+    }
+
+    #[test]
+    fn follow_and_hold_do_not_consult_hidden_seed_values() {
+        let (mut run, owner, wing) = launch();
+        run.think_wingmen();
+        let before = run.world.ship(wing).unwrap().input;
+        run.site.values.rich_pocket = (run.site.values.rich_pocket + 1) % run.site.pockets.len();
+        run.site.values.relays = [0, 0];
+        run.site.values.rises.clear();
+        run.think_wingmen();
+        assert_eq!(run.world.ship(wing).unwrap().input, before);
+        run.order_wingman(owner, WingmanOrder::Hold { x: 20, z: 20 })
+            .unwrap();
+        run.think_wingmen();
+        assert_eq!(
+            run.wingman(wing).unwrap().order,
+            WingmanOrder::Hold { x: 20, z: 20 }
+        );
+        assert!(!run.revealed());
+    }
+
+    #[test]
+    fn return_docks_and_banks_only_the_wingmans_cargo() {
+        let (mut run, owner, wing) = launch();
+        place(&mut run, wing, (28.0, 0.0));
+        run.pilots[1].cargo = [3, 2, 1];
+        run.order_wingman(owner, WingmanOrder::Return).unwrap();
+        for _ in 0..600 {
+            run.step();
+        }
+        assert_eq!(run.status(wing).unwrap().phase, Phase::Docked);
+        assert_eq!(run.status(owner).unwrap().cargo, 0);
+        assert!(run.take_events().iter().any(|(_, e)| matches!(e, RunEvent::Docked { pilot, summary } if *pilot == wing && summary.banked == [3, 2, 1])));
+    }
+
+    #[test]
+    fn a_destroyed_wingman_loses_cargo_and_fitting_without_ending_its_pilots_run() {
+        let (mut run, _, wing) = launch();
+        run.fit(wing, &["extraction_rig".into()]);
+        run.pilots[1].cargo = [5, 0, 0];
+        run.world.damage(wing, 1000.0);
+        run.step();
+        assert_eq!(run.status(wing).unwrap().phase, Phase::Destroyed);
+        assert!(run.ended().is_none());
+        assert!(run.take_events().iter().any(|(_, e)| matches!(e, RunEvent::Destroyed { pilot, summary } if *pilot == wing && summary.banked == [0; 3] && summary.lost.upgraded_modules == 1 && summary.lost.cargo == 5)));
+    }
+
+    #[test]
+    fn a_pilot_and_a_wingman_can_link_relays_and_earn_the_solo_contract_bonus() {
+        let (mut run, owner, wing) = launch();
+        let [a, b] = run.relays();
+        place(&mut run, owner, a);
+        place(&mut run, wing, b);
+        run.order_wingman(
+            owner,
+            WingmanOrder::Hold {
+                x: b.0.round() as i32,
+                z: b.1.round() as i32,
+            },
+        )
+        .unwrap();
+        for _ in 0..RELAY_HOLD_TICKS {
+            run.step();
+        }
+        assert_eq!(run.relay(), Relay::Linked);
+        run.pilots[0].cargo = [10, 0, 0];
+        let dock = run.site.template.dock;
+        place(&mut run, owner, dock);
+        run.step();
+        assert_eq!(run.pot().contract, run.site.tier.rules().payout);
+        assert_eq!(run.pot().relay, run.site.tier.rules().payout / 2);
+    }
+
+    #[test]
+    fn a_checkpoint_preserves_orders_owner_and_human_payout_scaling() {
+        let (mut run, owner, wing) = launch();
+        run.order_wingman(owner, WingmanOrder::Hold { x: 20, z: 20 })
+            .unwrap();
+        let checkpoint = run.checkpoint();
+        let mut restored = Run::restore(&checkpoint).unwrap();
+        assert_eq!(restored.wingman(wing), run.wingman(wing));
+        assert_eq!(restored.site.payout_pilots, 1);
+        assert!(restored.reconnect(owner));
+        assert!(restored.world.ship(wing).is_some());
+        assert_eq!(
+            restored.world.ship(wing).unwrap().kit.weapon,
+            wingman::WEAPON_FACTOR
+        );
+    }
+
+    #[test]
+    fn a_tier_two_wingman_extracts_and_vents_without_cutting_out() {
+        let (mut run, owner, wing) = launch();
+        run.revealed = true;
+        run.extract_percent = Some(1000);
+        let deposit = &run.site.deposits[0];
+        let point = (deposit.x, deposit.z);
+        place(&mut run, wing, point);
+        run.order_wingman(owner, WingmanOrder::Extract { deposit: 0 })
+            .unwrap();
+        run.pilots[1].extractor.heat = 0.72;
+        for _ in 0..400 {
+            run.step();
+        }
+        assert!(run.status(wing).unwrap().cargo > 0);
+        let events = run.take_events();
+        assert!(
+            events
+                .iter()
+                .any(|(_, event)| matches!(event, RunEvent::Vented { pilot } if *pilot == wing))
+        );
+        assert!(!events.iter().any(|(_, event)| matches!(event, RunEvent::ExtractorStopped { pilot, why: Stop::CutOut } if *pilot == wing)));
+    }
+
+    #[test]
+    fn a_wingman_flies_to_a_hold_mark_and_settles() {
+        let (mut run, owner, wing) = launch();
+        run.order_wingman(owner, WingmanOrder::Hold { x: 20, z: 20 })
+            .unwrap();
+        for _ in 0..400 {
+            run.step();
+        }
+        let ship = run.world.ship(wing).unwrap();
+        assert!((ship.state.x - 20.0).hypot(ship.state.z - 20.0) < 2.0);
+        assert!(ship.state.speed < 0.5);
+    }
+
+    #[test]
+    fn only_an_observed_attack_triggers_retaliation_and_follow_copies_a_pilots_jump() {
+        let (mut run, owner, wing) = launch();
+        let state = run.world.ship(owner).unwrap().state;
+        let at = (state.x + 3.0, state.z);
+        let enemy = run.world.spawn_npc_at(ShipKind::Drone, at, at);
+        run.world.set_lock(enemy, Some(owner));
+        run.think_wingmen();
+        assert_eq!(
+            run.world.ship(wing).unwrap().lock,
+            None,
+            "a private hostile lock is not a visible shot"
+        );
+        run.world.step();
+        run.think_wingmen();
+        assert_eq!(run.world.ship(wing).unwrap().lock, Some(enemy));
+        run.world.remove_ship(enemy);
+        let (dx, dz) = run.site.template.dock;
+        place(&mut run, owner, (dx - 40.0, dz));
+        place(&mut run, wing, (dx - 34.0, dz + 3.0));
+        run.jump(owner, Some(JumpTarget::Pocket(0))).unwrap();
+        run.think_wingmen();
+        assert_eq!(run.spooling(wing).unwrap().target, JumpTarget::Pocket(0));
+    }
+
+    #[test]
+    fn a_following_human_can_add_a_wingman_without_increasing_the_pot_or_exceeding_four() {
+        let site = Site::generate(COMPACT_SITE, 29, ThreatTier::I, 2, &[Capability::Wingman]);
+        let (mut run, humans) = Run::launch(
+            site,
+            2,
+            Options {
+                opening_threat: Some(0),
+                ..Options::default()
+            },
+        );
+        let payout = run.site.payout();
+        let pool = run.site.deposits[0].remaining;
+        run.add_wingman(humans[1], 1, &[]).unwrap();
+        assert_eq!(run.site.pilots, 3);
+        assert_eq!(run.site.payout(), payout);
+        assert!(run.site.deposits[0].remaining > pool);
+        run.add_wingman(humans[0], 1, &[]).unwrap();
+        assert_eq!(run.ships().len(), 4);
+        assert!(run.add_wingman(humans[1], 1, &[]).is_err());
     }
 }

@@ -43,11 +43,19 @@ pub struct TierRule {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Art {
+    Ready,
+    Pending,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FacilityRule {
     pub id: &'static str,
     pub name: &'static str,
     /// Tier 1 first.
     pub tiers: &'static [TierRule],
+    /// Pending facilities can be implemented before their model, but cannot be installed.
+    pub art: Art,
     /// The rig given with the first purchase (design section 10: "the first
     /// rig comes with its facility"), by fitting identifier.
     pub rig: Option<&'static str>,
@@ -113,6 +121,7 @@ pub const STAGE1: OutpostRules = OutpostRules {
     facilities: &[
         FacilityRule {
             id: "sensor_array",
+            art: Art::Ready,
             name: "Sensor array",
             tiers: &[
                 TierRule {
@@ -132,6 +141,7 @@ pub const STAGE1: OutpostRules = OutpostRules {
         },
         FacilityRule {
             id: "refinery",
+            art: Art::Ready,
             name: "Refinery",
             tiers: &[
                 TierRule {
@@ -155,6 +165,7 @@ pub const STAGE1: OutpostRules = OutpostRules {
         },
         FacilityRule {
             id: "fabrication_bay",
+            art: Art::Ready,
             name: "Fabrication bay",
             tiers: &[
                 TierRule {
@@ -171,6 +182,26 @@ pub const STAGE1: OutpostRules = OutpostRules {
                 },
             ],
             rig: Some("escort_rig"),
+        },
+        FacilityRule {
+            id: "crew_quarters",
+            name: "Crew quarters",
+            art: Art::Ready,
+            tiers: &[
+                TierRule {
+                    cost: TIER_1_COST,
+                    draw: 2,
+                    grants: &[Capability::Wingman],
+                    batch_seconds: None,
+                },
+                TierRule {
+                    cost: TIER_2_COST,
+                    draw: 3,
+                    grants: &[Capability::WingmanExtract],
+                    batch_seconds: None,
+                },
+            ],
+            rig: None,
         },
     ],
     adjacency: &[
@@ -267,6 +298,8 @@ pub struct Change {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum Refusal {
+    #[error("the art for {0} is pending")]
+    ArtPending(&'static str),
     #[error("there is no socket {0}")]
     NoSuchSocket(String),
     #[error("there is no facility {0}")]
@@ -436,6 +469,9 @@ impl OutpostRules {
     ) -> Result<Change, Refusal> {
         let socket = self.socket(socket)?;
         let facility = self.facility(facility)?;
+        if facility.art == Art::Pending {
+            return Err(Refusal::ArtPending(facility.name));
+        }
         if !self.is_open(outpost, socket) {
             return Err(Refusal::SocketClosed(socket.name));
         }
@@ -599,6 +635,22 @@ fn running(facility: &'static FacilityRule, run: u32) -> impl Iterator<Item = &'
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pending_art_cannot_be_installed() {
+        const PENDING: FacilityRule = FacilityRule {
+            art: Art::Pending,
+            ..STAGE1.facilities[0]
+        };
+        let rules = OutpostRules {
+            facilities: &[PENDING],
+            ..STAGE1
+        };
+        assert_eq!(
+            rules.install(&Outpost::default(), "a", PENDING.id),
+            Err(Refusal::ArtPending(PENDING.name))
+        );
+    }
 
     const RULES: OutpostRules = STAGE1;
 
@@ -819,6 +871,7 @@ mod tests {
         // nothing in the code knows about them.
         const SHIELD_WORKS: FacilityRule = FacilityRule {
             id: "shield_works",
+            art: Art::Ready,
             name: "Shield works",
             tiers: &[TierRule {
                 cost: Cost::credits(90),

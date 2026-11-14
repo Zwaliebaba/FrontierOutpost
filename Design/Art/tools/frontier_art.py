@@ -211,7 +211,13 @@ def geometry(root):
         "min": [min(p[i] for p in points) for i in range(3)],
         "max": [max(p[i] for p in points) for i in range(3)],
     }
-    return {"bounds": bounds, "triangles": triangles, "materials": sorted(materials),
+    anchors = {}
+    for obj in descendants(root):
+        if obj is not root and obj.type == "EMPTY":
+            transform = root.matrix_world.inverted() @ obj.matrix_world
+            anchors[obj.name] = {"matrix": [list(row) for row in transform],
+                                 "properties": {key: obj[key] for key in ["opening_width", "opening_height"] if key in obj}}
+    return {"bounds": bounds, "triangles": triangles, "materials": sorted(materials), "anchors": anchors,
             "nodes": sorted(obj.name for obj in descendants(root))}
 
 
@@ -355,6 +361,19 @@ def check_asset(art=ART):
                     errors.append(f"tell: {root.name} exceeds tell cube")
         if kind == "hull":
             record["footprint_radius"] = max(math.hypot(x, y) for x in [lo[0], hi[0]] for y in [lo[1], hi[1]])
+            exterior = art / "station/exterior/exterior.json"
+            if exterior.exists():
+                station = json.loads(exterior.read_text())
+                anchors = next(iter(station["roots"].values()))["anchors"]
+                mouth = anchors[CONTRACT["runtime_nodes"]["mouth"]]["properties"]
+                if hi[0] - lo[0] + CONTRACT["clearance"] * 2 > mouth["opening_width"] or hi[2] - lo[2] + CONTRACT["clearance"] * 2 > mouth["opening_height"]:
+                    errors.append(f"hull_fit: {root.name} cannot clear the station mouth")
+            interior = art / "station/interior/interior.json"
+            if interior.exists():
+                station = json.loads(interior.read_text())
+                anchors = next(iter(station["roots"].values()))["anchors"]
+                if "Parking_" + identifier not in anchors:
+                    errors.append(f"parking: {root.name} has no station parking anchor")
     if kind == "facility":
         for tier in range(2, tiers + 1):
             previous = records.get(root_name("facility", identifier, tier - 1), {}).get("bounds")
@@ -369,8 +388,9 @@ def check_asset(art=ART):
                 if any(b < a - epsilon for a, b in zip(old, new)) or math.prod(new) <= math.prod(old) + epsilon:
                     errors.append(f"tell_growth: tier {tier} tell must be bigger")
     if kind.startswith("station_"):
-        # The M9 greybox must set this before a station can be accepted as game art.
-        errors.append("station_pending: M9 scale, clearance and occlusion checks are not implemented; station export is disabled")
+        from station_checks import check
+        if roots:
+            errors.extend(check(roots[0], kind, art))
     return sorted(set(errors)), records
 
 
@@ -394,6 +414,8 @@ def export_asset(art=ART):
     inputs = {"source": sha(source), "contract": sha(ART / "contract.json"),
               "tool": sha(__file__), "game_data_reader": sha(Path(__file__).with_name("game_data.py")),
               "materials": sha(art / "library/materials.blend"), "blender": bpy.app.version_string}
+    if scene["frontier_kind"].startswith("station_"):
+        inputs["station_checks"] = sha(Path(__file__).with_name("station_checks.py"))
     target = source.with_suffix(".glb")
     manifest_path = source.with_suffix(".json")
     preview = source.with_suffix(".png")
@@ -435,7 +457,7 @@ def export_asset(art=ART):
             for root, matrix in saved.items():
                 root.matrix_world = matrix
         manifest = {"schema_version": 1, "kind": scene["frontier_kind"], "id": scene["frontier_id"],
-                    "planned": bool(scene.get("frontier_planned", False)), "tiers": scene["frontier_tiers"],
+                    "planned": scene["frontier_kind"] == "facility" and scene["frontier_id"] not in facility_tiers(), "tiers": scene["frontier_tiers"],
                     "tool_version": VERSION, "blender_version": bpy.app.version_string,
                     "units": CONTRACT["units"], "source_up": "+Z", "source_forward": "+Y", "gltf_up": "+Y",
                     "bounds_space": "root-local Blender Z-up metres", "inputs": inputs, "roots": records,
@@ -459,6 +481,8 @@ def main(argv=None):
     new.add_argument("--tiers", type=int, help="Explicit tier count for planned facilities only")
     commands.add_parser("check", help="Validate the open file; write nothing")
     commands.add_parser("export", help="Check, then export saved source, GLB, manifest, preview")
+    split_command = commands.add_parser("split", help="Migrate the six frozen facility modules once")
+    split_command.add_argument("--source", type=Path, default=ART.parent / "FrontierOutpost/FrontierOutpost.blend")
     args = parser.parse_args(argv)
     if args.command == "library":
         build_library(args.art_root / "library/materials.blend")
@@ -469,6 +493,9 @@ def main(argv=None):
         if errors:
             raise ValueError("\n".join(errors))
         print("PASS", bpy.data.filepath)
+    elif args.command == "split":
+        from split_generated import split
+        split(args.source, args.art_root)
     else:
         export_asset(args.art_root)
 

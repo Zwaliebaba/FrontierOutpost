@@ -12,6 +12,8 @@ pub mod frame;
 pub mod home;
 pub mod input;
 pub mod snapshot;
+pub mod wingman;
+pub use wingman::{WingmanHire, WingmanInfo, WingmanOrder};
 
 pub use home::{
     AccountInfo, AdjacencyInfo, Catalog, CostInfo, FacilityInfo, FittingInfo, Good, GoodAmount,
@@ -22,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 13;
+pub const PROTOCOL_VERSION: u32 = 14;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -34,50 +36,98 @@ pub const PROTOCOL_VERSION: u32 = 13;
 #[ts(export)]
 pub enum ClientMessage {
     /// First message on a new connection.
-    Hello { protocol_version: u32 },
+    Hello {
+        protocol_version: u32,
+    },
     /// Starts registering a new pilot with a passkey. The server answers with
     /// `PasskeyOptions` or `SignInRefused`.
-    Register { callsign: String },
+    Register {
+        callsign: String,
+    },
     /// Starts signing in the pilot called `callsign` with their passkey.
-    SignIn { callsign: String },
+    SignIn {
+        callsign: String,
+    },
     /// Finishes a registration or sign-in: `credential` is the browser's
     /// `PublicKeyCredential.toJSON()`, as JSON text.
-    PasskeyCredential { credential: String },
+    PasskeyCredential {
+        credential: String,
+    },
     /// Signs in again with the token from `SignedIn`, without a passkey.
-    Resume { token: String },
+    Resume {
+        token: String,
+    },
     /// Locks a hostile ship as the weapon target, or releases the lock with
     /// `None`. The server ignores a lock on anything but a hostile in range.
-    Lock { target: Option<u16> },
+    Lock {
+        target: Option<u16>,
+    },
     /// Accepts the offered contract at threat tier `tier` (1 to 3) and launches.
-    Launch { tier: u32 },
+    Launch {
+        tier: u32,
+        #[ts(optional)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        wingman: Option<WingmanHire>,
+    },
+    WingmanOrder {
+        order: WingmanOrder,
+    },
     /// Starts the extractor at the nearest deposit in reach, or stops it.
-    Extract { on: bool },
+    Extract {
+        on: bool,
+    },
     /// Vents the extractor: a 5-second pause that clears its heat.
     Vent,
     /// Starts a scan of the site; the ship must hold still in scan range.
     Scan,
     /// Spools the jump drive toward `target`, or cancels a spool with `None`.
     /// The server answers with `JumpSpooling` or `JumpRefused`.
-    Jump { target: Option<JumpTarget> },
+    Jump {
+        target: Option<JumpTarget>,
+    },
     /// Installs `facility` in the empty socket `socket`: bought at tier 1 the
     /// first time, installed again for the reinstallation cost after that.
-    Install { socket: String, facility: String },
+    Install {
+        socket: String,
+        facility: String,
+    },
     /// Buys the next tier of the facility in `socket`.
-    Upgrade { socket: String },
+    Upgrade {
+        socket: String,
+    },
     /// Removes the facility in `socket`, for nothing; its unlock stays.
-    Remove { socket: String },
+    Remove {
+        socket: String,
+    },
     /// Runs the facility in `socket` at tier `run`, or unpowers it with 0.
-    Power { socket: String, run: u32 },
+    Power {
+        socket: String,
+        run: u32,
+    },
     /// Sells `amount` of `good` to NPCs at the posted price.
-    Sell { good: Good, amount: u32 },
+    Sell {
+        good: Good,
+        amount: u32,
+    },
     /// Buys `amount` of `good` from NPCs at the posted price.
-    Buy { good: Good, amount: u32 },
+    Buy {
+        good: Good,
+        amount: u32,
+    },
     /// Queues `batches` of `recipe` at the processor; inputs leave the stock now.
-    Process { recipe: String, batches: u32 },
+    Process {
+        recipe: String,
+        batches: u32,
+    },
     /// Takes queued batches back, returning their inputs.
-    Unqueue { recipe: String, batches: u32 },
+    Unqueue {
+        recipe: String,
+        batches: u32,
+    },
     /// Buys a rig or module.
-    BuyFitting { fitting: String },
+    BuyFitting {
+        fitting: String,
+    },
     /// Saves the fitting to fly, by fitting identifier.
     SaveFitting {
         rig: Option<String>,
@@ -87,12 +137,16 @@ pub enum ClientMessage {
     /// carrying the invite code.
     CreateCrew,
     /// Joins the crew with this invite code.
-    JoinCrew { code: String },
+    JoinCrew {
+        code: String,
+    },
     /// Leaves the crew.
     LeaveCrew,
     /// The host sets the split: one whole percentage per member, in the
     /// order `Crew` lists them, summing to 100.
-    SetSplit { shares: Vec<u32> },
+    SetSplit {
+        shares: Vec<u32>,
+    },
 }
 
 /// A message sent from the server to the client.
@@ -104,8 +158,16 @@ pub enum ClientMessage {
 )]
 #[ts(export)]
 pub enum ServerMessage {
+    Wingman {
+        info: Option<WingmanInfo>,
+    },
+    WingmanRefused {
+        reason: String,
+    },
     /// The server accepted the client's protocol version.
-    Welcome { protocol_version: u32 },
+    Welcome {
+        protocol_version: u32,
+    },
     /// The server refused the connection; the client should show `reason`.
     Rejected {
         protocol_version: u32,
@@ -114,7 +176,9 @@ pub enum ServerMessage {
     /// Options for the browser's WebAuthn call, as JSON text: for a
     /// registration, `{ "publicKey": PublicKeyCredentialCreationOptionsJSON }`;
     /// for a sign-in, `{ "publicKey": PublicKeyCredentialRequestOptionsJSON }`.
-    PasskeyOptions { options: String },
+    PasskeyOptions {
+        options: String,
+    },
     /// The pilot is signed in. `token` signs them in again with `Resume`.
     /// A contract follows.
     SignedIn {
@@ -123,17 +187,29 @@ pub enum ServerMessage {
         account: AccountInfo,
     },
     /// Registration, sign-in or resumption failed, for `reason`.
-    SignInRefused { reason: String },
+    SignInRefused {
+        reason: String,
+    },
     /// The pilot's home holdings changed.
-    Account { account: AccountInfo },
+    Account {
+        account: AccountInfo,
+    },
     /// The outpost's rules and posted prices. Sent once, after `SignedIn`.
-    Catalog { catalog: Catalog },
+    Catalog {
+        catalog: Catalog,
+    },
     /// An action at home was refused, for `reason`; nothing changed.
-    HomeRefused { reason: String },
+    HomeRefused {
+        reason: String,
+    },
     /// The pilot's crew as it stands, or `None` once they are in none.
-    Crew { crew: Option<CrewInfo> },
+    Crew {
+        crew: Option<CrewInfo>,
+    },
     /// A crew action was refused, for `reason`.
-    CrewRefused { reason: String },
+    CrewRefused {
+        reason: String,
+    },
     /// The discovery contract on offer (design section 4): the site and what
     /// preparation shows of its seed. Sent after `Welcome` and after each run.
     Contract {
@@ -145,6 +221,9 @@ pub enum ServerMessage {
     /// The pilot launched and flies the ship `ship_id`. Snapshots follow as
     /// datagrams, `tick_rate` per second. Everything here is fixed for the run.
     Joined {
+        #[ts(optional)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        wingman: Option<WingmanInfo>,
         /// The run's site: a page that rejoins a run has no contract for it.
         site: SiteInfo,
         ship_id: u16,
@@ -172,11 +251,17 @@ pub enum ServerMessage {
         contract_cargo: u32,
     },
     /// The launch was refused, for `reason`.
-    LaunchRefused { reason: String },
+    LaunchRefused {
+        reason: String,
+    },
     /// The extractor did not start.
-    ExtractRefused { reason: ExtractRefusal },
+    ExtractRefused {
+        reason: ExtractRefusal,
+    },
     /// The scan did not start.
-    ScanRefused { reason: ScanRefusal },
+    ScanRefused {
+        reason: ScanRefusal,
+    },
     /// The jump drive started to spool toward `target`; the ship jumps in
     /// `seconds` unless the spool is cancelled.
     JumpSpooling {
@@ -185,11 +270,19 @@ pub enum ServerMessage {
         seconds: u32,
     },
     /// The jump drive did not spool.
-    JumpRefused { reason: JumpRefusal },
+    JumpRefused {
+        reason: JumpRefusal,
+    },
     /// A spooling jump stopped before the ship jumped.
-    JumpCancelled { ship: u32, reason: JumpCancel },
+    JumpCancelled {
+        ship: u32,
+        reason: JumpCancel,
+    },
     /// The ship jumped and arrived near `target`, at rest.
-    Jumped { ship: u32, target: JumpTarget },
+    Jumped {
+        ship: u32,
+        target: JumpTarget,
+    },
     /// A scan revealed the site's hidden seed values (design section 10).
     Scanned {
         /// Index into the contract's pockets.
@@ -200,9 +293,13 @@ pub enum ServerMessage {
         waves: Vec<WaveInfo>,
     },
     /// The instance ends in `seconds_left` seconds (design section 10).
-    LimitWarning { seconds_left: u32 },
+    LimitWarning {
+        seconds_left: u32,
+    },
     /// The pilot's run is over. A new `Contract` follows.
-    RunOver { summary: RunSummary },
+    RunOver {
+        summary: RunSummary,
+    },
     /// The instance ended and the crew's pot was paid: `share` of it to this
     /// pilot, by the host's split. A pilot who docked last also sees their
     /// share in `RunOver`.
@@ -579,7 +676,11 @@ mod tests {
     #[test]
     fn launch_and_actions_use_the_tagged_shape() {
         assert_eq!(
-            serde_json::to_string(&ClientMessage::Launch { tier: 1 }).unwrap(),
+            serde_json::to_string(&ClientMessage::Launch {
+                tier: 1,
+                wingman: None
+            })
+            .unwrap(),
             r#"{"type":"launch","tier":1}"#
         );
         assert_eq!(

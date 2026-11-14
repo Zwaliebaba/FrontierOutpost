@@ -238,7 +238,14 @@ async fn a_run_survives_the_server_being_killed_and_restarted() {
         read(&mut recv).await,
         ServerMessage::Contract { .. }
     ));
-    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    write(
+        &mut send,
+        &ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        },
+    )
+    .await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Account { .. }
@@ -350,7 +357,14 @@ async fn a_run_is_saved_where_it_stands_when_the_server_is_asked_to_stop() {
         read(&mut recv).await,
         ServerMessage::Contract { .. }
     ));
-    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    write(
+        &mut send,
+        &ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        },
+    )
+    .await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Account { .. }

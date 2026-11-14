@@ -12,7 +12,7 @@ export interface Candidate {
   z: number;
 }
 
-const isHostile = (kind: EntityKind) => kind !== "playerShip";
+const isHostile = (kind: EntityKind) => kind !== "playerShip" && kind !== "wingman";
 
 export class Selection {
   /** The ship the camera centres on, if not the player's own. */

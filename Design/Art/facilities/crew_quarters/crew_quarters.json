@@ -6,18 +6,19 @@
   "id": "crew_quarters",
   "inputs": {
     "blender": "4.3.2",
-    "contract": "05354ee00a364ba4819d93f6b2395dd3f6b9750a3431e2a1bdedd37c41ae2ac8",
-    "game_data_reader": "112e176506b279dc9978d40cf011152e16a10f48dde61073c5ac184c3938c7a4",
+    "contract": "f2d4607c59da6e235b18eebd780e7a9009a16334661549b2bc96160d7788f1f8",
+    "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
     "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
-    "source": "9592f7d1a2adda75cc620ff4fdcb58fc66371a46f0c0f47cc17811832ad82bd6",
-    "tool": "35a3bc7ed4e985a9a40ac5cac1864ba11f99c4a65f57951a75cbd9dd78ad6b00"
+    "source": "9ce0011f1bc5a1b57c6da1d137cafaa60156572759394db99f685527b6b9adbc",
+    "tool": "ff6e9899f67ff566e140c960f599b98cc10c04fa88d78bb0700eb88b4ef21443"
   },
   "kind": "facility",
-  "planned": true,
+  "planned": false,
   "preview": "crew_quarters.png",
-  "preview_sha256": "23624809ae339df7f2c9ab7aeaeeb2c7269bf6a073be2e1faf351c547ae19044",
+  "preview_sha256": "cbf1e3641c8701aa7efa0425adabd73034aaa534aec113c0da6b5bab3b16235d",
   "roots": {
     "Facility_crew_quarters_T1": {
+      "anchors": {},
       "bounds": {
         "max": [
           1.059999942779541,
@@ -87,6 +88,7 @@
       "triangles": 1784
     },
     "Facility_crew_quarters_T2": {
+      "anchors": {},
       "bounds": {
         "max": [
           1.0950000286102295,
@@ -186,6 +188,7 @@
       "triangles": 3332
     },
     "Tell_crew_quarters_T1": {
+      "anchors": {},
       "bounds": {
         "max": [
           0.3149999976158142,
@@ -214,6 +217,7 @@
       "triangles": 156
     },
     "Tell_crew_quarters_T2": {
+      "anchors": {},
       "bounds": {
         "max": [
           0.44999998807907104,
@@ -247,7 +251,7 @@
     }
   },
   "schema_version": 1,
-  "sha256": "4b625c4e8e059b3ea1cdc9a1202ae4047a64f4f98c398c4cb7fef2a98052a336",
+  "sha256": "1e3d1a225679cc362b7e540346f28eac793a21c030e5c69735f62b593088b5d1",
   "source_forward": "+Y",
   "source_up": "+Z",
   "tiers": 2,

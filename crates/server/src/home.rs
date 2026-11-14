@@ -85,7 +85,72 @@ pub fn discount(account: &Account) -> u32 {
 /// What launching now would carry.
 #[must_use]
 pub fn launch(account: &Account) -> Launch {
-    account.hangar.launch(&capabilities(account))
+    let mut hangar = account.hangar.clone();
+    if let Some(piece) = account.wingman_reservation.as_ref().and_then(|r| r.piece) {
+        hangar.pieces.retain(|p| p.id != piece);
+    }
+    hangar.launch(&capabilities(account))
+}
+
+#[derive(Clone)]
+pub struct WingmanLaunch {
+    pub tier: u32,
+    pub fitted: Vec<String>,
+}
+
+/// Validate and reserve stock in the same transaction that pays launch supplies.
+pub fn reserve_wingman(
+    account: &mut Account,
+    request: &frontier_protocol::WingmanHire,
+    run: &str,
+    ships: usize,
+) -> Result<WingmanLaunch, String> {
+    if ships >= 4 {
+        return Err("Four ships leave no room for a wingman.".into());
+    }
+    if account.wingman_reservation.is_some() {
+        return Err("Your previous wingman has not returned yet.".into());
+    }
+    let access = capabilities(account);
+    if !access.contains(&Capability::Wingman) {
+        return Err("Power crew quarters to hire a wingman.".into());
+    }
+    let tier = if access.contains(&Capability::WingmanExtract) {
+        2
+    } else {
+        1
+    };
+    let flown = launch(account).flown;
+    let piece = if let Some(id) = &request.rig {
+        if tier < 2 {
+            return Err("A wingman needs crew quarters 2 to fly a stock rig.".into());
+        }
+        let rule = fitting::fitting(id)
+            .filter(|r| r.slot == fitting::Slot::Rig)
+            .ok_or("Choose a rig from your stock.")?;
+        if !access.contains(&rule.needs) {
+            return Err("That rig's facility must be powered.".into());
+        }
+        Some(
+            account
+                .hangar
+                .pieces
+                .iter()
+                .find(|p| p.fitting == *id && !flown.iter().any(|f| f.id == p.id))
+                .ok_or("That rig is not spare stock; your pilot is using it or none is owned.")?
+                .id,
+        )
+    } else {
+        None
+    };
+    account.wingman_reservation = Some(crate::account::WingmanReservation {
+        run: run.to_owned(),
+        piece,
+    });
+    Ok(WingmanLaunch {
+        tier,
+        fitted: request.rig.iter().cloned().collect(),
+    })
 }
 
 /// The highest threat tier this home has opened.
@@ -901,5 +966,75 @@ mod tests {
             *home.stock.get_mut(good) = u32::MAX;
         }
         assert!(supplies_due(&home).is_err(), "there is stock to sell");
+    }
+}
+
+#[cfg(test)]
+mod wingman_tests {
+    use super::*;
+    use crate::account::WingmanReservation;
+    use frontier_protocol::WingmanHire;
+    use frontier_sim::outpost::{Installed, Unlock};
+
+    fn home(tier: u32) -> Account {
+        let mut account = Account::new("world", "Vega");
+        account.outpost.unlocks = vec![Unlock {
+            facility: "crew_quarters".into(),
+            tier,
+        }];
+        account.outpost.layout = vec![Installed {
+            socket: "a".into(),
+            facility: "crew_quarters".into(),
+            run: tier,
+        }];
+        account
+    }
+
+    #[test]
+    fn only_powered_quarters_and_a_free_ship_slot_allow_a_hire() {
+        let mut account = home(1);
+        assert!(reserve_wingman(&mut account, &WingmanHire { rig: None }, "r", 4).is_err());
+        account.outpost.layout[0].run = 0;
+        assert!(reserve_wingman(&mut account, &WingmanHire { rig: None }, "r", 1).is_err());
+        account.outpost.layout[0].run = 1;
+        assert_eq!(
+            reserve_wingman(&mut account, &WingmanHire { rig: None }, "r", 1)
+                .unwrap()
+                .tier,
+            1
+        );
+        assert!(reserve_wingman(&mut account, &WingmanHire { rig: None }, "r2", 1).is_err());
+    }
+
+    #[test]
+    fn tier_two_reserves_a_spare_rig_and_excludes_it_from_the_pilots_next_fitting() {
+        let mut account = home(2);
+        account.outpost.unlocks.push(Unlock {
+            facility: "refinery".into(),
+            tier: 1,
+        });
+        account.outpost.layout.push(Installed {
+            socket: "b".into(),
+            facility: "refinery".into(),
+            run: 1,
+        });
+        account
+            .hangar
+            .add(fitting::fitting("extraction_rig").unwrap());
+        account.hangar.saved.rig = Some("extraction_rig".into());
+        let request = WingmanHire {
+            rig: Some("extraction_rig".into()),
+        };
+        assert!(
+            reserve_wingman(&mut account, &request, "r", 1).is_err(),
+            "a single rig cannot fly twice"
+        );
+        account
+            .hangar
+            .add(fitting::fitting("extraction_rig").unwrap());
+        let hired = reserve_wingman(&mut account, &request, "r", 1).unwrap();
+        assert_eq!(hired.fitted, ["extraction_rig"]);
+        let WingmanReservation { piece, .. } = account.wingman_reservation.as_ref().unwrap();
+        assert!(launch(&account).flown.iter().all(|p| Some(p.id) != *piece));
     }
 }

@@ -4,6 +4,8 @@
 //! carries framed JSON messages ([`frontier_protocol::frame`]). The first
 //! client message must be `Hello`; the server answers with [`handshake`].
 
+type PaidSupplies = (u32, crate::account::Account, Option<home::WingmanLaunch>);
+
 use std::hash::{BuildHasher, RandomState};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -667,7 +669,12 @@ impl Pilot<'_> {
             return self.crew(account, message).await;
         }
         match (message, flying) {
-            (ClientMessage::Launch { tier }, None) => self.launch(account, tier).await?,
+            (ClientMessage::Launch { tier, wingman }, None) => {
+                self.launch(account, tier, wingman).await?
+            }
+            (ClientMessage::WingmanOrder { order }, Some((expedition, ship))) => {
+                expedition.order_wingman(ship, order)
+            }
             (ClientMessage::Lock { target }, Some((expedition, ship))) => {
                 expedition.lock(ship, target.map(ShipId));
             }
@@ -682,6 +689,7 @@ impl Pilot<'_> {
             // Actions sent just as a run ends arrive too late to matter.
             (
                 ClientMessage::Lock { .. }
+                | ClientMessage::WingmanOrder { .. }
                 | ClientMessage::Extract { .. }
                 | ClientMessage::Vent
                 | ClientMessage::Scan
@@ -846,7 +854,9 @@ impl Pilot<'_> {
         account: AccountId,
         run: &str,
         tier: Option<ThreatTier>,
-    ) -> Result<Result<(u32, crate::account::Account), String>, SessionError> {
+        wingman: Option<frontier_protocol::WingmanHire>,
+        crew_size: usize,
+    ) -> Result<Result<PaidSupplies, String>, SessionError> {
         let paid_for = run.to_owned();
         Ok(self
             .identity
@@ -859,20 +869,40 @@ impl Pilot<'_> {
                 home::settled(s, account, now_secs())?;
                 // Priced and paid in one transaction, on the holdings it reads.
                 let mut paid = 0;
+                let mut hired = None;
                 let holdings = s.update(account, |holdings| {
                     paid = home::supplies_due(holdings)?;
+                    if let Some(request) = &wingman {
+                        if holdings.credits.saturating_sub(paid) < frontier_sim::run::LAUNCH_COST {
+                            return Err("Wingman supplies cost another 40 cr.".to_owned());
+                        }
+                        hired = Some(home::reserve_wingman(
+                            holdings, request, &paid_for, crew_size,
+                        )?);
+                    }
                     // Supplies carried from an unpaid dock are used up here.
                     holdings.supplies_carried = false;
-                    Ok(Vec::from_iter((paid > 0).then_some(Transfer {
+                    let mut batch = Vec::from_iter((paid > 0).then_some(Transfer {
                         item: Item::Credits,
                         amount: paid,
                         from: Party::Account(account),
                         to: Party::Npc(Npc::Supplies),
                         reason: Reason::LaunchSupplies,
-                        run: Some(paid_for),
-                    })))
+                        run: Some(paid_for.clone()),
+                    }));
+                    if hired.is_some() {
+                        batch.push(Transfer {
+                            item: Item::Credits,
+                            amount: frontier_sim::run::LAUNCH_COST,
+                            from: Party::Account(account),
+                            to: Party::Npc(Npc::Supplies),
+                            reason: Reason::WingmanSupplies,
+                            run: Some(paid_for.clone()),
+                        });
+                    }
+                    Ok(batch)
                 })?;
-                Ok(holdings.map(|holdings| (paid, holdings)))
+                Ok(holdings.map(|holdings| (paid, holdings, hired)))
             })
             .await?)
     }
@@ -895,16 +925,25 @@ impl Pilot<'_> {
 
     /// Launches the pilot: solo, as a crew's host, or following their host
     /// into the instance they launched (the owner's choice for plan M6).
-    async fn launch(&mut self, account: AccountId, tier: u32) -> Result<(), SessionError> {
+    async fn launch(
+        &mut self,
+        account: AccountId,
+        tier: u32,
+        wingman: Option<frontier_protocol::WingmanHire>,
+    ) -> Result<(), SessionError> {
         let crew = self.identity.crews.view(account);
         if let Some(view) = crew.as_ref().filter(|view| !view.is_host()) {
             let share = view.share(account).unwrap_or(0);
-            return self.follow(account, share).await;
+            return self.follow(account, share, wingman).await;
         }
         let (access, open) = self.crew_home(account).await?;
         let tier = ThreatTier::from_number(tier).filter(|t| t.number() <= open);
         let run = random_hex(8)?;
-        let (paid, holdings) = match self.pay_supplies(account, &run, tier).await? {
+        let crew_size = crew.as_ref().map_or(1, |view| view.members.len());
+        let (paid, holdings, hired) = match self
+            .pay_supplies(account, &run, tier, wingman, crew_size)
+            .await?
+        {
             Ok(paid) => paid,
             Err(reason) => {
                 return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
@@ -938,6 +977,7 @@ impl Pilot<'_> {
                 .and_then(|view| view.share(account))
                 .unwrap_or(100),
             crew_size: u32::try_from(crew_size).unwrap_or(1),
+            wingman: hired,
             access,
             fitted: fitted(&holdings),
             store: self.identity.store.clone(),
@@ -976,7 +1016,12 @@ impl Pilot<'_> {
 
     /// Follows the crew's host into the instance they launched, for `share`
     /// percent of the pot.
-    async fn follow(&mut self, account: AccountId, share: u32) -> Result<(), SessionError> {
+    async fn follow(
+        &mut self,
+        account: AccountId,
+        share: u32,
+        wingman: Option<frontier_protocol::WingmanHire>,
+    ) -> Result<(), SessionError> {
         let Some(launch) = self.identity.crews.open_launch(account) else {
             let reason = "The host launches the crew; follow within a minute of them.".to_owned();
             return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
@@ -991,23 +1036,50 @@ impl Pilot<'_> {
                 return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
             }
         };
+        let crew_size = self
+            .identity
+            .crews
+            .view(account)
+            .map_or(1, |view| view.members.len());
+        let mut preview = holdings.clone();
+        let hired = if let Some(request) = &wingman {
+            let due = home::supplies_due(&holdings).unwrap_or(0);
+            if holdings.credits.saturating_sub(due) < frontier_sim::run::LAUNCH_COST {
+                return write_frame(
+                    &mut self.send,
+                    &ServerMessage::LaunchRefused {
+                        reason: "Wingman supplies cost another 40 cr.".to_owned(),
+                    },
+                )
+                .await;
+            }
+            match home::reserve_wingman(&mut preview, request, &run, crew_size) {
+                Ok(hired) => Some(hired),
+                Err(reason) => {
+                    return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason })
+                        .await;
+                }
+            }
+        } else {
+            None
+        };
         let joined = launch
             .expedition
-            .join(
+            .join_with_wingman(
                 account,
                 self.identity
                     .crews
                     .view(account)
                     .and_then(|view| view.berth_slot(account))
                     .unwrap_or(0),
-                fitted(&holdings),
+                (fitted(&holdings), hired),
                 share,
                 self.session.clone(),
                 self.events_tx.clone(),
             )
             .await;
         let Some((ship, joined)) = joined else {
-            let reason = "The crew's launch window has closed.".to_owned();
+            let reason = "The launch window has closed or no wingman slot remains.".to_owned();
             return write_frame(&mut self.send, &ServerMessage::LaunchRefused { reason }).await;
         };
         info!(target: "frontier::run", account = account.0, ship = ship.0, "followed the host");
@@ -1023,7 +1095,10 @@ impl Pilot<'_> {
         );
         self.flying = Some((launch.expedition.clone(), ship));
         self.log_unloading();
-        let (paid, holdings) = match self.pay_supplies(account, &run, Some(launch.tier)).await? {
+        let (paid, holdings, _) = match self
+            .pay_supplies(account, &run, Some(launch.tier), wingman, crew_size)
+            .await?
+        {
             Ok(paid) => paid,
             // They could pay a moment ago and only this session spends for
             // them, so this is not expected. They fly; nothing was taken.
@@ -1032,7 +1107,7 @@ impl Pilot<'_> {
                     account = account.0,
                     run, reason, "supplies not charged to a follower"
                 );
-                (0, holdings)
+                (0, holdings, None)
             }
         };
         let crew_size = self

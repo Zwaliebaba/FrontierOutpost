@@ -1,81 +1,91 @@
-# Running the first M8 pipeline
+# M8 art pipeline
 
-This implementation uses the shared Blender instance to author files, as requested by the
-owner in this session. This supersedes the older owner-only modelling/environment assumption
-in the art brief for this work. Sources remain editable; binaries and manifests are generated
-by Blender and the export tool, never edited as binary data or by hand.
+The owner directs the art and has authorised agent-authored Blender files in the shared
+Blender instance. Sources stay editable. Blender and the pipeline generate binaries and
+manifests; the catalogue is assembled by a repository script. Do not edit generated output
+by hand.
 
-## What works now
+## Implemented
 
-- Blender 4.3.2 has generated the shared linked material library and the first two-tier
-  crew-quarters source, GLB, manifest and 512 × 512 preview.
-- Facility and hull templates, validation and exports work. Preview cameras use exactly the
-  game's view direction `(0.43, -0.72, 0.545)` in Blender Z-up space, approximately 33° elevation.
-- Facility tier counts come from the current literal `STAGE1` rules through `game_data.py`.
-  This reader fails if it cannot recognise that format. Planned facilities require `--tiers`;
-  they are marked `planned` in their manifest and are not registered or buildable in the game.
-- CI verifies committed export/source/library/tool/contract hashes, tier roots and budgets.
-  It does not run Blender or prove the manifest's geometric claims independently.
+- `new`, `check` and `export` support facilities, hulls, station exteriors and interiors.
+  Blender 4.3.2 generated and verified the committed sources. The tool uses APIs compatible
+  with Blender 4.3+ and 5.x; a Blender 5 run has not been performed here.
+- Every asset links the shared material library. `contract.json` owns envelopes, budgets,
+  tier steps, clearance, material roles, anchors and the tactical view direction
+  `(0.43, -0.72, 0.545)` in Blender Z-up space (approximately 33 degrees).
+- Evaluated geometry, including modifiers, is checked. Station checks conservatively use
+  bounds for hangar/approach clearance, hardpoints, every hull's parking place, and projected
+  overlap from the tactical camera. A tight layout may need more space to pass these checks.
+  M9 still chooses the station's final physical scale and authors its exterior/interior.
+- `split` migrated the six original modules, preserving their evaluated geometry and material
+  roles, with reduced signature shapes as tells. The fabrication bay's tier 1 base was lowered
+  to Z=0; other geometry was preserved. These assets now live in separate facility sources.
+  The frozen scene no longer generates or exports facilities. Its regenerated manifest differs
+  only by removing those facility records.
+- Crew quarters has two habitat tiers and two matching tells. All four facility families are
+  exported, registered in the catalogue and available to the game.
+- Facility counts and `art: Art::Ready` / `Art::Pending` come from the literal Rust `STAGE1`
+  rules through `game_data.py`; there is no duplicated facility tier list. This reader fails
+  if it cannot recognise that format. A future data-file format should replace this bridge.
+- CI checks source/tool/library/contract and output hashes, ready-facility coverage, every tier
+  and tell, identifiers, names, budgets and catalogue freshness, without needing Blender.
+  Pending facilities cannot be built, and are omitted from the game's build catalogue.
+- The client finds assets through `catalogue.json`. A facility's GLB is fetched on first use;
+  concurrent requests and later tier changes share the parsed templates. Named operating
+  meshes remain separately switchable when static parts are merged by material.
 
-This is the first M8.1 delivery, not completion of M8. Station templates contain anchors,
-but station checks and exports deliberately fail with `station_pending`: M9 must establish
-the station scale, hangar and hull clearance, parking and socket occlusion tests first.
-The catalogue, client lazy loading and complete gameplay-art coverage are M8.2; migration
-of the six existing facility modules is M8.3. Existing runtime assets are untouched.
-
-The reference station image guides the future broad ring, heavy hub, segmented armour,
-warm windows and illuminated hangar. This change does not choose its M9 dimensions.
+The reference station image guides M9's broad ring, heavy hub, segmented armour, warm windows
+and illuminated hangar. M8 does not replace the existing station or choose its new dimensions.
 
 ## Commands
 
-Run from the repository root. `blender` must be on PATH. On Windows, use the full path to
-`blender.exe` if needed, and `py` for the ordinary Python checks.
+Run from the repository root, with `blender` on PATH. On Windows, use the full path to
+`blender.exe` if needed, and `py` in place of `python3`.
 
 ```sh
-# One-time library creation; refuses to replace an existing library.
+# One-time shared library creation; refuses to replace an existing library.
 blender -b --python-exit-code 1 --python Design/Art/tools/frontier_art.py -- library
 
-# Existing gameplay facility: derives its tier count from the game rules.
+# Derives tier count from the gameplay rules. Refuses to overwrite a source.
 blender -b --python-exit-code 1 --python Design/Art/tools/frontier_art.py -- new facility refinery
 
-# Planned facility, before its gameplay data is implemented.
-blender -b --python-exit-code 1 --python Design/Art/tools/frontier_art.py -- new facility crew_quarters --tiers 2
+# A local planned template before gameplay data exists; CI requires the identifier in data.
+blender -b --python-exit-code 1 --python Design/Art/tools/frontier_art.py -- new facility future_module --tiers 2
 
-# Open and edit the resulting source, then save it. Check writes no files.
+# Edit and save the source. Check writes nothing; export requires a valid saved file.
 blender -b Design/Art/facilities/crew_quarters/crew_quarters.blend --python-exit-code 1 --python Design/Art/tools/frontier_art.py -- check
 blender -b Design/Art/facilities/crew_quarters/crew_quarters.blend --python-exit-code 1 --python Design/Art/tools/frontier_art.py -- export
 
-# Ordinary Python, same check CI runs.
+python3 Design/Art/tools/catalogue.py
+python3 Design/Art/tools/catalogue.py --check
 python3 Design/Art/tools/check_exports.py
 python3 -m unittest discover -s Design/Art/tools/tests -p test_check_exports.py
-
-# Actual Blender fixtures, including GLB export, idempotence and broken-rule cases.
 blender -b --python-exit-code 1 --python Design/Art/tools/tests/test_frontier_art.py
 ```
 
-`new` refuses to overwrite a source. Templates contain roots and linked materials, not final
-geometry: an empty template should fail `check`. Each facility tier and tell stays at its own
-origin; export lays them out temporarily for the review preview, without saving that layout.
-To view individual tiers in Blender, hide the other roots while editing; unhide before export.
+The one-time `split` command accepts `--source <pre-M8 scene.blend>` and refuses to replace
+existing migrated sources. The current frozen scene intentionally has no facility roots left.
 
-Blender requires globally unique object names. Operating meshes therefore use
-`Operating_Tier_<n>__<root name>` (for example
-`Operating_Tier_1__Facility_crew_quarters_T2`), retaining the runtime role without `.001`
-suffixes. Tier 2 has separate tier 1 and tier 2 indicators. Presentation cameras and lights
-live outside the `Export` collection and never enter the GLB.
+## Authoring and exports
 
-Background export reopens the saved `.blend` first, so the manifest's source hash always
-describes the geometry actually exported. In an interactive Blender session, unsaved changes
-are rejected. Export stages its outputs before replacing them and skips a repeat export when
-the inputs, geometry records and output hashes match. Input changes trigger a fresh export;
-there are no timestamps in manifests. Bounds are root-local Blender Z-up metres, not glTF
-Y-up. Hull footprint radii conservatively enclose the bounds' horizontal corners.
+Each tier and tell stays at its own origin; the game supplies its placement. They overlap in
+the source: hide other roots to inspect or edit one, then unhide them before checking/exporting.
+The tool temporarily lays them out side by side for its 512-pixel review preview and never saves
+that layout into the source or gameplay GLB.
 
-Keep linked library paths relative to the source. Move or clone the whole repository rather
-than a `.blend` alone. The material library is generated from `contract.json`; if its palette
-changes, explicitly version/regenerate the library and all affected exports together.
+Blender requires globally unique object names. Operating meshes use
+`Operating_Tier_<n>__<root name>`, for example `Operating_Tier_1__Facility_crew_quarters_T2`.
+Tier 2 has separate tier 1 and tier 2 indicators. Presentation cameras and lights never enter
+the GLB. Station anchors are also recorded in the manifest. Bounds are root-local Blender
+Z-up metres, not glTF Y-up. Hull footprint radii conservatively enclose their bounds.
 
-`model_crew_quarters.py` reproduces the initial example from an empty crew-quarters template.
-It refuses to replace existing geometry. It is an authoring aid, not a step to run on every
-export; future manual editing of the source is supported. The example still needs visual
-review and gameplay integration before being marked ready for play.
+Background export reopens the saved source before checking it, so source hashes and exported
+geometry agree. Interactive export rejects unsaved changes. Exports are staged before replacing
+previous outputs; repeat exports with matching inputs and output hashes make no changes.
+There are no timestamps in manifests. A tool, contract or library change requires re-exporting
+affected sources and regenerating the catalogue.
+
+Keep the whole `Design/Art/` folder when moving sources: linked material paths are relative.
+`model_crew_quarters.py` reproduces the initial example from an empty two-tier template and
+refuses to replace existing geometry. It is an authoring aid, not a required export step;
+manual modelling and editing are supported.

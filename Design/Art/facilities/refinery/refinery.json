@@ -1,0 +1,187 @@
+{
+  "blender_version": "4.3.2",
+  "bounds_space": "root-local Blender Z-up metres",
+  "glb": "refinery.glb",
+  "gltf_up": "+Y",
+  "id": "refinery",
+  "inputs": {
+    "blender": "4.3.2",
+    "contract": "f2d4607c59da6e235b18eebd780e7a9009a16334661549b2bc96160d7788f1f8",
+    "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
+    "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
+    "source": "e9806096e621c773952c2ed1107b784fac4824b1f2d19c0b17c35bf95e9354e2",
+    "tool": "ff6e9899f67ff566e140c960f599b98cc10c04fa88d78bb0700eb88b4ef21443"
+  },
+  "kind": "facility",
+  "planned": false,
+  "preview": "refinery.png",
+  "preview_sha256": "72593f6be7b126ecc53cd07b2a0ab5b4313aef4c61aed037fbe1a204d3a72586",
+  "roots": {
+    "Facility_refinery_T1": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          1.149999976158142,
+          0.949999988079071,
+          2.3499996662139893
+        ],
+        "min": [
+          -1.149999976158142,
+          -1.1800005435943604,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "Orange"
+      ],
+      "nodes": [
+        "Facility_refinery_T1",
+        "Operating_Tier_1__Facility_refinery_T1",
+        "Refinery | control hut__Facility_refinery_T1",
+        "Refinery | hut window__Facility_refinery_T1",
+        "Refinery | manifold__Facility_refinery_T1",
+        "Refinery | riser.001__Facility_refinery_T1",
+        "Refinery | riser__Facility_refinery_T1",
+        "Refinery | skid__Facility_refinery_T1",
+        "Refinery | stack glow__Facility_refinery_T1",
+        "Refinery | stack__Facility_refinery_T1",
+        "Refinery | tank band.001__Facility_refinery_T1",
+        "Refinery | tank band__Facility_refinery_T1",
+        "Refinery | tank cap.001__Facility_refinery_T1",
+        "Refinery | tank cap__Facility_refinery_T1",
+        "Refinery | tank.001__Facility_refinery_T1",
+        "Refinery | tank__Facility_refinery_T1"
+      ],
+      "triangles": 1596
+    },
+    "Facility_refinery_T2": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          1.2000000476837158,
+          1.215000033378601,
+          3.2600011825561523
+        ],
+        "min": [
+          -1.2000000476837158,
+          -1.179999589920044,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "Facility_refinery_T2",
+        "Operating_Tier_1__Facility_refinery_T2",
+        "Operating_Tier_2__Facility_refinery_T2",
+        "Refinery | catwalk__Facility_refinery_T2",
+        "Refinery | crusher hopper__Facility_refinery_T2",
+        "Refinery | header pipe__Facility_refinery_T2",
+        "Refinery | skid.001__Facility_refinery_T2",
+        "Refinery | stack glow.001__Facility_refinery_T2",
+        "Refinery | stack glow.002__Facility_refinery_T2",
+        "Refinery | stack.001__Facility_refinery_T2",
+        "Refinery | stack.002__Facility_refinery_T2",
+        "Refinery | tank band.002__Facility_refinery_T2",
+        "Refinery | tank band.003__Facility_refinery_T2",
+        "Refinery | tank band.004__Facility_refinery_T2",
+        "Refinery | tank band.005__Facility_refinery_T2",
+        "Refinery | tank band.006__Facility_refinery_T2",
+        "Refinery | tank band.007__Facility_refinery_T2",
+        "Refinery | tank band.008__Facility_refinery_T2",
+        "Refinery | tank band.009__Facility_refinery_T2",
+        "Refinery | tank cap.002__Facility_refinery_T2",
+        "Refinery | tank cap.003__Facility_refinery_T2",
+        "Refinery | tank cap.004__Facility_refinery_T2",
+        "Refinery | tank cap.005__Facility_refinery_T2",
+        "Refinery | tank.002__Facility_refinery_T2",
+        "Refinery | tank.003__Facility_refinery_T2",
+        "Refinery | tank.004__Facility_refinery_T2",
+        "Refinery | tank.005__Facility_refinery_T2",
+        "Refinery | transfer pipe__Facility_refinery_T2"
+      ],
+      "triangles": 5448
+    },
+    "Tell_refinery_T1": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          0.3945325016975403,
+          0.4000000059604645,
+          0.8000000715255737
+        ],
+        "min": [
+          -0.3945325016975403,
+          -0.3985377550125122,
+          0.00436252960935235
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "IonBlue",
+        "Ochre",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "IonBlue",
+        "Tell_refinery_T1"
+      ],
+      "triangles": 460
+    },
+    "Tell_refinery_T2": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          0.58243328332901,
+          0.5833961367607117,
+          1.1366322040557861
+        ],
+        "min": [
+          -0.58243328332901,
+          -0.568053126335144,
+          0.049043308943510056
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "IonBlue",
+        "Ochre",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "IonBlue.001",
+        "Tell_refinery_T2"
+      ],
+      "triangles": 460
+    }
+  },
+  "schema_version": 1,
+  "sha256": "f4ded72757310f35325a42a4ced71e7139487b71ec15d9887a012fc22da6cdb1",
+  "source_forward": "+Y",
+  "source_up": "+Z",
+  "tiers": 2,
+  "tool_version": "0.1.0",
+  "units": "metres"
+}

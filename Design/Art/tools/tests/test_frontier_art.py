@@ -67,7 +67,7 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(any(e.startswith(code + ":") for e in errors), errors)
 
     def test_game_tiers(self):
-        self.assertEqual(facility_tiers(), {"sensor_array": 2, "refinery": 2, "fabrication_bay": 2})
+        self.assertEqual(facility_tiers(), {"sensor_array": 2, "refinery": 2, "fabrication_bay": 2, "crew_quarters": 2})
 
     def test_good_facility_and_hull(self):
         for kind in ["facility", "hull"]:
@@ -156,12 +156,65 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differs"):
             art.new_asset("facility", "sensor_array", tiers=3, art=self.art)
 
-    def test_stations_are_explicitly_gated(self):
-        for kind, identifier in [("station_exterior", "exterior"), ("station_interior", "interior")]:
-            path = art.asset_path(kind, identifier, self.art)
-            shutil.rmtree(path.parent, ignore_errors=True)
-            art.new_asset(kind, identifier, art=self.art)
-            self.assertFailure("station_pending")
+    def station_fixture(self, kind):
+        identifier = kind.removeprefix("station_")
+        path = art.asset_path(kind, identifier, self.art)
+        shutil.rmtree(path.parent, ignore_errors=True)
+        art.new_asset(kind, identifier, art=self.art)
+        root = bpy.data.objects[art.root_name(kind, identifier)]
+        from mathutils import Vector
+        right = Vector((.858, .513, 0)).normalized()
+        if kind == "station_exterior":
+            for name, offset in zip(art.CONTRACT["runtime_nodes"]["tells"], [-30, -10, 10, 30]):
+                position = right * offset
+                position.z = .2
+                cube(root, "Hull_" + name, (1, 1, .4), position)
+                position.z = .4
+                bpy.data.objects[name].location = position
+        else:
+            cube(root, "Deck", (100, 100, .3), (0, 0, -.15))
+            for name, offset in zip([*art.CONTRACT["runtime_nodes"]["sockets"], "Parking_frigate"], [-30, -10, 10, 30]):
+                bpy.data.objects[name].location = right * offset
+            cube(root, "Closure_C", (1, 1, .1), bpy.data.objects["Socket_C"].location)
+            cube(root, "Reactor_Upgrade", (1, 1, .1), right * 45)
+        bpy.context.view_layer.update()
+        return root
+
+    def test_station_kinds_pass_good_fixtures(self):
+        for kind in ["station_exterior", "station_interior"]:
+            with self.subTest(kind=kind):
+                self.station_fixture(kind)
+                self.assertEqual(art.check_asset(self.art)[0], [])
+
+    def test_station_failures(self):
+        cases = [
+            ("station_exterior", "mouth", lambda root: bpy.data.objects["Hangar_Mouth"].__setitem__("opening_width", 1)),
+            ("station_exterior", "lane", lambda root: cube(root, "Blocker", (1, 1, 1), (0, 10, .5))),
+            ("station_exterior", "anchors", lambda root: bpy.data.objects.remove(bpy.data.objects["Tell_A"], do_unlink=True)),
+            ("station_exterior", "tell_lane", lambda root: setattr(bpy.data.objects["Tell_A"], "location", (0, 10, 0))),
+            ("station_exterior", "hardpoint", lambda root: setattr(bpy.data.objects["Tell_A"], "location", (50, 50, 50))),
+            ("station_interior", "occlusion", lambda root: setattr(bpy.data.objects["Socket_B"], "location", bpy.data.objects["Socket_A"].location)),
+            ("station_interior", "runtime", lambda root: bpy.data.objects.remove(bpy.data.objects["Closure_C"], do_unlink=True)),
+            ("station_interior", "clearance", lambda root: cube(root, "Blocker", (1, 1, 1), bpy.data.objects["Parking_frigate"].location)),
+        ]
+        for kind, code, mutate in cases:
+            with self.subTest(kind=kind, rule=code):
+                root = self.station_fixture(kind)
+                mutate(root)
+                self.assertFailure(code)
+
+    def test_exports_each_supported_kind(self):
+        for kind in ["hull", "station_exterior", "station_interior"]:
+            with self.subTest(kind=kind):
+                if kind == "hull":
+                    source = self.fixture(kind)
+                else:
+                    self.station_fixture(kind)
+                    source = Path(bpy.data.filepath)
+                bpy.ops.wm.save_as_mainfile(filepath=str(source))
+                manifest = json.loads(art.export_asset(self.art).read_text())
+                self.assertEqual(manifest["kind"], kind)
+                self.assertEqual(manifest["sha256"], art.sha(source.with_suffix(".glb")))
 
     def test_export_and_idempotence(self):
         source = self.fixture()

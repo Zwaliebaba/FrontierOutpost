@@ -6,6 +6,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import check_exports
@@ -40,6 +41,17 @@ class ExportChecks(unittest.TestCase):
     def test_unchecked_glb(self):
         self.manifest.unlink()
         self.assertIn("missing export manifest", " ".join(check_exports.verify(self.art)))
+
+    def test_a_ready_facility_cannot_be_omitted(self):
+        shutil.rmtree(self.manifest.parent)
+        self.assertIn("missing ready facility asset", " ".join(check_exports.verify(self.art)))
+
+    def test_pending_facilities_can_merge_before_their_art(self):
+        shutil.rmtree(self.manifest.parent)
+        definitions = check_exports.facility_definitions()
+        definitions["crew_quarters"]["art"] = "pending"
+        with patch("check_exports.facility_definitions", return_value=definitions):
+            self.assertEqual(check_exports.verify(self.art), [])
 
     def test_stale_contract(self):
         with (self.art / "contract.json").open("a") as output:

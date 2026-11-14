@@ -10,8 +10,6 @@ A HUD-free outpost scene: an octagonal orbital depot with two circular side pods
 
 - `FrontierOutpost.blend`: editable scene saved by Blender 4.3.2 for the four-berth upgrade, overview camera and lighting.
 - `FrontierOutpostPreview.png`: rendered overview.
-- `facilities.glb`: the three facility modules at two tiers each (plan item 5.1), exported apart from the station.
-- `facilities_preview.png`: the six modules in a row, rendered from the facility catalogue camera.
 - `starter_frigate_detail.png`: close-up of the starter frigate on its landing gear.
 - `station.glb`, `cruiser.glb`, `frigate.glb`, `asteroids.glb`: separate gameplay asset exports. `station.glb` and `frigate.glb` were regenerated with Blender 4.3.2 for the four-berth upgrade; cruiser and asteroid exports retain their original bytes. `cruiser.glb` preserves the original Aurora hull at its original scale; `frigate.glb` is the new starter ship.
 - `create_scene.py`: deterministic source generator, seed 2266.
@@ -33,7 +31,10 @@ Use metres: Blender Z-up, ships forward +Y. The glTF exporter converts to glTF Y
 
 Design section 10's starter outpost has two construction sockets. `Socket A` sits beside the cargo bay (the port pod, on the -X side) and `Socket B` beside berth 07. Each is a clamp platform: an octagonal deck 1.3 scene metres in radius, a yellow mounting guide, four clamps on the rim along the axes, struts and a bridge with a power conduit to the station. An empty named `Socket_A` or `Socket_B`, a child of `Station_ROOT`, marks the centre of each deck. A module's base goes there. The manifest records both anchors in station space.
 
-`facilities.glb` holds six roots, `Facility_<facility>_T<tier>`, named by the game's facility identifiers (`sensor_array`, `refinery` and `fabrication_bay`) at tiers 1 and 2. Each root carries `facility` and `tier` custom properties. Each module is built around its root with its base at the root's origin. Its footprint stays within 1.25 scene metres of the centre on both horizontal axes, inside the rim clamps. Every tier 2 module stands more than 0.4 scene metres taller than its tier 1, so a tier change reads at the zoom where the whole outpost fits (design section 2). The generator asserts all three rules. In the Blender file the modules stand in a catalogue row out of the overview camera's frame. Move a root to a socket anchor (or its position to zero, under the anchor) to install it.
+The six original facility modules have moved to [`Design/Art/`](../Art/PIPELINE.md) through
+M8's `split` command, one editable source and checked export per facility family. The game
+loads their tiers through the generated art catalogue. They are no longer in the frozen scene
+or its generator. Crew quarters is the first new facility authored through the same pipeline.
 
 `SocketClosure_B*` meshes form a removable blanking plate and cross under the B anchor.
 `Operating_Tier_1*` and `Operating_Tier_2*` meshes are service indicators on each facility.
@@ -98,7 +99,7 @@ measured clear scene area, forward berth labels and a pinned launch receipt. See
 
 ## Frozen from plan M8
 
-From plan M8 every new asset is modelled by hand through the art pipeline in
+From plan M8 every new asset is authored in Blender through the art pipeline in
 [`Design/Art/`](../Art/README.md), which also holds the Stage 1 expansion's art brief. This scene
 is frozen: its assets stay until each is replaced there, and `create_scene.py` changes only to
 remove what has moved.
