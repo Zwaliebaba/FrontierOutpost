@@ -3,8 +3,10 @@
 //! pocket, the drive spools for [`SPOOL_TICKS`], and the ship arrives near it
 //! at rest.
 //!
-//! Its limits keep design section 2's risk on the way home: it spools only
-//! while the cruise drive could engage (not while a hostile has the ship
+//! It spools only once the ship has flown clear of the dock (past
+//! [`crate::run::UNDOCK_RADIUS`]): a jump is made from open space, never from
+//! the berth. Its limits keep design section 2's risk on the way home: it
+//! spools only while the cruise drive could engage (not while a hostile has the ship
 //! locked or the extractor works), and a jump home with cargo lands short of
 //! the dock, outside the site, so the return leg's interceptors still stand
 //! between the ship and the berth. A pocket jump lands outside the pocket,
@@ -40,6 +42,8 @@ pub enum Target {
 pub enum Refusal {
     /// The ship is docked, destroyed, held inert or the run is over.
     NotFlying,
+    /// The ship has not yet flown clear of the dock since launch.
+    AtDock,
     /// A hostile has the ship locked.
     Hunted,
     /// The extractor is working.

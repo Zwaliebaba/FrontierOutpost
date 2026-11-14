@@ -345,12 +345,13 @@ kbd {
   inset: 0;
   opacity: 0;
   pointer-events: none;
+  /* A burst from the ship at the centre of the view, not a flat fill: the cut lands on it. */
   background: radial-gradient(
-    ellipse at 50% 50%,
-    #d8f3ffb8 0%,
-    #64d5e466 22%,
-    #2a6fb022 55%,
-    transparent 78%
+    circle at 50% 50%,
+    #eaf8ffd0 0%,
+    #7fd0ff70 9%,
+    #3f8fe030 26%,
+    transparent 52%
   );
 }
 

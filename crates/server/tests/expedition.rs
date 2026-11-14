@@ -150,7 +150,7 @@ async fn a_pilot_flies_with_inputs_and_leaves_the_dock() {
 }
 
 #[tokio::test]
-async fn a_pilot_jumps_from_the_dock_to_just_outside_the_ore_field() {
+async fn a_pilot_flies_clear_of_the_dock_then_jumps_to_just_outside_the_ore_field() {
     let (url, sha256) = start_server();
     let mut pilot = launch(&url, sha256).await;
     write(
@@ -167,7 +167,18 @@ async fn a_pilot_jumps_from_the_dock_to_just_outside_the_ore_field() {
         }
     );
 
+    // Still on the berth: a jump is made from open space.
     let ore = JumpTarget::Pocket { index: 0 };
+    write(&mut pilot.send, &ClientMessage::Jump { target: Some(ore) }).await;
+    assert_eq!(
+        read(&mut pilot.recv).await,
+        ServerMessage::JumpRefused {
+            reason: JumpRefusal::AtDock
+        }
+    );
+    let out = pilot.fly(FORWARD, 100).await;
+    assert_eq!(out.last().unwrap().own.phase, RunPhase::Approach);
+
     write(&mut pilot.send, &ClientMessage::Jump { target: Some(ore) }).await;
     assert_eq!(
         read(&mut pilot.recv).await,

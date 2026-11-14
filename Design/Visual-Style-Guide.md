@@ -226,16 +226,22 @@ facts in its adjacent list. Scan results persistently explain the optional relay
 within 8 m of the two pocket centres simultaneously for 30 seconds, for +50% of earned shared
 contract payment. Selected relay feedback gives remaining range and held/waiting/linked state.
 
-**The jump.** A jump is seen, by the pilot and by the crew. While the drive spools, two thin
-rings close on the pilot's ship, one steadily and one in loops that quicken, so the last second
-reads as the last. Where a ship leaves, a ring opens and a streak shoots out the way it went;
-where it arrives, the streak comes in behind it and a ring closes on the hull. The effects are
-the blue of propulsion, a bright core in a coloured edge (§6), and none is solid: nothing behind
-one is hidden, and the spool is not taken for a shield. A ship that jumps is drawn where it was
-and then where it is, never slid across the space between. The pilot's own jump also washes the
-view once with the drive's light, to cover the camera's cut.
+**The jump.** A jump is seen, by the pilot and by the crew, in three beats. While the drive
+spools, light gathers on the plane under the ship in bands that run in toward the hull, sparks
+spiral in faster and faster, and one crisp ring closes as the countdown, so the last second
+reads as the last even zoomed fully out. In the spool's last moment the hull draws out along
+its length. Where a ship leaves, the hull squeezes into a line of light and pops to a point, a
+shockwave opens and a trail shoots out the way it went; where it arrives, a point draws out into
+the stretched hull, which settles, a ring closes on it and sparks scatter back along the way it
+came. The effects are the blue of propulsion, a bright core in a coloured edge (§6), soft-edged
+and additive, and none is solid: nothing behind one is hidden, and the spool is not taken for a
+shield. The stretch is presentation only: the ship's footprint is unchanged. A ship that jumps
+is drawn where it was and then where it is, never slid across the space between. For the
+pilot's own jump the view leans in slightly as the spool ends, and a burst of the drive's light
+from the ship's place at the centre covers the camera's cut as the lean lets go.
 
-Motion is small. The wash is skipped when the system asks for reduced motion.
+Motion is small. With reduced motion the countdown ring, the glow and the rings remain, but
+nothing flies or stretches: no sparks, no scatter, no stretch, no lean and no burst.
 
 **Extraction.** The extractor's beam runs from under the ship's edge into the worked crystals:
 a soft glow tinted by the material, around a bright, nearly white core (§6). Bands in the glow
@@ -244,11 +250,12 @@ the crystals and fly into the hull, so cargo is seen arriving. Neither the beam 
 fragments is solid. With reduced motion the beam holds still and the fragments are not drawn.
 
 **Flight dust.** In flight a sparse field of dust lies just below the gameplay plane, fixed in
-the world, so that open space shows the ship moving. Each speck is a short, faint streak that
-trails against the ship's motion and fades to its tail: its length follows the ship's speed,
-it is capped on the cruise drive, and it vanishes when the ship stops, so dust is never taken
-for stars. About two dozen cross the view at the starting zoom. It moves only as the scenery
-does, so reduced motion leaves it as it is. The home scene has no dust.
+the world, so that open space shows the ship moving. Each speck is a faint, soft round dot, a
+few pixels across, smaller and dimmer the deeper it lies; it never stretches into a streak,
+which on the cruise drive read as lines across the view. Dust is told from stars by its soft
+edge, by drifting against the sky as the ship moves, and by fading nearly out when the ship
+stops. About sixteen cross the view at the starting zoom. It moves only as the scenery does, so
+reduced motion leaves it as it is. The home scene has no dust.
 
 Reliable crew events start and cancel spool effects; every remote spool also has a bounded
 expiry. The pilot's confirmed jump returns camera focus to their ship without clearing a

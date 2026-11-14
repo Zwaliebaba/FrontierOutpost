@@ -208,6 +208,16 @@ describe("jumpReadiness", () => {
     expect(jumpReadiness(ore ?? null, "hunted").reason).toContain("hostile");
     expect(jumpReadiness(ore ?? null, "extracting").reason).toContain("(X)");
   });
+
+  it("waits for the ship to fly clear of the dock, as the server does", () => {
+    expect(jumpReadiness(ore ?? null, "ready", "atDock")).toEqual({
+      ready: false,
+      reason: "Fly clear of the dock first",
+    });
+    expect(jumpReadiness(ore ?? null, "ready", "approach").ready).toBe(true);
+    // The dock itself is the server's to refuse: the ship is already there.
+    expect(jumpReadiness(dock ?? null, "ready", "atDock").ready).toBe(true);
+  });
 });
 
 describe("sideOf", () => {

@@ -1523,14 +1523,15 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         String(jumpEffects.charges.filter((charge) => charge.ship !== session.shipId).length),
       );
       const leapt = jumpEffects.observe(poses, elapsed);
+      view.setPunch(calm.matches ? 1 : jumpEffects.punch(session.shipId));
       if (leapt.length > 0) {
         jumpsSeen += leapt.length;
         setData(hud, "jumps", String(jumpsSeen));
         // The wash covers the camera's cut, so it is for the pilot's own jump only.
         if (leapt.includes(session.shipId)) selection.steer();
         if (leapt.includes(session.shipId) && !calm.matches) {
-          jumpWash.animate([{ opacity: 0 }, { opacity: 0.7, offset: 0.2 }, { opacity: 0 }], {
-            duration: 520,
+          jumpWash.animate([{ opacity: 0 }, { opacity: 0.8, offset: 0.12 }, { opacity: 0 }], {
+            duration: 420,
             easing: "ease-out",
           });
         }
@@ -1706,7 +1707,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           relay: status?.relay ?? 0,
           selected: jumpDrive.selected,
           readout: jumpDrive.readout(now, site.pockets),
-          readiness: jumpReadiness(chosen ?? null, status?.drive ?? null),
+          readiness: jumpReadiness(chosen ?? null, status?.drive ?? null, status?.phase ?? null),
           own,
           contacts: poses.map((pose) => ({ ...pose, side: sideOf(pose.kind, pose.id, ownId) })),
           deposits: current.deposits,

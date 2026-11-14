@@ -3,12 +3,9 @@
  * tactical camera with the greybox's defaults (design §5).
  */
 import {
-  AdditiveBlending,
   AgXToneMapping,
   BufferAttribute,
   BufferGeometry,
-  LineBasicMaterial,
-  LineSegments,
   PerspectiveCamera,
   Points,
   PointsMaterial,
@@ -21,9 +18,10 @@ import type { EntityPose } from "../net/interpolation";
 import type { JumpEffects } from "./jumpEffects";
 import type { Shots } from "./shots";
 import { ExpeditionScene } from "./scene";
-import { createDust, streakDust } from "../view/dust";
+import { createDust, dustOpacity, placeDust } from "../view/dust";
 import { linear } from "../view/readability";
 import { createStarField } from "../view/sky";
+import { softPoints, softPointsMaterial } from "../view/softPoints";
 import { aimRig, createRig } from "../view/view";
 import type { CameraRig } from "../view/view";
 
@@ -34,7 +32,7 @@ const STAR_SEED = 2266;
 const DUST_SEED = 4417;
 /** A camera step longer than this in one frame is a jump's cut, not flight, metres. */
 const DUST_CUT = 20;
-/** How quickly the streaks follow a change of speed, per second. */
+/** How quickly the dust follows a change of speed, per second. */
 const DUST_EASE = 10;
 
 export class ExpeditionView {
@@ -46,16 +44,16 @@ export class ExpeditionView {
   /** Drawn in flight only, after the scene, so it shares the scene's depth (view/dust). */
   readonly #dust = new Scene();
   readonly #dustField = createDust(DUST_SEED);
-  readonly #dustPositions = new BufferAttribute(
-    new Float32Array((this.#dustField.homes.length / 3) * 6),
-    3,
-  );
+  readonly #dustPositions = new BufferAttribute(new Float32Array(this.#dustField.homes.length), 3);
+  readonly #dustUniforms = { pixelRatio: { value: 1 }, opacity: { value: dustOpacity(0) } };
   #dustAt: { x: number; z: number } | null = null;
   #dustVelocity = { x: 0, z: 0 };
   #rig: CameraRig;
   #width = 1;
   #height = 1;
   #viewWidth: number;
+  /** The jump's lean in: a zoom over the view width the player chose (jumpEffects). */
+  #punch = 1;
 
   constructor(container: HTMLElement, ownShipId: number, viewWidth: number) {
     this.world = new ExpeditionScene(ownShipId);
@@ -72,6 +70,12 @@ export class ExpeditionView {
     this.#rig = createRig(1, viewWidth, "ortho");
     this.#addStars();
     this.#addDust();
+    this.world.setPixelRatio(this.#renderer.getPixelRatio());
+  }
+
+  /** Leans the view in by `zoom` over the chosen width, for the pilot's own jump; 1 at rest. */
+  setPunch(zoom: number): void {
+    this.#punch = zoom;
   }
 
   /** The player's ship after a relaunch, drawn as their own. */
@@ -103,6 +107,7 @@ export class ExpeditionView {
     this.#height = height;
     this.#viewWidth = viewWidth;
     this.#renderer.setSize(width, height);
+    this.#dustUniforms.pixelRatio.value = this.#renderer.getPixelRatio();
     this.#rig = createRig(width / height, viewWidth, "ortho");
     this.#skyCamera.aspect = width / height;
     this.#skyCamera.updateProjectionMatrix();
@@ -124,6 +129,10 @@ export class ExpeditionView {
     jumps?: JumpEffects,
   ): void {
     this.world.update(poses, lock, shots, dt, jumps);
+    if (this.#rig.camera.zoom !== this.#punch) {
+      this.#rig.camera.zoom = this.#punch;
+      this.#rig.camera.updateProjectionMatrix();
+    }
     aimRig(this.#rig, target, pitch, yaw);
     this.#renderer.clear();
     this.#skyCamera.quaternion.copy(this.#rig.camera.quaternion);
@@ -135,6 +144,11 @@ export class ExpeditionView {
 
   /** Draws another scene, the outpost, with the same camera rules and star backdrop. */
   renderScene(scene: Scene, target: Vector3, pitch: number, yaw: number): void {
+    // Home has no jumps: a lean left over from a run's last frame must not stay.
+    if (this.#rig.camera.zoom !== 1) {
+      this.#rig.camera.zoom = 1;
+      this.#rig.camera.updateProjectionMatrix();
+    }
     aimRig(this.#rig, target, pitch, yaw);
     this.#renderer.clear();
     this.#skyCamera.quaternion.copy(this.#rig.camera.quaternion);
@@ -143,7 +157,7 @@ export class ExpeditionView {
     this.#renderer.render(scene, this.#rig.camera);
   }
 
-  /** The streaks, from how fast the camera's target is moving: the ship it follows. */
+  /** The dust round the camera, shown as much as the ship it follows is moving. */
   #drawDust(target: Vector3, dt: number): void {
     const last = this.#dustAt;
     this.#dustAt = { x: target.x, z: target.z };
@@ -156,39 +170,23 @@ export class ExpeditionView {
       v.x = cut ? 0 : v.x + (dx / dt - v.x) * ease;
       v.z = cut ? 0 : v.z + (dz / dt - v.z) * ease;
     }
-    streakDust(
-      this.#dustField,
-      target.x,
-      target.z,
-      this.#dustVelocity.x,
-      this.#dustVelocity.z,
-      this.#dustPositions.array as Float32Array,
-    );
+    placeDust(this.#dustField, target.x, target.z, this.#dustPositions.array as Float32Array);
     this.#dustPositions.needsUpdate = true;
+    this.#dustUniforms.opacity.value = dustOpacity(
+      Math.hypot(this.#dustVelocity.x, this.#dustVelocity.z),
+    );
     this.#renderer.render(this.#dust, this.#rig.camera);
   }
 
   #addDust(): void {
-    // Bright at the head, black at the tail: with additive blending the tail fades out.
-    const { colours } = this.#dustField;
-    const ends = new Float32Array((colours.length / 3) * 6);
-    for (let i = 0; i < colours.length; i += 3) {
-      ends.set([colours[i] ?? 0, colours[i + 1] ?? 0, colours[i + 2] ?? 0, 0, 0, 0], i * 2);
-    }
-    const streaks = new LineSegments(
-      new BufferGeometry()
-        .setAttribute("position", this.#dustPositions)
-        .setAttribute("color", new BufferAttribute(ends, 3)),
-      new LineBasicMaterial({
-        vertexColors: true,
-        blending: AdditiveBlending,
-        transparent: true,
-        depthWrite: false,
-      }),
-    );
-    // The positions follow the camera, so the bounds three.js computed once would cull them.
-    streaks.frustumCulled = false;
-    this.#dust.add(streaks);
+    const { colours, sizes } = this.#dustField;
+    this.#dustUniforms.pixelRatio.value = this.#renderer.getPixelRatio();
+    const specks = softPoints(sizes.length, softPointsMaterial(this.#dustUniforms));
+    specks.geometry
+      .setAttribute("position", this.#dustPositions)
+      .setAttribute("tint", new BufferAttribute(colours, 3))
+      .setAttribute("size", new BufferAttribute(sizes, 1));
+    this.#dust.add(specks);
   }
 
   #addStars(): void {

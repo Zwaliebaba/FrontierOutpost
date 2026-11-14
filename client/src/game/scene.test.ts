@@ -280,11 +280,19 @@ describe("ExpeditionScene", () => {
     expect(scene.jumpSpool.visible).toBe(true);
     expect(scene.jumpSpool.position.x).toBe(10);
     expect(scene.jumpSpool.position.z).toBe(4);
-    const far = scene.jumpSpool.children[0]?.scale.x ?? 0;
+    const countdown = () => scene.jumpSpool.getObjectByName("countdown")?.scale.x ?? 0;
+    const far = countdown();
+    expect(scene.jumpSpool.getObjectByName("sparks")?.visible).toBe(true);
+    expect(scene.ship(1)?.hull.scale.x).toBe(1);
 
     jumps.setCharge(1, 1);
     scene.update([pose(1, "playerShip", 10, 4)], null, undefined, 0, jumps);
-    expect(scene.jumpSpool.children[0]?.scale.x).toBeLessThan(far);
+    expect(countdown()).toBeLessThan(far);
+    // The hull draws out along its length at the very end, and thins to match.
+    const hull = scene.ship(1)?.hull.scale;
+    expect(hull?.x).toBeGreaterThan(1.3);
+    expect(hull?.z).toBeLessThan(1);
+    expect(hull?.y).toBe(1);
 
     // No ring without the ship it is on, or once the spool ends.
     scene.update([], null, undefined, 0, jumps);
@@ -292,6 +300,19 @@ describe("ExpeditionScene", () => {
     jumps.setCharge(null);
     scene.update([pose(1, "playerShip", 10, 4)], null, undefined, 0, jumps);
     expect(scene.jumpSpool.visible).toBe(false);
+    expect(scene.ship(1)?.hull.scale.x).toBe(1);
+  });
+
+  it("keeps the countdown but flies nothing and stretches nothing with reduced motion", () => {
+    const scene = new ExpeditionScene(1);
+    scene.configureFeedback(false, 0);
+    const jumps = new JumpEffects();
+    jumps.setCharge(1, 1);
+    scene.update([pose(1, "playerShip", 10, 4)], null, undefined, 0, jumps);
+    expect(scene.jumpSpool.visible).toBe(true);
+    expect(scene.jumpSpool.getObjectByName("countdown")?.visible).toBe(true);
+    expect(scene.jumpSpool.getObjectByName("sparks")?.visible).toBe(false);
+    expect(scene.ship(1)?.hull.scale.x).toBe(1);
   });
 
   it("flashes at both ends of a jump, with the streak along the way the ship went", () => {

@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on every incompatible change to these messages.
-pub const PROTOCOL_VERSION: u32 = 12;
+pub const PROTOCOL_VERSION: u32 = 13;
 
 /// A message sent from the client to the server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -382,6 +382,8 @@ pub enum JumpTarget {
 pub enum JumpRefusal {
     /// Docked, destroyed, or the run is over.
     NotFlying,
+    /// Not yet flown clear of the dock since launch.
+    AtDock,
     /// A hostile has the ship locked.
     Hunted,
     /// The extractor is working.

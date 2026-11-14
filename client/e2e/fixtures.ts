@@ -79,6 +79,13 @@ export async function launch(page: Page, url = "/"): Promise<void> {
   await page.locator("#hud[data-x]").waitFor();
 }
 
+/** Flies off the berth until the run counts the ship undocked: a jump is made from open space. */
+export async function flyClear(page: Page): Promise<void> {
+  await page.keyboard.down("KeyW");
+  await page.locator('#run[data-phase="approach"]').waitFor({ timeout: 20_000 });
+  await page.keyboard.up("KeyW");
+}
+
 /** Flies straight out of the dock until the ship is inside the ore field. */
 export async function flyIntoSite(page: Page): Promise<void> {
   await page.keyboard.down("KeyW");

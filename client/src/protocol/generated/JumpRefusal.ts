@@ -3,4 +3,4 @@
 /**
  * Why the jump drive did not spool.
  */
-export type JumpRefusal = "notFlying" | "hunted" | "extracting" | "unavailable" | "alreadyThere";
+export type JumpRefusal = "notFlying" | "atDock" | "hunted" | "extracting" | "unavailable" | "alreadyThere";
