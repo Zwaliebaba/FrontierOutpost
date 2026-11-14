@@ -89,6 +89,7 @@ pub enum PilotEvent {
 /// what they bring home.
 #[derive(Clone)]
 pub struct LaunchOrder {
+    pub wingman: Option<home::WingmanLaunch>,
     pub template: SiteTemplate,
     pub seed: u32,
     pub tier: ThreatTier,
@@ -139,6 +140,10 @@ impl Books {
 }
 
 enum Command {
+    WingmanOrder {
+        ship: ShipId,
+        order: frontier_protocol::WingmanOrder,
+    },
     Input {
         ship: ShipId,
         datagram: InputDatagram,
@@ -174,6 +179,7 @@ enum Command {
         reply: oneshot::Sender<Option<ServerMessage>>,
     },
     Join {
+        wingman: Option<home::WingmanLaunch>,
         account: AccountId,
         slot: u32,
         fitted: Vec<String>,
@@ -210,22 +216,28 @@ impl Expedition {
         sink: impl SnapshotSink,
         events: mpsc::UnboundedSender<PilotEvent>,
     ) -> Launched {
-        let site = Site::generate(
+        let mut site = Site::generate(
             order.template,
             order.seed,
             order.tier,
-            order.crew_size.max(1),
+            order.crew_size.max(1) + u32::from(order.wingman.is_some()),
             &order.access,
         );
+        site.payout_pilots = order.crew_size.max(1);
         let (mut run, ships) = Run::launch(site, 1, order.options);
         let ship = ships[0];
         run.fit(ship, &order.fitted);
+        if let Some(wing) = &order.wingman {
+            run.hire_wingman(ship, wing.tier, &wing.fitted, order.crew_size)
+                .expect("launch validated and stock paid atomically");
+        }
         let joined = joined(&run, ship, order.tier);
         let (commands, receiver) = mpsc::unbounded_channel();
         let mut pilots = HashMap::new();
         pilots.insert(
             ship,
             Pilot {
+                wingman: None,
                 sink: Box::new(sink),
                 events,
                 inputs: InputQueue::default(),
@@ -363,9 +375,24 @@ impl Expedition {
         sink: impl SnapshotSink,
         events: mpsc::UnboundedSender<PilotEvent>,
     ) -> Option<(ShipId, ServerMessage)> {
+        self.join_with_wingman(account, slot, (fitted, None), share, sink, events)
+            .await
+    }
+
+    pub async fn join_with_wingman(
+        &self,
+        account: AccountId,
+        slot: u32,
+        loadout: (Vec<String>, Option<home::WingmanLaunch>),
+        share: u32,
+        sink: impl SnapshotSink,
+        events: mpsc::UnboundedSender<PilotEvent>,
+    ) -> Option<(ShipId, ServerMessage)> {
         let (reply, answer) = oneshot::channel();
+        let (fitted, wingman) = loadout;
         self.commands
             .send(Command::Join {
+                wingman,
                 account,
                 slot,
                 fitted,
@@ -411,6 +438,10 @@ impl Expedition {
         let _ = self.commands.send(Command::Leave { ship });
     }
 
+    pub fn order_wingman(&self, ship: ShipId, order: frontier_protocol::WingmanOrder) {
+        let _ = self.commands.send(Command::WingmanOrder { ship, order });
+    }
+
     /// Waits until the instance has stopped. For tests.
     pub async fn stopped(&self) {
         self.commands.closed().await;
@@ -418,6 +449,7 @@ impl Expedition {
 }
 
 struct Pilot {
+    wingman: Option<Option<frontier_protocol::WingmanInfo>>,
     sink: Box<dyn SnapshotSink>,
     events: mpsc::UnboundedSender<PilotEvent>,
     inputs: InputQueue,
@@ -437,12 +469,21 @@ async fn fly(
     loop {
         tokio::select! {
             command = commands.recv() => match command {
-                Some(Command::Join { account, slot, fitted, share, sink, events, reply }) => {
+                Some(Command::Join { account, slot, fitted, wingman, share, sink, events, reply }) => {
+                    if wingman.is_some() && run.site().pilots >= 4 {
+                        let _ = reply.send(None);
+                        continue;
+                    }
                     let joined = run.join_at(slot).map(|ship| {
                         run.fit(ship, &fitted);
+                        if let Some(wing) = &wingman {
+                            run.allow_wingman(wing.tier);
+                            run.add_wingman(ship, wing.tier, &wing.fitted).expect("validated follower and free slot");
+                        }
                         pilots.insert(
                             ship,
                             Pilot {
+                        wingman: None,
                                 sink,
                                 events,
                                 inputs: InputQueue::default(),
@@ -508,6 +549,27 @@ async fn fly(
 
 fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
     match command {
+        Command::WingmanOrder { ship, order } => {
+            let order = match order {
+                frontier_protocol::WingmanOrder::Follow => frontier_sim::wingman::Order::Follow,
+                frontier_protocol::WingmanOrder::Hold { x, z } => {
+                    frontier_sim::wingman::Order::Hold { x, z }
+                }
+                frontier_protocol::WingmanOrder::Return => frontier_sim::wingman::Order::Return,
+                frontier_protocol::WingmanOrder::Extract { deposit } => {
+                    frontier_sim::wingman::Order::Extract { deposit }
+                }
+            };
+            if let Err(error) = run.order_wingman(ship, order) {
+                tell(
+                    pilots,
+                    ship,
+                    ServerMessage::WingmanRefused {
+                        reason: error.to_string(),
+                    },
+                );
+            }
+        }
         Command::Input { ship, datagram } => {
             if let Some(pilot) = pilots.get_mut(&ship) {
                 pilot.inputs.receive(&datagram);
@@ -588,6 +650,7 @@ fn apply(command: Command, run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>) {
                 pilots.insert(
                     ship,
                     Pilot {
+                        wingman: None,
                         sink,
                         events,
                         inputs: InputQueue::default(),
@@ -673,6 +736,18 @@ async fn report(run: &mut Run, pilots: &mut HashMap<ShipId, Pilot>, books: &mut 
                 } else {
                     Vec::new()
                 };
+                if let Some(wing) = run.wingman(pilot) {
+                    let owner = ShipId(wing.owner);
+                    bank_wingman(books, owner, &summary).await;
+                    if let Some(account) = holdings(books, owner).await {
+                        let message = ServerMessage::Account { account };
+                        tell(pilots, owner, message.clone());
+                        if let Some(home) = books.homes.get(&owner) {
+                            let _ = home.send(PilotEvent::Message(Box::new(message)));
+                        }
+                    }
+                    continue;
+                }
                 bank(books, pilot, &summary, lost).await;
                 if let Some(account) = books.accounts.get(&pilot) {
                     books.runs.remove(*account, &books.run);
@@ -997,7 +1072,18 @@ async fn bank(
             store.update(account, |holdings| {
                 batch.extend(home::settle(account, holdings, now));
                 // Rigs and modules destroyed with the ship (design section 6).
-                holdings.hangar.lose_kinds(&lost);
+                let reserved = holdings.wingman_reservation.as_ref().and_then(|r| r.piece);
+                for kind in &lost {
+                    if let Some(id) = holdings
+                        .hangar
+                        .pieces
+                        .iter()
+                        .find(|p| p.fitting == *kind && Some(p.id) != reserved)
+                        .map(|p| p.id)
+                    {
+                        holdings.hangar.lose(&[id]);
+                    }
+                }
                 Ok(batch)
             })
         })
@@ -1013,6 +1099,86 @@ async fn bank(
             None
         }
     }
+}
+
+async fn bank_wingman(books: &Books, owner: ShipId, summary: &Summary) {
+    let Some(&account) = books.accounts.get(&owner) else {
+        return;
+    };
+    let run = books.run.clone();
+    let summary = *summary;
+    let result = books
+        .store
+        .call(move |store| {
+            store.update(account, |holdings| {
+                let Some(reservation) = holdings
+                    .wingman_reservation
+                    .clone()
+                    .filter(|r| r.run == run)
+                else {
+                    return Ok(Vec::new());
+                };
+                if summary.ending != frontier_sim::outcome::Ending::Docked
+                    && let Some(piece) = reservation.piece
+                {
+                    holdings.hangar.lose(&[piece]);
+                }
+                holdings.wingman_reservation = None;
+                Ok([Item::ORE, Item::SALVAGE, Item::VOLATILES]
+                    .into_iter()
+                    .zip(summary.banked)
+                    .filter(|&(_, amount)| amount > 0)
+                    .map(|(item, amount)| Transfer {
+                        item,
+                        amount,
+                        from: Party::Site,
+                        to: Party::Account(account),
+                        reason: Reason::Banked,
+                        run: Some(run.clone()),
+                    })
+                    .collect())
+            })
+        })
+        .await;
+    if !matches!(result, Ok(Ok(_))) {
+        warn!(account = account.0, "wingman outcome could not be banked");
+    }
+}
+
+fn wingman_info(run: &Run, owner: ShipId) -> Option<frontier_protocol::WingmanInfo> {
+    use frontier_sim::wingman::Order;
+    let ship = run.wingman_ship(owner)?;
+    let wing = run.wingman(ship)?;
+    let status = run.status(ship)?;
+    let order = match wing.order {
+        Order::Follow => frontier_protocol::WingmanOrder::Follow,
+        Order::Hold { x, z } => frontier_protocol::WingmanOrder::Hold { x, z },
+        Order::Return => frontier_protocol::WingmanOrder::Return,
+        Order::Extract { deposit } => frontier_protocol::WingmanOrder::Extract { deposit },
+    };
+    let state = match status.phase {
+        Phase::Docked => "docked",
+        Phase::Destroyed => "destroyed",
+        Phase::Abandoned => "abandoned",
+        _ => match status.extractor {
+            ExtractorState::On { .. } => "extracting",
+            ExtractorState::Venting { .. } => "venting",
+            ExtractorState::CutOut { .. } => "cutOut",
+            _ => match wing.order {
+                Order::Follow => "following",
+                Order::Hold { .. } => "holding",
+                Order::Return => "returning",
+                Order::Extract { .. } => "travelling",
+            },
+        },
+    };
+    Some(frontier_protocol::WingmanInfo {
+        ship_id: ship.0,
+        order,
+        state: state.to_owned(),
+        cargo: status.cargo,
+        capacity: status.capacity,
+    })
 }
 
 fn scanned(run: &Run) -> ServerMessage {
@@ -1046,6 +1212,7 @@ fn scanned(run: &Run) -> ServerMessage {
 
 fn joined(run: &Run, ship: ShipId, tier: ThreatTier) -> ServerMessage {
     ServerMessage::Joined {
+        wingman: wingman_info(run, ship),
         site: wire::site_info(run.site()),
         ship_id: ship.0,
         tick_rate: TICKS_PER_SECOND,
@@ -1209,8 +1376,29 @@ fn broadcast(run: &Run, pilots: &mut HashMap<ShipId, Pilot>) {
         .take(MAX_DEPOSITS)
         .map(|d| u8::try_from(units(d.remaining)).unwrap_or(u8::MAX))
         .collect();
-    let shared = snapshot(run.world(), 0, OwnStatus::IDLE, deposits);
+    let mut shared = snapshot(run.world(), 0, OwnStatus::IDLE, deposits);
+    for entity in &mut shared.entities {
+        if run.wingman(ShipId(entity.id)).is_some() {
+            entity.kind = EntityKind::Wingman;
+        }
+    }
+    for event in &mut shared.events {
+        if let SnapshotEvent::Destroyed { ship, kind, .. } = event
+            && run.wingman(ShipId(*ship)).is_some()
+        {
+            *kind = EntityKind::Wingman;
+        }
+    }
     pilots.retain(|ship, pilot| {
+        let info = wingman_info(run, *ship);
+        if info.is_some() && pilot.wingman.as_ref() != Some(&info) {
+            let _ = pilot
+                .events
+                .send(PilotEvent::Message(Box::new(ServerMessage::Wingman {
+                    info: info.clone(),
+                })));
+            pilot.wingman = Some(info);
+        }
         let snapshot = Snapshot {
             input_ack: pilot.last_input.unwrap_or(0),
             own: own_status(run, *ship),
@@ -1266,6 +1454,7 @@ mod tests {
         let store = Store::in_memory().unwrap();
         let pilot = store.create_account("Vega").unwrap();
         LaunchOrder {
+            wingman: None,
             template: COMPACT_SITE,
             seed: 11,
             tier: ThreatTier::I,
@@ -1651,5 +1840,153 @@ mod tests {
             Some("alloy".to_owned()),
             "and is on the second batch"
         );
+    }
+}
+
+#[cfg(test)]
+mod wingman_integration_tests {
+    use super::*;
+    use crate::account::WingmanReservation;
+    use frontier_sim::site::COMPACT_SITE;
+    use frontier_sim::wingman::Order;
+
+    #[tokio::test]
+    async fn solo_pilot_and_wingman_link_relays_bank_cargo_and_pay_only_the_pilot() {
+        let store = Store::in_memory().unwrap();
+        let account = store.create_account("Solo").unwrap();
+        store
+            .update(account, |home| {
+                home.wingman_reservation = Some(WingmanReservation {
+                    run: "m8".into(),
+                    piece: None,
+                });
+                Ok(Vec::new())
+            })
+            .unwrap()
+            .unwrap();
+        let mut site = Site::generate(COMPACT_SITE, 29, ThreatTier::I, 2, &[Capability::Wingman]);
+        site.payout_pilots = 1;
+        let (mut run, ids) = Run::launch(
+            site,
+            1,
+            Options {
+                opening_threat: Some(0),
+                ..Options::default()
+            },
+        );
+        let pilot = ids[0];
+        let wing = run.hire_wingman(pilot, 1, &[], 1).unwrap();
+        let [a, b] = run.relays();
+        run.order_wingman(
+            pilot,
+            Order::Hold {
+                x: b.0.round() as i32,
+                z: b.1.round() as i32,
+            },
+        )
+        .unwrap();
+        let mut checkpoint = run.checkpoint();
+        for (saved, point) in checkpoint.crew.iter_mut().zip([a, b]) {
+            saved.x = point.0;
+            saved.z = point.1;
+            saved.phase = Phase::Objective;
+        }
+        let mut run = Run::restore(&checkpoint).unwrap();
+        assert!(run.reconnect(pilot));
+        for _ in 0..frontier_sim::run::RELAY_HOLD_TICKS {
+            run.step();
+        }
+        assert_eq!(run.relay(), Relay::Linked);
+        let mut checkpoint = run.checkpoint();
+        let dock = run.site().template.dock;
+        for (saved, cargo) in checkpoint.crew.iter_mut().zip([10, 3]) {
+            saved.x = dock.0;
+            saved.z = dock.1;
+            saved.phase = Phase::Return;
+            saved.cargo = [cargo, 0, 0];
+        }
+        let mut run = Run::restore(&checkpoint).unwrap();
+        assert!(run.reconnect(pilot));
+        run.order_wingman(pilot, Order::Return).unwrap();
+        run.step();
+        assert_eq!(run.status(wing).unwrap().phase, Phase::Docked);
+        let expected = run.pot();
+        let mut books = Books {
+            run: "m8".into(),
+            store: store.clone(),
+            runs: Runs::default(),
+            accounts: HashMap::from([(pilot, account)]),
+            shares: HashMap::from([(pilot, 100)]),
+            homes: HashMap::new(),
+        };
+        report(&mut run, &mut HashMap::new(), &mut books).await;
+        let home = store.load(account).unwrap();
+        assert_eq!(expected.contract, run.site().tier.rules().payout);
+        assert_eq!(expected.relay, expected.contract / 2);
+        assert_eq!(home.credits, 100 + expected.total());
+        assert_eq!(home.stock.ore, 13);
+        assert!(home.wingman_reservation.is_none());
+        let payments: u32 = store
+            .lock()
+            .query_row(
+                "SELECT COUNT(*) FROM ledger WHERE run = 'm8' AND reason = 'relay bonus'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(payments, 1, "no separate wingman pot share");
+    }
+
+    #[tokio::test]
+    async fn only_the_wingmans_reserved_piece_is_lost_and_its_outcome_is_banked_once() {
+        use frontier_sim::outcome::{Ending, Loadout};
+        for ending in [Ending::Docked, Ending::Destroyed, Ending::Abandoned] {
+            let store = Store::in_memory().unwrap();
+            let account = store.create_account("Loan").unwrap();
+            let home = store
+                .update(account, |home| {
+                    let rule = frontier_sim::fitting::fitting("extraction_rig").unwrap();
+                    home.hangar.add(rule);
+                    let piece = home.hangar.add(rule);
+                    home.wingman_reservation = Some(WingmanReservation {
+                        run: "loan".into(),
+                        piece: Some(piece),
+                    });
+                    Ok(Vec::new())
+                })
+                .unwrap()
+                .unwrap();
+            let pilot_piece = home.hangar.pieces[0].id;
+            let books = Books {
+                run: "loan".into(),
+                store: store.clone(),
+                runs: Runs::default(),
+                accounts: HashMap::from([(ShipId(0), account)]),
+                shares: HashMap::from([(ShipId(0), 100)]),
+                homes: HashMap::new(),
+            };
+            let docked = ending == Ending::Docked;
+            let summary = Summary {
+                ending,
+                banked: if docked { [3, 0, 0] } else { [0; 3] },
+                launch_cost: 40,
+                lost: if docked {
+                    Loadout::default()
+                } else {
+                    Loadout {
+                        upgraded_modules: 1,
+                        cargo: 3,
+                    }
+                },
+                phases: Default::default(),
+            };
+            bank_wingman(&books, ShipId(0), &summary).await;
+            bank_wingman(&books, ShipId(0), &summary).await;
+            let home = store.load(account).unwrap();
+            assert_eq!(home.hangar.pieces.len(), if docked { 2 } else { 1 });
+            assert!(home.hangar.pieces.iter().any(|p| p.id == pilot_piece));
+            assert_eq!(home.stock.ore, if docked { 3 } else { 0 });
+            assert!(home.wingman_reservation.is_none());
+        }
     }
 }

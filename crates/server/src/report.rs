@@ -1652,10 +1652,10 @@ mod tests {
     fn gate_1_carries_the_rules_check_and_its_table_for_the_pool() {
         let rules = rules_check(frontier_sim::site::FRONTIER_SITE, &PLAYTEST_POOL);
         let report = compute(&owner_alone(), &[], Players::Owner, rules);
-        // On every seed of the pool, 60 of 465 pairs change the best choice,
+        // On every seed of the pool, 96 of 1,378 pairs change the best choice,
         // the firmest by 2 credits of 260 (frontier-sim's choice tests).
         let changes = measure(&report, 0, "Rules: layout pairs");
-        assert!(close(changes.value, 60.0 / 465.0));
+        assert!(close(changes.value, 96.0 / 1378.0));
         assert_eq!(changes.verdict(Players::Owner), Some(Verdict::Met));
         let firmest = measure(&report, 0, "Rules: how firmly");
         assert!(close(firmest.value, 2.0 / 260.0));
@@ -1669,12 +1669,12 @@ mod tests {
 
         let markdown = report.markdown();
         assert!(markdown.contains("## Gate 1 rules check"));
-        assert!(markdown.contains("(31 layouts) is compared with every other (465 pairs)"));
+        assert!(markdown.contains("(53 layouts) is compared with every other (1378 pairs)"));
         assert!(markdown.contains(
-            "| 8 | Thermal flare | Derelict | Derelict, extraction rig (616 cr) | 60 of 465 | 2 cr of 260 cr |"
+            "| 8 | Thermal flare | Derelict | Derelict, extraction rig (616 cr) | 96 of 1378 | 2 cr of 260 cr |"
         ));
         assert!(markdown.contains(
-            "| Rules: layout pairs where a facility changes the best choice open under both | 13% | > 0% | met | rules | – |"
+            "| Rules: layout pairs where a facility changes the best choice open under both | 7% | > 0% | met | rules | – |"
         ));
     }
 }

@@ -1158,3 +1158,27 @@ body[data-map="open"] #messages {
 .launch-remedies button {
   margin: 4px 3px 4px 0;
 }
+
+#wingman-panel {
+  position: fixed;
+  bottom: 72px;
+  left: 18px;
+  max-width: min(440px, calc(100vw - 36px));
+  padding: 10px 12px;
+  border: 1px solid #447681;
+  background: rgba(7, 18, 27, 0.94);
+  color: #c7e1e8;
+  z-index: 6;
+}
+
+#wingman-panel[hidden] {
+  display: none;
+}
+
+#wingman-panel p {
+  margin: 0 0 8px;
+}
+
+#wingman-panel button {
+  margin: 2px;
+}

@@ -39,7 +39,7 @@ client/                 TypeScript + Vite + Three.js browser client
   src/sim/              loads the WebAssembly simulation; pkg/ is written by wasm-bindgen
 spikes/                 Throwaway experiments, each its own Cargo workspace; not built by CI
 Design/                 Game design, style guide, Blender scenes and their exports
-  Art/                  hand-made art from plan M8: one folder per asset, the tool, the catalogue
+  Art/                  editable art from plan M8: one folder per asset, the tool, the catalogue
 .github/workflows/      CI
 ```
 
@@ -76,6 +76,7 @@ npm run build:sim               # frontier-sim to WebAssembly; run by dev, build
 npm run dev                     # Vite dev server
 npm run check                   # format:check, lint, typecheck, test, build (= CI)
 npm run e2e                     # browser tests against the real server; run `npm run build` first
+npm run e2e:software            # CI's CPU renderer profile; same CSS viewport and assertions
 npm run e2e:container           # the same tests against `docker compose -f compose.e2e.yaml up --build --wait`
 npm run format                  # apply Prettier
 
@@ -149,10 +150,11 @@ change ships with a test. Keep comments for the *why*.
 - **Binary files are committed to Git directly**, not to Git LFS. `.gitattributes` marks them
   `binary`; add the pattern *before* committing a new binary type. CI fails if a Git LFS pointer
   is committed. Keep them small: every regenerated binary stays in the history for good.
-- **From plan M8, art is modelled by hand** in `Design/Art/` ([its README](Design/Art/README.md)):
+- **From plan M8, art is authored in Blender** in `Design/Art/` ([its README](Design/Art/README.md)):
   one `.blend` per asset, checked and exported by `Design/Art/tools/frontier_art.py`, found by the
-  game through `catalogue.json`. The owner models; agents write the tool, the CI check and the
-  game code, and never edit a `.blend`, an exported GLB, a manifest or the catalogue by hand.
+  game through `catalogue.json`. The owner directs the modelling and has authorised agents to
+  author editable sources through Blender. Generate GLBs, manifests and the catalogue through
+  the tools; never edit these outputs by hand.
 - The generated scene, `Design/FrontierOutpost/`, is frozen: do not hand-edit its `.glb`,
   `.blend`, `scene_manifest.json` or preview PNGs, and change `create_scene.py` only to remove an
   asset that has moved to `Design/Art/`. Regenerating on a different Blender version changes bytes
@@ -200,6 +202,7 @@ Decided:
 - Stage 2 may start without other players. The owner has no testers, so Stage 1 is measured alone
   (plan M7), and Stage 2 may begin with gates 1 and 3 unproven, an accepted risk. Reports keep
   them unproven until players other than the owner are measured; never record them as met.
-- Art: hand-made by the owner from plan M8, through the art pipeline in `Design/Art/`, scaled to
+- Art: editable Blender sources from plan M8, including agent-authored sources when requested,
+  through the art pipeline in `Design/Art/`, scaled to
   tens of facility modules; not primitives. The generated scene is frozen and its assets move to
   the pipeline one by one.

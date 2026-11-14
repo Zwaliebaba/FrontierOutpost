@@ -48,6 +48,7 @@ import type { Allegiance, ShipMeshes } from "../view/readability";
  */
 export const SIZE: Readonly<Record<EntityKind, number>> = {
   playerShip: 1,
+  wingman: 1,
   drone: 0.9 / 1.3,
   raider: 1,
   warden: 2.2 / 1.3,
@@ -71,6 +72,8 @@ const DEPOSIT: Readonly<Record<Material, { colour: ReturnType<typeof linear>; cr
   };
 const BEACON = linear(0.55, 0.62, 0.7);
 const STATION = linear(0.095, 0.135, 0.19);
+const WINGMAN_BADGE = new TorusGeometry(0.24, 0.045, 4, 12);
+const WINGMAN_BADGE_MATERIAL = new MeshBasicMaterial({ color: 0x7ce6ff, toneMapped: false });
 
 interface DrawnDeposit {
   group: Group;
@@ -80,6 +83,7 @@ interface DrawnDeposit {
 
 /** Other pilots are allies; every NPC is hostile in Stage 1. */
 export function allegianceOf(kind: EntityKind, own: boolean): Allegiance {
+  if (kind === "wingman") return "ally";
   if (kind !== "playerShip") return "hostile";
   return own ? "self" : "ally";
 }
@@ -138,6 +142,10 @@ export class ExpeditionScene {
   readonly scene = new Scene();
   readonly #ships = new Map<number, DrawnShip>();
   readonly #bracket: Group = lockBracket();
+  readonly wingmanMark = new Mesh(
+    new TorusGeometry(1.8, 0.08, 6, 32),
+    new MeshBasicMaterial({ color: 0x7ce6ff, toneMapped: false }),
+  );
   readonly #bolts: Mesh<BoxGeometry, MeshBasicMaterial>[] = [];
   readonly #blasts: Mesh<IcosahedronGeometry, MeshBasicMaterial>[] = [];
   readonly #jumps = new JumpVisuals();
@@ -159,6 +167,10 @@ export class ExpeditionScene {
     this.#ownShipId = ownShipId;
     this.scene.add(...stationLights());
     this.#bracket.visible = false;
+    this.wingmanMark.name = "wingman order mark";
+    this.wingmanMark.rotation.x = Math.PI / 2;
+    this.wingmanMark.visible = false;
+    this.scene.add(this.wingmanMark);
     this.#dock.name = "dock";
     this.scene.add(
       this.#bracket,
@@ -292,6 +304,18 @@ export class ExpeditionScene {
       const target = berthed ? 1 : 0;
       if (!drawn) {
         const meshes = shipMeshes(allegiance, SIZE[pose.kind]);
+        if (pose.kind === "wingman") {
+          // A double ring distinguishes the NPC ally even when its hull is silhouetted.
+          const badge = new Group();
+          badge.name = "wingman badge";
+          for (const x of [-0.27, 0.27]) {
+            const ring = new Mesh(WINGMAN_BADGE, WINGMAN_BADGE_MATERIAL);
+            ring.rotation.x = Math.PI / 2;
+            ring.position.set(x, 1.6, 0);
+            badge.add(ring);
+          }
+          meshes.hull.add(badge);
+        }
         drawn = {
           ...meshes,
           health: pose.hull,

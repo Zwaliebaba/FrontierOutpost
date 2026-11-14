@@ -52,4 +52,7 @@ export type { TierOffer } from "./generated/TierOffer";
 export type { UnlockInfo } from "./generated/UnlockInfo";
 export type { WaveInfo } from "./generated/WaveInfo";
 export type { WorkingInfo } from "./generated/WorkingInfo";
+export type { WingmanHire } from "./generated/WingmanHire";
+export type { WingmanInfo } from "./generated/WingmanInfo";
+export type { WingmanOrder } from "./generated/WingmanOrder";
 export { PROTOCOL_VERSION } from "./generated/version";

@@ -147,6 +147,7 @@ pub fn catalog() -> Catalog {
         facilities: STAGE1
             .facilities
             .iter()
+            .filter(|facility| facility.art == frontier_sim::outpost::Art::Ready)
             .map(|facility| FacilityInfo {
                 id: facility.id.to_owned(),
                 name: facility.name.to_owned(),
@@ -492,7 +493,7 @@ mod tests {
     fn the_catalog_carries_every_rule_the_previews_need() {
         let catalog = catalog();
         assert_eq!(catalog.sockets.len(), 2);
-        assert_eq!(catalog.facilities.len(), 3);
+        assert_eq!(catalog.facilities.len(), 4);
         let refinery = &catalog.facilities[1];
         assert_eq!(refinery.tiers[0].cost.credits, 150);
         assert!(

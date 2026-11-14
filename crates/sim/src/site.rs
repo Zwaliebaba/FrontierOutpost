@@ -35,10 +35,12 @@ pub enum Capability {
     HeatSink,
     /// Fits the point-defence module.
     PointDefence,
+    Wingman,
+    WingmanExtract,
 }
 
 impl Capability {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 12] = [
         Self::LocateSignal,
         Self::WorkVolatiles,
         Self::BreachNest,
@@ -49,6 +51,8 @@ impl Capability {
         Self::DeepScan,
         Self::HeatSink,
         Self::PointDefence,
+        Self::Wingman,
+        Self::WingmanExtract,
     ];
 
     /// What a preview names: the pocket, rig or module this opens (design
@@ -66,6 +70,8 @@ impl Capability {
             Self::DeepScan => "Deep-scan array module",
             Self::HeatSink => "Heat sink module",
             Self::PointDefence => "Point-defence module",
+            Self::Wingman => "Wingman",
+            Self::WingmanExtract => "Wingman extraction and stock rig",
         }
     }
 }
@@ -505,6 +511,8 @@ pub struct Site {
     pub seed: u32,
     pub tier: ThreatTier,
     pub pilots: u32,
+    /// Human pilots in the pot; allied wingmen count only in `pilots`' threat and yield.
+    pub payout_pilots: u32,
     /// What the crew's outposts grant between them.
     pub access: Vec<Capability>,
     pub values: SeedValues,
@@ -577,6 +585,7 @@ impl Site {
             seed,
             tier,
             pilots,
+            payout_pilots: pilots,
             access: access.to_vec(),
             values,
             pockets,
@@ -601,7 +610,7 @@ impl Site {
     /// The contract payout for the whole expedition: tier times crew scaling.
     #[must_use]
     pub fn payout(&self) -> u32 {
-        let payout = self.tier.rules().payout as f32 * crew_scaling(self.pilots).payout;
+        let payout = self.tier.rules().payout as f32 * crew_scaling(self.payout_pilots).payout;
         // A few hundred credits at most, so `as` loses nothing.
         payout.round() as u32
     }

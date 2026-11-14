@@ -3,13 +3,11 @@
  * station with its construction sockets, and the facility modules at each tier. Node names are
  * the generator's: `Station_ROOT`, `Socket_A`, `Facility_<facility>_T<tier>`.
  */
-import { Matrix4, Mesh, MeshStandardMaterial } from "three";
+import { Group, Matrix4, Mesh, MeshStandardMaterial } from "three";
 import type { BufferGeometry, Material, Object3D } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import facilitiesUrl from "../../../Design/FrontierOutpost/facilities.glb?url";
-import frigateUrl from "../../../Design/FrontierOutpost/frigate.glb?url";
-import stationUrl from "../../../Design/FrontierOutpost/station.glb?url";
+import { facilityEntry, legacyUrl } from "./catalogue";
 import { frigateModel, gearOf } from "../view/frigate";
 
 export interface OutpostModels {
@@ -19,6 +17,8 @@ export interface OutpostModels {
   readonly sockets: ReadonlyMap<string, Object3D>;
   /** Each facility module, its root at the origin, by {@link facilityKey}. */
   readonly facilities: ReadonlyMap<string, Object3D>;
+  /** Load one facility on demand, sharing concurrent requests and parsed templates. */
+  readonly loadFacility?: (id: string) => Promise<void>;
 }
 
 /** The outpost's models and the starter frigate (view/frigate), which waits on its berth. */
@@ -31,7 +31,7 @@ export function facilityKey(facility: string, tier: number): string {
 }
 
 const SOCKET = /^Socket_([A-Z])$/;
-const FACILITY = /^Facility_([a-z_]+)_T(\d+)$/;
+const FACILITY = /^Facility_([a-z][a-z0-9_]*)_T(\d+)$/;
 
 export class ModelError extends Error {
   override name = "ModelError";
@@ -135,9 +135,13 @@ export function parseGlb(bytes: ArrayBuffer): Promise<Object3D> {
           const materials = Array.isArray(node.material) ? node.material : [node.material];
           for (const material of materials) {
             if (material instanceof MeshStandardMaterial) {
-              if (material.name.startsWith("Windows"))
+              if (material.name === "Amber" || material.name.startsWith("Windows"))
                 material.emissiveIntensity = Math.min(material.emissiveIntensity, 1.8);
-              else if (material.name.startsWith("Lights") || material.name.startsWith("Navigation"))
+              else if (
+                material.name === "Cyan" ||
+                material.name.startsWith("Lights") ||
+                material.name.startsWith("Navigation")
+              )
                 material.emissiveIntensity = Math.min(material.emissiveIntensity, 2);
             }
           }
@@ -151,7 +155,7 @@ export function parseGlb(bytes: ArrayBuffer): Promise<Object3D> {
   });
 }
 
-async function fetchGlb(url: string): Promise<Object3D> {
+export async function fetchGlb(url: string): Promise<Object3D> {
   const response = await fetch(url);
   if (!response.ok) throw new ModelError(`${url}: HTTP ${String(response.status)}`);
   return parseGlb(await response.arrayBuffer());
@@ -159,17 +163,62 @@ async function fetchGlb(url: string): Promise<Object3D> {
 
 let loading: Promise<LoadedModels> | null = null;
 
-/** Loads the three GLBs once; later calls share the result. */
+export function facilityLoader(
+  facilities: Map<string, Object3D>,
+  load: (url: string) => Promise<Object3D> = fetchGlb,
+): (id: string) => Promise<void> {
+  const pending = new Map<string, Promise<void>>();
+  return (id) => {
+    let request = pending.get(id);
+    if (!request) {
+      const entry = facilityEntry(id);
+      request = load(entry.url)
+        .then((scene) => {
+          for (const name of entry.roots) {
+            if (!scene.getObjectByName(name))
+              throw new ModelError(`Missing catalogue root ${name}`);
+          }
+          const indexed = new Map<string, Object3D>();
+          for (const name of entry.roots) {
+            const match = FACILITY.exec(name);
+            if (!match?.[1] || !match[2]) continue;
+            const root = scene.getObjectByName(name);
+            if (!root) throw new ModelError(`Missing ${name}`);
+            root.position.set(0, 0, 0);
+            const preserved = new Set<Object3D>();
+            root.traverse((node) => {
+              if (node.name.startsWith("Operating_Tier_")) preserved.add(node);
+            });
+            mergeByMaterial(root, preserved);
+            indexed.set(facilityKey(id, Number(match[2])), root);
+          }
+          for (const [key, root] of indexed) facilities.set(key, root);
+        })
+        .catch((error: unknown) => {
+          pending.delete(id);
+          throw error;
+        });
+      pending.set(id, request);
+    }
+    return request;
+  };
+}
+
+/** Loads station and ship once; facilities wait until an installed module is first shown. */
 export function loadOutpostModels(): Promise<LoadedModels> {
-  loading ??= Promise.all([fetchGlb(stationUrl), fetchGlb(facilitiesUrl), loadFrigate()]).then(
-    ([station, facilities, frigate]) => ({ ...indexModels(station, facilities), frigate }),
+  loading ??= Promise.all([fetchGlb(legacyUrl("station")), loadFrigate()]).then(
+    ([station, frigate]) => {
+      const indexed = indexModels(station, new Group());
+      const facilities = new Map<string, Object3D>();
+      return { ...indexed, facilities, loadFacility: facilityLoader(facilities), frigate };
+    },
   );
   return loading;
 }
 
 /** Loads the starter frigate on its own, for the greybox. */
 export async function loadFrigate(): Promise<Object3D> {
-  const ship = frigateModel(await fetchGlb(frigateUrl));
+  const ship = frigateModel(await fetchGlb(legacyUrl("frigate")));
   // Four roster ships should not multiply every authored plate into a draw call.
   // Landing gear keeps its own transforms so deployment still animates.
   mergeByMaterial(ship, new Set(gearOf(ship)));

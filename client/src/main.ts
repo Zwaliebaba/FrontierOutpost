@@ -4,7 +4,9 @@
  */
 import "./command.css";
 import "./chart.css";
-import { Raycaster, Vector2, Vector3 } from "three";
+import { Plane, Raycaster, Vector2, Vector3 } from "three";
+import type { WingmanInfo, WingmanOrder } from "./protocol";
+import { wingmanChoices, wingmanFinished, wingmanText } from "./game/wingman";
 import { connect, fetchConnectInfo } from "./net/connection";
 import type { Connection } from "./net/connection";
 import type {
@@ -308,7 +310,18 @@ async function start(): Promise<void> {
       // Player ships fly as the starter frigate from here on, those in flight included.
       useShipModel(models.frigate);
       view.world.redraw();
-      outpost = new OutpostScene(models);
+      outpost = new OutpostScene(
+        models,
+        () => {
+          if (outpost) homePanel.dataset.scene = JSON.stringify(outpost.report());
+        },
+        (error) => {
+          showNotice(
+            `Could not load facility art: ${error instanceof Error ? error.message : String(error)}`,
+            "warn",
+          );
+        },
+      );
       homeChanged();
     })
     .catch((error: unknown) => {
@@ -505,6 +518,63 @@ const TIER_NAME = ["", "I", "II", "III"];
 
 function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   let life: Life | null = null;
+  let hireWingman = false;
+  let wingmanRig = "";
+  let wingman: WingmanInfo | null = null;
+  let markingWingman: "hold" | "extract" | null = null;
+  const wingmanPanel = element("section", "wingman-panel");
+  wingmanPanel.hidden = true;
+  document.body.append(wingmanPanel);
+  const orderWingman = (order: WingmanOrder) => {
+    send({ type: "wingmanOrder", order });
+  };
+  const drawWingman = () => {
+    wingmanPanel.replaceChildren();
+    wingmanPanel.hidden = !life || !wingman;
+    view.world.wingmanMark.visible = false;
+    if (!wingman || !life) return;
+    wingmanPanel.dataset.order = wingman.order.type;
+    wingmanPanel.dataset.state = wingman.state;
+    const reading = element("p");
+    reading.textContent = wingmanText(wingman);
+    wingmanPanel.append(reading);
+    for (const [label, order] of [
+      ["F · Follow", "follow"],
+      ["H · Mark hold", "hold"],
+      ["B · Return", "return"],
+      ["N · Mark deposit", "extract"],
+    ] as const) {
+      const button = element("button");
+      button.dataset.wingmanOrder = order;
+      button.textContent = label;
+      const extractTier =
+        holdings?.outpost.sockets.find((s) => s.facility === "crew_quarters")?.run ?? 0;
+      button.disabled = wingmanFinished(wingman) || (order === "extract" && extractTier < 2);
+      if (order === "extract" && extractTier < 2) button.title = "Needs crew quarters 2";
+      button.addEventListener("click", () => {
+        if (order === "hold" || order === "extract") {
+          markingWingman = order;
+          chart.close();
+          showNotice(
+            order === "hold"
+              ? "Wingman: click a place on the flight plane."
+              : "Wingman: click a deposit after scanning.",
+          );
+        } else orderWingman({ type: order });
+      });
+      wingmanPanel.append(button);
+    }
+    if (wingman.order.type === "hold") {
+      view.world.wingmanMark.position.set(wingman.order.x, 0.1, wingman.order.z);
+      view.world.wingmanMark.visible = !wingmanFinished(wingman);
+    } else if (wingman.order.type === "extract") {
+      const deposit = life.joined.deposits[wingman.order.deposit];
+      if (deposit) {
+        view.world.wingmanMark.position.set(deposit.x, 0.1, deposit.z);
+        view.world.wingmanMark.visible = !wingmanFinished(wingman);
+      }
+    }
+  };
   let selectedTier = 1;
   let contract: Contract | null = null;
   let reveal: Scanned | null = null;
@@ -672,6 +742,47 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const crewSection = element("div");
     renderCrew(crewSection, crew, send);
     const role = launchRole(crew);
+    if (holdings && catalog) {
+      const choices = wingmanChoices(holdings, catalog, crew);
+      if (!choices.canHire) {
+        hireWingman = false;
+        wingmanRig = "";
+      }
+      const label = element("label");
+      const hire = element("input", "wingman-hire");
+      hire.type = "checkbox";
+      hire.checked = hireWingman;
+      hire.disabled = !choices.canHire;
+      hire.addEventListener("change", () => {
+        hireWingman = hire.checked;
+      });
+      label.append(
+        hire,
+        choices.canHire
+          ? " Bring a wingman · +40 cr supplies · no pot share"
+          : " Wingman: power crew quarters; leave a free ship slot",
+      );
+      crewSection.append(label);
+      if (choices.tier >= 2) {
+        const rig = element("select", "wingman-rig");
+        const basic = element("option");
+        basic.value = "";
+        basic.textContent = "Wingman · basic fitting (free hull)";
+        rig.append(basic);
+        for (const fitting of choices.rigs) {
+          const option = element("option");
+          option.value = fitting.id;
+          option.textContent = `${fitting.name} · at stake`;
+          rig.append(option);
+        }
+        if (!choices.rigs.some((f) => f.id === wingmanRig)) wingmanRig = "";
+        rig.value = wingmanRig;
+        rig.addEventListener("change", () => {
+          wingmanRig = rig.value;
+        });
+        crewSection.append(rig);
+      }
+    }
     if (role.note) {
       const p = element("p");
       p.className = "crew-note";
@@ -730,7 +841,11 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       button.addEventListener("click", () => {
         for (const other of tiers.querySelectorAll("button")) other.disabled = true;
         // The run begins when `joined` arrives (handled below, as for a rejoined run).
-        launch(connection, tier.tier).catch((error: unknown) => {
+        launch(
+          connection,
+          tier.tier,
+          hireWingman ? (wingmanRig ? { rig: wingmanRig } : {}) : undefined,
+        ).catch((error: unknown) => {
           note.textContent = `Could not launch: ${error instanceof Error ? error.message : String(error)}`;
           for (const other of offer.tiers) {
             const b = tiers.querySelector<HTMLButtonElement>(`[data-tier="${String(other.tier)}"]`);
@@ -881,6 +996,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   };
 
   const beginRun = (joined: Joined) => {
+    wingman = joined.wingman ?? null;
+    markingWingman = null;
     // Launching from the outpost view glides to the ship; a rejoined run starts on it.
     if (!life && outpost && homePanel.dataset.state === "open") {
       glide = { from: new Vector3(), toStation: false, t: 0 };
@@ -903,6 +1020,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     view.beginRun(joined.shipId, joined.site, joined.obstacles, joined.deposits);
     life?.session.retire();
     life = beginLife(connection, joined, loaded);
+    drawWingman();
     reveal = null;
     freshKinds = freshPockets(joined.site, readSeen());
     const unlocked = unlockNotice(joined.site, freshKinds);
@@ -989,6 +1107,13 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
 
   connection.onMessage((message) => {
     switch (message.type) {
+      case "wingman":
+        wingman = message.info;
+        drawWingman();
+        break;
+      case "wingmanRefused":
+        showNotice(message.reason, "warn");
+        break;
       case "joined":
         // A launch, or a run rejoined after the connection dropped or the server restarted.
         delete summaryPanel.dataset.ending;
@@ -1001,6 +1126,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         if (summaryPanel.dataset.ending === undefined) showBriefing(message);
         break;
       case "runOver":
+        wingmanPanel.hidden = true;
+        view.world.wingmanMark.visible = false;
         if (outpost) glide = { from: target.clone().sub(outpost.centre), toStation: true, t: 0 };
         if (life) {
           try {
@@ -1131,6 +1258,32 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   };
   window.addEventListener("keydown", (event) => {
     if (!life) return;
+    if (
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLSelectElement ||
+      event.target instanceof HTMLTextAreaElement
+    )
+      return;
+    if (!event.repeat && wingman && !wingmanFinished(wingman)) {
+      if (event.code === "KeyF") {
+        orderWingman({ type: "follow" });
+        return;
+      }
+      if (event.code === "KeyB") {
+        orderWingman({ type: "return" });
+        return;
+      }
+      if (event.code === "KeyH" || event.code === "KeyN") {
+        markingWingman = event.code === "KeyH" ? "hold" : "extract";
+        chart.close();
+        showNotice(
+          markingWingman === "hold"
+            ? "Wingman: click a place to hold."
+            : "Wingman: click a deposit after scanning.",
+        );
+        return;
+      }
+    }
     const shipId = life.session.shipId;
     if (event.code === "Tab") {
       event.preventDefault();
@@ -1139,6 +1292,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       // Only what is within lock range can be locked (design §10: ion fog shortens it).
       lockNearest(own, shipId);
     } else if (event.code === "Escape") {
+      markingWingman = null;
       // Esc closes the map first; with the map closed it lets go of the lock.
       if (chart.isOpen) chart.close();
       else selection.release();
@@ -1219,6 +1373,38 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       return;
     }
     if (event.button !== 0 || !life) return;
+    if (markingWingman) {
+      const ray = new Raycaster();
+      ray.setFromCamera(
+        new Vector2(
+          (event.clientX / view.viewport.width) * 2 - 1,
+          -(event.clientY / view.viewport.height) * 2 + 1,
+        ),
+        view.camera,
+      );
+      const point = ray.ray.intersectPlane(new Plane(new Vector3(0, 1, 0), 0), new Vector3());
+      if (!point) return;
+      if (markingWingman === "hold") {
+        orderWingman({ type: "hold", x: Math.round(point.x), z: Math.round(point.z) });
+      } else {
+        const candidates = life.joined.deposits.map((d, index) => ({
+          id: String(index),
+          screen: worldToScreen(new Vector3(d.x, 0, d.z), view.camera, view.viewport),
+        }));
+        const deposit = pickNearest(
+          { x: event.clientX, y: event.clientY },
+          candidates,
+          PICK_RADIUS_PX,
+        );
+        if (deposit === null) {
+          showNotice("Click a deposit to mark it.", "warn");
+          return;
+        }
+        orderWingman({ type: "extract", deposit: Number(deposit) });
+      }
+      markingWingman = null;
+      return;
+    }
     // Clicking a hostile locks it and centres the view; an ally is only centred on; empty space
     // returns the view to your own ship.
     const shipId = life.session.shipId;

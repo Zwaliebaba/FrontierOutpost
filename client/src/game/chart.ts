@@ -232,5 +232,5 @@ export type ContactSide = "own" | "crew" | "hostile";
 
 export function sideOf(kind: EntityKind, id: number, ownId: number): ContactSide {
   if (id === ownId) return "own";
-  return kind === "playerShip" ? "crew" : "hostile";
+  return kind === "playerShip" || kind === "wingman" ? "crew" : "hostile";
 }

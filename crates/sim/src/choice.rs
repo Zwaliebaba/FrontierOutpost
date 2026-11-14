@@ -366,7 +366,7 @@ pub fn check(rules: &OutpostRules, template: SiteTemplate, seed: u32) -> SeedChe
 mod tests {
     use super::*;
     use crate::goods::Cost;
-    use crate::outpost::{FacilityRule, STAGE1, SocketOpens, SocketRule, TierRule};
+    use crate::outpost::{Art, FacilityRule, STAGE1, SocketOpens, SocketRule, TierRule};
     use crate::site::FRONTIER_SITE;
 
     #[test]
@@ -400,10 +400,11 @@ mod tests {
     #[test]
     fn the_stage1_layouts_are_every_powered_pair_within_the_cap() {
         let layouts = layouts(&STAGE1);
-        // Empty; one facility at one of two tiers in either socket (12); two
-        // different facilities, at tiers I and I, I and II or II and I, in
-        // either order (18). Two at tier II draw 6, over the cap of 5.
-        assert_eq!(layouts.len(), 31);
+        // Four facilities (crew quarters came with plan M8). Empty; one
+        // facility at one of two tiers in either socket (16); two different
+        // facilities, at tiers I and I, I and II or II and I, in either order
+        // (36). Two at tier II draw 6, over the cap of 5.
+        assert_eq!(layouts.len(), 53);
         assert!(
             layouts
                 .iter()
@@ -467,6 +468,7 @@ mod tests {
                     grants: &[Capability::LocateSignal, Capability::ExtractionRig],
                     batch_seconds: None,
                 }],
+                art: Art::Ready,
                 rig: None,
             },
             FacilityRule {
@@ -478,6 +480,7 @@ mod tests {
                     grants: &[],
                     batch_seconds: Some(60),
                 }],
+                art: Art::Ready,
                 rig: None,
             },
         ],
@@ -542,10 +545,11 @@ mod tests {
         // 6 salvage (258) and the ore field fills the basic hold of 20: 242 at
         // the core's pace, 260 once a refinery's processor works every batch.
         // So a refinery tips the choice, but leaves its owner 2 credits from
-        // indifferent; nothing else changes the best choice at all.
+        // indifferent; nothing else changes the best choice at all. Crew
+        // quarters' wingman leaves a solo run's take alone.
         for seed in [9, 10, 20, 16, 8, 3, 5] {
             let check = check(&STAGE1, FRONTIER_SITE, seed);
-            assert_eq!((check.layouts, check.pairs), (31, 465));
+            assert_eq!((check.layouts, check.pairs), (53, 1378));
             assert!(!check.changed.is_empty(), "seed {seed}");
             let largest = check
                 .changed
