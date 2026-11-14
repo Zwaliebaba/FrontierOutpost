@@ -98,8 +98,8 @@ measured clear scene area, forward berth labels and a pinned launch receipt. See
 
 ## Stage 1 expansion art brief
 
-What `create_scene.py` must add for the Stage 1 expansion (design §11, plan M8 to M11). Each
-milestone's first work item (8.1, 9.1, 10.1, 11.1) builds its part of this brief. The owner runs
+What `create_scene.py` must add for the Stage 1 expansion (design §11, plan M8 to M12). Each
+milestone's Blender work item (8.1, 9.2, 10.1, 11.1, 12.1) builds its part of this brief. The owner runs
 Blender; the agents' environment has none. Everything below follows the conventions above and
 style guide §2 to §9; where this brief adds a convention, the style guide records it too.
 
@@ -118,7 +118,33 @@ style guide §2 to §9; where this brief adds a convention, the style guide reco
 - Nodes the game toggles at runtime stay separate meshes with stable names, like
   `SocketClosure_B*` and `Operating_Tier_*` today.
 
-### Facility modules (8.1, 9.1, 10.1, 11.1)
+### The station and its hangar (9.2)
+
+The station is rebuilt two to three times larger around an internal hangar (design §11). This
+replaces the four-berth apron described above; until 9.2, that apron and its checks stand.
+
+- **Scale.** The station grows by one factor, between 2 and 3, chosen in the greybox first (9.1)
+  and recorded in the manifest. Ships keep their size. Sockets, their decks and clamps, and every
+  facility module grow by the same factor, so the module rules below are in station metres
+  multiplied by it.
+- **One hangar mouth,** marked by an empty named `Hangar_Mouth` at the centre of its opening on
+  the landing plane, facing out along the approach. Its clear opening is at least 6 m wide and
+  3 m high at the new scale (placeholders): wide enough for the largest hull with 0.15 m on every
+  side, and for crew ships leaving one after another.
+- **A clear approach lane:** a straight corridor out of the mouth, as wide as the opening, free of
+  station structure and of any module in any socket, at least 30 m long. The generator checks it
+  as it checks the berths' departure corridors today.
+- **The berths and apron are removed,** with `berths.json` and the berth empties. No landed ship
+  is drawn at home, so the docking validation of the frigate on a berth is replaced by the mouth
+  and lane checks.
+- **Sockets A and B** keep their places relative to the cargo bay and the hangar mouth (B moves
+  beside the mouth and keeps its adjacency); both stay visible from the overview camera.
+- **Readable from the tactical view.** Style guide §1 and §2 still hold: a strong central mass
+  and restrained detail. Tall spires or dense lit detail in a perspective reference become
+  clutter at 33° orthographic and hide ships; the greybox block (9.1) decides how tall the
+  station may stand.
+
+### Facility modules (8.1, 10.1, 11.1, 12.1)
 
 Every new module follows the existing module rules: a root named `Facility_<facility>_T<tier>`
 with `facility` and `tier` properties, its base at the root's origin, its footprint within
@@ -129,67 +155,64 @@ frame. Identifiers match the game's facility data.
 | Module | Root names | Tier 1 | Tier 2 | Tier 3 |
 |---|---|---|---|---|
 | Crew quarters (8.1) | `Facility_crew_quarters_T1`, `_T2` | A pressurised habitat: two horizontal cylinders with warm windows and an airlock | A second deck and an observation dome; a small davit for the wingman's shuttle | None |
-| Hangar (10.1) | `Facility_hangar_T1`, `_T2` | An open lattice cradle holding a hull frame, with a gantry over it | Two cradles, a longer gantry and fuel-cell racks | None |
-| Navigation array (11.1) | `Facility_navigation_array_T1`, `_T2` | A transmitter spire ringed by beacon lamps, with a star-tracker tube | Twin rings round the spire and a longer telescope | None |
-| Sensor array (9.1) | `Facility_sensor_array_T3` | As built | As built | A large radome on the tier 2 lattice |
-| Refinery (9.1) | `Facility_refinery_T3` | As built | As built | A fuel-cell plant: pressure spheres and a cracking column beside the tier 2 tanks |
-| Fabrication bay (9.1) | `Facility_fabrication_bay_T3` | As built | As built | A plate press and stacked armour plates outside a larger hall, with a second gantry |
+| Shipyard (11.1) | `Facility_shipyard_T1`, `_T2` | An open lattice cradle holding a hull frame, with a gantry over it | Two cradles, a longer gantry and fuel-cell racks | None |
+| Navigation array (12.1) | `Facility_navigation_array_T1`, `_T2` | A transmitter spire ringed by beacon lamps, with a star-tracker tube | Twin rings round the spire and a longer telescope | None |
+| Sensor array (10.1) | `Facility_sensor_array_T3` | As built | As built | A large radome on the tier 2 lattice |
+| Refinery (10.1) | `Facility_refinery_T3` | As built | As built | A fuel-cell plant: pressure spheres and a cracking column beside the tier 2 tanks |
+| Fabrication bay (10.1) | `Facility_fabrication_bay_T3` | As built | As built | A plate press and stacked armour plates outside a larger hall, with a second gantry |
 
 Rules the generator asserts, besides the existing ones:
 
 - **Each tier reads as bigger:** every tier 2 stands more than 0.4 m taller than its tier 1, and
   every tier 3 more than 0.4 m taller than its tier 2.
 - **Each facility has its own signature shape**, so it is told apart at the zoom where the whole
-  outpost fits. The hangar is an open cradle, never a closed hall: the fabrication bay is the
+  outpost fits. The shipyard is an open cradle, never a closed hall: the fabrication bay is the
   hall with doors. The navigation array has no dishes: the sensor array is the dishes.
 - **A module installed in any socket clears the station.** With each module set on each socket
-  anchor, its evaluated bounds clear every berth's safety boundary and every straight departure
-  corridor the four-berth checks already use. This is new: today's tallest module stands 4.5 m,
-  and tier 3 is taller.
+  anchor, its evaluated bounds clear the hangar mouth's approach lane (before 9.2, every berth's
+  safety boundary and departure corridor). This is new: today's tallest module stands 4.5 m, and
+  tier 3 is taller.
 
-### Socket C, the processor and the reactor (9.1)
+### Socket C, the processor and the reactor (10.1)
 
 - **The processor.** Design §10's core includes a processor, but the scene does not model it, and
   §11 places socket C beside it. Add a visible processor housing to the core: a hopper, a
   furnace drum and an output chute, as station structure (`Station_ROOT`, `Processor | …`).
 - **Socket C** is a clamp platform built by the existing `socket()` helper, beside the processor,
   with an anchor empty `Socket_C` and a blanking plate and cross named `SocketClosure_C*`, shown
-  until the reactor upgrade is bought, like socket B's. Its anchor clears every berth and
-  departure corridor by the same margins the generator checks for A and B, stays at least 3 m
-  from A and B, and is visible from the overview camera. The manifest records it under `sockets`.
+  until the reactor upgrade is bought, like socket B's. Its anchor clears the hangar mouth's
+  approach lane by the same margins the generator checks for A and B, stays at least 3 m (times
+  the station's scale) from A and B, and is visible from the overview camera. The manifest records it under `sockets`.
 - **The reactor upgrade** is added to the core, not to a socket: a reactor drum with radiator
   fins on the core's crown, in meshes named `Reactor_Upgrade*`, shown only once it is bought. It
   must not change the core's silhouette at the berths or at sockets A and B.
 
-### Hulls (10.1)
+### Hulls (11.1)
 
 The hauler and the gunship join the starter frigate's family (style guide §3): split dorsal
 armour, a central service spine, orange bands, dark inset panels and twin drive pods, with
 proportions and equipment changed for the role. Neither may read as a hostile: allegiance is
 told by shape as well as colour, and hostiles are forked silhouettes.
 
-| Hull | Root | Silhouette | Landed envelope, including gear |
+| Hull | Root | Silhouette | Size |
 |---|---|---|---|
-| Hauler | `Hauler_ROOT` | Wide and boxy: two cargo pods slung either side of the spine, a short bridge, no visible guns | At most 3.3 m wide and 3.3 m long; noticeably wider than the frigate |
-| Gunship | `Gunship_ROOT` | About the frigate's length, with forward weapon mounts, a turret on the spine and a shield emitter ring | At most 3.3 m wide and 3.3 m long; no larger than needed |
+| Hauler | `Hauler_ROOT` | Wide and boxy: two cargo pods slung either side of the spine, a short bridge, no visible guns | Noticeably wider than the frigate |
+| Gunship | `Gunship_ROOT` | About the frigate's length, with forward weapon mounts, a turret on the spine and a shield emitter ring | No larger than needed |
 
-- **Every hull fits every berth.** The four-berth upgrade gives each berth a 3.6 × 3.6 m safety
-  boundary (`docking_validation` in the manifest); with style guide §4's 0.15 m clearance, a
-  landed hull including its gear and attachments may be at most 3.3 × 3.3 m. The generator runs
-  the frigate's berth checks for each hull in each of berths 07 to 10: edge clearance, structural
-  overlap, departure corridor and clearance from a ship in the next berth, and records them per
-  hull.
-- **Landing gear the game can animate.** Struts and feet are separate meshes whose names contain
-  `landing_strut` and `landing_foot` (`client/src/view/frigate.ts` folds them by that pattern),
-  with the feet at the landing plane, as the frigate's are.
+- **Every hull passes through the hangar mouth** flying straight in along the approach lane, with
+  0.15 m clearance on every side (style guide §4), including weapons and attachments. With the
+  berths gone this is the only fit a hull must pass; the generator checks each hull against
+  `Hangar_Mouth` and records the margins.
+- **No landing gear is needed.** Ships are never drawn landed once the berths are gone. The
+  starter frigate keeps its gear until 9.5 removes the landed presentation.
 - **The collision radius comes from the model.** The manifest records each hull's footprint
-  radius about its root; the game's hull data (10.2) takes its collision radius from it, so the
+  radius about its root; the game's hull data (11.2) takes its collision radius from it, so the
   drawn hull is as large as the ship the server collides.
 - **Exports:** one GLB per hull (`hauler.glb`, `gunship.glb`), each root at its own origin's
   placement as the frigate is, with no gameplay scripts or collision shapes.
 
 ### Not in this brief
 
-The sentinel and the stalker (11.3) are drawn by the client's readability rules, as every hostile
+The sentinel and the stalker (12.3) are drawn by the client's readability rules, as every hostile
 is today; no hostile has a Blender model yet. The site map and the new sites' scenery are client
 and data work.

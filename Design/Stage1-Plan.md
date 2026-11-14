@@ -177,14 +177,16 @@ They stay unproven in every report until they are measured with players other th
 using the [playtest script](Playtest-Script.md), whenever there are any. Testers reached over the
 internet would reopen the hosting decision and the deferred hardening (AGENTS.md §8).
 
-### The Stage 1 expansion: M8 to M11
+### The Stage 1 expansion: M8 to M12
 
 The owner has no testers, so after M7 the game is expanded for one player instead of moving to
 Stage 2 (design §11). M7 measures Stage 1 as §10 specifies it, before any of this is built, so
 the expansion is chosen with M7's results in hand and the measurements describe the game they
-were taken on. The milestones run cheapest first: the wingman needs one facility module and no
-hull; the sites need the most authored content. Each milestone brings its own facility's art, so
-none waits on another's Blender work.
+were taken on. The wingman comes first: it needs one facility module and no hull. The station is
+rebuilt around its hangar next, before anything else is authored at its old scale: socket C and
+tier 3 are built on the new station, and the berth limit, which would constrain the new hulls,
+is gone before they are made. The sites, which need the most authored content, come last. Each
+milestone brings its own art, so none waits on another's Blender work.
 
 ### M8 · Wingman
 
@@ -202,50 +204,67 @@ none waits on another's Blender work.
 **Checkpoint.** The owner plays solo with a wingman. If the scaled threat and yield make runs
 trivial, or the wingman too often feels like a burden, its values are reworked before M9.
 
-### M9 · Deeper outpost
+### M9 · Station and hangar
+
+*At the end: the station is two to three times larger, you fly out of its hangar at launch and
+back into it to dock, and the berths are gone.*
+
+| # | Work item | Proof |
+| --- | --- | --- |
+| 9.1 | The larger station's silhouette and hangar mouth in the readability greybox, before any Blender work | The greybox block's measures with the new silhouette at the dock, against gate 2's thresholds |
+| 9.2 | `create_scene.py`: the station rebuilt around an internal hangar with one mouth, the apron and berths removed, sockets and facility modules scaled with it, per the art brief | The brief's checks pass, including the mouth for the largest hull and every module clear of the approach lane; the owner runs Blender and commits the regenerated assets |
+| 9.3 | Rules: docking and undocking measured from the hangar mouth; crew ships leave the mouth one after another; jump arrivals stay outside the station; the berth slots removed | Sim tests, including four ships launching without colliding and a jump home landing clear of the station |
+| 9.4 | Server and protocol: berth slots leave the crew roster and the wire | An integration test: four pilots launch and dock |
+| 9.5 | Client: the station at its new scale; the home view without the ship; ships leave the mouth at launch and are drawn into it on docking; the station HUD without berth slots | Browser tests for launch and docking |
+| 9.6 | Gates 2 and 4 measured again with the new station, as an addendum to M7's write-up | The addendum |
+
+**Checkpoint.** The owner launches, flies out and docks. If the larger station hides ships or
+crowds the dock, its shape is reworked before M10 builds on it.
+
+### M10 · Deeper outpost
 
 *At the end: a third socket and a third tier change the outpost's silhouette and force choices
 between six facilities.*
 
 | # | Work item | Proof |
 | --- | --- | --- |
-| 9.1 | `create_scene.py`: the processor housing, socket C, the reactor upgrade, and the three Stage 1 facilities at tier 3, per the art brief | The manifest lists them and the brief's checks pass, including every module clearing the station from every socket; the owner runs Blender and commits the regenerated assets |
-| 9.2 | Rules as data: the reactor and power cap 8, socket C and its adjacency, tier 3, fuel cells with their recipe and prices | Sim tests; the data tests of design §11's checks, including no arbitrage |
-| 9.3 | Outpost view: build the reactor, socket C and tier 3, with previews that name what opens | A browser test builds in socket C |
-| 9.4 | Tier 3 reaches the expedition: preparation shows the rich pocket and waves; armour plating | An integration test for each |
-| 9.5 | A cost test of the content horizon across design §10 and §11 | It shows about thirty solo runs to buy everything |
+| 10.1 | `create_scene.py`: the processor housing, socket C, the reactor upgrade, and the three Stage 1 facilities at tier 3, per the art brief | The manifest lists them and the brief's checks pass, including every module clearing the station from every socket; the owner runs Blender and commits the regenerated assets |
+| 10.2 | Rules as data: the reactor and power cap 8, socket C and its adjacency, tier 3, fuel cells with their recipe and prices | Sim tests; the data tests of design §11's checks, including no arbitrage |
+| 10.3 | Outpost view: build the reactor, socket C and tier 3, with previews that name what opens | A browser test builds in socket C |
+| 10.4 | Tier 3 reaches the expedition: preparation shows the rich pocket and waves; armour plating | An integration test for each |
+| 10.5 | A cost test of the content horizon across design §10 and §11 | It shows about thirty solo runs to buy everything |
 
-### M10 · Ships and fittings
+### M11 · Ships and fittings
 
 *At the end: you choose a hauler or a gunship at launch, and losing one costs you its
 replacement.*
 
 | # | Work item | Proof |
 | --- | --- | --- |
-| 10.1 | `create_scene.py`: the hangar module at two tiers, and the hauler and gunship hulls, per the art brief | The manifest lists them and the brief's checks pass, including each hull in each berth; the owner runs Blender and commits the regenerated assets |
-| 10.2 | Hulls as data: cargo, handling, weapons, shield, slots, collision radius and replacement price; the afterburner and armour plating | Sim tests per hull; prediction uses the same rules in WebAssembly |
-| 10.3 | The hull in snapshots and on the wire | Snapshot vectors updated; the size test still passes at 4 ships and 24 NPCs |
-| 10.4 | Launch screen: choose a hull; the stake shows its replacement price | A browser test of the stake shown |
-| 10.5 | Loss: a lost hauler or gunship returns the pilot in the starter hull, with an instrumentation event | A sim test of the outcome; a ledger conservation test |
-| 10.6 | Each hull drawn from its model, with its own silhouette for readability | The greybox's readability measures run with each hull |
+| 11.1 | `create_scene.py`: the shipyard module at two tiers, and the hauler and gunship hulls, per the art brief | The manifest lists them and the brief's checks pass, including each hull through the hangar mouth; the owner runs Blender and commits the regenerated assets |
+| 11.2 | Hulls as data: cargo, handling, weapons, shield, slots, collision radius and replacement price; the afterburner and armour plating | Sim tests per hull; prediction uses the same rules in WebAssembly |
+| 11.3 | The hull in snapshots and on the wire | Snapshot vectors updated; the size test still passes at 4 ships and 24 NPCs |
+| 11.4 | Launch screen: choose a hull; the stake shows its replacement price | A browser test of the stake shown |
+| 11.5 | Loss: a lost hauler or gunship returns the pilot in the starter hull, with an instrumentation event | A sim test of the outcome; a ledger conservation test |
+| 11.6 | Each hull drawn from its model, with its own silhouette for readability | The greybox's readability measures run with each hull |
 
-### M11 · Sites and the site map
+### M12 · Sites and the site map
 
 *At the end: you pick one of three sites on a site map, each with its own pockets, hazard and
 threat.*
 
 | # | Work item | Proof |
 | --- | --- | --- |
-| 11.1 | `create_scene.py`: the navigation array module at two tiers, per the art brief | The manifest lists it and the brief's checks pass; the owner runs Blender and commits the regenerated assets |
-| 11.2 | The Shattered moon and the Ice ring as site templates, with their pockets keyed to capability tags | The same seed gives the same site for each; a second seed differs |
-| 11.3 | The sentinel and the stalker; debris everywhere and the ion storm | A sim test for each behaviour and hazard |
-| 11.4 | The site map at preparation, with a contract per site and the navigation array's adjacency | A browser test takes a contract on the second site |
-| 11.5 | Gate events and the report carry the site, so later measures can be compared by site | A report test on a two-site fixture |
-| 11.6 | The caps benchmark on each site at its busiest | A recorded frame-time and snapshot-size result |
+| 12.1 | `create_scene.py`: the navigation array module at two tiers, per the art brief | The manifest lists it and the brief's checks pass; the owner runs Blender and commits the regenerated assets |
+| 12.2 | The Shattered moon and the Ice ring as site templates, with their pockets keyed to capability tags | The same seed gives the same site for each; a second seed differs |
+| 12.3 | The sentinel and the stalker; debris everywhere and the ion storm | A sim test for each behaviour and hazard |
+| 12.4 | The site map at preparation, with a contract per site and the navigation array's adjacency | A browser test takes a contract on the second site |
+| 12.5 | Gate events and the report carry the site, so later measures can be compared by site | A report test on a two-site fixture |
+| 12.6 | The caps benchmark on each site at its busiest | A recorded frame-time and snapshot-size result |
 
 ## 4. Size
 
-The plan has 45 work items, and the Stage 1 expansion (M8 to M11) adds 23 more. Some will split
+The plan has 45 work items, and the Stage 1 expansion (M8 to M12) adds 29 more. Some will split
 once work starts, so expect 55 to 75 pull requests for M0 to M7 and about 30 more for the
 expansion.
 The plan gives no dates: with agents writing the code, the pace is set by how many pull requests
@@ -264,10 +283,11 @@ for the rest.
 | Windows builds | M0.1 | Proven in CI before anything depends on it |
 | Facility art waits on Blender | M5.1 | It has no code dependency and can start any time after M0 |
 | Passkeys on shared playtest machines | The playtest after M7 | Each tester has their own operating-system account (AGENTS.md §8) |
-| Blender work in every expansion milestone | M8.1, M9.1, M10.1, M11.1 | Each milestone's art comes first and has no code dependency, so it can start as soon as the milestone is chosen |
+| Blender work in every expansion milestone | M8.1, M9.2, M10.1, M11.1, M12.1 | Each milestone's art comes first and has no code dependency, so it can start as soon as the milestone is chosen |
 | A wingman makes runs trivial, or feels like a burden | M8 | Threat and yield scale for it but the pot does not; the M8 checkpoint reworks its values before M9 |
-| New hulls or sites break the snapshot budget | M10.3, M11.6 | Ships stay at four per instance; the size test and the caps benchmark are re-run |
-| The expansion swallows the gates | M8 to M11 | M7 measures Stage 1 before the expansion starts; gates 1 and 3 stay unproven until other players are measured |
+| New hulls or sites break the snapshot budget | M11.3, M12.6 | Ships stay at four per instance; the size test and the caps benchmark are re-run |
+| A larger station hides ships or crowds the dock | M9 | The greybox tests its silhouette before Blender work (9.1); gates 2 and 4 are measured again (9.6) |
+| The expansion swallows the gates | M8 to M12 | M7 measures Stage 1 before the expansion starts; gates 1 and 3 stay unproven until other players are measured |
 | A solo measure is read as a pass | M7 | Each measure carries its basis, and a measure that needs other players is unproven, never met |
 | Stage 2 is built on a loop no other player has tried | After M7 | Accepted by the owner (AGENTS.md §8); gates 1 and 3 stay unproven until other players are measured |
 
