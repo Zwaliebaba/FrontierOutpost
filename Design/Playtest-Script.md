@@ -4,7 +4,7 @@
 
 With no testers available, plan M7 is closed by the owner alone, and this script's four sessions
 are what the owner plays for it (plan 7.5). The script itself is kept for the playtest with other
-players that gates 1 and 3 need before Stage 2 (plan M7, "What stays open").
+players that gates 1 and 3 need, whenever there are any (plan M7, "What stays open").
 
 This script runs the Stage 1 playtests: about eight invited testers who have not seen the game,
 on machines the owner provides (design §9). It says what each session asks of a tester, what the

@@ -187,4 +187,7 @@ Decided:
   owner's own network. The hardening the 2026-11-11 code review lists for clients the owner does
   not control (its §4) stays deferred until a build is reachable from outside that network.
 - Licence: all rights reserved for now (`LICENSE`).
+- Stage 2 may start without other players. The owner has no testers, so Stage 1 is measured alone
+  (plan M7), and Stage 2 may begin with gates 1 and 3 unproven, an accepted risk. Reports keep
+  them unproven until players other than the owner are measured; never record them as met.
 - Art for Stage 1: sockets and facility modules come from `create_scene.py`, not primitives.

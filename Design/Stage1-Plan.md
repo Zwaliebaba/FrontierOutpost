@@ -170,11 +170,12 @@ write-up exists. A failed gate is fixed and measured again before Stage 1 is cal
 unproven gate does not hold M7 open.
 
 **What stays open.** Gates 1 and 3 cannot be met without other players, and Stage 1 exists to
-prove them. Before any Stage 2 work starts, they are measured with players other than the owner,
-using the [playtest script](Playtest-Script.md). Even two or three people in person, on the owner's
-machines and network, answer the questions one person cannot: what confuses a first session, and
-whether anyone comes back unasked. Testers reached over the internet would reopen the hosting
-decision and the deferred hardening (AGENTS.md §8).
+prove them. The owner has decided that Stage 2 may start with them unproven (AGENTS.md §8),
+accepting the risk that the outpost does not change other players' decisions, or that other
+players do not come back after a loss, and that Stage 2 is built on a loop nobody else has tried.
+They stay unproven in every report until they are measured with players other than the owner,
+using the [playtest script](Playtest-Script.md), whenever there are any. Testers reached over the
+internet would reopen the hosting decision and the deferred hardening (AGENTS.md §8).
 
 ## 4. Size
 
@@ -195,7 +196,8 @@ for the rest.
 | Windows builds | M0.1 | Proven in CI before anything depends on it |
 | Facility art waits on Blender | M5.1 | It has no code dependency and can start any time after M0 |
 | Passkeys on shared playtest machines | The playtest after M7 | Each tester has their own operating-system account (AGENTS.md §8) |
-| A solo measure is read as a pass | M7 | Each measure carries its basis; a measure that needs other players is unproven, and gates 1 and 3 must be met with other players before Stage 2 |
+| A solo measure is read as a pass | M7 | Each measure carries its basis, and a measure that needs other players is unproven, never met |
+| Stage 2 is built on a loop no other player has tried | After M7 | Accepted by the owner (AGENTS.md §8); gates 1 and 3 stay unproven until other players are measured |
 
 ## 6. Open items for the owner
 
