@@ -36,11 +36,11 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY Cargo.toml Cargo.lock ./
 COPY .cargo .cargo
 COPY crates crates
-# The client imports the outpost's models and their placement from the scene's exports.
-COPY Design/FrontierOutpost/station.glb Design/FrontierOutpost/facilities.glb \
-    Design/FrontierOutpost/frigate.glb Design/FrontierOutpost/scene_manifest.json \
-    Design/FrontierOutpost/berths.json \
-    Design/FrontierOutpost/
+# Catalogue URLs are bundled by Vite. The context whitelist keeps editable sources and
+# previews out while including new facility/hull/station exports without a per-asset COPY.
+COPY Design/FrontierOutpost/*.glb Design/FrontierOutpost/
+COPY Design/FrontierOutpost/scene_manifest.json Design/FrontierOutpost/berths.json Design/FrontierOutpost/
+COPY Design/Art Design/Art
 COPY client client
 
 # target/ is a cache mount, so the results are copied out of it within the same step.

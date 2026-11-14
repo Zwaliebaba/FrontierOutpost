@@ -29,6 +29,8 @@ Verified with the pinned Rust 1.99.1 and Node 26, and Blender 4.3.2:
 - `blender -b --python-exit-code 1 --python Design/Art/tools/tests/test_frontier_art.py`: 16 passing tests
 - `python3 -m unittest discover -s Design/Art/tools/tests -p test_check_exports.py`: eight passing tests
 - `python3 Design/Art/tools/check_exports.py` and `python3 Design/Art/tools/catalogue.py --check`
+- Container asset COPY/ignore rules: a scratch-stage export contains every catalogue URL and the
+  contract, with no editable Blender files or previews
 
 The cloud workspace used debug-free local build profiles to stay within its disk quota, and
 `RUST_LOG=info` so process tests could read the server's startup message. The existing CPU

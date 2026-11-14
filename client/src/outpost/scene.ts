@@ -16,6 +16,7 @@ import {
 import type { Material, Object3D, Raycaster } from "three";
 import { Group } from "three";
 import type { AccountInfo, CrewInfo } from "../protocol";
+import contract from "../../../Design/Art/contract.json";
 import { stationLights } from "../view/lights";
 import { STRUCTURE_STENCIL, linear, placeShip, shipMeshes } from "../view/readability";
 import type { ShipMeshes } from "../view/readability";
@@ -120,7 +121,7 @@ export class OutpostScene {
       this.#targets.set(id, pick);
     }
     this.#ring = new Mesh(
-      new TorusGeometry(1.55, 0.06, 6, 48),
+      new TorusGeometry(contract.socket.half_width + contract.clearance * 2, 0.06, 6, 48),
       new MeshBasicMaterial({ color: RING, toneMapped: false }),
     );
     this.#ring.rotation.x = Math.PI / 2;
