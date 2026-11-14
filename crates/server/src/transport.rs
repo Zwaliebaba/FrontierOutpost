@@ -101,6 +101,12 @@ impl SeedPool {
         let index = usize::try_from(launched).ok()? % self.len;
         self.seeds.get(index).copied()
     }
+
+    /// The seeds in run order; empty when no pool is set.
+    #[must_use]
+    pub fn seeds(&self) -> &[u32] {
+        self.seeds.get(..self.len).unwrap_or_default()
+    }
 }
 
 impl Settings {

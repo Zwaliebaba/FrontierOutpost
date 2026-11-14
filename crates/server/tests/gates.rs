@@ -14,6 +14,7 @@ use frontier_protocol::input::{Controls, InputDatagram, quantize_control};
 use frontier_protocol::{ClientMessage, ServerMessage};
 use frontier_server::events::GateEvent;
 use frontier_server::ledger::{Item, Npc, Party, Reason, Transfer};
+use frontier_server::report::{Players, Verdict};
 
 const FORWARD: Controls = Controls {
     thrust: 127,
@@ -181,8 +182,10 @@ async fn a_session_records_sessions_launches_choices_reconfigurations_and_ending
     });
     assert_eq!(ending, Some("docked"));
 
-    // And the report computes every gate from them.
-    let report = frontier_server::report::compute(&store.events().unwrap(), &[]);
+    // And the report computes every gate from them. The pilot reconfigured
+    // early, but as the owner's play that leaves gate 1 unproven (plan 7.3).
+    let report =
+        frontier_server::report::compute(&store.events().unwrap(), &[], Players::Owner, Vec::new());
     assert_eq!((report.pilots, report.runs, report.sessions), (1, 1, 1));
     let reconfigured = report.gates[0]
         .measures
@@ -190,4 +193,8 @@ async fn a_session_records_sessions_launches_choices_reconfigurations_and_ending
         .find(|m| m.name.starts_with("Pilots who reconfigure"))
         .unwrap();
     assert_eq!(reconfigured.met(), Some(true));
+    assert_eq!(
+        reconfigured.verdict(Players::Owner),
+        Some(Verdict::Unproven)
+    );
 }

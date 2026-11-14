@@ -532,12 +532,40 @@ fn the_report_command_prints_the_gates() {
     let report = String::from_utf8(output.stdout).unwrap();
     assert!(report.starts_with("# Stage 1 gate report"), "{report}");
     assert!(report.contains("1 play sessions"), "{report}");
+    // Without --testers the pilot is the owner: a skill measure that passes
+    // is the owner's pass only.
     assert!(
         report.contains(
-            "| Median time to select a named hostile (grey vision) | 0.7 s | ≤ 1.0 s | yes |"
+            "| Median time to select a named hostile (grey vision) | 0.7 s | ≤ 1.0 s | met by the owner only | solo, skill | 1 | 1 selections |"
         ),
         "{report}"
     );
+    assert!(
+        report.contains("Every pilot is taken to be the owner"),
+        "{report}"
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_frontier-server"))
+        .args(["report", "--testers"])
+        .arg(&greybox)
+        .env("FRONTIER_DATA", &data)
+        .stderr(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let report = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        report.contains("| 0.7 s | ≤ 1.0 s | met | solo, skill |"),
+        "{report}"
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_frontier-server"))
+        .args(["report", "--players"])
+        .env("FRONTIER_DATA", &data)
+        .stderr(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "an unknown flag is refused");
     let _ = std::fs::remove_file(&data);
     let _ = std::fs::remove_file(&greybox);
 }

@@ -66,7 +66,7 @@ FRONTIER_EXTRACT_RATE=2 cargo run -p frontier-server      # mine at twice the de
 cargo run -p frontier-server -- grant Vega 1000cr,40ore   # extra stock for an existing pilot (reload the page)
 cargo run --release -p frontier-server --example caps     # server tick cost and snapshot size at the caps
 cargo run -p frontier-server -- wipe                      # wipe Stage 1 data: an empty world (stop the server first)
-cargo run -p frontier-server -- report [greybox.json ...] # the Stage 1 gate report from the saves and greybox results
+cargo run -p frontier-server -- report [--testers] [greybox.json ...] # the Stage 1 gate report; --testers when others played
 docker compose up --build       # server and built client in a Linux container, http://localhost:8080/
 
 # Client

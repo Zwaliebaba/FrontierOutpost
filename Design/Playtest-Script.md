@@ -216,7 +216,7 @@ Open:
 ## 9. After the playtest
 
 ```sh
-cargo run --release -p frontier-server -- report greybox/*.json > playtest-report.md
+cargo run --release -p frontier-server -- report --testers greybox/*.json > playtest-report.md
 ```
 
 Run it with the same `FRONTIER_DATA` as the server. Write one section per gate:

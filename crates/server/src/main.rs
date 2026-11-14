@@ -36,10 +36,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
         Some("report") => {
-            // `frontier-server report [greybox.json ...]`: the Stage 1 gates.
+            // `frontier-server report [--testers] [greybox.json ...]`: the
+            // Stage 1 gates. Without `--testers` every pilot is the owner.
             let store = Store::open(&config.data_path)?;
-            let greybox = std::env::args()
+            let (flags, files): (Vec<String>, Vec<String>) = std::env::args()
                 .skip(2)
+                .partition(|arg| arg.starts_with("--"));
+            let players = match flags.as_slice() {
+                [] => report::Players::Owner,
+                [flag] if flag == "--testers" => report::Players::Testers,
+                _ => {
+                    return Err(
+                        format!("unknown flags {flags:?}; the only flag is --testers").into(),
+                    );
+                }
+            };
+            let greybox = files
+                .into_iter()
                 .map(
                     |path| -> Result<report::Greybox, Box<dyn std::error::Error>> {
                         let text = std::fs::read_to_string(&path)
@@ -49,7 +62,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     },
                 )
                 .collect::<Result<Vec<_>, _>>()?;
-            print!("{}", report::compute(&store.events()?, &greybox).markdown());
+            // Gate 1's rules check runs on the server's seed pool, or the
+            // playtest's when none is set.
+            let settings = &config.settings;
+            let seeds = match settings.seed_pool.seeds() {
+                [] => &report::PLAYTEST_POOL[..],
+                seeds => seeds,
+            };
+            let rules = report::rules_check(settings.template, seeds);
+            let report = report::compute(&store.events()?, &greybox, players, rules);
+            print!("{}", report.markdown());
             return Ok(());
         }
         Some("grant") => {
