@@ -46,6 +46,66 @@ pub enum Target {
     AtLeast(f64),
 }
 
+/// Who the pilots in the saves are (plan M7). The report cannot tell the
+/// owner's accounts from anyone else's, so it assumes the owner unless told
+/// otherwise: a forgotten flag then errs towards unproven, never towards met.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Players {
+    /// Every pilot is the owner, on one account or several.
+    Owner,
+    /// The pilots are testers other than the owner: a playtest.
+    Testers,
+}
+
+/// What a measure's figure can show when the owner plays alone (plan M7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Basis {
+    /// Solo play counts in full: the figure comes from the game's structure,
+    /// such as time spent travelling.
+    Solo,
+    /// Solo play, but the player's expertise flatters the figure: on the
+    /// owner's play a miss is a failure and a pass is the owner's only.
+    Skill,
+    /// Computed from the rules, with no one playing.
+    Rules,
+    /// Needs players other than the owner: on the owner's play it is
+    /// unproven, neither met nor failed.
+    Others,
+}
+
+impl Basis {
+    const fn shown(self) -> &'static str {
+        match self {
+            Self::Solo => "solo",
+            Self::Skill => "solo, skill",
+            Self::Rules => "rules",
+            Self::Others => "other players",
+        }
+    }
+}
+
+/// A measure's or a gate's outcome.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    Met,
+    /// Met on the owner's play, where the owner's expertise flatters it.
+    MetByOwnerOnly,
+    Failed,
+    /// Needs players other than the owner.
+    Unproven,
+}
+
+impl Verdict {
+    const fn shown(self) -> &'static str {
+        match self {
+            Self::Met => "met",
+            Self::MetByOwnerOnly => "met by the owner only",
+            Self::Failed => "failed",
+            Self::Unproven => "unproven",
+        }
+    }
+}
+
 /// One measure of a gate.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Measure {
@@ -55,18 +115,32 @@ pub struct Measure {
     /// How to show the value: "%" for a share, or a unit.
     pub unit: &'static str,
     pub target: Option<Target>,
+    pub basis: Basis,
+    /// The pilots (accounts) the value rests on. Gate 2's greybox trials
+    /// carry no account, so there it counts files: one per tester and vision
+    /// mode in the playtest script.
+    pub pilots: usize,
     /// What the value was computed from, such as "12 defeats".
-    pub basis: String,
+    pub from: String,
 }
 
 impl Measure {
-    fn new(name: &str, value: Option<f64>, unit: &'static str, basis: String) -> Self {
+    fn new(
+        name: &str,
+        value: Option<f64>,
+        unit: &'static str,
+        basis: Basis,
+        pilots: usize,
+        from: String,
+    ) -> Self {
         Self {
             name: name.to_owned(),
             value,
             unit,
             target: None,
             basis,
+            pilots,
+            from,
         }
     }
 
@@ -75,13 +149,30 @@ impl Measure {
         self
     }
 
-    /// Whether the value meets its threshold, if it has both.
+    /// Whether the value meets its threshold, if it has both, regardless of
+    /// who played.
     #[must_use]
     pub fn met(&self) -> Option<bool> {
         let value = self.value?;
         Some(match self.target? {
             Target::AtMost(limit) => value <= limit,
             Target::AtLeast(limit) => value >= limit,
+        })
+    }
+
+    /// What the measure shows, given who played. A measure that needs other
+    /// players is unproven on the owner's play whatever its value, even with
+    /// nothing measured; otherwise a measure without a value or a target
+    /// shows nothing.
+    #[must_use]
+    pub fn verdict(&self, players: Players) -> Option<Verdict> {
+        if players == Players::Owner && self.basis == Basis::Others {
+            return Some(Verdict::Unproven);
+        }
+        Some(match (self.met()?, self.basis, players) {
+            (false, ..) => Verdict::Failed,
+            (true, Basis::Skill, Players::Owner) => Verdict::MetByOwnerOnly,
+            (true, ..) => Verdict::Met,
         })
     }
 
@@ -100,8 +191,31 @@ pub struct Gate {
     pub measures: Vec<Measure>,
 }
 
+impl Gate {
+    /// The gate's outcome (plan 7.6): failed if any measure failed; else
+    /// unproven if any is; else met, by the owner only if any measure is
+    /// only that; `None` when nothing was measured against a threshold.
+    #[must_use]
+    pub fn verdict(&self, players: Players) -> Option<Verdict> {
+        let verdicts: Vec<Verdict> = self
+            .measures
+            .iter()
+            .filter_map(|measure| measure.verdict(players))
+            .collect();
+        [
+            Verdict::Failed,
+            Verdict::Unproven,
+            Verdict::MetByOwnerOnly,
+            Verdict::Met,
+        ]
+        .into_iter()
+        .find(|verdict| verdicts.contains(verdict))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Report {
+    pub players: Players,
     pub pilots: usize,
     pub runs: usize,
     pub sessions: usize,
@@ -282,13 +396,14 @@ fn runs(events: &[Recorded]) -> Vec<Run> {
     by_key.into_values().collect()
 }
 
-/// Computes the gates from `events` and greybox `trials`.
+/// Computes the gates from `events` and greybox `trials`, played by `players`.
 #[must_use]
-pub fn compute(events: &[Recorded], greybox: &[Greybox]) -> Report {
+pub fn compute(events: &[Recorded], greybox: &[Greybox], players: Players) -> Report {
     let sessions = sessions(events);
     let runs = runs(events);
     let pilots: BTreeSet<i64> = runs.iter().map(|run| run.account).collect();
     Report {
+        players,
         pilots: pilots.len(),
         runs: runs.len(),
         sessions: sessions.values().map(Vec::len).sum(),
@@ -316,9 +431,11 @@ fn gate_1(events: &[Recorded], runs: &[Run], sessions: &HashMap<i64, Vec<Session
         .iter()
         .filter(|group| group.values().collect::<BTreeSet<_>>().len() > 1)
         .count();
+    let grouped: BTreeSet<i64> = groups.iter().flat_map(|g| g.keys().copied()).collect();
 
     // On the same seed, does the layout predict the rig and the first pocket?
     let (mut same, mut same_agree, mut other, mut other_agree) = (0, 0, 0, 0);
+    let (mut same_pilots, mut other_pilots) = (BTreeSet::new(), BTreeSet::new());
     let mut by_seed: BTreeMap<u32, Vec<&Run>> = BTreeMap::new();
     for run in runs.iter().filter(|run| run.first_pocket.is_some()) {
         by_seed.entry(run.seed).or_default().push(run);
@@ -333,9 +450,11 @@ fn gate_1(events: &[Recorded], runs: &[Run], sessions: &HashMap<i64, Vec<Session
                 if a.layout == b.layout {
                     same += 1;
                     same_agree += agree;
+                    same_pilots.extend([a.account, b.account]);
                 } else {
                     other += 1;
                     other_agree += agree;
+                    other_pilots.extend([a.account, b.account]);
                 }
             }
         }
@@ -374,6 +493,8 @@ fn gate_1(events: &[Recorded], runs: &[Run], sessions: &HashMap<i64, Vec<Session
         })
         .count();
     let per_ten_median = median(&mut per_ten);
+    // Every measure but the reconfiguration rate compares pilots, or is a
+    // share of testers; one pilot's own rate says how the owner plays.
     Gate {
         title: "Gate 1 · Outpost enhancements change expedition decisions",
         measures: vec![
@@ -381,18 +502,24 @@ fn gate_1(events: &[Recorded], runs: &[Run], sessions: &HashMap<i64, Vec<Session
                 "Pilots with the same unlocks whose layouts differ",
                 share(differing, groups.len()),
                 "%",
+                Basis::Others,
+                grouped.len(),
                 format!("{} groups of two or more pilots", groups.len()),
             ),
             Measure::new(
                 "Same seed, same layout: same rig and first pocket",
                 share(same_agree, same),
                 "%",
+                Basis::Others,
+                same_pilots.len(),
                 format!("{same} pairs of runs"),
             ),
             Measure::new(
                 "Same seed, different layout: same rig and first pocket",
                 share(other_agree, other),
                 "%",
+                Basis::Others,
+                other_pilots.len(),
                 format!(
                     "{other} pairs of runs; lower than the line above means layout predicts choice"
                 ),
@@ -401,6 +528,8 @@ fn gate_1(events: &[Recorded], runs: &[Run], sessions: &HashMap<i64, Vec<Session
                 "Reconfigurations per ten runs (median pilot)",
                 per_ten_median,
                 "per 10 runs",
+                Basis::Skill,
+                pilots,
                 format!(
                     "{} reconfigurations; should be neither 0 nor 10",
                     reconfigurations.len()
@@ -410,6 +539,8 @@ fn gate_1(events: &[Recorded], runs: &[Run], sessions: &HashMap<i64, Vec<Session
                 "Pilots who reconfigure in their first three sessions",
                 share(early, pilots),
                 "%",
+                Basis::Others,
+                pilots,
                 format!("{pilots} pilots"),
             )
             .target(Target::AtLeast(thresholds::RECONFIGURE_SHARE)),
@@ -419,14 +550,24 @@ fn gate_1(events: &[Recorded], runs: &[Run], sessions: &HashMap<i64, Vec<Session
 
 fn gate_2(events: &[Recorded], greybox: &[Greybox]) -> Gate {
     let mut measures = Vec::new();
-    let mut by_vision: BTreeMap<&str, Vec<&Trial>> = BTreeMap::new();
+    let mut by_vision: BTreeMap<&str, (usize, Vec<&Trial>)> = BTreeMap::new();
     for file in greybox {
-        by_vision
-            .entry(file.vision())
-            .or_default()
-            .extend(file.records.iter());
+        let (files, trials) = by_vision.entry(file.vision()).or_default();
+        *files += 1;
+        trials.extend(file.records.iter());
     }
-    for (vision, trials) in by_vision {
+    // Readability is a skill the owner has practised more than anyone.
+    for (vision, (files, trials)) in by_vision {
+        let measure = |name: &str, value, unit, from| {
+            Measure::new(
+                &format!("{name} ({vision} vision)"),
+                value,
+                unit,
+                Basis::Skill,
+                files,
+                from,
+            )
+        };
         let of =
             |kind: &str| -> Vec<&&Trial> { trials.iter().filter(|t| t.kind == kind).collect() };
         let (acquire, heading, range) = (of("acquire"), of("heading"), of("range"));
@@ -441,19 +582,19 @@ fn gate_2(events: &[Recorded], greybox: &[Greybox]) -> Gate {
             .count();
         let wrong = acquire.iter().filter(|t| t.outcome == "wrong").count();
         let correct = |list: &[&&Trial]| list.iter().filter(|t| t.outcome == "correct").count();
-        let label = |what: &str| format!("{what} ({vision} vision)");
+        let selections = times.len();
         measures.push(
-            Measure::new(
-                &label("Median time to select a named hostile"),
+            measure(
+                "Median time to select a named hostile",
                 median(&mut times),
                 "s",
-                format!("{} selections", times.len()),
+                format!("{selections} selections"),
             )
             .target(Target::AtMost(thresholds::SELECT_SECONDS)),
         );
         measures.push(
-            Measure::new(
-                &label("Wrong-target selections"),
+            measure(
+                "Wrong-target selections",
                 share(wrong, answered),
                 "%",
                 format!("{answered} answered"),
@@ -461,8 +602,8 @@ fn gate_2(events: &[Recorded], greybox: &[Greybox]) -> Gate {
             .target(Target::AtMost(thresholds::WRONG_TARGET_SHARE)),
         );
         measures.push(
-            Measure::new(
-                &label("Headings judged within 22.5°"),
+            measure(
+                "Headings judged within 22.5°",
                 share(correct(&heading), heading.len()),
                 "%",
                 format!("{} trials", heading.len()),
@@ -470,8 +611,8 @@ fn gate_2(events: &[Recorded], greybox: &[Greybox]) -> Gate {
             .target(Target::AtLeast(thresholds::HEADING_SHARE)),
         );
         measures.push(
-            Measure::new(
-                &label("Nearer target chosen"),
+            measure(
+                "Nearer target chosen",
                 share(correct(&range), range.len()),
                 "%",
                 format!("{} trials", range.len()),
@@ -484,22 +625,27 @@ fn gate_2(events: &[Recorded], greybox: &[Greybox]) -> Gate {
             "Greybox trials",
             None,
             "",
+            Basis::Skill,
+            0,
             "none given: pass the greybox's downloaded JSON files to the report".to_owned(),
         ));
     }
     // In the game itself: how often a lock attempt is beyond lock range.
-    let locks: Vec<bool> = events
+    let locks: Vec<(i64, bool)> = events
         .iter()
         .filter_map(|r| match r.event {
-            GateEvent::Locked { taken, .. } => Some(taken),
+            GateEvent::Locked { taken, .. } => Some((r.account, taken)),
             _ => None,
         })
         .collect();
-    let refused = locks.iter().filter(|taken| !**taken).count();
+    let refused = locks.iter().filter(|(_, taken)| !*taken).count();
+    let locking: BTreeSet<i64> = locks.iter().map(|(account, _)| *account).collect();
     measures.push(Measure::new(
         "In play: lock attempts beyond lock range",
         share(refused, locks.len()),
         "%",
+        Basis::Skill,
+        locking.len(),
         format!("{} lock attempts", locks.len()),
     ));
     Gate {
@@ -512,6 +658,7 @@ fn gate_3(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
     let mut defeats = 0;
     let mut relaunched = 0;
     let mut stake_ratios: Vec<f64> = Vec::new();
+    let (mut defeated, mut staking) = (BTreeSet::new(), BTreeSet::new());
     for (index, run) in runs.iter().enumerate() {
         let Some((ended_at, ending, ..)) = &run.ended else {
             continue;
@@ -520,6 +667,7 @@ fn gate_3(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
             continue;
         }
         defeats += 1;
+        defeated.insert(run.account);
         let next = runs[index + 1..]
             .iter()
             .find(|later| later.account == run.account && later.launched_at > *ended_at);
@@ -536,6 +684,7 @@ fn gate_3(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
             }
             if run.stake > 0 {
                 stake_ratios.push(f64::from(next.stake) / f64::from(run.stake));
+                staking.insert(run.account);
             }
         }
     }
@@ -543,6 +692,7 @@ fn gate_3(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
     // Next-day return after a session that ended in defeat, and in success.
     let (mut after_defeat, mut back_after_defeat, mut after_success, mut back_after_success) =
         (0, 0, 0, 0);
+    let (mut defeat_pilots, mut success_pilots) = (BTreeSet::new(), BTreeSet::new());
     for (account, list) in sessions {
         for (index, session) in list.iter().enumerate() {
             let last = runs
@@ -562,10 +712,12 @@ fn gate_3(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
                 "destroyed" => {
                     after_defeat += 1;
                     back_after_defeat += usize::from(back);
+                    defeat_pilots.insert(*account);
                 }
                 "docked" => {
                     after_success += 1;
                     back_after_success += usize::from(back);
+                    success_pilots.insert(*account);
                 }
                 _ => {}
             }
@@ -599,6 +751,8 @@ fn gate_3(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
     let (third, third_n) = spread(3);
     let (tenth, tenth_n) = spread(10);
     let mut stake_ratio = stake_ratios.clone();
+    // No measure of one's own return means anything (plan M7): the owner
+    // comes back to their game whatever happens.
     Gate {
         title: "Gate 3 · Players voluntarily repeat after loss",
         measures: vec![
@@ -606,6 +760,8 @@ fn gate_3(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
                 "Defeats followed by a launch in that session or the next",
                 share(relaunched, defeats),
                 "%",
+                Basis::Others,
+                defeated.len(),
                 format!("{defeats} defeats"),
             )
             .target(Target::AtLeast(thresholds::RELAUNCH_SHARE)),
@@ -613,18 +769,24 @@ fn gate_3(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
                 "Next-day return after a session ending in defeat",
                 share(back_after_defeat, after_defeat),
                 "%",
+                Basis::Others,
+                defeat_pilots.len(),
                 format!("{after_defeat} sessions"),
             ),
             Measure::new(
                 "Next-day return after a session ending docked",
                 share(back_after_success, after_success),
                 "%",
+                Basis::Others,
+                success_pilots.len(),
                 format!("{after_success} sessions"),
             ),
             Measure::new(
                 "Stake on the launch after a defeat, against the one lost (median)",
                 median(&mut stake_ratio),
                 "×",
+                Basis::Others,
+                staking.len(),
                 format!(
                     "{} relaunches after a defeat with a stake",
                     stake_ratios.len()
@@ -634,12 +796,16 @@ fn gate_3(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
                 "Distinct choices per pilot on one seed at run 3",
                 third,
                 "%",
+                Basis::Others,
+                third_n,
                 format!("{third_n} pilots on the most played seed"),
             ),
             Measure::new(
                 "Distinct choices per pilot on one seed at run 10",
                 tenth,
                 "%",
+                Basis::Others,
+                tenth_n,
                 format!("{tenth_n} pilots on the most played seed"),
             ),
         ],
@@ -659,8 +825,15 @@ fn gate_4(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
         .sum();
     let travel_share = (played > 0).then(|| travel as f64 * 1_000.0 / played as f64);
 
+    let travelling: BTreeSet<i64> = runs
+        .iter()
+        .filter(|run| run.ended.is_some())
+        .map(|run| run.account)
+        .collect();
+
     let mut recovery: Vec<f64> = Vec::new();
     let mut losses = 0;
+    let mut losing = BTreeSet::new();
     for (index, run) in runs.iter().enumerate() {
         let Some((ended_at, _, lost, _)) = &run.ended else {
             continue;
@@ -669,6 +842,7 @@ fn gate_4(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
             continue;
         }
         losses += 1;
+        losing.insert(run.account);
         let back = runs[index + 1..].iter().find(|later| {
             later.account == run.account
                 && later.launched_at > *ended_at
@@ -679,14 +853,17 @@ fn gate_4(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
         }
     }
 
-    let mut decisions: Vec<f64> = runs
-        .iter()
-        .filter_map(|run| {
-            run.first_decision_at
-                .map(|at| (at - run.launched_at) as f64 / 1_000.0)
-        })
-        .collect();
+    let mut decisions: Vec<f64> = Vec::new();
+    let mut deciding = BTreeSet::new();
+    for run in runs {
+        if let Some(at) = run.first_decision_at {
+            decisions.push((at - run.launched_at) as f64 / 1_000.0);
+            deciding.insert(run.account);
+        }
+    }
     let recovered = recovery.len();
+    // Travel and recovery come from the site's distances and the economy's
+    // prices, so solo play counts in full; how soon a pilot decides is skill.
     Gate {
         title: "Gate 4 · Travel and recovery meet targets",
         measures: vec![
@@ -694,6 +871,8 @@ fn gate_4(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
                 "Travel (undock to first pocket, last pocket to dock) as a share of session time",
                 travel_share,
                 "%",
+                Basis::Solo,
+                travelling.len(),
                 format!(
                     "{} runs ended",
                     runs.iter().filter(|r| r.ended.is_some()).count()
@@ -704,6 +883,8 @@ fn gate_4(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
                 "Minutes from losing a fitting to flying it again (median)",
                 median(&mut recovery),
                 "min",
+                Basis::Solo,
+                losing.len(),
                 format!("{losses} losses, {recovered} recovered"),
             )
             .target(Target::AtMost(thresholds::RECOVERY_MINUTES)),
@@ -711,6 +892,8 @@ fn gate_4(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
                 "Seconds from launch to the first decision (median)",
                 median(&mut decisions),
                 "s",
+                Basis::Skill,
+                deciding.len(),
                 format!("{} runs with a decision", decisions.len()),
             )
             .target(Target::AtMost(thresholds::FIRST_DECISION_SECONDS)),
@@ -720,28 +903,36 @@ fn gate_4(runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
 
 /// Early evidence for the Stage 2 crew gate, not itself a Stage 1 gate.
 fn crew_evidence(events: &[Recorded]) -> Gate {
-    let mut by_crew: BTreeMap<u32, Vec<f64>> = BTreeMap::new();
+    let mut by_crew: BTreeMap<u32, (Vec<f64>, BTreeSet<i64>)> = BTreeMap::new();
     for recorded in events {
         if let GateEvent::PotShare { share, crew } = recorded.event {
-            by_crew.entry(crew).or_default().push(f64::from(share));
+            let (shares, pilots) = by_crew.entry(crew).or_default();
+            shares.push(f64::from(share));
+            pilots.insert(recorded.account);
         }
     }
+    // A pot's split follows the crew rules, so the owner on two clients
+    // shows it in full; how a newcomer helps a veteran stays with others.
     let measures = if by_crew.is_empty() {
         vec![Measure::new(
             "Pot share per pilot",
             None,
             "cr",
+            Basis::Solo,
+            0,
             "no pots paid".to_owned(),
         )]
     } else {
         by_crew
             .into_iter()
-            .map(|(crew, mut shares)| {
+            .map(|(crew, (mut shares, pilots))| {
                 let count = shares.len();
                 Measure::new(
                     &format!("Pot share per pilot, crew of {crew} (median)"),
                     median(&mut shares),
                     "cr",
+                    Basis::Solo,
+                    pilots.len(),
                     format!("{count} shares"),
                 )
             })
@@ -764,13 +955,36 @@ impl Report {
             "{} pilots · {} runs · {} play sessions. Thresholds are design section 9's provisional figures.\n",
             self.pilots, self.runs, self.sessions
         );
+        let _ = writeln!(
+            out,
+            "{}\n",
+            match self.players {
+                Players::Owner => {
+                    "Every pilot is taken to be the owner, so a measure that needs other players is \
+                     unproven, and a pass the owner's expertise flatters is the owner's only. Run \
+                     the report with `--testers` for a playtest with other players."
+                }
+                Players::Testers => "The pilots are testers other than the owner.",
+            }
+        );
+        let _ = writeln!(
+            out,
+            "Basis: *solo* counts the owner's play in full; *solo, skill* is flattered by \
+             expertise; *rules* is computed from the simulation; *other players* needs players \
+             other than the owner. Pilots counts the accounts a value rests on (greybox files \
+             for gate 2's trials).\n"
+        );
         for gate in &self.gates {
             let _ = writeln!(out, "## {}\n", gate.title);
+            let verdict = gate
+                .verdict(self.players)
+                .map_or("not measured", Verdict::shown);
+            let _ = writeln!(out, "Gate: **{verdict}**\n");
             let _ = writeln!(
                 out,
-                "| Measure | Value | Provisional target | Met | Basis |"
+                "| Measure | Value | Provisional target | Verdict | Basis | Pilots | From |"
             );
-            let _ = writeln!(out, "| --- | --- | --- | --- | --- |");
+            let _ = writeln!(out, "| --- | --- | --- | --- | --- | --- | --- |");
             for measure in &gate.measures {
                 let value = measure
                     .value
@@ -784,15 +998,14 @@ impl Report {
                     }
                     None => String::new(),
                 };
-                let met = match measure.met() {
-                    Some(true) => "yes",
-                    Some(false) => "no",
-                    None => "",
-                };
+                let verdict = measure.verdict(self.players).map_or("", Verdict::shown);
                 let _ = writeln!(
                     out,
-                    "| {} | {value} | {target} | {met} | {} |",
-                    measure.name, measure.basis
+                    "| {} | {value} | {target} | {verdict} | {} | {} | {} |",
+                    measure.name,
+                    measure.basis.shown(),
+                    measure.pilots,
+                    measure.from
                 );
             }
             out.push('\n');
@@ -1010,7 +1223,7 @@ mod tests {
 
     #[test]
     fn reproduces_the_hand_checked_figures() {
-        let report = compute(&history(), &[greybox()]);
+        let report = compute(&history(), &[greybox()], Players::Testers);
         assert_eq!((report.pilots, report.runs, report.sessions), (2, 5, 3));
 
         // Gate 1. Both pilots own a refinery at tier 1 and install it in
@@ -1133,7 +1346,7 @@ mod tests {
 
     #[test]
     fn an_empty_world_reports_nothing_measured_and_renders() {
-        let report = compute(&[], &[]);
+        let report = compute(&[], &[], Players::Owner);
         assert_eq!((report.pilots, report.runs), (0, 0));
         let markdown = report.markdown();
         assert!(markdown.starts_with("# Stage 1 gate report"));
@@ -1148,11 +1361,136 @@ mod tests {
     }
 
     #[test]
-    fn the_markdown_shows_values_targets_and_verdicts() {
-        let markdown = compute(&history(), &[greybox()]).markdown();
+    fn the_markdown_shows_values_targets_verdicts_and_bases() {
+        let markdown = compute(&history(), &[greybox()], Players::Testers).markdown();
         assert!(markdown.contains(
-            "| Median time to select a named hostile (normal vision) | 0.9 s | ≤ 1.0 s | yes |"
+            "| Median time to select a named hostile (normal vision) | 0.9 s | ≤ 1.0 s | met | solo, skill | 1 | 3 selections |"
         ));
-        assert!(markdown.contains("| Defeats followed by a launch in that session or the next | 50% | ≥ 60% | no | 2 defeats |"));
+        assert!(markdown.contains(
+            "| Defeats followed by a launch in that session or the next | 50% | ≥ 60% | failed | other players | 2 | 2 defeats |"
+        ));
+        assert!(markdown.contains("The pilots are testers other than the owner."));
+    }
+
+    /// Pilot 1's play alone: the owner's.
+    fn owner_alone() -> Vec<Recorded> {
+        history().into_iter().filter(|r| r.account == 1).collect()
+    }
+
+    fn measure<'a>(report: &'a Report, gate: usize, name: &str) -> &'a Measure {
+        report.gates[gate]
+            .measures
+            .iter()
+            .find(|m| m.name.starts_with(name))
+            .unwrap_or_else(|| panic!("no measure {name}"))
+    }
+
+    #[test]
+    fn one_pilot_leaves_gates_1_and_3_unproven_however_the_figures_fall() {
+        // Plan 7.3. Pilot 1 reconfigures in their first session and relaunches
+        // after their only defeat: both figures clear their thresholds, and
+        // neither may count, because no one but the owner played.
+        let report = compute(&owner_alone(), &[greybox()], Players::Owner);
+        assert_eq!(report.pilots, 1);
+        let early = measure(&report, 0, "Pilots who reconfigure");
+        let relaunch = measure(&report, 2, "Defeats followed by a launch");
+        assert_eq!((early.met(), relaunch.met()), (Some(true), Some(true)));
+        for measure in [early, relaunch] {
+            assert_eq!(measure.verdict(Players::Owner), Some(Verdict::Unproven));
+        }
+        assert_eq!(
+            report.gates[0].verdict(Players::Owner),
+            Some(Verdict::Unproven)
+        );
+        assert_eq!(
+            report.gates[2].verdict(Players::Owner),
+            Some(Verdict::Unproven)
+        );
+        // Even a measure with nothing to measure is unproven, not blank.
+        let tenth = measure(
+            &report,
+            2,
+            "Distinct choices per pilot on one seed at run 10",
+        );
+        assert_eq!(tenth.value, None);
+        assert_eq!(tenth.verdict(Players::Owner), Some(Verdict::Unproven));
+
+        let markdown = report.markdown();
+        assert!(!markdown.contains("| met | other players |"));
+        assert_eq!(markdown.matches("Gate: **unproven**").count(), 2);
+        assert!(markdown.contains("Every pilot is taken to be the owner"));
+    }
+
+    #[test]
+    fn the_owner_can_fail_a_gate_but_pass_a_skill_measure_only_as_the_owner() {
+        let report = compute(&owner_alone(), &[greybox()], Players::Owner);
+        // Gate 2: a 0.9 s median selection passes, by the owner only; a
+        // quarter of selections wrong fails outright.
+        let select = measure(&report, 1, "Median time to select");
+        let wrong = measure(&report, 1, "Wrong-target selections");
+        assert_eq!(
+            select.verdict(Players::Owner),
+            Some(Verdict::MetByOwnerOnly)
+        );
+        assert_eq!(wrong.verdict(Players::Owner), Some(Verdict::Failed));
+        assert_eq!(
+            report.gates[1].verdict(Players::Owner),
+            Some(Verdict::Failed)
+        );
+        // Gate 4: travel, 1,000 s of 5,400 s played, counts in full; the
+        // first decision is skill; the 1,405-minute recovery fails the gate.
+        let travel = measure(&report, 3, "Travel");
+        assert!(close(travel.value, 1_000.0 / 5_400.0));
+        assert_eq!(travel.verdict(Players::Owner), Some(Verdict::Met));
+        assert_eq!(
+            measure(&report, 3, "Seconds from launch").verdict(Players::Owner),
+            Some(Verdict::MetByOwnerOnly)
+        );
+        assert_eq!(
+            report.gates[3].verdict(Players::Owner),
+            Some(Verdict::Failed)
+        );
+    }
+
+    #[test]
+    fn a_gate_met_on_skill_alone_is_met_by_the_owner_only() {
+        let gate = Gate {
+            title: "test",
+            measures: vec![
+                Measure::new("a", Some(1.0), "s", Basis::Solo, 1, String::new())
+                    .target(Target::AtMost(2.0)),
+                Measure::new("b", Some(1.0), "s", Basis::Skill, 1, String::new())
+                    .target(Target::AtMost(2.0)),
+                Measure::new("c", None, "s", Basis::Skill, 0, String::new()),
+            ],
+        };
+        assert_eq!(gate.verdict(Players::Owner), Some(Verdict::MetByOwnerOnly));
+        assert_eq!(gate.verdict(Players::Testers), Some(Verdict::Met));
+    }
+
+    #[test]
+    fn testers_can_meet_what_the_owner_cannot() {
+        let report = compute(&owner_alone(), &[], Players::Testers);
+        assert_eq!(
+            report.gates[0].verdict(Players::Testers),
+            Some(Verdict::Met)
+        );
+        assert_eq!(
+            report.gates[2].verdict(Players::Testers),
+            Some(Verdict::Met)
+        );
+    }
+
+    #[test]
+    fn each_measure_counts_the_pilots_it_rests_on() {
+        let report = compute(&history(), &[greybox()], Players::Testers);
+        // Both pilots were destroyed once; only pilot 1 lost a fitting; the
+        // different-layout pairs span both; one greybox file.
+        assert_eq!(measure(&report, 2, "Defeats followed").pilots, 2);
+        assert_eq!(measure(&report, 3, "Minutes from losing").pilots, 1);
+        assert_eq!(measure(&report, 0, "Same seed, different layout").pilots, 2);
+        assert_eq!(measure(&report, 0, "Same seed, same layout").pilots, 0);
+        assert_eq!(measure(&report, 1, "Median time to select").pilots, 1);
+        assert_eq!(measure(&report, 1, "In play: lock attempts").pilots, 2);
     }
 }
