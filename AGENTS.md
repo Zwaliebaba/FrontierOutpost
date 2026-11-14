@@ -14,8 +14,10 @@ multiplayer isometric space game with an authoritative Rust server and an HTML5 
 | [Design/FrontierOutpost/](Design/FrontierOutpost/README.md) | The reference Blender scene, its generator, GLB exports and manifest. |
 
 - Build toward **Stage 1** of the design (§9): a persistent home outpost, one 1–4-player
-  expedition, NPC threats and NPC trading. Do not start Stage 2+ systems (shared regions, player
-  market, access-key marketplace, territory, MMO scale) unless explicitly asked.
+  expedition, NPC threats and NPC trading. After plan M7, the Stage 1 expansion (design §11, plan
+  M8 to M11) adds a wingman, a deeper outpost, further hulls and further sites. Do not start
+  Stage 2+ systems (shared regions, player market, access-key marketplace, territory, MMO scale)
+  unless explicitly asked.
 - When code and design disagree, say so and ask. Don't silently diverge, and don't edit the
   design documents unless asked to.
 

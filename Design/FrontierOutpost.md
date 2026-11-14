@@ -171,6 +171,8 @@ Stage 1 requires persistent home/account saves and authoritative cooperative ses
 | Loss of cargo and upgraded modules; reconnect within a grace window | Cross-session suspend and checkpoints, PvP, territory |
 | Mouse and keyboard on desktop | Touch controls and tablet layout; gamepad is not planned at any stage |
 
+The Stage 1 expansion (§11) lifts four of these limits after plan M7: a second pilot as an NPC wingman, a third socket and further facilities, further hulls, and further sites with a site map at preparation. Everything else in the right-hand column stays outside Stage 1.
+
 **Stage 1 gate measures.** Playtests use about eight invited testers who have not seen the game, on machines the owner provides. The thresholds below are provisional starting figures from the Revision 3 review and are confirmed before the first measurement. With no testers available, the owner first measures Stage 1 alone (plan M7): each measure is met, failed or unproven, with its basis stated, and a measure that needs players other than the owner is unproven, never met. Gates 1 and 3 cannot be met that way. The owner may begin Stage 2 with them unproven, accepting the risk that the signature does not hold for other players; they stay unproven until other players are measured.
 
 1. *Outpost enhancements change expedition decisions.* Among players with the same unlocks, active layouts differ; on the same seed, layout predicts pocket and rig choice; reconfigurations per ten runs are neither zero nor one per run. Testers shown before-and-after overview images can say what changed and what it lets them do. Provisionally, at least half of testers reconfigure at least once in three sessions.
@@ -317,3 +319,91 @@ The instance ends when every connected pilot has docked or been destroyed, or at
 - For every good the NPC sells above the price it buys at, and each recipe's inputs bought from NPCs cost more than NPCs pay for the output (32 against 26; 56 against 46). Processing a pilot's own haul still gains (20 becomes 26; 36 becomes 46).
 - Three tier 1 facilities draw 6 and two tier 2 facilities draw 6, both over the cap of 5; one tier 2 and one tier 1 draw exactly 5.
 - A solo pilot with no losses buys all six tiers in nine completed runs, valuing materials at NPC buy prices. One loss or a few reinstallations makes it about ten.
+
+## 11. Stage 1 expansion
+
+The owner has no testers (§9), so the game must hold one player for longer than Stage 1's
+content horizon of about ten runs. Once plan M7 has measured Stage 1 as §10 specifies it, the
+expansion lifts four Stage 1 limits: the second pilot, the outpost's size, the single hull and
+the single site. It adds no Stage 2 system: no shared hub, player market, access keys or PvP.
+Progression still comes only from facilities (§3): every new option is opened by a facility,
+so the expansion widens the outpost's signature instead of working around it. Every value below
+is a placeholder and a tunable test parameter, as in §10, sized for about fifteen hours of play,
+roughly thirty runs.
+
+**The wingman.** A pilot may launch with one wingman: an NPC pilot from the outpost's crew
+quarters, flying the starter hull. A wingman is a pilot for the purposes of threat and yield
+scaling (§10's crew table), but the contract payout is not scaled for it and it takes no share
+of the pot; its supplies cost the same launch cost as a pilot's. It follows simple orders and
+sees only what a pilot could see: it never scans, chooses pockets or knows a hidden seed value.
+It is weaker than an attentive human pilot by design, so §3's newcomer still adds what a
+wingman cannot, and a wingman is no evidence for the Stage 2 crew gate.
+
+| Order | The wingman | Needs |
+|---|---|---|
+| Follow (default) | Stays near the pilot and fights whatever attacks either ship | Crew quarters 1 |
+| Hold | Holds the place the pilot marks, such as a relay, and fights there | Crew quarters 1 |
+| Return | Flies home and docks | Crew quarters 1 |
+| Extract | Works the deposit the pilot marks, venting on its own; its cargo banks to the pilot when it docks | Crew quarters 2 |
+
+A destroyed wingman loses its cargo and fitting, and is ready again for the next launch. Ships in
+one instance, pilots and wingmen together, never exceed four, so a crew of four has no wingmen
+and §5's caps and snapshot budget stand.
+
+**A deeper outpost.** A reactor upgrade to the outpost's core (600 cr + 15 alloy, once) opens a
+third construction socket, C, beside the processor, and raises the power cap from 5 to 8. The
+three Stage 1 facilities gain a third tier, and three new facilities open the wingman, hulls and
+sites, so six facilities compete for three sockets. A tier 3 facility draws 4.
+
+| Facility | Tier | Cost | Opens |
+|---|---|---|---|
+| Sensor array | 3 | 1,200 cr + 20 alloy + 12 components | The rich pocket and the wave composition shown in preparation |
+| Refinery | 3 | 1,200 cr + 20 alloy + 12 components | Fuel cells: 2 volatiles make 1 fuel cell |
+| Fabrication bay | 3 | 1,200 cr + 20 alloy + 12 components | Armour plating module |
+| Crew quarters | 1 | 150 cr + 10 ore | A wingman in the basic fitting |
+| | 2 | 550 cr + 12 alloy + 5 components | The extract order; the wingman may fly a rig from the outpost's stock, at stake |
+| Hangar | 1 | 300 cr + 10 alloy | Hauler hull; afterburner module |
+| | 2 | 700 cr + 15 alloy + 6 fuel cells | Gunship hull |
+| Navigation array | 1 | 300 cr + 10 alloy | Second site on the site map |
+| | 2 | 700 cr + 15 alloy + 6 fuel cells | Third site |
+
+Adjacency for socket C: a navigation array there shows each site's hazard and dominant threat on
+the site map before a contract is taken. Fuel cells are a sink as well as a good: the NPC buys
+them at 60 and sells them at 90.
+
+**Ships and fittings.** The hangar's hulls are chosen at launch, like a rig. A destroyed hauler
+or gunship is lost like an upgraded module (§6): the pilot comes home in the starter hull and
+replaces the lost one at its NPC price.
+
+| Hull | From | Cargo | Handling | Combat | Slots | NPC replacement |
+|---|---|---|---|---|---|---|
+| Frigate (starter) | Always | ×1.0 | As §10 | As §10 | 1 rig, 2 modules | Reissued free |
+| Hauler | Hangar 1 | ×1.75 | 25% slower; turns slower; larger | Weapons ×0.75 | 1 rig, 1 module | 180 cr |
+| Gunship | Hangar 2 | ×0.6 | As the frigate | Weapons ×1.5; shield | 1 rig, 2 modules | 260 cr |
+
+| Module | From | Effect | NPC replacement |
+|---|---|---|---|
+| Afterburner | Hangar 1 | The cruise drive's speed inside the site for 10 seconds, every 60 seconds | 90 cr |
+| Armour plating | Fabrication bay 3 | 50% more hull; 10% slower | 90 cr |
+
+**Sites and the site map.** At preparation, a site map lists the sites the outpost's navigation
+array opens; each has its own contract at the chosen threat tier. In flight the system map still
+shows only the site being flown. Each new site is a template with its own pockets, one new
+hazard and one new NPC, and its pockets are keyed to capability tags like the first site's.
+
+| Site | Opened by | Character | New hazard | New NPC | Payout |
+|---|---|---|---|---|---|
+| The first site (§10) | Always | Balanced | §10's | None | ×1.0 |
+| Shattered moon | Navigation array 1 | Dense debris everywhere; salvage-rich; tight pockets | Debris collides everywhere, not only between pockets | Sentinel: a stationary turret that guards a pocket; long range, heavy hull, never moves | ×1.2 |
+| Ice ring | Navigation array 2 | Wide and open; long legs; volatiles-rich | Ion storm: lock range halves for 20 seconds every 2 minutes | Stalker: fast, stays beyond lock range until it strikes; a scan reveals it | ×1.4 |
+
+**Checks on these values.** Each is to hold for the numbers above, and travels with the data as
+an automated test, like §10's.
+
+- Pilots and wingmen together never exceed four ships in an instance, so §10's snapshot test of
+  4 ships and 24 NPCs still bounds every instance.
+- With six facilities, three sockets and a power cap of 8, no layout runs everything: a tier 3,
+  a tier 2 and a tier 1 facility draw 9.
+- Fuel cells are no arbitrage: 2 volatiles bought from the NPC cost 72, more than the 60 the NPC
+  pays for a fuel cell.
+- A solo pilot buys everything in §10 and here in about thirty runs.
