@@ -192,7 +192,7 @@ none waits on another's Blender work.
 
 | # | Work item | Proof |
 | --- | --- | --- |
-| 8.1 | `create_scene.py`: the crew quarters module at two tiers | The manifest lists it; the owner runs Blender and commits the regenerated assets |
+| 8.1 | `create_scene.py`: the crew quarters module at two tiers, per the [art brief](FrontierOutpost/README.md#stage-1-expansion-art-brief) | The manifest lists it and the brief's checks pass; the owner runs Blender and commits the regenerated assets |
 | 8.2 | Rules: crew quarters as data; a wingman is a ship that counts in threat and yield scaling but not in the pot; pilots and wingmen never exceed four ships | Sim tests against design §11, including the four-ship limit |
 | 8.3 | Wingman behaviour: follow, hold and return; extract at crew quarters 2; it acts only on what a pilot could see | A sim test for each order, and one that a wingman never acts on an unscanned seed value |
 | 8.4 | Server and protocol: a wingman hired at launch for the launch cost, with an instrumentation event; orders as intents; wingmen in snapshots | An integration test: a solo pilot and a wingman earn the relay bonus |
@@ -209,7 +209,7 @@ between six facilities.*
 
 | # | Work item | Proof |
 | --- | --- | --- |
-| 9.1 | `create_scene.py`: socket C, the reactor upgrade, and the three Stage 1 facilities at tier 3 | The manifest lists them; the owner runs Blender and commits the regenerated assets |
+| 9.1 | `create_scene.py`: the processor housing, socket C, the reactor upgrade, and the three Stage 1 facilities at tier 3, per the art brief | The manifest lists them and the brief's checks pass, including every module clearing the station from every socket; the owner runs Blender and commits the regenerated assets |
 | 9.2 | Rules as data: the reactor and power cap 8, socket C and its adjacency, tier 3, fuel cells with their recipe and prices | Sim tests; the data tests of design §11's checks, including no arbitrage |
 | 9.3 | Outpost view: build the reactor, socket C and tier 3, with previews that name what opens | A browser test builds in socket C |
 | 9.4 | Tier 3 reaches the expedition: preparation shows the rich pocket and waves; armour plating | An integration test for each |
@@ -222,7 +222,7 @@ replacement.*
 
 | # | Work item | Proof |
 | --- | --- | --- |
-| 10.1 | `create_scene.py`: the hangar module at two tiers, and the hauler and gunship hulls | The manifest lists them; the owner runs Blender and commits the regenerated assets |
+| 10.1 | `create_scene.py`: the hangar module at two tiers, and the hauler and gunship hulls, per the art brief | The manifest lists them and the brief's checks pass, including each hull in each berth; the owner runs Blender and commits the regenerated assets |
 | 10.2 | Hulls as data: cargo, handling, weapons, shield, slots, collision radius and replacement price; the afterburner and armour plating | Sim tests per hull; prediction uses the same rules in WebAssembly |
 | 10.3 | The hull in snapshots and on the wire | Snapshot vectors updated; the size test still passes at 4 ships and 24 NPCs |
 | 10.4 | Launch screen: choose a hull; the stake shows its replacement price | A browser test of the stake shown |
@@ -236,7 +236,7 @@ threat.*
 
 | # | Work item | Proof |
 | --- | --- | --- |
-| 11.1 | `create_scene.py`: the navigation array module at two tiers | The manifest lists it; the owner runs Blender and commits the regenerated assets |
+| 11.1 | `create_scene.py`: the navigation array module at two tiers, per the art brief | The manifest lists it and the brief's checks pass; the owner runs Blender and commits the regenerated assets |
 | 11.2 | The Shattered moon and the Ice ring as site templates, with their pockets keyed to capability tags | The same seed gives the same site for each; a second seed differs |
 | 11.3 | The sentinel and the stalker; debris everywhere and the ion storm | A sim test for each behaviour and hazard |
 | 11.4 | The site map at preparation, with a contract per site and the navigation array's adjacency | A browser test takes a contract on the second site |
