@@ -233,6 +233,13 @@ async fn save_runs(runs: &Runs) {
 /// The SIGTERM handler is installed here, not when the result is first
 /// awaited. Until it is, the signal kills the process outright, so this is
 /// called before the server says it is open.
+#[cfg_attr(
+    not(unix),
+    allow(
+        clippy::manual_async_fn,
+        reason = "without the eager SIGTERM handler the body is a plain async block; an async fn would defer the handler on Unix"
+    )
+)]
 fn shutdown_signal() -> impl Future<Output = ()> {
     #[cfg(unix)]
     let terminate = {
