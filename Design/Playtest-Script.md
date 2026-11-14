@@ -1,10 +1,14 @@
 # Stage 1 playtest script
 
-**Draft 1 · 12 November 2026 · For owner review (plan item 7.4)**
+**Draft 1 · 12 November 2026 · For owner review**
+
+With no testers available, plan M7 is closed by the owner alone, and this script's four sessions
+are what the owner plays for it (plan 7.5). The script itself is kept for the playtest with other
+players that gates 1 and 3 need, whenever there are any (plan M7, "What stays open").
 
 This script runs the Stage 1 playtests: about eight invited testers who have not seen the game,
 on machines the owner provides (design §9). It says what each session asks of a tester, what the
-facilitator does and does not do, and how the results become the gate write-up (plan 7.5). Items
+facilitator does and does not do, and how the results become the gate write-up (plan 7.6). Items
 marked **Open:** wait on the owner.
 
 ## 1. What the sessions must produce
@@ -38,7 +42,7 @@ only have to create the conditions for them, and not spoil them.
 
 ## 3. Before the first session
 
-### Machines (plan 7.3)
+### Machines
 
 - Each tester has their own operating-system account on the machine they use. Their passkey
   lives there (AGENTS.md §8), so a tester always signs in on the same machine and account.

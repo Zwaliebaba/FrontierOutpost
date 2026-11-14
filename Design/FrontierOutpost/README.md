@@ -95,3 +95,10 @@ The runtime preview is a native browser capture from a granted local demonstrati
 not a Blender render or evidence of ordinary progression pacing. The current HUD uses the
 measured clear scene area, forward berth labels and a pinned launch receipt. See
 [the review implementation record](../Look-And-Feel-Implementation.md) for changes and validation.
+
+## Frozen from plan M8
+
+From plan M8 every new asset is modelled by hand through the art pipeline in
+[`Design/Art/`](../Art/README.md), which also holds the Stage 1 expansion's art brief. This scene
+is frozen: its assets stay until each is replaced there, and `create_scene.py` changes only to
+remove what has moved.

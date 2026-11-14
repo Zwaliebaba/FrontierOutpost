@@ -33,13 +33,15 @@ Ships in the same family share split dorsal armor, a central service spine, oran
 
 The cruiser remains a separate asset at its original scale. Future small ships should be designed around their role and landing envelope instead of uniformly shrinking the cruiser. Preserve the starter hull's recognizable silhouette when adding equipment.
 
+Every player hull reads as one family and never as a hostile: allegiance is told by shape as well as colour. Each hull's role shows in its proportions: the hauler is wide with slung cargo pods and no visible guns; the gunship keeps the frigate's length and shows its weapons and a shield emitter.
+
 Flight configurations retract landing gear and close its bays. Landed configurations deploy gear, idle the engines and align with the berth. Utility rigs should attach to explicit hardpoints and remain removable from the base ship.
 
 ## 4. Scale, docking and clearance
 
 Maintain consistent relative scale across scenes. The current Blender files use metre units, Z-up and ship-local +Y forward; glTF exports use Y-up. These are the current working scene dimensions. Choose any later physical-scale conversion once for the whole game, including ships, stations, collision, lights and movement speeds.
 
-At the current working scale, the starter frigate's landed envelope is approximately 1.29 wide × 2.67 long × 1.14 high. Berth 07's painted safety perimeter is 4.08 wide × 3.06 long. Preserve at least 0.15 units of horizontal safety clearance, including gear and attachments; scale that margin with the project.
+At the current working scale, the starter frigate's landed envelope is approximately 1.29 wide × 2.67 long × 1.14 high. Since the four-berth upgrade, each berth's safety boundary is 3.6 wide × 3.6 long (`docking_validation` in the outpost manifest). Preserve at least 0.15 units of horizontal safety clearance, including gear and attachments; scale that margin with the project. So while the berths stand, every player hull, landed with its gear and attachments, is at most 3.3 × 3.3, and must fit every berth, not only berth 07. Once the station is rebuilt around its internal hangar (design §11), the berths are gone and the hangar mouth is the only fit: every hull passes through it flying straight in, with the same clearance on every side.
 
 Check the complete evaluated geometry, including bevels and equipment. A hull fitting inside a painted rectangle is only one check: connectors, rails, masts and other station structure must also clear the ship. Keep approach surfaces flush and unobstructed. Flight scenes also need physical separation between the hull, tools and nearby rocks.
 
@@ -81,6 +83,10 @@ Use a strong central station mass, secondary side pods and a clearly readable ap
 
 Propulsion reads as a blue core with a tapered plume. A landed ship idles its drive; keep exhaust separate from the hull envelope.
 
+
+Each facility keeps a signature shape no other facility uses, so facilities are told apart at the zoom where the whole outpost fits: dishes are the sensor array's, a closed hall with doors is the fabrication bay's, an open cradle is the shipyard's. Each tier stands more than 0.4 taller than the one below it, tier 3 included, and a module in any socket clears every berth and departure corridor while the sockets are outside.
+
+Once the station is rebuilt (design §11), it is seen two ways in the one tactical camera. The exterior carries no sockets, modules or parked ships; the outpost's growth shows on it as tells, one small marker per installed facility in that facility's signature shape, on the hardpoint of the socket it is installed in, growing with its tier, so a facility is recognised outside and in. The interior is a cutaway open to the resting view: no wall, module or parked ship covers another socket or parking place from it. Upgrades to the core itself, such as the reactor, are separate named meshes shown only once bought, and leave the core's silhouette at the berths and sockets unchanged.
 ## 8. Asset and scene structure
 
 ### Shared assembly conventions
@@ -96,6 +102,8 @@ Store each scene under `Design/<SceneName>/` (the outpost scene is `Design/Front
 - GLB exports for gameplay assets and separate effects.
 - A manifest recording axes, units, geometry statistics and meaningful validation results.
 - A README explaining rebuilding, importing and the intended activity.
+
+From plan M8, new assets are modelled by hand, one `.blend` per asset in `Design/Art/`, and a shared tool stands in for the generation script: it checks each file against one contract and one material library, exports it and writes its manifest ([the art pipeline](Art/README.md)). The generated outpost scene is frozen and its assets move there one by one.
 
 Use standard metallic/roughness materials for GLB geometry. Procedural backgrounds, Blender lighting and compositor glow remain presentation elements. Recreate dynamic particles, bloom and exhaust in the game engine. The outpost scene is a static visual setup; docking, extraction, inventory, targeting and combat simulation are separate gameplay work.
 

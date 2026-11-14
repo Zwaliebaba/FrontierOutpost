@@ -14,8 +14,12 @@ multiplayer isometric space game with an authoritative Rust server and an HTML5 
 | [Design/FrontierOutpost/](Design/FrontierOutpost/README.md) | The reference Blender scene, its generator, GLB exports and manifest. |
 
 - Build toward **Stage 1** of the design (§9): a persistent home outpost, one 1–4-player
-  expedition, NPC threats and NPC trading. Do not start Stage 2+ systems (shared regions, player
-  market, access-key marketplace, territory, MMO scale) unless explicitly asked.
+  expedition, NPC threats and NPC trading. After plan M7, the Stage 1 expansion (design §11, plan
+  M8 to M12) adds a wingman, a larger station with an internal hangar (an exterior with
+  facility tells, and an interior with the modules and ships), a deeper outpost, further hulls and
+  further sites. Do not start
+  Stage 2+ systems (shared regions, player market, access-key marketplace, territory, MMO scale)
+  unless explicitly asked.
 - When code and design disagree, say so and ask. Don't silently diverge, and don't edit the
   design documents unless asked to.
 
@@ -35,6 +39,7 @@ client/                 TypeScript + Vite + Three.js browser client
   src/sim/              loads the WebAssembly simulation; pkg/ is written by wasm-bindgen
 spikes/                 Throwaway experiments, each its own Cargo workspace; not built by CI
 Design/                 Game design, style guide, Blender scenes and their exports
+  Art/                  hand-made art from plan M8: one folder per asset, the tool, the catalogue
 .github/workflows/      CI
 ```
 
@@ -144,12 +149,17 @@ change ships with a test. Keep comments for the *why*.
 - **Binary files are committed to Git directly**, not to Git LFS. `.gitattributes` marks them
   `binary`; add the pattern *before* committing a new binary type. CI fails if a Git LFS pointer
   is committed. Keep them small: every regenerated binary stays in the history for good.
-- Do not hand-edit `.glb`, `.blend`, `scene_manifest.json` or preview PNGs: change
-  `create_scene.py` and regenerate. Regenerating on a different Blender version changes bytes
+- **From plan M8, art is modelled by hand** in `Design/Art/` ([its README](Design/Art/README.md)):
+  one `.blend` per asset, checked and exported by `Design/Art/tools/frontier_art.py`, found by the
+  game through `catalogue.json`. The owner models; agents write the tool, the CI check and the
+  game code, and never edit a `.blend`, an exported GLB, a manifest or the catalogue by hand.
+- The generated scene, `Design/FrontierOutpost/`, is frozen: do not hand-edit its `.glb`,
+  `.blend`, `scene_manifest.json` or preview PNGs, and change `create_scene.py` only to remove an
+  asset that has moved to `Design/Art/`. Regenerating on a different Blender version changes bytes
   without changing geometry, so commit regenerated binaries only on purpose.
-- `create_scene.py` must keep working on Blender 4.3+ and 5.x. After changing it, run it with
-  `SCENE_OUTPUT` pointing outside the repo and diff the new `scene_manifest.json` against the
-  committed one.
+- `create_scene.py` and `frontier_art.py` must keep working on Blender 4.3+ and 5.x. After
+  removing an asset from `create_scene.py`, run it with `SCENE_OUTPUT` pointing outside the repo
+  and diff the new `scene_manifest.json` against the committed one.
 - A new scene goes in `Design/<SceneName>/` with the files listed in style guide §8. Record any
   new visual convention in the style guide.
 
@@ -187,4 +197,9 @@ Decided:
   owner's own network. The hardening the 2026-11-11 code review lists for clients the owner does
   not control (its §4) stays deferred until a build is reachable from outside that network.
 - Licence: all rights reserved for now (`LICENSE`).
-- Art for Stage 1: sockets and facility modules come from `create_scene.py`, not primitives.
+- Stage 2 may start without other players. The owner has no testers, so Stage 1 is measured alone
+  (plan M7), and Stage 2 may begin with gates 1 and 3 unproven, an accepted risk. Reports keep
+  them unproven until players other than the owner are measured; never record them as met.
+- Art: hand-made by the owner from plan M8, through the art pipeline in `Design/Art/`, scaled to
+  tens of facility modules; not primitives. The generated scene is frozen and its assets move to
+  the pipeline one by one.
