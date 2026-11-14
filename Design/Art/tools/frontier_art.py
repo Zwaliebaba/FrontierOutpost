@@ -295,8 +295,10 @@ def check_asset(art=ART):
             errors.append(f"visibility: {obj.name} must be visible for export")
         if obj.animation_data or obj.constraints:
             errors.append(f"animation: {obj.name} has animation or constraints")
+        if obj.instance_type != "NONE":
+            errors.append(f"geometry: {obj.name} must realise collection instances before export")
         if obj.type == "MESH":
-            if obj.data.shape_keys or obj.instance_type != "NONE":
+            if obj.data.shape_keys:
                 errors.append(f"geometry: {obj.name} must use static, realised geometry")
             if any(modifier.type in {"NODES", "ARMATURE", "PARTICLE_SYSTEM"} for modifier in obj.modifiers):
                 errors.append(f"geometry: {obj.name} must realise procedural instances or rigging before export")

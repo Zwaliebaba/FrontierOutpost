@@ -5,7 +5,7 @@ The reference-inspired station rebuild remains M9 work.
 
 | Item | Delivered proof |
 | --- | --- |
-| 8.1 | Shared contract/material library; new/check/export for all four kinds; 15 Blender tests including valid and deliberately broken fixtures, export/reimport bounds and triangle counts, and unchanged repeat exports |
+| 8.1 | Shared contract/material library; new/check/export for all four kinds; 16 Blender tests including valid and deliberately broken fixtures, export/reimport bounds and triangle counts, and unchanged repeat exports |
 | 8.2 | Generated catalogue, complete ready-facility coverage, pending-art build refusal, source/export hash checks, eight Blender-free verifier tests, and browser checks that each facility downloads once for both tiers |
 | 8.3 | Sensor array, refinery and fabrication bay migrated into separate editable sources, with both tiers and tells; the frozen generator/scene no longer contains them; all other regenerated manifest data matches |
 | 8.4 | Two crew-quarters habitat tiers and matching exterior tells, validated and exported through the same pipeline |
@@ -26,7 +26,7 @@ Verified with the pinned Rust 1.99.1 and Node 26, and Blender 4.3.2:
 - `RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked`
 - `cd client && npm run check`: 363 passing tests, format/lint/types/build checks
 - `cd client && npm run e2e:software`: 46 passing browser tests against real servers
-- `blender -b --python-exit-code 1 --python Design/Art/tools/tests/test_frontier_art.py`: 15 passing tests
+- `blender -b --python-exit-code 1 --python Design/Art/tools/tests/test_frontier_art.py`: 16 passing tests
 - `python3 -m unittest discover -s Design/Art/tools/tests -p test_check_exports.py`: eight passing tests
 - `python3 Design/Art/tools/check_exports.py` and `python3 Design/Art/tools/catalogue.py --check`
 

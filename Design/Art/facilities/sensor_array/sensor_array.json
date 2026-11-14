@@ -10,12 +10,12 @@
     "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
     "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
     "source": "3219d648bad02227ed2aacf547fb01532f584c0fff87df3f0c1a9851ad9ff0c0",
-    "tool": "ff6e9899f67ff566e140c960f599b98cc10c04fa88d78bb0700eb88b4ef21443"
+    "tool": "6786478f3fff1dc4779170a3ceae9f6b251191b8038dc062153690f7d48b401e"
   },
   "kind": "facility",
   "planned": false,
   "preview": "sensor_array.png",
-  "preview_sha256": "426827c580ce7738e885bd66ea654a37fafcb4c160cca9dc6fde8db3fd9f9fe5",
+  "preview_sha256": "d8bc3de6e7725fe882b618b82b4806f4a82302c5df06f523b62b2339e53a00db",
   "roots": {
     "Facility_sensor_array_T1": {
       "anchors": {},

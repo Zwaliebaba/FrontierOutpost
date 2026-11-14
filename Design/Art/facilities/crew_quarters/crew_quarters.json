@@ -10,12 +10,12 @@
     "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
     "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
     "source": "9ce0011f1bc5a1b57c6da1d137cafaa60156572759394db99f685527b6b9adbc",
-    "tool": "ff6e9899f67ff566e140c960f599b98cc10c04fa88d78bb0700eb88b4ef21443"
+    "tool": "6786478f3fff1dc4779170a3ceae9f6b251191b8038dc062153690f7d48b401e"
   },
   "kind": "facility",
   "planned": false,
   "preview": "crew_quarters.png",
-  "preview_sha256": "cbf1e3641c8701aa7efa0425adabd73034aaa534aec113c0da6b5bab3b16235d",
+  "preview_sha256": "4ca519437a9f1e8140b9bb179a6da6f6899743553e686b47146e607d4ccb47cf",
   "roots": {
     "Facility_crew_quarters_T1": {
       "anchors": {},

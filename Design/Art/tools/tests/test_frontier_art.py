@@ -134,6 +134,17 @@ class PipelineTests(unittest.TestCase):
         modifier.show_render = False
         self.assertFailure("geometry")
 
+    def test_unrealised_collection_instance_is_not_silently_omitted_from_bounds(self):
+        self.fixture()
+        source = bpy.data.collections.new("Instanced parts")
+        copy = bpy.data.objects["body1"].copy()
+        copy.parent = None
+        source.objects.link(copy)
+        instance = art.empty("Unrealised", bpy.data.collections["Export"], bpy.data.objects["Facility_refinery_T1"])
+        instance.instance_type = "COLLECTION"
+        instance.instance_collection = source
+        self.assertFailure("geometry")
+
     def test_evaluated_modifier_envelope(self):
         self.fixture()
         array = bpy.data.objects["body1"].modifiers.new("Expand", "ARRAY")
