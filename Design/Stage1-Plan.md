@@ -131,21 +131,54 @@ new on the next run. This is the game's signature.*
 | 6.3 | The two-ship relay objective | Sim test |
 | 6.4 | A destroyed pilot returns home while the crew continues; a disconnected pilot's run is abandoned if the instance ends | Integration tests for both |
 
-### M7 · Measure and playtest
+### M7 · Measure
 
-*At the end: the four Stage 1 gates have results.*
+*At the end: every Stage 1 gate is met, failed or recorded as unproven, from evidence the owner
+can produce alone.*
+
+There are no testers, so the owner closes M7 alone. A designer playing their own game can fail a
+gate but can rarely pass one: they know the rules, they want the game to work, and they will come
+back to it whatever happens. So M7 measures what one person can measure honestly, checks against
+the rules what can be checked without players, and records the rest as unproven instead of
+lowering the bar. Each measure carries its basis:
+
+- **Solo:** the owner's own play. It counts in full where the measure comes from the game's
+  structure, such as time spent travelling. Where the owner's expertise flatters the figure, a
+  miss is a failure and a pass is recorded as *met by the owner only*.
+- **Rules:** computed from `frontier-sim` without anyone playing.
+- **Unproven:** needs players other than the owner. It is neither met nor failed.
+
+| Gate (design §9) | Basis in M7 | What M7 can show |
+| --- | --- | --- |
+| 1. Outpost changes decisions | Rules; solo | Whether a facility changes the best pocket or rig among those open either way. Layouts compared across players stay unproven |
+| 2. Targeting stays readable | Solo, in all three vision modes | A failure, or a pass by the owner only |
+| 3. Players repeat after loss | None | Unproven: no measure of one's own return means anything |
+| 4. Travel and recovery | Solo | Travel share and minutes to recover, in full. Time to the first decision is a failure or a pass by the owner only |
+| Crew evidence (not a gate) | Solo | The owner on two clients; the newcomer pairing stays unproven |
 
 | # | Work item | Proof |
 | --- | --- | --- |
 | 7.1 | Gate events: selections, losses and relaunches, layouts and reconfigurations, choices per seed | Each §9 measure can be computed from one recorded session |
 | 7.2 | A report that computes the gate measures from the database | It reproduces hand-checked figures from a fixture |
-| 7.3 | Playtest machines: each prepared to trust the server's certificate and reach it by name | A second machine signs in and joins a run |
-| 7.4 | A playtest script, including the veteran, newcomer and two-client comparison | Reviewed by the owner |
-| 7.5 | Run the playtests and write up each gate against its provisional threshold | The write-up |
+| 7.3 | The report states each measure's basis and how many players it rests on, and marks a measure that needs other players *unproven* when the saves hold one, never met | A report test on a one-pilot fixture shows gates 1 and 3 unproven, not met |
+| 7.4 | A rules check for gate 1: for each seed in the playtest pool and each layout of the three facilities, the pocket and rig with the best expected take, counting only those open under both layouts compared, so an unlock alone does not count | A sim test on a fixture where a facility must change the best choice; the check's table for the pool |
+| 7.5 | Solo sessions: from a wiped world on a fresh account, the owner plays the playtest script's four sessions (about ten runs) on the seed pool, runs the greybox block in normal, grey and one colour-deficient mode, and flies one crew run on two clients | The report from those saves and greybox files |
+| 7.6 | The write-up: each gate met, failed or unproven, with its basis | The write-up; design §9 records the outcome |
+
+**Closing M7.** The owner confirms the provisional thresholds before 7.5. M7 closes when the
+write-up exists. A failed gate is fixed and measured again before Stage 1 is called done; an
+unproven gate does not hold M7 open.
+
+**What stays open.** Gates 1 and 3 cannot be met without other players, and Stage 1 exists to
+prove them. Before any Stage 2 work starts, they are measured with players other than the owner,
+using the [playtest script](Playtest-Script.md). Even two or three people in person, on the owner's
+machines and network, answer the questions one person cannot: what confuses a first session, and
+whether anyone comes back unasked. Testers reached over the internet would reopen the hosting
+decision and the deferred hardening (AGENTS.md §8).
 
 ## 4. Size
 
-The plan has 44 work items. Some will split once work starts, so expect 55 to 75 pull requests.
+The plan has 45 work items. Some will split once work starts, so expect 55 to 75 pull requests.
 The plan gives no dates: with agents writing the code, the pace is set by how many pull requests
 the owner can review in a week. Once M0 and M1 are done, their actual pace gives a real figure
 for the rest.
@@ -161,7 +194,8 @@ for the rest.
 | `web-transport-quinn` is pre-1.0 and changing | Throughout | Keep it behind the transport interface and pin its version |
 | Windows builds | M0.1 | Proven in CI before anything depends on it |
 | Facility art waits on Blender | M5.1 | It has no code dependency and can start any time after M0 |
-| Passkeys on shared playtest machines | M7.3 | See open item 1 |
+| Passkeys on shared playtest machines | The playtest after M7 | Each tester has their own operating-system account (AGENTS.md §8) |
+| A solo measure is read as a pass | M7 | Each measure carries its basis; a measure that needs other players is unproven, and gates 1 and 3 must be met with other players before Stage 2 |
 
 ## 6. Open items for the owner
 
