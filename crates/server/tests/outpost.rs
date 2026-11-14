@@ -51,7 +51,7 @@ async fn the_catalog_follows_signing_in() {
         ServerMessage::Catalog { catalog } => catalog,
         other => panic!("expected the catalog, got {other:?}"),
     };
-    assert_eq!(catalog.facilities.len(), 3);
+    assert_eq!(catalog.facilities.len(), 4);
     assert_eq!(catalog.supplies, 40);
     assert!(matches!(
         read_any(&mut recv).await,
@@ -101,7 +101,14 @@ async fn buying_a_facility_opens_its_pocket_on_the_next_run() {
         "the sensor array locates its signal"
     );
 
-    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    write(
+        &mut send,
+        &ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        },
+    )
+    .await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Account { .. }

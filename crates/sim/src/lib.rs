@@ -23,6 +23,7 @@ pub mod run;
 pub mod ship;
 pub mod site;
 pub mod skirmish;
+pub mod wingman;
 pub mod world;
 
 /// Simulation steps per second (design section 10).

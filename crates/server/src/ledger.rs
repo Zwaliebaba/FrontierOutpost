@@ -109,6 +109,7 @@ impl fmt::Display for Party {
 /// Why something moved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reason {
+    WingmanSupplies,
     StartingBalance,
     LaunchSupplies,
     /// Cargo docked at home (design section 6).
@@ -138,6 +139,7 @@ impl Reason {
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
+            Self::WingmanSupplies => "wingman launch supplies",
             Self::StartingBalance => "starting balance",
             Self::LaunchSupplies => "launch supplies",
             Self::Banked => "banked cargo",

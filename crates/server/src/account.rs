@@ -13,7 +13,7 @@ use frontier_sim::outpost::{self, Outpost};
 use serde::{Deserialize, Serialize};
 
 /// The version [`Account::to_json`] writes.
-pub const DOCUMENT_VERSION: u32 = 5;
+pub const DOCUMENT_VERSION: u32 = 6;
 
 /// Credits a new pilot starts with (design section 10).
 pub const STARTING_CREDITS: u32 = 100;
@@ -53,7 +53,15 @@ impl Stock {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WingmanReservation {
+    pub run: String,
+    pub piece: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Account {
+    #[serde(default)]
+    pub wingman_reservation: Option<WingmanReservation>,
     pub world: String,
     pub callsign: String,
     pub credits: u32,
@@ -84,12 +92,13 @@ pub enum DocumentError {
     WrongWorld { expected: String, found: String },
 }
 
-/// Version 5: the account as it is. Version 4 is the same document without
+/// Version 6 adds the optional wingman stock reservation. Version 5 has no
+/// reservation and defaults it to none. Version 4 is the same document without
 /// the time the processor's batch in hand was started, so its batches start
 /// when the processor is next looked at; version 3 also lacks
 /// `supplies_carried`, which then reads as false.
 #[derive(Serialize, Deserialize)]
-struct V5 {
+struct Current {
     version: u32,
     #[serde(flatten)]
     account: Account,
@@ -150,6 +159,7 @@ impl Account {
             outpost: Outpost::default(),
             processing: Queue::default(),
             hangar: Hangar::default(),
+            wingman_reservation: None,
             supplies_carried: false,
         }
     }
@@ -192,7 +202,7 @@ impl Account {
                     .collect();
                 account
             }
-            3..=5 => serde_json::from_str::<V5>(json)?.account,
+            3..=6 => serde_json::from_str::<Current>(json)?.account,
             newer => return Err(DocumentError::TooNew(newer)),
         };
         if account.world != world {
@@ -209,7 +219,7 @@ impl Account {
     /// # Errors
     /// Cannot fail for these types; the error is serde's.
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(&V5 {
+        serde_json::to_string(&Current {
             version: DOCUMENT_VERSION,
             account: self.clone(),
         })

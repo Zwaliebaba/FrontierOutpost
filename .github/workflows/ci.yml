@@ -93,7 +93,9 @@ jobs:
       - run: cargo build --locked -p frontier-server
       - run: npx playwright install --with-deps chromium
         working-directory: client
-      - run: npm run e2e
+      # Linux CI has no hardware GPU. Keep CSS viewports and assertions unchanged,
+      # using the repository's existing smaller backing buffers for CPU rendering.
+      - run: npm run e2e:software
         working-directory: client
 
   repo:
@@ -101,6 +103,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Checked art exports match their sources and contract
+        run: |
+          python3 Design/Art/tools/check_exports.py
+          python3 Design/Art/tools/catalogue.py --check
+          python3 -m unittest discover -s Design/Art/tools/tests -p test_check_exports.py
       # Binaries are committed as they are, not to Git LFS (the owner's decision); a pointer
       # committed by a client that still has LFS hooks would leave a file that does not load.
       - name: No Git LFS pointers in the index

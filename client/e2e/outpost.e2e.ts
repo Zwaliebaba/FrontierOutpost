@@ -16,20 +16,15 @@ async function scene(page: Page): Promise<SceneReport> {
 const home = (page: Page) => page.locator('#home[data-state="open"]');
 const account = (page: Page) => page.locator("#account");
 
-test("the outpost loads the station, both sockets and every module", async ({ page }) => {
+test("the outpost loads the station and sockets while unused catalogue modules wait", async ({
+  page,
+}) => {
   await signUp(page);
   await home(page).locator('button[data-action="view:facilities"]').click();
   await expect(home(page)).toHaveAttribute("data-scene", /sockets/);
   const report = await scene(page);
   expect(report.sockets).toEqual(["a", "b"]);
-  expect(report.facilities).toEqual([
-    "fabrication_bay:1",
-    "fabrication_bay:2",
-    "refinery:1",
-    "refinery:2",
-    "sensor_array:1",
-    "sensor_array:2",
-  ]);
+  expect(report.facilities).toEqual([]);
   expect(report.installed).toEqual([]);
   // A new pilot cannot afford a facility, and socket B is closed.
   await expect(home(page).locator('button[data-action="install:refinery"]')).toBeDisabled();
@@ -165,3 +160,25 @@ test("a loaded batch starts at once, counts down, and can be taken back", async 
   await expect(account(page)).toHaveAttribute("data-ore", "40");
   await expect(status).toHaveAttribute("data-state", "idle");
 });
+
+for (const facility of ["sensor_array", "refinery", "fabrication_bay", "crew_quarters"]) {
+  test(`the catalogue loads ${facility} once and displays both checked tiers`, async ({ page }) => {
+    const requests: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes(facility) && request.url().includes(".glb"))
+        requests.push(request.url());
+    });
+    await signUp(page, RICH);
+    await home(page).locator('button[data-action="view:facilities"]').click();
+    expect(requests).toEqual([]);
+    await home(page).locator(`button[data-action="install:${facility}"]`).click();
+    await expect
+      .poll(async () => (await scene(page)).installed)
+      .toEqual([{ socket: "a", facility, tier: 1, powered: true }]);
+    await home(page).locator('button[data-action="upgrade"]').click();
+    await expect
+      .poll(async () => (await scene(page)).installed)
+      .toEqual([{ socket: "a", facility, tier: 2, powered: true }]);
+    expect(requests).toHaveLength(1);
+  });
+}

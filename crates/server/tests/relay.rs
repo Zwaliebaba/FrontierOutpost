@@ -60,7 +60,14 @@ async fn a_session_survives_loss_and_jitter() {
         read(&mut recv).await,
         ServerMessage::Contract { .. }
     ));
-    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    write(
+        &mut send,
+        &ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        },
+    )
+    .await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Account { .. }

@@ -1,0 +1,184 @@
+{
+  "blender_version": "4.3.2",
+  "bounds_space": "root-local Blender Z-up metres",
+  "glb": "sensor_array.glb",
+  "gltf_up": "+Y",
+  "id": "sensor_array",
+  "inputs": {
+    "blender": "4.3.2",
+    "contract": "f2d4607c59da6e235b18eebd780e7a9009a16334661549b2bc96160d7788f1f8",
+    "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
+    "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
+    "source": "3219d648bad02227ed2aacf547fb01532f584c0fff87df3f0c1a9851ad9ff0c0",
+    "tool": "6786478f3fff1dc4779170a3ceae9f6b251191b8038dc062153690f7d48b401e"
+  },
+  "kind": "facility",
+  "planned": false,
+  "preview": "sensor_array.png",
+  "preview_sha256": "d8bc3de6e7725fe882b618b82b4806f4a82302c5df06f523b62b2339e53a00db",
+  "roots": {
+    "Facility_sensor_array_T1": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          1.0299999713897705,
+          1.0299994945526123,
+          2.6199991703033447
+        ],
+        "min": [
+          -1.0299999713897705,
+          -1.179999589920044,
+          0.0
+        ]
+      },
+      "materials": [
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "Titanium"
+      ],
+      "nodes": [
+        "Facility_sensor_array_T1",
+        "Operating_Tier_1__Facility_sensor_array_T1",
+        "Sensor | collar__Facility_sensor_array_T1",
+        "Sensor | dish__Facility_sensor_array_T1",
+        "Sensor | feed arm__Facility_sensor_array_T1",
+        "Sensor | feed horn__Facility_sensor_array_T1",
+        "Sensor | mast__Facility_sensor_array_T1",
+        "Sensor | plinth__Facility_sensor_array_T1",
+        "Sensor | status light.001__Facility_sensor_array_T1",
+        "Sensor | status light.002__Facility_sensor_array_T1",
+        "Sensor | status light.003__Facility_sensor_array_T1",
+        "Sensor | status light__Facility_sensor_array_T1"
+      ],
+      "triangles": 452
+    },
+    "Facility_sensor_array_T2": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          1.1975557804107666,
+          1.1700007915496826,
+          4.530000686645508
+        ],
+        "min": [
+          -1.1699998378753662,
+          -1.179999589920044,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "Titanium"
+      ],
+      "nodes": [
+        "Facility_sensor_array_T2",
+        "Operating_Tier_1__Facility_sensor_array_T2",
+        "Operating_Tier_2__Facility_sensor_array_T2",
+        "Sensor | array tile.001__Facility_sensor_array_T2",
+        "Sensor | array tile.002__Facility_sensor_array_T2",
+        "Sensor | array tile.003__Facility_sensor_array_T2",
+        "Sensor | array tile.004__Facility_sensor_array_T2",
+        "Sensor | array tile__Facility_sensor_array_T2",
+        "Sensor | beacon__Facility_sensor_array_T2",
+        "Sensor | collar.001__Facility_sensor_array_T2",
+        "Sensor | dish.001__Facility_sensor_array_T2",
+        "Sensor | dish.002__Facility_sensor_array_T2",
+        "Sensor | feed horn.001__Facility_sensor_array_T2",
+        "Sensor | feed horn.002__Facility_sensor_array_T2",
+        "Sensor | lattice leg.001__Facility_sensor_array_T2",
+        "Sensor | lattice leg.002__Facility_sensor_array_T2",
+        "Sensor | lattice leg.003__Facility_sensor_array_T2",
+        "Sensor | lattice leg__Facility_sensor_array_T2",
+        "Sensor | lattice ring.001__Facility_sensor_array_T2",
+        "Sensor | lattice ring.002__Facility_sensor_array_T2",
+        "Sensor | lattice ring__Facility_sensor_array_T2",
+        "Sensor | phased array__Facility_sensor_array_T2",
+        "Sensor | plinth.001__Facility_sensor_array_T2",
+        "Sensor | status light.004__Facility_sensor_array_T2",
+        "Sensor | status light.005__Facility_sensor_array_T2",
+        "Sensor | status light.006__Facility_sensor_array_T2",
+        "Sensor | status light.007__Facility_sensor_array_T2",
+        "Sensor | status light.008__Facility_sensor_array_T2",
+        "Sensor | status light.009__Facility_sensor_array_T2",
+        "Sensor | status light.010__Facility_sensor_array_T2",
+        "Sensor | status light.011__Facility_sensor_array_T2"
+      ],
+      "triangles": 2636
+    },
+    "Tell_sensor_array_T1": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          0.4000000059604645,
+          0.4000000059604645,
+          0.800000011920929
+        ],
+        "min": [
+          -0.4000000059604645,
+          -0.4000000059604645,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "IonBlue",
+        "Ochre",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "IonBlue",
+        "Tell_sensor_array_T1"
+      ],
+      "triangles": 452
+    },
+    "Tell_sensor_array_T2": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          0.5718724727630615,
+          0.5761651396751404,
+          1.149999976158142
+        ],
+        "min": [
+          -0.5761558413505554,
+          -0.5712721347808838,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "IonBlue",
+        "Ochre",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "IonBlue.001",
+        "Tell_sensor_array_T2"
+      ],
+      "triangles": 460
+    }
+  },
+  "schema_version": 1,
+  "sha256": "0f2efbfd47f12be4106a8323418f7b5fcc4b307752a42d48ea78978acdbe4547",
+  "source_forward": "+Y",
+  "source_up": "+Z",
+  "tiers": 2,
+  "tool_version": "0.1.0",
+  "units": "metres"
+}

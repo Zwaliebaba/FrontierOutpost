@@ -9,6 +9,18 @@ test("holding Space damages the locked hostile", async ({ page }) => {
   // The ore field's NPCs notice the pilot and close in; wait until one is in range.
   await expect(async () => {
     await page.keyboard.press("Tab");
+    // The readout is drawn in the frame loop. Let the new selection render before
+    // trusting "in range", which may still describe the previous target after Tab.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              resolve();
+            });
+          });
+        }),
+    );
     await expect(lock).toHaveAttribute("data-range", "in", { timeout: 500 });
   }).toPass({ timeout: 15_000 });
   const target = await lock.getAttribute("data-target");

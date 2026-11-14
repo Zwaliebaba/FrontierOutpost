@@ -1,23 +1,27 @@
 import { BERTHS } from "./placement";
-import { Box3, Mesh, Vector3 } from "three";
+import { Box3, Group, Mesh, Vector3 } from "three";
 import type { BufferGeometry, Object3D } from "three";
 import { describe, expect, it } from "vitest";
-import facilitiesGlb from "../../../Design/FrontierOutpost/facilities.glb?inline";
+import sensorGlb from "../../../Design/Art/facilities/sensor_array/sensor_array.glb?inline";
+import refineryGlb from "../../../Design/Art/facilities/refinery/refinery.glb?inline";
+import fabricationGlb from "../../../Design/Art/facilities/fabrication_bay/fabrication_bay.glb?inline";
 import stationGlb from "../../../Design/FrontierOutpost/station.glb?inline";
 import frigateGlb from "../../../Design/FrontierOutpost/frigate.glb?inline";
 import { frigateModel, gearOf, setGear } from "../view/frigate";
-import { facilityKey, indexModels, mergeByMaterial, parseGlb } from "./models";
+import { facilityKey, facilityLoader, indexModels, mergeByMaterial, parseGlb } from "./models";
 import type { OutpostModels } from "./models";
 
 /** The bytes of a data URL, as Vite inlines an asset. */
 const bytes = (url: string): ArrayBuffer =>
   Uint8Array.from(atob(url.slice(url.indexOf(",") + 1)), (c) => c.charCodeAt(0)).buffer;
 
-// The committed exports, as create_scene.py writes them.
-const models: OutpostModels = indexModels(
-  await parseGlb(bytes(stationGlb)),
-  await parseGlb(bytes(facilitiesGlb)),
-);
+const facilityScenes = new Group();
+for (const url of [sensorGlb, refineryGlb, fabricationGlb]) {
+  const scene = await parseGlb(bytes(url));
+  facilityScenes.add(...scene.children);
+}
+// Frozen station plus migrated, checked pipeline exports.
+const models: OutpostModels = indexModels(await parseGlb(bytes(stationGlb)), facilityScenes);
 
 /** What `root` costs to draw and what it draws: meshes, triangles and bounds. */
 function drawn(root: Object3D) {
@@ -45,6 +49,42 @@ function socketAt(id: string): Vector3 {
 }
 
 describe("the outpost models", () => {
+  it("accepts the same digit-bearing identifiers as the authoring contract", () => {
+    const station = new Group();
+    station.name = "Station_ROOT";
+    const facilities = new Group();
+    const facility = new Group();
+    facility.name = "Facility_module_2_T1";
+    facilities.add(facility);
+    expect(indexModels(station, facilities).facilities.has("module_2:1")).toBe(true);
+  });
+  it("loads a catalogue facility only on demand and shares requests across its tiers", async () => {
+    const templates = new Map<string, Object3D>();
+    let downloads = 0;
+    const load = facilityLoader(templates, async () => {
+      downloads++;
+      return parseGlb(bytes(sensorGlb));
+    });
+    expect(downloads).toBe(0);
+    await Promise.all([load("sensor_array"), load("sensor_array")]);
+    expect(downloads).toBe(1);
+    expect([...templates.keys()].sort()).toEqual(["sensor_array:1", "sensor_array:2"]);
+    await load("sensor_array");
+    expect(downloads).toBe(1);
+  });
+
+  it("rejects a file missing a catalogue root and permits a retry", async () => {
+    const templates = new Map<string, Object3D>();
+    let downloads = 0;
+    const load = facilityLoader(templates, () => {
+      downloads++;
+      return Promise.resolve(new Group());
+    });
+    await expect(load("refinery")).rejects.toThrow("Missing catalogue root");
+    await expect(load("refinery")).rejects.toThrow("Missing catalogue root");
+    expect(downloads).toBe(2);
+    expect(templates.size).toBe(0);
+  });
   it("batches ship armor while preserving independently animated landing gear", async () => {
     const ship = frigateModel(await parseGlb(bytes(frigateGlb)));
     const before = drawn(ship);

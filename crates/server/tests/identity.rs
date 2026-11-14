@@ -80,7 +80,14 @@ async fn a_pilot_registers_then_signs_in_again_by_token_and_by_passkey() {
         read(&mut recv).await,
         ServerMessage::Contract { .. }
     ));
-    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    write(
+        &mut send,
+        &ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        },
+    )
+    .await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Account { .. }
@@ -130,7 +137,14 @@ async fn a_session_that_launches_before_signing_in_is_closed() {
     let (url, sha256) = start_server();
     let (session, mut send, mut recv) = connect_to(&url, sha256).await;
     hello(&mut send, &mut recv).await;
-    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    write(
+        &mut send,
+        &ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        },
+    )
+    .await;
     tokio::time::timeout(Duration::from_secs(5), session.closed())
         .await
         .expect("the server closes a session that breaks the protocol");
@@ -155,7 +169,14 @@ async fn launched(
         read(&mut recv).await,
         ServerMessage::Contract { .. }
     ));
-    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    write(
+        &mut send,
+        &ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        },
+    )
+    .await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Account { .. }

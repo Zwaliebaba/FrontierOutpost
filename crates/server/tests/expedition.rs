@@ -40,7 +40,14 @@ async fn launch(url: &url::Url, sha256: [u8; 32]) -> Pilot {
         read(&mut recv).await,
         ServerMessage::Contract { .. }
     ));
-    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    write(
+        &mut send,
+        &ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        },
+    )
+    .await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Account { .. }
@@ -113,12 +120,26 @@ async fn the_contract_shows_the_site_and_only_opened_tiers_launch() {
     assert_eq!(site.pockets.iter().filter(|p| p.locked).count(), 3);
     assert_eq!(tiers.iter().filter(|t| t.open).count(), 1);
 
-    write(&mut send, &ClientMessage::Launch { tier: 2 }).await;
+    write(
+        &mut send,
+        &ClientMessage::Launch {
+            tier: 2,
+            wingman: None,
+        },
+    )
+    .await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::LaunchRefused { .. }
     ));
-    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    write(
+        &mut send,
+        &ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        },
+    )
+    .await;
     let ServerMessage::Account { account } = read(&mut recv).await else {
         panic!("expected the account after paying for supplies");
     };
@@ -268,7 +289,14 @@ async fn flying_out_and_back_docks_and_a_new_contract_follows() {
         read(&mut pilot.recv).await,
         ServerMessage::Contract { .. }
     ));
-    write(&mut pilot.send, &ClientMessage::Launch { tier: 1 }).await;
+    write(
+        &mut pilot.send,
+        &ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        },
+    )
+    .await;
     assert!(matches!(
         read(&mut pilot.recv).await,
         ServerMessage::Account { .. }
@@ -370,7 +398,14 @@ async fn a_pilot_at_home_stays_connected_past_the_idle_timeout() {
     ));
     let closed = tokio::time::timeout(idle * 5, session.closed()).await;
     assert!(closed.is_err(), "the session closed: {closed:?}");
-    write(&mut send, &ClientMessage::Launch { tier: 1 }).await;
+    write(
+        &mut send,
+        &ClientMessage::Launch {
+            tier: 1,
+            wingman: None,
+        },
+    )
+    .await;
     assert!(matches!(
         read(&mut recv).await,
         ServerMessage::Account { .. }

@@ -24,11 +24,6 @@
       "objects": 12,
       "triangles_base_mesh": 480,
       "triangles_export": 480
-    },
-    "Facilities": {
-      "objects": 128,
-      "triangles_base_mesh": 9880,
-      "triangles_export": 11320
     }
   },
   "notes": "GLBs retain scene placement. Berths 07\u201310 use berths.json; the reference frigate faces outward on 07. Preview crew copies are excluded from GLBs. Aurora cruiser stays at its original scale. Backdrop and drive plumes are presentation effects.",
@@ -189,116 +184,6 @@
         -4.3325,
         0.73
       ]
-    }
-  },
-  "facilities": {
-    "Facility_sensor_array_T1": {
-      "facility": "sensor_array",
-      "tier": 1,
-      "objects": 11,
-      "triangles_base_mesh": 292,
-      "bounds_root_space": {
-        "min": [
-          -1.03,
-          -1.18,
-          0.0
-        ],
-        "max": [
-          1.03,
-          1.03,
-          2.62
-        ]
-      }
-    },
-    "Facility_sensor_array_T2": {
-      "facility": "sensor_array",
-      "tier": 2,
-      "objects": 30,
-      "triangles_base_mesh": 2124,
-      "bounds_root_space": {
-        "min": [
-          -1.17,
-          -1.18,
-          0.0
-        ],
-        "max": [
-          1.1976,
-          1.17,
-          4.53
-        ]
-      }
-    },
-    "Facility_refinery_T1": {
-      "facility": "refinery",
-      "tier": 1,
-      "objects": 15,
-      "triangles_base_mesh": 1468,
-      "bounds_root_space": {
-        "min": [
-          -1.15,
-          -1.18,
-          0.0
-        ],
-        "max": [
-          1.15,
-          0.95,
-          2.35
-        ]
-      }
-    },
-    "Facility_refinery_T2": {
-      "facility": "refinery",
-      "tier": 2,
-      "objects": 27,
-      "triangles_base_mesh": 5352,
-      "bounds_root_space": {
-        "min": [
-          -1.2,
-          -1.18,
-          0.0
-        ],
-        "max": [
-          1.2,
-          1.215,
-          3.26
-        ]
-      }
-    },
-    "Facility_fabrication_bay_T1": {
-      "facility": "fabrication_bay",
-      "tier": 1,
-      "objects": 14,
-      "triangles_base_mesh": 200,
-      "bounds_root_space": {
-        "min": [
-          -1.1,
-          -1.18,
-          0.03
-        ],
-        "max": [
-          1.1,
-          0.95,
-          2.2074
-        ]
-      }
-    },
-    "Facility_fabrication_bay_T2": {
-      "facility": "fabrication_bay",
-      "tier": 2,
-      "objects": 25,
-      "triangles_base_mesh": 444,
-      "bounds_root_space": {
-        "min": [
-          -1.22,
-          -1.18,
-          0.0
-        ],
-        "max": [
-          1.22,
-          1.22,
-          2.69
-        ]
-      }
     }
   }
 }

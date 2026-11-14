@@ -51,6 +51,7 @@ describe("allegianceOf", () => {
   it("makes the player's own ship self, other pilots allies and every NPC hostile", () => {
     expect(allegianceOf("playerShip", true)).toBe("self");
     expect(allegianceOf("playerShip", false)).toBe("ally");
+    expect(allegianceOf("wingman", false)).toBe("ally");
     for (const kind of ["drone", "raider", "warden"] as const) {
       expect(allegianceOf(kind, false)).toBe("hostile");
     }
@@ -58,6 +59,12 @@ describe("allegianceOf", () => {
 });
 
 describe("ExpeditionScene", () => {
+  it("draws a wingman as an ally with its own double-ring badge", () => {
+    const world = new ExpeditionScene(1);
+    world.update([pose(2, "wingman")], null);
+    expect(world.ship(2)?.allegiance).toBe("ally");
+    expect(world.ship(2)?.hull.getObjectByName("wingman badge")?.children).toHaveLength(2);
+  });
   it("draws the extractor beam from the ship to the deposit being worked", () => {
     const world = new ExpeditionScene(1);
     world.setSite(

@@ -1,0 +1,185 @@
+{
+  "blender_version": "4.3.2",
+  "bounds_space": "root-local Blender Z-up metres",
+  "glb": "fabrication_bay.glb",
+  "gltf_up": "+Y",
+  "id": "fabrication_bay",
+  "inputs": {
+    "blender": "4.3.2",
+    "contract": "f2d4607c59da6e235b18eebd780e7a9009a16334661549b2bc96160d7788f1f8",
+    "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
+    "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
+    "source": "fb7f94f2ff86510a08d0843ac130b637d9fb765765615480f2ea5a40f64eadb8",
+    "tool": "6786478f3fff1dc4779170a3ceae9f6b251191b8038dc062153690f7d48b401e"
+  },
+  "kind": "facility",
+  "planned": false,
+  "preview": "fabrication_bay.png",
+  "preview_sha256": "112be18d926ac75e3c7a78036d02f90343cb5ef92bff92c7c91cb4f1ac33d67f",
+  "roots": {
+    "Facility_fabrication_bay_T1": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          1.100000023841858,
+          0.9500004053115845,
+          2.177398920059204
+        ],
+        "min": [
+          -1.100000023841858,
+          -1.179999589920044,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "Ochre",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "Fabrication | crane arm__Facility_fabrication_bay_T1",
+        "Fabrication | crane base__Facility_fabrication_bay_T1",
+        "Fabrication | crane hoist__Facility_fabrication_bay_T1",
+        "Fabrication | door__Facility_fabrication_bay_T1",
+        "Fabrication | hangar__Facility_fabrication_bay_T1",
+        "Fabrication | hazard stripe.001__Facility_fabrication_bay_T1",
+        "Fabrication | hazard stripe.002__Facility_fabrication_bay_T1",
+        "Fabrication | hazard stripe.003__Facility_fabrication_bay_T1",
+        "Fabrication | hazard stripe.004__Facility_fabrication_bay_T1",
+        "Fabrication | hazard stripe__Facility_fabrication_bay_T1",
+        "Fabrication | roof__Facility_fabrication_bay_T1",
+        "Fabrication | window.001__Facility_fabrication_bay_T1",
+        "Fabrication | window__Facility_fabrication_bay_T1",
+        "Facility_fabrication_bay_T1",
+        "Operating_Tier_1__Facility_fabrication_bay_T1"
+      ],
+      "triangles": 424
+    },
+    "Facility_fabrication_bay_T2": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          1.2199996709823608,
+          1.2199996709823608,
+          2.6900014877319336
+        ],
+        "min": [
+          -1.2199996709823608,
+          -1.179999589920044,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "Ochre",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "Fabrication | door.001__Facility_fabrication_bay_T2",
+        "Fabrication | door.002__Facility_fabrication_bay_T2",
+        "Fabrication | gantry beam__Facility_fabrication_bay_T2",
+        "Fabrication | gantry post.001__Facility_fabrication_bay_T2",
+        "Fabrication | gantry post.002__Facility_fabrication_bay_T2",
+        "Fabrication | gantry post.003__Facility_fabrication_bay_T2",
+        "Fabrication | gantry post__Facility_fabrication_bay_T2",
+        "Fabrication | gantry rail.001__Facility_fabrication_bay_T2",
+        "Fabrication | gantry rail__Facility_fabrication_bay_T2",
+        "Fabrication | hangar.001__Facility_fabrication_bay_T2",
+        "Fabrication | hazard stripe.005__Facility_fabrication_bay_T2",
+        "Fabrication | hazard stripe.006__Facility_fabrication_bay_T2",
+        "Fabrication | hazard stripe.007__Facility_fabrication_bay_T2",
+        "Fabrication | hazard stripe.008__Facility_fabrication_bay_T2",
+        "Fabrication | hazard stripe.009__Facility_fabrication_bay_T2",
+        "Fabrication | hazard stripe.010__Facility_fabrication_bay_T2",
+        "Fabrication | robot arm__Facility_fabrication_bay_T2",
+        "Fabrication | robot forearm__Facility_fabrication_bay_T2",
+        "Fabrication | roof.001__Facility_fabrication_bay_T2",
+        "Fabrication | trolley__Facility_fabrication_bay_T2",
+        "Fabrication | window.002__Facility_fabrication_bay_T2",
+        "Fabrication | window.003__Facility_fabrication_bay_T2",
+        "Fabrication | window.004__Facility_fabrication_bay_T2",
+        "Facility_fabrication_bay_T2",
+        "Operating_Tier_1__Facility_fabrication_bay_T2",
+        "Operating_Tier_2__Facility_fabrication_bay_T2"
+      ],
+      "triangles": 764
+    },
+    "Tell_fabrication_bay_T1": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          0.4000000059604645,
+          0.4000000059604645,
+          0.800000011920929
+        ],
+        "min": [
+          -0.4000000059604645,
+          -0.4000000059604645,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "IonBlue",
+        "Ochre",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "IonBlue",
+        "Tell_fabrication_bay_T1"
+      ],
+      "triangles": 424
+    },
+    "Tell_fabrication_bay_T2": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          0.574999988079071,
+          0.574999988079071,
+          1.149999976158142
+        ],
+        "min": [
+          -0.574999988079071,
+          -0.5731082558631897,
+          0.0
+        ]
+      },
+      "materials": [
+        "Amber",
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "IonBlue",
+        "Ochre",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "IonBlue.001",
+        "Tell_fabrication_bay_T2"
+      ],
+      "triangles": 460
+    }
+  },
+  "schema_version": 1,
+  "sha256": "640585dc6146185770274d3712285bcc19953379a0b0487574eff9178c0ec219",
+  "source_forward": "+Y",
+  "source_up": "+Z",
+  "tiers": 2,
+  "tool_version": "0.1.0",
+  "units": "metres"
+}

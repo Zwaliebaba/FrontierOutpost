@@ -16,6 +16,7 @@ import {
 import type { Material, Object3D, Raycaster } from "three";
 import { Group } from "three";
 import type { AccountInfo, CrewInfo } from "../protocol";
+import contract from "../../../Design/Art/contract.json";
 import { stationLights } from "../view/lights";
 import { STRUCTURE_STENCIL, linear, placeShip, shipMeshes } from "../view/readability";
 import type { ShipMeshes } from "../view/readability";
@@ -90,9 +91,19 @@ export class OutpostScene {
   #crewShips: ShipMeshes[] = [];
   #roster: { berth: string; callsign: string; you: boolean }[] = [];
   #atHome = true;
+  #account: AccountInfo | null = null;
+  readonly #loading = new Set<string>();
+  readonly #changed: () => void;
+  readonly #failed: (error: unknown) => void;
 
-  constructor(models: OutpostModels) {
+  constructor(
+    models: OutpostModels,
+    changed: () => void = () => undefined,
+    failed: (error: unknown) => void = () => undefined,
+  ) {
     this.#models = models;
+    this.#changed = changed;
+    this.#failed = failed;
     this.scene.add(...stationLights());
     structure(models.station);
     this.root.name = "station";
@@ -110,7 +121,7 @@ export class OutpostScene {
       this.#targets.set(id, pick);
     }
     this.#ring = new Mesh(
-      new TorusGeometry(1.55, 0.06, 6, 48),
+      new TorusGeometry(contract.socket.half_width + contract.clearance * 2, 0.06, 6, 48),
       new MeshBasicMaterial({ color: RING, toneMapped: false }),
     );
     this.#ring.rotation.x = Math.PI / 2;
@@ -152,6 +163,7 @@ export class OutpostScene {
 
   /** Shows each socket as `account` has it: the module at its owned tier, dimmed if unpowered. */
   apply(account: AccountInfo): void {
+    this.#account = account;
     for (const socket of account.outpost.sockets) {
       const anchor = this.#models.sockets.get(socket.id);
       if (!anchor) continue;
@@ -175,6 +187,27 @@ export class OutpostScene {
         this.#placed.delete(socket.id);
       }
       const template = key === null ? undefined : this.#models.facilities.get(key);
+      if (
+        key &&
+        !template &&
+        socket.facility &&
+        this.#models.loadFacility &&
+        !this.#loading.has(socket.facility)
+      ) {
+        const id = socket.facility;
+        this.#loading.add(id);
+        void this.#models
+          .loadFacility(id)
+          .then(() => {
+            this.#loading.delete(id);
+            if (this.#account) this.apply(this.#account);
+            this.#changed();
+          })
+          .catch((error: unknown) => {
+            this.#loading.delete(id);
+            this.#failed(error);
+          });
+      }
       if (!key || !template) continue;
       const object = template.clone();
       object.position.set(0, 0, 0);
@@ -251,7 +284,7 @@ export class OutpostScene {
     const installed: SceneReport["installed"] = [];
     for (const [socket, anchor] of this.#models.sockets) {
       for (const child of anchor.children) {
-        const match = /^Facility_([a-z_]+)_T(\d+)$/.exec(child.name);
+        const match = /^Facility_([a-z][a-z0-9_]*)_T(\d+)$/.exec(child.name);
         if (!match?.[1] || !match[2]) continue;
         installed.push({
           socket,

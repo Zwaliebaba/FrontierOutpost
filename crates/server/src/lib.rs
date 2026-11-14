@@ -34,6 +34,7 @@ pub fn handshake(message: &ClientMessage) -> ServerMessage {
         | ClientMessage::SignIn { .. }
         | ClientMessage::PasskeyCredential { .. }
         | ClientMessage::Resume { .. }
+        | ClientMessage::WingmanOrder { .. }
         | ClientMessage::Launch { .. }
         | ClientMessage::Extract { .. }
         | ClientMessage::Vent

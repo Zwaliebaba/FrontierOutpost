@@ -3,4 +3,4 @@
 /**
  * What an entity is. The client draws and labels it from this.
  */
-export type EntityKind = "playerShip" | "drone" | "raider" | "warden" | "core";
+export type EntityKind = "playerShip" | "drone" | "raider" | "warden" | "core" | "wingman";

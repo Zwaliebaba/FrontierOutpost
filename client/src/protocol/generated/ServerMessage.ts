@@ -16,11 +16,12 @@ import type { ScanRefusal } from "./ScanRefusal";
 import type { SiteInfo } from "./SiteInfo";
 import type { TierOffer } from "./TierOffer";
 import type { WaveInfo } from "./WaveInfo";
+import type { WingmanInfo } from "./WingmanInfo";
 
 /**
  * A message sent from the server to the client.
  */
-export type ServerMessage = { "type": "welcome", protocolVersion: number, } | { "type": "rejected", protocolVersion: number, reason: string, } | { "type": "passkeyOptions", options: string, } | { "type": "signedIn", callsign: string, token: string, account: AccountInfo, } | { "type": "signInRefused", reason: string, } | { "type": "account", account: AccountInfo, } | { "type": "catalog", catalog: Catalog, } | { "type": "homeRefused", reason: string, } | { "type": "crew", crew: CrewInfo | null, } | { "type": "crewRefused", reason: string, } | { "type": "contract", site: SiteInfo, hazard: Hazard, dominantThreat: DominantThreat, tiers: Array<TierOffer>, } | { "type": "joined", 
+export type ServerMessage = { "type": "wingman", info: WingmanInfo | null, } | { "type": "wingmanRefused", reason: string, } | { "type": "welcome", protocolVersion: number, } | { "type": "rejected", protocolVersion: number, reason: string, } | { "type": "passkeyOptions", options: string, } | { "type": "signedIn", callsign: string, token: string, account: AccountInfo, } | { "type": "signInRefused", reason: string, } | { "type": "account", account: AccountInfo, } | { "type": "catalog", catalog: Catalog, } | { "type": "homeRefused", reason: string, } | { "type": "crew", crew: CrewInfo | null, } | { "type": "crewRefused", reason: string, } | { "type": "contract", site: SiteInfo, hazard: Hazard, dominantThreat: DominantThreat, tiers: Array<TierOffer>, } | { "type": "joined", wingman?: WingmanInfo, 
 /**
  * The run's site: a page that rejoins a run has no contract for it.
  */

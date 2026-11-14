@@ -147,6 +147,46 @@ export const CATALOG: Catalog = {
         }
       ],
       "rig": "escort_rig"
+    },
+    {
+      "id": "crew_quarters",
+      "name": "Crew quarters",
+      "tiers": [
+        {
+          "cost": {
+            "credits": 150,
+            "goods": [
+              {
+                "good": "ore",
+                "amount": 10
+              }
+            ]
+          },
+          "draw": 2,
+          "opens": [
+            "Wingman"
+          ]
+        },
+        {
+          "cost": {
+            "credits": 550,
+            "goods": [
+              {
+                "good": "alloy",
+                "amount": 12
+              },
+              {
+                "good": "components",
+                "amount": 5
+              }
+            ]
+          },
+          "draw": 3,
+          "opens": [
+            "Wingman extraction and stock rig"
+          ]
+        }
+      ]
     }
   ],
   "adjacency": [

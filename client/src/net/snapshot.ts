@@ -34,7 +34,14 @@ const FIRED = 1;
 const DESTROYED = 2;
 const INTERCEPTED = 3;
 const NO_SHIP = 0xffff;
-const ENTITY_KINDS: readonly EntityKind[] = ["playerShip", "drone", "raider", "warden", "core"];
+const ENTITY_KINDS: readonly EntityKind[] = [
+  "playerShip",
+  "drone",
+  "raider",
+  "warden",
+  "core",
+  "wingman",
+];
 
 export const POSITION_UNITS_PER_METRE = 32;
 export const VELOCITY_UNITS_PER_METRE_PER_SECOND = 64;

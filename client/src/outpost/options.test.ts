@@ -86,6 +86,7 @@ describe("a socket's choices", () => {
       "Build a Sensor array",
       "Build a Refinery",
       "Build a Fabrication bay",
+      "Build a Crew quarters",
     ]);
     const refinery = view.choices[1];
     expect(refinery?.blocked).toBeUndefined();
@@ -282,7 +283,7 @@ describe("overview preparation", () => {
     expect(affordableFacilities(CATALOG, home({ credits: 100, ore: 0 }))).toEqual([]);
     expect(
       affordableFacilities(CATALOG, home({ credits: 160, ore: 10 })).map((f) => f.name),
-    ).toEqual(["Sensor array", "Refinery", "Fabrication bay"]);
+    ).toEqual(["Sensor array", "Refinery", "Fabrication bay", "Crew quarters"]);
   });
   it("does not promise an immediate expedition benefit without enough power to run it", () => {
     const account = home({ credits: 160, ore: 10 });
