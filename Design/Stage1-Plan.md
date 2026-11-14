@@ -194,7 +194,7 @@ milestone brings its own art, so none waits on another's Blender work.
 
 | # | Work item | Proof |
 | --- | --- | --- |
-| 8.1 | `create_scene.py`: the crew quarters module at two tiers, per the [art brief](FrontierOutpost/README.md#stage-1-expansion-art-brief) | The manifest lists it and the brief's checks pass; the owner runs Blender and commits the regenerated assets |
+| 8.1 | `create_scene.py`: the crew quarters module at two tiers, and `facilities.glb` split into one GLB per facility with the client's loader changed to match, per the [art brief](FrontierOutpost/README.md#stage-1-expansion-art-brief) | The manifest lists it and the brief's checks pass; the owner runs Blender and commits the regenerated assets |
 | 8.2 | Rules: crew quarters as data; a wingman is a ship that counts in threat and yield scaling but not in the pot; pilots and wingmen never exceed four ships | Sim tests against design §11, including the four-ship limit |
 | 8.3 | Wingman behaviour: follow, hold and return; extract at crew quarters 2; it acts only on what a pilot could see | A sim test for each order, and one that a wingman never acts on an unscanned seed value |
 | 8.4 | Server and protocol: a wingman hired at launch for the launch cost, with an instrumentation event; orders as intents; wingmen in snapshots | An integration test: a solo pilot and a wingman earn the relay bonus |

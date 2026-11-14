@@ -120,6 +120,31 @@ style guide §2 to §9; where this brief adds a convention, the style guide reco
 - These rules are for `create_scene.py`. The station's exterior is the owner's own model and has
   its own rules and check script (below).
 
+### How the Blender work is stored and exported
+
+- **One generator, one generated scene.** `create_scene.py` builds everything that is generated
+  (the facility modules, the tells, the interior from 9.3 and the hulls) in this folder's one
+  scene, `FrontierOutpost.blend`, each kind in its own collection: `Facilities` with one child
+  collection per facility (`Facility_<facility>`, holding that facility's tier roots in the
+  catalogue row), `Tells`, `Interior` and `Ships`. The rules that compare assets (each tier
+  taller than the one below, modules in the interior's sockets covering nothing, each hull in
+  its parking place and through the hangar mouth) are then asserted in one run, from one seed,
+  with nothing to keep in step across files.
+- **No `.blend` per module.** A module is never edited by hand: change the script and regenerate.
+- **One GLB per facility,** holding all its tiers: `facility_<facility>.glb`. From 8.1 these
+  replace `facilities.glb`, split once, with the client's loader changed in the same pull
+  request. Then `tells.glb`, `interior.glb` and one GLB per hull (`frigate.glb`, `hauler.glb`,
+  `gunship.glb`). Blender rewrites an export whole and every regenerated binary stays in the
+  history (AGENTS.md §6), so one combined file would add every module to the history whenever
+  any one changed.
+- **Commit only what changed.** After regenerating, commit an export only if its entry in
+  `scene_manifest.json` changed; restore the others (`git checkout -- <file>`). Render preview
+  PNGs, which are a megabyte or two each, once a milestone's art is done, not on every run.
+- **The exterior is one hand-made file,** `Design/StationExterior/StationExterior.blend`, holding
+  the exterior only. Tells are not saved into it: the game sets them on the hardpoints at
+  runtime. For a review render, the check script may place `tells.glb` on the hardpoints without
+  saving them into the file.
+
 ### The station's exterior (9.2): the owner's model
 
 From M9 the station is seen two ways (design §11): an **exterior** with no sockets, modules or
