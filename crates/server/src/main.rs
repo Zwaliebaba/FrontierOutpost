@@ -62,7 +62,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     },
                 )
                 .collect::<Result<Vec<_>, _>>()?;
-            let report = report::compute(&store.events()?, &greybox, players);
+            // Gate 1's rules check runs on the server's seed pool, or the
+            // playtest's when none is set.
+            let settings = &config.settings;
+            let seeds = match settings.seed_pool.seeds() {
+                [] => &report::PLAYTEST_POOL[..],
+                seeds => seeds,
+            };
+            let rules = report::rules_check(settings.template, seeds);
+            let report = report::compute(&store.events()?, &greybox, players, rules);
             print!("{}", report.markdown());
             return Ok(());
         }

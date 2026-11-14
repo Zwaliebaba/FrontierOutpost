@@ -11,6 +11,10 @@ use std::fmt::Write as _;
 
 use serde::Deserialize;
 
+use frontier_sim::choice::{self, SeedCheck};
+use frontier_sim::outpost::STAGE1;
+use frontier_sim::site::SiteTemplate;
+
 use crate::events::{GateEvent, Placed, Recorded};
 
 /// Sign-ins closer together than this are one play session: half an hour.
@@ -39,12 +43,18 @@ pub mod thresholds {
     pub const FIRST_DECISION_SECONDS: f64 = 120.0;
 }
 
-/// Whether a measure must be at most or at least its threshold.
+/// Whether a measure must be at most, at least or above its threshold.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Target {
     AtMost(f64),
     AtLeast(f64),
+    /// Strictly above: "does it happen at all" is above zero.
+    Above(f64),
 }
+
+/// The playtest's seed pool by run number (playtest script section 3): the
+/// seeds gate 1's rules check runs on when `FRONTIER_SEEDS` sets no other.
+pub const PLAYTEST_POOL: [u32; 7] = [9, 10, 20, 16, 8, 3, 5];
 
 /// Who the pilots in the saves are (plan M7). The report cannot tell the
 /// owner's accounts from anyone else's, so it assumes the owner unless told
@@ -157,6 +167,7 @@ impl Measure {
         Some(match self.target? {
             Target::AtMost(limit) => value <= limit,
             Target::AtLeast(limit) => value >= limit,
+            Target::Above(limit) => value > limit,
         })
     }
 
@@ -220,6 +231,8 @@ pub struct Report {
     pub runs: usize,
     pub sessions: usize,
     pub gates: Vec<Gate>,
+    /// Gate 1's rules check, seed by seed (plan 7.4).
+    pub rules: Vec<SeedCheck>,
 }
 
 /// One greybox trial, as the greybox downloads it.
@@ -396,9 +409,25 @@ fn runs(events: &[Recorded]) -> Vec<Run> {
     by_key.into_values().collect()
 }
 
-/// Computes the gates from `events` and greybox `trials`, played by `players`.
+/// Runs gate 1's rules check on each of `seeds` of `template` under the
+/// Stage 1 outpost.
 #[must_use]
-pub fn compute(events: &[Recorded], greybox: &[Greybox], players: Players) -> Report {
+pub fn rules_check(template: SiteTemplate, seeds: &[u32]) -> Vec<SeedCheck> {
+    seeds
+        .iter()
+        .map(|&seed| choice::check(&STAGE1, template, seed))
+        .collect()
+}
+
+/// Computes the gates from `events`, greybox `trials` and gate 1's `rules`
+/// check, played by `players`.
+#[must_use]
+pub fn compute(
+    events: &[Recorded],
+    greybox: &[Greybox],
+    players: Players,
+    rules: Vec<SeedCheck>,
+) -> Report {
     let sessions = sessions(events);
     let runs = runs(events);
     let pilots: BTreeSet<i64> = runs.iter().map(|run| run.account).collect();
@@ -408,16 +437,63 @@ pub fn compute(events: &[Recorded], greybox: &[Greybox], players: Players) -> Re
         runs: runs.len(),
         sessions: sessions.values().map(Vec::len).sum(),
         gates: vec![
-            gate_1(events, &runs, &sessions),
+            gate_1(events, &runs, &sessions, &rules),
             gate_2(events, greybox),
             gate_3(&runs, &sessions),
             gate_4(&runs, &sessions),
             crew_evidence(events),
         ],
+        rules,
     }
 }
 
-fn gate_1(events: &[Recorded], runs: &[Run], sessions: &HashMap<i64, Vec<Session>>) -> Gate {
+/// Gate 1's rules measures: how often a layout change alters the best choice
+/// open under both, and how firmly the firmest such change steers a pilot.
+fn rules_measures(rules: &[SeedCheck]) -> Vec<Measure> {
+    let pairs: usize = rules.iter().map(|check| check.pairs).sum();
+    let changed: Vec<&choice::Changed> = rules.iter().flat_map(|check| &check.changed).collect();
+    let firmest = changed
+        .iter()
+        .max_by(|a, b| a.gain_share().total_cmp(&b.gain_share()));
+    vec![
+        Measure::new(
+            "Rules: layout pairs where a facility changes the best choice open under both",
+            share(changed.len(), pairs),
+            "%",
+            Basis::Rules,
+            0,
+            format!(
+                "{} of {pairs} pairs on {} seeds; per-run take, time and risk left out",
+                changed.len(),
+                rules.len()
+            ),
+        )
+        .target(Target::Above(0.0)),
+        Measure::new(
+            "Rules: how firmly the firmest such change steers a pilot",
+            firmest.map(|changed| changed.gain_share()),
+            "%",
+            Basis::Rules,
+            0,
+            firmest.map_or_else(
+                || "no change".to_owned(),
+                |changed| {
+                    format!(
+                        "{} cr of {} cr: the smaller of the two layouts' preference",
+                        changed.gain, changed.of
+                    )
+                },
+            ),
+        ),
+    ]
+}
+
+fn gate_1(
+    events: &[Recorded],
+    runs: &[Run],
+    sessions: &HashMap<i64, Vec<Session>>,
+    rules: &[SeedCheck],
+) -> Gate {
     // Among pilots with the same unlocks, do active layouts differ?
     let mut by_unlocks: BTreeMap<&[String], BTreeMap<i64, &[Placed]>> = BTreeMap::new();
     for run in runs.iter().filter(|run| !run.unlocks.is_empty()) {
@@ -544,7 +620,10 @@ fn gate_1(events: &[Recorded], runs: &[Run], sessions: &HashMap<i64, Vec<Session
                 format!("{pilots} pilots"),
             )
             .target(Target::AtLeast(thresholds::RECONFIGURE_SHARE)),
-        ],
+        ]
+        .into_iter()
+        .chain(rules_measures(rules))
+        .collect(),
     }
 }
 
@@ -996,21 +1075,96 @@ impl Report {
                     Some(Target::AtLeast(limit)) => {
                         format!("≥ {}", Measure::shown(limit, measure.unit))
                     }
+                    Some(Target::Above(limit)) => {
+                        format!("> {}", Measure::shown(limit, measure.unit))
+                    }
                     None => String::new(),
                 };
                 let verdict = measure.verdict(self.players).map_or("", Verdict::shown);
+                // No one plays a rules measure.
+                let pilots = if measure.basis == Basis::Rules {
+                    "–".to_owned()
+                } else {
+                    measure.pilots.to_string()
+                };
                 let _ = writeln!(
                     out,
-                    "| {} | {value} | {target} | {verdict} | {} | {} | {} |",
+                    "| {} | {value} | {target} | {verdict} | {} | {pilots} | {} |",
                     measure.name,
                     measure.basis.shown(),
-                    measure.pilots,
                     measure.from
                 );
             }
             out.push('\n');
         }
+        self.rules_table(&mut out);
         out
+    }
+
+    /// Gate 1's rules check, seed by seed: the check's table for the pool
+    /// (plan 7.4).
+    fn rules_table(&self, out: &mut String) {
+        let Some(first) = self.rules.first() else {
+            return;
+        };
+        let _ = writeln!(out, "## Gate 1 rules check\n");
+        let _ = writeln!(
+            out,
+            "On each seed, every layout of the facilities ({} layouts) is compared with every \
+             other ({} pairs). Under each layout of a pair, the best choice is the pocket and rig \
+             with the best per-run take among the options open under both, so an unlock alone \
+             never counts. The take: a solo pilot at threat tier I fills the hold from one \
+             pocket and sells the haul raw or processed, the processor working for one \
+             {}-minute run. Time and risk are left out. A change's firmness is the smaller of \
+             the two layouts' preference for its own choice.\n",
+            first.layouts,
+            first.pairs,
+            choice::RUN_SECONDS / 60
+        );
+        let _ = writeln!(
+            out,
+            "| Seed | Hazard | Rich pocket | Best choice, any layout | Pairs where the best choice changes | Firmest change | Example |"
+        );
+        let _ = writeln!(out, "| --- | --- | --- | --- | --- | --- | --- |");
+        for check in &self.rules {
+            let site = &check.site;
+            let rich = site
+                .pockets
+                .get(site.values.rich_pocket)
+                .map_or("–", |pocket| pocket.template.kind.name());
+            let firmest = check
+                .changed
+                .iter()
+                .max_by(|a, b| a.gain_share().total_cmp(&b.gain_share()));
+            let (firmness, example) = firmest.map_or_else(
+                || ("–".to_owned(), "–".to_owned()),
+                |changed| {
+                    (
+                        format!("{} cr of {} cr", changed.gain, changed.of),
+                        format!(
+                            "{}: {} ({} cr); {}: {} ({} cr)",
+                            choice::describe(&STAGE1, &changed.first),
+                            changed.under_first.choice.name(),
+                            changed.under_first.take,
+                            choice::describe(&STAGE1, &changed.second),
+                            changed.under_second.choice.name(),
+                            changed.under_second.take
+                        ),
+                    )
+                },
+            );
+            let _ = writeln!(
+                out,
+                "| {} | {} | {rich} | {} ({} cr) | {} of {} | {firmness} | {example} |",
+                site.seed,
+                site.values.hazard.name(),
+                check.best_anywhere.choice.name(),
+                check.best_anywhere.take,
+                check.changed.len(),
+                check.pairs
+            );
+        }
+        out.push('\n');
     }
 }
 
@@ -1223,7 +1377,7 @@ mod tests {
 
     #[test]
     fn reproduces_the_hand_checked_figures() {
-        let report = compute(&history(), &[greybox()], Players::Testers);
+        let report = compute(&history(), &[greybox()], Players::Testers, Vec::new());
         assert_eq!((report.pilots, report.runs, report.sessions), (2, 5, 3));
 
         // Gate 1. Both pilots own a refinery at tier 1 and install it in
@@ -1346,7 +1500,7 @@ mod tests {
 
     #[test]
     fn an_empty_world_reports_nothing_measured_and_renders() {
-        let report = compute(&[], &[], Players::Owner);
+        let report = compute(&[], &[], Players::Owner, Vec::new());
         assert_eq!((report.pilots, report.runs), (0, 0));
         let markdown = report.markdown();
         assert!(markdown.starts_with("# Stage 1 gate report"));
@@ -1362,7 +1516,7 @@ mod tests {
 
     #[test]
     fn the_markdown_shows_values_targets_verdicts_and_bases() {
-        let markdown = compute(&history(), &[greybox()], Players::Testers).markdown();
+        let markdown = compute(&history(), &[greybox()], Players::Testers, Vec::new()).markdown();
         assert!(markdown.contains(
             "| Median time to select a named hostile (normal vision) | 0.9 s | ≤ 1.0 s | met | solo, skill | 1 | 3 selections |"
         ));
@@ -1390,7 +1544,7 @@ mod tests {
         // Plan 7.3. Pilot 1 reconfigures in their first session and relaunches
         // after their only defeat: both figures clear their thresholds, and
         // neither may count, because no one but the owner played.
-        let report = compute(&owner_alone(), &[greybox()], Players::Owner);
+        let report = compute(&owner_alone(), &[greybox()], Players::Owner, Vec::new());
         assert_eq!(report.pilots, 1);
         let early = measure(&report, 0, "Pilots who reconfigure");
         let relaunch = measure(&report, 2, "Defeats followed by a launch");
@@ -1423,7 +1577,7 @@ mod tests {
 
     #[test]
     fn the_owner_can_fail_a_gate_but_pass_a_skill_measure_only_as_the_owner() {
-        let report = compute(&owner_alone(), &[greybox()], Players::Owner);
+        let report = compute(&owner_alone(), &[greybox()], Players::Owner, Vec::new());
         // Gate 2: a 0.9 s median selection passes, by the owner only; a
         // quarter of selections wrong fails outright.
         let select = measure(&report, 1, "Median time to select");
@@ -1470,7 +1624,7 @@ mod tests {
 
     #[test]
     fn testers_can_meet_what_the_owner_cannot() {
-        let report = compute(&owner_alone(), &[], Players::Testers);
+        let report = compute(&owner_alone(), &[], Players::Testers, Vec::new());
         assert_eq!(
             report.gates[0].verdict(Players::Testers),
             Some(Verdict::Met)
@@ -1483,7 +1637,7 @@ mod tests {
 
     #[test]
     fn each_measure_counts_the_pilots_it_rests_on() {
-        let report = compute(&history(), &[greybox()], Players::Testers);
+        let report = compute(&history(), &[greybox()], Players::Testers, Vec::new());
         // Both pilots were destroyed once; only pilot 1 lost a fitting; the
         // different-layout pairs span both; one greybox file.
         assert_eq!(measure(&report, 2, "Defeats followed").pilots, 2);
@@ -1492,5 +1646,35 @@ mod tests {
         assert_eq!(measure(&report, 0, "Same seed, same layout").pilots, 0);
         assert_eq!(measure(&report, 1, "Median time to select").pilots, 1);
         assert_eq!(measure(&report, 1, "In play: lock attempts").pilots, 2);
+    }
+
+    #[test]
+    fn gate_1_carries_the_rules_check_and_its_table_for_the_pool() {
+        let rules = rules_check(frontier_sim::site::FRONTIER_SITE, &PLAYTEST_POOL);
+        let report = compute(&owner_alone(), &[], Players::Owner, rules);
+        // On every seed of the pool, 60 of 465 pairs change the best choice,
+        // the firmest by 2 credits of 260 (frontier-sim's choice tests).
+        let changes = measure(&report, 0, "Rules: layout pairs");
+        assert!(close(changes.value, 60.0 / 465.0));
+        assert_eq!(changes.verdict(Players::Owner), Some(Verdict::Met));
+        let firmest = measure(&report, 0, "Rules: how firmly");
+        assert!(close(firmest.value, 2.0 / 260.0));
+        assert_eq!(firmest.verdict(Players::Owner), None, "no threshold");
+        // The rules measure is met, but gate 1 stays unproven on the owner's
+        // play: the measures that compare players are not.
+        assert_eq!(
+            report.gates[0].verdict(Players::Owner),
+            Some(Verdict::Unproven)
+        );
+
+        let markdown = report.markdown();
+        assert!(markdown.contains("## Gate 1 rules check"));
+        assert!(markdown.contains("(31 layouts) is compared with every other (465 pairs)"));
+        assert!(markdown.contains(
+            "| 8 | Thermal flare | Derelict | Derelict, extraction rig (616 cr) | 60 of 465 | 2 cr of 260 cr |"
+        ));
+        assert!(markdown.contains(
+            "| Rules: layout pairs where a facility changes the best choice open under both | 13% | > 0% | met | rules | – |"
+        ));
     }
 }

@@ -79,6 +79,19 @@ pub enum PocketKind {
     NestCore,
 }
 
+impl PocketKind {
+    /// The pocket in words, as reports name it.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::OreField => "Ore field",
+            Self::Derelict => "Derelict",
+            Self::VolatileVeins => "Volatile veins",
+            Self::NestCore => "Nest core",
+        }
+    }
+}
+
 /// Raw materials a site yields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Material {
@@ -109,6 +122,16 @@ pub enum Hazard {
 
 impl Hazard {
     const ALL: [Self; 3] = [Self::ThermalFlare, Self::DebrisDrift, Self::IonFog];
+
+    /// The hazard in words, as reports name it.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::ThermalFlare => "Thermal flare",
+            Self::DebrisDrift => "Debris drift",
+            Self::IonFog => "Ion fog",
+        }
+    }
 
     /// How much faster extraction heat builds.
     #[must_use]

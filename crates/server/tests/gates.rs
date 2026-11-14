@@ -177,7 +177,8 @@ async fn a_session_records_sessions_launches_choices_reconfigurations_and_ending
 
     // And the report computes every gate from them. The pilot reconfigured
     // early, but as the owner's play that leaves gate 1 unproven (plan 7.3).
-    let report = frontier_server::report::compute(&store.events().unwrap(), &[], Players::Owner);
+    let report =
+        frontier_server::report::compute(&store.events().unwrap(), &[], Players::Owner, Vec::new());
     assert_eq!((report.pilots, report.runs, report.sessions), (1, 1, 1));
     let reconfigured = report.gates[0]
         .measures
