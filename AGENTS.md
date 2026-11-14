@@ -15,8 +15,9 @@ multiplayer isometric space game with an authoritative Rust server and an HTML5 
 
 - Build toward **Stage 1** of the design (§9): a persistent home outpost, one 1–4-player
   expedition, NPC threats and NPC trading. After plan M7, the Stage 1 expansion (design §11, plan
-  M8 to M12) adds a wingman, a larger station with an internal hangar, a deeper outpost,
-  further hulls and further sites. Do not start
+  M8 to M12) adds a wingman, a larger station with an internal hangar (an exterior with
+  facility tells, and an interior with the modules and ships), a deeper outpost, further hulls and
+  further sites. Do not start
   Stage 2+ systems (shared regions, player market, access-key marketplace, territory, MMO scale)
   unless explicitly asked.
 - When code and design disagree, say so and ask. Don't silently diverge, and don't edit the
@@ -148,7 +149,9 @@ change ships with a test. Keep comments for the *why*.
   `binary`; add the pattern *before* committing a new binary type. CI fails if a Git LFS pointer
   is committed. Keep them small: every regenerated binary stays in the history for good.
 - Do not hand-edit `.glb`, `.blend`, `scene_manifest.json` or preview PNGs: change
-  `create_scene.py` and regenerate. Regenerating on a different Blender version changes bytes
+  `create_scene.py` and regenerate. The one exception, from plan M9, is the station's exterior:
+  the owner models it by hand, and its `.blend`, its GLB export and the manifest its check script
+  writes are committed together. Regenerating on a different Blender version changes bytes
   without changing geometry, so commit regenerated binaries only on purpose.
 - `create_scene.py` must keep working on Blender 4.3+ and 5.x. After changing it, run it with
   `SCENE_OUTPUT` pointing outside the repo and diff the new `scene_manifest.json` against the
@@ -194,3 +197,5 @@ Decided:
   (plan M7), and Stage 2 may begin with gates 1 and 3 unproven, an accepted risk. Reports keep
   them unproven until players other than the owner are measured; never record them as met.
 - Art for Stage 1: sockets and facility modules come from `create_scene.py`, not primitives.
+  From plan M9 the station's exterior is the owner's hand-made Blender model, validated by a check
+  script; the interior, the facility modules and their exterior tells stay in `create_scene.py`.

@@ -171,7 +171,7 @@ Stage 1 requires persistent home/account saves and authoritative cooperative ses
 | Loss of cargo and upgraded modules; reconnect within a grace window | Cross-session suspend and checkpoints, PvP, territory |
 | Mouse and keyboard on desktop | Touch controls and tablet layout; gamepad is not planned at any stage |
 
-The Stage 1 expansion (§11) lifts four of these limits after plan M7: a second pilot as an NPC wingman, a third socket and further facilities, further hulls, and further sites with a site map at preparation; it also rebuilds the station around an internal hangar in place of the berths. Everything else in the right-hand column stays outside Stage 1.
+The Stage 1 expansion (§11) lifts four of these limits after plan M7: a second pilot as an NPC wingman, a third socket and further facilities, further hulls, and further sites with a site map at preparation; it also rebuilds the station around an internal hangar in place of the berths, seen as an exterior with facility tells and an interior with the modules and ships. Everything else in the right-hand column stays outside Stage 1.
 
 **Stage 1 gate measures.** Playtests use about eight invited testers who have not seen the game, on machines the owner provides. The thresholds below are provisional starting figures from the Revision 3 review and are confirmed before the first measurement. With no testers available, the owner first measures Stage 1 alone (plan M7): each measure is met, failed or unproven, with its basis stated, and a measure that needs players other than the owner is unproven, never met. Gates 1 and 3 cannot be met that way. The owner may begin Stage 2 with them unproven, accepting the risk that the signature does not hold for other players; they stay unproven until other players are measured.
 
@@ -325,7 +325,7 @@ The instance ends when every connected pilot has docked or been destroyed, or at
 The owner has no testers (§9), so the game must hold one player for longer than Stage 1's
 content horizon of about ten runs. Once plan M7 has measured Stage 1 as §10 specifies it, the
 expansion lifts four Stage 1 limits: the second pilot, the outpost's size, the single hull and
-the single site. It also rebuilds the station around an internal hangar, in place of the berths. It adds no Stage 2 system: no shared hub, player market, access keys or PvP.
+the single site. It also rebuilds the station around an internal hangar, in place of the berths, and splits it into an exterior and an interior view. It adds no Stage 2 system: no shared hub, player market, access keys or PvP.
 Progression still comes only from facilities (§3): every new option is opened by a facility,
 so the expansion widens the outpost's signature instead of working around it. Every value below
 is a placeholder and a tunable test parameter, as in §10, sized for about fifteen hours of play,
@@ -350,19 +350,27 @@ A destroyed wingman loses its cargo and fitting, and is ready again for the next
 one instance, pilots and wingmen together, never exceed four, so a crew of four has no wingmen
 and §5's caps and snapshot budget stand.
 
-**The station and its hangar.** The station is rebuilt two to three times larger around an
-internal hangar with one mouth, and the berths and their apron are removed. Ships keep their
-size; the construction sockets and facility modules grow with the station, so the facilities
-stay the outpost's readable signature. A ship launches by flying out of the mouth, and crew
-ships leave one after another; it docks by flying into the mouth, and docking is still flown
-(§2). Undocking, docking and a jump home are measured from the mouth, and a jump's arrival is
-always outside the station. The ship is not shown at home: it is inside the station, and the
-launch screen shows what it carries. Socket B moves beside the mouth and keeps its adjacency.
-The mouth is the only fit a hull must pass: its clear opening is wider and taller than the
-largest hull with the style guide's clearance on every side.
+**The station: exterior and interior.** The station is seen two ways, in the one tactical
+camera (§5). The **exterior** is the station as it stands at the dock in every run and at home:
+two to three times larger than today's, with one hangar mouth and no berths, apron, sockets or
+parked ships. It still changes as the outpost grows: each facility shows a small **tell** at its
+own fixed hardpoint on the hull, which grows with the facility's tier, and the reactor upgrade
+has one too, so the outside evolves even though the modules are inside. Selecting the station at
+home opens the **interior**: a cutaway of the same station, seen through the same orthographic
+view, orbit and zoom, showing the construction sockets with their facility modules and states
+(empty, building, powered, unpowered, producing, blocked; §2), the processor and cargo bay, and
+the hangar deck with every ship the pilot owns. Building, upgrading and reconfiguring happen in
+the interior. Gate 1's before-and-after images show both views.
+
+A ship launches by flying out of the mouth, and crew ships leave one after another; it docks by
+flying into the mouth, and docking is still flown (§2). Undocking, docking and a jump home are
+measured from the mouth, and a jump's arrival is always outside the station. The mouth is the
+only fit a hull must pass outside: its clear opening is wider and taller than the largest hull
+with the style guide's clearance on every side; inside, every hull has a parking place on the
+hangar deck. Socket B moves beside the hangar deck and keeps its adjacency.
 
 **A deeper outpost.** A reactor upgrade to the outpost's core (600 cr + 15 alloy, once) opens a
-third construction socket, C, beside the processor, and raises the power cap from 5 to 8. The
+third construction socket, C, beside the processor in the interior, and raises the power cap from 5 to 8. The
 three Stage 1 facilities gain a third tier, and three new facilities open the wingman, hulls and
 sites, so six facilities compete for three sockets. A tier 3 facility draws 4.
 
@@ -412,7 +420,7 @@ hazard and one new NPC, and its pockets are keyed to capability tags like the fi
 an automated test, like §10's.
 
 - Every hull passes through the hangar mouth flying straight in, with the style guide's
-  clearance on every side.
+  clearance on every side, and has a parking place on the interior's hangar deck.
 - Pilots and wingmen together never exceed four ships in an instance, so §10's snapshot test of
   4 ships and 24 NPCs still bounds every instance.
 - With six facilities, three sockets and a power cap of 8, no layout runs everything: a tier 3,

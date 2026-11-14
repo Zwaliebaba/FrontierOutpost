@@ -84,7 +84,9 @@ Use a strong central station mass, secondary side pods and a clearly readable ap
 Propulsion reads as a blue core with a tapered plume. A landed ship idles its drive; keep exhaust separate from the hull envelope.
 
 
-Each facility keeps a signature shape no other facility uses, so facilities are told apart at the zoom where the whole outpost fits: dishes are the sensor array's, a closed hall with doors is the fabrication bay's, an open cradle is the shipyard's. Each tier stands more than 0.4 taller than the one below it, tier 3 included, and a module in any socket clears every approach lane: the berths' departure corridors while they stand, the hangar mouth's lane after. Upgrades to the core itself, such as the reactor, are separate named meshes shown only once bought, and leave the core's silhouette at the berths and sockets unchanged.
+Each facility keeps a signature shape no other facility uses, so facilities are told apart at the zoom where the whole outpost fits: dishes are the sensor array's, a closed hall with doors is the fabrication bay's, an open cradle is the shipyard's. Each tier stands more than 0.4 taller than the one below it, tier 3 included, and a module in any socket clears every berth and departure corridor while the sockets are outside.
+
+Once the station is rebuilt (design §11), it is seen two ways in the one tactical camera. The exterior carries no sockets, modules or parked ships; the outpost's growth shows on it as tells, one small marker per facility in that facility's signature shape, on a fixed hardpoint, growing with its tier, so a facility is recognised outside and in. The interior is a cutaway open to the resting view: no wall, module or parked ship covers another socket or parking place from it. Upgrades to the core itself, such as the reactor, are separate named meshes shown only once bought, and leave the core's silhouette at the berths and sockets unchanged.
 ## 8. Asset and scene structure
 
 ### Shared assembly conventions
@@ -100,6 +102,8 @@ Store each scene under `Design/<SceneName>/` (the outpost scene is `Design/Front
 - GLB exports for gameplay assets and separate effects.
 - A manifest recording axes, units, geometry statistics and meaningful validation results.
 - A README explaining rebuilding, importing and the intended activity.
+
+The station's exterior (from plan M9) is the one hand-made scene: in `Design/StationExterior/`, its `.blend` is the owner's source and a check script stands in for the generation script, validating the model and writing its manifest. Everything else stays generated.
 
 Use standard metallic/roughness materials for GLB geometry. Procedural backgrounds, Blender lighting and compositor glow remain presentation elements. Recreate dynamic particles, bloom and exhaust in the game engine. The outpost scene is a static visual setup; docking, extraction, inventory, targeting and combat simulation are separate gameplay work.
 
