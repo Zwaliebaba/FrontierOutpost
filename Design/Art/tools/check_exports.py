@@ -14,11 +14,18 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def fits_berth(bounds, layout, contract):
-    """As frontier_art.berth_fit_errors: landed, a hull's beam lies across the berth."""
-    room = [2 * layout["halfWidth"], 2 * layout["halfLength"]]
-    return all(bounds["max"][i] - bounds["min"][i] + 2 * contract["clearance"] <= room[i] + contract["epsilon"]
-               for i in range(2))
+def mouth_errors(bounds, art, contract):
+    """As frontier_art's hull_fit: a flown hull passes the exterior's mouth flying straight in."""
+    exterior = art / "station/exterior/exterior.json"
+    if not exterior.exists():
+        return []
+    record = json.loads(exterior.read_text())["roots"][contract["roots"]["station_exterior"]]
+    mouth = record["anchors"][contract["runtime_nodes"]["mouth"]]["properties"]
+    clearance = 2 * contract["clearance"]
+    if (bounds["max"][0] - bounds["min"][0] + clearance > mouth["opening_width"]
+            or bounds["max"][2] - bounds["min"][2] + clearance > mouth["opening_height"]):
+        return ["Flown hull cannot pass the station's mouth with the clearance"]
+    return []
 
 
 def station_mismatches(record, contract):
@@ -90,10 +97,9 @@ def verify(art=ART):
                 expected = {contract["roots"][kind].format(id=identifier): kind}
                 if kind == "hull":
                     if identifier in contract["hulls"]["flown"]:
-                        berths = art.parent / "FrontierOutpost/berths.json"
                         bounds = manifest["roots"][contract["roots"]["hull"].format(id=identifier)]["bounds"]
-                        if berths.exists() and not fits_berth(bounds, json.loads(berths.read_text()), contract):
-                            raise ValueError("Flown hull does not fit a berth with the clearance")
+                        for error in mouth_errors(bounds, art, contract):
+                            raise ValueError(error)
                 if kind == "npc":
                     if identifier not in radii:
                         raise ValueError("Unknown NPC identifier in gameplay data")

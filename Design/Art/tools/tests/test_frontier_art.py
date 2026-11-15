@@ -36,9 +36,6 @@ class PipelineTests(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory(prefix="frontier-art-tests-")
         cls.art = Path(cls.temp.name) / "Art"
         (cls.art / "library").mkdir(parents=True)
-        # The frozen station's berths sit beside the art, as in the repository.
-        (cls.art.parent / "FrontierOutpost").mkdir()
-        shutil.copyfile(art.ART.parent / "FrontierOutpost/berths.json", cls.art.parent / "FrontierOutpost/berths.json")
         shutil.copyfile(art.ART / "library/materials.blend", cls.art / "library/materials.blend")
 
     @classmethod
@@ -174,11 +171,14 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unknown hull"):
             art.new_asset("hull", "hauler", art=self.art)
 
-    def test_flown_hull_must_fit_a_berth_and_display_hull_need_not(self):
-        # The berths are 3.6 m square: a 3.4 m beam leaves 0.1 m a side, short of the clearance.
+    def test_flown_hull_must_pass_the_mouth_and_display_hull_need_not(self):
+        # The fixture exterior's mouth is the rules' 8 m: a 7.8 m beam leaves 0.1 m a side.
+        self.station_fixture("station_exterior")
+        bpy.ops.wm.save_as_mainfile(filepath=bpy.data.filepath)
+        art.export_asset(self.art)
         self.fixture("hull")
-        bpy.data.objects["hull"].scale.x = 3.4
-        self.assertFailure("berth_fit")
+        bpy.data.objects["hull"].scale.x = 7.8
+        self.assertFailure("hull_fit")
         path = art.asset_path("hull", "cruiser", self.art)
         shutil.rmtree(path.parent, ignore_errors=True)
         art.new_asset("hull", "cruiser", art=self.art)
@@ -290,6 +290,27 @@ class PipelineTests(unittest.TestCase):
                 manifest = json.loads(art.export_asset(self.art).read_text())
                 self.assertEqual(manifest["kind"], kind)
                 self.assertEqual(manifest["sha256"], art.sha(source.with_suffix(".glb")))
+
+    def test_reexport_keeps_the_preview_of_an_unchanged_model(self):
+        source = self.fixture("hull")
+        bpy.ops.wm.save_as_mainfile(filepath=str(source))
+        manifest_path = art.export_asset(self.art)
+        preview = source.with_suffix(".png")
+        before = art.sha(preview)
+        # As after a tool or contract change: inputs differ, the model does not.
+        manifest = json.loads(manifest_path.read_text())
+        manifest["inputs"]["tool"] = "older tool"
+        manifest_path.write_text(json.dumps(manifest))
+        bpy.ops.wm.open_mainfile(filepath=str(source))
+        art.export_asset(self.art)
+        self.assertEqual(art.sha(preview), before)
+        self.assertEqual(json.loads(manifest_path.read_text())["preview_sha256"], before)
+        # A changed model is rendered again.
+        bpy.data.objects["hull"].scale.x = .5
+        bpy.ops.wm.save_as_mainfile(filepath=str(source))
+        art.export_asset(self.art)
+        self.assertEqual(json.loads(manifest_path.read_text())["preview_sha256"], art.sha(preview))
+        self.assertNotEqual(art.sha(preview), before)
 
     def test_export_and_idempotence(self):
         source = self.fixture()

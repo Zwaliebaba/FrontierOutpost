@@ -7,6 +7,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shutil
 import sys
 import tempfile
 
@@ -253,22 +254,6 @@ def hull_identifiers():
     return [*CONTRACT["hulls"]["flown"], *CONTRACT["hulls"]["display"]]
 
 
-def berth_fit_errors(name, bounds, art=ART):
-    """A flown hull landed on any of the frozen station's berths keeps the clearance on every
-    side; the berths are all one size (berths.json). None once the berths are gone (M9)."""
-    path = art.parent / "FrontierOutpost/berths.json"
-    if not path.exists():
-        return []
-    layout = json.loads(path.read_text())
-    clearance = CONTRACT["clearance"]
-    lo, hi = bounds["min"], bounds["max"]
-    # Landed, the hull faces out of the station: its beam lies across the berth's width.
-    if (hi[0] - lo[0] + 2 * clearance > 2 * layout["halfWidth"] + CONTRACT["epsilon"]
-            or hi[1] - lo[1] + 2 * clearance > 2 * layout["halfLength"] + CONTRACT["epsilon"]):
-        return [f"berth_fit: {name} does not fit a berth with the clearance on every side"]
-    return []
-
-
 def station_rule_errors(name, record):
     """The exterior against the rules' station (frontier_sim station.rs): the mouth where the
     rules dock ships, its opening, the lane the contract keeps clear, and a footprint that the
@@ -451,9 +436,8 @@ def check_asset(art=ART):
             if identifier not in hull_identifiers():
                 errors.append(f"identifier: {identifier} is not a hull in the contract")
             if identifier in CONTRACT["hulls"]["display"]:
-                # A display hull is shown, never flown: no berth, mouth or parking place.
+                # A display hull is shown, never flown: no mouth or parking place to fit.
                 continue
-            errors.extend(berth_fit_errors(root.name, record["bounds"], art))
             exterior = art / "station/exterior/exterior.json"
             if exterior.exists():
                 station = json.loads(exterior.read_text())
@@ -485,6 +469,31 @@ def check_asset(art=ART):
         if roots:
             errors.extend(check(roots[0], kind, art))
     return sorted(set(errors)), records
+
+
+def render_preview(scene, records, path):
+    """Renders the review preview: each tier and tell side by side, roots restored after."""
+    roots = [o for o in bpy.data.collections["Export"].objects if o.parent is None]
+    saved = {o: o.matrix_world.copy() for o in roots}
+    try:
+        kind = scene["frontier_kind"]
+        if kind == "facility":
+            step = CONTRACT["socket"]["half_width"] * 2 + 0.7
+            for root in roots:
+                root.location.x = (root["tier"] - 1) * step
+                root.location.y = -2.5 if root.name.startswith("Tell_") else 0
+        bpy.context.view_layer.update()
+        points = []
+        for root in roots:
+            bounds = records[root.name]["bounds"]
+            points.extend(root.matrix_world @ Vector((x, y, z)) for x in [bounds["min"][0], bounds["max"][0]] for y in [bounds["min"][1], bounds["max"][1]] for z in [bounds["min"][2], bounds["max"][2]])
+        centre = sum(points, Vector()) / len(points)
+        setup_presentation(scene, centre, max((p - centre).length for p in points) * 2.5)
+        scene.render.filepath = str(path)
+        bpy.ops.render.render(write_still=True)
+    finally:
+        for root, matrix in saved.items():
+            root.matrix_world = matrix
 
 
 def export_asset(art=ART):
@@ -527,28 +536,14 @@ def export_asset(art=ART):
                                   use_selection=True, export_yup=True, export_extras=True,
                                   export_animations=False, export_cameras=False, export_lights=False,
                                   export_apply=True)
-        # Present each tier and tell side by side; export always retains roots at origin.
-        roots = [o for o in bpy.data.collections["Export"].objects if o.parent is None]
-        saved = {o: o.matrix_world.copy() for o in roots}
-        try:
-            kind = scene["frontier_kind"]
-            if kind == "facility":
-                step = CONTRACT["socket"]["half_width"] * 2 + 0.7
-                for root in roots:
-                    root.location.x = (root["tier"] - 1) * step
-                    root.location.y = -2.5 if root.name.startswith("Tell_") else 0
-            bpy.context.view_layer.update()
-            points = []
-            for root in roots:
-                bounds = records[root.name]["bounds"]
-                points.extend(root.matrix_world @ Vector((x, y, z)) for x in [bounds["min"][0], bounds["max"][0]] for y in [bounds["min"][1], bounds["max"][1]] for z in [bounds["min"][2], bounds["max"][2]])
-            centre = sum(points, Vector()) / len(points)
-            setup_presentation(scene, centre, max((p - centre).length for p in points) * 2.5)
-            scene.render.filepath = str(temp / preview.name)
-            bpy.ops.render.render(write_still=True)
-        finally:
-            for root, matrix in saved.items():
-                root.matrix_world = matrix
+        # A render differs by noise every time, so an unchanged model keeps its checked preview:
+        # a tool or contract change then rewrites manifests, not every preview in history.
+        previous = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+        if (preview.exists() and previous.get("sha256") == sha(temp / target.name)
+                and previous.get("roots") == records and previous.get("preview_sha256") == sha(preview)):
+            shutil.copyfile(preview, temp / preview.name)
+        else:
+            render_preview(scene, records, temp / preview.name)
         manifest = {"schema_version": 1, "kind": scene["frontier_kind"], "id": scene["frontier_id"],
                     "planned": scene["frontier_kind"] == "facility" and scene["frontier_id"] not in facility_tiers(), "tiers": scene["frontier_tiers"],
                     "tool_version": VERSION, "blender_version": bpy.app.version_string,

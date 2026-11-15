@@ -92,6 +92,10 @@ There are no timestamps in manifests. A tool, contract or library change require
 affected sources and regenerating the catalogue.
 
 Keep the whole `Design/Art/` folder when moving sources: linked material paths are relative.
+Exports keep a model's checked preview when the GLB and its records are unchanged, so a tool,
+contract or library change rewrites manifests instead of re-rendering every preview (a render
+differs by noise every time, and each preview stays in Git history).
+
 `migrate_hulls.py` moved the frozen scene's starter frigate and Aurora cruiser into hull files
 once, appending the original objects with their bevel and weighted-normal modifiers (so the
 exports kept the frozen GLBs' triangles, vertices and part names) and mapping their materials to
