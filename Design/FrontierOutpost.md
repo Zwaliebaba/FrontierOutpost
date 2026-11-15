@@ -171,7 +171,7 @@ Stage 1 requires persistent home/account saves and authoritative cooperative ses
 | Loss of cargo and upgraded modules; reconnect within a grace window | Cross-session suspend and checkpoints, PvP, territory |
 | Mouse and keyboard on desktop | Touch controls and tablet layout; gamepad is not planned at any stage |
 
-The Stage 1 expansion (§11) lifts four of these limits after plan M7: a second pilot as an NPC wingman, a third socket and further facilities, further hulls, and further sites with a site map at preparation; it also rebuilds the station around an internal hangar in place of the berths, seen as an exterior with facility tells and an interior with the modules and ships. Everything else in the right-hand column stays outside Stage 1.
+The Stage 1 expansion (§11) lifts four of these limits after plan M7: a second pilot as an NPC wingman, a third socket and further facilities, further hulls, and further sites with a site map at preparation; it also rebuilds the station around an internal hangar in place of the berths, seen as an exterior with integrated facility tells and an interior with service locations and ships. Everything else in the right-hand column stays outside Stage 1.
 
 **Stage 1 gate measures.** Playtests use about eight invited testers who have not seen the game, on machines the owner provides. The thresholds below are provisional starting figures from the Revision 3 review and are confirmed before the first measurement. With no testers available, the owner first measures Stage 1 alone (plan M7): each measure is met, failed or unproven, with its basis stated, and a measure that needs players other than the owner is unproven, never met. Gates 1 and 3 cannot be met that way. The owner may begin Stage 2 with them unproven, accepting the risk that the signature does not hold for other players; they stay unproven until other players are measured.
 
@@ -355,11 +355,14 @@ camera (§5). The **exterior** is the station as it stands at the dock in every 
 two to three times larger than today's, with one hangar mouth and no berths, apron, sockets or
 parked ships. It still changes as the outpost grows: each installed facility shows a small
 **tell** in its signature shape at its socket's hardpoint on the hull, which grows with the
-facility's tier, and the reactor upgrade has one too, so the outside evolves even though the modules are inside. Selecting the station at
+facility's tier, and the reactor upgrade has one too. These are built-in roof/service assemblies
+with flush hull interfaces, not miniature buildings on raised platforms. Facilities visible
+on the exterior are not duplicated as modules in the interior (owner decision, 15 November 2026). Selecting the station at
 home opens the **interior**: a cutaway of the same station, seen through the same orthographic
-view, orbit and zoom, showing the construction sockets with their facility modules and states
+view, orbit and zoom, showing the construction/service locations and facility states
 (empty, building, powered, unpowered, producing, blocked; §2), the processor and cargo bay, and
-the hangar deck with every ship the pilot owns. Building, upgrading and reconfiguring happen in
+the hangar deck with every ship the pilot owns. Facility meshes already visible on the exterior
+are omitted from the cutaway. Building, upgrading and reconfiguring happen in
 the interior. Gate 1's before-and-after images show both views.
 
 A ship launches by flying out of the mouth, and crew ships leave one after another; it docks by

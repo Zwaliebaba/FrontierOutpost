@@ -9,14 +9,14 @@
     "contract": "c4c9a606e65507799b3b3249f1ddb8454508f35c44de060b730a2f4679d1f5a7",
     "game_data_reader": "2e4ed127f595d54db31a411c295752a6cdabf6b4aebaefe34ec5672eddab260c",
     "materials": "e6e79034affcdd1975f2efdf9b01c3d08d7556c5948afb376c0f434fb9d443e4",
-    "source": "b50e6e67facaab2a65fd6788b562727a54d1d046570b079a34970e37a27c1251",
+    "source": "f6df70da21059bcc5415a8b4a75d102e2aa57a714c2674139ce0cc1203d1e74b",
     "station_checks": "37174f24d54a1bc59b367cd43f1a1a92833420bdd9153383e795804180e39478",
     "tool": "ae209a2304f46b7663ab3a23298224ede7b279c05616bddd8192d7532af489fc"
   },
   "kind": "station_interior",
   "planned": false,
   "preview": "interior.png",
-  "preview_sha256": "d8ad3018b03627f5f5977b1e5008e1c9c58773ce9d17c857f0544813813983fd",
+  "preview_sha256": "3ebfe6135f57dbcf6f92059a0c22c583df3b49a068416db5f3c470295e2a591b",
   "roots": {
     "StationInterior_ROOT": {
       "anchors": {
@@ -162,6 +162,7 @@
         "Cargo container -1.2__StationInterior_ROOT",
         "Cargo container 0.1__StationInterior_ROOT",
         "Cargo container 1.4__StationInterior_ROOT",
+        "Cargo floor skin__StationInterior_ROOT",
         "Cargo latch -1.2__StationInterior_ROOT",
         "Cargo latch 0.1__StationInterior_ROOT",
         "Cargo latch 1.4__StationInterior_ROOT",
@@ -279,6 +280,7 @@
         "Hangar lane guide 7.5-7__StationInterior_ROOT",
         "Hangar lane guide 7.5-9__StationInterior_ROOT",
         "Parking_frigate",
+        "Processor floor skin__StationInterior_ROOT",
         "Processor furnace__StationInterior_ROOT",
         "Processor hopper__StationInterior_ROOT",
         "Processor output chute__StationInterior_ROOT",
@@ -302,11 +304,11 @@
         "Socket_C mounting deck__StationInterior_ROOT",
         "StationInterior_ROOT"
       ],
-      "triangles": 2604
+      "triangles": 2628
     }
   },
   "schema_version": 1,
-  "sha256": "e0d251e74fa00d30f14cb043d6f0dd21b6169f5ee80121a89dda75d2621f071e",
+  "sha256": "c2c7b589e158b3f7b5ad8217a531ea81be9dc865a0c0b7605045b7d9c9c31d25",
   "source_forward": "+Y",
   "source_up": "+Z",
   "tiers": 0,

@@ -1,8 +1,9 @@
 # M9 delivery and verification
 
 Plan M9 (station exterior and interior) is implemented: the station is two point two times its
-old size, solid, and docked through one hangar mouth; its facilities show as tells outside and
-as modules inside; the berths are gone. Three things remain the owner's: the 9.1 greybox runs
+old size, solid, and docked through one hangar mouth; its facilities show as integrated tells
+outside, and inside as service locations with their state, not duplicate modules (owner
+decision, 15 November 2026); the berths are gone. Three things remain the owner's: the 9.1 greybox runs
 that confirm or change the scale, the 9.7 measurements, and the checkpoint below.
 
 ## Owner decisions this build rests on (2026-11-15)
@@ -15,6 +16,8 @@ that confirm or change the scale, the 9.7 measurements, and the checkpoint below
 - Docking is entering a capture zone in front of the mouth, moving inward; the rules then draw
   the ship in.
 - Socket B's adjacency is "beside the hangar deck".
+- Facilities visible outside are not duplicated as modules inside; the interior shows each
+  socket's service location and state (decided with the art of #38).
 - The build uses the art's 2.2× scale; 9.1's greybox may change the constants and the art.
 - M7 is measured later, on the hangar build (below).
 

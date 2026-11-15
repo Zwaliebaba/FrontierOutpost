@@ -134,7 +134,8 @@ No game code changes for a new module.
   to its own.
 - **Each tier's tell** is a root `Tell_<id>_T<n>`, a small marker in the facility's signature
   shape within the tell cube, bigger at each tier. The game sets it on the exterior's hardpoint
-  for the socket the facility is installed in, so a facility is recognised outside and in.
+  for the socket the facility is installed in, so a facility is recognised by its exterior assembly and its management state. Exterior tells
+  use shallow service skins and shared hull seams, without raised miniature-building plinths.
 - **Each facility keeps a signature shape** no other uses, told apart at the zoom where the whole
   station fits: dishes are the sensor array's, a closed hall with doors the fabrication bay's, an
   open cradle the shipyard's. No tool can judge a shape, so the owner reviews each new facility's
@@ -154,7 +155,7 @@ Tiers 1 and 2 of the first three facilities exist, generated; 8.3 moves them her
 ## The station's exterior (9.2)
 
 The station is seen two ways (design §11). The exterior stands at the dock in every run and at
-home, with no sockets, modules, berths or parked ships.
+home, with no exposed construction sockets, separate module platforms, berths or parked ships.
 
 - **Root and scale:** `StationExterior_ROOT` at the dock point, the hangar mouth facing +Y; two to
   three times today's station, the factor chosen in the greybox first (9.1). Ships keep their size.
@@ -179,7 +180,10 @@ home, with no sockets, modules, berths or parked ships.
 ## The station's interior (9.3)
 
 A cutaway of the same station, open to the resting view, seen through the one tactical camera
-(AGENTS.md §4.5), where the modules and the owned ships are shown and building happens.
+(AGENTS.md §4.5), where the service locations and owned ships are shown and building happens. Per the owner's
+15 November 2026 decision, a facility represented on the exterior is not drawn again as an
+interior module; its socket and management state remain available. The full module roots
+remain in the library for compatibility with the pre-M9 station.
 
 - **Its parts:** sockets A, B and C, each an empty `Socket_<letter>` at its deck, with C closed by
   `Closure_C*` until the reactor is bought; the hangar deck with an empty `Parking_<hull>` per

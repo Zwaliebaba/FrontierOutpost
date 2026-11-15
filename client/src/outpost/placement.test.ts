@@ -2,6 +2,7 @@ import { Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 import exteriorGlb from "../../../Design/Art/station/exterior/exterior.glb?inline";
 import interiorGlb from "../../../Design/Art/station/interior/interior.glb?inline";
+import catalogue from "../../../Design/Art/catalogue.json";
 import { SHIP_HEIGHT } from "../view/hulls";
 import { indexStation, parseGlb } from "./models";
 import { HOME_STATION, STATION_HEIGHT, placeStation } from "./placement";
@@ -13,6 +14,15 @@ const station = indexStation(
   await parseGlb(bytes(exteriorGlb)),
   await parseGlb(bytes(interiorGlb)),
 );
+
+/** Where the exterior's manifest puts a hardpoint in the station's own frame (Blender X, Y). */
+function authored(name: string): { across: number; along: number } {
+  const anchors: Record<string, { matrix: number[][] }> =
+    catalogue.assets["station_exterior:exterior"].roots.StationExterior_ROOT.anchors;
+  const matrix = anchors[name]?.matrix;
+  if (!matrix) throw new Error(`no anchor ${name}`);
+  return { across: matrix[0]?.[3] ?? 0, along: matrix[1]?.[3] ?? 0 };
+}
 
 /** The rules' distance from the station's centre to its mouth (frontier_sim::station). */
 const MOUTH_DISTANCE = 14;
@@ -53,10 +63,18 @@ describe("placing the station at the dock", () => {
       expect(world?.y).toBeCloseTo(-SHIP_HEIGHT / 2, 6);
       expect(placement.y).toBe(STATION_HEIGHT);
       expect(placement.heading).toBeCloseTo(Math.atan2(at.forwardZ, at.forwardX), 6);
-      // The station's frame: +across is (−Fz, Fx), so Tell_B (Blender +X 14) lies that way.
-      const tell = station.hardpoints.get("b")?.getWorldPosition(new Vector3());
-      expect(tell?.x).toBeCloseTo(at.centreX - at.forwardZ * 14, 4);
-      expect(tell?.z).toBeCloseTo(at.centreZ + at.forwardX * 14, 4);
+      // The station's frame: +across is (−Fz, Fx) and +along is F, so every hardpoint lands
+      // where the rules' frame puts its authored position: the exterior is not mirrored.
+      for (const [id, name] of [
+        ["a", "Tell_A"],
+        ["b", "Tell_B"],
+        ["c", "Tell_C"],
+      ] as const) {
+        const { across, along } = authored(name);
+        const tell = station.hardpoints.get(id)?.getWorldPosition(new Vector3());
+        expect(tell?.x).toBeCloseTo(at.centreX - at.forwardZ * across + at.forwardX * along, 4);
+        expect(tell?.z).toBeCloseTo(at.centreZ + at.forwardX * across + at.forwardZ * along, 4);
+      }
       // The interior shares the frame: its hangar deck's parking place lies toward the mouth.
       const parked = station.parking.get("frigate")?.getWorldPosition(new Vector3());
       const along =

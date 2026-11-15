@@ -8,10 +8,12 @@ The pipeline exports both assets and the catalogue registers them for later M9 i
 The game draws both (plan 9.6): the client looks them up in the catalogue in place of the
 legacy station, at home and at the dock. The rules own the station's geometry
 (`crates/sim/src/station.rs`) and send it with the site; the client stands the exterior at the
-dock, its mouth facing the site's centre, with each installed facility's tell on its socket's
-hardpoint, and swaps in the interior when the station is selected at home, where modules are
-built. M9.1's greybox readability measurements and owner review may still change the scale.
-Existing M8 tells are reused.
+dock, its mouth facing the site's centre, with each installed facility's integrated tell on its
+socket's hardpoint, and swaps in the interior when the station is selected at home, where
+facilities are built and managed. Facilities visible outside are not duplicated as modules in
+the interior (owner decision, 15 November 2026): the interior shows each socket's service
+location and state. M9.1's greybox readability measurements and owner review may still change
+the scale. The existing tell identifiers are retained with newly integrated exterior geometry.
 
 ## Detailed reference pass
 
@@ -22,12 +24,12 @@ belts and a substantial command tower with amber vertical spines. The hangar gai
 cheeks, recessed portal lighting, interior ribs and ceiling light strips, plus a marked transit
 threshold. Its approach envelope remains clear; the threshold finishes at or below Z=0.
 
-Facility-specific shapes remain in the existing facility tells. The reference's decorative
+Facility-specific shapes remain in separate, interchangeable facility tells. The reference's decorative
 pads are not authored as exterior berths or parked ships. The interior receives matching
 corridor decks, floor seams, lane paint and cargo/processor details, without raising geometry
-into socket or ship envelopes. Tell mounts now sit above the armour panels; the outer mounts
-and reactor hardpoint are moved outward so all four pass visibility checks in both reviewed
-station orientations. The shared material library and contract are unchanged.
+into socket or ship envelopes. Tell mounts are flush with the structural roof. Thin receiver skins, perimeter hull seams
+and radial utility ducts replace the raised square plinths. All four bays sit within the
+ring footprint and pass visibility checks in both reviewed station orientations. The shared material library and contract are unchanged.
 
 `refine_station.py` applies this pass to the initial sources once and refuses to apply twice.
 It checks each file before saving, including both assets against the proposed reversed world
@@ -56,7 +58,8 @@ orientation. Subsequent modelling can be done directly in the Blender files.
 - `Hangar_Mouth` is at `(0, 14, 0)`, with an 8 by 3.5 metre opening and the contract's 30 metre
   straight approach. No exterior mesh or largest supported tell intersects that lane.
 - `Tell_A`, `Tell_B`, `Tell_C` and `Tell_reactor` are hull-mounted anchors. Facilities are not
-  baked into the exterior. The large review renders temporarily place three existing tells.
+  baked into the exterior. The large review renders place three integrated facility tells; a second layout shows
+  the fabrication bay instead of quarters, so all four facility families can be reviewed.
 - The cutaway shares the ring footprint and is drawn with the exterior's transform, in its
   place. Socket A is beside cargo, B beside the hangar deck,
   and C has separate `Closure_C*` meshes. The client gathers them under `Socket_C` and lays a
@@ -65,8 +68,10 @@ orientation. Subsequent modelling can be done directly in the Blender files.
   clearance. Future hulls will require their own parking places in M11.
 - Checks use all three full 5 metre socket envelopes simultaneously, even though the populated
   review uses current tier-II modules. Their projected bounds and the frigate parking envelope
-  do not overlap from the resting camera. The populated review shows C open and the reactor
-  visible to illustrate the later upgraded layout, not the initial gameplay state.
+  do not overlap from the resting camera. Per the owner's latest decision, exterior-visible facilities are omitted from the interior review.
+  Service locations remain; C is open in the populated gallery, matching its exterior facility.
+  The interior uses the same proposed 180-degree world placement and the same camera. The exterior layouts are art comparisons, not validated
+  purchase/power configurations. Full module roots remain unchanged for the legacy renderer.
 
 ## Rebuild and inspect
 
@@ -96,7 +101,7 @@ pipeline previews contain only the asset being exported, under the shared previe
 
 Verified in Blender 4.3.2:
 
-- Exterior: 25,384 evaluated/exported triangles; interior: 2,604. Both are below 30,000.
+- Exterior: 25,916 evaluated/exported triangles; interior: 2,628. Both are below 30,000.
 - Both saved sources pass the pipeline, including linked materials, runtime nodes, hangar
   opening, approach lane, tell hardpoints, full socket envelopes and tactical projection checks.
 - Reimporting each GLB preserves triangle counts and bounds (within 0.0001 metres), with all
@@ -108,3 +113,32 @@ Verified in Blender 4.3.2:
 
 Art checks establish geometric clearance, not gameplay targeting or frame-time gates. The
 interactive M9.1 and M9.7 measurements remain outstanding.
+
+## Integrated facilities pass
+
+The owner identified the roof equipment as looking parked on top and authorised removing
+duplicate interior modules when they are visible outside. `integrate_facilities.py` rebuilds
+only the exterior tell roots in the four facility sources, preserving every full facility
+root exactly. Each facility now has an architectural service skin, hull seams and utility
+couplings, with its signature equipment built into that skin. Each tier still fits the
+1.5 metre tell envelope and the 500 triangle budget (164–432 triangles).
+
+The station bays replace overhanging plinths with receiver plates at Z=1.20, embedded into the original Z=1.18 roof to avoid coincident faces and
+framed openings in the roof dressings. Their shared interfaces allow any facility to fit
+any bay; no facility geometry is baked into the station. The reference image's integrated
+look is achieved by matching the assemblies to the hull rather than duplicating standalone
+miniature buildings. The interior review does not import the exterior-visible facility meshes.
+Runtime adoption of this display rule remains part of M9 integration, as does adoption of
+the station itself; the legacy game renderer remains unchanged by this art pass.
+
+Assembly verification checked all eight facility tiers against all four receivers: base contact
+was exact within 0.00001 m, every footprint stayed on the ring, and no receiver overhang
+was needed. A deliberately raised anchor failed the contact condition without being saved.
+All full facility root records match the previous revision exactly. All six GLBs reimport
+with matching root triangle counts, bounds within 0.0001 m and all anchors retained.
+
+Removing the duplicate interior modules exposed old coplanar deck layers. The structural
+decks, floor skins and paint now have separate heights below the reserved service/parking
+envelopes; cargo and processor floor skins meet their equipment bases.
+`finish_interior_decks.py` applies this one-time cleanup. Both camera-orientation checks
+pass with the original full socket envelopes and parking clearance retained.

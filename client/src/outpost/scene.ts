@@ -1,13 +1,15 @@
 /**
  * The outpost as the home shows it (design §11): the station's exterior, with each installed
  * facility's tell on its socket's hardpoint, or, once the station is selected, the interior's
- * cutaway in its place, with each installed module on its socket at the tier it owns, unpowered
- * ones dimmed, closed sockets plated, a ring on the selected socket and the pilot's ship parked
- * on the hangar deck. The same object stands at the dock in a run. It needs no WebGL, so the
+ * cutaway in its place. A facility shows outside only: the interior keeps its socket as a service
+ * location, marked with the facility's state (owner decision, 15 November 2026; design §11),
+ * closed sockets plated, a ring on the selected socket and the pilot's ship parked on the
+ * hangar deck. The same object stands at the dock in a run. It needs no WebGL, so the
  * placement rules are tested without a renderer.
  */
 import {
   Box3,
+  BoxGeometry,
   CylinderGeometry,
   Mesh,
   MeshBasicMaterial,
@@ -37,6 +39,43 @@ const PICK_RADIUS = 1.9;
 /** How tall the exterior's pick target stands either side of the plane, metres. */
 const STATION_PICK_HEIGHT = 8;
 const RING = linear(1, 0.62, 0.15);
+/** A service location's state: lit as the style guide's indicators when powered, dark when not. */
+const POWERED = linear(0.04, 0.65, 1);
+const UNPOWERED = linear(0.12, 0.14, 0.17);
+const PIP_OFF = linear(0.05, 0.06, 0.08);
+const SERVICE_RADIUS = 1.15;
+
+/**
+ * The mark an installed facility leaves on its interior socket: a flat ring in its state's
+ * colour and one pip per owned tier, lit up to the tier it runs at. It stands no taller than a
+ * deck plate, so the cutaway shows the facility's state without duplicating its exterior model.
+ */
+export function serviceMarker(
+  facility: string,
+  tier: number,
+  run: number,
+  powered: boolean,
+): Object3D {
+  const marker = new Group();
+  marker.name = `Service_${facility}_T${String(tier)}`;
+  const ring = new Mesh(
+    new TorusGeometry(SERVICE_RADIUS, 0.09, 6, 40),
+    new MeshBasicMaterial({ color: powered ? POWERED : UNPOWERED, toneMapped: false }),
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.04;
+  marker.add(ring);
+  for (let n = 1; n <= tier; n += 1) {
+    const pip = new Mesh(
+      new BoxGeometry(0.28, 0.06, 0.28),
+      new MeshBasicMaterial({ color: n <= run ? POWERED : PIP_OFF, toneMapped: false }),
+    );
+    pip.name = `Service_pip_${String(n)}${n <= run ? "_lit" : ""}`;
+    pip.position.set((n - (tier + 1) / 2) * 0.42, 0.05, 0);
+    marker.add(pip);
+  }
+  return marker;
+}
 
 interface Placed {
   key: string;
@@ -50,8 +89,10 @@ export interface SceneReport {
   view: StationView;
   sockets: string[];
   facilities: string[];
-  /** What is actually in the scene graph under each interior socket. */
+  /** The service marker under each interior socket. */
   installed: { socket: string; facility: string; tier: number; powered: boolean }[];
+  /** Facility module models under interior sockets: none, since facilities show outside. */
+  modules: number;
   /** What stands on each exterior hardpoint. */
   tells: { hardpoint: string; facility: string; tier: number; powered: boolean }[];
   /** The sockets whose closure plate is shown. */
@@ -90,6 +131,7 @@ function dim(object: Object3D): void {
 }
 
 const FACILITY = /^Facility_([a-z][a-z0-9_]*)_T(\d+)$/;
+const SERVICE = /^Service_([a-z][a-z0-9_]*)_T(\d+)$/;
 const TELL = /^Tell_([a-z][a-z0-9_]*)_T(\d+)$/;
 
 export class OutpostScene {
@@ -190,8 +232,8 @@ export class OutpostScene {
   }
 
   /**
-   * Shows each socket as `account` has it: the module at its owned tier inside, dimmed if
-   * unpowered, and its tell on the socket's hardpoint outside, growing with the tier.
+   * Shows each socket as `account` has it: its tell on the socket's hardpoint outside, growing
+   * with the tier and dimmed if unpowered, and its service marker on the socket inside.
    */
   apply(account: AccountInfo): void {
     this.#account = account;
@@ -214,17 +256,11 @@ export class OutpostScene {
       )
         continue;
       this.#clear(socket.id);
+      // The facility's file holds its tells; the marker waits for it, so both appear together.
       const template = key === null ? undefined : this.#models.facilities.get(key);
       if (key && !template && socket.facility) this.#load(socket.facility);
-      if (!key || !template) continue;
-      const object = template.clone();
-      object.position.set(0, 0, 0);
-      object.traverse((node) => {
-        const match = /^Operating_Tier_(\d+)/.exec(node.name);
-        if (match?.[1]) node.visible = Number(match[1]) <= socket.run;
-      });
-      if (!powered) dim(object);
-      structure(object);
+      if (!key || !template || !socket.facility) continue;
+      const object = serviceMarker(socket.facility, tier, socket.run, powered);
       anchor.add(object);
       this.#placed.set(socket.id, { key, powered, run: socket.run, object });
       const hardpoint = this.#models.hardpoints.get(socket.id);
@@ -240,7 +276,7 @@ export class OutpostScene {
     this.scene.updateMatrixWorld(true);
   }
 
-  /** Takes the module and the tell off socket `id`. */
+  /** Takes the service marker and the tell off socket `id`. */
   #clear(id: string): void {
     this.#placed.get(id)?.object.removeFromParent();
     this.#placed.delete(id);
@@ -331,9 +367,13 @@ export class OutpostScene {
   /** What the scene graph holds, for tests and the page's diagnostics. */
   report(): SceneReport {
     const installed: SceneReport["installed"] = [];
+    let modules = 0;
     for (const [socket, anchor] of this.#models.sockets) {
+      anchor.traverse((node) => {
+        if (FACILITY.test(node.name)) modules += 1;
+      });
       for (const child of anchor.children) {
-        const match = FACILITY.exec(child.name);
+        const match = SERVICE.exec(child.name);
         if (!match?.[1] || !match[2]) continue;
         installed.push({
           socket,
@@ -366,6 +406,7 @@ export class OutpostScene {
       sockets: [...this.#models.sockets.keys()].sort(),
       facilities: [...this.#models.facilities.keys()].sort(),
       installed,
+      modules,
       tells,
       closed: [...this.#models.closures]
         .filter(([, closure]) => closure.visible)

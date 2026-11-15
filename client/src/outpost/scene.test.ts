@@ -301,7 +301,7 @@ describe("the outpost scene", () => {
   });
 });
 
-it("preserves the built tier while changing operating indicators", () => {
+it("marks a facility's socket inside with its tier and running state, not its model", () => {
   const pack = models();
   const scene = new OutpostScene(pack);
   const layout = (run: number) =>
@@ -312,14 +312,27 @@ it("preserves the built tier while changing operating indicators", () => {
       ],
       [{ facility: "sensor_array", tier: 2 }],
     );
+  const lit = () => {
+    let count = 0;
+    pack.sockets.get("a")?.traverse((node) => {
+      if (node.name.endsWith("_lit")) count += 1;
+    });
+    return count;
+  };
   scene.apply(layout(1));
   const socket = pack.sockets.get("a");
-  expect(socket?.getObjectByName("Facility_sensor_array_T2")).toBeDefined();
-  expect(socket?.getObjectByName("Operating_Tier_1")?.visible).toBe(true);
-  expect(socket?.getObjectByName("Operating_Tier_2")?.visible).toBe(false);
+  // The facility shows outside only (owner decision, 15 November 2026): no module inside.
+  expect(socket?.getObjectByName("Facility_sensor_array_T2")).toBeUndefined();
+  expect(scene.report().modules).toBe(0);
+  expect(socket?.getObjectByName("Service_sensor_array_T2")).toBeDefined();
+  expect(lit()).toBe(1);
   scene.apply(layout(2));
-  expect(socket?.getObjectByName("Operating_Tier_2")?.visible).toBe(true);
+  expect(lit()).toBe(2);
   scene.apply(layout(0));
-  expect(socket?.getObjectByName("Facility_sensor_array_T2")).toBeDefined();
-  expect(socket?.getObjectByName("Operating_Tier_1")?.visible).toBe(false);
+  // Built at tier 2, running none: the marker keeps the tier, with no pip lit.
+  expect(socket?.getObjectByName("Service_sensor_array_T2")).toBeDefined();
+  expect(lit()).toBe(0);
+  expect(scene.report().installed).toEqual([
+    { socket: "a", facility: "sensor_array", tier: 2, powered: false },
+  ]);
 });

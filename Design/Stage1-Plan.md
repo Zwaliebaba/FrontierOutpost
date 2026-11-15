@@ -215,7 +215,7 @@ trivial, or the wingman too often feels like a burden, its values are reworked b
 ### M9 · Station exterior and interior
 
 *At the end: the station is two to three times larger and shows each facility's tell outside;
-you select it to see your modules and ships inside, fly out of its hangar at launch and back in
+you select it to see service locations, facility states and ships inside, fly out of its hangar at launch and back in
 to dock, and the berths are gone.*
 
 The owner models the exterior, the interior and the tells by hand, through the art pipeline
@@ -228,7 +228,7 @@ The owner models the exterior, the interior and the tells by hand, through the a
 | 9.3 | The owner models the interior through the pipeline (the hangar deck with a parking place per hull, sockets A to C with C closed, the processor and the cargo bay), and a tell at each tier in each existing facility's file | `check` passes for the interior and every facility; CI's art check is green |
 | 9.4 | Rules: docking and undocking measured from the hangar mouth; crew ships leave the mouth one after another; jump arrivals stay outside the station; the berth slots removed | Sim tests, including four ships launching without colliding and a jump home landing clear of the station |
 | 9.5 | Server and protocol: berth slots leave the crew roster and the wire | An integration test: four pilots launch and dock |
-| 9.6 | Client: the exterior at the dock and at home with its tells drawn from facility state; selecting the station opens the interior in the same camera, with the owned ships, the modules and their states; building and upgrading move into the interior; ships leave the mouth at launch and are drawn into it on docking; the station HUD without berth slots | Browser tests: open the interior, build in a socket and see its tell outside, launch and dock |
+| 9.6 | Client: the exterior at the dock and at home with its tells drawn from facility state; selecting the station opens the interior in the same camera, with the owned ships, service locations and facility states, omitting duplicate meshes for facilities visible outside; building and upgrading move into the interior; ships leave the mouth at launch and are drawn into it on docking; the station HUD without berth slots | Browser tests: open the interior, build in a socket and see its tell outside, launch and dock |
 | 9.7 | Gates 2 and 4 measured again with the new station, as an addendum to M7's write-up | The addendum |
 
 **Checkpoint.** The owner builds a facility inside, sees its tell outside, launches and docks.
@@ -303,7 +303,7 @@ for the rest.
 | New hulls or sites break the snapshot budget | M11.3, M12.6 | Ships stay at four per instance; the size test and the caps benchmark are re-run |
 | A larger station hides ships or crowds the dock | M9 | The greybox tests its silhouette before the owner models it (9.1); gates 2 and 4 are measured again (9.7) |
 | The owner's hand-made exterior drifts from what the game needs | M9.2 | The pipeline's `check`, run on every export, fails on a missing mouth, a blocked lane or a missing hardpoint |
-| With the modules inside, the outside stops showing the outpost's growth | M9 | Each facility and the reactor keep a tell on the exterior; gate 1's images show both views |
+| Facility placement stops showing the outpost's growth | M9 | Each facility and the reactor keep a tell on the exterior; gate 1's images show both views |
 | The expansion swallows the gates | M8 to M12 | M7 measures Stage 1 before the expansion starts; gates 1 and 3 stay unproven until other players are measured |
 | A solo measure is read as a pass | M7 | Each measure carries its basis, and a measure that needs other players is unproven, never met |
 | Stage 2 is built on a loop no other player has tried | After M7 | Accepted by the owner (AGENTS.md §8); gates 1 and 3 stay unproven until other players are measured |

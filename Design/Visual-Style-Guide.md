@@ -89,7 +89,7 @@ Propulsion reads as a blue core with a tapered plume. A landed ship idles its dr
 
 Each facility keeps a signature shape no other facility uses, so facilities are told apart at the zoom where the whole outpost fits: dishes are the sensor array's, a closed hall with doors is the fabrication bay's, an open cradle is the shipyard's. Each tier stands more than 0.4 taller than the one below it, tier 3 included, and a module stays within the socket envelope, so it fits any interior socket.
 
-The station (design §11) is seen two ways in the one tactical camera. The exterior carries no sockets, modules or parked ships; the outpost's growth shows on it as tells, one small marker per installed facility in that facility's signature shape, on the hardpoint of the socket it is installed in, growing with its tier, so a facility is recognised outside and in. The interior is a cutaway open to the resting view: no wall, module or parked ship covers another socket or parking place from it. Upgrades to the core itself, such as the reactor, are separate named meshes shown only once bought, and leave the rest of the core's silhouette unchanged.
+The station (design §11) is seen two ways in the one tactical camera. The exterior carries no exposed construction sockets, separate module platforms or parked ships; the outpost's growth shows on it as tells, one small marker per installed facility in that facility's signature shape, on the hardpoint of the socket it is installed in, growing with its tier, so a facility is recognised outside and in. Exterior facility assemblies meet the ring through flush service skins, hull seams and utility connections; avoid isolated raised platforms. Per the owner's 15 November 2026 decision, facilities visible outside are not duplicated as module meshes in the interior. The interior retains their service locations and management state. The interior is a cutaway open to the resting view: no wall, module or parked ship covers another socket or parking place from it. Upgrades to the core itself, such as the reactor, are separate named meshes shown only once bought, and leave the rest of the core's silhouette unchanged.
 ## 8. Asset and scene structure
 
 ### Shared assembly conventions
@@ -178,8 +178,10 @@ berths, apron, sockets or parked ships; each installed facility shows its tell, 
 owns and dimmed when unpowered, on its socket's hardpoint (A, B and C on `Tell_A`–`Tell_C`), and
 `Tell_reactor` stays empty until the reactor is bought. Selecting the station, or the view
 control, opens the **interior**: the cutaway drawn in the exterior's place, in the same camera,
-zoom and orbit. It shows the sockets with their modules and states, the processor, the cargo bay
-and the pilot's own ship on its parking place, facing the mouth; crewmates' ships are not the
+zoom and orbit. It shows each socket as a service location, not a second copy of the facility
+seen outside: an installed facility marks its socket with a flat ring, indicator cyan when
+powered and dark when not, and one pip per owned tier, lit up to the tier it runs at. It also
+shows the processor, the cargo bay and the pilot's own ship on its parking place, facing the mouth; crewmates' ships are not the
 pilot's and are not drawn. Socket C stays plated, and the reactor's meshes hidden, until M10.
 Building, upgrading and reconfiguring happen inside: opening the facilities service, or
 selecting a socket, opens the interior, and leaving it closes that service. Only open sockets
