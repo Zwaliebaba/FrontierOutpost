@@ -8,7 +8,7 @@ The pipeline exports both assets and the catalogue registers them for later M9 i
 This is an art study, not completion of M9. The game still uses the legacy station.
 M9.1's interactive greybox readability measurements and owner review must establish the
 final scale before this replaces it. Docking rules, removal of berths, the interior toggle,
-facility placement and tell rendering remain M9.4–9.7 work. Existing M8 tells are reused.
+facility placement and tell rendering remain M9.4–9.7 work. The existing tell identifiers are retained with newly integrated exterior geometry.
 
 ## Detailed reference pass
 
@@ -19,12 +19,12 @@ belts and a substantial command tower with amber vertical spines. The hangar gai
 cheeks, recessed portal lighting, interior ribs and ceiling light strips, plus a marked transit
 threshold. Its approach envelope remains clear; the threshold finishes at or below Z=0.
 
-Facility-specific shapes remain in the existing facility tells. The reference's decorative
+Facility-specific shapes remain in separate, interchangeable facility tells. The reference's decorative
 pads are not authored as exterior berths or parked ships. The interior receives matching
 corridor decks, floor seams, lane paint and cargo/processor details, without raising geometry
-into socket or ship envelopes. Tell mounts now sit above the armour panels; the outer mounts
-and reactor hardpoint are moved outward so all four pass visibility checks in both reviewed
-station orientations. The shared material library and contract are unchanged.
+into socket or ship envelopes. Tell mounts are flush with the structural roof. Thin receiver skins, perimeter hull seams
+and radial utility ducts replace the raised square plinths. All four bays sit within the
+ring footprint and pass visibility checks in both reviewed station orientations. The shared material library and contract are unchanged.
 
 `refine_station.py` applies this pass to the initial sources once and refuses to apply twice.
 It checks each file before saving, including both assets against the proposed reversed world
@@ -52,15 +52,17 @@ orientation. Subsequent modelling can be done directly in the Blender files.
 - `Hangar_Mouth` is at `(0, 14, 0)`, with an 8 by 3.5 metre opening and the contract's 30 metre
   straight approach. No exterior mesh or largest supported tell intersects that lane.
 - `Tell_A`, `Tell_B`, `Tell_C` and `Tell_reactor` are hull-mounted anchors. Facilities are not
-  baked into the exterior. The large review renders temporarily place three existing tells.
+  baked into the exterior. The large review renders place three integrated facility tells; a second layout shows
+  the fabrication bay instead of quarters, so all four facility families can be reviewed.
 - The cutaway shares the ring footprint. Socket A is beside cargo, B beside the hangar deck,
   and C has separate `Closure_C*` meshes. The processor has a hopper, furnace and output chute.
   `Reactor_Upgrade*` meshes are separate for M10. `Parking_frigate` retains the current hull's
   clearance. Future hulls will require their own parking places in M11.
 - Checks use all three full 5 metre socket envelopes simultaneously, even though the populated
   review uses current tier-II modules. Their projected bounds and the frigate parking envelope
-  do not overlap from the resting camera. The populated review shows C open and the reactor
-  visible to illustrate the later upgraded layout, not the initial gameplay state.
+  do not overlap from the resting camera. Per the owner's latest decision, exterior-visible facilities are omitted from the interior review.
+  Service locations remain; C is closed. The exterior layouts are art comparisons, not validated
+  purchase/power configurations. Full module roots remain unchanged for the legacy renderer.
 
 ## Rebuild and inspect
 
@@ -90,7 +92,7 @@ pipeline previews contain only the asset being exported, under the shared previe
 
 Verified in Blender 4.3.2:
 
-- Exterior: 25,384 evaluated/exported triangles; interior: 2,604. Both are below 30,000.
+- Exterior: 25,916 evaluated/exported triangles; interior: 2,604. Both are below 30,000.
 - Both saved sources pass the pipeline, including linked materials, runtime nodes, hangar
   opening, approach lane, tell hardpoints, full socket envelopes and tactical projection checks.
 - Reimporting each GLB preserves triangle counts and bounds (within 0.0001 metres), with all
@@ -102,3 +104,26 @@ Verified in Blender 4.3.2:
 
 Art checks establish geometric clearance, not gameplay targeting or frame-time gates. The
 interactive M9.1 and M9.7 measurements remain outstanding.
+
+## Integrated facilities pass
+
+The owner identified the roof equipment as looking parked on top and authorised removing
+duplicate interior modules when they are visible outside. `integrate_facilities.py` rebuilds
+only the exterior tell roots in the four facility sources, preserving every full facility
+root exactly. Each facility now has an architectural service skin, hull seams and utility
+couplings, with its signature equipment built into that skin. Each tier still fits the
+1.5 metre tell envelope and the 500 triangle budget (164–432 triangles).
+
+The station bays replace overhanging plinths with receiver plates flush at Z=1.18 and
+framed openings in the roof dressings. Their shared interfaces allow any facility to fit
+any bay; no facility geometry is baked into the station. The reference image's integrated
+look is achieved by matching the assemblies to the hull rather than duplicating standalone
+miniature buildings. The interior review does not import the exterior-visible facility meshes.
+Runtime adoption of this display rule remains part of M9 integration, as does adoption of
+the station itself; the legacy game renderer remains unchanged by this art pass.
+
+Assembly verification checked all eight facility tiers against all four receivers: base contact
+was exact within 0.00001 m, every footprint stayed on the ring, and no receiver overhang
+was needed. A deliberately raised anchor failed the contact condition without being saved.
+All full facility root records match the previous revision exactly. All six GLBs reimport
+with matching root triangle counts, bounds within 0.0001 m and all anchors retained.

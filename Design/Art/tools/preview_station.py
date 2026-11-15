@@ -84,11 +84,12 @@ def setup(at, direction, width, output):
     bpy.ops.render.render(write_still=True)
 
 
-def populate_exterior():
+def populate_exterior(layout=None, tier=2):
     bpy.ops.wm.open_mainfile(filepath=str(art.ART/'station/exterior/exterior.blend'))
-    for facility,anchor in [('sensor_array','Tell_A'),('refinery','Tell_B'),('crew_quarters','Tell_C')]:
+    layout = layout or [('sensor_array','Tell_A'),('refinery','Tell_B'),('crew_quarters','Tell_C')]
+    for facility,anchor in layout:
         at=bpy.data.objects[anchor].location.copy()
-        append_glb(art.ART/f'facilities/{facility}/{facility}.glb',f'Tell_{facility}_T2',at)
+        append_glb(art.ART/f'facilities/{facility}/{facility}.glb',f'Tell_{facility}_T{tier}',at)
     for at in [(19,-9,0),(6,22,0),(-17,-9,0)]:
         append_glb(art.ART.parent/'FrontierOutpost/frigate.glb','Frigate_ROOT',at,True)
 
@@ -99,8 +100,8 @@ def exterior_review(out):
     setup((0,1,-.4),(.43,.72,.545),45,out/'station-entrance.png')
 
 
-def camera_facing_review(out):
-    populate_exterior()
+def camera_facing_review(out, layout=None, tier=2, filename='station-camera-facing.png'):
+    populate_exterior(layout, tier)
     # Proposed world placement only. Exported roots and the gameplay camera do not change.
     pivot=bpy.data.objects.new('Review station world yaw',None)
     bpy.context.scene.collection.objects.link(pivot)
@@ -110,17 +111,13 @@ def camera_facing_review(out):
     pivot.rotation_euler.z=math.pi
     bpy.context.scene['review_station_yaw']=math.pi
     bpy.context.view_layer.update()
-    setup((0,0,-.4),art.CONTRACT['camera_direction'],46,out/'station-camera-facing.png')
+    setup((0,0,-.4),art.CONTRACT['camera_direction'],46,out/filename)
 
 
 def interior_review(out):
     bpy.ops.wm.open_mainfile(filepath=str(art.ART/'station/interior/interior.blend'))
-    for facility,anchor in [('crew_quarters','Socket_A'),('sensor_array','Socket_B'),('refinery','Socket_C')]:
-        at=bpy.data.objects[anchor].location.copy()
-        append_glb(art.ART/f'facilities/{facility}/{facility}.glb',f'Facility_{facility}_T2',at)
-    for obj in bpy.data.objects:
-        if obj.name.startswith('Closure_C'):
-            obj.hide_render=True
+    # Owner decision: facilities visible on the exterior are not duplicated inside.
+    # Keep service locations, cargo, processor and owned ships visible in the cutaway.
     append_glb(art.ART.parent/'FrontierOutpost/frigate.glb','Frigate_ROOT',bpy.data.objects['Parking_frigate'].location.copy(),True)
     setup((0,0,0),art.CONTRACT['camera_direction'],40,out/'station-interior.png')
 
