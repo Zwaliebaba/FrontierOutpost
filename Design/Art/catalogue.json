@@ -2240,6 +2240,7 @@
             "Cargo container -1.2__StationInterior_ROOT",
             "Cargo container 0.1__StationInterior_ROOT",
             "Cargo container 1.4__StationInterior_ROOT",
+            "Cargo floor skin__StationInterior_ROOT",
             "Cargo latch -1.2__StationInterior_ROOT",
             "Cargo latch 0.1__StationInterior_ROOT",
             "Cargo latch 1.4__StationInterior_ROOT",
@@ -2357,6 +2358,7 @@
             "Hangar lane guide 7.5-7__StationInterior_ROOT",
             "Hangar lane guide 7.5-9__StationInterior_ROOT",
             "Parking_frigate",
+            "Processor floor skin__StationInterior_ROOT",
             "Processor furnace__StationInterior_ROOT",
             "Processor hopper__StationInterior_ROOT",
             "Processor output chute__StationInterior_ROOT",
@@ -2380,10 +2382,10 @@
             "Socket_C mounting deck__StationInterior_ROOT",
             "StationInterior_ROOT"
           ],
-          "triangles": 2604
+          "triangles": 2628
         }
       },
-      "sha256": "e0d251e74fa00d30f14cb043d6f0dd21b6169f5ee80121a89dda75d2621f071e"
+      "sha256": "c2c7b589e158b3f7b5ad8217a531ea81be9dc865a0c0b7605045b7d9c9c31d25"
     }
   },
   "legacy": {

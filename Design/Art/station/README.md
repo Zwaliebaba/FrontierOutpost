@@ -93,7 +93,7 @@ pipeline previews contain only the asset being exported, under the shared previe
 
 Verified in Blender 4.3.2:
 
-- Exterior: 25,916 evaluated/exported triangles; interior: 2,604. Both are below 30,000.
+- Exterior: 25,916 evaluated/exported triangles; interior: 2,628. Both are below 30,000.
 - Both saved sources pass the pipeline, including linked materials, runtime nodes, hangar
   opening, approach lane, tell hardpoints, full socket envelopes and tactical projection checks.
 - Reimporting each GLB preserves triangle counts and bounds (within 0.0001 metres), with all
@@ -128,3 +128,9 @@ was exact within 0.00001 m, every footprint stayed on the ring, and no receiver 
 was needed. A deliberately raised anchor failed the contact condition without being saved.
 All full facility root records match the previous revision exactly. All six GLBs reimport
 with matching root triangle counts, bounds within 0.0001 m and all anchors retained.
+
+Removing the duplicate interior modules exposed old coplanar deck layers. The structural
+decks, floor skins and paint now have separate heights below the reserved service/parking
+envelopes; cargo and processor floor skins meet their equipment bases.
+`finish_interior_decks.py` applies this one-time cleanup. Both camera-orientation checks
+pass with the original full socket envelopes and parking clearance retained.
