@@ -739,6 +739,71 @@
         }
       },
       "sha256": "0f2efbfd47f12be4106a8323418f7b5fcc4b307752a42d48ea78978acdbe4547"
+    },
+    "npc:raider": {
+      "glb": "npcs/raider/raider.glb",
+      "id": "raider",
+      "kind": "npc",
+      "pending": false,
+      "roots": {
+        "Npc_raider": {
+          "anchors": {},
+          "bounds": {
+            "max": [
+              0.9110769033432007,
+              0.995673656463623,
+              0.42090970277786255
+            ],
+            "min": [
+              -0.9110769033432007,
+              -0.9175384640693665,
+              -0.11630769073963165
+            ]
+          },
+          "collision_radius": 1.3,
+          "footprint_radius": 1.2160974355581462,
+          "materials": [
+            "Ember",
+            "Graphite",
+            "HostileArmor",
+            "HostileHull"
+          ],
+          "nodes": [
+            "Blade armour -1__Npc_raider",
+            "Blade armour 1__Npc_raider",
+            "Carapace seam -1 0__Npc_raider",
+            "Carapace seam -1 1__Npc_raider",
+            "Carapace seam -1 2__Npc_raider",
+            "Carapace seam 1 0__Npc_raider",
+            "Carapace seam 1 1__Npc_raider",
+            "Carapace seam 1 2__Npc_raider",
+            "Command crystal__Npc_raider",
+            "Conduit -1 0__Npc_raider",
+            "Conduit -1 1__Npc_raider",
+            "Conduit -1 2__Npc_raider",
+            "Conduit 1 0__Npc_raider",
+            "Conduit 1 1__Npc_raider",
+            "Conduit 1 2__Npc_raider",
+            "Dorsal shell__Npc_raider",
+            "Drive core -0.18__Npc_raider",
+            "Drive core 0.18__Npc_raider",
+            "Drive housing -0.18__Npc_raider",
+            "Drive housing 0.18__Npc_raider",
+            "Emitter housing -1__Npc_raider",
+            "Emitter housing 1__Npc_raider",
+            "Emitter lens -1__Npc_raider",
+            "Emitter lens 1__Npc_raider",
+            "Keel__Npc_raider",
+            "Npc_raider",
+            "Spine fin -1__Npc_raider",
+            "Spine fin 1__Npc_raider",
+            "Swept blade -1__Npc_raider",
+            "Swept blade 1__Npc_raider"
+          ],
+          "triangles": 2612
+        }
+      },
+      "sha256": "4b12faf57ec2ec8a0f42a05d3654670d4ba72472ddcdd8fe597568c3240f8601"
     }
   },
   "legacy": {

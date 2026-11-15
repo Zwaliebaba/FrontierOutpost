@@ -33,7 +33,7 @@ Ships in the same family share split dorsal armor, a central service spine, oran
 
 The cruiser remains a separate asset at its original scale. Future small ships should be designed around their role and landing envelope instead of uniformly shrinking the cruiser. Preserve the starter hull's recognizable silhouette when adding equipment.
 
-Every player hull reads as one family and never as a hostile: allegiance is told by shape as well as colour. Each hull's role shows in its proportions: the hauler is wide with slung cargo pods and no visible guns; the gunship keeps the frigate's length and shows its weapons and a shield emitter.
+Every player hull reads as one family and never as a hostile: allegiance is told by shape as well as colour. Hostile ships are not of this family: the raider is a broad crescent, a keel under a dorsal shell between two swept blades with forward emitters, a faceted command crystal and twin aft drives, after SpaceNomad's Veyr frigate, in the hostile rust, warm-grey armor, graphite and ember roles; it fills its collision circle, as wide as it is long. Each hull's role shows in its proportions: the hauler is wide with slung cargo pods and no visible guns; the gunship keeps the frigate's length and shows its weapons and a shield emitter.
 
 Flight configurations retract landing gear and close its bays. Landed configurations deploy gear, idle the engines and align with the berth. Utility rigs should attach to explicit hardpoints and remain removable from the base ship.
 
@@ -62,6 +62,9 @@ These are the current Blender base-color RGB values, not display hex colors. Tre
 | Warm amber | 1.000, 0.400, 0.055 | Windows and operating station lights |
 | Cyan | 0.040, 0.650, 1.000 | Navigation and utility indicators |
 | Ion blue | 0.015, 0.190, 1.000 | Active propulsion |
+| Hostile rust | 0.300, 0.110, 0.070 | Hostile hulls and carapace |
+| Hostile armor | 0.400, 0.320, 0.270 | Hostile armor plates, warm grey against the rust |
+| Ember | 1.000, 0.250, 0.050 | Hostile emitters, drives and command crystals |
 
 Manufactured hull materials use moderate-to-high metallic values and visible roughness. Keep graphite parts distinguishable from the background. Use emission for active equipment, hot contact points, engines and windows.
 
@@ -275,3 +278,6 @@ bounded so warm windows retain their colour. Tactical marker materials bypass to
 preserve their specified colour roles. Keep space dark and armor lit; do not add bloom, shadows
 or extra light rigs by default. Hostile fork silhouettes retain their gameplay footprint, with
 restrained lit armor and recessed graphite details; beacon armor carries a small emissive cap.
+A hostile with its own model (the raider) keeps its imported materials, with ember emission
+bounded as warm amber's is, and lies within its collision circle; the other hostiles keep the
+fork until they have models.

@@ -31,3 +31,32 @@ def facility_definitions(repo=None):
 
 def facility_tiers(repo=None):
     return {name: definition["tiers"] for name, definition in facility_definitions(repo).items()}
+
+
+def npc_radii(repo=None):
+    """Collision radius by NPC identifier, from frontier_sim's literal profiles.
+
+    An identifier is the lowercase `ShipKind` (`raider`), as the wire's `EntityKind` spells it.
+    The pilot's profile is not an NPC. Like the facility reader, it fails rather than guesses.
+    """
+    repo = Path(repo) if repo else Path(__file__).resolve().parents[3]
+    source = (repo / "crates/sim/src/profile.rs").read_text(encoding="utf-8")
+    source = re.sub(r"//[^\n]*", "", source)
+    constants = {"crate::collision::SHIP_RADIUS": None}
+    radius = re.search(r"pub const SHIP_RADIUS: f32 = ([0-9.]+);",
+                       (repo / "crates/sim/src/collision.rs").read_text(encoding="utf-8"))
+    if radius:
+        constants["crate::collision::SHIP_RADIUS"] = float(radius[1])
+    result = {}
+    for name, body in re.findall(r"\bconst ([A-Z]+): Profile = Profile \{(.*?)\n\};", source, re.S):
+        value = re.search(r"\bradius:\s*([0-9.]+|crate::collision::SHIP_RADIUS)\s*,", body)
+        if not value:
+            raise ValueError(f"Unsupported profile {name}; update the art data reader")
+        number = constants.get(value[1]) if value[1] in constants else float(value[1])
+        if number is None or number <= 0:
+            raise ValueError(f"Unsupported radius in profile {name}")
+        if name != "PILOT":
+            result[name.lower()] = number
+    if "raider" not in result:
+        raise ValueError("No NPC profiles found in frontier_sim")
+    return result

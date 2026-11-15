@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import sys
 
-from game_data import facility_definitions
+from game_data import facility_definitions, npc_radii
 
 ART = Path(__file__).resolve().parents[1]
 
@@ -19,6 +19,7 @@ def verify(art=ART):
     contract = json.loads((art / "contract.json").read_text())
     definitions = facility_definitions()
     game_tiers = {name: data["tiers"] for name, data in definitions.items()}
+    radii = npc_radii()
     seen = set()
     for manifest_path in sorted(art.glob("**/*.json")):
         if manifest_path.parent == art:
@@ -27,9 +28,9 @@ def verify(art=ART):
             manifest = json.loads(manifest_path.read_text())
             identifier, kind = manifest["id"], manifest["kind"]
             seen.add((kind, identifier))
-            if kind not in {"facility", "hull", "station_exterior", "station_interior"}:
+            if kind not in {"facility", "hull", "npc", "station_exterior", "station_interior"}:
                 raise ValueError("Unknown asset kind")
-            folder = "facilities" if kind == "facility" else "hulls" if kind == "hull" else "station"
+            folder = {"facility": "facilities", "hull": "hulls", "npc": "npcs"}.get(kind, "station")
             if manifest_path != art / folder / identifier / f"{identifier}.json":
                 raise ValueError("Identifier differs from file layout")
             if manifest["schema_version"] != 1:
@@ -62,6 +63,13 @@ def verify(art=ART):
                 expected = {contract["roots"][kind].format(id=identifier): kind}
                 if kind == "hull" and identifier != "frigate":
                     raise ValueError("Unknown hull identifier in gameplay data")
+                if kind == "npc":
+                    if identifier not in radii:
+                        raise ValueError("Unknown NPC identifier in gameplay data")
+                    record = manifest["roots"].get(contract["roots"]["npc"].format(id=identifier), {})
+                    # Rechecked against today's profile: a smaller collision radius needs a new model.
+                    if not record.get("footprint_radius", float("inf")) <= radii[identifier] + contract["epsilon"]:
+                        raise ValueError("Footprint exceeds the NPC's collision radius")
                 if kind.startswith("station_"):
                     if identifier != kind.removeprefix("station_"):
                         raise ValueError("Invalid station identifier")

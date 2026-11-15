@@ -32,6 +32,7 @@ Design/Art/
     <id>.json               the export's manifest
     <id>.png                a small preview, for review
   hulls/<id>/               the same four files per hull
+  npcs/<id>/                the same four files per NPC ship
   station/exterior/         the same four files for the station's exterior
   station/interior/         the same four files for the station's interior
 ```
@@ -45,6 +46,7 @@ in the folder, the files, the roots and the game's data.
 |---|---|---|
 | `facility` | `Facility_<id>_T<n>` for each tier, `Tell_<id>_T<n>` for each tier's tell | `frontier_kind`, `frontier_id`, `tier` |
 | `hull` | `Hull_<id>` | `frontier_kind`, `frontier_id` |
+| `npc` | `Npc_<id>` | `frontier_kind`, `frontier_id` |
 | `station_exterior` | `StationExterior_ROOT` | `frontier_kind` |
 | `station_interior` | `StationInterior_ROOT` | `frontier_kind` |
 
@@ -192,7 +194,7 @@ A cutaway of the same station, open to the resting view, seen through the one ta
 New hulls join the starter frigate's family (style guide §3): split dorsal armour, a central
 service spine, orange bands, dark inset panels and twin drive pods, with proportions and
 equipment changed for the role. None may read as a hostile: allegiance is told by shape as well
-as colour, and hostiles are forked silhouettes.
+as colour, and hostiles have shapes of their own (below).
 
 | Hull | Silhouette |
 |---|---|
@@ -217,5 +219,24 @@ as colour, and hostiles are forked silhouettes.
 | The starter frigate | 11.1, as `hulls/frigate/` |
 | The asteroids and the cruiser | Whenever they next change |
 
-Hostiles (including 12.3's sentinel and stalker) are drawn by the client's readability rules and
-have no models yet.
+## NPC ships
+
+Hostile ships are their own kind, `npc`, one file per NPC ship kind in `frontier_sim`
+(`drone`, `raider`, `warden`), the identifier as the wire's `EntityKind` spells it.
+
+- **Root:** `Npc_<id>`, nose along +Y, at the ship's centre on the plane.
+- **Inside the collision circle:** every evaluated vertex lies within the kind's collision
+  radius, read from `frontier_sim`'s profiles, measured from the root on the plane. The manifest
+  records both, and CI rechecks them against today's profile, so a smaller radius needs a new
+  model. The game draws the model at that size and centres it on its height.
+- **Hostile palette:** `HostileHull`, `HostileArmor`, `Graphite` and `Ember`, so a hostile never
+  shares the player family's blue-grey armour and orange bands (style guide §3, §5).
+- **Within the npc budget** (3,000 triangles), since up to the NPC cap can fly at once.
+
+| NPC | Model |
+|---|---|
+| Raider | A crescent after SpaceNomad's Veyr frigate: keel, dorsal shell, two swept blades with forward emitters, a faceted command crystal, twin aft drives (`model_raider.py` reproduces it) |
+| Drone, warden | None yet; the client draws the forked stand-in |
+
+Hostiles without a model (including 12.3's sentinel and stalker), and the nest core, are drawn
+by the client's readability rules.

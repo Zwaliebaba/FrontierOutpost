@@ -58,6 +58,24 @@ class ExportChecks(unittest.TestCase):
             output.write("\n")
         self.assertIn("contract changed", " ".join(check_exports.verify(self.art)))
 
+    def npc_manifest(self):
+        manifest = json.loads((self.art / "npcs/raider/raider.json").read_text())
+        return manifest, manifest["roots"]["Npc_raider"]
+
+    def test_npc_footprint_must_fit_its_collision_radius(self):
+        manifest, record = self.npc_manifest()
+        record["footprint_radius"] = 1.31
+        (self.art / "npcs/raider/raider.json").write_text(json.dumps(manifest))
+        self.assertIn("collision radius", " ".join(check_exports.verify(self.art)))
+
+    def test_npc_footprint_rechecked_when_the_profile_shrinks(self):
+        with patch("check_exports.npc_radii", return_value={"raider": 1.0}):
+            self.assertIn("collision radius", " ".join(check_exports.verify(self.art)))
+
+    def test_npc_identifier_must_be_a_ship_kind(self):
+        with patch("check_exports.npc_radii", return_value={"drone": 0.9}):
+            self.assertIn("Unknown NPC", " ".join(check_exports.verify(self.art)))
+
 
 if __name__ == "__main__":
     unittest.main()

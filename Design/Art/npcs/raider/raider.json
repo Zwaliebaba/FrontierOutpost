@@ -1,0 +1,84 @@
+{
+  "blender_version": "4.3.0",
+  "bounds_space": "root-local Blender Z-up metres",
+  "glb": "raider.glb",
+  "gltf_up": "+Y",
+  "id": "raider",
+  "inputs": {
+    "blender": "4.3.0",
+    "contract": "214fc1ae2a71eebbc7764d4704594411b60b5c279a30a0ab05f4c8e011ee7c8b",
+    "game_data_reader": "44627da1400f1f2ad7218b63dc9ddc37f0e9f074be5497b34c751134c34db516",
+    "materials": "416c2fffa7d78274ed165d04ded97baeab660e23449862872d160e43a1d5b3a1",
+    "source": "5733bd37078ffcc0cfd986eaec9d1c3dca18563e0a4444d81242db30dd3eea60",
+    "tool": "18822f1197270dbfc69820bc5a22c79f84939aa5c0668003402518963970f742"
+  },
+  "kind": "npc",
+  "planned": false,
+  "preview": "raider.png",
+  "preview_sha256": "587475e28e23d29526ac4c822529fd4e7911392ff514fa16ff7fd885a54d937a",
+  "roots": {
+    "Npc_raider": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          0.9110769033432007,
+          0.995673656463623,
+          0.42090970277786255
+        ],
+        "min": [
+          -0.9110769033432007,
+          -0.9175384640693665,
+          -0.11630769073963165
+        ]
+      },
+      "collision_radius": 1.3,
+      "footprint_radius": 1.2160974355581462,
+      "materials": [
+        "Ember",
+        "Graphite",
+        "HostileArmor",
+        "HostileHull"
+      ],
+      "nodes": [
+        "Blade armour -1__Npc_raider",
+        "Blade armour 1__Npc_raider",
+        "Carapace seam -1 0__Npc_raider",
+        "Carapace seam -1 1__Npc_raider",
+        "Carapace seam -1 2__Npc_raider",
+        "Carapace seam 1 0__Npc_raider",
+        "Carapace seam 1 1__Npc_raider",
+        "Carapace seam 1 2__Npc_raider",
+        "Command crystal__Npc_raider",
+        "Conduit -1 0__Npc_raider",
+        "Conduit -1 1__Npc_raider",
+        "Conduit -1 2__Npc_raider",
+        "Conduit 1 0__Npc_raider",
+        "Conduit 1 1__Npc_raider",
+        "Conduit 1 2__Npc_raider",
+        "Dorsal shell__Npc_raider",
+        "Drive core -0.18__Npc_raider",
+        "Drive core 0.18__Npc_raider",
+        "Drive housing -0.18__Npc_raider",
+        "Drive housing 0.18__Npc_raider",
+        "Emitter housing -1__Npc_raider",
+        "Emitter housing 1__Npc_raider",
+        "Emitter lens -1__Npc_raider",
+        "Emitter lens 1__Npc_raider",
+        "Keel__Npc_raider",
+        "Npc_raider",
+        "Spine fin -1__Npc_raider",
+        "Spine fin 1__Npc_raider",
+        "Swept blade -1__Npc_raider",
+        "Swept blade 1__Npc_raider"
+      ],
+      "triangles": 2612
+    }
+  },
+  "schema_version": 1,
+  "sha256": "4b12faf57ec2ec8a0f42a05d3654670d4ba72472ddcdd8fe597568c3240f8601",
+  "source_forward": "+Y",
+  "source_up": "+Z",
+  "tiers": 0,
+  "tool_version": "0.2.0",
+  "units": "metres"
+}

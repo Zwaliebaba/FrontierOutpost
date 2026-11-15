@@ -1,21 +1,21 @@
 {
-  "blender_version": "4.3.2",
+  "blender_version": "4.3.0",
   "bounds_space": "root-local Blender Z-up metres",
   "glb": "refinery.glb",
   "gltf_up": "+Y",
   "id": "refinery",
   "inputs": {
-    "blender": "4.3.2",
-    "contract": "f2d4607c59da6e235b18eebd780e7a9009a16334661549b2bc96160d7788f1f8",
-    "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
-    "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
+    "blender": "4.3.0",
+    "contract": "214fc1ae2a71eebbc7764d4704594411b60b5c279a30a0ab05f4c8e011ee7c8b",
+    "game_data_reader": "44627da1400f1f2ad7218b63dc9ddc37f0e9f074be5497b34c751134c34db516",
+    "materials": "416c2fffa7d78274ed165d04ded97baeab660e23449862872d160e43a1d5b3a1",
     "source": "e9806096e621c773952c2ed1107b784fac4824b1f2d19c0b17c35bf95e9354e2",
-    "tool": "6786478f3fff1dc4779170a3ceae9f6b251191b8038dc062153690f7d48b401e"
+    "tool": "18822f1197270dbfc69820bc5a22c79f84939aa5c0668003402518963970f742"
   },
   "kind": "facility",
   "planned": false,
   "preview": "refinery.png",
-  "preview_sha256": "eaa39974423301654dbcbf5e802e864940818916ce93a2629283578a58960202",
+  "preview_sha256": "a38ecb31004e074e47f2f5a0dc069b28ce2f368a207a1b43d605ce45638ca1dd",
   "roots": {
     "Facility_refinery_T1": {
       "anchors": {},
@@ -182,6 +182,6 @@
   "source_forward": "+Y",
   "source_up": "+Z",
   "tiers": 2,
-  "tool_version": "0.1.0",
+  "tool_version": "0.2.0",
   "units": "metres"
 }

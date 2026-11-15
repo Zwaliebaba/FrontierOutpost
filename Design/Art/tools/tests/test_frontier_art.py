@@ -167,6 +167,41 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differs"):
             art.new_asset("facility", "sensor_array", tiers=3, art=self.art)
 
+    def npc_fixture(self, size=(1.6, 1.8, .4)):
+        path = art.asset_path("npc", "raider", self.art)
+        shutil.rmtree(path.parent, ignore_errors=True)
+        art.new_asset("npc", "raider", art=self.art)
+        cube(bpy.data.objects["Npc_raider"], "carapace", size, material=bpy.data.materials["HostileHull"])
+        bpy.context.view_layer.update()
+        return path
+
+    def test_good_npc_records_its_footprint(self):
+        self.npc_fixture()
+        errors, records = art.check_asset(self.art)
+        self.assertEqual(errors, [])
+        record = records["Npc_raider"]
+        self.assertAlmostEqual(record["footprint_radius"], (.8 ** 2 + .9 ** 2) ** .5, places=4)
+        self.assertEqual(record["collision_radius"], 1.3)
+
+    def test_npc_beyond_its_collision_circle_rejected(self):
+        # A box 2 m square fits the 1.3 m radius by its sides (1 m) but not its corners (1.41 m).
+        self.npc_fixture((2, 2, .4))
+        self.assertFailure("footprint")
+
+    def test_npc_must_be_a_ship_kind(self):
+        with self.assertRaisesRegex(ValueError, "Unknown NPC"):
+            art.new_asset("npc", "pirate", art=self.art)
+
+    def test_library_gains_missing_roles_and_keeps_the_rest(self):
+        path = self.art / "library/materials.blend"
+        with self.assertRaisesRegex(ValueError, "Refusing"):
+            art.build_library(path)
+        art.build_library(path, add_missing=True)
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        materials = art.linked_materials(self.art)
+        self.assertEqual(set(materials), set(art.CONTRACT["materials"]))
+        self.assertTrue(all(art.material_matches_contract(m) for m in materials.values()))
+
     def station_fixture(self, kind):
         identifier = kind.removeprefix("station_")
         path = art.asset_path(kind, identifier, self.art)
@@ -215,10 +250,12 @@ class PipelineTests(unittest.TestCase):
                 self.assertFailure(code)
 
     def test_exports_each_supported_kind(self):
-        for kind in ["hull", "station_exterior", "station_interior"]:
+        for kind in ["hull", "npc", "station_exterior", "station_interior"]:
             with self.subTest(kind=kind):
                 if kind == "hull":
                     source = self.fixture(kind)
+                elif kind == "npc":
+                    source = self.npc_fixture()
                 else:
                     self.station_fixture(kind)
                     source = Path(bpy.data.filepath)
