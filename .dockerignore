@@ -10,7 +10,6 @@
 # The outpost models the client imports.
 !Design/FrontierOutpost/*.glb
 !Design/FrontierOutpost/scene_manifest.json
-!Design/FrontierOutpost/berths.json
 !Design/Art/catalogue.json
 !Design/Art/contract.json
 !Design/Art/**/*.glb

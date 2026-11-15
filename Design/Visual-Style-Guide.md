@@ -28,7 +28,7 @@ Ships in the same family share split dorsal armor, a central service spine, oran
 
 | Class | Visual identity | Role in the current scenes |
 | --- | --- | --- |
-| Starter frigate | Compact hull, short bridge, few armor sections, one small defense mount, limited equipment | Player's early ship; fits berth 07 |
+| Starter frigate | Compact hull, short bridge, few armor sections, one small defense mount, limited equipment | Player's early ship; parks on the hangar deck |
 | Aurora cruiser | Longer segmented hull, larger shoulders, extended spine and more exposed machinery | Preserved original ship; approximately four times the starter's length |
 
 The cruiser remains a separate asset at its original scale. Future small ships should be designed around their role and landing envelope instead of uniformly shrinking the cruiser. Preserve the starter hull's recognizable silhouette when adding equipment.
@@ -41,7 +41,7 @@ Flight configurations retract landing gear and close its bays. Landed configurat
 
 Maintain consistent relative scale across scenes. The current Blender files use metre units, Z-up and ship-local +Y forward; glTF exports use Y-up. These are the current working scene dimensions. Choose any later physical-scale conversion once for the whole game, including ships, stations, collision, lights and movement speeds.
 
-At the current working scale, the starter frigate's landed envelope is approximately 1.29 wide × 2.67 long × 1.14 high. Since the four-berth upgrade, each berth's safety boundary is 3.6 wide × 3.6 long (`berths.json`; the art pipeline checks every flown hull against it). Preserve at least 0.15 units of horizontal safety clearance, including gear and attachments; scale that margin with the project. So while the berths stand, every player hull, landed with its gear and attachments, is at most 3.3 × 3.3, and must fit every berth, not only berth 07. Once the station is rebuilt around its internal hangar (design §11), the berths are gone and the hangar mouth is the only fit: every hull passes through it flying straight in, with the same clearance on every side.
+At the current working scale, the starter frigate's envelope is approximately 1.29 wide × 2.67 long × 1.14 high, gear down. The station's hangar mouth is the only fit outside (design §11): its clear opening, 8 × 3.5, set by the rules (`crates/sim/src/station.rs`) and checked against the exterior, is wider and taller than the largest flown hull with at least 0.15 units of clearance on every side, gear and attachments included; scale that margin with the project. Inside, every flown hull has a parking place on the hangar deck. Display hulls, such as the Aurora cruiser, are shown but never flown in, and need neither.
 
 Check the complete evaluated geometry, including bevels and equipment. A hull fitting inside a painted rectangle is only one check: connectors, rails, masts and other station structure must also clear the ship. Keep approach surfaces flush and unobstructed. Flight scenes also need physical separation between the hull, tools and nearby rocks.
 
@@ -58,7 +58,7 @@ These are the current Blender base-color RGB values, not display hex colors. Tre
 | Pale titanium | 0.530, 0.570, 0.610 | Selected panels, edge contrast and machinery |
 | Graphite | 0.025, 0.038, 0.055 | Recesses, frames, radiator beds and mounts |
 | Burnt orange | 0.620, 0.190, 0.055 | Identification bands and utility attachments |
-| Safety ochre | 0.950, 0.570, 0.120 | Berth borders and approach markings |
+| Safety ochre | 0.950, 0.570, 0.120 | Hangar lane guides, socket borders and approach markings |
 | Warm amber | 1.000, 0.400, 0.055 | Windows and operating station lights |
 | Cyan | 0.040, 0.650, 1.000 | Navigation and utility indicators |
 | Ion blue | 0.015, 0.190, 1.000 | Active propulsion |
@@ -82,14 +82,14 @@ Compose clear foreground, action and background layers. Large cropped rocks can 
 
 ### Outpost and docking
 
-Use a strong central station mass, secondary side pods and a clearly readable apron. Warm windows imply occupation. Navigation lamps and painted borders indicate where a ship can land. Place large vessels outside starter berths, with enough separation to make their class difference apparent. The starter ship can demonstrate actual berth fit.
+Use a strong central station mass inside a broad ring, with one hangar mouth that reads from above by its roof stripes and lamps as well as from the front. Warm windows imply occupation. Lamps at the mouth and painted lane guides show where a ship flies in. Keep large vessels and tall structure off the mouth's approach lane, with enough separation to make their class difference apparent.
 
 Propulsion reads as a blue core with a tapered plume. A landed ship idles its drive; keep exhaust separate from the hull envelope.
 
 
-Each facility keeps a signature shape no other facility uses, so facilities are told apart at the zoom where the whole outpost fits: dishes are the sensor array's, a closed hall with doors is the fabrication bay's, an open cradle is the shipyard's. Each tier stands more than 0.4 taller than the one below it, tier 3 included, and a module in any socket clears every berth and departure corridor while the sockets are outside.
+Each facility keeps a signature shape no other facility uses, so facilities are told apart at the zoom where the whole outpost fits: dishes are the sensor array's, a closed hall with doors is the fabrication bay's, an open cradle is the shipyard's. Each tier stands more than 0.4 taller than the one below it, tier 3 included, and a module stays within the socket envelope, so it fits any interior socket.
 
-Once the station is rebuilt (design §11), it is seen two ways in the one tactical camera. The exterior carries no sockets, modules or parked ships; the outpost's growth shows on it as tells, one small marker per installed facility in that facility's signature shape, on the hardpoint of the socket it is installed in, growing with its tier, so a facility is recognised outside and in. The interior is a cutaway open to the resting view: no wall, module or parked ship covers another socket or parking place from it. Upgrades to the core itself, such as the reactor, are separate named meshes shown only once bought, and leave the core's silhouette at the berths and sockets unchanged.
+The station (design §11) is seen two ways in the one tactical camera. The exterior carries no sockets, modules or parked ships; the outpost's growth shows on it as tells, one small marker per installed facility in that facility's signature shape, on the hardpoint of the socket it is installed in, growing with its tier, so a facility is recognised outside and in. The interior is a cutaway open to the resting view: no wall, module or parked ship covers another socket or parking place from it. Upgrades to the core itself, such as the reactor, are separate named meshes shown only once bought, and leave the rest of the core's silhouette unchanged.
 ## 8. Asset and scene structure
 
 ### Shared assembly conventions
@@ -118,7 +118,7 @@ Before accepting a new scene, check:
 
 1. The main activity reads clearly from the overview camera.
 2. Ships retain the established silhouette, material roles and class proportions.
-3. Solid geometry clears nearby assets; a landed ship fits its actual berth and surrounding structure.
+3. Solid geometry clears nearby assets; a flown hull passes the hangar mouth and fits its parking place.
 4. Lighting preserves both the hull's form and the active contact points.
 5. Source assets remain available, with effects and equipment organized separately.
 6. The saved Blender file opens without missing external resources, and exports use the documented axes and scale.
