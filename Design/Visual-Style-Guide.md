@@ -35,7 +35,7 @@ The cruiser remains a separate asset at its original scale. Future small ships s
 
 Every player hull reads as one family and never as a hostile: allegiance is told by shape as well as colour. Hostile ships are not of this family: the raider is a broad crescent, a keel under a dorsal shell between two swept blades with forward emitters, a faceted command crystal and twin aft drives, after SpaceNomad's Veyr frigate, in the hostile rust, warm-grey armor, graphite and ember roles; it fills its collision circle, as wide as it is long. Each hull's role shows in its proportions: the hauler is wide with slung cargo pods and no visible guns; the gunship keeps the frigate's length and shows its weapons and a shield emitter.
 
-Flight configurations retract landing gear and close its bays. Landed configurations deploy gear, idle the engines and align with the berth. Utility rigs should attach to explicit hardpoints and remain removable from the base ship.
+Flight configurations retract landing gear and close its bays. Landed configurations deploy gear, idle the engines and align with their parking place on the hangar deck; ships leave and enter the hangar flying, so in flight the gear stays folded. Utility rigs should attach to explicit hardpoints and remain removable from the base ship.
 
 ## 4. Scale, docking and clearance
 
@@ -193,9 +193,11 @@ returns to the exterior). It is hidden in flight, where only the exterior stands
 Frame the home scene inside the actual gap between the service and briefing panels, using one
 stable envelope for both views (`client/src/outpost/framing.ts`): the 32 m ring turned every way
 the rules can stand it, with the largest tell all round, so neither a purchase nor opening the
-interior changes the station's apparent scale. Preserve player zoom and orbit. Until launches
-and docking are drawn through the mouth (plan 9.6), the flight view's landing gear still reads
-the legacy berth positions in `FrontierOutpost/berths.json`.
+interior changes the station's apparent scale. Preserve player zoom and orbit.
+
+The footer's place line counts the crew, not berths: `HOME OUTPOST / HANGAR` alone and
+`HOME OUTPOST / CREW n OF 4` in a crew (`placeLine` in `client/src/outpost/stationView.ts`); in
+flight it reads `EXPEDITION / ACTIVE`.
 
 ## 11. Flight HUD and system map
 
@@ -221,6 +223,21 @@ The full map sits between the target and ship-gauge bands; notices keep clear of
 of a deposit, the scan inside an unscanned site, the vent near the cut-out, the lock with a
 hostile near, the trigger with one in range, the cruise drive on the legs. At most three show.
 Instruments do not carry standing key hints.
+
+**Through the hangar mouth.** A launch flies the ship out of the hangar and along the lane on
+the rules' script, and a ship flown into the mouth is caught and drawn in the same way (design
+§11). While the rules fly it, no key does anything, so the prompts give way to one line that only
+tells (`Leaving the hangar · yours at the lane's end`, `Captured at the mouth · drawn in to dock`),
+the phase reads `Leaving the hangar` or `Drawn in to dock`, a refused scan or extraction and the
+map's jump button say `not while leaving the hangar` (or while the hangar draws the ship in), and
+the jump drive `not while the hangar flies the ship`, rather than asking the pilot to stop or
+move. On the return leg within 60 m of the mouth, a prompt that only tells says
+docking is flown straight into it, with the distance. A ship wholly behind the mouth is under the
+hangar's roof: its hull, silhouette, badge and lock bracket are not drawn and it cannot be
+clicked, so the departure queue, every ship on one spot, never shows stacked; it is drawn once
+any of it is outside the mouth (`client/src/game/hangar.ts`). The camera following a ship in the
+hangar holds on the mouth and follows it along the lane from there. Ships never land in flight:
+their landing gear stays folded, and only the ship parked in the interior lowers it.
 
 **Notices.** A notice answers something the pilot did or warns of something coming. Its level
 (news, warning, gain) shows by a marker and a coloured edge. The newest three stay together, each

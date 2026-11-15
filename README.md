@@ -40,8 +40,10 @@ npm ci
 npm run dev
 ```
 
-The home screen uses Station Command service views around a four-berth apron. Crew ships use
-the same authored slots at home and when launching. See the [station upgrade notes](Design/FrontierOutpost/README.md#four-berth-station-command-upgrade).
+The home screen uses Station Command service views around the station: its exterior, with each
+facility's tell, and its interior, where building happens. A launch flies the crew's ships out
+of the hangar mouth one after another, and a ship docks by flying back into it. See the
+[station's art notes](Design/Art/station/README.md).
 
 After building the client, `npm run e2e` runs browser checks against the real server. On a
 CPU-only machine, `npm run e2e:software` uses the same tests and CSS viewport with half-density
