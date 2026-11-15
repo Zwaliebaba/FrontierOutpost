@@ -2829,7 +2829,7 @@ mod tests {
             run.jump(ship, Some(JumpTarget::Dock)),
             Err(JumpRefusal::AlreadyThere)
         );
-        // Still on the berth: the pilot flies clear before the drive spools.
+        // Still leaving the hangar: the launch hands over before the drive spools.
         assert_eq!(
             run.jump(ship, Some(JumpTarget::Pocket(0))),
             Err(JumpRefusal::AtDock)

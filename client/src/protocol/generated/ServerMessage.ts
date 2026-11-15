@@ -25,7 +25,11 @@ export type ServerMessage = { "type": "wingman", info: WingmanInfo | null, } | {
 /**
  * The run's site: a page that rejoins a run has no contract for it.
  */
-site: SiteInfo, shipId: number, tickRate: number, tier: number, obstacles: Array<ObstacleInfo>, 
+site: SiteInfo, shipId: number, tickRate: number, tier: number, 
+/**
+ * The site's asteroids. The station's hull is in `site.station`.
+ */
+obstacles: Array<ObstacleInfo>, 
 /**
  * The deposits the pilot can work, in the order snapshots report them.
  */

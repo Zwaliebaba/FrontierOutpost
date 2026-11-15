@@ -2,10 +2,6 @@
 
 export type CrewMember = { callsign: string, 
 /**
- * Zero-based berth slot, stable while following an active launch.
- */
-berth?: number, 
-/**
  * Their share of the pot, a whole percentage.
  */
 share: number, 

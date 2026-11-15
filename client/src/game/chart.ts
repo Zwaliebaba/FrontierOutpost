@@ -56,7 +56,7 @@ export function fitChart(
   withDock = true,
 ): ChartFrame {
   const circles = [
-    ...(withDock ? [{ x: site.dockX, z: site.dockZ, radius: site.dockRadius }] : []),
+    ...(withDock ? [{ x: site.dockX, z: site.dockZ, radius: site.station.footprintRadius }] : []),
     { x: site.centreX, z: site.centreZ, radius: site.radius },
     ...site.pockets,
   ];
@@ -148,7 +148,7 @@ export function chartPlaces(
       name: "Dock",
       x: site.dockX,
       z: site.dockZ,
-      radius: site.dockRadius,
+      radius: site.station.footprintRadius,
       locked: false,
       status: "Home berth · banks the hold",
       tags: [],

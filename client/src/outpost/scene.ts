@@ -131,9 +131,10 @@ export class OutpostScene {
 
   /** Roster ships are presentation at each pilot's own home, never shared inventory. */
   setCrew(crew: CrewInfo | null, callsign: string): void {
-    const roster = crew?.members ?? [{ callsign, you: true, share: 100, berth: 0 }];
+    const roster = crew?.members ?? [{ callsign, you: true, share: 100 }];
+    // In roster order on the old berths, until the hangar's interior shows them (plan 9.6).
     const next = roster.slice(0, BERTHS.length).map((member, index) => ({
-      berth: BERTHS[member.berth ?? index]?.id ?? "07",
+      berth: BERTHS[index]?.id ?? "07",
       callsign: member.callsign,
       you: member.you,
     }));

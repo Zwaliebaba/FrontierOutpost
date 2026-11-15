@@ -3,4 +3,4 @@
 /**
  * Where the receiving pilot is in their run.
  */
-export type RunPhase = "atDock" | "approach" | "objective" | "return" | "docked" | "destroyed" | "abandoned";
+export type RunPhase = "atDock" | "approach" | "objective" | "return" | "docking" | "docked" | "destroyed" | "abandoned";

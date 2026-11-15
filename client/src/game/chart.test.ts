@@ -24,7 +24,19 @@ const site: SiteInfo = {
   centreX: 70,
   centreZ: 0,
   radius: 125,
-  dockRadius: 12,
+  station: {
+    centreX: -120,
+    centreZ: 0,
+    forwardX: 1,
+    forwardZ: 0,
+    mouthX: -106,
+    mouthZ: 0,
+    laneLength: 30,
+    captureDepth: 8,
+    mouthWidth: 8,
+    footprintRadius: 17,
+    obstacles: [],
+  },
   pockets: [
     { kind: "oreField", x: 45, z: -10, radius: 36, locked: false, material: "ore" },
     { kind: "derelict", x: 115, z: 65, radius: 24, locked: true, material: "salvage" },
@@ -71,7 +83,7 @@ describe("fitChart and plot", () => {
   it("shows the dock, the site and every pocket inside the padding", () => {
     const frame = fitChart(site, 800, 600, 40);
     const edges = [
-      { x: site.dockX, z: site.dockZ, radius: site.dockRadius },
+      { x: site.dockX, z: site.dockZ, radius: site.station.footprintRadius },
       { x: site.centreX, z: site.centreZ, radius: site.radius },
       ...site.pockets,
     ];
@@ -102,7 +114,7 @@ describe("fitChart and plot", () => {
     const frame = fitChart(site, 800, 600, 40);
     // The least room left at any edge is none: a larger scale would overflow the padding.
     const slack = [
-      { x: site.dockX, z: site.dockZ, radius: site.dockRadius },
+      { x: site.dockX, z: site.dockZ, radius: site.station.footprintRadius },
       { x: site.centreX, z: site.centreZ, radius: site.radius },
     ].flatMap((circle) => {
       const at = plot(frame, circle.x, circle.z);

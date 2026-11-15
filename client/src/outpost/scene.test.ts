@@ -169,14 +169,14 @@ describe("the outpost scene", () => {
       {
         ...crew,
         members: [
-          { callsign: "Vega", you: false, share: 50, berth: 0 },
-          { callsign: "Altair", you: true, share: 50, berth: 3 },
+          { callsign: "Vega", you: false, share: 50 },
+          { callsign: "Altair", you: true, share: 50 },
         ],
       },
       "Altair",
     );
-    expect(scene.report().berths.map((b) => b.berth)).toEqual(["07", "10"]);
-    expect(new Set(hulls().map((n) => n.position.x))).toEqual(new Set([-6, 6]));
+    expect(scene.report().berths.map((b) => b.berth)).toEqual(["07", "08"]);
+    expect(new Set(hulls().map((n) => n.position.x)).size).toBe(2);
     scene.setCrew(null, "Deneb");
     expect(scene.report().berths).toEqual([{ berth: "07", callsign: "Deneb", you: true }]);
     expect(hulls()).toHaveLength(2);

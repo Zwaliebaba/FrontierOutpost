@@ -1076,7 +1076,7 @@ impl Pilot<'_> {
                 self.identity
                     .crews
                     .view(account)
-                    .and_then(|view| view.berth_slot(account))
+                    .and_then(|view| view.roster_slot(account))
                     .unwrap_or(0),
                 (fitted(&holdings), hired),
                 share,

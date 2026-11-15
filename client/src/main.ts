@@ -26,7 +26,7 @@ import { OutpostScene } from "./outpost/scene";
 import type { HomeTab } from "./outpost/ui";
 import { renderHome, tickProcessor } from "./outpost/ui";
 import type { EntityPose } from "./net/interpolation";
-import { Predictor } from "./game/prediction";
+import { Predictor, predictsOwnShip, solidObstacles } from "./game/prediction";
 import { FrameTimer } from "./game/frameTimer";
 import { onHidden } from "./game/hidden";
 import { PendingEvents } from "./game/pending";
@@ -1013,19 +1013,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       glide = { from: new Vector3(), toStation: false, t: 0 };
     }
     placeFor(joined.site);
-    // Start the camera at this pilot's authored berth until the first snapshot arrives.
-    const slot = crew?.members.findIndex((member) => member.you) ?? 0;
-    const lateral = BERTHS[crew?.members[slot]?.berth ?? slot]?.x ?? BERTHS[0]?.x ?? 0;
-    const heading = Math.atan2(
-      joined.site.centreZ - joined.site.dockZ,
-      joined.site.centreX - joined.site.dockX,
-    );
-    target.set(
-      joined.site.dockX + Math.sin(heading) * lateral,
-      0,
-      joined.site.dockZ - Math.cos(heading) * lateral,
-    );
-    loaded.setObstacles(joined.obstacles);
+    // Start the camera on the hangar mouth, where every launch leaves, until the first snapshot.
+    target.set(joined.site.station.mouthX, 0, joined.site.station.mouthZ);
+    loaded.setObstacles(solidObstacles(joined.site, joined.obstacles));
     loaded.setSpeedFactor(joined.speedFactor);
     view.beginRun(joined.shipId, joined.site, joined.obstacles, joined.deposits);
     life?.session.retire();
@@ -1595,11 +1585,12 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     stationLabels.hidden = life !== null || !outpost || !holdings;
     if (stationLabels.hidden || !outpost) return;
     const station = outpost;
-    const roster = crew?.members ?? [{ callsign, you: true, berth: 0 }];
+    const roster = crew?.members ?? [{ callsign, you: true }];
     const targets = [
+      // Roster order until the hangar replaces the berths (plan 9.6).
       ...BERTHS.map((b, i) => ({
         id: `berth-${b.id}`,
-        label: `${b.id} / ${roster.find((member, index) => (member.berth ?? index) === i)?.callsign ?? "VACANT"}`,
+        label: `${b.id} / ${roster[i]?.callsign ?? "VACANT"}`,
         at: station.root.localToWorld(new Vector3(b.x, b.deck + 0.2, b.z + 3.4)),
       })),
       ...["a", "b"].map((id) => ({
@@ -1685,14 +1676,18 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     let own: EntityPose | undefined;
     if (current) {
       const { session, predictor } = current;
-      const others = session.snapshots.sample(now).filter((pose) => pose.id !== session.shipId);
-      const predicted = predictor.visual(
-        Math.min(1, Math.max(0, now - lastControlAt) / tickMs),
-        dt,
-      );
+      const sampled = session.snapshots.sample(now);
+      const others = sampled.filter((pose) => pose.id !== session.shipId);
+      // On the launch's or the draw-in's script the ship is the server's to fly.
+      const scripted = !predictsOwnShip(current.own?.phase);
+      const predicted = scripted
+        ? null
+        : predictor.visual(Math.min(1, Math.max(0, now - lastControlAt) / tickMs), dt);
       own = predicted
         ? { id: session.shipId, kind: "playerShip", hull: current.hull, ...predicted }
-        : undefined;
+        : scripted
+          ? sampled.find((pose) => pose.id === session.shipId)
+          : undefined;
       poses = own ? [own, ...others] : others;
       const drawnAt = (id: number) => poses.find((pose) => pose.id === id);
       for (const event of current.events.take()) {

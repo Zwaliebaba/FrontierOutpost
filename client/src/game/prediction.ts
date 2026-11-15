@@ -8,9 +8,27 @@
  * shows as a short glide rather than a jump.
  */
 import { isNewer } from "../net/input";
+import type { ObstacleInfo, RunPhase, SiteInfo } from "../protocol";
 import type { ShipControls, ShipState } from "../sim";
 
 export type StepShip = (state: ShipState, controls: ShipControls) => ShipState;
+
+/**
+ * Whether the client predicts its own ship in `phase`. A launch flies the ship out of the
+ * hangar, and a capture at the mouth draws it in, on the server's script (plan 9.4): the
+ * pilot's controls do nothing there, so the ship is drawn from snapshots like any other.
+ */
+export function predictsOwnShip(phase: RunPhase | null | undefined): boolean {
+  return phase !== "atDock" && phase !== "docking";
+}
+
+/** Everything a predicted ship collides with: the site's asteroids and the station's hull. */
+export function solidObstacles(
+  site: Pick<SiteInfo, "station">,
+  asteroids: readonly ObstacleInfo[],
+): ObstacleInfo[] {
+  return [...asteroids, ...site.station.obstacles];
+}
 
 interface Pending {
   sequence: number;

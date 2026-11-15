@@ -90,6 +90,7 @@ const PHASE_TEXT: Readonly<Record<RunPhase, string>> = {
   approach: "Approach",
   objective: "In the site",
   return: "Return leg",
+  docking: "Docking",
   docked: "Docked",
   destroyed: "Destroyed",
   abandoned: "Abandoned",

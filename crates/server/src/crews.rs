@@ -69,6 +69,7 @@ struct Crew {
     /// Who is already in the launched instance, the host first. A seat is
     /// taken once: nobody is offered the same launch twice.
     aboard: Vec<AccountId>,
+    /// The crew as it stood at launch, by roster slot.
     launch_slots: Vec<AccountId>,
 }
 
@@ -80,15 +81,17 @@ pub struct View {
     pub members: Vec<(AccountId, String, u32)>,
     pub you: AccountId,
     pub seed: u32,
-    pub berth_accounts: Vec<AccountId>,
+    /// Who holds each crew roster slot, by slot: one ship each, and the
+    /// order the crew leaves the hangar in. A slot is never a place.
+    pub roster: Vec<AccountId>,
     /// The tier the host launched at and the seconds left to follow.
     pub launch: Option<(ThreatTier, u32)>,
 }
 
 impl View {
     #[must_use]
-    pub fn berth_slot(&self, account: AccountId) -> Option<u32> {
-        self.berth_accounts
+    pub fn roster_slot(&self, account: AccountId) -> Option<u32> {
+        self.roster
             .iter()
             .position(|a| *a == account)
             .and_then(|i| u32::try_from(i).ok())
@@ -353,20 +356,20 @@ impl Crews {
         let code = inner.member_of.get(&account)?;
         let crew = inner.crews.get(code)?;
         let now = Instant::now();
-        let mut berth_accounts = crew.launch_slots.clone();
+        let mut roster = crew.launch_slots.clone();
         for member in &crew.members {
-            if berth_accounts.contains(&member.account) {
+            if roster.contains(&member.account) {
                 continue;
             }
-            // After the follow window, a newcomer may fill a departed member's berth.
+            // After the follow window, a newcomer may fill a departed member's slot.
             // Preserve the slots of everyone still present, rather than overlapping the last slot.
-            if let Some(vacant) = berth_accounts
+            if let Some(vacant) = roster
                 .iter()
                 .position(|account| !crew.members.iter().any(|member| member.account == *account))
             {
-                berth_accounts[vacant] = member.account;
+                roster[vacant] = member.account;
             } else {
-                berth_accounts.push(member.account);
+                roster.push(member.account);
             }
         }
         Some(View {
@@ -379,7 +382,7 @@ impl Crews {
                 .collect(),
             you: account,
             seed: crew.seed,
-            berth_accounts,
+            roster,
             launch: crew
                 .launch
                 .as_ref()
@@ -445,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    fn launch_slots_survive_a_departure_without_reassigning_an_occupied_berth() {
+    fn launch_slots_survive_a_departure_without_reassigning_an_occupied_slot() {
         let crews = Crews::default();
         let code = crews.create(AccountId(1), "Host", events(), 29, counter());
         for id in 2..=4 {
@@ -455,20 +458,16 @@ mod tests {
         crews.lock().crews.get_mut(&code).unwrap().launch_slots = (1..=4).map(AccountId).collect();
         crews.leave(AccountId(2));
         let view = crews.view(AccountId(3)).unwrap();
-        assert_eq!(view.berth_slot(AccountId(3)), Some(2));
-        assert_eq!(view.berth_slot(AccountId(4)), Some(3));
-        let wire = crate::wire::crew(&view);
-        assert_eq!(
-            wire.members.iter().map(|m| m.berth).collect::<Vec<_>>(),
-            [Some(0), Some(2), Some(3)]
-        );
+        assert_eq!(view.roster_slot(AccountId(3)), Some(2));
+        assert_eq!(view.roster_slot(AccountId(4)), Some(3));
+        assert_eq!(view.roster_slot(AccountId(1)), Some(0));
         crews
             .join(&code, AccountId(5), "New wing", events())
             .unwrap();
         let view = crews.view(AccountId(5)).unwrap();
-        assert_eq!(view.berth_slot(AccountId(5)), Some(1));
-        assert_eq!(view.berth_slot(AccountId(3)), Some(2));
-        assert_eq!(view.berth_slot(AccountId(4)), Some(3));
+        assert_eq!(view.roster_slot(AccountId(5)), Some(1));
+        assert_eq!(view.roster_slot(AccountId(3)), Some(2));
+        assert_eq!(view.roster_slot(AccountId(4)), Some(3));
     }
 
     #[test]
