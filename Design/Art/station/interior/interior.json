@@ -1,0 +1,315 @@
+{
+  "blender_version": "4.3.0",
+  "bounds_space": "root-local Blender Z-up metres",
+  "glb": "interior.glb",
+  "gltf_up": "+Y",
+  "id": "interior",
+  "inputs": {
+    "blender": "4.3.0",
+    "contract": "c4c9a606e65507799b3b3249f1ddb8454508f35c44de060b730a2f4679d1f5a7",
+    "game_data_reader": "44627da1400f1f2ad7218b63dc9ddc37f0e9f074be5497b34c751134c34db516",
+    "materials": "e6e79034affcdd1975f2efdf9b01c3d08d7556c5948afb376c0f434fb9d443e4",
+    "source": "b50e6e67facaab2a65fd6788b562727a54d1d046570b079a34970e37a27c1251",
+    "station_checks": "37174f24d54a1bc59b367cd43f1a1a92833420bdd9153383e795804180e39478",
+    "tool": "5b484ad2a05c5d5e656d78c3b435a9c4f58b7d36cc92cc4eafab777b01b673eb"
+  },
+  "kind": "station_interior",
+  "planned": false,
+  "preview": "interior.png",
+  "preview_sha256": "51489cc309611cf73a8daf5c34e3c4d9eec21bc2e9d92305d329f360c4a09fd8",
+  "roots": {
+    "StationInterior_ROOT": {
+      "anchors": {
+        "Parking_frigate": {
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              10.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "properties": {}
+        },
+        "Socket_A": {
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              -6.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              -6.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "properties": {}
+        },
+        "Socket_B": {
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              6.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "properties": {}
+        },
+        "Socket_C": {
+          "matrix": [
+            [
+              1.0,
+              0.0,
+              0.0,
+              -6.0
+            ],
+            [
+              0.0,
+              1.0,
+              0.0,
+              6.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ]
+          ],
+          "properties": {}
+        }
+      },
+      "bounds": {
+        "max": [
+          16.199481964111328,
+          14.916773796081543,
+          1.600000023841858
+        ],
+        "min": [
+          -16.199481964111328,
+          -16.199481964111328,
+          -1.899999976158142
+        ]
+      },
+      "materials": [
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "Ochre",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "Cargo container -1.2__StationInterior_ROOT",
+        "Cargo container 0.1__StationInterior_ROOT",
+        "Cargo container 1.4__StationInterior_ROOT",
+        "Cargo latch -1.2__StationInterior_ROOT",
+        "Cargo latch 0.1__StationInterior_ROOT",
+        "Cargo latch 1.4__StationInterior_ROOT",
+        "Closure_C cross -0.7853981633974483__StationInterior_ROOT",
+        "Closure_C cross 0.7853981633974483__StationInterior_ROOT",
+        "Closure_C plate__StationInterior_ROOT",
+        "Cutaway deck plate 00",
+        "Cutaway deck plate 01",
+        "Cutaway deck plate 02",
+        "Cutaway deck plate 03",
+        "Cutaway deck plate 04",
+        "Cutaway deck plate 05",
+        "Cutaway deck plate 10",
+        "Cutaway deck plate 11",
+        "Cutaway deck plate 12",
+        "Cutaway deck plate 13",
+        "Cutaway deck plate 14",
+        "Cutaway deck plate 15",
+        "Cutaway deck plate 16",
+        "Cutaway deck plate 17",
+        "Cutaway deck plate 18",
+        "Cutaway deck plate 19",
+        "Cutaway deck plate 20",
+        "Cutaway deck plate 21",
+        "Cutaway deck plate 22",
+        "Cutaway deck plate 23",
+        "Cutaway deck plate 24",
+        "Cutaway deck plate 25",
+        "Cutaway deck plate 26",
+        "Cutaway deck plate 27",
+        "Cutaway deck plate 28",
+        "Cutaway deck plate 29",
+        "Cutaway deck plate 30",
+        "Cutaway deck plate 31",
+        "Cutaway hub deck__StationInterior_ROOT",
+        "Cutaway hub foundation__StationInterior_ROOT",
+        "Cutaway ring foundation 00",
+        "Cutaway ring foundation 01",
+        "Cutaway ring foundation 02",
+        "Cutaway ring foundation 03",
+        "Cutaway ring foundation 04",
+        "Cutaway ring foundation 05",
+        "Cutaway ring foundation 10",
+        "Cutaway ring foundation 11",
+        "Cutaway ring foundation 12",
+        "Cutaway ring foundation 13",
+        "Cutaway ring foundation 14",
+        "Cutaway ring foundation 15",
+        "Cutaway ring foundation 16",
+        "Cutaway ring foundation 17",
+        "Cutaway ring foundation 18",
+        "Cutaway ring foundation 19",
+        "Cutaway ring foundation 20",
+        "Cutaway ring foundation 21",
+        "Cutaway ring foundation 22",
+        "Cutaway ring foundation 23",
+        "Cutaway ring foundation 24",
+        "Cutaway ring foundation 25",
+        "Cutaway ring foundation 26",
+        "Cutaway ring foundation 27",
+        "Cutaway ring foundation 28",
+        "Cutaway ring foundation 29",
+        "Cutaway ring foundation 30",
+        "Cutaway ring foundation 31",
+        "Detail Socket_A foundation runner -1__StationInterior_ROOT",
+        "Detail Socket_A foundation runner 1__StationInterior_ROOT",
+        "Detail Socket_B foundation runner -1__StationInterior_ROOT",
+        "Detail Socket_B foundation runner 1__StationInterior_ROOT",
+        "Detail Socket_C foundation runner -1__StationInterior_ROOT",
+        "Detail Socket_C foundation runner 1__StationInterior_ROOT",
+        "Detail cargo band -1.2--7.4__StationInterior_ROOT",
+        "Detail cargo band -1.2--8.6__StationInterior_ROOT",
+        "Detail cargo band 0.1--7.4__StationInterior_ROOT",
+        "Detail cargo band 0.1--8.6__StationInterior_ROOT",
+        "Detail cargo band 1.4--7.4__StationInterior_ROOT",
+        "Detail cargo band 1.4--8.6__StationInterior_ROOT",
+        "Detail cutaway corridor -1.5707963267948966__StationInterior_RO",
+        "Detail cutaway corridor 0__StationInterior_ROOT",
+        "Detail cutaway corridor 1.5707963267948966__StationInterior_ROO",
+        "Detail cutaway corridor 3.141592653589793__StationInterior_ROOT",
+        "Detail cutaway corridor stripe -1.5707963267948966__StationInte",
+        "Detail cutaway corridor stripe 0__StationInterior_ROOT",
+        "Detail cutaway corridor stripe 1.5707963267948966__StationInter",
+        "Detail cutaway corridor stripe 3.141592653589793__StationInteri",
+        "Detail hangar floor seam 10.0__StationInterior_ROOT",
+        "Detail hangar floor seam 11.5__StationInterior_ROOT",
+        "Detail hangar floor seam 13.0__StationInterior_ROOT",
+        "Detail hangar floor seam 4.0__StationInterior_ROOT",
+        "Detail hangar floor seam 5.5__StationInterior_ROOT",
+        "Detail hangar floor seam 7.0__StationInterior_ROOT",
+        "Detail hangar floor seam 8.5__StationInterior_ROOT",
+        "Detail interior edge markings -3-10.5__StationInterior_ROOT",
+        "Detail interior edge markings -3-12.5__StationInterior_ROOT",
+        "Detail interior edge markings -3-4.5__StationInterior_ROOT",
+        "Detail interior edge markings -3-6.5__StationInterior_ROOT",
+        "Detail interior edge markings -3-8.5__StationInterior_ROOT",
+        "Detail interior edge markings 7-10.5__StationInterior_ROOT",
+        "Detail interior edge markings 7-12.5__StationInterior_ROOT",
+        "Detail interior edge markings 7-4.5__StationInterior_ROOT",
+        "Detail interior edge markings 7-6.5__StationInterior_ROOT",
+        "Detail interior edge markings 7-8.5__StationInterior_ROOT",
+        "Detail processor thermal band 0.3__StationInterior_ROOT",
+        "Detail processor thermal band 0.6__StationInterior_ROOT",
+        "Detail processor thermal band 0.9__StationInterior_ROOT",
+        "Hangar deck__StationInterior_ROOT",
+        "Hangar inset deck__StationInterior_ROOT",
+        "Hangar lane guide -3.5-11__StationInterior_ROOT",
+        "Hangar lane guide -3.5-13__StationInterior_ROOT",
+        "Hangar lane guide -3.5-5__StationInterior_ROOT",
+        "Hangar lane guide -3.5-7__StationInterior_ROOT",
+        "Hangar lane guide -3.5-9__StationInterior_ROOT",
+        "Hangar lane guide 7.5-11__StationInterior_ROOT",
+        "Hangar lane guide 7.5-13__StationInterior_ROOT",
+        "Hangar lane guide 7.5-5__StationInterior_ROOT",
+        "Hangar lane guide 7.5-7__StationInterior_ROOT",
+        "Hangar lane guide 7.5-9__StationInterior_ROOT",
+        "Parking_frigate",
+        "Processor furnace__StationInterior_ROOT",
+        "Processor hopper__StationInterior_ROOT",
+        "Processor output chute__StationInterior_ROOT",
+        "Processor skid__StationInterior_ROOT",
+        "Reactor_Upgrade collar__StationInterior_ROOT",
+        "Reactor_Upgrade drum__StationInterior_ROOT",
+        "Reactor_Upgrade lamp -0.7__StationInterior_ROOT",
+        "Reactor_Upgrade lamp 0.7__StationInterior_ROOT",
+        "Reactor_Upgrade lamp 0__StationInterior_ROOT",
+        "Socket_A",
+        "Socket_A deck border -1__StationInterior_ROOT",
+        "Socket_A deck border 1__StationInterior_ROOT",
+        "Socket_A mounting deck__StationInterior_ROOT",
+        "Socket_B",
+        "Socket_B deck border -1__StationInterior_ROOT",
+        "Socket_B deck border 1__StationInterior_ROOT",
+        "Socket_B mounting deck__StationInterior_ROOT",
+        "Socket_C",
+        "Socket_C deck border -1__StationInterior_ROOT",
+        "Socket_C deck border 1__StationInterior_ROOT",
+        "Socket_C mounting deck__StationInterior_ROOT",
+        "StationInterior_ROOT"
+      ],
+      "triangles": 2604
+    }
+  },
+  "schema_version": 1,
+  "sha256": "e0d251e74fa00d30f14cb043d6f0dd21b6169f5ee80121a89dda75d2621f071e",
+  "source_forward": "+Y",
+  "source_up": "+Z",
+  "tiers": 0,
+  "tool_version": "0.2.0",
+  "units": "metres"
+}
