@@ -2,9 +2,13 @@ import type { Page } from "@playwright/test";
 import { RICH, expect, signUp, test } from "./fixtures";
 
 interface SceneReport {
+  view: "exterior" | "interior";
   sockets: string[];
   facilities: string[];
   installed: { socket: string; facility: string; tier: number; powered: boolean }[];
+  tells: { hardpoint: string; facility: string; tier: number; powered: boolean }[];
+  closed: string[];
+  parked: string[];
 }
 
 /** What the outpost scene holds, as the page reports it. */
@@ -15,6 +19,7 @@ async function scene(page: Page): Promise<SceneReport> {
 
 const home = (page: Page) => page.locator('#home[data-state="open"]');
 const account = (page: Page) => page.locator("#account");
+const stationView = (page: Page) => page.locator("#station-view");
 
 test("the outpost loads the station and sockets while unused catalogue modules wait", async ({
   page,
@@ -23,15 +28,79 @@ test("the outpost loads the station and sockets while unused catalogue modules w
   await home(page).locator('button[data-action="view:facilities"]').click();
   await expect(home(page)).toHaveAttribute("data-scene", /sockets/);
   const report = await scene(page);
-  expect(report.sockets).toEqual(["a", "b"]);
+  // Socket C is in the interior, plated until the reactor (plan M10).
+  expect(report.sockets).toEqual(["a", "b", "c"]);
+  expect(report.closed).toEqual(["b", "c"]);
   expect(report.facilities).toEqual([]);
   expect(report.installed).toEqual([]);
+  expect(report.tells).toEqual([]);
   // A new pilot cannot afford a facility, and socket B is closed.
   await expect(home(page).locator('button[data-action="install:refinery"]')).toBeDisabled();
   await expect(home(page).locator('button[data-action="socket:b"]')).toHaveAttribute(
     "data-state",
     "closed",
   );
+});
+
+test("selecting the station opens its interior in the same view, and Esc returns", async ({
+  page,
+}) => {
+  await signUp(page);
+  await expect(stationView(page)).toHaveAttribute("data-view", "exterior");
+  await expect(home(page)).toHaveAttribute("data-scene", /"view":"exterior"/);
+  const before = await page.locator("canvas").boundingBox();
+  // The station stands in the middle of the view: a click there selects it.
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error("no viewport");
+  await page.mouse.click(viewport.width / 2, viewport.height / 2);
+  await expect(stationView(page)).toHaveAttribute("data-view", "interior");
+  await expect(home(page)).toHaveAttribute("data-view", "facilities");
+  await expect
+    .poll(async () => scene(page))
+    .toMatchObject({ view: "interior", parked: ["frigate"] });
+  // The same camera: the view did not move or change size.
+  expect(await page.locator("canvas").boundingBox()).toEqual(before);
+  await expect(page.locator('.station-label[data-marker="socket-a"]')).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(stationView(page)).toHaveAttribute("data-view", "exterior");
+  await expect(home(page)).toHaveAttribute("data-view", "overview");
+  await expect.poll(async () => (await scene(page)).view).toBe("exterior");
+  await expect(page.locator('.station-label[data-marker="socket-a"]')).toBeHidden();
+  // The control does the same both ways.
+  await stationView(page).locator('button[data-action="interior"]').click();
+  await expect(stationView(page)).toHaveAttribute("data-view", "interior");
+  await stationView(page).locator('button[data-action="exterior"]').click();
+  await expect(stationView(page)).toHaveAttribute("data-view", "exterior");
+});
+
+test("building in a socket inside shows its tell on the exterior", async ({ page }) => {
+  await signUp(page, RICH);
+  // Building happens in the interior: the facilities service opens it.
+  await home(page).locator('button[data-action="view:facilities"]').click();
+  await expect(stationView(page)).toHaveAttribute("data-view", "interior");
+  await home(page).locator('button[data-action="install:refinery"]').click();
+  await expect
+    .poll(async () => scene(page))
+    .toMatchObject({
+      view: "interior",
+      installed: [{ socket: "a", facility: "refinery", tier: 1, powered: true }],
+    });
+  await stationView(page).locator('button[data-action="exterior"]').click();
+  await expect
+    .poll(async () => scene(page))
+    .toMatchObject({
+      view: "exterior",
+      tells: [{ hardpoint: "a", facility: "refinery", tier: 1, powered: true }],
+    });
+  // Out of the interior, nothing builds: the facilities service closed with it.
+  await expect(home(page).locator('button[data-action="install:refinery"]')).toBeHidden();
+  // Upgraded, the tell grows to the tier.
+  await home(page).locator('button[data-action="overview:a"]').click();
+  await expect(stationView(page)).toHaveAttribute("data-view", "interior");
+  await home(page).locator('button[data-action="upgrade"]').click();
+  await expect
+    .poll(async () => (await scene(page)).tells)
+    .toEqual([{ hardpoint: "a", facility: "refinery", tier: 2, powered: true }]);
 });
 
 test("the run docks at the outpost's own station, the one the home shows", async ({ page }) => {
@@ -41,6 +110,7 @@ test("the run docks at the outpost's own station, the one the home shows", async
   await page.locator('#briefing[data-state="open"] button[data-tier="1"]').click();
   await page.locator("#hud[data-x]").waitFor();
   await expect(page.locator("body")).toHaveAttribute("data-station", "dock");
+  await expect(stationView(page)).toBeHidden();
 });
 
 test("building a refinery puts it on its socket and opens its pocket", async ({ page }) => {

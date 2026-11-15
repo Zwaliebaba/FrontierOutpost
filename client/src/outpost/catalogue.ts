@@ -47,6 +47,14 @@ export function facilityEntry(id: string): { url: string; roots: string[] } {
   return { url: urlFor(entry.glb), roots: Object.keys(entry.roots) };
 }
 
+/** The station's two models (design §11): the exterior at the dock, the interior's cutaway. */
+export function stationEntry(part: "exterior" | "interior"): { url: string; root: string } {
+  const entry = catalogue.assets[`station_${part}:${part}`];
+  const root = entry && Object.keys(entry.roots)[0];
+  if (!entry || entry.pending || !root) throw new Error(`Station art is not ready: ${part}`);
+  return { url: urlFor(entry.glb), root };
+}
+
 /** A hull's model, by the game's identifier (`frigate`): its GLB and its one root. */
 export function hullEntry(id: string): { url: string; root: string } {
   const entry = catalogue.assets[`hull:${id}`];

@@ -21,9 +21,16 @@ import type {
 import { crewQuote, launchRole, renderCrew, resetSplitPending } from "./outpost/crew";
 import { loadNpc, loadOutpostModels } from "./outpost/models";
 import { affordableFacilities, fittingName, launchLines, supplySales } from "./outpost/options";
-import { BERTHS, placeStation } from "./outpost/placement";
+import { placeStation } from "./outpost/placement";
 import { OutpostScene } from "./outpost/scene";
-import type { HomeTab } from "./outpost/ui";
+import {
+  HOME_VIEW,
+  leaveInterior,
+  openInterior,
+  openTab,
+  viewControl,
+} from "./outpost/stationView";
+import type { HomeView } from "./outpost/stationView";
 import { renderHome, tickProcessor } from "./outpost/ui";
 import type { EntityPose } from "./net/interpolation";
 import { Predictor, predictsOwnShip, solidObstacles } from "./game/prediction";
@@ -166,7 +173,14 @@ hud.append(hudKeys, hudDiagnostics);
 utility.append(hud, cameraHints, sim);
 document.body.append(command, utility, lock, messages, jumpWash);
 const stationLabels = element("div", "station-labels");
-document.body.append(stationLabels);
+// Which of the station's views is drawn at home, and the control to the other (design §11).
+const stationControl = element("div", "station-view");
+const stationCaption = element("span", undefined, "station-view-caption");
+const stationToggle = element("button");
+const stationHint = element("small");
+stationControl.append(stationCaption, stationToggle, stationHint);
+stationControl.hidden = true;
+document.body.append(stationLabels, stationControl);
 const nav = element("div", "nav");
 // The ship gauges: one row each for hull, hold and heat, built once and updated in place.
 const shipPanel = element("div", "ship");
@@ -349,7 +363,8 @@ const sinceHoldings = () => (performance.now() - holdingsAt) / 1000;
 let catalog: Catalog | null = null;
 let outpost: OutpostScene | null = null;
 let selectedSocket = "a";
-let homeTab: HomeTab = "overview";
+/** Which of the station's views the home draws, and which service is open (outpost/stationView). */
+let homeView: HomeView = HOME_VIEW;
 /** The pilot's crew, if they are in one. */
 let crew: CrewInfo | null = null;
 /** Redraws what depends on the home: set by `play`. */
@@ -973,7 +988,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       develop.addEventListener("click", () => {
         delete summaryPanel.dataset.ending;
         selectedSocket = development.socket;
-        homeTab = "facilities";
+        homeView = openInterior();
         homeChanged();
         if (contract) showBriefing(contract);
       });
@@ -985,10 +1000,29 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
   // is, it is the outpost view at home and the dock in the run, and launching only moves the
   // camera from the station to the ship.
   const placeFor = (site: Joined["site"]) => {
-    outpost?.place(
-      placeStation({ x: site.dockX, z: site.dockZ }, { x: site.centreX, z: site.centreZ }),
-    );
+    outpost?.place(placeStation(site.station));
   };
+  /** The view's caption and control, at home with the outpost drawn. */
+  const drawStationControl = () => {
+    stationControl.hidden = life !== null || !outpost || !holdings;
+    const control = viewControl(homeView.view);
+    stationControl.dataset.view = homeView.view;
+    stationCaption.textContent = control.caption;
+    stationToggle.textContent = control.label;
+    stationToggle.dataset.action = control.action;
+    stationHint.textContent = control.hint;
+  };
+  stationToggle.addEventListener("click", () => {
+    homeView = homeView.view === "interior" ? leaveInterior(homeView) : openInterior();
+    homeChanged();
+  });
+  window.addEventListener("keydown", (event) => {
+    if (life || event.code !== "Escape" || homeView.view !== "interior") return;
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+      return;
+    homeView = leaveInterior(homeView);
+    homeChanged();
+  });
   const stationWhere = () => {
     if (!outpost) return;
     if (life) {
@@ -998,6 +1032,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       outpost.home();
     }
     document.body.dataset.station = life ? "dock" : "home";
+    drawStationControl();
     if (utility.firstChild)
       utility.firstChild.textContent = life
         ? "EXPEDITION / ACTIVE"
@@ -1046,6 +1081,9 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     delete briefing.dataset.state;
     briefing.replaceChildren();
     delete homePanel.dataset.state;
+    // A run leaves from the exterior: building waits for the interior at home again.
+    homeView = leaveInterior(homeView);
+    outpost?.setView(homeView.view);
     stationWhere();
   };
 
@@ -1055,7 +1093,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     stationWhere();
     if (!catalog || !holdings) return;
     if (outpost) {
-      outpost.setCrew(crew, callsign);
+      outpost.setView(homeView.view);
       outpost.apply(holdings);
       outpost.select(selectedSocket);
       homePanel.dataset.scene = JSON.stringify(outpost.report());
@@ -1076,12 +1114,12 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
             }
           : {}),
         tab: (tab) => {
-          homeTab = tab;
+          homeView = openTab(homeView, tab);
           homeChanged();
         },
         select: (socket, facility) => {
           selectedSocket = socket;
-          homeTab = "facilities";
+          homeView = openInterior();
           homeChanged();
           if (facility) {
             const card = homePanel.querySelector<HTMLElement>(
@@ -1092,7 +1130,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
           }
         },
       },
-      homeTab,
+      homeView.tab,
       sinceHoldings(),
     );
     if (!life) homePanel.dataset.state = "open";
@@ -1357,7 +1395,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       return;
     }
     if (event.button === 0 && !life && outpost) {
-      // At home a click selects the socket under the pointer.
+      // At home a click on the station opens the interior; inside, it selects the socket.
       const { width, height } = view.viewport;
       const ray = new Raycaster();
       ray.setFromCamera(
@@ -1367,7 +1405,10 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       const socket = outpost.pick(ray);
       if (socket) {
         selectedSocket = socket;
-        homeTab = "facilities";
+        homeView = openInterior();
+        homeChanged();
+      } else if (outpost.pickStation(ray)) {
+        homeView = openInterior();
         homeChanged();
       }
       return;
@@ -1585,22 +1626,19 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     stationLabels.hidden = life !== null || !outpost || !holdings;
     if (stationLabels.hidden || !outpost) return;
     const station = outpost;
-    const roster = crew?.members ?? [{ callsign, you: true }];
-    const targets = [
-      // Roster order until the hangar replaces the berths (plan 9.6).
-      ...BERTHS.map((b, i) => ({
-        id: `berth-${b.id}`,
-        label: `${b.id} / ${roster[i]?.callsign ?? "VACANT"}`,
-        at: station.root.localToWorld(new Vector3(b.x, b.deck + 0.2, b.z + 3.4)),
-      })),
-      ...["a", "b"].map((id) => ({
-        id: `socket-${id}`,
-        label: `SOCKET ${id.toUpperCase()}`,
-        at: station.socketPosition(id)?.add(new Vector3(0, 1.7, 0)),
-      })),
-    ];
+    // The sockets are inside: their labels show with the interior.
+    const inside = station.view === "interior";
+    const targets = ["a", "b"].map((id) => ({
+      id: `socket-${id}`,
+      label: `SOCKET ${id.toUpperCase()}`,
+      at: inside ? station.socketPosition(id)?.add(new Vector3(0, 1.7, 0)) : undefined,
+    }));
     for (const marker of targets) {
-      if (!marker.at) continue;
+      if (!marker.at) {
+        const shown = homeMarkers.get(marker.id);
+        if (shown) shown.hidden = true;
+        continue;
+      }
       let node = homeMarkers.get(marker.id);
       if (!node) {
         node = element("span", undefined, "station-label");
@@ -1614,7 +1652,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       node.hidden =
         screen.x < left || screen.x > right || screen.y < 126 || screen.y > window.innerHeight - 70;
       if (written.changed(`home.${marker.id}.text`, marker.label)) node.textContent = marker.label;
-      const transform = `translate(${screen.x.toFixed(0)}px, ${screen.y.toFixed(0)}px) translate(-50%, ${marker.id.startsWith("berth-") ? "0" : "-100%"})`;
+      const transform = `translate(${screen.x.toFixed(0)}px, ${screen.y.toFixed(0)}px) translate(-50%, -100%)`;
       if (written.changed(`home.${marker.id}.at`, transform)) node.style.transform = transform;
     }
   };

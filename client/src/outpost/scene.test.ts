@@ -1,5 +1,6 @@
 import { Group, Mesh, MeshStandardMaterial, OrthographicCamera, Raycaster, Vector2 } from "three";
 import { BoxGeometry } from "three";
+import type { Object3D } from "three";
 import { describe, expect, it } from "vitest";
 import type { AccountInfo } from "../protocol";
 import { facilityKey } from "./models";
@@ -8,26 +9,51 @@ import { STRUCTURE } from "../view/readability";
 import { placeStation } from "./placement";
 import { OutpostScene } from "./scene";
 
-/** A station with two sockets and every module, as small stand-ins. */
+const box = (size = 1) => new Mesh(new BoxGeometry(size, size, size), new MeshStandardMaterial());
+
+/**
+ * A station with three sockets, their hardpoints, a parking place and every module and tell, as
+ * small stand-ins, laid out as the pipeline's are (glTF: Blender +Y is −z).
+ */
 function models(): OutpostModels {
-  const station = new Group();
-  const sockets = new Map<string, Group>();
-  for (const [id, x] of [
-    ["a", -9],
-    ["b", 5],
+  const exterior = new Group();
+  exterior.add(box(30));
+  const interior = new Group();
+  interior.add(box(2));
+  const sockets = new Map<string, Object3D>();
+  const hardpoints = new Map<string, Object3D>();
+  const closures = new Map<string, Object3D>();
+  for (const [id, x, z] of [
+    ["a", -6, 6],
+    ["b", 6, 0],
+    ["c", -6, -6],
   ] as const) {
     const anchor = new Group();
     anchor.name = `Socket_${id.toUpperCase()}`;
-    anchor.position.set(x, 1, 0);
-    if (id === "b") {
-      const cover = new Mesh(new BoxGeometry(1, 0.1, 1), new MeshStandardMaterial());
-      cover.name = "SocketClosure_B_plate";
-      anchor.add(cover);
-    }
-    station.add(anchor);
+    anchor.position.set(x, 0, z);
+    const closure = new Group();
+    closure.name = `Closure_${id.toUpperCase()}`;
+    closure.add(box(0.5));
+    anchor.add(closure);
+    interior.add(anchor);
     sockets.set(id, anchor);
+    closures.set(id, closure);
+    const hardpoint = new Group();
+    hardpoint.name = `Tell_${id.toUpperCase()}`;
+    hardpoint.position.set(x * 2, 1.5, z * 2);
+    exterior.add(hardpoint);
+    hardpoints.set(id, hardpoint);
   }
+  const reactor = new Group();
+  reactor.add(box(0.8));
+  reactor.name = "Reactor_Upgrade drum";
+  interior.add(reactor);
+  const parking = new Group();
+  parking.name = "Parking_frigate";
+  parking.position.set(1, 0, -10);
+  interior.add(parking);
   const facilities = new Map<string, Group>();
+  const tells = new Map<string, Group>();
   for (const facility of ["sensor_array", "refinery", "fabrication_bay"]) {
     for (const tier of [1, 2]) {
       const root = new Group();
@@ -41,9 +67,23 @@ function models(): OutpostModels {
         root.add(indicator);
       }
       facilities.set(facilityKey(facility, tier), root);
+      const tell = new Group();
+      tell.name = `Tell_${facility}_T${String(tier)}`;
+      tell.add(box(0.5 * tier));
+      tells.set(facilityKey(facility, tier), tell);
     }
   }
-  return { station, sockets, facilities };
+  return {
+    exterior,
+    interior,
+    sockets,
+    hardpoints,
+    closures,
+    parking: new Map([["frigate", parking]]),
+    reactor: [reactor],
+    facilities,
+    tells,
+  };
 }
 
 function account(
@@ -53,8 +93,23 @@ function account(
   return { outpost: { sockets, unlocks } } as unknown as AccountInfo;
 }
 
+/** A camera straight down on the origin, 40 m across, and a ray through `(x, z)` on the plane. */
+function rayAt(x: number, z: number): Raycaster {
+  const camera = new OrthographicCamera(-20, 20, 12, -12, 0.1, 200);
+  camera.position.set(0, 50, 0);
+  camera.up.set(0, 0, -1);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld();
+  const ray = new Raycaster();
+  ray.setFromCamera(new Vector2(x / 20, -z / 12), camera);
+  return ray;
+}
+
+/** Facing −z, the station's frame is the models' own: no turn. */
+const UNTURNED = placeStation({ centreX: 0, centreZ: 0, forwardX: 0, forwardZ: -1 });
+
 describe("the outpost scene", () => {
-  it("puts each installed module on its socket at the tier it owns", () => {
+  it("puts each installed module on its socket at the tier it owns, and its tell outside", () => {
     const scene = new OutpostScene(models());
     scene.apply(
       account(
@@ -65,15 +120,20 @@ describe("the outpost scene", () => {
         [{ facility: "refinery", tier: 2 }],
       ),
     );
-    expect(scene.report().installed).toEqual([
+    const report = scene.report();
+    expect(report.installed).toEqual([
       { socket: "a", facility: "refinery", tier: 2, powered: true },
     ]);
-    expect(scene.report().sockets).toEqual(["a", "b"]);
-    expect(scene.report().facilities).toHaveLength(6);
+    expect(report.tells).toEqual([
+      { hardpoint: "a", facility: "refinery", tier: 2, powered: true },
+    ]);
+    expect(report.sockets).toEqual(["a", "b", "c"]);
+    expect(report.facilities).toHaveLength(6);
   });
 
-  it("replaces a module when it moves, upgrades or loses power", () => {
-    const scene = new OutpostScene(models());
+  it("replaces a module and its tell when it moves, upgrades or loses power", () => {
+    const parts = models();
+    const scene = new OutpostScene(parts);
     scene.apply(
       account(
         [
@@ -95,96 +155,128 @@ describe("the outpost scene", () => {
     expect(scene.report().installed).toEqual([
       { socket: "b", facility: "sensor_array", tier: 1, powered: false },
     ]);
-  });
-
-  it("picks the socket under the pointer and rings the selection", () => {
-    const scene = new OutpostScene(models());
-    const camera = new OrthographicCamera(-20, 20, 12, -12, 0.1, 200);
-    camera.position.set(0, 50, 0);
-    camera.lookAt(0, 0, 0);
-    camera.updateMatrixWorld();
-    const ray = new Raycaster();
-    // Socket A sits at x = -9: a quarter of the way across a 40 m view, from the left.
-    ray.setFromCamera(new Vector2(-9 / 20, 0), camera);
-    expect(scene.pick(ray)).toBe("a");
-    ray.setFromCamera(new Vector2(0.9, 0.9), camera);
-    expect(scene.pick(ray)).toBeNull();
-    scene.select("b");
-    expect(scene.selected).toBe("b");
-  });
-
-  it("stands where the dock puts it, with the pilot's ship on the berth until launch", () => {
-    const scene = new OutpostScene(models());
-    const placement = placeStation({ x: -120, z: 0 }, { x: 70, z: 0 });
-    scene.place(placement);
-    // Turned to face +x, socket A (station x -9) lies along -z from the station's origin.
-    const a = scene.socketPosition("a");
-    expect(a?.x).toBeCloseTo(placement.x, 6);
-    expect(a?.z).toBeCloseTo(placement.z + 9, 6);
-    expect(scene.centre.y).toBe(0);
-    const ships = () => {
-      const found: boolean[] = [];
-      scene.root.traverse((node) => {
-        if (node.name === "berth ship") found.push(node.visible);
-      });
-      return found;
+    expect(scene.report().tells).toEqual([
+      { hardpoint: "b", facility: "sensor_array", tier: 1, powered: false },
+    ]);
+    expect(parts.hardpoints.get("a")?.children).toHaveLength(0);
+    // Upgraded, the tell grows.
+    const size = () => {
+      const tell = parts.hardpoints.get("b")?.children[0];
+      const mesh = tell?.children[0];
+      return mesh instanceof Mesh ? (mesh.geometry as BoxGeometry).parameters.width : 0;
     };
-    expect(ships()).toEqual([true, true]);
-    const ship = scene.root.getObjectByName("berth ship");
+    const before = size();
+    scene.apply(
+      account(
+        [
+          { id: "a", open: true, run: 0 },
+          { id: "b", open: true, facility: "sensor_array", run: 2 },
+        ],
+        [{ facility: "sensor_array", tier: 2 }],
+      ),
+    );
+    expect(scene.report().tells).toEqual([
+      { hardpoint: "b", facility: "sensor_array", tier: 2, powered: true },
+    ]);
+    expect(size()).toBeGreaterThan(before);
+    // The reactor's hardpoint stays empty until the reactor is bought (plan M10).
+    expect(scene.report().tells.some((tell) => tell.hardpoint === "reactor")).toBe(false);
+  });
+
+  it("draws the exterior until the station is selected, then the interior in its place", () => {
+    const parts = models();
+    const scene = new OutpostScene(parts);
+    scene.place(UNTURNED);
+    expect(scene.report().view).toBe("exterior");
+    expect(parts.exterior.visible).toBe(true);
+    expect(parts.interior.visible).toBe(false);
+    // Only the exterior is selectable from outside, and only the station.
+    expect(scene.pick(rayAt(-6, 6))).toBeNull();
+    expect(scene.pickStation(rayAt(0, 0))).toBe(true);
+    expect(scene.pickStation(rayAt(19, 11))).toBe(false);
+    scene.setView("interior");
+    expect(parts.exterior.visible).toBe(false);
+    expect(parts.interior.visible).toBe(true);
+    expect(scene.report().view).toBe("interior");
+    expect(scene.pickStation(rayAt(0, 0))).toBe(false);
+    // Both share the station's transform: the interior replaces the exterior in place.
+    expect(parts.interior.parent).toBe(parts.exterior.parent);
+  });
+
+  it("picks an open socket under the pointer in the interior and rings the selection", () => {
+    const scene = new OutpostScene(models());
+    scene.place(UNTURNED);
+    expect(UNTURNED.yaw).toBeCloseTo(0, 12);
+    scene.apply(
+      account(
+        [
+          { id: "a", open: true, run: 0 },
+          { id: "b", open: false, run: 0 },
+        ],
+        [],
+      ),
+    );
+    expect(scene.pick(rayAt(-6, 6))).toBeNull();
+    scene.setView("interior");
+    expect(scene.pick(rayAt(-6, 6))).toBe("a");
+    // Socket B is closed, and socket C has no place in the account until the reactor.
+    expect(scene.pick(rayAt(6, 0))).toBeNull();
+    expect(scene.pick(rayAt(-6, -6))).toBeNull();
+    expect(scene.pick(rayAt(18, 11))).toBeNull();
+    scene.select("a");
+    expect(scene.selected).toBe("a");
+  });
+
+  it("plates closed sockets, socket C until the reactor, and hides the reactor", () => {
+    const parts = models();
+    const scene = new OutpostScene(parts);
+    const layout = (open: boolean) =>
+      account(
+        [
+          { id: "a", open: true, run: 0 },
+          { id: "b", open, run: 0 },
+        ],
+        [],
+      );
+    scene.apply(layout(false));
+    expect(scene.report().closed).toEqual(["b", "c"]);
+    scene.apply(layout(true));
+    expect(scene.report().closed).toEqual(["c"]);
+    expect(parts.reactor.every((part) => !part.visible)).toBe(true);
+  });
+
+  it("stands where the rules put it, with the pilot's ship parked inside until launch", () => {
+    const parts = models();
+    const scene = new OutpostScene(parts);
+    const placement = placeStation({ centreX: -120, centreZ: 0, forwardX: 1, forwardZ: 0 });
+    scene.place(placement);
+    expect(scene.centre.toArray()).toEqual([-120, 0, 0]);
+    // Facing +x: Blender +Y (glTF −z) runs along +x, Blender +X along +z.
+    const a = scene.socketPosition("a");
+    expect(a?.x).toBeCloseTo(-120 - 6, 6);
+    expect(a?.z).toBeCloseTo(-6, 6);
+    expect(scene.report().parked).toEqual(["frigate"]);
+    const ship = scene.root.getObjectByName("parked ship");
     const at = ship?.getWorldPosition(ship.position.clone());
-    expect(at?.x).toBeCloseTo(-120, 1);
-    expect(at?.z).toBeCloseTo(6, 1);
+    expect(at?.x).toBeCloseTo(-110, 4);
+    expect(at?.z).toBeCloseTo(1, 4);
     // Drawn on the plane, as the run draws the same ship once it launches.
     expect(at?.y).toBeCloseTo(0, 6);
 
+    scene.setView("interior");
     const root = scene.launch();
-    expect(ships()).toEqual([false, false]);
     expect(root).toBe(scene.root);
+    // Only the exterior stands at the dock; the ship flies from snapshots.
+    expect(parts.exterior.visible).toBe(true);
+    expect(parts.interior.visible).toBe(false);
+    expect(scene.report()).toMatchObject({ view: "exterior", parked: [] });
     scene.home();
     expect(scene.root.parent).toBe(scene.scene);
-    expect(ships()).toEqual([true, true]);
+    expect(scene.report()).toMatchObject({ view: "interior", parked: ["frigate"] });
   });
 
-  it("updates four roster ships and removes departed crewmates without ghosts", () => {
-    const scene = new OutpostScene(models());
-    const members = ["Vega", "Rigel", "Deneb", "Altair"].map((callsign, index) => ({
-      callsign,
-      share: 25,
-      you: index === 2,
-    }));
-    const crew = { code: "ABC234", hosting: false, members };
-    scene.setCrew(crew, "Deneb");
-    expect(scene.report().berths.map((b) => b.berth)).toEqual(["07", "08", "09", "10"]);
-    const hulls = () => scene.root.children.filter((n) => n.name === "berth ship");
-    expect(hulls()).toHaveLength(8);
-    expect(new Set(hulls().map((n) => n.position.x)).size).toBe(4);
-    scene.launch();
-    expect(hulls().every((n) => !n.visible)).toBe(true);
-    scene.setCrew({ ...crew, members: members.slice(0, 2) }, "Vega");
-    expect(hulls()).toHaveLength(4);
-    expect(hulls().every((n) => !n.visible)).toBe(true);
-    scene.home();
-    expect(hulls().every((n) => n.visible)).toBe(true);
-    scene.setCrew(
-      {
-        ...crew,
-        members: [
-          { callsign: "Vega", you: false, share: 50 },
-          { callsign: "Altair", you: true, share: 50 },
-        ],
-      },
-      "Altair",
-    );
-    expect(scene.report().berths.map((b) => b.berth)).toEqual(["07", "08"]);
-    expect(new Set(hulls().map((n) => n.position.x)).size).toBe(2);
-    scene.setCrew(null, "Deneb");
-    expect(scene.report().berths).toEqual([{ berth: "07", callsign: "Deneb", you: true }]);
-    expect(hulls()).toHaveLength(2);
-  });
-
-  it("makes the station and its modules structures, so ships behind them show as silhouettes", () => {
+  it("makes the station, its modules and tells structures, so ships behind show as silhouettes", () => {
     const parts = models();
-    parts.station.add(new Mesh(new BoxGeometry(4, 4, 4), new MeshStandardMaterial()));
     const scene = new OutpostScene(parts);
     scene.apply(
       account(
@@ -193,39 +285,41 @@ describe("the outpost scene", () => {
       ),
     );
     const refs: number[] = [];
-    parts.station.traverse((node) => {
-      if (node instanceof Mesh && node.material instanceof MeshStandardMaterial) {
-        refs.push(node.material.stencilRef);
-      }
-    });
-    // The hull and the dimmed refinery; pick targets and the ring are not drawn as structure.
-    expect(refs.length).toBeGreaterThanOrEqual(2);
+    for (const root of [parts.exterior, parts.interior]) {
+      root.traverse((node) => {
+        const ancestry: string[] = [node.name];
+        node.traverseAncestors((above) => ancestry.push(above.name));
+        if (ancestry.includes("parked ship")) return;
+        if (node instanceof Mesh && node.material instanceof MeshStandardMaterial) {
+          refs.push(node.material.stencilRef);
+        }
+      });
+    }
+    // Pick targets, the ring and the parked ship are not drawn as structure.
+    expect(refs.length).toBeGreaterThanOrEqual(4);
     expect(new Set(refs)).toEqual(new Set([STRUCTURE]));
   });
 });
 
-it("preserves the built tier while changing operating indicators and the socket cover", () => {
+it("preserves the built tier while changing operating indicators", () => {
   const pack = models();
   const scene = new OutpostScene(pack);
-  const layout = (run: number, open: boolean) =>
+  const layout = (run: number) =>
     account(
       [
         { id: "a", open: true, facility: "sensor_array", run },
-        { id: "b", open, run: 0 },
+        { id: "b", open: true, run: 0 },
       ],
       [{ facility: "sensor_array", tier: 2 }],
     );
-  scene.apply(layout(1, false));
+  scene.apply(layout(1));
   const socket = pack.sockets.get("a");
-  const cover = pack.station.getObjectByName("SocketClosure_B_plate");
   expect(socket?.getObjectByName("Facility_sensor_array_T2")).toBeDefined();
   expect(socket?.getObjectByName("Operating_Tier_1")?.visible).toBe(true);
   expect(socket?.getObjectByName("Operating_Tier_2")?.visible).toBe(false);
-  expect(cover?.visible).toBe(true);
-  scene.apply(layout(2, true));
+  scene.apply(layout(2));
   expect(socket?.getObjectByName("Operating_Tier_2")?.visible).toBe(true);
-  expect(cover?.visible).toBe(false);
-  scene.apply(layout(0, true));
+  scene.apply(layout(0));
   expect(socket?.getObjectByName("Facility_sensor_array_T2")).toBeDefined();
   expect(socket?.getObjectByName("Operating_Tier_1")?.visible).toBe(false);
 });
