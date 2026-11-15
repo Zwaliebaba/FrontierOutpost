@@ -44,6 +44,9 @@ pub struct Ship {
     pub vulnerable_from: Option<(f32, f32, f32)>,
     /// Steps until its point defence can intercept again.
     pub defence_cooldown: u32,
+    /// Flown by the rules on a scripted path, out of the hangar or into it:
+    /// it ignores its input and collides with nothing (plan 9.4).
+    pub scripted: bool,
 }
 
 /// What a ship's fittings change in flight (design section 10's rigs and
@@ -115,6 +118,7 @@ impl Ship {
             since_hit: 0,
             vulnerable_from: None,
             defence_cooldown: 0,
+            scripted: false,
         }
     }
 }
@@ -296,6 +300,18 @@ impl World {
         }
     }
 
+    /// Puts a ship on a scripted path, or back under its input. Returns
+    /// whether it exists.
+    pub fn set_scripted(&mut self, id: ShipId, scripted: bool) -> bool {
+        match self.ships.iter_mut().find(|ship| ship.id == id) {
+            Some(ship) => {
+                ship.scripted = scripted;
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Sets the cargo a ship carries. Returns whether it exists.
     pub fn set_cargo(&mut self, id: ShipId, cargo: u32) -> bool {
         match self.ships.iter_mut().find(|ship| ship.id == id) {
@@ -436,13 +452,16 @@ impl World {
 
     /// Advances the world by one step: NPCs decide, every ship moves, then
     /// collisions resolve. Ships push one another apart, and obstacles go last,
-    /// so no ship ends a step inside one.
+    /// so no ship ends a step inside one. A scripted ship stays where the
+    /// rules put it and takes no part in collisions.
     pub fn step(&mut self) {
         self.events.clear();
         self.think();
         for ship in &mut self.ships {
-            let handling = handling(ship.kind, &ship.kit);
-            ship.state = ship::step(ship.state, ship.input, &handling);
+            if !ship.scripted {
+                let handling = handling(ship.kind, &ship.kit);
+                ship.state = ship::step(ship.state, ship.input, &handling);
+            }
             ship.since_hit = ship.since_hit.saturating_add(1);
             if ship.since_hit >= SHIELD_DELAY_TICKS {
                 ship.shield = (ship.shield + SHIELD_REGEN * ship::DT).min(ship.kit.shield);
@@ -452,13 +471,16 @@ impl World {
         for i in 0..self.ships.len() {
             let (done, rest) = self.ships.split_at_mut(i + 1);
             let Some(a) = done.last_mut() else { continue };
-            for b in rest {
+            if a.scripted {
+                continue;
+            }
+            for b in rest.iter_mut().filter(|b| !b.scripted) {
                 let (ra, rb) = (a.kind.profile().radius, b.kind.profile().radius);
                 collision::separate(&mut a.state, ra, &mut b.state, rb);
             }
         }
         self.impacts.clear();
-        for ship in &mut self.ships {
+        for ship in self.ships.iter_mut().filter(|ship| !ship.scripted) {
             let radius = ship.kind.profile().radius;
             let (state, impact) =
                 collision::resolve_obstacles_with_impact(ship.state, radius, &self.obstacles);
@@ -828,6 +850,36 @@ mod tests {
             let (sa, sb) = (world.ship(a).unwrap().state, world.ship(b).unwrap().state);
             assert!((sa.x - sb.x).hypot(sa.z - sb.z) >= 2.0 * crate::collision::SHIP_RADIUS - 1e-3);
         }
+    }
+
+    #[test]
+    fn a_scripted_ship_ignores_its_input_and_collides_with_nothing() {
+        let mut world = World::with_obstacles(vec![Obstacle {
+            x: 0.0,
+            z: 0.0,
+            radius: 2.0,
+        }]);
+        let scripted = world.spawn_pilot_at((0.5, 0.0), 0.0);
+        let other = world.spawn_pilot_at((1.0, 0.0), 0.0);
+        world.set_scripted(scripted, true);
+        world.set_input(
+            scripted,
+            ShipInput {
+                thrust: 1.0,
+                turn: 1.0,
+                cruise: false,
+            },
+        );
+        world.step();
+        let state = world.ship(scripted).unwrap().state;
+        assert_eq!((state.x, state.z, state.heading), (0.5, 0.0, 0.0));
+        // The other ship is pushed out of the rock, but not by the scripted one.
+        let pushed = world.ship(other).unwrap().state;
+        assert!(pushed.x.hypot(pushed.z) >= 2.0 + crate::collision::SHIP_RADIUS - 1e-3);
+        assert!(world.impacts().iter().all(|&(ship, _)| ship != scripted));
+        world.set_scripted(scripted, false);
+        world.step();
+        assert!(world.ship(scripted).unwrap().state.x.hypot(0.0) > 0.5);
     }
 
     #[test]

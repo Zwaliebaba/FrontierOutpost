@@ -188,7 +188,7 @@ async fn a_pilot_flies_clear_of_the_dock_then_jumps_to_just_outside_the_ore_fiel
         }
     );
 
-    // Still on the berth: a jump is made from open space.
+    // Still leaving the hangar: a jump is made from open space.
     let ore = JumpTarget::Pocket { index: 0 };
     write(&mut pilot.send, &ClientMessage::Jump { target: Some(ore) }).await;
     assert_eq!(
@@ -258,7 +258,7 @@ async fn each_launch_is_its_own_instance() {
 async fn flying_out_and_back_docks_and_a_new_contract_follows() {
     let (url, sha256) = start_server();
     let mut pilot = launch(&url, sha256).await;
-    // Out past the undock radius, stop, turn about, and come straight back.
+    // Out of the hangar and off the lane, stop, turn about, and come straight back in.
     pilot.fly(FORWARD, 100).await;
     pilot.fly(BRAKE, 60).await;
     let about = Controls {

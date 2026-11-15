@@ -454,7 +454,7 @@ mod tests {
             SocketRule {
                 id: "b",
                 name: "Socket B",
-                beside: "berth",
+                beside: "hangar deck",
                 opens: SocketOpens::AtStart,
             },
         ],

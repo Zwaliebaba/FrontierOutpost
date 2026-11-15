@@ -10,7 +10,7 @@ use frontier_protocol::{
 use frontier_sim::fitting::{self, FITTINGS, Missing};
 use frontier_sim::market::{PRICES, RECIPES};
 use frontier_sim::outpost::{Bonus, STAGE1};
-use frontier_sim::run::{self, DOCK_RADIUS, LAUNCH_COST, seconds};
+use frontier_sim::run::{self, LAUNCH_COST, seconds};
 use frontier_sim::site::{self, Capability, Site, SiteTemplate, ThreatTier};
 use frontier_sim::{goods, outcome};
 
@@ -451,7 +451,9 @@ pub fn site_info(site: &Site) -> SiteInfo {
                 material: pocket.template.material.map(material),
             })
             .collect(),
-        dock_radius: DOCK_RADIUS,
+        // Until the wire carries the station (plan 9.5): how far from the
+        // dock the hangar mouth's capture zone reaches.
+        dock_radius: frontier_sim::station::MOUTH_DISTANCE + frontier_sim::station::CAPTURE_DEPTH,
     }
 }
 

@@ -373,7 +373,7 @@ async fn a_run_is_saved_where_it_stands_when_the_server_is_asked_to_stop() {
         panic!("expected Joined");
     };
 
-    // Three seconds out from the dock on the main drive.
+    // Three seconds of the launch flying the ship out of the hangar.
     let forward = Controls {
         thrust: 127,
         turn: 0,
@@ -399,7 +399,7 @@ async fn a_run_is_saved_where_it_stands_when_the_server_is_asked_to_stop() {
                   b: &frontier_protocol::snapshot::EntityState| {
         f32::from(a.x - b.x).hypot(f32::from(a.z - b.z)) / 32.0
     };
-    assert!(metres(&last, &launched) > 10.0, "well clear of the berth");
+    assert!(metres(&last, &launched) > 10.0, "well out along the lane");
 
     let asked = Command::new("kill")
         .args(["-TERM", &server.child.id().to_string()])
@@ -451,10 +451,10 @@ async fn a_run_is_saved_where_it_stands_when_the_server_is_asked_to_stop() {
     let snapshot = Snapshot::decode(&bytes).unwrap();
     let me = snapshot.entities.iter().find(|e| e.id == ship_id).unwrap();
     // The ship coasted on for the moment between the last snapshot read and
-    // the stop; the launch checkpoint would put it back at the berth.
+    // the stop; the launch checkpoint would put it back in the hangar.
     assert!(
         metres(me, &last) < metres(me, &launched),
-        "restored where it stopped, {} m on, not at the berth {} m back",
+        "restored where it stopped, {} m on, not in the hangar {} m back",
         metres(me, &last),
         metres(me, &launched)
     );

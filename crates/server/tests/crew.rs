@@ -292,7 +292,7 @@ async fn a_member_back_from_the_hosts_launch_is_not_offered_or_charged_for_it_ag
     assert_eq!(account.credits, 60, "supplies paid once");
     assert!(matches!(wing.hear().await, ServerMessage::Joined { .. }));
 
-    // Out past the undock radius and straight back, well inside the minute
+    // Out of the hangar, off the lane and straight back in, well inside the minute
     // the host's launch stays open.
     wing.fly(FORWARD, 100).await;
     wing.fly(BRAKE, 60).await;
@@ -361,7 +361,7 @@ async fn a_disconnected_member_is_abandoned_when_the_rest_of_the_crew_docks() {
     let token = wing.token.clone();
     wing.session.close(0, b"dropped");
 
-    // The host flies out past the undock radius and straight back.
+    // The host flies out of the hangar and straight back in.
     host.fly(FORWARD, 100).await;
     host.fly(BRAKE, 60).await;
     let about = Controls {

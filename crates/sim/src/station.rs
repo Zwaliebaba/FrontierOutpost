@@ -38,6 +38,20 @@ pub const CAPTURE_DEPTH: f32 = 8.0;
 /// The slowest inward speed that counts as flying in rather than drifting,
 /// m/s.
 pub const CAPTURE_SPEED: f32 = 0.25;
+/// How fast a launch flies a ship out along the lane, m/s: a placeholder,
+/// a little under the starter hull's top speed, so the pilot takes over a
+/// ship already under way.
+pub const DEPART_SPEED: f32 = 8.0;
+/// How far ahead along the lane the ship before it must be before a ship
+/// in the departure queue moves, metres: a placeholder that keeps four
+/// launching ships, and late joiners, clear of one another.
+pub const DEPART_SPACING: f32 = 10.0;
+/// How fast a captured ship is drawn in to the hangar, m/s: a placeholder,
+/// short enough that docking still feels flown.
+pub const DRAW_IN_SPEED: f32 = 6.0;
+/// Open space a site keeps round the hull and either side of the lane, so
+/// ships can fly round the station and line up on the lane; metres.
+pub const CLEARANCE: f32 = 8.0;
 
 /// The hub's drum, centred behind the station's centre.
 const HUB: (f32, f32, f32) = (0.0, -1.0, 7.6);
@@ -138,10 +152,53 @@ impl Station {
         self.world((0.0, HANGAR_START))
     }
 
-    /// How far along the lane, from the hangar start, `position` lies.
+    /// How far along the station's axis, from its centre, `position` lies.
     #[must_use]
     pub fn along(&self, position: (f32, f32)) -> f32 {
         self.local(position).1
+    }
+
+    /// The point on the station's axis `along` metres from its centre.
+    #[must_use]
+    pub fn on_axis(&self, along: f32) -> (f32, f32) {
+        self.world((0.0, along))
+    }
+
+    /// Whether an asteroid of `radius` at `position` leaves the station and
+    /// its lane [`CLEARANCE`] of open space.
+    #[must_use]
+    pub fn keeps_clear(&self, position: (f32, f32), radius: f32) -> bool {
+        let (x, z) = position;
+        let from_centre = (x - self.centre.0).hypot(z - self.centre.1);
+        if from_centre <= FOOTPRINT_RADIUS + CLEARANCE + radius {
+            return false;
+        }
+        // The lane, from the mouth to a clearance beyond its end.
+        let (across, along) = self.local(position);
+        let end = MOUTH_DISTANCE + LANE_LENGTH + CLEARANCE;
+        let nearest = along.clamp(MOUTH_DISTANCE, end);
+        let from_lane = across.hypot(along - nearest);
+        from_lane > MOUTH_WIDTH / 2.0 + CLEARANCE + radius
+    }
+
+    /// `position`, moved straight out from the centre if a body of `radius`
+    /// there would touch the footprint: where something placed near the
+    /// station, an arrival or a spawn, goes instead.
+    #[must_use]
+    pub fn outside(&self, position: (f32, f32), radius: f32) -> (f32, f32) {
+        let (dx, dz) = (position.0 - self.centre.0, position.1 - self.centre.1);
+        let distance = dx.hypot(dz);
+        let reach = FOOTPRINT_RADIUS + radius + 0.5;
+        if distance >= reach {
+            return position;
+        }
+        let (ux, uz) = if distance > 1e-3 {
+            (dx / distance, dz / distance)
+        } else {
+            // On the centre: out of the mouth.
+            self.forward
+        };
+        (self.centre.0 + ux * reach, self.centre.1 + uz * reach)
     }
 
     /// The solid hull: the hub, the ring and the hangar's walls, leaving the
@@ -327,5 +384,38 @@ mod tests {
         ));
         assert!(station.in_hangar(station.hangar_start()));
         assert!(!station.in_hangar(front));
+    }
+
+    #[test]
+    fn asteroids_keep_clear_of_the_hull_and_the_lane() {
+        let station = stations()[3];
+        // On the lane, just beyond its end, and beside the hull: not clear.
+        for point in [
+            (0.0, MOUTH_DISTANCE + LANE_LENGTH / 2.0),
+            (0.0, MOUTH_DISTANCE + LANE_LENGTH + 4.0),
+            (MOUTH_WIDTH / 2.0 + 3.0, MOUTH_DISTANCE + 10.0),
+            (0.0, -FOOTPRINT_RADIUS - 2.0),
+        ] {
+            assert!(!station.keeps_clear(station.world(point), 1.0), "{point:?}");
+        }
+        // Well to the side of the lane, and well behind the hull: clear.
+        for point in [
+            (30.0, MOUTH_DISTANCE + 10.0),
+            (0.0, -FOOTPRINT_RADIUS - 12.0),
+        ] {
+            assert!(station.keeps_clear(station.world(point), 1.0), "{point:?}");
+        }
+    }
+
+    #[test]
+    fn a_point_inside_the_footprint_is_moved_just_outside_it() {
+        let station = stations()[2];
+        let far = station.world((40.0, 3.0));
+        assert_eq!(station.outside(far, SHIP_RADIUS), far);
+        for point in [(3.0, -2.0), (0.0, 0.0), (-10.0, 9.0)] {
+            let moved = station.outside(station.world(point), SHIP_RADIUS);
+            assert!(!station.overlaps_footprint(moved), "{point:?}");
+            assert!(station.local(moved).0 * point.0 >= 0.0, "straight out");
+        }
     }
 }

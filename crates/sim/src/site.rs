@@ -7,6 +7,7 @@
 
 use crate::collision::Obstacle;
 use crate::rng::Rng;
+use crate::station::Station;
 use crate::{TICKS_PER_SECOND, ticks_for_millis};
 
 /// What an outpost's powered layout grants an expedition (design section 10).
@@ -321,7 +322,7 @@ pub struct PocketTemplate {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SiteTemplate {
     pub name: &'static str,
-    /// The pilots' home berth: launch and docking.
+    /// Where the station stands: launch and docking (plan 9.4).
     pub dock: (f32, f32),
     /// Leaving this circle after working a pocket starts the return leg.
     pub centre: (f32, f32),
@@ -523,8 +524,6 @@ pub struct Site {
 
 /// Keeps asteroids this far from deposits, pocket edges excepted.
 const DEPOSIT_CLEARANCE: f32 = 8.0;
-/// Keeps asteroids this far from the dock.
-const DOCK_CLEARANCE: f32 = 30.0;
 
 impl Site {
     /// Generates the site for a crew of `pilots` at `tier`, whose outposts grant
@@ -592,6 +591,20 @@ impl Site {
             deposits,
             obstacles,
         }
+    }
+
+    /// The station at the dock (plan 9.4).
+    #[must_use]
+    pub fn station(&self) -> Station {
+        Station::for_site(&self.template)
+    }
+
+    /// Everything ships collide with: the asteroids and the station's hull.
+    #[must_use]
+    pub fn solid_obstacles(&self) -> Vec<Obstacle> {
+        let mut solid = self.obstacles.clone();
+        solid.extend(self.station().obstacles());
+        solid
     }
 
     /// The pocket containing a point, if any.
@@ -698,7 +711,8 @@ fn seed_values(template: &SiteTemplate, seed: u32, tier: ThreatTier) -> SeedValu
 fn asteroids(template: &SiteTemplate, seed: u32, deposits: &[Deposit]) -> Vec<Obstacle> {
     // A different stream from the seed values, so adding rocks never changes them.
     let mut rng = Rng::new(seed ^ 0x9e37_79b9);
-    let (dx, dz) = template.dock;
+    let station = Station::for_site(template);
+    let dx = template.dock.0;
     let (cx, cz) = template.centre;
     let min_x = dx.min(cx - template.radius);
     let max_x = dx.max(cx + template.radius);
@@ -710,14 +724,15 @@ fn asteroids(template: &SiteTemplate, seed: u32, deposits: &[Deposit]) -> Vec<Ob
         let x = rng.between(min_x, max_x);
         let z = rng.between(cz - half_depth, cz + half_depth);
         let radius = rng.between(0.8, 5.0);
-        let clear_of_dock = (x - dx).hypot(z - dz) > DOCK_CLEARANCE + radius;
+        // Filtering draws nothing, so the station changes no other rock.
+        let clear_of_station = station.keeps_clear((x, z), radius);
         let clear_of_deposits = deposits
             .iter()
             .all(|d| (x - d.x).hypot(z - d.z) > DEPOSIT_CLEARANCE + radius);
         let clear_of_pocket_centres = template.pockets.iter().all(|pocket| {
             (x - pocket.centre.0).hypot(z - pocket.centre.1) > DEPOSIT_CLEARANCE + radius
         });
-        if clear_of_dock && clear_of_deposits && clear_of_pocket_centres {
+        if clear_of_station && clear_of_deposits && clear_of_pocket_centres {
             field.push(Obstacle { x, z, radius });
         }
     }
@@ -838,8 +853,9 @@ mod tests {
                 for deposit in &site.deposits {
                     assert!((rock.x - deposit.x).hypot(rock.z - deposit.z) > rock.radius + 6.0);
                 }
-                let (dx, dz) = template.dock;
-                assert!((rock.x - dx).hypot(rock.z - dz) > rock.radius + 20.0);
+                let station = site.station();
+                assert!(station.keeps_clear((rock.x, rock.z), rock.radius));
+                assert!(!station.overlaps_footprint((rock.x, rock.z)));
             }
         }
     }

@@ -1334,7 +1334,8 @@ fn own_status(run: &Run, ship: ShipId) -> OwnStatus {
             Phase::AtDock => RunPhase::AtDock,
             Phase::Approach => RunPhase::Approach,
             Phase::Objective => RunPhase::Objective,
-            Phase::Return => RunPhase::Return,
+            // Until the wire has a phase for it (plan 9.5).
+            Phase::Return | Phase::Docking => RunPhase::Return,
             Phase::Docked => RunPhase::Docked,
             Phase::Destroyed => RunPhase::Destroyed,
             Phase::Abandoned => RunPhase::Abandoned,
@@ -1898,17 +1899,20 @@ mod wingman_integration_tests {
         }
         assert_eq!(run.relay(), Relay::Linked);
         let mut checkpoint = run.checkpoint();
-        let dock = run.site().template.dock;
+        // Both caught by the hangar mouth, being drawn in.
+        let mouth = run.site().station().mouth();
         for (saved, cargo) in checkpoint.crew.iter_mut().zip([10, 3]) {
-            saved.x = dock.0;
-            saved.z = dock.1;
-            saved.phase = Phase::Return;
+            saved.x = mouth.0;
+            saved.z = mouth.1;
+            saved.phase = Phase::Docking;
             saved.cargo = [cargo, 0, 0];
         }
         let mut run = Run::restore(&checkpoint).unwrap();
         assert!(run.reconnect(pilot));
         run.order_wingman(pilot, Order::Return).unwrap();
-        run.step();
+        for _ in 0..2 * TICKS_PER_SECOND {
+            run.step();
+        }
         assert_eq!(run.status(wing).unwrap().phase, Phase::Docked);
         let expected = run.pot();
         let mut books = Books {
