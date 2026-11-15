@@ -1183,6 +1183,7 @@
               -10.800000190734863
             ]
           },
+          "footprint_radius": 16.818029400763855,
           "materials": [
             "Amber",
             "Armor",

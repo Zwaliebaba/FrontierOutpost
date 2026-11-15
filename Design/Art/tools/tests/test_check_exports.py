@@ -104,6 +104,23 @@ class ExportChecks(unittest.TestCase):
         (self.art / "contract.json").write_text(json.dumps(contract))
         self.assertIn("Unknown hull", " ".join(check_exports.verify(self.art)))
 
+    def exterior(self):
+        path = self.art / "station/exterior/exterior.json"
+        manifest = json.loads(path.read_text())
+        return path, manifest, manifest["roots"]["StationExterior_ROOT"]
+
+    def test_exterior_mouth_must_be_the_rules_mouth(self):
+        path, manifest, record = self.exterior()
+        record["anchors"]["Hangar_Mouth"]["matrix"][1][3] = 12.0
+        path.write_text(json.dumps(manifest))
+        self.assertIn("mouth differs", " ".join(check_exports.verify(self.art)))
+
+    def test_exterior_rechecked_against_todays_footprint(self):
+        rules = check_exports.station_geometry()
+        rules["footprint_radius"] = 15.0
+        with patch("check_exports.station_geometry", return_value=rules):
+            self.assertIn("footprint", " ".join(check_exports.verify(self.art)))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -60,3 +60,23 @@ def npc_radii(repo=None):
     if "raider" not in result:
         raise ValueError("No NPC profiles found in frontier_sim")
     return result
+
+
+STATION_CONSTANTS = ("MOUTH_DISTANCE", "MOUTH_WIDTH", "MOUTH_HEIGHT", "LANE_LENGTH", "FOOTPRINT_RADIUS")
+
+
+def station_geometry(repo=None):
+    """The station's gameplay geometry, from frontier_sim's literal constants (station.rs).
+
+    The rules own the mouth, the lane and the footprint; the exterior model is checked against
+    them, never the other way round. Fails rather than guesses if a constant is missing.
+    """
+    repo = Path(repo) if repo else Path(__file__).resolve().parents[3]
+    source = (repo / "crates/sim/src/station.rs").read_text(encoding="utf-8")
+    result = {}
+    for name in STATION_CONSTANTS:
+        match = re.search(rf"\bpub const {name}: f32 = ([0-9.]+);", source)
+        if not match:
+            raise ValueError(f"No {name} in frontier_sim's station.rs; update the art data reader")
+        result[name.lower()] = float(match[1])
+    return result

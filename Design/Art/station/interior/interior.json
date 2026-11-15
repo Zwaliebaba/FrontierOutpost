@@ -7,16 +7,16 @@
   "inputs": {
     "blender": "4.3.0",
     "contract": "c4c9a606e65507799b3b3249f1ddb8454508f35c44de060b730a2f4679d1f5a7",
-    "game_data_reader": "44627da1400f1f2ad7218b63dc9ddc37f0e9f074be5497b34c751134c34db516",
+    "game_data_reader": "2e4ed127f595d54db31a411c295752a6cdabf6b4aebaefe34ec5672eddab260c",
     "materials": "e6e79034affcdd1975f2efdf9b01c3d08d7556c5948afb376c0f434fb9d443e4",
     "source": "b50e6e67facaab2a65fd6788b562727a54d1d046570b079a34970e37a27c1251",
     "station_checks": "37174f24d54a1bc59b367cd43f1a1a92833420bdd9153383e795804180e39478",
-    "tool": "5b484ad2a05c5d5e656d78c3b435a9c4f58b7d36cc92cc4eafab777b01b673eb"
+    "tool": "3262576a57a5da0043df4e1a80de0a853eb6ee2b2f7cff95b8a082e00ecf2159"
   },
   "kind": "station_interior",
   "planned": false,
   "preview": "interior.png",
-  "preview_sha256": "51489cc309611cf73a8daf5c34e3c4d9eec21bc2e9d92305d329f360c4a09fd8",
+  "preview_sha256": "d8ad3018b03627f5f5977b1e5008e1c9c58773ce9d17c857f0544813813983fd",
   "roots": {
     "StationInterior_ROOT": {
       "anchors": {

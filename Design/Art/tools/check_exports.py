@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import sys
 
-from game_data import facility_definitions, npc_radii
+from game_data import facility_definitions, npc_radii, station_geometry
 
 ART = Path(__file__).resolve().parents[1]
 
@@ -19,6 +19,24 @@ def fits_berth(bounds, layout, contract):
     room = [2 * layout["halfWidth"], 2 * layout["halfLength"]]
     return all(bounds["max"][i] - bounds["min"][i] + 2 * contract["clearance"] <= room[i] + contract["epsilon"]
                for i in range(2))
+
+
+def station_mismatches(record, contract):
+    """As frontier_art.station_rule_errors, from the manifest and today's rules."""
+    rules = station_geometry()
+    epsilon = contract["epsilon"] * 100
+    mouth = record["anchors"].get(contract["runtime_nodes"]["mouth"], {})
+    position = [mouth.get("matrix", [[0] * 4] * 3)[i][3] for i in range(3)] if mouth else None
+    found = []
+    if position is None or any(abs(a - b) > epsilon for a, b in zip(position, [0, rules["mouth_distance"], 0])):
+        found.append("Exterior mouth differs from the rules' station")
+    properties = mouth.get("properties", {})
+    if any(abs(properties.get(key, 0) - rules[rule]) > epsilon
+           for key, rule in [("opening_width", "mouth_width"), ("opening_height", "mouth_height")]):
+        found.append("Exterior mouth opening differs from the rules' station")
+    if not record.get("footprint_radius", float("inf")) <= rules["footprint_radius"] + epsilon:
+        found.append("Exterior reaches beyond the rules' station footprint")
+    return found
 
 
 def verify(art=ART):
@@ -83,6 +101,10 @@ def verify(art=ART):
                     # Rechecked against today's profile: a smaller collision radius needs a new model.
                     if not record.get("footprint_radius", float("inf")) <= radii[identifier] + contract["epsilon"]:
                         raise ValueError("Footprint exceeds the NPC's collision radius")
+                if kind == "station_exterior":
+                    errors_here = station_mismatches(manifest["roots"][contract["roots"][kind]], contract)
+                    if errors_here:
+                        raise ValueError("; ".join(errors_here))
                 if kind.startswith("station_"):
                     if identifier != kind.removeprefix("station_"):
                         raise ValueError("Invalid station identifier")

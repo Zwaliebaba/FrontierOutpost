@@ -162,6 +162,9 @@ home, with no sockets, modules, berths or parked ships.
   facing out. Its clear opening meets the contract's minimum and is wider and taller than the
   largest hull in the catalogue with the clearance on every side, so crew ships can leave one
   after another.
+- **The rules own the mouth.** `frontier_sim`'s `station.rs` sets where the mouth is, its
+  opening, the lane's length and the footprint that no part of the hull may pass; the tool and
+  CI fail an exterior that differs, so a re-export never changes how ships dock (plan 9.4).
 - **A clear approach lane** straight out of the mouth, as wide as the opening and as long as the
   contract says, free of every exterior mesh and of every tell at its largest.
 - **Tell hardpoints belong to the sockets, not the facilities:** an empty per interior socket

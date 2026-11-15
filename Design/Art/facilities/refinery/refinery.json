@@ -7,15 +7,15 @@
   "inputs": {
     "blender": "4.3.0",
     "contract": "c4c9a606e65507799b3b3249f1ddb8454508f35c44de060b730a2f4679d1f5a7",
-    "game_data_reader": "44627da1400f1f2ad7218b63dc9ddc37f0e9f074be5497b34c751134c34db516",
+    "game_data_reader": "2e4ed127f595d54db31a411c295752a6cdabf6b4aebaefe34ec5672eddab260c",
     "materials": "e6e79034affcdd1975f2efdf9b01c3d08d7556c5948afb376c0f434fb9d443e4",
     "source": "e9806096e621c773952c2ed1107b784fac4824b1f2d19c0b17c35bf95e9354e2",
-    "tool": "5b484ad2a05c5d5e656d78c3b435a9c4f58b7d36cc92cc4eafab777b01b673eb"
+    "tool": "3262576a57a5da0043df4e1a80de0a853eb6ee2b2f7cff95b8a082e00ecf2159"
   },
   "kind": "facility",
   "planned": false,
   "preview": "refinery.png",
-  "preview_sha256": "2a9a606e17229e426b6c6580653b0d8e091f20648b1af0e7446e69bdd514095e",
+  "preview_sha256": "41b00b86a4d3f43dde58ff55e93b6e18c38e88d4655943af185148d2dd00ed45",
   "roots": {
     "Facility_refinery_T1": {
       "anchors": {},

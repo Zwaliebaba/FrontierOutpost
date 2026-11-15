@@ -235,7 +235,8 @@ class PipelineTests(unittest.TestCase):
         from mathutils import Vector
         right = Vector((.858, .513, 0)).normalized()
         if kind == "station_exterior":
-            for name, offset in zip(art.CONTRACT["runtime_nodes"]["tells"], [-30, -10, 10, 30]):
+            # Within the rules' footprint (17 m), across the view so no tell hides another.
+            for name, offset in zip(art.CONTRACT["runtime_nodes"]["tells"], [-14, -5, 5, 14]):
                 position = right * offset
                 position.z = .2
                 cube(root, "Hull_" + name, (1, 1, .4), position)
@@ -259,9 +260,11 @@ class PipelineTests(unittest.TestCase):
     def test_station_failures(self):
         cases = [
             ("station_exterior", "mouth", lambda root: bpy.data.objects["Hangar_Mouth"].__setitem__("opening_width", 1)),
-            ("station_exterior", "lane", lambda root: cube(root, "Blocker", (1, 1, 1), (0, 10, .5))),
+            ("station_exterior", "lane", lambda root: cube(root, "Blocker", (1, 1, 1), (0, 24, .5))),
+            ("station_exterior", "rules", lambda root: setattr(bpy.data.objects["Hangar_Mouth"].location, "y", 12)),
+            ("station_exterior", "rules", lambda root: cube(root, "Overhang", (1, 1, .4), (17.5, 0, .2))),
             ("station_exterior", "anchors", lambda root: bpy.data.objects.remove(bpy.data.objects["Tell_A"], do_unlink=True)),
-            ("station_exterior", "tell_lane", lambda root: setattr(bpy.data.objects["Tell_A"], "location", (0, 10, 0))),
+            ("station_exterior", "tell_lane", lambda root: setattr(bpy.data.objects["Tell_A"], "location", (0, 24, 0))),
             ("station_exterior", "hardpoint", lambda root: setattr(bpy.data.objects["Tell_A"], "location", (50, 50, 50))),
             ("station_interior", "occlusion", lambda root: setattr(bpy.data.objects["Socket_B"], "location", bpy.data.objects["Socket_A"].location)),
             ("station_interior", "runtime", lambda root: bpy.data.objects.remove(bpy.data.objects["Closure_C"], do_unlink=True)),

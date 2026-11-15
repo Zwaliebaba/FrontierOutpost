@@ -14,7 +14,7 @@ import bpy
 from mathutils import Matrix, Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from game_data import facility_tiers, npc_radii
+from game_data import facility_tiers, npc_radii, station_geometry
 
 VERSION = "0.2.0"
 ART = Path(__file__).resolve().parents[1]
@@ -149,8 +149,11 @@ def new_asset(kind, identifier, tiers=None, art=ART):
         for name in [nodes["mouth"], *nodes["tells"]]:
             anchor = empty(name, exports, roots[0])
             if name == nodes["mouth"]:
-                anchor["opening_width"] = CONTRACT["hangar"]["min_width"]
-                anchor["opening_height"] = CONTRACT["hangar"]["min_height"]
+                # The rules own the mouth (frontier_sim station.rs); start the model on it.
+                rules = station_geometry()
+                anchor.location = (0, rules["mouth_distance"], 0)
+                anchor["opening_width"] = rules["mouth_width"]
+                anchor["opening_height"] = rules["mouth_height"]
     if kind == "station_interior":
         for name in [*nodes["sockets"], "Parking_frigate"]:
             empty(name, exports, roots[0])
@@ -264,6 +267,29 @@ def berth_fit_errors(name, bounds, art=ART):
             or hi[1] - lo[1] + 2 * clearance > 2 * layout["halfLength"] + CONTRACT["epsilon"]):
         return [f"berth_fit: {name} does not fit a berth with the clearance on every side"]
     return []
+
+
+def station_rule_errors(name, record):
+    """The exterior against the rules' station (frontier_sim station.rs): the mouth where the
+    rules dock ships, its opening, the lane the contract keeps clear, and a footprint that the
+    rules' jump arrivals and asteroid clearance can rely on."""
+    rules = station_geometry()
+    errors = []
+    epsilon = CONTRACT["epsilon"] * 100
+    mouth = record["anchors"].get(CONTRACT["runtime_nodes"]["mouth"])
+    if mouth is not None:
+        position = [mouth["matrix"][i][3] for i in range(3)]
+        if any(abs(a - b) > epsilon for a, b in zip(position, [0, rules["mouth_distance"], 0])):
+            errors.append(f"rules: {name} mouth is not where the rules dock ships (0, {rules['mouth_distance']}, 0)")
+        properties = mouth["properties"]
+        for key, rule in [("opening_width", "mouth_width"), ("opening_height", "mouth_height")]:
+            if abs(properties.get(key, 0) - rules[rule]) > epsilon:
+                errors.append(f"rules: {name} mouth {key} differs from the rules' {rules[rule]} m")
+    if abs(CONTRACT["hangar"]["approach_length"] - rules["lane_length"]) > epsilon:
+        errors.append("rules: the contract's approach lane differs from the rules' lane")
+    if record["footprint_radius"] > rules["footprint_radius"] + epsilon:
+        errors.append(f"rules: {name} reaches {record['footprint_radius']:.2f} m, beyond the rules' footprint")
+    return errors
 
 
 def operating_name(tier, root):
@@ -407,6 +433,9 @@ def check_asset(art=ART):
                 size = CONTRACT["tell"]["cube_size"]
                 if any(lo[i] < -size / 2 - epsilon or hi[i] > size / 2 + epsilon for i in [0, 1]) or lo[2] < -epsilon or hi[2] > size + epsilon:
                     errors.append(f"tell: {root.name} exceeds tell cube")
+        if kind == "station_exterior":
+            record["footprint_radius"] = planar_radius
+            errors.extend(station_rule_errors(root.name, record))
         if kind == "npc":
             radius = npc_radii().get(identifier)
             if radius is None:

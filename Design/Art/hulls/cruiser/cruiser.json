@@ -7,15 +7,15 @@
   "inputs": {
     "blender": "4.3.0",
     "contract": "c4c9a606e65507799b3b3249f1ddb8454508f35c44de060b730a2f4679d1f5a7",
-    "game_data_reader": "44627da1400f1f2ad7218b63dc9ddc37f0e9f074be5497b34c751134c34db516",
+    "game_data_reader": "2e4ed127f595d54db31a411c295752a6cdabf6b4aebaefe34ec5672eddab260c",
     "materials": "e6e79034affcdd1975f2efdf9b01c3d08d7556c5948afb376c0f434fb9d443e4",
     "source": "0e502531afcbd38e532d9709bc7a0fa36ac9480245a8d5be671759c632a51408",
-    "tool": "5b484ad2a05c5d5e656d78c3b435a9c4f58b7d36cc92cc4eafab777b01b673eb"
+    "tool": "3262576a57a5da0043df4e1a80de0a853eb6ee2b2f7cff95b8a082e00ecf2159"
   },
   "kind": "hull",
   "planned": false,
   "preview": "cruiser.png",
-  "preview_sha256": "c126899083b1e9466a6545aa98b8455212a47a3407b8d926f30518313de526fa",
+  "preview_sha256": "392741fc74021634b3a46c52bd91ffce2b734fd855a370a2cd5a68d6a6085c1b",
   "roots": {
     "Hull_cruiser": {
       "anchors": {},

@@ -7,15 +7,15 @@
   "inputs": {
     "blender": "4.3.0",
     "contract": "c4c9a606e65507799b3b3249f1ddb8454508f35c44de060b730a2f4679d1f5a7",
-    "game_data_reader": "44627da1400f1f2ad7218b63dc9ddc37f0e9f074be5497b34c751134c34db516",
+    "game_data_reader": "2e4ed127f595d54db31a411c295752a6cdabf6b4aebaefe34ec5672eddab260c",
     "materials": "e6e79034affcdd1975f2efdf9b01c3d08d7556c5948afb376c0f434fb9d443e4",
     "source": "fb7f94f2ff86510a08d0843ac130b637d9fb765765615480f2ea5a40f64eadb8",
-    "tool": "5b484ad2a05c5d5e656d78c3b435a9c4f58b7d36cc92cc4eafab777b01b673eb"
+    "tool": "3262576a57a5da0043df4e1a80de0a853eb6ee2b2f7cff95b8a082e00ecf2159"
   },
   "kind": "facility",
   "planned": false,
   "preview": "fabrication_bay.png",
-  "preview_sha256": "0be73d6c95649f99861a6c01a6a8e34fb7c321b200715852ad38f666a1a5b785",
+  "preview_sha256": "99514a53342e0c3d73e4f1774429860c51e50d122aa3fee9de47d8525c08d8de",
   "roots": {
     "Facility_fabrication_bay_T1": {
       "anchors": {},
