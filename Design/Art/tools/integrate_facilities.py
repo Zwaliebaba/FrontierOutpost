@@ -16,13 +16,13 @@ from model_station import box, cylinder
 from model_crew_quarters import part
 
 FACILITIES=('sensor_array','refinery','fabrication_bay','crew_quarters')
-MOUNTS={'Tell_A':(14.5,0,1.18),'Tell_B':(11,-10,1.18),
-        'Tell_C':(-14.5,0,1.18),'Tell_reactor':(-10.5,-10.5,1.18)}
+MOUNTS={'Tell_A':(14.5,0,1.20),'Tell_B':(11,-10,1.20),
+        'Tell_C':(-14.5,0,1.20),'Tell_reactor':(-10.5,-10.5,1.20)}
 
 
 def dish(root,tier):
     radius=.33 if tier==1 else .46
-    centre=Vector((0,0,.55 if tier==1 else .77))
+    centre=Vector((0 if tier==1 else -.12,0,.55 if tier==1 else .77))
     tilt=.25
     vertices=[(0,0,0)]
     for ring in [.5,1]:
@@ -42,12 +42,12 @@ def dish(root,tier):
     bpy.data.collections['Export'].objects.link(obj)
     obj.parent=root
     mesh.materials.append(bpy.data.materials['Titanium'])
-    cylinder(root,'Sensor turret',(0,0,.30),.22,.36,'Armor',12)
-    box(root,'Reflector support',(0,.05,.47),(.12,.15,.35),'HullSteel',0)
+    cylinder(root,'Sensor turret',(0 if tier==1 else -.12,0,.30),.22,.36,'Armor',12)
+    box(root,'Reflector support',(0 if tier==1 else -.12,.05,.47),(.12,.15,.35),'HullSteel',0)
     if tier==2:
-        box(root,'Phased array backplane',(0,.32,1.08),(.8,.08,.32),'Graphite',0)
+        box(root,'Phased array backplane',(.43,.30,1.05),(.34,.08,.30),'Graphite',0)
         for x in [-.27,0,.27]:
-            box(root,'Phased array radiator '+str(x),(x,.265,1.08),(.20,.025,.24),'Titanium',0)
+            box(root,'Phased array radiator '+str(x),(.43+x*.4,.255,1.05),(.085,.025,.23),'Titanium',0)
 
 
 def roof_facility(identifier,tier,root):
@@ -133,7 +133,7 @@ def station():
                 bpy.data.objects.remove(obj,do_unlink=True)
     for name,at in MOUNTS.items():
         bpy.data.objects[name].location=at
-        box(root,f'Integrated {name} receiver skin',(at[0],at[1],1.16),(1.48,1.48,.04),'Armor',0)
+        box(root,f'Integrated {name} receiver skin',(at[0],at[1],1.16),(1.48,1.48,.08),'Armor',0)
         # Thin perimeter coaming and radial ducts meet the facility's own flush service skin.
         for side in [-1,1]:
             box(root,f'Integrated {name} hull seam X {side}',(at[0]+side*.81,at[1],1.24),(.14,1.76,.12),'Titanium',.025)

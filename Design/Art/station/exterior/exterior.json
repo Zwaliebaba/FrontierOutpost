@@ -9,14 +9,14 @@
     "contract": "f2d4607c59da6e235b18eebd780e7a9009a16334661549b2bc96160d7788f1f8",
     "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
     "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
-    "source": "4d6cbba86beeec584e422acd723f7e46b12da564accd54eff03f8542cd65e8ab",
+    "source": "446af5327a4d48a3321fe8aff9a297a8076900226c3004ccac164c8726f619c3",
     "station_checks": "8dd24a515c11d997d3898b092e9e9e3f24c68295fcf701582786d8f057886d73",
     "tool": "6786478f3fff1dc4779170a3ceae9f6b251191b8038dc062153690f7d48b401e"
   },
   "kind": "station_exterior",
   "planned": false,
   "preview": "exterior.png",
-  "preview_sha256": "4a33884c628c1c9e97ee313cf22df65e93740f8c1c333b3747e0c39e404e7b82",
+  "preview_sha256": "56f6ad6a2d3494f5dd9e9ec056d1ccb5b509051170ea53f901b1e69c46869c3b",
   "roots": {
     "StationExterior_ROOT": {
       "anchors": {
@@ -70,7 +70,7 @@
               0.0,
               0.0,
               1.0,
-              1.1799999475479126
+              1.2000000476837158
             ],
             [
               0.0,
@@ -99,7 +99,7 @@
               0.0,
               0.0,
               1.0,
-              1.1799999475479126
+              1.2000000476837158
             ],
             [
               0.0,
@@ -128,7 +128,7 @@
               0.0,
               0.0,
               1.0,
-              1.1799999475479126
+              1.2000000476837158
             ],
             [
               0.0,
@@ -157,7 +157,7 @@
               0.0,
               0.0,
               1.0,
-              1.1799999475479126
+              1.2000000476837158
             ],
             [
               0.0,
@@ -1283,7 +1283,7 @@
     }
   },
   "schema_version": 1,
-  "sha256": "1b2be3b438017ba1a4bf7319670948ffacd48a0f663d91b511e210c0eae8486d",
+  "sha256": "ee8a0342d0f982a6fbc37ff6dbc847cc4bafdb2eab845f6bb74f66b09d872f7a",
   "source_forward": "+Y",
   "source_up": "+Z",
   "tiers": 0,

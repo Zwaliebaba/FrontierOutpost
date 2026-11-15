@@ -115,7 +115,7 @@ root exactly. Each facility now has an architectural service skin, hull seams an
 couplings, with its signature equipment built into that skin. Each tier still fits the
 1.5 metre tell envelope and the 500 triangle budget (164–432 triangles).
 
-The station bays replace overhanging plinths with receiver plates flush at Z=1.18 and
+The station bays replace overhanging plinths with receiver plates at Z=1.20, embedded into the original Z=1.18 roof to avoid coincident faces and
 framed openings in the roof dressings. Their shared interfaces allow any facility to fit
 any bay; no facility geometry is baked into the station. The reference image's integrated
 look is achieved by matching the assemblies to the hull rather than duplicating standalone

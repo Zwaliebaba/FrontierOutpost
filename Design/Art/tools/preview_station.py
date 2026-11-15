@@ -100,7 +100,7 @@ def exterior_review(out):
     setup((0,1,-.4),(.43,.72,.545),45,out/'station-entrance.png')
 
 
-def camera_facing_review(out, layout=None, tier=2, filename='station-camera-facing.png'):
+def camera_facing_review(out, layout=None, tier=2, filename='station-camera-facing.png', focus=None, width=46):
     populate_exterior(layout, tier)
     # Proposed world placement only. Exported roots and the gameplay camera do not change.
     pivot=bpy.data.objects.new('Review station world yaw',None)
@@ -111,7 +111,8 @@ def camera_facing_review(out, layout=None, tier=2, filename='station-camera-faci
     pivot.rotation_euler.z=math.pi
     bpy.context.scene['review_station_yaw']=math.pi
     bpy.context.view_layer.update()
-    setup((0,0,-.4),art.CONTRACT['camera_direction'],46,out/filename)
+    centre=bpy.data.objects[focus].matrix_world.translation+Vector((0,0,.5)) if focus else (0,0,-.4)
+    setup(centre,art.CONTRACT['camera_direction'],width,out/filename)
 
 
 def interior_review(out):
