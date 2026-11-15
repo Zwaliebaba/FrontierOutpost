@@ -124,7 +124,7 @@ Before accepting a new scene, check:
 6. The saved Blender file opens without missing external resources, and exports use the documented axes and scale.
 7. The preview reflects the delivered scene. Record any new visual conventions here so the next scene can reuse them.
 
-## 10. Station command HUD and four-berth apron
+## 10. Station command HUD, exterior and interior
 
 The home HUD uses a restrained Military C2 layout: a command header, resource strip, left station
 services, right expedition briefing and a quiet utility rail. Graphite/naval panels, thin titanium
@@ -143,15 +143,17 @@ Final expedition receipts remain available from Overview after their notices exp
 Overview names both the built and running tier, including OFF, and lists only currently enabled
 options. Tier-II modules keep their owned silhouette when throttled or off; one or two small
 service indicators show their effective tier. A closed socket has a removable graphite plate
-with a titanium cross, visibly different from an available empty mounting deck. Affordable
+with a titanium cross, visibly different from an available empty mounting deck; the interior
+models it for socket C (`Closure_C*`), and the client lays a copy on any other closed socket, such
+as B before the first facility. Affordable
 development suggestions use banked goods and available power and open the existing facility
 choices for inspection.
 
 The resource strip holds what the pilot owns: credits and goods. Power is a capacity of the
 station, not a good, so it shows in the overview and the facilities view and not in the strip.
 The briefing draws the contract's site as the system map will (§11), framed on the site alone,
-and lists its pockets with the map's glyphs. Berth and socket labels on the station are plain
-ink on a thin rule: they name things and select nothing.
+and lists its pockets with the map's glyphs. Socket labels in the interior are plain ink on a
+thin rule: they name things and select nothing.
 
 **Colour roles in the HUD.** These hold at home and in flight.
 
@@ -168,17 +170,32 @@ No state rests on colour alone: each has a marker, a shape or a word as well (de
 is smaller than 11 px. Anything a pilot must press is at least 44 px, whatever its drawn size, and
 nothing is reachable only by hover or a right click (design §5).
 
-The forward apron has four side-by-side berths, 07–10, facing outward. The authored offsets,
-deck height and painted boundaries live in `FrontierOutpost/berths.json`, shared by Blender,
-the simulation and the client. Validate the full parked geometry, inter-ship clearance and
-straight departure corridors. Socket A stays beside cargo; Socket B stays beside the apron,
-clear of all four lanes. Crew preview instances in the Blender overview are presentation only;
-the browser draws roster ships separately from the station asset.
+**The station's two views** (design §11). Home opens on the **exterior**, the same object that
+stands at the run's dock, placed and turned as the contract's site has it: its hangar mouth
+faces the site's centre, its deck and mouth sill half a hull below the plane ships fly on. Before
+any contract it stands at the origin facing +x, the rules' own default. The exterior carries no
+berths, apron, sockets or parked ships; each installed facility shows its tell, at the tier it
+owns and dimmed when unpowered, on its socket's hardpoint (A, B and C on `Tell_A`–`Tell_C`), and
+`Tell_reactor` stays empty until the reactor is bought. Selecting the station, or the view
+control, opens the **interior**: the cutaway drawn in the exterior's place, in the same camera,
+zoom and orbit. It shows the sockets with their modules and states, the processor, the cargo bay
+and the pilot's own ship on its parking place, facing the mouth; crewmates' ships are not the
+pilot's and are not drawn. Socket C stays plated, and the reactor's meshes hidden, until M10.
+Building, upgrading and reconfiguring happen inside: opening the facilities service, or
+selecting a socket, opens the interior, and leaving it closes that service. Only open sockets
+can be picked.
+
+The view control sits at the top left of the gap between the panels, clear of the round station:
+plain ink naming the view drawn (`STATION / EXTERIOR` or `STATION / INTERIOR CUTAWAY`), a 44 px
+button to the other view, and a line saying what else does the same (selecting the station; Esc
+returns to the exterior). It is hidden in flight, where only the exterior stands.
 
 Frame the home scene inside the actual gap between the service and briefing panels, using one
-stable envelope for every supported facility. Preserve player zoom and orbit. Berth captions
-sit beyond the ships' noses with a short leader; they must clear hulls and controls at both
-1280×720 and 1920×1080. Landing gear uses the four authored berth positions.
+stable envelope for both views (`client/src/outpost/framing.ts`): the 32 m ring turned every way
+the rules can stand it, with the largest tell all round, so neither a purchase nor opening the
+interior changes the station's apparent scale. Preserve player zoom and orbit. Until launches
+and docking are drawn through the mouth (plan 9.6), the flight view's landing gear still reads
+the legacy berth positions in `FrontierOutpost/berths.json`.
 
 ## 11. Flight HUD and system map
 

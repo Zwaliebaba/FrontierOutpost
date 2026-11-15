@@ -5,10 +5,13 @@ blue-grey segmented armour, a broad inhabited ring, a heavy command hub, warm wi
 a single illuminated hangar, a stepped command tower and an underslung industrial core.
 The pipeline exports both assets and the catalogue registers them for later M9 integration.
 
-This is an art study, not completion of M9. The game still uses the legacy station.
-M9.1's interactive greybox readability measurements and owner review must establish the
-final scale before this replaces it. Docking rules, removal of berths, the interior toggle,
-facility placement and tell rendering remain M9.4–9.7 work. Existing M8 tells are reused.
+The game draws both (plan 9.6): the client looks them up in the catalogue in place of the
+legacy station, at home and at the dock. The rules own the station's geometry
+(`crates/sim/src/station.rs`) and send it with the site; the client stands the exterior at the
+dock, its mouth facing the site's centre, with each installed facility's tell on its socket's
+hardpoint, and swaps in the interior when the station is selected at home, where modules are
+built. M9.1's greybox readability measurements and owner review may still change the scale.
+Existing M8 tells are reused.
 
 ## Detailed reference pass
 
@@ -46,15 +49,18 @@ orientation. Subsequent modelling can be done directly in the Blender files.
   opening is consequently on the far side in the tactical render. Broad roof ribs and orange
   service bands identify the hangar from above. The entrance render is an orbit review, not
   the default gameplay view. The proposed world rotation brings the mouth into the default view and also passes the
-  interior projection check (using the equivalent opposite local view direction). World
-  placement, anchor transforms and authoritative docking must agree when M9 is integrated;
-  that rotation is a proposal in the review render, not an implemented gameplay change.
+  interior projection check (using the equivalent opposite local view direction). The game
+  does not use that rotation: it turns the station by the rules, the mouth toward the site's
+  centre, so which side faces the resting camera depends on the site. The client places the
+  root at the rules' station centre, its deck (Z=0) half a hull below the flight plane.
 - `Hangar_Mouth` is at `(0, 14, 0)`, with an 8 by 3.5 metre opening and the contract's 30 metre
   straight approach. No exterior mesh or largest supported tell intersects that lane.
 - `Tell_A`, `Tell_B`, `Tell_C` and `Tell_reactor` are hull-mounted anchors. Facilities are not
   baked into the exterior. The large review renders temporarily place three existing tells.
-- The cutaway shares the ring footprint. Socket A is beside cargo, B beside the hangar deck,
-  and C has separate `Closure_C*` meshes. The processor has a hopper, furnace and output chute.
+- The cutaway shares the ring footprint and is drawn with the exterior's transform, in its
+  place. Socket A is beside cargo, B beside the hangar deck,
+  and C has separate `Closure_C*` meshes. The client gathers them under `Socket_C` and lays a
+  copy on any other closed socket (B before the first facility). The processor has a hopper, furnace and output chute.
   `Reactor_Upgrade*` meshes are separate for M10. `Parking_frigate` retains the current hull's
   clearance. Future hulls will require their own parking places in M11.
 - Checks use all three full 5 metre socket envelopes simultaneously, even though the populated
