@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CONFIG, configToSearch, parseConfig } from "./config";
+import { DEFAULT_CONFIG, configToSearch, parseConfig, resultFileName } from "./config";
 
 describe("greybox config", () => {
   it("defaults to the current tactical view on the station scene", () => {
@@ -22,6 +22,8 @@ describe("greybox config", () => {
   it("round-trips every field through the query string", () => {
     const config = {
       scene: "rock",
+      scale: 3,
+      facing: "away",
       elevation: 45,
       projection: "wide",
       look: "free",
@@ -35,6 +37,23 @@ describe("greybox config", () => {
       trials: 12,
     } as const;
     expect(parseConfig(configToSearch(config))).toEqual(config);
+  });
+
+  it("puts the M9 ring at its authored size at the dock, mouth toward the site", () => {
+    expect(DEFAULT_CONFIG.scale).toBe(2.2);
+    expect(DEFAULT_CONFIG.facing).toBe("site");
+    expect(parseConfig("?scale=1").scale).toBe(1);
+    expect(parseConfig("?scale=3&facing=camera")).toMatchObject({ scale: 3, facing: "camera" });
+    expect(parseConfig("?scale=2&facing=up")).toMatchObject({ scale: 2.2, facing: "site" });
+  });
+
+  it("names each download after its scene and, in the station scene, its station", () => {
+    const named = (search: string) => resultFileName(parseConfig(search));
+    expect(named("")).toBe("greybox-station-2.2x-site-33deg.json");
+    expect(named("?scale=3&facing=away&elevation=40")).toBe("greybox-station-3x-away-40deg.json");
+    // The Stage 1 station has no mouth to face.
+    expect(named("?scale=1&facing=side")).toBe("greybox-station-1x-33deg.json");
+    expect(named("?scene=rock&scale=3")).toBe("greybox-rock-33deg.json");
   });
 
   it("falls back to defaults for unknown or out-of-range values", () => {

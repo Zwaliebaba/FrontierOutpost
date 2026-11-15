@@ -2,7 +2,15 @@ import { NPC_HANDLING, PLAYER_HANDLING, seek, stepShip } from "./kinematics";
 import type { ShipInput, ShipState } from "./kinematics";
 import type { Occluder } from "./occlusion";
 import { between, createRng } from "../view/rng";
-import { LARGE_ASTEROID_RADIUS, stationOccluders } from "./stationProxy";
+import {
+  DEFAULT_STATION,
+  LARGE_ASTEROID_RADIUS,
+  hangarOf,
+  onHangarAxis,
+  stationOccluders,
+  stationReach,
+} from "./stationProxy";
+import type { Hangar, StationSetup } from "./stationProxy";
 
 export const SCENE_IDS = ["crossing", "rock", "station", "headon"] as const;
 export type SceneId = (typeof SCENE_IDS)[number];
@@ -81,9 +89,49 @@ function lane(offset: number, length: number, towardFirst: boolean): Waypoint[] 
   return towardFirst ? [near, far] : [far, near];
 }
 
-export function createWorld(scene: SceneId, seed: number, heights: HeightMode): World {
+/**
+ * How far beyond the mouth hangar traffic turns round, in metres. Ships do not grow with the
+ * station, so neither does this.
+ */
+export const LANE_TRAFFIC_REACH = 18;
+
+/**
+ * Radius of an NPC's turn at full speed. Turning round takes a circle twice as wide: 6.7 m, in a
+ * hangar 8.2 m wide at scale 2.2. A ship that comes in this far to one side of the axis turns
+ * round across the middle and leaves on the other side, clear of the cheeks.
+ */
+const TURN_RADIUS = NPC_HANDLING.maxSpeed / NPC_HANDLING.turnRate;
+
+/**
+ * A loop in along the hangar's lane on `side` of its axis, round under its roof, and out on the
+ * other side, turning round again `reach` metres beyond the mouth. The loop's sides are what
+ * keep each turn going the same way: between two points the next one would lie dead astern.
+ * Starts inbound at the lane's end, or `inside`, under the roof.
+ */
+function hangarRoute(hangar: Hangar, side: number, reach: number, inside: boolean): Waypoint[] {
+  const far = hangar.mouth + reach;
+  const into = onHangarAxis(hangar, far, side * TURN_RADIUS);
+  const deep = onHangarAxis(hangar, hangar.deep, side * TURN_RADIUS);
+  const out = onHangarAxis(hangar, far, -side * TURN_RADIUS);
+  return inside ? [deep, out, into] : [into, deep, out];
+}
+
+/**
+ * Builds a scene. The station scene's traffic moves out as far as the station grows beyond the
+ * Stage 1 station, so it still passes around and in front of it; at a ring scale some ships fly
+ * in and out of the hangar, under its roof and between its cheeks. Other scenes ignore `station`.
+ */
+export function createWorld(
+  scene: SceneId,
+  seed: number,
+  heights: HeightMode,
+  station: StationSetup = DEFAULT_STATION,
+): World {
   const rng = createRng(seed);
   const ships: Ship[] = [];
+  const grown =
+    scene === "station" ? stationReach(station) - stationReach({ ...station, scale: 1 }) : 0;
+  const hangar = scene === "station" ? hangarOf(station) : null;
 
   const add = (id: string, allegiance: Allegiance, route: Waypoint[]) => {
     const [startX, startZ] = route[0] ?? [0, 0];
@@ -107,7 +155,7 @@ export function createWorld(scene: SceneId, seed: number, heights: HeightMode): 
   // The tester starts on the camera side of the scene, facing into it.
   const [tx, tz] = TOWARD_CAMERA;
   add("self", "self", [
-    [tx * 13, tz * 13],
+    [tx * (13 + grown), tz * (13 + grown)],
     [0, 0],
   ]);
 
@@ -126,11 +174,25 @@ export function createWorld(scene: SceneId, seed: number, heights: HeightMode): 
         break;
       case "rock":
       case "station":
+        // Every fourth ship, two hostiles and an ally, works the hangar: a hostile leaving as
+        // another comes in on the same side, and the ally turning round nearer the mouth.
+        if (hangar && i % 4 === 0) {
+          add(
+            id,
+            allegiance,
+            i === 0
+              ? hangarRoute(hangar, -1, LANE_TRAFFIC_REACH, true)
+              : i === 4
+                ? hangarRoute(hangar, -1, LANE_TRAFFIC_REACH, false)
+                : hangarRoute(hangar, 1, LANE_TRAFFIC_REACH * 0.66, false),
+          );
+          break;
+        }
         add(
           id,
           allegiance,
           orbit(
-            (scene === "rock" ? 7.5 : 9.5) + (i % 4) * 1.6,
+            (scene === "rock" ? 7.5 : 9.5 + grown) + (i % 4) * 1.6,
             (i * 2 * Math.PI) / (HOSTILES + ALLIES) + jitter,
             i % 2 === 0,
           ),
@@ -146,7 +208,7 @@ export function createWorld(scene: SceneId, seed: number, heights: HeightMode): 
     scene === "rock"
       ? [{ kind: "sphere", x: 0, y: 0, z: 0, radius: LARGE_ASTEROID_RADIUS }]
       : scene === "station"
-        ? stationOccluders()
+        ? stationOccluders(station)
         : [];
   return { ships, bolts: [], occluders, time: 0 };
 }

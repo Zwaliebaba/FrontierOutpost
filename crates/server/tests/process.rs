@@ -536,7 +536,7 @@ fn the_report_command_prints_the_gates() {
     // is the owner's pass only.
     assert!(
         report.contains(
-            "| Median time to select a named hostile (grey vision) | 0.7 s | ≤ 1.0 s | met by the owner only | solo, skill | 1 | 1 selections |"
+            "| Median time to select a named hostile (station ×1, grey vision) | 0.7 s | ≤ 1.0 s | met by the owner only | solo, skill | 1 | 1 selections |"
         ),
         "{report}"
     );
