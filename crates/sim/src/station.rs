@@ -25,7 +25,7 @@ pub const MOUTH_HEIGHT: f32 = 3.5;
 /// contract's `approach_length`). A launch hands over control at its end.
 pub const LANE_LENGTH: f32 = 30.0;
 /// No part of the hull reaches farther from the centre than this.
-pub const FOOTPRINT_RADIUS: f32 = 16.4;
+pub const FOOTPRINT_RADIUS: f32 = 17.0;
 /// Where a departing ship starts inside the hangar, along the axis.
 pub const HANGAR_START: f32 = 8.0;
 /// The hangar's back wall, along the axis: the hub's drum stands behind it.
