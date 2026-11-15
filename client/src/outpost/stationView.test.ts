@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { HOME_VIEW, leaveInterior, openInterior, openTab, viewControl } from "./stationView";
+import {
+  HOME_VIEW,
+  STATION_FACTS,
+  leaveInterior,
+  openInterior,
+  openTab,
+  placeLine,
+  viewControl,
+} from "./stationView";
 
 describe("the station's two views", () => {
   it("opens on the exterior and the overview", () => {
@@ -33,5 +41,14 @@ describe("the station's two views", () => {
     });
     expect(viewControl("interior")).toMatchObject({ action: "exterior", label: "Exterior" });
     expect(viewControl("interior").hint).toContain("Esc");
+  });
+});
+
+describe("the station's text without berths", () => {
+  it("counts the crew at home, not berths, and names the run in flight", () => {
+    expect(placeLine(false, 1)).toBe("HOME OUTPOST / HANGAR");
+    expect(placeLine(false, 3)).toBe("HOME OUTPOST / CREW 3 OF 4");
+    expect(placeLine(true, 3)).toBe("EXPEDITION / ACTIVE");
+    for (const text of [placeLine(false, 4), STATION_FACTS]) expect(text).not.toMatch(/berth/i);
   });
 });

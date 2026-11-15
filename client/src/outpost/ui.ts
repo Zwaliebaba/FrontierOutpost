@@ -13,6 +13,7 @@ import {
   toggleFitting,
 } from "./options";
 import { pace, processorView, progressLine } from "./processor";
+import { STATION_FACTS } from "./stationView";
 
 export type HomeTab = "overview" | "facilities" | "market" | "processor" | "hangar";
 
@@ -354,7 +355,7 @@ export function renderHome(
   }
   const overview = panes.get("overview");
   overview?.append(el("p", "HOME / OPERATIONS", "eyebrow"), el("h2", "Station overview"));
-  overview?.append(el("p", "Four berths. One expedition.", "facts"));
+  overview?.append(el("p", STATION_FACTS, "facts"));
   if (on.receipt)
     overview?.append(
       button("Expedition receipts", "view-receipts", () => {

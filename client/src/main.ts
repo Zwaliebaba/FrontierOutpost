@@ -29,6 +29,7 @@ import {
   leaveInterior,
   openInterior,
   openTab,
+  placeLine,
   viewControl,
 } from "./outpost/stationView";
 import type { HomeView } from "./outpost/stationView";
@@ -164,7 +165,7 @@ brand.innerHTML =
 // connection.
 command.append(brand, accountLine, run, status);
 const utility = element("footer", "utility");
-utility.textContent = "HOME OUTPOST   /   BERTHS 07–10";
+utility.textContent = placeLine(false, 1);
 const cameraHints = element("span");
 cameraHints.textContent = "SCROLL  Zoom   /   RMB  Orbit   /   R  Reset";
 // In flight the footer carries the keys. The link's diagnostics stay in the page for the
@@ -1038,9 +1039,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     document.body.dataset.station = life ? "dock" : "home";
     drawStationControl();
     if (utility.firstChild)
-      utility.firstChild.textContent = life
-        ? "EXPEDITION / ACTIVE"
-        : `HOME OUTPOST / ${String(crew?.members.length ?? 1)} OF 4 BERTHS OCCUPIED`;
+      utility.firstChild.textContent = placeLine(life !== null, crew?.members.length ?? 1);
     resize();
   };
 
@@ -1238,10 +1237,10 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
         break;
       }
       case "extractRefused":
-        showNotice(refusalText(message.reason), "warn");
+        showNotice(refusalText(message.reason, life?.own?.phase), "warn");
         break;
       case "scanRefused":
-        showNotice(scanRefusalText(message.reason), "warn");
+        showNotice(scanRefusalText(message.reason, life?.own?.phase), "warn");
         break;
       case "jumpSpooling":
         if (message.ship !== life?.session.shipId) {
@@ -1905,6 +1904,10 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
               (pose) =>
                 pose.kind !== "playerShip" &&
                 Math.hypot(pose.x - own.x, pose.z - own.z) <= lockRange,
+            ),
+            toMouth: Math.hypot(
+              current.joined.site.station.mouthX - own.x,
+              current.joined.site.station.mouthZ - own.z,
             ),
           }),
         );

@@ -34,7 +34,8 @@ export function targetName(target: JumpTarget, pockets: readonly { kind: PocketK
 
 export const REFUSAL_TEXT: Readonly<Record<JumpRefusal, string>> = {
   notFlying: "Jump drive: not while docked",
-  atDock: "Jump drive: fly clear of the dock first",
+  // The launch's and the draw-in's script: a jump is made from open space.
+  atDock: "Jump drive: not while the hangar flies the ship",
   hunted: "Jump drive jammed: a hostile has you locked",
   extracting: "Jump drive: stop the extractor first (X)",
   unavailable: "Jump drive: that pocket is locked",

@@ -86,11 +86,11 @@ export const THREAT_TEXT: Readonly<Record<DominantThreat, string>> = {
 };
 
 const PHASE_TEXT: Readonly<Record<RunPhase, string>> = {
-  atDock: "At the dock",
+  atDock: "Leaving the hangar",
   approach: "Approach",
   objective: "In the site",
   return: "Return leg",
-  docking: "Docking",
+  docking: "Drawn in to dock",
   docked: "Docked",
   destroyed: "Destroyed",
   abandoned: "Abandoned",
@@ -103,8 +103,20 @@ const REFUSAL_TEXT: Readonly<Record<ExtractRefusal, string>> = {
   busy: "Extractor: wait for the vent or cut-out to finish",
 };
 
-export function refusalText(reason: ExtractRefusal): string {
-  return REFUSAL_TEXT[reason];
+/**
+ * While the launch flies the ship out of the hangar, or the hangar draws it in, the rules fly it
+ * and the pilot's keys do nothing; a refusal for where the ship happens to be ("hold still",
+ * "slow to a stop") would ask for what the pilot cannot do. It says why instead.
+ */
+const SCRIPTED: Partial<Readonly<Record<RunPhase, string>>> = {
+  atDock: "not while leaving the hangar",
+  docking: "not while the hangar draws the ship in",
+};
+
+/** Why the extractor did not start, for a pilot in `phase`. */
+export function refusalText(reason: ExtractRefusal, phase?: RunPhase | null): string {
+  const scripted = phase ? SCRIPTED[phase] : undefined;
+  return scripted && reason === "notAtDeposit" ? `Extractor: ${scripted}` : REFUSAL_TEXT[reason];
 }
 
 // Each says what to do next, as the extractor's do: a key that did nothing used to say nothing.
@@ -116,8 +128,11 @@ const SCAN_REFUSAL_TEXT: Readonly<Record<ScanRefusal, string>> = {
   moving: "Scan: slow to a stop first",
 };
 
-export function scanRefusalText(reason: ScanRefusal): string {
-  return SCAN_REFUSAL_TEXT[reason];
+/** Why a scan did not start, for a pilot in `phase`. */
+export function scanRefusalText(reason: ScanRefusal, phase?: RunPhase | null): string {
+  const scripted = phase ? SCRIPTED[phase] : undefined;
+  const placed = reason === "moving" || reason === "outOfRange" || reason === "notFlying";
+  return scripted && placed ? `Scan: ${scripted}` : SCAN_REFUSAL_TEXT[reason];
 }
 
 /** Minutes and seconds, such as 3:07. */

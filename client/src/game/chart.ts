@@ -150,11 +150,11 @@ export function chartPlaces(
       z: site.dockZ,
       radius: site.station.footprintRadius,
       locked: false,
-      status: "Home berth · banks the hold",
+      status: "Home station · banks the hold",
       tags: [],
       arrival: laden
-        ? "Short of the dock, outside the site: the interceptors stand between"
-        : "Just off the berth: docking is flown",
+        ? "Short of the station, outside the site: the interceptors stand between"
+        : "Off the hangar mouth, facing it: docking is flown",
       distance: distance(site.dockX, site.dockZ),
     },
     ...site.pockets.map((pocket, index): ChartPlace => {
@@ -207,8 +207,8 @@ export interface JumpReadiness {
 /**
  * What the pilot can tell before asking: the server judges again (frontier_sim::jump), and its
  * refusal still shows. `drive` is the cruise drive's state, which the same hostile lock and
- * working extractor stop. `phase` is the pilot's: a jump is made from open space, so not until
- * the ship has flown clear of the dock.
+ * working extractor stop. `phase` is the pilot's: a jump is made from open space, so not while
+ * the launch flies the ship out of the hangar, or the hangar draws it in.
  */
 export function jumpReadiness(
   place: ChartPlace | null,
@@ -218,7 +218,10 @@ export function jumpReadiness(
   if (!place) return { ready: false, reason: "Choose a destination" };
   if (place.locked) return { ready: false, reason: place.status.replace(" · ", ": ") };
   if (phase === "atDock" && place.kind !== "dock") {
-    return { ready: false, reason: "Fly clear of the dock first" };
+    return { ready: false, reason: "Not while leaving the hangar" };
+  }
+  if (phase === "docking" && place.kind !== "dock") {
+    return { ready: false, reason: "Not while the hangar draws the ship in" };
   }
   if (drive === "hunted") {
     return { ready: false, reason: "Drive jammed: a hostile has you locked" };

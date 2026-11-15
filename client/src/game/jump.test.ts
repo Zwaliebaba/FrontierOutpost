@@ -97,6 +97,8 @@ describe("refusal and cancel text", () => {
   it("says why the drive did not spool or stopped", () => {
     expect(REFUSAL_TEXT.hunted).toContain("locked");
     expect(REFUSAL_TEXT.extracting).toContain("X");
+    // The launch's and the draw-in's script: no berth or dock to fly clear of.
+    expect(REFUSAL_TEXT.atDock).toBe("Jump drive: not while the hangar flies the ship");
     expect(CANCEL_TEXT.hunted).toContain("locked");
   });
 });

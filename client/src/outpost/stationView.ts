@@ -58,3 +58,15 @@ export function viewControl(view: StationView): ViewControl {
         hint: "Select the station to open it",
       };
 }
+
+/** The overview's line on what the station holds: one hangar, one expedition at a time. */
+export const STATION_FACTS = "One hangar mouth. One expedition, up to four ships.";
+
+/**
+ * The footer's place line. At home it counts the crew who will leave the hangar together, in
+ * roster order; ships wait inside, not on berths, so it no longer counts berths taken.
+ */
+export function placeLine(flying: boolean, crew: number): string {
+  if (flying) return "EXPEDITION / ACTIVE";
+  return crew > 1 ? `HOME OUTPOST / CREW ${String(crew)} OF 4` : "HOME OUTPOST / HANGAR";
+}

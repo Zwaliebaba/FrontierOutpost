@@ -6,7 +6,18 @@
 import type { OwnStatus } from "../protocol";
 
 export interface Prompt {
-  id: "vent" | "extract" | "deposit" | "fire" | "lock" | "scan" | "scanRange" | "cruise";
+  id:
+    | "vent"
+    | "extract"
+    | "deposit"
+    | "fire"
+    | "lock"
+    | "scan"
+    | "scanRange"
+    | "cruise"
+    | "departing"
+    | "docking"
+    | "dock";
   /** The key to press, or empty for a prompt that only tells. */
   key: string;
   text: string;
@@ -27,17 +38,32 @@ export interface PromptInput {
   lockedInRange: boolean;
   /** Whether a hostile is close enough to lock. */
   hostileInLockRange: boolean;
+  /** Metres from the ship to the station's hangar mouth, or null if unknown. */
+  toMouth: number | null;
 }
 
 /** As many prompts as fit beside the gauges without becoming a list to read. */
 export const MOST_PROMPTS = 3;
 /** The heat share from which venting is prompted: the gauge's own warning level. */
 const VENT_FROM = 0.75;
+/**
+ * How near the hangar mouth, metres, the return leg says how to dock: the lane's 30 m and the
+ * capture zone's 8 m in front of it, with room to line up.
+ */
+export const DOCK_PROMPT_RANGE = 60;
 
 /** The prompts for now, most urgent first, at most [`MOST_PROMPTS`]. */
 export function prompts(input: PromptInput): Prompt[] {
   const { own, deposit } = input;
-  const flying = own.phase === "atDock" || own.phase === "approach" || own.phase === "return";
+  // On the launch's and the draw-in's script the rules fly the ship: no key does anything, so
+  // the one prompt says so, and that the pilot's keys come back at the lane's end.
+  if (own.phase === "atDock") {
+    return [{ id: "departing", key: "", text: "Leaving the hangar · yours at the lane's end" }];
+  }
+  if (own.phase === "docking") {
+    return [{ id: "docking", key: "", text: "Captured at the mouth · drawn in to dock" }];
+  }
+  const flying = own.phase === "approach" || own.phase === "return";
   const found: Prompt[] = [];
   if (own.extractor === "on" && own.heat / 255 >= VENT_FROM) {
     found.push({ id: "vent", key: "V", text: "Vent heat before the cut-out" });
@@ -76,6 +102,14 @@ export function prompts(input: PromptInput): Prompt[] {
             text: "Scan · finds the rich pocket, relays and waves · hold still",
           },
     );
+  }
+  if (own.phase === "return" && input.toMouth !== null && input.toMouth <= DOCK_PROMPT_RANGE) {
+    // Docking is flown (design §11): straight in along the lane, where the mouth catches it.
+    found.push({
+      id: "dock",
+      key: "",
+      text: `Dock · fly straight into the hangar mouth · ${input.toMouth.toFixed(0)} m`,
+    });
   }
   if (flying && own.drive === "ready") {
     found.push({ id: "cruise", key: "Shift", text: "Hold to cruise" });

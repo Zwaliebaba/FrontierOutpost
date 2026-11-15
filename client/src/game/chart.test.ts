@@ -174,8 +174,10 @@ describe("chartPlaces", () => {
   it("warns that a laden jump home arrives short of the dock", () => {
     const empty = chartPlaces(site, { x: 0, z: 0 }, null, false)[0];
     const laden = chartPlaces(site, { x: 0, z: 0 }, null, true)[0];
-    expect(empty?.arrival).toContain("docking is flown");
+    expect(empty?.arrival).toBe("Off the hangar mouth, facing it: docking is flown");
     expect(laden?.arrival).toContain("interceptors");
+    // No berths: the station is docked through its mouth.
+    expect(empty?.status).toBe("Home station · banks the hold");
   });
 });
 
@@ -221,10 +223,14 @@ describe("jumpReadiness", () => {
     expect(jumpReadiness(ore ?? null, "extracting").reason).toContain("(X)");
   });
 
-  it("waits for the ship to fly clear of the dock, as the server does", () => {
+  it("waits while the hangar flies the ship out or in, as the server does", () => {
     expect(jumpReadiness(ore ?? null, "ready", "atDock")).toEqual({
       ready: false,
-      reason: "Fly clear of the dock first",
+      reason: "Not while leaving the hangar",
+    });
+    expect(jumpReadiness(ore ?? null, "ready", "docking")).toEqual({
+      ready: false,
+      reason: "Not while the hangar draws the ship in",
     });
     expect(jumpReadiness(ore ?? null, "ready", "approach").ready).toBe(true);
     // The dock itself is the server's to refuse: the ship is already there.
