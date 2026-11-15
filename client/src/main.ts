@@ -35,6 +35,7 @@ import type { HomeView } from "./outpost/stationView";
 import { renderHome, tickProcessor } from "./outpost/ui";
 import type { EntityPose } from "./net/interpolation";
 import { Predictor, predictsOwnShip, solidObstacles } from "./game/prediction";
+import { cameraFocus } from "./game/hangar";
 import { FrameTimer } from "./game/frameTimer";
 import { onHidden } from "./game/hidden";
 import { PendingEvents } from "./game/pending";
@@ -1450,7 +1451,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     // Clicking a hostile locks it and centres the view; an ally is only centred on; empty space
     // returns the view to your own ship.
     const shipId = life.session.shipId;
-    const others = poses.filter((pose) => pose.id !== shipId);
+    // A ship inside the hangar is not drawn, so it cannot be clicked either.
+    const others = poses.filter((pose) => pose.id !== shipId && view.world.drawn(pose.id));
     const candidates = others.map((pose) => ({
       id: String(pose.id),
       screen: worldToScreen(new Vector3(pose.x, 0, pose.z), view.camera, view.viewport),
@@ -1719,6 +1721,7 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
       const others = sampled.filter((pose) => pose.id !== session.shipId);
       // On the launch's or the draw-in's script the ship is the server's to fly.
       const scripted = !predictsOwnShip(current.own?.phase);
+      if (scripted) predictor.follow();
       const predicted = scripted
         ? null
         : predictor.visual(Math.min(1, Math.max(0, now - lastControlAt) / tickMs), dt);
@@ -1774,14 +1777,18 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const centre = focus ?? own;
     setData(hud, "camera", centre ? String(centre.id) : null);
     setData(hud, "cameraMoving", String(glide !== null));
-    if (centre) target.set(centre.x, 0, centre.z);
+    if (centre && current) {
+      // A ship in the hangar is not drawn: the camera waits on the mouth and follows it out.
+      const at = cameraFocus(current.joined.site.station, centre.x, centre.z);
+      target.set(at.x, 0, at.z);
+    }
     const atHome = !current && outpost && holdings ? outpost : null;
     let aim = atHome ? atHome.centre : target;
     if (glide) {
       // A glide still under way when the view changes again (a run that ends at once) stops.
       const under = glide.toStation === (atHome !== null);
       glide.t = Math.min(1, glide.t + dt / GLIDE_SECONDS);
-      // Into the run it follows the ship as it flies off the berth.
+      // Into the run it follows the ship as the launch flies it out of the hangar.
       if (under && outpost) {
         const from = glided.copy(outpost.centre).add(glide.from);
         aim = from.lerp(aim, glideEase(glide.t));
@@ -1790,8 +1797,11 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     }
     if (atHome) {
       view.renderScene(atHome.scene, aim, look.pitch, look.yaw);
+      setData(hud, "inHangar", null);
     } else {
       view.render(poses, selection.lock, aim, look.pitch, look.yaw, shots, dt, jumpEffects);
+      // For the browser tests: the ships the hangar hides, waiting to leave or drawn in.
+      setData(hud, "inHangar", view.world.inHangar.join(" ") || null);
     }
 
     drawHomeLabels();

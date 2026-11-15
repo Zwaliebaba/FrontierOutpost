@@ -105,6 +105,17 @@ export class Predictor {
   }
 
   /**
+   * The server is flying the ship on a script (the launch, the draw-in) and it is drawn from
+   * snapshots: drops any correction still to show. Corrections fade only as the ship is drawn
+   * from the prediction, so without this the departure's 4.5 s of them would add up and the
+   * ship would leap back along the lane as the pilot took it over at the lane's end.
+   */
+  follow(): void {
+    this.#offset = { x: 0, z: 0 };
+    this.#previous = this.#state;
+  }
+
+  /**
    * Where to draw the ship: between the last two predicted steps by `alpha` (0 to 1 through the
    * current tick), plus the fading correction. `dt` is the frame time in seconds.
    */

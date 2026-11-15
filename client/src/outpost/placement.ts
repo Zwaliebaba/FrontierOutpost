@@ -5,16 +5,8 @@
  * models to match. The outpost view shows the station turned the same way, so launching only
  * moves the camera from the station to the ship.
  */
-import layout from "../../../Design/FrontierOutpost/berths.json";
 import type { StationInfo } from "../protocol";
 import { SHIP_HEIGHT } from "../view/hulls";
-
-/**
- * The legacy apron's berths. Only the landing gear still reads them (game/scene), until the
- * launch and docking drawing moves to the hangar (plan 9.6); the station itself has none.
- */
-export const BERTH = { x: 0, z: -layout.centreY, deck: layout.deck };
-export const BERTHS = layout.berths.map((b) => ({ ...BERTH, x: b.x, id: b.id }));
 
 /**
  * How high the station's origin stands (design §5: one plane). Hulls are drawn centred on the
@@ -59,16 +51,4 @@ export function placeStation(station: StationPose): Placement {
     y: STATION_HEIGHT,
     heading: Math.atan2(fz, fx),
   };
-}
-
-/** Actual launch/departure positions, using the same lateral offsets as the simulation. */
-export function berthPositions(
-  dock: { x: number; z: number },
-  toward: { x: number; z: number },
-): { x: number; z: number }[] {
-  const heading = Math.atan2(toward.z - dock.z, toward.x - dock.x);
-  return BERTHS.map((berth) => ({
-    x: dock.x + berth.x * Math.sin(heading),
-    z: dock.z - berth.x * Math.cos(heading),
-  }));
 }

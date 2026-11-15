@@ -3,8 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import catalogue from "../../../Design/Art/catalogue.json";
 import frigateGlb from "../../../Design/Art/hulls/frigate/frigate.glb?inline";
 import { parseGlb } from "../outpost/models";
-import { BERTH } from "../outpost/placement";
-import { GEAR_LIFT, GEAR_SECONDS, frigateModel, gearOf, setGear, stepGear } from "./frigate";
+import { GEAR_LIFT, frigateModel, gearOf, setGear } from "./frigate";
 import { SHIP_BEAM, SHIP_HEIGHT, SHIP_LENGTH } from "./hulls";
 import { SIGNAL, STRUCTURE, shipMeshes, useShipModel } from "./readability";
 
@@ -44,7 +43,7 @@ describe("the starter frigate", () => {
 
   it("is drawn as the stand-in hulls are: nose along +x, resting its feet on the deck", () => {
     const bounds = new Box3().setFromObject(frigate);
-    // The landed envelope the berth and the stand-in hulls were sized from.
+    // The landed envelope the stand-in hulls were sized from.
     expect(bounds.max.x - bounds.min.x).toBeCloseTo(SHIP_LENGTH, 1);
     expect(bounds.max.z - bounds.min.z).toBeCloseTo(SHIP_BEAM, 1);
     expect(bounds.max.y - bounds.min.y).toBeCloseTo(SHIP_HEIGHT, 1);
@@ -54,9 +53,8 @@ describe("the starter frigate", () => {
     // The bridge is forward and the drives aft.
     expect(partAt(frigate, /bridge_glazing/).x).toBeGreaterThan(0.5);
     expect(partAt(frigate, /idle_engine_aperture/).x).toBeLessThan(-0.5);
-    // Its height on the deck matches the generator's docking check.
+    // Its feet on the plane's deck level, half a hull below its centre (outpost/placement).
     expect(SHIP_HEIGHT / 2 + bounds.min.y).toBeCloseTo(0, 6);
-    expect(BERTH.deck).toBeCloseTo(0.86, 2);
   });
 
   it("folds its three legs up into the hull and lowers them again", () => {
@@ -75,13 +73,6 @@ describe("the starter frigate", () => {
       expect(leg.position.y).toBeCloseTo(lowered[index] ?? 0, 6);
       expect(leg.scale.x).toBe(1);
     });
-  });
-
-  it("moves the gear at its own pace", () => {
-    expect(stepGear(1, 0, GEAR_SECONDS / 2)).toBeCloseTo(0.5, 6);
-    expect(stepGear(0.5, 0, GEAR_SECONDS)).toBe(0);
-    expect(stepGear(0, 1, GEAR_SECONDS * 2)).toBe(1);
-    expect(stepGear(0.3, 0.3, 1)).toBe(0.3);
   });
 
   it("draws player-side ships as the frigate, an ally's armour tinted, hostiles as before", () => {

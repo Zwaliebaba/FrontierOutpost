@@ -180,6 +180,21 @@ describe("predictor", () => {
     expect(last).toBeCloseTo(0.5, 2);
   });
 
+  it("shows no correction left over from a scripted path when the pilot takes the ship", () => {
+    const predictor = new Predictor(step);
+    predictor.reconcile(still, 0);
+    // The launch flies the ship while the pilot holds thrust the server ignores: each snapshot
+    // corrects the prediction a little, and nothing draws it, so nothing fades the corrections.
+    for (let i = 1; i <= 40; i += 1) {
+      predictor.advance(i, thrust);
+      predictor.reconcile({ ...still, x: i * 0.4, speed: 8 }, i - 1);
+      predictor.follow();
+    }
+    const state = predictor.state;
+    // Handed over: drawn where the prediction is, not seconds of corrections behind it.
+    expect(predictor.visual(1, 0.016)?.x).toBeCloseTo(state?.x ?? Number.NaN, 6);
+  });
+
   it("jumps straight to a large correction", () => {
     const predictor = new Predictor(step);
     predictor.reconcile(still, 0);
