@@ -61,7 +61,8 @@ orientation. Subsequent modelling can be done directly in the Blender files.
 - Checks use all three full 5 metre socket envelopes simultaneously, even though the populated
   review uses current tier-II modules. Their projected bounds and the frigate parking envelope
   do not overlap from the resting camera. Per the owner's latest decision, exterior-visible facilities are omitted from the interior review.
-  Service locations remain; C is closed. The exterior layouts are art comparisons, not validated
+  Service locations remain; C is open in the populated gallery, matching its exterior facility.
+  The interior uses the same proposed 180-degree world placement and the same camera. The exterior layouts are art comparisons, not validated
   purchase/power configurations. Full module roots remain unchanged for the legacy renderer.
 
 ## Rebuild and inspect

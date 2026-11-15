@@ -118,7 +118,19 @@ def interior_review(out):
     bpy.ops.wm.open_mainfile(filepath=str(art.ART/'station/interior/interior.blend'))
     # Owner decision: facilities visible on the exterior are not duplicated inside.
     # Keep service locations, cargo, processor and owned ships visible in the cutaway.
+    # Match the populated exterior gallery: C is open, without a duplicate facility mesh.
+    for obj in bpy.data.objects:
+        if obj.name.startswith('Closure_C'):
+            obj.hide_render=True
     append_glb(art.ART.parent/'FrontierOutpost/frigate.glb','Frigate_ROOT',bpy.data.objects['Parking_frigate'].location.copy(),True)
+    # Match the exterior's proposed world placement while retaining the same camera.
+    pivot=bpy.data.objects.new('Review interior world yaw',None)
+    bpy.context.scene.collection.objects.link(pivot)
+    for obj in list(bpy.context.scene.objects):
+        if obj != pivot and obj.parent is None and obj.type not in {'CAMERA','LIGHT'}:
+            obj.parent=pivot
+    pivot.rotation_euler.z=math.pi
+    bpy.context.view_layer.update()
     setup((0,0,0),art.CONTRACT['camera_direction'],40,out/'station-interior.png')
 
 
