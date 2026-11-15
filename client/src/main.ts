@@ -19,7 +19,7 @@ import type {
   SnapshotEvent,
 } from "./protocol";
 import { crewQuote, launchRole, renderCrew, resetSplitPending } from "./outpost/crew";
-import { loadOutpostModels } from "./outpost/models";
+import { loadNpc, loadOutpostModels } from "./outpost/models";
 import { affordableFacilities, fittingName, launchLines, supplySales } from "./outpost/options";
 import { BERTHS, placeStation } from "./outpost/placement";
 import { OutpostScene } from "./outpost/scene";
@@ -77,7 +77,7 @@ import { targetReadout } from "./game/target";
 import { loadSim } from "./sim";
 import type { Sim } from "./sim";
 import { headingRadians, positionMetres, velocityMetresPerSecond } from "./net/snapshot";
-import { useShipModel } from "./view/readability";
+import { useNpcModel, useShipModel } from "./view/readability";
 import { dragLook, glideEase, isHome, settleLook, turnLook, zoomWidth } from "./view/look";
 import type { LookState } from "./view/look";
 import { pickNearest, worldToScreen } from "./view/picking";
@@ -304,6 +304,16 @@ async function start(): Promise<void> {
   });
   const loaded = await rules;
   const view = new ExpeditionView(document.body, -1, START_WIDTH);
+  // Raiders fly as their pipeline model once it is in; until then, as the forked stand-in.
+  loadNpc("raider")
+    .then((model) => {
+      if (!model) return;
+      useNpcModel("raider", model);
+      view.world.redraw();
+    })
+    .catch((error: unknown) => {
+      showNotice(`The raider model did not load: ${String(error)}`, "warn");
+    });
   // The outpost's models load beside everything else; the home shows once they are in.
   loadOutpostModels()
     .then((models) => {

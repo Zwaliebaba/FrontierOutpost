@@ -46,3 +46,10 @@ export function facilityEntry(id: string): { url: string; roots: string[] } {
   if (!entry || entry.pending) throw new Error(`Facility art is not ready: ${id}`);
   return { url: urlFor(entry.glb), roots: Object.keys(entry.roots) };
 }
+
+/** An NPC ship's model, by the game's identifier (`raider`): its GLB and its one root. */
+export function npcEntry(id: string): { url: string; root: string } | null {
+  const entry = catalogue.assets[`npc:${id}`];
+  const root = entry && Object.keys(entry.roots)[0];
+  return entry && root ? { url: urlFor(entry.glb), root } : null;
+}

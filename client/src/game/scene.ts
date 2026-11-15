@@ -303,7 +303,7 @@ export class ExpeditionScene {
       );
       const target = berthed ? 1 : 0;
       if (!drawn) {
-        const meshes = shipMeshes(allegiance, SIZE[pose.kind]);
+        const meshes = shipMeshes(allegiance, SIZE[pose.kind], pose.kind);
         if (pose.kind === "wingman") {
           // A double ring distinguishes the NPC ally even when its hull is silhouetted.
           const badge = new Group();

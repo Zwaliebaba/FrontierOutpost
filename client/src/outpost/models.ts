@@ -7,8 +7,9 @@ import { Group, Matrix4, Mesh, MeshStandardMaterial } from "three";
 import type { BufferGeometry, Material, Object3D } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { facilityEntry, legacyUrl } from "./catalogue";
+import { facilityEntry, legacyUrl, npcEntry } from "./catalogue";
 import { frigateModel, gearOf } from "../view/frigate";
+import { npcModel } from "../view/npc";
 
 export interface OutpostModels {
   /** The station, its root at the origin. Sockets are among its descendants. */
@@ -135,7 +136,11 @@ export function parseGlb(bytes: ArrayBuffer): Promise<Object3D> {
           const materials = Array.isArray(node.material) ? node.material : [node.material];
           for (const material of materials) {
             if (material instanceof MeshStandardMaterial) {
-              if (material.name === "Amber" || material.name.startsWith("Windows"))
+              if (
+                material.name === "Amber" ||
+                material.name === "Ember" ||
+                material.name.startsWith("Windows")
+              )
                 material.emissiveIntensity = Math.min(material.emissiveIntensity, 1.8);
               else if (
                 material.name === "Cyan" ||
@@ -222,5 +227,18 @@ export async function loadFrigate(): Promise<Object3D> {
   // Four roster ships should not multiply every authored plate into a draw call.
   // Landing gear keeps its own transforms so deployment still animates.
   mergeByMaterial(ship, new Set(gearOf(ship)));
+  return ship;
+}
+
+/**
+ * Loads an NPC ship's model, or resolves null when the catalogue has none for it: that kind
+ * keeps its stand-in hull.
+ */
+export async function loadNpc(id: string): Promise<Object3D | null> {
+  const entry = npcEntry(id);
+  if (!entry) return null;
+  const ship = npcModel(await fetchGlb(entry.url), entry.root);
+  // Up to the NPC cap of one kind can fly at once: one draw call per material, not per plate.
+  mergeByMaterial(ship, new Set());
   return ship;
 }
