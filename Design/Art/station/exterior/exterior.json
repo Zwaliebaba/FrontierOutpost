@@ -9,14 +9,14 @@
     "contract": "f2d4607c59da6e235b18eebd780e7a9009a16334661549b2bc96160d7788f1f8",
     "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
     "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
-    "source": "4c351d5c709515d847edc4b9bf11c01671f6392199efbf13f3c695ff79251972",
+    "source": "446af5327a4d48a3321fe8aff9a297a8076900226c3004ccac164c8726f619c3",
     "station_checks": "8dd24a515c11d997d3898b092e9e9e3f24c68295fcf701582786d8f057886d73",
     "tool": "6786478f3fff1dc4779170a3ceae9f6b251191b8038dc062153690f7d48b401e"
   },
   "kind": "station_exterior",
   "planned": false,
   "preview": "exterior.png",
-  "preview_sha256": "0586a1f44d0588bbfb41bcd3cd09f111f6a469ef9f57e078e1cc6fcc819186b0",
+  "preview_sha256": "56f6ad6a2d3494f5dd9e9ec056d1ccb5b509051170ea53f901b1e69c46869c3b",
   "roots": {
     "StationExterior_ROOT": {
       "anchors": {
@@ -58,19 +58,19 @@
               1.0,
               0.0,
               0.0,
-              11.5
+              14.5
             ],
             [
               0.0,
               1.0,
               0.0,
-              -10.5
+              0.0
             ],
             [
               0.0,
               0.0,
               1.0,
-              1.5499999523162842
+              1.2000000476837158
             ],
             [
               0.0,
@@ -87,19 +87,19 @@
               1.0,
               0.0,
               0.0,
-              14.0
+              11.0
             ],
             [
               0.0,
               1.0,
               0.0,
-              0.0
+              -10.0
             ],
             [
               0.0,
               0.0,
               1.0,
-              1.5499999523162842
+              1.2000000476837158
             ],
             [
               0.0,
@@ -116,19 +116,19 @@
               1.0,
               0.0,
               0.0,
-              -11.5
+              -14.5
             ],
             [
               0.0,
               1.0,
               0.0,
-              -10.5
+              0.0
             ],
             [
               0.0,
               0.0,
               1.0,
-              1.5499999523162842
+              1.2000000476837158
             ],
             [
               0.0,
@@ -145,19 +145,19 @@
               1.0,
               0.0,
               0.0,
-              0.0
+              -10.5
             ],
             [
               0.0,
               1.0,
               0.0,
-              -15.600000381469727
+              -10.5
             ],
             [
               0.0,
               0.0,
               1.0,
-              1.5499999523162842
+              1.2000000476837158
             ],
             [
               0.0,
@@ -177,7 +177,7 @@
         ],
         "min": [
           -16.37712860107422,
-          -16.450000762939453,
+          -16.37712860107422,
           -10.800000190734863
         ]
       },
@@ -723,16 +723,10 @@
         "Detail orange ring stencil 13-1__StationExterior_ROOT",
         "Detail orange ring stencil 14--1__StationExterior_ROOT",
         "Detail orange ring stencil 14-1__StationExterior_ROOT",
-        "Detail orange ring stencil 16--1__StationExterior_ROOT",
-        "Detail orange ring stencil 16-1__StationExterior_ROOT",
         "Detail orange ring stencil 17--1__StationExterior_ROOT",
         "Detail orange ring stencil 17-1__StationExterior_ROOT",
-        "Detail orange ring stencil 19--1__StationExterior_ROOT",
-        "Detail orange ring stencil 19-1__StationExterior_ROOT",
         "Detail orange ring stencil 2--1__StationExterior_ROOT",
         "Detail orange ring stencil 2-1__StationExterior_ROOT",
-        "Detail orange ring stencil 20--1__StationExterior_ROOT",
-        "Detail orange ring stencil 20-1__StationExterior_ROOT",
         "Detail orange ring stencil 22--1__StationExterior_ROOT",
         "Detail orange ring stencil 22-1__StationExterior_ROOT",
         "Detail orange ring stencil 23--1__StationExterior_ROOT",
@@ -741,12 +735,8 @@
         "Detail orange ring stencil 25-1__StationExterior_ROOT",
         "Detail orange ring stencil 26--1__StationExterior_ROOT",
         "Detail orange ring stencil 26-1__StationExterior_ROOT",
-        "Detail orange ring stencil 28--1__StationExterior_ROOT",
-        "Detail orange ring stencil 28-1__StationExterior_ROOT",
         "Detail orange ring stencil 29--1__StationExterior_ROOT",
         "Detail orange ring stencil 29-1__StationExterior_ROOT",
-        "Detail orange ring stencil 31--1__StationExterior_ROOT",
-        "Detail orange ring stencil 31-1__StationExterior_ROOT",
         "Detail orange ring stencil 4--1__StationExterior_ROOT",
         "Detail orange ring stencil 4-1__StationExterior_ROOT",
         "Detail orange ring stencil 5--1__StationExterior_ROOT",
@@ -772,60 +762,44 @@
         "Detail radial structural bridge -1.5707963267948966__StationExt",
         "Detail radial structural bridge 0__StationExterior_ROOT",
         "Detail radial structural bridge 3.141592653589793__StationExter",
-        "Detail ring panel recess 0",
         "Detail ring panel recess 1",
         "Detail ring panel recess 10",
         "Detail ring panel recess 11",
         "Detail ring panel recess 12",
         "Detail ring panel recess 13",
         "Detail ring panel recess 14",
-        "Detail ring panel recess 15",
-        "Detail ring panel recess 16",
         "Detail ring panel recess 17",
         "Detail ring panel recess 18",
-        "Detail ring panel recess 19",
         "Detail ring panel recess 2",
-        "Detail ring panel recess 20",
         "Detail ring panel recess 21",
         "Detail ring panel recess 22",
         "Detail ring panel recess 23",
         "Detail ring panel recess 24",
         "Detail ring panel recess 25",
         "Detail ring panel recess 26",
-        "Detail ring panel recess 27",
-        "Detail ring panel recess 28",
         "Detail ring panel recess 29",
         "Detail ring panel recess 3",
         "Detail ring panel recess 30",
-        "Detail ring panel recess 31",
         "Detail ring panel recess 4",
         "Detail ring panel recess 5",
-        "Detail ring top panel 0",
         "Detail ring top panel 1",
         "Detail ring top panel 10",
         "Detail ring top panel 11",
         "Detail ring top panel 12",
         "Detail ring top panel 13",
         "Detail ring top panel 14",
-        "Detail ring top panel 15",
-        "Detail ring top panel 16",
         "Detail ring top panel 17",
         "Detail ring top panel 18",
-        "Detail ring top panel 19",
         "Detail ring top panel 2",
-        "Detail ring top panel 20",
         "Detail ring top panel 21",
         "Detail ring top panel 22",
         "Detail ring top panel 23",
         "Detail ring top panel 24",
         "Detail ring top panel 25",
         "Detail ring top panel 26",
-        "Detail ring top panel 27",
-        "Detail ring top panel 28",
         "Detail ring top panel 29",
         "Detail ring top panel 3",
         "Detail ring top panel 30",
-        "Detail ring top panel 31",
         "Detail ring top panel 4",
         "Detail ring top panel 5",
         "Detail roof sill -1__StationExterior_ROOT",
@@ -871,7 +845,6 @@
         "Detail stencil spine 14__StationExterior_ROOT",
         "Detail stencil spine 16__StationExterior_ROOT",
         "Detail stencil spine 17__StationExterior_ROOT",
-        "Detail stencil spine 19__StationExterior_ROOT",
         "Detail stencil spine 1__StationExterior_ROOT",
         "Detail stencil spine 20__StationExterior_ROOT",
         "Detail stencil spine 22__StationExterior_ROOT",
@@ -881,7 +854,6 @@
         "Detail stencil spine 28__StationExterior_ROOT",
         "Detail stencil spine 29__StationExterior_ROOT",
         "Detail stencil spine 2__StationExterior_ROOT",
-        "Detail stencil spine 31__StationExterior_ROOT",
         "Detail stencil spine 4__StationExterior_ROOT",
         "Detail stencil spine 5__StationExterior_ROOT",
         "Detail threshold extension__StationExterior_ROOT",
@@ -934,9 +906,7 @@
         "Detail underslung cabinet 25__StationExterior_ROOT",
         "Detail underslung cabinet 29__StationExterior_ROOT",
         "Detail underslung cabinet 5__StationExterior_ROOT",
-        "Detail vent bed 0__StationExterior_ROOT",
         "Detail vent bed 12__StationExterior_ROOT",
-        "Detail vent bed 15__StationExterior_ROOT",
         "Detail vent bed 18__StationExterior_ROOT",
         "Detail vent bed 21__StationExterior_ROOT",
         "Detail vent bed 24__StationExterior_ROOT",
@@ -947,13 +917,11 @@
         "Detail vent louvre 0-1__StationExterior_ROOT",
         "Detail vent louvre 0-2__StationExterior_ROOT",
         "Detail vent louvre 0-3__StationExterior_ROOT",
-        "Detail vent louvre 0-4__StationExterior_ROOT",
         "Detail vent louvre 12-0__StationExterior_ROOT",
         "Detail vent louvre 12-1__StationExterior_ROOT",
         "Detail vent louvre 12-2__StationExterior_ROOT",
         "Detail vent louvre 12-3__StationExterior_ROOT",
         "Detail vent louvre 12-4__StationExterior_ROOT",
-        "Detail vent louvre 15-0__StationExterior_ROOT",
         "Detail vent louvre 15-1__StationExterior_ROOT",
         "Detail vent louvre 15-2__StationExterior_ROOT",
         "Detail vent louvre 15-3__StationExterior_ROOT",
@@ -1139,6 +1107,34 @@
         "Hub segmented armour 8",
         "Hub segmented armour 9",
         "Hub upper collar__StationExterior_ROOT",
+        "Integrated Tell_A hull seam X -1__StationExterior_ROOT",
+        "Integrated Tell_A hull seam X 1__StationExterior_ROOT",
+        "Integrated Tell_A hull seam Y -1__StationExterior_ROOT",
+        "Integrated Tell_A hull seam Y 1__StationExterior_ROOT",
+        "Integrated Tell_A receiver skin__StationExterior_ROOT",
+        "Integrated Tell_A utility duct -0.25__StationExterior_ROOT",
+        "Integrated Tell_A utility duct 0.25__StationExterior_ROOT",
+        "Integrated Tell_B hull seam X -1__StationExterior_ROOT",
+        "Integrated Tell_B hull seam X 1__StationExterior_ROOT",
+        "Integrated Tell_B hull seam Y -1__StationExterior_ROOT",
+        "Integrated Tell_B hull seam Y 1__StationExterior_ROOT",
+        "Integrated Tell_B receiver skin__StationExterior_ROOT",
+        "Integrated Tell_B utility duct -0.25__StationExterior_ROOT",
+        "Integrated Tell_B utility duct 0.25__StationExterior_ROOT",
+        "Integrated Tell_C hull seam X -1__StationExterior_ROOT",
+        "Integrated Tell_C hull seam X 1__StationExterior_ROOT",
+        "Integrated Tell_C hull seam Y -1__StationExterior_ROOT",
+        "Integrated Tell_C hull seam Y 1__StationExterior_ROOT",
+        "Integrated Tell_C receiver skin__StationExterior_ROOT",
+        "Integrated Tell_C utility duct -0.25__StationExterior_ROOT",
+        "Integrated Tell_C utility duct 0.25__StationExterior_ROOT",
+        "Integrated Tell_reactor hull seam X -1__StationExterior_ROOT",
+        "Integrated Tell_reactor hull seam X 1__StationExterior_ROOT",
+        "Integrated Tell_reactor hull seam Y -1__StationExterior_ROOT",
+        "Integrated Tell_reactor hull seam Y 1__StationExterior_ROOT",
+        "Integrated Tell_reactor receiver skin__StationExterior_ROOT",
+        "Integrated Tell_reactor utility duct -0.25__StationExterior_ROO",
+        "Integrated Tell_reactor utility duct 0.25__StationExterior_ROOT",
         "Lower hub__StationExterior_ROOT",
         "Machinery armour 0__StationExterior_ROOT",
         "Machinery armour 12__StationExterior_ROOT",
@@ -1232,7 +1228,6 @@
         "Ring service band 25",
         "Ring service band 26",
         "Ring service band 27",
-        "Ring service band 28",
         "Ring service band 29",
         "Ring service band 3",
         "Ring service band 30",
@@ -1280,19 +1275,15 @@
         "Suspended machinery 28__StationExterior_ROOT",
         "Suspended machinery 4__StationExterior_ROOT",
         "Tell_A",
-        "Tell_A mounting plinth__StationExterior_ROOT",
         "Tell_B",
-        "Tell_B mounting plinth__StationExterior_ROOT",
         "Tell_C",
-        "Tell_C mounting plinth__StationExterior_ROOT",
-        "Tell_reactor",
-        "Tell_reactor mounting plinth__StationExterior_ROOT"
+        "Tell_reactor"
       ],
-      "triangles": 25384
+      "triangles": 25916
     }
   },
   "schema_version": 1,
-  "sha256": "131a93006ee7f24bee99cb366f5e0bf274fb9089009253900851d81fc7ee716d",
+  "sha256": "ee8a0342d0f982a6fbc37ff6dbc847cc4bafdb2eab845f6bb74f66b09d872f7a",
   "source_forward": "+Y",
   "source_up": "+Z",
   "tiers": 0,

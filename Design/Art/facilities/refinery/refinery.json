@@ -9,13 +9,13 @@
     "contract": "f2d4607c59da6e235b18eebd780e7a9009a16334661549b2bc96160d7788f1f8",
     "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
     "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
-    "source": "e9806096e621c773952c2ed1107b784fac4824b1f2d19c0b17c35bf95e9354e2",
+    "source": "a994dfc63ccaa193eb0449d665de3ce46274d616cf794cb8114e503e04fcddc4",
     "tool": "6786478f3fff1dc4779170a3ceae9f6b251191b8038dc062153690f7d48b401e"
   },
   "kind": "facility",
   "planned": false,
   "preview": "refinery.png",
-  "preview_sha256": "eaa39974423301654dbcbf5e802e864940818916ce93a2629283578a58960202",
+  "preview_sha256": "ad6e9f60db0b192b0d85a207ff688739d2bb5699be88dbf4cbed7f7be635b742",
   "roots": {
     "Facility_refinery_T1": {
       "anchors": {},
@@ -118,67 +118,81 @@
       "anchors": {},
       "bounds": {
         "max": [
-          0.3945325016975403,
-          0.4000000059604645,
-          0.8000000715255737
+          0.5699999928474426,
+          0.5699999928474426,
+          0.8100000023841858
         ],
         "min": [
-          -0.3945325016975403,
-          -0.3985377550125122,
-          0.00436252960935235
+          -0.5699999928474426,
+          -0.5699999928474426,
+          0.0
         ]
       },
       "materials": [
-        "Amber",
         "Armor",
-        "Cyan",
-        "Graphite",
         "HullSteel",
-        "IonBlue",
-        "Ochre",
         "Orange",
         "Titanium"
       ],
       "nodes": [
-        "IonBlue",
-        "Tell_refinery_T1"
+        "Flush service skin__Tell_refinery_T1",
+        "Hull seam -1__Tell_refinery_T1",
+        "Hull seam 1__Tell_refinery_T1",
+        "Inboard utility header__Tell_refinery_T1",
+        "Pressure vessel -0.24-0__Tell_refinery_T1",
+        "Pressure vessel 0.24-0__Tell_refinery_T1",
+        "Process band -0.24-0__Tell_refinery_T1",
+        "Process band 0.24-0__Tell_refinery_T1",
+        "Refinery manifold__Tell_refinery_T1",
+        "Tell_refinery_T1",
+        "Utility coupling -1__Tell_refinery_T1",
+        "Utility coupling 1__Tell_refinery_T1"
       ],
-      "triangles": 460
+      "triangles": 196
     },
     "Tell_refinery_T2": {
       "anchors": {},
       "bounds": {
         "max": [
-          0.58243328332901,
-          0.5833961367607117,
-          1.1366322040557861
+          0.6800000071525574,
+          0.6800000071525574,
+          1.190000057220459
         ],
         "min": [
-          -0.58243328332901,
-          -0.568053126335144,
-          0.049043308943510056
+          -0.6800000071525574,
+          -0.6800000071525574,
+          0.0
         ]
       },
       "materials": [
-        "Amber",
         "Armor",
-        "Cyan",
-        "Graphite",
         "HullSteel",
-        "IonBlue",
-        "Ochre",
         "Orange",
         "Titanium"
       ],
       "nodes": [
-        "IonBlue.001",
-        "Tell_refinery_T2"
+        "Flush service skin__Tell_refinery_T2",
+        "Hull seam -1__Tell_refinery_T2",
+        "Hull seam 1__Tell_refinery_T2",
+        "Inboard utility header__Tell_refinery_T2",
+        "Pressure vessel -0.24--0.25__Tell_refinery_T2",
+        "Pressure vessel -0.24-0.25__Tell_refinery_T2",
+        "Pressure vessel 0.24--0.25__Tell_refinery_T2",
+        "Pressure vessel 0.24-0.25__Tell_refinery_T2",
+        "Process band -0.24--0.25__Tell_refinery_T2",
+        "Process band -0.24-0.25__Tell_refinery_T2",
+        "Process band 0.24--0.25__Tell_refinery_T2",
+        "Process band 0.24-0.25__Tell_refinery_T2",
+        "Refinery manifold__Tell_refinery_T2",
+        "Tell_refinery_T2",
+        "Utility coupling -1__Tell_refinery_T2",
+        "Utility coupling 1__Tell_refinery_T2"
       ],
-      "triangles": 460
+      "triangles": 308
     }
   },
   "schema_version": 1,
-  "sha256": "f4ded72757310f35325a42a4ced71e7139487b71ec15d9887a012fc22da6cdb1",
+  "sha256": "5d88e51ec9a5da477073bc99bb040efe11ca4ebe1abfcc15e39b03cc97ce318a",
   "source_forward": "+Y",
   "source_up": "+Z",
   "tiers": 2,

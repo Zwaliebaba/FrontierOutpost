@@ -9,13 +9,13 @@
     "contract": "f2d4607c59da6e235b18eebd780e7a9009a16334661549b2bc96160d7788f1f8",
     "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
     "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
-    "source": "3219d648bad02227ed2aacf547fb01532f584c0fff87df3f0c1a9851ad9ff0c0",
+    "source": "d22a2516981f504f6e1e324a3bec76da2df3cabd05586e09885e2056c3692dbd",
     "tool": "6786478f3fff1dc4779170a3ceae9f6b251191b8038dc062153690f7d48b401e"
   },
   "kind": "facility",
   "planned": false,
   "preview": "sensor_array.png",
-  "preview_sha256": "d8bc3de6e7725fe882b618b82b4806f4a82302c5df06f523b62b2339e53a00db",
+  "preview_sha256": "a9ad74b0a0efa5592c5dc899a5ef7d8e6df33ea33c54a5e1bbe444855750de75",
   "roots": {
     "Facility_sensor_array_T1": {
       "anchors": {},
@@ -115,67 +115,78 @@
       "anchors": {},
       "bounds": {
         "max": [
-          0.4000000059604645,
-          0.4000000059604645,
-          0.800000011920929
+          0.5699999928474426,
+          0.5699999928474426,
+          0.7672910690307617
         ],
         "min": [
-          -0.4000000059604645,
-          -0.4000000059604645,
+          -0.5699999928474426,
+          -0.5699999928474426,
           0.0
         ]
       },
       "materials": [
-        "Amber",
         "Armor",
-        "Cyan",
-        "Graphite",
         "HullSteel",
-        "IonBlue",
-        "Ochre",
         "Orange",
         "Titanium"
       ],
       "nodes": [
-        "IonBlue",
-        "Tell_sensor_array_T1"
+        "Flush service skin__Tell_sensor_array_T1",
+        "Hull seam -1__Tell_sensor_array_T1",
+        "Hull seam 1__Tell_sensor_array_T1",
+        "Inboard utility header__Tell_sensor_array_T1",
+        "Integrated reflector__Tell_sensor_array_T1",
+        "Reflector support__Tell_sensor_array_T1",
+        "Sensor turret__Tell_sensor_array_T1",
+        "Tell_sensor_array_T1",
+        "Utility coupling -1__Tell_sensor_array_T1",
+        "Utility coupling 1__Tell_sensor_array_T1"
       ],
-      "triangles": 452
+      "triangles": 164
     },
     "Tell_sensor_array_T2": {
       "anchors": {},
       "bounds": {
         "max": [
-          0.5718724727630615,
-          0.5761651396751404,
-          1.149999976158142
+          0.6800000071525574,
+          0.6800000071525574,
+          1.1999999284744263
         ],
         "min": [
-          -0.5761558413505554,
-          -0.5712721347808838,
+          -0.6800000071525574,
+          -0.6800000071525574,
           0.0
         ]
       },
       "materials": [
-        "Amber",
         "Armor",
-        "Cyan",
         "Graphite",
         "HullSteel",
-        "IonBlue",
-        "Ochre",
         "Orange",
         "Titanium"
       ],
       "nodes": [
-        "IonBlue.001",
-        "Tell_sensor_array_T2"
+        "Flush service skin__Tell_sensor_array_T2",
+        "Hull seam -1__Tell_sensor_array_T2",
+        "Hull seam 1__Tell_sensor_array_T2",
+        "Inboard utility header__Tell_sensor_array_T2",
+        "Integrated reflector__Tell_sensor_array_T2",
+        "Phased array backplane__Tell_sensor_array_T2",
+        "Phased array radiator -0.27__Tell_sensor_array_T2",
+        "Phased array radiator 0.27__Tell_sensor_array_T2",
+        "Phased array radiator 0__Tell_sensor_array_T2",
+        "Reflector support__Tell_sensor_array_T2",
+        "Sensor turret__Tell_sensor_array_T2",
+        "Tell_sensor_array_T2",
+        "Utility coupling -1__Tell_sensor_array_T2",
+        "Utility coupling 1__Tell_sensor_array_T2"
       ],
-      "triangles": 460
+      "triangles": 212
     }
   },
   "schema_version": 1,
-  "sha256": "0f2efbfd47f12be4106a8323418f7b5fcc4b307752a42d48ea78978acdbe4547",
+  "sha256": "874445dd5812f12a0aa1013800c90d73ba891d6478ad4361f6b372064324b9c9",
   "source_forward": "+Y",
   "source_up": "+Z",
   "tiers": 2,

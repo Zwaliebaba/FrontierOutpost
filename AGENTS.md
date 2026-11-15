@@ -16,7 +16,7 @@ multiplayer isometric space game with an authoritative Rust server and an HTML5 
 - Build toward **Stage 1** of the design (§9): a persistent home outpost, one 1–4-player
   expedition, NPC threats and NPC trading. After plan M7, the Stage 1 expansion (design §11, plan
   M8 to M12) adds a wingman, a larger station with an internal hangar (an exterior with
-  facility tells, and an interior with the modules and ships), a deeper outpost, further hulls and
+  facility tells, and an interior with service locations and ships), a deeper outpost, further hulls and
   further sites. Do not start
   Stage 2+ systems (shared regions, player market, access-key marketplace, territory, MMO scale)
   unless explicitly asked.

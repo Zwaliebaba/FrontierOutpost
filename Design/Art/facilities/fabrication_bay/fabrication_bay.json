@@ -9,13 +9,13 @@
     "contract": "f2d4607c59da6e235b18eebd780e7a9009a16334661549b2bc96160d7788f1f8",
     "game_data_reader": "34ecdc848297d3966dbb7b9e66e122c93bfec79bc8e10c73c32522a27f417747",
     "materials": "5009cfb6bc0243ca167b31ce7e710c6a38d76783e158ee89da554df165c4703f",
-    "source": "fb7f94f2ff86510a08d0843ac130b637d9fb765765615480f2ea5a40f64eadb8",
+    "source": "59f98d8063d58c8d7d3c30f0eafc5e5c5d1968e37cd04bd3f9d39b9068658a69",
     "tool": "6786478f3fff1dc4779170a3ceae9f6b251191b8038dc062153690f7d48b401e"
   },
   "kind": "facility",
   "planned": false,
   "preview": "fabrication_bay.png",
-  "preview_sha256": "112be18d926ac75e3c7a78036d02f90343cb5ef92bff92c7c91cb4f1ac33d67f",
+  "preview_sha256": "24b7546e96bdee25de7e1faef01f388f09aa571ffc36a8f038d7a49054460bcb",
   "roots": {
     "Facility_fabrication_bay_T1": {
       "anchors": {},
@@ -116,67 +116,85 @@
       "anchors": {},
       "bounds": {
         "max": [
-          0.4000000059604645,
-          0.4000000059604645,
+          0.5699999928474426,
+          0.5699999928474426,
           0.800000011920929
         ],
         "min": [
-          -0.4000000059604645,
-          -0.4000000059604645,
+          -0.5699999928474426,
+          -0.5699999928474426,
           0.0
         ]
       },
       "materials": [
         "Amber",
         "Armor",
-        "Cyan",
         "Graphite",
         "HullSteel",
-        "IonBlue",
-        "Ochre",
         "Orange",
         "Titanium"
       ],
       "nodes": [
-        "IonBlue",
-        "Tell_fabrication_bay_T1"
+        "Door warning 0__Tell_fabrication_bay_T1",
+        "Fabrication door 0__Tell_fabrication_bay_T1",
+        "Flush service skin__Tell_fabrication_bay_T1",
+        "Hull seam -1__Tell_fabrication_bay_T1",
+        "Hull seam 1__Tell_fabrication_bay_T1",
+        "Inboard utility header__Tell_fabrication_bay_T1",
+        "Integrated production hall__Tell_fabrication_bay_T1",
+        "Production hall roof__Tell_fabrication_bay_T1",
+        "Tell_fabrication_bay_T1",
+        "Utility coupling -1__Tell_fabrication_bay_T1",
+        "Utility coupling 1__Tell_fabrication_bay_T1",
+        "Wall crane beam__Tell_fabrication_bay_T1",
+        "Wall crane post__Tell_fabrication_bay_T1"
       ],
-      "triangles": 424
+      "triangles": 176
     },
     "Tell_fabrication_bay_T2": {
       "anchors": {},
       "bounds": {
         "max": [
-          0.574999988079071,
-          0.574999988079071,
-          1.149999976158142
+          0.6800000071525574,
+          0.6800000071525574,
+          1.21999990940094
         ],
         "min": [
-          -0.574999988079071,
-          -0.5731082558631897,
+          -0.6800000071525574,
+          -0.6800000071525574,
           0.0
         ]
       },
       "materials": [
         "Amber",
         "Armor",
-        "Cyan",
         "Graphite",
         "HullSteel",
-        "IonBlue",
-        "Ochre",
         "Orange",
         "Titanium"
       ],
       "nodes": [
-        "IonBlue.001",
-        "Tell_fabrication_bay_T2"
+        "Door warning -0.17__Tell_fabrication_bay_T2",
+        "Door warning 0.17__Tell_fabrication_bay_T2",
+        "Fabrication door -0.17__Tell_fabrication_bay_T2",
+        "Fabrication door 0.17__Tell_fabrication_bay_T2",
+        "Flush service skin__Tell_fabrication_bay_T2",
+        "Hull seam -1__Tell_fabrication_bay_T2",
+        "Hull seam 1__Tell_fabrication_bay_T2",
+        "Inboard utility header__Tell_fabrication_bay_T2",
+        "Integrated production hall__Tell_fabrication_bay_T2",
+        "Production hall roof__Tell_fabrication_bay_T2",
+        "Tell_fabrication_bay_T2",
+        "Utility coupling -1__Tell_fabrication_bay_T2",
+        "Utility coupling 1__Tell_fabrication_bay_T2",
+        "Wall crane beam__Tell_fabrication_bay_T2",
+        "Wall crane post__Tell_fabrication_bay_T2"
       ],
-      "triangles": 460
+      "triangles": 200
     }
   },
   "schema_version": 1,
-  "sha256": "640585dc6146185770274d3712285bcc19953379a0b0487574eff9178c0ec219",
+  "sha256": "66c5fb30b906b07e55299ee0eba4c283774f0e93edc742c072ea98f7a96ae4f7",
   "source_forward": "+Y",
   "source_up": "+Z",
   "tiers": 2,
