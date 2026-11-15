@@ -2232,7 +2232,12 @@ impl Run {
     /// lane's end, keeping its speed. That is when it has undocked. A crew
     /// ship in the pilots' hands on the lane ahead, one stopped at its end
     /// or flying in, holds the queue the same way, so a launch never runs
-    /// into it.
+    /// into it. One clear of the lane's end does not: the launch hands the
+    /// ship over before reaching it, and from there ships collide as in
+    /// flight, without harm. Pilots who leave their ships coasting on after
+    /// the handover pack them a few metres beyond the end, and that would
+    /// otherwise hold the last of a crew of four on the script, just short
+    /// of the end, until a crewmate moved.
     ///
     /// The queue is read from where the ships are, so a ship restored from a
     /// checkpoint, or reconnected after being held inert, carries on from
@@ -2241,6 +2246,8 @@ impl Run {
     fn fly_departures(&mut self) {
         let station = self.station;
         let lane_end = MOUTH_DISTANCE + LANE_LENGTH;
+        // A crew ship touching the lane's end holds the queue; one clear of it does not.
+        let held_to = lane_end + 2.0 * SHIP_RADIUS;
         let mut queue: Vec<(usize, f32, (u32, bool))> = Vec::new();
         for index in 0..self.pilots.len() {
             let pilot = &self.pilots[index];
@@ -2273,7 +2280,9 @@ impl Run {
             })
             .filter_map(|pilot| self.world.ship(pilot.ship))
             .map(|ship| station.local((ship.state.x, ship.state.z)))
-            .filter(|(across, _)| across.abs() < MOUTH_WIDTH / 2.0 + SHIP_RADIUS)
+            .filter(|(across, along)| {
+                across.abs() < MOUTH_WIDTH / 2.0 + SHIP_RADIUS && *along < held_to
+            })
             .map(|(_, along)| along)
             .collect();
         let step = DEPART_SPEED * crate::ship::DT;
@@ -4035,6 +4044,31 @@ mod tests {
         assert_eq!(handed_over, ships, "all four, in roster order");
         let log = events(&mut run);
         assert_eq!(undocked(&log), ships);
+    }
+
+    #[test]
+    fn four_pilots_who_never_steer_all_leave_the_lane() {
+        // Each launches a second after the one before and leaves the ship to
+        // coast on from the lane's end: none is held on the script for good.
+        let site = Site::generate(COMPACT_SITE, 40, ThreatTier::I, 4, &[]);
+        let options = Options {
+            opening_threat: Some(0),
+            ..Options::default()
+        };
+        let (mut run, mut ships) = Run::launch(site, 1, options);
+        for _ in 1..4 {
+            for _ in 0..TICKS_PER_SECOND {
+                run.step();
+            }
+            ships.push(run.join().expect("a slot is free"));
+        }
+        for _ in 0..20 * TICKS_PER_SECOND {
+            run.step();
+        }
+        for ship in ships {
+            assert_eq!(run.status(ship).unwrap().phase, Phase::Approach, "{ship:?}");
+        }
+        assert_eq!(undocked(&events(&mut run)).len(), 4);
     }
 
     #[test]
