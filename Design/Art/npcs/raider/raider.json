@@ -6,16 +6,16 @@
   "id": "raider",
   "inputs": {
     "blender": "4.3.0",
-    "contract": "214fc1ae2a71eebbc7764d4704594411b60b5c279a30a0ab05f4c8e011ee7c8b",
+    "contract": "c4c9a606e65507799b3b3249f1ddb8454508f35c44de060b730a2f4679d1f5a7",
     "game_data_reader": "44627da1400f1f2ad7218b63dc9ddc37f0e9f074be5497b34c751134c34db516",
-    "materials": "416c2fffa7d78274ed165d04ded97baeab660e23449862872d160e43a1d5b3a1",
+    "materials": "e6e79034affcdd1975f2efdf9b01c3d08d7556c5948afb376c0f434fb9d443e4",
     "source": "5733bd37078ffcc0cfd986eaec9d1c3dca18563e0a4444d81242db30dd3eea60",
-    "tool": "18822f1197270dbfc69820bc5a22c79f84939aa5c0668003402518963970f742"
+    "tool": "5b484ad2a05c5d5e656d78c3b435a9c4f58b7d36cc92cc4eafab777b01b673eb"
   },
   "kind": "npc",
   "planned": false,
   "preview": "raider.png",
-  "preview_sha256": "587475e28e23d29526ac4c822529fd4e7911392ff514fa16ff7fd885a54d937a",
+  "preview_sha256": "249da807fad44e6b0ffeaeb32d4d969a1661f28232f3452e84c8e374b6fee186",
   "roots": {
     "Npc_raider": {
       "anchors": {},

@@ -1,0 +1,102 @@
+{
+  "blender_version": "4.3.0",
+  "bounds_space": "root-local Blender Z-up metres",
+  "glb": "frigate.glb",
+  "gltf_up": "+Y",
+  "id": "frigate",
+  "inputs": {
+    "blender": "4.3.0",
+    "contract": "c4c9a606e65507799b3b3249f1ddb8454508f35c44de060b730a2f4679d1f5a7",
+    "game_data_reader": "44627da1400f1f2ad7218b63dc9ddc37f0e9f074be5497b34c751134c34db516",
+    "materials": "e6e79034affcdd1975f2efdf9b01c3d08d7556c5948afb376c0f434fb9d443e4",
+    "source": "fc00778de6c19386c21b728e2212c4088c03ce126015fa92490e7db2f97b87ab",
+    "tool": "5b484ad2a05c5d5e656d78c3b435a9c4f58b7d36cc92cc4eafab777b01b673eb"
+  },
+  "kind": "hull",
+  "planned": false,
+  "preview": "frigate.png",
+  "preview_sha256": "55c2a1645f22f6717f9d14744c44ce028b30d641437398dd894c79466e951be4",
+  "roots": {
+    "Hull_frigate": {
+      "anchors": {},
+      "bounds": {
+        "max": [
+          0.6455000042915344,
+          1.299999713897705,
+          0.7000000476837158
+        ],
+        "min": [
+          -0.6455000638961792,
+          -1.3650000095367432,
+          -0.4399999678134918
+        ]
+      },
+      "footprint_radius": 1.5099322364017798,
+      "materials": [
+        "Armor",
+        "Cyan",
+        "Graphite",
+        "HullSteel",
+        "IdleCyan",
+        "Orange",
+        "Titanium"
+      ],
+      "nodes": [
+        "Frigate | armor fastener",
+        "Frigate | armor fastener.001",
+        "Frigate | armor fastener.002",
+        "Frigate | armor fastener.003",
+        "Frigate | bridge",
+        "Frigate | bridge glazing",
+        "Frigate | bridge mullion",
+        "Frigate | compact spine",
+        "Frigate | cooling fin",
+        "Frigate | cooling fin.001",
+        "Frigate | cooling fin.002",
+        "Frigate | cooling fin.003",
+        "Frigate | dorsal armor",
+        "Frigate | dorsal armor.001",
+        "Frigate | dorsal armor.002",
+        "Frigate | dorsal armor.003",
+        "Frigate | engine armor cap",
+        "Frigate | engine armor cap.001",
+        "Frigate | engine housing",
+        "Frigate | engine housing.001",
+        "Frigate | flank recess",
+        "Frigate | flank recess.001",
+        "Frigate | flank recess.002",
+        "Frigate | flank recess.003",
+        "Frigate | hull number",
+        "Frigate | idle engine aperture",
+        "Frigate | idle engine aperture.001",
+        "Frigate | keel",
+        "Frigate | landing foot",
+        "Frigate | landing foot.001",
+        "Frigate | landing foot.002",
+        "Frigate | landing strut",
+        "Frigate | landing strut.001",
+        "Frigate | landing strut.002",
+        "Frigate | nav marker",
+        "Frigate | nav marker.001",
+        "Frigate | orange identification band",
+        "Frigate | orange identification band.001",
+        "Frigate | short aerial",
+        "Frigate | short defense barrel",
+        "Frigate | shoulder armor",
+        "Frigate | shoulder armor.001",
+        "Frigate | shoulder armor.002",
+        "Frigate | shoulder armor.003",
+        "Frigate | single defense mount",
+        "Hull_frigate"
+      ],
+      "triangles": 2192
+    }
+  },
+  "schema_version": 1,
+  "sha256": "80e2d2808dff6226a60e53d07d14e3722507b8c8498302580285a73b96b8eab1",
+  "source_forward": "+Y",
+  "source_up": "+Z",
+  "tiers": 0,
+  "tool_version": "0.2.0",
+  "units": "metres"
+}

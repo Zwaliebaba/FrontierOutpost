@@ -47,6 +47,14 @@ export function facilityEntry(id: string): { url: string; roots: string[] } {
   return { url: urlFor(entry.glb), roots: Object.keys(entry.roots) };
 }
 
+/** A hull's model, by the game's identifier (`frigate`): its GLB and its one root. */
+export function hullEntry(id: string): { url: string; root: string } {
+  const entry = catalogue.assets[`hull:${id}`];
+  const root = entry && Object.keys(entry.roots)[0];
+  if (!entry || !root) throw new Error(`Hull art is not in the catalogue: ${id}`);
+  return { url: urlFor(entry.glb), root };
+}
+
 /** An NPC ship's model, by the game's identifier (`raider`): its GLB and its one root. */
 export function npcEntry(id: string): { url: string; root: string } | null {
   const entry = catalogue.assets[`npc:${id}`];

@@ -31,7 +31,7 @@ Design/Art/
     <id>.glb                the export: every tier and every tell
     <id>.json               the export's manifest
     <id>.png                a small preview, for review
-  hulls/<id>/               the same four files per hull
+  hulls/<id>/               the same four files per hull (the contract lists flown and display hulls)
   npcs/<id>/                the same four files per NPC ship
   station/exterior/         the same four files for the station's exterior
   station/interior/         the same four files for the station's interior
@@ -202,6 +202,12 @@ as colour, and hostiles have shapes of their own (below).
 | Gunship | About the frigate's length, with forward weapon mounts, a turret on the spine and a shield emitter ring |
 
 - **Root:** `Hull_<id>`, nose along +Y.
+- **Listed in the contract:** `hulls.flown` for hulls players fly, `hulls.display` for ships
+  that are shown but never flown, docked or parked (the Aurora cruiser, about four times the
+  frigate's length). A display hull keeps every other rule; it skips the berth, mouth and
+  parking checks below, and the station never makes room for it.
+- **On today's berths:** while `Design/FrontierOutpost/berths.json` stands, a flown hull,
+  landed with its gear, fits every berth with the clearance on every side; CI rechecks it.
 - **Through the mouth and into its place:** each hull passes the exterior's mouth flying straight
   in, and fits its interior parking place, with the clearance on every side, weapons and
   attachments included. The manifests carry the bounds; the exterior's and interior's checks use
@@ -216,8 +222,9 @@ as colour, and hostiles have shapes of their own (below).
 |---|---|
 | The six facility modules | 8.3, split into their facility files, then refined by hand at will |
 | The four-berth station | 9.2 and 9.3, by the exterior and the interior |
-| The starter frigate | 11.1, as `hulls/frigate/` |
-| The asteroids and the cruiser | Whenever they next change |
+| The starter frigate | Moved: `hulls/frigate/`, a flown hull (`migrate_hulls.py`) |
+| The Aurora cruiser | Moved: `hulls/cruiser/`, a display hull (`migrate_hulls.py`) |
+| The asteroids | Whenever they next change |
 
 ## NPC ships
 

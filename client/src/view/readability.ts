@@ -138,6 +138,8 @@ const npcTemplates = new Map<string, { hull: Object3D; silhouette: Object3D }>()
  * or your crew, as the stand-in hulls' tones did.
  */
 const ALLY_TINT = 0.55;
+/** The armour roles (Design/Art/contract.json) an ally's hull tints: both plate tones. */
+const ALLY_TINTED: ReadonlySet<string> = new Set(["Armor", "Titanium"]);
 
 function meshesOf(object: Object3D): Mesh[] {
   const meshes: Mesh[] = [];
@@ -159,7 +161,7 @@ function hullTemplate(model: Object3D, allegiance: Allegiance): Object3D {
         copy = original.clone();
         Object.assign(copy, HULL_STENCIL);
         if (allegiance === "ally" && copy instanceof MeshStandardMaterial) {
-          if (copy.name.startsWith("Armor")) copy.color.lerp(SIGNAL.ally, ALLY_TINT);
+          if (ALLY_TINTED.has(copy.name)) copy.color.lerp(SIGNAL.ally, ALLY_TINT);
         }
         copies.set(original, copy);
       }

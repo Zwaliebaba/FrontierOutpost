@@ -18,6 +18,10 @@ class ExportChecks(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.art = Path(self.temp.name) / "Art"
         shutil.copytree(check_exports.ART, self.art, ignore=shutil.ignore_patterns("__pycache__", "*.blend1", "*.blend2"))
+        # The frozen station's berths sit beside the art, as in the repository.
+        (self.art.parent / "FrontierOutpost").mkdir()
+        shutil.copyfile(check_exports.ART.parent / "FrontierOutpost/berths.json",
+                        self.art.parent / "FrontierOutpost/berths.json")
         self.manifest = self.art / "facilities/crew_quarters/crew_quarters.json"
 
     def test_good_committed_exports(self):
@@ -75,6 +79,30 @@ class ExportChecks(unittest.TestCase):
     def test_npc_identifier_must_be_a_ship_kind(self):
         with patch("check_exports.npc_radii", return_value={"drone": 0.9}):
             self.assertIn("Unknown NPC", " ".join(check_exports.verify(self.art)))
+
+    def hull_manifest(self, identifier):
+        path = self.art / f"hulls/{identifier}/{identifier}.json"
+        return path, json.loads(path.read_text())
+
+    def test_flown_hull_rechecked_against_the_berths(self):
+        path, manifest = self.hull_manifest("frigate")
+        # 3.65 m of beam on a 3.6 m berth.
+        manifest["roots"]["Hull_frigate"]["bounds"]["max"][0] = 3.0
+        path.write_text(json.dumps(manifest))
+        self.assertIn("fit a berth", " ".join(check_exports.verify(self.art)))
+
+    def test_display_hull_is_not_held_to_a_berth(self):
+        # The cruiser is about four times the berth's length, and shown, never landed.
+        self.assertEqual(check_exports.verify(self.art), [])
+        _, manifest = self.hull_manifest("cruiser")
+        bounds = manifest["roots"]["Hull_cruiser"]["bounds"]
+        self.assertGreater(bounds["max"][1] - bounds["min"][1], 3.6)
+
+    def test_hull_must_be_listed_in_the_contract(self):
+        contract = json.loads((self.art / "contract.json").read_text())
+        contract["hulls"]["display"] = []
+        (self.art / "contract.json").write_text(json.dumps(contract))
+        self.assertIn("Unknown hull", " ".join(check_exports.verify(self.art)))
 
 
 if __name__ == "__main__":

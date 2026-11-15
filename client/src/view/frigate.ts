@@ -1,5 +1,5 @@
 /**
- * The starter frigate from Design/FrontierOutpost (frigate.glb), set up as the game draws hulls
+ * The starter frigate from the art pipeline (Design/Art/hulls/frigate), set up as the game draws hulls
  * (view/hulls): nose along +x, centred on its footprint, its landing feet at the hull's underside
  * so it rests on berth 07 where the stand-in wedge did. Its landing gear folds up into the keel
  * in flight (style guide §3); the model has no gear bays yet, so the legs slide up out of sight.
@@ -22,13 +22,13 @@ export class FrigateError extends Error {
 }
 
 /**
- * The frigate from frigate.glb's scene, wrapped so that its outer group takes the ship's place
- * and heading as the stand-in hulls do: the generator faces it +Y in Blender, which is -Z in
- * glTF, and leaves it where it stands on the berth.
+ * The frigate under `rootName` in its GLB's scene, wrapped so that its outer group takes the
+ * ship's place and heading as the stand-in hulls do: hulls face +Y in Blender, which is -Z in
+ * glTF, and stand on their landing feet below the root.
  */
-export function frigateModel(scene: Object3D): Object3D {
-  const root = scene.getObjectByName("Frigate_ROOT");
-  if (!root) throw new FrigateError("frigate.glb has no Frigate_ROOT");
+export function frigateModel(scene: Object3D, rootName = "Hull_frigate"): Object3D {
+  const root = scene.getObjectByName(rootName);
+  if (!root) throw new FrigateError(`the frigate's GLB has no ${rootName}`);
   root.removeFromParent();
   root.position.set(0, 0, 0);
   // Turns glTF -Z, the nose, to +x.

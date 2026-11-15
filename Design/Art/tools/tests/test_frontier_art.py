@@ -34,8 +34,11 @@ class PipelineTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(prefix="frontier-art-tests-")
-        cls.art = Path(cls.temp.name)
-        (cls.art / "library").mkdir()
+        cls.art = Path(cls.temp.name) / "Art"
+        (cls.art / "library").mkdir(parents=True)
+        # The frozen station's berths sit beside the art, as in the repository.
+        (cls.art.parent / "FrontierOutpost").mkdir()
+        shutil.copyfile(art.ART.parent / "FrontierOutpost/berths.json", cls.art.parent / "FrontierOutpost/berths.json")
         shutil.copyfile(art.ART / "library/materials.blend", cls.art / "library/materials.blend")
 
     @classmethod
@@ -120,9 +123,9 @@ class PipelineTests(unittest.TestCase):
         self.assertFailure("visibility")
 
     def test_template_retains_library_on_reopen(self):
-        path = art.asset_path("hull", "template_test", self.art)
+        path = art.asset_path("hull", "cruiser", self.art)
         shutil.rmtree(path.parent, ignore_errors=True)
-        art.new_asset("hull", "template_test", art=self.art)
+        art.new_asset("hull", "cruiser", art=self.art)
         bpy.ops.wm.open_mainfile(filepath=str(path))
         self.assertTrue(all(role in bpy.data.materials for role in art.CONTRACT["materials"]))
         for role in art.CONTRACT["materials"]:
@@ -167,6 +170,22 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differs"):
             art.new_asset("facility", "sensor_array", tiers=3, art=self.art)
 
+    def test_hulls_must_be_listed_in_the_contract(self):
+        with self.assertRaisesRegex(ValueError, "Unknown hull"):
+            art.new_asset("hull", "hauler", art=self.art)
+
+    def test_flown_hull_must_fit_a_berth_and_display_hull_need_not(self):
+        # The berths are 3.6 m square: a 3.4 m beam leaves 0.1 m a side, short of the clearance.
+        self.fixture("hull")
+        bpy.data.objects["hull"].scale.x = 3.4
+        self.assertFailure("berth_fit")
+        path = art.asset_path("hull", "cruiser", self.art)
+        shutil.rmtree(path.parent, ignore_errors=True)
+        art.new_asset("hull", "cruiser", art=self.art)
+        cube(bpy.data.objects["Hull_cruiser"], "long hull", (4, 10.6, 2.5))
+        bpy.context.view_layer.update()
+        self.assertEqual(art.check_asset(self.art)[0], [])
+
     def npc_fixture(self, size=(1.6, 1.8, .4)):
         path = art.asset_path("npc", "raider", self.art)
         shutil.rmtree(path.parent, ignore_errors=True)
@@ -203,6 +222,11 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(all(art.material_matches_contract(m) for m in materials.values()))
 
     def station_fixture(self, kind):
+        # The station checks size parking places from each flown hull's manifest.
+        frigate = self.art / "hulls/frigate/frigate.json"
+        frigate.parent.mkdir(parents=True, exist_ok=True)
+        frigate.write_text(json.dumps({"id": "frigate", "roots": {"Hull_frigate": {
+            "bounds": {"min": [-.65, -1.37, -.44], "max": [.65, 1.3, .7]}}}}))
         identifier = kind.removeprefix("station_")
         path = art.asset_path(kind, identifier, self.art)
         shutil.rmtree(path.parent, ignore_errors=True)

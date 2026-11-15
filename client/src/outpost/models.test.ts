@@ -6,7 +6,7 @@ import sensorGlb from "../../../Design/Art/facilities/sensor_array/sensor_array.
 import refineryGlb from "../../../Design/Art/facilities/refinery/refinery.glb?inline";
 import fabricationGlb from "../../../Design/Art/facilities/fabrication_bay/fabrication_bay.glb?inline";
 import stationGlb from "../../../Design/FrontierOutpost/station.glb?inline";
-import frigateGlb from "../../../Design/FrontierOutpost/frigate.glb?inline";
+import frigateGlb from "../../../Design/Art/hulls/frigate/frigate.glb?inline";
 import { frigateModel, gearOf, setGear } from "../view/frigate";
 import { facilityKey, facilityLoader, indexModels, mergeByMaterial, parseGlb } from "./models";
 import type { OutpostModels } from "./models";

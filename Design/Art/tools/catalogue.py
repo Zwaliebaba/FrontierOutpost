@@ -30,8 +30,7 @@ def assemble(art=ART):
     # Frozen assets also pass through the catalogue until their planned migration.
     frozen = art.parent / "FrontierOutpost"
     legacy = {}
-    for identifier, root in [("station", "Station_ROOT"), ("frigate", "Frigate_ROOT"),
-                             ("asteroids", None), ("cruiser", "Cruiser_ROOT")]:
+    for identifier, root in [("station", "Station_ROOT"), ("asteroids", None)]:
         path = frozen / f"{identifier}.glb"
         legacy[identifier] = {"glb": "../FrontierOutpost/" + path.name,
                               "sha256": sha(path), "root": root}

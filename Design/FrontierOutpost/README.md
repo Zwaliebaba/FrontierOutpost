@@ -2,16 +2,16 @@
 
 Art direction: [Frontier Outpost Visual Style Guide](../Visual-Style-Guide.md). Game design: [Frontier Outpost](../FrontierOutpost.md).
 
-A HUD-free outpost scene: an octagonal orbital depot with two circular side pods, a reinforced four-berth forward landing deck, a service spine, antenna mast and red pennant; the original Aurora ship preserved as a cruiser in the background; starter frigates demonstrating berths 07–10; faceted asteroids; a distant blue planet and procedural starfield.
+A HUD-free outpost scene: an octagonal orbital depot with two circular side pods, a reinforced four-berth forward landing deck, a service spine, antenna mast and red pennant; faceted asteroids; a distant blue planet and procedural starfield.
 
 ![Rendered overview](FrontierOutpostPreview.png)
 
 ## Files
 
-- `FrontierOutpost.blend`: editable scene saved by Blender 4.3.2 for the four-berth upgrade, overview camera and lighting.
+- `FrontierOutpost.blend`: editable scene, overview camera and lighting, regenerated with Blender 4.3.0 when the ships moved to the art pipeline. `station.glb` keeps its four-berth bytes from Blender 4.3.2; the regenerated export differed only by float rounding in node rotations.
 - `FrontierOutpostPreview.png`: rendered overview.
-- `starter_frigate_detail.png`: close-up of the starter frigate on its landing gear.
-- `station.glb`, `cruiser.glb`, `frigate.glb`, `asteroids.glb`: separate gameplay asset exports. `station.glb` and `frigate.glb` were regenerated with Blender 4.3.2 for the four-berth upgrade; cruiser and asteroid exports retain their original bytes. `cruiser.glb` preserves the original Aurora hull at its original scale; `frigate.glb` is the new starter ship.
+- `station.glb`, `asteroids.glb`: separate gameplay asset exports.
+- The starter frigate and the Aurora cruiser have moved to [`Design/Art/hulls/`](../Art/README.md) (below).
 - `create_scene.py`: deterministic source generator, seed 2266.
 - `scene_manifest.json`: mesh statistics, scale and axis conventions.
 
@@ -25,7 +25,7 @@ The script supports Blender 4.3+ and 5.x. This four-berth revision was generated
 
 ## Game import
 
-Use metres: Blender Z-up, ships forward +Y. The glTF exporter converts to glTF Y-up. `Station_ROOT`, `Cruiser_ROOT`, and `Frigate_ROOT` are assembly pivots; child meshes remain separate for editing, destruction or interaction. The GLBs retain the scene's placement so they line up when imported together. Move each assembly root to the origin to use it as a standalone prefab. Asteroids are individually named mesh objects.
+Use metres: Blender Z-up, ships forward +Y. The glTF exporter converts to glTF Y-up. `Station_ROOT` is the assembly pivot; child meshes remain separate for editing, destruction or interaction. The GLBs retain the scene's placement so they line up when imported together. Move each assembly root to the origin to use it as a standalone prefab. Asteroids are individually named mesh objects.
 
 ## Construction sockets and facility modules
 
@@ -49,13 +49,15 @@ check from 434 to 437 meshes while preserving the recorded four-berth clearances
 
 ## Ship classes and docking
 
-Aurora is now a cruiser: its original hull, armor, equipment, materials and scale are retained, with a new background position. Its blue engine spill lights follow its assembly root. The starter frigate is a separate, simpler design with the same split armor, orange band and twin drive layout. It has a compact bridge, one small defense mount and deployed tripod landing gear. Its engines idle while landed.
+The starter frigate and the Aurora cruiser moved to the art pipeline as `hulls/frigate/` and
+`hulls/cruiser/` (`migrate_hulls.py`), with their original parts, modifiers and scale; this scene
+and its generator no longer contain them. The pipeline checks that the frigate, a flown hull,
+fits every berth in `berths.json` with 0.15 metres of clearance on every side; the cruiser is a
+display hull, shown but never flown. The generator's own check of the landed frigate against
+the station's solids along each departure corridor went with the frigate; the station and its
+berths are frozen, and the berths give way to the internal hangar in M9.
 
-[See the starter frigate close-up](starter_frigate_detail.png). The Blender file also includes a detail camera for inspecting the new ship.
-
-The frigate is aligned with the pad's longitudinal axis. The generator measures its complete evaluated geometry, including bevels and landing feet, in station coordinates and checks that it stays at least 0.15 scene metres inside the painted safety perimeter. The feet are placed at station-local Z=0.86 to clear the deck's raised painted markings. Measurements are recorded in `scene_manifest.json` under `docking_validation`. Exhaust is off and excluded from the landed frigate's footprint. This validates geometric fit; docking gameplay and animations still need implementation in the game engine.
-
-The station's rear pad connector is flush with the bare deck at Z=0.83, leaving the landing area unobstructed. The generator also checks the complete frigate bounds against every structural station mesh; decorative paint overlays are excluded from this overlap check.
+The station's rear pad connector is flush with the bare deck at Z=0.83, leaving the landing area unobstructed.
 
 GLBs use standard metal/roughness materials and emissive windows. The camera, planet, starfield, nebula, lights and translucent engine exhaust are presentation elements in the Blender file, excluded from the gameplay exports. Recreate bloom and exhaust in the target engine. The GLB exports contain no gameplay scripts, collision shapes or baked lightmaps.
 
@@ -63,21 +65,18 @@ This is an editable visual foundation, not a fully optimized production asset pa
 
 ## Scene organization
 
-`Station`, `Cruiser`, `Frigate`, `Asteroids`, `Backdrop`, `Lighting`, and `Cameras` collections isolate gameplay geometry from presentation. Materials are named by role. Geometry uses restrained bevels and flat-shaded rock facets to echo the reference's stylized industrial art direction.
+`Station`, `Asteroids`, `Backdrop`, `Lighting`, and `Cameras` collections isolate gameplay geometry from presentation. Materials are named by role. Geometry uses restrained bevels and flat-shaded rock facets to echo the reference's stylized industrial art direction.
 
 ## Four-berth station command upgrade
 
 `berths.json` defines four slots (07–10), spaced 4 metres apart on a reinforced apron.
 `Berth_07` through `Berth_10` are named empties in `station.glb`, with their bases on the
-0.86-metre landing plane and their headings pointing outward. The frigate stays at its
-established scale. Socket B moves to the apron’s outer starboard edge, preserving its berth
+0.86-metre landing plane and their headings pointing outward. Socket B moves to the apron’s outer starboard edge, preserving its berth
 adjacency bonus and clearing all departure lanes. The core gains segmented crown armor and
 identification bands; the apron gains fascia, structural beams and service cabinets.
 
-The generator checks the evaluated frigate in every berth, all station solids along each
-straight departure corridor, the gameplay collision envelope, inter-ship clearance and socket
-clearance. The manifest records the four individual results. The Blender overview includes
-three linked presentation copies of the frigate; these are excluded from the gameplay exports.
+The generator checks that the berths clear the gameplay collision envelope and that the
+sockets clear every departure lane.
 
 The TypeScript client draws ships from the crew roster at server-assigned slots. The server
 freezes slots for an active launch, so following out of order or another member leaving does

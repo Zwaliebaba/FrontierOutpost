@@ -92,6 +92,11 @@ There are no timestamps in manifests. A tool, contract or library change require
 affected sources and regenerating the catalogue.
 
 Keep the whole `Design/Art/` folder when moving sources: linked material paths are relative.
+`migrate_hulls.py` moved the frozen scene's starter frigate and Aurora cruiser into hull files
+once, appending the original objects with their bevel and weighted-normal modifiers (so the
+exports kept the frozen GLBs' triangles, vertices and part names) and mapping their materials to
+library roles, with `IdleCyan` and `WhiteCore` added for the frigate's idle drive and the
+cruiser's engine cores. Lights and exhaust plumes stayed behind as presentation.
 `model_raider.py` likewise reproduces the raider from a new `npc raider` template.
 `model_crew_quarters.py` reproduces the initial example from an empty two-tier template and
 refuses to replace existing geometry. It is an authoring aid, not a required export step;

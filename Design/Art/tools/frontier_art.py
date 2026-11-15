@@ -110,6 +110,8 @@ def new_asset(kind, identifier, tiers=None, art=ART):
     if path.exists():
         raise ValueError(f"Refusing to overwrite {path}")
     known = facility_tiers() if kind == "facility" else {}
+    if kind == "hull" and identifier not in hull_identifiers():
+        raise ValueError(f"Unknown hull '{identifier}': list it in the contract's hulls")
     if kind == "npc" and identifier not in npc_radii():
         raise ValueError(f"Unknown NPC '{identifier}': it must be a ship kind in frontier_sim")
     if kind == "facility":
@@ -241,6 +243,27 @@ def geometry(root):
                                  "properties": {key: obj[key] for key in ["opening_width", "opening_height"] if key in obj}}
     return {"bounds": bounds, "triangles": triangles, "materials": sorted(materials), "anchors": anchors,
             "nodes": sorted(obj.name for obj in descendants(root)), "planar_radius": planar_radius}
+
+
+def hull_identifiers():
+    """Every hull the contract lists: flown hulls, then display hulls (shown, never flown)."""
+    return [*CONTRACT["hulls"]["flown"], *CONTRACT["hulls"]["display"]]
+
+
+def berth_fit_errors(name, bounds, art=ART):
+    """A flown hull landed on any of the frozen station's berths keeps the clearance on every
+    side; the berths are all one size (berths.json). None once the berths are gone (M9)."""
+    path = art.parent / "FrontierOutpost/berths.json"
+    if not path.exists():
+        return []
+    layout = json.loads(path.read_text())
+    clearance = CONTRACT["clearance"]
+    lo, hi = bounds["min"], bounds["max"]
+    # Landed, the hull faces out of the station: its beam lies across the berth's width.
+    if (hi[0] - lo[0] + 2 * clearance > 2 * layout["halfWidth"] + CONTRACT["epsilon"]
+            or hi[1] - lo[1] + 2 * clearance > 2 * layout["halfLength"] + CONTRACT["epsilon"]):
+        return [f"berth_fit: {name} does not fit a berth with the clearance on every side"]
+    return []
 
 
 def operating_name(tier, root):
@@ -396,6 +419,12 @@ def check_asset(art=ART):
                     errors.append(f"footprint: {root.name} reaches {planar_radius:.3f} m; collision radius is {radius} m")
         if kind == "hull":
             record["footprint_radius"] = max(math.hypot(x, y) for x in [lo[0], hi[0]] for y in [lo[1], hi[1]])
+            if identifier not in hull_identifiers():
+                errors.append(f"identifier: {identifier} is not a hull in the contract")
+            if identifier in CONTRACT["hulls"]["display"]:
+                # A display hull is shown, never flown: no berth, mouth or parking place.
+                continue
+            errors.extend(berth_fit_errors(root.name, record["bounds"], art))
             exterior = art / "station/exterior/exterior.json"
             if exterior.exists():
                 station = json.loads(exterior.read_text())

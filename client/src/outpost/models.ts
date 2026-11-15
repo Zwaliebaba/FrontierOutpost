@@ -7,7 +7,7 @@ import { Group, Matrix4, Mesh, MeshStandardMaterial } from "three";
 import type { BufferGeometry, Material, Object3D } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { facilityEntry, legacyUrl, npcEntry } from "./catalogue";
+import { facilityEntry, hullEntry, legacyUrl, npcEntry } from "./catalogue";
 import { frigateModel, gearOf } from "../view/frigate";
 import { npcModel } from "../view/npc";
 
@@ -223,7 +223,8 @@ export function loadOutpostModels(): Promise<LoadedModels> {
 
 /** Loads the starter frigate on its own, for the greybox. */
 export async function loadFrigate(): Promise<Object3D> {
-  const ship = frigateModel(await fetchGlb(legacyUrl("frigate")));
+  const entry = hullEntry("frigate");
+  const ship = frigateModel(await fetchGlb(entry.url), entry.root);
   // Four roster ships should not multiply every authored plate into a draw call.
   // Landing gear keeps its own transforms so deployment still animates.
   mergeByMaterial(ship, new Set(gearOf(ship)));

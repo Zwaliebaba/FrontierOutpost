@@ -14,6 +14,13 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def fits_berth(bounds, layout, contract):
+    """As frontier_art.berth_fit_errors: landed, a hull's beam lies across the berth."""
+    room = [2 * layout["halfWidth"], 2 * layout["halfLength"]]
+    return all(bounds["max"][i] - bounds["min"][i] + 2 * contract["clearance"] <= room[i] + contract["epsilon"]
+               for i in range(2))
+
+
 def verify(art=ART):
     errors = []
     contract = json.loads((art / "contract.json").read_text())
@@ -33,6 +40,8 @@ def verify(art=ART):
             folder = {"facility": "facilities", "hull": "hulls", "npc": "npcs"}.get(kind, "station")
             if manifest_path != art / folder / identifier / f"{identifier}.json":
                 raise ValueError("Identifier differs from file layout")
+            if kind == "hull" and identifier not in contract["hulls"]["flown"] + contract["hulls"]["display"]:
+                raise ValueError("Unknown hull identifier in the contract")
             if manifest["schema_version"] != 1:
                 raise ValueError("Unsupported manifest version")
             source = manifest_path.with_suffix(".blend")
@@ -61,8 +70,12 @@ def verify(art=ART):
                             for n in range(1, tiers + 1) for k in ["facility", "tell"]}
             else:
                 expected = {contract["roots"][kind].format(id=identifier): kind}
-                if kind == "hull" and identifier != "frigate":
-                    raise ValueError("Unknown hull identifier in gameplay data")
+                if kind == "hull":
+                    if identifier in contract["hulls"]["flown"]:
+                        berths = art.parent / "FrontierOutpost/berths.json"
+                        bounds = manifest["roots"][contract["roots"]["hull"].format(id=identifier)]["bounds"]
+                        if berths.exists() and not fits_berth(bounds, json.loads(berths.read_text()), contract):
+                            raise ValueError("Flown hull does not fit a berth with the clearance")
                 if kind == "npc":
                     if identifier not in radii:
                         raise ValueError("Unknown NPC identifier in gameplay data")
