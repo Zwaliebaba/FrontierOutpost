@@ -1,6 +1,7 @@
 import { RICH, expect, signUp, test } from "./fixtures";
 
 test("powered quarters hire an allied wingman and accept each tier-one order", async ({ page }) => {
+  test.setTimeout(90_000);
   await signUp(page, RICH);
   const home = page.locator('#home[data-state="open"]');
   await home.locator('button[data-action="view:facilities"]').click();
@@ -23,5 +24,7 @@ test("powered quarters hire an allied wingman and accept each tier-one order", a
   await expect(wing).toHaveAttribute("data-order", "follow");
   await page.keyboard.press("KeyB");
   await expect(wing).toHaveAttribute("data-order", "return");
-  await expect(wing).toHaveAttribute("data-state", "docked");
+  // Home is through the mouth: the launch flies the wingman out behind its pilot, to the lane's
+  // end, and from there it turns back and flies into the mouth, which draws it in.
+  await expect(wing).toHaveAttribute("data-state", "docked", { timeout: 40_000 });
 });

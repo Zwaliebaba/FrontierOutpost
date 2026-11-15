@@ -5,8 +5,9 @@ import { aimRig, createRig } from "../src/view/view";
 import {
   addAuthenticator,
   expect,
-  flyClear,
   leave,
+  leaveHangar,
+  leaveHangarAndStop,
   position,
   QUIET,
   RICH,
@@ -55,8 +56,8 @@ test("map keys navigate real destinations while safety instruments remain in vie
   await signUp(page, QUIET);
   await page.locator('#briefing [data-tier="1"]').click();
   await page.locator("#hud[data-x]").waitFor();
-  // Off the berth, so the engage button is live: a jump is made from open space.
-  await flyClear(page);
+  // Out of the hangar, so the engage button is live: a jump is made from open space.
+  await leaveHangar(page);
   await page.keyboard.press("KeyM");
   await expect(page.locator('.chart-row[data-target="dock"]')).toBeFocused();
   await page.keyboard.press("ArrowDown");
@@ -184,18 +185,21 @@ test("crew sees a spool and the jumping pilot regains the camera from a selected
     await page.locator("#hud[data-x]").waitFor();
     await wing.locator('[data-action="follow"]').click();
     await wing.locator("#hud[data-x]").waitFor();
+    // The pilot's page in front: some Chromium builds draw a window behind another at about one
+    // frame a second, too few to finish the camera's glide or to see the jump as one.
+    await page.bringToFront();
     await expect(page.locator("#hud")).toHaveAttribute("data-camera-moving", "false");
     const own = await page.locator("#hud").getAttribute("data-ship");
     const other = await wing.locator("#hud").getAttribute("data-ship");
-    // A jump is made from open space: the pilot flies off the berth, then selects the crewmate
-    // still on theirs, found on screen with the client's own camera.
-    await flyClear(page);
-    const crewmate = await position(wing);
-    // Zoomed fully out, so the berth behind is in view.
+    // A jump is made from open space: both leave the hangar, the crewmate stops on the lane
+    // behind the pilot, and the pilot selects it, found on screen with the client's own camera.
+    await Promise.all([leaveHangar(page), leaveHangarAndStop(wing)]);
+    // Zoomed fully out, so the crewmate behind is in view.
     await page.mouse.move(640, 360);
     for (let i = 0; i < 8; i += 1) await page.mouse.wheel(0, 400);
     await expect(async () => {
       const own = await position(page);
+      const crewmate = await position(wing);
       const rig = createRig(1280 / 720, ZOOM_MAX, "ortho");
       aimRig(rig, new Vector3(own.x, 0, own.z), 33);
       const at = worldToScreen(new Vector3(crewmate.x, 0, crewmate.z), rig.camera, {

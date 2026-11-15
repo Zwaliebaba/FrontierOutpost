@@ -1,7 +1,18 @@
-import { QUIET, expect, launch, position, signUp, test } from "./fixtures";
+import {
+  QUIET,
+  expect,
+  launch,
+  leaveHangar,
+  leaveHangarAndStop,
+  position,
+  signUp,
+  test,
+} from "./fixtures";
 
 test("flight input continues when drawing is paused", async ({ page }) => {
   await launch(page, QUIET);
+  // Stopped out of the hangar, so only the pilot's thrust can move the ship.
+  await leaveHangarAndStop(page);
   const start = await position(page);
   await page.evaluate(() => {
     window.requestAnimationFrame = () => 0;
@@ -25,17 +36,32 @@ test("the briefing shows the contract and opens only tier I", async ({ page }) =
   await expect(briefing.locator('button[data-tier="2"]')).toBeDisabled();
 });
 
-test("the player's ship leaves the dock when they hold thrust", async ({ page }) => {
+test("the launch flies the ship out of the hangar, then the pilot's thrust moves it", async ({
+  page,
+}) => {
   await launch(page);
   await expect(page.locator("#briefing")).not.toHaveAttribute("data-state", "open");
   await expect(page.locator("#run")).toHaveAttribute("data-phase", "atDock");
+  await expect(page.locator('#prompts [data-prompt="departing"]')).toContainText(
+    "Leaving the hangar",
+  );
+  // With no key pressed the launch flies the ship out along the lane, +x on the compact site.
   const start = await position(page);
+  await leaveHangar(page);
+  const out = await position(page);
+  expect(out.x - start.x).toBeGreaterThan(20);
+  expect(Math.abs(out.z)).toBeLessThan(0.5);
+  // At the lane's end the ship is the pilot's: turned and thrust, it leaves the lane's line.
+  // 2.4 rad/s: a quarter turn in about 0.65 s.
+  await page.keyboard.down("KeyA");
+  await page.waitForTimeout(650);
+  await page.keyboard.up("KeyA");
   await page.keyboard.down("KeyW");
-  await page.waitForTimeout(1_500);
+  await page.waitForTimeout(1_000);
   await page.keyboard.up("KeyW");
   await page.waitForTimeout(300);
   const end = await position(page);
-  expect(Math.hypot(end.x - start.x, end.z - start.z)).toBeGreaterThan(2);
+  expect(Math.abs(end.z - out.z)).toBeGreaterThan(2);
   // The scene carries no labels: the map lists the dock and the pockets, and how far each is.
   await expect(page.locator("#waypoint")).toBeHidden();
   await page.keyboard.press("KeyM");
