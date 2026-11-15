@@ -42,7 +42,7 @@ def setup(at, direction, width, output):
     camera.data.ortho_scale=width
     scene.render.resolution_x=1600
     scene.render.resolution_y=1100
-    scene.cycles.samples=96
+    scene.cycles.samples=64
     scene.cycles.use_denoising=False
     # Additional reflected starlight reveals the underslung core in the review only.
     data=bpy.data.lights.new('Underbody reflected light','AREA')
@@ -54,6 +54,20 @@ def setup(at, direction, width, output):
     bpy.data.collections['Presentation'].objects.link(obj)
     obj.location=(12,-22,-10)
     obj.rotation_euler=(Vector((0,0,-3))-obj.location).to_track_quat('-Z','Y').to_euler()
+    if scene.get('frontier_kind') == 'station_exterior':
+        # Review-only local illumination: runtime lighting remains M9 integration work.
+        yaw = scene.get('review_station_yaw', 0)
+        lamp = bpy.data.lights.new('Hangar working lights', 'AREA')
+        lamp.energy = 900
+        lamp.color = (1.0, .58, .25)
+        lamp.shape = 'RECTANGLE'
+        lamp.size = 6
+        lamp.size_y = 3
+        obj = bpy.data.objects.new('Hangar working lights', lamp)
+        bpy.data.collections['Presentation'].objects.link(obj)
+        obj.location = (-13 * math.sin(yaw), 13 * math.cos(yaw), 2.9)
+        target = Vector((-12 * math.sin(yaw), 12 * math.cos(yaw), 0))
+        obj.rotation_euler = (target - obj.location).to_track_quat('-Z', 'Y').to_euler()
     scene.use_nodes=True
     tree=scene.node_tree
     tree.nodes.clear()
@@ -94,6 +108,7 @@ def camera_facing_review(out):
         if obj != pivot and obj.parent is None and obj.type not in {'CAMERA','LIGHT'}:
             obj.parent=pivot
     pivot.rotation_euler.z=math.pi
+    bpy.context.scene['review_station_yaw']=math.pi
     bpy.context.view_layer.update()
     setup((0,0,-.4),art.CONTRACT['camera_direction'],46,out/'station-camera-facing.png')
 

@@ -2,13 +2,33 @@
 
 Editable exterior and interior sources inspired by the owner's ring-station reference:
 blue-grey segmented armour, a broad inhabited ring, a heavy command hub, warm windows,
-a single illuminated hangar, short command towers and an underslung industrial core.
+a single illuminated hangar, a stepped command tower and an underslung industrial core.
 The pipeline exports both assets and the catalogue registers them for later M9 integration.
 
 This is an art study, not completion of M9. The game still uses the legacy station.
 M9.1's interactive greybox readability measurements and owner review must establish the
 final scale before this replaces it. Docking rules, removal of berths, the interior toggle,
 facility placement and tell rendering remain M9.4–9.7 work. Existing M8 tells are reused.
+
+## Detailed reference pass
+
+The owner supplied [this detailed station reference](https://chatgpt.com/s/m_6af9885a13a48191a1e194da80060ce5)
+after the initial study. The revised exterior adds framed facade windows on both sides of the
+ring, recessed louvres, chamfered armour, orange service stencils, radial bridges, stepped hub
+belts and a substantial command tower with amber vertical spines. The hangar gains segmented
+cheeks, recessed portal lighting, interior ribs and ceiling light strips, plus a marked transit
+threshold. Its approach envelope remains clear; the threshold finishes at or below Z=0.
+
+Facility-specific shapes remain in the existing facility tells. The reference's decorative
+pads are not authored as exterior berths or parked ships. The interior receives matching
+corridor decks, floor seams, lane paint and cargo/processor details, without raising geometry
+into socket or ship envelopes. Tell mounts now sit above the armour panels; the outer mounts
+and reactor hardpoint are moved outward so all four pass visibility checks in both reviewed
+station orientations. The shared material library and contract are unchanged.
+
+`refine_station.py` applies this pass to the initial sources once and refuses to apply twice.
+It checks each file before saving, including both assets against the proposed reversed world
+orientation. Subsequent modelling can be done directly in the Blender files.
 
 ## Camera and layout
 
@@ -61,14 +81,16 @@ blender -b --python-exit-code 1 --python Design/Art/tools/preview_station.py -- 
 
 `preview_station.py` creates large tactical, entrance, camera-facing and populated-interior renders. It imports
 existing exported ships and facilities for scale and adds presentation lighting and restrained
-glow. These additions never enter either source or gameplay GLB. The standard 512-pixel
+glow. These additions never enter either source or gameplay GLB. A warm area light illuminates
+the hangar in review renders only; the GLB carries emissive geometry, and runtime lighting
+still needs to be implemented as part of M9 integration. The standard 512-pixel
 pipeline previews contain only the asset being exported, under the shared preview lighting.
 
 ## Validation
 
 Verified in Blender 4.3.2:
 
-- Exterior: 11,652 evaluated/exported triangles; interior: 1,708. Both are below 30,000.
+- Exterior: 25,384 evaluated/exported triangles; interior: 2,604. Both are below 30,000.
 - Both saved sources pass the pipeline, including linked materials, runtime nodes, hangar
   opening, approach lane, tell hardpoints, full socket envelopes and tactical projection checks.
 - Reimporting each GLB preserves triangle counts and bounds (within 0.0001 metres), with all
