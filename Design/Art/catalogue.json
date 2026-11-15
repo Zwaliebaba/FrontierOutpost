@@ -2597,11 +2597,6 @@
       "glb": "../FrontierOutpost/asteroids.glb",
       "root": null,
       "sha256": "f8f1a54cdf951d56dce87219ad8bc2e116c34da84dee51289bab8286511a7ccd"
-    },
-    "station": {
-      "glb": "../FrontierOutpost/station.glb",
-      "root": "Station_ROOT",
-      "sha256": "7e525658ae8e73f2e48947da274786998dbd58c91e9b2839b26fe01cc64cb7b4"
     }
   },
   "schema_version": 1

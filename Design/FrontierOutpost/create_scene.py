@@ -9,18 +9,14 @@ from math import sin, cos, pi
 random.seed(2266)
 OUT = os.environ.get('SCENE_OUTPUT', os.path.dirname(os.path.abspath(__file__)))
 os.makedirs(OUT, exist_ok=True)
-with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'berths.json')) as f:
-    BERTH_LAYOUT=json.load(f)
-BERTHS=BERTH_LAYOUT['berths']
-DECK_Y=BERTH_LAYOUT['centreY']
 bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete(use_global=False)
 for data in list(bpy.data.collections):
     if data.name != 'Collection': bpy.data.collections.remove(data)
 scene = bpy.context.scene
 groups = {}
-for name in ['Station', 'Asteroids', 'Backdrop', 'Lighting', 'Cameras']:
+for name in ['Asteroids', 'Backdrop', 'Lighting', 'Cameras']:
     c = bpy.data.collections.new(name); scene.collection.children.link(c); groups[name] = c
-active = 'Station'
+active = 'Asteroids'
 def move(o, name):
     o.name = name
     for c in list(o.users_collection): c.objects.unlink(o)
@@ -78,154 +74,9 @@ right=Vector((.858,.513,0)).normalized(); up=view.cross(right).normalized()
 def layout(x,y,depth=0): return right*x+up*y+view*depth
 S=layout(5,1.0)
 def sp(x,y,z):return S+Vector((x,y,z))
-# Central station: octagonal hub, tiered crown, articulated utility spire.
-cyl('Hub | lower collar',sp(0,0,.1),2.35,.75,dark,8)
-cyl('Hub | octagonal pressure hull',sp(0,0,2.0),2.25,3.3,steel,8)
-cyl('Hub | shoulder armor',sp(0,0,3.65),2.5,.6,armor,8,r2=2.12)
-cyl('Hub | crown cap',sp(0,0,4.05),2.12,.25,lightarmor,8)
-cyl('Hub | rooftop machinery',sp(0,0,4.35),1.4,.45,dark,8)
-cyl('Hub | rooftop armor',sp(0,0,4.6),1.5,.16,armor,8)
-for i in range(8):
-    a=2*pi*i/8+pi/8; n=Vector((cos(a),sin(a),0)); tangent=Vector((-sin(a),cos(a),0))
-    # Flat wall panels, illuminated recesses, window mullions.
-    rot=(0,0,a+pi/2)
-    box('Hub | face armor %02d'%i,sp(n.x*2.13,n.y*2.13,2.0),(1.5,.12,2.55),armor,.035,rot)
-    for j in range(3):
-        c=sp(n.x*2.205,n.y*2.205,2.0)+tangent*((j-1)*.33)
-        box('Hub | recessed window housing',c,(.27,.12,.98),dark,.025,rot)
-        box('Hub | amber window',c+n*.075,(.17,.025,.76),warm,.015,rot)
-        box('Hub | window mullion',c+n*.095,(.21,.03,.035),dark,0,rot)
-    for z in [.8,3.12]:box('Hub | belt rail',sp(n.x*2.23,n.y*2.23,z),(1.55,.16,.12),dark,.015,rot)
-    box('Hub | roof vent',sp(n.x*1.72,n.y*1.72,4.06),(.65,.36,.13),dark,.02,rot)
-    for j in range(3): box('Hub | roof vent slat',sp(n.x*1.72,n.y*1.72,4.14)+tangent*((j-1)*.18),(.05,.3,.025),lightarmor,0,rot)
-# Segmented crown armor: broad bevel-lit plates with deliberate graphite gaps.
-for i in range(8):
-    a=i*pi/4; gap=.035
-    vs=[]
-    for radius,z in [(1.45,4.62),(2.48,4.03)]:
-        for angle in [a+gap,a+pi/4-gap]:vs.append(tuple(sp(cos(angle)*radius,sin(angle)*radius,z)))
-    me=bpy.data.meshes.new('Crown armor plate');me.from_pydata(vs,[],[(0,2,3,1)]);me.update()
-    uv=me.uv_layers.new(name='UVMap')
-    for loop,coord in zip(uv.data,[(0,0),(0,1),(1,1),(1,0)]):loop.uv=coord
-    o=bpy.data.objects.new('Hub | segmented crown',me);groups['Station'].objects.link(o);assign(o,armor if i%3 else lightarmor)
-    solid=o.modifiers.new('Armor thickness','SOLIDIFY');solid.thickness=.08
-# Suspended spine, heat radiators, pipes and aerials.
-for z,r,h in [(-.8,1.4,1.2),(-1.9,.95,1.1),(-3,.65,1.3),(-4.05,.33,.9)]:
-    cyl('Spine | service tier',sp(0,0,z),r,h,steel,8)
-    cyl('Spine | joint band',sp(0,0,z+h*.4),r*1.12,.15,armor,8)
-for i in range(8):
-    a=i*pi/4
-    beam('Spine | conduit',sp(cos(a)*1.05,sin(a)*1.05,-.2),sp(cos(a)*.5,sin(a)*.5,-3.7),.07,orange)
-    for z in [-.7,-1.5,-2.4]:box('Spine | status lamp',sp(cos(a)*1.12,sin(a)*1.12,z),(.12,.12,.22),warm,.01)
-    beam('Spine | dangling aerial',sp(cos(a)*.45,sin(a)*.45,-3.2),sp(cos(a)*.5,sin(a)*.5,-5.8-random.random()),.025,dark,5)
-for x,y,h in [(0,.3,5.3),(-.55,.6,3.6),(.48,.45,4.2),(.65,-.1,2.6)]:
-    box('Mast | mounting block',sp(x,y,4.8),(.4,.42,.6),steel)
-    beam('Mast | antenna',sp(x,y,4.9),sp(x,y,4.9+h),.045,lightarmor)
-    for z in [5.3,6.1,7.1]:
-        if z<4.9+h: box('Mast | equipment',sp(x,y,z),(.19,.26,.38),dark,.02)
-    cyl('Mast | beacon',sp(x,y,4.9+h),.055,.14,white,6)
-# Twin radial habitat / docking pods.
-for side in [-1,1]:
-    x=side*5.2
-    box('Arm | pressurized bridge',sp(side*3.45,.5,1.9),(3.1,1.35,1.15),steel,.12)
-    for dx in [2.6,3.3,4.0]:
-        box('Arm | segmented rib',sp(side*dx,.5,1.9),(.15,1.5,1.35),armor,.03)
-        for k in range(3):box('Arm | passage window',sp(side*dx,-.22,1.9+k*.18),(.23,.035,.08),warm,.01)
-    cyl('Pod | lower machinery',sp(x,.5,.95),1.66,1.2,dark,12)
-    cyl('Pod | armored drum',sp(x,.5,1.95),2.03,1.6,armor,12)
-    cyl('Pod | upper rim',sp(x,.5,2.8),2.12,.18,lightarmor,12)
-    cyl('Pod | recessed deck',sp(x,.5,2.9),1.91,.08,steel,48)
-    ring('Pod | circular landing guide',sp(x,.5,2.95),1.5,.025,yellow)
-    ring('Pod | outer deck rail',sp(x,.5,2.98),1.94,.028,dark)
-    cyl('Pod | hatch',sp(x,.5,2.96),.62,.07,dark,12)
-    for i in range(12):
-        a=i*pi/6
-        box('Pod | armor seam',sp(x+cos(a)*1.99,.5+sin(a)*1.99,1.95),(.075,.075,1.2),dark,.01)
-        if i%2==0:
-            box('Pod | running light',sp(x+cos(a)*1.83,.5+sin(a)*1.83,2.95),(.12,.12,.06),warm,.01)
-        if i%3==0:
-            for j in range(3):
-                a2=a+(j-1)*.09
-                box('Pod | amber porthole',sp(x+cos(a2)*2.035,.5+sin(a2)*2.035,2.05),(.12,.12,.16),warm,.01)
-    for dx,dy in [(-.9,0),(.8,.5),(0,-.7)]:
-        beam('Pod | underhang',sp(x+dx,.5+dy,1.1),sp(x+dx,.5+dy,-1.3-random.random()),.05,dark)
-    if side==1:
-        box('Pod | antenna base',sp(x,.5,3.15),(.55,.5,.3),steel)
-        beam('Pod | antenna',sp(x,.5,3.2),sp(x,.5,5.0),.045,lightarmor)
-        cyl('Pod | amber beacon',sp(x,.5,5.05),.05,.1,warm)
-# Four independently accessible berths share the layout used by the simulation and HUD.
-box('Dock | neck',sp(0,-2.6,.40),(3.3,2,.86),dark,.1)
-box('Dock | slab',sp(0,DECK_Y,.435),(16.8,4.5,.65),armor,.14)
-box('Dock | inset deck',sp(0,DECK_Y,.79),(16.45,4.18,.08),steel,.06)
-for berth in BERTHS:
-    x=berth['x'];number=berth['id']
-    # Anchors point outward (-Y in Blender / +Z in glTF).
-    anchor=bpy.data.objects.new('Berth_'+number,None);groups['Station'].objects.link(anchor)
-    anchor.location=sp(x,DECK_Y,BERTH_LAYOUT['deck']);anchor.rotation_euler.z=pi
-    for side in [-1,1]:
-        box('Dock | yellow side stripe',sp(x+side*1.8,DECK_Y,.845),(.045,3.6,.012),yellow,0)
-        for y in [DECK_Y-1.9,DECK_Y+1.9]:
-            box('Dock | corner lamp',sp(x+side*1.7,y,.89),(.12,.12,.06),cyan,.01)
-    for y in [DECK_Y-1.8,DECK_Y+1.8]:
-        box('Dock | yellow end stripe',sp(x,y,.845),(3.6,.045,.012),yellow,0)
-    for y in [-1.1,-.5,.1,.7]:
-        box('Dock | center approach dash',sp(x,DECK_Y+y,.85),(.04,.22,.012),yellow,0)
-    text('Dock | berth number',number,sp(x+1.25,DECK_Y-1.2,.855),.45,yellow)
-    box('Dock | underside beam',sp(x,DECK_Y,.02),(.35,4,.35),dark,.04)
-    box('Dock | forward armor fascia',sp(x,DECK_Y-2.22,.4),(3.7,.13,.48),steel,.025)
-    box('Dock | forward identification band',sp(x,DECK_Y-2.30,.4),(.65,.025,.25),orange,.01)
-    for side in [-1,1]:
-        box('Dock | rear service cabinet',sp(x+side*1.6,DECK_Y+2.03,1.03),(.3,.22,.4),dark,.025)
-        box('Dock | service cabinet cap',sp(x+side*1.6,DECK_Y+2.03,1.25),(.34,.25,.05),lightarmor,.01)
-    beam('Dock | diagonal brace',sp(x,DECK_Y-1.7,.25),sp(x*.6,-1.7,-1.4),.12,dark)
-    for y in [-1.5,0,1.5]:
-        box('Dock | edge signal',sp(x,DECK_Y+y,.54),(.22,.1,.14),warm,.01)
-# Armor seams and identification bands emphasize the station's structural rhythm.
-for i in range(8):
-    a=i*pi/4+pi/8
-    box('Hub | identification band',sp(cos(a)*2.2,sin(a)*2.2,3.25),(.65,.08,.2),orange,.01,(0,0,a+pi/2))
-for side in [-1,1]:
-    for y in [-.5,.5,1.5]:
-        box('Pod | identification band',sp(side*5.2,y,3.0),(.42,.6,.04),orange,.01)
-# Cloth banner: cut pennant, custom mesh, double-sided PBR material.
-bx,by,bz=sp(5.2,-1.45,2.45)
-verts=[(bx-0.7,by,bz),(bx+.7,by,bz),(bx+.65,by-.09,bz-2.75),(bx,by-.18,bz-2.48),(bx-.7,by-.12,bz-2.75)]
-me=bpy.data.meshes.new('Pennant cut');me.from_pydata(verts,[],[(0,1,2,3,4)]);me.update()
-o=bpy.data.objects.new('Banner | hanging pennant',me);groups['Station'].objects.link(o);assign(o,red)
-sol=o.modifiers.new('Fabric thickness','SOLIDIFY');sol.thickness=.015
-beam('Banner | support bar',sp(4.35,-1.46,2.5),sp(6.05,-1.46,2.5),.04,lightarmor)
-text('Banner | insignia','N',sp(5.2,-1.49,1.3),.8,lightarmor,(pi/2,0,0))
-# Construction sockets (design section 10): socket A beside the cargo bay (the port pod), socket B
-# beside berth 07. Each is a clamp platform with an anchor empty at its deck, where a facility
-# module's base sits. No random draws here, so everything generated after is unchanged.
-def empty(name,p):
-    o=bpy.data.objects.new(name,None);groups[active].objects.link(o);o.location=p;o.empty_display_size=.4;return o
-sockets={}
-def socket(label,beside,c,top,bridge_from,bridge_to):
-    cyl('Socket %s | clamp platform'%label,c+Vector((0,0,top-.2)),1.45,.4,armor,8)
-    cyl('Socket %s | deck'%label,c+Vector((0,0,top-.02)),1.3,.06,steel,8)
-    ring('Socket %s | mounting guide'%label,c+Vector((0,0,top+.015)),1.12,.022,yellow)
-    for i in range(4):
-        # On the rim, clear of a module's square footprint (at most 1.25 from its centre).
-        a=i*pi/2;q=c+Vector((cos(a)*1.4,sin(a)*1.4,top+.08))
-        box('Socket %s | clamp'%label,q,(.26,.26,.16),dark,.02,(0,0,a))
-        box('Socket %s | clamp lamp'%label,q+Vector((0,0,.1)),(.08,.08,.04),warm,.005,(0,0,a))
-    for i in range(3):
-        a=i*2*pi/3+pi/6
-        beam('Socket %s | strut'%label,c+Vector((cos(a)*1.0,sin(a)*1.0,top-.4)),c+Vector((cos(a)*.35,sin(a)*.35,top-1.6)),.06,dark)
-    beam('Socket %s | bridge'%label,bridge_from,bridge_to,.16,steel)
-    beam('Socket %s | power conduit'%label,bridge_from+Vector((0,0,-.22)),bridge_to+Vector((0,0,-.22)),.05,orange)
-    anchor=empty('Socket_%s'%label,c+Vector((0,0,top+.01)))
-    if label == 'B':
-        # Removable blanking plate: kept separate at import and shown only while closed.
-        lid=cyl('SocketClosure_B_plate',c+Vector((0,0,top+.12)),1.16,.16,dark,8)
-        bpy.context.view_layer.update();w=lid.matrix_world.copy();lid.parent=anchor;lid.matrix_world=w
-        for angle in [-pi/4,pi/4]:
-            bar=box('SocketClosure_B_cross',c+Vector((0,0,top+.22)),(1.7,.12,.06),lightarmor,.015,(0,0,angle))
-            bpy.context.view_layer.update();w=bar.matrix_world.copy();bar.parent=anchor;bar.matrix_world=w
-    sockets[label]={'beside':beside,'anchor':anchor}
-socket('A','cargo bay',sp(-8.95,.5,0),1.6,sp(-7.1,.5,1.45),sp(-7.6,.5,1.45))
-socket('B','berth',sp(10.2,DECK_Y,0),.72,sp(8.4,DECK_Y,.55),sp(8.85,DECK_Y,.55))
+# The station moved to Design/Art/station/ (plan M9). Its geometry drew 14 random numbers;
+# drawing as many here keeps every asteroid after it unchanged. S still aims the lights.
+for _ in range(14): random.random()
 # The Aurora cruiser and the starter frigate moved to Design/Art/hulls/ (cruiser, frigate).
 # Low-poly asteroids with seeded, varied faceting.
 active='Asteroids'
@@ -290,26 +141,7 @@ def area(name,pos,power,color,size,target):
     o=bpy.data.objects.new(name,d);groups[active].objects.link(o);o.location=pos;o.rotation_euler=(Vector(target)-o.location).to_track_quat('-Z','Y').to_euler()
 area('Key | soft warm rim',sp(-7,-1,16),1800,(1,.62,.37),10,S)
 area('Fill | cool camera bounce',layout(-4,2,19),1800,(.3,.48,1),14,S)
-point('Station | approach light',sp(0,-2.5,2.0),(1,.32,.06),60,1)
-# Game-oriented collection roots and metadata. Recenter each assembly at its pivot.
-for group,pivot in [('Station',S)]:
-    root=bpy.data.objects.new(group+'_ROOT',None);groups[group].objects.link(root);root.location=pivot
-    bpy.context.view_layer.update()
-    root['asset_type']=group.lower();root['units']='metres';root['forward_axis']='+Y';root['up_axis']='+Z'
-    for o in list(groups[group].objects):
-        if o!=root:
-            w=o.matrix_world.copy();o.parent=root;o.matrix_world=w
-bpy.context.view_layer.update()
-depsgraph=bpy.context.evaluated_depsgraph_get()
-station_inverse=bpy.data.objects['Station_ROOT'].matrix_world.inverted()
-# A flown hull's fit on a berth is checked by the art pipeline (Design/Art/hulls/).
-assert BERTH_LAYOUT['halfWidth'] >= 1.3+.15 and BERTH_LAYOUT['halfLength'] >= 1.3+.15, 'Berths must clear the gameplay collision envelope'
-# Socket footprints must also stay outside all departure lanes, even with tier-two modules.
-for info in sockets.values():
-    anchor=station_inverse@info['anchor'].matrix_world.translation
-    for berth in BERTHS:
-        assert abs(anchor.x-berth['x'])>1.25+.65+.15 or anchor.y>DECK_Y+1.34+1.25+.15
-scene['description']='Frontier Outpost — four-berth industrial station'
+scene['description']='Frontier Outpost — asteroids and backdrop; the station moved to Design/Art/station/'
 scene['seed']=2266
 scene.render.engine='CYCLES';scene.cycles.samples=int(os.environ.get('RENDER_SAMPLES','128'));scene.cycles.use_denoising=bool(getattr(bpy.app.build_options, 'openimagedenoise', False))
 scene.render.resolution_x=1600;scene.render.resolution_y=900;scene.render.resolution_percentage=int(os.environ.get('RENDER_SCALE','100'))
@@ -338,14 +170,12 @@ for screen in bpy.data.screens:
 scene.render.filepath=os.path.join(OUT,'FrontierOutpostPreview.png')
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT,'FrontierOutpost.blend'), compress=True)
 # GLB excludes backdrop, cameras, lights, and effect geometry for engine portability.
-for name in ['Station','Asteroids']:
+for name in ['Asteroids']:
     bpy.ops.object.select_all(action='DESELECT')
     for o in groups[name].objects:o.select_set(True)
     bpy.ops.export_scene.gltf(filepath=os.path.join(OUT,name.lower()+'.glb'),export_format='GLB',use_selection=True,export_apply=True,export_yup=True)
 bpy.ops.object.select_all(action='DESELECT')
-manifest={'units':'metres','blender_up':'+Z','blender_forward':'+Y','gltf_up':'+Y','seed':2266,'assets':{name:{'objects':len(groups[name].objects),'triangles':sum(sum(len(p.vertices)-2 for p in o.data.polygons) for o in groups[name].objects if o.type=='MESH')} for name in ['Station','Asteroids']},'notes':'GLBs retain scene placement. Berths 07–10 use berths.json. The starter frigate and the Aurora cruiser moved to Design/Art/hulls/. The backdrop is a presentation effect.'}
-station_root=bpy.data.objects['Station_ROOT']
-manifest['sockets']={'Socket_'+label:{'beside':info['beside'],'anchor_station_space':[round(v,4) for v in station_root.matrix_world.inverted()@info['anchor'].matrix_world.translation]} for label,info in sockets.items()}
+manifest={'units':'metres','blender_up':'+Z','blender_forward':'+Y','gltf_up':'+Y','seed':2266,'assets':{name:{'objects':len(groups[name].objects),'triangles':sum(sum(len(p.vertices)-2 for p in o.data.polygons) for o in groups[name].objects if o.type=='MESH')} for name in ['Asteroids']},'notes':'GLBs retain scene placement. The station, the starter frigate and the Aurora cruiser moved to Design/Art/. The backdrop is a presentation effect.'}
 def footprint(root):
     pts=[]
     for o in root.children_recursive:

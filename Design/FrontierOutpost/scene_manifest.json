@@ -5,34 +5,11 @@
   "gltf_up": "+Y",
   "seed": 2266,
   "assets": {
-    "Station": {
-      "objects": 481,
-      "triangles_base_mesh": 10091,
-      "triangles_export": 22628
-    },
     "Asteroids": {
       "objects": 12,
       "triangles_base_mesh": 480,
       "triangles_export": 480
     }
   },
-  "notes": "GLBs retain scene placement. Berths 07\u201310 use berths.json. The starter frigate and the Aurora cruiser moved to Design/Art/hulls/. The backdrop is a presentation effect.",
-  "sockets": {
-    "Socket_A": {
-      "beside": "cargo bay",
-      "anchor_station_space": [
-        -8.95,
-        0.5,
-        1.61
-      ]
-    },
-    "Socket_B": {
-      "beside": "berth",
-      "anchor_station_space": [
-        10.2,
-        -4.3325,
-        0.73
-      ]
-    }
-  }
+  "notes": "GLBs retain scene placement. The station, the starter frigate and the Aurora cruiser moved to Design/Art/. The backdrop is a presentation effect."
 }

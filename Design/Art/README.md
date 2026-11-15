@@ -207,10 +207,8 @@ as colour, and hostiles have shapes of their own (below).
 - **Root:** `Hull_<id>`, nose along +Y.
 - **Listed in the contract:** `hulls.flown` for hulls players fly, `hulls.display` for ships
   that are shown but never flown, docked or parked (the Aurora cruiser, about four times the
-  frigate's length). A display hull keeps every other rule; it skips the berth, mouth and
+  frigate's length). A display hull keeps every other rule; it skips the mouth and
   parking checks below, and the station never makes room for it.
-- **On today's berths:** while `Design/FrontierOutpost/berths.json` stands, a flown hull,
-  landed with its gear, fits every berth with the clearance on every side; CI rechecks it.
 - **Through the mouth and into its place:** each hull passes the exterior's mouth flying straight
   in, and fits its interior parking place, with the clearance on every side, weapons and
   attachments included. The manifests carry the bounds; the exterior's and interior's checks use
@@ -224,7 +222,7 @@ as colour, and hostiles have shapes of their own (below).
 | Generated asset | Replaced here in |
 |---|---|
 | The six facility modules | 8.3, split into their facility files, then refined by hand at will |
-| The four-berth station | 9.2 and 9.3, by the exterior and the interior |
+| The four-berth station | Moved: `station/exterior/` and `station/interior/` (plan M9); the berths are gone |
 | The starter frigate | Moved: `hulls/frigate/`, a flown hull (`migrate_hulls.py`) |
 | The Aurora cruiser | Moved: `hulls/cruiser/`, a display hull (`migrate_hulls.py`) |
 | The asteroids | Whenever they next change |
