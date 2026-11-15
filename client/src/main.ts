@@ -21,6 +21,7 @@ import type {
 import { crewQuote, launchRole, renderCrew, resetSplitPending } from "./outpost/crew";
 import { loadNpc, loadOutpostModels } from "./outpost/models";
 import { affordableFacilities, fittingName, launchLines, supplySales } from "./outpost/options";
+import { homeViewWidth } from "./outpost/framing";
 import { placeStation } from "./outpost/placement";
 import { OutpostScene } from "./outpost/scene";
 import {
@@ -681,6 +682,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const focusSplit = focused?.dataset.split;
     briefing.replaceChildren();
     briefing.dataset.state = "open";
+    // The briefing bounds the gap the station is framed in.
+    resize();
     const title = element("h2");
     const eyebrow = element("p", undefined, "eyebrow");
     eyebrow.textContent = "EXPEDITION / CONTRACT BRIEFING";
@@ -1135,6 +1138,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     );
     if (!life) homePanel.dataset.state = "open";
     if (briefing.dataset.state === "open" && contract) showBriefing(contract);
+    // Framed again now the panels are drawn: the gap between them is what the station fits.
+    resize();
   };
   // The processor's bar moves on between account messages; the server finishes the batch.
   window.setInterval(() => {
@@ -1369,12 +1374,8 @@ function play(connection: Connection, view: ExpeditionView, loaded: Sim): void {
     const left = homePanel.getBoundingClientRect();
     const right = briefing.getBoundingClientRect();
     const available = life ? width : Math.max(width * 0.35, right.left - left.right - 32);
-    // A fixed envelope holds every facility tier, four ships and outward captions.
-    // Fit the same envelope after purchases, so an upgrade never changes its apparent scale.
-    const homeWidth = Math.max(
-      (25 * width) / available,
-      (23 * width) / Math.max(240, window.innerHeight - 150),
-    );
+    // One envelope holds both views of the station, so nothing changes its apparent scale.
+    const homeWidth = homeViewWidth(width, window.innerHeight, available);
     view.resize(
       width,
       window.innerHeight,
